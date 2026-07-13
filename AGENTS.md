@@ -34,7 +34,7 @@ Run `pnpm check` before reporting a coding task complete.
 - Do not mix unrelated refactoring with feature or bug-fix commits.
 - Do not commit, push, rebase, amend, reset, or force-push unless explicitly requested.
 - Never commit secrets, local environment files, build outputs, or generated dependencies.
-- Before a commit, run `pnpm check`.
+- Before a commit, run `pnpm check`. Stop commiting if failed.
 
 ## Boundaries
 
