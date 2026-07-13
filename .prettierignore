@@ -1,5 +1,13 @@
-node_modules
-dist
-target
-src-tauri/target
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+src-tauri/target/
+coverage/
+
+# Generated Tauri files
+src-tauri/gen/
+
+# Lockfile
 pnpm-lock.yaml
