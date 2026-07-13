@@ -1,0 +1,19 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Tauri: Debug Rust",
+      "cargo": {
+        "args": ["build", "--manifest-path", "${workspaceFolder}/src-tauri/Cargo.toml"],
+        "filter": {
+          "name": "nice-audio-player",
+          "kind": "bin"
+        }
+      },
+      "cwd": "${workspaceFolder}",
+      "sourceLanguages": ["rust"]
+    }
+  ]
+}

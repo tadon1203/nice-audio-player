@@ -1,49 +1,45 @@
+import { open } from "@tauri-apps/plugin-dialog";
 import { useState } from "react";
-import reactLogo from "./assets/react.svg";
-import { invoke } from "@tauri-apps/api/core";
-import "./App.css";
 
 function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
+  const [selectedPath, setSelectedPath] = useState<string | null>(null);
 
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
+  async function selectAudioFile(): Promise<void> {
+    const result = await open({
+      multiple: false,
+      directory: false,
+      filters: [
+        {
+          name: "Audio",
+          extensions: ["mp3", "flac", "wav", "m4a", "aac"],
+        },
+      ],
+    });
+
+    if (typeof result === "string") {
+      setSelectedPath(result);
+    }
   }
 
   return (
-    <main className="container">
-      <h1>Welcome to Tauri + React</h1>
+    <main className="grid h-screen place-items-center bg-zinc-950 p-8 text-zinc-100">
+      <section className="w-full max-w-xl rounded-2xl border border-zinc-800 bg-zinc-900 p-8">
+        <p className="text-sm text-zinc-400">Nice Audio Player</p>
 
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
+        <h1 className="mt-2 text-3xl font-semibold">Audio file selection</h1>
 
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
-        />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
+        <button
+          type="button"
+          onClick={() => void selectAudioFile()}
+          className="mt-6 rounded-lg bg-zinc-100 px-4 py-2 font-medium text-zinc-950"
+        >
+          音楽ファイルを選択
+        </button>
+
+        <p className="mt-4 break-all text-sm text-zinc-400">
+          {selectedPath ?? "ファイルは選択されていません"}
+        </p>
+      </section>
     </main>
   );
 }

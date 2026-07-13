@@ -1,0 +1,64 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Tauri: Dev",
+      "type": "shell",
+      "command": "pnpm",
+      "args": ["tauri", "dev"],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "Project: Check",
+      "type": "shell",
+      "command": "pnpm",
+      "args": ["check"],
+      "problemMatcher": []
+    },
+    {
+      "label": "Frontend: Test",
+      "type": "shell",
+      "command": "pnpm",
+      "args": ["test:run"],
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "Frontend: Test Watch",
+      "type": "shell",
+      "command": "pnpm",
+      "args": ["test"],
+      "isBackground": true,
+      "group": "test",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "Frontend: Typecheck",
+      "type": "shell",
+      "command": "pnpm",
+      "args": ["typecheck"],
+      "problemMatcher": "$tsc"
+    },
+    {
+      "label": "Rust: Clippy",
+      "type": "shell",
+      "command": "pnpm",
+      "args": ["rust:clippy"],
+      "problemMatcher": "$rustc"
+    }
+  ]
+}
