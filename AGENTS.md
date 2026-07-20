@@ -10,6 +10,8 @@
 
 ## Commands
 
+Use pwsh.exe to run PowerShell commands.
+
 - Install dependencies: `pnpm install`
 - Start the app: `pnpm tauri dev`
 - Run all checks: `pnpm check`
