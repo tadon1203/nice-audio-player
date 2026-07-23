@@ -8,9 +8,19 @@
 - Treat audio stability as the highest priority.
 - Keep the visualizer at fixed maximum quality and optimize toward 120 Hz without dynamically reducing visual quality.
 
+## Documentation
+
+Read the relevant documentation before making implementation changes:
+
+- `docs/requirements.md` defines product scope and user-facing requirements.
+- `docs/architecture.md` defines module responsibilities and implementation constraints.
+- `docs/ui-design.md` defines visual and interaction rules.
+
+Update the relevant document when a change intentionally modifies its rules or scope.
+
 ## Commands
 
-Use pwsh.exe to run PowerShell commands.
+Use `pwsh` to run PowerShell commands. Do not try to find `pwsh` path.
 
 - Install dependencies: `pnpm install`
 - Start the app: `pnpm tauri dev`

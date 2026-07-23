@@ -1,7 +1,29 @@
-# Tauri + React + Typescript
+# Nice Audio Player
 
-This template should help get you started developing with Tauri, React and Typescript in Vite.
+A high-quality local audio player for Windows, built with Tauri, Rust, React, and TypeScript.
 
-## Recommended IDE Setup
+## Documentation
 
-- [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
+- [Requirements](docs/requirements.md)
+- [Architecture](docs/architecture.md)
+- [UI Design](docs/ui-design.md)
+
+## Development
+
+Install dependencies:
+
+```bash
+pnpm install
+```
+
+Start the desktop application:
+
+```bash
+pnpm tauri dev
+```
+
+Run all checks before completing a change:
+
+```bash
+pnpm check
+```
