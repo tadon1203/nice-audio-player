@@ -44,30 +44,21 @@ Run `pnpm check` before reporting a coding task as complete.
 - Do not manually edit generated files under `src-tauri/gen/`.
 - Add or update tests for changed logic when practical.
 
-## Git Workflow
+## Git Procedure
 
-- Work from a focused GitHub Issue whenever an issue exists for the task.
-- Keep one issue and one pull request focused on one outcome.
-- Create branches from `main`.
-- Use the branch format `<type>/<issue-number>-<description>`.
-- Examples:
-
-  - `feat/12-audio-file-validation`
-  - `fix/18-device-disconnect`
-  - `docs/21-architecture-rules`
-
-- Do not commit directly to `main`.
-- Use Conventional Commits, including `feat:`, `fix:`, `test:`, `refactor:`, `docs:`, and `chore:`.
-- Do not mix unrelated refactoring with feature or bug-fix changes.
-- Run `pnpm check` before creating a commit or reporting the task complete.
-- Do not commit while `pnpm check` is failing.
-- Include `Closes #<issue-number>` in the pull request description when the pull request fully resolves the issue.
-- Prefer squash merging so that each pull request produces one focused commit on `main`.
-- Delete the feature branch after the pull request is merged.
-- Do not create, close, or modify Issues or pull requests unless explicitly requested.
-- Do not commit, push, merge, rebase, amend, reset, or force-push unless explicitly requested.
+- Use `.github/ISSUE_TEMPLATE/task.md` when creating a task Issue.
+- Keep one Issue, one branch, and one pull request focused on one outcome.
+- Perform Issue, branch, commit, push, pull request, merge, and branch-deletion operations only when explicitly requested by the user.
+- Create branches from `main` using the format `<type>/<issue-number>-<description>`.
+- Do not commit directly to `main` unless the user explicitly authorizes it.
+- Before committing or reporting the task complete, run `pnpm check`. Do not commit while it is failing.
+- Review changes with `git status`, `git diff`, and `git diff --staged`.
+- Use Conventional Commit messages in the format `<type>: <summary>`.
+- Use the GitHub connector for GitHub Issues and pull requests when available. If `gh` is required, stop and report this to the user.
+- Include `Closes #<issue-number>` in the pull request description when applicable.
+- Use Squash and merge.
+- After merging, delete the remote branch, update `main`, then delete the local branch.
 - Never commit secrets, local environment files, build outputs, generated dependencies, or editor-specific local settings.
-- Use the GitHub connector for GitHub issues and pull requests when available.
 
 ## Boundaries
 
