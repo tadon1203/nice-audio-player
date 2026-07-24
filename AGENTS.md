@@ -8,9 +8,19 @@
 - Treat audio stability as the highest priority.
 - Keep the visualizer at fixed maximum quality and optimize toward 120 Hz without dynamically reducing visual quality.
 
+## Documentation
+
+Read the relevant documentation before making implementation changes:
+
+- `docs/requirements.md` defines product scope and user-facing requirements.
+- `docs/architecture.md` defines module responsibilities and implementation constraints.
+- `docs/ui-design.md` defines visual and interaction rules.
+
+Update the relevant document when a change intentionally modifies its rules or scope.
+
 ## Commands
 
-Use pwsh.exe to run PowerShell commands.
+Use `pwsh` to run PowerShell commands. Do not try to find `pwsh` path.
 
 - Install dependencies: `pnpm install`
 - Start the app: `pnpm tauri dev`
@@ -57,6 +67,7 @@ Run `pnpm check` before reporting a coding task as complete.
 - Do not create, close, or modify Issues or pull requests unless explicitly requested.
 - Do not commit, push, merge, rebase, amend, reset, or force-push unless explicitly requested.
 - Never commit secrets, local environment files, build outputs, generated dependencies, or editor-specific local settings.
+- Use the GitHub connector for GitHub issues and pull requests when available.
 
 ## Boundaries
 
