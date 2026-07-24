@@ -1,8 +1,36 @@
 import { open } from "@tauri-apps/plugin-dialog";
 import { useState } from "react";
 
+import { isAudioFileValidationError, validateAudioFile } from "@/api/audio-files";
+import type { ValidatedAudioFile } from "@/types/audio-files";
+
+function formatValidationError(error: unknown): string {
+  if (!isAudioFileValidationError(error)) {
+    return "The selected file could not be validated.";
+  }
+
+  switch (error.code) {
+    case "emptyPath":
+      return "Select an audio file first.";
+    case "notFound":
+      return "File not found.";
+    case "notAFile":
+      return "The selected path is not a file.";
+    case "unsupportedExtension": {
+      const extension = error.details?.extension;
+      return extension
+        ? `.${extension} is not currently supported.`
+        : "The selected file has no supported extension.";
+    }
+    case "invalidFileName":
+      return "The selected file name is invalid.";
+  }
+}
+
 function App() {
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  const [validatedFile, setValidatedFile] = useState<ValidatedAudioFile | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   async function selectAudioFile(): Promise<void> {
     const result = await open({
@@ -18,6 +46,14 @@ function App() {
 
     if (typeof result === "string") {
       setSelectedPath(result);
+      setValidatedFile(null);
+      setValidationError(null);
+
+      try {
+        setValidatedFile(await validateAudioFile(result));
+      } catch (error: unknown) {
+        setValidationError(formatValidationError(error));
+      }
     }
   }
 
@@ -39,6 +75,25 @@ function App() {
         <p className="mt-4 break-all text-sm text-zinc-400">
           {selectedPath ?? "ファイルは選択されていません"}
         </p>
+
+        {validatedFile ? (
+          <dl className="mt-4 space-y-1 text-sm text-zinc-300">
+            <div>
+              <dt className="inline text-zinc-500">File: </dt>
+              <dd className="inline">{validatedFile.fileName}</dd>
+            </div>
+            <div>
+              <dt className="inline text-zinc-500">Extension: </dt>
+              <dd className="inline">.{validatedFile.extension}</dd>
+            </div>
+          </dl>
+        ) : null}
+
+        {validationError ? (
+          <p className="mt-4 text-sm text-red-300" role="alert">
+            {validationError}
+          </p>
+        ) : null}
       </section>
     </main>
   );

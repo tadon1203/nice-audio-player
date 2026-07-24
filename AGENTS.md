@@ -35,6 +35,8 @@ Run `pnpm check` before reporting a coding task as complete.
 - Use TypeScript strict mode.
 - Do not use `any` unless it is unavoidable and documented.
 - Prefer small, single-purpose modules.
+- Use relative imports for files within the same feature.
+- Use `@/` imports for shared code used across features.
 - Use explicit types at Tauri command boundaries.
 - Validate untrusted input at the Rust/Tauri boundary.
 - Keep real-time visualizer data out of React state and context.
