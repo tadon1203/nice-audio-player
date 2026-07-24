@@ -67,6 +67,7 @@ Run `pnpm check` before reporting a coding task as complete.
 - Do not create, close, or modify Issues or pull requests unless explicitly requested.
 - Do not commit, push, merge, rebase, amend, reset, or force-push unless explicitly requested.
 - Never commit secrets, local environment files, build outputs, generated dependencies, or editor-specific local settings.
+- Use the GitHub connector for GitHub issues and pull requests when available.
 
 ## Boundaries
 
