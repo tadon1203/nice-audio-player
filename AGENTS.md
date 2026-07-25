@@ -48,18 +48,12 @@ Run `pnpm check` before reporting a coding task as complete.
 
 ## Git Procedure
 
-- Use `.github/ISSUE_TEMPLATE/task.md` when creating a task Issue.
-- Keep one Issue, one branch, and one pull request focused on one outcome.
-- Perform Issue, branch, commit, push, pull request, merge, and branch-deletion operations only when explicitly requested by the user.
-- Create branches from `main` using the format `<type>/<issue-number>-<description>`.
-- Do not commit directly to `main` unless the user explicitly authorizes it.
-- Before committing or reporting the task complete, run `pnpm check`. Do not commit while it is failing.
-- Review changes with `git status`, `git diff`, and `git diff --staged`.
-- Use Conventional Commit messages in the format `<type>: <summary>`.
-- Use the GitHub connector for GitHub Issues and pull requests when available. If `gh` is required, stop and report this to the user.
-- Include `Closes #<issue-number>` in the pull request description when applicable.
-- Use Squash and merge.
-- After merging, delete the remote branch, update `main`, then delete the local branch.
+- Start from a focused Issue using `.github/ISSUE_TEMPLATE/task.md`.
+- Create `<type>/<issue-number>-<description>` from `main`; keep one Issue, branch, and pull request per outcome.
+- During implementation, track the Issue's Done items and verify them against code, tests, and manual checks before completion.
+- Run `pnpm check` before completion or commit. Review `git status`, `git diff`, and `git diff --staged`.
+- Use `<type>: <summary>` commits. Perform Git and GitHub operations only when explicitly requested. Use the GitHub connector; if `gh` is required, stop and report it.
+- PRs should include only completed Done items and `Closes #<issue-number>` when applicable. Use Squash and merge, then delete the remote branch, update `main`, and delete the local branch.
 - Never commit secrets, local environment files, build outputs, generated dependencies, or editor-specific local settings.
 
 ## Boundaries
