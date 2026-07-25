@@ -1,5 +1,8 @@
 mod audio;
 
+use audio::devices::{
+    list_output_devices as list_output_devices_with_cpal, AudioDeviceListError, AudioOutputDevice,
+};
 use audio::validation::{
     validate_audio_file as validate_audio_file_path, AudioFileValidationError, ValidatedAudioFile,
 };
@@ -7,6 +10,11 @@ use audio::validation::{
 #[tauri::command]
 fn validate_audio_file(path: String) -> Result<ValidatedAudioFile, AudioFileValidationError> {
     validate_audio_file_path(&path)
+}
+
+#[tauri::command]
+fn list_audio_output_devices() -> Result<Vec<AudioOutputDevice>, AudioDeviceListError> {
+    list_output_devices_with_cpal()
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -19,7 +27,10 @@ pub fn run() {
         )
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![validate_audio_file])
+        .invoke_handler(tauri::generate_handler![
+            validate_audio_file,
+            list_audio_output_devices
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
