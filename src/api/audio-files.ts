@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   AudioFileValidationError,
   AudioFileValidationErrorCode,
+  AudioFileInfo,
   ValidatedAudioFile,
 } from "@/types/audio-files";
 
@@ -16,6 +17,10 @@ const validationErrorCodes: ReadonlySet<AudioFileValidationErrorCode> = new Set(
 
 export async function validateAudioFile(path: string): Promise<ValidatedAudioFile> {
   return invoke<ValidatedAudioFile>("validate_audio_file", { path });
+}
+
+export async function inspectAudioFile(path: string): Promise<AudioFileInfo> {
+  return invoke<AudioFileInfo>("inspect_audio_file", { path });
 }
 
 export function isAudioFileValidationError(value: unknown): value is AudioFileValidationError {
