@@ -13,3 +13,25 @@ export interface AudioFileValidationError {
     extension?: string | null;
   };
 }
+
+export type AudioCodec =
+  "aac" | "adpcm" | "alac" | "flac" | "mp1" | "mp2" | "mp3" | "pcm" | "vorbis" | "other";
+
+export interface AudioFileInfo {
+  codec: AudioCodec;
+  sampleRate: number;
+  channelCount: number;
+  durationMs: number | null;
+}
+
+export type AudioFileInspectionError =
+  | { code: "validationFailed"; error: AudioFileValidationError }
+  | { code: "fileOpenFailed" }
+  | { code: "unsupportedFormat" }
+  | { code: "missingAudioTrack" }
+  | { code: "missingCodecParameters" }
+  | { code: "unsupportedCodec" }
+  | { code: "missingSampleRate" }
+  | { code: "missingChannelCount" }
+  | { code: "invalidChannelCount" }
+  | { code: "corruptedFile" };

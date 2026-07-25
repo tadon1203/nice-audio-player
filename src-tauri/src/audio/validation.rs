@@ -11,7 +11,7 @@ pub struct ValidatedAudioFile {
     pub extension: String,
 }
 
-#[derive(Debug, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(tag = "code", content = "details", rename_all = "camelCase")]
 pub enum AudioFileValidationError {
     EmptyPath,

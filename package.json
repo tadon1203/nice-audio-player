@@ -23,7 +23,8 @@
     "rust:clippy": "cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings",
     "rust:format": "cargo fmt --manifest-path src-tauri/Cargo.toml",
     "rust:format:check": "cargo fmt --manifest-path src-tauri/Cargo.toml -- --check",
-    "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test:run && pnpm rust:format:check && pnpm rust:clippy"
+    "rust:test": "cargo test --manifest-path src-tauri/Cargo.toml",
+    "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test:run && pnpm rust:format:check && pnpm rust:clippy && pnpm rust:test"
   },
   "dependencies": {
     "@tanstack/react-table": "^8.21.3",
