@@ -170,62 +170,11 @@ fn codec_from_id(codec: AudioCodecId) -> AudioCodec {
 #[cfg(test)]
 mod tests {
     use super::{inspect_audio_file, AudioCodec, AudioFileInspectionError};
+    use crate::audio::test_support::{write_pcm_i16_wav, TestDirectory};
     use crate::audio::validation::ValidatedAudioFile;
-    use std::fs::{create_dir_all, remove_dir_all, File};
+    use std::fs::File;
     use std::io::Write;
-    use std::path::{Path, PathBuf};
-    use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    static NEXT_TEST_DIRECTORY: AtomicUsize = AtomicUsize::new(0);
-
-    struct TestDirectory(PathBuf);
-
-    impl TestDirectory {
-        fn new() -> Self {
-            let id = NEXT_TEST_DIRECTORY.fetch_add(1, Ordering::Relaxed);
-            let timestamp = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("system time must be after epoch")
-                .as_nanos();
-            let path =
-                std::env::temp_dir().join(format!("nice-audio-player-inspection-{timestamp}-{id}"));
-            create_dir_all(&path).expect("test directory must be created");
-            Self(path)
-        }
-
-        fn file(&self, name: &str) -> PathBuf {
-            self.0.join(name)
-        }
-    }
-
-    impl Drop for TestDirectory {
-        fn drop(&mut self) {
-            let _ = remove_dir_all(&self.0);
-        }
-    }
-
-    fn write_pcm_wav(path: &Path, sample_rate: u32, channels: u16, duration_frames: u32) {
-        let bits_per_sample = 16u16;
-        let block_align = channels * (bits_per_sample / 8);
-        let data_size = duration_frames * u32::from(block_align);
-        let byte_rate = sample_rate * u32::from(block_align);
-        let mut file = File::create(path).expect("WAV must be created");
-
-        file.write_all(b"RIFF").unwrap();
-        file.write_all(&(36 + data_size).to_le_bytes()).unwrap();
-        file.write_all(b"WAVEfmt ").unwrap();
-        file.write_all(&16u32.to_le_bytes()).unwrap();
-        file.write_all(&1u16.to_le_bytes()).unwrap();
-        file.write_all(&channels.to_le_bytes()).unwrap();
-        file.write_all(&sample_rate.to_le_bytes()).unwrap();
-        file.write_all(&byte_rate.to_le_bytes()).unwrap();
-        file.write_all(&block_align.to_le_bytes()).unwrap();
-        file.write_all(&bits_per_sample.to_le_bytes()).unwrap();
-        file.write_all(b"data").unwrap();
-        file.write_all(&data_size.to_le_bytes()).unwrap();
-        file.write_all(&vec![0; data_size as usize]).unwrap();
-    }
+    use std::path::Path;
 
     fn validated(path: &Path) -> ValidatedAudioFile {
         ValidatedAudioFile {
@@ -239,7 +188,7 @@ mod tests {
     fn inspects_mono_wav() {
         let directory = TestDirectory::new();
         let path = directory.file("mono.wav");
-        write_pcm_wav(&path, 44_100, 1, 44_100);
+        write_pcm_i16_wav(&path, 44_100, 1, &vec![0; 44_100]);
         let info = inspect_audio_file(&validated(&path)).expect("WAV must inspect");
         assert_eq!(info.codec, AudioCodec::Pcm);
         assert_eq!(info.sample_rate, 44_100);
@@ -251,7 +200,7 @@ mod tests {
     fn inspects_stereo_wav() {
         let directory = TestDirectory::new();
         let path = directory.file("stereo.wav");
-        write_pcm_wav(&path, 48_000, 2, 24_000);
+        write_pcm_i16_wav(&path, 48_000, 2, &vec![0; 48_000]);
         let info = inspect_audio_file(&validated(&path)).expect("WAV must inspect");
         assert_eq!(info.codec, AudioCodec::Pcm);
         assert_eq!(info.sample_rate, 48_000);
