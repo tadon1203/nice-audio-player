@@ -48,7 +48,7 @@ Run `pnpm check` before reporting a coding task as complete.
 
 ## Git Procedure
 
-- Start from a focused Issue using `.github/ISSUE_TEMPLATE/task.md`.
+- Start from a focused Issue using `.github/ISSUE_TEMPLATE/task.md`; fill in its Goal, Scope, Done, Notes, and Suggested branch sections.
 - Create `<type>/<issue-number>-<description>` from `main`; keep one Issue, branch, and pull request per outcome.
 - During implementation, track the Issue's Done items and verify them against code, tests, and manual checks before completion.
 - Run `pnpm check` before completion or commit. Review `git status`, `git diff`, and `git diff --staged`.

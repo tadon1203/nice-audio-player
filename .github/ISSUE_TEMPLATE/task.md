@@ -18,11 +18,15 @@ assignees: ""
 
 ## Done
 
-- [ ]
-- [ ]
-- [ ]
+- [ ] Implementation is complete
+- [ ] Tests are added or updated
 - [ ] `pnpm check` passes
+- [ ] Manual verification is complete, if applicable
 
 ## Notes
 
 <!-- Optional constraints, references, or implementation notes -->
+
+## Suggested branch
+
+<!-- Example: feat/12-wasapi-exclusive-output -->
