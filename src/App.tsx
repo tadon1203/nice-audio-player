@@ -1,7 +1,9 @@
 import { open } from "@tauri-apps/plugin-dialog";
 import { useState } from "react";
 
+import { isAudioDeviceListError, listAudioOutputDevices } from "@/api/audio-devices";
 import { isAudioFileValidationError, validateAudioFile } from "@/api/audio-files";
+import type { AudioOutputDevice } from "@/types/audio-devices";
 import type { ValidatedAudioFile } from "@/types/audio-files";
 
 function formatValidationError(error: unknown): string {
@@ -31,6 +33,9 @@ function App() {
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [validatedFile, setValidatedFile] = useState<ValidatedAudioFile | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [outputDevices, setOutputDevices] = useState<AudioOutputDevice[] | null>(null);
+  const [deviceListError, setDeviceListError] = useState<string | null>(null);
+  const [isLoadingDevices, setIsLoadingDevices] = useState(false);
 
   async function selectAudioFile(): Promise<void> {
     const result = await open({
@@ -54,6 +59,24 @@ function App() {
       } catch (error: unknown) {
         setValidationError(formatValidationError(error));
       }
+    }
+  }
+
+  async function loadOutputDevices(): Promise<void> {
+    setIsLoadingDevices(true);
+    setDeviceListError(null);
+
+    try {
+      setOutputDevices(await listAudioOutputDevices());
+    } catch (error: unknown) {
+      setOutputDevices(null);
+      setDeviceListError(
+        isAudioDeviceListError(error)
+          ? "Audio output devices could not be enumerated."
+          : "An unexpected error occurred while listing audio devices.",
+      );
+    } finally {
+      setIsLoadingDevices(false);
     }
   }
 
@@ -94,6 +117,39 @@ function App() {
             {validationError}
           </p>
         ) : null}
+
+        <div className="mt-8 border-t border-zinc-800 pt-6">
+          <h2 className="text-lg font-medium">Audio output devices</h2>
+          <button
+            type="button"
+            onClick={() => void loadOutputDevices()}
+            disabled={isLoadingDevices}
+            className="mt-4 rounded-lg border border-zinc-700 px-4 py-2 font-medium text-zinc-100 disabled:cursor-wait disabled:opacity-60"
+          >
+            {isLoadingDevices ? "Loading devices..." : "List output devices"}
+          </button>
+
+          {outputDevices?.length ? (
+            <ul className="mt-4 space-y-2 text-sm text-zinc-300">
+              {outputDevices.map((device) => (
+                <li key={device.id}>
+                  {device.name}
+                  {device.isDefault ? " — Default" : ""}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+
+          {outputDevices?.length === 0 ? (
+            <p className="mt-4 text-sm text-zinc-400">No audio output devices were found.</p>
+          ) : null}
+
+          {deviceListError ? (
+            <p className="mt-4 text-sm text-red-300" role="alert">
+              {deviceListError}
+            </p>
+          ) : null}
+        </div>
       </section>
     </main>
   );
