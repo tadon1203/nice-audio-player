@@ -1,12 +1,16 @@
 # Nice Audio Player
 
-A high-quality local audio player for Windows, built with Tauri, Rust, React, and TypeScript.
+A Windows desktop application for reliable, high-quality playback of local audio files.
+
+The project is under active development and is built with Tauri v2, Rust, React, TypeScript, Vite, and Tailwind CSS.
 
 ## Documentation
 
-- [Requirements](docs/requirements.md)
-- [Architecture](docs/architecture.md)
-- [UI Design](docs/ui-design.md)
+- [Requirements](docs/requirements.md): accepted product requirements
+- [Architecture](docs/architecture.md): implementation rules and boundaries
+- [UI Design](docs/ui-design.md): visual and interaction principles
+
+Feature proposals, experiments, and implementation scope are tracked in GitHub Issues rather than long-lived documentation.
 
 ## Development
 
@@ -22,7 +26,7 @@ Start the desktop application:
 pnpm tauri dev
 ```
 
-Run all checks before completing a change:
+Run all checks before completing a code change:
 
 ```bash
 pnpm check

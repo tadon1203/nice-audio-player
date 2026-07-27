@@ -1,8 +1,14 @@
 # UI Design
 
-This document defines the visual and interaction direction for Nice Audio Player.
+This document defines accepted visual and interaction principles for Nice Audio Player.
 
-It covers layout, color, typography, artwork-based theming, motion, components, lyrics, visualization, accessibility, and patterns to avoid. Product capabilities belong in `requirements.md`, while implementation boundaries and performance rules belong in `architecture.md`.
+Product capabilities belong in `requirements.md`; implementation and performance boundaries belong in `architecture.md`; proposed screens and feature-specific UI scope belong in GitHub Issues.
+
+The terms in this document are normative as follows:
+
+- **Must**: required for accessibility, consistency, safety, or an accepted interaction contract
+- **Should**: the default design direction unless a tested alternative is better
+- **May** or **Suggested**: a starting point to validate during implementation, not a fixed value
 
 ## 1. Design Direction
 
@@ -520,7 +526,7 @@ Visual rules:
 - Avoid rainbow coloring.
 - Avoid rapid decorative particle effects.
 - Avoid flashing backgrounds.
-- Do not reduce visual quality dynamically.
+- Preserve visual coherence, but skip or reduce the frequency of stale frames when necessary to protect audio stability.
 
 The visualizer may respond to artwork-derived colors, but contrast and stability take priority over exact palette matching.
 
@@ -707,4 +713,4 @@ Avoid:
 - Effects that reduce artwork readability
 - Effects that reduce lyric readability
 - Motion unrelated to state or navigation
-- Automatically reducing visualizer quality
+- Allowing visualizer work to interfere with audio stability
