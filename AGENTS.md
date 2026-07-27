@@ -2,25 +2,26 @@
 
 ## Project
 
-- This project is a Windows desktop audio player built with Tauri v2, Rust, React, TypeScript, Vite, and Tailwind CSS.
-- Keep audio processing and persistent application state in Rust.
+- Nice Audio Player is a Windows desktop audio player built with Tauri v2, Rust, React, TypeScript, Vite, and Tailwind CSS.
+- Treat audio stability as the highest runtime priority.
+- Keep authoritative audio and persistent application state in Rust.
 - Keep presentation and user interaction in React.
-- Treat audio stability as the highest priority.
-- Keep the visualizer at fixed maximum quality and optimize toward 120 Hz without dynamically reducing visual quality.
 
 ## Documentation
 
-Read the relevant documentation before making implementation changes:
+Read the relevant document before changing behavior or boundaries:
 
-- `docs/requirements.md` defines product scope and user-facing requirements.
-- `docs/architecture.md` defines module responsibilities and implementation constraints.
-- `docs/ui-design.md` defines visual and interaction rules.
+- `README.md` is the project entry point and development guide.
+- `docs/requirements.md` defines accepted product requirements.
+- `docs/architecture.md` defines implementation rules and boundaries.
+- `docs/ui-design.md` defines visual and interaction principles.
+- GitHub Issues define individual features, experiments, and implementation scope.
 
-Update the relevant document when a change intentionally modifies its rules or scope.
+Update a long-lived document only when a change intentionally modifies its accepted requirements or rules. Do not copy Issue-specific plans or temporary implementation details into documentation.
 
 ## Commands
 
-Use `pwsh` to run PowerShell commands. Do not try to find `pwsh` path.
+Use `pwsh` for PowerShell commands.
 
 - Install dependencies: `pnpm install`
 - Start the app: `pnpm tauri dev`
@@ -33,27 +34,26 @@ Run `pnpm check` before reporting a coding task as complete.
 ## Code Rules
 
 - Use TypeScript strict mode.
-- Do not use `any` unless it is unavoidable and documented.
+- Do not use `any` unless unavoidable and documented.
 - Prefer small, single-purpose modules.
-- Use relative imports for files within the same feature.
-- Use `@/` imports for shared code used across features.
+- Use relative imports within the same feature and `@/` imports for shared code.
 - Use explicit types at Tauri command boundaries.
 - Validate untrusted input at the Rust/Tauri boundary.
-- Keep real-time visualizer data out of React state and context.
-- Do not perform file I/O, database access, logging, allocation-heavy work, or IPC inside the audio callback.
-- Reuse buffers and typed arrays in hot paths.
-- Avoid per-frame allocations.
+- Do not perform file I/O, database access, logging, IPC, sleeping, blocking synchronization, or allocation-heavy work inside an audio callback.
+- Reuse buffers and typed arrays in hot paths; avoid per-frame allocations.
+- Keep high-frequency audio and visualization data out of React state and context.
 - Do not manually edit generated files under `src-tauri/gen/`.
 - Add or update tests for changed logic when practical.
 
 ## Git Procedure
 
-- Start from a focused Issue using `.github/ISSUE_TEMPLATE/task.md`; fill in its Goal, Scope, Done, Notes, and Suggested branch sections.
-- Create `<type>/<issue-number>-<description>` from `main`; keep one Issue, branch, and pull request per outcome.
-- During implementation, track the Issue's Done items and verify them against code, tests, and manual checks before completion.
-- Run `pnpm check` before completion or commit. Review `git status`, `git diff`, and `git diff --staged`.
-- Use `<type>: <summary>` commits. Perform Git and GitHub operations only when explicitly requested. Use the GitHub connector; if `gh` is required, stop and report it.
-- PRs should include only completed Done items and `Closes #<issue-number>` when applicable. Use Squash and merge, then delete the remote branch, update `main`, and delete the local branch.
+- Start from a focused Issue using `.github/ISSUE_TEMPLATE/task.md`.
+- Create `<type>/<issue-number>-<description>` from `main` and keep one Issue, branch, and pull request per outcome.
+- Verify the Issue's Done items against code, tests, and manual checks.
+- Review `git status`, `git diff`, and `git diff --staged` before completion or commit.
+- Use `<type>: <summary>` commits.
+- Perform Git and GitHub write operations only when explicitly requested.
+- PRs should contain only completed scope and use `Closes #<issue-number>` when applicable.
 - Never commit secrets, local environment files, build outputs, generated dependencies, or editor-specific local settings.
 
 ## Boundaries
@@ -61,7 +61,8 @@ Run `pnpm check` before reporting a coding task as complete.
 Do not:
 
 - Weaken lint, type-check, test, or security rules merely to make checks pass
-- Suppress errors without documenting the reason
+- Add broad lint suppressions when a narrower fix or annotation is possible
 - Change public command or event contracts without updating their consumers
-- Preserve temporary compatibility code unless it is required
+- Preserve temporary compatibility code without a current requirement
+- Introduce abstractions solely for hypothetical future implementations
 - Change existing behavior unless the task explicitly requires it

@@ -1,42 +1,32 @@
 # Requirements
 
-This document defines what Nice Audio Player must provide as a product.
+This document defines accepted product requirements for Nice Audio Player.
 
-It describes the supported environment, user-facing capabilities, quality requirements, data handling, and features that are outside the initial scope. Implementation rules and module boundaries belong in `architecture.md`, while visual and interaction details belong in `ui-design.md`.
+It describes user-visible behavior, supported environments, quality expectations, and data-safety requirements. Implementation rules belong in `architecture.md`; visual and interaction rules belong in `ui-design.md`; proposed features and implementation scope belong in GitHub Issues.
 
-## 1. Product Goals
+## 1. Product Purpose
 
-Nice Audio Player is a Windows desktop application for managing and playing a local music library.
+Nice Audio Player is a Windows desktop application for playing and managing local audio files.
 
-The product should provide:
+The product should prioritize:
 
-- Reliable, high-quality local audio playback
-- Fast navigation through large music libraries
-- A polished, artwork-driven interface
-- High-quality real-time audio visualization
-- Extensible lyrics and artwork retrieval
-- Clear ownership of local data and credentials
+- Reliable, high-quality playback
+- Clear and responsive interaction
+- Safe handling of local files and credentials
+- A polished, artwork-led listening experience
+- Responsiveness with large local libraries
 
-Audio stability has priority over visual performance. The visualizer must use fixed maximum quality and should be optimized toward the active display refresh rate, including 120 Hz displays, without dynamically lowering quality.
+Audio stability has priority over visual work. Delayed visual updates may be skipped rather than allowed to interfere with playback.
 
 ## 2. Target Environment
 
-The initial release targets:
+The initial supported platform is Windows 11.
 
-- Windows 11
-- Tauri v2
-- Rust
-- React
-- TypeScript
-- Vite
-- Tailwind CSS
-- SQLite
+The application is implemented with Tauri v2, Rust, React, TypeScript, Vite, and Tailwind CSS. Persistent library data may use SQLite when library functionality is introduced.
 
-Other operating systems are not part of the initial release.
+The interface must remain usable at common Windows display-scaling levels and across ordinary desktop window sizes.
 
-The application should remain usable at common Windows display scaling levels and on displays with different refresh rates.
-
-## 3. Supported Audio Formats
+## 3. Audio Files
 
 The initial target formats are:
 
@@ -46,432 +36,119 @@ The initial target formats are:
 - AAC
 - M4A
 
-A file is supported only when its contained codec and audio stream can be decoded reliably. File extensions alone must not be treated as proof of a valid audio file.
+A file is supported only when its container and selected audio stream can be validated and decoded. File extensions alone are not proof that a file is valid or supported.
 
-Additional formats may be added later when they can be supported without weakening playback stability.
+Additional formats may be accepted through focused feature work when they can be supported without weakening playback reliability.
 
 ## 4. Playback
 
-The player must support:
+The accepted playback direction includes:
 
-- Play
-- Pause
-- Resume
-- Stop
-- Seek
-- Previous track
-- Next track
-- Volume control
-- Mute
-- Playback queue
-- Queue reordering
-- Repeat modes
-- Shuffle
-- Gapless playback
-- Output device selection
+- Play, pause, resume, and stop
+- Seeking and playback-position reporting
+- Previous and next track behavior
+- Volume and mute
+- Queue playback
+- Repeat and shuffle
+- Output-device selection
 - Shared output mode
-- Exclusive output mode where supported
-- Recovery from output-device disconnection where practical
-- Playback progress
-- Playback completion
-- Keyboard media controls
+- Playback completion and structured failure reporting
 
-Rust must remain the source of truth for playback state.
+Playback behavior must reflect the actual audio state. The UI must not present a successful or active state after the underlying operation has failed or ended.
 
-The application must not report a playback state that differs from the actual audio-engine state.
+Application-side resampling, channel conversion, gapless playback, exclusive output, and bit-perfect playback are not implied by this section. Each requires explicit acceptance and focused implementation scope.
 
-## 5. Loudness and Playback Statistics
+## 5. Audio Processing
 
-The player should support:
+Optional audio processing may include loudness normalization and ReplayGain support when separately accepted.
 
-- Track loudness normalization
-- Album loudness normalization
-- ReplayGain metadata where available
-- Calculated loudness values where required
-- Peak information
-- Playback history
-- Last played time
-- Play count
-- Skip count
-- Favorites
+Any processing that changes sample values must be explicit, user-visible, and bypassable where the product mode requires an unmodified path.
 
-Normalization must avoid clipping.
+Normalization must avoid clipping. Processing must not run in a way that compromises real-time playback stability.
 
-Playback history and counters should be updated only after clearly defined playback conditions are met. Brief previews or accidental starts must not always count as completed plays.
+## 6. Local Library
 
-## 6. Music Library
+The accepted library direction includes:
 
-The application must support:
+- Registering local music folders
+- Discovering and indexing supported audio files
+- Updating records when files change
+- Representing missing files without destructive automatic actions
+- Searching, sorting, and filtering
+- Track, album, artist, playlist, recent, and favorite views where the required data exists
+- Responsive presentation for large collections
 
-- Registering one or more music folders
-- Initial folder scanning
-- Incremental rescanning
-- File-system change detection
-- Adding newly discovered files
-- Updating changed files
-- Marking or removing missing files
-- Fast searching
-- Sorting
-- Filtering
-- Virtualized list rendering
-- Track view
-- Album view
-- Artist view
-- Genre view where metadata is available
-- Playlist view
-- Recently added view
-- Recently played view
-- Frequently played view
-- Unplayed view
-- Favorites view
+Long-running scans and analysis should expose progress and cancellation where practical.
 
-Library operations must remain responsive with large collections.
+Automatic deletion or destructive duplicate handling is not permitted.
 
-Scanning, metadata extraction, artwork processing, and audio analysis should expose progress and allow cancellation where practical.
+## 7. Metadata and Source Files
 
-## 7. Metadata
+The application may display available metadata such as:
 
-The application should display relevant metadata, including:
-
-- Track title
-- Album title
-- Artist
-- Album artist
-- Track number
-- Disc number
-- Genre
-- Year or date
+- Track, album, artist, and album artist
+- Track and disc numbers
+- Genre and date
 - Duration
-- File format
-- Codec
-- Sample rate
-- Channel count
-- Bit depth where available
-- Bit rate where meaningful
+- File format and codec
+- Sample rate, channel count, bit depth, and bit rate where meaningful
 - File path
 
-The application should support metadata editing.
+Application-level metadata overrides may be supported.
 
-Initial metadata edits may be stored as application-level overrides. Writing metadata changes back to source files must require an explicit user action.
+Writing metadata back to source files must require explicit user action. Source files must remain unchanged unless the user deliberately requests a modification.
 
-The application must preserve source files unless the user deliberately requests a file modification.
+## 8. Playlists and Playback History
 
-## 8. Playlists
+The accepted product direction includes manually managed playlists and playback-derived views such as recently played or frequently played.
 
-The application must support:
+Any play count, skip count, history, or completion statistic must use a clearly defined threshold. A brief preview or accidental start must not automatically count as a completed play.
 
-- Manually managed playlists
-- Adding tracks to playlists
-- Removing tracks from playlists
-- Reordering playlist entries
-- Renaming playlists
-- Deleting playlists
+Smart playlists and advanced statistics require separate accepted feature scope.
 
-The application should also support smart playlists based on conditions such as:
+## 9. Lyrics and Artwork
 
-- Artist
-- Album
-- Genre
-- Year
-- Rating or favorite state
-- Play count
-- Skip count
-- Last played time
-- Date added
-- Duration
-- File format
+The product may use local, embedded, cached, manually selected, or external lyrics and artwork sources when those sources are separately implemented.
 
-Smart playlists must be derived from stored rules rather than duplicated track lists.
+A confirmed user selection must not be silently replaced by an automatic provider result.
 
-## 9. Duplicate Detection
+Provider attribution and usage requirements must be respected. External-provider failures must not prevent local playback.
 
-The library should detect likely duplicate tracks.
+Artwork and lyrics processing must not delay or destabilize audio playback.
 
-Duplicate detection may use combinations of:
+## 10. Visualization
 
-- File path
-- File size
-- Modification time
-- Duration
-- Normalized metadata
-- Audio properties
-- File or content hashes where appropriate
+Visualization is supplementary and must never be required to understand playback state.
 
-Duplicate detection must not automatically delete files.
+Visualizer rendering must remain isolated from playback-critical work. Stale or delayed visual frames may be discarded rather than queued. The implementation may adapt update frequency or skip frames to preserve audio stability, provided the user-facing result remains coherent.
 
-Any destructive duplicate-resolution action must require explicit user confirmation.
+Specific visualizer modes and quality targets require focused feature acceptance.
 
-## 10. Lyrics
+## 11. Data, Credentials, and Privacy
 
-The application must support:
+Local library data should remain local unless the user explicitly enables an external service.
 
-- Plain lyrics
-- Synchronized lyrics
-- Local sidecar lyric files
-- Embedded lyrics
-- Cached lyrics
-- External lyrics providers
-- Manual lyric selection
-- Manual lyric editing
-- Timing offset adjustment
-- Provider attribution where required
+Credentials must:
 
-Lyrics should be resolved in this order:
+- Be stored using an operating-system-backed credential mechanism where available
+- Never be returned to the frontend as secret values
+- Never appear in logs, error messages, database records, debug output, or serialized events
 
-1. Local sidecar file
-2. Embedded lyrics
-3. User override
-4. Local cache
-5. Enabled external providers
-6. Manual search or editing
+External network access must be limited to user-enabled features and clearly identified providers.
 
-The application should support multiple provider candidates and help the user choose the correct result.
+## 12. Reliability and Safety
 
-Candidate matching may use:
+The application must:
 
-- Track title
-- Artist
-- Album
-- Duration
-- Track number
+- Report validation, decode, output, provider, and persistence failures clearly
+- Preserve unrelated user data after recoverable failures
+- Avoid silent fallback when fallback would change an explicitly selected playback mode
+- Avoid destructive file operations without confirmation
+- Shut down owned background and audio resources cleanly
+- Keep hardware-dependent behavior manually verifiable where deterministic automated testing is not practical
 
-A provider mismatch must not silently replace a confirmed user selection.
+## 13. Scope Management
 
-## 11. Lyrics Providers
+A capability is not an accepted requirement merely because it is described in an idea, roadmap, or Issue.
 
-Lyrics providers must be modular.
-
-Each provider may expose:
-
-- Provider name
-- Enabled state
-- Priority
-- Supported capabilities
-- API-key requirement
-- Search
-- Candidate lookup
-- Lyrics retrieval
-- Attribution
-- Rate-limit or error status
-
-Provider settings must support:
-
-- Enable or disable
-- Priority ordering
-- API-key entry
-- API-key replacement
-- API-key removal
-- Connection testing where supported
-- Cache clearing
-
-Failure of an external provider must not interrupt local playback or access to locally stored lyrics.
-
-## 12. Artwork
-
-Artwork should be resolved in this order:
-
-1. Embedded artwork
-2. Common artwork files in the track folder
-3. User-selected artwork
-4. Local cache
-5. Enabled external providers
-6. Generated fallback artwork
-
-Common folder artwork names may include:
-
-- `cover`
-- `folder`
-- `front`
-- `album`
-
-The application should support:
-
-- Artwork extraction
-- Artwork caching
-- User replacement
-- Provider attribution where required
-- Fallback artwork
-- Artwork-derived color extraction
-
-Artwork loading and processing must not block audio playback.
-
-## 13. Artwork Providers
-
-Artwork providers must be modular and independent from lyrics providers.
-
-Provider settings may include:
-
-- Enabled state
-- Priority
-- API-key configuration
-- Search capabilities
-- Image-size capabilities
-- Attribution requirements
-- Cache policy
-
-Provider failures must not prevent local or embedded artwork from being used.
-
-## 14. Visualizer
-
-The application should provide visualizer modes such as:
-
-- Spectrum
-- Waveform
-- Peak meter
-- RMS meter
-- VU meter
-- Stereo phase
-- Combined view
-- Full-screen view
-
-The visualizer must:
-
-- Use fixed maximum visual quality
-- Avoid automatic quality reduction
-- Aim to follow the active display refresh rate
-- Remain independent from React rendering
-- Avoid blocking or delaying audio processing
-- Use the latest available analysis data
-- Discard stale visualization frames
-- Avoid unbounded queues
-- Avoid unnecessary per-frame allocations
-
-A slower visualizer must never reduce playback stability.
-
-## 15. User Interface
-
-The interface must provide:
-
-- Library navigation
-- Search
-- Track lists
-- Album and artist browsing
-- Queue management
-- Persistent playback controls
-- Now Playing view
-- Lyrics view
-- Visualizer view
-- Settings
-- Provider configuration
-- Output-device configuration
-
-The interface should support:
-
-- Artwork-based theming
-- Smooth transitions
-- Animated control-state changes
-- Carefully limited SVG morphing
-- Keyboard navigation
-- Accessible focus states
-- Reduced-motion preferences
-
-Detailed visual rules belong in `ui-design.md`.
-
-## 16. Performance
-
-The application must prioritize playback reliability.
-
-The following requirements apply:
-
-- Normal UI interaction must not cause audio underruns
-- Scrolling and searching large libraries must remain responsive
-- File scanning must not block playback
-- Provider requests must not block playback
-- Database work must not run in the audio callback
-- File access must not run in the audio callback
-- Logging must not run in the audio callback
-- IPC must not run in the audio callback
-- Large or repeated allocations must be avoided in hot paths
-- Visualizer data must not update React state once per rendered frame
-- Stale visualizer frames must not accumulate
-
-Performance should be measured on representative Windows hardware rather than inferred only from development builds.
-
-## 17. Data Storage
-
-SQLite should store:
-
-- Registered library folders
-- Track metadata
-- Album and artist relationships
-- File identity information
-- Playlists
-- Smart-playlist rules
-- Favorites
-- Playback history
-- Play and skip counts
-- Analysis results
-- Cached lyrics metadata
-- Cached artwork metadata
-- Non-secret application settings
-
-Database changes must be versioned through migrations.
-
-Cached external content must retain provider and attribution information where required.
-
-## 18. Credentials and Security
-
-API keys and other provider credentials must:
-
-- Be handled by Rust
-- Be stored through an operating-system credential-store abstraction
-- Never be stored in source files
-- Never be stored in plain-text application settings
-- Never be written to logs
-- Never be returned to React after saving
-- Never be displayed again after saving
-
-The frontend may receive only credential states such as:
-
-- `missing`
-- `configured`
-- `invalid`
-- `unavailable`
-
-File paths, metadata, lyrics, artwork, and provider responses must be treated as untrusted input.
-
-## 19. Error Handling
-
-The application must handle recoverable errors without crashing.
-
-User-facing errors should:
-
-- Explain what failed
-- Provide an actionable next step where possible
-- Avoid exposing internal secrets
-- Avoid displaying raw stack traces
-- Preserve unrelated application functionality
-
-Examples include:
-
-- Unsupported audio file
-- Corrupted audio stream
-- Missing output device
-- Disconnected output device
-- Failed library scan
-- Unavailable provider
-- Invalid provider credential
-- Database failure
-- Missing source file
-
-Provider and artwork failures must not stop local audio playback.
-
-## 20. Out of Scope
-
-The initial product does not include:
-
-- Online music streaming
-- Cloud library synchronization
-- Multi-device synchronization
-- Mobile applications
-- User accounts
-- Social features
-- Public profiles
-- Sleep timer
-- Podcast management
-- Video playback
-- CD ripping
-- Music purchasing
-- Third-party DSP plugin hosting
-- Automatic visualizer quality reduction
-- Automatic destructive duplicate removal
+New capabilities should be accepted through a focused Issue before being added here. This document should describe durable product expectations, not temporary implementation status, branch plans, or speculative class and module structures.
