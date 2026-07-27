@@ -39,6 +39,13 @@ pub struct DecodeCancellation {
 }
 
 impl DecodeCancellation {
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "reserved for the future stop/cancellation boundary"
+        )
+    )]
     pub fn cancel(&self) {
         self.cancelled.store(true, Ordering::Relaxed);
     }

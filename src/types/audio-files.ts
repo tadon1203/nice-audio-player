@@ -35,3 +35,9 @@ export type AudioFileInspectionError =
   | { code: "missingChannelCount" }
   | { code: "invalidChannelCount" }
   | { code: "corruptedFile" };
+
+export type PlayAudioFileError =
+  | { code: "validationFailed"; error: AudioFileValidationError }
+  | { code: "decodeFailed" }
+  | { code: "outputFailed" }
+  | { code: "taskFailed" };

@@ -1,8 +1,7 @@
-#[allow(dead_code)]
 pub mod decoding;
 pub mod devices;
 pub mod inspection;
-#[allow(dead_code)]
+pub mod output;
 pub mod pcm;
 pub mod validation;
 

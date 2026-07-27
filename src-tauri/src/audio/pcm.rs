@@ -65,6 +65,10 @@ impl PcmBuffer {
         &self.samples
     }
 
+    pub(crate) fn into_samples(self) -> Vec<f32> {
+        self.samples
+    }
+
     pub const fn sample_rate(&self) -> SampleRate {
         self.sample_rate
     }
