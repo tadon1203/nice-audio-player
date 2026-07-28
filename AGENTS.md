@@ -45,29 +45,55 @@ Run `pnpm check` before reporting a coding task as complete.
 - Do not manually edit generated files under `src-tauri/gen/`.
 - Add or update tests for changed logic when practical.
 
-## Git Procedure
+## Git Workflow
+
+### Policy
 
 - Start from a focused Issue using `.github/ISSUE_TEMPLATE/task.md`.
 - Create `<type>/<issue-number>-<description>` from `main` and keep one Issue, branch, and pull request per outcome.
 - Verify the Issue's Done items against code, tests, and manual checks.
-- Review `git status`, `git diff`, and `git diff --staged` before completion or commit.
-- Use `<type>: <summary>` commits.
-- PRs should contain only completed scope and use `Closes #<issue-number>` when applicable.
+- Git/GitHub write operations require an explicit user request.
+- The ordinary merge workflow is not used; feature branches are always integrated by squash.
+- Use `<type>: <summary>` commit messages.
 - Never commit secrets, local environment files, build outputs, generated dependencies, or editor-specific local settings.
 
-### Merge and cleanup (`merge and cleanup`)
+### Commands
 
-Perform this procedure only when the user explicitly requests `merge and cleanup`.
-Do not infer permission from a request to commit, push, merge, or finish a coding task alone.
+| Keyword            | Scope                                             |
+| ------------------ | ------------------------------------------------- |
+| `commit`           | Commit the current branch changes only.           |
+| `push`             | Push the explicitly specified branch only.        |
+| `merge and squash` | Run the complete feature delivery workflow below. |
 
-When explicitly requested, after the feature work is committed:
+Do not infer permission to commit, push, merge, squash, or delete branches from a general coding request.
 
-1. Push the feature branch and merge it into `main`.
-2. Run `pnpm check` after the merge.
-3. Review the merge result with `git status`, `git log`, and `git diff` as needed.
-4. Push the updated `main` branch when the post-merge checks pass.
-5. Close the related Issue or PR when applicable.
-6. Delete the merged feature branch locally and remotely when it is no longer needed.
+### Delivery workflow
+
+When the user explicitly requests `merge and squash`:
+
+1. Inspect the current branch, worktree, local branches, and remote branches.
+2. Verify the Issue's Done items, run the relevant tests, and run `pnpm check`.
+3. Commit with `<type>: <summary>`.
+4. Push the feature branch.
+5. Switch to `main` and verify that the target branch is based on the current `main`.
+6. Integrate with `git merge --squash <feature-branch>`; do not create a regular merge commit.
+7. Create one squash commit on `main` using `<type>: <summary>`.
+8. Run `pnpm check` after the squash commit.
+9. Push `main`.
+10. Close the related Issue or PR when applicable.
+11. Delete the feature branch locally and remotely only after the squash commit is present on the remote `main`.
+
+### Resume rules
+
+When `continue merge and squash` is explicitly requested:
+
+- Inspect `git status`, `git log`, local branches, and remote branches before taking action.
+- Determine the first incomplete phase and resume from there.
+- Do not recreate an existing commit, repeat a completed squash, or push an already synchronized branch unnecessarily.
+- If there are conflicts, unexpected uncommitted changes, or remote divergence, stop and report them before writing.
+- If a completed check is followed by new changes, run the check again.
+- CI verification is optional when the repository has no CI configured.
+- Release tags, builds, and other release actions require a separate explicit request.
 
 ## Boundaries
 
