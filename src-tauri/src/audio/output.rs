@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, Sample, SampleFormat, StreamConfig, StreamInstant, SupportedStreamConfig};
+use tauri_plugin_log::log::{error, info};
 
 use super::decoding::DecodedAudioSpec;
 use super::pcm_queue::PcmConsumer;
@@ -153,19 +154,39 @@ pub(crate) fn build_output_stream(
     let device = host
         .default_output_device()
         .ok_or(AudioOutputError::NoDefaultOutputDevice)?;
+    let device_name = device
+        .description()
+        .map(|description| description.name().to_owned())
+        .unwrap_or_else(|error| format!("<unavailable: {error}>"));
     let sample_rate = spec.sample_rate.get();
     let channel_count = spec.channel_count.get();
     let ranges = device
         .supported_output_configs()
-        .map_err(|_| AudioOutputError::ConfigurationQueryFailed)?;
-    let supported_config = select_output_config(ranges, sample_rate, channel_count)?;
+        .map_err(|_| AudioOutputError::ConfigurationQueryFailed)?
+        .collect::<Vec<_>>();
+    info!(
+        "audio output configs: device={device_name:?}, pcm_sample_rate={sample_rate}, \
+         pcm_channels={channel_count}, ranges={}",
+        format_supported_output_configs(&ranges)
+    );
+    let supported_config =
+        select_output_config(ranges.iter().cloned(), sample_rate, channel_count)?;
     let sample_format = supported_config.sample_format();
     let config = supported_config.config();
+    info!(
+        "audio output config selected: device={device_name:?}, \
+         pcm_sample_rate={sample_rate}, pcm_channels={channel_count}, \
+         sample_format={sample_format:?}, output_sample_rate={}, \
+         output_channels={}, buffer_size={:?}",
+        config.sample_rate, config.channels, config.buffer_size,
+    );
     let (position_sender, position_receiver) = mpsc::sync_channel(1);
     let stream = match sample_format {
         SampleFormat::F32 => build_stream::<f32>(
             &device,
+            &device_name,
             config,
+            sample_format,
             stream_id,
             consumer,
             producer_state,
@@ -175,7 +196,9 @@ pub(crate) fn build_output_stream(
         )?,
         SampleFormat::F64 => build_stream::<f64>(
             &device,
+            &device_name,
             config,
+            sample_format,
             stream_id,
             consumer,
             producer_state,
@@ -185,7 +208,9 @@ pub(crate) fn build_output_stream(
         )?,
         SampleFormat::I8 => build_stream::<i8>(
             &device,
+            &device_name,
             config,
+            sample_format,
             stream_id,
             consumer,
             producer_state,
@@ -195,7 +220,9 @@ pub(crate) fn build_output_stream(
         )?,
         SampleFormat::I16 => build_stream::<i16>(
             &device,
+            &device_name,
             config,
+            sample_format,
             stream_id,
             consumer,
             producer_state,
@@ -205,7 +232,9 @@ pub(crate) fn build_output_stream(
         )?,
         SampleFormat::I24 => build_stream::<cpal::I24>(
             &device,
+            &device_name,
             config,
+            sample_format,
             stream_id,
             consumer,
             producer_state,
@@ -215,7 +244,9 @@ pub(crate) fn build_output_stream(
         )?,
         SampleFormat::I32 => build_stream::<i32>(
             &device,
+            &device_name,
             config,
+            sample_format,
             stream_id,
             consumer,
             producer_state,
@@ -225,7 +256,9 @@ pub(crate) fn build_output_stream(
         )?,
         SampleFormat::I64 => build_stream::<i64>(
             &device,
+            &device_name,
             config,
+            sample_format,
             stream_id,
             consumer,
             producer_state,
@@ -235,7 +268,9 @@ pub(crate) fn build_output_stream(
         )?,
         SampleFormat::U8 => build_stream::<u8>(
             &device,
+            &device_name,
             config,
+            sample_format,
             stream_id,
             consumer,
             producer_state,
@@ -245,7 +280,9 @@ pub(crate) fn build_output_stream(
         )?,
         SampleFormat::U16 => build_stream::<u16>(
             &device,
+            &device_name,
             config,
+            sample_format,
             stream_id,
             consumer,
             producer_state,
@@ -255,7 +292,9 @@ pub(crate) fn build_output_stream(
         )?,
         SampleFormat::U24 => build_stream::<cpal::U24>(
             &device,
+            &device_name,
             config,
+            sample_format,
             stream_id,
             consumer,
             producer_state,
@@ -265,7 +304,9 @@ pub(crate) fn build_output_stream(
         )?,
         SampleFormat::U32 => build_stream::<u32>(
             &device,
+            &device_name,
             config,
+            sample_format,
             stream_id,
             consumer,
             producer_state,
@@ -275,7 +316,9 @@ pub(crate) fn build_output_stream(
         )?,
         SampleFormat::U64 => build_stream::<u64>(
             &device,
+            &device_name,
             config,
+            sample_format,
             stream_id,
             consumer,
             producer_state,
@@ -292,6 +335,23 @@ pub(crate) fn build_output_stream(
         latest_position_update: None,
         last_played_frame_position: 0,
     })
+}
+
+fn format_supported_output_configs(ranges: &[cpal::SupportedStreamConfigRange]) -> String {
+    ranges
+        .iter()
+        .map(|range| {
+            format!(
+                "channels={}, sample_rate={}..={}, sample_format={:?}, buffer_size={:?}",
+                range.channels(),
+                range.min_sample_rate(),
+                range.max_sample_rate(),
+                range.sample_format(),
+                range.buffer_size(),
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("; ")
 }
 
 fn select_output_config(
@@ -371,7 +431,9 @@ where
 #[allow(clippy::too_many_arguments)]
 fn build_stream<T>(
     device: &cpal::Device,
+    device_name: &str,
     config: StreamConfig,
+    sample_format: SampleFormat,
     stream_id: OutputStreamId,
     mut consumer: PcmConsumer,
     producer_state: Arc<AtomicProducerState>,
@@ -382,6 +444,9 @@ fn build_stream<T>(
 where
     T: cpal::SizedSample + FromSample<f32>,
 {
+    let config_sample_rate = config.sample_rate;
+    let config_channels = config.channels;
+    let config_buffer_size = config.buffer_size;
     let sample_rate = config.sample_rate;
     let channel_count = usize::from(config.channels);
     let error_sender = signal_sender.clone();
@@ -440,7 +505,15 @@ where
             },
             None,
         )
-        .map_err(|_| AudioOutputError::StreamBuildFailed)?;
+        .map_err(|error| {
+            error!(
+                "audio output stream build failed: device={device_name:?}, \
+                 sample_format={sample_format:?}, sample_rate={}, channels={}, \
+                 buffer_size={:?}, error={error:?}",
+                config_sample_rate, config_channels, config_buffer_size,
+            );
+            AudioOutputError::StreamBuildFailed
+        })?;
 
     Ok(stream)
 }
@@ -491,8 +564,8 @@ fn calculate_end_time(
 #[cfg(test)]
 mod tests {
     use super::{
-        calculate_end_time, played_frame_position, sample_format_rank, select_output_config,
-        write_output_samples, PositionUpdate,
+        calculate_end_time, format_supported_output_configs, played_frame_position,
+        sample_format_rank, select_output_config, write_output_samples, PositionUpdate,
     };
     use cpal::{SampleFormat, StreamInstant, SupportedBufferSize, SupportedStreamConfigRange};
     use std::time::Duration;
@@ -531,6 +604,24 @@ mod tests {
         assert!(select_output_config([range(SampleFormat::F32, 1)], 44_100, 2).is_err());
         assert!(select_output_config([range(SampleFormat::F32, 2)], 96_000, 2).is_err());
         assert!(select_output_config([range(SampleFormat::DsdU8, 2)], 44_100, 2).is_err());
+    }
+
+    #[test]
+    fn formats_supported_output_configs_for_diagnostics() {
+        let ranges = vec![SupportedStreamConfigRange::new(
+            2,
+            44_100,
+            96_000,
+            SupportedBufferSize::Unknown,
+            SampleFormat::F32,
+        )];
+
+        let formatted = format_supported_output_configs(&ranges);
+
+        assert!(formatted.contains("channels=2"));
+        assert!(formatted.contains("sample_rate=44100..=96000"));
+        assert!(formatted.contains("sample_format=F32"));
+        assert!(formatted.contains("buffer_size=Unknown"));
     }
 
     #[test]
