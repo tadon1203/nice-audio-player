@@ -36,8 +36,25 @@ export type AudioFileInspectionError =
   | { code: "invalidChannelCount" }
   | { code: "corruptedFile" };
 
-export type PlayAudioFileError =
+export type PlaybackFailureCode =
+  | "noOutputDevice"
+  | "unsupportedOutputConfiguration"
+  | "outputStreamBuildFailed"
+  | "outputStreamStartFailed"
+  | "outputStreamRuntimeFailed"
+  | "completionTimingFailed"
+  | "playbackWorkerUnavailable";
+
+export type PlaybackSnapshot =
+  | { status: "stopped" }
+  | { status: "playing"; playbackId: string }
+  | { status: "failed"; playbackId?: string; error: PlaybackFailureCode };
+
+export type StartAudioFileError =
   | { code: "validationFailed"; error: AudioFileValidationError }
   | { code: "decodeFailed" }
   | { code: "outputFailed" }
+  | { code: "playbackWorkerUnavailable" }
   | { code: "taskFailed" };
+
+export type StopAudioPlaybackError = { code: "playbackWorkerUnavailable" } | { code: "taskFailed" };

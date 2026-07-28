@@ -1,0 +1,6 @@
+prefix_rule(
+    pattern = ["pnpm", "check"],
+    decision = "allow",
+    justification = "Vitest needs to spawn esbuild while loading vite.config.ts.",
+    match = ["pnpm check"],
+)
