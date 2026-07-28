@@ -121,10 +121,8 @@ export function isResumeAudioPlaybackError(value: unknown): value is ResumeAudio
 export function isPlaybackSnapshot(value: unknown): value is PlaybackSnapshot {
   if (typeof value !== "object" || value === null || !("status" in value)) return false;
   if (value.status === "stopped") return true;
-  if (value.status === "playing")
-    return "playbackId" in value && typeof value.playbackId === "string";
-  if (value.status === "paused")
-    return "playbackId" in value && typeof value.playbackId === "string";
+  if (value.status === "playing") return isTimedPlaybackSnapshot(value);
+  if (value.status === "paused") return isTimedPlaybackSnapshot(value);
   return (
     value.status === "failed" &&
     "error" in value &&
@@ -132,6 +130,21 @@ export function isPlaybackSnapshot(value: unknown): value is PlaybackSnapshot {
     playbackFailureCodes.has(value.error as PlaybackFailureCode) &&
     (!("playbackId" in value) || typeof value.playbackId === "string")
   );
+}
+
+function isTimedPlaybackSnapshot(
+  value: Record<string, unknown>,
+): value is { playbackId: string; positionMs: number; durationMs: number } {
+  return (
+    typeof value.playbackId === "string" &&
+    isValidTimingValue(value.positionMs) &&
+    isValidTimingValue(value.durationMs) &&
+    value.positionMs <= value.durationMs
+  );
+}
+
+function isValidTimingValue(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }
 
 function isPlaybackControlError(

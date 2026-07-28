@@ -48,8 +48,8 @@ export type PlaybackFailureCode =
 
 export type PlaybackSnapshot =
   | { status: "stopped" }
-  | { status: "playing"; playbackId: string }
-  | { status: "paused"; playbackId: string }
+  | { status: "playing"; playbackId: string; positionMs: number; durationMs: number }
+  | { status: "paused"; playbackId: string; positionMs: number; durationMs: number }
   | { status: "failed"; playbackId?: string; error: PlaybackFailureCode };
 
 export type StartAudioFileError =

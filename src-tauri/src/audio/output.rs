@@ -1,4 +1,4 @@
-use std::sync::mpsc::SyncSender;
+use std::sync::mpsc::{self, Receiver, SyncSender};
 use std::time::Duration;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
@@ -22,6 +22,13 @@ pub(crate) enum OutputSignal {
     },
 }
 
+#[derive(Debug, Copy, Clone)]
+pub(crate) struct PositionUpdate {
+    pub(crate) start_frame: u64,
+    pub(crate) end_frame: u64,
+    pub(crate) playback_time: StreamInstant,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AudioOutputError {
     NoDefaultOutputDevice,
@@ -35,6 +42,9 @@ pub enum AudioOutputError {
 
 pub(crate) struct PreparedOutputStream {
     stream: cpal::Stream,
+    position_receiver: Receiver<PositionUpdate>,
+    latest_position_update: Option<PositionUpdate>,
+    last_played_frame_position: u64,
 }
 
 impl PreparedOutputStream {
@@ -59,6 +69,35 @@ impl PreparedOutputStream {
     pub(crate) fn now(&self) -> StreamInstant {
         self.stream.now()
     }
+
+    pub(crate) fn played_frame_position(
+        &mut self,
+        sample_rate: u32,
+        total_frame_count: u64,
+    ) -> u64 {
+        while let Ok(update) = self.position_receiver.try_recv() {
+            self.latest_position_update = Some(update);
+        }
+
+        let position =
+            self.latest_position_update
+                .map_or(self.last_played_frame_position, |update| {
+                    played_frame_position(
+                        update,
+                        self.stream.now(),
+                        sample_rate,
+                        total_frame_count,
+                        self.last_played_frame_position,
+                    )
+                });
+        self.last_played_frame_position = self.last_played_frame_position.max(position);
+        self.last_played_frame_position
+    }
+
+    pub(crate) fn clear_timing_anchor(&mut self) {
+        while self.position_receiver.try_recv().is_ok() {}
+        self.latest_position_update = None;
+    }
 }
 
 pub(crate) fn build_output_stream(
@@ -78,27 +117,113 @@ pub(crate) fn build_output_stream(
     let supported_config = select_output_config(ranges, sample_rate, channel_count)?;
     let sample_format = supported_config.sample_format();
     let config = supported_config.config();
+    let (position_sender, position_receiver) = mpsc::sync_channel(1);
     let stream = match sample_format {
-        SampleFormat::F32 => build_stream::<f32>(&device, config, stream_id, pcm, signal_sender)?,
-        SampleFormat::F64 => build_stream::<f64>(&device, config, stream_id, pcm, signal_sender)?,
-        SampleFormat::I8 => build_stream::<i8>(&device, config, stream_id, pcm, signal_sender)?,
-        SampleFormat::I16 => build_stream::<i16>(&device, config, stream_id, pcm, signal_sender)?,
-        SampleFormat::I24 => {
-            build_stream::<cpal::I24>(&device, config, stream_id, pcm, signal_sender)?
-        }
-        SampleFormat::I32 => build_stream::<i32>(&device, config, stream_id, pcm, signal_sender)?,
-        SampleFormat::I64 => build_stream::<i64>(&device, config, stream_id, pcm, signal_sender)?,
-        SampleFormat::U8 => build_stream::<u8>(&device, config, stream_id, pcm, signal_sender)?,
-        SampleFormat::U16 => build_stream::<u16>(&device, config, stream_id, pcm, signal_sender)?,
-        SampleFormat::U24 => {
-            build_stream::<cpal::U24>(&device, config, stream_id, pcm, signal_sender)?
-        }
-        SampleFormat::U32 => build_stream::<u32>(&device, config, stream_id, pcm, signal_sender)?,
-        SampleFormat::U64 => build_stream::<u64>(&device, config, stream_id, pcm, signal_sender)?,
+        SampleFormat::F32 => build_stream::<f32>(
+            &device,
+            config,
+            stream_id,
+            pcm,
+            signal_sender.clone(),
+            position_sender.clone(),
+        )?,
+        SampleFormat::F64 => build_stream::<f64>(
+            &device,
+            config,
+            stream_id,
+            pcm,
+            signal_sender.clone(),
+            position_sender.clone(),
+        )?,
+        SampleFormat::I8 => build_stream::<i8>(
+            &device,
+            config,
+            stream_id,
+            pcm,
+            signal_sender.clone(),
+            position_sender.clone(),
+        )?,
+        SampleFormat::I16 => build_stream::<i16>(
+            &device,
+            config,
+            stream_id,
+            pcm,
+            signal_sender.clone(),
+            position_sender.clone(),
+        )?,
+        SampleFormat::I24 => build_stream::<cpal::I24>(
+            &device,
+            config,
+            stream_id,
+            pcm,
+            signal_sender.clone(),
+            position_sender.clone(),
+        )?,
+        SampleFormat::I32 => build_stream::<i32>(
+            &device,
+            config,
+            stream_id,
+            pcm,
+            signal_sender.clone(),
+            position_sender.clone(),
+        )?,
+        SampleFormat::I64 => build_stream::<i64>(
+            &device,
+            config,
+            stream_id,
+            pcm,
+            signal_sender.clone(),
+            position_sender.clone(),
+        )?,
+        SampleFormat::U8 => build_stream::<u8>(
+            &device,
+            config,
+            stream_id,
+            pcm,
+            signal_sender.clone(),
+            position_sender.clone(),
+        )?,
+        SampleFormat::U16 => build_stream::<u16>(
+            &device,
+            config,
+            stream_id,
+            pcm,
+            signal_sender.clone(),
+            position_sender.clone(),
+        )?,
+        SampleFormat::U24 => build_stream::<cpal::U24>(
+            &device,
+            config,
+            stream_id,
+            pcm,
+            signal_sender.clone(),
+            position_sender.clone(),
+        )?,
+        SampleFormat::U32 => build_stream::<u32>(
+            &device,
+            config,
+            stream_id,
+            pcm,
+            signal_sender.clone(),
+            position_sender.clone(),
+        )?,
+        SampleFormat::U64 => build_stream::<u64>(
+            &device,
+            config,
+            stream_id,
+            pcm,
+            signal_sender.clone(),
+            position_sender.clone(),
+        )?,
         _ => return Err(AudioOutputError::UnsupportedConfiguration),
     };
 
-    Ok(PreparedOutputStream { stream })
+    Ok(PreparedOutputStream {
+        stream,
+        position_receiver,
+        latest_position_update: None,
+        last_played_frame_position: 0,
+    })
 }
 
 fn select_output_config(
@@ -167,6 +292,7 @@ fn build_stream<T>(
     stream_id: OutputStreamId,
     pcm: PcmBuffer,
     signal_sender: SyncSender<OutputSignal>,
+    position_sender: SyncSender<PositionUpdate>,
 ) -> Result<cpal::Stream, AudioOutputError>
 where
     T: cpal::SizedSample + FromSample<f32>,
@@ -185,7 +311,14 @@ where
         .build_output_stream(
             config,
             move |output: &mut [T], info| {
+                let start_frame = (position / channel_count) as u64;
                 let written_sample_count = write_output_samples(output, &samples, &mut position);
+                let end_frame = (position / channel_count) as u64;
+                let _ = position_sender.try_send(PositionUpdate {
+                    start_frame,
+                    end_frame,
+                    playback_time: info.timestamp().playback,
+                });
 
                 if position < source_sample_count || completion_sent {
                     return;
@@ -217,6 +350,30 @@ where
     Ok(stream)
 }
 
+fn elapsed_frames(elapsed: Duration, sample_rate: u32) -> u64 {
+    ((elapsed.as_nanos() * u128::from(sample_rate)) / 1_000_000_000).min(u128::from(u64::MAX))
+        as u64
+}
+
+fn played_frame_position(
+    update: PositionUpdate,
+    now: StreamInstant,
+    sample_rate: u32,
+    total_frame_count: u64,
+    last_position: u64,
+) -> u64 {
+    let elapsed = now
+        .checked_duration_since(update.playback_time)
+        .map_or(0, |duration| elapsed_frames(duration, sample_rate));
+    last_position.max(
+        update
+            .start_frame
+            .saturating_add(elapsed)
+            .min(update.end_frame)
+            .min(total_frame_count),
+    )
+}
+
 #[allow(clippy::manual_is_multiple_of)]
 fn calculate_end_time(
     playback_start: StreamInstant,
@@ -240,7 +397,8 @@ fn calculate_end_time(
 #[cfg(test)]
 mod tests {
     use super::{
-        calculate_end_time, sample_format_rank, select_output_config, write_output_samples,
+        calculate_end_time, played_frame_position, sample_format_rank, select_output_config,
+        write_output_samples, PositionUpdate,
     };
     use cpal::{SampleFormat, StreamInstant, SupportedBufferSize, SupportedStreamConfigRange};
     use std::time::Duration;
@@ -371,5 +529,122 @@ mod tests {
             end.checked_duration_since(start),
             Some(Duration::from_secs_f64(1.0 / 48_000.0))
         );
+    }
+
+    #[test]
+    fn calculates_played_frames_from_stream_clock_elapsed_time() {
+        let position = played_frame_position(
+            PositionUpdate {
+                start_frame: 100,
+                end_frame: 300,
+                playback_time: StreamInstant::new(10, 0),
+            },
+            StreamInstant::new(11, 500_000_000),
+            100,
+            1_000,
+            0,
+        );
+
+        assert_eq!(position, 250);
+    }
+
+    #[test]
+    fn clamps_and_keeps_played_position_monotonic() {
+        let update = PositionUpdate {
+            start_frame: 900,
+            end_frame: 1_000,
+            playback_time: StreamInstant::new(10, 0),
+        };
+
+        assert_eq!(
+            played_frame_position(update, StreamInstant::new(12, 0), 100, 1_000, 0),
+            1_000
+        );
+        assert_eq!(
+            played_frame_position(update, StreamInstant::new(10, 0), 100, 1_000, 950),
+            950
+        );
+    }
+
+    #[test]
+    fn stops_at_callback_end_when_stream_clock_runs_past_callback_length() {
+        let position = played_frame_position(
+            PositionUpdate {
+                start_frame: 100,
+                end_frame: 150,
+                playback_time: StreamInstant::new(10, 0),
+            },
+            StreamInstant::new(20, 0),
+            100,
+            1_000,
+            0,
+        );
+
+        assert_eq!(position, 150);
+    }
+
+    #[test]
+    fn stops_at_track_end_even_when_callback_end_is_later() {
+        let position = played_frame_position(
+            PositionUpdate {
+                start_frame: 900,
+                end_frame: 1_100,
+                playback_time: StreamInstant::new(10, 0),
+            },
+            StreamInstant::new(20, 0),
+            100,
+            1_000,
+            0,
+        );
+
+        assert_eq!(position, 1_000);
+    }
+
+    #[test]
+    fn does_not_move_backwards_when_stream_clock_is_before_playback_timestamp() {
+        let position = played_frame_position(
+            PositionUpdate {
+                start_frame: 100,
+                end_frame: 300,
+                playback_time: StreamInstant::new(20, 0),
+            },
+            StreamInstant::new(10, 0),
+            100,
+            1_000,
+            0,
+        );
+        let position_after_progress = played_frame_position(
+            PositionUpdate {
+                start_frame: 100,
+                end_frame: 300,
+                playback_time: StreamInstant::new(20, 0),
+            },
+            StreamInstant::new(10, 0),
+            100,
+            1_000,
+            250,
+        );
+
+        assert_eq!(position, 100);
+        assert_eq!(position_after_progress, 250);
+    }
+
+    #[test]
+    fn builds_callback_frame_ranges_from_stereo_sample_positions() {
+        let source = [1.0; 6];
+        let mut position = 2;
+        let mut normal_output = [0.0; 4];
+        let start_frame = position / 2;
+        write_output_samples(&mut normal_output, &source, &mut position);
+        let end_frame = position / 2;
+        assert_eq!((start_frame, end_frame), (1, 3));
+
+        let mut partial_output = [0.0; 4];
+        let mut partial_position = 4;
+        let start_frame = partial_position / 2;
+        write_output_samples(&mut partial_output, &source, &mut partial_position);
+        let end_frame = partial_position / 2;
+        assert_eq!((start_frame, end_frame), (2, 3));
+        assert_eq!(partial_output, [1.0, 1.0, 0.0, 0.0]);
     }
 }
