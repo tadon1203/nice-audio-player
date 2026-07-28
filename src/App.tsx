@@ -1,15 +1,18 @@
 import { open } from "@tauri-apps/plugin-dialog";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { isAudioDeviceListError, listAudioOutputDevices } from "@/api/audio-devices";
 import {
   isAudioFileValidationError,
-  isPlayAudioFileError,
-  playAudioFile,
+  getPlaybackState,
+  isStartAudioFileError,
+  listenToPlaybackState,
+  startAudioFile,
+  stopAudioPlayback,
   validateAudioFile,
 } from "@/api/audio-files";
 import type { AudioOutputDevice } from "@/types/audio-devices";
-import type { ValidatedAudioFile } from "@/types/audio-files";
+import type { PlaybackSnapshot, ValidatedAudioFile } from "@/types/audio-files";
 
 function formatValidationError(error: unknown): string {
   if (!isAudioFileValidationError(error)) {
@@ -41,9 +44,36 @@ function App() {
   const [outputDevices, setOutputDevices] = useState<AudioOutputDevice[] | null>(null);
   const [deviceListError, setDeviceListError] = useState<string | null>(null);
   const [isLoadingDevices, setIsLoadingDevices] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [playbackMessage, setPlaybackMessage] = useState<string | null>(null);
+  const [playback, setPlayback] = useState<PlaybackSnapshot>({ status: "stopped" });
+  const [isStarting, setIsStarting] = useState(false);
+  const [isStopping, setIsStopping] = useState(false);
   const [playbackError, setPlaybackError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    let unsubscribe: (() => void) | undefined;
+    async function initializePlaybackState(): Promise<void> {
+      try {
+        const registeredUnsubscribe = await listenToPlaybackState((snapshot) => {
+          if (active) setPlayback(snapshot);
+        });
+        if (!active) {
+          registeredUnsubscribe();
+          return;
+        }
+        unsubscribe = registeredUnsubscribe;
+        const snapshot = await getPlaybackState();
+        if (active) setPlayback(snapshot);
+      } catch {
+        if (active) setPlaybackError("The playback state could not be read.");
+      }
+    }
+    void initializePlaybackState();
+    return () => {
+      active = false;
+      unsubscribe?.();
+    };
+  }, []);
 
   async function selectAudioFile(): Promise<void> {
     const result = await open({
@@ -61,7 +91,6 @@ function App() {
       setSelectedPath(result);
       setValidatedFile(null);
       setValidationError(null);
-      setPlaybackMessage(null);
       setPlaybackError(null);
 
       try {
@@ -73,19 +102,18 @@ function App() {
   }
 
   async function playSelectedAudioFile(): Promise<void> {
-    if (validatedFile === null || isPlaying) {
+    if (validatedFile === null || isStarting) {
       return;
     }
 
-    setIsPlaying(true);
-    setPlaybackMessage(null);
+    setIsStarting(true);
     setPlaybackError(null);
 
     try {
-      await playAudioFile(validatedFile.path);
-      setPlaybackMessage("Playback completed.");
+      setPlayback(await startAudioFile(validatedFile.path));
     } catch (error: unknown) {
-      if (!isPlayAudioFileError(error)) {
+      if (!isStartAudioFileError(error)) {
+        console.error("Unexpected playback error", error);
         setPlaybackError("An unexpected playback error occurred.");
       } else {
         switch (error.code) {
@@ -98,13 +126,28 @@ function App() {
           case "outputFailed":
             setPlaybackError("The audio output could not play this file.");
             break;
+          case "playbackWorkerUnavailable":
+            setPlaybackError("The playback service is unavailable.");
+            break;
           case "taskFailed":
             setPlaybackError("The playback task failed.");
             break;
         }
       }
     } finally {
-      setIsPlaying(false);
+      setIsStarting(false);
+    }
+  }
+
+  async function stopPlayback(): Promise<void> {
+    setIsStopping(true);
+    setPlaybackError(null);
+    try {
+      setPlayback(await stopAudioPlayback());
+    } catch {
+      setPlaybackError("The playback service is unavailable.");
+    } finally {
+      setIsStopping(false);
     }
   }
 
@@ -136,7 +179,6 @@ function App() {
         <button
           type="button"
           onClick={() => void selectAudioFile()}
-          disabled={isPlaying}
           className="mt-6 rounded-lg bg-zinc-100 px-4 py-2 font-medium text-zinc-950"
         >
           音楽ファイルを選択
@@ -168,21 +210,35 @@ function App() {
         <button
           type="button"
           onClick={() => void playSelectedAudioFile()}
-          disabled={validatedFile === null || isPlaying}
+          disabled={validatedFile === null || isStarting}
           className="mt-4 rounded-lg border border-zinc-700 px-4 py-2 font-medium text-zinc-100 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {isPlaying ? "Playing..." : "Play"}
+          {isStarting ? "Starting..." : "Play"}
         </button>
 
-        {playbackMessage ? (
-          <p className="mt-4 text-sm text-emerald-300" role="status">
-            {playbackMessage}
-          </p>
+        {playback.status === "playing" ? (
+          <button
+            type="button"
+            onClick={() => void stopPlayback()}
+            disabled={isStopping}
+            className="ml-3 rounded-lg border border-zinc-700 px-4 py-2 font-medium text-zinc-100 disabled:opacity-60"
+          >
+            {isStopping ? "Stopping..." : "Stop"}
+          </button>
         ) : null}
+        <p className="mt-4 text-sm text-zinc-400" role="status">
+          Playback: {playback.status}
+          {playback.status === "playing" ? ` (${playback.playbackId})` : ""}
+        </p>
 
         {playbackError ? (
           <p className="mt-4 text-sm text-red-300" role="alert">
             {playbackError}
+          </p>
+        ) : null}
+        {playback.status === "failed" ? (
+          <p className="mt-4 text-sm text-red-300" role="alert">
+            Playback failed: {playback.error}
           </p>
         ) : null}
 

@@ -1,10 +1,26 @@
-use std::sync::mpsc::{self, Receiver, SyncSender};
+use std::sync::mpsc::SyncSender;
 use std::time::Duration;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, Sample, SampleFormat, StreamConfig, StreamInstant, SupportedStreamConfig};
 
 use super::pcm::PcmBuffer;
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub(crate) struct OutputStreamId(pub(crate) u64);
+
+pub(crate) enum OutputSignal {
+    FinalFramesSubmitted {
+        stream_id: OutputStreamId,
+        end_time: StreamInstant,
+    },
+    StreamFailed {
+        stream_id: OutputStreamId,
+    },
+    CompletionTimingFailed {
+        stream_id: OutputStreamId,
+    },
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AudioOutputError {
@@ -13,19 +29,29 @@ pub enum AudioOutputError {
     UnsupportedConfiguration,
     StreamBuildFailed,
     StreamStartFailed,
-    StreamRuntimeFailed,
-    CompletionTimingFailed,
-    CompletionSignalFailed,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-enum OutputSignal {
-    FinalFramesSubmitted(StreamInstant),
-    StreamFailed,
-    CompletionTimingFailed,
+pub(crate) struct PreparedOutputStream {
+    stream: cpal::Stream,
 }
 
-pub fn play_pcm_to_completion(pcm: PcmBuffer) -> Result<(), AudioOutputError> {
+impl PreparedOutputStream {
+    pub(crate) fn start(&self) -> Result<(), AudioOutputError> {
+        self.stream
+            .play()
+            .map_err(|_| AudioOutputError::StreamStartFailed)
+    }
+
+    pub(crate) fn now(&self) -> StreamInstant {
+        self.stream.now()
+    }
+}
+
+pub(crate) fn build_output_stream(
+    stream_id: OutputStreamId,
+    pcm: PcmBuffer,
+    signal_sender: SyncSender<OutputSignal>,
+) -> Result<PreparedOutputStream, AudioOutputError> {
     let host = cpal::default_host();
     let device = host
         .default_output_device()
@@ -38,30 +64,27 @@ pub fn play_pcm_to_completion(pcm: PcmBuffer) -> Result<(), AudioOutputError> {
     let supported_config = select_output_config(ranges, sample_rate, channel_count)?;
     let sample_format = supported_config.sample_format();
     let config = supported_config.config();
-    let (signal_sender, signal_receiver) = mpsc::sync_channel(2);
-
     let stream = match sample_format {
-        SampleFormat::F32 => build_output_stream::<f32>(&device, config, pcm, signal_sender)?,
-        SampleFormat::F64 => build_output_stream::<f64>(&device, config, pcm, signal_sender)?,
-        SampleFormat::I8 => build_output_stream::<i8>(&device, config, pcm, signal_sender)?,
-        SampleFormat::I16 => build_output_stream::<i16>(&device, config, pcm, signal_sender)?,
-        SampleFormat::I24 => build_output_stream::<cpal::I24>(&device, config, pcm, signal_sender)?,
-        SampleFormat::I32 => build_output_stream::<i32>(&device, config, pcm, signal_sender)?,
-        SampleFormat::I64 => build_output_stream::<i64>(&device, config, pcm, signal_sender)?,
-        SampleFormat::U8 => build_output_stream::<u8>(&device, config, pcm, signal_sender)?,
-        SampleFormat::U16 => build_output_stream::<u16>(&device, config, pcm, signal_sender)?,
-        SampleFormat::U24 => build_output_stream::<cpal::U24>(&device, config, pcm, signal_sender)?,
-        SampleFormat::U32 => build_output_stream::<u32>(&device, config, pcm, signal_sender)?,
-        SampleFormat::U64 => build_output_stream::<u64>(&device, config, pcm, signal_sender)?,
+        SampleFormat::F32 => build_stream::<f32>(&device, config, stream_id, pcm, signal_sender)?,
+        SampleFormat::F64 => build_stream::<f64>(&device, config, stream_id, pcm, signal_sender)?,
+        SampleFormat::I8 => build_stream::<i8>(&device, config, stream_id, pcm, signal_sender)?,
+        SampleFormat::I16 => build_stream::<i16>(&device, config, stream_id, pcm, signal_sender)?,
+        SampleFormat::I24 => {
+            build_stream::<cpal::I24>(&device, config, stream_id, pcm, signal_sender)?
+        }
+        SampleFormat::I32 => build_stream::<i32>(&device, config, stream_id, pcm, signal_sender)?,
+        SampleFormat::I64 => build_stream::<i64>(&device, config, stream_id, pcm, signal_sender)?,
+        SampleFormat::U8 => build_stream::<u8>(&device, config, stream_id, pcm, signal_sender)?,
+        SampleFormat::U16 => build_stream::<u16>(&device, config, stream_id, pcm, signal_sender)?,
+        SampleFormat::U24 => {
+            build_stream::<cpal::U24>(&device, config, stream_id, pcm, signal_sender)?
+        }
+        SampleFormat::U32 => build_stream::<u32>(&device, config, stream_id, pcm, signal_sender)?,
+        SampleFormat::U64 => build_stream::<u64>(&device, config, stream_id, pcm, signal_sender)?,
         _ => return Err(AudioOutputError::UnsupportedConfiguration),
     };
 
-    stream
-        .play()
-        .map_err(|_| AudioOutputError::StreamStartFailed)?;
-
-    let end_time = receive_final_signal(&signal_receiver)?;
-    wait_for_playback_completion(&stream, &signal_receiver, end_time)
+    Ok(PreparedOutputStream { stream })
 }
 
 fn select_output_config(
@@ -124,9 +147,10 @@ where
     copied
 }
 
-fn build_output_stream<T>(
+fn build_stream<T>(
     device: &cpal::Device,
     config: StreamConfig,
+    stream_id: OutputStreamId,
     pcm: PcmBuffer,
     signal_sender: SyncSender<OutputSignal>,
 ) -> Result<cpal::Stream, AudioOutputError>
@@ -152,21 +176,25 @@ where
                 if position < source_sample_count || completion_sent {
                     return;
                 }
-                completion_sent = true;
-
                 let Some(end_time) = calculate_end_time(
                     info.timestamp().playback,
                     written_sample_count,
                     channel_count,
                     sample_rate,
                 ) else {
-                    let _ = signal_sender.try_send(OutputSignal::CompletionTimingFailed);
+                    let _ =
+                        signal_sender.try_send(OutputSignal::CompletionTimingFailed { stream_id });
                     return;
                 };
-                let _ = signal_sender.try_send(OutputSignal::FinalFramesSubmitted(end_time));
+                completion_sent = signal_sender
+                    .try_send(OutputSignal::FinalFramesSubmitted {
+                        stream_id,
+                        end_time,
+                    })
+                    .is_ok();
             },
             move |_error| {
-                let _ = error_sender.try_send(OutputSignal::StreamFailed);
+                let _ = error_sender.try_send(OutputSignal::StreamFailed { stream_id });
             },
             None,
         )
@@ -193,39 +221,6 @@ fn calculate_end_time(
     }
 
     playback_start.checked_add(Duration::from_secs_f64(seconds))
-}
-
-fn receive_final_signal(
-    receiver: &Receiver<OutputSignal>,
-) -> Result<StreamInstant, AudioOutputError> {
-    match receiver.recv() {
-        Ok(OutputSignal::FinalFramesSubmitted(end_time)) => Ok(end_time),
-        Ok(OutputSignal::StreamFailed) => Err(AudioOutputError::StreamRuntimeFailed),
-        Ok(OutputSignal::CompletionTimingFailed) => Err(AudioOutputError::CompletionTimingFailed),
-        Err(_) => Err(AudioOutputError::CompletionSignalFailed),
-    }
-}
-
-fn wait_for_playback_completion(
-    stream: &cpal::Stream,
-    receiver: &Receiver<OutputSignal>,
-    end_time: StreamInstant,
-) -> Result<(), AudioOutputError> {
-    while stream.now() < end_time {
-        match receiver.recv_timeout(Duration::from_millis(1)) {
-            Ok(OutputSignal::StreamFailed) => return Err(AudioOutputError::StreamRuntimeFailed),
-            Ok(OutputSignal::CompletionTimingFailed) => {
-                return Err(AudioOutputError::CompletionTimingFailed)
-            }
-            Ok(OutputSignal::FinalFramesSubmitted(_)) => {}
-            Err(mpsc::RecvTimeoutError::Timeout) => {}
-            Err(mpsc::RecvTimeoutError::Disconnected) => {
-                return Err(AudioOutputError::CompletionSignalFailed)
-            }
-        }
-    }
-
-    Ok(())
 }
 
 #[cfg(test)]

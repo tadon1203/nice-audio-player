@@ -1,10 +1,14 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 
 import type {
   AudioFileValidationError,
   AudioFileValidationErrorCode,
   AudioFileInfo,
-  PlayAudioFileError,
+  PlaybackFailureCode,
+  PlaybackSnapshot,
+  StartAudioFileError,
+  StopAudioPlaybackError,
   ValidatedAudioFile,
 } from "@/types/audio-files";
 
@@ -16,12 +20,24 @@ const validationErrorCodes: ReadonlySet<AudioFileValidationErrorCode> = new Set(
   "invalidFileName",
 ]);
 
-const playAudioFileErrorCodes: ReadonlySet<PlayAudioFileError["code"]> = new Set([
+const startAudioFileErrorCodes: ReadonlySet<StartAudioFileError["code"]> = new Set([
   "validationFailed",
   "decodeFailed",
   "outputFailed",
+  "playbackWorkerUnavailable",
   "taskFailed",
 ]);
+
+const playbackFailureCodes: ReadonlySet<PlaybackFailureCode> = new Set([
+  "noOutputDevice",
+  "unsupportedOutputConfiguration",
+  "outputStreamBuildFailed",
+  "outputStreamStartFailed",
+  "outputStreamRuntimeFailed",
+  "completionTimingFailed",
+]);
+
+const invalidPlaybackSnapshotMessage = "Invalid playback snapshot payload.";
 
 export async function validateAudioFile(path: string): Promise<ValidatedAudioFile> {
   return invoke<ValidatedAudioFile>("validate_audio_file", { path });
@@ -31,8 +47,24 @@ export async function inspectAudioFile(path: string): Promise<AudioFileInfo> {
   return invoke<AudioFileInfo>("inspect_audio_file", { path });
 }
 
-export async function playAudioFile(path: string): Promise<void> {
-  return invoke<void>("play_audio_file", { path });
+export async function startAudioFile(path: string): Promise<PlaybackSnapshot> {
+  return readPlaybackSnapshot(invoke<unknown>("start_audio_file", { path }));
+}
+
+export async function stopAudioPlayback(): Promise<PlaybackSnapshot> {
+  return readPlaybackSnapshot(invoke<unknown>("stop_audio_playback"));
+}
+
+export async function getPlaybackState(): Promise<PlaybackSnapshot> {
+  return readPlaybackSnapshot(invoke<unknown>("get_playback_state"));
+}
+
+export async function listenToPlaybackState(
+  handler: (snapshot: PlaybackSnapshot) => void,
+): Promise<() => void> {
+  return listen<unknown>("playback-state-changed", (event) => {
+    if (isPlaybackSnapshot(event.payload)) handler(event.payload);
+  });
 }
 
 export function isAudioFileValidationError(value: unknown): value is AudioFileValidationError {
@@ -46,13 +78,44 @@ export function isAudioFileValidationError(value: unknown): value is AudioFileVa
   );
 }
 
-export function isPlayAudioFileError(value: unknown): value is PlayAudioFileError {
+export function isStartAudioFileError(value: unknown): value is StartAudioFileError {
   if (typeof value !== "object" || value === null || !("code" in value)) {
     return false;
   }
 
   return (
     typeof value.code === "string" &&
-    playAudioFileErrorCodes.has(value.code as PlayAudioFileError["code"])
+    startAudioFileErrorCodes.has(value.code as StartAudioFileError["code"])
   );
+}
+
+export function isStopAudioPlaybackError(value: unknown): value is StopAudioPlaybackError {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "code" in value &&
+    (value.code === "playbackWorkerUnavailable" || value.code === "taskFailed")
+  );
+}
+
+export function isPlaybackSnapshot(value: unknown): value is PlaybackSnapshot {
+  if (typeof value !== "object" || value === null || !("status" in value)) return false;
+  if (value.status === "stopped") return true;
+  if (value.status === "playing")
+    return "playbackId" in value && typeof value.playbackId === "string";
+  return (
+    value.status === "failed" &&
+    "error" in value &&
+    typeof value.error === "string" &&
+    playbackFailureCodes.has(value.error as PlaybackFailureCode) &&
+    (!("playbackId" in value) || typeof value.playbackId === "string")
+  );
+}
+
+async function readPlaybackSnapshot(payload: Promise<unknown>): Promise<PlaybackSnapshot> {
+  const value = await payload;
+  if (!isPlaybackSnapshot(value)) {
+    throw new Error(invalidPlaybackSnapshotMessage);
+  }
+  return value;
 }
