@@ -52,9 +52,22 @@ Run `pnpm check` before reporting a coding task as complete.
 - Verify the Issue's Done items against code, tests, and manual checks.
 - Review `git status`, `git diff`, and `git diff --staged` before completion or commit.
 - Use `<type>: <summary>` commits.
-- Perform Git and GitHub write operations only when explicitly requested.
 - PRs should contain only completed scope and use `Closes #<issue-number>` when applicable.
 - Never commit secrets, local environment files, build outputs, generated dependencies, or editor-specific local settings.
+
+### Merge and cleanup (`merge and cleanup`)
+
+Perform this procedure only when the user explicitly requests `merge and cleanup`.
+Do not infer permission from a request to commit, push, merge, or finish a coding task alone.
+
+When explicitly requested, after the feature work is committed:
+
+1. Push the feature branch and merge it into `main`.
+2. Run `pnpm check` after the merge.
+3. Review the merge result with `git status`, `git log`, and `git diff` as needed.
+4. Push the updated `main` branch when the post-merge checks pass.
+5. Close the related Issue or PR when applicable.
+6. Delete the merged feature branch locally and remotely when it is no longer needed.
 
 ## Boundaries
 
