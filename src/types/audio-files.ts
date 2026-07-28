@@ -41,12 +41,15 @@ export type PlaybackFailureCode =
   | "unsupportedOutputConfiguration"
   | "outputStreamBuildFailed"
   | "outputStreamStartFailed"
+  | "outputStreamPauseFailed"
+  | "outputStreamResumeFailed"
   | "outputStreamRuntimeFailed"
   | "completionTimingFailed";
 
 export type PlaybackSnapshot =
   | { status: "stopped" }
   | { status: "playing"; playbackId: string }
+  | { status: "paused"; playbackId: string }
   | { status: "failed"; playbackId?: string; error: PlaybackFailureCode };
 
 export type StartAudioFileError =
@@ -57,3 +60,15 @@ export type StartAudioFileError =
   | { code: "taskFailed" };
 
 export type StopAudioPlaybackError = { code: "playbackWorkerUnavailable" } | { code: "taskFailed" };
+
+export type PauseAudioPlaybackError =
+  | { code: "playbackWorkerUnavailable" }
+  | { code: "invalidPlaybackState" }
+  | { code: "outputFailed" }
+  | { code: "taskFailed" };
+
+export type ResumeAudioPlaybackError =
+  | { code: "playbackWorkerUnavailable" }
+  | { code: "invalidPlaybackState" }
+  | { code: "outputFailed" }
+  | { code: "taskFailed" };

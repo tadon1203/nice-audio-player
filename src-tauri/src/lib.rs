@@ -70,9 +70,30 @@ enum StopAudioPlaybackError {
     TaskFailed,
 }
 
+#[allow(clippy::enum_variant_names)]
+#[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
+#[serde(tag = "code", rename_all = "camelCase")]
+enum PauseAudioPlaybackError {
+    PlaybackWorkerUnavailable,
+    InvalidPlaybackState,
+    OutputFailed,
+    TaskFailed,
+}
+
+#[allow(clippy::enum_variant_names)]
+#[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
+#[serde(tag = "code", rename_all = "camelCase")]
+enum ResumeAudioPlaybackError {
+    PlaybackWorkerUnavailable,
+    InvalidPlaybackState,
+    OutputFailed,
+    TaskFailed,
+}
+
 fn map_start_error(error: PlaybackServiceError) -> StartAudioFileError {
     match error {
         PlaybackServiceError::WorkerUnavailable => StartAudioFileError::PlaybackWorkerUnavailable,
+        PlaybackServiceError::InvalidPlaybackState => StartAudioFileError::OutputFailed,
         PlaybackServiceError::Output(_) => StartAudioFileError::OutputFailed,
     }
 }
@@ -86,6 +107,50 @@ async fn stop_audio_playback(
         .await
         .map_err(|_| StopAudioPlaybackError::TaskFailed)?
         .map_err(|_| StopAudioPlaybackError::PlaybackWorkerUnavailable)
+}
+
+fn map_pause_error(error: PlaybackServiceError) -> PauseAudioPlaybackError {
+    match error {
+        PlaybackServiceError::WorkerUnavailable => {
+            PauseAudioPlaybackError::PlaybackWorkerUnavailable
+        }
+        PlaybackServiceError::InvalidPlaybackState => PauseAudioPlaybackError::InvalidPlaybackState,
+        PlaybackServiceError::Output(_) => PauseAudioPlaybackError::OutputFailed,
+    }
+}
+
+#[tauri::command]
+async fn pause_audio_playback(
+    playback: tauri::State<'_, PlaybackService>,
+) -> Result<PlaybackSnapshot, PauseAudioPlaybackError> {
+    let playback = playback.handle();
+    tauri::async_runtime::spawn_blocking(move || playback.pause())
+        .await
+        .map_err(|_| PauseAudioPlaybackError::TaskFailed)?
+        .map_err(map_pause_error)
+}
+
+fn map_resume_error(error: PlaybackServiceError) -> ResumeAudioPlaybackError {
+    match error {
+        PlaybackServiceError::WorkerUnavailable => {
+            ResumeAudioPlaybackError::PlaybackWorkerUnavailable
+        }
+        PlaybackServiceError::InvalidPlaybackState => {
+            ResumeAudioPlaybackError::InvalidPlaybackState
+        }
+        PlaybackServiceError::Output(_) => ResumeAudioPlaybackError::OutputFailed,
+    }
+}
+
+#[tauri::command]
+async fn resume_audio_playback(
+    playback: tauri::State<'_, PlaybackService>,
+) -> Result<PlaybackSnapshot, ResumeAudioPlaybackError> {
+    let playback = playback.handle();
+    tauri::async_runtime::spawn_blocking(move || playback.resume())
+        .await
+        .map_err(|_| ResumeAudioPlaybackError::TaskFailed)?
+        .map_err(map_resume_error)
 }
 
 #[tauri::command]
@@ -123,6 +188,8 @@ pub fn run() {
             list_audio_output_devices,
             start_audio_file,
             stop_audio_playback,
+            pause_audio_playback,
+            resume_audio_playback,
             get_playback_state
         ])
         .build(tauri::generate_context!())

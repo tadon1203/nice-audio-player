@@ -5,8 +5,12 @@ import { isAudioDeviceListError, listAudioOutputDevices } from "@/api/audio-devi
 import {
   isAudioFileValidationError,
   getPlaybackState,
+  isPauseAudioPlaybackError,
+  isResumeAudioPlaybackError,
   isStartAudioFileError,
   listenToPlaybackState,
+  pauseAudioPlayback,
+  resumeAudioPlayback,
   startAudioFile,
   stopAudioPlayback,
   validateAudioFile,
@@ -45,8 +49,7 @@ function App() {
   const [deviceListError, setDeviceListError] = useState<string | null>(null);
   const [isLoadingDevices, setIsLoadingDevices] = useState(false);
   const [playback, setPlayback] = useState<PlaybackSnapshot>({ status: "stopped" });
-  const [isStarting, setIsStarting] = useState(false);
-  const [isStopping, setIsStopping] = useState(false);
+  const [isChangingPlaybackState, setIsChangingPlaybackState] = useState(false);
   const [playbackError, setPlaybackError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -102,11 +105,11 @@ function App() {
   }
 
   async function playSelectedAudioFile(): Promise<void> {
-    if (validatedFile === null || isStarting) {
+    if (validatedFile === null || isChangingPlaybackState) {
       return;
     }
 
-    setIsStarting(true);
+    setIsChangingPlaybackState(true);
     setPlaybackError(null);
 
     try {
@@ -135,19 +138,58 @@ function App() {
         }
       }
     } finally {
-      setIsStarting(false);
+      setIsChangingPlaybackState(false);
     }
   }
 
   async function stopPlayback(): Promise<void> {
-    setIsStopping(true);
+    if (isChangingPlaybackState) return;
+    setIsChangingPlaybackState(true);
     setPlaybackError(null);
     try {
       setPlayback(await stopAudioPlayback());
     } catch {
       setPlaybackError("The playback service is unavailable.");
     } finally {
-      setIsStopping(false);
+      setIsChangingPlaybackState(false);
+    }
+  }
+
+  async function pausePlayback(): Promise<void> {
+    if (isChangingPlaybackState) return;
+    setIsChangingPlaybackState(true);
+    setPlaybackError(null);
+    try {
+      setPlayback(await pauseAudioPlayback());
+    } catch (error: unknown) {
+      setPlaybackError(
+        isPauseAudioPlaybackError(error)
+          ? error.code === "invalidPlaybackState"
+            ? "Playback cannot be paused in its current state."
+            : "The playback could not be paused."
+          : "An unexpected playback error occurred.",
+      );
+    } finally {
+      setIsChangingPlaybackState(false);
+    }
+  }
+
+  async function resumePlayback(): Promise<void> {
+    if (isChangingPlaybackState) return;
+    setIsChangingPlaybackState(true);
+    setPlaybackError(null);
+    try {
+      setPlayback(await resumeAudioPlayback());
+    } catch (error: unknown) {
+      setPlaybackError(
+        isResumeAudioPlaybackError(error)
+          ? error.code === "invalidPlaybackState"
+            ? "Playback cannot be resumed in its current state."
+            : "The playback could not be resumed."
+          : "An unexpected playback error occurred.",
+      );
+    } finally {
+      setIsChangingPlaybackState(false);
     }
   }
 
@@ -210,25 +252,56 @@ function App() {
         <button
           type="button"
           onClick={() => void playSelectedAudioFile()}
-          disabled={validatedFile === null || isStarting}
+          disabled={validatedFile === null || isChangingPlaybackState}
           className="mt-4 rounded-lg border border-zinc-700 px-4 py-2 font-medium text-zinc-100 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {isStarting ? "Starting..." : "Play"}
+          {isChangingPlaybackState ? "Changing..." : "Play"}
         </button>
 
         {playback.status === "playing" ? (
-          <button
-            type="button"
-            onClick={() => void stopPlayback()}
-            disabled={isStopping}
-            className="ml-3 rounded-lg border border-zinc-700 px-4 py-2 font-medium text-zinc-100 disabled:opacity-60"
-          >
-            {isStopping ? "Stopping..." : "Stop"}
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={() => void pausePlayback()}
+              disabled={isChangingPlaybackState}
+              className="ml-3 rounded-lg border border-zinc-700 px-4 py-2 font-medium text-zinc-100 disabled:opacity-60"
+            >
+              {isChangingPlaybackState ? "Changing..." : "Pause"}
+            </button>
+            <button
+              type="button"
+              onClick={() => void stopPlayback()}
+              disabled={isChangingPlaybackState}
+              className="ml-3 rounded-lg border border-zinc-700 px-4 py-2 font-medium text-zinc-100 disabled:opacity-60"
+            >
+              Stop
+            </button>
+          </>
+        ) : playback.status === "paused" ? (
+          <>
+            <button
+              type="button"
+              onClick={() => void resumePlayback()}
+              disabled={isChangingPlaybackState}
+              className="ml-3 rounded-lg border border-zinc-700 px-4 py-2 font-medium text-zinc-100 disabled:opacity-60"
+            >
+              {isChangingPlaybackState ? "Changing..." : "Resume"}
+            </button>
+            <button
+              type="button"
+              onClick={() => void stopPlayback()}
+              disabled={isChangingPlaybackState}
+              className="ml-3 rounded-lg border border-zinc-700 px-4 py-2 font-medium text-zinc-100 disabled:opacity-60"
+            >
+              Stop
+            </button>
+          </>
         ) : null}
         <p className="mt-4 text-sm text-zinc-400" role="status">
           Playback: {playback.status}
-          {playback.status === "playing" ? ` (${playback.playbackId})` : ""}
+          {playback.status === "playing" || playback.status === "paused"
+            ? ` (${playback.playbackId})`
+            : ""}
         </p>
 
         {playbackError ? (

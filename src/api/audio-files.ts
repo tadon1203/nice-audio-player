@@ -5,8 +5,10 @@ import type {
   AudioFileValidationError,
   AudioFileValidationErrorCode,
   AudioFileInfo,
+  PauseAudioPlaybackError,
   PlaybackFailureCode,
   PlaybackSnapshot,
+  ResumeAudioPlaybackError,
   StartAudioFileError,
   StopAudioPlaybackError,
   ValidatedAudioFile,
@@ -33,6 +35,8 @@ const playbackFailureCodes: ReadonlySet<PlaybackFailureCode> = new Set([
   "unsupportedOutputConfiguration",
   "outputStreamBuildFailed",
   "outputStreamStartFailed",
+  "outputStreamPauseFailed",
+  "outputStreamResumeFailed",
   "outputStreamRuntimeFailed",
   "completionTimingFailed",
 ]);
@@ -53,6 +57,14 @@ export async function startAudioFile(path: string): Promise<PlaybackSnapshot> {
 
 export async function stopAudioPlayback(): Promise<PlaybackSnapshot> {
   return readPlaybackSnapshot(invoke<unknown>("stop_audio_playback"));
+}
+
+export async function pauseAudioPlayback(): Promise<PlaybackSnapshot> {
+  return readPlaybackSnapshot(invoke<unknown>("pause_audio_playback"));
+}
+
+export async function resumeAudioPlayback(): Promise<PlaybackSnapshot> {
+  return readPlaybackSnapshot(invoke<unknown>("resume_audio_playback"));
 }
 
 export async function getPlaybackState(): Promise<PlaybackSnapshot> {
@@ -98,10 +110,20 @@ export function isStopAudioPlaybackError(value: unknown): value is StopAudioPlay
   );
 }
 
+export function isPauseAudioPlaybackError(value: unknown): value is PauseAudioPlaybackError {
+  return isPlaybackControlError(value);
+}
+
+export function isResumeAudioPlaybackError(value: unknown): value is ResumeAudioPlaybackError {
+  return isPlaybackControlError(value);
+}
+
 export function isPlaybackSnapshot(value: unknown): value is PlaybackSnapshot {
   if (typeof value !== "object" || value === null || !("status" in value)) return false;
   if (value.status === "stopped") return true;
   if (value.status === "playing")
+    return "playbackId" in value && typeof value.playbackId === "string";
+  if (value.status === "paused")
     return "playbackId" in value && typeof value.playbackId === "string";
   return (
     value.status === "failed" &&
@@ -109,6 +131,20 @@ export function isPlaybackSnapshot(value: unknown): value is PlaybackSnapshot {
     typeof value.error === "string" &&
     playbackFailureCodes.has(value.error as PlaybackFailureCode) &&
     (!("playbackId" in value) || typeof value.playbackId === "string")
+  );
+}
+
+function isPlaybackControlError(
+  value: unknown,
+): value is PauseAudioPlaybackError | ResumeAudioPlaybackError {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "code" in value &&
+    (value.code === "playbackWorkerUnavailable" ||
+      value.code === "invalidPlaybackState" ||
+      value.code === "outputFailed" ||
+      value.code === "taskFailed")
   );
 }
 

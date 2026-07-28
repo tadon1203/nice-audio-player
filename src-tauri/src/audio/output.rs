@@ -29,6 +29,8 @@ pub enum AudioOutputError {
     UnsupportedConfiguration,
     StreamBuildFailed,
     StreamStartFailed,
+    StreamPauseFailed,
+    StreamResumeFailed,
 }
 
 pub(crate) struct PreparedOutputStream {
@@ -40,6 +42,18 @@ impl PreparedOutputStream {
         self.stream
             .play()
             .map_err(|_| AudioOutputError::StreamStartFailed)
+    }
+
+    pub(crate) fn resume(&self) -> Result<(), AudioOutputError> {
+        self.stream
+            .play()
+            .map_err(|_| AudioOutputError::StreamResumeFailed)
+    }
+
+    pub(crate) fn pause(&self) -> Result<(), AudioOutputError> {
+        self.stream
+            .pause()
+            .map_err(|_| AudioOutputError::StreamPauseFailed)
     }
 
     pub(crate) fn now(&self) -> StreamInstant {

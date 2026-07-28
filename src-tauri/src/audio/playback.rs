@@ -23,6 +23,9 @@ pub enum PlaybackSnapshot {
     Playing {
         playback_id: String,
     },
+    Paused {
+        playback_id: String,
+    },
     Failed {
         #[serde(skip_serializing_if = "Option::is_none")]
         playback_id: Option<String>,
@@ -37,6 +40,8 @@ pub enum PlaybackFailureCode {
     UnsupportedOutputConfiguration,
     OutputStreamBuildFailed,
     OutputStreamStartFailed,
+    OutputStreamPauseFailed,
+    OutputStreamResumeFailed,
     OutputStreamRuntimeFailed,
     CompletionTimingFailed,
 }
@@ -44,6 +49,7 @@ pub enum PlaybackFailureCode {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PlaybackServiceError {
     WorkerUnavailable,
+    InvalidPlaybackState,
     Output(PlaybackFailureCode),
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -57,6 +63,12 @@ enum PlaybackCommand {
         reply: SyncSender<Result<PlaybackSnapshot, PlaybackServiceError>>,
     },
     Stop {
+        reply: SyncSender<Result<PlaybackSnapshot, PlaybackServiceError>>,
+    },
+    Pause {
+        reply: SyncSender<Result<PlaybackSnapshot, PlaybackServiceError>>,
+    },
+    Resume {
         reply: SyncSender<Result<PlaybackSnapshot, PlaybackServiceError>>,
     },
     Shutdown,
@@ -136,6 +148,14 @@ impl PlaybackServiceHandle {
         self.request(|reply| PlaybackCommand::Stop { reply })
     }
 
+    pub(crate) fn pause(&self) -> Result<PlaybackSnapshot, PlaybackServiceError> {
+        self.request(|reply| PlaybackCommand::Pause { reply })
+    }
+
+    pub(crate) fn resume(&self) -> Result<PlaybackSnapshot, PlaybackServiceError> {
+        self.request(|reply| PlaybackCommand::Resume { reply })
+    }
+
     fn request(
         &self,
         make: impl FnOnce(SyncSender<Result<PlaybackSnapshot, PlaybackServiceError>>) -> PlaybackCommand,
@@ -183,6 +203,12 @@ impl PlaybackWorker {
                 Ok(PlaybackCommand::Stop { reply }) => {
                     let _ = reply.send(Ok(self.stop()));
                 }
+                Ok(PlaybackCommand::Pause { reply }) => {
+                    let _ = reply.send(self.pause());
+                }
+                Ok(PlaybackCommand::Resume { reply }) => {
+                    let _ = reply.send(self.resume());
+                }
                 Ok(PlaybackCommand::Shutdown) | Err(mpsc::RecvTimeoutError::Disconnected) => break,
                 Err(mpsc::RecvTimeoutError::Timeout) => {}
             }
@@ -222,6 +248,56 @@ impl PlaybackWorker {
             self.publish(PlaybackSnapshot::Stopped);
         }
         PlaybackSnapshot::Stopped
+    }
+    fn pause(&mut self) -> Result<PlaybackSnapshot, PlaybackServiceError> {
+        match pause_action(&self.current()) {
+            PlaybackControlAction::Idempotent => Ok(self.current()),
+            PlaybackControlAction::Invalid => Err(PlaybackServiceError::InvalidPlaybackState),
+            PlaybackControlAction::Change => {
+                let Some(active) = self.active.as_ref() else {
+                    return Err(PlaybackServiceError::InvalidPlaybackState);
+                };
+                let id = active.id;
+                if let Err(error) = active.stream.pause() {
+                    return Err(self.control_failure(id, error));
+                }
+                let snapshot = PlaybackSnapshot::Paused {
+                    playback_id: id.0.to_string(),
+                };
+                self.publish(snapshot.clone());
+                Ok(snapshot)
+            }
+        }
+    }
+    fn resume(&mut self) -> Result<PlaybackSnapshot, PlaybackServiceError> {
+        match resume_action(&self.current()) {
+            PlaybackControlAction::Idempotent => Ok(self.current()),
+            PlaybackControlAction::Invalid => Err(PlaybackServiceError::InvalidPlaybackState),
+            PlaybackControlAction::Change => {
+                let Some(active) = self.active.as_ref() else {
+                    return Err(PlaybackServiceError::InvalidPlaybackState);
+                };
+                let id = active.id;
+                if let Err(error) = active.stream.resume() {
+                    return Err(self.control_failure(id, error));
+                }
+                let snapshot = PlaybackSnapshot::Playing {
+                    playback_id: id.0.to_string(),
+                };
+                self.publish(snapshot.clone());
+                Ok(snapshot)
+            }
+        }
+    }
+    fn control_failure(
+        &mut self,
+        id: OutputStreamId,
+        error: AudioOutputError,
+    ) -> PlaybackServiceError {
+        self.active = None;
+        let code = output_failure_code(error);
+        self.publish(failed_snapshot(id, code.clone()));
+        PlaybackServiceError::Output(code)
     }
     fn commit_started_stream(
         &mut self,
@@ -284,9 +360,7 @@ impl PlaybackWorker {
     }
     fn finish_if_due(&mut self) {
         let due = self.active.as_ref().is_some_and(|active| {
-            active
-                .completion_time
-                .is_some_and(|end| completion_time_reached(end, active.stream.now()))
+            should_finish(&self.current(), active.completion_time, active.stream.now())
         });
         if due {
             self.active = None;
@@ -305,6 +379,42 @@ fn signal_stream_id(signal: &OutputSignal) -> OutputStreamId {
 
 fn completion_time_reached(end: StreamInstant, now: StreamInstant) -> bool {
     now >= end
+}
+
+fn should_finish(
+    snapshot: &PlaybackSnapshot,
+    completion_time: Option<StreamInstant>,
+    now: StreamInstant,
+) -> bool {
+    matches!(snapshot, PlaybackSnapshot::Playing { .. })
+        && completion_time.is_some_and(|end| completion_time_reached(end, now))
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PlaybackControlAction {
+    Change,
+    Idempotent,
+    Invalid,
+}
+
+fn pause_action(snapshot: &PlaybackSnapshot) -> PlaybackControlAction {
+    match snapshot {
+        PlaybackSnapshot::Playing { .. } => PlaybackControlAction::Change,
+        PlaybackSnapshot::Paused { .. } => PlaybackControlAction::Idempotent,
+        PlaybackSnapshot::Stopped | PlaybackSnapshot::Failed { .. } => {
+            PlaybackControlAction::Invalid
+        }
+    }
+}
+
+fn resume_action(snapshot: &PlaybackSnapshot) -> PlaybackControlAction {
+    match snapshot {
+        PlaybackSnapshot::Paused { .. } => PlaybackControlAction::Change,
+        PlaybackSnapshot::Playing { .. } => PlaybackControlAction::Idempotent,
+        PlaybackSnapshot::Stopped | PlaybackSnapshot::Failed { .. } => {
+            PlaybackControlAction::Invalid
+        }
+    }
 }
 
 fn failed_snapshot(id: OutputStreamId, error: PlaybackFailureCode) -> PlaybackSnapshot {
@@ -336,14 +446,18 @@ fn output_failure_code(error: AudioOutputError) -> PlaybackFailureCode {
         }
         AudioOutputError::StreamBuildFailed => PlaybackFailureCode::OutputStreamBuildFailed,
         AudioOutputError::StreamStartFailed => PlaybackFailureCode::OutputStreamStartFailed,
+        AudioOutputError::StreamPauseFailed => PlaybackFailureCode::OutputStreamPauseFailed,
+        AudioOutputError::StreamResumeFailed => PlaybackFailureCode::OutputStreamResumeFailed,
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::super::output::AudioOutputError;
     use super::{
-        completion_time_reached, failed_snapshot, signal_stream_id, start_failure_snapshot,
-        OutputSignal, OutputStreamId, PlaybackFailureCode, PlaybackService, PlaybackSnapshot,
+        completion_time_reached, failed_snapshot, output_failure_code, pause_action, resume_action,
+        should_finish, signal_stream_id, start_failure_snapshot, OutputSignal, OutputStreamId,
+        PlaybackControlAction, PlaybackFailureCode, PlaybackService, PlaybackSnapshot,
         PlaybackWorker,
     };
     use cpal::StreamInstant;
@@ -358,6 +472,18 @@ mod tests {
         assert_eq!(
             serde_json::to_value(snapshot).unwrap(),
             serde_json::json!({ "status": "playing", "playbackId": "1" })
+        );
+    }
+
+    #[test]
+    fn serializes_paused_snapshot_with_camel_case_playback_id() {
+        let snapshot = PlaybackSnapshot::Paused {
+            playback_id: "1".into(),
+        };
+
+        assert_eq!(
+            serde_json::to_value(snapshot).unwrap(),
+            serde_json::json!({ "status": "paused", "playbackId": "1" })
         );
     }
 
@@ -387,6 +513,16 @@ mod tests {
         assert_eq!(worker.stop(), PlaybackSnapshot::Stopped);
         assert_eq!(worker.current(), PlaybackSnapshot::Stopped);
         assert!(worker.active.is_none());
+    }
+
+    #[test]
+    fn stop_from_paused_is_stopped() {
+        let mut worker = test_worker(PlaybackSnapshot::Paused {
+            playback_id: "1".into(),
+        });
+
+        assert_eq!(worker.stop(), PlaybackSnapshot::Stopped);
+        assert_eq!(worker.current(), PlaybackSnapshot::Stopped);
     }
 
     #[test]
@@ -448,6 +584,59 @@ mod tests {
     }
 
     #[test]
+    fn pause_and_resume_actions_are_idempotent_or_invalid_by_snapshot() {
+        let playing = PlaybackSnapshot::Playing {
+            playback_id: "1".into(),
+        };
+        let paused = PlaybackSnapshot::Paused {
+            playback_id: "1".into(),
+        };
+        let stopped = PlaybackSnapshot::Stopped;
+        let failed = failed_snapshot(
+            OutputStreamId(1),
+            PlaybackFailureCode::OutputStreamRuntimeFailed,
+        );
+
+        assert_eq!(pause_action(&playing), PlaybackControlAction::Change);
+        assert_eq!(pause_action(&paused), PlaybackControlAction::Idempotent);
+        assert_eq!(pause_action(&stopped), PlaybackControlAction::Invalid);
+        assert_eq!(pause_action(&failed), PlaybackControlAction::Invalid);
+        assert_eq!(resume_action(&paused), PlaybackControlAction::Change);
+        assert_eq!(resume_action(&playing), PlaybackControlAction::Idempotent);
+        assert_eq!(resume_action(&stopped), PlaybackControlAction::Invalid);
+        assert_eq!(resume_action(&failed), PlaybackControlAction::Invalid);
+    }
+
+    #[test]
+    fn paused_playback_does_not_finish_naturally() {
+        let paused = PlaybackSnapshot::Paused {
+            playback_id: "1".into(),
+        };
+        let end = StreamInstant::new(10, 0);
+
+        assert!(!should_finish(&paused, Some(end), end));
+        assert!(should_finish(
+            &PlaybackSnapshot::Playing {
+                playback_id: "1".into()
+            },
+            Some(end),
+            end
+        ));
+    }
+
+    #[test]
+    fn maps_pause_and_resume_output_failures() {
+        assert_eq!(
+            output_failure_code(AudioOutputError::StreamPauseFailed),
+            PlaybackFailureCode::OutputStreamPauseFailed
+        );
+        assert_eq!(
+            output_failure_code(AudioOutputError::StreamResumeFailed),
+            PlaybackFailureCode::OutputStreamResumeFailed
+        );
+    }
+
+    #[test]
     fn start_failure_preserves_existing_playback() {
         assert_eq!(
             start_failure_snapshot(
@@ -471,20 +660,6 @@ mod tests {
                 playback_id: Some("1".into()),
                 error: PlaybackFailureCode::OutputStreamStartFailed,
             })
-        );
-    }
-
-    #[test]
-    fn commit_started_stream_uses_new_playback_id_and_clears_completion_time() {
-        // PreparedOutputStream is intentionally not constructed in unit tests. This
-        // verifies the commit contract without introducing a CPAL mock.
-        assert_eq!(
-            PlaybackSnapshot::Playing {
-                playback_id: OutputStreamId(2).0.to_string(),
-            },
-            PlaybackSnapshot::Playing {
-                playback_id: "2".into(),
-            }
         );
     }
 
