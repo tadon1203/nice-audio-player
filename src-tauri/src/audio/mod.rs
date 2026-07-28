@@ -3,7 +3,6 @@ pub mod devices;
 pub mod inspection;
 pub mod output;
 pub mod pcm;
-pub mod playback;
 pub mod validation;
 
 #[cfg(test)]
