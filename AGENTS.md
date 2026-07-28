@@ -47,36 +47,16 @@ Run `pnpm check` before reporting a coding task as complete.
 
 ## Git Workflow
 
-### Basic flow
-
-Issue → branch → commit → push → pull request → squash merge → delete branch → update `main`
-
-The related Issue is normally closed automatically when the pull request containing `Closes #<issue-number>` is squash-merged into `main`.
-
 ### Rules
 
-- Start each change from one focused Issue.
-- Use one branch and one pull request per Issue.
-- Create the branch from an up-to-date local `main` that matches `origin/main`.
-- Name the branch:
-  `<type>/<issue-number>-<description>`
-- Take the Issue number from the current branch name.
-- Use lowercase kebab-case for `<description>`.
-- Use the Issue type when available; otherwise choose an appropriate conventional type such as `feat`, `fix`, `refactor`, `docs`, `test`, or `chore`.
-- Use `<type>: <summary>` for commit messages, pull request titles, and the final squash commit title.
-- Keep changes within the related Issue's scope.
-- Before merging:
-  - verify the Issue's Done items;
-  - run tests affected by the change;
-  - run any test command required by the Issue;
-  - perform manual checks explicitly listed in the Issue;
-  - run `pnpm check`.
-- Do not invent additional mandatory checks that are not justified by the change or the Issue.
-- Manual checks may be accepted when the user explicitly reports that they passed. If a required manual check has not been completed, report it and stop before merging.
-- Integrate pull requests into `main` with squash merge.
-- Do not use regular merge commits.
-- Do not commit secrets, local environment files, build outputs, generated dependencies, or editor-specific settings.
-- Git and GitHub write operations require an explicit user request.
+- Start each change from one focused Issue, using one branch and one pull request per Issue.
+- Create the branch from an up-to-date local `main` matching `origin/main`.
+- Name it `<type>/<issue-number>-<lowercase-kebab-case-description>` and use `<type>: <summary>` for commit, PR, and squash-commit titles.
+- Keep the change within the Issue scope. Do not commit secrets, local environment files, build outputs, generated dependencies, or editor settings.
+- Use local `git` for branches, staging, commits, pushes, and local cleanup. Use the GitHub plugin for Issues, pull requests, reviews, merges, and remote branch operations.
+- Do not run `gh` automatically, including for authentication or repository lookup. If the GitHub plugin cannot perform a required operation, stop and ask the user before using `gh`.
+- Git and GitHub writes require an explicit user request.
+- Integrate pull requests into `main` with squash merge only; do not use regular merge commits.
 
 ### Commands
 
@@ -85,38 +65,23 @@ The related Issue is normally closed automatically when the pull request contain
 | `commit`       | Commit the current branch changes.                                                                                               |
 | `push`         | Push the current branch.                                                                                                         |
 | `open pr`      | Push existing commits if necessary and open or update the current branch's pull request. It does not commit uncommitted changes. |
-| `squash merge` | Continue the current Issue workflow from its present state through squash merge and cleanup.                                     |
+| `squash merge` | Continue the current Issue workflow through validation, Issue checklist update, squash merge, and cleanup.                       |
 
-Each command authorizes only the action it describes. The `squash merge` command is the exception: it authorizes the remaining delivery and cleanup steps listed below.
-
-Do not repeat steps that are already complete. Reuse an existing commit, pushed branch, or pull request only when it matches the current feature branch, targets `main`, and refers to the same Issue.
+Each command authorizes only the action it describes. Do not repeat completed steps or reuse a PR unless it matches the current branch, targets `main`, and refers to the same Issue.
 
 ### `squash merge`
 
 When explicitly requested:
 
-1. Confirm the current branch, related Issue, pull request, and worktree state.
-2. Read the Issue number from the branch name.
-3. Stop if:
-   - the branch name does not follow the required format;
-   - the branch Issue number conflicts with the pull request;
-   - the pull request does not target `main`;
-   - unrelated changes would be included.
-4. Verify the Issue's Done items.
-5. Run the relevant tests, required manual checks, and `pnpm check`.
-6. Commit and push any remaining intended changes.
-7. Open or update the pull request with:
-   - a title in the form `<type>: <summary>`;
-   - `Closes #<issue-number>` in the body.
-8. Squash-merge the pull request into `main` using `<type>: <summary>` as the squash commit title.
-9. Confirm that the squash commit exists on `origin/main`.
-10. Confirm that the related Issue was closed automatically. Close it manually only if necessary.
-11. Delete the remote branch if it still exists.
-12. Delete the local feature branch.
-13. Switch to `main` and update it to match `origin/main`.
-14. Confirm the worktree is clean.
-
-Stop before merging if tests fail, a required manual check is incomplete, the branch does not match the Issue, or the repository state is ambiguous.
+1. Confirm the branch, Issue, PR, target `main`, worktree, and intended scope. Stop for a branch/Issue/PR mismatch, unrelated changes, or ambiguous state.
+2. Read the Issue number from the branch name and fetch the complete Issue body with the GitHub plugin.
+3. Verify every required Done item against the code, relevant tests, required manual checks, and `pnpm check`. A user report may satisfy a manual check. Stop if any required check is incomplete or fails.
+4. Update the Issue body with the GitHub plugin: preserve the title, description, formatting, links, and unverified items; change only verified `- [ ]` items to `- [x]`. Confirm no required Done item remains unchecked.
+5. Commit and push all intended changes that are still uncommitted.
+6. Use the GitHub plugin to open or update the PR with a `<type>: <summary>` title and `Closes #<issue-number>` in the body.
+7. Use the GitHub plugin to squash-merge the PR into `main` using the same title.
+8. Confirm the squash commit exists on `origin/main`, the Issue is closed, and all verified Done items remain checked.
+9. Delete the remote branch with the GitHub plugin when supported; otherwise stop and ask before using `gh`. Delete the local branch with `git`, update local `main` to `origin/main`, and confirm the worktree is clean.
 
 ## Boundaries
 
