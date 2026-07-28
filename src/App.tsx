@@ -17,6 +17,7 @@ import {
 } from "@/api/audio-files";
 import type { AudioOutputDevice } from "@/types/audio-devices";
 import type { PlaybackSnapshot, ValidatedAudioFile } from "@/types/audio-files";
+import { formatPlaybackTime } from "@/lib/playback-time";
 
 function formatValidationError(error: unknown): string {
   if (!isAudioFileValidationError(error)) {
@@ -303,6 +304,11 @@ function App() {
             ? ` (${playback.playbackId})`
             : ""}
         </p>
+        {playback.status === "playing" || playback.status === "paused" ? (
+          <p className="mt-2 font-mono text-sm text-zinc-300">
+            {formatPlaybackTime(playback.positionMs)} / {formatPlaybackTime(playback.durationMs)}
+          </p>
+        ) : null}
 
         {playbackError ? (
           <p className="mt-4 text-sm text-red-300" role="alert">

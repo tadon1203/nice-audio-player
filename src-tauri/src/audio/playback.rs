@@ -3,7 +3,7 @@ use std::sync::{
     Arc, Mutex, RwLock,
 };
 use std::thread::{self, JoinHandle};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use cpal::StreamInstant;
 
@@ -22,9 +22,13 @@ pub enum PlaybackSnapshot {
     Stopped,
     Playing {
         playback_id: String,
+        position_ms: u64,
+        duration_ms: u64,
     },
     Paused {
         playback_id: String,
+        position_ms: u64,
+        duration_ms: u64,
     },
     Failed {
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -179,7 +183,13 @@ struct ActivePlayback {
     id: OutputStreamId,
     stream: PreparedOutputStream,
     completion_time: Option<StreamInstant>,
+    sample_rate: u32,
+    total_frame_count: u64,
+    position_frame: u64,
+    last_position_publish: Instant,
 }
+
+const POSITION_UPDATE_INTERVAL: Duration = Duration::from_millis(250);
 
 struct PlaybackWorker {
     active: Option<ActivePlayback>,
@@ -213,11 +223,15 @@ impl PlaybackWorker {
                 Err(mpsc::RecvTimeoutError::Timeout) => {}
             }
             self.finish_if_due();
+            self.update_playback_position();
         }
         self.active = None;
         self.publish(PlaybackSnapshot::Stopped);
     }
     fn start(&mut self, pcm: PcmBuffer) -> Result<PlaybackSnapshot, PlaybackServiceError> {
+        let sample_rate = pcm.sample_rate().get();
+        let total_frame_count = pcm.frame_count() as u64;
+        let duration_ms = duration_ms(total_frame_count, sample_rate);
         self.next_playback_id = self.next_playback_id.wrapping_add(1);
         let id = OutputStreamId(self.next_playback_id);
         let stream = match build_output_stream(id, pcm, self.output_sender.clone()) {
@@ -227,7 +241,7 @@ impl PlaybackWorker {
         if let Err(error) = stream.start() {
             return Err(self.start_failure(id, error));
         }
-        Ok(self.commit_started_stream(id, stream))
+        Ok(self.commit_started_stream(id, stream, sample_rate, total_frame_count, duration_ms))
     }
     fn start_failure(
         &mut self,
@@ -254,15 +268,23 @@ impl PlaybackWorker {
             PlaybackControlAction::Idempotent => Ok(self.current()),
             PlaybackControlAction::Invalid => Err(PlaybackServiceError::InvalidPlaybackState),
             PlaybackControlAction::Change => {
-                let Some(active) = self.active.as_ref() else {
+                let Some(active) = self.active.as_mut() else {
                     return Err(PlaybackServiceError::InvalidPlaybackState);
                 };
                 let id = active.id;
                 if let Err(error) = active.stream.pause() {
                     return Err(self.control_failure(id, error));
                 }
+                let position_frame = active
+                    .stream
+                    .played_frame_position(active.sample_rate, active.total_frame_count);
+                active.stream.clear_timing_anchor();
+                active.position_frame = position_frame;
+                let duration_ms = duration_ms(active.total_frame_count, active.sample_rate);
                 let snapshot = PlaybackSnapshot::Paused {
                     playback_id: id.0.to_string(),
+                    position_ms: frame_to_millis(position_frame, active.sample_rate),
+                    duration_ms,
                 };
                 self.publish(snapshot.clone());
                 Ok(snapshot)
@@ -274,15 +296,19 @@ impl PlaybackWorker {
             PlaybackControlAction::Idempotent => Ok(self.current()),
             PlaybackControlAction::Invalid => Err(PlaybackServiceError::InvalidPlaybackState),
             PlaybackControlAction::Change => {
-                let Some(active) = self.active.as_ref() else {
+                let Some(active) = self.active.as_mut() else {
                     return Err(PlaybackServiceError::InvalidPlaybackState);
                 };
                 let id = active.id;
                 if let Err(error) = active.stream.resume() {
                     return Err(self.control_failure(id, error));
                 }
+                let position_ms = frame_to_millis(active.position_frame, active.sample_rate);
+                let duration_ms = duration_ms(active.total_frame_count, active.sample_rate);
                 let snapshot = PlaybackSnapshot::Playing {
                     playback_id: id.0.to_string(),
+                    position_ms,
+                    duration_ms,
                 };
                 self.publish(snapshot.clone());
                 Ok(snapshot)
@@ -303,15 +329,24 @@ impl PlaybackWorker {
         &mut self,
         id: OutputStreamId,
         stream: PreparedOutputStream,
+        sample_rate: u32,
+        total_frame_count: u64,
+        duration_ms: u64,
     ) -> PlaybackSnapshot {
         let snapshot = PlaybackSnapshot::Playing {
             playback_id: id.0.to_string(),
+            position_ms: 0,
+            duration_ms,
         };
 
         self.active = Some(ActivePlayback {
             id,
             stream,
             completion_time: None,
+            sample_rate,
+            total_frame_count,
+            position_frame: 0,
+            last_position_publish: Instant::now(),
         });
 
         self.publish(snapshot.clone());
@@ -367,6 +402,56 @@ impl PlaybackWorker {
             self.publish(PlaybackSnapshot::Stopped);
         }
     }
+    fn update_playback_position(&mut self) {
+        let is_playing = matches!(self.current(), PlaybackSnapshot::Playing { .. });
+        let Some((playback_id, position_frame, sample_rate, total_frame_count)) =
+            self.active.as_mut().and_then(|active| {
+                if !is_playing {
+                    return None;
+                }
+                let position_frame = active
+                    .stream
+                    .played_frame_position(active.sample_rate, active.total_frame_count);
+                if !should_publish_position(
+                    active.last_position_publish.elapsed(),
+                    position_frame != active.position_frame,
+                ) {
+                    return None;
+                }
+                active.position_frame = position_frame;
+                active.last_position_publish = Instant::now();
+                Some((
+                    active.id.0.to_string(),
+                    position_frame,
+                    active.sample_rate,
+                    active.total_frame_count,
+                ))
+            })
+        else {
+            return;
+        };
+        self.publish(PlaybackSnapshot::Playing {
+            playback_id,
+            position_ms: frame_to_millis(position_frame, sample_rate),
+            duration_ms: duration_ms(total_frame_count, sample_rate),
+        });
+    }
+}
+
+fn frame_to_millis(frame_position: u64, sample_rate: u32) -> u64 {
+    if sample_rate == 0 {
+        return 0;
+    }
+    ((u128::from(frame_position) * 1_000) / u128::from(sample_rate)).min(u128::from(u64::MAX))
+        as u64
+}
+
+fn duration_ms(total_frame_count: u64, sample_rate: u32) -> u64 {
+    frame_to_millis(total_frame_count, sample_rate)
+}
+
+fn should_publish_position(elapsed_since_publish: Duration, position_changed: bool) -> bool {
+    elapsed_since_publish >= POSITION_UPDATE_INTERVAL && position_changed
 }
 
 fn signal_stream_id(signal: &OutputSignal) -> OutputStreamId {
@@ -455,8 +540,9 @@ fn output_failure_code(error: AudioOutputError) -> PlaybackFailureCode {
 mod tests {
     use super::super::output::AudioOutputError;
     use super::{
-        completion_time_reached, failed_snapshot, output_failure_code, pause_action, resume_action,
-        should_finish, signal_stream_id, start_failure_snapshot, OutputSignal, OutputStreamId,
+        completion_time_reached, duration_ms, failed_snapshot, frame_to_millis,
+        output_failure_code, pause_action, resume_action, should_finish, should_publish_position,
+        signal_stream_id, start_failure_snapshot, OutputSignal, OutputStreamId,
         PlaybackControlAction, PlaybackFailureCode, PlaybackService, PlaybackSnapshot,
         PlaybackWorker,
     };
@@ -467,11 +553,13 @@ mod tests {
     fn serializes_playing_snapshot_with_camel_case_playback_id() {
         let snapshot = PlaybackSnapshot::Playing {
             playback_id: "1".into(),
+            position_ms: 1_000,
+            duration_ms: 60_000,
         };
 
         assert_eq!(
             serde_json::to_value(snapshot).unwrap(),
-            serde_json::json!({ "status": "playing", "playbackId": "1" })
+            serde_json::json!({ "status": "playing", "playbackId": "1", "positionMs": 1_000, "durationMs": 60_000 })
         );
     }
 
@@ -479,11 +567,13 @@ mod tests {
     fn serializes_paused_snapshot_with_camel_case_playback_id() {
         let snapshot = PlaybackSnapshot::Paused {
             playback_id: "1".into(),
+            position_ms: 1_000,
+            duration_ms: 60_000,
         };
 
         assert_eq!(
             serde_json::to_value(snapshot).unwrap(),
-            serde_json::json!({ "status": "paused", "playbackId": "1" })
+            serde_json::json!({ "status": "paused", "playbackId": "1", "positionMs": 1_000, "durationMs": 60_000 })
         );
     }
 
@@ -507,6 +597,8 @@ mod tests {
     fn stop_is_stopped_when_called_twice() {
         let mut worker = test_worker(PlaybackSnapshot::Playing {
             playback_id: "1".into(),
+            position_ms: 0,
+            duration_ms: 60_000,
         });
 
         assert_eq!(worker.stop(), PlaybackSnapshot::Stopped);
@@ -519,6 +611,8 @@ mod tests {
     fn stop_from_paused_is_stopped() {
         let mut worker = test_worker(PlaybackSnapshot::Paused {
             playback_id: "1".into(),
+            position_ms: 10_000,
+            duration_ms: 60_000,
         });
 
         assert_eq!(worker.stop(), PlaybackSnapshot::Stopped);
@@ -587,9 +681,13 @@ mod tests {
     fn pause_and_resume_actions_are_idempotent_or_invalid_by_snapshot() {
         let playing = PlaybackSnapshot::Playing {
             playback_id: "1".into(),
+            position_ms: 0,
+            duration_ms: 60_000,
         };
         let paused = PlaybackSnapshot::Paused {
             playback_id: "1".into(),
+            position_ms: 10_000,
+            duration_ms: 60_000,
         };
         let stopped = PlaybackSnapshot::Stopped;
         let failed = failed_snapshot(
@@ -611,13 +709,17 @@ mod tests {
     fn paused_playback_does_not_finish_naturally() {
         let paused = PlaybackSnapshot::Paused {
             playback_id: "1".into(),
+            position_ms: 10_000,
+            duration_ms: 60_000,
         };
         let end = StreamInstant::new(10, 0);
 
         assert!(!should_finish(&paused, Some(end), end));
         assert!(should_finish(
             &PlaybackSnapshot::Playing {
-                playback_id: "1".into()
+                playback_id: "1".into(),
+                position_ms: 0,
+                duration_ms: 60_000,
             },
             Some(end),
             end
@@ -693,6 +795,33 @@ mod tests {
             }),
             OutputStreamId(3)
         );
+    }
+
+    #[test]
+    fn converts_frames_and_calculates_duration_in_milliseconds() {
+        assert_eq!(frame_to_millis(22_050, 44_100), 500);
+        assert_eq!(duration_ms(132_300, 44_100), 3_000);
+        assert_eq!(frame_to_millis(96_000, 96_000), 1_000);
+    }
+
+    #[test]
+    fn position_publication_requires_interval_and_a_changed_position() {
+        assert!(!should_publish_position(
+            std::time::Duration::from_millis(249),
+            true
+        ));
+        assert!(!should_publish_position(
+            std::time::Duration::from_millis(250),
+            false
+        ));
+        assert!(should_publish_position(
+            std::time::Duration::from_millis(250),
+            true
+        ));
+        assert!(should_publish_position(
+            std::time::Duration::from_millis(500),
+            true
+        ));
     }
 
     fn test_worker(snapshot: PlaybackSnapshot) -> PlaybackWorker {
