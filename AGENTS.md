@@ -47,53 +47,76 @@ Run `pnpm check` before reporting a coding task as complete.
 
 ## Git Workflow
 
-### Policy
+### Basic flow
 
-- Start from a focused Issue using `.github/ISSUE_TEMPLATE/task.md`.
-- Create `<type>/<issue-number>-<description>` from `main` and keep one Issue, branch, and pull request per outcome.
-- Verify the Issue's Done items against code, tests, and manual checks.
-- Git/GitHub write operations require an explicit user request.
-- The ordinary merge workflow is not used; feature branches are always integrated by squash.
-- Use `<type>: <summary>` commit messages.
-- Never commit secrets, local environment files, build outputs, generated dependencies, or editor-specific local settings.
+Issue → branch → commit → push → pull request → squash merge → delete branch → update `main`
+
+The related Issue is normally closed automatically when the pull request containing `Closes #<issue-number>` is squash-merged into `main`.
+
+### Rules
+
+- Start each change from one focused Issue.
+- Use one branch and one pull request per Issue.
+- Create the branch from an up-to-date local `main` that matches `origin/main`.
+- Name the branch:
+  `<type>/<issue-number>-<description>`
+- Take the Issue number from the current branch name.
+- Use lowercase kebab-case for `<description>`.
+- Use the Issue type when available; otherwise choose an appropriate conventional type such as `feat`, `fix`, `refactor`, `docs`, `test`, or `chore`.
+- Use `<type>: <summary>` for commit messages, pull request titles, and the final squash commit title.
+- Keep changes within the related Issue's scope.
+- Before merging:
+  - verify the Issue's Done items;
+  - run tests affected by the change;
+  - run any test command required by the Issue;
+  - perform manual checks explicitly listed in the Issue;
+  - run `pnpm check`.
+- Do not invent additional mandatory checks that are not justified by the change or the Issue.
+- Manual checks may be accepted when the user explicitly reports that they passed. If a required manual check has not been completed, report it and stop before merging.
+- Integrate pull requests into `main` with squash merge.
+- Do not use regular merge commits.
+- Do not commit secrets, local environment files, build outputs, generated dependencies, or editor-specific settings.
+- Git and GitHub write operations require an explicit user request.
 
 ### Commands
 
-| Keyword            | Scope                                             |
-| ------------------ | ------------------------------------------------- |
-| `commit`           | Commit the current branch changes only.           |
-| `push`             | Push the explicitly specified branch only.        |
-| `merge and squash` | Run the complete feature delivery workflow below. |
+| Request        | Action                                                                                                                           |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `commit`       | Commit the current branch changes.                                                                                               |
+| `push`         | Push the current branch.                                                                                                         |
+| `open pr`      | Push existing commits if necessary and open or update the current branch's pull request. It does not commit uncommitted changes. |
+| `squash merge` | Continue the current Issue workflow from its present state through squash merge and cleanup.                                     |
 
-Do not infer permission to commit, push, merge, squash, or delete branches from a general coding request.
+Each command authorizes only the action it describes. The `squash merge` command is the exception: it authorizes the remaining delivery and cleanup steps listed below.
 
-### Delivery workflow
+Do not repeat steps that are already complete. Reuse an existing commit, pushed branch, or pull request only when it matches the current feature branch, targets `main`, and refers to the same Issue.
 
-When the user explicitly requests `merge and squash`:
+### `squash merge`
 
-1. Inspect the current branch, worktree, local branches, and remote branches.
-2. Verify the Issue's Done items, run the relevant tests, and run `pnpm check`.
-3. Commit with `<type>: <summary>`.
-4. Push the feature branch.
-5. Switch to `main` and verify that the target branch is based on the current `main`.
-6. Integrate with `git merge --squash <feature-branch>`; do not create a regular merge commit.
-7. Create one squash commit on `main` using `<type>: <summary>`.
-8. Run `pnpm check` after the squash commit.
-9. Push `main`.
-10. Close the related Issue or PR when applicable.
-11. Delete the feature branch locally and remotely only after the squash commit is present on the remote `main`.
+When explicitly requested:
 
-### Resume rules
+1. Confirm the current branch, related Issue, pull request, and worktree state.
+2. Read the Issue number from the branch name.
+3. Stop if:
+   - the branch name does not follow the required format;
+   - the branch Issue number conflicts with the pull request;
+   - the pull request does not target `main`;
+   - unrelated changes would be included.
+4. Verify the Issue's Done items.
+5. Run the relevant tests, required manual checks, and `pnpm check`.
+6. Commit and push any remaining intended changes.
+7. Open or update the pull request with:
+   - a title in the form `<type>: <summary>`;
+   - `Closes #<issue-number>` in the body.
+8. Squash-merge the pull request into `main` using `<type>: <summary>` as the squash commit title.
+9. Confirm that the squash commit exists on `origin/main`.
+10. Confirm that the related Issue was closed automatically. Close it manually only if necessary.
+11. Delete the remote branch if it still exists.
+12. Delete the local feature branch.
+13. Switch to `main` and update it to match `origin/main`.
+14. Confirm the worktree is clean.
 
-When `continue merge and squash` is explicitly requested:
-
-- Inspect `git status`, `git log`, local branches, and remote branches before taking action.
-- Determine the first incomplete phase and resume from there.
-- Do not recreate an existing commit, repeat a completed squash, or push an already synchronized branch unnecessarily.
-- If there are conflicts, unexpected uncommitted changes, or remote divergence, stop and report them before writing.
-- If a completed check is followed by new changes, run the check again.
-- CI verification is optional when the repository has no CI configured.
-- Release tags, builds, and other release actions require a separate explicit request.
+Stop before merging if tests fail, a required manual check is incomplete, the branch does not match the Issue, or the repository state is ambiguous.
 
 ## Boundaries
 
