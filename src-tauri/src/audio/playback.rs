@@ -882,7 +882,9 @@ fn output_failure_code(error: AudioOutputError) -> PlaybackFailureCode {
         AudioOutputError::UnsupportedConfiguration | AudioOutputError::ConfigurationQueryFailed => {
             PlaybackFailureCode::UnsupportedOutputConfiguration
         }
-        AudioOutputError::NativeStreamUnsupported => PlaybackFailureCode::OutputStreamBuildFailed,
+        AudioOutputError::StreamConfigurationUnsupported => {
+            PlaybackFailureCode::UnsupportedOutputConfiguration
+        }
         AudioOutputError::StreamBuildFailed => PlaybackFailureCode::OutputStreamBuildFailed,
         AudioOutputError::StreamStartFailed => PlaybackFailureCode::OutputStreamStartFailed,
         AudioOutputError::StreamPauseFailed => PlaybackFailureCode::OutputStreamPauseFailed,
@@ -1089,6 +1091,22 @@ mod tests {
         assert_eq!(
             output_failure_code(AudioOutputError::StreamResumeFailed),
             PlaybackFailureCode::OutputStreamResumeFailed
+        );
+    }
+
+    #[test]
+    fn preserves_frontend_mapping_for_output_configuration_errors() {
+        assert_eq!(
+            output_failure_code(AudioOutputError::UnsupportedConfiguration),
+            PlaybackFailureCode::UnsupportedOutputConfiguration
+        );
+        assert_eq!(
+            output_failure_code(AudioOutputError::StreamConfigurationUnsupported),
+            PlaybackFailureCode::UnsupportedOutputConfiguration
+        );
+        assert_eq!(
+            output_failure_code(AudioOutputError::StreamBuildFailed),
+            PlaybackFailureCode::OutputStreamBuildFailed
         );
     }
 

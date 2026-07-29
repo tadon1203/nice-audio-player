@@ -15,7 +15,9 @@ pub(crate) struct PcmConverter {
     source_frames: u64,
     output_frames: u64,
     phase_remainder: u64,
-    previous: Option<Vec<f32>>,
+    current_frame: Vec<f32>,
+    previous_frame: Vec<f32>,
+    has_previous_frame: bool,
     finished: bool,
 }
 
@@ -41,7 +43,9 @@ impl PcmConverter {
             source_frames: 0,
             output_frames: 0,
             phase_remainder: 0,
-            previous: None,
+            current_frame: vec![0.0; target_channels],
+            previous_frame: vec![0.0; target_channels],
+            has_previous_frame: false,
             finished: false,
         })
     }
@@ -67,19 +71,22 @@ impl PcmConverter {
         }
 
         for frame in input.chunks_exact(self.source_channels) {
-            let converted = convert_channels(frame, self.target_channels);
-            if let Some(previous) = self.previous.take() {
+            convert_channels_into(frame, &mut self.current_frame);
+            if self.has_previous_frame {
                 while self.output_source_index() < self.source_frames {
                     let fraction = self.phase_remainder as f32 / self.target_rate as f32;
                     for channel in 0..self.target_channels {
                         output.push(
-                            previous[channel] + (converted[channel] - previous[channel]) * fraction,
+                            self.previous_frame[channel]
+                                + (self.current_frame[channel] - self.previous_frame[channel])
+                                    * fraction,
                         );
                     }
                     self.advance_phase();
                 }
             }
-            self.previous = Some(converted);
+            std::mem::swap(&mut self.current_frame, &mut self.previous_frame);
+            self.has_previous_frame = true;
             self.source_frames += 1;
         }
         Ok(())
@@ -91,16 +98,16 @@ impl PcmConverter {
             self.finished = true;
             return;
         }
-        let Some(last) = self.previous.take() else {
+        if !self.has_previous_frame {
             self.finished = true;
             return;
-        };
+        }
         let expected = ceil_div(
             u128::from(self.source_frames) * u128::from(self.target_rate),
             u128::from(self.source_rate),
         ) as u64;
         while self.output_frames < expected {
-            output.extend_from_slice(&last);
+            output.extend_from_slice(&self.previous_frame);
             self.advance_phase();
         }
         self.finished = true;
@@ -119,11 +126,11 @@ impl PcmConverter {
     }
 }
 
-fn convert_channels(frame: &[f32], target_channels: usize) -> Vec<f32> {
-    match (frame.len(), target_channels) {
-        (channels, target) if channels == target => frame.to_vec(),
-        (1, 2) => vec![frame[0], frame[0]],
-        (2, 1) => vec![(frame[0] + frame[1]) * 0.5],
+fn convert_channels_into(frame: &[f32], output: &mut [f32]) {
+    match (frame.len(), output.len()) {
+        (channels, target) if channels == target => output.copy_from_slice(frame),
+        (1, 2) => output.copy_from_slice(&[frame[0], frame[0]]),
+        (2, 1) => output[0] = (frame[0] + frame[1]) * 0.5,
         _ => unreachable!("channel conversion was validated by PcmConverter::new"),
     }
 }
@@ -230,5 +237,22 @@ mod tests {
         let output = run(&mut converter, &[0.0, 1.0, 2.0]);
         assert_eq!(output.len(), 10);
         assert!(output.chunks_exact(2).all(|frame| frame[0] == frame[1]));
+    }
+
+    #[test]
+    fn reuses_current_and_previous_frame_buffers() {
+        let mut converter = converter(48_000, 2, 96_000, 2);
+        let current_ptr = converter.current_frame.as_ptr();
+        let previous_ptr = converter.previous_frame.as_ptr();
+        let mut output = Vec::new();
+        converter
+            .convert(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0], &mut output)
+            .unwrap();
+        assert!(
+            (converter.current_frame.as_ptr() == current_ptr
+                && converter.previous_frame.as_ptr() == previous_ptr)
+                || (converter.current_frame.as_ptr() == previous_ptr
+                    && converter.previous_frame.as_ptr() == current_ptr)
+        );
     }
 }

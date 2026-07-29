@@ -77,7 +77,7 @@ pub enum AudioOutputError {
     ConfigurationQueryFailed,
     UnsupportedConfiguration,
     StreamBuildFailed,
-    NativeStreamUnsupported,
+    StreamConfigurationUnsupported,
     StreamStartFailed,
     StreamPauseFailed,
     StreamResumeFailed,
@@ -96,6 +96,29 @@ pub(crate) struct OutputPreparation {
     pub(crate) channel_count: u16,
     #[allow(dead_code)]
     pub(crate) path: OutputPath,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum NativeAttemptDecision<T> {
+    Success(T),
+    Fallback,
+    Failure(AudioOutputError),
+}
+
+fn classify_native_attempt<T>(result: Result<T, AudioOutputError>) -> NativeAttemptDecision<T> {
+    match result {
+        Ok(value) => NativeAttemptDecision::Success(value),
+        Err(AudioOutputError::UnsupportedConfiguration)
+        | Err(AudioOutputError::StreamConfigurationUnsupported) => NativeAttemptDecision::Fallback,
+        Err(error) => NativeAttemptDecision::Failure(error),
+    }
+}
+
+fn classify_fallback_build<T>(result: Result<T, AudioOutputError>) -> Result<T, AudioOutputError> {
+    result.map_err(|error| match error {
+        AudioOutputError::StreamConfigurationUnsupported => AudioOutputError::StreamBuildFailed,
+        error => error,
+    })
 }
 
 pub(crate) struct PreparedOutputStream {
@@ -375,19 +398,18 @@ pub(crate) fn prepare_output_stream(
             path: OutputPath::Native,
         })
     });
-    match native_result {
-        Ok(prepared) => {
+    match classify_native_attempt(native_result) {
+        NativeAttemptDecision::Success(prepared) => {
             info!("audio output path native: source_rate={source_rate}, source_channels={source_channels}, sample_format={:?}",
                 native_sample_format);
             return Ok(prepared);
         }
-        Err(AudioOutputError::UnsupportedConfiguration)
-        | Err(AudioOutputError::NativeStreamUnsupported) => {
+        NativeAttemptDecision::Fallback => {
             tauri_plugin_log::log::warn!(
                 "native audio output configuration rejected; beginning default-output fallback"
             );
         }
-        Err(error) => return Err(error),
+        NativeAttemptDecision::Failure(error) => return Err(error),
     }
 
     let fallback = device
@@ -408,7 +430,7 @@ pub(crate) fn prepare_output_stream(
     .map_err(|_| AudioOutputError::UnsupportedConfiguration)?;
     let (producer, consumer) = make_queue(target_rate, target_channels)?;
     let config = fallback.config();
-    let stream = match build_stream_for_config(
+    let stream = classify_fallback_build(build_stream_for_config(
         &device,
         &device_name,
         stream_id,
@@ -418,13 +440,7 @@ pub(crate) fn prepare_output_stream(
         producer_state,
         capacity_sender,
         signal_sender,
-    ) {
-        Ok(stream) => stream,
-        Err(AudioOutputError::NativeStreamUnsupported) => {
-            return Err(AudioOutputError::StreamBuildFailed)
-        }
-        Err(error) => return Err(error),
-    };
+    ))?;
     info!("audio output path fallback: source_rate={source_rate}, source_channels={source_channels}, target_rate={target_rate}, target_channels={target_channels}, sample_format={:?}", fallback.sample_format());
     Ok(OutputPreparation {
         stream,
@@ -628,7 +644,7 @@ where
                 config_sample_rate, config_channels, config_buffer_size,
             );
             if error.kind() == cpal::ErrorKind::UnsupportedConfig {
-                AudioOutputError::NativeStreamUnsupported
+                AudioOutputError::StreamConfigurationUnsupported
             } else {
                 AudioOutputError::StreamBuildFailed
             }
@@ -683,8 +699,10 @@ fn calculate_end_time(
 #[cfg(test)]
 mod tests {
     use super::{
-        calculate_end_time, format_supported_output_configs, played_frame_position,
-        sample_format_rank, select_output_config, write_output_samples, PositionUpdate,
+        calculate_end_time, classify_fallback_build, classify_native_attempt,
+        format_supported_output_configs, played_frame_position, sample_format_rank,
+        select_output_config, write_output_samples, AudioOutputError, NativeAttemptDecision,
+        PositionUpdate,
     };
     use cpal::{SampleFormat, StreamInstant, SupportedBufferSize, SupportedStreamConfigRange};
     use std::time::Duration;
@@ -723,6 +741,46 @@ mod tests {
         assert!(select_output_config([range(SampleFormat::F32, 1)], 44_100, 2).is_err());
         assert!(select_output_config([range(SampleFormat::F32, 2)], 96_000, 2).is_err());
         assert!(select_output_config([range(SampleFormat::DsdU8, 2)], 44_100, 2).is_err());
+    }
+
+    #[test]
+    fn native_attempt_decision_only_falls_back_for_unsupported_configuration() {
+        assert_eq!(
+            classify_native_attempt(Ok::<_, AudioOutputError>(7)),
+            NativeAttemptDecision::Success(7)
+        );
+        assert_eq!(
+            classify_native_attempt::<u8>(Err(AudioOutputError::UnsupportedConfiguration)),
+            NativeAttemptDecision::Fallback
+        );
+        assert_eq!(
+            classify_native_attempt::<u8>(Err(AudioOutputError::StreamConfigurationUnsupported)),
+            NativeAttemptDecision::Fallback
+        );
+        assert_eq!(
+            classify_native_attempt::<u8>(Err(AudioOutputError::ConfigurationQueryFailed)),
+            NativeAttemptDecision::Failure(AudioOutputError::ConfigurationQueryFailed)
+        );
+        assert_eq!(
+            classify_native_attempt::<u8>(Err(AudioOutputError::StreamBuildFailed)),
+            NativeAttemptDecision::Failure(AudioOutputError::StreamBuildFailed)
+        );
+    }
+
+    #[test]
+    fn fallback_unsupported_build_is_final_stream_build_failure() {
+        assert_eq!(
+            classify_fallback_build::<u8>(Err(AudioOutputError::StreamConfigurationUnsupported)),
+            Err(AudioOutputError::StreamBuildFailed)
+        );
+        assert_eq!(
+            classify_fallback_build::<u8>(Err(AudioOutputError::StreamBuildFailed)),
+            Err(AudioOutputError::StreamBuildFailed)
+        );
+        assert_eq!(
+            classify_native_attempt::<u8>(Err(AudioOutputError::StreamBuildFailed)),
+            NativeAttemptDecision::Failure(AudioOutputError::StreamBuildFailed)
+        );
     }
 
     #[test]
