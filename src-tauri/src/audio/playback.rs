@@ -16,7 +16,7 @@ use super::output::{
 use super::pcm_queue::PcmProducer;
 use super::validation::ValidatedAudioFile;
 
-#[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, serde::Serialize, specta::Type, PartialEq, Eq)]
 #[serde(
     tag = "status",
     rename_all = "camelCase",
@@ -41,7 +41,7 @@ pub enum PlaybackSnapshot {
     },
 }
 
-#[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, serde::Serialize, specta::Type, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum PlaybackFailureCode {
     NoOutputDevice,

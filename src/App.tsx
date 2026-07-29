@@ -15,8 +15,7 @@ import {
   stopAudioPlayback,
   validateAudioFile,
 } from "@/api/audio-files";
-import type { AudioOutputDevice } from "@/types/audio-devices";
-import type { PlaybackSnapshot, ValidatedAudioFile } from "@/types/audio-files";
+import type { AudioOutputDevice, PlaybackSnapshot, ValidatedAudioFile } from "@/bindings";
 import { formatPlaybackTime } from "@/lib/playback-time";
 
 function formatValidationError(error: unknown): string {
