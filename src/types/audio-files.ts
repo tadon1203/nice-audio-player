@@ -44,12 +44,13 @@ export type PlaybackFailureCode =
   | "outputStreamPauseFailed"
   | "outputStreamResumeFailed"
   | "outputStreamRuntimeFailed"
-  | "completionTimingFailed";
+  | "completionTimingFailed"
+  | "decodeFailed";
 
 export type PlaybackSnapshot =
   | { status: "stopped" }
-  | { status: "playing"; playbackId: string; positionMs: number; durationMs: number }
-  | { status: "paused"; playbackId: string; positionMs: number; durationMs: number }
+  | { status: "playing"; playbackId: string; positionMs: number; durationMs: number | null }
+  | { status: "paused"; playbackId: string; positionMs: number; durationMs: number | null }
   | { status: "failed"; playbackId?: string; error: PlaybackFailureCode };
 
 export type StartAudioFileError =

@@ -1,10 +1,13 @@
+use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::mpsc::{self, Receiver, SyncSender};
+use std::sync::Arc;
 use std::time::Duration;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, Sample, SampleFormat, StreamConfig, StreamInstant, SupportedStreamConfig};
 
-use super::pcm::PcmBuffer;
+use super::decoding::DecodedAudioSpec;
+use super::pcm_queue::PcmConsumer;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct OutputStreamId(pub(crate) u64);
@@ -20,6 +23,44 @@ pub(crate) enum OutputSignal {
     CompletionTimingFailed {
         stream_id: OutputStreamId,
     },
+    DecodeFailed {
+        stream_id: OutputStreamId,
+    },
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[repr(u8)]
+pub(crate) enum ProducerState {
+    Running = 0,
+    EndOfStream = 1,
+    Failed = 2,
+    Cancelled = 3,
+}
+
+pub(crate) struct AtomicProducerState {
+    state: AtomicU8,
+}
+
+impl AtomicProducerState {
+    pub(crate) fn new(state: ProducerState) -> Self {
+        Self {
+            state: AtomicU8::new(state as u8),
+        }
+    }
+
+    pub(crate) fn store(&self, state: ProducerState) {
+        self.state.store(state as u8, Ordering::Release);
+    }
+
+    pub(crate) fn load(&self) -> ProducerState {
+        match self.state.load(Ordering::Acquire) {
+            0 => ProducerState::Running,
+            1 => ProducerState::EndOfStream,
+            2 => ProducerState::Failed,
+            3 => ProducerState::Cancelled,
+            _ => ProducerState::Failed,
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -73,7 +114,7 @@ impl PreparedOutputStream {
     pub(crate) fn played_frame_position(
         &mut self,
         sample_rate: u32,
-        total_frame_count: u64,
+        max_frame_count: Option<u64>,
     ) -> u64 {
         while let Ok(update) = self.position_receiver.try_recv() {
             self.latest_position_update = Some(update);
@@ -86,7 +127,7 @@ impl PreparedOutputStream {
                         update,
                         self.stream.now(),
                         sample_rate,
-                        total_frame_count,
+                        max_frame_count,
                         self.last_played_frame_position,
                     )
                 });
@@ -102,15 +143,18 @@ impl PreparedOutputStream {
 
 pub(crate) fn build_output_stream(
     stream_id: OutputStreamId,
-    pcm: PcmBuffer,
+    spec: DecodedAudioSpec,
+    consumer: PcmConsumer,
+    producer_state: Arc<AtomicProducerState>,
+    capacity_sender: SyncSender<()>,
     signal_sender: SyncSender<OutputSignal>,
 ) -> Result<PreparedOutputStream, AudioOutputError> {
     let host = cpal::default_host();
     let device = host
         .default_output_device()
         .ok_or(AudioOutputError::NoDefaultOutputDevice)?;
-    let sample_rate = pcm.sample_rate().get();
-    let channel_count = pcm.channel_count().get();
+    let sample_rate = spec.sample_rate.get();
+    let channel_count = spec.channel_count.get();
     let ranges = device
         .supported_output_configs()
         .map_err(|_| AudioOutputError::ConfigurationQueryFailed)?;
@@ -123,7 +167,9 @@ pub(crate) fn build_output_stream(
             &device,
             config,
             stream_id,
-            pcm,
+            consumer,
+            producer_state,
+            capacity_sender,
             signal_sender.clone(),
             position_sender.clone(),
         )?,
@@ -131,7 +177,9 @@ pub(crate) fn build_output_stream(
             &device,
             config,
             stream_id,
-            pcm,
+            consumer,
+            producer_state,
+            capacity_sender,
             signal_sender.clone(),
             position_sender.clone(),
         )?,
@@ -139,7 +187,9 @@ pub(crate) fn build_output_stream(
             &device,
             config,
             stream_id,
-            pcm,
+            consumer,
+            producer_state,
+            capacity_sender,
             signal_sender.clone(),
             position_sender.clone(),
         )?,
@@ -147,7 +197,9 @@ pub(crate) fn build_output_stream(
             &device,
             config,
             stream_id,
-            pcm,
+            consumer,
+            producer_state,
+            capacity_sender,
             signal_sender.clone(),
             position_sender.clone(),
         )?,
@@ -155,7 +207,9 @@ pub(crate) fn build_output_stream(
             &device,
             config,
             stream_id,
-            pcm,
+            consumer,
+            producer_state,
+            capacity_sender,
             signal_sender.clone(),
             position_sender.clone(),
         )?,
@@ -163,7 +217,9 @@ pub(crate) fn build_output_stream(
             &device,
             config,
             stream_id,
-            pcm,
+            consumer,
+            producer_state,
+            capacity_sender,
             signal_sender.clone(),
             position_sender.clone(),
         )?,
@@ -171,7 +227,9 @@ pub(crate) fn build_output_stream(
             &device,
             config,
             stream_id,
-            pcm,
+            consumer,
+            producer_state,
+            capacity_sender,
             signal_sender.clone(),
             position_sender.clone(),
         )?,
@@ -179,7 +237,9 @@ pub(crate) fn build_output_stream(
             &device,
             config,
             stream_id,
-            pcm,
+            consumer,
+            producer_state,
+            capacity_sender,
             signal_sender.clone(),
             position_sender.clone(),
         )?,
@@ -187,7 +247,9 @@ pub(crate) fn build_output_stream(
             &device,
             config,
             stream_id,
-            pcm,
+            consumer,
+            producer_state,
+            capacity_sender,
             signal_sender.clone(),
             position_sender.clone(),
         )?,
@@ -195,7 +257,9 @@ pub(crate) fn build_output_stream(
             &device,
             config,
             stream_id,
-            pcm,
+            consumer,
+            producer_state,
+            capacity_sender,
             signal_sender.clone(),
             position_sender.clone(),
         )?,
@@ -203,7 +267,9 @@ pub(crate) fn build_output_stream(
             &device,
             config,
             stream_id,
-            pcm,
+            consumer,
+            producer_state,
+            capacity_sender,
             signal_sender.clone(),
             position_sender.clone(),
         )?,
@@ -211,7 +277,9 @@ pub(crate) fn build_output_stream(
             &device,
             config,
             stream_id,
-            pcm,
+            consumer,
+            producer_state,
+            capacity_sender,
             signal_sender.clone(),
             position_sender.clone(),
         )?,
@@ -267,70 +335,97 @@ fn sample_format_rank(sample_format: SampleFormat) -> Option<u8> {
     }
 }
 
+fn write_queue_samples<T>(output: &mut [T], consumer: &mut PcmConsumer) -> usize
+where
+    T: Sample + FromSample<f32>,
+{
+    let mut consumed = 0;
+    for destination in output.iter_mut() {
+        let Some(sample) = consumer.pop_sample() else {
+            *destination = T::EQUILIBRIUM;
+            continue;
+        };
+        *destination = T::from_sample(sample);
+        consumed += 1;
+    }
+    consumed
+}
+
+#[cfg(test)]
 fn write_output_samples<T>(output: &mut [T], source: &[f32], position: &mut usize) -> usize
 where
     T: Sample + FromSample<f32>,
 {
-    let remaining = source.len().saturating_sub(*position);
-    let copied = remaining.min(output.len());
-    let source_end = *position + copied;
-
+    let copied = source.len().saturating_sub(*position).min(output.len());
     for (destination, sample) in output[..copied]
         .iter_mut()
-        .zip(&source[*position..source_end])
+        .zip(&source[*position..*position + copied])
     {
         *destination = T::from_sample(*sample);
     }
     output[copied..].fill(T::EQUILIBRIUM);
-    *position = source_end;
+    *position += copied;
     copied
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_stream<T>(
     device: &cpal::Device,
     config: StreamConfig,
     stream_id: OutputStreamId,
-    pcm: PcmBuffer,
+    mut consumer: PcmConsumer,
+    producer_state: Arc<AtomicProducerState>,
+    capacity_sender: SyncSender<()>,
     signal_sender: SyncSender<OutputSignal>,
     position_sender: SyncSender<PositionUpdate>,
 ) -> Result<cpal::Stream, AudioOutputError>
 where
     T: cpal::SizedSample + FromSample<f32>,
 {
-    let sample_rate = pcm.sample_rate().get();
-    let channel_count = usize::from(pcm.channel_count().get());
-    let source_sample_count = pcm.samples().len();
-    let source_frame_count = pcm.frame_count();
-    debug_assert_eq!(source_sample_count, source_frame_count * channel_count);
-    let samples = pcm.into_samples();
+    let sample_rate = config.sample_rate;
+    let channel_count = usize::from(config.channels);
     let error_sender = signal_sender.clone();
-    let mut position = 0usize;
+    let mut position_frame = 0u64;
+    let mut last_end_time = None;
     let mut completion_sent = false;
+    let mut completion_timing_failed = false;
 
     let stream = device
         .build_output_stream(
             config,
             move |output: &mut [T], info| {
-                let start_frame = (position / channel_count) as u64;
-                let written_sample_count = write_output_samples(output, &samples, &mut position);
-                let end_frame = (position / channel_count) as u64;
+                let start_frame = position_frame;
+                let consumed_sample_count = write_queue_samples(output, &mut consumer);
+                let consumed_frames = consumed_sample_count / channel_count;
+                position_frame = position_frame.saturating_add(consumed_frames as u64);
+                let end_frame = position_frame;
+                if consumed_frames > 0 {
+                    let _ = capacity_sender.try_send(());
+                    last_end_time = calculate_end_time(
+                        info.timestamp().playback,
+                        consumed_sample_count,
+                        channel_count,
+                        sample_rate,
+                    );
+                }
                 let _ = position_sender.try_send(PositionUpdate {
                     start_frame,
                     end_frame,
                     playback_time: info.timestamp().playback,
                 });
 
-                if position < source_sample_count || completion_sent {
+                if producer_state.load() != ProducerState::EndOfStream
+                    || !consumer.is_empty()
+                    || completion_sent
+                {
                     return;
                 }
-                let Some(end_time) = calculate_end_time(
-                    info.timestamp().playback,
-                    written_sample_count,
-                    channel_count,
-                    sample_rate,
-                ) else {
-                    let _ =
-                        signal_sender.try_send(OutputSignal::CompletionTimingFailed { stream_id });
+                let Some(end_time) = last_end_time else {
+                    if !completion_timing_failed {
+                        completion_timing_failed = true;
+                        let _ = signal_sender
+                            .try_send(OutputSignal::CompletionTimingFailed { stream_id });
+                    }
                     return;
                 };
                 completion_sent = signal_sender
@@ -359,19 +454,18 @@ fn played_frame_position(
     update: PositionUpdate,
     now: StreamInstant,
     sample_rate: u32,
-    total_frame_count: u64,
+    max_frame_count: Option<u64>,
     last_position: u64,
 ) -> u64 {
     let elapsed = now
         .checked_duration_since(update.playback_time)
         .map_or(0, |duration| elapsed_frames(duration, sample_rate));
-    last_position.max(
-        update
-            .start_frame
-            .saturating_add(elapsed)
-            .min(update.end_frame)
-            .min(total_frame_count),
-    )
+    let position = update
+        .start_frame
+        .saturating_add(elapsed)
+        .min(update.end_frame);
+    let position = max_frame_count.map_or(position, |max| position.min(max));
+    last_position.max(position)
 }
 
 #[allow(clippy::manual_is_multiple_of)]
@@ -541,7 +635,7 @@ mod tests {
             },
             StreamInstant::new(11, 500_000_000),
             100,
-            1_000,
+            Some(1_000),
             0,
         );
 
@@ -557,11 +651,11 @@ mod tests {
         };
 
         assert_eq!(
-            played_frame_position(update, StreamInstant::new(12, 0), 100, 1_000, 0),
+            played_frame_position(update, StreamInstant::new(12, 0), 100, Some(1_000), 0),
             1_000
         );
         assert_eq!(
-            played_frame_position(update, StreamInstant::new(10, 0), 100, 1_000, 950),
+            played_frame_position(update, StreamInstant::new(10, 0), 100, Some(1_000), 950),
             950
         );
     }
@@ -576,7 +670,7 @@ mod tests {
             },
             StreamInstant::new(20, 0),
             100,
-            1_000,
+            Some(1_000),
             0,
         );
 
@@ -593,7 +687,7 @@ mod tests {
             },
             StreamInstant::new(20, 0),
             100,
-            1_000,
+            Some(1_000),
             0,
         );
 
@@ -610,7 +704,7 @@ mod tests {
             },
             StreamInstant::new(10, 0),
             100,
-            1_000,
+            Some(1_000),
             0,
         );
         let position_after_progress = played_frame_position(
@@ -621,7 +715,7 @@ mod tests {
             },
             StreamInstant::new(10, 0),
             100,
-            1_000,
+            Some(1_000),
             250,
         );
 

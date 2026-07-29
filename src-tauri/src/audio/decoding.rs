@@ -1,14 +1,16 @@
+#![allow(dead_code)]
+
 use std::fs::File;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use symphonia::core::audio::Channels;
-use symphonia::core::codecs::audio::AudioDecoderOptions;
+use symphonia::core::codecs::audio::{AudioDecoder, AudioDecoderOptions};
 use symphonia::core::errors::Error as SymphoniaError;
 use symphonia::core::formats::probe::Hint;
-use symphonia::core::formats::{FormatOptions, TrackType};
+use symphonia::core::formats::{FormatOptions, FormatReader, TrackType};
 use symphonia::core::io::{MediaSourceStream, MediaSourceStreamOptions};
 use symphonia::core::meta::MetadataOptions;
+use symphonia::core::units::Timestamp;
 use symphonia::default::{get_codecs, get_probe};
 
 use super::pcm::{ChannelCount, PcmBuffer, PcmBufferBuildError, SampleRate};
@@ -39,13 +41,6 @@ pub struct DecodeCancellation {
 }
 
 impl DecodeCancellation {
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "reserved for the future stop/cancellation boundary"
-        )
-    )]
     pub fn cancel(&self) {
         self.cancelled.store(true, Ordering::Relaxed);
     }
@@ -55,11 +50,146 @@ impl DecodeCancellation {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct OutputSpec {
-    sample_rate: SampleRate,
-    channel_count: ChannelCount,
-    channels: Channels,
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub(crate) struct DecodedAudioSpec {
+    pub(crate) sample_rate: SampleRate,
+    pub(crate) channel_count: ChannelCount,
+}
+
+pub(crate) enum DecodeStep {
+    Samples,
+    EndOfStream,
+}
+
+pub(crate) struct StreamingDecoder {
+    format: Box<dyn FormatReader>,
+    decoder: Box<dyn AudioDecoder>,
+    track_id: u32,
+    expected_spec: DecodedAudioSpec,
+    duration_ms: Option<u64>,
+    finished: bool,
+}
+
+pub(crate) fn open_streaming_decoder(
+    file: &ValidatedAudioFile,
+) -> Result<StreamingDecoder, PcmDecodeError> {
+    let source = File::open(&file.path).map_err(|_| PcmDecodeError::FileOpenFailed)?;
+    let media_source =
+        MediaSourceStream::new(Box::new(source), MediaSourceStreamOptions::default());
+
+    let mut hint = Hint::new();
+    hint.with_extension(&file.extension);
+
+    let format = get_probe()
+        .probe(
+            &hint,
+            media_source,
+            FormatOptions::default(),
+            MetadataOptions::default(),
+        )
+        .map_err(map_probe_error)?;
+    let track = format
+        .default_track(TrackType::Audio)
+        .ok_or(PcmDecodeError::MissingAudioTrack)?;
+    let track_id = track.id;
+    let codec_params = track
+        .codec_params
+        .as_ref()
+        .ok_or(PcmDecodeError::MissingCodecParameters)?
+        .audio()
+        .ok_or(PcmDecodeError::MissingCodecParameters)?;
+    let expected_spec = DecodedAudioSpec {
+        sample_rate: SampleRate::new(
+            codec_params
+                .sample_rate
+                .ok_or(PcmDecodeError::InvalidSampleRate)?,
+        )
+        .ok_or(PcmDecodeError::InvalidSampleRate)?,
+        channel_count: ChannelCount::new(
+            codec_params
+                .channels
+                .as_ref()
+                .ok_or(PcmDecodeError::InvalidChannelCount)?
+                .count(),
+        )
+        .ok_or(PcmDecodeError::InvalidChannelCount)?,
+    };
+    let duration_ms = track_duration_ms(track);
+    let decoder = get_codecs()
+        .make_audio_decoder(codec_params, &AudioDecoderOptions::default().verify(true))
+        .map_err(map_decoder_creation_error)?;
+
+    Ok(StreamingDecoder {
+        format,
+        decoder,
+        track_id,
+        expected_spec,
+        duration_ms,
+        finished: false,
+    })
+}
+
+impl StreamingDecoder {
+    pub(crate) fn spec(&self) -> DecodedAudioSpec {
+        self.expected_spec
+    }
+
+    pub(crate) fn duration_ms(&self) -> Option<u64> {
+        self.duration_ms
+    }
+
+    pub(crate) fn decode_next(
+        &mut self,
+        destination: &mut Vec<f32>,
+    ) -> Result<DecodeStep, PcmDecodeError> {
+        if self.finished {
+            return Ok(DecodeStep::EndOfStream);
+        }
+
+        loop {
+            let Some(packet) = self.format.next_packet().map_err(map_packet_error)? else {
+                self.finished = true;
+                return Ok(DecodeStep::EndOfStream);
+            };
+            if packet.track_id != self.track_id {
+                continue;
+            }
+
+            let decoded = self.decoder.decode(&packet).map_err(map_decode_error)?;
+            let packet_sample_count = decoded.samples_interleaved();
+            if packet_sample_count == 0 {
+                continue;
+            }
+
+            let spec = decoded.spec();
+            let current_spec = DecodedAudioSpec {
+                sample_rate: SampleRate::new(spec.rate())
+                    .ok_or(PcmDecodeError::InvalidSampleRate)?,
+                channel_count: ChannelCount::new(spec.channels().count())
+                    .ok_or(PcmDecodeError::InvalidChannelCount)?,
+            };
+            if current_spec != self.expected_spec {
+                return Err(PcmDecodeError::StreamChanged);
+            }
+
+            destination.clear();
+            destination
+                .try_reserve(packet_sample_count)
+                .map_err(|_| PcmDecodeError::BufferAllocationFailed)?;
+            destination.resize(packet_sample_count, 0.0);
+            decoded.copy_to_slice_interleaved(destination);
+            return Ok(DecodeStep::Samples);
+        }
+    }
+
+    pub(crate) fn finalize(mut self) -> Result<(), PcmDecodeError> {
+        let finalize_result = self.decoder.finalize();
+        if finalize_result.verify_ok == Some(false) {
+            Err(PcmDecodeError::VerificationFailed)
+        } else {
+            Ok(())
+        }
+    }
 }
 
 pub fn decode_audio_file(
@@ -75,92 +205,45 @@ fn decode_audio_file_with_cancel_check(
 ) -> Result<PcmBuffer, PcmDecodeError> {
     check_cancelled(&mut is_cancelled)?;
 
-    let source = File::open(&file.path).map_err(|_| PcmDecodeError::FileOpenFailed)?;
-    let media_source =
-        MediaSourceStream::new(Box::new(source), MediaSourceStreamOptions::default());
-
-    let mut hint = Hint::new();
-    hint.with_extension(&file.extension);
-
-    let probed = get_probe()
-        .probe(
-            &hint,
-            media_source,
-            FormatOptions::default(),
-            MetadataOptions::default(),
-        )
-        .map_err(map_probe_error)?;
-    let mut format = probed;
-    let track = format
-        .default_track(TrackType::Audio)
-        .ok_or(PcmDecodeError::MissingAudioTrack)?;
-    let track_id = track.id;
-    let codec_params = track
-        .codec_params
-        .as_ref()
-        .ok_or(PcmDecodeError::MissingCodecParameters)?
-        .audio()
-        .ok_or(PcmDecodeError::MissingCodecParameters)?;
-    let decoder_options = AudioDecoderOptions::default().verify(true);
-    let mut decoder = get_codecs()
-        .make_audio_decoder(codec_params, &decoder_options)
-        .map_err(map_decoder_creation_error)?;
-
     let mut samples = Vec::<f32>::new();
-    let mut output_spec: Option<OutputSpec> = None;
+    let mut decoder = open_streaming_decoder(file)?;
+    let output_spec = decoder.spec();
+    let mut packet_samples = Vec::new();
 
     loop {
         check_cancelled(&mut is_cancelled)?;
-        let Some(packet) = format.next_packet().map_err(map_packet_error)? else {
+        if matches!(
+            decoder.decode_next(&mut packet_samples)?,
+            DecodeStep::EndOfStream
+        ) {
             break;
-        };
-
-        if packet.track_id != track_id {
-            continue;
         }
-
-        let decoded = decoder.decode(&packet).map_err(map_decode_error)?;
-        let packet_sample_count = decoded.samples_interleaved();
-        if packet_sample_count == 0 {
-            continue;
-        }
-
-        let spec = decoded.spec();
-        let current_spec = OutputSpec {
-            sample_rate: SampleRate::new(spec.rate()).ok_or(PcmDecodeError::InvalidSampleRate)?,
-            channel_count: ChannelCount::new(spec.channels().count())
-                .ok_or(PcmDecodeError::InvalidChannelCount)?,
-            channels: spec.channels().clone(),
-        };
-        if let Some(expected_spec) = &output_spec {
-            if expected_spec != &current_spec {
-                return Err(PcmDecodeError::StreamChanged);
-            }
-        } else {
-            output_spec = Some(current_spec.clone());
-        }
-
-        let old_len = samples.len();
-        let new_len = old_len
-            .checked_add(packet_sample_count)
+        let new_len = samples
+            .len()
+            .checked_add(packet_samples.len())
             .ok_or(PcmDecodeError::BufferAllocationFailed)?;
         samples
-            .try_reserve(packet_sample_count)
+            .try_reserve(packet_samples.len())
             .map_err(|_| PcmDecodeError::BufferAllocationFailed)?;
         samples.resize(new_len, 0.0);
-        decoded.copy_to_slice_interleaved(&mut samples[old_len..new_len]);
+        samples[new_len - packet_samples.len()..].copy_from_slice(&packet_samples);
         check_cancelled(&mut is_cancelled)?;
     }
 
     check_cancelled(&mut is_cancelled)?;
-    let finalize_result = decoder.finalize();
-    if finalize_result.verify_ok == Some(false) {
-        return Err(PcmDecodeError::VerificationFailed);
+    decoder.finalize()?;
+    if samples.is_empty() {
+        return Err(PcmDecodeError::EmptyAudioStream);
     }
-
-    let output_spec = output_spec.ok_or(PcmDecodeError::EmptyAudioStream)?;
     PcmBuffer::from_interleaved(samples, output_spec.sample_rate, output_spec.channel_count)
         .map_err(map_pcm_build_error)
+}
+
+fn track_duration_ms(track: &symphonia::core::formats::Track) -> Option<u64> {
+    let time_base = track.time_base?;
+    let duration = track.duration?;
+    let timestamp = Timestamp::try_from(duration.get()).ok()?;
+    u64::try_from(time_base.calc_time(timestamp)?.as_millis()).ok()
 }
 
 fn check_cancelled(is_cancelled: &mut impl FnMut() -> bool) -> Result<(), PcmDecodeError> {

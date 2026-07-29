@@ -3,6 +3,7 @@ pub mod devices;
 pub mod inspection;
 pub mod output;
 pub mod pcm;
+pub mod pcm_queue;
 pub mod playback;
 pub mod validation;
 
