@@ -76,7 +76,9 @@ describe("isPlaybackSnapshot", () => {
       null,
     ];
     for (const field of ["positionMs", "durationMs"] as const) {
-      for (const value of invalidValues) {
+      for (const value of invalidValues.filter(
+        (value) => !(field === "durationMs" && value === null),
+      )) {
         const payload = {
           status: "playing" as const,
           playbackId: "1",
@@ -87,6 +89,14 @@ describe("isPlaybackSnapshot", () => {
         expect(isPlaybackSnapshot(payload)).toBe(false);
       }
     }
+    expect(
+      isPlaybackSnapshot({
+        status: "playing",
+        playbackId: "1",
+        positionMs: 1_000,
+        durationMs: null,
+      }),
+    ).toBe(true);
     expect(
       isPlaybackSnapshot({
         status: "playing",

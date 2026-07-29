@@ -4,7 +4,6 @@ use std::thread;
 
 use tauri::{Emitter, Manager};
 
-use audio::decoding::{decode_audio_file, DecodeCancellation, PcmDecodeError};
 use audio::devices::{
     list_output_devices as list_output_devices_with_cpal, AudioDeviceListError, AudioOutputDevice,
 };
@@ -54,10 +53,7 @@ async fn start_audio_file(
     let task = tauri::async_runtime::spawn_blocking(move || {
         let validated_file = validate_audio_file_path(&path)
             .map_err(|error| StartAudioFileError::ValidationFailed { error })?;
-        let cancellation = DecodeCancellation::default();
-        let pcm = decode_audio_file(&validated_file, &cancellation)
-            .map_err(|_error: PcmDecodeError| StartAudioFileError::DecodeFailed)?;
-        playback.play(pcm).map_err(map_start_error)
+        playback.play(validated_file).map_err(map_start_error)
     });
     task.await.map_err(|_| StartAudioFileError::TaskFailed)?
 }
@@ -95,6 +91,7 @@ fn map_start_error(error: PlaybackServiceError) -> StartAudioFileError {
         PlaybackServiceError::WorkerUnavailable => StartAudioFileError::PlaybackWorkerUnavailable,
         PlaybackServiceError::InvalidPlaybackState => StartAudioFileError::OutputFailed,
         PlaybackServiceError::Output(_) => StartAudioFileError::OutputFailed,
+        PlaybackServiceError::Decode => StartAudioFileError::DecodeFailed,
     }
 }
 
@@ -116,6 +113,7 @@ fn map_pause_error(error: PlaybackServiceError) -> PauseAudioPlaybackError {
         }
         PlaybackServiceError::InvalidPlaybackState => PauseAudioPlaybackError::InvalidPlaybackState,
         PlaybackServiceError::Output(_) => PauseAudioPlaybackError::OutputFailed,
+        PlaybackServiceError::Decode => PauseAudioPlaybackError::OutputFailed,
     }
 }
 
@@ -139,6 +137,7 @@ fn map_resume_error(error: PlaybackServiceError) -> ResumeAudioPlaybackError {
             ResumeAudioPlaybackError::InvalidPlaybackState
         }
         PlaybackServiceError::Output(_) => ResumeAudioPlaybackError::OutputFailed,
+        PlaybackServiceError::Decode => ResumeAudioPlaybackError::OutputFailed,
     }
 }
 

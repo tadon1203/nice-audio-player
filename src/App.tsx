@@ -306,7 +306,8 @@ function App() {
         </p>
         {playback.status === "playing" || playback.status === "paused" ? (
           <p className="mt-2 font-mono text-sm text-zinc-300">
-            {formatPlaybackTime(playback.positionMs)} / {formatPlaybackTime(playback.durationMs)}
+            {formatPlaybackTime(playback.positionMs)} /{" "}
+            {playback.durationMs === null ? "--:--" : formatPlaybackTime(playback.durationMs)}
           </p>
         ) : null}
 

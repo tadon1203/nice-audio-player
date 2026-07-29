@@ -7,10 +7,13 @@ use std::time::{Duration, Instant};
 
 use cpal::StreamInstant;
 
+use super::decoding::{open_streaming_decoder, DecodeCancellation, DecodeStep, StreamingDecoder};
 use super::output::{
-    build_output_stream, AudioOutputError, OutputSignal, OutputStreamId, PreparedOutputStream,
+    build_output_stream, AtomicProducerState, AudioOutputError, OutputSignal, OutputStreamId,
+    PreparedOutputStream, ProducerState,
 };
-use super::pcm::PcmBuffer;
+use super::pcm_queue::{bounded_pcm_queue, PcmProducer};
+use super::validation::ValidatedAudioFile;
 
 #[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
 #[serde(
@@ -23,12 +26,12 @@ pub enum PlaybackSnapshot {
     Playing {
         playback_id: String,
         position_ms: u64,
-        duration_ms: u64,
+        duration_ms: Option<u64>,
     },
     Paused {
         playback_id: String,
         position_ms: u64,
-        duration_ms: u64,
+        duration_ms: Option<u64>,
     },
     Failed {
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -48,6 +51,7 @@ pub enum PlaybackFailureCode {
     OutputStreamResumeFailed,
     OutputStreamRuntimeFailed,
     CompletionTimingFailed,
+    DecodeFailed,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -55,6 +59,7 @@ pub enum PlaybackServiceError {
     WorkerUnavailable,
     InvalidPlaybackState,
     Output(PlaybackFailureCode),
+    Decode,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PlaybackServiceStartError {
@@ -63,7 +68,7 @@ pub enum PlaybackServiceStartError {
 
 enum PlaybackCommand {
     Start {
-        pcm: PcmBuffer,
+        file: ValidatedAudioFile,
         reply: SyncSender<Result<PlaybackSnapshot, PlaybackServiceError>>,
     },
     Stop {
@@ -102,6 +107,7 @@ impl PlaybackService {
             .spawn(move || {
                 PlaybackWorker {
                     active: None,
+                    pending: None,
                     next_playback_id: 0,
                     snapshot: worker_state,
                     command_receiver,
@@ -144,8 +150,11 @@ impl PlaybackService {
 }
 
 impl PlaybackServiceHandle {
-    pub(crate) fn play(&self, pcm: PcmBuffer) -> Result<PlaybackSnapshot, PlaybackServiceError> {
-        self.request(|reply| PlaybackCommand::Start { pcm, reply })
+    pub(crate) fn play(
+        &self,
+        file: ValidatedAudioFile,
+    ) -> Result<PlaybackSnapshot, PlaybackServiceError> {
+        self.request(|reply| PlaybackCommand::Start { file, reply })
     }
 
     pub(crate) fn stop(&self) -> Result<PlaybackSnapshot, PlaybackServiceError> {
@@ -184,15 +193,42 @@ struct ActivePlayback {
     stream: PreparedOutputStream,
     completion_time: Option<StreamInstant>,
     sample_rate: u32,
-    total_frame_count: u64,
+    duration_ms: Option<u64>,
     position_frame: u64,
     last_position_publish: Instant,
+    decoder_worker: DecodeWorker,
+}
+
+struct PendingPlayback {
+    id: OutputStreamId,
+    stream: PreparedOutputStream,
+    decoder_worker: DecodeWorker,
+    producer_state: Arc<AtomicProducerState>,
+    prebuffer_receiver: Receiver<()>,
+    sample_rate: u32,
+    duration_ms: Option<u64>,
+    reply: SyncSender<Result<PlaybackSnapshot, PlaybackServiceError>>,
+}
+
+struct DecodeWorker {
+    cancellation: DecodeCancellation,
+    join_handle: JoinHandle<()>,
+    wake_sender: SyncSender<()>,
+}
+
+impl DecodeWorker {
+    fn cancel_and_join(self) {
+        self.cancellation.cancel();
+        let _ = self.wake_sender.try_send(());
+        let _ = self.join_handle.join();
+    }
 }
 
 const POSITION_UPDATE_INTERVAL: Duration = Duration::from_millis(250);
 
 struct PlaybackWorker {
     active: Option<ActivePlayback>,
+    pending: Option<PendingPlayback>,
     next_playback_id: u64,
     snapshot: Arc<RwLock<PlaybackSnapshot>>,
     command_receiver: Receiver<PlaybackCommand>,
@@ -207,8 +243,8 @@ impl PlaybackWorker {
                 self.handle_signal(signal);
             }
             match self.command_receiver.recv_timeout(Duration::from_millis(5)) {
-                Ok(PlaybackCommand::Start { pcm, reply }) => {
-                    let _ = reply.send(self.start(pcm));
+                Ok(PlaybackCommand::Start { file, reply }) => {
+                    self.begin_start(file, reply);
                 }
                 Ok(PlaybackCommand::Stop { reply }) => {
                     let _ = reply.send(Ok(self.stop()));
@@ -222,26 +258,149 @@ impl PlaybackWorker {
                 Ok(PlaybackCommand::Shutdown) | Err(mpsc::RecvTimeoutError::Disconnected) => break,
                 Err(mpsc::RecvTimeoutError::Timeout) => {}
             }
+            self.advance_pending_playback();
             self.finish_if_due();
             self.update_playback_position();
         }
-        self.active = None;
+        self.discard_pending();
+        self.discard_active();
         self.publish(PlaybackSnapshot::Stopped);
     }
-    fn start(&mut self, pcm: PcmBuffer) -> Result<PlaybackSnapshot, PlaybackServiceError> {
-        let sample_rate = pcm.sample_rate().get();
-        let total_frame_count = pcm.frame_count() as u64;
-        let duration_ms = duration_ms(total_frame_count, sample_rate);
+    fn begin_start(
+        &mut self,
+        file: ValidatedAudioFile,
+        reply: SyncSender<Result<PlaybackSnapshot, PlaybackServiceError>>,
+    ) {
+        self.discard_pending();
+        self.discard_active();
+        let mut decoder = match open_streaming_decoder(&file) {
+            Ok(decoder) => decoder,
+            Err(_) => {
+                let _ = reply.send(Err(PlaybackServiceError::Decode));
+                return;
+            }
+        };
+        let spec = decoder.spec();
+        let duration_ms = decoder.duration_ms();
+        let sample_rate = spec.sample_rate.get();
+        let capacity_frames = (usize::try_from(sample_rate)
+            .unwrap_or(usize::MAX)
+            .saturating_mul(2_000)
+            / 1_000)
+            .max(1);
+        let prebuffer_frames = (usize::try_from(sample_rate)
+            .unwrap_or(usize::MAX)
+            .saturating_mul(250)
+            / 1_000)
+            .max(1);
+        let (producer, consumer) = match bounded_pcm_queue(capacity_frames, spec.channel_count) {
+            Ok(queue) => queue,
+            Err(_) => {
+                let _ = reply.send(Err(PlaybackServiceError::Decode));
+                return;
+            }
+        };
+        let mut first_packet = Vec::new();
+        match decoder.decode_next(&mut first_packet) {
+            Err(_) | Ok(DecodeStep::EndOfStream) => {
+                let _ = reply.send(Err(PlaybackServiceError::Decode));
+                return;
+            }
+            Ok(DecodeStep::Samples) => {}
+        }
+        let producer_state = Arc::new(AtomicProducerState::new(ProducerState::Running));
+        let (capacity_sender, capacity_receiver) = mpsc::sync_channel(1);
+        let (prebuffer_sender, prebuffer_receiver) = mpsc::sync_channel(1);
         self.next_playback_id = self.next_playback_id.wrapping_add(1);
         let id = OutputStreamId(self.next_playback_id);
-        let stream = match build_output_stream(id, pcm, self.output_sender.clone()) {
+        let worker_cancellation = DecodeCancellation::default();
+        let stream = match build_output_stream(
+            id,
+            spec,
+            consumer,
+            Arc::clone(&producer_state),
+            capacity_sender.clone(),
+            self.output_sender.clone(),
+        ) {
             Ok(stream) => stream,
-            Err(error) => return Err(self.start_failure(id, error)),
+            Err(error) => {
+                let _ = reply.send(Err(self.start_failure(id, error)));
+                return;
+            }
         };
-        if let Err(error) = stream.start() {
-            return Err(self.start_failure(id, error));
+        let worker_state = Arc::clone(&producer_state);
+        let worker_signal = self.output_sender.clone();
+        let worker_wake = capacity_sender.clone();
+        let worker_cancel = worker_cancellation.clone();
+        let join_handle = thread::spawn(move || {
+            decode_loop(
+                decoder,
+                producer,
+                first_packet,
+                worker_cancel,
+                worker_state,
+                worker_signal,
+                id,
+                capacity_receiver,
+                prebuffer_sender,
+                prebuffer_frames,
+            )
+        });
+        let decoder_worker = DecodeWorker {
+            cancellation: worker_cancellation,
+            join_handle,
+            wake_sender: worker_wake,
+        };
+        self.pending = Some(PendingPlayback {
+            id,
+            stream,
+            decoder_worker,
+            producer_state,
+            prebuffer_receiver,
+            sample_rate,
+            duration_ms,
+            reply,
+        });
+    }
+    fn advance_pending_playback(&mut self) {
+        let Some(pending) = self.pending.as_ref() else {
+            return;
+        };
+        let ready = pending.prebuffer_receiver.try_recv().is_ok();
+        let state = pending.producer_state.load();
+        if !ready && state == ProducerState::Running {
+            return;
         }
-        Ok(self.commit_started_stream(id, stream, sample_rate, total_frame_count, duration_ms))
+
+        let pending = self.pending.take().expect("pending playback exists");
+        if state == ProducerState::Failed {
+            pending.decoder_worker.cancel_and_join();
+            let _ = pending.reply.send(Err(PlaybackServiceError::Decode));
+            return;
+        }
+        if let Err(error) = pending.stream.start() {
+            pending.decoder_worker.cancel_and_join();
+            let error = self.start_failure(pending.id, error);
+            let _ = pending.reply.send(Err(error));
+            return;
+        }
+        let snapshot = self.commit_started_stream(
+            pending.id,
+            pending.stream,
+            pending.sample_rate,
+            pending.duration_ms,
+            pending.decoder_worker,
+        );
+        let _ = pending.reply.send(Ok(snapshot));
+    }
+
+    fn discard_pending(&mut self) {
+        if let Some(pending) = self.pending.take() {
+            pending.decoder_worker.cancel_and_join();
+            let _ = pending
+                .reply
+                .send(Err(PlaybackServiceError::WorkerUnavailable));
+        }
     }
     fn start_failure(
         &mut self,
@@ -257,7 +416,8 @@ impl PlaybackWorker {
         PlaybackServiceError::Output(code)
     }
     fn stop(&mut self) -> PlaybackSnapshot {
-        self.active = None;
+        self.discard_pending();
+        self.discard_active();
         if self.current() != PlaybackSnapshot::Stopped {
             self.publish(PlaybackSnapshot::Stopped);
         }
@@ -275,16 +435,18 @@ impl PlaybackWorker {
                 if let Err(error) = active.stream.pause() {
                     return Err(self.control_failure(id, error));
                 }
-                let position_frame = active
-                    .stream
-                    .played_frame_position(active.sample_rate, active.total_frame_count);
+                let position_frame = active.stream.played_frame_position(
+                    active.sample_rate,
+                    active.duration_ms.map(|ms| {
+                        ((u128::from(ms) * u128::from(active.sample_rate)) / 1_000) as u64
+                    }),
+                );
                 active.stream.clear_timing_anchor();
                 active.position_frame = position_frame;
-                let duration_ms = duration_ms(active.total_frame_count, active.sample_rate);
                 let snapshot = PlaybackSnapshot::Paused {
                     playback_id: id.0.to_string(),
                     position_ms: frame_to_millis(position_frame, active.sample_rate),
-                    duration_ms,
+                    duration_ms: active.duration_ms,
                 };
                 self.publish(snapshot.clone());
                 Ok(snapshot)
@@ -304,11 +466,10 @@ impl PlaybackWorker {
                     return Err(self.control_failure(id, error));
                 }
                 let position_ms = frame_to_millis(active.position_frame, active.sample_rate);
-                let duration_ms = duration_ms(active.total_frame_count, active.sample_rate);
                 let snapshot = PlaybackSnapshot::Playing {
                     playback_id: id.0.to_string(),
                     position_ms,
-                    duration_ms,
+                    duration_ms: active.duration_ms,
                 };
                 self.publish(snapshot.clone());
                 Ok(snapshot)
@@ -320,7 +481,7 @@ impl PlaybackWorker {
         id: OutputStreamId,
         error: AudioOutputError,
     ) -> PlaybackServiceError {
-        self.active = None;
+        self.discard_active();
         let code = output_failure_code(error);
         self.publish(failed_snapshot(id, code.clone()));
         PlaybackServiceError::Output(code)
@@ -330,8 +491,8 @@ impl PlaybackWorker {
         id: OutputStreamId,
         stream: PreparedOutputStream,
         sample_rate: u32,
-        total_frame_count: u64,
-        duration_ms: u64,
+        duration_ms: Option<u64>,
+        decoder_worker: DecodeWorker,
     ) -> PlaybackSnapshot {
         let snapshot = PlaybackSnapshot::Playing {
             playback_id: id.0.to_string(),
@@ -344,9 +505,10 @@ impl PlaybackWorker {
             stream,
             completion_time: None,
             sample_rate,
-            total_frame_count,
+            duration_ms,
             position_frame: 0,
             last_position_publish: Instant::now(),
+            decoder_worker,
         });
 
         self.publish(snapshot.clone());
@@ -354,6 +516,12 @@ impl PlaybackWorker {
     }
     fn current(&self) -> PlaybackSnapshot {
         read_snapshot(&self.snapshot)
+    }
+
+    fn discard_active(&mut self) {
+        if let Some(active) = self.active.take() {
+            active.decoder_worker.cancel_and_join();
+        }
     }
     fn publish(&self, snapshot: PlaybackSnapshot) {
         *self
@@ -378,18 +546,22 @@ impl PlaybackWorker {
                 }
             }
             OutputSignal::StreamFailed { .. } => {
-                self.active = None;
+                self.discard_active();
                 self.publish(failed_snapshot(
                     id,
                     PlaybackFailureCode::OutputStreamRuntimeFailed,
                 ));
             }
             OutputSignal::CompletionTimingFailed { .. } => {
-                self.active = None;
+                self.discard_active();
                 self.publish(failed_snapshot(
                     id,
                     PlaybackFailureCode::CompletionTimingFailed,
                 ));
+            }
+            OutputSignal::DecodeFailed { .. } => {
+                self.discard_active();
+                self.publish(failed_snapshot(id, PlaybackFailureCode::DecodeFailed));
             }
         }
     }
@@ -398,20 +570,23 @@ impl PlaybackWorker {
             should_finish(&self.current(), active.completion_time, active.stream.now())
         });
         if due {
-            self.active = None;
+            self.discard_active();
             self.publish(PlaybackSnapshot::Stopped);
         }
     }
     fn update_playback_position(&mut self) {
         let is_playing = matches!(self.current(), PlaybackSnapshot::Playing { .. });
-        let Some((playback_id, position_frame, sample_rate, total_frame_count)) =
+        let Some((playback_id, position_frame, sample_rate, duration_ms)) =
             self.active.as_mut().and_then(|active| {
                 if !is_playing {
                     return None;
                 }
-                let position_frame = active
-                    .stream
-                    .played_frame_position(active.sample_rate, active.total_frame_count);
+                let position_frame = active.stream.played_frame_position(
+                    active.sample_rate,
+                    active.duration_ms.map(|ms| {
+                        ((u128::from(ms) * u128::from(active.sample_rate)) / 1_000) as u64
+                    }),
+                );
                 if !should_publish_position(
                     active.last_position_publish.elapsed(),
                     position_frame != active.position_frame,
@@ -424,7 +599,7 @@ impl PlaybackWorker {
                     active.id.0.to_string(),
                     position_frame,
                     active.sample_rate,
-                    active.total_frame_count,
+                    active.duration_ms,
                 ))
             })
         else {
@@ -433,8 +608,136 @@ impl PlaybackWorker {
         self.publish(PlaybackSnapshot::Playing {
             playback_id,
             position_ms: frame_to_millis(position_frame, sample_rate),
-            duration_ms: duration_ms(total_frame_count, sample_rate),
+            duration_ms,
         });
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn decode_loop(
+    mut decoder: StreamingDecoder,
+    mut producer: PcmProducer,
+    first_packet: Vec<f32>,
+    cancellation: DecodeCancellation,
+    producer_state: Arc<AtomicProducerState>,
+    signal_sender: SyncSender<OutputSignal>,
+    stream_id: OutputStreamId,
+    capacity_receiver: Receiver<()>,
+    prebuffer_sender: SyncSender<()>,
+    prebuffer_frames: usize,
+) {
+    let mut packet = Vec::new();
+    let mut prebuffer_sent = false;
+    if matches!(
+        write_packet_fully(
+            &mut producer,
+            &first_packet,
+            &cancellation,
+            &capacity_receiver,
+            prebuffer_frames,
+            &mut prebuffer_sent,
+            &prebuffer_sender,
+        ),
+        QueueWriteResult::Cancelled
+    ) {
+        producer_state.store(ProducerState::Cancelled);
+        return;
+    }
+    notify_prebuffer_if_ready(
+        &producer,
+        prebuffer_frames,
+        &mut prebuffer_sent,
+        &prebuffer_sender,
+    );
+    loop {
+        if cancellation.is_cancelled() {
+            producer_state.store(ProducerState::Cancelled);
+            return;
+        }
+        packet.clear();
+        match decoder.decode_next(&mut packet) {
+            Ok(DecodeStep::EndOfStream) => {
+                if decoder.finalize().is_err() {
+                    producer_state.store(ProducerState::Failed);
+                    let _ = signal_sender.try_send(OutputSignal::DecodeFailed { stream_id });
+                    let _ = prebuffer_sender.try_send(());
+                    return;
+                }
+                producer_state.store(ProducerState::EndOfStream);
+                let _ = prebuffer_sender.try_send(());
+                return;
+            }
+            Ok(DecodeStep::Samples) => {
+                if matches!(
+                    write_packet_fully(
+                        &mut producer,
+                        &packet,
+                        &cancellation,
+                        &capacity_receiver,
+                        prebuffer_frames,
+                        &mut prebuffer_sent,
+                        &prebuffer_sender,
+                    ),
+                    QueueWriteResult::Cancelled
+                ) {
+                    producer_state.store(ProducerState::Cancelled);
+                    return;
+                }
+                notify_prebuffer_if_ready(
+                    &producer,
+                    prebuffer_frames,
+                    &mut prebuffer_sent,
+                    &prebuffer_sender,
+                );
+            }
+            Err(_) => {
+                producer_state.store(ProducerState::Failed);
+                let _ = signal_sender.try_send(OutputSignal::DecodeFailed { stream_id });
+                let _ = prebuffer_sender.try_send(());
+                return;
+            }
+        }
+    }
+}
+
+enum QueueWriteResult {
+    Completed,
+    Cancelled,
+}
+
+fn write_packet_fully(
+    producer: &mut PcmProducer,
+    samples: &[f32],
+    cancellation: &DecodeCancellation,
+    capacity_receiver: &Receiver<()>,
+    prebuffer_frames: usize,
+    prebuffer_sent: &mut bool,
+    prebuffer_sender: &SyncSender<()>,
+) -> QueueWriteResult {
+    let mut offset = 0;
+    while offset < samples.len() {
+        if cancellation.is_cancelled() {
+            return QueueWriteResult::Cancelled;
+        }
+        let pushed = producer.push_samples(&samples[offset..]);
+        offset += pushed;
+        notify_prebuffer_if_ready(producer, prebuffer_frames, prebuffer_sent, prebuffer_sender);
+        if pushed == 0 {
+            let _ = capacity_receiver.recv_timeout(Duration::from_millis(10));
+        }
+    }
+    QueueWriteResult::Completed
+}
+
+fn notify_prebuffer_if_ready(
+    producer: &PcmProducer,
+    prebuffer_frames: usize,
+    prebuffer_sent: &mut bool,
+    prebuffer_sender: &SyncSender<()>,
+) {
+    if !*prebuffer_sent && producer.available_frames() >= prebuffer_frames {
+        *prebuffer_sent = true;
+        let _ = prebuffer_sender.try_send(());
     }
 }
 
@@ -446,6 +749,7 @@ fn frame_to_millis(frame_position: u64, sample_rate: u32) -> u64 {
         as u64
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn duration_ms(total_frame_count: u64, sample_rate: u32) -> u64 {
     frame_to_millis(total_frame_count, sample_rate)
 }
@@ -458,7 +762,8 @@ fn signal_stream_id(signal: &OutputSignal) -> OutputStreamId {
     match signal {
         OutputSignal::FinalFramesSubmitted { stream_id, .. }
         | OutputSignal::StreamFailed { stream_id }
-        | OutputSignal::CompletionTimingFailed { stream_id } => *stream_id,
+        | OutputSignal::CompletionTimingFailed { stream_id }
+        | OutputSignal::DecodeFailed { stream_id } => *stream_id,
     }
 }
 
@@ -554,7 +859,7 @@ mod tests {
         let snapshot = PlaybackSnapshot::Playing {
             playback_id: "1".into(),
             position_ms: 1_000,
-            duration_ms: 60_000,
+            duration_ms: Some(60_000),
         };
 
         assert_eq!(
@@ -568,7 +873,7 @@ mod tests {
         let snapshot = PlaybackSnapshot::Paused {
             playback_id: "1".into(),
             position_ms: 1_000,
-            duration_ms: 60_000,
+            duration_ms: Some(60_000),
         };
 
         assert_eq!(
@@ -598,7 +903,7 @@ mod tests {
         let mut worker = test_worker(PlaybackSnapshot::Playing {
             playback_id: "1".into(),
             position_ms: 0,
-            duration_ms: 60_000,
+            duration_ms: Some(60_000),
         });
 
         assert_eq!(worker.stop(), PlaybackSnapshot::Stopped);
@@ -612,7 +917,7 @@ mod tests {
         let mut worker = test_worker(PlaybackSnapshot::Paused {
             playback_id: "1".into(),
             position_ms: 10_000,
-            duration_ms: 60_000,
+            duration_ms: Some(60_000),
         });
 
         assert_eq!(worker.stop(), PlaybackSnapshot::Stopped);
@@ -682,12 +987,12 @@ mod tests {
         let playing = PlaybackSnapshot::Playing {
             playback_id: "1".into(),
             position_ms: 0,
-            duration_ms: 60_000,
+            duration_ms: Some(60_000),
         };
         let paused = PlaybackSnapshot::Paused {
             playback_id: "1".into(),
             position_ms: 10_000,
-            duration_ms: 60_000,
+            duration_ms: Some(60_000),
         };
         let stopped = PlaybackSnapshot::Stopped;
         let failed = failed_snapshot(
@@ -710,7 +1015,7 @@ mod tests {
         let paused = PlaybackSnapshot::Paused {
             playback_id: "1".into(),
             position_ms: 10_000,
-            duration_ms: 60_000,
+            duration_ms: Some(60_000),
         };
         let end = StreamInstant::new(10, 0);
 
@@ -719,7 +1024,7 @@ mod tests {
             &PlaybackSnapshot::Playing {
                 playback_id: "1".into(),
                 position_ms: 0,
-                duration_ms: 60_000,
+                duration_ms: Some(60_000),
             },
             Some(end),
             end
@@ -831,6 +1136,7 @@ mod tests {
 
         PlaybackWorker {
             active: None,
+            pending: None,
             next_playback_id: 0,
             snapshot: Arc::new(RwLock::new(snapshot)),
             command_receiver,

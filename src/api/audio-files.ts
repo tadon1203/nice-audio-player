@@ -39,6 +39,7 @@ const playbackFailureCodes: ReadonlySet<PlaybackFailureCode> = new Set([
   "outputStreamResumeFailed",
   "outputStreamRuntimeFailed",
   "completionTimingFailed",
+  "decodeFailed",
 ]);
 
 const invalidPlaybackSnapshotMessage = "Invalid playback snapshot payload.";
@@ -134,12 +135,12 @@ export function isPlaybackSnapshot(value: unknown): value is PlaybackSnapshot {
 
 function isTimedPlaybackSnapshot(
   value: Record<string, unknown>,
-): value is { playbackId: string; positionMs: number; durationMs: number } {
+): value is { playbackId: string; positionMs: number; durationMs: number | null } {
   return (
     typeof value.playbackId === "string" &&
     isValidTimingValue(value.positionMs) &&
-    isValidTimingValue(value.durationMs) &&
-    value.positionMs <= value.durationMs
+    (value.durationMs === null ||
+      (isValidTimingValue(value.durationMs) && value.positionMs <= value.durationMs))
   );
 }
 
