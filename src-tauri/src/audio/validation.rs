@@ -3,7 +3,7 @@ use std::path::Path;
 
 const SUPPORTED_EXTENSIONS: [&str; 5] = ["mp3", "flac", "wav", "aac", "m4a"];
 
-#[derive(Debug, Serialize, PartialEq, Eq)]
+#[derive(Debug, Serialize, specta::Type, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct ValidatedAudioFile {
     pub path: String,
@@ -11,7 +11,7 @@ pub struct ValidatedAudioFile {
     pub extension: String,
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, specta::Type, PartialEq, Eq)]
 #[serde(tag = "code", content = "details", rename_all = "camelCase")]
 pub enum AudioFileValidationError {
     EmptyPath,

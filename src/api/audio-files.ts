@@ -1,9 +1,8 @@
-import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
+import { commands } from "@/bindings";
 import type {
   AudioFileValidationError,
-  AudioFileValidationErrorCode,
   AudioFileInfo,
   PauseAudioPlaybackError,
   PlaybackFailureCode,
@@ -12,64 +11,87 @@ import type {
   StartAudioFileError,
   StopAudioPlaybackError,
   ValidatedAudioFile,
-} from "@/types/audio-files";
+} from "@/bindings";
 
-const validationErrorCodes: ReadonlySet<AudioFileValidationErrorCode> = new Set([
-  "emptyPath",
-  "notFound",
-  "notAFile",
-  "unsupportedExtension",
-  "invalidFileName",
-]);
+const validationErrorCodes = {
+  emptyPath: true,
+  notFound: true,
+  notAFile: true,
+  unsupportedExtension: true,
+  invalidFileName: true,
+} satisfies Record<AudioFileValidationError["code"], true>;
 
-const startAudioFileErrorCodes: ReadonlySet<StartAudioFileError["code"]> = new Set([
-  "validationFailed",
-  "decodeFailed",
-  "outputFailed",
-  "playbackWorkerUnavailable",
-  "taskFailed",
-]);
+const startAudioFileErrorCodes = {
+  validationFailed: true,
+  decodeFailed: true,
+  outputFailed: true,
+  playbackWorkerUnavailable: true,
+  taskFailed: true,
+} satisfies Record<StartAudioFileError["code"], true>;
 
-const playbackFailureCodes: ReadonlySet<PlaybackFailureCode> = new Set([
-  "noOutputDevice",
-  "unsupportedOutputConfiguration",
-  "outputStreamBuildFailed",
-  "outputStreamStartFailed",
-  "outputStreamPauseFailed",
-  "outputStreamResumeFailed",
-  "outputStreamRuntimeFailed",
-  "completionTimingFailed",
-  "decodeFailed",
-]);
+const stopAudioPlaybackErrorCodes = {
+  playbackWorkerUnavailable: true,
+  taskFailed: true,
+} satisfies Record<StopAudioPlaybackError["code"], true>;
+
+const pauseAudioPlaybackErrorCodes = {
+  playbackWorkerUnavailable: true,
+  invalidPlaybackState: true,
+  outputFailed: true,
+  taskFailed: true,
+} satisfies Record<PauseAudioPlaybackError["code"], true>;
+
+const resumeAudioPlaybackErrorCodes = {
+  playbackWorkerUnavailable: true,
+  invalidPlaybackState: true,
+  outputFailed: true,
+  taskFailed: true,
+} satisfies Record<ResumeAudioPlaybackError["code"], true>;
+
+const playbackFailureCodes = {
+  noOutputDevice: true,
+  unsupportedOutputConfiguration: true,
+  outputStreamBuildFailed: true,
+  outputStreamStartFailed: true,
+  outputStreamPauseFailed: true,
+  outputStreamResumeFailed: true,
+  outputStreamRuntimeFailed: true,
+  completionTimingFailed: true,
+  decodeFailed: true,
+} satisfies Record<PlaybackFailureCode, true>;
 
 const invalidPlaybackSnapshotMessage = "Invalid playback snapshot payload.";
 
+function hasOwn(record: object, key: PropertyKey): boolean {
+  return Object.prototype.hasOwnProperty.call(record, key);
+}
+
 export async function validateAudioFile(path: string): Promise<ValidatedAudioFile> {
-  return invoke<ValidatedAudioFile>("validate_audio_file", { path });
+  return commands.validateAudioFile(path);
 }
 
 export async function inspectAudioFile(path: string): Promise<AudioFileInfo> {
-  return invoke<AudioFileInfo>("inspect_audio_file", { path });
+  return commands.inspectAudioFile(path);
 }
 
 export async function startAudioFile(path: string): Promise<PlaybackSnapshot> {
-  return readPlaybackSnapshot(invoke<unknown>("start_audio_file", { path }));
+  return readPlaybackSnapshot(commands.startAudioFile(path));
 }
 
 export async function stopAudioPlayback(): Promise<PlaybackSnapshot> {
-  return readPlaybackSnapshot(invoke<unknown>("stop_audio_playback"));
+  return readPlaybackSnapshot(commands.stopAudioPlayback());
 }
 
 export async function pauseAudioPlayback(): Promise<PlaybackSnapshot> {
-  return readPlaybackSnapshot(invoke<unknown>("pause_audio_playback"));
+  return readPlaybackSnapshot(commands.pauseAudioPlayback());
 }
 
 export async function resumeAudioPlayback(): Promise<PlaybackSnapshot> {
-  return readPlaybackSnapshot(invoke<unknown>("resume_audio_playback"));
+  return readPlaybackSnapshot(commands.resumeAudioPlayback());
 }
 
 export async function getPlaybackState(): Promise<PlaybackSnapshot> {
-  return readPlaybackSnapshot(invoke<unknown>("get_playback_state"));
+  return readPlaybackSnapshot(commands.getPlaybackState());
 }
 
 export async function listenToPlaybackState(
@@ -85,10 +107,7 @@ export function isAudioFileValidationError(value: unknown): value is AudioFileVa
     return false;
   }
 
-  return (
-    typeof value.code === "string" &&
-    validationErrorCodes.has(value.code as AudioFileValidationErrorCode)
-  );
+  return typeof value.code === "string" && hasOwn(validationErrorCodes, value.code);
 }
 
 export function isStartAudioFileError(value: unknown): value is StartAudioFileError {
@@ -96,10 +115,7 @@ export function isStartAudioFileError(value: unknown): value is StartAudioFileEr
     return false;
   }
 
-  return (
-    typeof value.code === "string" &&
-    startAudioFileErrorCodes.has(value.code as StartAudioFileError["code"])
-  );
+  return typeof value.code === "string" && hasOwn(startAudioFileErrorCodes, value.code);
 }
 
 export function isStopAudioPlaybackError(value: unknown): value is StopAudioPlaybackError {
@@ -107,16 +123,29 @@ export function isStopAudioPlaybackError(value: unknown): value is StopAudioPlay
     typeof value === "object" &&
     value !== null &&
     "code" in value &&
-    (value.code === "playbackWorkerUnavailable" || value.code === "taskFailed")
+    typeof value.code === "string" &&
+    hasOwn(stopAudioPlaybackErrorCodes, value.code)
   );
 }
 
 export function isPauseAudioPlaybackError(value: unknown): value is PauseAudioPlaybackError {
-  return isPlaybackControlError(value);
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "code" in value &&
+    typeof value.code === "string" &&
+    hasOwn(pauseAudioPlaybackErrorCodes, value.code)
+  );
 }
 
 export function isResumeAudioPlaybackError(value: unknown): value is ResumeAudioPlaybackError {
-  return isPlaybackControlError(value);
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "code" in value &&
+    typeof value.code === "string" &&
+    hasOwn(resumeAudioPlaybackErrorCodes, value.code)
+  );
 }
 
 export function isPlaybackSnapshot(value: unknown): value is PlaybackSnapshot {
@@ -128,7 +157,7 @@ export function isPlaybackSnapshot(value: unknown): value is PlaybackSnapshot {
     value.status === "failed" &&
     "error" in value &&
     typeof value.error === "string" &&
-    playbackFailureCodes.has(value.error as PlaybackFailureCode) &&
+    hasOwn(playbackFailureCodes, value.error) &&
     (!("playbackId" in value) || typeof value.playbackId === "string")
   );
 }
@@ -146,20 +175,6 @@ function isTimedPlaybackSnapshot(
 
 function isValidTimingValue(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
-}
-
-function isPlaybackControlError(
-  value: unknown,
-): value is PauseAudioPlaybackError | ResumeAudioPlaybackError {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "code" in value &&
-    (value.code === "playbackWorkerUnavailable" ||
-      value.code === "invalidPlaybackState" ||
-      value.code === "outputFailed" ||
-      value.code === "taskFailed")
-  );
 }
 
 async function readPlaybackSnapshot(payload: Promise<unknown>): Promise<PlaybackSnapshot> {

@@ -1,8 +1,11 @@
 mod audio;
 
+#[cfg(all(feature = "bindings-export", test))]
+use std::path::{Path, PathBuf};
 use std::thread;
 
 use tauri::{Emitter, Manager};
+use tauri_specta::{collect_commands, Builder, ErrorHandlingMode};
 
 use audio::devices::{
     list_output_devices as list_output_devices_with_cpal, AudioDeviceListError, AudioOutputDevice,
@@ -16,11 +19,13 @@ use audio::validation::{
 };
 
 #[tauri::command]
+#[specta::specta]
 fn validate_audio_file(path: String) -> Result<ValidatedAudioFile, AudioFileValidationError> {
     validate_audio_file_path(&path)
 }
 
 #[tauri::command]
+#[specta::specta]
 fn inspect_audio_file(path: String) -> Result<AudioFileInfo, AudioFileInspectionError> {
     let validated_file = validate_audio_file_path(&path)
         .map_err(|error| AudioFileInspectionError::ValidationFailed { error })?;
@@ -29,12 +34,13 @@ fn inspect_audio_file(path: String) -> Result<AudioFileInfo, AudioFileInspection
 }
 
 #[tauri::command]
+#[specta::specta]
 fn list_audio_output_devices() -> Result<Vec<AudioOutputDevice>, AudioDeviceListError> {
     list_output_devices_with_cpal()
 }
 
 #[allow(clippy::enum_variant_names)]
-#[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, serde::Serialize, specta::Type, PartialEq, Eq)]
 #[serde(tag = "code", rename_all = "camelCase")]
 enum StartAudioFileError {
     ValidationFailed { error: AudioFileValidationError },
@@ -45,6 +51,7 @@ enum StartAudioFileError {
 }
 
 #[tauri::command]
+#[specta::specta]
 async fn start_audio_file(
     path: String,
     playback: tauri::State<'_, PlaybackService>,
@@ -59,7 +66,7 @@ async fn start_audio_file(
 }
 
 #[allow(clippy::enum_variant_names)]
-#[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, serde::Serialize, specta::Type, PartialEq, Eq)]
 #[serde(tag = "code", rename_all = "camelCase")]
 enum StopAudioPlaybackError {
     PlaybackWorkerUnavailable,
@@ -67,7 +74,7 @@ enum StopAudioPlaybackError {
 }
 
 #[allow(clippy::enum_variant_names)]
-#[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, serde::Serialize, specta::Type, PartialEq, Eq)]
 #[serde(tag = "code", rename_all = "camelCase")]
 enum PauseAudioPlaybackError {
     PlaybackWorkerUnavailable,
@@ -77,7 +84,7 @@ enum PauseAudioPlaybackError {
 }
 
 #[allow(clippy::enum_variant_names)]
-#[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, serde::Serialize, specta::Type, PartialEq, Eq)]
 #[serde(tag = "code", rename_all = "camelCase")]
 enum ResumeAudioPlaybackError {
     PlaybackWorkerUnavailable,
@@ -96,6 +103,7 @@ fn map_start_error(error: PlaybackServiceError) -> StartAudioFileError {
 }
 
 #[tauri::command]
+#[specta::specta]
 async fn stop_audio_playback(
     playback: tauri::State<'_, PlaybackService>,
 ) -> Result<PlaybackSnapshot, StopAudioPlaybackError> {
@@ -118,6 +126,7 @@ fn map_pause_error(error: PlaybackServiceError) -> PauseAudioPlaybackError {
 }
 
 #[tauri::command]
+#[specta::specta]
 async fn pause_audio_playback(
     playback: tauri::State<'_, PlaybackService>,
 ) -> Result<PlaybackSnapshot, PauseAudioPlaybackError> {
@@ -142,6 +151,7 @@ fn map_resume_error(error: PlaybackServiceError) -> ResumeAudioPlaybackError {
 }
 
 #[tauri::command]
+#[specta::specta]
 async fn resume_audio_playback(
     playback: tauri::State<'_, PlaybackService>,
 ) -> Result<PlaybackSnapshot, ResumeAudioPlaybackError> {
@@ -153,13 +163,73 @@ async fn resume_audio_playback(
 }
 
 #[tauri::command]
+#[specta::specta]
 fn get_playback_state(playback: tauri::State<'_, PlaybackService>) -> PlaybackSnapshot {
     playback.snapshot()
+}
+
+fn create_specta_builder() -> Builder<tauri::Wry> {
+    Builder::<tauri::Wry>::new()
+        .commands(collect_specta_commands())
+        .error_handling(ErrorHandlingMode::Throw)
+        .dangerously_cast_bigints_to_number()
+}
+
+fn collect_specta_commands<R: tauri::Runtime>() -> tauri_specta::Commands<R> {
+    collect_commands![
+        validate_audio_file,
+        inspect_audio_file,
+        list_audio_output_devices,
+        start_audio_file,
+        stop_audio_playback,
+        pause_audio_playback,
+        resume_audio_playback,
+        get_playback_state,
+    ]
+}
+
+#[cfg(all(feature = "bindings-export", test))]
+fn create_export_builder() -> Builder<tauri::test::MockRuntime> {
+    Builder::<tauri::test::MockRuntime>::new()
+        .commands(collect_specta_commands())
+        .error_handling(ErrorHandlingMode::Throw)
+        .dangerously_cast_bigints_to_number()
+}
+
+#[cfg(all(feature = "bindings-export", test))]
+fn canonical_bindings_path() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("src-tauri must have a repository parent")
+        .join("src")
+        .join("bindings.ts")
+}
+
+#[cfg(all(feature = "bindings-export", test))]
+fn export_typescript_bindings_to(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let header = "/* eslint-disable */\n";
+    create_export_builder()
+        .export(
+            specta_typescript::Typescript::default().header(header),
+            path,
+        )
+        .map_err(Into::into)
+}
+
+#[cfg(all(feature = "bindings-export", test))]
+#[test]
+#[ignore = "run through pnpm bindings:generate or pnpm bindings:check"]
+fn export_typescript_bindings() {
+    let output_path = std::env::var_os("TAURI_SPECTA_OUTPUT")
+        .map(PathBuf::from)
+        .unwrap_or_else(canonical_bindings_path);
+    export_typescript_bindings_to(&output_path).expect("failed to export TypeScript bindings");
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let playback_service = PlaybackService::start().expect("playback service must start");
+    let specta_builder = create_specta_builder();
     let app = tauri::Builder::default()
         .manage(playback_service)
         .plugin(
@@ -181,16 +251,7 @@ pub fn run() {
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![
-            validate_audio_file,
-            inspect_audio_file,
-            list_audio_output_devices,
-            start_audio_file,
-            stop_audio_playback,
-            pause_audio_playback,
-            resume_audio_playback,
-            get_playback_state
-        ])
+        .invoke_handler(specta_builder.invoke_handler())
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
     app.run(|app_handle, event| {

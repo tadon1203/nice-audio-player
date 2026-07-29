@@ -31,3 +31,10 @@ Run all checks before completing a code change:
 ```bash
 pnpm check
 ```
+
+## Generated IPC bindings
+
+Rust Tauri command and IPC type changes require running `pnpm bindings:generate`. The generated
+`src/bindings.ts` file is tracked, must not be edited manually, and is checked for staleness by
+`pnpm check`. Keep `tauri-specta`, `specta`, and `specta-typescript` pinned to their exact
+coordinated versions and upgrade them together.
