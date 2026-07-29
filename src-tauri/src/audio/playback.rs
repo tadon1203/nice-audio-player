@@ -7,12 +7,13 @@ use std::time::{Duration, Instant};
 
 use cpal::StreamInstant;
 
+use super::conversion::PcmConverter;
 use super::decoding::{open_streaming_decoder, DecodeCancellation, DecodeStep, StreamingDecoder};
 use super::output::{
-    build_output_stream, AtomicProducerState, AudioOutputError, OutputSignal, OutputStreamId,
+    prepare_output_stream, AtomicProducerState, AudioOutputError, OutputSignal, OutputStreamId,
     PreparedOutputStream, ProducerState,
 };
-use super::pcm_queue::{bounded_pcm_queue, PcmProducer};
+use super::pcm_queue::PcmProducer;
 use super::validation::ValidatedAudioFile;
 
 #[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
@@ -282,24 +283,6 @@ impl PlaybackWorker {
         };
         let spec = decoder.spec();
         let duration_ms = decoder.duration_ms();
-        let sample_rate = spec.sample_rate.get();
-        let capacity_frames = (usize::try_from(sample_rate)
-            .unwrap_or(usize::MAX)
-            .saturating_mul(2_000)
-            / 1_000)
-            .max(1);
-        let prebuffer_frames = (usize::try_from(sample_rate)
-            .unwrap_or(usize::MAX)
-            .saturating_mul(250)
-            / 1_000)
-            .max(1);
-        let (producer, consumer) = match bounded_pcm_queue(capacity_frames, spec.channel_count) {
-            Ok(queue) => queue,
-            Err(_) => {
-                let _ = reply.send(Err(PlaybackServiceError::Decode));
-                return;
-            }
-        };
         let mut first_packet = Vec::new();
         match decoder.decode_next(&mut first_packet) {
             Err(_) | Ok(DecodeStep::EndOfStream) => {
@@ -314,20 +297,29 @@ impl PlaybackWorker {
         self.next_playback_id = self.next_playback_id.wrapping_add(1);
         let id = OutputStreamId(self.next_playback_id);
         let worker_cancellation = DecodeCancellation::default();
-        let stream = match build_output_stream(
+        let preparation = match prepare_output_stream(
             id,
             spec,
-            consumer,
             Arc::clone(&producer_state),
             capacity_sender.clone(),
             self.output_sender.clone(),
         ) {
-            Ok(stream) => stream,
+            Ok(preparation) => preparation,
             Err(error) => {
                 let _ = reply.send(Err(self.start_failure(id, error)));
                 return;
             }
         };
+        let sample_rate = preparation.sample_rate;
+        let channel_count = preparation.channel_count;
+        let prebuffer_frames = usize::try_from(sample_rate)
+            .unwrap_or(usize::MAX)
+            .saturating_mul(250)
+            .checked_div(1_000)
+            .unwrap_or(usize::MAX)
+            .max(1);
+        let stream = preparation.stream;
+        let producer = preparation.producer;
         let worker_state = Arc::clone(&producer_state);
         let worker_signal = self.output_sender.clone();
         let worker_wake = capacity_sender.clone();
@@ -337,6 +329,9 @@ impl PlaybackWorker {
                 decoder,
                 producer,
                 first_packet,
+                spec,
+                sample_rate,
+                channel_count,
                 worker_cancel,
                 worker_state,
                 worker_signal,
@@ -618,6 +613,9 @@ fn decode_loop(
     mut decoder: StreamingDecoder,
     mut producer: PcmProducer,
     first_packet: Vec<f32>,
+    source_spec: super::decoding::DecodedAudioSpec,
+    target_rate: u32,
+    target_channels: u16,
     cancellation: DecodeCancellation,
     producer_state: Arc<AtomicProducerState>,
     signal_sender: SyncSender<OutputSignal>,
@@ -626,17 +624,39 @@ fn decode_loop(
     prebuffer_sender: SyncSender<()>,
     prebuffer_frames: usize,
 ) {
+    let mut converter = match PcmConverter::new(
+        source_spec.sample_rate,
+        source_spec.channel_count,
+        super::pcm::SampleRate::new(target_rate).expect("prepared output rate is nonzero"),
+        super::pcm::ChannelCount::new(usize::from(target_channels))
+            .expect("prepared output channels are nonzero"),
+    ) {
+        Ok(converter) => converter,
+        Err(_) => {
+            producer_state.store(ProducerState::Failed);
+            let _ = signal_sender.try_send(OutputSignal::DecodeFailed { stream_id });
+            let _ = prebuffer_sender.try_send(());
+            return;
+        }
+    };
+    let mut converted = Vec::new();
     let mut packet = Vec::new();
     let mut prebuffer_sent = false;
+    if converter.convert(&first_packet, &mut converted).is_err() {
+        producer_state.store(ProducerState::Failed);
+        let _ = signal_sender.try_send(OutputSignal::DecodeFailed { stream_id });
+        let _ = prebuffer_sender.try_send(());
+        return;
+    }
     if matches!(
         write_packet_fully(
             &mut producer,
-            &first_packet,
+            &converted,
             &cancellation,
             &capacity_receiver,
             prebuffer_frames,
             &mut prebuffer_sent,
-            &prebuffer_sender,
+            &prebuffer_sender
         ),
         QueueWriteResult::Cancelled
     ) {
@@ -663,15 +683,43 @@ fn decode_loop(
                     let _ = prebuffer_sender.try_send(());
                     return;
                 }
+                converter.flush(&mut converted);
+                if matches!(
+                    write_packet_fully(
+                        &mut producer,
+                        &converted,
+                        &cancellation,
+                        &capacity_receiver,
+                        prebuffer_frames,
+                        &mut prebuffer_sent,
+                        &prebuffer_sender
+                    ),
+                    QueueWriteResult::Cancelled
+                ) {
+                    producer_state.store(ProducerState::Cancelled);
+                    return;
+                }
+                notify_prebuffer_if_ready(
+                    &producer,
+                    prebuffer_frames,
+                    &mut prebuffer_sent,
+                    &prebuffer_sender,
+                );
                 producer_state.store(ProducerState::EndOfStream);
                 let _ = prebuffer_sender.try_send(());
                 return;
             }
             Ok(DecodeStep::Samples) => {
+                if converter.convert(&packet, &mut converted).is_err() {
+                    producer_state.store(ProducerState::Failed);
+                    let _ = signal_sender.try_send(OutputSignal::DecodeFailed { stream_id });
+                    let _ = prebuffer_sender.try_send(());
+                    return;
+                }
                 if matches!(
                     write_packet_fully(
                         &mut producer,
-                        &packet,
+                        &converted,
                         &cancellation,
                         &capacity_receiver,
                         prebuffer_frames,
@@ -832,6 +880,9 @@ fn output_failure_code(error: AudioOutputError) -> PlaybackFailureCode {
     match error {
         AudioOutputError::NoDefaultOutputDevice => PlaybackFailureCode::NoOutputDevice,
         AudioOutputError::UnsupportedConfiguration | AudioOutputError::ConfigurationQueryFailed => {
+            PlaybackFailureCode::UnsupportedOutputConfiguration
+        }
+        AudioOutputError::StreamConfigurationUnsupported => {
             PlaybackFailureCode::UnsupportedOutputConfiguration
         }
         AudioOutputError::StreamBuildFailed => PlaybackFailureCode::OutputStreamBuildFailed,
@@ -1040,6 +1091,22 @@ mod tests {
         assert_eq!(
             output_failure_code(AudioOutputError::StreamResumeFailed),
             PlaybackFailureCode::OutputStreamResumeFailed
+        );
+    }
+
+    #[test]
+    fn preserves_frontend_mapping_for_output_configuration_errors() {
+        assert_eq!(
+            output_failure_code(AudioOutputError::UnsupportedConfiguration),
+            PlaybackFailureCode::UnsupportedOutputConfiguration
+        );
+        assert_eq!(
+            output_failure_code(AudioOutputError::StreamConfigurationUnsupported),
+            PlaybackFailureCode::UnsupportedOutputConfiguration
+        );
+        assert_eq!(
+            output_failure_code(AudioOutputError::StreamBuildFailed),
+            PlaybackFailureCode::OutputStreamBuildFailed
         );
     }
 

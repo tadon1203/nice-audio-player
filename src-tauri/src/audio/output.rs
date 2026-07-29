@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, Sample, SampleFormat, StreamConfig, StreamInstant, SupportedStreamConfig};
+use tauri_plugin_log::log::{error, info};
 
 use super::decoding::DecodedAudioSpec;
 use super::pcm_queue::PcmConsumer;
@@ -76,9 +77,48 @@ pub enum AudioOutputError {
     ConfigurationQueryFailed,
     UnsupportedConfiguration,
     StreamBuildFailed,
+    StreamConfigurationUnsupported,
     StreamStartFailed,
     StreamPauseFailed,
     StreamResumeFailed,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub(crate) enum OutputPath {
+    Native,
+    Fallback,
+}
+
+pub(crate) struct OutputPreparation {
+    pub(crate) stream: PreparedOutputStream,
+    pub(crate) producer: super::pcm_queue::PcmProducer,
+    pub(crate) sample_rate: u32,
+    pub(crate) channel_count: u16,
+    #[allow(dead_code)]
+    pub(crate) path: OutputPath,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum NativeAttemptDecision<T> {
+    Success(T),
+    Fallback,
+    Failure(AudioOutputError),
+}
+
+fn classify_native_attempt<T>(result: Result<T, AudioOutputError>) -> NativeAttemptDecision<T> {
+    match result {
+        Ok(value) => NativeAttemptDecision::Success(value),
+        Err(AudioOutputError::UnsupportedConfiguration)
+        | Err(AudioOutputError::StreamConfigurationUnsupported) => NativeAttemptDecision::Fallback,
+        Err(error) => NativeAttemptDecision::Failure(error),
+    }
+}
+
+fn classify_fallback_build<T>(result: Result<T, AudioOutputError>) -> Result<T, AudioOutputError> {
+    result.map_err(|error| match error {
+        AudioOutputError::StreamConfigurationUnsupported => AudioOutputError::StreamBuildFailed,
+        error => error,
+    })
 }
 
 pub(crate) struct PreparedOutputStream {
@@ -141,31 +181,25 @@ impl PreparedOutputStream {
     }
 }
 
-pub(crate) fn build_output_stream(
+#[allow(clippy::needless_borrow, clippy::too_many_arguments)]
+fn build_stream_for_config(
+    device: &cpal::Device,
+    device_name: &str,
     stream_id: OutputStreamId,
-    spec: DecodedAudioSpec,
+    config: StreamConfig,
+    sample_format: SampleFormat,
     consumer: PcmConsumer,
     producer_state: Arc<AtomicProducerState>,
     capacity_sender: SyncSender<()>,
     signal_sender: SyncSender<OutputSignal>,
 ) -> Result<PreparedOutputStream, AudioOutputError> {
-    let host = cpal::default_host();
-    let device = host
-        .default_output_device()
-        .ok_or(AudioOutputError::NoDefaultOutputDevice)?;
-    let sample_rate = spec.sample_rate.get();
-    let channel_count = spec.channel_count.get();
-    let ranges = device
-        .supported_output_configs()
-        .map_err(|_| AudioOutputError::ConfigurationQueryFailed)?;
-    let supported_config = select_output_config(ranges, sample_rate, channel_count)?;
-    let sample_format = supported_config.sample_format();
-    let config = supported_config.config();
     let (position_sender, position_receiver) = mpsc::sync_channel(1);
     let stream = match sample_format {
         SampleFormat::F32 => build_stream::<f32>(
             &device,
+            &device_name,
             config,
+            sample_format,
             stream_id,
             consumer,
             producer_state,
@@ -175,7 +209,9 @@ pub(crate) fn build_output_stream(
         )?,
         SampleFormat::F64 => build_stream::<f64>(
             &device,
+            &device_name,
             config,
+            sample_format,
             stream_id,
             consumer,
             producer_state,
@@ -185,7 +221,9 @@ pub(crate) fn build_output_stream(
         )?,
         SampleFormat::I8 => build_stream::<i8>(
             &device,
+            &device_name,
             config,
+            sample_format,
             stream_id,
             consumer,
             producer_state,
@@ -195,7 +233,9 @@ pub(crate) fn build_output_stream(
         )?,
         SampleFormat::I16 => build_stream::<i16>(
             &device,
+            &device_name,
             config,
+            sample_format,
             stream_id,
             consumer,
             producer_state,
@@ -205,7 +245,9 @@ pub(crate) fn build_output_stream(
         )?,
         SampleFormat::I24 => build_stream::<cpal::I24>(
             &device,
+            &device_name,
             config,
+            sample_format,
             stream_id,
             consumer,
             producer_state,
@@ -215,7 +257,9 @@ pub(crate) fn build_output_stream(
         )?,
         SampleFormat::I32 => build_stream::<i32>(
             &device,
+            &device_name,
             config,
+            sample_format,
             stream_id,
             consumer,
             producer_state,
@@ -225,7 +269,9 @@ pub(crate) fn build_output_stream(
         )?,
         SampleFormat::I64 => build_stream::<i64>(
             &device,
+            &device_name,
             config,
+            sample_format,
             stream_id,
             consumer,
             producer_state,
@@ -235,7 +281,9 @@ pub(crate) fn build_output_stream(
         )?,
         SampleFormat::U8 => build_stream::<u8>(
             &device,
+            &device_name,
             config,
+            sample_format,
             stream_id,
             consumer,
             producer_state,
@@ -245,7 +293,9 @@ pub(crate) fn build_output_stream(
         )?,
         SampleFormat::U16 => build_stream::<u16>(
             &device,
+            &device_name,
             config,
+            sample_format,
             stream_id,
             consumer,
             producer_state,
@@ -255,7 +305,9 @@ pub(crate) fn build_output_stream(
         )?,
         SampleFormat::U24 => build_stream::<cpal::U24>(
             &device,
+            &device_name,
             config,
+            sample_format,
             stream_id,
             consumer,
             producer_state,
@@ -265,7 +317,9 @@ pub(crate) fn build_output_stream(
         )?,
         SampleFormat::U32 => build_stream::<u32>(
             &device,
+            &device_name,
             config,
+            sample_format,
             stream_id,
             consumer,
             producer_state,
@@ -275,7 +329,9 @@ pub(crate) fn build_output_stream(
         )?,
         SampleFormat::U64 => build_stream::<u64>(
             &device,
+            &device_name,
             config,
+            sample_format,
             stream_id,
             consumer,
             producer_state,
@@ -292,6 +348,141 @@ pub(crate) fn build_output_stream(
         latest_position_update: None,
         last_played_frame_position: 0,
     })
+}
+
+pub(crate) fn prepare_output_stream(
+    stream_id: OutputStreamId,
+    spec: DecodedAudioSpec,
+    producer_state: Arc<AtomicProducerState>,
+    capacity_sender: SyncSender<()>,
+    signal_sender: SyncSender<OutputSignal>,
+) -> Result<OutputPreparation, AudioOutputError> {
+    let host = cpal::default_host();
+    let device = host
+        .default_output_device()
+        .ok_or(AudioOutputError::NoDefaultOutputDevice)?;
+    let device_name = device
+        .description()
+        .map(|description| description.name().to_owned())
+        .unwrap_or_else(|error| format!("<unavailable: {error}>"));
+    let source_rate = spec.sample_rate.get();
+    let source_channels = spec.channel_count.get();
+    let ranges = device
+        .supported_output_configs()
+        .map_err(|_| AudioOutputError::ConfigurationQueryFailed)?
+        .collect::<Vec<_>>();
+    let native = select_output_config(ranges.iter().cloned(), source_rate, source_channels);
+    let native_sample_format = native
+        .as_ref()
+        .ok()
+        .map(SupportedStreamConfig::sample_format);
+    let native_result = native.and_then(|config| {
+        let (producer, consumer) =
+            make_queue(config.config().sample_rate, config.config().channels)?;
+        let result = build_stream_for_config(
+            &device,
+            &device_name,
+            stream_id,
+            config.config(),
+            config.sample_format(),
+            consumer,
+            Arc::clone(&producer_state),
+            capacity_sender.clone(),
+            signal_sender.clone(),
+        );
+        result.map(|stream| OutputPreparation {
+            stream,
+            producer,
+            sample_rate: source_rate,
+            channel_count: source_channels,
+            path: OutputPath::Native,
+        })
+    });
+    match classify_native_attempt(native_result) {
+        NativeAttemptDecision::Success(prepared) => {
+            info!("audio output path native: source_rate={source_rate}, source_channels={source_channels}, sample_format={:?}",
+                native_sample_format);
+            return Ok(prepared);
+        }
+        NativeAttemptDecision::Fallback => {
+            tauri_plugin_log::log::warn!(
+                "native audio output configuration rejected; beginning default-output fallback"
+            );
+        }
+        NativeAttemptDecision::Failure(error) => return Err(error),
+    }
+
+    let fallback = device
+        .default_output_config()
+        .map_err(|_| AudioOutputError::UnsupportedConfiguration)?;
+    if fallback.sample_format().is_dsd() || sample_format_rank(fallback.sample_format()).is_none() {
+        return Err(AudioOutputError::UnsupportedConfiguration);
+    }
+    let target_rate = fallback.sample_rate();
+    let target_channels = fallback.channels();
+    super::conversion::PcmConverter::new(
+        spec.sample_rate,
+        spec.channel_count,
+        super::pcm::SampleRate::new(target_rate).expect("CPAL sample rate is nonzero"),
+        super::pcm::ChannelCount::new(usize::from(target_channels))
+            .ok_or(AudioOutputError::UnsupportedConfiguration)?,
+    )
+    .map_err(|_| AudioOutputError::UnsupportedConfiguration)?;
+    let (producer, consumer) = make_queue(target_rate, target_channels)?;
+    let config = fallback.config();
+    let stream = classify_fallback_build(build_stream_for_config(
+        &device,
+        &device_name,
+        stream_id,
+        config,
+        fallback.sample_format(),
+        consumer,
+        producer_state,
+        capacity_sender,
+        signal_sender,
+    ))?;
+    info!("audio output path fallback: source_rate={source_rate}, source_channels={source_channels}, target_rate={target_rate}, target_channels={target_channels}, sample_format={:?}", fallback.sample_format());
+    Ok(OutputPreparation {
+        stream,
+        producer,
+        sample_rate: target_rate,
+        channel_count: target_channels,
+        path: OutputPath::Fallback,
+    })
+}
+
+fn make_queue(
+    sample_rate: u32,
+    channels: u16,
+) -> Result<(super::pcm_queue::PcmProducer, PcmConsumer), AudioOutputError> {
+    let capacity = usize::try_from(sample_rate)
+        .unwrap_or(usize::MAX)
+        .saturating_mul(2)
+        .max(1);
+    super::pcm_queue::bounded_pcm_queue(
+        capacity,
+        super::pcm::ChannelCount::new(usize::from(channels))
+            .ok_or(AudioOutputError::UnsupportedConfiguration)?,
+    )
+    .map_err(|_| AudioOutputError::UnsupportedConfiguration)
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
+fn format_supported_output_configs(ranges: &[cpal::SupportedStreamConfigRange]) -> String {
+    ranges
+        .iter()
+        .map(|range| {
+            format!(
+                "channels={}, sample_rate={}..={}, sample_format={:?}, buffer_size={:?}",
+                range.channels(),
+                range.min_sample_rate(),
+                range.max_sample_rate(),
+                range.sample_format(),
+                range.buffer_size(),
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("; ")
 }
 
 fn select_output_config(
@@ -371,7 +562,9 @@ where
 #[allow(clippy::too_many_arguments)]
 fn build_stream<T>(
     device: &cpal::Device,
+    device_name: &str,
     config: StreamConfig,
+    sample_format: SampleFormat,
     stream_id: OutputStreamId,
     mut consumer: PcmConsumer,
     producer_state: Arc<AtomicProducerState>,
@@ -382,6 +575,9 @@ fn build_stream<T>(
 where
     T: cpal::SizedSample + FromSample<f32>,
 {
+    let config_sample_rate = config.sample_rate;
+    let config_channels = config.channels;
+    let config_buffer_size = config.buffer_size;
     let sample_rate = config.sample_rate;
     let channel_count = usize::from(config.channels);
     let error_sender = signal_sender.clone();
@@ -440,7 +636,19 @@ where
             },
             None,
         )
-        .map_err(|_| AudioOutputError::StreamBuildFailed)?;
+        .map_err(|error| {
+            error!(
+                "audio output stream build failed: device={device_name:?}, \
+                 sample_format={sample_format:?}, sample_rate={}, channels={}, \
+                 buffer_size={:?}, error={error:?}",
+                config_sample_rate, config_channels, config_buffer_size,
+            );
+            if error.kind() == cpal::ErrorKind::UnsupportedConfig {
+                AudioOutputError::StreamConfigurationUnsupported
+            } else {
+                AudioOutputError::StreamBuildFailed
+            }
+        })?;
 
     Ok(stream)
 }
@@ -491,8 +699,10 @@ fn calculate_end_time(
 #[cfg(test)]
 mod tests {
     use super::{
-        calculate_end_time, played_frame_position, sample_format_rank, select_output_config,
-        write_output_samples, PositionUpdate,
+        calculate_end_time, classify_fallback_build, classify_native_attempt,
+        format_supported_output_configs, played_frame_position, sample_format_rank,
+        select_output_config, write_output_samples, AudioOutputError, NativeAttemptDecision,
+        PositionUpdate,
     };
     use cpal::{SampleFormat, StreamInstant, SupportedBufferSize, SupportedStreamConfigRange};
     use std::time::Duration;
@@ -531,6 +741,64 @@ mod tests {
         assert!(select_output_config([range(SampleFormat::F32, 1)], 44_100, 2).is_err());
         assert!(select_output_config([range(SampleFormat::F32, 2)], 96_000, 2).is_err());
         assert!(select_output_config([range(SampleFormat::DsdU8, 2)], 44_100, 2).is_err());
+    }
+
+    #[test]
+    fn native_attempt_decision_only_falls_back_for_unsupported_configuration() {
+        assert_eq!(
+            classify_native_attempt(Ok::<_, AudioOutputError>(7)),
+            NativeAttemptDecision::Success(7)
+        );
+        assert_eq!(
+            classify_native_attempt::<u8>(Err(AudioOutputError::UnsupportedConfiguration)),
+            NativeAttemptDecision::Fallback
+        );
+        assert_eq!(
+            classify_native_attempt::<u8>(Err(AudioOutputError::StreamConfigurationUnsupported)),
+            NativeAttemptDecision::Fallback
+        );
+        assert_eq!(
+            classify_native_attempt::<u8>(Err(AudioOutputError::ConfigurationQueryFailed)),
+            NativeAttemptDecision::Failure(AudioOutputError::ConfigurationQueryFailed)
+        );
+        assert_eq!(
+            classify_native_attempt::<u8>(Err(AudioOutputError::StreamBuildFailed)),
+            NativeAttemptDecision::Failure(AudioOutputError::StreamBuildFailed)
+        );
+    }
+
+    #[test]
+    fn fallback_unsupported_build_is_final_stream_build_failure() {
+        assert_eq!(
+            classify_fallback_build::<u8>(Err(AudioOutputError::StreamConfigurationUnsupported)),
+            Err(AudioOutputError::StreamBuildFailed)
+        );
+        assert_eq!(
+            classify_fallback_build::<u8>(Err(AudioOutputError::StreamBuildFailed)),
+            Err(AudioOutputError::StreamBuildFailed)
+        );
+        assert_eq!(
+            classify_native_attempt::<u8>(Err(AudioOutputError::StreamBuildFailed)),
+            NativeAttemptDecision::Failure(AudioOutputError::StreamBuildFailed)
+        );
+    }
+
+    #[test]
+    fn formats_supported_output_configs_for_diagnostics() {
+        let ranges = vec![SupportedStreamConfigRange::new(
+            2,
+            44_100,
+            96_000,
+            SupportedBufferSize::Unknown,
+            SampleFormat::F32,
+        )];
+
+        let formatted = format_supported_output_configs(&ranges);
+
+        assert!(formatted.contains("channels=2"));
+        assert!(formatted.contains("sample_rate=44100..=96000"));
+        assert!(formatted.contains("sample_format=F32"));
+        assert!(formatted.contains("buffer_size=Unknown"));
     }
 
     #[test]
