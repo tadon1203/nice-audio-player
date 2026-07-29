@@ -50,7 +50,18 @@ Run `pnpm check` before reporting a coding task as complete.
 ### Rules
 
 - **Branch / PR**: Start from fresh `main`. Work strictly 1 Issue = 1 Branch = 1 PR (`<type>/<issue-number>-<kebab-case>`).
-- **Titles**: Use `<type>: <summary>` for commits, PRs, and squash merge titles.
+- **Conventional Commits**: Use one of these types for branch prefixes and commit, PR, and squash merge titles:
+  - `feat`: introduce user-visible functionality
+  - `fix`: correct incorrect behavior
+  - `refactor`: restructure code without changing behavior
+  - `perf`: improve performance without changing behavior
+  - `docs`: change documentation or project instructions
+  - `test`: add or change tests
+  - `build`: change build or dependency configuration
+  - `ci`: change continuous integration configuration
+  - `chore`: maintenance that does not fit another type
+  - `revert`: revert a previous change
+- **Titles**: Use `<type>: <summary>`; keep the type consistent across the commit, PR, and squash merge title.
 - **Scope**: Keep changes strictly within Issue scope. Never commit secrets, env files, build outputs, or editor settings.
 - **Tool Priority**:
   - Local operations: Use local `git`.
