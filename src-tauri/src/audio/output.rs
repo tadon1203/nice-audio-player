@@ -77,9 +77,25 @@ pub enum AudioOutputError {
     ConfigurationQueryFailed,
     UnsupportedConfiguration,
     StreamBuildFailed,
+    NativeStreamUnsupported,
     StreamStartFailed,
     StreamPauseFailed,
     StreamResumeFailed,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub(crate) enum OutputPath {
+    Native,
+    Fallback,
+}
+
+pub(crate) struct OutputPreparation {
+    pub(crate) stream: PreparedOutputStream,
+    pub(crate) producer: super::pcm_queue::PcmProducer,
+    pub(crate) sample_rate: u32,
+    pub(crate) channel_count: u16,
+    #[allow(dead_code)]
+    pub(crate) path: OutputPath,
 }
 
 pub(crate) struct PreparedOutputStream {
@@ -142,44 +158,18 @@ impl PreparedOutputStream {
     }
 }
 
-pub(crate) fn build_output_stream(
+#[allow(clippy::needless_borrow, clippy::too_many_arguments)]
+fn build_stream_for_config(
+    device: &cpal::Device,
+    device_name: &str,
     stream_id: OutputStreamId,
-    spec: DecodedAudioSpec,
+    config: StreamConfig,
+    sample_format: SampleFormat,
     consumer: PcmConsumer,
     producer_state: Arc<AtomicProducerState>,
     capacity_sender: SyncSender<()>,
     signal_sender: SyncSender<OutputSignal>,
 ) -> Result<PreparedOutputStream, AudioOutputError> {
-    let host = cpal::default_host();
-    let device = host
-        .default_output_device()
-        .ok_or(AudioOutputError::NoDefaultOutputDevice)?;
-    let device_name = device
-        .description()
-        .map(|description| description.name().to_owned())
-        .unwrap_or_else(|error| format!("<unavailable: {error}>"));
-    let sample_rate = spec.sample_rate.get();
-    let channel_count = spec.channel_count.get();
-    let ranges = device
-        .supported_output_configs()
-        .map_err(|_| AudioOutputError::ConfigurationQueryFailed)?
-        .collect::<Vec<_>>();
-    info!(
-        "audio output configs: device={device_name:?}, pcm_sample_rate={sample_rate}, \
-         pcm_channels={channel_count}, ranges={}",
-        format_supported_output_configs(&ranges)
-    );
-    let supported_config =
-        select_output_config(ranges.iter().cloned(), sample_rate, channel_count)?;
-    let sample_format = supported_config.sample_format();
-    let config = supported_config.config();
-    info!(
-        "audio output config selected: device={device_name:?}, \
-         pcm_sample_rate={sample_rate}, pcm_channels={channel_count}, \
-         sample_format={sample_format:?}, output_sample_rate={}, \
-         output_channels={}, buffer_size={:?}",
-        config.sample_rate, config.channels, config.buffer_size,
-    );
     let (position_sender, position_receiver) = mpsc::sync_channel(1);
     let stream = match sample_format {
         SampleFormat::F32 => build_stream::<f32>(
@@ -337,6 +327,131 @@ pub(crate) fn build_output_stream(
     })
 }
 
+pub(crate) fn prepare_output_stream(
+    stream_id: OutputStreamId,
+    spec: DecodedAudioSpec,
+    producer_state: Arc<AtomicProducerState>,
+    capacity_sender: SyncSender<()>,
+    signal_sender: SyncSender<OutputSignal>,
+) -> Result<OutputPreparation, AudioOutputError> {
+    let host = cpal::default_host();
+    let device = host
+        .default_output_device()
+        .ok_or(AudioOutputError::NoDefaultOutputDevice)?;
+    let device_name = device
+        .description()
+        .map(|description| description.name().to_owned())
+        .unwrap_or_else(|error| format!("<unavailable: {error}>"));
+    let source_rate = spec.sample_rate.get();
+    let source_channels = spec.channel_count.get();
+    let ranges = device
+        .supported_output_configs()
+        .map_err(|_| AudioOutputError::ConfigurationQueryFailed)?
+        .collect::<Vec<_>>();
+    let native = select_output_config(ranges.iter().cloned(), source_rate, source_channels);
+    let native_sample_format = native
+        .as_ref()
+        .ok()
+        .map(SupportedStreamConfig::sample_format);
+    let native_result = native.and_then(|config| {
+        let (producer, consumer) =
+            make_queue(config.config().sample_rate, config.config().channels)?;
+        let result = build_stream_for_config(
+            &device,
+            &device_name,
+            stream_id,
+            config.config(),
+            config.sample_format(),
+            consumer,
+            Arc::clone(&producer_state),
+            capacity_sender.clone(),
+            signal_sender.clone(),
+        );
+        result.map(|stream| OutputPreparation {
+            stream,
+            producer,
+            sample_rate: source_rate,
+            channel_count: source_channels,
+            path: OutputPath::Native,
+        })
+    });
+    match native_result {
+        Ok(prepared) => {
+            info!("audio output path native: source_rate={source_rate}, source_channels={source_channels}, sample_format={:?}",
+                native_sample_format);
+            return Ok(prepared);
+        }
+        Err(AudioOutputError::UnsupportedConfiguration)
+        | Err(AudioOutputError::NativeStreamUnsupported) => {
+            tauri_plugin_log::log::warn!(
+                "native audio output configuration rejected; beginning default-output fallback"
+            );
+        }
+        Err(error) => return Err(error),
+    }
+
+    let fallback = device
+        .default_output_config()
+        .map_err(|_| AudioOutputError::UnsupportedConfiguration)?;
+    if fallback.sample_format().is_dsd() || sample_format_rank(fallback.sample_format()).is_none() {
+        return Err(AudioOutputError::UnsupportedConfiguration);
+    }
+    let target_rate = fallback.sample_rate();
+    let target_channels = fallback.channels();
+    super::conversion::PcmConverter::new(
+        spec.sample_rate,
+        spec.channel_count,
+        super::pcm::SampleRate::new(target_rate).expect("CPAL sample rate is nonzero"),
+        super::pcm::ChannelCount::new(usize::from(target_channels))
+            .ok_or(AudioOutputError::UnsupportedConfiguration)?,
+    )
+    .map_err(|_| AudioOutputError::UnsupportedConfiguration)?;
+    let (producer, consumer) = make_queue(target_rate, target_channels)?;
+    let config = fallback.config();
+    let stream = match build_stream_for_config(
+        &device,
+        &device_name,
+        stream_id,
+        config,
+        fallback.sample_format(),
+        consumer,
+        producer_state,
+        capacity_sender,
+        signal_sender,
+    ) {
+        Ok(stream) => stream,
+        Err(AudioOutputError::NativeStreamUnsupported) => {
+            return Err(AudioOutputError::StreamBuildFailed)
+        }
+        Err(error) => return Err(error),
+    };
+    info!("audio output path fallback: source_rate={source_rate}, source_channels={source_channels}, target_rate={target_rate}, target_channels={target_channels}, sample_format={:?}", fallback.sample_format());
+    Ok(OutputPreparation {
+        stream,
+        producer,
+        sample_rate: target_rate,
+        channel_count: target_channels,
+        path: OutputPath::Fallback,
+    })
+}
+
+fn make_queue(
+    sample_rate: u32,
+    channels: u16,
+) -> Result<(super::pcm_queue::PcmProducer, PcmConsumer), AudioOutputError> {
+    let capacity = usize::try_from(sample_rate)
+        .unwrap_or(usize::MAX)
+        .saturating_mul(2)
+        .max(1);
+    super::pcm_queue::bounded_pcm_queue(
+        capacity,
+        super::pcm::ChannelCount::new(usize::from(channels))
+            .ok_or(AudioOutputError::UnsupportedConfiguration)?,
+    )
+    .map_err(|_| AudioOutputError::UnsupportedConfiguration)
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
 fn format_supported_output_configs(ranges: &[cpal::SupportedStreamConfigRange]) -> String {
     ranges
         .iter()
@@ -512,7 +627,11 @@ where
                  buffer_size={:?}, error={error:?}",
                 config_sample_rate, config_channels, config_buffer_size,
             );
-            AudioOutputError::StreamBuildFailed
+            if error.kind() == cpal::ErrorKind::UnsupportedConfig {
+                AudioOutputError::NativeStreamUnsupported
+            } else {
+                AudioOutputError::StreamBuildFailed
+            }
         })?;
 
     Ok(stream)

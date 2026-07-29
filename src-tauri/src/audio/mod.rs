@@ -1,3 +1,4 @@
+pub mod conversion;
 pub mod decoding;
 pub mod devices;
 pub mod inspection;
