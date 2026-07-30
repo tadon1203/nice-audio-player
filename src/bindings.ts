@@ -17,6 +17,10 @@ export const commands = {
   resumeAudioPlayback: () => __TAURI_INVOKE<PlaybackSnapshot_Serialize>("resume_audio_playback"),
   seekAudioPlayback: (positionMs: number) =>
     __TAURI_INVOKE<PlaybackSnapshot_Serialize>("seek_audio_playback", { positionMs }),
+  setPlaybackVolume: (volume: number) =>
+    __TAURI_INVOKE<PlaybackSnapshot_Serialize>("set_playback_volume", { volume }),
+  muteAudioPlayback: () => __TAURI_INVOKE<PlaybackSnapshot_Serialize>("mute_audio_playback"),
+  unmuteAudioPlayback: () => __TAURI_INVOKE<PlaybackSnapshot_Serialize>("unmute_audio_playback"),
   getPlaybackState: () => __TAURI_INVOKE<PlaybackSnapshot_Serialize>("get_playback_state"),
 };
 
@@ -80,43 +84,71 @@ export type PlaybackFailureCode =
   | "completionTimingFailed"
   | "decodeFailed";
 
+export type PlaybackMuteError = { code: "playbackWorkerUnavailable" } | { code: "taskFailed" };
+
 export type PlaybackSnapshot = PlaybackSnapshot_Serialize | PlaybackSnapshot_Deserialize;
 
 export type PlaybackSnapshot_Deserialize =
-  | ({ status: "stopped" } & {
+  | ({ status: "stopped"; volume: number; muted: boolean } & {
       durationMs?: never;
       error?: never;
       playbackId?: never;
       positionMs?: never;
     })
-  | ({ status: "playing"; playbackId: string; positionMs: number; durationMs: number | null } & {
-      error?: never;
-    })
-  | ({ status: "paused"; playbackId: string; positionMs: number; durationMs: number | null } & {
-      error?: never;
-    })
-  | ({ status: "failed"; playbackId: string | null; error: PlaybackFailureCode } & {
-      durationMs?: never;
-      positionMs?: never;
-    });
+  | ({
+      status: "playing";
+      playbackId: string;
+      positionMs: number;
+      durationMs: number | null;
+      volume: number;
+      muted: boolean;
+    } & { error?: never })
+  | ({
+      status: "paused";
+      playbackId: string;
+      positionMs: number;
+      durationMs: number | null;
+      volume: number;
+      muted: boolean;
+    } & { error?: never })
+  | ({
+      status: "failed";
+      playbackId: string | null;
+      error: PlaybackFailureCode;
+      volume: number;
+      muted: boolean;
+    } & { durationMs?: never; positionMs?: never });
 
 export type PlaybackSnapshot_Serialize =
-  | ({ status: "stopped" } & {
+  | ({ status: "stopped"; volume: number; muted: boolean } & {
       durationMs?: never;
       error?: never;
       playbackId?: never;
       positionMs?: never;
     })
-  | ({ status: "playing"; playbackId: string; positionMs: number; durationMs: number | null } & {
-      error?: never;
-    })
-  | ({ status: "paused"; playbackId: string; positionMs: number; durationMs: number | null } & {
-      error?: never;
-    })
-  | ({ status: "failed"; playbackId?: string | null; error: PlaybackFailureCode } & {
-      durationMs?: never;
-      positionMs?: never;
-    });
+  | ({
+      status: "playing";
+      playbackId: string;
+      positionMs: number;
+      durationMs: number | null;
+      volume: number;
+      muted: boolean;
+    } & { error?: never })
+  | ({
+      status: "paused";
+      playbackId: string;
+      positionMs: number;
+      durationMs: number | null;
+      volume: number;
+      muted: boolean;
+    } & { error?: never })
+  | ({
+      status: "failed";
+      playbackId?: string | null;
+      error: PlaybackFailureCode;
+      volume: number;
+      muted: boolean;
+    } & { durationMs?: never; positionMs?: never });
 
 export type ResumeAudioPlaybackError =
   | { code: "playbackWorkerUnavailable" }
@@ -132,6 +164,9 @@ export type SeekAudioPlaybackError =
   | { code: "outputFailed" }
   | { code: "playbackWorkerUnavailable" }
   | { code: "taskFailed" };
+
+export type SetPlaybackVolumeError =
+  { code: "invalidVolume" } | { code: "playbackWorkerUnavailable" } | { code: "taskFailed" };
 
 export type StartAudioFileError =
   | { code: "validationFailed"; error: AudioFileValidationError }
