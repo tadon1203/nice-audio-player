@@ -93,10 +93,26 @@ enum ResumeAudioPlaybackError {
     TaskFailed,
 }
 
+#[allow(clippy::enum_variant_names)]
+#[derive(Debug, Clone, serde::Serialize, specta::Type, PartialEq, Eq)]
+#[serde(tag = "code", rename_all = "camelCase")]
+enum SeekAudioPlaybackError {
+    InvalidPlaybackState,
+    DurationUnavailable,
+    SeekFailed,
+    DecodeFailed,
+    OutputFailed,
+    PlaybackWorkerUnavailable,
+    TaskFailed,
+}
+
 fn map_start_error(error: PlaybackServiceError) -> StartAudioFileError {
     match error {
         PlaybackServiceError::WorkerUnavailable => StartAudioFileError::PlaybackWorkerUnavailable,
         PlaybackServiceError::InvalidPlaybackState => StartAudioFileError::OutputFailed,
+        PlaybackServiceError::DurationUnavailable | PlaybackServiceError::Seek => {
+            StartAudioFileError::DecodeFailed
+        }
         PlaybackServiceError::Output(_) => StartAudioFileError::OutputFailed,
         PlaybackServiceError::Decode => StartAudioFileError::DecodeFailed,
     }
@@ -120,6 +136,9 @@ fn map_pause_error(error: PlaybackServiceError) -> PauseAudioPlaybackError {
             PauseAudioPlaybackError::PlaybackWorkerUnavailable
         }
         PlaybackServiceError::InvalidPlaybackState => PauseAudioPlaybackError::InvalidPlaybackState,
+        PlaybackServiceError::DurationUnavailable | PlaybackServiceError::Seek => {
+            PauseAudioPlaybackError::OutputFailed
+        }
         PlaybackServiceError::Output(_) => PauseAudioPlaybackError::OutputFailed,
         PlaybackServiceError::Decode => PauseAudioPlaybackError::OutputFailed,
     }
@@ -145,9 +164,38 @@ fn map_resume_error(error: PlaybackServiceError) -> ResumeAudioPlaybackError {
         PlaybackServiceError::InvalidPlaybackState => {
             ResumeAudioPlaybackError::InvalidPlaybackState
         }
+        PlaybackServiceError::DurationUnavailable | PlaybackServiceError::Seek => {
+            ResumeAudioPlaybackError::OutputFailed
+        }
         PlaybackServiceError::Output(_) => ResumeAudioPlaybackError::OutputFailed,
         PlaybackServiceError::Decode => ResumeAudioPlaybackError::OutputFailed,
     }
+}
+
+fn map_seek_error(error: PlaybackServiceError) -> SeekAudioPlaybackError {
+    match error {
+        PlaybackServiceError::WorkerUnavailable => {
+            SeekAudioPlaybackError::PlaybackWorkerUnavailable
+        }
+        PlaybackServiceError::InvalidPlaybackState => SeekAudioPlaybackError::InvalidPlaybackState,
+        PlaybackServiceError::DurationUnavailable => SeekAudioPlaybackError::DurationUnavailable,
+        PlaybackServiceError::Seek => SeekAudioPlaybackError::SeekFailed,
+        PlaybackServiceError::Decode => SeekAudioPlaybackError::DecodeFailed,
+        PlaybackServiceError::Output(_) => SeekAudioPlaybackError::OutputFailed,
+    }
+}
+
+#[tauri::command]
+#[specta::specta]
+async fn seek_audio_playback(
+    position_ms: u64,
+    playback: tauri::State<'_, PlaybackService>,
+) -> Result<PlaybackSnapshot, SeekAudioPlaybackError> {
+    let playback = playback.handle();
+    tauri::async_runtime::spawn_blocking(move || playback.seek(position_ms))
+        .await
+        .map_err(|_| SeekAudioPlaybackError::TaskFailed)?
+        .map_err(map_seek_error)
 }
 
 #[tauri::command]
@@ -184,6 +232,7 @@ fn collect_specta_commands<R: tauri::Runtime>() -> tauri_specta::Commands<R> {
         stop_audio_playback,
         pause_audio_playback,
         resume_audio_playback,
+        seek_audio_playback,
         get_playback_state,
     ]
 }

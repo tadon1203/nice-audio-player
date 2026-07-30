@@ -8,10 +8,14 @@ use std::time::{Duration, Instant};
 use cpal::StreamInstant;
 
 use super::conversion::PcmConverter;
-use super::decoding::{open_streaming_decoder, DecodeCancellation, DecodeStep, StreamingDecoder};
+use super::decoding::{
+    open_streaming_decoder, DecodeCancellation, DecodeStep, DecodedAudioSpec, PcmDecodeError,
+    SeekStep, StreamingDecoder,
+};
 use super::output::{
-    prepare_output_stream, AtomicProducerState, AudioOutputError, OutputSignal, OutputStreamId,
-    PreparedOutputStream, ProducerState,
+    prepare_output_stream, prepare_output_stream_with_config, AtomicProducerState,
+    AudioOutputError, OutputSignal, OutputStreamId, PreparedOutputConfig, PreparedOutputStream,
+    ProducerState,
 };
 use super::pcm_queue::PcmProducer;
 use super::validation::ValidatedAudioFile;
@@ -59,6 +63,8 @@ pub enum PlaybackFailureCode {
 pub enum PlaybackServiceError {
     WorkerUnavailable,
     InvalidPlaybackState,
+    DurationUnavailable,
+    Seek,
     Output(PlaybackFailureCode),
     Decode,
 }
@@ -79,6 +85,10 @@ enum PlaybackCommand {
         reply: SyncSender<Result<PlaybackSnapshot, PlaybackServiceError>>,
     },
     Resume {
+        reply: SyncSender<Result<PlaybackSnapshot, PlaybackServiceError>>,
+    },
+    Seek {
+        position_ms: u64,
         reply: SyncSender<Result<PlaybackSnapshot, PlaybackServiceError>>,
     },
     Shutdown,
@@ -109,7 +119,9 @@ impl PlaybackService {
                 PlaybackWorker {
                     active: None,
                     pending: None,
-                    next_playback_id: 0,
+                    pending_seek: None,
+                    next_playback_session_id: 0,
+                    next_output_stream_id: 0,
                     snapshot: worker_state,
                     command_receiver,
                     state_changed_sender,
@@ -170,6 +182,10 @@ impl PlaybackServiceHandle {
         self.request(|reply| PlaybackCommand::Resume { reply })
     }
 
+    pub(crate) fn seek(&self, position_ms: u64) -> Result<PlaybackSnapshot, PlaybackServiceError> {
+        self.request(|reply| PlaybackCommand::Seek { position_ms, reply })
+    }
+
     fn request(
         &self,
         make: impl FnOnce(SyncSender<Result<PlaybackSnapshot, PlaybackServiceError>>) -> PlaybackCommand,
@@ -190,17 +206,27 @@ impl Drop for PlaybackService {
 }
 
 struct ActivePlayback {
+    session_id: u64,
     id: OutputStreamId,
+    source_file: ValidatedAudioFile,
+    source_spec: DecodedAudioSpec,
+    output_config: PreparedOutputConfig,
     stream: PreparedOutputStream,
     completion_time: Option<StreamInstant>,
     sample_rate: u32,
     duration_ms: Option<u64>,
     position_frame: u64,
+    position_base_frame: u64,
+    remaining_frames: Option<u64>,
     last_position_publish: Instant,
     decoder_worker: DecodeWorker,
 }
 
 struct PendingPlayback {
+    session_id: u64,
+    source_file: ValidatedAudioFile,
+    source_spec: DecodedAudioSpec,
+    output_config: PreparedOutputConfig,
     id: OutputStreamId,
     stream: PreparedOutputStream,
     decoder_worker: DecodeWorker,
@@ -208,6 +234,22 @@ struct PendingPlayback {
     prebuffer_receiver: Receiver<()>,
     sample_rate: u32,
     duration_ms: Option<u64>,
+    reply: SyncSender<Result<PlaybackSnapshot, PlaybackServiceError>>,
+}
+
+struct PendingSeek {
+    session_id: u64,
+    id: OutputStreamId,
+    confirmed_position_ms: u64,
+    output_base_frame: u64,
+    remaining_frames: u64,
+    stream: PreparedOutputStream,
+    output_config: PreparedOutputConfig,
+    decoder_worker: DecodeWorker,
+    producer_state: Arc<AtomicProducerState>,
+    prebuffer_receiver: Receiver<()>,
+    sample_rate: u32,
+    duration_ms: u64,
     reply: SyncSender<Result<PlaybackSnapshot, PlaybackServiceError>>,
 }
 
@@ -230,7 +272,9 @@ const POSITION_UPDATE_INTERVAL: Duration = Duration::from_millis(250);
 struct PlaybackWorker {
     active: Option<ActivePlayback>,
     pending: Option<PendingPlayback>,
-    next_playback_id: u64,
+    pending_seek: Option<PendingSeek>,
+    next_playback_session_id: u64,
+    next_output_stream_id: u64,
     snapshot: Arc<RwLock<PlaybackSnapshot>>,
     command_receiver: Receiver<PlaybackCommand>,
     state_changed_sender: SyncSender<()>,
@@ -256,14 +300,19 @@ impl PlaybackWorker {
                 Ok(PlaybackCommand::Resume { reply }) => {
                     let _ = reply.send(self.resume());
                 }
+                Ok(PlaybackCommand::Seek { position_ms, reply }) => {
+                    self.begin_seek(position_ms, reply);
+                }
                 Ok(PlaybackCommand::Shutdown) | Err(mpsc::RecvTimeoutError::Disconnected) => break,
                 Err(mpsc::RecvTimeoutError::Timeout) => {}
             }
             self.advance_pending_playback();
+            self.advance_pending_seek();
             self.finish_if_due();
             self.update_playback_position();
         }
         self.discard_pending();
+        self.discard_pending_seek();
         self.discard_active();
         self.publish(PlaybackSnapshot::Stopped);
     }
@@ -273,6 +322,7 @@ impl PlaybackWorker {
         reply: SyncSender<Result<PlaybackSnapshot, PlaybackServiceError>>,
     ) {
         self.discard_pending();
+        self.discard_pending_seek();
         self.discard_active();
         let mut decoder = match open_streaming_decoder(&file) {
             Ok(decoder) => decoder,
@@ -294,8 +344,10 @@ impl PlaybackWorker {
         let producer_state = Arc::new(AtomicProducerState::new(ProducerState::Running));
         let (capacity_sender, capacity_receiver) = mpsc::sync_channel(1);
         let (prebuffer_sender, prebuffer_receiver) = mpsc::sync_channel(1);
-        self.next_playback_id = self.next_playback_id.wrapping_add(1);
-        let id = OutputStreamId(self.next_playback_id);
+        self.next_playback_session_id = self.next_playback_session_id.wrapping_add(1);
+        self.next_output_stream_id = self.next_output_stream_id.wrapping_add(1);
+        let session_id = self.next_playback_session_id;
+        let id = OutputStreamId(self.next_output_stream_id);
         let worker_cancellation = DecodeCancellation::default();
         let preparation = match prepare_output_stream(
             id,
@@ -347,6 +399,10 @@ impl PlaybackWorker {
             wake_sender: worker_wake,
         };
         self.pending = Some(PendingPlayback {
+            session_id,
+            source_file: file,
+            source_spec: spec,
+            output_config: preparation.config.clone(),
             id,
             stream,
             decoder_worker,
@@ -356,6 +412,261 @@ impl PlaybackWorker {
             duration_ms,
             reply,
         });
+    }
+
+    fn begin_seek(
+        &mut self,
+        requested_position_ms: u64,
+        reply: SyncSender<Result<PlaybackSnapshot, PlaybackServiceError>>,
+    ) {
+        if self.pending_seek.is_some() {
+            self.discard_pending_seek();
+        }
+        let current = self.current();
+        if !matches!(
+            current,
+            PlaybackSnapshot::Playing { .. } | PlaybackSnapshot::Paused { .. }
+        ) {
+            let _ = reply.send(Err(PlaybackServiceError::InvalidPlaybackState));
+            return;
+        }
+        let Some(active) = self.active.as_ref() else {
+            let _ = reply.send(Err(PlaybackServiceError::InvalidPlaybackState));
+            return;
+        };
+        let Some(duration_ms) = active.duration_ms else {
+            let _ = reply.send(Err(PlaybackServiceError::DurationUnavailable));
+            return;
+        };
+        let target_ms = requested_position_ms.min(duration_ms);
+        if target_ms == duration_ms {
+            let _ = reply.send(Ok(self.stop()));
+            return;
+        }
+        let session_id = active.session_id;
+        let source_file = active.source_file.clone();
+        let source_spec = active.source_spec;
+        let target_source_frame = millis_to_frame(target_ms, source_spec.sample_rate.get());
+        let mut decoder = match open_streaming_decoder(&source_file) {
+            Ok(decoder) => decoder,
+            Err(_) => {
+                let _ = reply.send(Err(PlaybackServiceError::Decode));
+                return;
+            }
+        };
+        if decoder.spec() != source_spec {
+            let _ = reply.send(Err(PlaybackServiceError::Decode));
+            return;
+        }
+        let seek = match decoder.seek_to_frame(target_source_frame) {
+            Ok(SeekStep::Samples(seek)) => seek,
+            Ok(SeekStep::EndOfStream) => {
+                let _ = reply.send(Err(PlaybackServiceError::Decode));
+                return;
+            }
+            Err(PcmDecodeError::SeekFailed) => {
+                let _ = reply.send(Err(PlaybackServiceError::Seek));
+                return;
+            }
+            Err(_) => {
+                let _ = reply.send(Err(PlaybackServiceError::Decode));
+                return;
+            }
+        };
+        if seek.first_packet.is_empty() {
+            let _ = reply.send(Err(PlaybackServiceError::Decode));
+            return;
+        }
+
+        self.next_output_stream_id = self.next_output_stream_id.wrapping_add(1);
+        let id = OutputStreamId(self.next_output_stream_id);
+        let producer_state = Arc::new(AtomicProducerState::new(ProducerState::Running));
+        let (capacity_sender, capacity_receiver) = mpsc::sync_channel(1);
+        let (prebuffer_sender, prebuffer_receiver) = mpsc::sync_channel(1);
+        let output_config = active.output_config.clone();
+        let preparation = match prepare_output_stream_with_config(
+            id,
+            source_spec,
+            &output_config,
+            Arc::clone(&producer_state),
+            capacity_sender.clone(),
+            self.output_sender.clone(),
+        ) {
+            Ok(preparation) => preparation,
+            Err(error) => {
+                let _ = reply.send(Err(PlaybackServiceError::Output(output_failure_code(
+                    error,
+                ))));
+                return;
+            }
+        };
+        let sample_rate = preparation.sample_rate;
+        let channel_count = preparation.channel_count;
+        let prebuffer_frames = prebuffer_frames(sample_rate);
+        let cancellation = DecodeCancellation::default();
+        let worker_cancel = cancellation.clone();
+        let worker_state = Arc::clone(&producer_state);
+        let worker_signal = self.output_sender.clone();
+        let worker_wake = capacity_sender.clone();
+        let join_handle = thread::spawn(move || {
+            decode_loop(
+                decoder,
+                preparation.producer,
+                seek.first_packet,
+                source_spec,
+                sample_rate,
+                channel_count,
+                worker_cancel,
+                worker_state,
+                worker_signal,
+                id,
+                capacity_receiver,
+                prebuffer_sender,
+                prebuffer_frames,
+            )
+        });
+        let output_base_frame = source_to_output_frame(
+            seek.confirmed_source_frame,
+            sample_rate,
+            source_spec.sample_rate.get(),
+        );
+        let total_output_frames = duration_to_frames(duration_ms, sample_rate);
+        self.pending_seek = Some(PendingSeek {
+            session_id,
+            id,
+            confirmed_position_ms: seek.confirmed_position_ms,
+            output_base_frame: output_base_frame.min(total_output_frames),
+            remaining_frames: total_output_frames.saturating_sub(output_base_frame),
+            stream: preparation.stream,
+            output_config: preparation.config,
+            decoder_worker: DecodeWorker {
+                cancellation,
+                join_handle,
+                wake_sender: worker_wake,
+            },
+            producer_state,
+            prebuffer_receiver,
+            sample_rate,
+            duration_ms,
+            reply,
+        });
+    }
+
+    fn advance_pending_seek(&mut self) {
+        let Some(pending) = self.pending_seek.as_ref() else {
+            return;
+        };
+        let ready = pending.prebuffer_receiver.try_recv().is_ok();
+        let state = pending.producer_state.load();
+        if !ready && state == ProducerState::Running {
+            return;
+        }
+        let pending = self.pending_seek.take().expect("pending seek exists");
+        if state == ProducerState::Failed {
+            pending.decoder_worker.cancel_and_join();
+            let _ = pending.reply.send(Err(PlaybackServiceError::Decode));
+            return;
+        }
+        let Some(active) = self.active.as_ref() else {
+            pending.decoder_worker.cancel_and_join();
+            let _ = pending
+                .reply
+                .send(Err(PlaybackServiceError::InvalidPlaybackState));
+            return;
+        };
+        if active.session_id != pending.session_id {
+            pending.decoder_worker.cancel_and_join();
+            let _ = pending
+                .reply
+                .send(Err(PlaybackServiceError::InvalidPlaybackState));
+            return;
+        }
+        let was_playing = matches!(self.current(), PlaybackSnapshot::Playing { .. });
+        if was_playing {
+            if let Some(active) = self.active.as_mut() {
+                if let Err(error) = active.stream.pause() {
+                    pending.decoder_worker.cancel_and_join();
+                    let _ =
+                        pending
+                            .reply
+                            .send(Err(PlaybackServiceError::Output(output_failure_code(
+                                error,
+                            ))));
+                    return;
+                }
+            }
+            if let Err(error) = pending.stream.start() {
+                pending.decoder_worker.cancel_and_join();
+                let rollback_failed = self.active.as_mut().is_none_or(|active| {
+                    let failed = active.stream.resume().is_err();
+                    if !failed {
+                        active.stream.clear_timing_anchor();
+                    }
+                    failed
+                });
+                if rollback_failed {
+                    let playback_id = self
+                        .active
+                        .as_ref()
+                        .map(|active| active.session_id.to_string());
+                    self.discard_active();
+                    self.publish(failed_snapshot_with_id(
+                        playback_id,
+                        PlaybackFailureCode::OutputStreamResumeFailed,
+                    ));
+                }
+                let _ = pending
+                    .reply
+                    .send(Err(PlaybackServiceError::Output(output_failure_code(
+                        error,
+                    ))));
+                return;
+            }
+        }
+        let old = self.active.take().expect("active playback exists");
+        old.decoder_worker.cancel_and_join();
+        self.active = Some(ActivePlayback {
+            session_id: pending.session_id,
+            id: pending.id,
+            source_file: old.source_file,
+            source_spec: old.source_spec,
+            output_config: pending.output_config,
+            stream: pending.stream,
+            completion_time: None,
+            sample_rate: pending.sample_rate,
+            duration_ms: Some(pending.duration_ms),
+            position_frame: pending.output_base_frame,
+            position_base_frame: pending.output_base_frame,
+            remaining_frames: Some(pending.remaining_frames),
+            last_position_publish: Instant::now(),
+            decoder_worker: pending.decoder_worker,
+        });
+        let snapshot = if was_playing {
+            PlaybackSnapshot::Playing {
+                playback_id: pending.session_id.to_string(),
+                position_ms: pending.confirmed_position_ms,
+                duration_ms: Some(pending.duration_ms),
+            }
+        } else {
+            PlaybackSnapshot::Paused {
+                playback_id: pending.session_id.to_string(),
+                position_ms: pending.confirmed_position_ms,
+                duration_ms: Some(pending.duration_ms),
+            }
+        };
+        self.publish(snapshot.clone());
+        let _ = pending.reply.send(Ok(snapshot));
+    }
+
+    fn discard_pending_seek(&mut self) {
+        self.cancel_pending_seek_with(PlaybackServiceError::InvalidPlaybackState);
+    }
+
+    fn cancel_pending_seek_with(&mut self, error: PlaybackServiceError) {
+        if let Some(pending) = self.pending_seek.take() {
+            pending.decoder_worker.cancel_and_join();
+            let _ = pending.reply.send(Err(error));
+        }
     }
     fn advance_pending_playback(&mut self) {
         let Some(pending) = self.pending.as_ref() else {
@@ -380,6 +691,10 @@ impl PlaybackWorker {
             return;
         }
         let snapshot = self.commit_started_stream(
+            pending.session_id,
+            pending.source_file,
+            pending.source_spec,
+            pending.output_config,
             pending.id,
             pending.stream,
             pending.sample_rate,
@@ -412,6 +727,7 @@ impl PlaybackWorker {
     }
     fn stop(&mut self) -> PlaybackSnapshot {
         self.discard_pending();
+        self.discard_pending_seek();
         self.discard_active();
         if self.current() != PlaybackSnapshot::Stopped {
             self.publish(PlaybackSnapshot::Stopped);
@@ -430,16 +746,17 @@ impl PlaybackWorker {
                 if let Err(error) = active.stream.pause() {
                     return Err(self.control_failure(id, error));
                 }
-                let position_frame = active.stream.played_frame_position(
+                let relative_frame = active.stream.played_frame_position(
                     active.sample_rate,
                     active.duration_ms.map(|ms| {
                         ((u128::from(ms) * u128::from(active.sample_rate)) / 1_000) as u64
                     }),
                 );
                 active.stream.clear_timing_anchor();
+                let position_frame = absolute_position(active, relative_frame);
                 active.position_frame = position_frame;
                 let snapshot = PlaybackSnapshot::Paused {
-                    playback_id: id.0.to_string(),
+                    playback_id: active.session_id.to_string(),
                     position_ms: frame_to_millis(position_frame, active.sample_rate),
                     duration_ms: active.duration_ms,
                 };
@@ -462,7 +779,7 @@ impl PlaybackWorker {
                 }
                 let position_ms = frame_to_millis(active.position_frame, active.sample_rate);
                 let snapshot = PlaybackSnapshot::Playing {
-                    playback_id: id.0.to_string(),
+                    playback_id: active.session_id.to_string(),
                     position_ms,
                     duration_ms: active.duration_ms,
                 };
@@ -476,13 +793,23 @@ impl PlaybackWorker {
         id: OutputStreamId,
         error: AudioOutputError,
     ) -> PlaybackServiceError {
+        let playback_id = self
+            .active
+            .as_ref()
+            .map(|active| active.session_id.to_string())
+            .or_else(|| Some(id.0.to_string()));
         self.discard_active();
         let code = output_failure_code(error);
-        self.publish(failed_snapshot(id, code.clone()));
+        self.publish(failed_snapshot_with_id(playback_id, code.clone()));
         PlaybackServiceError::Output(code)
     }
+    #[allow(clippy::too_many_arguments)]
     fn commit_started_stream(
         &mut self,
+        session_id: u64,
+        source_file: ValidatedAudioFile,
+        source_spec: DecodedAudioSpec,
+        output_config: PreparedOutputConfig,
         id: OutputStreamId,
         stream: PreparedOutputStream,
         sample_rate: u32,
@@ -490,18 +817,24 @@ impl PlaybackWorker {
         decoder_worker: DecodeWorker,
     ) -> PlaybackSnapshot {
         let snapshot = PlaybackSnapshot::Playing {
-            playback_id: id.0.to_string(),
+            playback_id: session_id.to_string(),
             position_ms: 0,
             duration_ms,
         };
 
         self.active = Some(ActivePlayback {
+            session_id,
             id,
+            source_file,
+            source_spec,
+            output_config,
             stream,
             completion_time: None,
             sample_rate,
             duration_ms,
             position_frame: 0,
+            position_base_frame: 0,
+            remaining_frames: duration_ms.map(|duration| duration_to_frames(duration, sample_rate)),
             last_position_publish: Instant::now(),
             decoder_worker,
         });
@@ -541,22 +874,44 @@ impl PlaybackWorker {
                 }
             }
             OutputSignal::StreamFailed { .. } => {
+                let playback_id = self
+                    .active
+                    .as_ref()
+                    .map(|active| active.session_id.to_string());
+                self.cancel_pending_seek_with(PlaybackServiceError::Output(
+                    PlaybackFailureCode::OutputStreamRuntimeFailed,
+                ));
                 self.discard_active();
-                self.publish(failed_snapshot(
-                    id,
+                self.publish(failed_snapshot_with_id(
+                    playback_id,
                     PlaybackFailureCode::OutputStreamRuntimeFailed,
                 ));
             }
             OutputSignal::CompletionTimingFailed { .. } => {
+                let playback_id = self
+                    .active
+                    .as_ref()
+                    .map(|active| active.session_id.to_string());
+                self.cancel_pending_seek_with(PlaybackServiceError::Output(
+                    PlaybackFailureCode::CompletionTimingFailed,
+                ));
                 self.discard_active();
-                self.publish(failed_snapshot(
-                    id,
+                self.publish(failed_snapshot_with_id(
+                    playback_id,
                     PlaybackFailureCode::CompletionTimingFailed,
                 ));
             }
             OutputSignal::DecodeFailed { .. } => {
+                let playback_id = self
+                    .active
+                    .as_ref()
+                    .map(|active| active.session_id.to_string());
+                self.cancel_pending_seek_with(PlaybackServiceError::Decode);
                 self.discard_active();
-                self.publish(failed_snapshot(id, PlaybackFailureCode::DecodeFailed));
+                self.publish(failed_snapshot_with_id(
+                    playback_id,
+                    PlaybackFailureCode::DecodeFailed,
+                ));
             }
         }
     }
@@ -565,6 +920,7 @@ impl PlaybackWorker {
             should_finish(&self.current(), active.completion_time, active.stream.now())
         });
         if due {
+            self.discard_pending_seek();
             self.discard_active();
             self.publish(PlaybackSnapshot::Stopped);
         }
@@ -576,12 +932,13 @@ impl PlaybackWorker {
                 if !is_playing {
                     return None;
                 }
-                let position_frame = active.stream.played_frame_position(
+                let relative_frame = active.stream.played_frame_position(
                     active.sample_rate,
                     active.duration_ms.map(|ms| {
                         ((u128::from(ms) * u128::from(active.sample_rate)) / 1_000) as u64
                     }),
                 );
+                let position_frame = absolute_position(active, relative_frame);
                 if !should_publish_position(
                     active.last_position_publish.elapsed(),
                     position_frame != active.position_frame,
@@ -591,7 +948,7 @@ impl PlaybackWorker {
                 active.position_frame = position_frame;
                 active.last_position_publish = Instant::now();
                 Some((
-                    active.id.0.to_string(),
+                    active.session_id.to_string(),
                     position_frame,
                     active.sample_rate,
                     active.duration_ms,
@@ -797,6 +1154,46 @@ fn frame_to_millis(frame_position: u64, sample_rate: u32) -> u64 {
         as u64
 }
 
+fn millis_to_frame(position_ms: u64, sample_rate: u32) -> u64 {
+    u128::from(position_ms)
+        .saturating_mul(u128::from(sample_rate))
+        .checked_div(1_000)
+        .unwrap_or(0)
+        .min(u128::from(u64::MAX)) as u64
+}
+
+fn absolute_position(active: &ActivePlayback, relative_frame: u64) -> u64 {
+    active
+        .position_base_frame
+        .saturating_add(relative_frame)
+        .min(
+            active
+                .position_base_frame
+                .saturating_add(active.remaining_frames.unwrap_or(u64::MAX)),
+        )
+}
+
+fn source_to_output_frame(source_frame: u64, output_rate: u32, source_rate: u32) -> u64 {
+    u128::from(source_frame)
+        .saturating_mul(u128::from(output_rate))
+        .checked_div(u128::from(source_rate))
+        .unwrap_or(0)
+        .min(u128::from(u64::MAX)) as u64
+}
+
+fn duration_to_frames(duration_ms: u64, sample_rate: u32) -> u64 {
+    millis_to_frame(duration_ms, sample_rate)
+}
+
+fn prebuffer_frames(sample_rate: u32) -> usize {
+    usize::try_from(sample_rate)
+        .unwrap_or(usize::MAX)
+        .saturating_mul(250)
+        .checked_div(1_000)
+        .unwrap_or(usize::MAX)
+        .max(1)
+}
+
 #[cfg_attr(not(test), allow(dead_code))]
 fn duration_ms(total_frame_count: u64, sample_rate: u32) -> u64 {
     frame_to_millis(total_frame_count, sample_rate)
@@ -856,10 +1253,14 @@ fn resume_action(snapshot: &PlaybackSnapshot) -> PlaybackControlAction {
 }
 
 fn failed_snapshot(id: OutputStreamId, error: PlaybackFailureCode) -> PlaybackSnapshot {
-    PlaybackSnapshot::Failed {
-        playback_id: Some(id.0.to_string()),
-        error,
-    }
+    failed_snapshot_with_id(Some(id.0.to_string()), error)
+}
+
+fn failed_snapshot_with_id(
+    playback_id: Option<String>,
+    error: PlaybackFailureCode,
+) -> PlaybackSnapshot {
+    PlaybackSnapshot::Failed { playback_id, error }
 }
 
 fn start_failure_snapshot(
@@ -896,11 +1297,11 @@ fn output_failure_code(error: AudioOutputError) -> PlaybackFailureCode {
 mod tests {
     use super::super::output::AudioOutputError;
     use super::{
-        completion_time_reached, duration_ms, failed_snapshot, frame_to_millis,
-        output_failure_code, pause_action, resume_action, should_finish, should_publish_position,
-        signal_stream_id, start_failure_snapshot, OutputSignal, OutputStreamId,
-        PlaybackControlAction, PlaybackFailureCode, PlaybackService, PlaybackSnapshot,
-        PlaybackWorker,
+        completion_time_reached, duration_ms, duration_to_frames, failed_snapshot, frame_to_millis,
+        millis_to_frame, output_failure_code, pause_action, resume_action, should_finish,
+        should_publish_position, signal_stream_id, source_to_output_frame, start_failure_snapshot,
+        OutputSignal, OutputStreamId, PlaybackControlAction, PlaybackFailureCode, PlaybackService,
+        PlaybackSnapshot, PlaybackWorker,
     };
     use cpal::StreamInstant;
     use std::sync::{mpsc, Arc, RwLock};
@@ -1204,12 +1605,28 @@ mod tests {
         PlaybackWorker {
             active: None,
             pending: None,
-            next_playback_id: 0,
+            pending_seek: None,
+            next_playback_session_id: 0,
+            next_output_stream_id: 0,
             snapshot: Arc::new(RwLock::new(snapshot)),
             command_receiver,
             state_changed_sender,
             output_sender,
             output_receiver,
         }
+    }
+
+    #[test]
+    fn seek_position_helpers_use_floor_alignment_and_output_rate() {
+        assert_eq!(millis_to_frame(999, 44_100), 44_055);
+        assert_eq!(frame_to_millis(44_055, 44_100), 998);
+        assert_eq!(source_to_output_frame(44_100, 48_000, 44_100), 48_000);
+        assert_eq!(duration_to_frames(2_001, 48_000), 96_048);
+    }
+
+    #[test]
+    fn seek_position_helpers_saturate_large_values() {
+        assert_eq!(millis_to_frame(u64::MAX, u32::MAX), u64::MAX);
+        assert_eq!(source_to_output_frame(u64::MAX, u32::MAX, 1), u64::MAX);
     }
 }

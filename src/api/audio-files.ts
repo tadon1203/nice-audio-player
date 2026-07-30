@@ -8,6 +8,7 @@ import type {
   PlaybackFailureCode,
   PlaybackSnapshot,
   ResumeAudioPlaybackError,
+  SeekAudioPlaybackError,
   StartAudioFileError,
   StopAudioPlaybackError,
   ValidatedAudioFile,
@@ -60,6 +61,16 @@ const playbackFailureCodes = {
   decodeFailed: true,
 } satisfies Record<PlaybackFailureCode, true>;
 
+const seekAudioPlaybackErrorCodes = {
+  invalidPlaybackState: true,
+  durationUnavailable: true,
+  seekFailed: true,
+  decodeFailed: true,
+  outputFailed: true,
+  playbackWorkerUnavailable: true,
+  taskFailed: true,
+} satisfies Record<SeekAudioPlaybackError["code"], true>;
+
 const invalidPlaybackSnapshotMessage = "Invalid playback snapshot payload.";
 
 function hasOwn(record: object, key: PropertyKey): boolean {
@@ -88,6 +99,13 @@ export async function pauseAudioPlayback(): Promise<PlaybackSnapshot> {
 
 export async function resumeAudioPlayback(): Promise<PlaybackSnapshot> {
   return readPlaybackSnapshot(commands.resumeAudioPlayback());
+}
+
+export async function seekAudioPlayback(positionMs: number): Promise<PlaybackSnapshot> {
+  if (!Number.isSafeInteger(positionMs) || positionMs < 0) {
+    throw new Error("Playback position must be a non-negative safe integer.");
+  }
+  return readPlaybackSnapshot(commands.seekAudioPlayback(positionMs));
 }
 
 export async function getPlaybackState(): Promise<PlaybackSnapshot> {
@@ -145,6 +163,16 @@ export function isResumeAudioPlaybackError(value: unknown): value is ResumeAudio
     "code" in value &&
     typeof value.code === "string" &&
     hasOwn(resumeAudioPlaybackErrorCodes, value.code)
+  );
+}
+
+export function isSeekAudioPlaybackError(value: unknown): value is SeekAudioPlaybackError {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "code" in value &&
+    typeof value.code === "string" &&
+    hasOwn(seekAudioPlaybackErrorCodes, value.code)
   );
 }
 
