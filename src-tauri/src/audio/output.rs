@@ -89,6 +89,16 @@ pub(crate) enum OutputPath {
     Fallback,
 }
 
+#[derive(Clone)]
+pub(crate) struct PreparedOutputConfig {
+    pub(crate) device_name: String,
+    pub(crate) stream_config: StreamConfig,
+    pub(crate) sample_format: SampleFormat,
+    pub(crate) path: OutputPath,
+    pub(crate) sample_rate: u32,
+    pub(crate) channel_count: u16,
+}
+
 pub(crate) struct OutputPreparation {
     pub(crate) stream: PreparedOutputStream,
     pub(crate) producer: super::pcm_queue::PcmProducer,
@@ -96,6 +106,7 @@ pub(crate) struct OutputPreparation {
     pub(crate) channel_count: u16,
     #[allow(dead_code)]
     pub(crate) path: OutputPath,
+    pub(crate) config: PreparedOutputConfig,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -377,14 +388,15 @@ pub(crate) fn prepare_output_stream(
         .ok()
         .map(SupportedStreamConfig::sample_format);
     let native_result = native.and_then(|config| {
-        let (producer, consumer) =
-            make_queue(config.config().sample_rate, config.config().channels)?;
+        let stream_config = config.config();
+        let sample_format = config.sample_format();
+        let (producer, consumer) = make_queue(stream_config.sample_rate, stream_config.channels)?;
         let result = build_stream_for_config(
             &device,
             &device_name,
             stream_id,
-            config.config(),
-            config.sample_format(),
+            stream_config,
+            sample_format,
             consumer,
             Arc::clone(&producer_state),
             capacity_sender.clone(),
@@ -396,6 +408,14 @@ pub(crate) fn prepare_output_stream(
             sample_rate: source_rate,
             channel_count: source_channels,
             path: OutputPath::Native,
+            config: PreparedOutputConfig {
+                device_name: device_name.clone(),
+                stream_config,
+                sample_format,
+                path: OutputPath::Native,
+                sample_rate: source_rate,
+                channel_count: source_channels,
+            },
         })
     });
     match classify_native_attempt(native_result) {
@@ -442,12 +462,66 @@ pub(crate) fn prepare_output_stream(
         signal_sender,
     ))?;
     info!("audio output path fallback: source_rate={source_rate}, source_channels={source_channels}, target_rate={target_rate}, target_channels={target_channels}, sample_format={:?}", fallback.sample_format());
+    let config = PreparedOutputConfig {
+        device_name: device_name.clone(),
+        stream_config: config,
+        sample_format: fallback.sample_format(),
+        path: OutputPath::Fallback,
+        sample_rate: target_rate,
+        channel_count: target_channels,
+    };
     Ok(OutputPreparation {
         stream,
         producer,
         sample_rate: target_rate,
         channel_count: target_channels,
         path: OutputPath::Fallback,
+        config,
+    })
+}
+
+pub(crate) fn prepare_output_stream_with_config(
+    stream_id: OutputStreamId,
+    _spec: DecodedAudioSpec,
+    config: &PreparedOutputConfig,
+    producer_state: Arc<AtomicProducerState>,
+    capacity_sender: SyncSender<()>,
+    signal_sender: SyncSender<OutputSignal>,
+) -> Result<OutputPreparation, AudioOutputError> {
+    let host = cpal::default_host();
+    let device = host
+        .default_output_device()
+        .ok_or(AudioOutputError::NoDefaultOutputDevice)?;
+    let device_name = device
+        .description()
+        .map(|description| description.name().to_owned())
+        .unwrap_or_else(|error| format!("<unavailable: {error}>"));
+    if device_name != config.device_name {
+        return Err(AudioOutputError::StreamBuildFailed);
+    }
+    let (producer, consumer) = make_queue(config.sample_rate, config.channel_count)?;
+    let stream = build_stream_for_config(
+        &device,
+        &device_name,
+        stream_id,
+        config.stream_config,
+        config.sample_format,
+        consumer,
+        producer_state,
+        capacity_sender,
+        signal_sender,
+    )
+    .map_err(|error| match error {
+        AudioOutputError::StreamConfigurationUnsupported => AudioOutputError::StreamBuildFailed,
+        error => error,
+    })?;
+    Ok(OutputPreparation {
+        stream,
+        producer,
+        sample_rate: config.sample_rate,
+        channel_count: config.channel_count,
+        path: config.path,
+        config: config.clone(),
     })
 }
 

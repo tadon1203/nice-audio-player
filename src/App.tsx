@@ -11,6 +11,8 @@ import {
   listenToPlaybackState,
   pauseAudioPlayback,
   resumeAudioPlayback,
+  isSeekAudioPlaybackError,
+  seekAudioPlayback,
   startAudioFile,
   stopAudioPlayback,
   validateAudioFile,
@@ -41,6 +43,8 @@ function formatValidationError(error: unknown): string {
   }
 }
 
+type PendingPlaybackCommand = "start" | "stop" | "pause" | "resume" | "seek" | null;
+
 function App() {
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [validatedFile, setValidatedFile] = useState<ValidatedAudioFile | null>(null);
@@ -49,8 +53,13 @@ function App() {
   const [deviceListError, setDeviceListError] = useState<string | null>(null);
   const [isLoadingDevices, setIsLoadingDevices] = useState(false);
   const [playback, setPlayback] = useState<PlaybackSnapshot>({ status: "stopped" });
-  const [isChangingPlaybackState, setIsChangingPlaybackState] = useState(false);
+  const [pendingPlaybackCommand, setPendingPlaybackCommand] =
+    useState<PendingPlaybackCommand>(null);
+  const isChangingPlaybackState = pendingPlaybackCommand !== null;
+  const isSeeking = pendingPlaybackCommand === "seek";
   const [playbackError, setPlaybackError] = useState<string | null>(null);
+  const [isScrubbing, setIsScrubbing] = useState(false);
+  const [positionDraft, setPositionDraft] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -109,7 +118,7 @@ function App() {
       return;
     }
 
-    setIsChangingPlaybackState(true);
+    setPendingPlaybackCommand("start");
     setPlaybackError(null);
 
     try {
@@ -138,26 +147,26 @@ function App() {
         }
       }
     } finally {
-      setIsChangingPlaybackState(false);
+      setPendingPlaybackCommand(null);
     }
   }
 
   async function stopPlayback(): Promise<void> {
     if (isChangingPlaybackState) return;
-    setIsChangingPlaybackState(true);
+    setPendingPlaybackCommand("stop");
     setPlaybackError(null);
     try {
       setPlayback(await stopAudioPlayback());
     } catch {
       setPlaybackError("The playback service is unavailable.");
     } finally {
-      setIsChangingPlaybackState(false);
+      setPendingPlaybackCommand(null);
     }
   }
 
   async function pausePlayback(): Promise<void> {
     if (isChangingPlaybackState) return;
-    setIsChangingPlaybackState(true);
+    setPendingPlaybackCommand("pause");
     setPlaybackError(null);
     try {
       setPlayback(await pauseAudioPlayback());
@@ -170,13 +179,13 @@ function App() {
           : "An unexpected playback error occurred.",
       );
     } finally {
-      setIsChangingPlaybackState(false);
+      setPendingPlaybackCommand(null);
     }
   }
 
   async function resumePlayback(): Promise<void> {
     if (isChangingPlaybackState) return;
-    setIsChangingPlaybackState(true);
+    setPendingPlaybackCommand("resume");
     setPlaybackError(null);
     try {
       setPlayback(await resumeAudioPlayback());
@@ -189,7 +198,7 @@ function App() {
           : "An unexpected playback error occurred.",
       );
     } finally {
-      setIsChangingPlaybackState(false);
+      setPendingPlaybackCommand(null);
     }
   }
 
@@ -208,6 +217,44 @@ function App() {
       );
     } finally {
       setIsLoadingDevices(false);
+    }
+  }
+
+  async function commitSeek(targetPositionMs: number): Promise<void> {
+    if (
+      isChangingPlaybackState ||
+      (playback.status !== "playing" && playback.status !== "paused") ||
+      playback.durationMs === null
+    ) {
+      setIsScrubbing(false);
+      return;
+    }
+    setIsScrubbing(false);
+    const target = Math.max(0, Math.min(targetPositionMs, playback.durationMs));
+    setPendingPlaybackCommand("seek");
+    setPlaybackError(null);
+    try {
+      setPlayback(await seekAudioPlayback(target));
+      setPositionDraft(target);
+    } catch (error: unknown) {
+      if (isSeekAudioPlaybackError(error)) {
+        setPlaybackError(
+          error.code === "invalidPlaybackState"
+            ? "Playback cannot be seeked in its current state."
+            : error.code === "durationUnavailable"
+              ? "Playback duration is unavailable."
+              : "The playback position could not be changed.",
+        );
+      } else {
+        setPlaybackError("The playback position could not be changed.");
+      }
+      try {
+        setPlayback(await getPlaybackState());
+      } catch {
+        // Keep the existing authoritative snapshot when the refresh fails.
+      }
+    } finally {
+      setPendingPlaybackCommand(null);
     }
   }
 
@@ -305,9 +352,52 @@ function App() {
         </p>
         {playback.status === "playing" || playback.status === "paused" ? (
           <p className="mt-2 font-mono text-sm text-zinc-300">
-            {formatPlaybackTime(playback.positionMs)} /{" "}
+            {formatPlaybackTime(isScrubbing || isSeeking ? positionDraft : playback.positionMs)} /{" "}
             {playback.durationMs === null ? "--:--" : formatPlaybackTime(playback.durationMs)}
           </p>
+        ) : null}
+        {playback.status === "playing" || playback.status === "paused" ? (
+          <label className="mt-4 block text-sm text-zinc-300">
+            <span className="sr-only">Playback position</span>
+            <input
+              aria-label="Playback position"
+              type="range"
+              min={0}
+              max={playback.durationMs ?? 0}
+              value={Math.min(
+                isScrubbing || isSeeking ? positionDraft : playback.positionMs,
+                playback.durationMs ?? 0,
+              )}
+              disabled={isChangingPlaybackState || playback.durationMs === null}
+              onChange={(event) => {
+                setIsScrubbing(true);
+                setPositionDraft(Number(event.currentTarget.value));
+              }}
+              onPointerDown={() => setIsScrubbing(true)}
+              onPointerUp={(event) => void commitSeek(Number(event.currentTarget.value))}
+              onPointerCancel={() => {
+                setIsScrubbing(false);
+                setPositionDraft(playback.positionMs);
+              }}
+              onKeyUp={(event) => {
+                if (
+                  [
+                    "ArrowLeft",
+                    "ArrowRight",
+                    "ArrowUp",
+                    "ArrowDown",
+                    "PageUp",
+                    "PageDown",
+                    "Home",
+                    "End",
+                  ].includes(event.key)
+                ) {
+                  void commitSeek(Number(event.currentTarget.value));
+                }
+              }}
+              className="mt-2 w-full"
+            />
+          </label>
         ) : null}
 
         {playbackError ? (

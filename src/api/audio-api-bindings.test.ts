@@ -8,6 +8,7 @@ const mockedCommands = vi.hoisted(() => ({
   stopAudioPlayback: vi.fn(),
   pauseAudioPlayback: vi.fn(),
   resumeAudioPlayback: vi.fn(),
+  seekAudioPlayback: vi.fn(),
   getPlaybackState: vi.fn(),
 }));
 
@@ -19,6 +20,7 @@ import {
   inspectAudioFile,
   pauseAudioPlayback,
   resumeAudioPlayback,
+  seekAudioPlayback,
   startAudioFile,
   stopAudioPlayback,
   validateAudioFile,
@@ -56,6 +58,7 @@ describe("frontend API command bindings", () => {
       mockedCommands.stopAudioPlayback,
       mockedCommands.pauseAudioPlayback,
       mockedCommands.resumeAudioPlayback,
+      mockedCommands.seekAudioPlayback,
       mockedCommands.getPlaybackState,
     ]) {
       command.mockResolvedValue(snapshot);
@@ -65,12 +68,14 @@ describe("frontend API command bindings", () => {
     await expect(stopAudioPlayback()).resolves.toEqual(snapshot);
     await expect(pauseAudioPlayback()).resolves.toEqual(snapshot);
     await expect(resumeAudioPlayback()).resolves.toEqual(snapshot);
+    await expect(seekAudioPlayback(1_500)).resolves.toEqual(snapshot);
     await expect(getPlaybackState()).resolves.toEqual(snapshot);
 
     expect(mockedCommands.startAudioFile).toHaveBeenCalledWith("C:/track.flac");
     expect(mockedCommands.stopAudioPlayback).toHaveBeenCalledOnce();
     expect(mockedCommands.pauseAudioPlayback).toHaveBeenCalledOnce();
     expect(mockedCommands.resumeAudioPlayback).toHaveBeenCalledOnce();
+    expect(mockedCommands.seekAudioPlayback).toHaveBeenCalledWith(1_500);
     expect(mockedCommands.getPlaybackState).toHaveBeenCalledOnce();
   });
 });

@@ -4,6 +4,7 @@ import {
   isPauseAudioPlaybackError,
   isPlaybackSnapshot,
   isResumeAudioPlaybackError,
+  isSeekAudioPlaybackError,
 } from "./audio-files";
 import { formatPlaybackTime } from "@/lib/playback-time";
 
@@ -164,5 +165,27 @@ describe("playback control error validators", () => {
   it("reject unknown pause and resume error codes", () => {
     expect(isPauseAudioPlaybackError({ code: "workerUnavailable" })).toBe(false);
     expect(isResumeAudioPlaybackError({ code: "outputStreamPauseFailed" })).toBe(false);
+  });
+});
+
+describe("seek API error validation", () => {
+  it("accepts every generated seek error code", () => {
+    for (const code of [
+      "invalidPlaybackState",
+      "durationUnavailable",
+      "seekFailed",
+      "decodeFailed",
+      "outputFailed",
+      "playbackWorkerUnavailable",
+      "taskFailed",
+    ]) {
+      expect(isSeekAudioPlaybackError({ code })).toBe(true);
+    }
+  });
+
+  it("rejects malformed seek errors", () => {
+    expect(isSeekAudioPlaybackError({ code: "unknown" })).toBe(false);
+    expect(isSeekAudioPlaybackError(null)).toBe(false);
+    expect(isSeekAudioPlaybackError({})).toBe(false);
   });
 });

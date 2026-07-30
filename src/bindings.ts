@@ -15,6 +15,8 @@ export const commands = {
   stopAudioPlayback: () => __TAURI_INVOKE<PlaybackSnapshot_Serialize>("stop_audio_playback"),
   pauseAudioPlayback: () => __TAURI_INVOKE<PlaybackSnapshot_Serialize>("pause_audio_playback"),
   resumeAudioPlayback: () => __TAURI_INVOKE<PlaybackSnapshot_Serialize>("resume_audio_playback"),
+  seekAudioPlayback: (positionMs: number) =>
+    __TAURI_INVOKE<PlaybackSnapshot_Serialize>("seek_audio_playback", { positionMs }),
   getPlaybackState: () => __TAURI_INVOKE<PlaybackSnapshot_Serialize>("get_playback_state"),
 };
 
@@ -120,6 +122,15 @@ export type ResumeAudioPlaybackError =
   | { code: "playbackWorkerUnavailable" }
   | { code: "invalidPlaybackState" }
   | { code: "outputFailed" }
+  | { code: "taskFailed" };
+
+export type SeekAudioPlaybackError =
+  | { code: "invalidPlaybackState" }
+  | { code: "durationUnavailable" }
+  | { code: "seekFailed" }
+  | { code: "decodeFailed" }
+  | { code: "outputFailed" }
+  | { code: "playbackWorkerUnavailable" }
   | { code: "taskFailed" };
 
 export type StartAudioFileError =
