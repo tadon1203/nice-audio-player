@@ -1,5 +1,5 @@
 import { open } from "@tauri-apps/plugin-dialog";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { isAudioDeviceListError, listAudioOutputDevices } from "@/api/audio-devices";
 import {
@@ -7,12 +7,17 @@ import {
   getPlaybackState,
   isPauseAudioPlaybackError,
   isResumeAudioPlaybackError,
+  isPlaybackMuteError,
+  isSetPlaybackVolumeError,
   isStartAudioFileError,
   listenToPlaybackState,
   pauseAudioPlayback,
   resumeAudioPlayback,
   isSeekAudioPlaybackError,
   seekAudioPlayback,
+  setPlaybackVolume,
+  muteAudioPlayback,
+  unmuteAudioPlayback,
   startAudioFile,
   stopAudioPlayback,
   validateAudioFile,
@@ -52,7 +57,11 @@ function App() {
   const [outputDevices, setOutputDevices] = useState<AudioOutputDevice[] | null>(null);
   const [deviceListError, setDeviceListError] = useState<string | null>(null);
   const [isLoadingDevices, setIsLoadingDevices] = useState(false);
-  const [playback, setPlayback] = useState<PlaybackSnapshot>({ status: "stopped" });
+  const [playback, setPlayback] = useState<PlaybackSnapshot>({
+    status: "stopped",
+    volume: 1,
+    muted: false,
+  });
   const [pendingPlaybackCommand, setPendingPlaybackCommand] =
     useState<PendingPlaybackCommand>(null);
   const isChangingPlaybackState = pendingPlaybackCommand !== null;
@@ -60,6 +69,11 @@ function App() {
   const [playbackError, setPlaybackError] = useState<string | null>(null);
   const [isScrubbing, setIsScrubbing] = useState(false);
   const [positionDraft, setPositionDraft] = useState(0);
+  const [isAdjustingVolume, setIsAdjustingVolume] = useState(false);
+  const [volumeDraft, setVolumeDraft] = useState(100);
+  const [isVolumePending, setIsVolumePending] = useState(false);
+  const volumeAdjustingRef = useRef(false);
+  const volumePendingRef = useRef(false);
 
   useEffect(() => {
     let active = true;
@@ -67,7 +81,12 @@ function App() {
     async function initializePlaybackState(): Promise<void> {
       try {
         const registeredUnsubscribe = await listenToPlaybackState((snapshot) => {
-          if (active) setPlayback(snapshot);
+          if (active) {
+            setPlayback(snapshot);
+            if (!volumeAdjustingRef.current && !volumePendingRef.current) {
+              setVolumeDraft(Math.round((snapshot.volume ?? 0) * 100));
+            }
+          }
         });
         if (!active) {
           registeredUnsubscribe();
@@ -75,7 +94,10 @@ function App() {
         }
         unsubscribe = registeredUnsubscribe;
         const snapshot = await getPlaybackState();
-        if (active) setPlayback(snapshot);
+        if (active) {
+          setPlayback(snapshot);
+          setVolumeDraft(Math.round((snapshot.volume ?? 0) * 100));
+        }
       } catch {
         if (active) setPlaybackError("The playback state could not be read.");
       }
@@ -258,6 +280,61 @@ function App() {
     }
   }
 
+  async function commitVolume(targetPercentage: number): Promise<void> {
+    const target = Math.max(0, Math.min(100, Math.round(targetPercentage)));
+    volumeAdjustingRef.current = false;
+    setIsAdjustingVolume(false);
+    volumePendingRef.current = true;
+    setIsVolumePending(true);
+    setPlaybackError(null);
+    try {
+      const snapshot = await setPlaybackVolume(target / 100);
+      setPlayback(snapshot);
+      setIsAdjustingVolume(false);
+      setVolumeDraft(Math.round((snapshot.volume ?? 0) * 100));
+    } catch (error: unknown) {
+      setPlaybackError(
+        isSetPlaybackVolumeError(error) && error.code === "invalidVolume"
+          ? "The playback volume is invalid."
+          : "The playback volume could not be changed.",
+      );
+      try {
+        const snapshot = await getPlaybackState();
+        setPlayback(snapshot);
+        setVolumeDraft(Math.round((snapshot.volume ?? 0) * 100));
+      } catch {
+        // Keep the existing authoritative snapshot when the refresh fails.
+      }
+    } finally {
+      volumePendingRef.current = false;
+      setIsVolumePending(false);
+    }
+  }
+
+  async function toggleMute(): Promise<void> {
+    if (isVolumePending) return;
+    volumePendingRef.current = true;
+    setIsVolumePending(true);
+    setPlaybackError(null);
+    try {
+      setPlayback(await (playback.muted ? unmuteAudioPlayback() : muteAudioPlayback()));
+    } catch (error: unknown) {
+      setPlaybackError(
+        isPlaybackMuteError(error)
+          ? "The playback mute state could not be changed."
+          : "An unexpected playback error occurred.",
+      );
+      try {
+        setPlayback(await getPlaybackState());
+      } catch {
+        // Keep the existing authoritative snapshot when the refresh fails.
+      }
+    } finally {
+      volumePendingRef.current = false;
+      setIsVolumePending(false);
+    }
+  }
+
   return (
     <main className="grid h-screen place-items-center bg-zinc-950 p-8 text-zinc-100">
       <section className="w-full max-w-xl rounded-2xl border border-zinc-800 bg-zinc-900 p-8">
@@ -356,6 +433,66 @@ function App() {
             {playback.durationMs === null ? "--:--" : formatPlaybackTime(playback.durationMs)}
           </p>
         ) : null}
+
+        <div className="mt-6">
+          <div className="flex items-center justify-between text-sm text-zinc-300">
+            <label htmlFor="playback-volume">Playback volume</label>
+            <span>{Math.round((playback.volume ?? 0) * 100)}%</span>
+          </div>
+          <input
+            id="playback-volume"
+            aria-label="Playback volume"
+            aria-valuetext={`${isAdjustingVolume ? Math.round(volumeDraft) : Math.round((playback.volume ?? 0) * 100)} percent`}
+            type="range"
+            min={0}
+            max={100}
+            step={1}
+            value={isAdjustingVolume ? volumeDraft : Math.round((playback.volume ?? 0) * 100)}
+            disabled={isVolumePending}
+            onChange={(event) => {
+              const value = Number(event.currentTarget.value);
+              volumeAdjustingRef.current = true;
+              setIsAdjustingVolume(true);
+              setVolumeDraft(value);
+            }}
+            onPointerDown={() => {
+              volumeAdjustingRef.current = true;
+              setIsAdjustingVolume(true);
+              setVolumeDraft(Math.round((playback.volume ?? 0) * 100));
+            }}
+            onPointerUp={(event) => void commitVolume(Number(event.currentTarget.value))}
+            onPointerCancel={() => {
+              volumeAdjustingRef.current = false;
+              setIsAdjustingVolume(false);
+              setVolumeDraft(Math.round((playback.volume ?? 0) * 100));
+            }}
+            onKeyUp={(event) => {
+              if (
+                [
+                  "ArrowLeft",
+                  "ArrowRight",
+                  "ArrowUp",
+                  "ArrowDown",
+                  "PageUp",
+                  "PageDown",
+                  "Home",
+                  "End",
+                ].includes(event.key)
+              ) {
+                void commitVolume(Number(event.currentTarget.value));
+              }
+            }}
+            className="mt-2 w-full"
+          />
+          <button
+            type="button"
+            onClick={() => void toggleMute()}
+            disabled={isVolumePending}
+            className="mt-3 rounded-lg border border-zinc-700 px-4 py-2 font-medium text-zinc-100 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {playback.muted ? "Unmute" : "Mute"}
+          </button>
+        </div>
         {playback.status === "playing" || playback.status === "paused" ? (
           <label className="mt-4 block text-sm text-zinc-300">
             <span className="sr-only">Playback position</span>

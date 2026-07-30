@@ -11,6 +11,8 @@ import type {
   SeekAudioPlaybackError,
   StartAudioFileError,
   StopAudioPlaybackError,
+  SetPlaybackVolumeError,
+  PlaybackMuteError,
   ValidatedAudioFile,
 } from "@/bindings";
 
@@ -71,6 +73,17 @@ const seekAudioPlaybackErrorCodes = {
   taskFailed: true,
 } satisfies Record<SeekAudioPlaybackError["code"], true>;
 
+const setPlaybackVolumeErrorCodes = {
+  invalidVolume: true,
+  playbackWorkerUnavailable: true,
+  taskFailed: true,
+} satisfies Record<SetPlaybackVolumeError["code"], true>;
+
+const playbackMuteErrorCodes = {
+  playbackWorkerUnavailable: true,
+  taskFailed: true,
+} satisfies Record<PlaybackMuteError["code"], true>;
+
 const invalidPlaybackSnapshotMessage = "Invalid playback snapshot payload.";
 
 function hasOwn(record: object, key: PropertyKey): boolean {
@@ -106,6 +119,21 @@ export async function seekAudioPlayback(positionMs: number): Promise<PlaybackSna
     throw new Error("Playback position must be a non-negative safe integer.");
   }
   return readPlaybackSnapshot(commands.seekAudioPlayback(positionMs));
+}
+
+export async function setPlaybackVolume(volume: number): Promise<PlaybackSnapshot> {
+  if (!Number.isFinite(volume) || volume < 0 || volume > 1) {
+    throw new Error("Playback volume must be a finite number between 0 and 1.");
+  }
+  return readPlaybackSnapshot(commands.setPlaybackVolume(volume));
+}
+
+export async function muteAudioPlayback(): Promise<PlaybackSnapshot> {
+  return readPlaybackSnapshot(commands.muteAudioPlayback());
+}
+
+export async function unmuteAudioPlayback(): Promise<PlaybackSnapshot> {
+  return readPlaybackSnapshot(commands.unmuteAudioPlayback());
 }
 
 export async function getPlaybackState(): Promise<PlaybackSnapshot> {
@@ -176,8 +204,29 @@ export function isSeekAudioPlaybackError(value: unknown): value is SeekAudioPlay
   );
 }
 
+export function isSetPlaybackVolumeError(value: unknown): value is SetPlaybackVolumeError {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "code" in value &&
+    typeof value.code === "string" &&
+    hasOwn(setPlaybackVolumeErrorCodes, value.code)
+  );
+}
+
+export function isPlaybackMuteError(value: unknown): value is PlaybackMuteError {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "code" in value &&
+    typeof value.code === "string" &&
+    hasOwn(playbackMuteErrorCodes, value.code)
+  );
+}
+
 export function isPlaybackSnapshot(value: unknown): value is PlaybackSnapshot {
   if (typeof value !== "object" || value === null || !("status" in value)) return false;
+  if (!isValidVolumeState(value)) return false;
   if (value.status === "stopped") return true;
   if (value.status === "playing") return isTimedPlaybackSnapshot(value);
   if (value.status === "paused") return isTimedPlaybackSnapshot(value);
@@ -198,6 +247,19 @@ function isTimedPlaybackSnapshot(
     isValidTimingValue(value.positionMs) &&
     (value.durationMs === null ||
       (isValidTimingValue(value.durationMs) && value.positionMs <= value.durationMs))
+  );
+}
+
+function isValidVolumeState(value: Record<string, unknown>): value is Record<string, unknown> & {
+  volume: number;
+  muted: boolean;
+} {
+  return (
+    typeof value.volume === "number" &&
+    Number.isFinite(value.volume) &&
+    value.volume >= 0 &&
+    value.volume <= 1 &&
+    typeof value.muted === "boolean"
   );
 }
 

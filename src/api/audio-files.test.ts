@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   isPauseAudioPlaybackError,
+  isPlaybackMuteError,
   isPlaybackSnapshot,
   isResumeAudioPlaybackError,
+  isSetPlaybackVolumeError,
   isSeekAudioPlaybackError,
 } from "./audio-files";
 import { formatPlaybackTime } from "@/lib/playback-time";
@@ -16,6 +18,8 @@ describe("isPlaybackSnapshot", () => {
         playbackId: "1",
         positionMs: 1_000,
         durationMs: 2_000,
+        volume: 1,
+        muted: false,
       }),
     ).toBe(true);
     expect(
@@ -24,6 +28,8 @@ describe("isPlaybackSnapshot", () => {
         playbackId: "1",
         positionMs: 1_000,
         durationMs: 2_000,
+        volume: 1,
+        muted: false,
       }),
     ).toBe(true);
   });
@@ -96,6 +102,8 @@ describe("isPlaybackSnapshot", () => {
         playbackId: "1",
         positionMs: 1_000,
         durationMs: null,
+        volume: 1,
+        muted: false,
       }),
     ).toBe(true);
     expect(
@@ -104,6 +112,8 @@ describe("isPlaybackSnapshot", () => {
         playbackId: "1",
         positionMs: 2_001,
         durationMs: 2_000,
+        volume: 1,
+        muted: false,
       }),
     ).toBe(false);
     expect(
@@ -112,23 +122,43 @@ describe("isPlaybackSnapshot", () => {
         playbackId: "1",
         positionMs: 2_000,
         durationMs: 2_000,
+        volume: 1,
+        muted: false,
       }),
     ).toBe(true);
     expect(
-      isPlaybackSnapshot({ status: "playing", playbackId: "1", positionMs: 0, durationMs: 2_000 }),
+      isPlaybackSnapshot({
+        status: "playing",
+        playbackId: "1",
+        positionMs: 0,
+        durationMs: 2_000,
+        volume: 1,
+        muted: false,
+      }),
     ).toBe(true);
   });
 
   it("preserves stopped and failed snapshot validation", () => {
-    expect(isPlaybackSnapshot({ status: "stopped" })).toBe(true);
+    expect(isPlaybackSnapshot({ status: "stopped", volume: 1, muted: false })).toBe(true);
     expect(
       isPlaybackSnapshot({
         status: "failed",
         playbackId: "1",
         error: "outputStreamRuntimeFailed",
+        volume: 1,
+        muted: false,
       }),
     ).toBe(true);
     expect(isPlaybackSnapshot({ status: "failed", error: "unknownFailure" })).toBe(false);
+  });
+
+  it("rejects missing or invalid volume state", () => {
+    expect(isPlaybackSnapshot({ status: "stopped" })).toBe(false);
+    expect(isPlaybackSnapshot({ status: "stopped", volume: 1 })).toBe(false);
+    for (const volume of [-0.1, 1.1, Number.NaN, Number.POSITIVE_INFINITY, "1", null]) {
+      expect(isPlaybackSnapshot({ status: "stopped", volume, muted: false })).toBe(false);
+    }
+    expect(isPlaybackSnapshot({ status: "stopped", volume: 1, muted: "false" })).toBe(false);
   });
 });
 
@@ -187,5 +217,15 @@ describe("seek API error validation", () => {
     expect(isSeekAudioPlaybackError({ code: "unknown" })).toBe(false);
     expect(isSeekAudioPlaybackError(null)).toBe(false);
     expect(isSeekAudioPlaybackError({})).toBe(false);
+  });
+});
+
+describe("volume and mute API validation", () => {
+  it("accepts only generated volume and mute errors", () => {
+    expect(isSetPlaybackVolumeError({ code: "invalidVolume" })).toBe(true);
+    expect(isSetPlaybackVolumeError({ code: "taskFailed" })).toBe(true);
+    expect(isSetPlaybackVolumeError({ code: "outputFailed" })).toBe(false);
+    expect(isPlaybackMuteError({ code: "playbackWorkerUnavailable" })).toBe(true);
+    expect(isPlaybackMuteError({ code: "invalidVolume" })).toBe(false);
   });
 });

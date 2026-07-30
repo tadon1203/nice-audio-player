@@ -9,6 +9,7 @@ use tauri_plugin_log::log::{error, info};
 
 use super::decoding::DecodedAudioSpec;
 use super::pcm_queue::PcmConsumer;
+use super::volume::{process_sample, AtomicEffectiveGain};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct OutputStreamId(pub(crate) u64);
@@ -200,6 +201,7 @@ fn build_stream_for_config(
     config: StreamConfig,
     sample_format: SampleFormat,
     consumer: PcmConsumer,
+    effective_gain: AtomicEffectiveGain,
     producer_state: Arc<AtomicProducerState>,
     capacity_sender: SyncSender<()>,
     signal_sender: SyncSender<OutputSignal>,
@@ -213,6 +215,7 @@ fn build_stream_for_config(
             sample_format,
             stream_id,
             consumer,
+            effective_gain.clone(),
             producer_state,
             capacity_sender,
             signal_sender.clone(),
@@ -225,6 +228,7 @@ fn build_stream_for_config(
             sample_format,
             stream_id,
             consumer,
+            effective_gain.clone(),
             producer_state,
             capacity_sender,
             signal_sender.clone(),
@@ -237,6 +241,7 @@ fn build_stream_for_config(
             sample_format,
             stream_id,
             consumer,
+            effective_gain.clone(),
             producer_state,
             capacity_sender,
             signal_sender.clone(),
@@ -249,6 +254,7 @@ fn build_stream_for_config(
             sample_format,
             stream_id,
             consumer,
+            effective_gain.clone(),
             producer_state,
             capacity_sender,
             signal_sender.clone(),
@@ -261,6 +267,7 @@ fn build_stream_for_config(
             sample_format,
             stream_id,
             consumer,
+            effective_gain.clone(),
             producer_state,
             capacity_sender,
             signal_sender.clone(),
@@ -273,6 +280,7 @@ fn build_stream_for_config(
             sample_format,
             stream_id,
             consumer,
+            effective_gain.clone(),
             producer_state,
             capacity_sender,
             signal_sender.clone(),
@@ -285,6 +293,7 @@ fn build_stream_for_config(
             sample_format,
             stream_id,
             consumer,
+            effective_gain.clone(),
             producer_state,
             capacity_sender,
             signal_sender.clone(),
@@ -297,6 +306,7 @@ fn build_stream_for_config(
             sample_format,
             stream_id,
             consumer,
+            effective_gain.clone(),
             producer_state,
             capacity_sender,
             signal_sender.clone(),
@@ -309,6 +319,7 @@ fn build_stream_for_config(
             sample_format,
             stream_id,
             consumer,
+            effective_gain.clone(),
             producer_state,
             capacity_sender,
             signal_sender.clone(),
@@ -321,6 +332,7 @@ fn build_stream_for_config(
             sample_format,
             stream_id,
             consumer,
+            effective_gain.clone(),
             producer_state,
             capacity_sender,
             signal_sender.clone(),
@@ -333,6 +345,7 @@ fn build_stream_for_config(
             sample_format,
             stream_id,
             consumer,
+            effective_gain.clone(),
             producer_state,
             capacity_sender,
             signal_sender.clone(),
@@ -345,6 +358,7 @@ fn build_stream_for_config(
             sample_format,
             stream_id,
             consumer,
+            effective_gain.clone(),
             producer_state,
             capacity_sender,
             signal_sender.clone(),
@@ -364,6 +378,7 @@ fn build_stream_for_config(
 pub(crate) fn prepare_output_stream(
     stream_id: OutputStreamId,
     spec: DecodedAudioSpec,
+    effective_gain: AtomicEffectiveGain,
     producer_state: Arc<AtomicProducerState>,
     capacity_sender: SyncSender<()>,
     signal_sender: SyncSender<OutputSignal>,
@@ -398,6 +413,7 @@ pub(crate) fn prepare_output_stream(
             stream_config,
             sample_format,
             consumer,
+            effective_gain.clone(),
             Arc::clone(&producer_state),
             capacity_sender.clone(),
             signal_sender.clone(),
@@ -457,6 +473,7 @@ pub(crate) fn prepare_output_stream(
         config,
         fallback.sample_format(),
         consumer,
+        effective_gain,
         producer_state,
         capacity_sender,
         signal_sender,
@@ -484,6 +501,7 @@ pub(crate) fn prepare_output_stream_with_config(
     stream_id: OutputStreamId,
     _spec: DecodedAudioSpec,
     config: &PreparedOutputConfig,
+    effective_gain: AtomicEffectiveGain,
     producer_state: Arc<AtomicProducerState>,
     capacity_sender: SyncSender<()>,
     signal_sender: SyncSender<OutputSignal>,
@@ -507,6 +525,7 @@ pub(crate) fn prepare_output_stream_with_config(
         config.stream_config,
         config.sample_format,
         consumer,
+        effective_gain,
         producer_state,
         capacity_sender,
         signal_sender,
@@ -600,7 +619,11 @@ fn sample_format_rank(sample_format: SampleFormat) -> Option<u8> {
     }
 }
 
-fn write_queue_samples<T>(output: &mut [T], consumer: &mut PcmConsumer) -> usize
+fn write_queue_samples<T>(
+    output: &mut [T],
+    consumer: &mut PcmConsumer,
+    effective_gain: f32,
+) -> usize
 where
     T: Sample + FromSample<f32>,
 {
@@ -610,7 +633,7 @@ where
             *destination = T::EQUILIBRIUM;
             continue;
         };
-        *destination = T::from_sample(sample);
+        *destination = T::from_sample(process_sample(sample, effective_gain));
         consumed += 1;
     }
     consumed
@@ -641,6 +664,7 @@ fn build_stream<T>(
     sample_format: SampleFormat,
     stream_id: OutputStreamId,
     mut consumer: PcmConsumer,
+    effective_gain: AtomicEffectiveGain,
     producer_state: Arc<AtomicProducerState>,
     capacity_sender: SyncSender<()>,
     signal_sender: SyncSender<OutputSignal>,
@@ -665,7 +689,9 @@ where
             config,
             move |output: &mut [T], info| {
                 let start_frame = position_frame;
-                let consumed_sample_count = write_queue_samples(output, &mut consumer);
+                let effective_gain = effective_gain.load();
+                let consumed_sample_count =
+                    write_queue_samples(output, &mut consumer, effective_gain);
                 let consumed_frames = consumed_sample_count / channel_count;
                 position_frame = position_frame.saturating_add(consumed_frames as u64);
                 let end_frame = position_frame;
@@ -772,13 +798,17 @@ fn calculate_end_time(
 
 #[cfg(test)]
 mod tests {
+    use super::super::pcm::ChannelCount;
+    use super::super::pcm_queue::bounded_pcm_queue;
     use super::{
         calculate_end_time, classify_fallback_build, classify_native_attempt,
         format_supported_output_configs, played_frame_position, sample_format_rank,
-        select_output_config, write_output_samples, AudioOutputError, NativeAttemptDecision,
-        PositionUpdate,
+        select_output_config, write_output_samples, write_queue_samples, AudioOutputError,
+        NativeAttemptDecision, PositionUpdate,
     };
-    use cpal::{SampleFormat, StreamInstant, SupportedBufferSize, SupportedStreamConfigRange};
+    use cpal::{
+        Sample, SampleFormat, StreamInstant, SupportedBufferSize, SupportedStreamConfigRange,
+    };
     use std::time::Duration;
 
     fn range(sample_format: SampleFormat, channels: u16) -> SupportedStreamConfigRange {
@@ -930,6 +960,22 @@ mod tests {
 
         assert_eq!(write_output_samples(&mut output, &source, &mut position), 3);
         assert_eq!(output, [i16::MIN, 0, i16::MAX]);
+    }
+
+    #[test]
+    fn applies_gain_before_integer_conversion_and_pads_with_equilibrium() {
+        let (mut producer, mut consumer) =
+            bounded_pcm_queue(3, ChannelCount::new(1).unwrap()).unwrap();
+        assert_eq!(producer.push_samples(&[-1.0, 0.5, 1.0]), 3);
+        let mut output = [0i16; 4];
+
+        assert_eq!(write_queue_samples(&mut output, &mut consumer, 0.5), 3);
+        assert_eq!(output[..3], [-16_384, 8_192, 16_384]);
+        assert_eq!(output[3], i16::EQUILIBRIUM);
+
+        let mut empty = [0u16; 2];
+        assert_eq!(write_queue_samples(&mut empty, &mut consumer, 1.0), 0);
+        assert_eq!(empty, [u16::EQUILIBRIUM; 2]);
     }
 
     #[test]

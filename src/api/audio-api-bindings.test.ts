@@ -9,6 +9,9 @@ const mockedCommands = vi.hoisted(() => ({
   pauseAudioPlayback: vi.fn(),
   resumeAudioPlayback: vi.fn(),
   seekAudioPlayback: vi.fn(),
+  setPlaybackVolume: vi.fn(),
+  muteAudioPlayback: vi.fn(),
+  unmuteAudioPlayback: vi.fn(),
   getPlaybackState: vi.fn(),
 }));
 
@@ -21,12 +24,15 @@ import {
   pauseAudioPlayback,
   resumeAudioPlayback,
   seekAudioPlayback,
+  setPlaybackVolume,
+  muteAudioPlayback,
+  unmuteAudioPlayback,
   startAudioFile,
   stopAudioPlayback,
   validateAudioFile,
 } from "./audio-files";
 
-const snapshot = { status: "stopped" } as const;
+const snapshot = { status: "stopped", volume: 1, muted: false } as const;
 
 describe("frontend API command bindings", () => {
   it("delegates file and device commands with their existing arguments", async () => {
@@ -59,6 +65,9 @@ describe("frontend API command bindings", () => {
       mockedCommands.pauseAudioPlayback,
       mockedCommands.resumeAudioPlayback,
       mockedCommands.seekAudioPlayback,
+      mockedCommands.setPlaybackVolume,
+      mockedCommands.muteAudioPlayback,
+      mockedCommands.unmuteAudioPlayback,
       mockedCommands.getPlaybackState,
     ]) {
       command.mockResolvedValue(snapshot);
@@ -69,6 +78,9 @@ describe("frontend API command bindings", () => {
     await expect(pauseAudioPlayback()).resolves.toEqual(snapshot);
     await expect(resumeAudioPlayback()).resolves.toEqual(snapshot);
     await expect(seekAudioPlayback(1_500)).resolves.toEqual(snapshot);
+    await expect(setPlaybackVolume(0.5)).resolves.toEqual(snapshot);
+    await expect(muteAudioPlayback()).resolves.toEqual(snapshot);
+    await expect(unmuteAudioPlayback()).resolves.toEqual(snapshot);
     await expect(getPlaybackState()).resolves.toEqual(snapshot);
 
     expect(mockedCommands.startAudioFile).toHaveBeenCalledWith("C:/track.flac");
@@ -76,6 +88,17 @@ describe("frontend API command bindings", () => {
     expect(mockedCommands.pauseAudioPlayback).toHaveBeenCalledOnce();
     expect(mockedCommands.resumeAudioPlayback).toHaveBeenCalledOnce();
     expect(mockedCommands.seekAudioPlayback).toHaveBeenCalledWith(1_500);
+    expect(mockedCommands.setPlaybackVolume).toHaveBeenCalledWith(0.5);
+    expect(mockedCommands.muteAudioPlayback).toHaveBeenCalledOnce();
+    expect(mockedCommands.unmuteAudioPlayback).toHaveBeenCalledOnce();
     expect(mockedCommands.getPlaybackState).toHaveBeenCalledOnce();
+  });
+
+  it("rejects invalid volume before invoking the generated command", async () => {
+    mockedCommands.setPlaybackVolume.mockClear();
+    for (const value of [-0.1, 1.1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      await expect(setPlaybackVolume(value)).rejects.toThrow();
+    }
+    expect(mockedCommands.setPlaybackVolume).not.toHaveBeenCalled();
   });
 });
