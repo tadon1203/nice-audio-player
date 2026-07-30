@@ -25,9 +25,16 @@ Use `pwsh` for PowerShell commands.
 
 - **Install dependencies**: `pnpm install`
 - **Start the app**: `pnpm tauri dev`
-- **Run all checks**: `pnpm check`
 - **Build the frontend**: `pnpm build`
-- **Run tests in watch mode**: `pnpm test`
+- **Run frontend tests once and exit**: `pnpm test`
+- **Run all checks**: `pnpm check`
+- **Format frontend, tooling, and Rust**: `pnpm format`
+- **Generate IPC bindings**: `pnpm bindings:generate`
+- **Check IPC bindings**: `pnpm bindings:check`
+- **Package the app when explicitly required**: `pnpm tauri build`
+
+Run `pnpm check` before reporting a task complete or merging a change. It is the repository's
+single comprehensive validation command.
 
 Run `pnpm check` before reporting a coding task as complete.
 
@@ -39,7 +46,9 @@ Run `pnpm check` before reporting a coding task as complete.
 - **Audio Thread Safety**: Do not perform file I/O, database access, logging, IPC, sleeping, blocking synchronization, or allocation-heavy work inside an audio callback.
 - **Performance**: Reuse buffers and typed arrays in hot paths; avoid per-frame allocations.
 - **React State**: Keep high-frequency audio and visualization data out of React state and context.
-- **Generated Code**: Do not manually edit generated files under `src-tauri/gen/`.
+- **Generated Code**: Do not manually edit generated files under `src-tauri/gen/` or `src/bindings.ts`.
+  When changing a Rust Tauri command or IPC type, run `pnpm bindings:generate` and verify the
+  result with `pnpm bindings:check`.
 - **Testing**: Add or update tests for changed logic when practical.
 
 ## Git Workflow

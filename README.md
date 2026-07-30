@@ -26,11 +26,45 @@ Start the desktop application:
 pnpm tauri dev
 ```
 
+Build the production frontend bundle:
+
+```bash
+pnpm build
+```
+
+Run the frontend tests once and exit:
+
+```bash
+pnpm test
+```
+
 Run all checks before completing a code change:
 
 ```bash
 pnpm check
 ```
+
+Format frontend, tooling, and Rust code:
+
+```bash
+pnpm format
+```
+
+Regenerate or verify the tracked Rust IPC bindings:
+
+```bash
+pnpm bindings:generate
+pnpm bindings:check
+```
+
+Package the desktop application only when an application bundle is explicitly required:
+
+```bash
+pnpm tauri build
+```
+
+`pnpm check` is the single comprehensive validation command to run before reporting a task
+complete or merging a change.
 
 ## Generated IPC bindings
 
