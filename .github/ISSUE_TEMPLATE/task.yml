@@ -1,8 +1,5 @@
 name: Task
 description: Create a focused implementation task
-title: ""
-labels: []
-assignees: []
 
 body:
   - type: markdown
@@ -49,7 +46,7 @@ body:
     attributes:
       label: Notes
       description: Optional constraints, references, or implementation notes.
-      placeholder: Add any relevant context or leave this empty.
+      placeholder: Add any relevant context.
     validations:
       required: false
 
