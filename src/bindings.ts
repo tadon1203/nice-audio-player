@@ -17,6 +17,8 @@ export const commands = {
   resumeAudioPlayback: () => __TAURI_INVOKE<PlaybackSnapshot_Serialize>("resume_audio_playback"),
   seekAudioPlayback: (positionMs: number) =>
     __TAURI_INVOKE<PlaybackSnapshot_Serialize>("seek_audio_playback", { positionMs }),
+  setAudioOutputSelection: (selection: AudioOutputSelection) =>
+    __TAURI_INVOKE<PlaybackSnapshot_Serialize>("set_audio_output_selection", { selection }),
   setPlaybackVolume: (volume: number) =>
     __TAURI_INVOKE<PlaybackSnapshot_Serialize>("set_playback_volume", { volume }),
   muteAudioPlayback: () => __TAURI_INVOKE<PlaybackSnapshot_Serialize>("mute_audio_playback"),
@@ -67,6 +69,13 @@ export type AudioOutputDevice = {
   isDefault: boolean;
 };
 
+export type AudioOutputDeviceIdentity = {
+  id: string;
+  name: string;
+};
+
+export type AudioOutputSelection = { kind: "systemDefault" } | { kind: "device"; deviceId: string };
+
 export type PauseAudioPlaybackError =
   | { code: "playbackWorkerUnavailable" }
   | { code: "invalidPlaybackState" }
@@ -75,6 +84,7 @@ export type PauseAudioPlaybackError =
 
 export type PlaybackFailureCode =
   | "noOutputDevice"
+  | "outputDeviceUnavailable"
   | "unsupportedOutputConfiguration"
   | "outputStreamBuildFailed"
   | "outputStreamStartFailed"
@@ -89,9 +99,15 @@ export type PlaybackMuteError = { code: "playbackWorkerUnavailable" } | { code: 
 export type PlaybackSnapshot = PlaybackSnapshot_Serialize | PlaybackSnapshot_Deserialize;
 
 export type PlaybackSnapshot_Deserialize =
-  | ({ status: "stopped"; volume: number; muted: boolean } & {
+  | ({
+      status: "stopped";
+      volume: number;
+      muted: boolean;
+      outputSelection: AudioOutputSelection;
+    } & {
       durationMs?: never;
       error?: never;
+      outputDevice?: never;
       playbackId?: never;
       positionMs?: never;
     })
@@ -102,6 +118,8 @@ export type PlaybackSnapshot_Deserialize =
       durationMs: number | null;
       volume: number;
       muted: boolean;
+      outputSelection: AudioOutputSelection;
+      outputDevice: AudioOutputDeviceIdentity;
     } & { error?: never })
   | ({
       status: "paused";
@@ -110,6 +128,8 @@ export type PlaybackSnapshot_Deserialize =
       durationMs: number | null;
       volume: number;
       muted: boolean;
+      outputSelection: AudioOutputSelection;
+      outputDevice: AudioOutputDeviceIdentity;
     } & { error?: never })
   | ({
       status: "failed";
@@ -117,12 +137,19 @@ export type PlaybackSnapshot_Deserialize =
       error: PlaybackFailureCode;
       volume: number;
       muted: boolean;
-    } & { durationMs?: never; positionMs?: never });
+      outputSelection: AudioOutputSelection;
+    } & { durationMs?: never; outputDevice?: never; positionMs?: never });
 
 export type PlaybackSnapshot_Serialize =
-  | ({ status: "stopped"; volume: number; muted: boolean } & {
+  | ({
+      status: "stopped";
+      volume: number;
+      muted: boolean;
+      outputSelection: AudioOutputSelection;
+    } & {
       durationMs?: never;
       error?: never;
+      outputDevice?: never;
       playbackId?: never;
       positionMs?: never;
     })
@@ -133,6 +160,8 @@ export type PlaybackSnapshot_Serialize =
       durationMs: number | null;
       volume: number;
       muted: boolean;
+      outputSelection: AudioOutputSelection;
+      outputDevice: AudioOutputDeviceIdentity;
     } & { error?: never })
   | ({
       status: "paused";
@@ -141,6 +170,8 @@ export type PlaybackSnapshot_Serialize =
       durationMs: number | null;
       volume: number;
       muted: boolean;
+      outputSelection: AudioOutputSelection;
+      outputDevice: AudioOutputDeviceIdentity;
     } & { error?: never })
   | ({
       status: "failed";
@@ -148,7 +179,8 @@ export type PlaybackSnapshot_Serialize =
       error: PlaybackFailureCode;
       volume: number;
       muted: boolean;
-    } & { durationMs?: never; positionMs?: never });
+      outputSelection: AudioOutputSelection;
+    } & { durationMs?: never; outputDevice?: never; positionMs?: never });
 
 export type ResumeAudioPlaybackError =
   | { code: "playbackWorkerUnavailable" }
@@ -165,12 +197,21 @@ export type SeekAudioPlaybackError =
   | { code: "playbackWorkerUnavailable" }
   | { code: "taskFailed" };
 
+export type SetAudioOutputSelectionError =
+  | { code: "invalidDeviceId" }
+  | { code: "outputDeviceUnavailable" }
+  | { code: "invalidPlaybackState" }
+  | { code: "playbackWorkerUnavailable" }
+  | { code: "taskFailed" };
+
 export type SetPlaybackVolumeError =
   { code: "invalidVolume" } | { code: "playbackWorkerUnavailable" } | { code: "taskFailed" };
 
 export type StartAudioFileError =
   | { code: "validationFailed"; error: AudioFileValidationError }
   | { code: "decodeFailed" }
+  | { code: "noOutputDevice" }
+  | { code: "outputDeviceUnavailable" }
   | { code: "outputFailed" }
   | { code: "playbackWorkerUnavailable" }
   | { code: "taskFailed" };

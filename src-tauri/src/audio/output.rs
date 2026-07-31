@@ -3,11 +3,12 @@ use std::sync::mpsc::{self, Receiver, SyncSender};
 use std::sync::Arc;
 use std::time::Duration;
 
-use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+use cpal::traits::{DeviceTrait, StreamTrait};
 use cpal::{FromSample, Sample, SampleFormat, StreamConfig, StreamInstant, SupportedStreamConfig};
 use tauri_plugin_log::log::{error, info};
 
 use super::decoding::DecodedAudioSpec;
+use super::devices::ResolvedAudioOutputDevice;
 use super::pcm_queue::PcmConsumer;
 use super::volume::{process_sample, AtomicEffectiveGain};
 
@@ -21,6 +22,7 @@ pub(crate) enum OutputSignal {
     },
     StreamFailed {
         stream_id: OutputStreamId,
+        kind: StreamFailureKind,
     },
     CompletionTimingFailed {
         stream_id: OutputStreamId,
@@ -28,6 +30,21 @@ pub(crate) enum OutputSignal {
     DecodeFailed {
         stream_id: OutputStreamId,
     },
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub(crate) enum StreamFailureKind {
+    DeviceChanged,
+    DeviceUnavailable,
+    RuntimeFailed,
+}
+
+fn classify_stream_error_kind(kind: cpal::ErrorKind) -> StreamFailureKind {
+    match kind {
+        cpal::ErrorKind::DeviceChanged => StreamFailureKind::DeviceChanged,
+        cpal::ErrorKind::DeviceNotAvailable => StreamFailureKind::DeviceUnavailable,
+        _ => StreamFailureKind::RuntimeFailed,
+    }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -74,7 +91,6 @@ pub(crate) struct PositionUpdate {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AudioOutputError {
-    NoDefaultOutputDevice,
     ConfigurationQueryFailed,
     UnsupportedConfiguration,
     StreamBuildFailed,
@@ -82,6 +98,7 @@ pub enum AudioOutputError {
     StreamStartFailed,
     StreamPauseFailed,
     StreamResumeFailed,
+    DeviceUnavailable,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -92,6 +109,7 @@ pub(crate) enum OutputPath {
 
 #[derive(Clone)]
 pub(crate) struct PreparedOutputConfig {
+    pub(crate) device_id: String,
     pub(crate) device_name: String,
     pub(crate) stream_config: StreamConfig,
     pub(crate) sample_format: SampleFormat,
@@ -133,6 +151,13 @@ fn classify_fallback_build<T>(result: Result<T, AudioOutputError>) -> Result<T, 
     })
 }
 
+fn map_stream_start_error(error: cpal::Error) -> AudioOutputError {
+    match error.kind() {
+        cpal::ErrorKind::DeviceNotAvailable => AudioOutputError::DeviceUnavailable,
+        _ => AudioOutputError::StreamStartFailed,
+    }
+}
+
 pub(crate) struct PreparedOutputStream {
     stream: cpal::Stream,
     position_receiver: Receiver<PositionUpdate>,
@@ -142,21 +167,21 @@ pub(crate) struct PreparedOutputStream {
 
 impl PreparedOutputStream {
     pub(crate) fn start(&self) -> Result<(), AudioOutputError> {
-        self.stream
-            .play()
-            .map_err(|_| AudioOutputError::StreamStartFailed)
+        self.stream.play().map_err(map_stream_start_error)
     }
 
     pub(crate) fn resume(&self) -> Result<(), AudioOutputError> {
-        self.stream
-            .play()
-            .map_err(|_| AudioOutputError::StreamResumeFailed)
+        self.stream.play().map_err(|error| match error.kind() {
+            cpal::ErrorKind::DeviceNotAvailable => AudioOutputError::DeviceUnavailable,
+            _ => AudioOutputError::StreamResumeFailed,
+        })
     }
 
     pub(crate) fn pause(&self) -> Result<(), AudioOutputError> {
-        self.stream
-            .pause()
-            .map_err(|_| AudioOutputError::StreamPauseFailed)
+        self.stream.pause().map_err(|error| match error.kind() {
+            cpal::ErrorKind::DeviceNotAvailable => AudioOutputError::DeviceUnavailable,
+            _ => AudioOutputError::StreamPauseFailed,
+        })
     }
 
     pub(crate) fn now(&self) -> StreamInstant {
@@ -378,24 +403,24 @@ fn build_stream_for_config(
 pub(crate) fn prepare_output_stream(
     stream_id: OutputStreamId,
     spec: DecodedAudioSpec,
+    resolved_device: ResolvedAudioOutputDevice,
     effective_gain: AtomicEffectiveGain,
     producer_state: Arc<AtomicProducerState>,
     capacity_sender: SyncSender<()>,
     signal_sender: SyncSender<OutputSignal>,
 ) -> Result<OutputPreparation, AudioOutputError> {
-    let host = cpal::default_host();
-    let device = host
-        .default_output_device()
-        .ok_or(AudioOutputError::NoDefaultOutputDevice)?;
-    let device_name = device
-        .description()
-        .map(|description| description.name().to_owned())
-        .unwrap_or_else(|error| format!("<unavailable: {error}>"));
+    let device_identity = resolved_device.identity;
+    let device = resolved_device.device;
+    let device_name = device_identity.name.clone();
+    let device_id = device_identity.id.clone();
     let source_rate = spec.sample_rate.get();
     let source_channels = spec.channel_count.get();
     let ranges = device
         .supported_output_configs()
-        .map_err(|_| AudioOutputError::ConfigurationQueryFailed)?
+        .map_err(|error| match error.kind() {
+            cpal::ErrorKind::DeviceNotAvailable => AudioOutputError::DeviceUnavailable,
+            _ => AudioOutputError::ConfigurationQueryFailed,
+        })?
         .collect::<Vec<_>>();
     let native = select_output_config(ranges.iter().cloned(), source_rate, source_channels);
     let native_sample_format = native
@@ -425,6 +450,7 @@ pub(crate) fn prepare_output_stream(
             channel_count: source_channels,
             path: OutputPath::Native,
             config: PreparedOutputConfig {
+                device_id: device_id.clone(),
                 device_name: device_name.clone(),
                 stream_config,
                 sample_format,
@@ -442,7 +468,7 @@ pub(crate) fn prepare_output_stream(
         }
         NativeAttemptDecision::Fallback => {
             tauri_plugin_log::log::warn!(
-                "native audio output configuration rejected; beginning default-output fallback"
+                "native audio output configuration rejected; beginning selected-device fallback"
             );
         }
         NativeAttemptDecision::Failure(error) => return Err(error),
@@ -450,7 +476,10 @@ pub(crate) fn prepare_output_stream(
 
     let fallback = device
         .default_output_config()
-        .map_err(|_| AudioOutputError::UnsupportedConfiguration)?;
+        .map_err(|error| match error.kind() {
+            cpal::ErrorKind::DeviceNotAvailable => AudioOutputError::DeviceUnavailable,
+            _ => AudioOutputError::UnsupportedConfiguration,
+        })?;
     if fallback.sample_format().is_dsd() || sample_format_rank(fallback.sample_format()).is_none() {
         return Err(AudioOutputError::UnsupportedConfiguration);
     }
@@ -480,6 +509,7 @@ pub(crate) fn prepare_output_stream(
     ))?;
     info!("audio output path fallback: source_rate={source_rate}, source_channels={source_channels}, target_rate={target_rate}, target_channels={target_channels}, sample_format={:?}", fallback.sample_format());
     let config = PreparedOutputConfig {
+        device_id: device_id.clone(),
         device_name: device_name.clone(),
         stream_config: config,
         sample_format: fallback.sample_format(),
@@ -497,26 +527,23 @@ pub(crate) fn prepare_output_stream(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn prepare_output_stream_with_config(
     stream_id: OutputStreamId,
     _spec: DecodedAudioSpec,
+    resolved_device: ResolvedAudioOutputDevice,
     config: &PreparedOutputConfig,
     effective_gain: AtomicEffectiveGain,
     producer_state: Arc<AtomicProducerState>,
     capacity_sender: SyncSender<()>,
     signal_sender: SyncSender<OutputSignal>,
 ) -> Result<OutputPreparation, AudioOutputError> {
-    let host = cpal::default_host();
-    let device = host
-        .default_output_device()
-        .ok_or(AudioOutputError::NoDefaultOutputDevice)?;
-    let device_name = device
-        .description()
-        .map(|description| description.name().to_owned())
-        .unwrap_or_else(|error| format!("<unavailable: {error}>"));
-    if device_name != config.device_name {
+    let device_identity = resolved_device.identity;
+    let device = resolved_device.device;
+    if device_identity.id != config.device_id {
         return Err(AudioOutputError::StreamBuildFailed);
     }
+    let device_name = device_identity.name.clone();
     let (producer, consumer) = make_queue(config.sample_rate, config.channel_count)?;
     let stream = build_stream_for_config(
         &device,
@@ -731,8 +758,9 @@ where
                     })
                     .is_ok();
             },
-            move |_error| {
-                let _ = error_sender.try_send(OutputSignal::StreamFailed { stream_id });
+            move |error| {
+                let kind = classify_stream_error_kind(error.kind());
+                let _ = error_sender.try_send(OutputSignal::StreamFailed { stream_id, kind });
             },
             None,
         )
@@ -743,10 +771,12 @@ where
                  buffer_size={:?}, error={error:?}",
                 config_sample_rate, config_channels, config_buffer_size,
             );
-            if error.kind() == cpal::ErrorKind::UnsupportedConfig {
-                AudioOutputError::StreamConfigurationUnsupported
-            } else {
-                AudioOutputError::StreamBuildFailed
+            match error.kind() {
+                cpal::ErrorKind::DeviceNotAvailable => AudioOutputError::DeviceUnavailable,
+                cpal::ErrorKind::UnsupportedConfig => {
+                    AudioOutputError::StreamConfigurationUnsupported
+                }
+                _ => AudioOutputError::StreamBuildFailed,
             }
         })?;
 
@@ -802,9 +832,9 @@ mod tests {
     use super::super::pcm_queue::bounded_pcm_queue;
     use super::{
         calculate_end_time, classify_fallback_build, classify_native_attempt,
-        format_supported_output_configs, played_frame_position, sample_format_rank,
-        select_output_config, write_output_samples, write_queue_samples, AudioOutputError,
-        NativeAttemptDecision, PositionUpdate,
+        classify_stream_error_kind, format_supported_output_configs, played_frame_position,
+        sample_format_rank, select_output_config, write_output_samples, write_queue_samples,
+        AudioOutputError, NativeAttemptDecision, PositionUpdate, StreamFailureKind,
     };
     use cpal::{
         Sample, SampleFormat, StreamInstant, SupportedBufferSize, SupportedStreamConfigRange,
@@ -838,6 +868,22 @@ mod tests {
         assert_eq!(config.sample_format(), SampleFormat::F32);
         assert_eq!(config.channels(), 2);
         assert_eq!(config.sample_rate(), 44_100);
+    }
+
+    #[test]
+    fn classifies_stream_error_kinds() {
+        assert_eq!(
+            classify_stream_error_kind(cpal::ErrorKind::DeviceChanged),
+            StreamFailureKind::DeviceChanged
+        );
+        assert_eq!(
+            classify_stream_error_kind(cpal::ErrorKind::DeviceNotAvailable),
+            StreamFailureKind::DeviceUnavailable
+        );
+        assert_eq!(
+            classify_stream_error_kind(cpal::ErrorKind::BackendError),
+            StreamFailureKind::RuntimeFailed
+        );
     }
 
     #[test]
