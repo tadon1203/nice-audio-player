@@ -13,6 +13,8 @@ import type {
   StopAudioPlaybackError,
   SetPlaybackVolumeError,
   PlaybackMuteError,
+  AudioOutputSelection,
+  AudioOutputDeviceIdentity,
   ValidatedAudioFile,
 } from "@/bindings";
 
@@ -30,6 +32,8 @@ const startAudioFileErrorCodes = {
   outputFailed: true,
   playbackWorkerUnavailable: true,
   taskFailed: true,
+  noOutputDevice: true,
+  outputDeviceUnavailable: true,
 } satisfies Record<StartAudioFileError["code"], true>;
 
 const stopAudioPlaybackErrorCodes = {
@@ -53,6 +57,7 @@ const resumeAudioPlaybackErrorCodes = {
 
 const playbackFailureCodes = {
   noOutputDevice: true,
+  outputDeviceUnavailable: true,
   unsupportedOutputConfiguration: true,
   outputStreamBuildFailed: true,
   outputStreamStartFailed: true,
@@ -227,6 +232,7 @@ export function isPlaybackMuteError(value: unknown): value is PlaybackMuteError 
 export function isPlaybackSnapshot(value: unknown): value is PlaybackSnapshot {
   if (typeof value !== "object" || value === null || !("status" in value)) return false;
   if (!isValidVolumeState(value)) return false;
+  if (!isValidOutputSelection(value.outputSelection)) return false;
   if (value.status === "stopped") return true;
   if (value.status === "playing") return isTimedPlaybackSnapshot(value);
   if (value.status === "paused") return isTimedPlaybackSnapshot(value);
@@ -245,8 +251,33 @@ function isTimedPlaybackSnapshot(
   return (
     typeof value.playbackId === "string" &&
     isValidTimingValue(value.positionMs) &&
+    isValidOutputDeviceIdentity(value.outputDevice) &&
     (value.durationMs === null ||
       (isValidTimingValue(value.durationMs) && value.positionMs <= value.durationMs))
+  );
+}
+
+function isValidOutputSelection(value: unknown): value is AudioOutputSelection {
+  if (typeof value !== "object" || value === null || !("kind" in value)) return false;
+  if (value.kind === "systemDefault") return !hasOwn(value, "deviceId");
+  return (
+    value.kind === "device" &&
+    "deviceId" in value &&
+    typeof value.deviceId === "string" &&
+    value.deviceId.length > 0
+  );
+}
+
+function isValidOutputDeviceIdentity(value: unknown): value is AudioOutputDeviceIdentity {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "id" in value &&
+    "name" in value &&
+    typeof value.id === "string" &&
+    value.id.length > 0 &&
+    typeof value.name === "string" &&
+    value.name.length > 0
   );
 }
 

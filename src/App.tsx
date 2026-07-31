@@ -1,7 +1,12 @@
 import { open } from "@tauri-apps/plugin-dialog";
 import { useEffect, useRef, useState } from "react";
 
-import { isAudioDeviceListError, listAudioOutputDevices } from "@/api/audio-devices";
+import {
+  isAudioDeviceListError,
+  isSetAudioOutputSelectionError,
+  listAudioOutputDevices,
+  setAudioOutputSelection,
+} from "@/api/audio-devices";
 import {
   isAudioFileValidationError,
   getPlaybackState,
@@ -22,7 +27,12 @@ import {
   stopAudioPlayback,
   validateAudioFile,
 } from "@/api/audio-files";
-import type { AudioOutputDevice, PlaybackSnapshot, ValidatedAudioFile } from "@/bindings";
+import type {
+  AudioOutputDevice,
+  AudioOutputSelection,
+  PlaybackSnapshot,
+  ValidatedAudioFile,
+} from "@/bindings";
 import { formatPlaybackTime } from "@/lib/playback-time";
 
 function formatValidationError(error: unknown): string {
@@ -57,14 +67,17 @@ function App() {
   const [outputDevices, setOutputDevices] = useState<AudioOutputDevice[] | null>(null);
   const [deviceListError, setDeviceListError] = useState<string | null>(null);
   const [isLoadingDevices, setIsLoadingDevices] = useState(false);
+  const [isOutputSelectionPending, setIsOutputSelectionPending] = useState(false);
   const [playback, setPlayback] = useState<PlaybackSnapshot>({
     status: "stopped",
     volume: 1,
     muted: false,
+    outputSelection: { kind: "systemDefault" },
   });
   const [pendingPlaybackCommand, setPendingPlaybackCommand] =
     useState<PendingPlaybackCommand>(null);
   const isChangingPlaybackState = pendingPlaybackCommand !== null;
+  const isAudioCommandPending = isChangingPlaybackState || isOutputSelectionPending;
   const isSeeking = pendingPlaybackCommand === "seek";
   const [playbackError, setPlaybackError] = useState<string | null>(null);
   const [isScrubbing, setIsScrubbing] = useState(false);
@@ -109,6 +122,10 @@ function App() {
     };
   }, []);
 
+  useEffect(() => {
+    void loadOutputDevices();
+  }, []);
+
   async function selectAudioFile(): Promise<void> {
     const result = await open({
       multiple: false,
@@ -136,7 +153,7 @@ function App() {
   }
 
   async function playSelectedAudioFile(): Promise<void> {
-    if (validatedFile === null || isChangingPlaybackState) {
+    if (validatedFile === null || isAudioCommandPending) {
       return;
     }
 
@@ -157,6 +174,12 @@ function App() {
           case "decodeFailed":
             setPlaybackError("The audio file could not be decoded.");
             break;
+          case "noOutputDevice":
+            setPlaybackError("No system-default audio output device is available.");
+            break;
+          case "outputDeviceUnavailable":
+            setPlaybackError("The selected output device is unavailable.");
+            break;
           case "outputFailed":
             setPlaybackError("The audio output could not play this file.");
             break;
@@ -174,7 +197,7 @@ function App() {
   }
 
   async function stopPlayback(): Promise<void> {
-    if (isChangingPlaybackState) return;
+    if (isAudioCommandPending) return;
     setPendingPlaybackCommand("stop");
     setPlaybackError(null);
     try {
@@ -187,7 +210,7 @@ function App() {
   }
 
   async function pausePlayback(): Promise<void> {
-    if (isChangingPlaybackState) return;
+    if (isAudioCommandPending) return;
     setPendingPlaybackCommand("pause");
     setPlaybackError(null);
     try {
@@ -206,7 +229,7 @@ function App() {
   }
 
   async function resumePlayback(): Promise<void> {
-    if (isChangingPlaybackState) return;
+    if (isAudioCommandPending) return;
     setPendingPlaybackCommand("resume");
     setPlaybackError(null);
     try {
@@ -242,9 +265,47 @@ function App() {
     }
   }
 
+  async function changeOutputSelection(selection: AudioOutputSelection): Promise<void> {
+    if (
+      isAudioCommandPending ||
+      playback.status === "playing" ||
+      playback.status === "paused" ||
+      isLoadingDevices
+    ) {
+      return;
+    }
+    setIsOutputSelectionPending(true);
+    setPlaybackError(null);
+    try {
+      setPlayback(await setAudioOutputSelection(selection));
+    } catch (error: unknown) {
+      if (isSetAudioOutputSelectionError(error)) {
+        if (error.code === "outputDeviceUnavailable") {
+          setPlaybackError("The selected output device is unavailable.");
+          await loadOutputDevices();
+        } else if (error.code === "invalidPlaybackState") {
+          setPlaybackError("Stop playback before changing the output device.");
+          try {
+            setPlayback(await getPlaybackState());
+          } catch {
+            // Keep the existing authoritative snapshot when the refresh fails.
+          }
+        } else if (error.code === "invalidDeviceId") {
+          setPlaybackError("The selected output device is invalid.");
+        } else {
+          setPlaybackError("The output device could not be changed.");
+        }
+      } else {
+        setPlaybackError("The output device could not be changed.");
+      }
+    } finally {
+      setIsOutputSelectionPending(false);
+    }
+  }
+
   async function commitSeek(targetPositionMs: number): Promise<void> {
     if (
-      isChangingPlaybackState ||
+      isAudioCommandPending ||
       (playback.status !== "playing" && playback.status !== "paused") ||
       playback.durationMs === null
     ) {
@@ -335,6 +396,9 @@ function App() {
     }
   }
 
+  const selectedOutputDeviceId =
+    playback.outputSelection.kind === "device" ? playback.outputSelection.deviceId : null;
+
   return (
     <main className="grid h-screen place-items-center bg-zinc-950 p-8 text-zinc-100">
       <section className="w-full max-w-xl rounded-2xl border border-zinc-800 bg-zinc-900 p-8">
@@ -376,7 +440,7 @@ function App() {
         <button
           type="button"
           onClick={() => void playSelectedAudioFile()}
-          disabled={validatedFile === null || isChangingPlaybackState}
+          disabled={validatedFile === null || isAudioCommandPending}
           className="mt-4 rounded-lg border border-zinc-700 px-4 py-2 font-medium text-zinc-100 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {isChangingPlaybackState ? "Changing..." : "Play"}
@@ -387,7 +451,7 @@ function App() {
             <button
               type="button"
               onClick={() => void pausePlayback()}
-              disabled={isChangingPlaybackState}
+              disabled={isAudioCommandPending}
               className="ml-3 rounded-lg border border-zinc-700 px-4 py-2 font-medium text-zinc-100 disabled:opacity-60"
             >
               {isChangingPlaybackState ? "Changing..." : "Pause"}
@@ -395,7 +459,7 @@ function App() {
             <button
               type="button"
               onClick={() => void stopPlayback()}
-              disabled={isChangingPlaybackState}
+              disabled={isAudioCommandPending}
               className="ml-3 rounded-lg border border-zinc-700 px-4 py-2 font-medium text-zinc-100 disabled:opacity-60"
             >
               Stop
@@ -406,7 +470,7 @@ function App() {
             <button
               type="button"
               onClick={() => void resumePlayback()}
-              disabled={isChangingPlaybackState}
+              disabled={isAudioCommandPending}
               className="ml-3 rounded-lg border border-zinc-700 px-4 py-2 font-medium text-zinc-100 disabled:opacity-60"
             >
               {isChangingPlaybackState ? "Changing..." : "Resume"}
@@ -414,7 +478,7 @@ function App() {
             <button
               type="button"
               onClick={() => void stopPlayback()}
-              disabled={isChangingPlaybackState}
+              disabled={isAudioCommandPending}
               className="ml-3 rounded-lg border border-zinc-700 px-4 py-2 font-medium text-zinc-100 disabled:opacity-60"
             >
               Stop
@@ -432,6 +496,9 @@ function App() {
             {formatPlaybackTime(isScrubbing || isSeeking ? positionDraft : playback.positionMs)} /{" "}
             {playback.durationMs === null ? "--:--" : formatPlaybackTime(playback.durationMs)}
           </p>
+        ) : null}
+        {playback.status === "playing" || playback.status === "paused" ? (
+          <p className="mt-2 text-sm text-zinc-400">Output device: {playback.outputDevice.name}</p>
         ) : null}
 
         <div className="mt-6">
@@ -505,7 +572,7 @@ function App() {
                 isScrubbing || isSeeking ? positionDraft : playback.positionMs,
                 playback.durationMs ?? 0,
               )}
-              disabled={isChangingPlaybackState || playback.durationMs === null}
+              disabled={isAudioCommandPending || playback.durationMs === null}
               onChange={(event) => {
                 setIsScrubbing(true);
                 setPositionDraft(Number(event.currentTarget.value));
@@ -550,29 +617,55 @@ function App() {
 
         <div className="mt-8 border-t border-zinc-800 pt-6">
           <h2 className="text-lg font-medium">Audio output devices</h2>
+          <label className="mt-4 block text-sm text-zinc-300">
+            <span>Audio output device</span>
+            <select
+              aria-label="Audio output device"
+              value={
+                playback.outputSelection.kind === "systemDefault"
+                  ? "systemDefault"
+                  : playback.outputSelection.deviceId
+              }
+              disabled={
+                isLoadingDevices ||
+                isOutputSelectionPending ||
+                isAudioCommandPending ||
+                playback.status === "playing" ||
+                playback.status === "paused"
+              }
+              onChange={(event) => {
+                const value = event.currentTarget.value;
+                void changeOutputSelection(
+                  value === "systemDefault"
+                    ? { kind: "systemDefault" }
+                    : { kind: "device", deviceId: value },
+                );
+              }}
+              className="mt-2 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2"
+            >
+              <option value="systemDefault">System default</option>
+              {selectedOutputDeviceId !== null &&
+              !outputDevices?.some((device) => device.id === selectedOutputDeviceId) ? (
+                <option value={selectedOutputDeviceId} disabled>
+                  Unavailable selected device
+                </option>
+              ) : null}
+              {outputDevices?.map((device) => (
+                <option key={device.id} value={device.id}>
+                  {device.name}
+                  {device.isDefault ? " — Current default" : ""}
+                </option>
+              ))}
+            </select>
+          </label>
           <button
             type="button"
             onClick={() => void loadOutputDevices()}
             disabled={isLoadingDevices}
             className="mt-4 rounded-lg border border-zinc-700 px-4 py-2 font-medium text-zinc-100 disabled:cursor-wait disabled:opacity-60"
           >
-            {isLoadingDevices ? "Loading devices..." : "List output devices"}
+            {isLoadingDevices ? "Loading devices..." : "Refresh devices"}
           </button>
-
-          {outputDevices?.length ? (
-            <ul className="mt-4 space-y-2 text-sm text-zinc-300">
-              {outputDevices.map((device) => (
-                <li key={device.id}>
-                  {device.name}
-                  {device.isDefault ? " — Default" : ""}
-                </li>
-              ))}
-            </ul>
-          ) : null}
-
-          {outputDevices?.length === 0 ? (
-            <p className="mt-4 text-sm text-zinc-400">No audio output devices were found.</p>
-          ) : null}
 
           {deviceListError ? (
             <p className="mt-4 text-sm text-red-300" role="alert">

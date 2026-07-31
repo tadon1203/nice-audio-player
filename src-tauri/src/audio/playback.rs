@@ -12,6 +12,10 @@ use super::decoding::{
     open_streaming_decoder, DecodeCancellation, DecodeStep, DecodedAudioSpec, PcmDecodeError,
     SeekStep, StreamingDecoder,
 };
+use super::devices::{
+    resolve_output_device_id, resolve_output_selection, AudioOutputDeviceIdentity,
+    AudioOutputSelection, DeviceResolutionError,
+};
 use super::output::{
     prepare_output_stream, prepare_output_stream_with_config, AtomicProducerState,
     AudioOutputError, OutputSignal, OutputStreamId, PreparedOutputConfig, PreparedOutputStream,
@@ -32,6 +36,7 @@ pub enum PlaybackSnapshot {
         #[specta(type = f64)]
         volume: f32,
         muted: bool,
+        output_selection: AudioOutputSelection,
     },
     Playing {
         playback_id: String,
@@ -40,6 +45,8 @@ pub enum PlaybackSnapshot {
         #[specta(type = f64)]
         volume: f32,
         muted: bool,
+        output_selection: AudioOutputSelection,
+        output_device: AudioOutputDeviceIdentity,
     },
     Paused {
         playback_id: String,
@@ -48,6 +55,8 @@ pub enum PlaybackSnapshot {
         #[specta(type = f64)]
         volume: f32,
         muted: bool,
+        output_selection: AudioOutputSelection,
+        output_device: AudioOutputDeviceIdentity,
     },
     Failed {
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -56,19 +65,23 @@ pub enum PlaybackSnapshot {
         #[specta(type = f64)]
         volume: f32,
         muted: bool,
+        output_selection: AudioOutputSelection,
     },
 }
 
 impl PlaybackSnapshot {
-    fn stopped(volume: VolumeState) -> Self {
+    fn stopped_with_selection(volume: VolumeState, output_selection: AudioOutputSelection) -> Self {
         Self::Stopped {
             volume: volume.volume(),
             muted: volume.muted(),
+            output_selection,
         }
     }
 
-    fn playing(
+    fn playing_with_output(
         volume: VolumeState,
+        output_selection: AudioOutputSelection,
+        output_device: AudioOutputDeviceIdentity,
         playback_id: String,
         position_ms: u64,
         duration_ms: Option<u64>,
@@ -79,11 +92,15 @@ impl PlaybackSnapshot {
             duration_ms,
             volume: volume.volume(),
             muted: volume.muted(),
+            output_selection,
+            output_device,
         }
     }
 
-    fn paused(
+    fn paused_with_output(
         volume: VolumeState,
+        output_selection: AudioOutputSelection,
+        output_device: AudioOutputDeviceIdentity,
         playback_id: String,
         position_ms: u64,
         duration_ms: Option<u64>,
@@ -94,11 +111,14 @@ impl PlaybackSnapshot {
             duration_ms,
             volume: volume.volume(),
             muted: volume.muted(),
+            output_selection,
+            output_device,
         }
     }
 
-    fn failed(
+    fn failed_with_selection(
         volume: VolumeState,
+        output_selection: AudioOutputSelection,
         playback_id: Option<String>,
         error: PlaybackFailureCode,
     ) -> Self {
@@ -107,28 +127,111 @@ impl PlaybackSnapshot {
             error,
             volume: volume.volume(),
             muted: volume.muted(),
+            output_selection,
         }
     }
 
     fn with_volume(self, volume: VolumeState) -> Self {
         match self {
-            Self::Stopped { .. } => Self::stopped(volume),
+            Self::Stopped {
+                output_selection, ..
+            } => Self::stopped_with_selection(volume, output_selection),
             Self::Playing {
                 playback_id,
                 position_ms,
                 duration_ms,
+                output_selection,
+                output_device,
                 ..
-            } => Self::playing(volume, playback_id, position_ms, duration_ms),
+            } => Self::playing_with_output(
+                volume,
+                output_selection,
+                output_device,
+                playback_id,
+                position_ms,
+                duration_ms,
+            ),
             Self::Paused {
                 playback_id,
                 position_ms,
                 duration_ms,
+                output_selection,
+                output_device,
                 ..
-            } => Self::paused(volume, playback_id, position_ms, duration_ms),
+            } => Self::paused_with_output(
+                volume,
+                output_selection,
+                output_device,
+                playback_id,
+                position_ms,
+                duration_ms,
+            ),
             Self::Failed {
-                playback_id, error, ..
-            } => Self::failed(volume, playback_id, error),
+                playback_id,
+                error,
+                output_selection,
+                ..
+            } => Self::failed_with_selection(volume, output_selection, playback_id, error),
         }
+    }
+
+    #[cfg(test)]
+    fn stopped(volume: VolumeState) -> Self {
+        Self::stopped_with_selection(volume, AudioOutputSelection::SystemDefault)
+    }
+
+    #[cfg(test)]
+    fn playing(
+        volume: VolumeState,
+        playback_id: String,
+        position_ms: u64,
+        duration_ms: Option<u64>,
+    ) -> Self {
+        Self::playing_with_output(
+            volume,
+            AudioOutputSelection::SystemDefault,
+            AudioOutputDeviceIdentity {
+                id: "test-device".into(),
+                name: "Test device".into(),
+            },
+            playback_id,
+            position_ms,
+            duration_ms,
+        )
+    }
+
+    #[cfg(test)]
+    fn paused(
+        volume: VolumeState,
+        playback_id: String,
+        position_ms: u64,
+        duration_ms: Option<u64>,
+    ) -> Self {
+        Self::paused_with_output(
+            volume,
+            AudioOutputSelection::SystemDefault,
+            AudioOutputDeviceIdentity {
+                id: "test-device".into(),
+                name: "Test device".into(),
+            },
+            playback_id,
+            position_ms,
+            duration_ms,
+        )
+    }
+
+    #[cfg(test)]
+    fn failed(
+        volume: VolumeState,
+        playback_id: Option<String>,
+        error: PlaybackFailureCode,
+    ) -> Self {
+        Self::failed_with_selection(
+            volume,
+            AudioOutputSelection::SystemDefault,
+            playback_id,
+            error,
+        )
     }
 }
 
@@ -136,6 +239,7 @@ impl PlaybackSnapshot {
 #[serde(rename_all = "camelCase")]
 pub enum PlaybackFailureCode {
     NoOutputDevice,
+    OutputDeviceUnavailable,
     UnsupportedOutputConfiguration,
     OutputStreamBuildFailed,
     OutputStreamStartFailed,
@@ -150,6 +254,8 @@ pub enum PlaybackFailureCode {
 pub enum PlaybackServiceError {
     WorkerUnavailable,
     InvalidVolume,
+    InvalidDeviceId,
+    OutputDeviceUnavailable,
     InvalidPlaybackState,
     DurationUnavailable,
     Seek,
@@ -189,6 +295,10 @@ enum PlaybackCommand {
     Unmute {
         reply: SyncSender<Result<PlaybackSnapshot, PlaybackServiceError>>,
     },
+    SetOutputSelection {
+        selection: AudioOutputSelection,
+        reply: SyncSender<Result<PlaybackSnapshot, PlaybackServiceError>>,
+    },
     Shutdown,
 }
 
@@ -211,7 +321,11 @@ impl PlaybackService {
         let (output_sender, output_receiver) = mpsc::sync_channel(4);
         let volume_state = VolumeState::default();
         let effective_gain = AtomicEffectiveGain::new(volume_state.effective_gain());
-        let state = Arc::new(RwLock::new(PlaybackSnapshot::stopped(volume_state)));
+        let output_selection = AudioOutputSelection::SystemDefault;
+        let state = Arc::new(RwLock::new(PlaybackSnapshot::stopped_with_selection(
+            volume_state,
+            output_selection.clone(),
+        )));
         let worker_state = Arc::clone(&state);
         let worker_gain = effective_gain.clone();
         let worker = thread::Builder::new()
@@ -225,6 +339,7 @@ impl PlaybackService {
                     next_output_stream_id: 0,
                     volume_state,
                     effective_gain: worker_gain,
+                    output_selection,
                     snapshot: worker_state,
                     command_receiver,
                     state_changed_sender,
@@ -299,6 +414,13 @@ impl PlaybackServiceHandle {
 
     pub(crate) fn unmute(&self) -> Result<PlaybackSnapshot, PlaybackServiceError> {
         self.request(|reply| PlaybackCommand::Unmute { reply })
+    }
+
+    pub(crate) fn set_output_selection(
+        &self,
+        selection: AudioOutputSelection,
+    ) -> Result<PlaybackSnapshot, PlaybackServiceError> {
+        self.request(|reply| PlaybackCommand::SetOutputSelection { selection, reply })
     }
 
     fn request(
@@ -392,6 +514,7 @@ struct PlaybackWorker {
     next_output_stream_id: u64,
     volume_state: VolumeState,
     effective_gain: AtomicEffectiveGain,
+    output_selection: AudioOutputSelection,
     snapshot: Arc<RwLock<PlaybackSnapshot>>,
     command_receiver: Receiver<PlaybackCommand>,
     state_changed_sender: SyncSender<()>,
@@ -428,6 +551,9 @@ impl PlaybackWorker {
                 }
                 Ok(PlaybackCommand::Unmute { reply }) => {
                     let _ = reply.send(Ok(self.unmute()));
+                }
+                Ok(PlaybackCommand::SetOutputSelection { selection, reply }) => {
+                    let _ = reply.send(self.set_output_selection(selection));
                 }
                 Ok(PlaybackCommand::Shutdown) | Err(mpsc::RecvTimeoutError::Disconnected) => break,
                 Err(mpsc::RecvTimeoutError::Timeout) => {}
@@ -475,9 +601,17 @@ impl PlaybackWorker {
         let session_id = self.next_playback_session_id;
         let id = OutputStreamId(self.next_output_stream_id);
         let worker_cancellation = DecodeCancellation::default();
+        let resolved_device = match resolve_output_selection(&self.output_selection) {
+            Ok(device) => device,
+            Err(error) => {
+                let _ = reply.send(Err(self.start_device_failure(id, error)));
+                return;
+            }
+        };
         let preparation = match prepare_output_stream(
             id,
             spec,
+            resolved_device,
             self.effective_gain.clone(),
             Arc::clone(&producer_state),
             capacity_sender.clone(),
@@ -611,9 +745,19 @@ impl PlaybackWorker {
         let (capacity_sender, capacity_receiver) = mpsc::sync_channel(1);
         let (prebuffer_sender, prebuffer_receiver) = mpsc::sync_channel(1);
         let output_config = active.output_config.clone();
+        let resolved_device = match resolve_output_device_id(&output_config.device_id) {
+            Ok(device) => device,
+            Err(error) => {
+                let _ = reply.send(Err(PlaybackServiceError::Output(
+                    device_resolution_failure_code(error),
+                )));
+                return;
+            }
+        };
         let preparation = match prepare_output_stream_with_config(
             id,
             source_spec,
+            resolved_device,
             &output_config,
             self.effective_gain.clone(),
             Arc::clone(&producer_state),
@@ -847,12 +991,34 @@ impl PlaybackWorker {
     ) -> PlaybackServiceError {
         let code = output_failure_code(error);
 
-        if let Some(snapshot) =
-            start_failure_snapshot(self.active.is_some(), id, code.clone(), self.volume_state)
-        {
+        if let Some(snapshot) = start_failure_snapshot(
+            self.active.is_some(),
+            id,
+            code.clone(),
+            self.volume_state,
+            self.output_selection.clone(),
+        ) {
             self.publish(snapshot);
         }
 
+        PlaybackServiceError::Output(code)
+    }
+
+    fn start_device_failure(
+        &mut self,
+        id: OutputStreamId,
+        error: DeviceResolutionError,
+    ) -> PlaybackServiceError {
+        let code = device_resolution_failure_code(error);
+        if let Some(snapshot) = start_failure_snapshot(
+            self.active.is_some(),
+            id,
+            code.clone(),
+            self.volume_state,
+            self.output_selection.clone(),
+        ) {
+            self.publish(snapshot);
+        }
         PlaybackServiceError::Output(code)
     }
     fn stop(&mut self) -> PlaybackSnapshot {
@@ -863,6 +1029,38 @@ impl PlaybackWorker {
             self.publish(self.stopped_snapshot());
         }
         self.stopped_snapshot()
+    }
+
+    fn set_output_selection(
+        &mut self,
+        selection: AudioOutputSelection,
+    ) -> Result<PlaybackSnapshot, PlaybackServiceError> {
+        if self.active.is_some() || self.pending.is_some() || self.pending_seek.is_some() {
+            return Err(PlaybackServiceError::InvalidPlaybackState);
+        }
+        if let AudioOutputSelection::Device { .. } = &selection {
+            resolve_output_selection(&selection).map_err(|error| match error {
+                DeviceResolutionError::InvalidDeviceId => PlaybackServiceError::InvalidDeviceId,
+                DeviceResolutionError::DeviceUnavailable => {
+                    PlaybackServiceError::OutputDeviceUnavailable
+                }
+                DeviceResolutionError::NoDefaultOutputDevice => {
+                    PlaybackServiceError::OutputDeviceUnavailable
+                }
+            })?;
+        }
+        let unchanged = self.output_selection == selection;
+        self.output_selection = selection;
+        if matches!(self.current(), PlaybackSnapshot::Failed { .. }) {
+            let snapshot = self.stopped_snapshot();
+            self.publish(snapshot.clone());
+            return Ok(snapshot);
+        }
+        let snapshot = self.stopped_snapshot();
+        if !unchanged {
+            self.publish(snapshot.clone());
+        }
+        Ok(snapshot)
     }
     fn set_volume(&mut self, volume: f32) -> Result<PlaybackSnapshot, PlaybackServiceError> {
         let changed = self
@@ -901,7 +1099,6 @@ impl PlaybackWorker {
         snapshot
     }
     fn pause(&mut self) -> Result<PlaybackSnapshot, PlaybackServiceError> {
-        let volume_state = self.volume_state;
         match pause_action(&self.current()) {
             PlaybackControlAction::Idempotent => Ok(self.current()),
             PlaybackControlAction::Invalid => Err(PlaybackServiceError::InvalidPlaybackState),
@@ -922,19 +1119,16 @@ impl PlaybackWorker {
                 active.stream.clear_timing_anchor();
                 let position_frame = absolute_position(active, relative_frame);
                 active.position_frame = position_frame;
-                let snapshot = PlaybackSnapshot::paused(
-                    volume_state,
-                    active.session_id.to_string(),
-                    frame_to_millis(position_frame, active.sample_rate),
-                    active.duration_ms,
-                );
+                let playback_id = active.session_id.to_string();
+                let position_ms = frame_to_millis(position_frame, active.sample_rate);
+                let duration_ms = active.duration_ms;
+                let snapshot = self.paused_snapshot(playback_id, position_ms, duration_ms);
                 self.publish(snapshot.clone());
                 Ok(snapshot)
             }
         }
     }
     fn resume(&mut self) -> Result<PlaybackSnapshot, PlaybackServiceError> {
-        let volume_state = self.volume_state;
         match resume_action(&self.current()) {
             PlaybackControlAction::Idempotent => Ok(self.current()),
             PlaybackControlAction::Invalid => Err(PlaybackServiceError::InvalidPlaybackState),
@@ -947,12 +1141,9 @@ impl PlaybackWorker {
                     return Err(self.control_failure(id, error));
                 }
                 let position_ms = frame_to_millis(active.position_frame, active.sample_rate);
-                let snapshot = PlaybackSnapshot::playing(
-                    volume_state,
-                    active.session_id.to_string(),
-                    position_ms,
-                    active.duration_ms,
-                );
+                let playback_id = active.session_id.to_string();
+                let duration_ms = active.duration_ms;
+                let snapshot = self.playing_snapshot(playback_id, position_ms, duration_ms);
                 self.publish(snapshot.clone());
                 Ok(snapshot)
             }
@@ -986,8 +1177,6 @@ impl PlaybackWorker {
         duration_ms: Option<u64>,
         decoder_worker: DecodeWorker,
     ) -> PlaybackSnapshot {
-        let snapshot = self.playing_snapshot(session_id.to_string(), 0, duration_ms);
-
         self.active = Some(ActivePlayback {
             session_id,
             id,
@@ -1005,6 +1194,8 @@ impl PlaybackWorker {
             decoder_worker,
         });
 
+        let snapshot = self.playing_snapshot(session_id.to_string(), 0, duration_ms);
+
         self.publish(snapshot.clone());
         snapshot
     }
@@ -1013,7 +1204,7 @@ impl PlaybackWorker {
     }
 
     fn stopped_snapshot(&self) -> PlaybackSnapshot {
-        PlaybackSnapshot::stopped(self.volume_state)
+        PlaybackSnapshot::stopped_with_selection(self.volume_state, self.output_selection.clone())
     }
 
     fn playing_snapshot(
@@ -1022,7 +1213,22 @@ impl PlaybackWorker {
         position_ms: u64,
         duration_ms: Option<u64>,
     ) -> PlaybackSnapshot {
-        PlaybackSnapshot::playing(self.volume_state, playback_id, position_ms, duration_ms)
+        let device = self
+            .active
+            .as_ref()
+            .map(|active| AudioOutputDeviceIdentity {
+                id: active.output_config.device_id.clone(),
+                name: active.output_config.device_name.clone(),
+            })
+            .expect("playing snapshot requires active output device");
+        PlaybackSnapshot::playing_with_output(
+            self.volume_state,
+            self.output_selection.clone(),
+            device,
+            playback_id,
+            position_ms,
+            duration_ms,
+        )
     }
 
     fn paused_snapshot(
@@ -1031,7 +1237,22 @@ impl PlaybackWorker {
         position_ms: u64,
         duration_ms: Option<u64>,
     ) -> PlaybackSnapshot {
-        PlaybackSnapshot::paused(self.volume_state, playback_id, position_ms, duration_ms)
+        let device = self
+            .active
+            .as_ref()
+            .map(|active| AudioOutputDeviceIdentity {
+                id: active.output_config.device_id.clone(),
+                name: active.output_config.device_name.clone(),
+            })
+            .expect("paused snapshot requires active output device");
+        PlaybackSnapshot::paused_with_output(
+            self.volume_state,
+            self.output_selection.clone(),
+            device,
+            playback_id,
+            position_ms,
+            duration_ms,
+        )
     }
 
     fn failed_snapshot(
@@ -1039,7 +1260,12 @@ impl PlaybackWorker {
         playback_id: Option<String>,
         error: PlaybackFailureCode,
     ) -> PlaybackSnapshot {
-        PlaybackSnapshot::failed(self.volume_state, playback_id, error)
+        PlaybackSnapshot::failed_with_selection(
+            self.volume_state,
+            self.output_selection.clone(),
+            playback_id,
+            error,
+        )
     }
 
     fn discard_active(&mut self) {
@@ -1054,6 +1280,49 @@ impl PlaybackWorker {
             .unwrap_or_else(std::sync::PoisonError::into_inner) = snapshot;
         let _ = self.state_changed_sender.try_send(());
     }
+
+    fn refresh_active_snapshot(&self) -> Option<PlaybackSnapshot> {
+        let active = self.active.as_ref()?;
+        let playback_id = active.session_id.to_string();
+        let position_ms = frame_to_millis(active.position_frame, active.sample_rate);
+        match self.current() {
+            PlaybackSnapshot::Playing { .. } => {
+                Some(self.playing_snapshot(playback_id, position_ms, active.duration_ms))
+            }
+            PlaybackSnapshot::Paused { .. } => {
+                Some(self.paused_snapshot(playback_id, position_ms, active.duration_ms))
+            }
+            PlaybackSnapshot::Stopped { .. } | PlaybackSnapshot::Failed { .. } => None,
+        }
+    }
+
+    fn fail_active_stream(&mut self, error: PlaybackFailureCode) {
+        let playback_id = self
+            .active
+            .as_ref()
+            .map(|active| active.session_id.to_string());
+        self.cancel_pending_seek_with(PlaybackServiceError::Output(error.clone()));
+        self.discard_active();
+        self.publish(self.failed_snapshot(playback_id, error));
+    }
+
+    fn refresh_default_device(&mut self) -> bool {
+        let resolved = match resolve_output_selection(&AudioOutputSelection::SystemDefault) {
+            Ok(resolved) => resolved,
+            Err(_) => return false,
+        };
+        if let Some(active) = self.active.as_mut() {
+            active.output_config.device_id = resolved.identity.id;
+            active.output_config.device_name = resolved.identity.name;
+        } else {
+            return false;
+        }
+        if let Some(snapshot) = self.refresh_active_snapshot() {
+            self.publish(snapshot);
+        }
+        true
+    }
+
     fn handle_signal(&mut self, signal: OutputSignal) {
         let id = signal_stream_id(&signal);
         let Some(active) = self.active.as_ref() else {
@@ -1069,21 +1338,19 @@ impl PlaybackWorker {
                     active.completion_time = Some(end_time);
                 }
             }
-            OutputSignal::StreamFailed { .. } => {
-                let playback_id = self
-                    .active
-                    .as_ref()
-                    .map(|active| active.session_id.to_string());
-                self.cancel_pending_seek_with(PlaybackServiceError::Output(
-                    PlaybackFailureCode::OutputStreamRuntimeFailed,
-                ));
-                self.discard_active();
-                self.publish(
-                    self.failed_snapshot(
-                        playback_id,
-                        PlaybackFailureCode::OutputStreamRuntimeFailed,
-                    ),
-                );
+            OutputSignal::StreamFailed { kind, .. } => {
+                match stream_signal_action(&self.output_selection, kind) {
+                    StreamSignalAction::RefreshDefaultDevice => {
+                        self.cancel_pending_seek_with(PlaybackServiceError::Output(
+                            PlaybackFailureCode::OutputDeviceUnavailable,
+                        ));
+                        if !self.refresh_default_device() {
+                            self.fail_active_stream(PlaybackFailureCode::OutputDeviceUnavailable);
+                        }
+                    }
+                    StreamSignalAction::PreservePlayback => {}
+                    StreamSignalAction::Fail(error) => self.fail_active_stream(error),
+                }
             }
             OutputSignal::CompletionTimingFailed { .. } => {
                 let playback_id = self
@@ -1400,9 +1667,34 @@ fn should_publish_position(elapsed_since_publish: Duration, position_changed: bo
 fn signal_stream_id(signal: &OutputSignal) -> OutputStreamId {
     match signal {
         OutputSignal::FinalFramesSubmitted { stream_id, .. }
-        | OutputSignal::StreamFailed { stream_id }
+        | OutputSignal::StreamFailed { stream_id, .. }
         | OutputSignal::CompletionTimingFailed { stream_id }
         | OutputSignal::DecodeFailed { stream_id } => *stream_id,
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum StreamSignalAction {
+    RefreshDefaultDevice,
+    PreservePlayback,
+    Fail(PlaybackFailureCode),
+}
+
+fn stream_signal_action(
+    selection: &AudioOutputSelection,
+    kind: super::output::StreamFailureKind,
+) -> StreamSignalAction {
+    match kind {
+        super::output::StreamFailureKind::DeviceChanged => match selection {
+            AudioOutputSelection::SystemDefault => StreamSignalAction::RefreshDefaultDevice,
+            AudioOutputSelection::Device { .. } => StreamSignalAction::PreservePlayback,
+        },
+        super::output::StreamFailureKind::DeviceUnavailable => {
+            StreamSignalAction::Fail(PlaybackFailureCode::OutputDeviceUnavailable)
+        }
+        super::output::StreamFailureKind::RuntimeFailed => {
+            StreamSignalAction::Fail(PlaybackFailureCode::OutputStreamRuntimeFailed)
+        }
     }
 }
 
@@ -1456,8 +1748,16 @@ fn start_failure_snapshot(
     id: OutputStreamId,
     error: PlaybackFailureCode,
     volume: VolumeState,
+    output_selection: AudioOutputSelection,
 ) -> Option<PlaybackSnapshot> {
-    (!has_active_playback).then(|| PlaybackSnapshot::failed(volume, Some(id.0.to_string()), error))
+    (!has_active_playback).then(|| {
+        PlaybackSnapshot::failed_with_selection(
+            volume,
+            output_selection,
+            Some(id.0.to_string()),
+            error,
+        )
+    })
 }
 fn read_snapshot(snapshot: &RwLock<PlaybackSnapshot>) -> PlaybackSnapshot {
     snapshot
@@ -1468,7 +1768,6 @@ fn read_snapshot(snapshot: &RwLock<PlaybackSnapshot>) -> PlaybackSnapshot {
 
 fn output_failure_code(error: AudioOutputError) -> PlaybackFailureCode {
     match error {
-        AudioOutputError::NoDefaultOutputDevice => PlaybackFailureCode::NoOutputDevice,
         AudioOutputError::UnsupportedConfiguration | AudioOutputError::ConfigurationQueryFailed => {
             PlaybackFailureCode::UnsupportedOutputConfiguration
         }
@@ -1479,22 +1778,69 @@ fn output_failure_code(error: AudioOutputError) -> PlaybackFailureCode {
         AudioOutputError::StreamStartFailed => PlaybackFailureCode::OutputStreamStartFailed,
         AudioOutputError::StreamPauseFailed => PlaybackFailureCode::OutputStreamPauseFailed,
         AudioOutputError::StreamResumeFailed => PlaybackFailureCode::OutputStreamResumeFailed,
+        AudioOutputError::DeviceUnavailable => PlaybackFailureCode::OutputDeviceUnavailable,
+    }
+}
+
+fn device_resolution_failure_code(error: DeviceResolutionError) -> PlaybackFailureCode {
+    match error {
+        DeviceResolutionError::NoDefaultOutputDevice => PlaybackFailureCode::NoOutputDevice,
+        DeviceResolutionError::InvalidDeviceId | DeviceResolutionError::DeviceUnavailable => {
+            PlaybackFailureCode::OutputDeviceUnavailable
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::super::devices::AudioOutputSelection;
     use super::super::output::AudioOutputError;
+    use super::super::output::StreamFailureKind;
     use super::super::volume::VolumeState;
     use super::{
         completion_time_reached, duration_ms, duration_to_frames, failed_snapshot, frame_to_millis,
         millis_to_frame, output_failure_code, pause_action, resume_action, should_finish,
         should_publish_position, signal_stream_id, source_to_output_frame, start_failure_snapshot,
-        OutputSignal, OutputStreamId, PlaybackControlAction, PlaybackFailureCode, PlaybackService,
-        PlaybackServiceError, PlaybackSnapshot, PlaybackWorker,
+        stream_signal_action, OutputSignal, OutputStreamId, PlaybackControlAction,
+        PlaybackFailureCode, PlaybackService, PlaybackServiceError, PlaybackSnapshot,
+        PlaybackWorker, StreamSignalAction,
     };
     use cpal::StreamInstant;
     use std::sync::{mpsc, Arc, RwLock};
+
+    #[test]
+    fn classifies_stream_signals_by_selection_and_failure_kind() {
+        assert_eq!(
+            stream_signal_action(
+                &AudioOutputSelection::SystemDefault,
+                StreamFailureKind::DeviceChanged
+            ),
+            StreamSignalAction::RefreshDefaultDevice
+        );
+        assert_eq!(
+            stream_signal_action(
+                &AudioOutputSelection::Device {
+                    device_id: "device".into()
+                },
+                StreamFailureKind::DeviceChanged
+            ),
+            StreamSignalAction::PreservePlayback
+        );
+        assert_eq!(
+            stream_signal_action(
+                &AudioOutputSelection::SystemDefault,
+                StreamFailureKind::DeviceUnavailable
+            ),
+            StreamSignalAction::Fail(PlaybackFailureCode::OutputDeviceUnavailable)
+        );
+        assert_eq!(
+            stream_signal_action(
+                &AudioOutputSelection::SystemDefault,
+                StreamFailureKind::RuntimeFailed
+            ),
+            StreamSignalAction::Fail(PlaybackFailureCode::OutputStreamRuntimeFailed)
+        );
+    }
 
     #[test]
     fn serializes_playing_snapshot_with_camel_case_playback_id() {
@@ -1503,7 +1849,7 @@ mod tests {
 
         assert_eq!(
             serde_json::to_value(snapshot).unwrap(),
-            serde_json::json!({ "status": "playing", "playbackId": "1", "positionMs": 1_000, "durationMs": 60_000, "volume": 1.0, "muted": false })
+            serde_json::json!({ "status": "playing", "playbackId": "1", "positionMs": 1_000, "durationMs": 60_000, "volume": 1.0, "muted": false, "outputSelection": { "kind": "systemDefault" }, "outputDevice": { "id": "test-device", "name": "Test device" } })
         );
     }
 
@@ -1514,7 +1860,7 @@ mod tests {
 
         assert_eq!(
             serde_json::to_value(snapshot).unwrap(),
-            serde_json::json!({ "status": "paused", "playbackId": "1", "positionMs": 1_000, "durationMs": 60_000, "volume": 1.0, "muted": false })
+            serde_json::json!({ "status": "paused", "playbackId": "1", "positionMs": 1_000, "durationMs": 60_000, "volume": 1.0, "muted": false, "outputSelection": { "kind": "systemDefault" }, "outputDevice": { "id": "test-device", "name": "Test device" } })
         );
     }
 
@@ -1532,7 +1878,8 @@ mod tests {
                 "status": "failed",
                 "error": "noOutputDevice",
                 "volume": 1.0,
-                "muted": false
+                "muted": false,
+                "outputSelection": { "kind": "systemDefault" }
             })
         );
     }
@@ -1614,7 +1961,7 @@ mod tests {
         let service = PlaybackService::start().expect("worker should start");
         assert_eq!(
             serde_json::to_value(service.snapshot()).unwrap(),
-            serde_json::json!({"status": "stopped", "volume": 1.0, "muted": false})
+            serde_json::json!({"status": "stopped", "volume": 1.0, "muted": false, "outputSelection": { "kind": "systemDefault" }})
         );
         service.shutdown();
     }
@@ -1633,6 +1980,7 @@ mod tests {
     fn ignores_stream_failure_from_another_stream() {
         let signal = OutputSignal::StreamFailed {
             stream_id: OutputStreamId(2),
+            kind: StreamFailureKind::RuntimeFailed,
         };
         assert_ne!(signal_stream_id(&signal), OutputStreamId(1));
     }
@@ -1751,6 +2099,7 @@ mod tests {
                 OutputStreamId(2),
                 PlaybackFailureCode::OutputStreamBuildFailed,
                 VolumeState::default(),
+                AudioOutputSelection::SystemDefault,
             ),
             None
         );
@@ -1764,6 +2113,7 @@ mod tests {
                 OutputStreamId(1),
                 PlaybackFailureCode::OutputStreamStartFailed,
                 VolumeState::default(),
+                AudioOutputSelection::SystemDefault,
             ),
             Some(PlaybackSnapshot::failed(
                 VolumeState::default(),
@@ -1846,6 +2196,7 @@ mod tests {
             next_output_stream_id: 0,
             volume_state: VolumeState::default(),
             effective_gain: super::super::volume::AtomicEffectiveGain::new(1.0),
+            output_selection: AudioOutputSelection::SystemDefault,
             snapshot: Arc::new(RwLock::new(snapshot)),
             command_receiver,
             state_changed_sender,
@@ -1856,7 +2207,7 @@ mod tests {
 
     fn changed_volume(snapshot: &PlaybackSnapshot) -> (f32, bool) {
         match snapshot {
-            PlaybackSnapshot::Stopped { volume, muted }
+            PlaybackSnapshot::Stopped { volume, muted, .. }
             | PlaybackSnapshot::Playing { volume, muted, .. }
             | PlaybackSnapshot::Paused { volume, muted, .. }
             | PlaybackSnapshot::Failed { volume, muted, .. } => (*volume, *muted),

@@ -10,6 +10,9 @@ import {
 } from "./audio-files";
 import { formatPlaybackTime } from "@/lib/playback-time";
 
+const outputSelection = { kind: "systemDefault" } as const;
+const outputDevice = { id: "device-1", name: "Speakers" } as const;
+
 describe("isPlaybackSnapshot", () => {
   it("accepts playing and paused payloads with timing fields", () => {
     expect(
@@ -20,6 +23,8 @@ describe("isPlaybackSnapshot", () => {
         durationMs: 2_000,
         volume: 1,
         muted: false,
+        outputSelection,
+        outputDevice,
       }),
     ).toBe(true);
     expect(
@@ -30,6 +35,8 @@ describe("isPlaybackSnapshot", () => {
         durationMs: 2_000,
         volume: 1,
         muted: false,
+        outputSelection,
+        outputDevice,
       }),
     ).toBe(true);
   });
@@ -104,6 +111,8 @@ describe("isPlaybackSnapshot", () => {
         durationMs: null,
         volume: 1,
         muted: false,
+        outputSelection,
+        outputDevice,
       }),
     ).toBe(true);
     expect(
@@ -114,6 +123,8 @@ describe("isPlaybackSnapshot", () => {
         durationMs: 2_000,
         volume: 1,
         muted: false,
+        outputSelection,
+        outputDevice,
       }),
     ).toBe(false);
     expect(
@@ -124,6 +135,8 @@ describe("isPlaybackSnapshot", () => {
         durationMs: 2_000,
         volume: 1,
         muted: false,
+        outputSelection,
+        outputDevice,
       }),
     ).toBe(true);
     expect(
@@ -134,12 +147,16 @@ describe("isPlaybackSnapshot", () => {
         durationMs: 2_000,
         volume: 1,
         muted: false,
+        outputSelection,
+        outputDevice,
       }),
     ).toBe(true);
   });
 
   it("preserves stopped and failed snapshot validation", () => {
-    expect(isPlaybackSnapshot({ status: "stopped", volume: 1, muted: false })).toBe(true);
+    expect(
+      isPlaybackSnapshot({ status: "stopped", volume: 1, muted: false, outputSelection }),
+    ).toBe(true);
     expect(
       isPlaybackSnapshot({
         status: "failed",
@@ -147,6 +164,7 @@ describe("isPlaybackSnapshot", () => {
         error: "outputStreamRuntimeFailed",
         volume: 1,
         muted: false,
+        outputSelection,
       }),
     ).toBe(true);
     expect(isPlaybackSnapshot({ status: "failed", error: "unknownFailure" })).toBe(false);
@@ -159,6 +177,29 @@ describe("isPlaybackSnapshot", () => {
       expect(isPlaybackSnapshot({ status: "stopped", volume, muted: false })).toBe(false);
     }
     expect(isPlaybackSnapshot({ status: "stopped", volume: 1, muted: "false" })).toBe(false);
+  });
+
+  it("requires valid selection and active device fields", () => {
+    expect(isPlaybackSnapshot({ status: "stopped", volume: 1, muted: false })).toBe(false);
+    expect(
+      isPlaybackSnapshot({
+        status: "stopped",
+        volume: 1,
+        muted: false,
+        outputSelection: { kind: "device" },
+      }),
+    ).toBe(false);
+    expect(
+      isPlaybackSnapshot({
+        status: "playing",
+        playbackId: "1",
+        positionMs: 0,
+        durationMs: null,
+        volume: 1,
+        muted: false,
+        outputSelection,
+      }),
+    ).toBe(false);
   });
 });
 

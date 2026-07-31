@@ -13,11 +13,16 @@ const mockedCommands = vi.hoisted(() => ({
   muteAudioPlayback: vi.fn(),
   unmuteAudioPlayback: vi.fn(),
   getPlaybackState: vi.fn(),
+  setAudioOutputSelection: vi.fn(),
 }));
 
 vi.mock("@/bindings", () => ({ commands: mockedCommands }));
 
-import { listAudioOutputDevices } from "./audio-devices";
+import {
+  isSetAudioOutputSelectionError,
+  listAudioOutputDevices,
+  setAudioOutputSelection,
+} from "./audio-devices";
 import {
   getPlaybackState,
   inspectAudioFile,
@@ -32,7 +37,12 @@ import {
   validateAudioFile,
 } from "./audio-files";
 
-const snapshot = { status: "stopped", volume: 1, muted: false } as const;
+const snapshot = {
+  status: "stopped",
+  volume: 1,
+  muted: false,
+  outputSelection: { kind: "systemDefault" },
+} as const;
 
 describe("frontend API command bindings", () => {
   it("delegates file and device commands with their existing arguments", async () => {
@@ -69,6 +79,7 @@ describe("frontend API command bindings", () => {
       mockedCommands.muteAudioPlayback,
       mockedCommands.unmuteAudioPlayback,
       mockedCommands.getPlaybackState,
+      mockedCommands.setAudioOutputSelection,
     ]) {
       command.mockResolvedValue(snapshot);
     }
@@ -82,6 +93,7 @@ describe("frontend API command bindings", () => {
     await expect(muteAudioPlayback()).resolves.toEqual(snapshot);
     await expect(unmuteAudioPlayback()).resolves.toEqual(snapshot);
     await expect(getPlaybackState()).resolves.toEqual(snapshot);
+    await expect(setAudioOutputSelection({ kind: "systemDefault" })).resolves.toEqual(snapshot);
 
     expect(mockedCommands.startAudioFile).toHaveBeenCalledWith("C:/track.flac");
     expect(mockedCommands.stopAudioPlayback).toHaveBeenCalledOnce();
@@ -92,6 +104,7 @@ describe("frontend API command bindings", () => {
     expect(mockedCommands.muteAudioPlayback).toHaveBeenCalledOnce();
     expect(mockedCommands.unmuteAudioPlayback).toHaveBeenCalledOnce();
     expect(mockedCommands.getPlaybackState).toHaveBeenCalledOnce();
+    expect(mockedCommands.setAudioOutputSelection).toHaveBeenCalledWith({ kind: "systemDefault" });
   });
 
   it("rejects invalid volume before invoking the generated command", async () => {
@@ -100,5 +113,19 @@ describe("frontend API command bindings", () => {
       await expect(setPlaybackVolume(value)).rejects.toThrow();
     }
     expect(mockedCommands.setPlaybackVolume).not.toHaveBeenCalled();
+  });
+
+  it("validates and delegates output selection", async () => {
+    mockedCommands.setAudioOutputSelection.mockResolvedValue(snapshot);
+    await expect(
+      setAudioOutputSelection({ kind: "device", deviceId: "device-1" }),
+    ).resolves.toEqual(snapshot);
+    expect(mockedCommands.setAudioOutputSelection).toHaveBeenCalledWith({
+      kind: "device",
+      deviceId: "device-1",
+    });
+    await expect(setAudioOutputSelection({ kind: "device", deviceId: "" })).rejects.toThrow();
+    expect(isSetAudioOutputSelectionError({ code: "invalidDeviceId" })).toBe(true);
+    expect(isSetAudioOutputSelectionError({ code: "unknown" })).toBe(false);
   });
 });

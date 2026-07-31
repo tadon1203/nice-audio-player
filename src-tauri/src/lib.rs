@@ -9,11 +9,14 @@ use tauri_specta::{collect_commands, Builder, ErrorHandlingMode};
 
 use audio::devices::{
     list_output_devices as list_output_devices_with_cpal, AudioDeviceListError, AudioOutputDevice,
+    AudioOutputSelection,
 };
 use audio::inspection::{
     inspect_audio_file as inspect_validated_audio_file, AudioFileInfo, AudioFileInspectionError,
 };
-use audio::playback::{PlaybackService, PlaybackServiceError, PlaybackSnapshot};
+use audio::playback::{
+    PlaybackFailureCode, PlaybackService, PlaybackServiceError, PlaybackSnapshot,
+};
 use audio::validation::{
     validate_audio_file as validate_audio_file_path, AudioFileValidationError, ValidatedAudioFile,
 };
@@ -45,7 +48,20 @@ fn list_audio_output_devices() -> Result<Vec<AudioOutputDevice>, AudioDeviceList
 enum StartAudioFileError {
     ValidationFailed { error: AudioFileValidationError },
     DecodeFailed,
+    NoOutputDevice,
+    OutputDeviceUnavailable,
     OutputFailed,
+    PlaybackWorkerUnavailable,
+    TaskFailed,
+}
+
+#[allow(clippy::enum_variant_names)]
+#[derive(Debug, Clone, serde::Serialize, specta::Type, PartialEq, Eq)]
+#[serde(tag = "code", rename_all = "camelCase")]
+enum SetAudioOutputSelectionError {
+    InvalidDeviceId,
+    OutputDeviceUnavailable,
+    InvalidPlaybackState,
     PlaybackWorkerUnavailable,
     TaskFailed,
 }
@@ -131,9 +147,47 @@ fn map_start_error(error: PlaybackServiceError) -> StartAudioFileError {
         PlaybackServiceError::DurationUnavailable | PlaybackServiceError::Seek => {
             StartAudioFileError::DecodeFailed
         }
+        PlaybackServiceError::Output(PlaybackFailureCode::NoOutputDevice) => {
+            StartAudioFileError::NoOutputDevice
+        }
+        PlaybackServiceError::Output(PlaybackFailureCode::OutputDeviceUnavailable) => {
+            StartAudioFileError::OutputDeviceUnavailable
+        }
         PlaybackServiceError::Output(_) => StartAudioFileError::OutputFailed,
         PlaybackServiceError::Decode => StartAudioFileError::DecodeFailed,
+        PlaybackServiceError::InvalidDeviceId | PlaybackServiceError::OutputDeviceUnavailable => {
+            StartAudioFileError::OutputFailed
+        }
     }
+}
+
+fn map_output_selection_error(error: PlaybackServiceError) -> SetAudioOutputSelectionError {
+    match error {
+        PlaybackServiceError::InvalidDeviceId => SetAudioOutputSelectionError::InvalidDeviceId,
+        PlaybackServiceError::OutputDeviceUnavailable => {
+            SetAudioOutputSelectionError::OutputDeviceUnavailable
+        }
+        PlaybackServiceError::InvalidPlaybackState => {
+            SetAudioOutputSelectionError::InvalidPlaybackState
+        }
+        PlaybackServiceError::WorkerUnavailable => {
+            SetAudioOutputSelectionError::PlaybackWorkerUnavailable
+        }
+        _ => SetAudioOutputSelectionError::PlaybackWorkerUnavailable,
+    }
+}
+
+#[tauri::command]
+#[specta::specta]
+async fn set_audio_output_selection(
+    selection: AudioOutputSelection,
+    playback: tauri::State<'_, PlaybackService>,
+) -> Result<PlaybackSnapshot, SetAudioOutputSelectionError> {
+    let playback = playback.handle();
+    tauri::async_runtime::spawn_blocking(move || playback.set_output_selection(selection))
+        .await
+        .map_err(|_| SetAudioOutputSelectionError::TaskFailed)?
+        .map_err(map_output_selection_error)
 }
 
 #[tauri::command]
@@ -160,6 +214,9 @@ fn map_pause_error(error: PlaybackServiceError) -> PauseAudioPlaybackError {
         }
         PlaybackServiceError::Output(_) => PauseAudioPlaybackError::OutputFailed,
         PlaybackServiceError::Decode => PauseAudioPlaybackError::OutputFailed,
+        PlaybackServiceError::InvalidDeviceId | PlaybackServiceError::OutputDeviceUnavailable => {
+            PauseAudioPlaybackError::OutputFailed
+        }
     }
 }
 
@@ -189,6 +246,9 @@ fn map_resume_error(error: PlaybackServiceError) -> ResumeAudioPlaybackError {
         }
         PlaybackServiceError::Output(_) => ResumeAudioPlaybackError::OutputFailed,
         PlaybackServiceError::Decode => ResumeAudioPlaybackError::OutputFailed,
+        PlaybackServiceError::InvalidDeviceId | PlaybackServiceError::OutputDeviceUnavailable => {
+            ResumeAudioPlaybackError::OutputFailed
+        }
     }
 }
 
@@ -203,6 +263,9 @@ fn map_seek_error(error: PlaybackServiceError) -> SeekAudioPlaybackError {
         PlaybackServiceError::Seek => SeekAudioPlaybackError::SeekFailed,
         PlaybackServiceError::Decode => SeekAudioPlaybackError::DecodeFailed,
         PlaybackServiceError::Output(_) => SeekAudioPlaybackError::OutputFailed,
+        PlaybackServiceError::InvalidDeviceId | PlaybackServiceError::OutputDeviceUnavailable => {
+            SeekAudioPlaybackError::OutputFailed
+        }
     }
 }
 
@@ -242,6 +305,9 @@ fn map_set_volume_error(error: PlaybackServiceError) -> SetPlaybackVolumeError {
         | PlaybackServiceError::Seek
         | PlaybackServiceError::Output(_)
         | PlaybackServiceError::Decode => SetPlaybackVolumeError::PlaybackWorkerUnavailable,
+        PlaybackServiceError::InvalidDeviceId | PlaybackServiceError::OutputDeviceUnavailable => {
+            SetPlaybackVolumeError::PlaybackWorkerUnavailable
+        }
     }
 }
 
@@ -267,6 +333,9 @@ fn map_mute_error(error: PlaybackServiceError) -> PlaybackMuteError {
         | PlaybackServiceError::Seek
         | PlaybackServiceError::Output(_)
         | PlaybackServiceError::Decode => PlaybackMuteError::PlaybackWorkerUnavailable,
+        PlaybackServiceError::InvalidDeviceId | PlaybackServiceError::OutputDeviceUnavailable => {
+            PlaybackMuteError::PlaybackWorkerUnavailable
+        }
     }
 }
 
@@ -317,6 +386,7 @@ fn collect_specta_commands<R: tauri::Runtime>() -> tauri_specta::Commands<R> {
         pause_audio_playback,
         resume_audio_playback,
         seek_audio_playback,
+        set_audio_output_selection,
         set_playback_volume,
         mute_audio_playback,
         unmute_audio_playback,
