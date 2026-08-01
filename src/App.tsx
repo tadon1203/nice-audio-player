@@ -8,38 +8,41 @@ import {
   setAudioOutputSelection,
 } from "@/api/audio-devices";
 import {
-  isAudioFileValidationError,
   getPlaybackState,
+  isAudioFileValidationError,
   isPauseAudioPlaybackError,
-  isResumeAudioPlaybackError,
   isPlaybackMuteError,
+  isResumeAudioPlaybackError,
+  isSeekAudioPlaybackError,
   isSetPlaybackVolumeError,
   isStartAudioFileError,
   listenToPlaybackState,
+  muteAudioPlayback,
   pauseAudioPlayback,
   resumeAudioPlayback,
-  isSeekAudioPlaybackError,
   seekAudioPlayback,
   setPlaybackVolume,
-  muteAudioPlayback,
-  unmuteAudioPlayback,
   startAudioFile,
   stopAudioPlayback,
+  unmuteAudioPlayback,
   validateAudioFile,
 } from "@/api/audio-files";
 import type {
   AudioOutputDevice,
   AudioOutputSelection,
+  PlaybackFailureCode,
   PlaybackSnapshot,
   ValidatedAudioFile,
 } from "@/bindings";
-import { formatPlaybackTime } from "@/lib/playback-time";
+
+import { AppShell } from "./components/AppShell";
+import { NowPlayingView } from "./components/NowPlayingView";
+import { PlaybackDock } from "./components/PlaybackDock";
+
+type PendingTransportCommand = "start" | "stop" | "pause" | "resume" | null;
 
 function formatValidationError(error: unknown): string {
-  if (!isAudioFileValidationError(error)) {
-    return "The selected file could not be validated.";
-  }
-
+  if (!isAudioFileValidationError(error)) return "The selected file could not be validated.";
   switch (error.code) {
     case "emptyPath":
       return "Select an audio file first.";
@@ -47,59 +50,82 @@ function formatValidationError(error: unknown): string {
       return "File not found.";
     case "notAFile":
       return "The selected path is not a file.";
-    case "unsupportedExtension": {
-      const extension = error.details?.extension;
-      return extension
-        ? `.${extension} is not currently supported.`
+    case "unsupportedExtension":
+      return error.details?.extension
+        ? `.${error.details.extension} is not currently supported.`
         : "The selected file has no supported extension.";
-    }
     case "invalidFileName":
       return "The selected file name is invalid.";
   }
 }
 
-type PendingPlaybackCommand = "start" | "stop" | "pause" | "resume" | "seek" | null;
+function formatPlaybackFailure(code: PlaybackFailureCode): string {
+  switch (code) {
+    case "noOutputDevice":
+      return "No audio output device is available.";
+    case "outputDeviceUnavailable":
+      return "The selected output device is unavailable.";
+    case "unsupportedOutputConfiguration":
+      return "The output device configuration is unsupported.";
+    case "outputStreamBuildFailed":
+      return "The audio output could not be prepared.";
+    case "outputStreamStartFailed":
+      return "The audio output could not be started.";
+    case "outputStreamPauseFailed":
+      return "The audio output could not be paused.";
+    case "outputStreamResumeFailed":
+      return "The audio output could not be resumed.";
+    case "outputStreamRuntimeFailed":
+      return "The audio output stopped unexpectedly.";
+    case "completionTimingFailed":
+      return "Playback completion could not be determined.";
+    case "decodeFailed":
+      return "The audio file could not be decoded.";
+  }
+}
 
 function App() {
-  const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [validatedFile, setValidatedFile] = useState<ValidatedAudioFile | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [isValidatingFile, setIsValidatingFile] = useState(false);
   const [outputDevices, setOutputDevices] = useState<AudioOutputDevice[] | null>(null);
   const [deviceListError, setDeviceListError] = useState<string | null>(null);
   const [isLoadingDevices, setIsLoadingDevices] = useState(false);
   const [isOutputSelectionPending, setIsOutputSelectionPending] = useState(false);
+  const [isPlaybackInitializing, setIsPlaybackInitializing] = useState(true);
   const [playback, setPlayback] = useState<PlaybackSnapshot>({
     status: "stopped",
     volume: 1,
     muted: false,
     outputSelection: { kind: "systemDefault" },
   });
-  const [pendingPlaybackCommand, setPendingPlaybackCommand] =
-    useState<PendingPlaybackCommand>(null);
-  const isChangingPlaybackState = pendingPlaybackCommand !== null;
-  const isAudioCommandPending = isChangingPlaybackState || isOutputSelectionPending;
-  const isSeeking = pendingPlaybackCommand === "seek";
+  const [pendingTransportCommand, setPendingTransportCommand] =
+    useState<PendingTransportCommand>(null);
   const [playbackError, setPlaybackError] = useState<string | null>(null);
   const [isScrubbing, setIsScrubbing] = useState(false);
   const [positionDraft, setPositionDraft] = useState(0);
+  const [isSeekPending, setIsSeekPending] = useState(false);
   const [isAdjustingVolume, setIsAdjustingVolume] = useState(false);
   const [volumeDraft, setVolumeDraft] = useState(100);
   const [isVolumePending, setIsVolumePending] = useState(false);
   const volumeAdjustingRef = useRef(false);
   const volumePendingRef = useRef(false);
 
+  const isTransportCommandPending = pendingTransportCommand !== null;
+  const isAudioCommandPending = isTransportCommandPending || isOutputSelectionPending;
+  const isTimedPlayback = playback.status === "playing" || playback.status === "paused";
+
   useEffect(() => {
     let active = true;
     let unsubscribe: (() => void) | undefined;
-    async function initializePlaybackState(): Promise<void> {
+    async function initializePlaybackState() {
       try {
         const registeredUnsubscribe = await listenToPlaybackState((snapshot) => {
-          if (active) {
-            setPlayback(snapshot);
-            if (!volumeAdjustingRef.current && !volumePendingRef.current) {
-              setVolumeDraft(Math.round((snapshot.volume ?? 0) * 100));
-            }
-          }
+          if (!active) return;
+          setPlayback(snapshot);
+          if (snapshot.status === "failed") setPlaybackError(formatPlaybackFailure(snapshot.error));
+          if (!volumeAdjustingRef.current && !volumePendingRef.current)
+            setVolumeDraft(Math.round(snapshot.volume * 100));
         });
         if (!active) {
           registeredUnsubscribe();
@@ -109,10 +135,14 @@ function App() {
         const snapshot = await getPlaybackState();
         if (active) {
           setPlayback(snapshot);
-          setVolumeDraft(Math.round((snapshot.volume ?? 0) * 100));
+          setVolumeDraft(Math.round(snapshot.volume * 100));
+          setIsPlaybackInitializing(false);
         }
       } catch {
-        if (active) setPlaybackError("The playback state could not be read.");
+        if (active) {
+          setPlaybackError("The playback state could not be read.");
+          setIsPlaybackInitializing(false);
+        }
       }
     }
     void initializePlaybackState();
@@ -126,131 +156,94 @@ function App() {
     void loadOutputDevices();
   }, []);
 
-  async function selectAudioFile(): Promise<void> {
+  async function selectAudioFile() {
+    if (isValidatingFile || isTransportCommandPending || isTimedPlayback) return;
     const result = await open({
       multiple: false,
       directory: false,
-      filters: [
-        {
-          name: "Audio",
-          extensions: ["mp3", "flac", "wav", "m4a", "aac"],
-        },
-      ],
+      filters: [{ name: "Audio", extensions: ["mp3", "flac", "wav", "m4a", "aac"] }],
     });
-
-    if (typeof result === "string") {
-      setSelectedPath(result);
+    if (typeof result !== "string") return;
+    setValidationError(null);
+    setPlaybackError(null);
+    setIsValidatingFile(true);
+    try {
+      setValidatedFile(await validateAudioFile(result));
+    } catch (error: unknown) {
       setValidatedFile(null);
-      setValidationError(null);
-      setPlaybackError(null);
-
-      try {
-        setValidatedFile(await validateAudioFile(result));
-      } catch (error: unknown) {
-        setValidationError(formatValidationError(error));
-      }
+      setValidationError(formatValidationError(error));
+    } finally {
+      setIsValidatingFile(false);
     }
   }
 
-  async function playSelectedAudioFile(): Promise<void> {
-    if (validatedFile === null || isAudioCommandPending) {
-      return;
-    }
-
-    setPendingPlaybackCommand("start");
+  async function playSelectedAudioFile() {
+    if (validatedFile === null || isAudioCommandPending) return;
+    setPendingTransportCommand("start");
     setPlaybackError(null);
-
     try {
       setPlayback(await startAudioFile(validatedFile.path));
     } catch (error: unknown) {
-      if (!isStartAudioFileError(error)) {
-        console.error("Unexpected playback error", error);
-        setPlaybackError("An unexpected playback error occurred.");
-      } else {
-        switch (error.code) {
-          case "validationFailed":
-            setPlaybackError("The file is no longer valid.");
-            break;
-          case "decodeFailed":
-            setPlaybackError("The audio file could not be decoded.");
-            break;
-          case "noOutputDevice":
-            setPlaybackError("No system-default audio output device is available.");
-            break;
-          case "outputDeviceUnavailable":
-            setPlaybackError("The selected output device is unavailable.");
-            break;
-          case "outputFailed":
-            setPlaybackError("The audio output could not play this file.");
-            break;
-          case "playbackWorkerUnavailable":
-            setPlaybackError("The playback service is unavailable.");
-            break;
-          case "taskFailed":
-            setPlaybackError("The playback task failed.");
-            break;
-        }
-      }
+      setPlaybackError(
+        isStartAudioFileError(error)
+          ? formatStartError(error.code)
+          : "An unexpected playback error occurred.",
+      );
     } finally {
-      setPendingPlaybackCommand(null);
+      setPendingTransportCommand(null);
     }
   }
 
-  async function stopPlayback(): Promise<void> {
+  async function stopPlayback() {
     if (isAudioCommandPending) return;
-    setPendingPlaybackCommand("stop");
+    setPendingTransportCommand("stop");
     setPlaybackError(null);
     try {
       setPlayback(await stopAudioPlayback());
     } catch {
       setPlaybackError("The playback service is unavailable.");
     } finally {
-      setPendingPlaybackCommand(null);
+      setPendingTransportCommand(null);
     }
   }
 
-  async function pausePlayback(): Promise<void> {
+  async function pausePlayback() {
     if (isAudioCommandPending) return;
-    setPendingPlaybackCommand("pause");
+    setPendingTransportCommand("pause");
     setPlaybackError(null);
     try {
       setPlayback(await pauseAudioPlayback());
     } catch (error: unknown) {
       setPlaybackError(
-        isPauseAudioPlaybackError(error)
-          ? error.code === "invalidPlaybackState"
-            ? "Playback cannot be paused in its current state."
-            : "The playback could not be paused."
-          : "An unexpected playback error occurred.",
+        isPauseAudioPlaybackError(error) && error.code === "invalidPlaybackState"
+          ? "Playback cannot be paused in its current state."
+          : "The playback could not be paused.",
       );
     } finally {
-      setPendingPlaybackCommand(null);
+      setPendingTransportCommand(null);
     }
   }
 
-  async function resumePlayback(): Promise<void> {
+  async function resumePlayback() {
     if (isAudioCommandPending) return;
-    setPendingPlaybackCommand("resume");
+    setPendingTransportCommand("resume");
     setPlaybackError(null);
     try {
       setPlayback(await resumeAudioPlayback());
     } catch (error: unknown) {
       setPlaybackError(
-        isResumeAudioPlaybackError(error)
-          ? error.code === "invalidPlaybackState"
-            ? "Playback cannot be resumed in its current state."
-            : "The playback could not be resumed."
-          : "An unexpected playback error occurred.",
+        isResumeAudioPlaybackError(error) && error.code === "invalidPlaybackState"
+          ? "Playback cannot be resumed in its current state."
+          : "The playback could not be resumed.",
       );
     } finally {
-      setPendingPlaybackCommand(null);
+      setPendingTransportCommand(null);
     }
   }
 
-  async function loadOutputDevices(): Promise<void> {
+  async function loadOutputDevices() {
     setIsLoadingDevices(true);
     setDeviceListError(null);
-
     try {
       setOutputDevices(await listAudioOutputDevices());
     } catch (error: unknown) {
@@ -265,84 +258,83 @@ function App() {
     }
   }
 
-  async function changeOutputSelection(selection: AudioOutputSelection): Promise<void> {
-    if (
-      isAudioCommandPending ||
-      playback.status === "playing" ||
-      playback.status === "paused" ||
-      isLoadingDevices
-    ) {
-      return;
-    }
+  async function changeOutputSelection(selection: AudioOutputSelection) {
+    if (isAudioCommandPending || isLoadingDevices || isTimedPlayback) return;
     setIsOutputSelectionPending(true);
     setPlaybackError(null);
     try {
       setPlayback(await setAudioOutputSelection(selection));
     } catch (error: unknown) {
-      if (isSetAudioOutputSelectionError(error)) {
-        if (error.code === "outputDeviceUnavailable") {
-          setPlaybackError("The selected output device is unavailable.");
-          await loadOutputDevices();
-        } else if (error.code === "invalidPlaybackState") {
-          setPlaybackError("Stop playback before changing the output device.");
-          try {
-            setPlayback(await getPlaybackState());
-          } catch {
-            // Keep the existing authoritative snapshot when the refresh fails.
-          }
-        } else if (error.code === "invalidDeviceId") {
-          setPlaybackError("The selected output device is invalid.");
-        } else {
-          setPlaybackError("The output device could not be changed.");
-        }
-      } else {
-        setPlaybackError("The output device could not be changed.");
+      if (isSetAudioOutputSelectionError(error) && error.code === "outputDeviceUnavailable") {
+        setPlaybackError("The selected output device is unavailable.");
+        await loadOutputDevices();
+      } else if (isSetAudioOutputSelectionError(error) && error.code === "invalidPlaybackState")
+        setPlaybackError("Stop playback before changing the output device.");
+      else setPlaybackError("The output device could not be changed.");
+      try {
+        setPlayback(await getPlaybackState());
+      } catch {
+        /* Preserve the authoritative snapshot. */
       }
     } finally {
       setIsOutputSelectionPending(false);
     }
   }
 
-  async function commitSeek(targetPositionMs: number): Promise<void> {
+  function updateSeek(value: number) {
+    setIsScrubbing(true);
+    setPositionDraft(value);
+  }
+  async function commitSeek(value: number) {
     if (
+      !isTimedPlayback ||
+      playback.durationMs === null ||
       isAudioCommandPending ||
-      (playback.status !== "playing" && playback.status !== "paused") ||
-      playback.durationMs === null
+      isSeekPending
     ) {
       setIsScrubbing(false);
       return;
     }
+    const target = Math.max(0, Math.min(value, playback.durationMs));
     setIsScrubbing(false);
-    const target = Math.max(0, Math.min(targetPositionMs, playback.durationMs));
-    setPendingPlaybackCommand("seek");
+    setIsSeekPending(true);
     setPlaybackError(null);
     try {
       setPlayback(await seekAudioPlayback(target));
       setPositionDraft(target);
     } catch (error: unknown) {
-      if (isSeekAudioPlaybackError(error)) {
-        setPlaybackError(
-          error.code === "invalidPlaybackState"
-            ? "Playback cannot be seeked in its current state."
-            : error.code === "durationUnavailable"
-              ? "Playback duration is unavailable."
-              : "The playback position could not be changed.",
-        );
-      } else {
-        setPlaybackError("The playback position could not be changed.");
-      }
+      setPlaybackError(
+        isSeekAudioPlaybackError(error)
+          ? "The playback position could not be changed."
+          : "An unexpected playback error occurred.",
+      );
       try {
         setPlayback(await getPlaybackState());
       } catch {
-        // Keep the existing authoritative snapshot when the refresh fails.
+        /* Preserve the authoritative snapshot. */
       }
     } finally {
-      setPendingPlaybackCommand(null);
+      setIsSeekPending(false);
     }
   }
 
-  async function commitVolume(targetPercentage: number): Promise<void> {
-    const target = Math.max(0, Math.min(100, Math.round(targetPercentage)));
+  function beginVolume() {
+    volumeAdjustingRef.current = true;
+    setIsAdjustingVolume(true);
+    setVolumeDraft(Math.round(playback.volume * 100));
+  }
+  function updateVolume(value: number) {
+    volumeAdjustingRef.current = true;
+    setIsAdjustingVolume(true);
+    setVolumeDraft(value);
+  }
+  function cancelVolume() {
+    volumeAdjustingRef.current = false;
+    setIsAdjustingVolume(false);
+    setVolumeDraft(Math.round(playback.volume * 100));
+  }
+  async function commitVolume(value: number) {
+    const target = Math.max(0, Math.min(100, Math.round(value)));
     volumeAdjustingRef.current = false;
     setIsAdjustingVolume(false);
     volumePendingRef.current = true;
@@ -351,8 +343,7 @@ function App() {
     try {
       const snapshot = await setPlaybackVolume(target / 100);
       setPlayback(snapshot);
-      setIsAdjustingVolume(false);
-      setVolumeDraft(Math.round((snapshot.volume ?? 0) * 100));
+      setVolumeDraft(Math.round(snapshot.volume * 100));
     } catch (error: unknown) {
       setPlaybackError(
         isSetPlaybackVolumeError(error) && error.code === "invalidVolume"
@@ -362,9 +353,9 @@ function App() {
       try {
         const snapshot = await getPlaybackState();
         setPlayback(snapshot);
-        setVolumeDraft(Math.round((snapshot.volume ?? 0) * 100));
+        setVolumeDraft(Math.round(snapshot.volume * 100));
       } catch {
-        // Keep the existing authoritative snapshot when the refresh fails.
+        /* Preserve the authoritative snapshot. */
       }
     } finally {
       volumePendingRef.current = false;
@@ -372,7 +363,7 @@ function App() {
     }
   }
 
-  async function toggleMute(): Promise<void> {
+  async function toggleMute() {
     if (isVolumePending) return;
     volumePendingRef.current = true;
     setIsVolumePending(true);
@@ -388,7 +379,7 @@ function App() {
       try {
         setPlayback(await getPlaybackState());
       } catch {
-        // Keep the existing authoritative snapshot when the refresh fails.
+        /* Preserve the authoritative snapshot. */
       }
     } finally {
       volumePendingRef.current = false;
@@ -396,286 +387,111 @@ function App() {
     }
   }
 
-  const selectedOutputDeviceId =
-    playback.outputSelection.kind === "device" ? playback.outputSelection.deviceId : null;
+  const statusMessage = isPlaybackInitializing
+    ? "Loading playback state…"
+    : isValidatingFile
+      ? "Validating audio file…"
+      : pendingTransportCommand === "start"
+        ? "Starting playback…"
+        : pendingTransportCommand === "pause"
+          ? "Pausing playback…"
+          : pendingTransportCommand === "resume"
+            ? "Resuming playback…"
+            : pendingTransportCommand === "stop"
+              ? "Stopping playback…"
+              : isSeekPending
+                ? "Updating playback position…"
+                : isVolumePending
+                  ? "Updating volume…"
+                  : isOutputSelectionPending
+                    ? "Changing output device…"
+                    : playback.status === "playing"
+                      ? "Playing"
+                      : playback.status === "paused"
+                        ? "Paused"
+                        : "";
+  const isFileSelectionDisabled =
+    isPlaybackInitializing || isValidatingFile || isTransportCommandPending || isTimedPlayback;
 
   return (
-    <main className="grid h-screen place-items-center bg-zinc-950 p-8 text-zinc-100">
-      <section className="w-full max-w-xl rounded-2xl border border-zinc-800 bg-zinc-900 p-8">
-        <p className="text-sm text-zinc-400">Nice Audio Player</p>
-
-        <h1 className="mt-2 text-3xl font-semibold">Audio file selection</h1>
-
-        <button
-          type="button"
-          onClick={() => void selectAudioFile()}
-          className="mt-6 rounded-lg bg-zinc-100 px-4 py-2 font-medium text-zinc-950"
-        >
-          音楽ファイルを選択
-        </button>
-
-        <p className="mt-4 break-all text-sm text-zinc-400">
-          {selectedPath ?? "ファイルは選択されていません"}
-        </p>
-
-        {validatedFile ? (
-          <dl className="mt-4 space-y-1 text-sm text-zinc-300">
-            <div>
-              <dt className="inline text-zinc-500">File: </dt>
-              <dd className="inline">{validatedFile.fileName}</dd>
-            </div>
-            <div>
-              <dt className="inline text-zinc-500">Extension: </dt>
-              <dd className="inline">.{validatedFile.extension}</dd>
-            </div>
-          </dl>
-        ) : null}
-
-        {validationError ? (
-          <p className="mt-4 text-sm text-red-300" role="alert">
-            {validationError}
-          </p>
-        ) : null}
-
-        <button
-          type="button"
-          onClick={() => void playSelectedAudioFile()}
-          disabled={validatedFile === null || isAudioCommandPending}
-          className="mt-4 rounded-lg border border-zinc-700 px-4 py-2 font-medium text-zinc-100 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {isChangingPlaybackState ? "Changing..." : "Play"}
-        </button>
-
-        {playback.status === "playing" ? (
-          <>
-            <button
-              type="button"
-              onClick={() => void pausePlayback()}
-              disabled={isAudioCommandPending}
-              className="ml-3 rounded-lg border border-zinc-700 px-4 py-2 font-medium text-zinc-100 disabled:opacity-60"
-            >
-              {isChangingPlaybackState ? "Changing..." : "Pause"}
-            </button>
-            <button
-              type="button"
-              onClick={() => void stopPlayback()}
-              disabled={isAudioCommandPending}
-              className="ml-3 rounded-lg border border-zinc-700 px-4 py-2 font-medium text-zinc-100 disabled:opacity-60"
-            >
-              Stop
-            </button>
-          </>
-        ) : playback.status === "paused" ? (
-          <>
-            <button
-              type="button"
-              onClick={() => void resumePlayback()}
-              disabled={isAudioCommandPending}
-              className="ml-3 rounded-lg border border-zinc-700 px-4 py-2 font-medium text-zinc-100 disabled:opacity-60"
-            >
-              {isChangingPlaybackState ? "Changing..." : "Resume"}
-            </button>
-            <button
-              type="button"
-              onClick={() => void stopPlayback()}
-              disabled={isAudioCommandPending}
-              className="ml-3 rounded-lg border border-zinc-700 px-4 py-2 font-medium text-zinc-100 disabled:opacity-60"
-            >
-              Stop
-            </button>
-          </>
-        ) : null}
-        <p className="mt-4 text-sm text-zinc-400" role="status">
-          Playback: {playback.status}
-          {playback.status === "playing" || playback.status === "paused"
-            ? ` (${playback.playbackId})`
-            : ""}
-        </p>
-        {playback.status === "playing" || playback.status === "paused" ? (
-          <p className="mt-2 font-mono text-sm text-zinc-300">
-            {formatPlaybackTime(isScrubbing || isSeeking ? positionDraft : playback.positionMs)} /{" "}
-            {playback.durationMs === null ? "--:--" : formatPlaybackTime(playback.durationMs)}
-          </p>
-        ) : null}
-        {playback.status === "playing" || playback.status === "paused" ? (
-          <p className="mt-2 text-sm text-zinc-400">Output device: {playback.outputDevice.name}</p>
-        ) : null}
-
-        <div className="mt-6">
-          <div className="flex items-center justify-between text-sm text-zinc-300">
-            <label htmlFor="playback-volume">Playback volume</label>
-            <span>{Math.round((playback.volume ?? 0) * 100)}%</span>
-          </div>
-          <input
-            id="playback-volume"
-            aria-label="Playback volume"
-            aria-valuetext={`${isAdjustingVolume ? Math.round(volumeDraft) : Math.round((playback.volume ?? 0) * 100)} percent`}
-            type="range"
-            min={0}
-            max={100}
-            step={1}
-            value={isAdjustingVolume ? volumeDraft : Math.round((playback.volume ?? 0) * 100)}
-            disabled={isVolumePending}
-            onChange={(event) => {
-              const value = Number(event.currentTarget.value);
-              volumeAdjustingRef.current = true;
-              setIsAdjustingVolume(true);
-              setVolumeDraft(value);
-            }}
-            onPointerDown={() => {
-              volumeAdjustingRef.current = true;
-              setIsAdjustingVolume(true);
-              setVolumeDraft(Math.round((playback.volume ?? 0) * 100));
-            }}
-            onPointerUp={(event) => void commitVolume(Number(event.currentTarget.value))}
-            onPointerCancel={() => {
-              volumeAdjustingRef.current = false;
-              setIsAdjustingVolume(false);
-              setVolumeDraft(Math.round((playback.volume ?? 0) * 100));
-            }}
-            onKeyUp={(event) => {
-              if (
-                [
-                  "ArrowLeft",
-                  "ArrowRight",
-                  "ArrowUp",
-                  "ArrowDown",
-                  "PageUp",
-                  "PageDown",
-                  "Home",
-                  "End",
-                ].includes(event.key)
-              ) {
-                void commitVolume(Number(event.currentTarget.value));
-              }
-            }}
-            className="mt-2 w-full"
-          />
-          <button
-            type="button"
-            onClick={() => void toggleMute()}
-            disabled={isVolumePending}
-            className="mt-3 rounded-lg border border-zinc-700 px-4 py-2 font-medium text-zinc-100 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {playback.muted ? "Unmute" : "Mute"}
-          </button>
-        </div>
-        {playback.status === "playing" || playback.status === "paused" ? (
-          <label className="mt-4 block text-sm text-zinc-300">
-            <span className="sr-only">Playback position</span>
-            <input
-              aria-label="Playback position"
-              type="range"
-              min={0}
-              max={playback.durationMs ?? 0}
-              value={Math.min(
-                isScrubbing || isSeeking ? positionDraft : playback.positionMs,
-                playback.durationMs ?? 0,
-              )}
-              disabled={isAudioCommandPending || playback.durationMs === null}
-              onChange={(event) => {
-                setIsScrubbing(true);
-                setPositionDraft(Number(event.currentTarget.value));
-              }}
-              onPointerDown={() => setIsScrubbing(true)}
-              onPointerUp={(event) => void commitSeek(Number(event.currentTarget.value))}
-              onPointerCancel={() => {
-                setIsScrubbing(false);
-                setPositionDraft(playback.positionMs);
-              }}
-              onKeyUp={(event) => {
-                if (
-                  [
-                    "ArrowLeft",
-                    "ArrowRight",
-                    "ArrowUp",
-                    "ArrowDown",
-                    "PageUp",
-                    "PageDown",
-                    "Home",
-                    "End",
-                  ].includes(event.key)
-                ) {
-                  void commitSeek(Number(event.currentTarget.value));
-                }
-              }}
-              className="mt-2 w-full"
-            />
-          </label>
-        ) : null}
-
-        {playbackError ? (
-          <p className="mt-4 text-sm text-red-300" role="alert">
-            {playbackError}
-          </p>
-        ) : null}
-        {playback.status === "failed" ? (
-          <p className="mt-4 text-sm text-red-300" role="alert">
-            Playback failed: {playback.error}
-          </p>
-        ) : null}
-
-        <div className="mt-8 border-t border-zinc-800 pt-6">
-          <h2 className="text-lg font-medium">Audio output devices</h2>
-          <label className="mt-4 block text-sm text-zinc-300">
-            <span>Audio output device</span>
-            <select
-              aria-label="Audio output device"
-              value={
-                playback.outputSelection.kind === "systemDefault"
-                  ? "systemDefault"
-                  : playback.outputSelection.deviceId
-              }
-              disabled={
-                isLoadingDevices ||
-                isOutputSelectionPending ||
-                isAudioCommandPending ||
-                playback.status === "playing" ||
-                playback.status === "paused"
-              }
-              onChange={(event) => {
-                const value = event.currentTarget.value;
-                void changeOutputSelection(
-                  value === "systemDefault"
-                    ? { kind: "systemDefault" }
-                    : { kind: "device", deviceId: value },
-                );
-              }}
-              className="mt-2 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2"
-            >
-              <option value="systemDefault">System default</option>
-              {selectedOutputDeviceId !== null &&
-              !outputDevices?.some((device) => device.id === selectedOutputDeviceId) ? (
-                <option value={selectedOutputDeviceId} disabled>
-                  Unavailable selected device
-                </option>
-              ) : null}
-              {outputDevices?.map((device) => (
-                <option key={device.id} value={device.id}>
-                  {device.name}
-                  {device.isDefault ? " — Current default" : ""}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            type="button"
-            onClick={() => void loadOutputDevices()}
-            disabled={isLoadingDevices}
-            className="mt-4 rounded-lg border border-zinc-700 px-4 py-2 font-medium text-zinc-100 disabled:cursor-wait disabled:opacity-60"
-          >
-            {isLoadingDevices ? "Loading devices..." : "Refresh devices"}
-          </button>
-
-          {deviceListError ? (
-            <p className="mt-4 text-sm text-red-300" role="alert">
-              {deviceListError}
-            </p>
-          ) : null}
-        </div>
-      </section>
-    </main>
+    <AppShell
+      main={
+        <NowPlayingView
+          validatedFile={validatedFile}
+          isValidatingFile={isValidatingFile}
+          isFileSelectionDisabled={isFileSelectionDisabled}
+          validationError={validationError}
+          onSelectFile={() => void selectAudioFile()}
+        />
+      }
+      dock={
+        <PlaybackDock
+          playback={playback}
+          validatedFile={validatedFile}
+          outputDevices={outputDevices}
+          isLoadingDevices={isLoadingDevices}
+          isOutputSelectionPending={isOutputSelectionPending}
+          isTransportCommandPending={isTransportCommandPending || isPlaybackInitializing}
+          isSeekPending={isSeekPending}
+          pendingTransportCommand={pendingTransportCommand}
+          isScrubbing={isScrubbing}
+          positionDraft={positionDraft}
+          isAdjustingVolume={isAdjustingVolume}
+          volumeDraft={volumeDraft}
+          isVolumePending={isVolumePending}
+          statusMessage={statusMessage}
+          playbackError={playbackError}
+          deviceListError={deviceListError}
+          onPlay={() => void playSelectedAudioFile()}
+          onPause={() => void pausePlayback()}
+          onResume={() => void resumePlayback()}
+          onStop={() => void stopPlayback()}
+          onSeek={updateSeek}
+          onSeekCommit={(value) => void commitSeek(value)}
+          onSeekCancel={() => {
+            setIsScrubbing(false);
+            setPositionDraft(
+              playback.status === "playing" || playback.status === "paused"
+                ? playback.positionMs
+                : 0,
+            );
+          }}
+          onVolumeChange={updateVolume}
+          onVolumePointerDown={beginVolume}
+          onVolumeCommit={(value) => void commitVolume(value)}
+          onVolumePointerCancel={cancelVolume}
+          onMuteToggle={() => void toggleMute()}
+          onOutputSelectionChange={(selection) => void changeOutputSelection(selection)}
+          onRefreshDevices={() => void loadOutputDevices()}
+        />
+      }
+    />
   );
+}
+
+function formatStartError(
+  code:
+    | Parameters<typeof formatPlaybackFailure>[0]
+    | "validationFailed"
+    | "outputFailed"
+    | "playbackWorkerUnavailable"
+    | "taskFailed"
+    | "decodeFailed",
+) {
+  switch (code) {
+    case "validationFailed":
+      return "The file is no longer valid.";
+    case "outputFailed":
+      return "The audio output could not play this file.";
+    case "playbackWorkerUnavailable":
+      return "The playback service is unavailable.";
+    case "taskFailed":
+      return "The playback task failed.";
+    case "decodeFailed":
+      return "The audio file could not be decoded.";
+    default:
+      return formatPlaybackFailure(code);
+  }
 }
 
 export default App;
