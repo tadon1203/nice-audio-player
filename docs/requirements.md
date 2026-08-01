@@ -2,7 +2,7 @@
 
 This document defines accepted product requirements for Nice Audio Player.
 
-It describes user-visible behavior, supported environments, quality expectations, and data-safety requirements. Implementation rules belong in `architecture.md`; visual and interaction rules belong in `ui-design.md`; proposed features and implementation scope belong in GitHub Issues.
+It describes user-visible behavior, supported environments, quality expectations, and data-safety requirements. Implementation rules belong in `architecture.md`; visual and interaction principles belong in `DESIGN.md`; proposed features and implementation scope belong in GitHub Issues.
 
 ## 1. Product Purpose
 
