@@ -1,0 +1,91 @@
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html,
+  body,
+  #root {
+    width: 100%;
+    min-width: 320px;
+    height: 100%;
+    margin: 0;
+  }
+
+  html {
+    background: var(--color-canvas);
+  }
+
+  body {
+    overflow: hidden;
+    background: var(--color-canvas);
+    color: var(--color-text-primary);
+    font-family: var(--font-interface);
+    font-size: var(--text-body-md);
+    line-height: var(--text-body-md--line-height);
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    max-inline-size: 100%;
+    font: inherit;
+  }
+
+  img,
+  svg,
+  video,
+  canvas {
+    max-inline-size: 100%;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-focus-ring);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: var(--color-text-primary);
+    color: var(--color-canvas);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-property: opacity, color, background-color, border-color !important;
+    transition-duration: 120ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media (forced-colors: active) {
+  html,
+  body {
+    background: Canvas;
+    color: CanvasText;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    background: ButtonFace;
+    border-color: ButtonText;
+    color: ButtonText;
+  }
+
+  :focus-visible {
+    outline-color: Highlight;
+  }
+}

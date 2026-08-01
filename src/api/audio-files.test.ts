@@ -12,30 +12,28 @@ import { formatPlaybackTime } from "@/lib/playback-time";
 
 const outputSelection = { kind: "systemDefault" } as const;
 const outputDevice = { id: "device-1", name: "Speakers" } as const;
+const file = { path: "C:/track.flac", fileName: "track.flac", extension: "flac" } as const;
+const snapshotBase = { revision: 1, file, volume: 1, muted: false, outputSelection } as const;
 
 describe("isPlaybackSnapshot", () => {
   it("accepts playing and paused payloads with timing fields", () => {
     expect(
       isPlaybackSnapshot({
+        ...snapshotBase,
         status: "playing",
         playbackId: "1",
         positionMs: 1_000,
         durationMs: 2_000,
-        volume: 1,
-        muted: false,
-        outputSelection,
         outputDevice,
       }),
     ).toBe(true);
     expect(
       isPlaybackSnapshot({
+        ...snapshotBase,
         status: "paused",
         playbackId: "1",
         positionMs: 1_000,
         durationMs: 2_000,
-        volume: 1,
-        muted: false,
-        outputSelection,
         outputDevice,
       }),
     ).toBe(true);
@@ -94,6 +92,7 @@ describe("isPlaybackSnapshot", () => {
         (value) => !(field === "durationMs" && value === null),
       )) {
         const payload = {
+          ...snapshotBase,
           status: "playing" as const,
           playbackId: "1",
           positionMs: 1_000,
@@ -105,69 +104,79 @@ describe("isPlaybackSnapshot", () => {
     }
     expect(
       isPlaybackSnapshot({
+        ...snapshotBase,
         status: "playing",
         playbackId: "1",
         positionMs: 1_000,
         durationMs: null,
-        volume: 1,
-        muted: false,
-        outputSelection,
         outputDevice,
       }),
     ).toBe(true);
     expect(
       isPlaybackSnapshot({
+        ...snapshotBase,
         status: "playing",
         playbackId: "1",
         positionMs: 2_001,
         durationMs: 2_000,
-        volume: 1,
-        muted: false,
-        outputSelection,
         outputDevice,
       }),
     ).toBe(false);
     expect(
       isPlaybackSnapshot({
+        ...snapshotBase,
         status: "playing",
         playbackId: "1",
         positionMs: 2_000,
         durationMs: 2_000,
-        volume: 1,
-        muted: false,
-        outputSelection,
         outputDevice,
       }),
     ).toBe(true);
     expect(
       isPlaybackSnapshot({
+        ...snapshotBase,
         status: "playing",
         playbackId: "1",
         positionMs: 0,
         durationMs: 2_000,
-        volume: 1,
-        muted: false,
-        outputSelection,
         outputDevice,
       }),
     ).toBe(true);
   });
 
   it("preserves stopped and failed snapshot validation", () => {
-    expect(
-      isPlaybackSnapshot({ status: "stopped", volume: 1, muted: false, outputSelection }),
-    ).toBe(true);
+    expect(isPlaybackSnapshot({ ...snapshotBase, status: "stopped", file: null })).toBe(true);
     expect(
       isPlaybackSnapshot({
+        ...snapshotBase,
         status: "failed",
         playbackId: "1",
         error: "outputStreamRuntimeFailed",
-        volume: 1,
-        muted: false,
-        outputSelection,
       }),
     ).toBe(true);
     expect(isPlaybackSnapshot({ status: "failed", error: "unknownFailure" })).toBe(false);
+  });
+
+  it("requires a monotonic-safe revision and valid file identity", () => {
+    for (const revision of [-1, 1.5, Number.NaN, Number.MAX_SAFE_INTEGER + 1, "1", null]) {
+      expect(isPlaybackSnapshot({ ...snapshotBase, status: "stopped", revision, file: null })).toBe(
+        false,
+      );
+    }
+    expect(
+      isPlaybackSnapshot({
+        ...snapshotBase,
+        status: "playing",
+        playbackId: "1",
+        positionMs: 0,
+        durationMs: 1_000,
+        outputDevice,
+        file: null,
+      }),
+    ).toBe(false);
+    expect(
+      isPlaybackSnapshot({ ...snapshotBase, status: "stopped", file: { ...file, path: "" } }),
+    ).toBe(false);
   });
 
   it("rejects missing or invalid volume state", () => {

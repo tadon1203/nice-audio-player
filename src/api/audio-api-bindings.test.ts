@@ -39,6 +39,8 @@ import {
 
 const snapshot = {
   status: "stopped",
+  revision: 1,
+  file: null,
   volume: 1,
   muted: false,
   outputSelection: { kind: "systemDefault" },
@@ -66,6 +68,18 @@ describe("frontend API command bindings", () => {
     expect(mockedCommands.validateAudioFile).toHaveBeenCalledWith("C:/track.flac");
     expect(mockedCommands.inspectAudioFile).toHaveBeenCalledWith("C:/track.flac");
     expect(mockedCommands.listAudioOutputDevices).toHaveBeenCalledOnce();
+  });
+
+  it("rejects malformed file and device payloads at the frontend boundary", async () => {
+    mockedCommands.validateAudioFile.mockResolvedValue({ path: "", fileName: "", extension: "" });
+    mockedCommands.listAudioOutputDevices.mockResolvedValue([
+      { id: "device-1", name: "Speakers", isDefault: "yes" },
+    ]);
+
+    await expect(validateAudioFile("C:/track.flac")).rejects.toThrow(
+      "Invalid validated audio file payload.",
+    );
+    await expect(listAudioOutputDevices()).rejects.toThrow("Invalid audio output device payload.");
   });
 
   it("delegates every playback command and keeps snapshot validation", async () => {

@@ -2,7 +2,7 @@
 
 This document defines implementation rules and boundaries for Nice Audio Player.
 
-It describes constraints that should remain valid as the codebase evolves. It does not prescribe a final class diagram, list future features, or duplicate Issue-specific implementation plans. Product behavior belongs in `requirements.md`; visual and interaction rules belong in `ui-design.md`.
+It describes constraints that should remain valid as the codebase evolves. It does not prescribe a final class diagram, list future features, or duplicate Issue-specific implementation plans. Product behavior belongs in `requirements.md`; visual and interaction principles belong in `DESIGN.md`.
 
 ## 1. Core Principles
 
@@ -21,6 +21,9 @@ Ownership must follow the lifetime and authority of the state.
 
 - Long-lived playback state, when introduced, belongs in Rust.
 - React may mirror Rust state for display but must not independently reconstruct authoritative playback state.
+- Every published playback snapshot carries a session-scoped monotonic revision. Frontend command
+  responses, initial reads, and events pass through one revision-aware acceptance path so late
+  delivery cannot replace newer authoritative state.
 - A resource-owning operation must make the owner of streams, threads, tasks, buffers, database transactions, and cancellation handles clear.
 - Drop-based cleanup is preferred when ownership alone can guarantee release.
 - Explicit shutdown is required when a long-lived worker or external resource cannot be safely released by ordinary ownership.
@@ -203,12 +206,27 @@ Prefer deterministic tests around pure policy and boundary logic.
 - Keep hardware- or operating-system-dependent behavior in explicit manual verification steps.
 - Tests must not weaken production invariants merely to simplify fixtures.
 
-## 15. Change Rules
+## 15. Responsive Layout
+
+- Application-level composition uses viewport queries.
+- Reusable feature components use container queries based on their allocated inline size.
+- Flexible Grid tracks use `minmax(0, 1fr)`.
+- Flexible Grid and Flex children use explicit zero minimum inline sizing.
+- Fixed interaction targets retain their documented dimensions.
+- Text and data regions use wrapping, clamping, scrolling, or reflow according to their content role.
+- Breakpoints derive from the minimum width required by the component's contents, controls, gaps, and padding.
+- Browser layout tests verify supported widths, stress-content fixtures, and text-token enlargement.
+- Windows display scaling at 100%, 125%, 150%, and 200% is verified manually in the Tauri application.
+- Horizontal scrolling represents an explicit feature requirement and receives a named scroll region.
+
+## 16. Change Rules
 
 A change that modifies an accepted product requirement must update `requirements.md`.
 
 A change that modifies a durable implementation rule or boundary must update this document.
 
-A change that modifies visual or interaction principles must update `ui-design.md`.
+A change that modifies visual or interaction principles must update `DESIGN.md`.
+
+CSS owns hover, focus, pressed, color, border, and ordinary opacity transitions. Motion for React owns coordinated SVG geometry transitions. Reduced-motion behavior follows `DESIGN.md`.
 
 Issue scope, branch names, temporary structures, migration steps, and implementation plans belong in GitHub Issues or pull requests, not here.

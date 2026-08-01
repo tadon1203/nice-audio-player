@@ -9,7 +9,23 @@ import type {
 import { isPlaybackSnapshot } from "./audio-files";
 
 export async function listAudioOutputDevices(): Promise<AudioOutputDevice[]> {
-  return commands.listAudioOutputDevices();
+  const devices: unknown = await commands.listAudioOutputDevices();
+  if (!Array.isArray(devices) || !devices.every(isAudioOutputDevice)) {
+    throw new Error("Invalid audio output device payload.");
+  }
+  return devices;
+}
+
+function isAudioOutputDevice(value: unknown): value is AudioOutputDevice {
+  if (typeof value !== "object" || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.id === "string" &&
+    record.id.length > 0 &&
+    typeof record.name === "string" &&
+    record.name.length > 0 &&
+    typeof record.isDefault === "boolean"
+  );
 }
 
 export function isAudioDeviceListError(value: unknown): value is AudioDeviceListError {

@@ -1,0 +1,27 @@
+export type LayoutFixtureName =
+  | "empty"
+  | "japanese-filename"
+  | "long-filename"
+  | "unbroken-filename"
+  | "long-device"
+  | "playing"
+  | "seek-pending"
+  | "failed";
+
+const fixtures = new Set<LayoutFixtureName>([
+  "empty",
+  "japanese-filename",
+  "long-filename",
+  "unbroken-filename",
+  "long-device",
+  "playing",
+  "seek-pending",
+  "failed",
+]);
+
+export function resolveLayoutFixture(search: string): LayoutFixtureName {
+  const requested = new URLSearchParams(search).get("layoutFixture");
+  return requested !== null && fixtures.has(requested as LayoutFixtureName)
+    ? (requested as LayoutFixtureName)
+    : "empty";
+}
