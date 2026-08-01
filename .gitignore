@@ -16,6 +16,9 @@ test-results/
 playwright-report/
 blob-report/
 
+# Locally downloaded fonts governed by a non-redistributable license
+/public/fonts/fontshare/*.woff2
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
