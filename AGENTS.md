@@ -12,12 +12,14 @@
 Read the relevant document before changing behavior or boundaries:
 
 - `README.md`: Project entry point and development guide.
+- `DESIGN.md`: Shared visual tokens and interaction principles.
 - `docs/requirements.md`: Accepted product requirements.
 - `docs/architecture.md`: Implementation rules and boundaries.
-- `docs/ui-design.md`: Visual and interaction principles.
 - **GitHub Issues**: Individual features, experiments, and implementation scope.
 
 Update a long-lived document only when a change intentionally modifies its accepted requirements or rules. Do not copy Issue-specific plans or temporary implementation details into documentation.
+
+`DESIGN.md` is the normative visual reference. Its prose, specific references, and intentional Do's and Don'ts describe the design intent; token values support that context and are not, by themselves, rendering instructions. `src/styles/theme.css` is the manually maintained implementation of the currently supported design decisions, translated into Tailwind and CSS variables rather than mechanically generated from `DESIGN.md`. Do not add durable colors, typography values, spacing values, radii, shadows, or motion values outside `theme.css`. When a durable visual decision changes, update `DESIGN.md` to describe the intent and update `theme.css` to implement it in the same change. Feature-specific layout values remain local to the feature.
 
 ## Commands
 
@@ -27,8 +29,12 @@ Use `pwsh` for PowerShell commands.
 - **Start the app**: `pnpm tauri dev`
 - **Build the frontend**: `pnpm build`
 - **Run frontend tests once and exit**: `pnpm test`
+- **Run browser layout tests**: `pnpm test:layout`
 - **Run all checks**: `pnpm check`
 - **Format frontend, tooling, and Rust**: `pnpm format`
+- **Validate the design system**: `pnpm design:lint`
+- **Check local licensed fonts**: `pnpm fonts:check`
+- **Build a release package**: `pnpm package`
 - **Generate IPC bindings**: `pnpm bindings:generate`
 - **Check IPC bindings**: `pnpm bindings:check`
 - **Package the app when explicitly required**: `pnpm tauri build`
@@ -50,6 +56,18 @@ Run `pnpm check` before reporting a coding task as complete.
   When changing a Rust Tauri command or IPC type, run `pnpm bindings:generate` and verify the
   result with `pnpm bindings:check`.
 - **Testing**: Add or update tests for changed logic when practical.
+
+### Responsive layout review
+
+- Application-wide changes use viewport queries.
+- Reusable components use container queries.
+- Flexible Grid tracks use `minmax(0, 1fr)`.
+- Flexible children use `min-inline-size: 0`.
+- Fixed controls preserve 40×40px or 48×48px targets.
+- Long user data has a defined wrap, clamp, or scroll behavior.
+- 640px and 800px layout tests pass.
+- Horizontal overflow and doubled text-token stress tests pass.
+- DOM order matches reading and keyboard order.
 
 ## Git Workflow
 

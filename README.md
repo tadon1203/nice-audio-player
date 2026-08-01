@@ -8,7 +8,7 @@ The project is under active development and is built with Tauri v2, Rust, React,
 
 - [Requirements](docs/requirements.md): accepted product requirements
 - [Architecture](docs/architecture.md): implementation rules and boundaries
-- [UI Design](docs/ui-design.md): visual and interaction principles
+- [Design](DESIGN.md): shared visual tokens and interaction principles
 
 Feature proposals, experiments, and implementation scope are tracked in GitHub Issues rather than long-lived documentation.
 
@@ -18,6 +18,7 @@ Install dependencies:
 
 ```bash
 pnpm install
+pnpm exec playwright install --with-deps chromium
 ```
 
 Start the desktop application:
@@ -38,6 +39,12 @@ Run the frontend tests once and exit:
 pnpm test
 ```
 
+Run the real-browser responsive layout tests:
+
+```bash
+pnpm test:layout
+```
+
 Run all checks before completing a code change:
 
 ```bash
@@ -49,6 +56,36 @@ Format frontend, tooling, and Rust code:
 ```bash
 pnpm format
 ```
+
+Validate and inspect the project design system with the Stitch-compatible CLI:
+
+```bash
+pnpm design:lint
+```
+
+`DESIGN.md` is the normative visual reference. Its durable values are manually implemented in
+`src/styles/theme.css`; `designmd` is used only to lint the design document.
+
+Source implementation verification:
+
+```bash
+pnpm install
+pnpm exec playwright install --with-deps chromium
+pnpm check
+```
+
+Install the licensed Fontshare assets manually according to
+[`public/fonts/fontshare/README.md`](public/fonts/fontshare/README.md), then verify them with:
+
+```bash
+pnpm fonts:check
+pnpm tauri dev
+pnpm package
+```
+
+`pnpm check` validates source code and automated tests without the licensed Fontshare binaries.
+`pnpm package` is the supported release command and requires those assets; direct `pnpm tauri build`
+is reserved for low-level troubleshooting.
 
 Regenerate or verify the tracked Rust IPC bindings:
 
