@@ -14,6 +14,8 @@ const noop = () => undefined;
 
 const defaultPlayback: PlaybackSnapshot = {
   status: "stopped",
+  revision: 0,
+  file: null,
   volume: 0.5,
   muted: false,
   outputSelection: { kind: "systemDefault" },
@@ -52,6 +54,7 @@ export function LayoutFixtureApp({ fixture }: LayoutFixtureAppProps) {
             outputDevices={outputDevices}
             isLoadingDevices={false}
             isOutputSelectionPending={false}
+            isPlaybackAvailable
             isTransportCommandPending={false}
             pendingTransportCommand={null}
             isScrubbing={false}
@@ -60,7 +63,6 @@ export function LayoutFixtureApp({ fixture }: LayoutFixtureAppProps) {
             isAdjustingVolume={false}
             volumeDraft={50}
             isVolumePending={false}
-            statusMessage={playback.status === "playing" ? "Playing" : ""}
             playbackError={playbackError}
             deviceListError={null}
             onPlay={noop}
@@ -101,6 +103,8 @@ function fixturePlayback(fixture: LayoutFixtureName): PlaybackSnapshot {
   if (fixture === "playing" || fixture === "seek-pending") {
     return {
       status: "playing",
+      revision: 1,
+      file: audioFile(layoutStressFixtures.longFilename),
       playbackId: "layout-fixture",
       positionMs: 83_000,
       durationMs: 245_000,
@@ -113,6 +117,8 @@ function fixturePlayback(fixture: LayoutFixtureName): PlaybackSnapshot {
   if (fixture === "failed") {
     return {
       status: "failed",
+      revision: 1,
+      file: audioFile(layoutStressFixtures.longFilename),
       playbackId: null,
       error: "outputDeviceUnavailable",
       volume: 0.5,

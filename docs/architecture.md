@@ -21,6 +21,9 @@ Ownership must follow the lifetime and authority of the state.
 
 - Long-lived playback state, when introduced, belongs in Rust.
 - React may mirror Rust state for display but must not independently reconstruct authoritative playback state.
+- Every published playback snapshot carries a session-scoped monotonic revision. Frontend command
+  responses, initial reads, and events pass through one revision-aware acceptance path so late
+  delivery cannot replace newer authoritative state.
 - A resource-owning operation must make the owner of streams, threads, tasks, buffers, database transactions, and cancellation handles clear.
 - Drop-based cleanup is preferred when ownership alone can guarantee release.
 - Explicit shutdown is required when a long-lived worker or external resource cannot be safely released by ordinary ownership.

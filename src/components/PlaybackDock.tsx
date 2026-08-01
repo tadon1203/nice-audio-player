@@ -17,6 +17,7 @@ interface PlaybackDockProps {
   outputDevices: AudioOutputDevice[] | null;
   isLoadingDevices: boolean;
   isOutputSelectionPending: boolean;
+  isPlaybackAvailable: boolean;
   isTransportCommandPending: boolean;
   pendingTransportCommand: PendingTransportCommand;
   isScrubbing: boolean;
@@ -25,7 +26,6 @@ interface PlaybackDockProps {
   isAdjustingVolume: boolean;
   volumeDraft: number;
   isVolumePending: boolean;
-  statusMessage: string;
   playbackError: string | null;
   deviceListError: string | null;
   onPlay: () => void;
@@ -50,6 +50,7 @@ export function PlaybackDock({
   outputDevices,
   isLoadingDevices,
   isOutputSelectionPending,
+  isPlaybackAvailable,
   isTransportCommandPending,
   pendingTransportCommand,
   isScrubbing,
@@ -58,7 +59,6 @@ export function PlaybackDock({
   isAdjustingVolume,
   volumeDraft,
   isVolumePending,
-  statusMessage,
   playbackError,
   deviceListError,
   onPlay,
@@ -95,7 +95,11 @@ export function PlaybackDock({
     Math.max(0, isAdjustingVolume ? volumeDraft : Math.round(playback.volume * 100)),
   );
   const outputDisabled =
-    isLoadingDevices || isOutputSelectionPending || isTransportCommandPending || timed;
+    !isPlaybackAvailable ||
+    isLoadingDevices ||
+    isOutputSelectionPending ||
+    isTransportCommandPending ||
+    timed;
 
   return (
     <section
@@ -128,7 +132,7 @@ export function PlaybackDock({
               type="button"
               aria-label={primaryLabel}
               aria-busy={primaryBusy}
-              disabled={validatedFile === null || isTransportCommandPending}
+              disabled={validatedFile === null || !isPlaybackAvailable}
               onClick={primaryAction}
               className="playback-dock__fixed-control grid size-12 place-items-center rounded-full bg-text-primary text-canvas transition-opacity duration-150 ease-interface hover:opacity-85 disabled:cursor-not-allowed disabled:bg-surface-pressed disabled:text-text-disabled disabled:opacity-80"
             >
@@ -137,7 +141,8 @@ export function PlaybackDock({
             <button
               type="button"
               aria-label="Stop"
-              disabled={!timed || isTransportCommandPending}
+              aria-busy={pendingTransportCommand === "stop"}
+              disabled={!timed || !isPlaybackAvailable}
               onClick={onStop}
               className="playback-dock__fixed-control grid size-10 place-items-center rounded-full border border-border-control text-text-primary transition-opacity duration-150 ease-interface hover:opacity-80 disabled:cursor-not-allowed disabled:border-border-subtle disabled:bg-transparent disabled:text-text-disabled disabled:opacity-80"
             >
@@ -159,7 +164,13 @@ export function PlaybackDock({
             min={0}
             max={duration ?? 0}
             value={seekValue}
-            disabled={!timed || duration === null || isSeekPending || isTransportCommandPending}
+            disabled={
+              !isPlaybackAvailable ||
+              !timed ||
+              duration === null ||
+              isSeekPending ||
+              isTransportCommandPending
+            }
             onChange={(event) => onSeek(Number(event.currentTarget.value))}
             onPointerUp={(event) => onSeekCommit(Number(event.currentTarget.value))}
             onPointerCancel={onSeekCancel}
@@ -195,7 +206,7 @@ export function PlaybackDock({
             max={100}
             step={1}
             value={displayedVolume}
-            disabled={isVolumePending}
+            disabled={!isPlaybackAvailable || isVolumePending}
             onChange={(event) => onVolumeChange(Number(event.currentTarget.value))}
             onPointerDown={onVolumePointerDown}
             onPointerUp={(event) => onVolumeCommit(Number(event.currentTarget.value))}
@@ -266,7 +277,7 @@ export function PlaybackDock({
           <button
             type="button"
             aria-label="Refresh output devices"
-            disabled={isLoadingDevices}
+            disabled={!isPlaybackAvailable || isLoadingDevices}
             onClick={onRefreshDevices}
             className="playback-dock__fixed-control grid size-10 place-items-center rounded-control border border-border-control text-text-primary disabled:cursor-not-allowed disabled:border-border-subtle disabled:bg-transparent disabled:text-text-disabled disabled:opacity-80"
           >
@@ -275,7 +286,7 @@ export function PlaybackDock({
           <button
             type="button"
             aria-label={playback.muted ? "Unmute" : "Mute"}
-            disabled={isVolumePending}
+            disabled={!isPlaybackAvailable || isVolumePending}
             onClick={onMuteToggle}
             className="playback-dock__fixed-control grid size-10 place-items-center rounded-control border border-border-control text-text-primary disabled:cursor-not-allowed disabled:border-border-subtle disabled:bg-transparent disabled:text-text-disabled disabled:opacity-80"
           >
@@ -283,21 +294,20 @@ export function PlaybackDock({
           </button>
         </div>
       </div>
-      <div className="playback-dock__status text-body-sm text-text-secondary" data-region="status">
-        <div className="min-h-5" aria-live="polite">
-          {statusMessage}
+      {playbackError || deviceListError ? (
+        <div className="playback-dock__status text-body-sm" data-region="status">
+          {playbackError ? (
+            <p className="playback-dock__error text-error" role="alert">
+              {playbackError}
+            </p>
+          ) : null}
+          {deviceListError ? (
+            <p className="playback-dock__error text-error" role="alert">
+              {deviceListError}
+            </p>
+          ) : null}
         </div>
-        {playbackError ? (
-          <p className="playback-dock__error mt-1 text-error" role="alert">
-            {playbackError}
-          </p>
-        ) : null}
-        {deviceListError ? (
-          <p className="playback-dock__error mt-1 text-error" role="alert">
-            {deviceListError}
-          </p>
-        ) : null}
-      </div>
+      ) : null}
     </section>
   );
 }

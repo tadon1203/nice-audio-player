@@ -96,7 +96,9 @@ function hasOwn(record: object, key: PropertyKey): boolean {
 }
 
 export async function validateAudioFile(path: string): Promise<ValidatedAudioFile> {
-  return commands.validateAudioFile(path);
+  const file: unknown = await commands.validateAudioFile(path);
+  if (!isValidatedAudioFile(file)) throw new Error("Invalid validated audio file payload.");
+  return file;
 }
 
 export async function inspectAudioFile(path: string): Promise<AudioFileInfo> {
@@ -147,9 +149,11 @@ export async function getPlaybackState(): Promise<PlaybackSnapshot> {
 
 export async function listenToPlaybackState(
   handler: (snapshot: PlaybackSnapshot) => void,
+  invalidPayloadHandler?: () => void,
 ): Promise<() => void> {
   return listen<unknown>("playback-state-changed", (event) => {
     if (isPlaybackSnapshot(event.payload)) handler(event.payload);
+    else invalidPayloadHandler?.();
   });
 }
 
@@ -231,17 +235,43 @@ export function isPlaybackMuteError(value: unknown): value is PlaybackMuteError 
 
 export function isPlaybackSnapshot(value: unknown): value is PlaybackSnapshot {
   if (typeof value !== "object" || value === null || !("status" in value)) return false;
-  if (!isValidVolumeState(value)) return false;
-  if (!isValidOutputSelection(value.outputSelection)) return false;
-  if (value.status === "stopped") return true;
-  if (value.status === "playing") return isTimedPlaybackSnapshot(value);
-  if (value.status === "paused") return isTimedPlaybackSnapshot(value);
+  const record = value as Record<string, unknown>;
+  if (!isValidRevision(record.revision) || !isValidOptionalAudioFile(record.file)) return false;
+  if (!isValidVolumeState(record)) return false;
+  if (!isValidOutputSelection(record.outputSelection)) return false;
+  if (record.status === "stopped") return true;
+  if (record.status === "playing")
+    return isValidatedAudioFile(record.file) && isTimedPlaybackSnapshot(record);
+  if (record.status === "paused")
+    return isValidatedAudioFile(record.file) && isTimedPlaybackSnapshot(record);
   return (
-    value.status === "failed" &&
-    "error" in value &&
-    typeof value.error === "string" &&
-    hasOwn(playbackFailureCodes, value.error) &&
-    (!("playbackId" in value) || typeof value.playbackId === "string")
+    record.status === "failed" &&
+    typeof record.error === "string" &&
+    hasOwn(playbackFailureCodes, record.error) &&
+    (!("playbackId" in record) ||
+      record.playbackId === null ||
+      typeof record.playbackId === "string")
+  );
+}
+
+function isValidRevision(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+
+function isValidOptionalAudioFile(value: unknown): value is ValidatedAudioFile | null {
+  return value === null || isValidatedAudioFile(value);
+}
+
+export function isValidatedAudioFile(value: unknown): value is ValidatedAudioFile {
+  if (typeof value !== "object" || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.path === "string" &&
+    record.path.length > 0 &&
+    typeof record.fileName === "string" &&
+    record.fileName.length > 0 &&
+    typeof record.extension === "string" &&
+    record.extension.length > 0
   );
 }
 

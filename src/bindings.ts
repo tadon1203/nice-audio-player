@@ -101,6 +101,8 @@ export type PlaybackSnapshot = PlaybackSnapshot_Serialize | PlaybackSnapshot_Des
 export type PlaybackSnapshot_Deserialize =
   | ({
       status: "stopped";
+      revision: number;
+      file: ValidatedAudioFile | null;
       volume: number;
       muted: boolean;
       outputSelection: AudioOutputSelection;
@@ -113,6 +115,8 @@ export type PlaybackSnapshot_Deserialize =
     })
   | ({
       status: "playing";
+      revision: number;
+      file: ValidatedAudioFile;
       playbackId: string;
       positionMs: number;
       durationMs: number | null;
@@ -123,6 +127,8 @@ export type PlaybackSnapshot_Deserialize =
     } & { error?: never })
   | ({
       status: "paused";
+      revision: number;
+      file: ValidatedAudioFile;
       playbackId: string;
       positionMs: number;
       durationMs: number | null;
@@ -133,6 +139,8 @@ export type PlaybackSnapshot_Deserialize =
     } & { error?: never })
   | ({
       status: "failed";
+      revision: number;
+      file: ValidatedAudioFile | null;
       playbackId: string | null;
       error: PlaybackFailureCode;
       volume: number;
@@ -143,6 +151,8 @@ export type PlaybackSnapshot_Deserialize =
 export type PlaybackSnapshot_Serialize =
   | ({
       status: "stopped";
+      revision: number;
+      file: ValidatedAudioFile | null;
       volume: number;
       muted: boolean;
       outputSelection: AudioOutputSelection;
@@ -155,6 +165,8 @@ export type PlaybackSnapshot_Serialize =
     })
   | ({
       status: "playing";
+      revision: number;
+      file: ValidatedAudioFile;
       playbackId: string;
       positionMs: number;
       durationMs: number | null;
@@ -165,6 +177,8 @@ export type PlaybackSnapshot_Serialize =
     } & { error?: never })
   | ({
       status: "paused";
+      revision: number;
+      file: ValidatedAudioFile;
       playbackId: string;
       positionMs: number;
       durationMs: number | null;
@@ -175,6 +189,8 @@ export type PlaybackSnapshot_Serialize =
     } & { error?: never })
   | ({
       status: "failed";
+      revision: number;
+      file: ValidatedAudioFile | null;
       playbackId?: string | null;
       error: PlaybackFailureCode;
       volume: number;

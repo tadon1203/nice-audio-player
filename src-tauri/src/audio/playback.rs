@@ -33,12 +33,16 @@ use super::volume::{AtomicEffectiveGain, VolumeState};
 )]
 pub enum PlaybackSnapshot {
     Stopped {
+        revision: u64,
+        file: Option<ValidatedAudioFile>,
         #[specta(type = f64)]
         volume: f32,
         muted: bool,
         output_selection: AudioOutputSelection,
     },
     Playing {
+        revision: u64,
+        file: ValidatedAudioFile,
         playback_id: String,
         position_ms: u64,
         duration_ms: Option<u64>,
@@ -49,6 +53,8 @@ pub enum PlaybackSnapshot {
         output_device: AudioOutputDeviceIdentity,
     },
     Paused {
+        revision: u64,
+        file: ValidatedAudioFile,
         playback_id: String,
         position_ms: u64,
         duration_ms: Option<u64>,
@@ -59,6 +65,8 @@ pub enum PlaybackSnapshot {
         output_device: AudioOutputDeviceIdentity,
     },
     Failed {
+        revision: u64,
+        file: Option<ValidatedAudioFile>,
         #[serde(skip_serializing_if = "Option::is_none")]
         playback_id: Option<String>,
         error: PlaybackFailureCode,
@@ -70,8 +78,14 @@ pub enum PlaybackSnapshot {
 }
 
 impl PlaybackSnapshot {
-    fn stopped_with_selection(volume: VolumeState, output_selection: AudioOutputSelection) -> Self {
+    fn stopped_with_selection(
+        volume: VolumeState,
+        output_selection: AudioOutputSelection,
+        file: Option<ValidatedAudioFile>,
+    ) -> Self {
         Self::Stopped {
+            revision: 0,
+            file,
             volume: volume.volume(),
             muted: volume.muted(),
             output_selection,
@@ -82,11 +96,14 @@ impl PlaybackSnapshot {
         volume: VolumeState,
         output_selection: AudioOutputSelection,
         output_device: AudioOutputDeviceIdentity,
+        file: ValidatedAudioFile,
         playback_id: String,
         position_ms: u64,
         duration_ms: Option<u64>,
     ) -> Self {
         Self::Playing {
+            revision: 0,
+            file,
             playback_id,
             position_ms,
             duration_ms,
@@ -101,11 +118,14 @@ impl PlaybackSnapshot {
         volume: VolumeState,
         output_selection: AudioOutputSelection,
         output_device: AudioOutputDeviceIdentity,
+        file: ValidatedAudioFile,
         playback_id: String,
         position_ms: u64,
         duration_ms: Option<u64>,
     ) -> Self {
         Self::Paused {
+            revision: 0,
+            file,
             playback_id,
             position_ms,
             duration_ms,
@@ -121,8 +141,11 @@ impl PlaybackSnapshot {
         output_selection: AudioOutputSelection,
         playback_id: Option<String>,
         error: PlaybackFailureCode,
+        file: Option<ValidatedAudioFile>,
     ) -> Self {
         Self::Failed {
+            revision: 0,
+            file,
             playback_id,
             error,
             volume: volume.volume(),
@@ -134,9 +157,12 @@ impl PlaybackSnapshot {
     fn with_volume(self, volume: VolumeState) -> Self {
         match self {
             Self::Stopped {
-                output_selection, ..
-            } => Self::stopped_with_selection(volume, output_selection),
+                output_selection,
+                file,
+                ..
+            } => Self::stopped_with_selection(volume, output_selection, file),
             Self::Playing {
+                file,
                 playback_id,
                 position_ms,
                 duration_ms,
@@ -147,11 +173,13 @@ impl PlaybackSnapshot {
                 volume,
                 output_selection,
                 output_device,
+                file,
                 playback_id,
                 position_ms,
                 duration_ms,
             ),
             Self::Paused {
+                file,
                 playback_id,
                 position_ms,
                 duration_ms,
@@ -162,6 +190,7 @@ impl PlaybackSnapshot {
                 volume,
                 output_selection,
                 output_device,
+                file,
                 playback_id,
                 position_ms,
                 duration_ms,
@@ -170,14 +199,32 @@ impl PlaybackSnapshot {
                 playback_id,
                 error,
                 output_selection,
+                file,
                 ..
-            } => Self::failed_with_selection(volume, output_selection, playback_id, error),
+            } => Self::failed_with_selection(volume, output_selection, playback_id, error, file),
+        }
+    }
+
+    fn set_revision(&mut self, revision: u64) {
+        match self {
+            Self::Stopped {
+                revision: current, ..
+            }
+            | Self::Playing {
+                revision: current, ..
+            }
+            | Self::Paused {
+                revision: current, ..
+            }
+            | Self::Failed {
+                revision: current, ..
+            } => *current = revision,
         }
     }
 
     #[cfg(test)]
     fn stopped(volume: VolumeState) -> Self {
-        Self::stopped_with_selection(volume, AudioOutputSelection::SystemDefault)
+        Self::stopped_with_selection(volume, AudioOutputSelection::SystemDefault, None)
     }
 
     #[cfg(test)]
@@ -194,6 +241,7 @@ impl PlaybackSnapshot {
                 id: "test-device".into(),
                 name: "Test device".into(),
             },
+            test_file(),
             playback_id,
             position_ms,
             duration_ms,
@@ -214,6 +262,7 @@ impl PlaybackSnapshot {
                 id: "test-device".into(),
                 name: "Test device".into(),
             },
+            test_file(),
             playback_id,
             position_ms,
             duration_ms,
@@ -231,7 +280,17 @@ impl PlaybackSnapshot {
             AudioOutputSelection::SystemDefault,
             playback_id,
             error,
+            None,
         )
+    }
+}
+
+#[cfg(test)]
+fn test_file() -> ValidatedAudioFile {
+    ValidatedAudioFile {
+        path: "C:/test.flac".into(),
+        file_name: "test.flac".into(),
+        extension: "flac".into(),
     }
 }
 
@@ -325,6 +384,7 @@ impl PlaybackService {
         let state = Arc::new(RwLock::new(PlaybackSnapshot::stopped_with_selection(
             volume_state,
             output_selection.clone(),
+            None,
         )));
         let worker_state = Arc::clone(&state);
         let worker_gain = effective_gain.clone();
@@ -337,6 +397,8 @@ impl PlaybackService {
                     pending_seek: None,
                     next_playback_session_id: 0,
                     next_output_stream_id: 0,
+                    next_snapshot_revision: 0,
+                    current_file: None,
                     volume_state,
                     effective_gain: worker_gain,
                     output_selection,
@@ -512,6 +574,8 @@ struct PlaybackWorker {
     pending_seek: Option<PendingSeek>,
     next_playback_session_id: u64,
     next_output_stream_id: u64,
+    next_snapshot_revision: u64,
+    current_file: Option<ValidatedAudioFile>,
     volume_state: VolumeState,
     effective_gain: AtomicEffectiveGain,
     output_selection: AudioOutputSelection,
@@ -926,7 +990,7 @@ impl PlaybackWorker {
                 Some(pending.duration_ms),
             )
         };
-        self.publish(snapshot.clone());
+        let snapshot = self.publish(snapshot);
         let _ = pending.reply.send(Ok(snapshot));
     }
 
@@ -997,6 +1061,7 @@ impl PlaybackWorker {
             code.clone(),
             self.volume_state,
             self.output_selection.clone(),
+            self.current_file.clone(),
         ) {
             self.publish(snapshot);
         }
@@ -1016,6 +1081,7 @@ impl PlaybackWorker {
             code.clone(),
             self.volume_state,
             self.output_selection.clone(),
+            self.current_file.clone(),
         ) {
             self.publish(snapshot);
         }
@@ -1025,10 +1091,10 @@ impl PlaybackWorker {
         self.discard_pending();
         self.discard_pending_seek();
         self.discard_active();
-        if self.current() != self.stopped_snapshot() {
-            self.publish(self.stopped_snapshot());
+        if matches!(self.current(), PlaybackSnapshot::Stopped { .. }) {
+            return self.current();
         }
-        self.stopped_snapshot()
+        self.publish(self.stopped_snapshot())
     }
 
     fn set_output_selection(
@@ -1053,14 +1119,12 @@ impl PlaybackWorker {
         self.output_selection = selection;
         if matches!(self.current(), PlaybackSnapshot::Failed { .. }) {
             let snapshot = self.stopped_snapshot();
-            self.publish(snapshot.clone());
-            return Ok(snapshot);
+            return Ok(self.publish(snapshot));
         }
-        let snapshot = self.stopped_snapshot();
-        if !unchanged {
-            self.publish(snapshot.clone());
+        if unchanged {
+            return Ok(self.current());
         }
-        Ok(snapshot)
+        Ok(self.publish(self.stopped_snapshot()))
     }
     fn set_volume(&mut self, volume: f32) -> Result<PlaybackSnapshot, PlaybackServiceError> {
         let changed = self
@@ -1073,8 +1137,7 @@ impl PlaybackWorker {
         self.effective_gain
             .store(self.volume_state.effective_gain());
         let snapshot = self.current().with_volume(self.volume_state);
-        self.publish(snapshot.clone());
-        Ok(snapshot)
+        Ok(self.publish(snapshot))
     }
 
     fn mute(&mut self) -> PlaybackSnapshot {
@@ -1084,8 +1147,7 @@ impl PlaybackWorker {
         self.effective_gain
             .store(self.volume_state.effective_gain());
         let snapshot = self.current().with_volume(self.volume_state);
-        self.publish(snapshot.clone());
-        snapshot
+        self.publish(snapshot)
     }
 
     fn unmute(&mut self) -> PlaybackSnapshot {
@@ -1095,8 +1157,7 @@ impl PlaybackWorker {
         self.effective_gain
             .store(self.volume_state.effective_gain());
         let snapshot = self.current().with_volume(self.volume_state);
-        self.publish(snapshot.clone());
-        snapshot
+        self.publish(snapshot)
     }
     fn pause(&mut self) -> Result<PlaybackSnapshot, PlaybackServiceError> {
         match pause_action(&self.current()) {
@@ -1123,8 +1184,7 @@ impl PlaybackWorker {
                 let position_ms = frame_to_millis(position_frame, active.sample_rate);
                 let duration_ms = active.duration_ms;
                 let snapshot = self.paused_snapshot(playback_id, position_ms, duration_ms);
-                self.publish(snapshot.clone());
-                Ok(snapshot)
+                Ok(self.publish(snapshot))
             }
         }
     }
@@ -1144,8 +1204,7 @@ impl PlaybackWorker {
                 let playback_id = active.session_id.to_string();
                 let duration_ms = active.duration_ms;
                 let snapshot = self.playing_snapshot(playback_id, position_ms, duration_ms);
-                self.publish(snapshot.clone());
-                Ok(snapshot)
+                Ok(self.publish(snapshot))
             }
         }
     }
@@ -1193,18 +1252,25 @@ impl PlaybackWorker {
             last_position_publish: Instant::now(),
             decoder_worker,
         });
+        self.current_file = self
+            .active
+            .as_ref()
+            .map(|active| active.source_file.clone());
 
         let snapshot = self.playing_snapshot(session_id.to_string(), 0, duration_ms);
 
-        self.publish(snapshot.clone());
-        snapshot
+        self.publish(snapshot)
     }
     fn current(&self) -> PlaybackSnapshot {
         read_snapshot(&self.snapshot)
     }
 
     fn stopped_snapshot(&self) -> PlaybackSnapshot {
-        PlaybackSnapshot::stopped_with_selection(self.volume_state, self.output_selection.clone())
+        PlaybackSnapshot::stopped_with_selection(
+            self.volume_state,
+            self.output_selection.clone(),
+            self.current_file.clone(),
+        )
     }
 
     fn playing_snapshot(
@@ -1221,10 +1287,16 @@ impl PlaybackWorker {
                 name: active.output_config.device_name.clone(),
             })
             .expect("playing snapshot requires active output device");
+        let file = self
+            .active
+            .as_ref()
+            .map(|active| active.source_file.clone())
+            .expect("playing snapshot requires active source file");
         PlaybackSnapshot::playing_with_output(
             self.volume_state,
             self.output_selection.clone(),
             device,
+            file,
             playback_id,
             position_ms,
             duration_ms,
@@ -1245,10 +1317,16 @@ impl PlaybackWorker {
                 name: active.output_config.device_name.clone(),
             })
             .expect("paused snapshot requires active output device");
+        let file = self
+            .active
+            .as_ref()
+            .map(|active| active.source_file.clone())
+            .expect("paused snapshot requires active source file");
         PlaybackSnapshot::paused_with_output(
             self.volume_state,
             self.output_selection.clone(),
             device,
+            file,
             playback_id,
             position_ms,
             duration_ms,
@@ -1265,6 +1343,7 @@ impl PlaybackWorker {
             self.output_selection.clone(),
             playback_id,
             error,
+            self.current_file.clone(),
         )
     }
 
@@ -1273,12 +1352,15 @@ impl PlaybackWorker {
             active.decoder_worker.cancel_and_join();
         }
     }
-    fn publish(&self, snapshot: PlaybackSnapshot) {
+    fn publish(&mut self, mut snapshot: PlaybackSnapshot) -> PlaybackSnapshot {
+        self.next_snapshot_revision = self.next_snapshot_revision.saturating_add(1);
+        snapshot.set_revision(self.next_snapshot_revision);
         *self
             .snapshot
             .write()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = snapshot;
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = snapshot.clone();
         let _ = self.state_changed_sender.try_send(());
+        snapshot
     }
 
     fn refresh_active_snapshot(&self) -> Option<PlaybackSnapshot> {
@@ -1749,6 +1831,7 @@ fn start_failure_snapshot(
     error: PlaybackFailureCode,
     volume: VolumeState,
     output_selection: AudioOutputSelection,
+    file: Option<ValidatedAudioFile>,
 ) -> Option<PlaybackSnapshot> {
     (!has_active_playback).then(|| {
         PlaybackSnapshot::failed_with_selection(
@@ -1756,6 +1839,7 @@ fn start_failure_snapshot(
             output_selection,
             Some(id.0.to_string()),
             error,
+            file,
         )
     })
 }
@@ -1849,7 +1933,7 @@ mod tests {
 
         assert_eq!(
             serde_json::to_value(snapshot).unwrap(),
-            serde_json::json!({ "status": "playing", "playbackId": "1", "positionMs": 1_000, "durationMs": 60_000, "volume": 1.0, "muted": false, "outputSelection": { "kind": "systemDefault" }, "outputDevice": { "id": "test-device", "name": "Test device" } })
+            serde_json::json!({ "status": "playing", "revision": 0, "file": { "path": "C:/test.flac", "fileName": "test.flac", "extension": "flac" }, "playbackId": "1", "positionMs": 1_000, "durationMs": 60_000, "volume": 1.0, "muted": false, "outputSelection": { "kind": "systemDefault" }, "outputDevice": { "id": "test-device", "name": "Test device" } })
         );
     }
 
@@ -1860,7 +1944,7 @@ mod tests {
 
         assert_eq!(
             serde_json::to_value(snapshot).unwrap(),
-            serde_json::json!({ "status": "paused", "playbackId": "1", "positionMs": 1_000, "durationMs": 60_000, "volume": 1.0, "muted": false, "outputSelection": { "kind": "systemDefault" }, "outputDevice": { "id": "test-device", "name": "Test device" } })
+            serde_json::json!({ "status": "paused", "revision": 0, "file": { "path": "C:/test.flac", "fileName": "test.flac", "extension": "flac" }, "playbackId": "1", "positionMs": 1_000, "durationMs": 60_000, "volume": 1.0, "muted": false, "outputSelection": { "kind": "systemDefault" }, "outputDevice": { "id": "test-device", "name": "Test device" } })
         );
     }
 
@@ -1876,6 +1960,8 @@ mod tests {
             serde_json::to_value(snapshot).unwrap(),
             serde_json::json!({
                 "status": "failed",
+                "revision": 0,
+                "file": null,
                 "error": "noOutputDevice",
                 "volume": 1.0,
                 "muted": false,
@@ -1893,18 +1979,13 @@ mod tests {
             Some(60_000),
         ));
 
-        assert_eq!(
-            worker.stop(),
-            PlaybackSnapshot::stopped(VolumeState::default())
-        );
-        assert_eq!(
-            worker.stop(),
-            PlaybackSnapshot::stopped(VolumeState::default())
-        );
-        assert_eq!(
-            worker.current(),
-            PlaybackSnapshot::stopped(VolumeState::default())
-        );
+        let first = worker.stop();
+        assert!(matches!(
+            first,
+            PlaybackSnapshot::Stopped { revision: 1, .. }
+        ));
+        assert_eq!(worker.stop(), first);
+        assert_eq!(worker.current(), first);
         assert!(worker.active.is_none());
     }
 
@@ -1917,14 +1998,12 @@ mod tests {
             Some(60_000),
         ));
 
-        assert_eq!(
-            worker.stop(),
-            PlaybackSnapshot::stopped(VolumeState::default())
-        );
-        assert_eq!(
-            worker.current(),
-            PlaybackSnapshot::stopped(VolumeState::default())
-        );
+        let stopped = worker.stop();
+        assert!(matches!(
+            stopped,
+            PlaybackSnapshot::Stopped { revision: 1, .. }
+        ));
+        assert_eq!(worker.current(), stopped);
     }
 
     #[test]
@@ -1957,11 +2036,43 @@ mod tests {
     }
 
     #[test]
+    fn published_snapshots_are_monotonic_and_idempotent_commands_keep_revision() {
+        let mut worker = test_worker(PlaybackSnapshot::stopped(VolumeState::default()));
+
+        let changed = worker.set_volume(0.5).expect("valid volume must succeed");
+        let muted = worker.mute();
+        let muted_again = worker.mute();
+
+        assert_eq!(snapshot_revision(&changed), 1);
+        assert_eq!(snapshot_revision(&muted), 2);
+        assert_eq!(snapshot_revision(&muted_again), 2);
+    }
+
+    #[test]
+    fn stopped_snapshot_retains_the_last_played_file_identity() {
+        let mut worker = test_worker(PlaybackSnapshot::paused(
+            VolumeState::default(),
+            "1".into(),
+            1_000,
+            Some(60_000),
+        ));
+        worker.current_file = Some(super::test_file());
+
+        let PlaybackSnapshot::Stopped {
+            file: Some(file), ..
+        } = worker.stop()
+        else {
+            panic!("stop must retain a file identity");
+        };
+        assert_eq!(file.file_name, "test.flac");
+    }
+
+    #[test]
     fn volume_state_is_present_in_initial_stopped_snapshot() {
         let service = PlaybackService::start().expect("worker should start");
         assert_eq!(
             serde_json::to_value(service.snapshot()).unwrap(),
-            serde_json::json!({"status": "stopped", "volume": 1.0, "muted": false, "outputSelection": { "kind": "systemDefault" }})
+            serde_json::json!({"status": "stopped", "revision": 0, "file": null, "volume": 1.0, "muted": false, "outputSelection": { "kind": "systemDefault" }})
         );
         service.shutdown();
     }
@@ -2100,6 +2211,7 @@ mod tests {
                 PlaybackFailureCode::OutputStreamBuildFailed,
                 VolumeState::default(),
                 AudioOutputSelection::SystemDefault,
+                None,
             ),
             None
         );
@@ -2114,6 +2226,7 @@ mod tests {
                 PlaybackFailureCode::OutputStreamStartFailed,
                 VolumeState::default(),
                 AudioOutputSelection::SystemDefault,
+                None,
             ),
             Some(PlaybackSnapshot::failed(
                 VolumeState::default(),
@@ -2194,6 +2307,8 @@ mod tests {
             pending_seek: None,
             next_playback_session_id: 0,
             next_output_stream_id: 0,
+            next_snapshot_revision: 0,
+            current_file: None,
             volume_state: VolumeState::default(),
             effective_gain: super::super::volume::AtomicEffectiveGain::new(1.0),
             output_selection: AudioOutputSelection::SystemDefault,
@@ -2211,6 +2326,15 @@ mod tests {
             | PlaybackSnapshot::Playing { volume, muted, .. }
             | PlaybackSnapshot::Paused { volume, muted, .. }
             | PlaybackSnapshot::Failed { volume, muted, .. } => (*volume, *muted),
+        }
+    }
+
+    fn snapshot_revision(snapshot: &PlaybackSnapshot) -> u64 {
+        match snapshot {
+            PlaybackSnapshot::Stopped { revision, .. }
+            | PlaybackSnapshot::Playing { revision, .. }
+            | PlaybackSnapshot::Paused { revision, .. }
+            | PlaybackSnapshot::Failed { revision, .. } => *revision,
         }
     }
 

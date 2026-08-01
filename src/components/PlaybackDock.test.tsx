@@ -11,6 +11,8 @@ import { PlaybackDock } from "./PlaybackDock";
 
 const playback: PlaybackSnapshot = {
   status: "stopped",
+  revision: 0,
+  file: null,
   volume: 0.5,
   muted: false,
   outputSelection: { kind: "systemDefault" },
@@ -28,6 +30,7 @@ const props = {
   outputDevices: [],
   isLoadingDevices: false,
   isOutputSelectionPending: false,
+  isPlaybackAvailable: true,
   isTransportCommandPending: false,
   pendingTransportCommand: null,
   isScrubbing: false,
@@ -36,7 +39,6 @@ const props = {
   isAdjustingVolume: false,
   volumeDraft: 50,
   isVolumePending: false,
-  statusMessage: "",
   playbackError: null,
   deviceListError: null,
   onPlay: vi.fn(),
@@ -79,7 +81,7 @@ describe("PlaybackDock", () => {
       screen.getByTestId("playback-dock").querySelectorAll("[data-region]"),
       (element) => element.getAttribute("data-region"),
     );
-    expect(regions).toEqual(["identity", "transport", "timeline", "volume", "output", "status"]);
+    expect(regions).toEqual(["identity", "transport", "timeline", "volume", "output"]);
     expect(screen.getByText(file.fileName)).toHaveAttribute("title", file.fileName);
     expect(screen.getByRole("combobox", { name: "Audio output device" })).toHaveAccessibleName(
       "Audio output device",
@@ -99,6 +101,8 @@ describe("PlaybackDock", () => {
         ? playback
         : {
             status,
+            revision: 1,
+            file,
             playbackId: "1",
             positionMs: 0,
             durationMs: 1000,
@@ -117,6 +121,13 @@ describe("PlaybackDock", () => {
 
     expect(screen.getByText("Playback failed.")).toBeInTheDocument();
     expect(screen.getAllByRole("alert")).toHaveLength(1);
+    expect(screen.getByText("Playback failed.").closest('[data-region="status"]')).not.toBeNull();
+  });
+
+  it("does not render a status region when there is no error", () => {
+    render(<PlaybackDock {...props} />);
+
+    expect(screen.getByTestId("playback-dock").querySelector('[data-region="status"]')).toBeNull();
   });
 
   it("uses the volume draft consistently while adjusting", () => {
@@ -135,6 +146,8 @@ describe("PlaybackDock", () => {
         isSeekPending
         playback={{
           status: "playing",
+          revision: 1,
+          file,
           playbackId: "1",
           positionMs: 500,
           durationMs: 1000,
@@ -165,6 +178,8 @@ describe("PlaybackDock", () => {
         isLoadingDevices
         playback={{
           status: "playing",
+          revision: 1,
+          file,
           playbackId: "1",
           positionMs: 0,
           durationMs: 1000,
@@ -181,11 +196,13 @@ describe("PlaybackDock", () => {
       "disabled:bg-surface-pressed",
       "disabled:text-text-disabled",
     );
+    expect(screen.getByRole("button", { name: "Pause" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Stop" })).toHaveClass(
       "size-10",
       "disabled:border-border-subtle",
       "disabled:text-text-disabled",
     );
+    expect(screen.getByRole("button", { name: "Stop" })).toBeEnabled();
     expect(screen.getByRole("slider", { name: "Playback position" })).toBeDisabled();
     expect(screen.getByRole("slider", { name: "Playback volume" })).toBeDisabled();
     expect(screen.getByRole("combobox", { name: "Audio output device" })).toBeDisabled();
