@@ -89,7 +89,7 @@ Run `pnpm check` before reporting a coding task as complete.
 - **Scope**: Keep changes strictly within Issue scope. Never commit secrets, env files, build outputs, or editor settings.
 - **Tool Priority**:
   - Local operations: Use local `git`.
-  - Remote/GitHub operations: Primary choice is the **GitHub plugin**. If unavailable or failing, fall back to **`gh` CLI** automatically.
+  - Remote/GitHub operations: Primary choice is the **GitHub connector**. If unavailable or failing, fall back to **`gh` CLI** automatically.
 - **Safety**: Write operations (git/GitHub) require explicit user request.
 - **Merge**: Integrate via **Squash Merge** only.
 
@@ -108,10 +108,10 @@ Execute strictly in order upon explicit request:
 
 1. **Verify State**: Stop if branch, Issue, or PR mismatch, or if dirty with unrelated changes.
 2. **Run Checks**: Run `pnpm check` and test commands in the terminal. Verify all Issue "Done" items against code and checks. Stop if any fail.
-3. **Update Issue**: Mark verified `- [ ]` as `- [x]` (via GitHub plugin or `gh`). Ensure all required items are checked.
+3. **Update Issue**: Mark verified `- [ ]` as `- [x]` (via GitHub connector or `gh`). Ensure all required items are checked.
 4. **Push & PR**: Commit/push any remaining work. Open or update PR with `Closes #<issue-number>` in the body.
 5. **Squash Merge**: Squash-merge PR into `main` using `<type>: <summary>`.
-6. **Clean Up**: Delete remote branch (via GitHub plugin or `gh`), delete local branch, sync local `main` with `origin/main`, and ensure clean worktree.
+6. **Clean Up**: Delete remote branch (via GitHub connector or `gh`), delete local branch, sync local `main` with `origin/main`, and ensure clean worktree.
 
 ## Boundaries
 
