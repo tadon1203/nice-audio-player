@@ -110,6 +110,7 @@ describe("PlaybackDock", () => {
             muted: false,
             outputSelection: { kind: "systemDefault" },
             outputDevice: { id: "default", name: "Default" },
+            channelConversion: "none",
           };
 
     render(<PlaybackDock {...props} playback={state} />);
@@ -122,6 +123,31 @@ describe("PlaybackDock", () => {
     expect(screen.getByText("Playback failed.")).toBeInTheDocument();
     expect(screen.getAllByRole("alert")).toHaveLength(1);
     expect(screen.getByText("Playback failed.").closest('[data-region="status"]')).not.toBeNull();
+  });
+
+  it.each([
+    ["monoToStereo", "Output: Mono → stereo"],
+    ["stereoToMono", "Output: Stereo → mono"],
+  ] as const)("reports %s output processing", (channelConversion, label) => {
+    render(
+      <PlaybackDock
+        {...props}
+        playback={{
+          status: "playing",
+          revision: 1,
+          file,
+          playbackId: "1",
+          positionMs: 0,
+          durationMs: 1000,
+          volume: 0.5,
+          muted: false,
+          outputSelection: { kind: "systemDefault" },
+          outputDevice: { id: "default", name: "Default" },
+          channelConversion,
+        }}
+      />,
+    );
+    expect(screen.getByText(label)).toBeInTheDocument();
   });
 
   it("does not render a status region when there is no error", () => {
@@ -155,6 +181,7 @@ describe("PlaybackDock", () => {
           muted: false,
           outputSelection: { kind: "systemDefault" },
           outputDevice: { id: "default", name: "Default" },
+          channelConversion: "none",
         }}
       />,
     );
@@ -187,6 +214,7 @@ describe("PlaybackDock", () => {
           muted: false,
           outputSelection: { kind: "systemDefault" },
           outputDevice: { id: "default", name: "Default" },
+          channelConversion: "none",
         }}
       />,
     );

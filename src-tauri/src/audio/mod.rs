@@ -1,8 +1,8 @@
-pub mod conversion;
 pub mod decoding;
 pub mod devices;
 pub mod inspection;
 pub mod output;
+pub mod output_processing;
 pub mod pcm;
 pub mod pcm_queue;
 pub mod playback;

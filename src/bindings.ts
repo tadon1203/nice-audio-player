@@ -82,6 +82,8 @@ export type PauseAudioPlaybackError =
   | { code: "outputFailed" }
   | { code: "taskFailed" };
 
+export type PlaybackChannelConversion = "none" | "monoToStereo" | "stereoToMono";
+
 export type PlaybackFailureCode =
   | "noOutputDevice"
   | "outputDeviceUnavailable"
@@ -107,6 +109,7 @@ export type PlaybackSnapshot_Deserialize =
       muted: boolean;
       outputSelection: AudioOutputSelection;
     } & {
+      channelConversion?: never;
       durationMs?: never;
       error?: never;
       outputDevice?: never;
@@ -124,6 +127,7 @@ export type PlaybackSnapshot_Deserialize =
       muted: boolean;
       outputSelection: AudioOutputSelection;
       outputDevice: AudioOutputDeviceIdentity;
+      channelConversion: PlaybackChannelConversion;
     } & { error?: never })
   | ({
       status: "paused";
@@ -136,6 +140,7 @@ export type PlaybackSnapshot_Deserialize =
       muted: boolean;
       outputSelection: AudioOutputSelection;
       outputDevice: AudioOutputDeviceIdentity;
+      channelConversion: PlaybackChannelConversion;
     } & { error?: never })
   | ({
       status: "failed";
@@ -146,7 +151,12 @@ export type PlaybackSnapshot_Deserialize =
       volume: number;
       muted: boolean;
       outputSelection: AudioOutputSelection;
-    } & { durationMs?: never; outputDevice?: never; positionMs?: never });
+    } & {
+      channelConversion?: never;
+      durationMs?: never;
+      outputDevice?: never;
+      positionMs?: never;
+    });
 
 export type PlaybackSnapshot_Serialize =
   | ({
@@ -157,6 +167,7 @@ export type PlaybackSnapshot_Serialize =
       muted: boolean;
       outputSelection: AudioOutputSelection;
     } & {
+      channelConversion?: never;
       durationMs?: never;
       error?: never;
       outputDevice?: never;
@@ -174,6 +185,7 @@ export type PlaybackSnapshot_Serialize =
       muted: boolean;
       outputSelection: AudioOutputSelection;
       outputDevice: AudioOutputDeviceIdentity;
+      channelConversion: PlaybackChannelConversion;
     } & { error?: never })
   | ({
       status: "paused";
@@ -186,6 +198,7 @@ export type PlaybackSnapshot_Serialize =
       muted: boolean;
       outputSelection: AudioOutputSelection;
       outputDevice: AudioOutputDeviceIdentity;
+      channelConversion: PlaybackChannelConversion;
     } & { error?: never })
   | ({
       status: "failed";
@@ -196,7 +209,12 @@ export type PlaybackSnapshot_Serialize =
       volume: number;
       muted: boolean;
       outputSelection: AudioOutputSelection;
-    } & { durationMs?: never; outputDevice?: never; positionMs?: never });
+    } & {
+      channelConversion?: never;
+      durationMs?: never;
+      outputDevice?: never;
+      positionMs?: never;
+    });
 
 export type ResumeAudioPlaybackError =
   | { code: "playbackWorkerUnavailable" }

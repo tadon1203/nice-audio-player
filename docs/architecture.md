@@ -128,6 +128,12 @@ Decoded PCM must use an owned representation with explicit sample rate, channel 
 - Resampling, remixing, normalization, or gain changes must not occur implicitly.
 - A processing-bypass or bit-perfect claim may be reported only when every application-controlled condition has been verified.
 
+Output processing is an explicit boundary between `StreamingDecoder` and the bounded PCM queue. Source and
+output PCM formats are represented explicitly, and a validated output-processing plan is created before worker
+startup. Channel-layout adaptation and application-side sample-rate adaptation run in the decode worker;
+the real-time callback consumes output-ready interleaved PCM. Channel conversion, sample-rate conversion,
+gain, and scalar sample-format conversion remain separately identifiable responsibilities.
+
 ## 8. Concurrency and Background Work
 
 Each task, thread, or worker must have:

@@ -13,7 +13,7 @@ use symphonia::core::meta::MetadataOptions;
 use symphonia::core::units::{Time, TimeBase, Timestamp};
 use symphonia::default::{get_codecs, get_probe};
 
-use super::pcm::{ChannelCount, PcmBuffer, PcmBufferBuildError, SampleRate};
+use super::pcm::{ChannelCount, PcmBuffer, PcmBufferBuildError, PcmSpec, SampleRate};
 use super::validation::ValidatedAudioFile;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -52,11 +52,6 @@ impl DecodeCancellation {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub(crate) struct DecodedAudioSpec {
-    pub(crate) sample_rate: SampleRate,
-    pub(crate) channel_count: ChannelCount,
-}
-
 pub(crate) enum DecodeStep {
     Samples,
     EndOfStream,
@@ -77,7 +72,7 @@ pub(crate) struct StreamingDecoder {
     format: Box<dyn FormatReader>,
     decoder: Box<dyn AudioDecoder>,
     track_id: u32,
-    expected_spec: DecodedAudioSpec,
+    expected_spec: PcmSpec,
     time_base: TimeBase,
     duration_ms: Option<u64>,
     finished: bool,
@@ -111,14 +106,14 @@ pub(crate) fn open_streaming_decoder(
         .ok_or(PcmDecodeError::MissingCodecParameters)?
         .audio()
         .ok_or(PcmDecodeError::MissingCodecParameters)?;
-    let expected_spec = DecodedAudioSpec {
-        sample_rate: SampleRate::new(
+    let expected_spec = PcmSpec::new(
+        SampleRate::new(
             codec_params
                 .sample_rate
                 .ok_or(PcmDecodeError::InvalidSampleRate)?,
         )
         .ok_or(PcmDecodeError::InvalidSampleRate)?,
-        channel_count: ChannelCount::new(
+        ChannelCount::new(
             codec_params
                 .channels
                 .as_ref()
@@ -126,10 +121,10 @@ pub(crate) fn open_streaming_decoder(
                 .count(),
         )
         .ok_or(PcmDecodeError::InvalidChannelCount)?,
-    };
+    );
     let duration_ms = track_duration_ms(track);
     let time_base = track.time_base.unwrap_or_else(|| {
-        TimeBase::from_recip(std::num::NonZeroU32::new(expected_spec.sample_rate.get()).unwrap())
+        TimeBase::from_recip(std::num::NonZeroU32::new(expected_spec.sample_rate().get()).unwrap())
     });
     let decoder = get_codecs()
         .make_audio_decoder(codec_params, &AudioDecoderOptions::default().verify(true))
@@ -147,7 +142,7 @@ pub(crate) fn open_streaming_decoder(
 }
 
 impl StreamingDecoder {
-    pub(crate) fn spec(&self) -> DecodedAudioSpec {
+    pub(crate) fn spec(&self) -> PcmSpec {
         self.expected_spec
     }
 
@@ -159,7 +154,7 @@ impl StreamingDecoder {
         &mut self,
         target_source_frame: u64,
     ) -> Result<SeekStep, PcmDecodeError> {
-        let sample_rate = self.expected_spec.sample_rate.get();
+        let sample_rate = self.expected_spec.sample_rate().get();
         let target_nanos = u128::from(target_source_frame)
             .saturating_mul(1_000_000_000)
             .checked_div(u128::from(sample_rate))
@@ -190,7 +185,7 @@ impl StreamingDecoder {
             match self.decode_next(&mut packet)? {
                 DecodeStep::EndOfStream => return Ok(SeekStep::EndOfStream),
                 DecodeStep::Samples => {
-                    let channels = usize::from(self.expected_spec.channel_count.get());
+                    let channels = usize::from(self.expected_spec.channel_count().get());
                     let packet_frames = packet.len() / channels;
                     if frames_to_discard >= packet_frames as u64 {
                         frames_to_discard -= packet_frames as u64;
@@ -234,12 +229,11 @@ impl StreamingDecoder {
             }
 
             let spec = decoded.spec();
-            let current_spec = DecodedAudioSpec {
-                sample_rate: SampleRate::new(spec.rate())
-                    .ok_or(PcmDecodeError::InvalidSampleRate)?,
-                channel_count: ChannelCount::new(spec.channels().count())
+            let current_spec = PcmSpec::new(
+                SampleRate::new(spec.rate()).ok_or(PcmDecodeError::InvalidSampleRate)?,
+                ChannelCount::new(spec.channels().count())
                     .ok_or(PcmDecodeError::InvalidChannelCount)?,
-            };
+            );
             if current_spec != self.expected_spec {
                 return Err(PcmDecodeError::StreamChanged);
             }
@@ -307,8 +301,12 @@ fn decode_audio_file_with_cancel_check(
     if samples.is_empty() {
         return Err(PcmDecodeError::EmptyAudioStream);
     }
-    PcmBuffer::from_interleaved(samples, output_spec.sample_rate, output_spec.channel_count)
-        .map_err(map_pcm_build_error)
+    PcmBuffer::from_interleaved(
+        samples,
+        output_spec.sample_rate(),
+        output_spec.channel_count(),
+    )
+    .map_err(map_pcm_build_error)
 }
 
 fn track_duration_ms(track: &symphonia::core::formats::Track) -> Option<u64> {

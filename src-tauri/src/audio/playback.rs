@@ -7,10 +7,9 @@ use std::time::{Duration, Instant};
 
 use cpal::StreamInstant;
 
-use super::conversion::PcmConverter;
 use super::decoding::{
-    open_streaming_decoder, DecodeCancellation, DecodeStep, DecodedAudioSpec, PcmDecodeError,
-    SeekStep, StreamingDecoder,
+    open_streaming_decoder, DecodeCancellation, DecodeStep, PcmDecodeError, SeekStep,
+    StreamingDecoder,
 };
 use super::devices::{
     resolve_output_device_id, resolve_output_selection, AudioOutputDeviceIdentity,
@@ -21,6 +20,7 @@ use super::output::{
     AudioOutputError, OutputSignal, OutputStreamId, PreparedOutputConfig, PreparedOutputStream,
     ProducerState,
 };
+use super::output_processing::{ChannelConversion, OutputPcmProcessor};
 use super::pcm_queue::PcmProducer;
 use super::validation::ValidatedAudioFile;
 use super::volume::{AtomicEffectiveGain, VolumeState};
@@ -51,6 +51,7 @@ pub enum PlaybackSnapshot {
         muted: bool,
         output_selection: AudioOutputSelection,
         output_device: AudioOutputDeviceIdentity,
+        channel_conversion: PlaybackChannelConversion,
     },
     Paused {
         revision: u64,
@@ -63,6 +64,7 @@ pub enum PlaybackSnapshot {
         muted: bool,
         output_selection: AudioOutputSelection,
         output_device: AudioOutputDeviceIdentity,
+        channel_conversion: PlaybackChannelConversion,
     },
     Failed {
         revision: u64,
@@ -75,6 +77,24 @@ pub enum PlaybackSnapshot {
         muted: bool,
         output_selection: AudioOutputSelection,
     },
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum PlaybackChannelConversion {
+    None,
+    MonoToStereo,
+    StereoToMono,
+}
+
+impl From<ChannelConversion> for PlaybackChannelConversion {
+    fn from(value: ChannelConversion) -> Self {
+        match value {
+            ChannelConversion::None => Self::None,
+            ChannelConversion::MonoToStereo => Self::MonoToStereo,
+            ChannelConversion::StereoToMono => Self::StereoToMono,
+        }
+    }
 }
 
 impl PlaybackSnapshot {
@@ -92,7 +112,8 @@ impl PlaybackSnapshot {
         }
     }
 
-    fn playing_with_output(
+    #[allow(clippy::too_many_arguments)]
+    fn playing_with_conversion(
         volume: VolumeState,
         output_selection: AudioOutputSelection,
         output_device: AudioOutputDeviceIdentity,
@@ -100,6 +121,7 @@ impl PlaybackSnapshot {
         playback_id: String,
         position_ms: u64,
         duration_ms: Option<u64>,
+        channel_conversion: PlaybackChannelConversion,
     ) -> Self {
         Self::Playing {
             revision: 0,
@@ -111,10 +133,12 @@ impl PlaybackSnapshot {
             muted: volume.muted(),
             output_selection,
             output_device,
+            channel_conversion,
         }
     }
 
-    fn paused_with_output(
+    #[allow(clippy::too_many_arguments)]
+    fn paused_with_conversion(
         volume: VolumeState,
         output_selection: AudioOutputSelection,
         output_device: AudioOutputDeviceIdentity,
@@ -122,6 +146,7 @@ impl PlaybackSnapshot {
         playback_id: String,
         position_ms: u64,
         duration_ms: Option<u64>,
+        channel_conversion: PlaybackChannelConversion,
     ) -> Self {
         Self::Paused {
             revision: 0,
@@ -133,6 +158,7 @@ impl PlaybackSnapshot {
             muted: volume.muted(),
             output_selection,
             output_device,
+            channel_conversion,
         }
     }
 
@@ -168,8 +194,9 @@ impl PlaybackSnapshot {
                 duration_ms,
                 output_selection,
                 output_device,
+                channel_conversion,
                 ..
-            } => Self::playing_with_output(
+            } => Self::playing_with_conversion(
                 volume,
                 output_selection,
                 output_device,
@@ -177,6 +204,7 @@ impl PlaybackSnapshot {
                 playback_id,
                 position_ms,
                 duration_ms,
+                channel_conversion,
             ),
             Self::Paused {
                 file,
@@ -185,8 +213,9 @@ impl PlaybackSnapshot {
                 duration_ms,
                 output_selection,
                 output_device,
+                channel_conversion,
                 ..
-            } => Self::paused_with_output(
+            } => Self::paused_with_conversion(
                 volume,
                 output_selection,
                 output_device,
@@ -194,6 +223,7 @@ impl PlaybackSnapshot {
                 playback_id,
                 position_ms,
                 duration_ms,
+                channel_conversion,
             ),
             Self::Failed {
                 playback_id,
@@ -234,7 +264,7 @@ impl PlaybackSnapshot {
         position_ms: u64,
         duration_ms: Option<u64>,
     ) -> Self {
-        Self::playing_with_output(
+        Self::playing_with_conversion(
             volume,
             AudioOutputSelection::SystemDefault,
             AudioOutputDeviceIdentity {
@@ -245,6 +275,7 @@ impl PlaybackSnapshot {
             playback_id,
             position_ms,
             duration_ms,
+            PlaybackChannelConversion::None,
         )
     }
 
@@ -255,7 +286,7 @@ impl PlaybackSnapshot {
         position_ms: u64,
         duration_ms: Option<u64>,
     ) -> Self {
-        Self::paused_with_output(
+        Self::paused_with_conversion(
             volume,
             AudioOutputSelection::SystemDefault,
             AudioOutputDeviceIdentity {
@@ -266,6 +297,7 @@ impl PlaybackSnapshot {
             playback_id,
             position_ms,
             duration_ms,
+            PlaybackChannelConversion::None,
         )
     }
 
@@ -508,7 +540,6 @@ struct ActivePlayback {
     session_id: u64,
     id: OutputStreamId,
     source_file: ValidatedAudioFile,
-    source_spec: DecodedAudioSpec,
     output_config: PreparedOutputConfig,
     stream: PreparedOutputStream,
     completion_time: Option<StreamInstant>,
@@ -524,7 +555,6 @@ struct ActivePlayback {
 struct PendingPlayback {
     session_id: u64,
     source_file: ValidatedAudioFile,
-    source_spec: DecodedAudioSpec,
     output_config: PreparedOutputConfig,
     id: OutputStreamId,
     stream: PreparedOutputStream,
@@ -687,8 +717,12 @@ impl PlaybackWorker {
                 return;
             }
         };
-        let sample_rate = preparation.sample_rate;
-        let channel_count = preparation.channel_count;
+        let sample_rate = preparation
+            .config
+            .processing_plan
+            .output()
+            .sample_rate()
+            .get();
         let prebuffer_frames = usize::try_from(sample_rate)
             .unwrap_or(usize::MAX)
             .saturating_mul(250)
@@ -706,9 +740,7 @@ impl PlaybackWorker {
                 decoder,
                 producer,
                 first_packet,
-                spec,
-                sample_rate,
-                channel_count,
+                preparation.config.processing_plan,
                 worker_cancel,
                 worker_state,
                 worker_signal,
@@ -726,7 +758,6 @@ impl PlaybackWorker {
         self.pending = Some(PendingPlayback {
             session_id,
             source_file: file,
-            source_spec: spec,
             output_config: preparation.config.clone(),
             id,
             stream,
@@ -770,8 +801,8 @@ impl PlaybackWorker {
         }
         let session_id = active.session_id;
         let source_file = active.source_file.clone();
-        let source_spec = active.source_spec;
-        let target_source_frame = millis_to_frame(target_ms, source_spec.sample_rate.get());
+        let source_spec = active.output_config.processing_plan.source();
+        let target_source_frame = millis_to_frame(target_ms, source_spec.sample_rate().get());
         let mut decoder = match open_streaming_decoder(&source_file) {
             Ok(decoder) => decoder,
             Err(_) => {
@@ -820,7 +851,6 @@ impl PlaybackWorker {
         };
         let preparation = match prepare_output_stream_with_config(
             id,
-            source_spec,
             resolved_device,
             &output_config,
             self.effective_gain.clone(),
@@ -836,8 +866,12 @@ impl PlaybackWorker {
                 return;
             }
         };
-        let sample_rate = preparation.sample_rate;
-        let channel_count = preparation.channel_count;
+        let sample_rate = preparation
+            .config
+            .processing_plan
+            .output()
+            .sample_rate()
+            .get();
         let prebuffer_frames = prebuffer_frames(sample_rate);
         let cancellation = DecodeCancellation::default();
         let worker_cancel = cancellation.clone();
@@ -849,9 +883,7 @@ impl PlaybackWorker {
                 decoder,
                 preparation.producer,
                 seek.first_packet,
-                source_spec,
-                sample_rate,
-                channel_count,
+                output_config.processing_plan,
                 worker_cancel,
                 worker_state,
                 worker_signal,
@@ -864,7 +896,7 @@ impl PlaybackWorker {
         let output_base_frame = source_to_output_frame(
             seek.confirmed_source_frame,
             sample_rate,
-            source_spec.sample_rate.get(),
+            source_spec.sample_rate().get(),
         );
         let total_output_frames = duration_to_frames(duration_ms, sample_rate);
         self.pending_seek = Some(PendingSeek {
@@ -965,7 +997,6 @@ impl PlaybackWorker {
             session_id: pending.session_id,
             id: pending.id,
             source_file: old.source_file,
-            source_spec: old.source_spec,
             output_config: pending.output_config,
             stream: pending.stream,
             completion_time: None,
@@ -1029,7 +1060,6 @@ impl PlaybackWorker {
         let snapshot = self.commit_started_stream(
             pending.session_id,
             pending.source_file,
-            pending.source_spec,
             pending.output_config,
             pending.id,
             pending.stream,
@@ -1228,7 +1258,6 @@ impl PlaybackWorker {
         &mut self,
         session_id: u64,
         source_file: ValidatedAudioFile,
-        source_spec: DecodedAudioSpec,
         output_config: PreparedOutputConfig,
         id: OutputStreamId,
         stream: PreparedOutputStream,
@@ -1240,7 +1269,6 @@ impl PlaybackWorker {
             session_id,
             id,
             source_file,
-            source_spec,
             output_config,
             stream,
             completion_time: None,
@@ -1292,7 +1320,7 @@ impl PlaybackWorker {
             .as_ref()
             .map(|active| active.source_file.clone())
             .expect("playing snapshot requires active source file");
-        PlaybackSnapshot::playing_with_output(
+        PlaybackSnapshot::playing_with_conversion(
             self.volume_state,
             self.output_selection.clone(),
             device,
@@ -1300,6 +1328,13 @@ impl PlaybackWorker {
             playback_id,
             position_ms,
             duration_ms,
+            self.active
+                .as_ref()
+                .expect("active playback")
+                .output_config
+                .processing_plan
+                .channel_conversion()
+                .into(),
         )
     }
 
@@ -1322,7 +1357,7 @@ impl PlaybackWorker {
             .as_ref()
             .map(|active| active.source_file.clone())
             .expect("paused snapshot requires active source file");
-        PlaybackSnapshot::paused_with_output(
+        PlaybackSnapshot::paused_with_conversion(
             self.volume_state,
             self.output_selection.clone(),
             device,
@@ -1330,6 +1365,13 @@ impl PlaybackWorker {
             playback_id,
             position_ms,
             duration_ms,
+            self.active
+                .as_ref()
+                .expect("active playback")
+                .output_config
+                .processing_plan
+                .channel_conversion()
+                .into(),
         )
     }
 
@@ -1513,9 +1555,7 @@ fn decode_loop(
     mut decoder: StreamingDecoder,
     mut producer: PcmProducer,
     first_packet: Vec<f32>,
-    source_spec: super::decoding::DecodedAudioSpec,
-    target_rate: u32,
-    target_channels: u16,
+    processing_plan: super::output_processing::OutputProcessingPlan,
     cancellation: DecodeCancellation,
     producer_state: Arc<AtomicProducerState>,
     signal_sender: SyncSender<OutputSignal>,
@@ -1524,21 +1564,7 @@ fn decode_loop(
     prebuffer_sender: SyncSender<()>,
     prebuffer_frames: usize,
 ) {
-    let mut converter = match PcmConverter::new(
-        source_spec.sample_rate,
-        source_spec.channel_count,
-        super::pcm::SampleRate::new(target_rate).expect("prepared output rate is nonzero"),
-        super::pcm::ChannelCount::new(usize::from(target_channels))
-            .expect("prepared output channels are nonzero"),
-    ) {
-        Ok(converter) => converter,
-        Err(_) => {
-            producer_state.store(ProducerState::Failed);
-            let _ = signal_sender.try_send(OutputSignal::DecodeFailed { stream_id });
-            let _ = prebuffer_sender.try_send(());
-            return;
-        }
-    };
+    let mut converter = OutputPcmProcessor::new(processing_plan);
     let mut converted = Vec::new();
     let mut packet = Vec::new();
     let mut prebuffer_sent = false;
@@ -1933,7 +1959,7 @@ mod tests {
 
         assert_eq!(
             serde_json::to_value(snapshot).unwrap(),
-            serde_json::json!({ "status": "playing", "revision": 0, "file": { "path": "C:/test.flac", "fileName": "test.flac", "extension": "flac" }, "playbackId": "1", "positionMs": 1_000, "durationMs": 60_000, "volume": 1.0, "muted": false, "outputSelection": { "kind": "systemDefault" }, "outputDevice": { "id": "test-device", "name": "Test device" } })
+            serde_json::json!({ "status": "playing", "revision": 0, "file": { "path": "C:/test.flac", "fileName": "test.flac", "extension": "flac" }, "playbackId": "1", "positionMs": 1_000, "durationMs": 60_000, "volume": 1.0, "muted": false, "outputSelection": { "kind": "systemDefault" }, "outputDevice": { "id": "test-device", "name": "Test device" }, "channelConversion": "none" })
         );
     }
 
@@ -1944,7 +1970,7 @@ mod tests {
 
         assert_eq!(
             serde_json::to_value(snapshot).unwrap(),
-            serde_json::json!({ "status": "paused", "revision": 0, "file": { "path": "C:/test.flac", "fileName": "test.flac", "extension": "flac" }, "playbackId": "1", "positionMs": 1_000, "durationMs": 60_000, "volume": 1.0, "muted": false, "outputSelection": { "kind": "systemDefault" }, "outputDevice": { "id": "test-device", "name": "Test device" } })
+            serde_json::json!({ "status": "paused", "revision": 0, "file": { "path": "C:/test.flac", "fileName": "test.flac", "extension": "flac" }, "playbackId": "1", "positionMs": 1_000, "durationMs": 60_000, "volume": 1.0, "muted": false, "outputSelection": { "kind": "systemDefault" }, "outputDevice": { "id": "test-device", "name": "Test device" }, "channelConversion": "none" })
         );
     }
 

@@ -29,6 +29,29 @@ impl ChannelCount {
     }
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub(crate) struct PcmSpec {
+    sample_rate: SampleRate,
+    channel_count: ChannelCount,
+}
+
+impl PcmSpec {
+    pub(crate) const fn new(sample_rate: SampleRate, channel_count: ChannelCount) -> Self {
+        Self {
+            sample_rate,
+            channel_count,
+        }
+    }
+
+    pub(crate) const fn sample_rate(self) -> SampleRate {
+        self.sample_rate
+    }
+
+    pub(crate) const fn channel_count(self) -> ChannelCount {
+        self.channel_count
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum PcmBufferBuildError {
     EmptySamples,

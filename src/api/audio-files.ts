@@ -275,13 +275,19 @@ export function isValidatedAudioFile(value: unknown): value is ValidatedAudioFil
   );
 }
 
-function isTimedPlaybackSnapshot(
-  value: Record<string, unknown>,
-): value is { playbackId: string; positionMs: number; durationMs: number | null } {
+function isTimedPlaybackSnapshot(value: Record<string, unknown>): value is {
+  playbackId: string;
+  positionMs: number;
+  durationMs: number | null;
+  channelConversion: "none" | "monoToStereo" | "stereoToMono";
+} {
   return (
     typeof value.playbackId === "string" &&
     isValidTimingValue(value.positionMs) &&
     isValidOutputDeviceIdentity(value.outputDevice) &&
+    (value.channelConversion === "none" ||
+      value.channelConversion === "monoToStereo" ||
+      value.channelConversion === "stereoToMono") &&
     (value.durationMs === null ||
       (isValidTimingValue(value.durationMs) && value.positionMs <= value.durationMs))
   );
