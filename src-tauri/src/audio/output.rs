@@ -7,8 +7,9 @@ use cpal::traits::{DeviceTrait, StreamTrait};
 use cpal::{FromSample, Sample, SampleFormat, StreamConfig, StreamInstant, SupportedStreamConfig};
 use tauri_plugin_log::log::{error, info};
 
-use super::decoding::DecodedAudioSpec;
 use super::devices::ResolvedAudioOutputDevice;
+use super::output_processing::{OutputProcessingError, OutputProcessingPlan};
+use super::pcm::{ChannelCount, PcmSpec, SampleRate};
 use super::pcm_queue::PcmConsumer;
 use super::volume::{process_sample, AtomicEffectiveGain};
 
@@ -113,18 +114,14 @@ pub(crate) struct PreparedOutputConfig {
     pub(crate) device_name: String,
     pub(crate) stream_config: StreamConfig,
     pub(crate) sample_format: SampleFormat,
+    #[allow(dead_code)]
     pub(crate) path: OutputPath,
-    pub(crate) sample_rate: u32,
-    pub(crate) channel_count: u16,
+    pub(crate) processing_plan: OutputProcessingPlan,
 }
 
 pub(crate) struct OutputPreparation {
     pub(crate) stream: PreparedOutputStream,
     pub(crate) producer: super::pcm_queue::PcmProducer,
-    pub(crate) sample_rate: u32,
-    pub(crate) channel_count: u16,
-    #[allow(dead_code)]
-    pub(crate) path: OutputPath,
     pub(crate) config: PreparedOutputConfig,
 }
 
@@ -402,7 +399,7 @@ fn build_stream_for_config(
 
 pub(crate) fn prepare_output_stream(
     stream_id: OutputStreamId,
-    spec: DecodedAudioSpec,
+    spec: PcmSpec,
     resolved_device: ResolvedAudioOutputDevice,
     effective_gain: AtomicEffectiveGain,
     producer_state: Arc<AtomicProducerState>,
@@ -413,8 +410,8 @@ pub(crate) fn prepare_output_stream(
     let device = resolved_device.device;
     let device_name = device_identity.name.clone();
     let device_id = device_identity.id.clone();
-    let source_rate = spec.sample_rate.get();
-    let source_channels = spec.channel_count.get();
+    let source_rate = spec.sample_rate().get();
+    let source_channels = spec.channel_count().get();
     let ranges = device
         .supported_output_configs()
         .map_err(|error| match error.kind() {
@@ -430,7 +427,10 @@ pub(crate) fn prepare_output_stream(
     let native_result = native.and_then(|config| {
         let stream_config = config.config();
         let sample_format = config.sample_format();
-        let (producer, consumer) = make_queue(stream_config.sample_rate, stream_config.channels)?;
+        let plan = OutputProcessingPlan::new(spec, spec)
+            .map_err(|_| AudioOutputError::UnsupportedConfiguration)?;
+        let output_spec = plan.output();
+        let (producer, consumer) = make_queue(output_spec)?;
         let result = build_stream_for_config(
             &device,
             &device_name,
@@ -446,24 +446,20 @@ pub(crate) fn prepare_output_stream(
         result.map(|stream| OutputPreparation {
             stream,
             producer,
-            sample_rate: source_rate,
-            channel_count: source_channels,
-            path: OutputPath::Native,
             config: PreparedOutputConfig {
                 device_id: device_id.clone(),
                 device_name: device_name.clone(),
                 stream_config,
                 sample_format,
                 path: OutputPath::Native,
-                sample_rate: source_rate,
-                channel_count: source_channels,
+                processing_plan: plan,
             },
         })
     });
     match classify_native_attempt(native_result) {
         NativeAttemptDecision::Success(prepared) => {
-            info!("audio output path native: source_rate={source_rate}, source_channels={source_channels}, sample_format={:?}",
-                native_sample_format);
+            info!("audio output path native: source_rate={source_rate}, source_channels={source_channels}, output_rate={source_rate}, output_channels={source_channels}, channel_conversion={:?}, sample_format={:?}",
+                prepared.config.processing_plan.channel_conversion(), native_sample_format);
             return Ok(prepared);
         }
         NativeAttemptDecision::Fallback => {
@@ -485,15 +481,18 @@ pub(crate) fn prepare_output_stream(
     }
     let target_rate = fallback.sample_rate();
     let target_channels = fallback.channels();
-    super::conversion::PcmConverter::new(
-        spec.sample_rate,
-        spec.channel_count,
-        super::pcm::SampleRate::new(target_rate).expect("CPAL sample rate is nonzero"),
-        super::pcm::ChannelCount::new(usize::from(target_channels))
+    let target = PcmSpec::new(
+        SampleRate::new(target_rate).ok_or(AudioOutputError::UnsupportedConfiguration)?,
+        ChannelCount::new(usize::from(target_channels))
             .ok_or(AudioOutputError::UnsupportedConfiguration)?,
-    )
-    .map_err(|_| AudioOutputError::UnsupportedConfiguration)?;
-    let (producer, consumer) = make_queue(target_rate, target_channels)?;
+    );
+    let plan = OutputProcessingPlan::new(spec, target).map_err(|error| match error {
+        OutputProcessingError::UnsupportedChannelConversion => {
+            AudioOutputError::UnsupportedConfiguration
+        }
+        OutputProcessingError::MisalignedSamples => AudioOutputError::UnsupportedConfiguration,
+    })?;
+    let (producer, consumer) = make_queue(target)?;
     let config = fallback.config();
     let stream = classify_fallback_build(build_stream_for_config(
         &device,
@@ -507,22 +506,18 @@ pub(crate) fn prepare_output_stream(
         capacity_sender,
         signal_sender,
     ))?;
-    info!("audio output path fallback: source_rate={source_rate}, source_channels={source_channels}, target_rate={target_rate}, target_channels={target_channels}, sample_format={:?}", fallback.sample_format());
+    info!("audio output path fallback: source_rate={source_rate}, source_channels={source_channels}, target_rate={target_rate}, target_channels={target_channels}, channel_conversion={:?}, sample_format={:?}", plan.channel_conversion(), fallback.sample_format());
     let config = PreparedOutputConfig {
         device_id: device_id.clone(),
         device_name: device_name.clone(),
         stream_config: config,
         sample_format: fallback.sample_format(),
         path: OutputPath::Fallback,
-        sample_rate: target_rate,
-        channel_count: target_channels,
+        processing_plan: plan,
     };
     Ok(OutputPreparation {
         stream,
         producer,
-        sample_rate: target_rate,
-        channel_count: target_channels,
-        path: OutputPath::Fallback,
         config,
     })
 }
@@ -530,7 +525,6 @@ pub(crate) fn prepare_output_stream(
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn prepare_output_stream_with_config(
     stream_id: OutputStreamId,
-    _spec: DecodedAudioSpec,
     resolved_device: ResolvedAudioOutputDevice,
     config: &PreparedOutputConfig,
     effective_gain: AtomicEffectiveGain,
@@ -544,7 +538,7 @@ pub(crate) fn prepare_output_stream_with_config(
         return Err(AudioOutputError::StreamBuildFailed);
     }
     let device_name = device_identity.name.clone();
-    let (producer, consumer) = make_queue(config.sample_rate, config.channel_count)?;
+    let (producer, consumer) = make_queue(config.processing_plan.output())?;
     let stream = build_stream_for_config(
         &device,
         &device_name,
@@ -564,17 +558,15 @@ pub(crate) fn prepare_output_stream_with_config(
     Ok(OutputPreparation {
         stream,
         producer,
-        sample_rate: config.sample_rate,
-        channel_count: config.channel_count,
-        path: config.path,
         config: config.clone(),
     })
 }
 
 fn make_queue(
-    sample_rate: u32,
-    channels: u16,
+    spec: PcmSpec,
 ) -> Result<(super::pcm_queue::PcmProducer, PcmConsumer), AudioOutputError> {
+    let sample_rate = spec.sample_rate().get();
+    let channels = spec.channel_count().get();
     let capacity = usize::try_from(sample_rate)
         .unwrap_or(usize::MAX)
         .saturating_mul(2)

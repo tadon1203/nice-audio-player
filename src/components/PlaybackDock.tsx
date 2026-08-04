@@ -120,6 +120,13 @@ export function PlaybackDock({
                 {validatedFile.fileName}
               </p>
               <p className="mt-1 text-body-sm text-text-secondary">.{validatedFile.extension}</p>
+              {timed && playback.channelConversion !== "none" ? (
+                <p className="mt-1 text-body-sm text-text-secondary">
+                  {playback.channelConversion === "monoToStereo"
+                    ? "Output: Mono → stereo"
+                    : "Output: Stereo → mono"}
+                </p>
+              ) : null}
             </>
           ) : (
             <p className="text-body-sm text-text-muted">No audio selected</p>

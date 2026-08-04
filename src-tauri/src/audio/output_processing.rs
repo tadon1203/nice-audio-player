@@ -1,13 +1,56 @@
-use super::pcm::{ChannelCount, SampleRate};
+use super::pcm::PcmSpec;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum PcmConversionError {
+pub(crate) enum OutputProcessingError {
     MisalignedSamples,
     UnsupportedChannelConversion,
 }
 
 /// Incremental, deterministic PCM conversion performed by the decode worker.
-pub(crate) struct PcmConverter {
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub(crate) enum ChannelConversion {
+    None,
+    MonoToStereo,
+    StereoToMono,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub(crate) struct OutputProcessingPlan {
+    source: PcmSpec,
+    output: PcmSpec,
+    channel_conversion: ChannelConversion,
+}
+
+impl OutputProcessingPlan {
+    pub(crate) fn new(source: PcmSpec, output: PcmSpec) -> Result<Self, OutputProcessingError> {
+        let source_channels = source.channel_count().get();
+        let output_channels = output.channel_count().get();
+        let channel_conversion = match (source_channels, output_channels) {
+            (source, output) if source == output => ChannelConversion::None,
+            (1, 2) => ChannelConversion::MonoToStereo,
+            (2, 1) => ChannelConversion::StereoToMono,
+            _ => return Err(OutputProcessingError::UnsupportedChannelConversion),
+        };
+        Ok(Self {
+            source,
+            output,
+            channel_conversion,
+        })
+    }
+
+    pub(crate) const fn source(self) -> PcmSpec {
+        self.source
+    }
+    pub(crate) const fn output(self) -> PcmSpec {
+        self.output
+    }
+    pub(crate) const fn channel_conversion(self) -> ChannelConversion {
+        self.channel_conversion
+    }
+}
+
+/// Incremental, deterministic PCM output processing performed by the decode worker.
+pub(crate) struct OutputPcmProcessor {
     source_rate: u32,
     target_rate: u32,
     source_channels: usize,
@@ -21,23 +64,15 @@ pub(crate) struct PcmConverter {
     finished: bool,
 }
 
-impl PcmConverter {
-    pub(crate) fn new(
-        source_rate: SampleRate,
-        source_channels: ChannelCount,
-        target_rate: SampleRate,
-        target_channels: ChannelCount,
-    ) -> Result<Self, PcmConversionError> {
-        let source_channels = usize::from(source_channels.get());
-        let target_channels = usize::from(target_channels.get());
-        if source_channels != target_channels
-            && !matches!((source_channels, target_channels), (1, 2) | (2, 1))
-        {
-            return Err(PcmConversionError::UnsupportedChannelConversion);
-        }
-        Ok(Self {
-            source_rate: source_rate.get(),
-            target_rate: target_rate.get(),
+impl OutputPcmProcessor {
+    pub(crate) fn new(plan: OutputProcessingPlan) -> Self {
+        let source = plan.source();
+        let output = plan.output();
+        let source_channels = usize::from(source.channel_count().get());
+        let target_channels = usize::from(output.channel_count().get());
+        Self {
+            source_rate: source.sample_rate().get(),
+            target_rate: output.sample_rate().get(),
             source_channels,
             target_channels,
             source_frames: 0,
@@ -47,7 +82,7 @@ impl PcmConverter {
             previous_frame: vec![0.0; target_channels],
             has_previous_frame: false,
             finished: false,
-        })
+        }
     }
 
     pub(crate) fn is_passthrough(&self) -> bool {
@@ -58,9 +93,9 @@ impl PcmConverter {
         &mut self,
         input: &[f32],
         output: &mut Vec<f32>,
-    ) -> Result<(), PcmConversionError> {
+    ) -> Result<(), OutputProcessingError> {
         if self.finished || !input.len().is_multiple_of(self.source_channels) {
-            return Err(PcmConversionError::MisalignedSamples);
+            return Err(OutputProcessingError::MisalignedSamples);
         }
         output.clear();
         if self.is_passthrough() {
@@ -131,7 +166,7 @@ fn convert_channels_into(frame: &[f32], output: &mut [f32]) {
         (channels, target) if channels == target => output.copy_from_slice(frame),
         (1, 2) => output.copy_from_slice(&[frame[0], frame[0]]),
         (2, 1) => output[0] = (frame[0] + frame[1]) * 0.5,
-        _ => unreachable!("channel conversion was validated by PcmConverter::new"),
+        _ => unreachable!("channel conversion was validated by OutputProcessingPlan::new"),
     }
 }
 
@@ -141,25 +176,29 @@ fn ceil_div(numerator: u128, denominator: u128) -> u128 {
 
 #[cfg(test)]
 mod tests {
-    use super::{PcmConversionError, PcmConverter};
-    use crate::audio::pcm::{ChannelCount, SampleRate};
+    use super::{
+        ChannelConversion, OutputPcmProcessor, OutputProcessingError, OutputProcessingPlan,
+    };
+    use crate::audio::pcm::{ChannelCount, PcmSpec, SampleRate};
 
     fn converter(
         source_rate: u32,
         source_channels: usize,
         target_rate: u32,
         target_channels: usize,
-    ) -> PcmConverter {
-        PcmConverter::new(
+    ) -> OutputPcmProcessor {
+        let source = PcmSpec::new(
             SampleRate::new(source_rate).unwrap(),
             ChannelCount::new(source_channels).unwrap(),
+        );
+        let output = PcmSpec::new(
             SampleRate::new(target_rate).unwrap(),
             ChannelCount::new(target_channels).unwrap(),
-        )
-        .unwrap()
+        );
+        OutputPcmProcessor::new(OutputProcessingPlan::new(source, output).unwrap())
     }
 
-    fn run(converter: &mut PcmConverter, input: &[f32]) -> Vec<f32> {
+    fn run(converter: &mut OutputPcmProcessor, input: &[f32]) -> Vec<f32> {
         let mut output = Vec::new();
         converter.convert(input, &mut output).unwrap();
         let mut flushed = Vec::new();
@@ -187,18 +226,16 @@ mod tests {
         let mut output = vec![9.0];
         assert_eq!(
             converter.convert(&[1.0], &mut output),
-            Err(PcmConversionError::MisalignedSamples)
+            Err(OutputProcessingError::MisalignedSamples)
         );
         assert_eq!(output, [9.0]);
         assert_eq!(
-            PcmConverter::new(
-                SampleRate::new(1).unwrap(),
-                ChannelCount::new(3).unwrap(),
-                SampleRate::new(1).unwrap(),
-                ChannelCount::new(2).unwrap()
+            OutputProcessingPlan::new(
+                PcmSpec::new(SampleRate::new(1).unwrap(), ChannelCount::new(3).unwrap()),
+                PcmSpec::new(SampleRate::new(1).unwrap(), ChannelCount::new(2).unwrap())
             )
             .err(),
-            Some(PcmConversionError::UnsupportedChannelConversion)
+            Some(OutputProcessingError::UnsupportedChannelConversion)
         );
     }
 
@@ -253,6 +290,18 @@ mod tests {
                 && converter.previous_frame.as_ptr() == previous_ptr)
                 || (converter.current_frame.as_ptr() == previous_ptr
                     && converter.previous_frame.as_ptr() == current_ptr)
+        );
+    }
+
+    #[test]
+    fn plan_reports_channel_conversion() {
+        let source = PcmSpec::new(SampleRate::new(1).unwrap(), ChannelCount::new(1).unwrap());
+        let stereo = PcmSpec::new(SampleRate::new(1).unwrap(), ChannelCount::new(2).unwrap());
+        assert_eq!(
+            OutputProcessingPlan::new(source, stereo)
+                .unwrap()
+                .channel_conversion(),
+            ChannelConversion::MonoToStereo
         );
     }
 }

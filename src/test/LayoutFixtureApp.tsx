@@ -112,6 +112,7 @@ function fixturePlayback(fixture: LayoutFixtureName): PlaybackSnapshot {
       muted: false,
       outputSelection: { kind: "systemDefault" },
       outputDevice: { id: "default", name: "System speakers" },
+      channelConversion: "monoToStereo",
     };
   }
   if (fixture === "failed") {

@@ -62,6 +62,11 @@ Application-side resampling, channel conversion, gapless playback, exclusive out
 
 Optional audio processing may include loudness normalization and ReplayGain support when separately accepted.
 
+When the selected output requires channel adaptation, matching channel layouts preserve the source layout,
+mono sources may play through stereo output by duplicating each sample to left and right, and the active
+conversion is visible in playback state. Unsupported channel-layout combinations produce a structured
+playback failure.
+
 Any processing that changes sample values must be explicit, user-visible, and bypassable where the product mode requires an unmodified path.
 
 Normalization must avoid clipping. Processing must not run in a way that compromises real-time playback stability.

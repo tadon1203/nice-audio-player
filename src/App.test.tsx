@@ -63,6 +63,7 @@ function playing(revision: number): Extract<PlaybackSnapshot, { status: "playing
     muted: false,
     outputSelection: { kind: "systemDefault" },
     outputDevice: { id: "default", name: "Speakers" },
+    channelConversion: "none",
   };
 }
 

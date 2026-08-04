@@ -33,6 +33,7 @@ function playing(revision: number): PlaybackSnapshot {
     muted: false,
     outputSelection: { kind: "systemDefault" },
     outputDevice: { id: "default", name: "Speakers" },
+    channelConversion: "none",
   };
 }
 

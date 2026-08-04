@@ -13,7 +13,14 @@ import { formatPlaybackTime } from "@/lib/playback-time";
 const outputSelection = { kind: "systemDefault" } as const;
 const outputDevice = { id: "device-1", name: "Speakers" } as const;
 const file = { path: "C:/track.flac", fileName: "track.flac", extension: "flac" } as const;
-const snapshotBase = { revision: 1, file, volume: 1, muted: false, outputSelection } as const;
+const snapshotBase = {
+  revision: 1,
+  file,
+  volume: 1,
+  muted: false,
+  outputSelection,
+  channelConversion: "none",
+} as const;
 
 describe("isPlaybackSnapshot", () => {
   it("accepts playing and paused payloads with timing fields", () => {
@@ -142,6 +149,22 @@ describe("isPlaybackSnapshot", () => {
         outputDevice,
       }),
     ).toBe(true);
+  });
+
+  it("requires a supported channel conversion on timed snapshots", () => {
+    for (const channelConversion of ["monoToStereo", "stereoToMono", "unknown"] as const) {
+      expect(
+        isPlaybackSnapshot({
+          ...snapshotBase,
+          status: "playing",
+          playbackId: "1",
+          positionMs: 0,
+          durationMs: 1_000,
+          outputDevice,
+          channelConversion,
+        }),
+      ).toBe(channelConversion !== "unknown");
+    }
   });
 
   it("preserves stopped and failed snapshot validation", () => {
