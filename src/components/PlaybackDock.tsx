@@ -20,8 +20,7 @@ interface PlaybackDockProps {
   isPlaybackAvailable: boolean;
   isTransportCommandPending: boolean;
   pendingTransportCommand: PendingTransportCommand;
-  isScrubbing: boolean;
-  positionDraft: number;
+  seekPreviewMs: number | null;
   isSeekPending: boolean;
   isAdjustingVolume: boolean;
   volumeDraft: number;
@@ -53,8 +52,7 @@ export function PlaybackDock({
   isPlaybackAvailable,
   isTransportCommandPending,
   pendingTransportCommand,
-  isScrubbing,
-  positionDraft,
+  seekPreviewMs,
   isSeekPending,
   isAdjustingVolume,
   volumeDraft,
@@ -89,7 +87,7 @@ export function PlaybackDock({
     pendingTransportCommand === "start" ||
     pendingTransportCommand === "pause" ||
     pendingTransportCommand === "resume";
-  const seekValue = Math.min(isScrubbing ? positionDraft : position, duration ?? 0);
+  const seekValue = Math.min(seekPreviewMs ?? position, duration ?? 0);
   const displayedVolume = Math.min(
     100,
     Math.max(0, isAdjustingVolume ? volumeDraft : Math.round(playback.volume * 100)),

@@ -74,7 +74,6 @@ struct HighQualityResampler {
     resampler: Fft<f32>,
     input: Vec<f32>,
     input_frames: usize,
-    input_chunk_frames: usize,
     output: Vec<f32>,
     channels: usize,
     delay_remaining: usize,
@@ -83,6 +82,7 @@ struct HighQualityResampler {
     finished: bool,
     resampler_input_rate: u32,
     resampler_output_rate: u32,
+    input_chunk_frames: usize,
 }
 
 impl HighQualityResampler {
@@ -97,8 +97,8 @@ impl HighQualityResampler {
         )
         .map_err(|_| OutputProcessingError::ResamplerConstructionFailed)?;
         let input_capacity_frames = resampler.input_frames_max();
-        let input_chunk_frames = resampler.input_frames_next();
         let output_frames = resampler.output_frames_max();
+        let input_chunk_frames = resampler.input_frames_next();
         Ok(Self {
             input: vec![0.0; input_capacity_frames * channels],
             output: vec![0.0; output_frames * channels],
@@ -106,12 +106,12 @@ impl HighQualityResampler {
             delay_remaining: resampler.output_delay(),
             resampler,
             input_frames: 0,
-            input_chunk_frames,
             total_source_frames: 0,
             emitted_output_frames: 0,
             finished: false,
             resampler_input_rate: plan.source().sample_rate().get(),
             resampler_output_rate: plan.output().sample_rate().get(),
+            input_chunk_frames,
         })
     }
 
@@ -227,22 +227,6 @@ impl OutputPcmProcessor {
         })
     }
 
-    pub(crate) fn seek_preroll_frames(&self, target_source_frame: u64) -> u64 {
-        let Some(resampler) = self.resampler.as_ref() else {
-            return 0;
-        };
-        let source_rate = u128::from(resampler.input_rate());
-        let output_rate = u128::from(resampler.output_rate());
-        let delay_source_frames = (resampler.delay_remaining as u128)
-            .saturating_mul(source_rate)
-            .div_ceil(output_rate);
-        let warmup_frames = (delay_source_frames + (resampler.input_chunk_frames as u128 * 4))
-            .min(u128::from(u64::MAX)) as u64;
-        let initial_frame = target_source_frame.saturating_sub(warmup_frames);
-        target_source_frame
-            .saturating_sub(initial_frame - initial_frame % resampler.input_chunk_frames as u64)
-    }
-
     pub(crate) fn convert(
         &mut self,
         input: &[f32],
@@ -278,6 +262,22 @@ impl OutputPcmProcessor {
         }
         self.finished = true;
         Ok(())
+    }
+
+    pub(crate) fn seek_preroll_frames(&self, target_source_frame: u64) -> u64 {
+        let Some(resampler) = self.resampler.as_ref() else {
+            return 0;
+        };
+        let source_rate = u128::from(resampler.input_rate());
+        let output_rate = u128::from(resampler.output_rate());
+        let delay_source_frames = (resampler.delay_remaining as u128)
+            .saturating_mul(source_rate)
+            .div_ceil(output_rate);
+        let warmup_frames = (delay_source_frames + (resampler.input_chunk_frames as u128 * 4))
+            .min(u128::from(u64::MAX)) as u64;
+        let initial_frame = target_source_frame.saturating_sub(warmup_frames);
+        target_source_frame
+            .saturating_sub(initial_frame - initial_frame % resampler.input_chunk_frames as u64)
     }
 }
 

@@ -46,6 +46,10 @@ import {
 import type { TransportCommand, TransportIntent } from "./lib/playback-state";
 
 type PendingTransportCommand = "start" | "stop" | "pause" | "resume" | null;
+type SeekInteraction =
+  | { kind: "idle" }
+  | { kind: "scrubbing"; positionMs: number }
+  | { kind: "pending"; positionMs: number };
 
 function formatValidationError(error: unknown): string {
   if (!isAudioFileValidationError(error)) return "The selected file could not be validated.";
@@ -107,9 +111,7 @@ function App() {
   const validatedFile = fileOverride === undefined ? playback.file : fileOverride;
   const [pendingTransportCommand, setPendingTransportCommand] =
     useState<PendingTransportCommand>(null);
-  const [isScrubbing, setIsScrubbing] = useState(false);
-  const [positionDraft, setPositionDraft] = useState(0);
-  const [isSeekPending, setIsSeekPending] = useState(false);
+  const [seekInteraction, setSeekInteraction] = useState<SeekInteraction>({ kind: "idle" });
   const [isAdjustingVolume, setIsAdjustingVolume] = useState(false);
   const [volumeDraft, setVolumeDraft] = useState(100);
   const [isVolumePending, setIsVolumePending] = useState(false);
@@ -132,6 +134,8 @@ function App() {
   connectionRef.current = playbackUi.connection;
 
   const isTransportCommandPending = pendingTransportCommand !== null;
+  const isSeekPending = seekInteraction.kind === "pending";
+  const seekPreviewMs = seekInteraction.kind === "idle" ? null : seekInteraction.positionMs;
   const isTimedPlayback = playback.status === "playing" || playback.status === "paused";
   const isPlaybackAvailable = playbackUi.connection === "ready";
 
@@ -377,8 +381,7 @@ function App() {
   }
 
   function updateSeek(value: number) {
-    setIsScrubbing(true);
-    setPositionDraft(value);
+    setSeekInteraction({ kind: "scrubbing", positionMs: value });
   }
   async function commitSeek(value: number) {
     const current = latestPlaybackRef.current;
@@ -390,17 +393,15 @@ function App() {
       seekPendingRef.current ||
       connectionRef.current !== "ready"
     ) {
-      setIsScrubbing(false);
+      setSeekInteraction({ kind: "idle" });
       return;
     }
     const target = Math.max(0, Math.min(value, current.durationMs));
-    setIsScrubbing(false);
+    setSeekInteraction({ kind: "pending", positionMs: target });
     seekPendingRef.current = true;
-    setIsSeekPending(true);
     dispatchPlaybackUi({ type: "commandStarted", lane: "seek" });
     try {
       applySnapshot(await seekAudioPlayback(target));
-      setPositionDraft(target);
       dispatchPlaybackUi({ type: "commandSucceeded", lane: "seek" });
     } catch (error: unknown) {
       dispatchPlaybackUi({
@@ -413,7 +414,7 @@ function App() {
       await refreshAuthoritativeSnapshot();
     } finally {
       seekPendingRef.current = false;
-      setIsSeekPending(false);
+      setSeekInteraction({ kind: "idle" });
     }
   }
 
@@ -514,8 +515,7 @@ function App() {
           isTransportCommandPending={isTransportCommandPending}
           isSeekPending={isSeekPending}
           pendingTransportCommand={pendingTransportCommand}
-          isScrubbing={isScrubbing}
-          positionDraft={positionDraft}
+          seekPreviewMs={seekPreviewMs}
           isAdjustingVolume={isAdjustingVolume}
           volumeDraft={volumeDraft}
           isVolumePending={isVolumePending}
@@ -528,11 +528,8 @@ function App() {
           onSeek={updateSeek}
           onSeekCommit={(value) => void commitSeek(value)}
           onSeekCancel={() => {
-            setIsScrubbing(false);
-            setPositionDraft(
-              playback.status === "playing" || playback.status === "paused"
-                ? playback.positionMs
-                : 0,
+            setSeekInteraction((current) =>
+              current.kind === "scrubbing" ? { kind: "idle" } : current,
             );
           }}
           onVolumeChange={updateVolume}

@@ -33,8 +33,7 @@ const props = {
   isPlaybackAvailable: true,
   isTransportCommandPending: false,
   pendingTransportCommand: null,
-  isScrubbing: false,
-  positionDraft: 0,
+  seekPreviewMs: null,
   isSeekPending: false,
   isAdjustingVolume: false,
   volumeDraft: 50,
@@ -72,6 +71,32 @@ describe("PlaybackDock", () => {
       "systemDefault",
     );
     expect(screen.getByRole("button", { name: "Refresh output devices" })).toBeEnabled();
+  });
+
+  it("uses the authoritative position when there is no seek preview", () => {
+    render(
+      <PlaybackDock
+        {...props}
+        playback={{
+          status: "playing",
+          revision: 1,
+          file,
+          playbackId: "1",
+          positionMs: 500,
+          durationMs: 1000,
+          volume: 0.5,
+          muted: false,
+          outputSelection: { kind: "systemDefault" },
+          outputDevice: { id: "default", name: "Default" },
+          channelConversion: "none",
+          sourceSampleRate: 44_100,
+          outputSampleRate: 44_100,
+          resamplingActive: false,
+        }}
+      />,
+    );
+
+    expect(screen.getByRole("slider", { name: "Playback position" })).toHaveValue("500");
   });
 
   it("keeps the five control regions in reading order", () => {
@@ -176,6 +201,7 @@ describe("PlaybackDock", () => {
       <PlaybackDock
         {...props}
         isSeekPending
+        seekPreviewMs={700}
         playback={{
           status: "playing",
           revision: 1,
@@ -200,6 +226,8 @@ describe("PlaybackDock", () => {
     expect(pause.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
     expect(screen.getByRole("button", { name: "Stop" })).toBeEnabled();
     expect(screen.getByRole("slider", { name: "Playback position" })).toBeDisabled();
+    expect(screen.getByRole("slider", { name: "Playback position" })).toHaveValue("700");
+    expect(screen.getByText("0:00")).toBeInTheDocument();
     expect(
       screen.getByRole("slider", { name: "Playback position" }).closest('[data-region="timeline"]'),
     ).toHaveAttribute("aria-busy", "true");
