@@ -87,6 +87,8 @@ function formatPlaybackFailure(code: PlaybackFailureCode): string {
       return "Playback completion could not be determined.";
     case "decodeFailed":
       return "The audio file could not be decoded.";
+    case "sampleRateConversionFailed":
+      return "The audio could not be converted for the selected output.";
   }
 }
 

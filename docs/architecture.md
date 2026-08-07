@@ -121,6 +121,9 @@ All callback inputs must be prepared before the callback needs them. Callback fa
 
 Decoded PCM must use an owned representation with explicit sample rate, channel count, layout contract, and validated invariants.
 
+When source and selected output rates differ, the decode worker uses Rubato `Fft<f32>` with a 1,024-frame hint and `FixedSync::Both`. Decoder packet boundaries are accumulated into reusable interleaved buffers; channel conversion runs before sample-rate conversion. The worker trims the library-reported startup delay, flushes partial input and silent tail chunks, and emits exactly the ceiling of source frames multiplied by output rate divided by source rate. Input and output samples are finite-checked, output is saturated to the normalized range, and all Rubato types remain inside `output_processing.rs`. This adds approximately one resampler chunk plus the reported filter delay to the unchanged approximately 250 ms playback prebuffer. Equal-rate processing bypasses Rubato exactly.
+Seek replacement starts decoding from a source preroll large enough to warm the new filter, aligned to the resampler input chunk boundary. The converted preroll frames are discarded before queue insertion so the active output position remains at the requested seek target.
+
 - Decoder-specific types stay inside the decode infrastructure.
 - Output-backend types stay inside the output infrastructure.
 - Decoding occurs outside the audio callback.

@@ -20,6 +20,9 @@ const snapshotBase = {
   muted: false,
   outputSelection,
   channelConversion: "none",
+  sourceSampleRate: 44_100,
+  outputSampleRate: 44_100,
+  resamplingActive: false,
 } as const;
 
 describe("isPlaybackSnapshot", () => {

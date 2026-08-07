@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2021"
+rust-version = "1.85"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -35,3 +36,4 @@ tauri-plugin-log = "2"
 cpal = "0.18.1"
 ringbuf = "0.4"
 symphonia = { version = "0.6.0", features = ["all"] }
+rubato = { version = "4.0.0", default-features = false, features = ["fft_resampler"] }

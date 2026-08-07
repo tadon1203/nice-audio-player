@@ -58,6 +58,7 @@ pub(crate) enum DecodeStep {
 }
 
 pub(crate) struct SeekResult {
+    pub(crate) preroll_source_frame: u64,
     pub(crate) confirmed_source_frame: u64,
     pub(crate) confirmed_position_ms: u64,
     pub(crate) first_packet: Vec<f32>,
@@ -154,8 +155,17 @@ impl StreamingDecoder {
         &mut self,
         target_source_frame: u64,
     ) -> Result<SeekStep, PcmDecodeError> {
+        self.seek_to_frame_with_preroll(target_source_frame, 0)
+    }
+
+    pub(crate) fn seek_to_frame_with_preroll(
+        &mut self,
+        target_source_frame: u64,
+        preroll_frames: u64,
+    ) -> Result<SeekStep, PcmDecodeError> {
         let sample_rate = self.expected_spec.sample_rate().get();
-        let target_nanos = u128::from(target_source_frame)
+        let preroll_source_frame = target_source_frame.saturating_sub(preroll_frames);
+        let target_nanos = u128::from(preroll_source_frame)
             .saturating_mul(1_000_000_000)
             .checked_div(u128::from(sample_rate))
             .ok_or(PcmDecodeError::SeekFailed)?;
@@ -196,6 +206,7 @@ impl StreamingDecoder {
                         .checked_mul(channels)
                         .ok_or(PcmDecodeError::BufferAllocationFailed)?;
                     return Ok(SeekStep::Samples(SeekResult {
+                        preroll_source_frame,
                         confirmed_source_frame: target_source_frame,
                         confirmed_position_ms: frame_to_millis(target_source_frame, sample_rate),
                         first_packet: packet[skip_samples..].to_vec(),
