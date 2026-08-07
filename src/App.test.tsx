@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   startAudioFile: vi.fn(),
   stopAudioPlayback: vi.fn(),
   pauseAudioPlayback: vi.fn(),
+  seekAudioPlayback: vi.fn(),
 }));
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn() }));
@@ -32,6 +33,7 @@ vi.mock("@/api/audio-files", async (importOriginal) => {
     startAudioFile: mocks.startAudioFile,
     stopAudioPlayback: mocks.stopAudioPlayback,
     pauseAudioPlayback: mocks.pauseAudioPlayback,
+    seekAudioPlayback: mocks.seekAudioPlayback,
     resumeAudioPlayback: vi.fn(),
   };
 });
@@ -51,13 +53,16 @@ function stopped(revision: number): PlaybackSnapshot {
   };
 }
 
-function playing(revision: number): Extract<PlaybackSnapshot, { status: "playing" }> {
+function playingAt(
+  revision: number,
+  positionMs: number,
+): Extract<PlaybackSnapshot, { status: "playing" }> {
   return {
     status: "playing",
     revision,
     file,
     playbackId: "1",
-    positionMs: 1_000,
+    positionMs,
     durationMs: 10_000,
     volume: 1,
     muted: false,
@@ -68,6 +73,10 @@ function playing(revision: number): Extract<PlaybackSnapshot, { status: "playing
     outputSampleRate: 44_100,
     resamplingActive: false,
   };
+}
+
+function playing(revision: number) {
+  return playingAt(revision, 1_000);
 }
 
 function paused(revision: number): Extract<PlaybackSnapshot, { status: "paused" }> {
@@ -198,5 +207,44 @@ describe("App playback coordination", () => {
 
     expect(await screen.findByText(/unexpected error occurred while listing/i)).toBeVisible();
     expect(selector).toContainElement(screen.getByRole("option", { name: /Speakers/ }));
+  });
+
+  it("keeps the seek preview visible while the seek command is pending", async () => {
+    mocks.getPlaybackState.mockResolvedValue(playing(1));
+    const seek = deferred<PlaybackSnapshot>();
+    mocks.seekAudioPlayback.mockReturnValue(seek.promise);
+    render(<App />);
+
+    const slider = await screen.findByRole("slider", { name: "Playback position" });
+    await waitFor(() => expect(slider).toBeEnabled());
+    fireEvent.change(slider, { target: { value: "7000" } });
+    fireEvent.pointerUp(slider);
+
+    expect(mocks.seekAudioPlayback).toHaveBeenCalledWith(7_000);
+    expect(slider).toBeDisabled();
+    expect(slider).toHaveValue("7000");
+    expect(screen.getByText("0:07")).toBeInTheDocument();
+
+    seek.resolve(playingAt(2, 7_250));
+    await waitFor(() => expect(slider).toHaveValue("7250"));
+    expect(slider).toBeEnabled();
+  });
+
+  it("rolls a failed seek back to the refreshed authoritative position", async () => {
+    mocks.getPlaybackState
+      .mockResolvedValueOnce(playing(1))
+      .mockResolvedValueOnce(playingAt(3, 1_300));
+    mocks.seekAudioPlayback.mockRejectedValue(new Error("seek failed"));
+    render(<App />);
+
+    const slider = await screen.findByRole("slider", { name: "Playback position" });
+    await waitFor(() => expect(slider).toBeEnabled());
+    fireEvent.change(slider, { target: { value: "7000" } });
+    fireEvent.pointerUp(slider);
+
+    await waitFor(() => expect(slider).toHaveValue("1300"));
+    expect(slider).toBeEnabled();
+    expect(mocks.getPlaybackState).toHaveBeenCalledTimes(2);
+    expect(screen.getByText("An unexpected playback error occurred.")).toBeVisible();
   });
 });
