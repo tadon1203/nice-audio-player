@@ -11,20 +11,13 @@ import {
   getPlaybackState,
   isAudioFileValidationError,
   isPauseAudioPlaybackError,
-  isPlaybackMuteError,
   isResumeAudioPlaybackError,
-  isSeekAudioPlaybackError,
-  isSetPlaybackVolumeError,
   isStartAudioFileError,
   listenToPlaybackState,
-  muteAudioPlayback,
   pauseAudioPlayback,
   resumeAudioPlayback,
-  seekAudioPlayback,
-  setPlaybackVolume,
   startAudioFile,
   stopAudioPlayback,
-  unmuteAudioPlayback,
   validateAudioFile,
 } from "@/api/audio-files";
 import type {
@@ -38,6 +31,8 @@ import type {
 import { AppShell } from "./components/AppShell";
 import { NowPlayingView } from "./components/NowPlayingView";
 import { PlaybackDock } from "./components/PlaybackDock";
+import { useSeekController } from "./hooks/use-seek-controller";
+import { useVolumeController } from "./hooks/use-volume-controller";
 import {
   commandForTransportIntent,
   initialPlaybackUiState,
@@ -46,10 +41,6 @@ import {
 import type { TransportCommand, TransportIntent } from "./lib/playback-state";
 
 type PendingTransportCommand = "start" | "stop" | "pause" | "resume" | null;
-type SeekInteraction =
-  | { kind: "idle" }
-  | { kind: "scrubbing"; positionMs: number }
-  | { kind: "pending"; positionMs: number };
 
 function formatValidationError(error: unknown): string {
   if (!isAudioFileValidationError(error)) return "The selected file could not be validated.";
@@ -111,19 +102,12 @@ function App() {
   const validatedFile = fileOverride === undefined ? playback.file : fileOverride;
   const [pendingTransportCommand, setPendingTransportCommand] =
     useState<PendingTransportCommand>(null);
-  const [seekInteraction, setSeekInteraction] = useState<SeekInteraction>({ kind: "idle" });
-  const [isAdjustingVolume, setIsAdjustingVolume] = useState(false);
-  const [volumeDraft, setVolumeDraft] = useState(100);
-  const [isVolumePending, setIsVolumePending] = useState(false);
-  const volumeAdjustingRef = useRef(false);
-  const volumePendingRef = useRef(false);
   const latestPlaybackRef = useRef(playback);
   const readyFileRef = useRef(validatedFile);
   const connectionRef = useRef(playbackUi.connection);
   const connectionHealthyRef = useRef(true);
   const transportPendingRef = useRef(false);
   const queuedTransportIntentRef = useRef<TransportIntent | null>(null);
-  const seekPendingRef = useRef(false);
   const outputSelectionPendingRef = useRef(false);
   const validationRequestRef = useRef(0);
   const fileSelectionPendingRef = useRef(false);
@@ -134,8 +118,6 @@ function App() {
   connectionRef.current = playbackUi.connection;
 
   const isTransportCommandPending = pendingTransportCommand !== null;
-  const isSeekPending = seekInteraction.kind === "pending";
-  const seekPreviewMs = seekInteraction.kind === "idle" ? null : seekInteraction.positionMs;
   const isTimedPlayback = playback.status === "playing" || playback.status === "paused";
   const isPlaybackAvailable = playbackUi.connection === "ready";
 
@@ -143,9 +125,6 @@ function App() {
     if (snapshot.revision <= latestPlaybackRef.current.revision) return false;
     latestPlaybackRef.current = snapshot;
     dispatchPlaybackUi({ type: "snapshotReceived", snapshot });
-    if (!volumeAdjustingRef.current && !volumePendingRef.current) {
-      setVolumeDraft(Math.round(snapshot.volume * 100));
-    }
     return true;
   }, []);
 
@@ -314,6 +293,23 @@ function App() {
     }
   }
 
+  const seekController = useSeekController({
+    playback,
+    connection: playbackUi.connection,
+    isTransportCommandPending,
+    isOutputSelectionPending,
+    applySnapshot,
+    refreshAuthoritativeSnapshot,
+    dispatchPlaybackUi,
+  });
+  const volumeController = useVolumeController({
+    playback,
+    connection: playbackUi.connection,
+    applySnapshot,
+    refreshAuthoritativeSnapshot,
+    dispatchPlaybackUi,
+  });
+
   async function loadOutputDevices() {
     const request = deviceListRequestRef.current + 1;
     deviceListRequestRef.current = request;
@@ -380,112 +376,6 @@ function App() {
     }
   }
 
-  function updateSeek(value: number) {
-    setSeekInteraction({ kind: "scrubbing", positionMs: value });
-  }
-  async function commitSeek(value: number) {
-    const current = latestPlaybackRef.current;
-    if (
-      (current.status !== "playing" && current.status !== "paused") ||
-      current.durationMs === null ||
-      transportPendingRef.current ||
-      outputSelectionPendingRef.current ||
-      seekPendingRef.current ||
-      connectionRef.current !== "ready"
-    ) {
-      setSeekInteraction({ kind: "idle" });
-      return;
-    }
-    const target = Math.max(0, Math.min(value, current.durationMs));
-    setSeekInteraction({ kind: "pending", positionMs: target });
-    seekPendingRef.current = true;
-    dispatchPlaybackUi({ type: "commandStarted", lane: "seek" });
-    try {
-      applySnapshot(await seekAudioPlayback(target));
-      dispatchPlaybackUi({ type: "commandSucceeded", lane: "seek" });
-    } catch (error: unknown) {
-      dispatchPlaybackUi({
-        type: "commandFailed",
-        lane: "seek",
-        message: isSeekAudioPlaybackError(error)
-          ? "The playback position could not be changed."
-          : "An unexpected playback error occurred.",
-      });
-      await refreshAuthoritativeSnapshot();
-    } finally {
-      seekPendingRef.current = false;
-      setSeekInteraction({ kind: "idle" });
-    }
-  }
-
-  function beginVolume() {
-    volumeAdjustingRef.current = true;
-    setIsAdjustingVolume(true);
-    setVolumeDraft(Math.round(playback.volume * 100));
-  }
-  function updateVolume(value: number) {
-    volumeAdjustingRef.current = true;
-    setIsAdjustingVolume(true);
-    setVolumeDraft(value);
-  }
-  function cancelVolume() {
-    volumeAdjustingRef.current = false;
-    setIsAdjustingVolume(false);
-    setVolumeDraft(Math.round(playback.volume * 100));
-  }
-  async function commitVolume(value: number) {
-    if (volumePendingRef.current || connectionRef.current !== "ready") return;
-    const target = Math.max(0, Math.min(100, Math.round(value)));
-    volumeAdjustingRef.current = false;
-    setIsAdjustingVolume(false);
-    volumePendingRef.current = true;
-    setIsVolumePending(true);
-    dispatchPlaybackUi({ type: "commandStarted", lane: "volume" });
-    try {
-      const snapshot = await setPlaybackVolume(target / 100);
-      if (applySnapshot(snapshot)) setVolumeDraft(Math.round(snapshot.volume * 100));
-      dispatchPlaybackUi({ type: "commandSucceeded", lane: "volume" });
-    } catch (error: unknown) {
-      dispatchPlaybackUi({
-        type: "commandFailed",
-        lane: "volume",
-        message:
-          isSetPlaybackVolumeError(error) && error.code === "invalidVolume"
-            ? "The playback volume is invalid."
-            : "The playback volume could not be changed.",
-      });
-      await refreshAuthoritativeSnapshot();
-      setVolumeDraft(Math.round(latestPlaybackRef.current.volume * 100));
-    } finally {
-      volumePendingRef.current = false;
-      setIsVolumePending(false);
-    }
-  }
-
-  async function toggleMute() {
-    if (volumePendingRef.current || connectionRef.current !== "ready") return;
-    volumePendingRef.current = true;
-    setIsVolumePending(true);
-    dispatchPlaybackUi({ type: "commandStarted", lane: "volume" });
-    try {
-      const current = latestPlaybackRef.current;
-      applySnapshot(await (current.muted ? unmuteAudioPlayback() : muteAudioPlayback()));
-      dispatchPlaybackUi({ type: "commandSucceeded", lane: "volume" });
-    } catch (error: unknown) {
-      dispatchPlaybackUi({
-        type: "commandFailed",
-        lane: "volume",
-        message: isPlaybackMuteError(error)
-          ? "The playback mute state could not be changed."
-          : "An unexpected playback error occurred.",
-      });
-      await refreshAuthoritativeSnapshot();
-    } finally {
-      volumePendingRef.current = false;
-      setIsVolumePending(false);
-    }
-  }
-
   const snapshotFailure =
     playback.status === "failed" ? formatPlaybackFailure(playback.error) : null;
   const playbackError =
@@ -513,30 +403,26 @@ function App() {
           isOutputSelectionPending={isOutputSelectionPending}
           isPlaybackAvailable={isPlaybackAvailable}
           isTransportCommandPending={isTransportCommandPending}
-          isSeekPending={isSeekPending}
+          isSeekPending={seekController.isSeekPending}
           pendingTransportCommand={pendingTransportCommand}
-          seekPreviewMs={seekPreviewMs}
-          isAdjustingVolume={isAdjustingVolume}
-          volumeDraft={volumeDraft}
-          isVolumePending={isVolumePending}
+          seekPreviewMs={seekController.seekPreviewMs}
+          volumeValue={volumeController.volumeValue}
+          isVolumePending={volumeController.isVolumePending}
+          isVolumeSliderDisabled={volumeController.isVolumeSliderDisabled}
           playbackError={playbackError}
           deviceListError={deviceListError}
           onPlay={() => requestTransport("playing")}
           onPause={() => requestTransport("paused")}
           onResume={() => requestTransport("playing")}
           onStop={() => requestTransport("stopped")}
-          onSeek={updateSeek}
-          onSeekCommit={(value) => void commitSeek(value)}
-          onSeekCancel={() => {
-            setSeekInteraction((current) =>
-              current.kind === "scrubbing" ? { kind: "idle" } : current,
-            );
-          }}
-          onVolumeChange={updateVolume}
-          onVolumePointerDown={beginVolume}
-          onVolumeCommit={(value) => void commitVolume(value)}
-          onVolumePointerCancel={cancelVolume}
-          onMuteToggle={() => void toggleMute()}
+          onSeek={seekController.onSeek}
+          onSeekCommit={(value) => void seekController.onSeekCommit(value)}
+          onSeekCancel={seekController.onSeekCancel}
+          onVolumeChange={volumeController.onVolumeChange}
+          onVolumePointerDown={volumeController.onVolumePointerDown}
+          onVolumeCommit={volumeController.onVolumeCommit}
+          onVolumePointerCancel={volumeController.onVolumePointerCancel}
+          onMuteToggle={() => void volumeController.onMuteToggle()}
           onOutputSelectionChange={(selection) => void changeOutputSelection(selection)}
           onRefreshDevices={() => void loadOutputDevices()}
         />

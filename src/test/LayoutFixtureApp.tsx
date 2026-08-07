@@ -59,9 +59,9 @@ export function LayoutFixtureApp({ fixture }: LayoutFixtureAppProps) {
             pendingTransportCommand={null}
             seekPreviewMs={fixture === "seek-pending" ? 700 : null}
             isSeekPending={fixture === "seek-pending"}
-            isAdjustingVolume={false}
-            volumeDraft={50}
+            volumeValue={Math.round(playback.volume * 100)}
             isVolumePending={false}
+            isVolumeSliderDisabled={false}
             playbackError={playbackError}
             deviceListError={null}
             onPlay={noop}
