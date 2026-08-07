@@ -94,7 +94,8 @@ export type PlaybackFailureCode =
   | "outputStreamResumeFailed"
   | "outputStreamRuntimeFailed"
   | "completionTimingFailed"
-  | "decodeFailed";
+  | "decodeFailed"
+  | "sampleRateConversionFailed";
 
 export type PlaybackMuteError = { code: "playbackWorkerUnavailable" } | { code: "taskFailed" };
 
@@ -113,8 +114,11 @@ export type PlaybackSnapshot_Deserialize =
       durationMs?: never;
       error?: never;
       outputDevice?: never;
+      outputSampleRate?: never;
       playbackId?: never;
       positionMs?: never;
+      resamplingActive?: never;
+      sourceSampleRate?: never;
     })
   | ({
       status: "playing";
@@ -128,6 +132,9 @@ export type PlaybackSnapshot_Deserialize =
       outputSelection: AudioOutputSelection;
       outputDevice: AudioOutputDeviceIdentity;
       channelConversion: PlaybackChannelConversion;
+      sourceSampleRate: number;
+      outputSampleRate: number;
+      resamplingActive: boolean;
     } & { error?: never })
   | ({
       status: "paused";
@@ -141,6 +148,9 @@ export type PlaybackSnapshot_Deserialize =
       outputSelection: AudioOutputSelection;
       outputDevice: AudioOutputDeviceIdentity;
       channelConversion: PlaybackChannelConversion;
+      sourceSampleRate: number;
+      outputSampleRate: number;
+      resamplingActive: boolean;
     } & { error?: never })
   | ({
       status: "failed";
@@ -155,7 +165,10 @@ export type PlaybackSnapshot_Deserialize =
       channelConversion?: never;
       durationMs?: never;
       outputDevice?: never;
+      outputSampleRate?: never;
       positionMs?: never;
+      resamplingActive?: never;
+      sourceSampleRate?: never;
     });
 
 export type PlaybackSnapshot_Serialize =
@@ -171,8 +184,11 @@ export type PlaybackSnapshot_Serialize =
       durationMs?: never;
       error?: never;
       outputDevice?: never;
+      outputSampleRate?: never;
       playbackId?: never;
       positionMs?: never;
+      resamplingActive?: never;
+      sourceSampleRate?: never;
     })
   | ({
       status: "playing";
@@ -186,6 +202,9 @@ export type PlaybackSnapshot_Serialize =
       outputSelection: AudioOutputSelection;
       outputDevice: AudioOutputDeviceIdentity;
       channelConversion: PlaybackChannelConversion;
+      sourceSampleRate: number;
+      outputSampleRate: number;
+      resamplingActive: boolean;
     } & { error?: never })
   | ({
       status: "paused";
@@ -199,6 +218,9 @@ export type PlaybackSnapshot_Serialize =
       outputSelection: AudioOutputSelection;
       outputDevice: AudioOutputDeviceIdentity;
       channelConversion: PlaybackChannelConversion;
+      sourceSampleRate: number;
+      outputSampleRate: number;
+      resamplingActive: boolean;
     } & { error?: never })
   | ({
       status: "failed";
@@ -213,7 +235,10 @@ export type PlaybackSnapshot_Serialize =
       channelConversion?: never;
       durationMs?: never;
       outputDevice?: never;
+      outputSampleRate?: never;
       positionMs?: never;
+      resamplingActive?: never;
+      sourceSampleRate?: never;
     });
 
 export type ResumeAudioPlaybackError =

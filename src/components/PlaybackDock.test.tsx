@@ -111,6 +111,9 @@ describe("PlaybackDock", () => {
             outputSelection: { kind: "systemDefault" },
             outputDevice: { id: "default", name: "Default" },
             channelConversion: "none",
+            sourceSampleRate: 44_100,
+            outputSampleRate: 44_100,
+            resamplingActive: false,
           };
 
     render(<PlaybackDock {...props} playback={state} />);
@@ -144,6 +147,9 @@ describe("PlaybackDock", () => {
           outputSelection: { kind: "systemDefault" },
           outputDevice: { id: "default", name: "Default" },
           channelConversion,
+          sourceSampleRate: 44_100,
+          outputSampleRate: 44_100,
+          resamplingActive: false,
         }}
       />,
     );
@@ -182,6 +188,9 @@ describe("PlaybackDock", () => {
           outputSelection: { kind: "systemDefault" },
           outputDevice: { id: "default", name: "Default" },
           channelConversion: "none",
+          sourceSampleRate: 44_100,
+          outputSampleRate: 44_100,
+          resamplingActive: false,
         }}
       />,
     );
@@ -215,6 +224,9 @@ describe("PlaybackDock", () => {
           outputSelection: { kind: "systemDefault" },
           outputDevice: { id: "default", name: "Default" },
           channelConversion: "none",
+          sourceSampleRate: 44_100,
+          outputSampleRate: 44_100,
+          resamplingActive: false,
         }}
       />,
     );

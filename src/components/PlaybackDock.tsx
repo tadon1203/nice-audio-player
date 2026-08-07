@@ -120,11 +120,9 @@ export function PlaybackDock({
                 {validatedFile.fileName}
               </p>
               <p className="mt-1 text-body-sm text-text-secondary">.{validatedFile.extension}</p>
-              {timed && playback.channelConversion !== "none" ? (
+              {timed && outputProcessingLabel(playback) ? (
                 <p className="mt-1 text-body-sm text-text-secondary">
-                  {playback.channelConversion === "monoToStereo"
-                    ? "Output: Mono → stereo"
-                    : "Output: Stereo → mono"}
+                  {outputProcessingLabel(playback)}
                 </p>
               ) : null}
             </>
@@ -317,4 +315,26 @@ export function PlaybackDock({
       ) : null}
     </section>
   );
+}
+
+function formatSampleRate(sampleRate: number): string {
+  return `${(sampleRate / 1_000).toFixed(3).replace(/\.?(0+)$/, "")} kHz`;
+}
+
+function outputProcessingLabel(
+  playback: Extract<PlaybackSnapshot, { status: "playing" | "paused" }>,
+): string | null {
+  const rate = playback.resamplingActive
+    ? `${formatSampleRate(playback.sourceSampleRate).replace(" kHz", "")} → ${formatSampleRate(playback.outputSampleRate)}`
+    : null;
+  const channels =
+    playback.channelConversion === "monoToStereo"
+      ? "Mono → stereo"
+      : playback.channelConversion === "stereoToMono"
+        ? "Stereo → mono"
+        : null;
+  if (rate && channels) return `Output: ${rate} · ${channels}`;
+  if (rate) return `Output: ${rate}`;
+  if (channels) return `Output: ${channels}`;
+  return null;
 }

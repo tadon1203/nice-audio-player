@@ -20,7 +20,7 @@ use super::output::{
     AudioOutputError, OutputSignal, OutputStreamId, PreparedOutputConfig, PreparedOutputStream,
     ProducerState,
 };
-use super::output_processing::{ChannelConversion, OutputPcmProcessor};
+use super::output_processing::{ChannelConversion, OutputPcmProcessor, OutputProcessingError};
 use super::pcm_queue::PcmProducer;
 use super::validation::ValidatedAudioFile;
 use super::volume::{AtomicEffectiveGain, VolumeState};
@@ -52,6 +52,9 @@ pub enum PlaybackSnapshot {
         output_selection: AudioOutputSelection,
         output_device: AudioOutputDeviceIdentity,
         channel_conversion: PlaybackChannelConversion,
+        source_sample_rate: u32,
+        output_sample_rate: u32,
+        resampling_active: bool,
     },
     Paused {
         revision: u64,
@@ -65,6 +68,9 @@ pub enum PlaybackSnapshot {
         output_selection: AudioOutputSelection,
         output_device: AudioOutputDeviceIdentity,
         channel_conversion: PlaybackChannelConversion,
+        source_sample_rate: u32,
+        output_sample_rate: u32,
+        resampling_active: bool,
     },
     Failed {
         revision: u64,
@@ -113,6 +119,7 @@ impl PlaybackSnapshot {
     }
 
     #[allow(clippy::too_many_arguments)]
+    #[cfg(test)]
     fn playing_with_conversion(
         volume: VolumeState,
         output_selection: AudioOutputSelection,
@@ -122,6 +129,35 @@ impl PlaybackSnapshot {
         position_ms: u64,
         duration_ms: Option<u64>,
         channel_conversion: PlaybackChannelConversion,
+    ) -> Self {
+        Self::playing_with_processing(
+            volume,
+            output_selection,
+            output_device,
+            file,
+            playback_id,
+            position_ms,
+            duration_ms,
+            channel_conversion,
+            44_100,
+            44_100,
+            false,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn playing_with_processing(
+        volume: VolumeState,
+        output_selection: AudioOutputSelection,
+        output_device: AudioOutputDeviceIdentity,
+        file: ValidatedAudioFile,
+        playback_id: String,
+        position_ms: u64,
+        duration_ms: Option<u64>,
+        channel_conversion: PlaybackChannelConversion,
+        source_sample_rate: u32,
+        output_sample_rate: u32,
+        resampling_active: bool,
     ) -> Self {
         Self::Playing {
             revision: 0,
@@ -134,10 +170,14 @@ impl PlaybackSnapshot {
             output_selection,
             output_device,
             channel_conversion,
+            source_sample_rate,
+            output_sample_rate,
+            resampling_active,
         }
     }
 
     #[allow(clippy::too_many_arguments)]
+    #[cfg(test)]
     fn paused_with_conversion(
         volume: VolumeState,
         output_selection: AudioOutputSelection,
@@ -147,6 +187,35 @@ impl PlaybackSnapshot {
         position_ms: u64,
         duration_ms: Option<u64>,
         channel_conversion: PlaybackChannelConversion,
+    ) -> Self {
+        Self::paused_with_processing(
+            volume,
+            output_selection,
+            output_device,
+            file,
+            playback_id,
+            position_ms,
+            duration_ms,
+            channel_conversion,
+            44_100,
+            44_100,
+            false,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn paused_with_processing(
+        volume: VolumeState,
+        output_selection: AudioOutputSelection,
+        output_device: AudioOutputDeviceIdentity,
+        file: ValidatedAudioFile,
+        playback_id: String,
+        position_ms: u64,
+        duration_ms: Option<u64>,
+        channel_conversion: PlaybackChannelConversion,
+        source_sample_rate: u32,
+        output_sample_rate: u32,
+        resampling_active: bool,
     ) -> Self {
         Self::Paused {
             revision: 0,
@@ -159,6 +228,9 @@ impl PlaybackSnapshot {
             output_selection,
             output_device,
             channel_conversion,
+            source_sample_rate,
+            output_sample_rate,
+            resampling_active,
         }
     }
 
@@ -195,8 +267,11 @@ impl PlaybackSnapshot {
                 output_selection,
                 output_device,
                 channel_conversion,
+                source_sample_rate,
+                output_sample_rate,
+                resampling_active,
                 ..
-            } => Self::playing_with_conversion(
+            } => Self::playing_with_processing(
                 volume,
                 output_selection,
                 output_device,
@@ -205,6 +280,9 @@ impl PlaybackSnapshot {
                 position_ms,
                 duration_ms,
                 channel_conversion,
+                source_sample_rate,
+                output_sample_rate,
+                resampling_active,
             ),
             Self::Paused {
                 file,
@@ -214,8 +292,11 @@ impl PlaybackSnapshot {
                 output_selection,
                 output_device,
                 channel_conversion,
+                source_sample_rate,
+                output_sample_rate,
+                resampling_active,
                 ..
-            } => Self::paused_with_conversion(
+            } => Self::paused_with_processing(
                 volume,
                 output_selection,
                 output_device,
@@ -224,6 +305,9 @@ impl PlaybackSnapshot {
                 position_ms,
                 duration_ms,
                 channel_conversion,
+                source_sample_rate,
+                output_sample_rate,
+                resampling_active,
             ),
             Self::Failed {
                 playback_id,
@@ -339,6 +423,7 @@ pub enum PlaybackFailureCode {
     OutputStreamRuntimeFailed,
     CompletionTimingFailed,
     DecodeFailed,
+    SampleRateConversionFailed,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -717,6 +802,15 @@ impl PlaybackWorker {
                 return;
             }
         };
+        let processor = match OutputPcmProcessor::new(preparation.config.processing_plan) {
+            Ok(processor) => processor,
+            Err(_) => {
+                let error = PlaybackFailureCode::SampleRateConversionFailed;
+                let _ = reply.send(Err(PlaybackServiceError::Output(error.clone())));
+                self.publish(self.failed_snapshot(Some(id.0.to_string()), error));
+                return;
+            }
+        };
         let sample_rate = preparation
             .config
             .processing_plan
@@ -740,7 +834,8 @@ impl PlaybackWorker {
                 decoder,
                 producer,
                 first_packet,
-                preparation.config.processing_plan,
+                processor,
+                0,
                 worker_cancel,
                 worker_state,
                 worker_signal,
@@ -803,6 +898,17 @@ impl PlaybackWorker {
         let source_file = active.source_file.clone();
         let source_spec = active.output_config.processing_plan.source();
         let target_source_frame = millis_to_frame(target_ms, source_spec.sample_rate().get());
+        let processing_plan = active.output_config.processing_plan;
+        let seek_processor = match OutputPcmProcessor::new(processing_plan) {
+            Ok(processor) => processor,
+            Err(_) => {
+                let _ = reply.send(Err(PlaybackServiceError::Output(
+                    PlaybackFailureCode::SampleRateConversionFailed,
+                )));
+                return;
+            }
+        };
+        let preroll_frames = seek_processor.seek_preroll_frames(target_source_frame);
         let mut decoder = match open_streaming_decoder(&source_file) {
             Ok(decoder) => decoder,
             Err(_) => {
@@ -814,7 +920,7 @@ impl PlaybackWorker {
             let _ = reply.send(Err(PlaybackServiceError::Decode));
             return;
         }
-        let seek = match decoder.seek_to_frame(target_source_frame) {
+        let seek = match decoder.seek_to_frame_with_preroll(target_source_frame, preroll_frames) {
             Ok(SeekStep::Samples(seek)) => seek,
             Ok(SeekStep::EndOfStream) => {
                 let _ = reply.send(Err(PlaybackServiceError::Decode));
@@ -879,11 +985,21 @@ impl PlaybackWorker {
         let worker_signal = self.output_sender.clone();
         let worker_wake = capacity_sender.clone();
         let join_handle = thread::spawn(move || {
+            let discard_output_frames = source_to_output_frame(
+                seek.confirmed_source_frame
+                    .saturating_sub(seek.preroll_source_frame),
+                sample_rate,
+                source_spec.sample_rate().get(),
+            ) as usize;
+            let discard_output_samples = discard_output_frames.saturating_mul(usize::from(
+                output_config.processing_plan.output().channel_count().get(),
+            ));
             decode_loop(
                 decoder,
                 preparation.producer,
                 seek.first_packet,
-                output_config.processing_plan,
+                seek_processor,
+                discard_output_samples,
                 worker_cancel,
                 worker_state,
                 worker_signal,
@@ -930,9 +1046,16 @@ impl PlaybackWorker {
             return;
         }
         let pending = self.pending_seek.take().expect("pending seek exists");
-        if state == ProducerState::Failed {
+        if state == ProducerState::DecodeFailed {
             pending.decoder_worker.cancel_and_join();
             let _ = pending.reply.send(Err(PlaybackServiceError::Decode));
+            return;
+        }
+        if state == ProducerState::SampleRateConversionFailed {
+            pending.decoder_worker.cancel_and_join();
+            let _ = pending.reply.send(Err(PlaybackServiceError::Output(
+                PlaybackFailureCode::SampleRateConversionFailed,
+            )));
             return;
         }
         let Some(active) = self.active.as_ref() else {
@@ -1046,9 +1169,16 @@ impl PlaybackWorker {
         }
 
         let pending = self.pending.take().expect("pending playback exists");
-        if state == ProducerState::Failed {
+        if state == ProducerState::DecodeFailed {
             pending.decoder_worker.cancel_and_join();
             let _ = pending.reply.send(Err(PlaybackServiceError::Decode));
+            return;
+        }
+        if state == ProducerState::SampleRateConversionFailed {
+            pending.decoder_worker.cancel_and_join();
+            let _ = pending.reply.send(Err(PlaybackServiceError::Output(
+                PlaybackFailureCode::SampleRateConversionFailed,
+            )));
             return;
         }
         if let Err(error) = pending.stream.start() {
@@ -1320,7 +1450,13 @@ impl PlaybackWorker {
             .as_ref()
             .map(|active| active.source_file.clone())
             .expect("playing snapshot requires active source file");
-        PlaybackSnapshot::playing_with_conversion(
+        let plan = self
+            .active
+            .as_ref()
+            .expect("active playback")
+            .output_config
+            .processing_plan;
+        PlaybackSnapshot::playing_with_processing(
             self.volume_state,
             self.output_selection.clone(),
             device,
@@ -1328,13 +1464,10 @@ impl PlaybackWorker {
             playback_id,
             position_ms,
             duration_ms,
-            self.active
-                .as_ref()
-                .expect("active playback")
-                .output_config
-                .processing_plan
-                .channel_conversion()
-                .into(),
+            plan.channel_conversion().into(),
+            plan.source().sample_rate().get(),
+            plan.output().sample_rate().get(),
+            plan.sample_rate_conversion() != super::output_processing::SampleRateConversion::None,
         )
     }
 
@@ -1357,7 +1490,13 @@ impl PlaybackWorker {
             .as_ref()
             .map(|active| active.source_file.clone())
             .expect("paused snapshot requires active source file");
-        PlaybackSnapshot::paused_with_conversion(
+        let plan = self
+            .active
+            .as_ref()
+            .expect("active playback")
+            .output_config
+            .processing_plan;
+        PlaybackSnapshot::paused_with_processing(
             self.volume_state,
             self.output_selection.clone(),
             device,
@@ -1365,13 +1504,10 @@ impl PlaybackWorker {
             playback_id,
             position_ms,
             duration_ms,
-            self.active
-                .as_ref()
-                .expect("active playback")
-                .output_config
-                .processing_plan
-                .channel_conversion()
-                .into(),
+            plan.channel_conversion().into(),
+            plan.source().sample_rate().get(),
+            plan.output().sample_rate().get(),
+            plan.sample_rate_conversion() != super::output_processing::SampleRateConversion::None,
         )
     }
 
@@ -1498,6 +1634,22 @@ impl PlaybackWorker {
                 self.discard_active();
                 self.publish(self.failed_snapshot(playback_id, PlaybackFailureCode::DecodeFailed));
             }
+            OutputSignal::SampleRateConversionFailed { .. } => {
+                let playback_id = self
+                    .active
+                    .as_ref()
+                    .map(|active| active.session_id.to_string());
+                self.cancel_pending_seek_with(PlaybackServiceError::Output(
+                    PlaybackFailureCode::SampleRateConversionFailed,
+                ));
+                self.discard_active();
+                self.publish(
+                    self.failed_snapshot(
+                        playback_id,
+                        PlaybackFailureCode::SampleRateConversionFailed,
+                    ),
+                );
+            }
         }
     }
     fn finish_if_due(&mut self) {
@@ -1555,7 +1707,8 @@ fn decode_loop(
     mut decoder: StreamingDecoder,
     mut producer: PcmProducer,
     first_packet: Vec<f32>,
-    processing_plan: super::output_processing::OutputProcessingPlan,
+    mut converter: OutputPcmProcessor,
+    mut discard_output_samples: usize,
     cancellation: DecodeCancellation,
     producer_state: Arc<AtomicProducerState>,
     signal_sender: SyncSender<OutputSignal>,
@@ -1564,16 +1717,17 @@ fn decode_loop(
     prebuffer_sender: SyncSender<()>,
     prebuffer_frames: usize,
 ) {
-    let mut converter = OutputPcmProcessor::new(processing_plan);
     let mut converted = Vec::new();
     let mut packet = Vec::new();
     let mut prebuffer_sent = false;
-    if converter.convert(&first_packet, &mut converted).is_err() {
-        producer_state.store(ProducerState::Failed);
-        let _ = signal_sender.try_send(OutputSignal::DecodeFailed { stream_id });
+    if let Err(error) = converter.convert(&first_packet, &mut converted) {
+        let (state, signal) = processing_failure(error, stream_id);
+        producer_state.store(state);
+        let _ = signal_sender.try_send(signal);
         let _ = prebuffer_sender.try_send(());
         return;
     }
+    discard_output_prefix(&mut converted, &mut discard_output_samples);
     if matches!(
         write_packet_fully(
             &mut producer,
@@ -1604,12 +1758,19 @@ fn decode_loop(
         match decoder.decode_next(&mut packet) {
             Ok(DecodeStep::EndOfStream) => {
                 if decoder.finalize().is_err() {
-                    producer_state.store(ProducerState::Failed);
+                    producer_state.store(ProducerState::DecodeFailed);
                     let _ = signal_sender.try_send(OutputSignal::DecodeFailed { stream_id });
                     let _ = prebuffer_sender.try_send(());
                     return;
                 }
-                converter.flush(&mut converted);
+                if let Err(error) = converter.flush(&mut converted) {
+                    let (state, signal) = processing_failure(error, stream_id);
+                    producer_state.store(state);
+                    let _ = signal_sender.try_send(signal);
+                    let _ = prebuffer_sender.try_send(());
+                    return;
+                }
+                discard_output_prefix(&mut converted, &mut discard_output_samples);
                 if matches!(
                     write_packet_fully(
                         &mut producer,
@@ -1636,12 +1797,14 @@ fn decode_loop(
                 return;
             }
             Ok(DecodeStep::Samples) => {
-                if converter.convert(&packet, &mut converted).is_err() {
-                    producer_state.store(ProducerState::Failed);
-                    let _ = signal_sender.try_send(OutputSignal::DecodeFailed { stream_id });
+                if let Err(error) = converter.convert(&packet, &mut converted) {
+                    let (state, signal) = processing_failure(error, stream_id);
+                    producer_state.store(state);
+                    let _ = signal_sender.try_send(signal);
                     let _ = prebuffer_sender.try_send(());
                     return;
                 }
+                discard_output_prefix(&mut converted, &mut discard_output_samples);
                 if matches!(
                     write_packet_fully(
                         &mut producer,
@@ -1665,12 +1828,40 @@ fn decode_loop(
                 );
             }
             Err(_) => {
-                producer_state.store(ProducerState::Failed);
+                producer_state.store(ProducerState::DecodeFailed);
                 let _ = signal_sender.try_send(OutputSignal::DecodeFailed { stream_id });
                 let _ = prebuffer_sender.try_send(());
                 return;
             }
         }
+    }
+}
+
+fn discard_output_prefix(samples: &mut Vec<f32>, remaining_samples: &mut usize) {
+    let discarded = samples.len().min(*remaining_samples);
+    if discarded == 0 {
+        return;
+    }
+    samples.copy_within(discarded.., 0);
+    samples.truncate(samples.len() - discarded);
+    *remaining_samples -= discarded;
+}
+
+fn processing_failure(
+    error: OutputProcessingError,
+    stream_id: OutputStreamId,
+) -> (ProducerState, OutputSignal) {
+    match error {
+        OutputProcessingError::ResamplerProcessingFailed
+        | OutputProcessingError::InvalidResamplerOutput
+        | OutputProcessingError::ResamplerConstructionFailed => (
+            ProducerState::SampleRateConversionFailed,
+            OutputSignal::SampleRateConversionFailed { stream_id },
+        ),
+        _ => (
+            ProducerState::DecodeFailed,
+            OutputSignal::DecodeFailed { stream_id },
+        ),
     }
 }
 
@@ -1777,7 +1968,8 @@ fn signal_stream_id(signal: &OutputSignal) -> OutputStreamId {
         OutputSignal::FinalFramesSubmitted { stream_id, .. }
         | OutputSignal::StreamFailed { stream_id, .. }
         | OutputSignal::CompletionTimingFailed { stream_id }
-        | OutputSignal::DecodeFailed { stream_id } => *stream_id,
+        | OutputSignal::DecodeFailed { stream_id }
+        | OutputSignal::SampleRateConversionFailed { stream_id } => *stream_id,
     }
 }
 
@@ -1959,7 +2151,7 @@ mod tests {
 
         assert_eq!(
             serde_json::to_value(snapshot).unwrap(),
-            serde_json::json!({ "status": "playing", "revision": 0, "file": { "path": "C:/test.flac", "fileName": "test.flac", "extension": "flac" }, "playbackId": "1", "positionMs": 1_000, "durationMs": 60_000, "volume": 1.0, "muted": false, "outputSelection": { "kind": "systemDefault" }, "outputDevice": { "id": "test-device", "name": "Test device" }, "channelConversion": "none" })
+            serde_json::json!({ "status": "playing", "revision": 0, "file": { "path": "C:/test.flac", "fileName": "test.flac", "extension": "flac" }, "playbackId": "1", "positionMs": 1_000, "durationMs": 60_000, "volume": 1.0, "muted": false, "outputSelection": { "kind": "systemDefault" }, "outputDevice": { "id": "test-device", "name": "Test device" }, "channelConversion": "none", "sourceSampleRate": 44_100, "outputSampleRate": 44_100, "resamplingActive": false })
         );
     }
 
@@ -1970,7 +2162,7 @@ mod tests {
 
         assert_eq!(
             serde_json::to_value(snapshot).unwrap(),
-            serde_json::json!({ "status": "paused", "revision": 0, "file": { "path": "C:/test.flac", "fileName": "test.flac", "extension": "flac" }, "playbackId": "1", "positionMs": 1_000, "durationMs": 60_000, "volume": 1.0, "muted": false, "outputSelection": { "kind": "systemDefault" }, "outputDevice": { "id": "test-device", "name": "Test device" }, "channelConversion": "none" })
+            serde_json::json!({ "status": "paused", "revision": 0, "file": { "path": "C:/test.flac", "fileName": "test.flac", "extension": "flac" }, "playbackId": "1", "positionMs": 1_000, "durationMs": 60_000, "volume": 1.0, "muted": false, "outputSelection": { "kind": "systemDefault" }, "outputDevice": { "id": "test-device", "name": "Test device" }, "channelConversion": "none", "sourceSampleRate": 44_100, "outputSampleRate": 44_100, "resamplingActive": false })
         );
     }
 

@@ -66,6 +66,7 @@ const playbackFailureCodes = {
   outputStreamRuntimeFailed: true,
   completionTimingFailed: true,
   decodeFailed: true,
+  sampleRateConversionFailed: true,
 } satisfies Record<PlaybackFailureCode, true>;
 
 const seekAudioPlaybackErrorCodes = {
@@ -280,6 +281,9 @@ function isTimedPlaybackSnapshot(value: Record<string, unknown>): value is {
   positionMs: number;
   durationMs: number | null;
   channelConversion: "none" | "monoToStereo" | "stereoToMono";
+  sourceSampleRate: number;
+  outputSampleRate: number;
+  resamplingActive: boolean;
 } {
   return (
     typeof value.playbackId === "string" &&
@@ -288,9 +292,16 @@ function isTimedPlaybackSnapshot(value: Record<string, unknown>): value is {
     (value.channelConversion === "none" ||
       value.channelConversion === "monoToStereo" ||
       value.channelConversion === "stereoToMono") &&
+    isValidSampleRate(value.sourceSampleRate) &&
+    isValidSampleRate(value.outputSampleRate) &&
+    value.resamplingActive === (value.sourceSampleRate !== value.outputSampleRate) &&
     (value.durationMs === null ||
       (isValidTimingValue(value.durationMs) && value.positionMs <= value.durationMs))
   );
+}
+
+function isValidSampleRate(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
 }
 
 function isValidOutputSelection(value: unknown): value is AudioOutputSelection {

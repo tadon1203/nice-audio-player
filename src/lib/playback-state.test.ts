@@ -34,6 +34,9 @@ function playing(revision: number): PlaybackSnapshot {
     outputSelection: { kind: "systemDefault" },
     outputDevice: { id: "default", name: "Speakers" },
     channelConversion: "none",
+    sourceSampleRate: 44_100,
+    outputSampleRate: 44_100,
+    resamplingActive: false,
   };
 }
 

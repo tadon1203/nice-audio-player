@@ -56,7 +56,7 @@ The accepted playback direction includes:
 
 Playback behavior must reflect the actual audio state. The UI must not present a successful or active state after the underlying operation has failed or ended.
 
-Application-side resampling, channel conversion, gapless playback, exclusive output, and bit-perfect playback are not implied by this section. Each requires explicit acceptance and focused implementation scope.
+Application-side high-quality fixed-rate resampling and channel conversion are accepted when the selected shared output configuration requires them. Conversion must preserve channel order and source-media duration, bypass sample-rate conversion exactly when rates match, and expose source rate, output rate, and active resampling in playback state. Construction or completion failures must be reported as structured playback failures. Gapless playback, exclusive output, and bit-perfect playback still require separate acceptance and focused implementation scope.
 
 ## 5. Audio Processing
 

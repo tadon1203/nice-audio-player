@@ -31,6 +31,9 @@ pub(crate) enum OutputSignal {
     DecodeFailed {
         stream_id: OutputStreamId,
     },
+    SampleRateConversionFailed {
+        stream_id: OutputStreamId,
+    },
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -53,8 +56,9 @@ fn classify_stream_error_kind(kind: cpal::ErrorKind) -> StreamFailureKind {
 pub(crate) enum ProducerState {
     Running = 0,
     EndOfStream = 1,
-    Failed = 2,
-    Cancelled = 3,
+    DecodeFailed = 2,
+    SampleRateConversionFailed = 3,
+    Cancelled = 4,
 }
 
 pub(crate) struct AtomicProducerState {
@@ -76,9 +80,10 @@ impl AtomicProducerState {
         match self.state.load(Ordering::Acquire) {
             0 => ProducerState::Running,
             1 => ProducerState::EndOfStream,
-            2 => ProducerState::Failed,
-            3 => ProducerState::Cancelled,
-            _ => ProducerState::Failed,
+            2 => ProducerState::DecodeFailed,
+            3 => ProducerState::SampleRateConversionFailed,
+            4 => ProducerState::Cancelled,
+            _ => ProducerState::DecodeFailed,
         }
     }
 }
@@ -490,7 +495,13 @@ pub(crate) fn prepare_output_stream(
         OutputProcessingError::UnsupportedChannelConversion => {
             AudioOutputError::UnsupportedConfiguration
         }
-        OutputProcessingError::MisalignedSamples => AudioOutputError::UnsupportedConfiguration,
+        OutputProcessingError::MisalignedSamples
+        | OutputProcessingError::InvalidInputSamples
+        | OutputProcessingError::ResamplerConstructionFailed
+        | OutputProcessingError::ResamplerProcessingFailed
+        | OutputProcessingError::InvalidResamplerOutput => {
+            AudioOutputError::UnsupportedConfiguration
+        }
     })?;
     let (producer, consumer) = make_queue(target)?;
     let config = fallback.config();
