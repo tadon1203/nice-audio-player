@@ -34,10 +34,7 @@ body:
       label: Done
       description: Define task-specific completion criteria.
       placeholder: |
-        - [ ] Required implementation is complete
-        - [ ] Relevant tests are added or updated
         - [ ] `pnpm check` passes
-        - [ ] Manual verification is complete, if applicable
     validations:
       required: true
 
