@@ -22,9 +22,9 @@ interface PlaybackDockProps {
   pendingTransportCommand: PendingTransportCommand;
   seekPreviewMs: number | null;
   isSeekPending: boolean;
-  isAdjustingVolume: boolean;
-  volumeDraft: number;
+  volumeValue: number;
   isVolumePending: boolean;
+  isVolumeSliderDisabled: boolean;
   playbackError: string | null;
   deviceListError: string | null;
   onPlay: () => void;
@@ -54,9 +54,9 @@ export function PlaybackDock({
   pendingTransportCommand,
   seekPreviewMs,
   isSeekPending,
-  isAdjustingVolume,
-  volumeDraft,
+  volumeValue,
   isVolumePending,
+  isVolumeSliderDisabled,
   playbackError,
   deviceListError,
   onPlay,
@@ -88,10 +88,6 @@ export function PlaybackDock({
     pendingTransportCommand === "pause" ||
     pendingTransportCommand === "resume";
   const seekValue = Math.min(seekPreviewMs ?? position, duration ?? 0);
-  const displayedVolume = Math.min(
-    100,
-    Math.max(0, isAdjustingVolume ? volumeDraft : Math.round(playback.volume * 100)),
-  );
   const outputDisabled =
     !isPlaybackAvailable ||
     isLoadingDevices ||
@@ -203,13 +199,13 @@ export function PlaybackDock({
           </span>
           <input
             aria-label="Playback volume"
-            aria-valuetext={`${displayedVolume} percent`}
+            aria-valuetext={`${volumeValue} percent`}
             type="range"
             min={0}
             max={100}
             step={1}
-            value={displayedVolume}
-            disabled={!isPlaybackAvailable || isVolumePending}
+            value={volumeValue}
+            disabled={!isPlaybackAvailable || isVolumeSliderDisabled}
             onChange={(event) => onVolumeChange(Number(event.currentTarget.value))}
             onPointerDown={onVolumePointerDown}
             onPointerUp={(event) => onVolumeCommit(Number(event.currentTarget.value))}
@@ -233,7 +229,7 @@ export function PlaybackDock({
             className="accent-text-primary disabled:accent-text-disabled"
           />
           <span className="text-right text-body-sm text-text-secondary tabular-nums">
-            {displayedVolume}%
+            {volumeValue}%
           </span>
         </div>
 

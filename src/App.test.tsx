@@ -15,6 +15,9 @@ const mocks = vi.hoisted(() => ({
   stopAudioPlayback: vi.fn(),
   pauseAudioPlayback: vi.fn(),
   seekAudioPlayback: vi.fn(),
+  setPlaybackVolume: vi.fn(),
+  muteAudioPlayback: vi.fn(),
+  unmuteAudioPlayback: vi.fn(),
 }));
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn() }));
@@ -34,6 +37,9 @@ vi.mock("@/api/audio-files", async (importOriginal) => {
     stopAudioPlayback: mocks.stopAudioPlayback,
     pauseAudioPlayback: mocks.pauseAudioPlayback,
     seekAudioPlayback: mocks.seekAudioPlayback,
+    setPlaybackVolume: mocks.setPlaybackVolume,
+    muteAudioPlayback: mocks.muteAudioPlayback,
+    unmuteAudioPlayback: mocks.unmuteAudioPlayback,
     resumeAudioPlayback: vi.fn(),
   };
 });
@@ -56,6 +62,7 @@ function stopped(revision: number): PlaybackSnapshot {
 function playingAt(
   revision: number,
   positionMs: number,
+  volume = 1,
 ): Extract<PlaybackSnapshot, { status: "playing" }> {
   return {
     status: "playing",
@@ -64,7 +71,7 @@ function playingAt(
     playbackId: "1",
     positionMs,
     durationMs: 10_000,
-    volume: 1,
+    volume,
     muted: false,
     outputSelection: { kind: "systemDefault" },
     outputDevice: { id: "default", name: "Speakers" },
@@ -225,7 +232,9 @@ describe("App playback coordination", () => {
     expect(slider).toHaveValue("7000");
     expect(screen.getByText("0:07")).toBeInTheDocument();
 
-    seek.resolve(playingAt(2, 7_250));
+    emitSnapshot(playingAt(2, 1_500));
+    expect(slider).toHaveValue("7000");
+    seek.resolve(playingAt(3, 7_250));
     await waitFor(() => expect(slider).toHaveValue("7250"));
     expect(slider).toBeEnabled();
   });
@@ -246,5 +255,32 @@ describe("App playback coordination", () => {
     expect(slider).toBeEnabled();
     expect(mocks.getPlaybackState).toHaveBeenCalledTimes(2);
     expect(screen.getByText("An unexpected playback error occurred.")).toBeVisible();
+  });
+
+  it("updates volume live and drains only the latest queued value", async () => {
+    mocks.getPlaybackState.mockResolvedValue(playingAt(1, 1_000, 0.5));
+    const first = deferred<PlaybackSnapshot>();
+    const second = deferred<PlaybackSnapshot>();
+    mocks.setPlaybackVolume.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    render(<App />);
+
+    const volume = await screen.findByRole("slider", { name: "Playback volume" });
+    await waitFor(() => expect(volume).toBeEnabled());
+    fireEvent.change(volume, { target: { value: "60" } });
+    fireEvent.change(volume, { target: { value: "70" } });
+    fireEvent.change(volume, { target: { value: "80" } });
+
+    expect(mocks.setPlaybackVolume).toHaveBeenCalledTimes(1);
+    expect(mocks.setPlaybackVolume).toHaveBeenCalledWith(0.6);
+    expect(volume).toHaveValue("80");
+    expect(volume).toBeEnabled();
+
+    first.resolve(playingAt(2, 1_000, 0.6));
+    await waitFor(() => expect(mocks.setPlaybackVolume).toHaveBeenCalledTimes(2));
+    expect(mocks.setPlaybackVolume).toHaveBeenLastCalledWith(0.8);
+
+    fireEvent.pointerUp(volume);
+    second.resolve(playingAt(3, 1_000, 0.8));
+    await waitFor(() => expect(volume).toHaveValue("80"));
   });
 });

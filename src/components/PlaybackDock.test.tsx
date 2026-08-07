@@ -35,9 +35,9 @@ const props = {
   pendingTransportCommand: null,
   seekPreviewMs: null,
   isSeekPending: false,
-  isAdjustingVolume: false,
-  volumeDraft: 50,
+  volumeValue: 50,
   isVolumePending: false,
+  isVolumeSliderDisabled: false,
   playbackError: null,
   deviceListError: null,
   onPlay: vi.fn(),
@@ -187,13 +187,30 @@ describe("PlaybackDock", () => {
     expect(screen.getByTestId("playback-dock").querySelector('[data-region="status"]')).toBeNull();
   });
 
-  it("uses the volume draft consistently while adjusting", () => {
-    render(<PlaybackDock {...props} isAdjustingVolume volumeDraft={80} />);
+  it("uses the supplied volume value consistently", () => {
+    render(<PlaybackDock {...props} volumeValue={80} />);
 
     const slider = screen.getByRole("slider", { name: "Playback volume" });
     expect(slider).toHaveValue("80");
     expect(slider).toHaveAttribute("aria-valuetext", "80 percent");
     expect(screen.getByText("80%")).toBeInTheDocument();
+  });
+
+  it("keeps the volume slider enabled during live volume updates", () => {
+    render(<PlaybackDock {...props} isVolumePending volumeValue={80} />);
+
+    expect(screen.getByRole("slider", { name: "Playback volume" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Mute" })).toBeDisabled();
+    expect(
+      screen.getByRole("slider", { name: "Playback volume" }).closest('[data-region="volume"]'),
+    ).toHaveAttribute("aria-busy", "true");
+  });
+
+  it("disables volume adjustment while mute is pending", () => {
+    render(<PlaybackDock {...props} isVolumePending isVolumeSliderDisabled />);
+
+    expect(screen.getByRole("slider", { name: "Playback volume" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Mute" })).toBeDisabled();
   });
 
   it("keeps transport controls stable while a seek is pending", () => {
@@ -272,7 +289,7 @@ describe("PlaybackDock", () => {
     );
     expect(screen.getByRole("button", { name: "Stop" })).toBeEnabled();
     expect(screen.getByRole("slider", { name: "Playback position" })).toBeDisabled();
-    expect(screen.getByRole("slider", { name: "Playback volume" })).toBeDisabled();
+    expect(screen.getByRole("slider", { name: "Playback volume" })).toBeEnabled();
     expect(screen.getByRole("combobox", { name: "Audio output device" })).toBeDisabled();
   });
 });
