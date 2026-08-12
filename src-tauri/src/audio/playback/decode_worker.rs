@@ -366,8 +366,8 @@ mod tests {
     use crate::audio::output::{OutputSignal, OutputStreamId, ProducerState};
     use crate::audio::output_processing::{OutputPcmProcessor, OutputProcessingError};
     use crate::audio::pcm_queue::bounded_pcm_queue;
-    use crate::audio::test_support::{write_pcm_i16_wav, TestDirectory};
-    use crate::audio::validation::ValidatedAudioFile;
+    use crate::media::validation::ValidatedAudioFile;
+    use crate::test_support::{write_pcm_i16_wav, TestDirectory};
     use std::sync::{mpsc, Arc};
     use std::time::{Duration, Instant};
 

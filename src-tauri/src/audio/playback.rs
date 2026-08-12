@@ -17,8 +17,8 @@ use super::output::{
     OutputStreamId, PreparedOutputConfig, PreparedOutputStream, ProducerState,
 };
 use super::output_processing::{ChannelConversion, OutputPcmProcessor};
-use super::validation::ValidatedAudioFile;
 use super::volume::{AtomicEffectiveGain, VolumeState};
+use crate::media::validation::ValidatedAudioFile;
 
 mod decode_worker;
 use decode_worker::{DecodePipeline, DecodeTaskInput, DecodeWorker, DecodeWorkerSetup};

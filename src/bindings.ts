@@ -24,9 +24,38 @@ export const commands = {
   muteAudioPlayback: () => __TAURI_INVOKE<PlaybackSnapshot_Serialize>("mute_audio_playback"),
   unmuteAudioPlayback: () => __TAURI_INVOKE<PlaybackSnapshot_Serialize>("unmute_audio_playback"),
   getPlaybackState: () => __TAURI_INVOKE<PlaybackSnapshot_Serialize>("get_playback_state"),
+  getLibraryStatus: () => __TAURI_INVOKE<LibraryStatus>("get_library_status"),
+  listLibraryRoots: () => __TAURI_INVOKE<LibraryRoot[]>("list_library_roots"),
+  registerLibraryRoot: (path: string) =>
+    __TAURI_INVOKE<LibraryRoot>("register_library_root", { path }),
+  setLibraryRootEnabled: (id: string, enabled: boolean) =>
+    __TAURI_INVOKE<LibraryRoot>("set_library_root_enabled", { id, enabled }),
+  startLibraryScan: () => __TAURI_INVOKE<null>("start_library_scan"),
+  cancelLibraryScan: () => __TAURI_INVOKE<null>("cancel_library_scan"),
+  getLibraryScanState: () => __TAURI_INVOKE<LibraryScanSnapshot>("get_library_scan_state"),
+  listLibraryTracks: (afterId: string | null) =>
+    __TAURI_INVOKE<LibraryTrackPage>("list_library_tracks", { afterId }),
+  getLibraryTrackForPath: (path: string) =>
+    __TAURI_INVOKE<{
+      id: string;
+      title: string;
+      artist: string | null;
+      artwork: ArtworkRef | null;
+      durationMs: number | null;
+      availability: LibraryFileAvailability;
+      playable: boolean;
+    } | null>("get_library_track_for_path", { path }),
 };
 
 /* Types */
+export type ArtworkMimeType = "jpeg" | "png";
+
+export type ArtworkRef = {
+  contentHash: string;
+  mimeType: ArtworkMimeType;
+  relativePath: string;
+};
+
 export type AudioCodec =
   "aac" | "adpcm" | "alac" | "flac" | "mp1" | "mp2" | "mp3" | "pcm" | "vorbis" | "other";
 
@@ -75,6 +104,70 @@ export type AudioOutputDeviceIdentity = {
 };
 
 export type AudioOutputSelection = { kind: "systemDefault" } | { kind: "device"; deviceId: string };
+
+export type LibraryCommandError =
+  | { code: "invalidRoot" }
+  | { code: "rootNotFound" }
+  | { code: "rootNotDirectory" }
+  | { code: "canonicalizationFailed" }
+  | { code: "duplicateRoot" }
+  | { code: "overlappingRoot" }
+  | { code: "scanInProgress" }
+  | { code: "invalidId" }
+  | { code: "rootMissing" }
+  | { code: "scanAlreadyRunning" }
+  | { code: "noEnabledRoots" }
+  | { code: "scanNotRunning" }
+  | { code: "libraryUnavailable" }
+  | { code: "persistenceFailed" }
+  | { code: "taskFailed" };
+
+export type LibraryFileAvailability = "available" | "missing";
+
+export type LibraryRoot = {
+  id: string;
+  path: string;
+  enabled: boolean;
+  scanGeneration: number;
+  lastSuccessfulScanAtMs: number | null;
+};
+
+export type LibraryScanSnapshot = {
+  state: LibraryScanState;
+  currentRoot: LibraryRoot | null;
+  discoveredCount: number;
+  inspectedCount: number;
+  indexedCount: number;
+  failedCount: number;
+  failureCode: string | null;
+};
+
+export type LibraryScanState = "idle" | "running" | "completed" | "cancelled" | "failed";
+
+export type LibraryStatus =
+  { status: "ready" } | { status: "unavailable"; reason: LibraryUnavailableReason };
+
+export type LibraryTrackPage = {
+  items: LibraryTrackSummary[];
+  nextAfterId: string | null;
+};
+
+export type LibraryTrackSummary = {
+  id: string;
+  title: string;
+  artist: string | null;
+  artwork: ArtworkRef | null;
+  durationMs: number | null;
+  availability: LibraryFileAvailability;
+  playable: boolean;
+};
+
+export type LibraryUnavailableReason =
+  | "storageUnavailable"
+  | "databaseOpenFailed"
+  | "migrationFailed"
+  | "schemaTooNew"
+  | "databaseCorrupt";
 
 export type PauseAudioPlaybackError =
   | { code: "playbackWorkerUnavailable" }
