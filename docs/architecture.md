@@ -165,6 +165,10 @@ When persistence is introduced:
 
 Filesystem operations must validate paths and expected file types at the Rust boundary. Source audio and metadata files must not be modified without explicit user intent.
 
+Reusable media validation and technical inspection are separate from playback ownership. Symphonia is authoritative for whether an audio source is playable and for its technical properties; best-effort metadata parsing cannot redefine that decision.
+
+The local-library database, file traversal, and scan lifecycle are Rust-owned background work and remain isolated from playback workers and audio callbacks. Source-derived records are revisioned independently from future application-derived analysis. Embedded artwork is stored as app-owned assets and referenced by application models; it is not a database BLOB or playback-snapshot payload.
+
 ## 10. Provider and Credential Rules
 
 External providers must remain optional and isolated from local playback.

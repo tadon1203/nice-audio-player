@@ -36,4 +36,9 @@ tauri-plugin-log = "2"
 cpal = "0.18.1"
 ringbuf = "0.4"
 symphonia = { version = "0.6.0", features = ["all"] }
+rusqlite = { version = "=0.34.0", features = ["bundled"] }
+lofty = "=0.24.0"
+walkdir = "=2.5.0"
+dunce = "=1.0.5"
+blake3 = "=1.8.5"
 rubato = { version = "4.0.0", default-features = false, features = ["fft_resampler"] }

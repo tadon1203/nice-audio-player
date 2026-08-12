@@ -14,7 +14,7 @@ use symphonia::core::units::{Time, TimeBase, Timestamp};
 use symphonia::default::{get_codecs, get_probe};
 
 use super::pcm::{ChannelCount, PcmBuffer, PcmBufferBuildError, PcmSpec, SampleRate};
-use super::validation::ValidatedAudioFile;
+use crate::media::validation::ValidatedAudioFile;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PcmDecodeError {
@@ -414,8 +414,8 @@ mod tests {
         decode_audio_file, decode_audio_file_with_cancel_check, open_streaming_decoder,
         DecodeCancellation, DecodeStep, PcmDecodeError, SeekStep,
     };
-    use crate::audio::test_support::{write_pcm_i16_wav, TestDirectory};
-    use crate::audio::validation::ValidatedAudioFile;
+    use crate::media::validation::ValidatedAudioFile;
+    use crate::test_support::{write_pcm_i16_wav, TestDirectory};
     use std::fs::{File, OpenOptions};
     use std::io::Write;
 

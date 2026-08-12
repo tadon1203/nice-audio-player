@@ -1,4 +1,10 @@
 mod audio;
+mod library;
+mod media;
+
+#[cfg(test)]
+#[path = "audio/test_support.rs"]
+pub(crate) mod test_support;
 
 #[cfg(all(feature = "bindings-export", test))]
 use std::path::{Path, PathBuf};
@@ -11,15 +17,101 @@ use audio::devices::{
     list_output_devices as list_output_devices_with_cpal, AudioDeviceListError, AudioOutputDevice,
     AudioOutputSelection,
 };
-use audio::inspection::{
-    inspect_audio_file as inspect_validated_audio_file, AudioFileInfo, AudioFileInspectionError,
-};
 use audio::playback::{
     PlaybackFailureCode, PlaybackService, PlaybackServiceError, PlaybackSnapshot,
 };
-use audio::validation::{
+use library::{
+    models::{
+        LibraryRoot, LibraryScanSnapshot, LibraryStatus, LibraryTrackPage, LibraryTrackSummary,
+    },
+    service::{LibraryCommandError, LibraryService},
+};
+use media::inspection::{
+    inspect_audio_file as inspect_validated_audio_file, AudioFileInfo, AudioFileInspectionError,
+};
+use media::validation::{
     validate_audio_file as validate_audio_file_path, AudioFileValidationError, ValidatedAudioFile,
 };
+
+#[tauri::command]
+#[specta::specta]
+fn get_library_status(library: tauri::State<'_, LibraryService>) -> LibraryStatus {
+    library.status()
+}
+#[tauri::command]
+#[specta::specta]
+async fn list_library_roots(
+    library: tauri::State<'_, LibraryService>,
+) -> Result<Vec<LibraryRoot>, LibraryCommandError> {
+    let service = library.handle();
+    tauri::async_runtime::spawn_blocking(move || service.roots())
+        .await
+        .map_err(|_| LibraryCommandError::TaskFailed)?
+}
+#[tauri::command]
+#[specta::specta]
+async fn register_library_root(
+    path: String,
+    library: tauri::State<'_, LibraryService>,
+) -> Result<LibraryRoot, LibraryCommandError> {
+    let service = library.handle();
+    tauri::async_runtime::spawn_blocking(move || service.register_root(path))
+        .await
+        .map_err(|_| LibraryCommandError::TaskFailed)?
+}
+#[tauri::command]
+#[specta::specta]
+async fn set_library_root_enabled(
+    id: String,
+    enabled: bool,
+    library: tauri::State<'_, LibraryService>,
+) -> Result<LibraryRoot, LibraryCommandError> {
+    let service = library.handle();
+    tauri::async_runtime::spawn_blocking(move || service.set_root_enabled(id, enabled))
+        .await
+        .map_err(|_| LibraryCommandError::TaskFailed)?
+}
+#[tauri::command]
+#[specta::specta]
+fn start_library_scan(
+    library: tauri::State<'_, LibraryService>,
+) -> Result<(), LibraryCommandError> {
+    library.handle().start_scan()
+}
+#[tauri::command]
+#[specta::specta]
+fn cancel_library_scan(
+    library: tauri::State<'_, LibraryService>,
+) -> Result<(), LibraryCommandError> {
+    library.handle().cancel_scan()
+}
+#[tauri::command]
+#[specta::specta]
+fn get_library_scan_state(library: tauri::State<'_, LibraryService>) -> LibraryScanSnapshot {
+    library.handle().scan_state()
+}
+#[tauri::command]
+#[specta::specta]
+async fn list_library_tracks(
+    after_id: Option<String>,
+    library: tauri::State<'_, LibraryService>,
+) -> Result<LibraryTrackPage, LibraryCommandError> {
+    let service = library.handle();
+    tauri::async_runtime::spawn_blocking(move || service.tracks(after_id))
+        .await
+        .map_err(|_| LibraryCommandError::TaskFailed)?
+}
+#[tauri::command]
+#[specta::specta]
+async fn get_library_track_for_path(
+    path: String,
+    library: tauri::State<'_, LibraryService>,
+) -> Result<Option<LibraryTrackSummary>, LibraryCommandError> {
+    let service = library.handle();
+    tauri::async_runtime::spawn_blocking(move || service.track_for_path(path))
+        .await
+        .map_err(|_| LibraryCommandError::TaskFailed)?
+}
 
 #[tauri::command]
 #[specta::specta]
@@ -391,6 +483,15 @@ fn collect_specta_commands<R: tauri::Runtime>() -> tauri_specta::Commands<R> {
         mute_audio_playback,
         unmute_audio_playback,
         get_playback_state,
+        get_library_status,
+        list_library_roots,
+        register_library_root,
+        set_library_root_enabled,
+        start_library_scan,
+        cancel_library_scan,
+        get_library_scan_state,
+        list_library_tracks,
+        get_library_track_for_path,
     ]
 }
 
@@ -449,6 +550,23 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
+            let library_directory = app
+                .path()
+                .app_local_data_dir()
+                .map_err(|_| "library storage path unavailable")?;
+            app.manage(LibraryService::initialize(library_directory));
+            if let Some(receiver) = app
+                .state::<LibraryService>()
+                .take_scan_state_changed_receiver()
+            {
+                let app_handle = app.handle().clone();
+                thread::spawn(move || {
+                    while receiver.recv().is_ok() {
+                        let snapshot = app_handle.state::<LibraryService>().handle().scan_state();
+                        let _ = app_handle.emit("library-scan-progress", snapshot);
+                    }
+                });
+            }
             if let Some(receiver) = app.state::<PlaybackService>().take_state_changed_receiver() {
                 let app_handle = app.handle().clone();
                 thread::spawn(move || {
@@ -469,6 +587,7 @@ pub fn run() {
             tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit
         ) {
             app_handle.state::<PlaybackService>().shutdown();
+            app_handle.state::<LibraryService>().shutdown();
         }
     });
 }
