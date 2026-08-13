@@ -13,7 +13,7 @@ use std::{
         Arc, Mutex,
     },
     thread::{self, JoinHandle},
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 #[derive(Debug, Clone, serde::Serialize, specta::Type)]
 #[serde(tag = "code", rename_all = "camelCase")]
@@ -214,8 +214,8 @@ impl LibraryShared {
             .read()
             .map_err(|_| LibraryCommandError::PersistenceFailed)?;
         let search = search.unwrap_or_default().trim().to_owned();
-        let pattern = format!("%{}%", search);
-        let mut s=c.prepare("SELECT t.id,f.file_name,f.availability,f.inspection_status,m.title,m.artist,m.album,m.album_artist,m.duration_ms,a.content_hash,a.mime_type,a.relative_path,m.artwork_status FROM tracks t JOIN library_files f ON f.id=t.file_id LEFT JOIN track_source_metadata m ON m.track_id=t.id AND m.source_revision=f.source_revision LEFT JOIN artwork_assets a ON a.id=m.artwork_id AND m.artwork_status='stored' WHERE t.id>?1 AND (?2='' OR COALESCE(m.title,f.file_name) LIKE ?3 OR COALESCE(m.artist,'') LIKE ?3 OR COALESCE(m.album,'') LIKE ?3 OR COALESCE(m.album_artist,'') LIKE ?3) ORDER BY t.id LIMIT 101").map_err(|_|LibraryCommandError::PersistenceFailed)?;
+        let pattern = literal_like_pattern(&search);
+        let mut s=c.prepare("SELECT t.id,f.file_name,f.availability,f.inspection_status,m.title,m.artist,m.album,m.album_artist,m.duration_ms,a.content_hash,a.mime_type,a.relative_path,m.artwork_status FROM tracks t JOIN library_files f ON f.id=t.file_id LEFT JOIN track_source_metadata m ON m.track_id=t.id AND m.source_revision=f.source_revision LEFT JOIN artwork_assets a ON a.id=m.artwork_id AND m.artwork_status='stored' WHERE t.id>?1 AND (?2='' OR COALESCE(NULLIF(trim(m.title),''),f.file_name) LIKE ?3 ESCAPE '\\' OR COALESCE(m.artist,'') LIKE ?3 ESCAPE '\\' OR COALESCE(NULLIF(trim(m.album),''),'Unknown album') LIKE ?3 ESCAPE '\\' OR COALESCE(NULLIF(trim(m.album_artist),''),NULLIF(trim(m.artist),''),'Unknown artist') LIKE ?3 ESCAPE '\\') ORDER BY t.id LIMIT 101").map_err(|_|LibraryCommandError::PersistenceFailed)?;
         let rows = s
             .query_map(params![after, search, pattern], summary_from_row)
             .map_err(|_| LibraryCommandError::PersistenceFailed)?;
@@ -239,88 +239,106 @@ impl LibraryShared {
         search: Option<String>,
     ) -> Result<LibraryAlbumPage, LibraryCommandError> {
         let after = after.map(|v| parse_id(&v)).transpose()?.unwrap_or(0);
-        let search = search.unwrap_or_default().trim().to_owned().to_lowercase();
+        let search = search.unwrap_or_default().trim().to_owned();
+        let pattern = literal_like_pattern(&search);
         let c = self
             .db()?
             .read()
             .map_err(|_| LibraryCommandError::PersistenceFailed)?;
-        let mut stmt = c.prepare("SELECT t.id, f.file_name, m.title, m.artist, m.album, m.album_artist, a.content_hash, a.mime_type, a.relative_path FROM tracks t JOIN library_files f ON f.id=t.file_id LEFT JOIN track_source_metadata m ON m.track_id=t.id AND m.source_revision=f.source_revision LEFT JOIN artwork_assets a ON a.id=m.artwork_id AND m.artwork_status='stored' ORDER BY t.id").map_err(|_| LibraryCommandError::PersistenceFailed)?;
+        let mut stmt = c.prepare(r#"
+            WITH members AS (
+                SELECT
+                    t.id,
+                    f.file_name,
+                    COALESCE(NULLIF(trim(m.title), ''), f.file_name) AS track_title,
+                    COALESCE(m.artist, '') AS track_artist,
+                    COALESCE(NULLIF(trim(m.album), ''), 'Unknown album') AS album_title,
+                    COALESCE(NULLIF(trim(m.album_artist), ''), NULLIF(trim(m.artist), ''), 'Unknown artist') AS album_artist,
+                    m.track_number,
+                    m.disc_number,
+                    m.artwork_id,
+                    CASE WHEN ?2 = '' OR
+                        COALESCE(NULLIF(trim(m.title), ''), f.file_name) LIKE ?3 ESCAPE '\' OR
+                        COALESCE(m.artist, '') LIKE ?3 ESCAPE '\' OR
+                        COALESCE(NULLIF(trim(m.album), ''), 'Unknown album') LIKE ?3 ESCAPE '\' OR
+                        COALESCE(NULLIF(trim(m.album_artist), ''), NULLIF(trim(m.artist), ''), 'Unknown artist') LIKE ?3 ESCAPE '\'
+                    THEN 1 ELSE 0 END AS search_match
+                FROM tracks t
+                JOIN library_files f ON f.id = t.file_id
+                LEFT JOIN track_source_metadata m ON m.track_id = t.id AND m.source_revision = f.source_revision
+            ),
+            groups AS (
+                SELECT album_title, album_artist, MIN(id) AS album_id, MAX(search_match) AS search_match
+                FROM members
+                GROUP BY album_title, album_artist
+            ),
+            page AS (
+                SELECT album_id, album_title, album_artist
+                FROM groups
+                WHERE album_id > ?1 AND (?2 = '' OR search_match = 1)
+                ORDER BY album_id
+                LIMIT 101
+            ),
+            ranked_artwork AS (
+                SELECT
+                    p.album_id,
+                    a.content_hash,
+                    a.mime_type,
+                    a.relative_path,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY p.album_id
+                        ORDER BY
+                            CASE WHEN m.disc_number IS NULL THEN 1 ELSE 0 END,
+                            m.disc_number,
+                            CASE WHEN m.track_number IS NULL THEN 1 ELSE 0 END,
+                            m.track_number,
+                            m.id
+                    ) AS artwork_rank
+                FROM page p
+                JOIN members m ON m.album_title = p.album_title AND m.album_artist = p.album_artist
+                JOIN artwork_assets a ON a.id = m.artwork_id AND a.mime_type IN ('image/jpeg', 'image/png')
+            )
+            SELECT p.album_id, p.album_title, p.album_artist, a.content_hash, a.mime_type, a.relative_path
+            FROM page p
+            LEFT JOIN ranked_artwork a ON a.album_id = p.album_id AND a.artwork_rank = 1
+            ORDER BY p.album_id
+        "#).map_err(|_| LibraryCommandError::PersistenceFailed)?;
         let rows = stmt
-            .query_map([], |r| {
+            .query_map(params![after, search, pattern], |r| {
                 Ok((
                     r.get::<_, i64>(0)?,
                     r.get::<_, String>(1)?,
-                    r.get::<_, Option<String>>(2)?,
+                    r.get::<_, String>(2)?,
                     r.get::<_, Option<String>>(3)?,
                     r.get::<_, Option<String>>(4)?,
                     r.get::<_, Option<String>>(5)?,
-                    r.get::<_, Option<String>>(6)?,
-                    r.get::<_, Option<String>>(7)?,
-                    r.get::<_, Option<String>>(8)?,
                 ))
             })
             .map_err(|_| LibraryCommandError::PersistenceFailed)?;
-        let mut groups: std::collections::BTreeMap<(String, String), (i64, Option<ArtworkRef>)> =
-            std::collections::BTreeMap::new();
+        let mut items = Vec::new();
         for row in rows {
-            let (id, file, title, artist, album, album_artist, hash, mime, path) =
+            let (id, effective_title, effective_artist, hash, mime, path) =
                 row.map_err(|_| LibraryCommandError::PersistenceFailed)?;
-            let effective_title = album
-                .filter(|v| !v.trim().is_empty())
-                .unwrap_or_else(|| "Unknown album".into());
-            let effective_artist = album_artist
-                .filter(|v| !v.trim().is_empty())
-                .or(artist.clone())
-                .filter(|v| !v.trim().is_empty())
-                .unwrap_or_else(|| "Unknown artist".into());
-            let hay = format!(
-                "{} {} {} {}",
-                title.unwrap_or_else(|| file.clone()),
-                artist.unwrap_or_default(),
-                effective_title,
-                effective_artist
-            )
-            .to_lowercase();
-            if !search.is_empty() && !hay.contains(&search) {
-                continue;
-            }
-            let artwork = match (hash, mime, path) {
-                (Some(content_hash), Some(mime_type), Some(relative_path)) => Some(ArtworkRef {
+            let artwork = match (hash, mime.as_deref(), path) {
+                (Some(content_hash), Some("image/jpeg"), Some(relative_path)) => Some(ArtworkRef {
                     content_hash,
-                    mime_type: if mime_type == "image/png" {
-                        ArtworkMimeType::Png
-                    } else {
-                        ArtworkMimeType::Jpeg
-                    },
+                    mime_type: ArtworkMimeType::Jpeg,
+                    relative_path,
+                }),
+                (Some(content_hash), Some("image/png"), Some(relative_path)) => Some(ArtworkRef {
+                    content_hash,
+                    mime_type: ArtworkMimeType::Png,
                     relative_path,
                 }),
                 _ => None,
             };
-            groups
-                .entry((effective_title, effective_artist))
-                .and_modify(|entry| {
-                    if entry.1.is_none() {
-                        entry.1 = artwork.clone();
-                    }
-                })
-                .or_insert((id, artwork));
-        }
-        let mut items = groups
-            .into_iter()
-            .filter(|(_, (id, _))| *id > after)
-            .map(|((title, artist), (id, artwork))| LibraryAlbumSummary {
+            items.push(LibraryAlbumSummary {
                 id: id.to_string(),
-                title,
-                album_artist: artist,
+                title: effective_title,
+                album_artist: effective_artist,
                 artwork,
-            })
-            .collect::<Vec<_>>();
-        items.sort_by(|a, b| {
-            a.id.parse::<i64>()
-                .unwrap_or(0)
-                .cmp(&b.id.parse::<i64>().unwrap_or(0))
-        });
-        items.truncate(101);
+            });
+        }
         let next_after_id = if items.len() > 100 {
             items.pop();
             items.last().map(|x| x.id.clone())
@@ -550,6 +568,7 @@ fn scan(
     cancel: Arc<AtomicBool>,
     notify: std::sync::mpsc::SyncSender<()>,
 ) {
+    let mut progress = ProgressPublisher::new(&notify);
     let mut traversal_failed = false;
     for root in roots {
         if cancel.load(Ordering::Acquire) {
@@ -604,15 +623,15 @@ fn scan(
             let relative = match path.strip_prefix(&root.path).ok().and_then(|p| p.to_str()) {
                 Some(v) => v.replace('\\', "/"),
                 None => {
-                    inc_failed(&state);
+                    progress.failed(&state);
                     continue;
                 }
             };
-            inc_discovered(&state);
+            progress.discovered(&state);
             let metadata = match std::fs::metadata(path) {
                 Ok(v) => v,
                 Err(_) => {
-                    inc_failed(&state);
+                    progress.failed(&state);
                     continue;
                 }
             };
@@ -663,7 +682,7 @@ fn scan(
                 }
                 continue;
             }
-            inc_inspected(&state);
+            progress.inspected(&state);
             let input = ValidatedAudioFile {
                 path: path.to_string_lossy().into_owned(),
                 file_name,
@@ -790,11 +809,11 @@ fn scan(
                         None => None,
                     };
                     require_persistence!(c.execute("INSERT INTO track_source_metadata(track_id,source_revision,title,artist,album,album_artist,track_number,track_total,disc_number,disc_total,genre,date,duration_ms,file_format,codec,sample_rate,channel_count,bit_depth,bitrate_kbps,tag_status,artwork_status,artwork_id,updated_at_ms) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23) ON CONFLICT(track_id) DO UPDATE SET source_revision=excluded.source_revision,title=excluded.title,artist=excluded.artist,album=excluded.album,album_artist=excluded.album_artist,track_number=excluded.track_number,track_total=excluded.track_total,disc_number=excluded.disc_number,disc_total=excluded.disc_total,genre=excluded.genre,date=excluded.date,duration_ms=excluded.duration_ms,file_format=excluded.file_format,codec=excluded.codec,sample_rate=excluded.sample_rate,channel_count=excluded.channel_count,bit_depth=excluded.bit_depth,bitrate_kbps=excluded.bitrate_kbps,tag_status=excluded.tag_status,artwork_status=excluded.artwork_status,artwork_id=excluded.artwork_id,updated_at_ms=excluded.updated_at_ms",params![track,revision,title,artist,album,album_artist,track_number,track_total,disc_number,disc_total,genre,date,inspection.info.duration_ms.map(|v|v as i64),input.extension,format!("{:?}",inspection.info.codec),inspection.info.sample_rate,inspection.info.channel_count,inspection.bit_depth,bitrate_kbps,tag_status,artwork_status,artwork_id,now()]), state, notify);
-                    inc_indexed(&state)
+                    progress.indexed(&state)
                 }
                 Err(_) => {
                     require_persistence!(c.execute("UPDATE library_files SET inspection_status='unsupported',inspection_error_code='unsupportedFormat' WHERE id=?1",params![file_id]), state, notify);
-                    inc_failed(&state)
+                    progress.failed(&state)
                 }
             }
         }
@@ -802,7 +821,7 @@ fn scan(
             require_persistence!(c.execute("UPDATE library_files SET availability='missing' WHERE root_id=?1 AND seen_generation<?2",params![root_id,generation]), state, notify);
             require_persistence!(c.execute("UPDATE library_roots SET last_successful_scan_at_ms=?2,last_scan_error_code=NULL WHERE id=?1",params![root_id,now()]), state, notify);
         } else {
-            inc_failed(&state);
+            progress.failed(&state);
             traversal_failed = true;
         }
     }
@@ -939,23 +958,50 @@ fn finish(
     f: Option<String>,
     notify: &std::sync::mpsc::SyncSender<()>,
 ) {
-    let mut x = s.lock().expect("scan state lock");
-    x.state = state;
-    x.current_root = None;
-    x.failure_code = f;
+    {
+        let mut x = s.lock().expect("scan state lock");
+        x.state = state;
+        x.current_root = None;
+        x.failure_code = f;
+    }
     let _ = notify.try_send(());
 }
-fn inc_discovered(s: &Arc<Mutex<LibraryScanSnapshot>>) {
-    s.lock().expect("scan state lock").discovered_count += 1
+struct ProgressPublisher<'a> {
+    notify: &'a std::sync::mpsc::SyncSender<()>,
+    last_counter_signal: Instant,
 }
-fn inc_inspected(s: &Arc<Mutex<LibraryScanSnapshot>>) {
-    s.lock().expect("scan state lock").inspected_count += 1
-}
-fn inc_indexed(s: &Arc<Mutex<LibraryScanSnapshot>>) {
-    s.lock().expect("scan state lock").indexed_count += 1
-}
-fn inc_failed(s: &Arc<Mutex<LibraryScanSnapshot>>) {
-    s.lock().expect("scan state lock").failed_count += 1
+impl<'a> ProgressPublisher<'a> {
+    fn new(notify: &'a std::sync::mpsc::SyncSender<()>) -> Self {
+        Self {
+            notify,
+            last_counter_signal: Instant::now() - Duration::from_millis(200),
+        }
+    }
+    fn counter(
+        &mut self,
+        state: &Arc<Mutex<LibraryScanSnapshot>>,
+        update: impl FnOnce(&mut LibraryScanSnapshot),
+    ) {
+        {
+            update(&mut state.lock().expect("scan state lock"));
+        }
+        if self.last_counter_signal.elapsed() >= Duration::from_millis(200) {
+            let _ = self.notify.try_send(());
+            self.last_counter_signal = Instant::now();
+        }
+    }
+    fn discovered(&mut self, state: &Arc<Mutex<LibraryScanSnapshot>>) {
+        self.counter(state, |s| s.discovered_count += 1);
+    }
+    fn inspected(&mut self, state: &Arc<Mutex<LibraryScanSnapshot>>) {
+        self.counter(state, |s| s.inspected_count += 1);
+    }
+    fn indexed(&mut self, state: &Arc<Mutex<LibraryScanSnapshot>>) {
+        self.counter(state, |s| s.indexed_count += 1);
+    }
+    fn failed(&mut self, state: &Arc<Mutex<LibraryScanSnapshot>>) {
+        self.counter(state, |s| s.failed_count += 1);
+    }
 }
 fn parse_id(value: &str) -> Result<i64, LibraryCommandError> {
     if value.is_empty() || value.starts_with('0') || !value.bytes().all(|b| b.is_ascii_digit()) {
@@ -966,6 +1012,13 @@ fn parse_id(value: &str) -> Result<i64, LibraryCommandError> {
         .ok()
         .filter(|v: &i64| *v > 0)
         .ok_or(LibraryCommandError::InvalidId)
+}
+fn literal_like_pattern(value: &str) -> String {
+    let escaped = value
+        .replace('\\', "\\\\")
+        .replace('%', "\\%")
+        .replace('_', "\\_");
+    format!("%{escaped}%")
 }
 fn now() -> i64 {
     SystemTime::now()
@@ -986,4 +1039,134 @@ fn average_bitrate_kbps(byte_length: u64, duration_ms: Option<u64>) -> Option<u6
         .checked_add(duration_ms / 2)?
         .checked_div(duration_ms)?
         .checked_div(1000)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_library() -> LibraryShared {
+        let directory = std::env::temp_dir().join(format!(
+            "nice-audio-player-library-service-{}-{}",
+            std::process::id(),
+            now()
+        ));
+        std::fs::create_dir_all(&directory).expect("test directory");
+        LibraryShared::ready(Database::initialize(&directory).expect("test database"))
+    }
+
+    struct TrackSeed<'a> {
+        id: i64,
+        title: &'a str,
+        artist: &'a str,
+        album: &'a str,
+        album_artist: &'a str,
+        disc_number: Option<i64>,
+        track_number: Option<i64>,
+        artwork_id: Option<i64>,
+    }
+
+    fn seed_track(library: &LibraryShared, track: TrackSeed<'_>) {
+        let c = library
+            .db()
+            .expect("database")
+            .write()
+            .expect("database lock");
+        c.execute(
+            "INSERT OR IGNORE INTO library_roots(id,path,enabled,scan_generation,created_at_ms,updated_at_ms) VALUES(1,'C:/Music',1,0,0,0)",
+            [],
+        ).expect("root");
+        c.execute(
+            "INSERT INTO library_files(id,root_id,relative_path,file_name,extension,byte_length,modification_key,source_revision,seen_generation,availability,inspection_status,updated_at_ms) VALUES(?1,1,?2,?3,'wav',1,'1',1,1,'available','indexed',0)",
+            params![track.id, format!("{}.wav", track.id), format!("{}.wav", track.id)],
+        ).expect("file");
+        c.execute(
+            "INSERT INTO tracks(id,file_id,created_at_ms) VALUES(?1,?1,0)",
+            params![track.id],
+        )
+        .expect("track");
+        c.execute(
+            "INSERT INTO track_source_metadata(track_id,source_revision,title,artist,album,album_artist,track_number,disc_number,tag_status,artwork_status,artwork_id,updated_at_ms) VALUES(?1,1,?2,?3,?4,?5,?6,?7,'loaded','stored',?8,0)",
+            params![track.id, track.title, track.artist, track.album, track.album_artist, track.track_number, track.disc_number, track.artwork_id],
+        ).expect("metadata");
+    }
+
+    #[test]
+    fn album_query_keeps_logical_identity_and_ranks_stored_artwork() {
+        let library = test_library();
+        let c = library
+            .db()
+            .expect("database")
+            .write()
+            .expect("database lock");
+        c.execute("INSERT INTO artwork_assets(id,content_hash,mime_type,relative_path,byte_length,created_at_ms) VALUES(1,?1,'image/jpeg',?2,1,0)", params!["a".repeat(64), format!("artwork/aa/{}.jpg", "a".repeat(64))]).expect("artwork one");
+        c.execute("INSERT INTO artwork_assets(id,content_hash,mime_type,relative_path,byte_length,created_at_ms) VALUES(2,?1,'image/png',?2,1,0)", params!["b".repeat(64), format!("artwork/bb/{}.png", "b".repeat(64))]).expect("artwork two");
+        drop(c);
+        seed_track(
+            &library,
+            TrackSeed {
+                id: 1,
+                title: "First",
+                artist: "Artist",
+                album: "Shared",
+                album_artist: "Album Artist",
+                disc_number: Some(2),
+                track_number: Some(1),
+                artwork_id: Some(1),
+            },
+        );
+        seed_track(
+            &library,
+            TrackSeed {
+                id: 2,
+                title: "Needle",
+                artist: "Artist",
+                album: "Shared",
+                album_artist: "Album Artist",
+                disc_number: Some(1),
+                track_number: Some(2),
+                artwork_id: Some(2),
+            },
+        );
+        seed_track(
+            &library,
+            TrackSeed {
+                id: 3,
+                title: "Percent %",
+                artist: "Other",
+                album: "Other album",
+                album_artist: "Other artist",
+                disc_number: None,
+                track_number: None,
+                artwork_id: None,
+            },
+        );
+
+        let all = library.albums(None, None).expect("album page");
+        assert_eq!(all.items.len(), 2);
+        let shared = all
+            .items
+            .iter()
+            .find(|album| album.title == "Shared")
+            .expect("shared album");
+        assert_eq!(shared.id, "1");
+        assert!(matches!(
+            shared.artwork.as_ref(),
+            Some(ArtworkRef {
+                mime_type: ArtworkMimeType::Png,
+                ..
+            })
+        ));
+
+        let searched = library
+            .albums(None, Some("Needle".into()))
+            .expect("search page");
+        assert_eq!(searched.items.len(), 1);
+        assert_eq!(searched.items[0].id, "1");
+        let literal = library
+            .albums(None, Some("%".into()))
+            .expect("literal search page");
+        assert_eq!(literal.items.len(), 1);
+        assert_eq!(literal.items[0].title, "Other album");
+    }
 }

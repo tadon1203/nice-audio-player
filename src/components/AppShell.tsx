@@ -1,10 +1,11 @@
-import type { ReactNode } from "react";
+import type { ReactNode, Ref } from "react";
 
 interface AppShellProps {
   main: ReactNode;
   dock: ReactNode;
   destination?: "library" | "settings";
   onDestinationChange?: (destination: "library" | "settings") => void;
+  mainScrollRef?: Ref<HTMLElement>;
 }
 
 export function AppShell({
@@ -12,6 +13,7 @@ export function AppShell({
   dock,
   destination = "library",
   onDestinationChange = () => undefined,
+  mainScrollRef,
 }: AppShellProps) {
   return (
     <div className="app-shell" data-testid="app-shell">
@@ -38,7 +40,9 @@ export function AppShell({
             Settings
           </button>
         </nav>
-        <main className="app-shell__main">{main}</main>
+        <main ref={mainScrollRef} className="app-shell__main">
+          {main}
+        </main>
       </div>
       <footer className="app-shell__persistent">{dock}</footer>
       <div id="overlay-root" />
