@@ -11,6 +11,34 @@
   overflow: hidden;
   background: var(--color-canvas);
 }
+.app-shell__workspace {
+  display: grid;
+  grid-template-columns: 192px minmax(0, 1fr);
+  min-block-size: 0;
+}
+.app-shell__navigation {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding: 72px 12px 24px;
+  border-inline-end: 1px solid var(--color-border-subtle);
+  background: var(--color-surface);
+}
+.app-shell__nav-item {
+  min-block-size: 48px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--color-text-secondary);
+  text-align: start;
+  padding-inline: 24px;
+  font-size: var(--text-body-lg);
+}
+.app-shell__nav-item:hover,
+.app-shell__nav-item.is-active {
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
 
 .app-shell__main {
   min-inline-size: 0;
@@ -59,6 +87,7 @@
 }
 
 .playback-dock {
+  position: relative;
   container: playback-dock / inline-size;
   --playback-dock-inline-padding: clamp(calc(var(--spacing) * 6), 3vw, calc(var(--spacing) * 12));
   --playback-dock-block-padding: calc(var(--spacing) * 4);
@@ -77,6 +106,45 @@
   border-block-start: 1px solid var(--color-border-subtle);
   background: var(--color-surface);
   padding-block: var(--playback-dock-block-padding);
+}
+.playback-dock__menu-wrap {
+  position: absolute;
+  inset-block-start: 12px;
+  inset-inline-end: 16px;
+  z-index: 2;
+}
+.playback-dock__menu-wrap > button {
+  min-inline-size: 40px;
+  min-block-size: 40px;
+  border: 1px solid var(--color-border-control);
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--color-text-primary);
+}
+.playback-dock__menu {
+  position: absolute;
+  inset-block-end: calc(100% + 8px);
+  inset-inline-end: 0;
+  min-inline-size: 160px;
+  padding: 8px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-surface);
+  background: var(--color-surface-raised);
+  box-shadow: 0 16px 48px rgb(0 0 0 / 45%);
+}
+.playback-dock__menu button {
+  display: block;
+  inline-size: 100%;
+  min-block-size: 40px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--color-text-primary);
+  text-align: start;
+  padding-inline: 12px;
+}
+.playback-dock__menu button:hover {
+  background: var(--color-surface-hover);
 }
 
 .playback-dock__layout {

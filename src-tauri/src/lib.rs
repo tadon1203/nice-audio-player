@@ -22,9 +22,10 @@ use audio::playback::{
 };
 use library::{
     models::{
-        LibraryRoot, LibraryScanSnapshot, LibraryStatus, LibraryTrackPage, LibraryTrackSummary,
+        LibraryAlbumPage, LibraryRoot, LibraryScanSnapshot, LibraryStatus, LibraryTrackPage,
+        LibraryTrackSummary,
     },
-    service::{LibraryCommandError, LibraryService},
+    service::{LibraryCommandError, LibraryService, StartLibraryTrackError},
 };
 use media::inspection::{
     inspect_audio_file as inspect_validated_audio_file, AudioFileInfo, AudioFileInspectionError,
@@ -94,10 +95,34 @@ fn get_library_scan_state(library: tauri::State<'_, LibraryService>) -> LibraryS
 #[specta::specta]
 async fn list_library_tracks(
     after_id: Option<String>,
+    search: Option<String>,
     library: tauri::State<'_, LibraryService>,
 ) -> Result<LibraryTrackPage, LibraryCommandError> {
     let service = library.handle();
-    tauri::async_runtime::spawn_blocking(move || service.tracks(after_id))
+    tauri::async_runtime::spawn_blocking(move || service.tracks(after_id, search))
+        .await
+        .map_err(|_| LibraryCommandError::TaskFailed)?
+}
+#[tauri::command]
+#[specta::specta]
+async fn list_library_albums(
+    after_id: Option<String>,
+    search: Option<String>,
+    library: tauri::State<'_, LibraryService>,
+) -> Result<LibraryAlbumPage, LibraryCommandError> {
+    let service = library.handle();
+    tauri::async_runtime::spawn_blocking(move || service.albums(after_id, search))
+        .await
+        .map_err(|_| LibraryCommandError::TaskFailed)?
+}
+#[tauri::command]
+#[specta::specta]
+async fn remove_library_root(
+    id: String,
+    library: tauri::State<'_, LibraryService>,
+) -> Result<(), LibraryCommandError> {
+    let service = library.handle();
+    tauri::async_runtime::spawn_blocking(move || service.remove_root(id))
         .await
         .map_err(|_| LibraryCommandError::TaskFailed)?
 }
@@ -111,6 +136,40 @@ async fn get_library_track_for_path(
     tauri::async_runtime::spawn_blocking(move || service.track_for_path(path))
         .await
         .map_err(|_| LibraryCommandError::TaskFailed)?
+}
+#[tauri::command]
+#[specta::specta]
+async fn start_library_track(
+    track_id: String,
+    library: tauri::State<'_, LibraryService>,
+    playback: tauri::State<'_, PlaybackService>,
+) -> Result<PlaybackSnapshot, StartLibraryTrackError> {
+    let library = library.handle();
+    let playback = playback.handle();
+    tauri::async_runtime::spawn_blocking(move || {
+        let source = library.playable_source(track_id)?;
+        playback.play(source).map_err(map_start_library_error)
+    })
+    .await
+    .map_err(|_| StartLibraryTrackError::TaskFailed)?
+}
+
+fn map_start_library_error(error: PlaybackServiceError) -> StartLibraryTrackError {
+    match error {
+        PlaybackServiceError::WorkerUnavailable => {
+            StartLibraryTrackError::PlaybackWorkerUnavailable
+        }
+        PlaybackServiceError::Output(PlaybackFailureCode::NoOutputDevice) => {
+            StartLibraryTrackError::NoOutputDevice
+        }
+        PlaybackServiceError::Output(PlaybackFailureCode::OutputDeviceUnavailable) => {
+            StartLibraryTrackError::OutputDeviceUnavailable
+        }
+        PlaybackServiceError::Decode
+        | PlaybackServiceError::DurationUnavailable
+        | PlaybackServiceError::Seek => StartLibraryTrackError::DecodeFailed,
+        _ => StartLibraryTrackError::OutputFailed,
+    }
 }
 
 #[tauri::command]
@@ -491,7 +550,10 @@ fn collect_specta_commands<R: tauri::Runtime>() -> tauri_specta::Commands<R> {
         cancel_library_scan,
         get_library_scan_state,
         list_library_tracks,
+        list_library_albums,
+        remove_library_root,
         get_library_track_for_path,
+        start_library_track,
     ]
 }
 

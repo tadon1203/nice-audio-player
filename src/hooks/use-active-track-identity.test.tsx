@@ -25,6 +25,8 @@ const track = (title: string, withArtwork = false): LibraryTrackSummary => ({
   id: "1",
   title,
   artist: "Artist",
+  album: null,
+  albumArtist: null,
   artwork: withArtwork ? artwork : null,
   durationMs: 1_000,
   availability: "available",
