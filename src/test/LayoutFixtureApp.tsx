@@ -56,8 +56,8 @@ export function LayoutFixtureApp({ fixture }: LayoutFixtureAppProps) {
             seekPreviewMs={fixture === "seek-pending" ? 700 : null}
             isSeekPending={fixture === "seek-pending"}
             volumeValue={Math.round(playback.volume * 100)}
-            isVolumePending={false}
-            isVolumeSliderDisabled={false}
+            isVolumeUpdatePending={false}
+            isMutePending={false}
             playbackError={playbackError}
             presentationTitle={
               validatedFile?.fileName.replace(/\.[^.]+$/, "") ?? "No audio selected"
@@ -72,10 +72,10 @@ export function LayoutFixtureApp({ fixture }: LayoutFixtureAppProps) {
             onSeekCommit={noop}
             onSeekCancel={noop}
             onVolumeChange={noop}
-            onVolumePointerDown={noop}
+            onVolumeInteractionStart={noop}
             onVolumeCommit={noop}
             onVolumePointerCancel={noop}
-            onMuteToggle={noop}
+            onVolumeButtonPress={noop}
           />
         }
       />
@@ -97,7 +97,13 @@ function fixtureFile(fixture: LayoutFixtureName): ValidatedAudioFile | null {
 }
 
 function fixturePlayback(fixture: LayoutFixtureName): PlaybackSnapshot {
-  if (fixture === "playing" || fixture === "seek-pending") {
+  if (
+    fixture === "playing" ||
+    fixture === "seek-pending" ||
+    fixture === "volume-low" ||
+    fixture === "volume-zero" ||
+    fixture === "volume-muted"
+  ) {
     return {
       status: "playing",
       revision: 1,
@@ -105,8 +111,8 @@ function fixturePlayback(fixture: LayoutFixtureName): PlaybackSnapshot {
       playbackId: "layout-fixture",
       positionMs: 83_000,
       durationMs: 245_000,
-      volume: 0.72,
-      muted: false,
+      volume: fixture === "volume-low" ? 0.2 : fixture === "volume-zero" ? 0 : 0.72,
+      muted: fixture === "volume-muted",
       outputSelection: { kind: "systemDefault" },
       outputDevice: { id: "default", name: "System speakers" },
       channelConversion: "monoToStereo",

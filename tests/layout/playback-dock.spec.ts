@@ -70,38 +70,45 @@ for (const width of [640, 800, 1120, 1440, 1760]) {
       !volumeIconBox
     )
       return;
-    expect(dockBox.height).toBeGreaterThanOrEqual(144);
-    expect(dockBox.height).toBeLessThanOrEqual(160);
+    expect(dockBox.height).toBeGreaterThanOrEqual(136);
+    expect(dockBox.height).toBeLessThanOrEqual(140);
     expect(
       Math.abs(buttonBox.x + buttonBox.width / 2 - (gridBox.x + gridBox.width / 2)),
     ).toBeLessThanOrEqual(1);
     expect(seekBox.x).toBeGreaterThanOrEqual(coreBox.x - 1);
     expect(seekBox.x + seekBox.width).toBeLessThanOrEqual(coreBox.x + coreBox.width + 1);
     expect(seekBox.width).toBeLessThanOrEqual(704);
-    expect(buttonBox.width).toBe(64);
-    expect(buttonBox.height).toBe(64);
-    expect(primaryIconBox.width).toBe(32);
-    expect(primaryIconBox.height).toBe(32);
+    expect(buttonBox.width).toBe(48);
+    expect(buttonBox.height).toBe(48);
+    expect(primaryIconBox.width).toBe(24);
+    expect(primaryIconBox.height).toBe(24);
     expect(volumeIconBox.width).toBe(28);
     expect(volumeIconBox.height).toBe(28);
-    expect(artworkBox.width).toBe(64);
-    expect(artworkBox.height).toBe(64);
+    expect(artworkBox.width).toBe(80);
+    expect(artworkBox.height).toBe(80);
     expect(
       Math.abs(timelineBox.x + timelineBox.width / 2 - (coreBox.x + coreBox.width / 2)),
     ).toBeLessThanOrEqual(1);
-    expect(timelineBox.y - (buttonBox.y + buttonBox.height)).toBeGreaterThanOrEqual(-16);
+    expect(timelineBox.y).toBeGreaterThanOrEqual(buttonBox.y + buttonBox.height - 5);
     expect(timelineBox.y - (buttonBox.y + buttonBox.height)).toBeLessThanOrEqual(0);
-    expect(seekBox.y).toBeGreaterThanOrEqual(buttonBox.y + buttonBox.height - 1);
+    expect(timelineBox.y - (buttonBox.y + buttonBox.height)).toBeGreaterThanOrEqual(-5);
+    expect(seekBox.y).toBeGreaterThanOrEqual(timelineBox.y + 20 - 1);
     expect(identityBox.x + identityBox.width).toBeLessThanOrEqual(coreBox.x + 1);
     expect(volumeBox.x).toBeGreaterThanOrEqual(coreBox.x + coreBox.width - 1);
     expect(identityBox.x - dockBox.x).toBeGreaterThanOrEqual(24);
     expect(identityBox.x - dockBox.x).toBeLessThanOrEqual(48);
     expect(dockBox.x + dockBox.width - (volumeBox.x + volumeBox.width)).toBeGreaterThanOrEqual(24);
     expect(dockBox.x + dockBox.width - (volumeBox.x + volumeBox.width)).toBeLessThanOrEqual(48);
-    expect(buttonBox.y - dockBox.y).toBeGreaterThanOrEqual(16);
+    expect(buttonBox.y - dockBox.y).toBeGreaterThanOrEqual(8);
     expect(
       dockBox.y + dockBox.height - (timelineBox.y + timelineBox.height),
-    ).toBeGreaterThanOrEqual(16);
+    ).toBeGreaterThanOrEqual(8);
+    expect(volumeBox.width).toBeGreaterThanOrEqual(192);
+    expect(
+      await page
+        .getByRole("slider", { name: "Playback volume" })
+        .evaluate((element) => element.getBoundingClientRect().width),
+    ).toBeGreaterThanOrEqual(144);
     expect(
       Math.abs(identityBox.y + identityBox.height / 2 - (coreBox.y + coreBox.height / 2)),
     ).toBeLessThanOrEqual(8);
@@ -140,26 +147,23 @@ test("Dock remains contained when typography tokens grow", async ({ page }) => {
 
 test("Dock ranges use the shared custom control treatment", async ({ page }) => {
   await openFixture(page, "playing", { width: 800, height: 600 });
-  const ruleSelectors = await page.evaluate(() =>
-    Array.from(document.styleSheets).flatMap((sheet) => {
-      try {
-        return Array.from(sheet.cssRules, (rule) =>
-          rule instanceof CSSStyleRule ? rule.selectorText : "",
-        );
-      } catch {
-        return [];
-      }
-    }),
-  );
-  expect(
-    ruleSelectors.some((selector) => selector.includes("::-webkit-slider-runnable-track")),
-  ).toBe(true);
-  expect(ruleSelectors.some((selector) => selector.includes("::-webkit-slider-thumb"))).toBe(true);
   for (const name of ["Playback position", "Playback volume"]) {
-    const appearance = await page
-      .getByRole("slider", { name })
-      .evaluate((input) => getComputedStyle(input).appearance);
+    const input = page.getByRole("slider", { name });
+    const appearance = await input.evaluate((element) => getComputedStyle(element).appearance);
     expect(appearance).toBe("none");
+    await expect(input.locator(".."), `${name} should use the shared wrapper`).toHaveClass(
+      /range-control/,
+    );
+    const wrapper = input.locator("..");
+    await expect(wrapper.locator(".range-control__track")).toHaveCount(1);
+    await expect(wrapper.locator(".range-control__fill-position")).toHaveCount(1);
+    await expect(wrapper.locator(".range-control__fill-visual")).toHaveCount(1);
+    await expect(wrapper.locator(".range-control__thumb-position")).toHaveCount(1);
+    await expect(wrapper.locator(".range-control__thumb-visual")).toHaveCount(1);
+    await expect(wrapper.locator(".range-control__thumb-ring")).toHaveCount(1);
+    expect(
+      await wrapper.evaluate((element) => element.getBoundingClientRect().height),
+    ).toBeGreaterThanOrEqual(40);
   }
 });
 
@@ -183,6 +187,7 @@ test("minimum window width keeps the Dock in one anchored row", async ({ page })
   expect(Math.abs(volume.y + volume.height / 2 - (core.y + core.height / 2))).toBeLessThanOrEqual(
     8,
   );
+  expect(timeline.y - (button.y + button.height)).toBeGreaterThanOrEqual(-5);
   expect(timeline.y - (button.y + button.height)).toBeLessThanOrEqual(0);
   await expectNoHorizontalOverflow(page);
 });

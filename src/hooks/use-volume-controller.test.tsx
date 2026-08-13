@@ -78,13 +78,13 @@ function Harness({
         aria-label="volume"
         type="range"
         value={controller.volumeValue}
-        disabled={controller.isVolumeSliderDisabled}
+        disabled={false}
         onChange={(event) => controller.onVolumeChange(Number(event.currentTarget.value))}
         onPointerDown={controller.onVolumePointerDown}
         onPointerUp={(event) => controller.onVolumeCommit(Number(event.currentTarget.value))}
         onPointerCancel={controller.onVolumePointerCancel}
       />
-      <button type="button" onClick={() => void controller.onMuteToggle()}>
+      <button type="button" onClick={controller.onVolumeButtonPress}>
         mute
       </button>
     </>
@@ -127,7 +127,7 @@ describe("useVolumeController", () => {
     fireEvent.change(volume, { target: { value: "60" } });
     fireEvent.change(volume, { target: { value: "70" } });
     fireEvent.change(volume, { target: { value: "80" } });
-    expect(mocks.setPlaybackVolume).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(mocks.setPlaybackVolume).toHaveBeenCalledTimes(1));
 
     first.resolve(playing(2, 0.6));
     await waitFor(() => expect(mocks.setPlaybackVolume).toHaveBeenCalledTimes(2));
@@ -225,12 +225,6 @@ describe("useVolumeController", () => {
     });
     await waitFor(() => expect(refreshAuthoritativeSnapshot).toHaveBeenCalledOnce());
     fireEvent.change(volume, { target: { value: "70" } });
-    expect(mocks.setPlaybackVolume).toHaveBeenCalledTimes(1);
-    fireEvent.pointerUp(volume);
-    expect(volume).toHaveValue("50");
-
-    fireEvent.pointerDown(volume);
-    fireEvent.change(volume, { target: { value: "70" } });
     await waitFor(() => expect(mocks.setPlaybackVolume).toHaveBeenCalledTimes(2));
   });
 
@@ -249,8 +243,49 @@ describe("useVolumeController", () => {
     volumeRequest.resolve(playing(2, 0.6));
     await waitFor(() => expect(mute).toBeEnabled());
     fireEvent.click(mute);
-    expect(volume).toBeDisabled();
+    expect(volume).toBeEnabled();
     muteRequest.resolve(playing(3, 0.6));
     await waitFor(() => expect(volume).toBeEnabled());
+  });
+
+  it("returns to idle after commit so later authoritative snapshots control the slider", async () => {
+    mocks.setPlaybackVolume.mockResolvedValue(playing(2, 0.6));
+    const view = renderHarness();
+    const volume = screen.getByRole("slider", { name: "volume" });
+
+    fireEvent.pointerDown(volume);
+    fireEvent.change(volume, { target: { value: "60" } });
+    fireEvent.pointerUp(volume, { target: { value: "60" } });
+    await waitFor(() => expect(mocks.setPlaybackVolume).toHaveBeenCalledWith(0.6));
+
+    view.rerender(
+      <Harness
+        playback={playing(3, 0.2)}
+        applySnapshot={applySnapshot}
+        refreshAuthoritativeSnapshot={refreshAuthoritativeSnapshot}
+      />,
+    );
+    await waitFor(() => expect(screen.getByRole("slider", { name: "volume" })).toHaveValue("20"));
+  });
+
+  it("unmutes after an in-flight mute when the slider requests audible output", async () => {
+    const muteRequest = deferred<PlaybackSnapshot>();
+    const volumeRequest = deferred<PlaybackSnapshot>();
+    mocks.muteAudioPlayback.mockReturnValueOnce(muteRequest.promise);
+    mocks.setPlaybackVolume.mockReturnValueOnce(volumeRequest.promise);
+    mocks.unmuteAudioPlayback.mockResolvedValue(playing(4, 0.7));
+    renderHarness();
+    const volume = screen.getByRole("slider", { name: "volume" });
+    const mute = screen.getByRole("button", { name: "mute" });
+
+    fireEvent.click(mute);
+    await waitFor(() => expect(mocks.muteAudioPlayback).toHaveBeenCalledOnce());
+    fireEvent.change(volume, { target: { value: "70" } });
+
+    muteRequest.resolve({ ...playing(2, 0.5), muted: true });
+    await waitFor(() => expect(mocks.setPlaybackVolume).toHaveBeenCalledWith(0.7));
+    expect(mocks.unmuteAudioPlayback).not.toHaveBeenCalled();
+    volumeRequest.resolve(playing(3, 0.7));
+    await waitFor(() => expect(mocks.unmuteAudioPlayback).toHaveBeenCalledOnce());
   });
 });

@@ -31,6 +31,11 @@
     -moz-osx-font-smoothing: grayscale;
   }
 
+  .motion-feedback {
+    transition-duration: var(--motion-feedback);
+    transition-timing-function: var(--ease-interface);
+  }
+
   button,
   input,
   select,

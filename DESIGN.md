@@ -426,6 +426,12 @@ Preserve the element's outer width and height. Do not replace an entire view wit
 
 Use `error` only in the affected region. Preserve unrelated content and its position.
 
+### Range controls
+
+Range controls use separate unfilled and filled tracks with a 4px visible track and a 16px thumb inside a minimum 40px interactive surface. The native range remains semantic. Fill and thumb share one visual progress source: pointer tracking uses `feedback` settling, while non-pointer value changes use `state` settling and interface easing. Hover, focus, press, and drag feedback use `feedback` timing independently of position motion and do not change control geometry.
+
+An explicitly muted Volume control keeps its stored non-zero position while its fill and thumb use the subdued treatment over state timing. The Volume icon changes only between `silent`, `low`, and `high` presentation states. Audible waves remain independent from the cancellation slash; normal motion contracts waves while expanding the slash. Reduced motion uses final-state groups with an opacity-only crossfade limited to 120ms.
+
 ## Motion
 
 ```yaml
@@ -434,7 +440,6 @@ motion:
   state: 220ms
   content: 320ms
   image: 600ms
-  light: 800ms
   easing: cubic-bezier(0.22, 1, 0.36, 1)
 ```
 
@@ -444,7 +449,7 @@ Use motion only when a visible element changes state, appears, disappears, or is
 - State-indicator changes use `state`.
 - Text-group and region replacement use `content`.
 - Visible-image replacement uses `image`.
-- Reflected-light replacement uses `light`.
+- Image replacement uses `image`; reflected-light changes follow the timing of the element they belong to.
 - Nothing bounces or overshoots.
 - Idle elements do not animate.
 - Animate opacity and transform before layout dimensions or filter values.

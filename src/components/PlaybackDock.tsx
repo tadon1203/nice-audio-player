@@ -1,8 +1,11 @@
 import type { PlaybackSnapshot, ValidatedAudioFile } from "@/bindings";
 import { useEffect, useState } from "react";
 import { formatPlaybackTime } from "@/lib/playback-time";
-import { PlayPauseIcon, VolumeIcon } from "./icons";
+import { motionDurationSeconds } from "@/lib/motion";
+import { PlayPauseIcon } from "./icons";
 import { ResponsiveCluster } from "./layout/ResponsiveCluster";
+import { RangeControl } from "./RangeControl";
+import { VolumeControl } from "./VolumeControl";
 
 type PendingTransportCommand = "stop" | "pause" | "resume" | null;
 
@@ -17,8 +20,8 @@ interface PlaybackDockProps {
   seekPreviewMs: number | null;
   isSeekPending: boolean;
   volumeValue: number;
-  isVolumePending: boolean;
-  isVolumeSliderDisabled: boolean;
+  isVolumeUpdatePending: boolean;
+  isMutePending: boolean;
   playbackError: string | null;
   presentationTitle: string;
   presentationArtist: string | null;
@@ -31,10 +34,10 @@ interface PlaybackDockProps {
   onSeekCommit: (value: number) => void;
   onSeekCancel: () => void;
   onVolumeChange: (value: number) => void;
-  onVolumePointerDown: () => void;
+  onVolumeInteractionStart: () => void;
   onVolumeCommit: (value: number) => void;
   onVolumePointerCancel: () => void;
-  onMuteToggle: () => void;
+  onVolumeButtonPress: () => void;
 }
 
 export function PlaybackDock({
@@ -47,8 +50,8 @@ export function PlaybackDock({
   seekPreviewMs,
   isSeekPending,
   volumeValue,
-  isVolumePending,
-  isVolumeSliderDisabled,
+  isVolumeUpdatePending,
+  isMutePending,
   playbackError,
   presentationTitle,
   presentationArtist,
@@ -61,10 +64,10 @@ export function PlaybackDock({
   onSeekCommit,
   onSeekCancel,
   onVolumeChange,
-  onVolumePointerDown,
+  onVolumeInteractionStart,
   onVolumeCommit,
   onVolumePointerCancel,
-  onMuteToggle,
+  onVolumeButtonPress,
 }: PlaybackDockProps) {
   const [artworkFailed, setArtworkFailed] = useState(false);
   useEffect(() => {
@@ -79,16 +82,6 @@ export function PlaybackDock({
     playback.status === "playing" ? onPause : playback.status === "paused" ? onResume : onPlay;
   const primaryBusy = pendingTransportCommand === "pause" || pendingTransportCommand === "resume";
   const seekValue = Math.min(seekPreviewMs ?? position, duration ?? 0);
-  const rangeKeys = [
-    "ArrowLeft",
-    "ArrowRight",
-    "ArrowUp",
-    "ArrowDown",
-    "PageUp",
-    "PageDown",
-    "Home",
-    "End",
-  ];
   return (
     <section
       className="playback-dock"
@@ -134,7 +127,7 @@ export function PlaybackDock({
                 (playback.status !== "playing" && !(hasResumablePlayback ?? validatedFile !== null))
               }
               onClick={primaryAction}
-              className="playback-dock__fixed-control playback-dock__primary-control grid place-items-center rounded-full bg-text-primary text-canvas transition-opacity duration-150 ease-interface hover:opacity-85 disabled:cursor-not-allowed disabled:bg-surface-pressed disabled:text-text-disabled disabled:opacity-80"
+              className="playback-dock__fixed-control playback-dock__primary-control grid place-items-center rounded-full bg-text-primary text-canvas hover:opacity-85 disabled:cursor-not-allowed disabled:bg-surface-pressed disabled:text-text-disabled disabled:opacity-80"
             >
               <PlayPauseIcon
                 playing={playback.status === "playing"}
@@ -142,18 +135,24 @@ export function PlaybackDock({
               />
             </button>
           </ResponsiveCluster>
-          <div className="playback-dock__timeline">
+          <div
+            className={`playback-dock__timeline${
+              isSeekPending || isTransportCommandPending ? " is-pending" : ""
+            }`}
+          >
             <div className="flex justify-between text-body-sm text-text-secondary">
               <span className="tabular-nums">{formatPlaybackTime(seekValue)}</span>
               <span className="tabular-nums">
                 {duration === null ? "--:--" : formatPlaybackTime(duration)}
               </span>
             </div>
-            <input
+            <RangeControl
               aria-label="Playback position"
-              type="range"
+              aria-valuetext={`${formatPlaybackTime(seekValue)} of ${duration === null ? "--:--" : formatPlaybackTime(duration)}`}
               min={0}
               max={duration ?? 0}
+              step={1}
+              positionTransitionDuration={motionDurationSeconds.content}
               value={seekValue}
               disabled={
                 !isPlaybackAvailable ||
@@ -162,45 +161,24 @@ export function PlaybackDock({
                 isSeekPending ||
                 isTransportCommandPending
               }
-              onChange={(event) => onSeek(Number(event.currentTarget.value))}
-              onPointerUp={(event) => onSeekCommit(Number(event.currentTarget.value))}
-              onPointerCancel={onSeekCancel}
-              onKeyUp={(event) => {
-                if (rangeKeys.includes(event.key)) onSeekCommit(Number(event.currentTarget.value));
-              }}
-              className="w-full accent-text-primary disabled:accent-text-disabled"
+              onValueChange={onSeek}
+              onValueCommit={onSeekCommit}
+              onInteractionCancel={onSeekCancel}
             />
           </div>
         </div>
-        <div className="playback-dock__volume" data-region="volume" aria-busy={isVolumePending}>
-          <button
-            type="button"
-            aria-label={playback.muted ? "Unmute" : "Mute"}
-            disabled={!isPlaybackAvailable || isVolumePending}
-            onClick={onMuteToggle}
-            className="playback-dock__fixed-control grid size-10 place-items-center rounded-control border border-border-control text-text-primary disabled:cursor-not-allowed disabled:border-border-subtle disabled:text-text-disabled"
-          >
-            <VolumeIcon muted={playback.muted} className="playback-dock__volume-icon" />
-          </button>
-          <input
-            aria-label="Playback volume"
-            aria-valuetext={`${volumeValue} percent`}
-            type="range"
-            min={0}
-            max={100}
-            step={1}
-            value={volumeValue}
-            disabled={!isPlaybackAvailable || isVolumeSliderDisabled}
-            onChange={(event) => onVolumeChange(Number(event.currentTarget.value))}
-            onPointerDown={onVolumePointerDown}
-            onPointerUp={(event) => onVolumeCommit(Number(event.currentTarget.value))}
-            onPointerCancel={onVolumePointerCancel}
-            onKeyUp={(event) => {
-              if (rangeKeys.includes(event.key)) onVolumeCommit(Number(event.currentTarget.value));
-            }}
-            className="accent-text-primary disabled:accent-text-disabled"
-          />
-        </div>
+        <VolumeControl
+          playback={playback}
+          value={volumeValue}
+          isPlaybackAvailable={isPlaybackAvailable}
+          isVolumeUpdatePending={isVolumeUpdatePending}
+          isMutePending={isMutePending}
+          onValueChange={onVolumeChange}
+          onInteractionStart={onVolumeInteractionStart}
+          onValueCommit={onVolumeCommit}
+          onInteractionCancel={onVolumePointerCancel}
+          onVolumeButtonPress={onVolumeButtonPress}
+        />
       </div>
       {playbackError ? (
         <div className="playback-dock__status text-body-sm" data-region="status">
