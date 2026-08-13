@@ -27,7 +27,6 @@ interface PlaybackDockProps {
   onPlay: () => void;
   onPause: () => void;
   onResume: () => void;
-  onStop?: () => void;
   onSeek: (value: number) => void;
   onSeekCommit: (value: number) => void;
   onSeekCancel: () => void;
@@ -58,7 +57,6 @@ export function PlaybackDock({
   onPlay,
   onPause,
   onResume,
-  onStop = () => undefined,
   onSeek,
   onSeekCommit,
   onSeekCancel,
@@ -69,7 +67,6 @@ export function PlaybackDock({
   onMuteToggle,
 }: PlaybackDockProps) {
   const [artworkFailed, setArtworkFailed] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
   useEffect(() => {
     queueMicrotask(() => setArtworkFailed(false));
   }, [artworkUrl]);
@@ -204,31 +201,6 @@ export function PlaybackDock({
             className="accent-text-primary disabled:accent-text-disabled"
           />
         </div>
-      </div>
-      <div className="playback-dock__menu-wrap">
-        <button
-          type="button"
-          aria-label="More playback actions"
-          aria-expanded={menuOpen}
-          onClick={() => setMenuOpen((value) => !value)}
-        >
-          ⋯
-        </button>
-        {menuOpen ? (
-          <div role="menu" className="playback-dock__menu">
-            <button
-              type="button"
-              role="menuitem"
-              disabled={!timed || !isPlaybackAvailable}
-              onClick={() => {
-                setMenuOpen(false);
-                onStop();
-              }}
-            >
-              Stop playback
-            </button>
-          </div>
-        ) : null}
       </div>
       {playbackError ? (
         <div className="playback-dock__status text-body-sm" data-region="status">

@@ -312,7 +312,6 @@ function App() {
           onPlay={() => void requestTransport("resume")}
           onPause={() => void requestTransport("pause")}
           onResume={() => void requestTransport("resume")}
-          onStop={() => void requestTransport("stop")}
           onSeek={seekController.onSeek}
           onSeekCommit={(value) => void seekController.onSeekCommit(value)}
           onSeekCancel={seekController.onSeekCancel}
