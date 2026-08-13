@@ -5,6 +5,9 @@ export type LayoutFixtureName =
   | "unbroken-filename"
   | "long-device"
   | "playing"
+  | "volume-low"
+  | "volume-zero"
+  | "volume-muted"
   | "seek-pending"
   | "failed";
 
@@ -15,6 +18,9 @@ const fixtures = new Set<LayoutFixtureName>([
   "unbroken-filename",
   "long-device",
   "playing",
+  "volume-low",
+  "volume-zero",
+  "volume-muted",
   "seek-pending",
   "failed",
 ]);

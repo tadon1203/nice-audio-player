@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-
 import {
   isPlaybackMuteError,
   isSetPlaybackVolumeError,
@@ -8,22 +7,21 @@ import {
   unmuteAudioPlayback,
 } from "@/api/audio-files";
 import type { PlaybackSnapshot } from "@/bindings";
-
 import type { PlaybackConnectionState, PlaybackUiAction } from "../lib/playback-state";
 
 type VolumeInteraction =
   | { kind: "idle" }
-  | { kind: "adjusting" | "settling"; value: number; startValue: number; failed: boolean };
+  | { kind: "adjusting" | "settling"; value: number; startValue: number; startMuted: boolean };
+type MuteIntent = { target: boolean; kind: "explicit" | "volumeInteraction" };
 
-interface UseVolumeControllerOptions {
+interface Options {
   playback: PlaybackSnapshot;
   connection: PlaybackConnectionState;
   applySnapshot: (snapshot: PlaybackSnapshot) => boolean;
   refreshAuthoritativeSnapshot: () => Promise<void>;
   dispatchPlaybackUi: (action: PlaybackUiAction) => void;
 }
-
-function normalizeVolume(value: number): number {
+function normalize(value: number) {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
 
@@ -33,191 +31,199 @@ export function useVolumeController({
   applySnapshot,
   refreshAuthoritativeSnapshot,
   dispatchPlaybackUi,
-}: UseVolumeControllerOptions) {
+}: Options) {
   const [interaction, setInteraction] = useState<VolumeInteraction>({ kind: "idle" });
-  const [isSetVolumePending, setIsSetVolumePending] = useState(false);
-  const [isMutePending, setIsMutePending] = useState(false);
-  const interactionRef = useRef(interaction);
+  const [isVolumeUpdatePending, setVolumePending] = useState(false);
+  const [isMutePending, setMutePending] = useState(false);
   const playbackRef = useRef(playback);
   const connectionRef = useRef(connection);
-  const inFlightRef = useRef<number | null>(null);
-  const queuedRef = useRef<number | null>(null);
-  const drainingRef = useRef(false);
-  const failedRef = useRef(false);
+  const interactionRef = useRef(interaction);
+  const lastNonZeroVolume = useRef(100);
+  const desiredVolume = useRef<number | null>(null);
+  const desiredMute = useRef<MuteIntent | null>(null);
+  const inFlight = useRef<"volume" | "mute" | null>(null);
+  const inFlightMute = useRef<MuteIntent | null>(null);
+  const draining = useRef(false);
 
   useEffect(() => {
     playbackRef.current = playback;
     connectionRef.current = connection;
+    if (playback.volume > 0) lastNonZeroVolume.current = normalize(playback.volume * 100);
   }, [connection, playback]);
 
-  const setInteractionValue = useCallback((value: number, kind: "adjusting" | "settling") => {
-    const current = interactionRef.current;
-    const next: VolumeInteraction =
-      current.kind === "idle"
-        ? {
-            kind,
-            value,
-            startValue: normalizeVolume(playbackRef.current.volume * 100),
-            failed: false,
-          }
-        : { ...current, kind, value };
+  const publishInteraction = useCallback((next: VolumeInteraction) => {
     interactionRef.current = next;
     setInteraction(next);
   }, []);
+  const startInteraction = useCallback(() => {
+    const current = interactionRef.current;
+    const value =
+      current.kind === "idle" ? normalize(playbackRef.current.volume * 100) : current.value;
+    publishInteraction({
+      kind: "adjusting",
+      value,
+      startValue: value,
+      startMuted: playbackRef.current.muted,
+    });
+  }, [publishInteraction]);
 
-  const drainVolume = useCallback(async () => {
-    if (drainingRef.current || connectionRef.current !== "ready") return;
-    drainingRef.current = true;
+  const drain = useCallback(async () => {
+    if (draining.current || connectionRef.current !== "ready") return;
+    draining.current = true;
     try {
-      while (!failedRef.current && queuedRef.current !== null) {
-        const target = queuedRef.current;
-        queuedRef.current = null;
-        if (target === null) break;
-
-        inFlightRef.current = target;
-        setIsSetVolumePending(true);
+      while (desiredVolume.current !== null || desiredMute.current !== null) {
+        const volumeTarget = desiredVolume.current;
+        if (volumeTarget !== null) {
+          desiredVolume.current = null;
+          inFlight.current = "volume";
+          setVolumePending(true);
+          dispatchPlaybackUi({ type: "commandStarted", lane: "volume" });
+          try {
+            applySnapshot(await setPlaybackVolume(volumeTarget / 100));
+            dispatchPlaybackUi({ type: "commandSucceeded", lane: "volume" });
+          } catch (error) {
+            desiredVolume.current = null;
+            desiredMute.current =
+              desiredMute.current?.kind === "volumeInteraction" ? null : desiredMute.current;
+            dispatchPlaybackUi({
+              type: "commandFailed",
+              lane: "volume",
+              message:
+                isSetPlaybackVolumeError(error) && error.code === "invalidVolume"
+                  ? "The playback volume is invalid."
+                  : "The playback volume could not be changed.",
+            });
+            await refreshAuthoritativeSnapshot();
+          } finally {
+            inFlight.current = null;
+            setVolumePending(false);
+          }
+          continue;
+        }
+        const muteTarget = desiredMute.current;
+        if (!muteTarget) break;
+        desiredMute.current = null;
+        inFlightMute.current = muteTarget;
+        inFlight.current = "mute";
+        setMutePending(true);
         dispatchPlaybackUi({ type: "commandStarted", lane: "volume" });
         try {
-          applySnapshot(await setPlaybackVolume(target / 100));
+          applySnapshot(await (muteTarget.target ? muteAudioPlayback() : unmuteAudioPlayback()));
           dispatchPlaybackUi({ type: "commandSucceeded", lane: "volume" });
-        } catch (error: unknown) {
-          failedRef.current = true;
-          queuedRef.current = null;
+        } catch (error) {
           dispatchPlaybackUi({
             type: "commandFailed",
             lane: "volume",
-            message:
-              isSetPlaybackVolumeError(error) && error.code === "invalidVolume"
-                ? "The playback volume is invalid."
-                : "The playback volume could not be changed.",
+            message: isPlaybackMuteError(error)
+              ? "The playback mute state could not be changed."
+              : "An unexpected playback error occurred.",
           });
           await refreshAuthoritativeSnapshot();
-          if (interactionRef.current.kind === "settling") {
-            interactionRef.current = { kind: "idle" };
-            setInteraction({ kind: "idle" });
-          }
         } finally {
-          inFlightRef.current = null;
-          setIsSetVolumePending(false);
+          inFlight.current = null;
+          inFlightMute.current = null;
+          setMutePending(false);
         }
       }
     } finally {
-      drainingRef.current = false;
+      draining.current = false;
       if (
-        !failedRef.current &&
         interactionRef.current.kind === "settling" &&
-        inFlightRef.current === null &&
-        queuedRef.current === null
-      ) {
-        interactionRef.current = { kind: "idle" };
-        setInteraction({ kind: "idle" });
-      }
+        inFlight.current === null &&
+        desiredVolume.current === null &&
+        desiredMute.current === null
+      )
+        publishInteraction({ kind: "idle" });
     }
-  }, [applySnapshot, dispatchPlaybackUi, refreshAuthoritativeSnapshot]);
-
-  const recordDesiredValue = useCallback((value: number) => {
-    const target = normalizeVolume(value);
-    const authoritative = normalizeVolume(playbackRef.current.volume * 100);
-    const inFlight = inFlightRef.current;
-    if (failedRef.current) return target;
-    if (inFlight !== null && target === inFlight) {
-      queuedRef.current = null;
-    } else if (inFlight === null && target === authoritative) {
-      queuedRef.current = null;
-    } else {
-      queuedRef.current = target;
-    }
-    return target;
-  }, []);
-
-  const beginVolume = useCallback(() => {
-    const displayed =
-      interactionRef.current.kind === "idle"
-        ? normalizeVolume(playbackRef.current.volume * 100)
-        : interactionRef.current.value;
-    failedRef.current = false;
-    const next: VolumeInteraction = {
-      kind: "adjusting",
-      value: displayed,
-      startValue: displayed,
-      failed: false,
-    };
-    interactionRef.current = next;
-    setInteraction(next);
-  }, []);
+  }, [applySnapshot, dispatchPlaybackUi, publishInteraction, refreshAuthoritativeSnapshot]);
 
   const updateVolume = useCallback(
     (value: number) => {
-      const target = normalizeVolume(value);
-      if (interactionRef.current.kind === "idle") beginVolume();
-      setInteractionValue(target, "adjusting");
-      recordDesiredValue(target);
-      void drainVolume();
+      const target = normalize(value);
+      if (interactionRef.current.kind === "idle") startInteraction();
+      const current = playbackRef.current;
+      if (target > 0) {
+        const pendingMute = desiredMute.current ?? inFlightMute.current;
+        if (current.muted || pendingMute?.target === true) {
+          desiredMute.current = { target: false, kind: "volumeInteraction" };
+        } else if (desiredMute.current?.kind === "explicit") {
+          desiredMute.current = null;
+        }
+      }
+      desiredVolume.current = target;
+      publishInteraction({
+        ...(interactionRef.current.kind === "idle"
+          ? {
+              kind: "adjusting",
+              startValue: normalize(current.volume * 100),
+              startMuted: current.muted,
+            }
+          : interactionRef.current),
+        kind: "adjusting",
+        value: target,
+      });
+      void drain();
     },
-    [beginVolume, drainVolume, recordDesiredValue, setInteractionValue],
+    [drain, publishInteraction, startInteraction],
   );
 
-  const finishVolume = useCallback(
+  const commitVolume = useCallback(
     (value: number) => {
-      const target = normalizeVolume(value);
-      if (interactionRef.current.kind === "idle") beginVolume();
-      const finalValue = recordDesiredValue(target);
-      if (failedRef.current) {
-        interactionRef.current = { kind: "idle" };
-        setInteraction({ kind: "idle" });
-        return;
+      const target = normalize(value);
+      if (interactionRef.current.kind === "idle") startInteraction();
+      const current = playbackRef.current;
+      if (target > 0) {
+        const pendingMute = desiredMute.current ?? inFlightMute.current;
+        if (current.muted || pendingMute?.target === true) {
+          desiredMute.current = { target: false, kind: "volumeInteraction" };
+        } else if (desiredMute.current?.kind === "explicit") {
+          desiredMute.current = null;
+        }
       }
-      setInteractionValue(finalValue, "settling");
-      void drainVolume();
+      desiredVolume.current = target;
+      publishInteraction({
+        ...interactionRef.current,
+        kind: "settling",
+        value: target,
+      } as VolumeInteraction);
+      void drain();
     },
-    [beginVolume, drainVolume, recordDesiredValue, setInteractionValue],
+    [drain, publishInteraction, startInteraction],
   );
 
   const cancelVolume = useCallback(() => {
     const current = interactionRef.current;
     if (current.kind === "idle") return;
-    const rollback = current.startValue;
-    if (failedRef.current) {
-      interactionRef.current = { kind: "idle" };
-      setInteraction({ kind: "idle" });
-      return;
-    }
-    recordDesiredValue(rollback);
-    setInteractionValue(rollback, "settling");
-    void drainVolume();
-  }, [drainVolume, recordDesiredValue, setInteractionValue]);
+    desiredVolume.current = current.startValue;
+    desiredMute.current =
+      current.startMuted === playbackRef.current.muted
+        ? null
+        : { target: current.startMuted, kind: "volumeInteraction" };
+    publishInteraction({ ...current, kind: "settling", value: current.startValue });
+    void drain();
+  }, [drain, publishInteraction]);
 
-  const toggleMute = useCallback(async () => {
-    if (inFlightRef.current !== null || isMutePending || connectionRef.current !== "ready") return;
-    setIsMutePending(true);
-    dispatchPlaybackUi({ type: "commandStarted", lane: "volume" });
-    try {
-      const current = playbackRef.current;
-      applySnapshot(await (current.muted ? unmuteAudioPlayback() : muteAudioPlayback()));
-      dispatchPlaybackUi({ type: "commandSucceeded", lane: "volume" });
-    } catch (error: unknown) {
-      dispatchPlaybackUi({
-        type: "commandFailed",
-        lane: "volume",
-        message: isPlaybackMuteError(error)
-          ? "The playback mute state could not be changed."
-          : "An unexpected playback error occurred.",
-      });
-      await refreshAuthoritativeSnapshot();
-    } finally {
-      setIsMutePending(false);
+  const volumeButtonPress = useCallback(() => {
+    if (connectionRef.current !== "ready" || isMutePending) return;
+    const current = playbackRef.current;
+    const value = normalize(current.volume * 100);
+    if (value === 0) {
+      desiredVolume.current = lastNonZeroVolume.current;
+      desiredMute.current = { target: false, kind: "volumeInteraction" };
+    } else {
+      desiredMute.current = { target: !current.muted, kind: "explicit" };
     }
-  }, [applySnapshot, dispatchPlaybackUi, isMutePending, refreshAuthoritativeSnapshot]);
+    void drain();
+  }, [drain, isMutePending]);
 
   return {
-    volumeValue:
-      interaction.kind === "idle" ? normalizeVolume(playback.volume * 100) : interaction.value,
-    isVolumePending: isSetVolumePending || isMutePending,
-    isVolumeSliderDisabled: isMutePending,
+    volumeValue: interaction.kind === "idle" ? normalize(playback.volume * 100) : interaction.value,
+    isVolumeUpdatePending,
+    isMutePending,
     onVolumeChange: updateVolume,
-    onVolumePointerDown: beginVolume,
-    onVolumeCommit: finishVolume,
+    onVolumePointerDown: startInteraction,
+    onVolumeCommit: commitVolume,
     onVolumePointerCancel: cancelVolume,
-    onMuteToggle: toggleMute,
+    onVolumeButtonPress: volumeButtonPress,
   };
 }

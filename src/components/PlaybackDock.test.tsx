@@ -27,8 +27,8 @@ const base = {
   seekPreviewMs: null,
   isSeekPending: false,
   volumeValue: 50,
-  isVolumePending: false,
-  isVolumeSliderDisabled: false,
+  isVolumeUpdatePending: false,
+  isMutePending: false,
   playbackError: null,
   presentationTitle: "Track",
   presentationArtist: "Artist",
@@ -41,10 +41,10 @@ const base = {
   onSeekCommit: vi.fn(),
   onSeekCancel: vi.fn(),
   onVolumeChange: vi.fn(),
-  onVolumePointerDown: vi.fn(),
+  onVolumeInteractionStart: vi.fn(),
   onVolumeCommit: vi.fn(),
   onVolumePointerCancel: vi.fn(),
-  onMuteToggle: vi.fn(),
+  onVolumeButtonPress: vi.fn(),
 };
 
 describe("PlaybackDock", () => {

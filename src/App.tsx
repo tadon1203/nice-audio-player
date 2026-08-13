@@ -297,8 +297,8 @@ function App() {
           seekPreviewMs={seekController.seekPreviewMs}
           isSeekPending={seekController.isSeekPending}
           volumeValue={volumeController.volumeValue}
-          isVolumePending={volumeController.isVolumePending}
-          isVolumeSliderDisabled={volumeController.isVolumeSliderDisabled}
+          isVolumeUpdatePending={volumeController.isVolumeUpdatePending}
+          isMutePending={volumeController.isMutePending}
           playbackError={
             playbackUi.commandError?.message ??
             playbackUi.connectionError ??
@@ -315,10 +315,10 @@ function App() {
           onSeekCommit={(value) => void seekController.onSeekCommit(value)}
           onSeekCancel={seekController.onSeekCancel}
           onVolumeChange={volumeController.onVolumeChange}
-          onVolumePointerDown={volumeController.onVolumePointerDown}
+          onVolumeInteractionStart={volumeController.onVolumePointerDown}
           onVolumeCommit={volumeController.onVolumeCommit}
           onVolumePointerCancel={volumeController.onVolumePointerCancel}
-          onMuteToggle={() => void volumeController.onMuteToggle()}
+          onVolumeButtonPress={volumeController.onVolumeButtonPress}
         />
       }
     />

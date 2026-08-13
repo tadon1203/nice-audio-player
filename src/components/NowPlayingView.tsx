@@ -84,7 +84,7 @@ export function NowPlayingView({
           onClick={onSelectFile}
           disabled={isFileSelectionDisabled}
           aria-busy={isValidatingFile}
-          className={`now-playing-view__action mt-4 min-h-12 rounded-control px-5 py-3 font-interface text-body-md font-medium transition-opacity duration-150 ease-interface focus-visible:outline-2 focus-visible:outline-focus-ring focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60 ${hasFile ? "border border-border-control text-text-primary disabled:border-border-subtle disabled:bg-transparent disabled:text-text-disabled" : "bg-text-primary text-canvas disabled:bg-surface-pressed disabled:text-text-disabled"}`}
+          className={`now-playing-view__action mt-4 min-h-12 rounded-control px-5 py-3 font-interface text-body-md font-medium transition-opacity motion-feedback focus-visible:outline-2 focus-visible:outline-focus-ring focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60 ${hasFile ? "border border-border-control text-text-primary disabled:border-border-subtle disabled:bg-transparent disabled:text-text-disabled" : "bg-text-primary text-canvas disabled:bg-surface-pressed disabled:text-text-disabled"}`}
         >
           {isValidatingFile ? "Validating…" : hasFile ? "Choose another file" : "Choose audio file"}
         </button>
