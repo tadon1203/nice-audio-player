@@ -4,11 +4,13 @@ import { formatPlaybackTime } from "@/lib/playback-time";
 import { PlayPauseIcon, VolumeIcon } from "./icons";
 import { ResponsiveCluster } from "./layout/ResponsiveCluster";
 
-type PendingTransportCommand = "start" | "stop" | "pause" | "resume" | null;
+type PendingTransportCommand = "stop" | "pause" | "resume" | null;
 
 interface PlaybackDockProps {
   playback: PlaybackSnapshot;
-  validatedFile: ValidatedAudioFile | null;
+  hasResumablePlayback?: boolean;
+  /** Compatibility input for the old direct-file Dock fixture; no new UI writes it. */
+  validatedFile?: ValidatedAudioFile | null;
   isPlaybackAvailable: boolean;
   isTransportCommandPending: boolean;
   pendingTransportCommand: PendingTransportCommand;
@@ -25,6 +27,7 @@ interface PlaybackDockProps {
   onPlay: () => void;
   onPause: () => void;
   onResume: () => void;
+  onStop?: () => void;
   onSeek: (value: number) => void;
   onSeekCommit: (value: number) => void;
   onSeekCancel: () => void;
@@ -37,6 +40,7 @@ interface PlaybackDockProps {
 
 export function PlaybackDock({
   playback,
+  hasResumablePlayback,
   validatedFile,
   isPlaybackAvailable,
   isTransportCommandPending,
@@ -54,6 +58,7 @@ export function PlaybackDock({
   onPlay,
   onPause,
   onResume,
+  onStop = () => undefined,
   onSeek,
   onSeekCommit,
   onSeekCancel,
@@ -64,6 +69,7 @@ export function PlaybackDock({
   onMuteToggle,
 }: PlaybackDockProps) {
   const [artworkFailed, setArtworkFailed] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   useEffect(() => {
     queueMicrotask(() => setArtworkFailed(false));
   }, [artworkUrl]);
@@ -74,10 +80,7 @@ export function PlaybackDock({
     playback.status === "playing" ? "Pause" : playback.status === "paused" ? "Resume" : "Play";
   const primaryAction =
     playback.status === "playing" ? onPause : playback.status === "paused" ? onResume : onPlay;
-  const primaryBusy =
-    pendingTransportCommand === "start" ||
-    pendingTransportCommand === "pause" ||
-    pendingTransportCommand === "resume";
+  const primaryBusy = pendingTransportCommand === "pause" || pendingTransportCommand === "resume";
   const seekValue = Math.min(seekPreviewMs ?? position, duration ?? 0);
   const rangeKeys = [
     "ArrowLeft",
@@ -129,7 +132,10 @@ export function PlaybackDock({
               type="button"
               aria-label={primaryLabel}
               aria-busy={primaryBusy}
-              disabled={validatedFile === null || !isPlaybackAvailable}
+              disabled={
+                !isPlaybackAvailable ||
+                (playback.status !== "playing" && !(hasResumablePlayback ?? validatedFile !== null))
+              }
               onClick={primaryAction}
               className="playback-dock__fixed-control playback-dock__primary-control grid place-items-center rounded-full bg-text-primary text-canvas transition-opacity duration-150 ease-interface hover:opacity-85 disabled:cursor-not-allowed disabled:bg-surface-pressed disabled:text-text-disabled disabled:opacity-80"
             >
@@ -198,6 +204,31 @@ export function PlaybackDock({
             className="accent-text-primary disabled:accent-text-disabled"
           />
         </div>
+      </div>
+      <div className="playback-dock__menu-wrap">
+        <button
+          type="button"
+          aria-label="More playback actions"
+          aria-expanded={menuOpen}
+          onClick={() => setMenuOpen((value) => !value)}
+        >
+          ⋯
+        </button>
+        {menuOpen ? (
+          <div role="menu" className="playback-dock__menu">
+            <button
+              type="button"
+              role="menuitem"
+              disabled={!timed || !isPlaybackAvailable}
+              onClick={() => {
+                setMenuOpen(false);
+                onStop();
+              }}
+            >
+              Stop playback
+            </button>
+          </div>
+        ) : null}
       </div>
       {playbackError ? (
         <div className="playback-dock__status text-body-sm" data-region="status">

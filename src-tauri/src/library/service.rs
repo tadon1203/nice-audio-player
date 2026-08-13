@@ -3,7 +3,7 @@ use super::{database::Database, models::*};
 use crate::media::{
     inspection::inspect_audio_file_internal,
     metadata::read_source_metadata,
-    validation::{is_supported_extension, ValidatedAudioFile},
+    validation::{is_supported_extension, validate_audio_file, ValidatedAudioFile},
 };
 use rusqlite::{params, OptionalExtension, Row};
 use std::{
@@ -200,7 +200,11 @@ impl LibraryShared {
         self.cancel.store(true, Ordering::Release);
         Ok(())
     }
-    pub fn tracks(&self, after: Option<String>) -> Result<LibraryTrackPage, LibraryCommandError> {
+    pub fn tracks(
+        &self,
+        after: Option<String>,
+        search: Option<String>,
+    ) -> Result<LibraryTrackPage, LibraryCommandError> {
         let after = match after {
             Some(v) => parse_id(&v)?,
             None => 0,
@@ -209,9 +213,11 @@ impl LibraryShared {
             .db()?
             .read()
             .map_err(|_| LibraryCommandError::PersistenceFailed)?;
-        let mut s=c.prepare("SELECT t.id,f.file_name,f.availability,f.inspection_status,m.title,m.artist,m.duration_ms,a.content_hash,a.mime_type,a.relative_path,m.artwork_status FROM tracks t JOIN library_files f ON f.id=t.file_id LEFT JOIN track_source_metadata m ON m.track_id=t.id AND m.source_revision=f.source_revision LEFT JOIN artwork_assets a ON a.id=m.artwork_id AND m.artwork_status='stored' WHERE t.id>?1 ORDER BY t.id LIMIT 101").map_err(|_|LibraryCommandError::PersistenceFailed)?;
+        let search = search.unwrap_or_default().trim().to_owned();
+        let pattern = format!("%{}%", search);
+        let mut s=c.prepare("SELECT t.id,f.file_name,f.availability,f.inspection_status,m.title,m.artist,m.album,m.album_artist,m.duration_ms,a.content_hash,a.mime_type,a.relative_path,m.artwork_status FROM tracks t JOIN library_files f ON f.id=t.file_id LEFT JOIN track_source_metadata m ON m.track_id=t.id AND m.source_revision=f.source_revision LEFT JOIN artwork_assets a ON a.id=m.artwork_id AND m.artwork_status='stored' WHERE t.id>?1 AND (?2='' OR COALESCE(m.title,f.file_name) LIKE ?3 OR COALESCE(m.artist,'') LIKE ?3 OR COALESCE(m.album,'') LIKE ?3 OR COALESCE(m.album_artist,'') LIKE ?3) ORDER BY t.id LIMIT 101").map_err(|_|LibraryCommandError::PersistenceFailed)?;
         let rows = s
-            .query_map(params![after], summary_from_row)
+            .query_map(params![after, search, pattern], summary_from_row)
             .map_err(|_| LibraryCommandError::PersistenceFailed)?;
         let mut items = rows
             .collect::<Result<Vec<_>, _>>()
@@ -226,6 +232,141 @@ impl LibraryShared {
             items,
             next_after_id,
         })
+    }
+    pub fn albums(
+        &self,
+        after: Option<String>,
+        search: Option<String>,
+    ) -> Result<LibraryAlbumPage, LibraryCommandError> {
+        let after = after.map(|v| parse_id(&v)).transpose()?.unwrap_or(0);
+        let search = search.unwrap_or_default().trim().to_owned().to_lowercase();
+        let c = self
+            .db()?
+            .read()
+            .map_err(|_| LibraryCommandError::PersistenceFailed)?;
+        let mut stmt = c.prepare("SELECT t.id, f.file_name, m.title, m.artist, m.album, m.album_artist, a.content_hash, a.mime_type, a.relative_path FROM tracks t JOIN library_files f ON f.id=t.file_id LEFT JOIN track_source_metadata m ON m.track_id=t.id AND m.source_revision=f.source_revision LEFT JOIN artwork_assets a ON a.id=m.artwork_id AND m.artwork_status='stored' ORDER BY t.id").map_err(|_| LibraryCommandError::PersistenceFailed)?;
+        let rows = stmt
+            .query_map([], |r| {
+                Ok((
+                    r.get::<_, i64>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, Option<String>>(2)?,
+                    r.get::<_, Option<String>>(3)?,
+                    r.get::<_, Option<String>>(4)?,
+                    r.get::<_, Option<String>>(5)?,
+                    r.get::<_, Option<String>>(6)?,
+                    r.get::<_, Option<String>>(7)?,
+                    r.get::<_, Option<String>>(8)?,
+                ))
+            })
+            .map_err(|_| LibraryCommandError::PersistenceFailed)?;
+        let mut groups: std::collections::BTreeMap<(String, String), (i64, Option<ArtworkRef>)> =
+            std::collections::BTreeMap::new();
+        for row in rows {
+            let (id, file, title, artist, album, album_artist, hash, mime, path) =
+                row.map_err(|_| LibraryCommandError::PersistenceFailed)?;
+            let effective_title = album
+                .filter(|v| !v.trim().is_empty())
+                .unwrap_or_else(|| "Unknown album".into());
+            let effective_artist = album_artist
+                .filter(|v| !v.trim().is_empty())
+                .or(artist.clone())
+                .filter(|v| !v.trim().is_empty())
+                .unwrap_or_else(|| "Unknown artist".into());
+            let hay = format!(
+                "{} {} {} {}",
+                title.unwrap_or_else(|| file.clone()),
+                artist.unwrap_or_default(),
+                effective_title,
+                effective_artist
+            )
+            .to_lowercase();
+            if !search.is_empty() && !hay.contains(&search) {
+                continue;
+            }
+            let artwork = match (hash, mime, path) {
+                (Some(content_hash), Some(mime_type), Some(relative_path)) => Some(ArtworkRef {
+                    content_hash,
+                    mime_type: if mime_type == "image/png" {
+                        ArtworkMimeType::Png
+                    } else {
+                        ArtworkMimeType::Jpeg
+                    },
+                    relative_path,
+                }),
+                _ => None,
+            };
+            groups
+                .entry((effective_title, effective_artist))
+                .and_modify(|entry| {
+                    if entry.1.is_none() {
+                        entry.1 = artwork.clone();
+                    }
+                })
+                .or_insert((id, artwork));
+        }
+        let mut items = groups
+            .into_iter()
+            .filter(|(_, (id, _))| *id > after)
+            .map(|((title, artist), (id, artwork))| LibraryAlbumSummary {
+                id: id.to_string(),
+                title,
+                album_artist: artist,
+                artwork,
+            })
+            .collect::<Vec<_>>();
+        items.sort_by(|a, b| {
+            a.id.parse::<i64>()
+                .unwrap_or(0)
+                .cmp(&b.id.parse::<i64>().unwrap_or(0))
+        });
+        items.truncate(101);
+        let next_after_id = if items.len() > 100 {
+            items.pop();
+            items.last().map(|x| x.id.clone())
+        } else {
+            None
+        };
+        Ok(LibraryAlbumPage {
+            items,
+            next_after_id,
+        })
+    }
+    pub fn remove_root(&self, id: String) -> Result<(), LibraryCommandError> {
+        if scanning(&self.state) {
+            return Err(LibraryCommandError::ScanInProgress);
+        }
+        let id = parse_id(&id)?;
+        let mut c = self
+            .db()?
+            .write()
+            .map_err(|_| LibraryCommandError::PersistenceFailed)?;
+        let tx = c
+            .transaction()
+            .map_err(|_| LibraryCommandError::PersistenceFailed)?;
+        let exists: Option<i64> = tx
+            .query_row(
+                "SELECT id FROM library_roots WHERE id=?1",
+                params![id],
+                |r| r.get(0),
+            )
+            .optional()
+            .map_err(|_| LibraryCommandError::PersistenceFailed)?;
+        if exists.is_none() {
+            return Err(LibraryCommandError::RootMissing);
+        }
+        tx.execute("DELETE FROM track_source_metadata WHERE track_id IN (SELECT t.id FROM tracks t JOIN library_files f ON f.id=t.file_id WHERE f.root_id=?1)", params![id]).map_err(|_| LibraryCommandError::PersistenceFailed)?;
+        tx.execute(
+            "DELETE FROM tracks WHERE file_id IN (SELECT id FROM library_files WHERE root_id=?1)",
+            params![id],
+        )
+        .map_err(|_| LibraryCommandError::PersistenceFailed)?;
+        tx.execute("DELETE FROM library_files WHERE root_id=?1", params![id])
+            .map_err(|_| LibraryCommandError::PersistenceFailed)?;
+        tx.execute("DELETE FROM library_roots WHERE id=?1", params![id])
+            .map_err(|_| LibraryCommandError::PersistenceFailed)?;
+        tx.commit()
+            .map_err(|_| LibraryCommandError::PersistenceFailed)
     }
     pub fn track_for_path(
         &self,
@@ -256,7 +397,34 @@ impl LibraryShared {
             .db()?
             .read()
             .map_err(|_| LibraryCommandError::PersistenceFailed)?;
-        c.query_row("SELECT t.id,f.file_name,f.availability,f.inspection_status,m.title,m.artist,m.duration_ms,a.content_hash,a.mime_type,a.relative_path,m.artwork_status FROM tracks t JOIN library_files f ON f.id=t.file_id LEFT JOIN track_source_metadata m ON m.track_id=t.id AND m.source_revision=f.source_revision LEFT JOIN artwork_assets a ON a.id=m.artwork_id AND m.artwork_status='stored' WHERE f.root_id=?1 AND f.relative_path=?2", params![parse_id(&root.id)?, relative_path], summary_from_row).optional().map_err(|_|LibraryCommandError::PersistenceFailed)
+        c.query_row("SELECT t.id,f.file_name,f.availability,f.inspection_status,m.title,m.artist,m.album,m.album_artist,m.duration_ms,a.content_hash,a.mime_type,a.relative_path,m.artwork_status FROM tracks t JOIN library_files f ON f.id=t.file_id LEFT JOIN track_source_metadata m ON m.track_id=t.id AND m.source_revision=f.source_revision LEFT JOIN artwork_assets a ON a.id=m.artwork_id AND m.artwork_status='stored' WHERE f.root_id=?1 AND f.relative_path=?2", params![parse_id(&root.id)?, relative_path], summary_from_row).optional().map_err(|_|LibraryCommandError::PersistenceFailed)
+    }
+    pub fn playable_source(
+        &self,
+        id: String,
+    ) -> Result<ValidatedAudioFile, StartLibraryTrackError> {
+        let id = parse_id(&id).map_err(|_| StartLibraryTrackError::InvalidId)?;
+        let c = self
+            .db()
+            .map_err(|_| StartLibraryTrackError::LibraryUnavailable)?
+            .read()
+            .map_err(|_| StartLibraryTrackError::PersistenceFailed)?;
+        let row: Option<(String, String, String, String)> = c.query_row(
+            "SELECT r.path,f.relative_path,f.availability,f.inspection_status FROM tracks t JOIN library_files f ON f.id=t.file_id JOIN library_roots r ON r.id=f.root_id WHERE t.id=?1",
+            params![id], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        ).optional().map_err(|_| StartLibraryTrackError::PersistenceFailed)?;
+        let Some((root, relative, availability, inspection)) = row else {
+            return Err(StartLibraryTrackError::TrackNotFound);
+        };
+        if availability == "missing" {
+            return Err(StartLibraryTrackError::TrackUnavailable);
+        }
+        if inspection != "indexed" {
+            return Err(StartLibraryTrackError::TrackNotPlayable);
+        }
+        let source = Path::new(&root).join(relative);
+        validate_audio_file(source.to_string_lossy().as_ref())
+            .map_err(|_| StartLibraryTrackError::TrackUnavailable)
     }
     pub fn start_scan(&self) -> Result<(), LibraryCommandError> {
         if scanning(&self.state) {
@@ -300,6 +468,22 @@ impl LibraryShared {
             let _ = worker.join();
         }
     }
+}
+#[derive(Debug, Clone, serde::Serialize, specta::Type)]
+#[serde(tag = "code", rename_all = "camelCase")]
+pub enum StartLibraryTrackError {
+    InvalidId,
+    TrackNotFound,
+    TrackUnavailable,
+    TrackNotPlayable,
+    LibraryUnavailable,
+    PersistenceFailed,
+    DecodeFailed,
+    NoOutputDevice,
+    OutputDeviceUnavailable,
+    OutputFailed,
+    PlaybackWorkerUnavailable,
+    TaskFailed,
 }
 /// The Tauri-managed owner. Only this type owns scanner shutdown.
 pub struct LibraryService {
@@ -698,10 +882,12 @@ fn summary_from_row(row: &Row<'_>) -> rusqlite::Result<LibraryTrackSummary> {
     let inspection_status: String = row.get(3)?;
     let title: Option<String> = row.get(4)?;
     let artist: Option<String> = row.get(5)?;
-    let duration: Option<i64> = row.get(6)?;
-    let content_hash: Option<String> = row.get(7)?;
-    let mime_type: Option<String> = row.get(8)?;
-    let relative_path: Option<String> = row.get(9)?;
+    let album: Option<String> = row.get(6)?;
+    let album_artist: Option<String> = row.get(7)?;
+    let duration: Option<i64> = row.get(8)?;
+    let content_hash: Option<String> = row.get(9)?;
+    let mime_type: Option<String> = row.get(10)?;
+    let relative_path: Option<String> = row.get(11)?;
     let artwork = match (content_hash, mime_type, relative_path) {
         (Some(content_hash), Some(mime_type), Some(relative_path)) => match mime_type.as_str() {
             "image/jpeg" => Some(ArtworkRef {
@@ -729,6 +915,8 @@ fn summary_from_row(row: &Row<'_>) -> rusqlite::Result<LibraryTrackSummary> {
         id: id.to_string(),
         title,
         artist: artist.filter(|v| !v.trim().is_empty()),
+        album: album.filter(|v| !v.trim().is_empty()),
+        album_artist: album_artist.filter(|v| !v.trim().is_empty()),
         artwork,
         duration_ms: duration.map(|v| v as u64),
         playable: availability == "available" && inspection_status == "indexed",

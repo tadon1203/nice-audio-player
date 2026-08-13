@@ -3,12 +3,43 @@ import type { ReactNode } from "react";
 interface AppShellProps {
   main: ReactNode;
   dock: ReactNode;
+  destination?: "library" | "settings";
+  onDestinationChange?: (destination: "library" | "settings") => void;
 }
 
-export function AppShell({ main, dock }: AppShellProps) {
+export function AppShell({
+  main,
+  dock,
+  destination = "library",
+  onDestinationChange = () => undefined,
+}: AppShellProps) {
   return (
     <div className="app-shell" data-testid="app-shell">
-      <main className="app-shell__main">{main}</main>
+      <div className="app-shell__workspace">
+        <nav className="app-shell__navigation" aria-label="Application">
+          <button
+            type="button"
+            aria-current={destination === "library" ? "page" : undefined}
+            className={
+              destination === "library" ? "app-shell__nav-item is-active" : "app-shell__nav-item"
+            }
+            onClick={() => onDestinationChange("library")}
+          >
+            Library
+          </button>
+          <button
+            type="button"
+            aria-current={destination === "settings" ? "page" : undefined}
+            className={
+              destination === "settings" ? "app-shell__nav-item is-active" : "app-shell__nav-item"
+            }
+            onClick={() => onDestinationChange("settings")}
+          >
+            Settings
+          </button>
+        </nav>
+        <main className="app-shell__main">{main}</main>
+      </div>
       <footer className="app-shell__persistent">{dock}</footer>
       <div id="overlay-root" />
     </div>

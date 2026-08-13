@@ -11,6 +11,34 @@
   overflow: hidden;
   background: var(--color-canvas);
 }
+.app-shell__workspace {
+  display: grid;
+  grid-template-columns: 192px minmax(0, 1fr);
+  min-block-size: 0;
+}
+.app-shell__navigation {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding: 72px 12px 24px;
+  border-inline-end: 1px solid var(--color-border-subtle);
+  background: var(--color-surface);
+}
+.app-shell__nav-item {
+  min-block-size: 48px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--color-text-secondary);
+  text-align: start;
+  padding-inline: 24px;
+  font-size: var(--text-body-lg);
+}
+.app-shell__nav-item:hover,
+.app-shell__nav-item.is-active {
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
 
 .app-shell__main {
   min-inline-size: 0;

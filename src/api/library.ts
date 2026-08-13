@@ -9,7 +9,37 @@ import type {
   LibraryStatus,
   LibraryTrackPage,
   LibraryTrackSummary,
+  LibraryAlbumPage,
+  PlaybackSnapshot,
+  StartLibraryTrackError,
 } from "@/bindings";
+
+const startLibraryTrackErrorCodes = {
+  invalidId: true,
+  trackNotFound: true,
+  trackUnavailable: true,
+  trackNotPlayable: true,
+  libraryUnavailable: true,
+  persistenceFailed: true,
+  decodeFailed: true,
+  noOutputDevice: true,
+  outputDeviceUnavailable: true,
+  outputFailed: true,
+  playbackWorkerUnavailable: true,
+  taskFailed: true,
+} satisfies Record<StartLibraryTrackError["code"], true>;
+
+export async function startLibraryTrack(trackId: string): Promise<PlaybackSnapshot> {
+  validateId(trackId);
+  return commands.startLibraryTrack(trackId);
+}
+export function isStartLibraryTrackError(value: unknown): value is StartLibraryTrackError {
+  return (
+    isRecord(value) &&
+    typeof value.code === "string" &&
+    Object.prototype.hasOwnProperty.call(startLibraryTrackErrorCodes, value.code)
+  );
+}
 
 const errorCodes = {
   invalidRoot: true,
@@ -61,11 +91,27 @@ export async function getLibraryScanState(): Promise<LibraryScanSnapshot> {
   if (!isLibraryScanSnapshot(value)) throw new Error("Invalid library scan payload.");
   return value;
 }
-export async function listLibraryTracks(afterId: string | null = null): Promise<LibraryTrackPage> {
+export async function listLibraryTracks(
+  afterId: string | null = null,
+  search: string | null = null,
+): Promise<LibraryTrackPage> {
   if (afterId !== null) validateId(afterId);
-  const value: unknown = await commands.listLibraryTracks(afterId);
+  const value: unknown = await commands.listLibraryTracks(afterId, search);
   if (!isLibraryTrackPage(value)) throw new Error("Invalid library tracks payload.");
   return value;
+}
+export async function listLibraryAlbums(
+  afterId: string | null = null,
+  search: string | null = null,
+): Promise<LibraryAlbumPage> {
+  if (afterId !== null) validateId(afterId);
+  const value: unknown = await commands.listLibraryAlbums(afterId, search);
+  if (!isLibraryAlbumPage(value)) throw new Error("Invalid library albums payload.");
+  return value;
+}
+export async function removeLibraryRoot(id: string): Promise<void> {
+  validateId(id);
+  await commands.removeLibraryRoot(id);
 }
 export async function getLibraryTrackForPath(path: string): Promise<LibraryTrackSummary | null> {
   if (!path.trim()) throw new Error("Track path must not be empty.");
@@ -128,6 +174,8 @@ function isLibraryTrackSummary(value: unknown): value is LibraryTrackSummary {
     isId(value.id) &&
     typeof value.title === "string" &&
     (value.artist === null || typeof value.artist === "string") &&
+    (value.album === null || typeof value.album === "string") &&
+    (value.albumArtist === null || typeof value.albumArtist === "string") &&
     (value.artwork === null || isArtworkRef(value.artwork)) &&
     (value.durationMs === null || isNatural(value.durationMs)) &&
     (value.availability === "available" || value.availability === "missing") &&
@@ -139,6 +187,21 @@ function isLibraryTrackPage(value: unknown): value is LibraryTrackPage {
     isRecord(value) &&
     Array.isArray(value.items) &&
     value.items.every(isLibraryTrackSummary) &&
+    (value.nextAfterId === null || isId(value.nextAfterId))
+  );
+}
+function isLibraryAlbumPage(value: unknown): value is LibraryAlbumPage {
+  return (
+    isRecord(value) &&
+    Array.isArray(value.items) &&
+    value.items.every(
+      (item) =>
+        isRecord(item) &&
+        isId(item.id) &&
+        typeof item.title === "string" &&
+        typeof item.albumArtist === "string" &&
+        (item.artwork === null || isArtworkRef(item.artwork)),
+    ) &&
     (value.nextAfterId === null || isId(value.nextAfterId))
   );
 }

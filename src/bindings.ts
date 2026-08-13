@@ -33,18 +33,25 @@ export const commands = {
   startLibraryScan: () => __TAURI_INVOKE<null>("start_library_scan"),
   cancelLibraryScan: () => __TAURI_INVOKE<null>("cancel_library_scan"),
   getLibraryScanState: () => __TAURI_INVOKE<LibraryScanSnapshot>("get_library_scan_state"),
-  listLibraryTracks: (afterId: string | null) =>
-    __TAURI_INVOKE<LibraryTrackPage>("list_library_tracks", { afterId }),
+  listLibraryTracks: (afterId: string | null, search: string | null) =>
+    __TAURI_INVOKE<LibraryTrackPage>("list_library_tracks", { afterId, search }),
+  listLibraryAlbums: (afterId: string | null, search: string | null) =>
+    __TAURI_INVOKE<LibraryAlbumPage>("list_library_albums", { afterId, search }),
+  removeLibraryRoot: (id: string) => __TAURI_INVOKE<null>("remove_library_root", { id }),
   getLibraryTrackForPath: (path: string) =>
     __TAURI_INVOKE<{
       id: string;
       title: string;
       artist: string | null;
+      album: string | null;
+      albumArtist: string | null;
       artwork: ArtworkRef | null;
       durationMs: number | null;
       availability: LibraryFileAvailability;
       playable: boolean;
     } | null>("get_library_track_for_path", { path }),
+  startLibraryTrack: (trackId: string) =>
+    __TAURI_INVOKE<PlaybackSnapshot_Serialize>("start_library_track", { trackId }),
 };
 
 /* Types */
@@ -105,6 +112,18 @@ export type AudioOutputDeviceIdentity = {
 
 export type AudioOutputSelection = { kind: "systemDefault" } | { kind: "device"; deviceId: string };
 
+export type LibraryAlbumPage = {
+  items: LibraryAlbumSummary[];
+  nextAfterId: string | null;
+};
+
+export type LibraryAlbumSummary = {
+  id: string;
+  title: string;
+  albumArtist: string;
+  artwork: ArtworkRef | null;
+};
+
 export type LibraryCommandError =
   | { code: "invalidRoot" }
   | { code: "rootNotFound" }
@@ -156,6 +175,8 @@ export type LibraryTrackSummary = {
   id: string;
   title: string;
   artist: string | null;
+  album: string | null;
+  albumArtist: string | null;
   artwork: ArtworkRef | null;
   durationMs: number | null;
   availability: LibraryFileAvailability;
@@ -361,6 +382,20 @@ export type SetPlaybackVolumeError =
 
 export type StartAudioFileError =
   | { code: "validationFailed"; error: AudioFileValidationError }
+  | { code: "decodeFailed" }
+  | { code: "noOutputDevice" }
+  | { code: "outputDeviceUnavailable" }
+  | { code: "outputFailed" }
+  | { code: "playbackWorkerUnavailable" }
+  | { code: "taskFailed" };
+
+export type StartLibraryTrackError =
+  | { code: "invalidId" }
+  | { code: "trackNotFound" }
+  | { code: "trackUnavailable" }
+  | { code: "trackNotPlayable" }
+  | { code: "libraryUnavailable" }
+  | { code: "persistenceFailed" }
   | { code: "decodeFailed" }
   | { code: "noOutputDevice" }
   | { code: "outputDeviceUnavailable" }

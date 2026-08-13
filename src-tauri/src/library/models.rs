@@ -58,6 +58,8 @@ pub struct LibraryTrackSummary {
     pub id: String,
     pub title: String,
     pub artist: Option<String>,
+    pub album: Option<String>,
+    pub album_artist: Option<String>,
     pub artwork: Option<ArtworkRef>,
     pub duration_ms: Option<u64>,
     pub availability: LibraryFileAvailability,
@@ -104,6 +106,20 @@ pub struct LibraryTrackDetails {
 #[serde(rename_all = "camelCase")]
 pub struct LibraryTrackPage {
     pub items: Vec<LibraryTrackSummary>,
+    pub next_after_id: Option<String>,
+}
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryAlbumSummary {
+    pub id: String,
+    pub title: String,
+    pub album_artist: String,
+    pub artwork: Option<ArtworkRef>,
+}
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryAlbumPage {
+    pub items: Vec<LibraryAlbumSummary>,
     pub next_after_id: Option<String>,
 }
 #[derive(Debug, Clone, Serialize, specta::Type)]
