@@ -8,10 +8,8 @@ import type {
 } from "@/bindings";
 import {
   cancelLibraryScan,
-  getLibraryScanState,
   isLibraryCommandError,
   listLibraryRoots,
-  listenToLibraryScanProgress,
   removeLibraryRoot,
   registerLibraryRoot,
   setLibraryRootEnabled,
@@ -24,6 +22,8 @@ interface SettingsViewProps {
   onOutputSelectionChange: (value: AudioOutputSelection) => void;
   onRefreshDevices: () => void;
   outputDisabled?: boolean;
+  scan?: LibraryScanSnapshot | null;
+  scanError?: string | null;
 }
 export function SettingsView({
   outputDevices,
@@ -31,34 +31,18 @@ export function SettingsView({
   onOutputSelectionChange,
   onRefreshDevices,
   outputDisabled = false,
+  scan = null,
+  scanError = null,
 }: SettingsViewProps) {
   const [roots, setRoots] = useState<LibraryRoot[]>([]);
-  const [scan, setScan] = useState<LibraryScanSnapshot | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmRoot, setConfirmRoot] = useState<LibraryRoot | null>(null);
   const reload = () =>
-    void Promise.all([listLibraryRoots(), getLibraryScanState()])
-      .then(([nextRoots, nextScan]) => {
-        setRoots(nextRoots);
-        setScan(nextScan);
-      })
+    void listLibraryRoots()
+      .then((nextRoots) => setRoots(nextRoots))
       .catch(() => setError("Library settings could not be loaded."));
   useEffect(reload, []);
-  useEffect(() => {
-    let active = true;
-    let unsubscribe: (() => void) | undefined;
-    void listenToLibraryScanProgress((snapshot) => {
-      if (active) setScan(snapshot);
-    }).then((fn) => {
-      if (active) unsubscribe = fn;
-      else fn();
-    });
-    return () => {
-      active = false;
-      unsubscribe?.();
-    };
-  }, []);
   const scanning = scan?.state === "running";
   async function addFolder() {
     const path = await open({ directory: true, multiple: false });
@@ -111,11 +95,51 @@ export function SettingsView({
       setBusy(false);
     }
   }
+  function formatOperationError(cause: unknown, operation: "scan" | "cancel" | "root"): string {
+    if (!isLibraryCommandError(cause)) return "The library operation could not be completed.";
+    const messages: Record<string, string> = {
+      scanAlreadyRunning: "A library scan is already running.",
+      noEnabledRoots: "Enable at least one library folder before scanning.",
+      scanNotRunning: "There is no library scan to cancel.",
+      rootMissing: "This library folder no longer exists.",
+      scanInProgress: "Wait for the current library scan to finish.",
+      libraryUnavailable: "The library database is unavailable.",
+      persistenceFailed: "The library change could not be saved.",
+      taskFailed: "The library task could not be completed.",
+    };
+    return messages[cause.code] ?? `The ${operation} operation could not be completed.`;
+  }
+  async function runScanAction() {
+    setBusy(true);
+    setError(null);
+    try {
+      if (scanning) await cancelLibraryScan();
+      else await startLibraryScan();
+      reload();
+    } catch (cause) {
+      setError(formatOperationError(cause, scanning ? "cancel" : "scan"));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function toggleRoot(root: LibraryRoot) {
+    setBusy(true);
+    setError(null);
+    try {
+      await setLibraryRootEnabled(root.id, !root.enabled);
+      reload();
+    } catch (cause) {
+      setError(formatOperationError(cause, "root"));
+    } finally {
+      setBusy(false);
+    }
+  }
   return (
     <section className="settings-view" aria-label="Settings">
       <header>
         <h1>Settings</h1>
       </header>
+      {scanError ? <p className="settings-view__error">{scanError}</p> : null}
       <section className="settings-view__section">
         <div className="settings-view__section-head">
           <div>
@@ -123,13 +147,7 @@ export function SettingsView({
             <p>Choose locations to include in your music library.</p>
           </div>
           <div>
-            <button
-              type="button"
-              disabled={busy || scanning}
-              onClick={() =>
-                void (scanning ? cancelLibraryScan().then(reload) : startLibraryScan().then(reload))
-              }
-            >
+            <button type="button" disabled={busy} onClick={() => void runScanAction()}>
               {scanning ? "Cancel scan" : "Rescan library"}
             </button>
             <button type="button" disabled={busy || scanning} onClick={() => void addFolder()}>
@@ -153,7 +171,7 @@ export function SettingsView({
                 <button
                   type="button"
                   disabled={busy || scanning}
-                  onClick={() => void setLibraryRootEnabled(root.id, !root.enabled).then(reload)}
+                  onClick={() => void toggleRoot(root)}
                 >
                   {root.enabled ? "Disable" : "Enable"}
                 </button>
