@@ -1,161 +1,188 @@
 import { expect, test } from "@playwright/test";
-
 import { expectContainedBy, expectNoHorizontalOverflow, openFixture } from "./helpers";
 
-const stressCases = [
-  { width: 640, height: 800, fixture: "long-filename" },
-  { width: 800, height: 600, fixture: "long-device" },
-  { width: 800, height: 600, fixture: "unbroken-filename" },
-  { width: 1120, height: 700, fixture: "failed" },
-  { width: 1440, height: 900, fixture: "playing" },
-] as const;
-
-for (const stressCase of stressCases) {
-  test(`dock contains stress content at ${stressCase.width}px with ${stressCase.fixture}`, async ({
-    page,
-  }) => {
-    await openFixture(page, stressCase.fixture, stressCase);
+for (const viewport of [
+  { width: 640, height: 800 },
+  { width: 800, height: 600 },
+  { width: 1120, height: 700 },
+  { width: 1440, height: 900 },
+]) {
+  test(`three-region Dock contains controls at ${viewport.width}px`, async ({ page }) => {
+    await openFixture(page, "playing", viewport);
     const dock = page.getByTestId("playback-dock");
-    const overflow = await dock.evaluate((element) => ({
-      clientWidth: element.clientWidth,
-      scrollWidth: element.scrollWidth,
-    }));
-    expect(overflow.scrollWidth).toBeLessThanOrEqual(overflow.clientWidth + 1);
-
-    const controls = [
-      dock.getByRole("button", { name: /^(Play|Pause)$/ }),
-      dock.getByRole("button", { name: "Stop" }),
-      dock.getByRole("slider", { name: "Playback position" }),
-      dock.getByRole("slider", { name: "Playback volume" }),
-      dock.getByRole("combobox", { name: "Audio output device" }),
-      dock.getByRole("button", { name: "Refresh output devices" }),
-      dock.getByRole("button", { name: "Mute" }),
-    ];
-    for (const control of controls) {
-      await expectContainedBy(control, dock);
-    }
-
-    const primary = dock.getByRole("button", {
-      name: stressCase.fixture === "playing" ? "Pause" : "Play",
-    });
-    const primaryBox = await primary.boundingBox();
-    expect(primaryBox?.width).toBeGreaterThanOrEqual(48);
-    expect(primaryBox?.height).toBeGreaterThanOrEqual(48);
-    for (const name of ["Stop", "Refresh output devices", "Mute"]) {
-      const box = await dock.getByRole("button", { name }).boundingBox();
-      expect(box?.width).toBeGreaterThanOrEqual(40);
-      expect(box?.height).toBeGreaterThanOrEqual(40);
-    }
+    const regions = dock.locator("[data-region]");
+    await expect(regions).toHaveCount(3);
+    for (const region of ["identity", "playback-core", "volume"])
+      await expect(dock.locator(`[data-region="${region}"]`)).toBeVisible();
+    for (let index = 0; index < (await regions.count()); index += 1)
+      await expectContainedBy(regions.nth(index), dock);
+    await expect(dock.getByRole("button", { name: "Pause" })).toHaveAttribute(
+      "aria-label",
+      "Pause",
+    );
     await expectNoHorizontalOverflow(page);
   });
 }
 
-const containerLayouts = [
-  { width: 640, expected: '"identity" "transport" "timeline" "volume" "output"' },
-  { width: 800, expected: '"identity transport" "timeline timeline" "volume output"' },
-  {
-    width: 1120,
-    expected: '"identity transport timeline volume output"',
-  },
-] as const;
-
-for (const { width, expected } of containerLayouts) {
-  test(`uses the intended container layout at ${width}px`, async ({ page }) => {
-    await openFixture(page, "playing", { width, height: 800 });
-    const areas = await page
-      .locator(".playback-dock__layout")
-      .evaluate((element) => getComputedStyle(element).gridTemplateAreas);
-    expect(areas).toBe(expected);
+for (const width of [640, 800, 1120, 1440, 1760]) {
+  test(`Play/Pause remains centered in the Dock at ${width}px`, async ({ page }) => {
+    await openFixture(page, "playing", { width, height: 700 });
+    const grid = page.locator(".playback-dock__layout");
+    const core = page.locator('[data-region="playback-core"]');
+    const button = page.getByRole("button", { name: "Pause" });
+    const [
+      gridBox,
+      dockBox,
+      coreBox,
+      buttonBox,
+      timelineBox,
+      seekBox,
+      volumeBox,
+      identityBox,
+      artworkBox,
+      primaryIconBox,
+      volumeIconBox,
+    ] = await Promise.all([
+      grid.boundingBox(),
+      page.getByTestId("playback-dock").boundingBox(),
+      core.boundingBox(),
+      button.boundingBox(),
+      page.locator(".playback-dock__timeline").boundingBox(),
+      page.getByRole("slider", { name: "Playback position" }).boundingBox(),
+      page.locator('[data-region="volume"]').boundingBox(),
+      page.locator('[data-region="identity"]').boundingBox(),
+      page.locator(".playback-dock__artwork-frame").boundingBox(),
+      button.locator("svg").boundingBox(),
+      page.getByRole("button", { name: "Mute" }).locator("svg").boundingBox(),
+    ]);
+    expect(gridBox && buttonBox).not.toBeNull();
+    if (
+      !gridBox ||
+      !dockBox ||
+      !buttonBox ||
+      !coreBox ||
+      !timelineBox ||
+      !seekBox ||
+      !volumeBox ||
+      !identityBox ||
+      !artworkBox ||
+      !primaryIconBox ||
+      !volumeIconBox
+    )
+      return;
+    expect(dockBox.height).toBeGreaterThanOrEqual(144);
+    expect(dockBox.height).toBeLessThanOrEqual(160);
+    expect(
+      Math.abs(buttonBox.x + buttonBox.width / 2 - (gridBox.x + gridBox.width / 2)),
+    ).toBeLessThanOrEqual(1);
+    expect(seekBox.x).toBeGreaterThanOrEqual(coreBox.x - 1);
+    expect(seekBox.x + seekBox.width).toBeLessThanOrEqual(coreBox.x + coreBox.width + 1);
+    expect(seekBox.width).toBeLessThanOrEqual(704);
+    expect(buttonBox.width).toBe(64);
+    expect(buttonBox.height).toBe(64);
+    expect(primaryIconBox.width).toBe(32);
+    expect(primaryIconBox.height).toBe(32);
+    expect(volumeIconBox.width).toBe(28);
+    expect(volumeIconBox.height).toBe(28);
+    expect(artworkBox.width).toBe(64);
+    expect(artworkBox.height).toBe(64);
+    expect(
+      Math.abs(timelineBox.x + timelineBox.width / 2 - (coreBox.x + coreBox.width / 2)),
+    ).toBeLessThanOrEqual(1);
+    expect(timelineBox.y - (buttonBox.y + buttonBox.height)).toBeGreaterThanOrEqual(-16);
+    expect(timelineBox.y - (buttonBox.y + buttonBox.height)).toBeLessThanOrEqual(0);
+    expect(seekBox.y).toBeGreaterThanOrEqual(buttonBox.y + buttonBox.height - 1);
+    expect(identityBox.x + identityBox.width).toBeLessThanOrEqual(coreBox.x + 1);
+    expect(volumeBox.x).toBeGreaterThanOrEqual(coreBox.x + coreBox.width - 1);
+    expect(identityBox.x - dockBox.x).toBeGreaterThanOrEqual(24);
+    expect(identityBox.x - dockBox.x).toBeLessThanOrEqual(48);
+    expect(dockBox.x + dockBox.width - (volumeBox.x + volumeBox.width)).toBeGreaterThanOrEqual(24);
+    expect(dockBox.x + dockBox.width - (volumeBox.x + volumeBox.width)).toBeLessThanOrEqual(48);
+    expect(buttonBox.y - dockBox.y).toBeGreaterThanOrEqual(16);
+    expect(
+      dockBox.y + dockBox.height - (timelineBox.y + timelineBox.height),
+    ).toBeGreaterThanOrEqual(16);
+    expect(
+      Math.abs(identityBox.y + identityBox.height / 2 - (coreBox.y + coreBox.height / 2)),
+    ).toBeLessThanOrEqual(8);
+    expect(
+      Math.abs(volumeBox.y + volumeBox.height / 2 - (coreBox.y + coreBox.height / 2)),
+    ).toBeLessThanOrEqual(8);
   });
 }
 
-test("reflows without horizontal overflow when text tokens are doubled", async ({ page }) => {
-  await openFixture(page, "long-device", { width: 800, height: 600 });
-  const dock = page.getByTestId("playback-dock");
-  const initialDockBox = await dock.boundingBox();
-  await page.addStyleTag({
-    content: `
-      :root {
-        --text-body-sm: 26px;
-        --text-body-md: 28px;
-        --text-label: 24px;
-        --text-numeric: 24px;
-        --text-title: 40px;
-        --text-display-md: 64px;
-        --text-character-sm: 80px;
-        --text-character-md: 104px;
-      }
-    `,
-  });
-
-  const regions = dock.locator("[data-region]");
-  for (let index = 0; index < (await regions.count()); index += 1) {
-    await expectContainedBy(regions.nth(index), dock);
-  }
-  const [timelineBox, volumeBox, outputBox, resizedDockBox] = await Promise.all([
-    dock.locator('[data-region="timeline"]').boundingBox(),
-    dock.locator('[data-region="volume"]').boundingBox(),
-    dock.locator('[data-region="output"]').boundingBox(),
-    dock.boundingBox(),
-  ]);
-  expect(timelineBox).not.toBeNull();
-  expect(volumeBox).not.toBeNull();
-  expect(outputBox).not.toBeNull();
-  expect(resizedDockBox).not.toBeNull();
-  if (
-    timelineBox === null ||
-    volumeBox === null ||
-    outputBox === null ||
-    resizedDockBox === null ||
-    initialDockBox === null
-  ) {
-    return;
-  }
-  expect(timelineBox.y + timelineBox.height).toBeLessThanOrEqual(volumeBox.y + 1);
-  expect(volumeBox.x + volumeBox.width).toBeLessThanOrEqual(outputBox.x + 1);
-  expect(resizedDockBox.height).toBeGreaterThan(initialDockBox.height);
-  for (const [name, minimum] of [
-    ["Play", 48],
-    ["Stop", 40],
-    ["Refresh output devices", 40],
-    ["Mute", 40],
-  ] as const) {
-    const box = await dock.getByRole("button", { name }).boundingBox();
-    expect(box?.width).toBeGreaterThanOrEqual(minimum);
-    expect(box?.height).toBeGreaterThanOrEqual(minimum);
-  }
-  await expectNoHorizontalOverflow(page);
-});
-
-test("keeps transport geometry stable while seek is pending", async ({ page }) => {
+test("seek-pending preserves core geometry", async ({ page }) => {
   const viewport = { width: 1120, height: 700 };
   await openFixture(page, "playing", viewport);
-  const playingDock = page.getByTestId("playback-dock");
-  const [playingPauseBox, playingStopBox] = await Promise.all([
-    playingDock.getByRole("button", { name: "Pause" }).boundingBox(),
-    playingDock.getByRole("button", { name: "Stop" }).boundingBox(),
-  ]);
-
+  const normalButton = await page.getByRole("button", { name: "Pause" }).boundingBox();
+  const normalCore = await page.locator('[data-region="playback-core"]').boundingBox();
   await openFixture(page, "seek-pending", viewport);
   const dock = page.getByTestId("playback-dock");
-  const pause = dock.getByRole("button", { name: "Pause" });
-  const stop = dock.getByRole("button", { name: "Stop" });
-  const seek = dock.getByRole("slider", { name: "Playback position" });
-  await expect(pause).toBeEnabled();
-  await expect(stop).toBeEnabled();
-  await expect(seek).toBeDisabled();
-  await expect(seek.locator("..")).toHaveAttribute("aria-busy", "true");
+  expect(await dock.getByRole("slider", { name: "Playback position" }).isDisabled()).toBe(true);
+  const pendingButton = await dock.getByRole("button", { name: "Pause" }).boundingBox();
+  const pendingCore = await dock.locator('[data-region="playback-core"]').boundingBox();
+  expect(normalButton && pendingButton && normalCore && pendingCore).not.toBeNull();
+  if (!normalButton || !pendingButton || !normalCore || !pendingCore) return;
+  for (const property of ["x", "y", "width", "height"] as const) {
+    expect(Math.abs(pendingButton[property] - normalButton[property])).toBeLessThanOrEqual(1);
+    expect(Math.abs(pendingCore[property] - normalCore[property])).toBeLessThanOrEqual(1);
+  }
+});
 
-  const [seekPauseBox, seekStopBox] = await Promise.all([pause.boundingBox(), stop.boundingBox()]);
-  expect(seekPauseBox).toEqual(playingPauseBox);
-  expect(seekStopBox).toEqual(playingStopBox);
+test("Dock remains contained when typography tokens grow", async ({ page }) => {
+  await openFixture(page, "playing", { width: 800, height: 600 });
+  const dock = page.getByTestId("playback-dock");
+  await page.addStyleTag({ content: ":root { --text-body-sm: 26px; --text-body-md: 28px; }" });
+  for (const region of ["identity", "playback-core", "volume"])
+    await expectContainedBy(dock.locator(`[data-region="${region}"]`), dock);
   await expectNoHorizontalOverflow(page);
 });
 
-test("playing layout remains visually stable at 1120x700", async ({ page }) => {
-  await openFixture(page, "playing", { width: 1120, height: 700 });
-  await page.addStyleTag({
-    content: "* { font-family: Arial, sans-serif !important; }",
-  });
-  await expect(page).toHaveScreenshot("playing-1120x700.png", { animations: "disabled" });
+test("Dock ranges use the shared custom control treatment", async ({ page }) => {
+  await openFixture(page, "playing", { width: 800, height: 600 });
+  const ruleSelectors = await page.evaluate(() =>
+    Array.from(document.styleSheets).flatMap((sheet) => {
+      try {
+        return Array.from(sheet.cssRules, (rule) =>
+          rule instanceof CSSStyleRule ? rule.selectorText : "",
+        );
+      } catch {
+        return [];
+      }
+    }),
+  );
+  expect(
+    ruleSelectors.some((selector) => selector.includes("::-webkit-slider-runnable-track")),
+  ).toBe(true);
+  expect(ruleSelectors.some((selector) => selector.includes("::-webkit-slider-thumb"))).toBe(true);
+  for (const name of ["Playback position", "Playback volume"]) {
+    const appearance = await page
+      .getByRole("slider", { name })
+      .evaluate((input) => getComputedStyle(input).appearance);
+    expect(appearance).toBe("none");
+  }
+});
+
+test("minimum window width keeps the Dock in one anchored row", async ({ page }) => {
+  await openFixture(page, "playing", { width: 640, height: 800 });
+  const dock = page.getByTestId("playback-dock");
+  const [identity, core, volume, button, timeline] = await Promise.all([
+    dock.locator('[data-region="identity"]').boundingBox(),
+    dock.locator('[data-region="playback-core"]').boundingBox(),
+    dock.locator('[data-region="volume"]').boundingBox(),
+    dock.getByRole("button", { name: "Pause" }).boundingBox(),
+    dock.locator(".playback-dock__timeline").boundingBox(),
+  ]);
+  expect(identity && core && volume && button && timeline).not.toBeNull();
+  if (!identity || !core || !volume || !button || !timeline) return;
+  expect(identity.x + identity.width).toBeLessThanOrEqual(core.x + 1);
+  expect(core.x + core.width).toBeLessThanOrEqual(volume.x + 1);
+  expect(
+    Math.abs(identity.y + identity.height / 2 - (core.y + core.height / 2)),
+  ).toBeLessThanOrEqual(8);
+  expect(Math.abs(volume.y + volume.height / 2 - (core.y + core.height / 2))).toBeLessThanOrEqual(
+    8,
+  );
+  expect(timeline.y - (button.y + button.height)).toBeLessThanOrEqual(0);
+  await expectNoHorizontalOverflow(page);
 });

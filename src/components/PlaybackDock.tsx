@@ -1,12 +1,7 @@
-import type {
-  AudioOutputDevice,
-  AudioOutputSelection,
-  PlaybackSnapshot,
-  ValidatedAudioFile,
-} from "@/bindings";
+import type { PlaybackSnapshot, ValidatedAudioFile } from "@/bindings";
+import { useEffect, useState } from "react";
 import { formatPlaybackTime } from "@/lib/playback-time";
-
-import { OutputDeviceIcon, PlayPauseIcon, RefreshIcon, StopIcon, VolumeIcon } from "./icons";
+import { PlayPauseIcon, VolumeIcon } from "./icons";
 import { ResponsiveCluster } from "./layout/ResponsiveCluster";
 
 type PendingTransportCommand = "start" | "stop" | "pause" | "resume" | null;
@@ -14,9 +9,6 @@ type PendingTransportCommand = "start" | "stop" | "pause" | "resume" | null;
 interface PlaybackDockProps {
   playback: PlaybackSnapshot;
   validatedFile: ValidatedAudioFile | null;
-  outputDevices: AudioOutputDevice[] | null;
-  isLoadingDevices: boolean;
-  isOutputSelectionPending: boolean;
   isPlaybackAvailable: boolean;
   isTransportCommandPending: boolean;
   pendingTransportCommand: PendingTransportCommand;
@@ -26,11 +18,13 @@ interface PlaybackDockProps {
   isVolumePending: boolean;
   isVolumeSliderDisabled: boolean;
   playbackError: string | null;
-  deviceListError: string | null;
+  presentationTitle: string;
+  presentationArtist: string | null;
+  artworkUrl: string | null;
+  artworkLoading: boolean;
   onPlay: () => void;
   onPause: () => void;
   onResume: () => void;
-  onStop: () => void;
   onSeek: (value: number) => void;
   onSeekCommit: (value: number) => void;
   onSeekCancel: () => void;
@@ -39,16 +33,11 @@ interface PlaybackDockProps {
   onVolumeCommit: (value: number) => void;
   onVolumePointerCancel: () => void;
   onMuteToggle: () => void;
-  onOutputSelectionChange: (selection: AudioOutputSelection) => void;
-  onRefreshDevices: () => void;
 }
 
 export function PlaybackDock({
   playback,
   validatedFile,
-  outputDevices,
-  isLoadingDevices,
-  isOutputSelectionPending,
   isPlaybackAvailable,
   isTransportCommandPending,
   pendingTransportCommand,
@@ -58,11 +47,13 @@ export function PlaybackDock({
   isVolumePending,
   isVolumeSliderDisabled,
   playbackError,
-  deviceListError,
+  presentationTitle,
+  presentationArtist,
+  artworkUrl,
+  artworkLoading,
   onPlay,
   onPause,
   onResume,
-  onStop,
   onSeek,
   onSeekCommit,
   onSeekCancel,
@@ -71,14 +62,14 @@ export function PlaybackDock({
   onVolumeCommit,
   onVolumePointerCancel,
   onMuteToggle,
-  onOutputSelectionChange,
-  onRefreshDevices,
 }: PlaybackDockProps) {
+  const [artworkFailed, setArtworkFailed] = useState(false);
+  useEffect(() => {
+    queueMicrotask(() => setArtworkFailed(false));
+  }, [artworkUrl]);
   const timed = playback.status === "playing" || playback.status === "paused";
   const duration = timed ? playback.durationMs : null;
   const position = timed ? playback.positionMs : 0;
-  const selectedOutputDeviceId =
-    playback.outputSelection.kind === "device" ? playback.outputSelection.deviceId : null;
   const primaryLabel =
     playback.status === "playing" ? "Pause" : playback.status === "paused" ? "Resume" : "Play";
   const primaryAction =
@@ -88,13 +79,16 @@ export function PlaybackDock({
     pendingTransportCommand === "pause" ||
     pendingTransportCommand === "resume";
   const seekValue = Math.min(seekPreviewMs ?? position, duration ?? 0);
-  const outputDisabled =
-    !isPlaybackAvailable ||
-    isLoadingDevices ||
-    isOutputSelectionPending ||
-    isTransportCommandPending ||
-    timed;
-
+  const rangeKeys = [
+    "ArrowLeft",
+    "ArrowRight",
+    "ArrowUp",
+    "ArrowDown",
+    "PageUp",
+    "PageDown",
+    "Home",
+    "End",
+  ];
   return (
     <section
       className="playback-dock"
@@ -103,100 +97,88 @@ export function PlaybackDock({
       data-testid="playback-dock"
     >
       <div className="playback-dock__layout">
-        <div className="playback-dock__identity" data-region="identity" aria-label="Current file">
-          {validatedFile ? (
-            <>
-              <p
-                className="playback-dock__filename font-interface text-body-md text-text-primary"
-                title={validatedFile.fileName}
-                aria-label={validatedFile.fileName}
-              >
-                {validatedFile.fileName}
+        <div className="playback-dock__identity" data-region="identity" aria-label="Current track">
+          <div className="playback-dock__identity-content">
+            <div className="playback-dock__artwork-frame" aria-busy={artworkLoading}>
+              {artworkUrl && !artworkFailed ? (
+                <img
+                  src={artworkUrl}
+                  alt=""
+                  className="playback-dock__artwork"
+                  onError={() => setArtworkFailed(true)}
+                />
+              ) : (
+                <span className="playback-dock__artwork-placeholder" aria-hidden="true" />
+              )}
+            </div>
+            <div className="playback-dock__identity-copy">
+              <p className="playback-dock__title" title={presentationTitle}>
+                {presentationTitle}
               </p>
-              <p className="mt-1 text-body-sm text-text-secondary">.{validatedFile.extension}</p>
-              {timed && outputProcessingLabel(playback) ? (
-                <p className="mt-1 text-body-sm text-text-secondary">
-                  {outputProcessingLabel(playback)}
-                </p>
-              ) : null}
-            </>
-          ) : (
-            <p className="text-body-sm text-text-muted">No audio selected</p>
-          )}
+              <p className="playback-dock__artist">{presentationArtist ?? " "}</p>
+            </div>
+          </div>
         </div>
-
-        <div className="playback-dock__transport" data-region="transport">
-          <ResponsiveCluster align="start">
+        <div
+          className="playback-dock__playback-core"
+          data-region="playback-core"
+          aria-busy={isSeekPending}
+        >
+          <ResponsiveCluster align="center" className="playback-dock__transport">
             <button
               type="button"
               aria-label={primaryLabel}
               aria-busy={primaryBusy}
               disabled={validatedFile === null || !isPlaybackAvailable}
               onClick={primaryAction}
-              className="playback-dock__fixed-control grid size-12 place-items-center rounded-full bg-text-primary text-canvas transition-opacity duration-150 ease-interface hover:opacity-85 disabled:cursor-not-allowed disabled:bg-surface-pressed disabled:text-text-disabled disabled:opacity-80"
+              className="playback-dock__fixed-control playback-dock__primary-control grid place-items-center rounded-full bg-text-primary text-canvas transition-opacity duration-150 ease-interface hover:opacity-85 disabled:cursor-not-allowed disabled:bg-surface-pressed disabled:text-text-disabled disabled:opacity-80"
             >
-              <PlayPauseIcon playing={playback.status === "playing"} />
-            </button>
-            <button
-              type="button"
-              aria-label="Stop"
-              aria-busy={pendingTransportCommand === "stop"}
-              disabled={!timed || !isPlaybackAvailable}
-              onClick={onStop}
-              className="playback-dock__fixed-control grid size-10 place-items-center rounded-full border border-border-control text-text-primary transition-opacity duration-150 ease-interface hover:opacity-80 disabled:cursor-not-allowed disabled:border-border-subtle disabled:bg-transparent disabled:text-text-disabled disabled:opacity-80"
-            >
-              <StopIcon />
+              <PlayPauseIcon
+                playing={playback.status === "playing"}
+                className="playback-dock__primary-icon"
+              />
             </button>
           </ResponsiveCluster>
-        </div>
-
-        <div className="playback-dock__timeline" data-region="timeline" aria-busy={isSeekPending}>
-          <div className="flex justify-between text-body-sm text-text-secondary">
-            <span className="tabular-nums">{formatPlaybackTime(seekValue)}</span>
-            <span className="tabular-nums">
-              {duration === null ? "--:--" : formatPlaybackTime(duration)}
-            </span>
-          </div>
-          <input
-            aria-label="Playback position"
-            type="range"
-            min={0}
-            max={duration ?? 0}
-            value={seekValue}
-            disabled={
-              !isPlaybackAvailable ||
-              !timed ||
-              duration === null ||
-              isSeekPending ||
-              isTransportCommandPending
-            }
-            onChange={(event) => onSeek(Number(event.currentTarget.value))}
-            onPointerUp={(event) => onSeekCommit(Number(event.currentTarget.value))}
-            onPointerCancel={onSeekCancel}
-            onKeyUp={(event) => {
-              if (
-                [
-                  "ArrowLeft",
-                  "ArrowRight",
-                  "ArrowUp",
-                  "ArrowDown",
-                  "PageUp",
-                  "PageDown",
-                  "Home",
-                  "End",
-                ].includes(event.key)
-              ) {
-                onSeekCommit(Number(event.currentTarget.value));
+          <div className="playback-dock__timeline">
+            <div className="flex justify-between text-body-sm text-text-secondary">
+              <span className="tabular-nums">{formatPlaybackTime(seekValue)}</span>
+              <span className="tabular-nums">
+                {duration === null ? "--:--" : formatPlaybackTime(duration)}
+              </span>
+            </div>
+            <input
+              aria-label="Playback position"
+              type="range"
+              min={0}
+              max={duration ?? 0}
+              value={seekValue}
+              disabled={
+                !isPlaybackAvailable ||
+                !timed ||
+                duration === null ||
+                isSeekPending ||
+                isTransportCommandPending
               }
-            }}
-            className="mt-2 w-full accent-text-primary disabled:accent-text-disabled"
-          />
+              onChange={(event) => onSeek(Number(event.currentTarget.value))}
+              onPointerUp={(event) => onSeekCommit(Number(event.currentTarget.value))}
+              onPointerCancel={onSeekCancel}
+              onKeyUp={(event) => {
+                if (rangeKeys.includes(event.key)) onSeekCommit(Number(event.currentTarget.value));
+              }}
+              className="w-full accent-text-primary disabled:accent-text-disabled"
+            />
+          </div>
         </div>
-
         <div className="playback-dock__volume" data-region="volume" aria-busy={isVolumePending}>
-          <span className="playback-dock__fixed-icon">
-            <VolumeIcon muted={playback.muted} />
-          </span>
+          <button
+            type="button"
+            aria-label={playback.muted ? "Unmute" : "Mute"}
+            disabled={!isPlaybackAvailable || isVolumePending}
+            onClick={onMuteToggle}
+            className="playback-dock__fixed-control grid size-10 place-items-center rounded-control border border-border-control text-text-primary disabled:cursor-not-allowed disabled:border-border-subtle disabled:text-text-disabled"
+          >
+            <VolumeIcon muted={playback.muted} className="playback-dock__volume-icon" />
+          </button>
           <input
             aria-label="Playback volume"
             aria-valuetext={`${volumeValue} percent`}
@@ -211,124 +193,19 @@ export function PlaybackDock({
             onPointerUp={(event) => onVolumeCommit(Number(event.currentTarget.value))}
             onPointerCancel={onVolumePointerCancel}
             onKeyUp={(event) => {
-              if (
-                [
-                  "ArrowLeft",
-                  "ArrowRight",
-                  "ArrowUp",
-                  "ArrowDown",
-                  "PageUp",
-                  "PageDown",
-                  "Home",
-                  "End",
-                ].includes(event.key)
-              ) {
-                onVolumeCommit(Number(event.currentTarget.value));
-              }
+              if (rangeKeys.includes(event.key)) onVolumeCommit(Number(event.currentTarget.value));
             }}
             className="accent-text-primary disabled:accent-text-disabled"
           />
-          <span className="text-right text-body-sm text-text-secondary tabular-nums">
-            {volumeValue}%
-          </span>
-        </div>
-
-        <div
-          className="playback-dock__output"
-          data-region="output"
-          aria-busy={isOutputSelectionPending}
-        >
-          <span className="playback-dock__fixed-icon">
-            <OutputDeviceIcon />
-          </span>
-          <select
-            aria-label="Audio output device"
-            value={
-              playback.outputSelection.kind === "systemDefault"
-                ? "systemDefault"
-                : playback.outputSelection.deviceId
-            }
-            disabled={outputDisabled}
-            onChange={(event) => {
-              const value = event.currentTarget.value;
-              onOutputSelectionChange(
-                value === "systemDefault"
-                  ? { kind: "systemDefault" }
-                  : { kind: "device", deviceId: value },
-              );
-            }}
-            className="rounded-control border border-border-control bg-canvas px-2 py-2 text-body-sm text-text-primary disabled:border-border-subtle disabled:bg-transparent disabled:text-text-disabled"
-          >
-            <option value="systemDefault">System default</option>
-            {selectedOutputDeviceId !== null &&
-            !outputDevices?.some((device) => device.id === selectedOutputDeviceId) ? (
-              <option value={selectedOutputDeviceId} disabled>
-                Unavailable selected device
-              </option>
-            ) : null}
-            {outputDevices?.map((device) => (
-              <option key={device.id} value={device.id}>
-                {device.name}
-                {device.isDefault ? " — Current default" : ""}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            aria-label="Refresh output devices"
-            disabled={!isPlaybackAvailable || isLoadingDevices}
-            onClick={onRefreshDevices}
-            className="playback-dock__fixed-control grid size-10 place-items-center rounded-control border border-border-control text-text-primary disabled:cursor-not-allowed disabled:border-border-subtle disabled:bg-transparent disabled:text-text-disabled disabled:opacity-80"
-          >
-            <RefreshIcon />
-          </button>
-          <button
-            type="button"
-            aria-label={playback.muted ? "Unmute" : "Mute"}
-            disabled={!isPlaybackAvailable || isVolumePending}
-            onClick={onMuteToggle}
-            className="playback-dock__fixed-control grid size-10 place-items-center rounded-control border border-border-control text-text-primary disabled:cursor-not-allowed disabled:border-border-subtle disabled:bg-transparent disabled:text-text-disabled disabled:opacity-80"
-          >
-            <VolumeIcon muted={playback.muted} />
-          </button>
         </div>
       </div>
-      {playbackError || deviceListError ? (
+      {playbackError ? (
         <div className="playback-dock__status text-body-sm" data-region="status">
-          {playbackError ? (
-            <p className="playback-dock__error text-error" role="alert">
-              {playbackError}
-            </p>
-          ) : null}
-          {deviceListError ? (
-            <p className="playback-dock__error text-error" role="alert">
-              {deviceListError}
-            </p>
-          ) : null}
+          <p className="playback-dock__error text-error" role="alert">
+            {playbackError}
+          </p>
         </div>
       ) : null}
     </section>
   );
-}
-
-function formatSampleRate(sampleRate: number): string {
-  return `${(sampleRate / 1_000).toFixed(3).replace(/\.?(0+)$/, "")} kHz`;
-}
-
-function outputProcessingLabel(
-  playback: Extract<PlaybackSnapshot, { status: "playing" | "paused" }>,
-): string | null {
-  const rate = playback.resamplingActive
-    ? `${formatSampleRate(playback.sourceSampleRate).replace(" kHz", "")} → ${formatSampleRate(playback.outputSampleRate)}`
-    : null;
-  const channels =
-    playback.channelConversion === "monoToStereo"
-      ? "Mono → stereo"
-      : playback.channelConversion === "stereoToMono"
-        ? "Stereo → mono"
-        : null;
-  if (rate && channels) return `Output: ${rate} · ${channels}`;
-  if (rate) return `Output: ${rate}`;
-  if (channels) return `Output: ${channels}`;
-  return null;
 }

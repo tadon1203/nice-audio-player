@@ -1,3 +1,4 @@
+use super::artwork;
 use super::{database::Database, models::*};
 use crate::media::{
     inspection::inspect_audio_file_internal,
@@ -208,7 +209,7 @@ impl LibraryShared {
             .db()?
             .read()
             .map_err(|_| LibraryCommandError::PersistenceFailed)?;
-        let mut s=c.prepare("SELECT t.id,f.file_name,f.availability,f.inspection_status,m.title,m.artist,m.duration_ms FROM tracks t JOIN library_files f ON f.id=t.file_id LEFT JOIN track_source_metadata m ON m.track_id=t.id AND m.source_revision=f.source_revision WHERE t.id>?1 ORDER BY t.id LIMIT 101").map_err(|_|LibraryCommandError::PersistenceFailed)?;
+        let mut s=c.prepare("SELECT t.id,f.file_name,f.availability,f.inspection_status,m.title,m.artist,m.duration_ms,a.content_hash,a.mime_type,a.relative_path,m.artwork_status FROM tracks t JOIN library_files f ON f.id=t.file_id LEFT JOIN track_source_metadata m ON m.track_id=t.id AND m.source_revision=f.source_revision LEFT JOIN artwork_assets a ON a.id=m.artwork_id AND m.artwork_status='stored' WHERE t.id>?1 ORDER BY t.id LIMIT 101").map_err(|_|LibraryCommandError::PersistenceFailed)?;
         let rows = s
             .query_map(params![after], summary_from_row)
             .map_err(|_| LibraryCommandError::PersistenceFailed)?;
@@ -255,7 +256,7 @@ impl LibraryShared {
             .db()?
             .read()
             .map_err(|_| LibraryCommandError::PersistenceFailed)?;
-        c.query_row("SELECT t.id,f.file_name,f.availability,f.inspection_status,m.title,m.artist,m.duration_ms FROM tracks t JOIN library_files f ON f.id=t.file_id LEFT JOIN track_source_metadata m ON m.track_id=t.id AND m.source_revision=f.source_revision WHERE f.root_id=?1 AND f.relative_path=?2", params![parse_id(&root.id)?, relative_path], summary_from_row).optional().map_err(|_|LibraryCommandError::PersistenceFailed)
+        c.query_row("SELECT t.id,f.file_name,f.availability,f.inspection_status,m.title,m.artist,m.duration_ms,a.content_hash,a.mime_type,a.relative_path,m.artwork_status FROM tracks t JOIN library_files f ON f.id=t.file_id LEFT JOIN track_source_metadata m ON m.track_id=t.id AND m.source_revision=f.source_revision LEFT JOIN artwork_assets a ON a.id=m.artwork_id AND m.artwork_status='stored' WHERE f.root_id=?1 AND f.relative_path=?2", params![parse_id(&root.id)?, relative_path], summary_from_row).optional().map_err(|_|LibraryCommandError::PersistenceFailed)
     }
     pub fn start_scan(&self) -> Result<(), LibraryCommandError> {
         if scanning(&self.state) {
@@ -442,23 +443,40 @@ fn scan(
                 .and_then(|v| v.to_str())
                 .unwrap_or("")
                 .to_owned();
-            let existing:Option<(i64,i64,String,String)>=match c.query_row("SELECT id,source_revision,modification_key,inspection_status FROM library_files WHERE root_id=?1 AND relative_path=?2",params![root_id,relative],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?))).optional() { Ok(value) => value, Err(_) => { finish(&state,LibraryScanState::Failed,Some("persistenceFailed".into()),&notify);return; } };
-            let (file_id, revision, needs) = match existing {
-                Some((id, rev, old, status)) if old == modkey && status != "pending" => {
+            let existing: Option<(i64, i64, String, String, String)> = match c.query_row("SELECT f.id,f.source_revision,f.modification_key,f.inspection_status,COALESCE(m.artwork_status,'') FROM library_files f LEFT JOIN tracks t ON t.file_id=f.id LEFT JOIN track_source_metadata m ON m.track_id=t.id AND m.source_revision=f.source_revision WHERE f.root_id=?1 AND f.relative_path=?2",params![root_id,relative],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?))).optional() { Ok(value) => value, Err(_) => { finish(&state,LibraryScanState::Failed,Some("persistenceFailed".into()),&notify);return; } };
+            let (file_id, revision, needs, artwork_retry) = match existing {
+                Some((id, rev, old, status, artwork_status))
+                    if old == modkey && status == "indexed" && artwork_status == "storeFailed" =>
+                {
                     require_persistence!(c.execute("UPDATE library_files SET seen_generation=?2,availability='available',updated_at_ms=?3 WHERE id=?1",params![id,generation,now()]), state, notify);
-                    (id, rev, false)
+                    (id, rev, false, true)
+                }
+                Some((id, rev, old, status, _)) if old == modkey && status != "pending" => {
+                    require_persistence!(c.execute("UPDATE library_files SET seen_generation=?2,availability='available',updated_at_ms=?3 WHERE id=?1",params![id,generation,now()]), state, notify);
+                    (id, rev, false, false)
                 }
                 Some((id, rev, ..)) => {
                     let n = rev + 1;
                     require_persistence!(c.execute("UPDATE library_files SET byte_length=?2,modification_key=?3,source_revision=?4,seen_generation=?5,availability='available',inspection_status='pending',updated_at_ms=?6 WHERE id=?1",params![id,metadata.len() as i64,modkey,n,generation,now()]), state, notify);
-                    (id, n, true)
+                    (id, n, true, false)
                 }
                 None => {
                     require_persistence!(c.execute("INSERT INTO library_files(root_id,relative_path,file_name,extension,byte_length,modification_key,source_revision,seen_generation,availability,inspection_status,updated_at_ms) VALUES(?1,?2,?3,?4,?5,?6,1,?7,'available','pending',?8)",params![root_id,relative,file_name,ext.to_ascii_lowercase(),metadata.len() as i64,modkey,generation,now()]), state, notify);
-                    (c.last_insert_rowid(), 1, true)
+                    (c.last_insert_rowid(), 1, true, false)
                 }
             };
             if !needs {
+                if artwork_retry
+                    && retry_artwork_metadata(&c, path, file_id, revision, db.data_dir()).is_err()
+                {
+                    finish(
+                        &state,
+                        LibraryScanState::Failed,
+                        Some("persistenceFailed".into()),
+                        &notify,
+                    );
+                    return;
+                }
                 continue;
             }
             inc_inspected(&state);
@@ -514,6 +532,7 @@ fn scan(
                         disc_total,
                         genre,
                         date,
+                        artwork_read,
                     ) = match tags {
                         Ok(Some(t)) => (
                             "loaded",
@@ -527,17 +546,66 @@ fn scan(
                             t.disc_total,
                             t.genre,
                             t.date,
+                            t.artwork,
                         ),
                         Ok(None) => (
-                            "absent", None, None, None, None, None, None, None, None, None, None,
+                            "absent",
+                            None,
+                            None,
+                            None,
+                            None,
+                            None,
+                            None,
+                            None,
+                            None,
+                            None,
+                            None,
+                            crate::media::metadata::ArtworkRead::NotPresent,
                         ),
                         Err(_) => (
-                            "failed", None, None, None, None, None, None, None, None, None, None,
+                            "failed",
+                            None,
+                            None,
+                            None,
+                            None,
+                            None,
+                            None,
+                            None,
+                            None,
+                            None,
+                            None,
+                            crate::media::metadata::ArtworkRead::Unavailable,
                         ),
+                    };
+                    let stored = match artwork_read {
+                        crate::media::metadata::ArtworkRead::Selected {
+                            ref bytes,
+                            mime_type,
+                        } => artwork::materialize(db.data_dir(), bytes, mime_type).ok(),
+                        _ => None,
+                    };
+                    let artwork_status = match (&artwork_read, &stored) {
+                        (crate::media::metadata::ArtworkRead::NotPresent, _) => "notPresent",
+                        (crate::media::metadata::ArtworkRead::Unavailable, _) => "unavailable",
+                        (crate::media::metadata::ArtworkRead::Invalid, _) => "invalid",
+                        (crate::media::metadata::ArtworkRead::Selected { .. }, Some(_)) => "stored",
+                        (crate::media::metadata::ArtworkRead::Selected { .. }, None) => {
+                            "storeFailed"
+                        }
                     };
                     let bitrate_kbps =
                         average_bitrate_kbps(metadata.len(), inspection.info.duration_ms);
-                    require_persistence!(c.execute("INSERT INTO track_source_metadata(track_id,source_revision,title,artist,album,album_artist,track_number,track_total,disc_number,disc_total,genre,date,duration_ms,file_format,codec,sample_rate,channel_count,bit_depth,bitrate_kbps,tag_status,artwork_status,updated_at_ms) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,'notPresent',?21) ON CONFLICT(track_id) DO UPDATE SET source_revision=excluded.source_revision,title=excluded.title,artist=excluded.artist,album=excluded.album,album_artist=excluded.album_artist,track_number=excluded.track_number,track_total=excluded.track_total,disc_number=excluded.disc_number,disc_total=excluded.disc_total,genre=excluded.genre,date=excluded.date,duration_ms=excluded.duration_ms,file_format=excluded.file_format,codec=excluded.codec,sample_rate=excluded.sample_rate,channel_count=excluded.channel_count,bit_depth=excluded.bit_depth,bitrate_kbps=excluded.bitrate_kbps,tag_status=excluded.tag_status,updated_at_ms=excluded.updated_at_ms",params![track,revision,title,artist,album,album_artist,track_number,track_total,disc_number,disc_total,genre,date,inspection.info.duration_ms.map(|v|v as i64),input.extension,format!("{:?}",inspection.info.codec),inspection.info.sample_rate,inspection.info.channel_count,inspection.bit_depth,bitrate_kbps,tag_status,now()]), state, notify);
+                    let artwork_id = match stored.as_ref() {
+                        Some(asset) => match c.query_row("INSERT INTO artwork_assets(content_hash,mime_type,relative_path,byte_length,created_at_ms) VALUES(?1,?2,?3,?4,?5) ON CONFLICT(content_hash) DO UPDATE SET content_hash=excluded.content_hash RETURNING id", params![asset.hash,asset.mime_type,asset.relative_path,asset.byte_length as i64,now()], |r| r.get::<_, i64>(0)) {
+                            Ok(id) => Some(id),
+                            Err(_) => {
+                                finish(&state, LibraryScanState::Failed, Some("persistenceFailed".into()), &notify);
+                                return;
+                            }
+                        },
+                        None => None,
+                    };
+                    require_persistence!(c.execute("INSERT INTO track_source_metadata(track_id,source_revision,title,artist,album,album_artist,track_number,track_total,disc_number,disc_total,genre,date,duration_ms,file_format,codec,sample_rate,channel_count,bit_depth,bitrate_kbps,tag_status,artwork_status,artwork_id,updated_at_ms) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23) ON CONFLICT(track_id) DO UPDATE SET source_revision=excluded.source_revision,title=excluded.title,artist=excluded.artist,album=excluded.album,album_artist=excluded.album_artist,track_number=excluded.track_number,track_total=excluded.track_total,disc_number=excluded.disc_number,disc_total=excluded.disc_total,genre=excluded.genre,date=excluded.date,duration_ms=excluded.duration_ms,file_format=excluded.file_format,codec=excluded.codec,sample_rate=excluded.sample_rate,channel_count=excluded.channel_count,bit_depth=excluded.bit_depth,bitrate_kbps=excluded.bitrate_kbps,tag_status=excluded.tag_status,artwork_status=excluded.artwork_status,artwork_id=excluded.artwork_id,updated_at_ms=excluded.updated_at_ms",params![track,revision,title,artist,album,album_artist,track_number,track_total,disc_number,disc_total,genre,date,inspection.info.duration_ms.map(|v|v as i64),input.extension,format!("{:?}",inspection.info.codec),inspection.info.sample_rate,inspection.info.channel_count,inspection.bit_depth,bitrate_kbps,tag_status,artwork_status,artwork_id,now()]), state, notify);
                     inc_indexed(&state)
                 }
                 Err(_) => {
@@ -565,6 +633,53 @@ fn scan(
         finish(&state, LibraryScanState::Completed, None, &notify)
     }
 }
+
+fn retry_artwork_metadata(
+    c: &rusqlite::Connection,
+    path: &Path,
+    file_id: i64,
+    revision: i64,
+    data_dir: &Path,
+) -> Result<(), ()> {
+    let track_id: i64 = c
+        .query_row(
+            "SELECT id FROM tracks WHERE file_id=?1",
+            params![file_id],
+            |row| row.get(0),
+        )
+        .map_err(|_| ())?;
+    let artwork_read = match crate::media::metadata::read_source_metadata(path) {
+        Ok(Some(metadata)) => metadata.artwork,
+        Ok(None) => crate::media::metadata::ArtworkRead::NotPresent,
+        Err(_) => crate::media::metadata::ArtworkRead::Unavailable,
+    };
+    let stored = match &artwork_read {
+        crate::media::metadata::ArtworkRead::Selected { bytes, mime_type } => {
+            artwork::materialize(data_dir, bytes, mime_type).ok()
+        }
+        _ => None,
+    };
+    let (status, artwork_id) = match (&artwork_read, stored) {
+        (crate::media::metadata::ArtworkRead::NotPresent, _) => ("notPresent", None),
+        (crate::media::metadata::ArtworkRead::Unavailable, _) => ("unavailable", None),
+        (crate::media::metadata::ArtworkRead::Invalid, _) => ("invalid", None),
+        (crate::media::metadata::ArtworkRead::Selected { .. }, None) => ("storeFailed", None),
+        (crate::media::metadata::ArtworkRead::Selected { .. }, Some(asset)) => {
+            let id = c.query_row(
+                "INSERT INTO artwork_assets(content_hash,mime_type,relative_path,byte_length,created_at_ms) VALUES(?1,?2,?3,?4,?5) ON CONFLICT(content_hash) DO UPDATE SET content_hash=excluded.content_hash RETURNING id",
+                params![asset.hash, asset.mime_type, asset.relative_path, asset.byte_length as i64, now()],
+                |row| row.get::<_, i64>(0),
+            ).map_err(|_| ())?;
+            ("stored", Some(id))
+        }
+    };
+    c.execute(
+        "UPDATE track_source_metadata SET artwork_status=?3,artwork_id=?4,updated_at_ms=?5 WHERE track_id=?1 AND source_revision=?2",
+        params![track_id, revision, status, artwork_id, now()],
+    ).map_err(|_| ())?;
+    Ok(())
+}
+
 fn idle() -> LibraryScanSnapshot {
     LibraryScanSnapshot {
         state: LibraryScanState::Idle,
@@ -584,6 +699,25 @@ fn summary_from_row(row: &Row<'_>) -> rusqlite::Result<LibraryTrackSummary> {
     let title: Option<String> = row.get(4)?;
     let artist: Option<String> = row.get(5)?;
     let duration: Option<i64> = row.get(6)?;
+    let content_hash: Option<String> = row.get(7)?;
+    let mime_type: Option<String> = row.get(8)?;
+    let relative_path: Option<String> = row.get(9)?;
+    let artwork = match (content_hash, mime_type, relative_path) {
+        (Some(content_hash), Some(mime_type), Some(relative_path)) => match mime_type.as_str() {
+            "image/jpeg" => Some(ArtworkRef {
+                content_hash,
+                mime_type: ArtworkMimeType::Jpeg,
+                relative_path,
+            }),
+            "image/png" => Some(ArtworkRef {
+                content_hash,
+                mime_type: ArtworkMimeType::Png,
+                relative_path,
+            }),
+            _ => None,
+        },
+        _ => None,
+    };
     let title = title.filter(|v| !v.trim().is_empty()).unwrap_or_else(|| {
         Path::new(&file)
             .file_stem()
@@ -595,7 +729,7 @@ fn summary_from_row(row: &Row<'_>) -> rusqlite::Result<LibraryTrackSummary> {
         id: id.to_string(),
         title,
         artist: artist.filter(|v| !v.trim().is_empty()),
-        artwork: None,
+        artwork,
         duration_ms: duration.map(|v| v as u64),
         playable: availability == "available" && inspection_status == "indexed",
         availability: if availability == "available" {

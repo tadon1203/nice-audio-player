@@ -1,11 +1,11 @@
 import type { ReactNode } from "react";
 import { motion, useReducedMotion } from "motion/react";
 
-function Svg({ children }: { children: ReactNode }) {
+function Svg({ children, className = "size-6" }: { children: ReactNode; className?: string }) {
   return (
     <svg
       aria-hidden="true"
-      className="size-6"
+      className={className}
       fill="none"
       focusable="false"
       viewBox="0 0 24 24"
@@ -16,10 +16,10 @@ function Svg({ children }: { children: ReactNode }) {
   );
 }
 
-export function PlayPauseIcon({ playing }: { playing: boolean }) {
+export function PlayPauseIcon({ playing, className }: { playing: boolean; className?: string }) {
   const reducedMotion = useReducedMotion();
   return (
-    <Svg>
+    <Svg className={className}>
       <motion.path
         animate={{ d: playing ? "M7 5L10 5L10 19L7 19Z" : "M8 5L18 12L8 19Z" }}
         d="M8 5L18 12L8 19Z"
@@ -46,27 +46,37 @@ export function StopIcon() {
   );
 }
 
-export function VolumeIcon({ muted }: { muted: boolean }) {
+export function VolumeIcon({ muted, className }: { muted: boolean; className?: string }) {
+  const reducedMotion = useReducedMotion();
+  const transition = {
+    duration: reducedMotion ? 0 : 0.22,
+    ease: [0.22, 1, 0.36, 1] as const,
+  };
   return (
-    <Svg>
+    <Svg className={className}>
       <path d="M5 10v4h3l4 3V7l-4 3H5Z" fill="currentColor" />
-      {muted ? (
-        <path
-          d="m16 9 4 6m0-6-4 6"
-          stroke="currentColor"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth="1.7"
-        />
-      ) : (
-        <path
-          d="M16 9.5a4 4 0 0 1 0 5"
-          stroke="currentColor"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth="1.7"
-        />
-      )}
+      <motion.path
+        animate={{ opacity: muted ? 0 : 1 }}
+        d="M16 9.5a4 4 0 0 1 0 5"
+        fill="none"
+        initial={false}
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.7"
+        transition={transition}
+      />
+      <motion.path
+        animate={{ opacity: muted ? 1 : 0 }}
+        d="m16 9 4 6m0-6-4 6"
+        fill="none"
+        initial={false}
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.7"
+        transition={transition}
+      />
     </Svg>
   );
 }

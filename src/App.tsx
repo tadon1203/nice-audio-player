@@ -33,6 +33,7 @@ import { NowPlayingView } from "./components/NowPlayingView";
 import { PlaybackDock } from "./components/PlaybackDock";
 import { useSeekController } from "./hooks/use-seek-controller";
 import { useVolumeController } from "./hooks/use-volume-controller";
+import { useActiveTrackIdentity } from "./hooks/use-active-track-identity";
 import {
   commandForTransportIntent,
   initialPlaybackUiState,
@@ -120,6 +121,7 @@ function App() {
   const isTransportCommandPending = pendingTransportCommand !== null;
   const isTimedPlayback = playback.status === "playing" || playback.status === "paused";
   const isPlaybackAvailable = playbackUi.connection === "ready";
+  const activeTrack = useActiveTrackIdentity(validatedFile);
 
   const applySnapshot = useCallback((snapshot: PlaybackSnapshot) => {
     if (snapshot.revision <= latestPlaybackRef.current.revision) return false;
@@ -392,15 +394,23 @@ function App() {
           isFileSelectionDisabled={isFileSelectionDisabled}
           validationError={validationError}
           onSelectFile={() => void selectAudioFile()}
+          outputDevices={outputDevices}
+          isLoadingDevices={isLoadingDevices}
+          isOutputSelectionPending={isOutputSelectionPending}
+          isPlaybackAvailable={isPlaybackAvailable}
+          isTransportCommandPending={isTransportCommandPending}
+          isTimedPlayback={isTimedPlayback}
+          selectedOutput={playback.outputSelection}
+          deviceListError={deviceListError}
+          onStop={() => requestTransport("stopped")}
+          onOutputSelectionChange={(selection) => void changeOutputSelection(selection)}
+          onRefreshDevices={() => void loadOutputDevices()}
         />
       }
       dock={
         <PlaybackDock
           playback={playback}
           validatedFile={validatedFile}
-          outputDevices={outputDevices}
-          isLoadingDevices={isLoadingDevices}
-          isOutputSelectionPending={isOutputSelectionPending}
           isPlaybackAvailable={isPlaybackAvailable}
           isTransportCommandPending={isTransportCommandPending}
           isSeekPending={seekController.isSeekPending}
@@ -410,11 +420,13 @@ function App() {
           isVolumePending={volumeController.isVolumePending}
           isVolumeSliderDisabled={volumeController.isVolumeSliderDisabled}
           playbackError={playbackError}
-          deviceListError={deviceListError}
+          presentationTitle={activeTrack.title}
+          presentationArtist={activeTrack.artist}
+          artworkUrl={activeTrack.artworkUrl}
+          artworkLoading={activeTrack.artworkLoading}
           onPlay={() => requestTransport("playing")}
           onPause={() => requestTransport("paused")}
           onResume={() => requestTransport("playing")}
-          onStop={() => requestTransport("stopped")}
           onSeek={seekController.onSeek}
           onSeekCommit={(value) => void seekController.onSeekCommit(value)}
           onSeekCancel={seekController.onSeekCancel}
@@ -423,8 +435,6 @@ function App() {
           onVolumeCommit={volumeController.onVolumeCommit}
           onVolumePointerCancel={volumeController.onVolumePointerCancel}
           onMuteToggle={() => void volumeController.onMuteToggle()}
-          onOutputSelectionChange={(selection) => void changeOutputSelection(selection)}
-          onRefreshDevices={() => void loadOutputDevices()}
         />
       }
     />

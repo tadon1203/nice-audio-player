@@ -12,6 +12,11 @@ pub struct Database {
     path: PathBuf,
 }
 impl Database {
+    pub fn data_dir(&self) -> &Path {
+        self.path.parent().unwrap_or_else(|| Path::new("."))
+    }
+}
+impl Database {
     pub fn initialize(directory: &Path) -> Result<Self, DatabaseError> {
         std::fs::create_dir_all(directory).map_err(|_| DatabaseError::Open)?;
         let path = directory.join("library.sqlite3");
