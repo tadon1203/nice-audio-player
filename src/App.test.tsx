@@ -208,6 +208,7 @@ describe("App playback coordination", () => {
       .mockRejectedValueOnce(new Error("enumeration failed"));
     render(<App />);
 
+    await userEvent.click(await screen.findByText("Playback options"));
     const selector = await screen.findByRole("combobox", { name: "Audio output device" });
     await waitFor(() => expect(screen.getByRole("option", { name: /Speakers/ })).toBeVisible());
     await userEvent.click(screen.getByRole("button", { name: "Refresh output devices" }));

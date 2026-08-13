@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { commands } from "@/bindings";
 import type {
   LibraryCommandError,
+  ArtworkRef,
   LibraryRoot,
   LibraryScanSnapshot,
   LibraryStatus,
@@ -89,6 +90,28 @@ export function isLibraryCommandError(value: unknown): value is LibraryCommandEr
     Object.prototype.hasOwnProperty.call(errorCodes, value.code)
   );
 }
+export function isArtworkRef(value: unknown): value is ArtworkRef {
+  if (
+    !isRecord(value) ||
+    typeof value.contentHash !== "string" ||
+    !/^[0-9a-f]{64}$/.test(value.contentHash)
+  )
+    return false;
+  if (
+    (value.mimeType !== "jpeg" && value.mimeType !== "png") ||
+    typeof value.relativePath !== "string"
+  )
+    return false;
+  const parts = value.relativePath.split("/");
+  return (
+    parts.length === 3 &&
+    parts[0] === "artwork" &&
+    parts[1] === value.contentHash.slice(0, 2) &&
+    parts[2] === `${value.contentHash}.${value.mimeType === "jpeg" ? "jpg" : "png"}` &&
+    !value.relativePath.startsWith("/") &&
+    !parts.some((part) => part === "." || part === "..")
+  );
+}
 function isLibraryRoot(value: unknown): value is LibraryRoot {
   return (
     isRecord(value) &&
@@ -105,6 +128,7 @@ function isLibraryTrackSummary(value: unknown): value is LibraryTrackSummary {
     isId(value.id) &&
     typeof value.title === "string" &&
     (value.artist === null || typeof value.artist === "string") &&
+    (value.artwork === null || isArtworkRef(value.artwork)) &&
     (value.durationMs === null || isNatural(value.durationMs)) &&
     (value.availability === "available" || value.availability === "missing") &&
     typeof value.playable === "boolean"

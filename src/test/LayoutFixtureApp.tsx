@@ -1,4 +1,4 @@
-import type { AudioOutputDevice, PlaybackSnapshot, ValidatedAudioFile } from "@/bindings";
+import type { PlaybackSnapshot, ValidatedAudioFile } from "@/bindings";
 import { AppShell } from "@/components/AppShell";
 import { NowPlayingView } from "@/components/NowPlayingView";
 import { PlaybackDock } from "@/components/PlaybackDock";
@@ -32,7 +32,6 @@ function audioFile(fileName: string): ValidatedAudioFile {
 export function LayoutFixtureApp({ fixture }: LayoutFixtureAppProps) {
   const validatedFile = fixtureFile(fixture);
   const playback = fixturePlayback(fixture);
-  const outputDevices = fixtureDevices(fixture);
   const playbackError = fixture === "failed" ? layoutStressFixtures.longError : null;
 
   return (
@@ -51,9 +50,6 @@ export function LayoutFixtureApp({ fixture }: LayoutFixtureAppProps) {
           <PlaybackDock
             playback={playback}
             validatedFile={validatedFile}
-            outputDevices={outputDevices}
-            isLoadingDevices={false}
-            isOutputSelectionPending={false}
             isPlaybackAvailable
             isTransportCommandPending={false}
             pendingTransportCommand={null}
@@ -63,11 +59,15 @@ export function LayoutFixtureApp({ fixture }: LayoutFixtureAppProps) {
             isVolumePending={false}
             isVolumeSliderDisabled={false}
             playbackError={playbackError}
-            deviceListError={null}
+            presentationTitle={
+              validatedFile?.fileName.replace(/\.[^.]+$/, "") ?? "No audio selected"
+            }
+            presentationArtist={fixture === "playing" ? "Artist" : null}
+            artworkUrl={null}
+            artworkLoading={false}
             onPlay={noop}
             onPause={noop}
             onResume={noop}
-            onStop={noop}
             onSeek={noop}
             onSeekCommit={noop}
             onSeekCancel={noop}
@@ -76,8 +76,6 @@ export function LayoutFixtureApp({ fixture }: LayoutFixtureAppProps) {
             onVolumeCommit={noop}
             onVolumePointerCancel={noop}
             onMuteToggle={noop}
-            onOutputSelectionChange={noop}
-            onRefreshDevices={noop}
           />
         }
       />
@@ -136,14 +134,4 @@ function fixturePlayback(fixture: LayoutFixtureName): PlaybackSnapshot {
     };
   }
   return defaultPlayback;
-}
-
-function fixtureDevices(fixture: LayoutFixtureName): AudioOutputDevice[] {
-  return [
-    {
-      id: fixture === "long-device" ? "long-device" : "default",
-      name: fixture === "long-device" ? layoutStressFixtures.longDeviceName : "System speakers",
-      isDefault: true,
-    },
-  ];
 }

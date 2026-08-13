@@ -88,6 +88,4 @@
   --content-max-width: 1360px;
   --layout-gutter: 24px;
   --layout-inline-padding: clamp(24px, 5vw, 80px);
-  --playback-dock-min-height: 144px;
-  --playback-dock-gutter: 16px;
 }

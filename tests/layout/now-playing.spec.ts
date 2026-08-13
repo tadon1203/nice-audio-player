@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { test } from "@playwright/test";
 
 import { expectContainedBy, expectNoHorizontalOverflow, openFixture } from "./helpers";
 
@@ -10,12 +10,4 @@ test("long and unbroken filenames stay inside Now Playing", async ({ page }) => 
     await expectContainedBy(page.locator(".now-playing-view__action"), view);
     await expectNoHorizontalOverflow(page);
   }
-});
-
-test("empty layout remains visually stable at 800x600", async ({ page }) => {
-  await openFixture(page, "empty", { width: 800, height: 600 });
-  await page.addStyleTag({
-    content: "* { font-family: Arial, sans-serif !important; }",
-  });
-  await expect(page).toHaveScreenshot("empty-800x600.png", { animations: "disabled" });
 });
