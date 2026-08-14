@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { interfaceEase, motionDurationSeconds } from "@/lib/motion";
+import { interfaceEase, motionDurationSeconds, reducedMotionDurationSeconds } from "@/lib/motion";
 
 function Svg({ children, className = "size-6" }: { children: ReactNode; className?: string }) {
   return (
@@ -33,7 +33,7 @@ export function PlayPauseIcon({ playing, className }: { playing: boolean; classN
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             initial={{ opacity: 0 }}
-            transition={{ duration: 0.12, ease: interfaceEase }}
+            transition={{ duration: reducedMotionDurationSeconds, ease: interfaceEase }}
           >
             <path d={leftPath} fill="currentColor" />
             <path d={rightPath} fill="currentColor" />

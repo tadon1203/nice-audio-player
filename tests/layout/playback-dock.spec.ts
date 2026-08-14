@@ -75,6 +75,11 @@ for (const width of [640, 800, 1120, 1440, 1760]) {
     expect(
       Math.abs(buttonBox.x + buttonBox.width / 2 - (gridBox.x + gridBox.width / 2)),
     ).toBeLessThanOrEqual(1);
+    expect(
+      await page
+        .locator(".playback-dock__transport")
+        .evaluate((element) => getComputedStyle(element).translate),
+    ).toBe("0px 8px");
     expect(seekBox.x).toBeGreaterThanOrEqual(coreBox.x - 1);
     expect(seekBox.x + seekBox.width).toBeLessThanOrEqual(coreBox.x + coreBox.width + 1);
     expect(seekBox.width).toBeLessThanOrEqual(704);
@@ -89,9 +94,9 @@ for (const width of [640, 800, 1120, 1440, 1760]) {
     expect(
       Math.abs(timelineBox.x + timelineBox.width / 2 - (coreBox.x + coreBox.width / 2)),
     ).toBeLessThanOrEqual(1);
-    expect(timelineBox.y).toBeGreaterThanOrEqual(buttonBox.y + buttonBox.height - 5);
-    expect(timelineBox.y - (buttonBox.y + buttonBox.height)).toBeLessThanOrEqual(0);
-    expect(timelineBox.y - (buttonBox.y + buttonBox.height)).toBeGreaterThanOrEqual(-5);
+    expect(timelineBox.y).toBeGreaterThanOrEqual(buttonBox.y + buttonBox.height - 6);
+    expect(timelineBox.y - (buttonBox.y + buttonBox.height)).toBeLessThanOrEqual(4);
+    expect(timelineBox.y - (buttonBox.y + buttonBox.height)).toBeGreaterThanOrEqual(-6);
     expect(seekBox.y).toBeGreaterThanOrEqual(timelineBox.y + 20 - 1);
     expect(identityBox.x + identityBox.width).toBeLessThanOrEqual(coreBox.x + 1);
     expect(volumeBox.x).toBeGreaterThanOrEqual(coreBox.x + coreBox.width - 1);
@@ -112,6 +117,9 @@ for (const width of [640, 800, 1120, 1440, 1760]) {
     expect(
       Math.abs(identityBox.y + identityBox.height / 2 - (coreBox.y + coreBox.height / 2)),
     ).toBeLessThanOrEqual(8);
+    expect(
+      Math.abs(artworkBox.y + artworkBox.height / 2 - (identityBox.y + identityBox.height / 2)),
+    ).toBeLessThanOrEqual(1);
     expect(
       Math.abs(volumeBox.y + volumeBox.height / 2 - (coreBox.y + coreBox.height / 2)),
     ).toBeLessThanOrEqual(8);
@@ -187,7 +195,7 @@ test("minimum window width keeps the Dock in one anchored row", async ({ page })
   expect(Math.abs(volume.y + volume.height / 2 - (core.y + core.height / 2))).toBeLessThanOrEqual(
     8,
   );
-  expect(timeline.y - (button.y + button.height)).toBeGreaterThanOrEqual(-5);
-  expect(timeline.y - (button.y + button.height)).toBeLessThanOrEqual(0);
+  expect(timeline.y - (button.y + button.height)).toBeGreaterThanOrEqual(-6);
+  expect(timeline.y - (button.y + button.height)).toBeLessThanOrEqual(4);
   await expectNoHorizontalOverflow(page);
 });

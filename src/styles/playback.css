@@ -1,114 +1,25 @@
-.layout-fluid {
-  min-inline-size: 0;
-  min-block-size: 0;
-}
-
-.app-shell {
-  display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
-  inline-size: 100%;
-  block-size: 100dvh;
-  overflow: hidden;
-  background: var(--color-canvas);
-}
-.app-shell__workspace {
-  display: grid;
-  grid-template-columns: 192px minmax(0, 1fr);
-  min-block-size: 0;
-}
-.app-shell__navigation {
-  display: grid;
-  align-content: start;
-  gap: 8px;
-  padding: 72px 12px 24px;
-  border-inline-end: 1px solid var(--color-border-subtle);
-  background: var(--color-surface);
-}
-.app-shell__nav-item {
-  min-block-size: 48px;
-  border: 0;
-  border-radius: var(--radius-control);
-  background: transparent;
-  color: var(--color-text-secondary);
-  text-align: start;
-  padding-inline: 24px;
-  font-size: var(--text-body-lg);
-}
-.app-shell__nav-item:hover,
-.app-shell__nav-item.is-active {
-  background: var(--color-surface-hover);
-  color: var(--color-text-primary);
-}
-
-.app-shell__main {
-  min-inline-size: 0;
-  min-block-size: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
-  scrollbar-gutter: stable;
-}
-
-.app-shell__persistent {
-  min-inline-size: 0;
-  min-block-size: 0;
-  max-block-size: 100dvh;
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-}
-
-.app-shell > #overlay-root {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-}
-
-[data-layout="cluster"] {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--layout-cluster-gap, 8px);
-  min-inline-size: 0;
-}
-
-[data-layout="cluster"] > * {
-  flex: 0 0 auto;
-}
-
-[data-layout="cluster"][data-align="start"] {
-  justify-content: flex-start;
-}
-
-[data-layout="cluster"][data-align="center"] {
-  justify-content: center;
-}
-
-[data-layout="cluster"][data-align="end"] {
-  justify-content: flex-end;
-}
-
 .playback-dock {
   container: playback-dock / inline-size;
+  display: grid;
+  grid-template-rows: minmax(var(--playback-dock-content-min-block-size), auto) auto;
   --playback-dock-inline-padding: clamp(calc(var(--spacing) * 10), 3vw, calc(var(--spacing) * 10));
   --playback-dock-block-padding: calc(var(--spacing) * 2);
   --playback-dock-primary-control-size: calc(var(--spacing) * 12);
-  --playback-dock-primary-icon-size: calc(var(--spacing) * 8);
+  --playback-dock-primary-icon-size: calc(var(--spacing) * 6);
   --playback-dock-volume-icon-size: calc(var(--spacing) * 7);
-  --playback-dock-artwork-size: calc(var(--spacing) * 22);
+  --playback-dock-artwork-size: calc(var(--spacing) * 20);
   --playback-dock-volume-width: calc(var(--spacing) * 48);
+  --playback-dock-transport-offset-block: calc(var(--spacing) * 2);
   --playback-dock-side-min-width: calc(var(--spacing) * 48);
   --playback-dock-core-min-width: calc(var(--spacing) * 52);
   --playback-dock-core-max-width: calc(var(--spacing) * 176);
-  --playback-dock-timeline-label-size: calc(var(--spacing) * 3);
+  --playback-dock-timeline-label-size: calc(var(--spacing) * 5);
   --playback-dock-range-interaction-size: calc(var(--spacing) * 10);
   --playback-dock-timeline-size: calc(
     var(--playback-dock-timeline-label-size) + var(--playback-dock-range-interaction-size)
   );
-  --playback-dock-core-row-gap: calc(var(--spacing) * 2);
-  --playback-dock-transport-offset-block: calc(var(--spacing) * 2);
-  --playback-dock-transport-overlap: calc(var(--spacing) * 2);
   --playback-dock-content-min-block-size: calc(var(--spacing) * 26);
-  min-block-size: calc(var(--spacing) * 30);
+  min-block-size: calc(var(--spacing) * 34);
   border-block-start: 1px solid var(--color-border-subtle);
   background: var(--color-surface);
   padding-block: var(--playback-dock-block-padding);
@@ -126,6 +37,8 @@
   align-items: stretch;
   box-sizing: border-box;
   inline-size: 100%;
+  min-block-size: var(--playback-dock-content-min-block-size);
+  block-size: 100%;
   padding-inline: var(--playback-dock-inline-padding);
 }
 
@@ -137,6 +50,7 @@
 }
 .playback-dock__artwork-frame {
   display: grid;
+  align-self: center;
   flex: 0 0 var(--playback-dock-artwork-size);
   inline-size: var(--playback-dock-artwork-size);
   block-size: var(--playback-dock-artwork-size);
@@ -190,7 +104,7 @@
     "transport" minmax(0, 1fr)
     "timeline" var(--playback-dock-timeline-size)
     / minmax(0, 1fr);
-  row-gap: calc(var(--playback-dock-core-row-gap) - var(--playback-dock-transport-overlap));
+  row-gap: 0;
   align-content: center;
   inline-size: 100%;
   block-size: 100%;
@@ -200,10 +114,19 @@
 
 .playback-dock__transport {
   grid-area: transport;
+  display: grid;
+  place-items: center;
+  min-inline-size: 0;
   position: relative;
   z-index: 1;
   align-self: center;
   translate: 0 var(--playback-dock-transport-offset-block);
+}
+
+@container playback-dock (max-width: 42rem) {
+  .playback-dock__layout {
+    --playback-dock-core-min-width: calc(var(--spacing) * 44);
+  }
 }
 
 .playback-dock__timeline {
@@ -451,13 +374,13 @@
 @media (prefers-reduced-motion: reduce) {
   .range-control__fill-visual,
   .range-control__thumb-visual {
-    transition: background-color 120ms var(--ease-interface);
+    transition: background-color var(--motion-reduced) var(--ease-interface);
     transform: none;
   }
 
   .range-control__thumb-ring,
   .range-control__track {
-    transition-duration: 120ms;
+    transition-duration: var(--motion-reduced);
   }
 
   .range-control__thumb-ring {
@@ -490,15 +413,11 @@
   transform: scale(1);
   transition:
     opacity var(--motion-state) var(--ease-interface),
-    transform var(--motion-state) var(--ease-interface);
-}
-
-.playback-dock__primary-control:hover:not(:disabled) {
-  transform: scale(1.02);
+    transform var(--motion-feedback) var(--ease-interface);
 }
 
 .playback-dock__primary-control:active:not(:disabled) {
-  transform: scale(0.97);
+  transform: scale(0.98);
 }
 
 .playback-dock__primary-icon {
@@ -554,44 +473,4 @@
 .playback-dock__volume {
   justify-self: end;
   inline-size: var(--playback-dock-volume-width);
-}
-
-.now-playing-view {
-  container: now-playing / inline-size;
-  min-inline-size: 0;
-}
-
-.now-playing-view__content {
-  inline-size: min(100%, 42rem);
-  min-inline-size: 0;
-}
-
-.now-playing-view__editorial {
-  min-block-size: 52px;
-  font-size: var(--text-character-sm);
-  line-height: var(--text-character-sm--line-height);
-  letter-spacing: var(--text-character-sm--letter-spacing);
-}
-
-.now-playing-view__filename {
-  display: -webkit-box;
-  overflow: hidden;
-  overflow-wrap: anywhere;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-.now-playing-view__action {
-  max-inline-size: 100%;
-  white-space: normal;
-  overflow-wrap: anywhere;
-}
-
-@container now-playing (min-width: 45rem) {
-  .now-playing-view__editorial {
-    min-block-size: 64px;
-    font-size: var(--text-character-md);
-    line-height: var(--text-character-md--line-height);
-    letter-spacing: var(--text-character-md--letter-spacing);
-  }
 }

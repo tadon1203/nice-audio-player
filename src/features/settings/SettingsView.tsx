@@ -1,5 +1,5 @@
 import { open } from "@tauri-apps/plugin-dialog";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
   AudioOutputDevice,
   AudioOutputSelection,
@@ -15,6 +15,8 @@ import {
   setLibraryRootEnabled,
   startLibraryScan,
 } from "@/api/library";
+import { Dialog } from "@/components/ui/Dialog";
+import { InlineNotice } from "@/components/ui/InlineNotice";
 
 interface SettingsViewProps {
   outputDevices: AudioOutputDevice[] | null;
@@ -38,11 +40,31 @@ export function SettingsView({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmRoot, setConfirmRoot] = useState<LibraryRoot | null>(null);
-  const reload = () =>
-    void listLibraryRoots()
-      .then((nextRoots) => setRoots(nextRoots))
-      .catch(() => setError("Library settings could not be loaded."));
-  useEffect(reload, []);
+  const cancelButtonRef = useRef<HTMLButtonElement>(null);
+  const addFolderRef = useRef<HTMLButtonElement>(null);
+  const [focusAddFolderAfterRemoval, setFocusAddFolderAfterRemoval] = useState(false);
+  const reload = async (): Promise<boolean> => {
+    try {
+      const nextRoots = await listLibraryRoots();
+      setRoots(nextRoots);
+      return true;
+    } catch {
+      setError("Library settings could not be loaded.");
+      return false;
+    }
+  };
+  useEffect(() => {
+    const timer = window.setTimeout(() => void reload(), 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+  useEffect(() => {
+    if (confirmRoot || !focusAddFolderAfterRemoval) return;
+    const timer = window.setTimeout(() => {
+      addFolderRef.current?.focus();
+      setFocusAddFolderAfterRemoval(false);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [confirmRoot, focusAddFolderAfterRemoval]);
   const scanning = scan?.state === "running";
   async function addFolder() {
     const path = await open({ directory: true, multiple: false });
@@ -56,7 +78,7 @@ export function SettingsView({
       } catch {
         setError("Folder was added, but the scan could not start.");
       }
-      reload();
+      await reload();
     } catch (cause) {
       if (!isLibraryCommandError(cause)) setError("The folder could not be added.");
       else {
@@ -82,9 +104,15 @@ export function SettingsView({
     if (!confirmRoot) return;
     setBusy(true);
     try {
-      await removeLibraryRoot(confirmRoot.id);
+      const removedRootId = confirmRoot.id;
+      await removeLibraryRoot(removedRootId);
+      const refreshed = await reload();
+      if (!refreshed) {
+        setRoots((current) => current.filter((root) => root.id !== removedRootId));
+        setError("The folder was removed, but library settings could not be refreshed.");
+      }
+      setFocusAddFolderAfterRemoval(true);
       setConfirmRoot(null);
-      reload();
     } catch (cause) {
       setError(
         isLibraryCommandError(cause) && cause.code === "scanInProgress"
@@ -115,7 +143,7 @@ export function SettingsView({
     try {
       if (scanning) await cancelLibraryScan();
       else await startLibraryScan();
-      reload();
+      await reload();
     } catch (cause) {
       setError(formatOperationError(cause, scanning ? "cancel" : "scan"));
     } finally {
@@ -127,7 +155,7 @@ export function SettingsView({
     setError(null);
     try {
       await setLibraryRootEnabled(root.id, !root.enabled);
-      reload();
+      await reload();
     } catch (cause) {
       setError(formatOperationError(cause, "root"));
     } finally {
@@ -139,7 +167,7 @@ export function SettingsView({
       <header>
         <h1>Settings</h1>
       </header>
-      {scanError ? <p className="settings-view__error">{scanError}</p> : null}
+      {scanError ? <InlineNotice tone="error">{scanError}</InlineNotice> : null}
       <section className="settings-view__section">
         <div className="settings-view__section-head">
           <div>
@@ -150,16 +178,17 @@ export function SettingsView({
             <button type="button" disabled={busy} onClick={() => void runScanAction()}>
               {scanning ? "Cancel scan" : "Rescan library"}
             </button>
-            <button type="button" disabled={busy || scanning} onClick={() => void addFolder()}>
+            <button
+              ref={addFolderRef}
+              type="button"
+              disabled={busy || scanning}
+              onClick={() => void addFolder()}
+            >
               Add folder
             </button>
           </div>
         </div>
-        {error ? (
-          <p role="alert" className="settings-view__error">
-            {error}
-          </p>
-        ) : null}
+        {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
         <div className="settings-view__roots">
           {roots.map((root) => (
             <div key={root.id}>
@@ -196,17 +225,30 @@ export function SettingsView({
         ) : null}
       </section>
       {confirmRoot ? (
-        <div className="settings-view__dialog" role="dialog" aria-modal="true">
-          <h2>Remove library folder?</h2>
+        <Dialog
+          title="Remove library folder?"
+          role="alertdialog"
+          initialFocusRef={cancelButtonRef}
+          fallbackFocusRef={addFolderRef}
+          onClose={() => !busy && setConfirmRoot(null)}
+        >
           <p>{confirmRoot.path}</p>
           <p>This removes index entries but does not delete music files.</p>
-          <button type="button" onClick={() => setConfirmRoot(null)}>
-            Cancel
-          </button>
-          <button type="button" disabled={busy} onClick={() => void removeRoot()}>
-            Remove
-          </button>
-        </div>
+          {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
+          <div className="dialog__actions">
+            <button
+              ref={cancelButtonRef}
+              type="button"
+              disabled={busy}
+              onClick={() => setConfirmRoot(null)}
+            >
+              Cancel
+            </button>
+            <button type="button" disabled={busy} onClick={() => void removeRoot()}>
+              Remove
+            </button>
+          </div>
+        </Dialog>
       ) : null}
       <section className="settings-view__section">
         <h2>Audio</h2>

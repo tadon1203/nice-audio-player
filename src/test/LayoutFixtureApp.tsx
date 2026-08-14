@@ -1,6 +1,6 @@
 import type { PlaybackSnapshot, ValidatedAudioFile } from "@/bindings";
+import { useState } from "react";
 import { AppShell } from "@/components/AppShell";
-import { NowPlayingView } from "@/components/NowPlayingView";
 import { PlaybackDock } from "@/components/PlaybackDock";
 
 import type { LayoutFixtureName } from "./layout-fixture-state";
@@ -30,26 +30,29 @@ function audioFile(fileName: string): ValidatedAudioFile {
 }
 
 export function LayoutFixtureApp({ fixture }: LayoutFixtureAppProps) {
-  const validatedFile = fixtureFile(fixture);
+  const [destination, setDestination] = useState<"library" | "settings">("library");
   const playback = fixturePlayback(fixture);
   const playbackError = fixture === "failed" ? layoutStressFixtures.longError : null;
 
   return (
     <div data-layout-fixture={fixture}>
       <AppShell
+        destination={destination}
+        onDestinationChange={setDestination}
         main={
-          <NowPlayingView
-            validatedFile={validatedFile}
-            isValidatingFile={false}
-            isFileSelectionDisabled={playback.status === "playing" || playback.status === "paused"}
-            validationError={null}
-            onSelectFile={noop}
-          />
+          <section
+            className={destination === "library" ? "library-view" : "settings-view"}
+            data-fixture-view={destination}
+            aria-label={destination === "library" ? "Library" : "Settings"}
+          >
+            <h1>{destination === "library" ? "Library" : "Settings"}</h1>
+            <p>Deterministic {destination} fixture content.</p>
+          </section>
         }
         dock={
           <PlaybackDock
             playback={playback}
-            validatedFile={validatedFile}
+            hasResumablePlayback={playback.status === "paused"}
             isPlaybackAvailable
             isTransportCommandPending={false}
             pendingTransportCommand={null}
@@ -59,9 +62,7 @@ export function LayoutFixtureApp({ fixture }: LayoutFixtureAppProps) {
             isVolumeUpdatePending={false}
             isMutePending={false}
             playbackError={playbackError}
-            presentationTitle={
-              validatedFile?.fileName.replace(/\.[^.]+$/, "") ?? "No audio selected"
-            }
+            presentationTitle={fixturePresentationTitle(fixture)}
             presentationArtist={fixture === "playing" ? "Artist" : null}
             artworkUrl={null}
             artworkLoading={false}
@@ -83,17 +84,13 @@ export function LayoutFixtureApp({ fixture }: LayoutFixtureAppProps) {
   );
 }
 
-function fixtureFile(fixture: LayoutFixtureName): ValidatedAudioFile | null {
-  if (fixture === "empty") {
-    return null;
-  }
-  if (fixture === "unbroken-filename") {
-    return audioFile(layoutStressFixtures.unbrokenFilename);
-  }
-  if (fixture === "japanese-filename") {
-    return audioFile(layoutStressFixtures.japaneseFilename);
-  }
-  return audioFile(layoutStressFixtures.longFilename);
+function fixturePresentationTitle(fixture: LayoutFixtureName): string {
+  if (fixture === "empty") return "No audio selected";
+  if (fixture === "unbroken-filename")
+    return layoutStressFixtures.unbrokenFilename.replace(/\.[^.]+$/, "");
+  if (fixture === "japanese-filename")
+    return layoutStressFixtures.japaneseFilename.replace(/\.[^.]+$/, "");
+  return layoutStressFixtures.longFilename.replace(/\.[^.]+$/, "");
 }
 
 function fixturePlayback(fixture: LayoutFixtureName): PlaybackSnapshot {

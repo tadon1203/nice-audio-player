@@ -1,0 +1,86 @@
+.app-shell {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  inline-size: 100%;
+  block-size: 100dvh;
+  overflow: hidden;
+  background: var(--color-canvas);
+}
+.app-shell__workspace {
+  display: grid;
+  grid-template-columns: 192px minmax(0, 1fr);
+  min-block-size: 0;
+}
+.app-shell__navigation {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding: 72px 12px 24px;
+  border-inline-end: 1px solid var(--color-border-subtle);
+  background: var(--color-surface);
+}
+.app-shell__nav-item {
+  position: relative;
+  min-block-size: 48px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--color-text-secondary);
+  text-align: start;
+  padding-inline: 24px;
+  font-size: var(--text-body-lg);
+}
+.app-shell__nav-item:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+.app-shell__nav-item.is-active {
+  background: var(--color-surface-raised);
+  color: var(--color-text-primary);
+}
+.app-shell__nav-item.is-active::before {
+  position: absolute;
+  inset-block: 8px;
+  inset-inline-start: 4px;
+  inline-size: 3px;
+  border-radius: var(--radius-full);
+  background: currentColor;
+  content: "";
+}
+.app-shell__main {
+  min-inline-size: 0;
+  min-block-size: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+.app-shell__persistent {
+  min-inline-size: 0;
+  min-block-size: 0;
+  max-block-size: 100dvh;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+@media (max-width: 799px) {
+  .app-shell__workspace {
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .app-shell__navigation {
+    grid-template-columns: 1fr 1fr;
+    padding: 8px 24px;
+    border-block-end: 1px solid var(--color-border-subtle);
+    border-inline-end: 0;
+  }
+  .app-shell__nav-item {
+    text-align: center;
+    padding-inline: 12px;
+  }
+  .app-shell__nav-item.is-active::before {
+    inset-block: auto 2px;
+    inset-inline: 12px;
+    block-size: 3px;
+    inline-size: auto;
+  }
+}

@@ -22,9 +22,9 @@ import type {
   PlaybackSnapshot,
 } from "@/bindings";
 import { AppShell } from "./components/AppShell";
-import { LibraryView } from "./components/LibraryView";
 import { PlaybackDock } from "./components/PlaybackDock";
-import { SettingsView } from "./components/SettingsView";
+import { LibraryView } from "./features/library";
+import { SettingsView } from "./features/settings";
 import { useActiveTrackIdentity } from "./hooks/use-active-track-identity";
 import { useSeekController } from "./hooks/use-seek-controller";
 import { useVolumeController } from "./hooks/use-volume-controller";
