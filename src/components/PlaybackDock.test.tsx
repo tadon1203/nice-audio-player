@@ -20,7 +20,7 @@ const stopped: PlaybackSnapshot = {
 };
 const base = {
   playback: stopped,
-  validatedFile: file,
+  hasResumablePlayback: true,
   isPlaybackAvailable: true,
   isTransportCommandPending: false,
   pendingTransportCommand: null,

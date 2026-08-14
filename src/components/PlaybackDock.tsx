@@ -1,9 +1,8 @@
-import type { PlaybackSnapshot, ValidatedAudioFile } from "@/bindings";
+import type { PlaybackSnapshot } from "@/bindings";
 import { useEffect, useState } from "react";
 import { formatPlaybackTime } from "@/lib/playback-time";
 import { motionDurationSeconds } from "@/lib/motion";
 import { PlayPauseIcon } from "./icons";
-import { ResponsiveCluster } from "./layout/ResponsiveCluster";
 import { RangeControl } from "./RangeControl";
 import { VolumeControl } from "./VolumeControl";
 
@@ -12,8 +11,6 @@ type PendingTransportCommand = "stop" | "pause" | "resume" | null;
 interface PlaybackDockProps {
   playback: PlaybackSnapshot;
   hasResumablePlayback?: boolean;
-  /** Compatibility input for the old direct-file Dock fixture; no new UI writes it. */
-  validatedFile?: ValidatedAudioFile | null;
   isPlaybackAvailable: boolean;
   isTransportCommandPending: boolean;
   pendingTransportCommand: PendingTransportCommand;
@@ -43,7 +40,6 @@ interface PlaybackDockProps {
 export function PlaybackDock({
   playback,
   hasResumablePlayback,
-  validatedFile,
   isPlaybackAvailable,
   isTransportCommandPending,
   pendingTransportCommand,
@@ -117,14 +113,13 @@ export function PlaybackDock({
           data-region="playback-core"
           aria-busy={isSeekPending}
         >
-          <ResponsiveCluster align="center" className="playback-dock__transport">
+          <div className="playback-dock__transport">
             <button
               type="button"
               aria-label={primaryLabel}
               aria-busy={primaryBusy}
               disabled={
-                !isPlaybackAvailable ||
-                (playback.status !== "playing" && !(hasResumablePlayback ?? validatedFile !== null))
+                !isPlaybackAvailable || (playback.status !== "playing" && !hasResumablePlayback)
               }
               onClick={primaryAction}
               className="playback-dock__fixed-control playback-dock__primary-control grid place-items-center rounded-full bg-text-primary text-canvas hover:opacity-85 disabled:cursor-not-allowed disabled:bg-surface-pressed disabled:text-text-disabled disabled:opacity-80"
@@ -134,7 +129,7 @@ export function PlaybackDock({
                 className="playback-dock__primary-icon"
               />
             </button>
-          </ResponsiveCluster>
+          </div>
           <div
             className={`playback-dock__timeline${
               isSeekPending || isTransportCommandPending ? " is-pending" : ""

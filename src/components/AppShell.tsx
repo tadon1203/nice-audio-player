@@ -1,4 +1,5 @@
 import type { ReactNode, Ref } from "react";
+import { ContentTransition } from "./ui/ContentTransition";
 
 interface AppShellProps {
   main: ReactNode;
@@ -41,11 +42,10 @@ export function AppShell({
           </button>
         </nav>
         <main ref={mainScrollRef} className="app-shell__main">
-          {main}
+          <ContentTransition contentKey={destination}>{main}</ContentTransition>
         </main>
       </div>
       <footer className="app-shell__persistent">{dock}</footer>
-      <div id="overlay-root" />
     </div>
   );
 }

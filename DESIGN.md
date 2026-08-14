@@ -414,6 +414,14 @@ Use a 2px `focus-ring` outline with a 2px offset. The indicator remains visible 
 
 Use at least two visible differences from rest. One difference may be color or luminance. The second difference must be shape, border, icon, text weight, or position of a non-layout-affecting marker.
 
+### Current / active
+
+Use this for the destination or application state currently being displayed. It is distinct from a selected item in a collection and must use the same two-difference rule as selected state. Keyboard focus identifies location only; it never supplies current state by itself.
+
+### Playing
+
+Use this only for the authoritative playback identity. It remains distinct from selected and current state, and must not be inferred from keyboard focus.
+
 ### Disabled
 
 Use `text-disabled` for foreground content. Preserve the element's outer dimensions. Do not communicate disabled state by opacity alone.
@@ -440,6 +448,7 @@ motion:
   state: 220ms
   content: 320ms
   image: 600ms
+  reduced: 120ms
   easing: cubic-bezier(0.22, 1, 0.36, 1)
 ```
 
@@ -448,6 +457,7 @@ Use motion only when a visible element changes state, appears, disappears, or is
 - Hover, focus, and pressed feedback use `feedback`.
 - State-indicator changes use `state`.
 - Text-group and region replacement use `content`.
+- Main-region transitions may use restrained opacity and translation; persistent navigation and playback surfaces remain stable.
 - Visible-image replacement uses `image`.
 - Image replacement uses `image`; reflected-light changes follow the timing of the element they belong to.
 - Nothing bounces or overshoots.
@@ -460,6 +470,8 @@ When reduced motion is active:
 - remove translation, scale, rotation, and morphing;
 - limit opacity transitions to 120ms;
 - preserve focus, selected, loading, and error distinctions.
+
+Raised modal surfaces remain visually distinct from the canvas. Their reduced-motion equivalent is opacity only.
 
 ## Accessibility
 

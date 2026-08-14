@@ -84,6 +84,7 @@
   --motion-state: 220ms;
   --motion-content: 320ms;
   --motion-image: 600ms;
+  --motion-reduced: 120ms;
   --content-max-width: 1360px;
   --layout-gutter: 24px;
   --layout-inline-padding: clamp(24px, 5vw, 80px);

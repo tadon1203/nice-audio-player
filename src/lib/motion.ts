@@ -5,4 +5,6 @@ export const motionDurationSeconds = {
   image: 0.6,
 } as const;
 
+export const reducedMotionDurationSeconds = 0.12;
+
 export const interfaceEase = [0.22, 1, 0.36, 1] as const;
