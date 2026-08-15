@@ -38,6 +38,8 @@ function playing(
     volume,
     muted: false,
     outputSelection: { kind: "systemDefault" },
+    canGoPrevious: false,
+    canGoNext: false,
     outputDevice: { id: "default", name: "Speakers" },
     channelConversion: "none",
     sourceSampleRate: 44_100,

@@ -114,13 +114,43 @@
 
 .playback-dock__transport {
   grid-area: transport;
-  display: grid;
+  display: flex;
+  gap: calc(var(--spacing) * 2);
   place-items: center;
   min-inline-size: 0;
   position: relative;
   z-index: 1;
   align-self: center;
   translate: 0 var(--playback-dock-transport-offset-block);
+}
+
+.playback-dock__navigation-control {
+  display: grid;
+  place-items: center;
+  inline-size: calc(var(--spacing) * 10);
+  block-size: calc(var(--spacing) * 10);
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--color-text-primary);
+}
+.playback-dock__navigation-control:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+}
+.playback-dock__navigation-control:active:not(:disabled) {
+  background: var(--color-surface-pressed);
+}
+.playback-dock__navigation-control:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+.playback-dock__navigation-control:disabled {
+  color: var(--color-text-disabled);
+  cursor: not-allowed;
+}
+.playback-dock__navigation-icon {
+  inline-size: calc(var(--spacing) * 6);
+  block-size: calc(var(--spacing) * 6);
 }
 
 @container playback-dock (max-width: 42rem) {

@@ -2,11 +2,11 @@ import type { PlaybackSnapshot } from "@/bindings";
 import { useEffect, useState } from "react";
 import { formatPlaybackTime } from "@/lib/playback-time";
 import { motionDurationSeconds } from "@/lib/motion";
-import { PlayPauseIcon } from "./icons";
+import { PlayPauseIcon, SkipTrackIcon } from "./icons";
 import { RangeControl } from "./RangeControl";
 import { VolumeControl } from "./VolumeControl";
 
-type PendingTransportCommand = "stop" | "pause" | "resume" | null;
+type PendingTransportCommand = "stop" | "pause" | "resume" | "previous" | "next" | null;
 
 interface PlaybackDockProps {
   playback: PlaybackSnapshot;
@@ -27,6 +27,8 @@ interface PlaybackDockProps {
   onPlay: () => void;
   onPause: () => void;
   onResume: () => void;
+  onPrevious?: () => void;
+  onNext?: () => void;
   onSeek: (value: number) => void;
   onSeekCommit: (value: number) => void;
   onSeekCancel: () => void;
@@ -56,6 +58,8 @@ export function PlaybackDock({
   onPlay,
   onPause,
   onResume,
+  onPrevious = () => {},
+  onNext = () => {},
   onSeek,
   onSeekCommit,
   onSeekCancel,
@@ -116,6 +120,16 @@ export function PlaybackDock({
           <div className="playback-dock__transport">
             <button
               type="button"
+              aria-label="Previous track"
+              aria-busy={pendingTransportCommand === "previous"}
+              disabled={!isPlaybackAvailable || !playback.canGoPrevious}
+              onClick={onPrevious}
+              className="playback-dock__fixed-control playback-dock__navigation-control"
+            >
+              <SkipTrackIcon direction="previous" />
+            </button>
+            <button
+              type="button"
               aria-label={primaryLabel}
               aria-busy={primaryBusy}
               disabled={
@@ -128,6 +142,16 @@ export function PlaybackDock({
                 playing={playback.status === "playing"}
                 className="playback-dock__primary-icon"
               />
+            </button>
+            <button
+              type="button"
+              aria-label="Next track"
+              aria-busy={pendingTransportCommand === "next"}
+              disabled={!isPlaybackAvailable || !playback.canGoNext}
+              onClick={onNext}
+              className="playback-dock__fixed-control playback-dock__navigation-control"
+            >
+              <SkipTrackIcon direction="next" />
             </button>
           </div>
           <div

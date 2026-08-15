@@ -61,6 +61,7 @@ function renderDetail({
   firstPlayableTrackId?: string | null;
 } = {}) {
   const onPlayTrack = vi.fn();
+  const onPlayAlbum = vi.fn();
   const loadNext = vi.fn();
   mocks.useAlbumDetailQuery.mockReturnValue({
     details: {
@@ -85,10 +86,13 @@ function renderDetail({
       playbackAvailable={playbackAvailable}
       onBack={vi.fn()}
       onPlayTrack={onPlayTrack}
+      onPlayAlbum={onPlayAlbum}
+      activeTrackId={null}
+      playbackStatus="stopped"
       scrollElement={null}
     />,
   );
-  return { loadNext, onPlayTrack };
+  return { loadNext, onPlayTrack, onPlayAlbum };
 }
 
 describe("AlbumDetailView", () => {
@@ -105,7 +109,7 @@ describe("AlbumDetailView", () => {
   });
 
   it("plays the album and clicked track, formats the date, and omits matching artists", () => {
-    const { onPlayTrack } = renderDetail({
+    const { onPlayTrack, onPlayAlbum } = renderDetail({
       items: [
         track(),
         track({ id: "track-2", title: "Guest track", artist: "Guest artist", trackNumber: 2 }),
@@ -116,8 +120,8 @@ describe("AlbumDetailView", () => {
     expect(screen.getByText("Guest artist")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Play album" }));
     fireEvent.click(screen.getByRole("button", { name: "Play Guest track by Guest artist" }));
-    expect(onPlayTrack).toHaveBeenNthCalledWith(1, "track-1");
-    expect(onPlayTrack).toHaveBeenNthCalledWith(2, "track-2");
+    expect(onPlayAlbum).toHaveBeenCalledWith("album-1");
+    expect(onPlayTrack).toHaveBeenCalledWith("track-2");
   });
 
   it("hides the disc heading and track number for a single-track album", () => {
@@ -135,7 +139,7 @@ describe("AlbumDetailView", () => {
   });
 
   it("uses Button variants for the album and load-more actions", () => {
-    const { loadNext, onPlayTrack } = renderDetail({ nextOffset: 20 });
+    const { loadNext, onPlayAlbum } = renderDetail({ nextOffset: 20 });
     const playAlbum = screen.getByRole("button", { name: "Play album" });
     const loadMore = screen.getByRole("button", { name: "Load more" });
 
@@ -143,7 +147,7 @@ describe("AlbumDetailView", () => {
     expect(loadMore).toHaveClass("button--neutral");
     fireEvent.click(playAlbum);
     fireEvent.click(loadMore);
-    expect(onPlayTrack).toHaveBeenCalledWith("track-1");
+    expect(onPlayAlbum).toHaveBeenCalledWith("album-1");
     expect(loadNext).toHaveBeenCalledOnce();
   });
 

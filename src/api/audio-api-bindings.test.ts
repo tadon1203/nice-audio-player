@@ -44,6 +44,8 @@ const snapshot = {
   volume: 1,
   muted: false,
   outputSelection: { kind: "systemDefault" },
+  canGoPrevious: false,
+  canGoNext: false,
 } as const;
 
 describe("frontend API command bindings", () => {

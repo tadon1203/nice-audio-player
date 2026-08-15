@@ -90,6 +90,14 @@ const playbackMuteErrorCodes = {
   taskFailed: true,
 } satisfies Record<PlaybackMuteError["code"], true>;
 
+const playbackNavigationErrorCodes = {
+  invalidPlaybackState: true,
+  decodeFailed: true,
+  outputFailed: true,
+  playbackWorkerUnavailable: true,
+  taskFailed: true,
+} satisfies Record<import("@/bindings").PlaybackNavigationError["code"], true>;
+
 const invalidPlaybackSnapshotMessage = "Invalid playback snapshot payload.";
 
 function hasOwn(record: object, key: PropertyKey): boolean {
@@ -120,6 +128,14 @@ export async function pauseAudioPlayback(): Promise<PlaybackSnapshot> {
 
 export async function resumeAudioPlayback(): Promise<PlaybackSnapshot> {
   return readPlaybackSnapshot(commands.resumeAudioPlayback());
+}
+
+export async function previousAudioPlayback(): Promise<PlaybackSnapshot> {
+  return readPlaybackSnapshot(commands.previousAudioPlayback());
+}
+
+export async function nextAudioPlayback(): Promise<PlaybackSnapshot> {
+  return readPlaybackSnapshot(commands.nextAudioPlayback());
 }
 
 export async function seekAudioPlayback(positionMs: number): Promise<PlaybackSnapshot> {
@@ -234,10 +250,24 @@ export function isPlaybackMuteError(value: unknown): value is PlaybackMuteError 
   );
 }
 
+export function isPlaybackNavigationError(
+  value: unknown,
+): value is import("@/bindings").PlaybackNavigationError {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "code" in value &&
+    typeof value.code === "string" &&
+    hasOwn(playbackNavigationErrorCodes, value.code)
+  );
+}
+
 export function isPlaybackSnapshot(value: unknown): value is PlaybackSnapshot {
   if (typeof value !== "object" || value === null || !("status" in value)) return false;
   const record = value as Record<string, unknown>;
   if (!isValidRevision(record.revision) || !isValidOptionalAudioFile(record.file)) return false;
+  if (typeof record.canGoPrevious !== "boolean" || typeof record.canGoNext !== "boolean")
+    return false;
   if (!isValidVolumeState(record)) return false;
   if (!isValidOutputSelection(record.outputSelection)) return false;
   if (record.status === "stopped") return true;

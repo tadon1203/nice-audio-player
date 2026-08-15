@@ -18,6 +18,8 @@ function stopped(revision: number): PlaybackSnapshot {
     volume: 1,
     muted: false,
     outputSelection: { kind: "systemDefault" },
+    canGoPrevious: false,
+    canGoNext: false,
   };
 }
 
@@ -32,6 +34,8 @@ function playing(revision: number): PlaybackSnapshot {
     volume: 1,
     muted: false,
     outputSelection: { kind: "systemDefault" },
+    canGoPrevious: false,
+    canGoNext: false,
     outputDevice: { id: "default", name: "Speakers" },
     channelConversion: "none",
     sourceSampleRate: 44_100,

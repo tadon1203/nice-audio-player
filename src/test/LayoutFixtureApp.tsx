@@ -20,6 +20,8 @@ const defaultPlayback: PlaybackSnapshot = {
   volume: 0.5,
   muted: false,
   outputSelection: { kind: "systemDefault" },
+  canGoPrevious: false,
+  canGoNext: false,
 };
 
 function audioFile(fileName: string): ValidatedAudioFile {
@@ -161,6 +163,8 @@ function fixturePlayback(fixture: LayoutFixtureName): PlaybackSnapshot {
       volume: fixture === "volume-low" ? 0.2 : fixture === "volume-zero" ? 0 : 0.72,
       muted: fixture === "volume-muted",
       outputSelection: { kind: "systemDefault" },
+      canGoPrevious: false,
+      canGoNext: false,
       outputDevice: { id: "default", name: "System speakers" },
       channelConversion: "monoToStereo",
       sourceSampleRate: 44_100,
@@ -178,6 +182,8 @@ function fixturePlayback(fixture: LayoutFixtureName): PlaybackSnapshot {
       volume: 0.5,
       muted: false,
       outputSelection: { kind: "systemDefault" },
+      canGoPrevious: false,
+      canGoNext: false,
     };
   }
   if (fixture === "long-device") {

@@ -26,6 +26,8 @@ export const initialPlaybackSnapshot: PlaybackSnapshot = {
   volume: 1,
   muted: false,
   outputSelection: { kind: "systemDefault" },
+  canGoPrevious: false,
+  canGoNext: false,
 };
 
 export const initialPlaybackUiState: PlaybackUiState = {

@@ -397,6 +397,10 @@ Use this for the destination or application state currently being displayed. It 
 
 Use this only for the authoritative playback identity. It remains distinct from selected and current state, and must not be inferred from keyboard focus.
 
+A compact, monochrome three-bar indicator may replace a track number for the authoritative playing
+item. It loops only while playback is active and is static when paused or reduced motion is active.
+It is a state indicator, not a visualizer, and does not consume audio data.
+
 ### Disabled
 
 Use `text-disabled` for foreground content. Preserve the element's outer dimensions. Do not communicate disabled state by opacity alone.
