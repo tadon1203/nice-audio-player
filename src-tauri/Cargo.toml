@@ -41,4 +41,6 @@ lofty = "=0.24.0"
 walkdir = "=2.5.0"
 dunce = "=1.0.5"
 blake3 = "=1.8.5"
+notify = "=8.2.0"
 rubato = { version = "4.0.0", default-features = false, features = ["fft_resampler"] }
+

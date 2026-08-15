@@ -29,6 +29,7 @@ import type {
   PlaybackSnapshot,
 } from "@/bindings";
 import { AppShell } from "./components/AppShell";
+import { ApplicationActivityIndicator } from "./components/ApplicationActivityIndicator";
 import { PlaybackDock } from "./components/PlaybackDock";
 import { LibraryView } from "./features/library";
 import { SettingsView } from "./features/settings";
@@ -36,6 +37,7 @@ import { useActiveTrackIdentity } from "./hooks/use-active-track-identity";
 import { useSeekController } from "./hooks/use-seek-controller";
 import { useVolumeController } from "./hooks/use-volume-controller";
 import { useLibraryScan } from "./features/library/use-library-scan";
+import { useApplicationActivities } from "./hooks/use-application-activities";
 import { initialPlaybackUiState, playbackUiReducer } from "./lib/playback-state";
 
 type TransportOperation =
@@ -71,6 +73,7 @@ function App() {
   const [isLoadingDevices, setIsLoadingDevices] = useState(false);
   const [isOutputSelectionPending, setIsOutputSelectionPending] = useState(false);
   const { snapshot: scan, error: scanError, libraryRefreshKey } = useLibraryScan();
+  const { selected: applicationActivity } = useApplicationActivities();
   const [playbackUi, dispatchPlaybackUi] = useReducer(playbackUiReducer, initialPlaybackUiState);
   const [pendingTransportCommand, setPendingTransportCommand] =
     useState<PendingTransportCommand>(null);
@@ -287,7 +290,6 @@ function App() {
         activeTrackId={activeTrack.id}
         playbackStatus={playback.status}
         libraryRefreshKey={libraryRefreshKey}
-        scan={scan}
         scanError={scanError}
         scrollElement={mainScrollElement}
       />
@@ -315,6 +317,7 @@ function App() {
       onDestinationChange={setDestination}
       mainScrollRef={setMainScrollElement}
       main={main}
+      activity={<ApplicationActivityIndicator activity={applicationActivity} />}
       dock={
         <PlaybackDock
           playback={playback}
@@ -355,3 +358,4 @@ function App() {
   );
 }
 export default App;
+

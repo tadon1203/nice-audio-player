@@ -15,6 +15,35 @@ pub struct StoredArtwork {
     pub byte_length: u64,
 }
 
+pub(crate) fn is_canonical_source_path(hash: &str, mime_type: &str, relative: &str) -> bool {
+    let extension = match mime_type {
+        "image/jpeg" => "jpg",
+        "image/png" => "png",
+        _ => return false,
+    };
+    hash.len() == 64
+        && hash.bytes().all(|b| b.is_ascii_hexdigit())
+        && relative == format!("artwork/{}/{}.{}", &hash[..2], hash, extension)
+}
+
+pub(crate) fn is_canonical_relative_path(relative: &str) -> bool {
+    let parts: Vec<_> = relative.split('/').collect();
+    if parts.len() != 3 || parts[0] != "artwork" || parts[1].len() != 2 {
+        return false;
+    }
+    let (hash, extension) = if let Some(hash) = parts[2].strip_suffix(".jpg") {
+        (hash, "jpg")
+    } else if let Some(hash) = parts[2].strip_suffix(".png") {
+        (hash, "png")
+    } else {
+        return false;
+    };
+    hash.len() == 64
+        && hash.starts_with(parts[1])
+        && hash.bytes().all(|b| b.is_ascii_hexdigit())
+        && (extension == "jpg" || extension == "png")
+}
+
 pub fn materialize(root: &Path, bytes: &[u8], mime_type: &str) -> Result<StoredArtwork, ()> {
     let extension = match mime_type {
         "image/jpeg" => "jpg",
@@ -90,3 +119,4 @@ pub fn materialize(root: &Path, bytes: &[u8], mime_type: &str) -> Result<StoredA
         byte_length: bytes.len() as u64,
     })
 }
+

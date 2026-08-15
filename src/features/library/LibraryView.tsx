@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import type { LibraryAlbumSummary, LibraryScanSnapshot, LibraryTrackSummary } from "@/bindings";
+import type { LibraryAlbumSummary, LibraryTrackSummary } from "@/bindings";
 import { getLibraryStatus, listLibraryRoots } from "@/api/library";
 import { useAlbumQuery } from "./use-album-query";
 import { useTrackQuery } from "./use-track-query";
@@ -18,7 +18,6 @@ interface Props {
   playbackStatus: "stopped" | "playing" | "paused" | "failed";
   playbackAvailable: boolean;
   libraryRefreshKey?: number;
-  scan?: LibraryScanSnapshot | null;
   scanError?: string | null;
   scrollElement?: HTMLElement | null;
 }
@@ -30,7 +29,6 @@ export function LibraryView({
   playbackStatus,
   playbackAvailable,
   libraryRefreshKey = 0,
-  scan = null,
   scanError = null,
   scrollElement = null,
 }: Props) {
@@ -92,9 +90,6 @@ export function LibraryView({
         <p className="library-view__notice" role="alert">
           {scanError}
         </p>
-      ) : null}
-      {scan?.state === "running" ? (
-        <p className="library-view__scan">Scanning library… {scan.indexedCount} tracks indexed</p>
       ) : null}
       {query.error ? (
         <div className="library-view__notice" role="alert">
@@ -246,3 +241,4 @@ function Tracks({
     </section>
   );
 }
+
