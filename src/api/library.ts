@@ -37,6 +37,14 @@ export async function startLibraryTrack(trackId: string): Promise<PlaybackSnapsh
   validateId(trackId);
   return commands.startLibraryTrack(trackId);
 }
+export async function startLibraryAlbumTrack(
+  albumId: string,
+  trackId: string,
+): Promise<PlaybackSnapshot> {
+  validateId(albumId);
+  validateId(trackId);
+  return commands.startLibraryAlbumTrack(albumId, trackId);
+}
 const startLibraryAlbumErrorCodes = {
   invalidId: true,
   albumNotFound: true,
@@ -333,3 +341,4 @@ function isNatural(value: unknown): value is number {
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
+

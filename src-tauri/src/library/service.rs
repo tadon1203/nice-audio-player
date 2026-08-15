@@ -678,6 +678,64 @@ impl LibraryShared {
             })
             .collect()
     }
+    pub fn album_playable_sources_from_track(
+        &self,
+        album_id: String,
+        track_id: String,
+    ) -> Result<(Vec<ValidatedAudioFile>, usize), StartLibraryTrackError> {
+        let album_id = parse_id(&album_id).map_err(|_| StartLibraryTrackError::InvalidId)?;
+        let track_id = parse_id(&track_id).map_err(|_| StartLibraryTrackError::InvalidId)?;
+        let c = self
+            .db()
+            .map_err(|_| StartLibraryTrackError::LibraryUnavailable)?
+            .read()
+            .map_err(|_| StartLibraryTrackError::PersistenceFailed)?;
+        let mut statement = c
+            .prepare(
+                r#"
+                WITH members AS (
+                    SELECT t.id, r.path, f.relative_path, f.availability, f.inspection_status,
+                        COALESCE(NULLIF(trim(m.album), ''), 'Unknown album') AS album_title,
+                        COALESCE(NULLIF(trim(m.album_artist), ''), NULLIF(trim(m.artist), ''), 'Unknown artist') AS album_artist,
+                        m.disc_number, m.track_number
+                    FROM tracks t JOIN library_files f ON f.id=t.file_id JOIN library_roots r ON r.id=f.root_id
+                    LEFT JOIN track_source_metadata m ON m.track_id=t.id AND m.source_revision=f.source_revision
+                ), selected AS (
+                    SELECT m.* FROM members m JOIN (
+                        SELECT album_title, album_artist FROM members WHERE id=?1
+                    ) identity ON identity.album_title=m.album_title AND identity.album_artist=m.album_artist
+                )
+                SELECT id, path, relative_path, availability, inspection_status FROM selected
+                WHERE availability='available' AND inspection_status='indexed'
+                ORDER BY CASE WHEN disc_number IS NULL THEN 1 ELSE 0 END, disc_number,
+                    CASE WHEN track_number IS NULL THEN 1 ELSE 0 END, track_number, id
+                "#,
+            )
+            .map_err(|_| StartLibraryTrackError::PersistenceFailed)?;
+        let rows = statement
+            .query_map(params![album_id], |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                ))
+            })
+            .map_err(|_| StartLibraryTrackError::PersistenceFailed)?;
+        let candidates = rows
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|_| StartLibraryTrackError::PersistenceFailed)?;
+        let Some(index) = candidates.iter().position(|(id, _, _)| *id == track_id) else {
+            return Err(StartLibraryTrackError::TrackNotFound);
+        };
+        let sources = candidates
+            .into_iter()
+            .map(|(_, root, relative)| {
+                validate_audio_file(Path::new(&root).join(relative).to_string_lossy().as_ref())
+                    .map_err(|_| StartLibraryTrackError::TrackUnavailable)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok((sources, index))
+    }
     pub(crate) fn start_scan_targets(
         &self,
         roots: Vec<LibraryRoot>,

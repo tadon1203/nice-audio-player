@@ -451,6 +451,11 @@ enum PlaybackCommand {
         files: Vec<ValidatedAudioFile>,
         reply: SyncSender<Result<PlaybackSnapshot, PlaybackServiceError>>,
     },
+    StartSequenceAt {
+        files: Vec<ValidatedAudioFile>,
+        index: usize,
+        reply: SyncSender<Result<PlaybackSnapshot, PlaybackServiceError>>,
+    },
     Previous {
         reply: SyncSender<Result<PlaybackSnapshot, PlaybackServiceError>>,
     },
@@ -581,6 +586,17 @@ impl PlaybackServiceHandle {
         files: Vec<ValidatedAudioFile>,
     ) -> Result<PlaybackSnapshot, PlaybackServiceError> {
         self.request(|reply| PlaybackCommand::StartSequence { files, reply })
+    }
+    pub(crate) fn play_sequence_at(
+        &self,
+        files: Vec<ValidatedAudioFile>,
+        index: usize,
+    ) -> Result<PlaybackSnapshot, PlaybackServiceError> {
+        self.request(|reply| PlaybackCommand::StartSequenceAt {
+            files,
+            index,
+            reply,
+        })
     }
     pub(crate) fn previous(&self) -> Result<PlaybackSnapshot, PlaybackServiceError> {
         self.request(|reply| PlaybackCommand::Previous { reply })
@@ -806,6 +822,24 @@ impl PlaybackWorker {
                     let file = sequence.current().clone();
                     self.sequence = Some(sequence);
                     self.begin_start(file, reply, false, 0);
+                }
+                Ok(PlaybackCommand::StartSequenceAt {
+                    files,
+                    index,
+                    reply,
+                }) => {
+                    let Some(mut sequence) = PlaybackSequence::new(files) else {
+                        let _ = reply.send(Err(PlaybackServiceError::InvalidPlaybackState));
+                        continue;
+                    };
+                    if index >= sequence.files.len() {
+                        let _ = reply.send(Err(PlaybackServiceError::InvalidPlaybackState));
+                        continue;
+                    }
+                    sequence.current_index = index;
+                    let file = sequence.current().clone();
+                    self.sequence = Some(sequence);
+                    self.begin_start(file, reply, false, index);
                 }
                 Ok(PlaybackCommand::Previous { reply }) => {
                     self.navigate(false, reply);
@@ -1959,3 +1993,4 @@ fn device_resolution_failure_code(error: DeviceResolutionError) -> PlaybackFailu
 
 #[cfg(test)]
 mod tests;
+

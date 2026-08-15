@@ -60,6 +60,8 @@ export const commands = {
     __TAURI_INVOKE<PlaybackSnapshot_Serialize>("start_library_track", { trackId }),
   startLibraryAlbum: (albumId: string) =>
     __TAURI_INVOKE<PlaybackSnapshot_Serialize>("start_library_album", { albumId }),
+  startLibraryAlbumTrack: (albumId: string, trackId: string) =>
+    __TAURI_INVOKE<PlaybackSnapshot_Serialize>("start_library_album_track", { albumId, trackId }),
   previousAudioPlayback: () =>
     __TAURI_INVOKE<PlaybackSnapshot_Serialize>("previous_audio_playback"),
   nextAudioPlayback: () => __TAURI_INVOKE<PlaybackSnapshot_Serialize>("next_audio_playback"),

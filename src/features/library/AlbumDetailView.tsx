@@ -14,7 +14,7 @@ export function AlbumDetailView({
   refreshKey,
   playbackAvailable,
   onBack,
-  onPlayTrack,
+  onPlayAlbumTrack,
   onPlayAlbum,
   activeTrackId,
   playbackStatus,
@@ -24,7 +24,7 @@ export function AlbumDetailView({
   refreshKey: number;
   playbackAvailable: boolean;
   onBack: () => void;
-  onPlayTrack: (id: string) => void;
+  onPlayAlbumTrack: (albumId: string, trackId: string) => void;
   onPlayAlbum: (id: string) => void;
   activeTrackId: string | null;
   playbackStatus: "stopped" | "playing" | "paused" | "failed";
@@ -133,9 +133,10 @@ export function AlbumDetailView({
                 key={label}
                 label={label}
                 tracks={tracks}
+                albumId={album.id}
                 albumArtist={summary.albumArtist}
                 playbackAvailable={playbackAvailable}
-                onPlayTrack={onPlayTrack}
+                onPlayAlbumTrack={onPlayAlbumTrack}
                 activeTrackId={activeTrackId}
                 playbackStatus={playbackStatus}
                 hideHeading={
@@ -164,7 +165,10 @@ export function AlbumDetailView({
   );
 }
 function groupTracks(items: LibraryAlbumTrackSummary[]) {
-  const numbered = items.some((t) => t.discNumber !== null);
+  const discs = new Set(
+    items.flatMap((track) => (track.discNumber === null ? [] : [track.discNumber])),
+  );
+  const numbered = discs.size > 1;
   const groups = new Map<string, LibraryAlbumTrackSummary[]>();
   for (const t of items) {
     const label = !numbered
@@ -181,7 +185,8 @@ function TrackGroup({
   tracks,
   albumArtist,
   playbackAvailable,
-  onPlayTrack,
+  onPlayAlbumTrack,
+  albumId,
   activeTrackId,
   playbackStatus,
   hideHeading,
@@ -191,7 +196,8 @@ function TrackGroup({
   tracks: LibraryAlbumTrackSummary[];
   albumArtist: string;
   playbackAvailable: boolean;
-  onPlayTrack: (id: string) => void;
+  onPlayAlbumTrack: (albumId: string, trackId: string) => void;
+  albumId: string;
   activeTrackId: string | null;
   playbackStatus: "stopped" | "playing" | "paused" | "failed";
   hideHeading: boolean;
@@ -214,11 +220,19 @@ function TrackGroup({
                     : "album-detail__row"
                 }${active ? " album-detail__row--active" : ""}`}
                 disabled={!playbackAvailable || !t.playable}
-                aria-label={`${active ? `${playbackStatus === "playing" ? "Playing" : "Paused"}: ` : "Play "}${t.title} by ${t.artist ?? albumArtist}`}
-                onClick={() => onPlayTrack(t.id)}
+                aria-label={`${active ? "Restart " : "Play "}${t.title} by ${t.artist ?? albumArtist}`}
+                aria-description={
+                  active
+                    ? playbackStatus === "playing"
+                      ? "Currently playing"
+                      : "Currently paused"
+                    : undefined
+                }
+                aria-current={active ? "true" : undefined}
+                onClick={() => onPlayAlbumTrack(albumId, t.id)}
               >
                 {hideTrackNumber ? null : (
-                  <span className="type-numeric">
+                  <span className="album-detail__track-number type-numeric">
                     {active ? (
                       <span
                         className={`album-detail__playing-bars${playbackStatus === "playing" ? " is-playing" : ""}`}
@@ -239,7 +253,7 @@ function TrackGroup({
                     <small>{t.artist}</small>
                   ) : null}
                 </span>
-                <span className="type-numeric">
+                <span className="album-detail__duration type-numeric">
                   {t.durationMs === null ? "--:--" : formatPlaybackTime(t.durationMs)}
                 </span>
               </button>
@@ -250,3 +264,4 @@ function TrackGroup({
     </section>
   );
 }
+
