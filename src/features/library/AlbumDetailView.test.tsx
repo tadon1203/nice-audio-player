@@ -49,35 +49,46 @@ const track = (overrides: Partial<LibraryAlbumTrackSummary> = {}): LibraryAlbumT
   ...overrides,
 });
 
-function renderDetail(items = [track()]) {
+function renderDetail({
+  items = [track()],
+  nextOffset = null,
+  playbackAvailable = true,
+  firstPlayableTrackId = items[0]?.id ?? null,
+}: {
+  items?: LibraryAlbumTrackSummary[];
+  nextOffset?: number | null;
+  playbackAvailable?: boolean;
+  firstPlayableTrackId?: string | null;
+} = {}) {
   const onPlayTrack = vi.fn();
+  const loadNext = vi.fn();
   mocks.useAlbumDetailQuery.mockReturnValue({
     details: {
       summary: album,
       date: "2000-09-27T09:00:00",
       trackCount: items.length,
       durationMs: 272_000,
-      firstPlayableTrackId: items[0]?.id ?? null,
+      firstPlayableTrackId,
     },
     items,
     error: null,
     loading: false,
-    nextOffset: null,
+    nextOffset,
     loadingNext: false,
     retry: vi.fn(),
-    loadNext: vi.fn(),
+    loadNext,
   });
   render(
     <AlbumDetailView
       album={album}
       refreshKey={0}
-      playbackAvailable
+      playbackAvailable={playbackAvailable}
       onBack={vi.fn()}
       onPlayTrack={onPlayTrack}
       scrollElement={null}
     />,
   );
-  return onPlayTrack;
+  return { loadNext, onPlayTrack };
 }
 
 describe("AlbumDetailView", () => {
@@ -94,10 +105,12 @@ describe("AlbumDetailView", () => {
   });
 
   it("plays the album and clicked track, formats the date, and omits matching artists", () => {
-    const onPlayTrack = renderDetail([
-      track(),
-      track({ id: "track-2", title: "Guest track", artist: "Guest artist", trackNumber: 2 }),
-    ]);
+    const { onPlayTrack } = renderDetail({
+      items: [
+        track(),
+        track({ id: "track-2", title: "Guest track", artist: "Guest artist", trackNumber: 2 }),
+      ],
+    });
     expect(screen.getByText("2000 · 2 tracks · 4:32")).toBeInTheDocument();
     expect(screen.queryByText("Album artist", { selector: "small" })).not.toBeInTheDocument();
     expect(screen.getByText("Guest artist")).toBeInTheDocument();
@@ -108,7 +121,7 @@ describe("AlbumDetailView", () => {
   });
 
   it("hides the disc heading and track number for a single-track album", () => {
-    renderDetail([track()]);
+    renderDetail({ items: [track()] });
     expect(screen.queryByRole("heading", { name: "Disc 1" })).not.toBeInTheDocument();
     expect(screen.queryByText("1", { selector: ".type-numeric" })).not.toBeInTheDocument();
     expect(screen.getByText("Track title")).toBeInTheDocument();
@@ -116,8 +129,31 @@ describe("AlbumDetailView", () => {
   });
 
   it("keeps the disc heading and track number for multi-track albums", () => {
-    renderDetail([track(), track({ id: "track-2", trackNumber: 2 })]);
+    renderDetail({ items: [track(), track({ id: "track-2", trackNumber: 2 })] });
     expect(screen.getByRole("heading", { name: "Disc 1" })).toBeInTheDocument();
     expect(screen.getByText("1", { selector: ".type-numeric" })).toBeInTheDocument();
+  });
+
+  it("uses Button variants for the album and load-more actions", () => {
+    const { loadNext, onPlayTrack } = renderDetail({ nextOffset: 20 });
+    const playAlbum = screen.getByRole("button", { name: "Play album" });
+    const loadMore = screen.getByRole("button", { name: "Load more" });
+
+    expect(playAlbum).toHaveClass("button--filled");
+    expect(loadMore).toHaveClass("button--neutral");
+    fireEvent.click(playAlbum);
+    fireEvent.click(loadMore);
+    expect(onPlayTrack).toHaveBeenCalledWith("track-1");
+    expect(loadNext).toHaveBeenCalledOnce();
+  });
+
+  it("preserves the play-album disabled condition", () => {
+    renderDetail({ playbackAvailable: false });
+    expect(screen.getByRole("button", { name: "Play album" })).toBeDisabled();
+  });
+
+  it("disables play album when the detail has no playable track", () => {
+    renderDetail({ firstPlayableTrackId: null });
+    expect(screen.getByRole("button", { name: "Play album" })).toBeDisabled();
   });
 });

@@ -4,6 +4,48 @@
   z-index: 100;
   pointer-events: none;
 }
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-block-size: 44px;
+  border-radius: var(--radius-surface);
+  padding: 8px 16px;
+  font: inherit;
+  cursor: pointer;
+}
+.button:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+.button--filled {
+  border: 1px solid transparent;
+  background: var(--color-action-filled);
+  color: var(--color-action-filled-foreground);
+}
+.button--filled:hover:not(:disabled) {
+  background: var(--color-action-filled-hover);
+}
+.button--filled:active:not(:disabled) {
+  background: var(--color-action-filled-pressed);
+}
+.button--neutral {
+  border: 1px solid var(--color-border-control);
+  background: transparent;
+  color: var(--color-text-primary);
+}
+.button--neutral:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+}
+.button--neutral:active:not(:disabled) {
+  background: var(--color-surface-pressed);
+}
+.button:disabled {
+  background: var(--color-surface-raised);
+  color: var(--color-text-disabled);
+  cursor: not-allowed;
+}
 .type-character-xl,
 .type-character-lg,
 .type-character-md,

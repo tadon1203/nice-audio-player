@@ -2,6 +2,7 @@ import type { PlaybackSnapshot, ValidatedAudioFile } from "@/bindings";
 import { useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { PlaybackDock } from "@/components/PlaybackDock";
+import { Button } from "@/components/ui/Button";
 
 import type { LayoutFixtureName } from "./layout-fixture-state";
 import { layoutStressFixtures } from "./layout-stress-fixtures";
@@ -107,9 +108,9 @@ function AlbumDetailLayoutFixture() {
             <h1>A Very Long Album Title For Layout Verification</h1>
             <p className="album-detail__artist">Fixture Artist</p>
             <p className="album-detail__meta">2000 · 13 tracks · 42:00</p>
-            <button type="button" className="album-detail__play">
+            <Button type="button" variant="filled" className="album-detail__play">
               Play album
-            </button>
+            </Button>
           </div>
         </div>
         <div className="album-detail__tracks">

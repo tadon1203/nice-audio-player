@@ -16,6 +16,10 @@
   --color-text-muted: #787878;
   --color-text-disabled: #707070;
   --color-focus-ring: #ffffff;
+  --color-action-filled: #f4f4f4;
+  --color-action-filled-hover: #dddddd;
+  --color-action-filled-pressed: #c8c8c8;
+  --color-action-filled-foreground: #050505;
   --color-error: #ff5c68;
   --color-error-surface: #2a1014;
 

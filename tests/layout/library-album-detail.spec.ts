@@ -38,12 +38,17 @@ for (const viewport of [
     if (rowBox && durationBox)
       expect(durationBox.x + durationBox.width).toBeLessThanOrEqual(rowBox.x + rowBox.width + 1);
     const playButton = page.locator(".album-detail__play");
-    await playButton.hover();
-    const colors = await playButton.evaluate((element) => {
+    const restColors = await playButton.evaluate((element) => {
       const style = getComputedStyle(element);
       return { color: style.color, background: style.backgroundColor };
     });
-    expect(colors.color).not.toBe(colors.background);
+    await playButton.hover();
+    const hoverColors = await playButton.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return { color: style.color, background: style.backgroundColor };
+    });
+    expect(restColors).toEqual({ color: "rgb(5, 5, 5)", background: "rgb(244, 244, 244)" });
+    expect(hoverColors).toEqual({ color: "rgb(5, 5, 5)", background: "rgb(221, 221, 221)" });
     await expectNoHorizontalOverflow(page);
   });
 }

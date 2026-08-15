@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import type { LibraryAlbumSummary, LibraryAlbumTrackSummary } from "@/bindings";
 import { PlayIcon } from "@/components/icons";
+import { Button } from "@/components/ui/Button";
 import { formatLongPlaybackTime, formatPlaybackTime } from "@/lib/playback-time";
 import { formatLibraryDate } from "@/lib/library-date";
 import { interfaceEase, motionDurationSeconds, reducedMotionDurationSeconds } from "@/lib/motion";
@@ -87,8 +88,9 @@ export function AlbumDetailView({
                 .filter(Boolean)
                 .join(" · ")}
             </p>
-            <button
+            <Button
               type="button"
+              variant="filled"
               className="album-detail__play"
               disabled={!playbackAvailable || !detail?.firstPlayableTrackId}
               onClick={() =>
@@ -96,7 +98,7 @@ export function AlbumDetailView({
               }
             >
               <PlayIcon /> Play album
-            </button>
+            </Button>
           </motion.div>
         </div>
         {query.error ? (
@@ -139,14 +141,15 @@ export function AlbumDetailView({
               />
             ))}
             {query.nextOffset !== null ? (
-              <button
+              <Button
                 type="button"
+                variant="neutral"
                 className="album-detail__load-more"
                 onClick={query.loadNext}
                 disabled={query.loadingNext}
               >
                 Load more
-              </button>
+              </Button>
             ) : null}
           </motion.div>
         )}

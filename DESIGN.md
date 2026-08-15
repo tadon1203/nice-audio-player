@@ -20,6 +20,11 @@ colors:
 
   focus-ring: "#FFFFFF"
 
+  action-filled: "#F4F4F4"
+  action-filled-hover: "#DDDDDD"
+  action-filled-pressed: "#C8C8C8"
+  action-filled-foreground: "#050505"
+
   error: "#FF5C68"
   error-surface: "#2A1014"
 
@@ -85,9 +90,15 @@ rounded:
 
 components:
   action-filled:
-    backgroundColor: "{colors.text-primary}"
-    textColor: "{colors.canvas}"
-    rounded: "{rounded.full}"
+    backgroundColor: "{colors.action-filled}"
+    textColor: "{colors.action-filled-foreground}"
+    rounded: "{rounded.surface}"
+
+  action-filled-hover:
+    backgroundColor: "{colors.action-filled-hover}"
+
+  action-filled-pressed:
+    backgroundColor: "{colors.action-filled-pressed}"
 
   action-neutral:
     backgroundColor: "{colors.transparent}"
@@ -319,7 +330,7 @@ Use the radius tokens by visual role:
 - `media`: images and visualizations;
 - `full`: circular targets and states whose geometry requires a circle.
 
-A pill shape is permitted only when width is determined by a short text value and the element represents one binary selection or one compact status.
+Primary text actions use the `surface` radius. A pill shape is reserved for binary selection, compact status, or controls whose semantic shape is explicitly pill-like.
 
 Do not apply the same radius to every element. Do not combine a large radius, chromatic glow, gradient, backdrop blur, and shadow on one element.
 
@@ -331,6 +342,7 @@ Component entries in the YAML define reusable visual archetypes, not product fea
 
 - A related action group contains no more than one filled action.
 - It uses `action-filled` at rest.
+- Hover uses `action-filled-hover`; pressed uses `action-filled-pressed`; its foreground uses `action-filled-foreground` in every state.
 - Its fill remains grayscale.
 - It does not receive a permanent glow.
 
