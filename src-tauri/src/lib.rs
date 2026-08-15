@@ -1,3 +1,4 @@
+mod activity;
 mod audio;
 mod library;
 mod media;
@@ -13,6 +14,7 @@ use std::thread;
 use tauri::{Emitter, Manager};
 use tauri_specta::{collect_commands, Builder, ErrorHandlingMode};
 
+use activity::{ApplicationActivity, ApplicationActivityService};
 use audio::devices::{
     list_output_devices as list_output_devices_with_cpal, AudioDeviceListError, AudioOutputDevice,
     AudioOutputSelection,
@@ -40,6 +42,13 @@ use media::validation::{
 #[specta::specta]
 fn get_library_status(library: tauri::State<'_, LibraryService>) -> LibraryStatus {
     library.status()
+}
+#[tauri::command]
+#[specta::specta]
+fn get_application_activities(
+    activities: tauri::State<'_, ApplicationActivityService>,
+) -> Vec<ApplicationActivity> {
+    activities.handle().snapshot()
 }
 #[tauri::command]
 #[specta::specta]
@@ -652,6 +661,7 @@ fn collect_specta_commands<R: tauri::Runtime>() -> tauri_specta::Commands<R> {
         mute_audio_playback,
         unmute_audio_playback,
         get_playback_state,
+        get_application_activities,
         get_library_status,
         list_library_roots,
         register_library_root,
@@ -731,7 +741,27 @@ pub fn run() {
                 .path()
                 .app_local_data_dir()
                 .map_err(|_| "library storage path unavailable")?;
-            app.manage(LibraryService::initialize(library_directory));
+            app.manage(ApplicationActivityService::new());
+            let activity = app.state::<ApplicationActivityService>().handle();
+            app.manage(LibraryService::initialize_with_activity(
+                library_directory,
+                Some(activity),
+            ));
+            if let Some(receiver) = app
+                .state::<ApplicationActivityService>()
+                .take_changed_receiver()
+            {
+                let app_handle = app.handle().clone();
+                thread::spawn(move || {
+                    while receiver.recv().is_ok() {
+                        let snapshot = app_handle
+                            .state::<ApplicationActivityService>()
+                            .handle()
+                            .snapshot();
+                        let _ = app_handle.emit("application-activities-changed", snapshot);
+                    }
+                });
+            }
             if let Some(receiver) = app
                 .state::<LibraryService>()
                 .take_scan_state_changed_receiver()
@@ -768,3 +798,4 @@ pub fn run() {
         }
     });
 }
+

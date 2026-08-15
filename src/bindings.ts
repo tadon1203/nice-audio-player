@@ -24,6 +24,8 @@ export const commands = {
   muteAudioPlayback: () => __TAURI_INVOKE<PlaybackSnapshot_Serialize>("mute_audio_playback"),
   unmuteAudioPlayback: () => __TAURI_INVOKE<PlaybackSnapshot_Serialize>("unmute_audio_playback"),
   getPlaybackState: () => __TAURI_INVOKE<PlaybackSnapshot_Serialize>("get_playback_state"),
+  getApplicationActivities: () =>
+    __TAURI_INVOKE<ApplicationActivity[]>("get_application_activities"),
   getLibraryStatus: () => __TAURI_INVOKE<LibraryStatus>("get_library_status"),
   listLibraryRoots: () => __TAURI_INVOKE<LibraryRoot[]>("list_library_roots"),
   registerLibraryRoot: (path: string) =>
@@ -64,6 +66,16 @@ export const commands = {
 };
 
 /* Types */
+export type ApplicationActivity = {
+  id: string;
+  kind: ApplicationActivityKind;
+  state: ApplicationActivityState;
+};
+
+export type ApplicationActivityKind = "librarySync";
+
+export type ApplicationActivityState = "running" | "attentionRequired";
+
 export type ArtworkMimeType = "jpeg" | "png";
 
 export type ArtworkRef = {
@@ -481,3 +493,4 @@ export type ValidatedAudioFile = {
   fileName: string;
   extension: string;
 };
+

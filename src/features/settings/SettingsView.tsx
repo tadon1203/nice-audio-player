@@ -73,11 +73,6 @@ export function SettingsView({
     setError(null);
     try {
       await registerLibraryRoot(path);
-      try {
-        await startLibraryScan();
-      } catch {
-        setError("Folder was added, but the scan could not start.");
-      }
       await reload();
     } catch (cause) {
       if (!isLibraryCommandError(cause)) setError("The folder could not be added.");
@@ -220,7 +215,13 @@ export function SettingsView({
           <p className="settings-view__scan">
             {scanning
               ? `Scanning: ${scan.indexedCount} tracks indexed`
-              : "Library scan is up to date."}
+              : scan.state === "completed"
+                ? "Library scan is up to date."
+                : scan.state === "cancelled"
+                  ? "Library scan was cancelled."
+                  : scan.state === "failed"
+                    ? "The last library scan did not complete."
+                    : null}
           </p>
         ) : null}
       </section>
@@ -283,3 +284,4 @@ export function SettingsView({
     </section>
   );
 }
+

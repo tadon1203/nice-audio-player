@@ -253,4 +253,20 @@ A change that modifies visual or interaction principles must update `DESIGN.md`.
 
 CSS owns hover, focus, pressed, color, border, and ordinary opacity transitions. Motion for React owns coordinated SVG geometry transitions. Reduced-motion behavior follows `DESIGN.md`.
 
+## 17. Library Synchronization Boundaries
+
+Filesystem watching is an invalidation-only signal. The scanner remains the sole authority for
+filesystem-to-SQLite reconciliation; watcher callbacks do not inspect files, write the database, or
+publish user-facing state. Automatic invalidations are coalesced by root and scheduled through one
+Library runtime worker. Watcher failure cannot destructively alter indexed content.
+
+Source-artwork maintenance is reference-based, serialized with scanning, and limited to the current
+embedded/source artwork ownership domain. Any future user- or provider-owned artwork layout must
+define its lifecycle separately before sharing this maintenance path.
+
+`ApplicationActivity` is a transient, user-facing operational channel separate from logs and domain
+persistence. `LibraryRuntime` coordinates Library lifecycle work only; it is not a generic application
+background-job scheduler.
+
 Issue scope, branch names, temporary structures, migration steps, and implementation plans belong in GitHub Issues or pull requests, not here.
+

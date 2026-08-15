@@ -4,6 +4,7 @@ import { ContentTransition } from "./ui/ContentTransition";
 interface AppShellProps {
   main: ReactNode;
   dock: ReactNode;
+  activity?: ReactNode;
   destination?: "library" | "settings";
   onDestinationChange?: (destination: "library" | "settings") => void;
   mainScrollRef?: Ref<HTMLElement>;
@@ -12,6 +13,7 @@ interface AppShellProps {
 export function AppShell({
   main,
   dock,
+  activity,
   destination = "library",
   onDestinationChange = () => undefined,
   mainScrollRef,
@@ -44,8 +46,10 @@ export function AppShell({
         <main ref={mainScrollRef} className="app-shell__main">
           <ContentTransition contentKey={destination}>{main}</ContentTransition>
         </main>
+        <div className="app-shell__activity">{activity}</div>
       </div>
       <footer className="app-shell__persistent">{dock}</footer>
     </div>
   );
 }
+

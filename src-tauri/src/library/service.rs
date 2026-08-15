@@ -1,5 +1,7 @@
 use super::artwork;
+use super::runtime::LibraryRuntime;
 use super::{database::Database, models::*};
+use crate::activity::ApplicationActivityHandle;
 use crate::media::{
     inspection::inspect_audio_file_internal,
     metadata::read_source_metadata,
@@ -100,6 +102,12 @@ impl LibraryShared {
         self.database
             .as_ref()
             .ok_or(LibraryCommandError::LibraryUnavailable)
+    }
+    pub(crate) fn run_artwork_maintenance(&self) -> Vec<i64> {
+        if let Some(database) = &self.database {
+            return super::maintenance::collect_source_artwork(database).unwrap_or_default();
+        }
+        Vec::new()
     }
     pub fn roots(&self) -> Result<Vec<LibraryRoot>, LibraryCommandError> {
         let c = self
@@ -670,7 +678,10 @@ impl LibraryShared {
             })
             .collect()
     }
-    pub fn start_scan(&self) -> Result<(), LibraryCommandError> {
+    pub(crate) fn start_scan_targets(
+        &self,
+        roots: Vec<LibraryRoot>,
+    ) -> Result<(), LibraryCommandError> {
         if scanning(&self.state) {
             return Err(LibraryCommandError::ScanAlreadyRunning);
         }
@@ -682,7 +693,6 @@ impl LibraryShared {
                 return Err(LibraryCommandError::ScanAlreadyRunning);
             }
         }
-        let roots: Vec<_> = self.roots()?.into_iter().filter(|r| r.enabled).collect();
         if roots.is_empty() {
             return Err(LibraryCommandError::NoEnabledRoots);
         };
@@ -705,6 +715,10 @@ impl LibraryShared {
             scan(db, roots, state, cancel, notify)
         }));
         Ok(())
+    }
+    pub fn start_scan(&self) -> Result<(), LibraryCommandError> {
+        let roots: Vec<_> = self.roots()?.into_iter().filter(|r| r.enabled).collect();
+        self.start_scan_targets(roots)
     }
     pub fn shutdown(&self) {
         self.cancel.store(true, Ordering::Release);
@@ -748,12 +762,15 @@ pub enum StartLibraryAlbumError {
 /// The Tauri-managed owner. Only this type owns scanner shutdown.
 pub struct LibraryService {
     shared: LibraryShared,
+    runtime: Mutex<Option<LibraryRuntime>>,
+    activity: Option<ApplicationActivityHandle>,
 }
 
 /// A command-safe view of the library. Dropping it has no lifecycle effect.
 #[derive(Clone)]
 pub struct LibraryServiceHandle {
     shared: LibraryShared,
+    runtime: Option<super::runtime::LibraryRuntimeHandle>,
 }
 
 impl std::ops::Deref for LibraryServiceHandle {
@@ -763,22 +780,82 @@ impl std::ops::Deref for LibraryServiceHandle {
     }
 }
 
+impl LibraryServiceHandle {
+    pub fn register_root(&self, input: String) -> Result<LibraryRoot, LibraryCommandError> {
+        if let Some(runtime) = &self.runtime {
+            runtime.register_root(input)
+        } else {
+            self.shared.register_root(input)
+        }
+    }
+    pub fn set_root_enabled(
+        &self,
+        id: String,
+        enabled: bool,
+    ) -> Result<LibraryRoot, LibraryCommandError> {
+        if let Some(runtime) = &self.runtime {
+            runtime.set_root_enabled(id, enabled)
+        } else {
+            self.shared.set_root_enabled(id, enabled)
+        }
+    }
+    pub fn remove_root(&self, id: String) -> Result<(), LibraryCommandError> {
+        if let Some(runtime) = &self.runtime {
+            runtime.remove_root(id)
+        } else {
+            self.shared.remove_root(id)
+        }
+    }
+    pub fn start_scan(&self) -> Result<(), LibraryCommandError> {
+        self.runtime
+            .as_ref()
+            .map_or_else(|| self.shared.start_scan(), |runtime| runtime.start_scan())
+    }
+    pub fn cancel_scan(&self) -> Result<(), LibraryCommandError> {
+        self.runtime.as_ref().map_or_else(
+            || self.shared.cancel_scan(),
+            |runtime| runtime.cancel_scan(),
+        )
+    }
+}
+
 impl LibraryService {
-    pub fn initialize(directory: PathBuf) -> Self {
+    pub fn initialize_with_activity(
+        directory: PathBuf,
+        activity: Option<ApplicationActivityHandle>,
+    ) -> Self {
+        let shared = LibraryShared::initialize(directory);
+        let runtime = if matches!(shared.status(), LibraryStatus::Ready) {
+            Some(LibraryRuntime::start(shared.clone(), activity.clone()))
+        } else {
+            None
+        };
         Self {
-            shared: LibraryShared::initialize(directory),
+            shared,
+            runtime: Mutex::new(runtime),
+            activity,
         }
     }
     pub fn handle(&self) -> LibraryServiceHandle {
         LibraryServiceHandle {
             shared: self.shared.clone(),
+            runtime: self
+                .runtime
+                .lock()
+                .expect("library runtime lock")
+                .as_ref()
+                .map(|runtime| runtime.handle()),
         }
     }
     pub fn status(&self) -> LibraryStatus {
         self.shared.status()
     }
     pub fn shutdown(&self) {
-        self.shared.shutdown()
+        if let Some(runtime) = self.runtime.lock().expect("library runtime lock").as_mut() {
+            runtime.shutdown(&self.shared, self.activity.as_ref());
+        } else {
+            self.shared.shutdown();
+        }
     }
     pub fn take_scan_state_changed_receiver(&self) -> Option<std::sync::mpsc::Receiver<()>> {
         self.shared.take_scan_state_changed_receiver()
@@ -1412,3 +1489,4 @@ mod tests {
         assert_eq!(literal.items[0].title, "Other album");
     }
 }
+
