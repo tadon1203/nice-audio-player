@@ -10,6 +10,9 @@ import type {
   LibraryTrackPage,
   LibraryTrackSummary,
   LibraryAlbumPage,
+  LibraryAlbumDetails,
+  LibraryAlbumTrackPage,
+  LibraryAlbumTrackSummary,
   PlaybackSnapshot,
   StartLibraryTrackError,
 } from "@/bindings";
@@ -57,6 +60,7 @@ const errorCodes = {
   libraryUnavailable: true,
   persistenceFailed: true,
   taskFailed: true,
+  albumNotFound: true,
 } satisfies Record<LibraryCommandError["code"], true>;
 
 export async function getLibraryStatus(): Promise<LibraryStatus> {
@@ -107,6 +111,23 @@ export async function listLibraryAlbums(
   if (afterId !== null) validateId(afterId);
   const value: unknown = await commands.listLibraryAlbums(afterId, search);
   if (!isLibraryAlbumPage(value)) throw new Error("Invalid library albums payload.");
+  return value;
+}
+export async function getLibraryAlbumDetails(albumId: string): Promise<LibraryAlbumDetails> {
+  validateId(albumId);
+  const value: unknown = await commands.getLibraryAlbumDetails(albumId);
+  if (!isLibraryAlbumDetails(value)) throw new Error("Invalid library album details payload.");
+  return value;
+}
+export async function listLibraryAlbumTracks(
+  albumId: string,
+  offset = 0,
+): Promise<LibraryAlbumTrackPage> {
+  validateId(albumId);
+  if (!isNatural(offset))
+    throw new Error("Album track offsets must be safe non-negative integers.");
+  const value: unknown = await commands.listLibraryAlbumTracks(albumId, offset);
+  if (!isLibraryAlbumTrackPage(value)) throw new Error("Invalid library album tracks payload.");
   return value;
 }
 export async function removeLibraryRoot(id: string): Promise<void> {
@@ -203,6 +224,46 @@ function isLibraryAlbumPage(value: unknown): value is LibraryAlbumPage {
         (item.artwork === null || isArtworkRef(item.artwork)),
     ) &&
     (value.nextAfterId === null || isId(value.nextAfterId))
+  );
+}
+function isLibraryAlbumDetails(value: unknown): value is LibraryAlbumDetails {
+  return (
+    isRecord(value) &&
+    isLibraryAlbumSummary(value.summary) &&
+    (value.date === null || typeof value.date === "string") &&
+    isNatural(value.trackCount) &&
+    (value.durationMs === null || isNatural(value.durationMs)) &&
+    (value.firstPlayableTrackId === null || isId(value.firstPlayableTrackId))
+  );
+}
+function isLibraryAlbumSummary(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    isId(value.id) &&
+    typeof value.title === "string" &&
+    typeof value.albumArtist === "string" &&
+    (value.artwork === null || isArtworkRef(value.artwork))
+  );
+}
+function isLibraryAlbumTrack(value: unknown): value is LibraryAlbumTrackSummary {
+  return (
+    isRecord(value) &&
+    isId(value.id) &&
+    typeof value.title === "string" &&
+    (value.artist === null || typeof value.artist === "string") &&
+    (value.trackNumber === null || isNatural(value.trackNumber)) &&
+    (value.discNumber === null || isNatural(value.discNumber)) &&
+    (value.durationMs === null || isNatural(value.durationMs)) &&
+    (value.availability === "available" || value.availability === "missing") &&
+    typeof value.playable === "boolean"
+  );
+}
+function isLibraryAlbumTrackPage(value: unknown): value is LibraryAlbumTrackPage {
+  return (
+    isRecord(value) &&
+    Array.isArray(value.items) &&
+    value.items.every(isLibraryAlbumTrack) &&
+    (value.nextOffset === null || isNatural(value.nextOffset))
   );
 }
 function isLibraryScanSnapshot(value: unknown): value is LibraryScanSnapshot {

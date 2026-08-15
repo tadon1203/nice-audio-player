@@ -26,6 +26,7 @@ pub enum LibraryCommandError {
     OverlappingRoot,
     ScanInProgress,
     InvalidId,
+    AlbumNotFound,
     RootMissing,
     ScanAlreadyRunning,
     NoEnabledRoots,
@@ -349,6 +350,173 @@ impl LibraryShared {
             items,
             next_after_id,
         })
+    }
+    pub fn album_details(
+        &self,
+        album_id: String,
+    ) -> Result<LibraryAlbumDetails, LibraryCommandError> {
+        let id = parse_id(&album_id)?;
+        let c = self
+            .db()?
+            .read()
+            .map_err(|_| LibraryCommandError::PersistenceFailed)?;
+        let mut stmt = c.prepare(r#"
+            WITH members AS (
+                SELECT t.id, f.file_name, f.availability, f.inspection_status,
+                    m.title, m.artist, m.album, m.album_artist, m.track_number, m.disc_number,
+                    m.duration_ms, m.date, m.artwork_id
+                FROM tracks t JOIN library_files f ON f.id=t.file_id
+                LEFT JOIN track_source_metadata m ON m.track_id=t.id AND m.source_revision=f.source_revision
+            ), grouped AS (
+                SELECT COALESCE(NULLIF(trim(album), ''), 'Unknown album') AS album_title,
+                    COALESCE(NULLIF(trim(album_artist), ''), NULLIF(trim(artist), ''), 'Unknown artist') AS album_artist,
+                    MIN(id) AS album_id
+                FROM members GROUP BY album_title, album_artist
+            ), selected AS (
+                SELECT m.*, g.album_title, g.album_artist FROM members m JOIN grouped g
+                  ON g.album_id = ?1 AND COALESCE(NULLIF(trim(m.album), ''), 'Unknown album') = g.album_title
+                  AND COALESCE(NULLIF(trim(m.album_artist), ''), NULLIF(trim(m.artist), ''), 'Unknown artist') = g.album_artist
+            ), ordered AS (
+                SELECT *, ROW_NUMBER() OVER (ORDER BY CASE WHEN disc_number IS NULL THEN 1 ELSE 0 END,
+                    disc_number, CASE WHEN track_number IS NULL THEN 1 ELSE 0 END, track_number, id) AS ordering
+                FROM selected
+            )
+            SELECT album_id, album_title, album_artist, track_count, total_duration, date_value,
+                playable_id, content_hash, mime_type, relative_path
+            FROM (
+                SELECT ?1 AS album_id, album_title, album_artist, COUNT(*) AS track_count,
+                    CASE WHEN COUNT(duration_ms) = COUNT(*) THEN SUM(duration_ms) ELSE NULL END AS total_duration,
+                    (SELECT date FROM ordered WHERE date IS NOT NULL AND trim(date) <> '' ORDER BY ordering LIMIT 1) AS date_value,
+                    (SELECT id FROM ordered WHERE availability='available' AND inspection_status='indexed' ORDER BY ordering LIMIT 1) AS playable_id,
+                    (SELECT a.content_hash FROM ordered o JOIN artwork_assets a ON a.id=o.artwork_id AND a.mime_type IN ('image/jpeg','image/png') ORDER BY o.ordering LIMIT 1) AS content_hash,
+                    (SELECT a.mime_type FROM ordered o JOIN artwork_assets a ON a.id=o.artwork_id AND a.mime_type IN ('image/jpeg','image/png') ORDER BY o.ordering LIMIT 1) AS mime_type,
+                    (SELECT a.relative_path FROM ordered o JOIN artwork_assets a ON a.id=o.artwork_id AND a.mime_type IN ('image/jpeg','image/png') ORDER BY o.ordering LIMIT 1) AS relative_path
+                FROM ordered
+                GROUP BY album_title, album_artist
+            )
+        "#).map_err(|_| LibraryCommandError::PersistenceFailed)?;
+        let row = stmt
+            .query_row(params![id], |r| {
+                Ok((
+                    r.get::<_, String>(1)?,
+                    r.get::<_, String>(2)?,
+                    r.get::<_, i64>(3)?,
+                    r.get::<_, Option<i64>>(4)?,
+                    r.get::<_, Option<String>>(5)?,
+                    r.get::<_, Option<i64>>(6)?,
+                    r.get::<_, Option<String>>(7)?,
+                    r.get::<_, Option<String>>(8)?,
+                    r.get::<_, Option<String>>(9)?,
+                ))
+            })
+            .optional()
+            .map_err(|_| LibraryCommandError::PersistenceFailed)?
+            .ok_or(LibraryCommandError::AlbumNotFound)?;
+        let (title, artist, count, duration, date, playable, hash, mime, path) = row;
+        let artwork = match (hash, mime.as_deref(), path) {
+            (Some(content_hash), Some("image/jpeg"), Some(relative_path)) => Some(ArtworkRef {
+                content_hash,
+                mime_type: ArtworkMimeType::Jpeg,
+                relative_path,
+            }),
+            (Some(content_hash), Some("image/png"), Some(relative_path)) => Some(ArtworkRef {
+                content_hash,
+                mime_type: ArtworkMimeType::Png,
+                relative_path,
+            }),
+            _ => None,
+        };
+        Ok(LibraryAlbumDetails {
+            summary: LibraryAlbumSummary {
+                id: id.to_string(),
+                title,
+                album_artist: artist,
+                artwork,
+            },
+            date,
+            track_count: count as u64,
+            duration_ms: duration.map(|v| v as u64),
+            first_playable_track_id: playable.map(|v| v.to_string()),
+        })
+    }
+    pub fn album_tracks(
+        &self,
+        album_id: String,
+        offset: u32,
+    ) -> Result<LibraryAlbumTrackPage, LibraryCommandError> {
+        let _ = self.album_details(album_id.clone())?;
+        let id = parse_id(&album_id)?;
+        let c = self
+            .db()?
+            .read()
+            .map_err(|_| LibraryCommandError::PersistenceFailed)?;
+        let mut stmt = c.prepare(r#"
+            WITH members AS (
+                SELECT t.id, f.file_name, f.availability, f.inspection_status, m.title, m.artist, m.album, m.album_artist, m.track_number, m.disc_number, m.duration_ms
+                FROM tracks t JOIN library_files f ON f.id=t.file_id LEFT JOIN track_source_metadata m ON m.track_id=t.id AND m.source_revision=f.source_revision
+            ), grouped AS (
+                SELECT COALESCE(NULLIF(trim(album), ''), 'Unknown album') album_title, COALESCE(NULLIF(trim(album_artist), ''), NULLIF(trim(artist), ''), 'Unknown artist') album_artist, MIN(id) album_id FROM members GROUP BY album_title, album_artist
+            ), selected AS (
+                SELECT m.* FROM members m JOIN grouped g ON g.album_id=?1 AND COALESCE(NULLIF(trim(m.album), ''), 'Unknown album')=g.album_title AND COALESCE(NULLIF(trim(m.album_artist), ''), NULLIF(trim(m.artist), ''), 'Unknown artist')=g.album_artist
+            )
+            SELECT id, file_name, title, artist, track_number, disc_number, duration_ms, availability, inspection_status FROM selected
+            ORDER BY CASE WHEN disc_number IS NULL THEN 1 ELSE 0 END, disc_number, CASE WHEN track_number IS NULL THEN 1 ELSE 0 END, track_number, id LIMIT 101 OFFSET ?2
+        "#).map_err(|_| LibraryCommandError::PersistenceFailed)?;
+        let rows = stmt
+            .query_map(params![id, offset], |r| {
+                Ok((
+                    r.get::<_, i64>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, Option<String>>(2)?,
+                    r.get::<_, Option<String>>(3)?,
+                    r.get::<_, Option<i64>>(4)?,
+                    r.get::<_, Option<i64>>(5)?,
+                    r.get::<_, Option<i64>>(6)?,
+                    r.get::<_, String>(7)?,
+                    r.get::<_, String>(8)?,
+                ))
+            })
+            .map_err(|_| LibraryCommandError::PersistenceFailed)?;
+        let mut items = rows
+            .map(|row| {
+                row.map(
+                    |(id, file, title, artist, track, disc, duration, availability, inspection)| {
+                        LibraryAlbumTrackSummary {
+                            id: id.to_string(),
+                            title: title.filter(|v| !v.trim().is_empty()).unwrap_or_else(|| {
+                                Path::new(&file)
+                                    .file_stem()
+                                    .and_then(|v| v.to_str())
+                                    .unwrap_or(&file)
+                                    .to_owned()
+                            }),
+                            artist: artist.filter(|v| !v.trim().is_empty()),
+                            track_number: track.map(|v| v as u32),
+                            disc_number: disc.map(|v| v as u32),
+                            duration_ms: duration.map(|v| v as u64),
+                            playable: availability == "available" && inspection == "indexed",
+                            availability: if availability == "available" {
+                                LibraryFileAvailability::Available
+                            } else {
+                                LibraryFileAvailability::Missing
+                            },
+                        }
+                    },
+                )
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|_| LibraryCommandError::PersistenceFailed)?;
+        let next_offset = if items.len() > 100 {
+            items.pop();
+            Some(
+                offset
+                    .checked_add(100)
+                    .ok_or(LibraryCommandError::InvalidId)?,
+            )
+        } else {
+            None
+        };
+        Ok(LibraryAlbumTrackPage { items, next_offset })
     }
     pub fn remove_root(&self, id: String) -> Result<(), LibraryCommandError> {
         if scanning(&self.state) {

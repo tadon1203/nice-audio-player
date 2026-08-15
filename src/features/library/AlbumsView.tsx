@@ -6,10 +6,12 @@ export function AlbumsView({
   albums,
   hasMore,
   onEnd,
+  onOpen,
 }: {
   albums: LibraryAlbumSummary[];
   hasMore: boolean;
   onEnd: () => void;
+  onOpen: (album: LibraryAlbumSummary) => void;
 }) {
   const sentinelRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -24,11 +26,10 @@ export function AlbumsView({
     return () => observer.disconnect();
   }, [hasMore, onEnd]);
   return (
-    <section>
-      <h2>Albums</h2>
+    <section className="library-view__album-section" aria-label="Albums">
       <div className="library-view__album-grid">
         {albums.map((album) => (
-          <AlbumCard key={album.id} album={album} />
+          <AlbumCard key={album.id} album={album} onOpen={onOpen} />
         ))}
       </div>
       <div ref={sentinelRef} aria-hidden="true" />

@@ -40,14 +40,18 @@ export function LayoutFixtureApp({ fixture }: LayoutFixtureAppProps) {
         destination={destination}
         onDestinationChange={setDestination}
         main={
-          <section
-            className={destination === "library" ? "library-view" : "settings-view"}
-            data-fixture-view={destination}
-            aria-label={destination === "library" ? "Library" : "Settings"}
-          >
-            <h1>{destination === "library" ? "Library" : "Settings"}</h1>
-            <p>Deterministic {destination} fixture content.</p>
-          </section>
+          fixture === "album-detail-wide" && destination === "library" ? (
+            <AlbumDetailLayoutFixture />
+          ) : (
+            <section
+              className={destination === "library" ? "library-view" : "settings-view"}
+              data-fixture-view={destination}
+              aria-label={destination === "library" ? "Library" : "Settings"}
+            >
+              <h1>{destination === "library" ? "Library" : "Settings"}</h1>
+              <p>Deterministic {destination} fixture content.</p>
+            </section>
+          )
         }
         dock={
           <PlaybackDock
@@ -81,6 +85,51 @@ export function LayoutFixtureApp({ fixture }: LayoutFixtureAppProps) {
         }
       />
     </div>
+  );
+}
+
+function AlbumDetailLayoutFixture() {
+  return (
+    <section className="album-detail" data-fixture-view="library" aria-label="Album detail">
+      <div className="album-detail__content">
+        <button type="button" className="album-detail__back">
+          ← Back to albums
+        </button>
+        <div className="album-detail__hero">
+          <div className="album-detail__artwork-wrap">
+            <img
+              className="album-detail__artwork library-view__artwork"
+              src="data:image/gif;base64,R0lGODlhAQABAAD/ACw="
+              alt=""
+            />
+          </div>
+          <div className="album-detail__identity">
+            <h1>A Very Long Album Title For Layout Verification</h1>
+            <p className="album-detail__artist">Fixture Artist</p>
+            <p className="album-detail__meta">2000 · 13 tracks · 42:00</p>
+            <button type="button" className="album-detail__play">
+              Play album
+            </button>
+          </div>
+        </div>
+        <div className="album-detail__tracks">
+          <section className="album-detail__group">
+            <h2>Disc 1</h2>
+            <ul className="album-detail__table">
+              {Array.from({ length: 13 }, (_, index) => (
+                <li key={index}>
+                  <button type="button" className="album-detail__row">
+                    <span className="type-numeric">{index + 1}</span>
+                    <span className="album-detail__track-title">Fixture track {index + 1}</span>
+                    <span className="type-numeric">4:32</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        </div>
+      </div>
+    </section>
   );
 }
 

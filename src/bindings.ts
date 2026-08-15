@@ -37,6 +37,10 @@ export const commands = {
     __TAURI_INVOKE<LibraryTrackPage>("list_library_tracks", { afterId, search }),
   listLibraryAlbums: (afterId: string | null, search: string | null) =>
     __TAURI_INVOKE<LibraryAlbumPage>("list_library_albums", { afterId, search }),
+  getLibraryAlbumDetails: (albumId: string) =>
+    __TAURI_INVOKE<LibraryAlbumDetails>("get_library_album_details", { albumId }),
+  listLibraryAlbumTracks: (albumId: string, offset: number) =>
+    __TAURI_INVOKE<LibraryAlbumTrackPage>("list_library_album_tracks", { albumId, offset }),
   removeLibraryRoot: (id: string) => __TAURI_INVOKE<null>("remove_library_root", { id }),
   getLibraryTrackForPath: (path: string) =>
     __TAURI_INVOKE<{
@@ -112,6 +116,14 @@ export type AudioOutputDeviceIdentity = {
 
 export type AudioOutputSelection = { kind: "systemDefault" } | { kind: "device"; deviceId: string };
 
+export type LibraryAlbumDetails = {
+  summary: LibraryAlbumSummary;
+  date: string | null;
+  trackCount: number;
+  durationMs: number | null;
+  firstPlayableTrackId: string | null;
+};
+
 export type LibraryAlbumPage = {
   items: LibraryAlbumSummary[];
   nextAfterId: string | null;
@@ -124,6 +136,22 @@ export type LibraryAlbumSummary = {
   artwork: ArtworkRef | null;
 };
 
+export type LibraryAlbumTrackPage = {
+  items: LibraryAlbumTrackSummary[];
+  nextOffset: number | null;
+};
+
+export type LibraryAlbumTrackSummary = {
+  id: string;
+  title: string;
+  artist: string | null;
+  trackNumber: number | null;
+  discNumber: number | null;
+  durationMs: number | null;
+  availability: LibraryFileAvailability;
+  playable: boolean;
+};
+
 export type LibraryCommandError =
   | { code: "invalidRoot" }
   | { code: "rootNotFound" }
@@ -133,6 +161,7 @@ export type LibraryCommandError =
   | { code: "overlappingRoot" }
   | { code: "scanInProgress" }
   | { code: "invalidId" }
+  | { code: "albumNotFound" }
   | { code: "rootMissing" }
   | { code: "scanAlreadyRunning" }
   | { code: "noEnabledRoots" }

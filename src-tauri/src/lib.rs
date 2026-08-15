@@ -22,8 +22,8 @@ use audio::playback::{
 };
 use library::{
     models::{
-        LibraryAlbumPage, LibraryRoot, LibraryScanSnapshot, LibraryStatus, LibraryTrackPage,
-        LibraryTrackSummary,
+        LibraryAlbumDetails, LibraryAlbumPage, LibraryAlbumTrackPage, LibraryRoot,
+        LibraryScanSnapshot, LibraryStatus, LibraryTrackPage, LibraryTrackSummary,
     },
     service::{LibraryCommandError, LibraryService, StartLibraryTrackError},
 };
@@ -112,6 +112,29 @@ async fn list_library_albums(
 ) -> Result<LibraryAlbumPage, LibraryCommandError> {
     let service = library.handle();
     tauri::async_runtime::spawn_blocking(move || service.albums(after_id, search))
+        .await
+        .map_err(|_| LibraryCommandError::TaskFailed)?
+}
+#[tauri::command]
+#[specta::specta]
+async fn get_library_album_details(
+    album_id: String,
+    library: tauri::State<'_, LibraryService>,
+) -> Result<LibraryAlbumDetails, LibraryCommandError> {
+    let service = library.handle();
+    tauri::async_runtime::spawn_blocking(move || service.album_details(album_id))
+        .await
+        .map_err(|_| LibraryCommandError::TaskFailed)?
+}
+#[tauri::command]
+#[specta::specta]
+async fn list_library_album_tracks(
+    album_id: String,
+    offset: u32,
+    library: tauri::State<'_, LibraryService>,
+) -> Result<LibraryAlbumTrackPage, LibraryCommandError> {
+    let service = library.handle();
+    tauri::async_runtime::spawn_blocking(move || service.album_tracks(album_id, offset))
         .await
         .map_err(|_| LibraryCommandError::TaskFailed)?
 }
@@ -551,6 +574,8 @@ fn collect_specta_commands<R: tauri::Runtime>() -> tauri_specta::Commands<R> {
         get_library_scan_state,
         list_library_tracks,
         list_library_albums,
+        get_library_album_details,
+        list_library_album_tracks,
         remove_library_root,
         get_library_track_for_path,
         start_library_track,

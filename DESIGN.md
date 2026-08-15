@@ -26,83 +26,41 @@ colors:
   transparent: "transparent"
 
 typography:
-  character-display-lg:
-    fontFamily: '"Zodiak", serif'
-    fontSize: 64px
-    fontWeight: 400
-    lineHeight: 0.96
-    letterSpacing: -0.02em
+  typeScale:
+    character-xl: 92px / 0.94
+    character-lg: 72px / 0.96
+    character-md: 56px / 0.98
+    character-sm: 44px / 1.00
+    display-lg: 44px / 1.12
+    display-md: 34px / 1.18
+    title: 22px / 1.30
+    body-lg: 18px / 1.50
+    body-md: 16px / 1.45
+    body-sm: 14px / 1.40
+    caption: 13px / 1.35
 
-  character-display-md:
-    fontFamily: '"Zodiak", serif'
-    fontSize: 52px
-    fontWeight: 400
-    lineHeight: 0.98
-    letterSpacing: -0.02em
+  fontRoles:
+    interface: "Switzer / Noto Sans JP / system fallback"
+    character: "Zodiak / Noto Sans JP / serif fallback"
 
-  character-display-sm:
-    fontFamily: '"Zodiak", serif'
-    fontSize: 40px
-    fontWeight: 400
-    lineHeight: 1
-    letterSpacing: -0.015em
+  weights:
+    regular: 400
+    medium: 500
+    semibold: 600
 
-  display-lg:
-    fontFamily: '"Switzer", "Noto Sans JP", sans-serif'
-    fontSize: 40px
-    fontWeight: 600
-    lineHeight: 1.15
-    letterSpacing: 0em
+  tracking:
+    character-tight: -0.02em
+    character-snug: -0.015em
+    label: 0.01em
 
-  display-md:
-    fontFamily: '"Switzer", "Noto Sans JP", sans-serif'
-    fontSize: 32px
-    fontWeight: 600
-    lineHeight: 1.2
-    letterSpacing: 0em
-
-  title:
-    fontFamily: '"Switzer", "Noto Sans JP", sans-serif'
-    fontSize: 20px
-    fontWeight: 600
-    lineHeight: 1.3
-    letterSpacing: 0em
-
-  body-lg:
-    fontFamily: '"Switzer", "Noto Sans JP", sans-serif'
-    fontSize: 16px
-    fontWeight: 400
-    lineHeight: 1.5
-    letterSpacing: 0em
-
-  body-md:
-    fontFamily: '"Switzer", "Noto Sans JP", sans-serif'
-    fontSize: 14px
-    fontWeight: 400
-    lineHeight: 1.43
-    letterSpacing: 0em
-
-  body-sm:
-    fontFamily: '"Switzer", "Noto Sans JP", sans-serif'
-    fontSize: 13px
-    fontWeight: 400
-    lineHeight: 1.38
-    letterSpacing: 0em
-
-  label:
-    fontFamily: '"Switzer", "Noto Sans JP", sans-serif'
-    fontSize: 12px
-    fontWeight: 500
-    lineHeight: 1.33
-    letterSpacing: 0.01em
-
-  numeric:
-    fontFamily: '"Switzer", "Noto Sans JP", sans-serif'
-    fontSize: 12px
-    fontWeight: 500
-    lineHeight: 1.33
-    letterSpacing: 0em
-    fontFeature: '"tnum" 1'
+  semanticRoles:
+    character-xl-lg-md: character + regular + character-tight
+    character-sm: character + regular + character-snug
+    display-lg-md: interface + semibold
+    title: interface + semibold
+    body-lg-md-sm: interface + regular
+    label: caption + interface + medium + label
+    numeric: caption + interface + medium + tabular nums
 
 spacing:
   s1: 4px
@@ -345,6 +303,11 @@ A light effect must have a visible source in the same viewport. The light remain
 Light does not pulse, rotate, travel across the viewport, or animate while the source remains unchanged.
 
 Typography remains flat. Do not apply emissive effects to Zodiak, Switzer, or Noto Sans JP.
+
+The Album Detail title is the sole media-identity exception that may use the character face; the
+album artist, metadata, controls, and track information use the interface face. Album artwork is
+foreground media only; it does not create a persistent background or propagated accent on controls,
+text, borders, or actions.
 
 ## Shapes
 

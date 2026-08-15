@@ -233,12 +233,7 @@ impl DecodeTask {
                     );
                 }
                 Ok(DecodeStep::EndOfStream) => {
-                    if decoder.finalize().is_err() {
-                        producer_state.store(ProducerState::DecodeFailed);
-                        let _ = signal_sender.try_send(OutputSignal::DecodeFailed { stream_id });
-                        let _ = prebuffer_sender.try_send(());
-                        return;
-                    }
+                    let finalization = decoder.finalize();
                     if let Err(error) = converter.flush(&mut converted) {
                         signal_failure(
                             error,
@@ -264,8 +259,15 @@ impl DecodeTask {
                         producer_state.store(ProducerState::Cancelled);
                         return;
                     }
-                    producer_state.store(ProducerState::EndOfStream);
                     let _ = prebuffer_sender.try_send(());
+                    match finalization {
+                        Ok(()) => producer_state.store(ProducerState::EndOfStream),
+                        Err(_) => {
+                            producer_state.store(ProducerState::DecodeFailed);
+                            let _ =
+                                signal_sender.try_send(OutputSignal::DecodeFailed { stream_id });
+                        }
+                    }
                     return;
                 }
                 Err(_) => {
@@ -362,7 +364,7 @@ fn notify_prebuffer_if_ready(
 #[cfg(test)]
 mod tests {
     use super::{prebuffer_frames, signal_failure, DecodeTaskInput, DecodeWorkerSetup};
-    use crate::audio::decoding::open_streaming_decoder;
+    use crate::audio::decoding::open_playback_decoder;
     use crate::audio::output::{OutputSignal, OutputStreamId, ProducerState};
     use crate::audio::output_processing::{OutputPcmProcessor, OutputProcessingError};
     use crate::audio::pcm_queue::bounded_pcm_queue;
@@ -402,7 +404,7 @@ mod tests {
         Arc<crate::audio::output::AtomicProducerState>,
         crate::audio::pcm_queue::PcmConsumer,
     ) {
-        let decoder = open_streaming_decoder(file).unwrap();
+        let decoder = open_playback_decoder(file).unwrap();
         let spec = decoder.spec();
         let mut first_packet = Vec::new();
         assert!(decoder.duration_ms().is_some());
@@ -456,7 +458,9 @@ mod tests {
         let directory = TestDirectory::new();
         let file = wav_file(&directory, 1_000);
         let (pipeline, state, _consumer) = start_pipeline(&file, 2_000);
-        wait_until(|| state.load() == ProducerState::EndOfStream && pipeline.prebuffer_ready());
+        wait_until(|| {
+            matches!(state.load(), ProducerState::EndOfStream) && pipeline.prebuffer_ready()
+        });
         pipeline.cancel_and_join();
     }
 

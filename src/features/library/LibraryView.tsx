@@ -1,11 +1,14 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import type { LibraryScanSnapshot, LibraryTrackSummary } from "@/bindings";
+import type { LibraryAlbumSummary, LibraryScanSnapshot, LibraryTrackSummary } from "@/bindings";
 import { getLibraryStatus, listLibraryRoots } from "@/api/library";
 import { useAlbumQuery } from "./use-album-query";
 import { useTrackQuery } from "./use-track-query";
 import { AlbumsView } from "./AlbumsView";
 import { TrackRow } from "./TrackRow";
+import { AlbumDetailView } from "./AlbumDetailView";
+import { ContentTransition } from "@/components/ui/ContentTransition";
+import { LibraryPresentationTabs } from "./LibraryPresentationTabs";
 
 interface Props {
   onOpenSettings: () => void;
@@ -29,6 +32,10 @@ export function LibraryView({
   const [rawSearch, setRawSearch] = useState("");
   const [search, setSearch] = useState("");
   const [hasRoots, setHasRoots] = useState<boolean | null>(null);
+  const [selectedAlbum, setSelectedAlbum] = useState<LibraryAlbumSummary | null>(null);
+  const browserScrollTop = useRef(0);
+  const pendingFocusRef = useRef<"detail" | "browser" | null>(null);
+  const focusAlbumIdRef = useRef<string | null>(null);
   const albumQuery = useAlbumQuery(search, libraryRefreshKey, presentation === "albums");
   const trackQuery = useTrackQuery(search, libraryRefreshKey, presentation === "tracks");
   useEffect(() => {
@@ -43,29 +50,28 @@ export function LibraryView({
   const empty =
     hasRoots === false ? "Set up your library" : search ? "No matches" : "No indexed music yet";
   const query = presentation === "albums" ? albumQuery : trackQuery;
-  return (
-    <section className="library-view" aria-label="Library">
+  useLayoutEffect(() => {
+    if (pendingFocusRef.current === "detail" && selectedAlbum) {
+      document.querySelector<HTMLButtonElement>(".album-detail__back")?.focus();
+      pendingFocusRef.current = null;
+    } else if (pendingFocusRef.current === "browser" && !selectedAlbum) {
+      scrollElement?.scrollTo({
+        top: browserScrollTop.current,
+        behavior: "instant" as ScrollBehavior,
+      });
+      const card = focusAlbumIdRef.current
+        ? document.querySelector<HTMLButtonElement>(`[data-album-id="${focusAlbumIdRef.current}"]`)
+        : null;
+      card?.focus({ preventScroll: true });
+      pendingFocusRef.current = null;
+    }
+  }, [scrollElement, selectedAlbum]);
+  const browser = (
+    <section className="library-view" data-presentation={presentation} aria-label="Library">
       <header className="library-view__header">
         <div>
           <h1>Library</h1>
-          <div className="library-view__switch" role="group" aria-label="Library presentation">
-            <button
-              type="button"
-              className={presentation === "albums" ? "is-active" : ""}
-              aria-pressed={presentation === "albums"}
-              onClick={() => setPresentation("albums")}
-            >
-              Albums
-            </button>
-            <button
-              type="button"
-              className={presentation === "tracks" ? "is-active" : ""}
-              aria-pressed={presentation === "tracks"}
-              onClick={() => setPresentation("tracks")}
-            >
-              Tracks
-            </button>
-          </div>
+          <LibraryPresentationTabs presentation={presentation} onChange={setPresentation} />
         </div>
         <label className="library-view__search">
           <span className="sr-only">Search your library</span>
@@ -102,22 +108,51 @@ export function LibraryView({
           </button>
         </div>
       ) : presentation === "albums" ? (
-        <AlbumsView
-          albums={albumQuery.items}
-          onEnd={albumQuery.loadNext}
-          hasMore={Boolean(albumQuery.nextAfterId)}
-        />
+        <ContentTransition contentKey="albums">
+          <AlbumsView
+            albums={albumQuery.items}
+            onEnd={albumQuery.loadNext}
+            hasMore={Boolean(albumQuery.nextAfterId)}
+            onOpen={(album) => {
+              browserScrollTop.current = scrollElement?.scrollTop ?? 0;
+              focusAlbumIdRef.current = album.id;
+              pendingFocusRef.current = "detail";
+              setSelectedAlbum(album);
+              scrollElement?.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
+            }}
+          />
+        </ContentTransition>
       ) : (
-        <Tracks
-          tracks={trackQuery.items}
-          onEnd={trackQuery.loadNext}
-          hasMore={Boolean(trackQuery.nextAfterId)}
-          playbackAvailable={playbackAvailable}
-          onPlayTrack={onPlayTrack}
-          scrollElement={scrollElement}
-        />
+        <ContentTransition contentKey="tracks">
+          <Tracks
+            tracks={trackQuery.items}
+            onEnd={trackQuery.loadNext}
+            hasMore={Boolean(trackQuery.nextAfterId)}
+            playbackAvailable={playbackAvailable}
+            onPlayTrack={onPlayTrack}
+            scrollElement={scrollElement}
+          />
+        </ContentTransition>
       )}
     </section>
+  );
+  const detail = selectedAlbum ? (
+    <AlbumDetailView
+      album={selectedAlbum}
+      refreshKey={libraryRefreshKey}
+      playbackAvailable={playbackAvailable}
+      scrollElement={scrollElement}
+      onPlayTrack={onPlayTrack}
+      onBack={() => {
+        pendingFocusRef.current = "browser";
+        setSelectedAlbum(null);
+      }}
+    />
+  ) : null;
+  return (
+    <ContentTransition contentKey={selectedAlbum ? `album:${selectedAlbum.id}` : "browser"}>
+      {detail ?? browser}
+    </ContentTransition>
   );
 }
 function Tracks({
@@ -143,7 +178,7 @@ function Tracks({
   const rowVirtualizer = useVirtualizer({
     count: tracks.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => 80,
+    estimateSize: () => 84,
     scrollMargin,
   });
   const virtualItems = rowVirtualizer.getVirtualItems();
@@ -177,12 +212,14 @@ function Tracks({
       <div
         ref={listRef}
         className="library-view__tracks"
+        role="list"
         style={{ height: `${rowVirtualizer.getTotalSize()}px`, position: "relative" }}
       >
         {virtualItems.map((item) => {
           const t = tracks[item.index];
           return (
             <div
+              role="listitem"
               ref={rowVirtualizer.measureElement}
               data-index={item.index}
               key={t.id}

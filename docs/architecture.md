@@ -137,6 +137,13 @@ startup. Channel-layout adaptation and application-side sample-rate adaptation r
 the real-time callback consumes output-ready interleaved PCM. Channel conversion, sample-rate conversion,
 gain, and scalar sample-format conversion remain separately identifiable responsibilities.
 
+Playback decoding prioritizes successful streaming and seekable decoding with codec, packet, and frame
+validation. Whole-file integrity verification requires decoding the complete source from its beginning through
+EOF and belongs to a separate verification workflow; it is not a playback success condition. Packet, read,
+conversion, and cancellation failures remain immediate. The audio callback remains non-blocking, I/O-free,
+allocation-free in its steady-state path, and limited to
+bounded queue consumption, timing arithmetic, atomic state reads, and non-blocking signals.
+
 ## 8. Concurrency and Background Work
 
 Each task, thread, or worker must have:
