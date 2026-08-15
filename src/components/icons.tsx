@@ -69,6 +69,14 @@ export function StopIcon() {
   );
 }
 
+export function PlayIcon({ className }: { className?: string } = {}) {
+  return (
+    <Svg className={className}>
+      <path d="M8 5L18 12L8 19L8 5Z" fill="currentColor" />
+    </Svg>
+  );
+}
+
 export function VolumeIcon({
   state,
   className,

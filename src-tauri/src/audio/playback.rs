@@ -5,9 +5,7 @@ use std::sync::{
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-use cpal::StreamInstant;
-
-use super::decoding::{open_streaming_decoder, DecodeStep, PcmDecodeError, SeekStep};
+use super::decoding::{open_playback_decoder, DecodeStep, PcmDecodeError, SeekStep};
 use super::devices::{
     resolve_output_device_id, resolve_output_selection, AudioOutputDeviceIdentity,
     AudioOutputSelection, DeviceResolutionError,
@@ -19,6 +17,7 @@ use super::output::{
 use super::output_processing::{ChannelConversion, OutputPcmProcessor};
 use super::volume::{AtomicEffectiveGain, VolumeState};
 use crate::media::validation::ValidatedAudioFile;
+use cpal::StreamInstant;
 
 mod decode_worker;
 use decode_worker::{DecodePipeline, DecodeTaskInput, DecodeWorker, DecodeWorkerSetup};
@@ -733,7 +732,7 @@ impl PlaybackWorker {
         self.discard_pending();
         self.discard_pending_seek();
         self.discard_active();
-        let mut decoder = match open_streaming_decoder(&file) {
+        let mut decoder = match open_playback_decoder(&file) {
             Ok(decoder) => decoder,
             Err(_) => {
                 let _ = reply.send(Err(PlaybackServiceError::Decode));
@@ -872,7 +871,7 @@ impl PlaybackWorker {
             }
         };
         let preroll_frames = processor.seek_preroll_frames(target_source_frame);
-        let mut decoder = match open_streaming_decoder(&source_file) {
+        let mut decoder = match open_playback_decoder(&source_file) {
             Ok(decoder) => decoder,
             Err(_) => {
                 let _ = reply.send(Err(PlaybackServiceError::Decode));
@@ -1531,10 +1530,10 @@ impl PlaybackWorker {
         }
     }
     fn finish_if_due(&mut self) {
-        let due = self.active.as_ref().is_some_and(|active| {
+        let is_due = self.active.as_ref().is_some_and(|active| {
             should_finish(&self.current(), active.completion_time, active.stream.now())
         });
-        if due {
+        if is_due {
             self.discard_pending_seek();
             self.discard_active();
             self.publish(self.stopped_snapshot());

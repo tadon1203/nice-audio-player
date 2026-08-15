@@ -740,10 +740,10 @@ where
                     playback_time: info.timestamp().playback,
                 });
 
-                if producer_state.load() != ProducerState::EndOfStream
-                    || !consumer.is_empty()
-                    || completion_sent
-                {
+                if producer_state.load() != ProducerState::EndOfStream {
+                    return;
+                }
+                if !consumer.is_empty() || completion_sent {
                     return;
                 }
                 let Some(end_time) = last_end_time else {

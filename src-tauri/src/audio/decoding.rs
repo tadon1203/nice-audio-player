@@ -79,8 +79,19 @@ pub(crate) struct StreamingDecoder {
     finished: bool,
 }
 
-pub(crate) fn open_streaming_decoder(
+pub(crate) fn open_playback_decoder(
     file: &ValidatedAudioFile,
+) -> Result<StreamingDecoder, PcmDecodeError> {
+    open_decoder(file, false)
+}
+
+fn open_verified_decoder(file: &ValidatedAudioFile) -> Result<StreamingDecoder, PcmDecodeError> {
+    open_decoder(file, true)
+}
+
+fn open_decoder(
+    file: &ValidatedAudioFile,
+    verify: bool,
 ) -> Result<StreamingDecoder, PcmDecodeError> {
     let source = File::open(&file.path).map_err(|_| PcmDecodeError::FileOpenFailed)?;
     let media_source =
@@ -127,8 +138,9 @@ pub(crate) fn open_streaming_decoder(
     let time_base = track.time_base.unwrap_or_else(|| {
         TimeBase::from_recip(std::num::NonZeroU32::new(expected_spec.sample_rate().get()).unwrap())
     });
+    let decoder_options = AudioDecoderOptions::default().verify(verify);
     let decoder = get_codecs()
-        .make_audio_decoder(codec_params, &AudioDecoderOptions::default().verify(true))
+        .make_audio_decoder(codec_params, &decoder_options)
         .map_err(map_decoder_creation_error)?;
 
     Ok(StreamingDecoder {
@@ -283,7 +295,7 @@ fn decode_audio_file_with_cancel_check(
     check_cancelled(&mut is_cancelled)?;
 
     let mut samples = Vec::<f32>::new();
-    let mut decoder = open_streaming_decoder(file)?;
+    let mut decoder = open_verified_decoder(file)?;
     let output_spec = decoder.spec();
     let mut packet_samples = Vec::new();
 
@@ -411,7 +423,7 @@ fn map_pcm_build_error(error: PcmBufferBuildError) -> PcmDecodeError {
 #[cfg(test)]
 mod tests {
     use super::{
-        decode_audio_file, decode_audio_file_with_cancel_check, open_streaming_decoder,
+        decode_audio_file, decode_audio_file_with_cancel_check, open_playback_decoder,
         DecodeCancellation, DecodeStep, PcmDecodeError, SeekStep,
     };
     use crate::media::validation::ValidatedAudioFile;
@@ -552,7 +564,7 @@ mod tests {
             samples.push(frame);
         }
         write_pcm_i16_wav(&path, 100_000, 1, &samples);
-        let mut decoder = open_streaming_decoder(&validated(&path)).expect("decoder opens");
+        let mut decoder = open_playback_decoder(&validated(&path)).expect("decoder opens");
         let result = decoder.seek_to_frame(500).expect("seek succeeds");
         let SeekStep::Samples(result) = result else {
             panic!("seek reached end of stream unexpectedly");

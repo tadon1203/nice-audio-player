@@ -2,7 +2,9 @@ import { useEffect, useState } from "react";
 import type { ArtworkRef } from "@/bindings";
 import { resolveArtworkUrl } from "@/lib/artwork-url";
 
-export function LibraryArtwork({ artwork }: { artwork: ArtworkRef | null }) {
+const artworkUrlCache = new WeakMap<object, Promise<string | null>>();
+
+export function useLibraryArtworkUrl(artwork: ArtworkRef | null) {
   const [url, setUrl] = useState<string | null>(null);
   useEffect(() => {
     let active = true;
@@ -14,20 +16,33 @@ export function LibraryArtwork({ artwork }: { artwork: ArtworkRef | null }) {
         active = false;
       };
     }
-    void resolveArtworkUrl(artwork)
-      .then((next) => {
-        if (active) setUrl(next);
-      })
-      .catch(() => {
-        if (active) setUrl(null);
-      });
+    const pending = artworkUrlCache.get(artwork) ?? resolveArtworkUrl(artwork);
+    artworkUrlCache.set(artwork, pending);
+    void pending.then((next) => active && setUrl(next)).catch(() => active && setUrl(null));
     return () => {
       active = false;
     };
   }, [artwork]);
+  return url;
+}
+
+export function LibraryArtwork({
+  artwork,
+  className,
+  resolvedUrl,
+}: {
+  artwork: ArtworkRef | null;
+  className?: string;
+  resolvedUrl?: string | null;
+}) {
+  const resolvedArtworkUrl = useLibraryArtworkUrl(artwork);
+  const url = resolvedUrl === undefined ? resolvedArtworkUrl : resolvedUrl;
   return url ? (
-    <img className="library-view__artwork" src={url} alt="" />
+    <img className={`library-view__artwork ${className ?? ""}`} src={url} alt="" />
   ) : (
-    <span className="library-view__artwork library-view__artwork--placeholder" aria-hidden="true" />
+    <span
+      className={`library-view__artwork library-view__artwork--placeholder ${className ?? ""}`}
+      aria-hidden="true"
+    />
   );
 }

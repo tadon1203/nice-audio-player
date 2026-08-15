@@ -9,7 +9,8 @@ export type LayoutFixtureName =
   | "volume-zero"
   | "volume-muted"
   | "seek-pending"
-  | "failed";
+  | "failed"
+  | "album-detail-wide";
 
 const fixtures = new Set<LayoutFixtureName>([
   "empty",
@@ -23,6 +24,7 @@ const fixtures = new Set<LayoutFixtureName>([
   "volume-muted",
   "seek-pending",
   "failed",
+  "album-detail-wide",
 ]);
 
 export function resolveLayoutFixture(search: string): LayoutFixtureName {

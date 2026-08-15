@@ -124,6 +124,33 @@ pub struct LibraryAlbumPage {
 }
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
+pub struct LibraryAlbumDetails {
+    pub summary: LibraryAlbumSummary,
+    pub date: Option<String>,
+    pub track_count: u64,
+    pub duration_ms: Option<u64>,
+    pub first_playable_track_id: Option<String>,
+}
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryAlbumTrackSummary {
+    pub id: String,
+    pub title: String,
+    pub artist: Option<String>,
+    pub track_number: Option<u32>,
+    pub disc_number: Option<u32>,
+    pub duration_ms: Option<u64>,
+    pub availability: LibraryFileAvailability,
+    pub playable: bool,
+}
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryAlbumTrackPage {
+    pub items: Vec<LibraryAlbumTrackSummary>,
+    pub next_offset: Option<u32>,
+}
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
 pub enum LibraryScanState {
     Idle,
     Running,

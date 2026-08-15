@@ -9,14 +9,16 @@
   color: var(--color-text-primary);
   font-family: var(--font-character);
   font-size: var(--text-character-md);
-  font-weight: 400;
-  line-height: 1;
-  letter-spacing: var(--text-character-sm--letter-spacing);
+  font-weight: var(--font-weight-regular);
+  line-height: var(--text-character-md--line-height);
+  letter-spacing: var(--tracking-character-tight);
 }
 .settings-view h2 {
   margin: 20px 0 12px;
   color: var(--color-text-primary);
   font-size: var(--text-title);
+  line-height: var(--text-title--line-height);
+  font-weight: var(--font-weight-semibold);
 }
 .settings-view p {
   margin: 0;
