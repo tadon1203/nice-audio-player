@@ -176,6 +176,10 @@ Reusable media validation and technical inspection are separate from playback ow
 
 The local-library database, file traversal, and scan lifecycle are Rust-owned background work and remain isolated from playback workers and audio callbacks. Source-derived records are revisioned independently from future application-derived analysis. Embedded artwork is stored as app-owned assets and referenced by application models; it is not a database BLOB or playback-snapshot payload.
 
+Ordered playback sequences are session-scoped Rust-owned playback state. The Library resolves library
+identities and validates source files before they enter a sequence; neither library persistence nor
+sequence state enters the real-time audio callback.
+
 ## 10. Provider and Credential Rules
 
 External providers must remain optional and isolated from local playback.

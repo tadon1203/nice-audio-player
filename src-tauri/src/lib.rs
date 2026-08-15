@@ -25,7 +25,9 @@ use library::{
         LibraryAlbumDetails, LibraryAlbumPage, LibraryAlbumTrackPage, LibraryRoot,
         LibraryScanSnapshot, LibraryStatus, LibraryTrackPage, LibraryTrackSummary,
     },
-    service::{LibraryCommandError, LibraryService, StartLibraryTrackError},
+    service::{
+        LibraryCommandError, LibraryService, StartLibraryAlbumError, StartLibraryTrackError,
+    },
 };
 use media::inspection::{
     inspect_audio_file as inspect_validated_audio_file, AudioFileInfo, AudioFileInspectionError,
@@ -177,6 +179,43 @@ async fn start_library_track(
     .map_err(|_| StartLibraryTrackError::TaskFailed)?
 }
 
+#[tauri::command]
+#[specta::specta]
+async fn start_library_album(
+    album_id: String,
+    library: tauri::State<'_, LibraryService>,
+    playback: tauri::State<'_, PlaybackService>,
+) -> Result<PlaybackSnapshot, StartLibraryAlbumError> {
+    let library = library.handle();
+    let playback = playback.handle();
+    tauri::async_runtime::spawn_blocking(move || {
+        let sources = library.album_playable_sources(album_id)?;
+        playback
+            .play_sequence(sources)
+            .map_err(map_start_library_album_error)
+    })
+    .await
+    .map_err(|_| StartLibraryAlbumError::TaskFailed)?
+}
+
+fn map_start_library_album_error(error: PlaybackServiceError) -> StartLibraryAlbumError {
+    match error {
+        PlaybackServiceError::WorkerUnavailable => {
+            StartLibraryAlbumError::PlaybackWorkerUnavailable
+        }
+        PlaybackServiceError::Output(PlaybackFailureCode::NoOutputDevice) => {
+            StartLibraryAlbumError::NoOutputDevice
+        }
+        PlaybackServiceError::Output(PlaybackFailureCode::OutputDeviceUnavailable) => {
+            StartLibraryAlbumError::OutputDeviceUnavailable
+        }
+        PlaybackServiceError::Decode
+        | PlaybackServiceError::DurationUnavailable
+        | PlaybackServiceError::Seek => StartLibraryAlbumError::DecodeFailed,
+        _ => StartLibraryAlbumError::OutputFailed,
+    }
+}
+
 fn map_start_library_error(error: PlaybackServiceError) -> StartLibraryTrackError {
     match error {
         PlaybackServiceError::WorkerUnavailable => {
@@ -311,6 +350,54 @@ enum SetPlaybackVolumeError {
 enum PlaybackMuteError {
     PlaybackWorkerUnavailable,
     TaskFailed,
+}
+
+#[allow(clippy::enum_variant_names)]
+#[derive(Debug, Clone, serde::Serialize, specta::Type, PartialEq, Eq)]
+#[serde(tag = "code", rename_all = "camelCase")]
+enum PlaybackNavigationError {
+    InvalidPlaybackState,
+    DecodeFailed,
+    OutputFailed,
+    PlaybackWorkerUnavailable,
+    TaskFailed,
+}
+
+fn map_navigation_error(error: PlaybackServiceError) -> PlaybackNavigationError {
+    match error {
+        PlaybackServiceError::InvalidPlaybackState => PlaybackNavigationError::InvalidPlaybackState,
+        PlaybackServiceError::Decode
+        | PlaybackServiceError::Seek
+        | PlaybackServiceError::DurationUnavailable => PlaybackNavigationError::DecodeFailed,
+        PlaybackServiceError::WorkerUnavailable => {
+            PlaybackNavigationError::PlaybackWorkerUnavailable
+        }
+        _ => PlaybackNavigationError::OutputFailed,
+    }
+}
+
+#[tauri::command]
+#[specta::specta]
+async fn previous_audio_playback(
+    playback: tauri::State<'_, PlaybackService>,
+) -> Result<PlaybackSnapshot, PlaybackNavigationError> {
+    let playback = playback.handle();
+    tauri::async_runtime::spawn_blocking(move || playback.previous())
+        .await
+        .map_err(|_| PlaybackNavigationError::TaskFailed)?
+        .map_err(map_navigation_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+async fn next_audio_playback(
+    playback: tauri::State<'_, PlaybackService>,
+) -> Result<PlaybackSnapshot, PlaybackNavigationError> {
+    let playback = playback.handle();
+    tauri::async_runtime::spawn_blocking(move || playback.next())
+        .await
+        .map_err(|_| PlaybackNavigationError::TaskFailed)?
+        .map_err(map_navigation_error)
 }
 
 fn map_start_error(error: PlaybackServiceError) -> StartAudioFileError {
@@ -579,6 +666,9 @@ fn collect_specta_commands<R: tauri::Runtime>() -> tauri_specta::Commands<R> {
         remove_library_root,
         get_library_track_for_path,
         start_library_track,
+        start_library_album,
+        previous_audio_playback,
+        next_audio_playback,
     ]
 }
 

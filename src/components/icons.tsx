@@ -77,6 +77,18 @@ export function PlayIcon({ className }: { className?: string } = {}) {
   );
 }
 
+export function SkipTrackIcon({ direction }: { direction: "previous" | "next" }) {
+  const next = direction === "next";
+  return (
+    <Svg className="playback-dock__navigation-icon">
+      <path
+        d={next ? "M5 6l9 6-9 6V6zm10 0h3v12h-3V6z" : "M19 6l-9 6 9 6V6zM6 6h3v12H6V6z"}
+        fill="currentColor"
+      />
+    </Svg>
+  );
+}
+
 export function VolumeIcon({
   state,
   className,

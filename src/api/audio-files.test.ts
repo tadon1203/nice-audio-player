@@ -19,6 +19,8 @@ const snapshotBase = {
   volume: 1,
   muted: false,
   outputSelection,
+  canGoPrevious: false,
+  canGoNext: false,
   channelConversion: "none",
   sourceSampleRate: 44_100,
   outputSampleRate: 44_100,

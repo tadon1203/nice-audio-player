@@ -1,13 +1,5 @@
-# Dependencies
-node_modules/
-
-# Build outputs
+.agents/skills/impeccable/
 dist/
 src-tauri/target/
-coverage/
-
-# Generated Tauri files
 src-tauri/gen/
-
-# Lockfile
 pnpm-lock.yaml

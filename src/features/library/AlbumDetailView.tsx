@@ -15,6 +15,9 @@ export function AlbumDetailView({
   playbackAvailable,
   onBack,
   onPlayTrack,
+  onPlayAlbum,
+  activeTrackId,
+  playbackStatus,
   scrollElement,
 }: {
   album: LibraryAlbumSummary;
@@ -22,6 +25,9 @@ export function AlbumDetailView({
   playbackAvailable: boolean;
   onBack: () => void;
   onPlayTrack: (id: string) => void;
+  onPlayAlbum: (id: string) => void;
+  activeTrackId: string | null;
+  playbackStatus: "stopped" | "playing" | "paused" | "failed";
   scrollElement: HTMLElement | null;
 }) {
   const backRef = useRef<HTMLButtonElement>(null);
@@ -93,9 +99,7 @@ export function AlbumDetailView({
               variant="filled"
               className="album-detail__play"
               disabled={!playbackAvailable || !detail?.firstPlayableTrackId}
-              onClick={() =>
-                detail?.firstPlayableTrackId && onPlayTrack(detail.firstPlayableTrackId)
-              }
+              onClick={() => onPlayAlbum(album.id)}
             >
               <PlayIcon /> Play album
             </Button>
@@ -132,6 +136,8 @@ export function AlbumDetailView({
                 albumArtist={summary.albumArtist}
                 playbackAvailable={playbackAvailable}
                 onPlayTrack={onPlayTrack}
+                activeTrackId={activeTrackId}
+                playbackStatus={playbackStatus}
                 hideHeading={
                   detail?.trackCount === 1 && query.items.length === 1 && query.nextOffset === null
                 }
@@ -176,6 +182,8 @@ function TrackGroup({
   albumArtist,
   playbackAvailable,
   onPlayTrack,
+  activeTrackId,
+  playbackStatus,
   hideHeading,
   hideTrackNumber,
 }: {
@@ -184,6 +192,8 @@ function TrackGroup({
   albumArtist: string;
   playbackAvailable: boolean;
   onPlayTrack: (id: string) => void;
+  activeTrackId: string | null;
+  playbackStatus: "stopped" | "playing" | "paused" | "failed";
   hideHeading: boolean;
   hideTrackNumber: boolean;
 }) {
@@ -191,34 +201,51 @@ function TrackGroup({
     <section className="album-detail__group">
       {hideHeading ? null : <h2>{label}</h2>}
       <ul className="album-detail__table" aria-label={label}>
-        {tracks.map((t) => (
-          <li key={t.id}>
-            <button
-              type="button"
-              className={
-                hideTrackNumber
-                  ? "album-detail__row album-detail__row--single"
-                  : "album-detail__row"
-              }
-              disabled={!playbackAvailable || !t.playable}
-              aria-label={`Play ${t.title} by ${t.artist ?? albumArtist}`}
-              onClick={() => onPlayTrack(t.id)}
-            >
-              {hideTrackNumber ? null : (
-                <span className="type-numeric">{t.trackNumber ?? "—"}</span>
-              )}
-              <span className="album-detail__track-title">
-                <span className="album-detail__track-title-main">{t.title}</span>
-                {t.artist && t.artist.trim() !== albumArtist.trim() ? (
-                  <small>{t.artist}</small>
-                ) : null}
-              </span>
-              <span className="type-numeric">
-                {t.durationMs === null ? "--:--" : formatPlaybackTime(t.durationMs)}
-              </span>
-            </button>
-          </li>
-        ))}
+        {tracks.map((t) => {
+          const active =
+            t.id === activeTrackId && (playbackStatus === "playing" || playbackStatus === "paused");
+          return (
+            <li key={t.id}>
+              <button
+                type="button"
+                className={`${
+                  hideTrackNumber
+                    ? "album-detail__row album-detail__row--single"
+                    : "album-detail__row"
+                }${active ? " album-detail__row--active" : ""}`}
+                disabled={!playbackAvailable || !t.playable}
+                aria-label={`${active ? `${playbackStatus === "playing" ? "Playing" : "Paused"}: ` : "Play "}${t.title} by ${t.artist ?? albumArtist}`}
+                onClick={() => onPlayTrack(t.id)}
+              >
+                {hideTrackNumber ? null : (
+                  <span className="type-numeric">
+                    {active ? (
+                      <span
+                        className={`album-detail__playing-bars${playbackStatus === "playing" ? " is-playing" : ""}`}
+                        aria-hidden="true"
+                      >
+                        <i />
+                        <i />
+                        <i />
+                      </span>
+                    ) : (
+                      (t.trackNumber ?? "—")
+                    )}
+                  </span>
+                )}
+                <span className="album-detail__track-title">
+                  <span className="album-detail__track-title-main">{t.title}</span>
+                  {t.artist && t.artist.trim() !== albumArtist.trim() ? (
+                    <small>{t.artist}</small>
+                  ) : null}
+                </span>
+                <span className="type-numeric">
+                  {t.durationMs === null ? "--:--" : formatPlaybackTime(t.durationMs)}
+                </span>
+              </button>
+            </li>
+          );
+        })}
       </ul>
     </section>
   );

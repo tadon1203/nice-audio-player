@@ -15,6 +15,7 @@ import type {
   LibraryAlbumTrackSummary,
   PlaybackSnapshot,
   StartLibraryTrackError,
+  StartLibraryAlbumError,
 } from "@/bindings";
 
 const startLibraryTrackErrorCodes = {
@@ -35,6 +36,31 @@ const startLibraryTrackErrorCodes = {
 export async function startLibraryTrack(trackId: string): Promise<PlaybackSnapshot> {
   validateId(trackId);
   return commands.startLibraryTrack(trackId);
+}
+const startLibraryAlbumErrorCodes = {
+  invalidId: true,
+  albumNotFound: true,
+  noPlayableTracks: true,
+  sourceUnavailable: true,
+  libraryUnavailable: true,
+  persistenceFailed: true,
+  decodeFailed: true,
+  noOutputDevice: true,
+  outputDeviceUnavailable: true,
+  outputFailed: true,
+  playbackWorkerUnavailable: true,
+  taskFailed: true,
+} satisfies Record<StartLibraryAlbumError["code"], true>;
+export async function startLibraryAlbum(albumId: string): Promise<PlaybackSnapshot> {
+  validateId(albumId);
+  return commands.startLibraryAlbum(albumId);
+}
+export function isStartLibraryAlbumError(value: unknown): value is StartLibraryAlbumError {
+  return (
+    isRecord(value) &&
+    typeof value.code === "string" &&
+    Object.prototype.hasOwnProperty.call(startLibraryAlbumErrorCodes, value.code)
+  );
 }
 export function isStartLibraryTrackError(value: unknown): value is StartLibraryTrackError {
   return (

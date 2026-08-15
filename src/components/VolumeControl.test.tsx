@@ -12,6 +12,8 @@ const playback = (volume: number, muted: boolean): PlaybackSnapshot => ({
   volume,
   muted,
   outputSelection: { kind: "systemDefault" },
+  canGoPrevious: false,
+  canGoNext: false,
 });
 
 const base = {

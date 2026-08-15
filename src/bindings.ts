@@ -56,6 +56,11 @@ export const commands = {
     } | null>("get_library_track_for_path", { path }),
   startLibraryTrack: (trackId: string) =>
     __TAURI_INVOKE<PlaybackSnapshot_Serialize>("start_library_track", { trackId }),
+  startLibraryAlbum: (albumId: string) =>
+    __TAURI_INVOKE<PlaybackSnapshot_Serialize>("start_library_album", { albumId }),
+  previousAudioPlayback: () =>
+    __TAURI_INVOKE<PlaybackSnapshot_Serialize>("previous_audio_playback"),
+  nextAudioPlayback: () => __TAURI_INVOKE<PlaybackSnapshot_Serialize>("next_audio_playback"),
 };
 
 /* Types */
@@ -242,6 +247,13 @@ export type PlaybackFailureCode =
 
 export type PlaybackMuteError = { code: "playbackWorkerUnavailable" } | { code: "taskFailed" };
 
+export type PlaybackNavigationError =
+  | { code: "invalidPlaybackState" }
+  | { code: "decodeFailed" }
+  | { code: "outputFailed" }
+  | { code: "playbackWorkerUnavailable" }
+  | { code: "taskFailed" };
+
 export type PlaybackSnapshot = PlaybackSnapshot_Serialize | PlaybackSnapshot_Deserialize;
 
 export type PlaybackSnapshot_Deserialize =
@@ -252,6 +264,8 @@ export type PlaybackSnapshot_Deserialize =
       volume: number;
       muted: boolean;
       outputSelection: AudioOutputSelection;
+      canGoPrevious: boolean;
+      canGoNext: boolean;
     } & {
       channelConversion?: never;
       durationMs?: never;
@@ -278,6 +292,8 @@ export type PlaybackSnapshot_Deserialize =
       sourceSampleRate: number;
       outputSampleRate: number;
       resamplingActive: boolean;
+      canGoPrevious: boolean;
+      canGoNext: boolean;
     } & { error?: never })
   | ({
       status: "paused";
@@ -294,6 +310,8 @@ export type PlaybackSnapshot_Deserialize =
       sourceSampleRate: number;
       outputSampleRate: number;
       resamplingActive: boolean;
+      canGoPrevious: boolean;
+      canGoNext: boolean;
     } & { error?: never })
   | ({
       status: "failed";
@@ -304,6 +322,8 @@ export type PlaybackSnapshot_Deserialize =
       volume: number;
       muted: boolean;
       outputSelection: AudioOutputSelection;
+      canGoPrevious: boolean;
+      canGoNext: boolean;
     } & {
       channelConversion?: never;
       durationMs?: never;
@@ -322,6 +342,8 @@ export type PlaybackSnapshot_Serialize =
       volume: number;
       muted: boolean;
       outputSelection: AudioOutputSelection;
+      canGoPrevious: boolean;
+      canGoNext: boolean;
     } & {
       channelConversion?: never;
       durationMs?: never;
@@ -348,6 +370,8 @@ export type PlaybackSnapshot_Serialize =
       sourceSampleRate: number;
       outputSampleRate: number;
       resamplingActive: boolean;
+      canGoPrevious: boolean;
+      canGoNext: boolean;
     } & { error?: never })
   | ({
       status: "paused";
@@ -364,6 +388,8 @@ export type PlaybackSnapshot_Serialize =
       sourceSampleRate: number;
       outputSampleRate: number;
       resamplingActive: boolean;
+      canGoPrevious: boolean;
+      canGoNext: boolean;
     } & { error?: never })
   | ({
       status: "failed";
@@ -374,6 +400,8 @@ export type PlaybackSnapshot_Serialize =
       volume: number;
       muted: boolean;
       outputSelection: AudioOutputSelection;
+      canGoPrevious: boolean;
+      canGoNext: boolean;
     } & {
       channelConversion?: never;
       durationMs?: never;
@@ -411,6 +439,20 @@ export type SetPlaybackVolumeError =
 
 export type StartAudioFileError =
   | { code: "validationFailed"; error: AudioFileValidationError }
+  | { code: "decodeFailed" }
+  | { code: "noOutputDevice" }
+  | { code: "outputDeviceUnavailable" }
+  | { code: "outputFailed" }
+  | { code: "playbackWorkerUnavailable" }
+  | { code: "taskFailed" };
+
+export type StartLibraryAlbumError =
+  | { code: "invalidId" }
+  | { code: "albumNotFound" }
+  | { code: "noPlayableTracks" }
+  | { code: "sourceUnavailable" }
+  | { code: "libraryUnavailable" }
+  | { code: "persistenceFailed" }
   | { code: "decodeFailed" }
   | { code: "noOutputDevice" }
   | { code: "outputDeviceUnavailable" }

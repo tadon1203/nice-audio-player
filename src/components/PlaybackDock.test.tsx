@@ -17,6 +17,8 @@ const stopped: PlaybackSnapshot = {
   volume: 0.5,
   muted: false,
   outputSelection: { kind: "systemDefault" },
+  canGoPrevious: false,
+  canGoNext: false,
 };
 const base = {
   playback: stopped,
@@ -74,6 +76,8 @@ describe("PlaybackDock", () => {
           volume: 0.5,
           muted: false,
           outputSelection: { kind: "systemDefault" },
+          canGoPrevious: false,
+          canGoNext: false,
           outputDevice: { id: "default", name: "Default" },
           channelConversion: "none",
           sourceSampleRate: 44100,

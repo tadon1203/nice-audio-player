@@ -612,6 +612,64 @@ impl LibraryShared {
         validate_audio_file(source.to_string_lossy().as_ref())
             .map_err(|_| StartLibraryTrackError::TrackUnavailable)
     }
+    pub fn album_playable_sources(
+        &self,
+        album_id: String,
+    ) -> Result<Vec<ValidatedAudioFile>, StartLibraryAlbumError> {
+        let id = parse_id(&album_id).map_err(|_| StartLibraryAlbumError::InvalidId)?;
+        let c = self
+            .db()
+            .map_err(|_| StartLibraryAlbumError::LibraryUnavailable)?
+            .read()
+            .map_err(|_| StartLibraryAlbumError::PersistenceFailed)?;
+        let mut statement = c.prepare(r#"
+            WITH members AS (
+                SELECT t.id, r.path, f.relative_path, f.availability, f.inspection_status,
+                    COALESCE(NULLIF(trim(m.album), ''), 'Unknown album') AS album_title,
+                    COALESCE(NULLIF(trim(m.album_artist), ''), NULLIF(trim(m.artist), ''), 'Unknown artist') AS album_artist,
+                    m.disc_number, m.track_number
+                FROM tracks t JOIN library_files f ON f.id=t.file_id JOIN library_roots r ON r.id=f.root_id
+                LEFT JOIN track_source_metadata m ON m.track_id=t.id AND m.source_revision=f.source_revision
+            ), selected AS (
+                SELECT m.* FROM members m JOIN (
+                    SELECT album_title, album_artist FROM members WHERE id=?1
+                ) identity ON identity.album_title=m.album_title AND identity.album_artist=m.album_artist
+            )
+            SELECT path, relative_path FROM selected
+            WHERE availability='available' AND inspection_status='indexed'
+            ORDER BY CASE WHEN disc_number IS NULL THEN 1 ELSE 0 END, disc_number,
+                CASE WHEN track_number IS NULL THEN 1 ELSE 0 END, track_number, id
+        "#).map_err(|_| StartLibraryAlbumError::PersistenceFailed)?;
+        let rows = statement
+            .query_map(params![id], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })
+            .map_err(|_| StartLibraryAlbumError::PersistenceFailed)?;
+        let candidates = rows
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|_| StartLibraryAlbumError::PersistenceFailed)?;
+        if candidates.is_empty() {
+            let exists: bool = c
+                .query_row(
+                    "SELECT EXISTS(SELECT 1 FROM tracks WHERE id=?1)",
+                    params![id],
+                    |r| r.get(0),
+                )
+                .map_err(|_| StartLibraryAlbumError::PersistenceFailed)?;
+            return Err(if exists {
+                StartLibraryAlbumError::NoPlayableTracks
+            } else {
+                StartLibraryAlbumError::AlbumNotFound
+            });
+        }
+        candidates
+            .into_iter()
+            .map(|(root, relative)| {
+                validate_audio_file(Path::new(&root).join(relative).to_string_lossy().as_ref())
+                    .map_err(|_| StartLibraryAlbumError::SourceUnavailable)
+            })
+            .collect()
+    }
     pub fn start_scan(&self) -> Result<(), LibraryCommandError> {
         if scanning(&self.state) {
             return Err(LibraryCommandError::ScanAlreadyRunning);
@@ -662,6 +720,22 @@ pub enum StartLibraryTrackError {
     TrackNotFound,
     TrackUnavailable,
     TrackNotPlayable,
+    LibraryUnavailable,
+    PersistenceFailed,
+    DecodeFailed,
+    NoOutputDevice,
+    OutputDeviceUnavailable,
+    OutputFailed,
+    PlaybackWorkerUnavailable,
+    TaskFailed,
+}
+#[derive(Debug, Clone, serde::Serialize, specta::Type)]
+#[serde(tag = "code", rename_all = "camelCase")]
+pub enum StartLibraryAlbumError {
+    InvalidId,
+    AlbumNotFound,
+    NoPlayableTracks,
+    SourceUnavailable,
     LibraryUnavailable,
     PersistenceFailed,
     DecodeFailed,

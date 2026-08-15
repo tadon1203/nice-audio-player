@@ -4,6 +4,7 @@ import { getLibraryTrackForPath } from "@/api/library";
 import { resolveArtworkUrl } from "@/lib/artwork-url";
 
 export interface ActiveTrackPresentation {
+  id: string | null;
   title: string;
   artist: string | null;
   artwork: ArtworkRef | null;
@@ -30,6 +31,7 @@ function fallback(
   if (!path || !fileName || !extension)
     return {
       title: "No audio selected",
+      id: null,
       artist: null,
       artwork: null,
       artworkUrl: null,
@@ -39,7 +41,7 @@ function fallback(
   const title = fileName.toLowerCase().endsWith(suffix.toLowerCase())
     ? fileName.slice(0, -suffix.length) || fileName
     : fileName;
-  return { title, artist: null, artwork: null, artworkUrl: null, artworkLoading: false };
+  return { id: null, title, artist: null, artwork: null, artworkUrl: null, artworkLoading: false };
 }
 
 export function useActiveTrackIdentity(file: ValidatedAudioFile | null): ActiveTrackPresentation {
@@ -104,6 +106,7 @@ export function useActiveTrackIdentity(file: ValidatedAudioFile | null): ActiveT
   }, [artwork, artworkPath, path]);
 
   return {
+    id: summary?.id ?? null,
     title: identity.title,
     artist: identity.artist,
     artwork,

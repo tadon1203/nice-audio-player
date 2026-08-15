@@ -7,7 +7,8 @@ use super::{
     millis_to_frame, output_failure_code, pause_action, resume_action, should_finish,
     should_publish_position, signal_stream_id, source_to_output_frame, start_failure_snapshot,
     stream_signal_action, OutputSignal, OutputStreamId, PlaybackControlAction, PlaybackFailureCode,
-    PlaybackService, PlaybackServiceError, PlaybackSnapshot, PlaybackWorker, StreamSignalAction,
+    PlaybackSequence, PlaybackService, PlaybackServiceError, PlaybackSnapshot, PlaybackWorker,
+    StreamSignalAction,
 };
 use cpal::StreamInstant;
 use std::sync::{mpsc, Arc, RwLock};
@@ -69,7 +70,7 @@ fn serializes_playing_snapshot_with_camel_case_playback_id() {
 
     assert_eq!(
         serde_json::to_value(snapshot).unwrap(),
-        serde_json::json!({ "status": "playing", "revision": 0, "file": { "path": "C:/test.flac", "fileName": "test.flac", "extension": "flac" }, "playbackId": "1", "positionMs": 1_000, "durationMs": 60_000, "volume": 1.0, "muted": false, "outputSelection": { "kind": "systemDefault" }, "outputDevice": { "id": "test-device", "name": "Test device" }, "channelConversion": "none", "sourceSampleRate": 44_100, "outputSampleRate": 44_100, "resamplingActive": false })
+        serde_json::json!({ "status": "playing", "revision": 0, "file": { "path": "C:/test.flac", "fileName": "test.flac", "extension": "flac" }, "playbackId": "1", "positionMs": 1_000, "durationMs": 60_000, "volume": 1.0, "muted": false, "outputSelection": { "kind": "systemDefault" }, "outputDevice": { "id": "test-device", "name": "Test device" }, "channelConversion": "none", "sourceSampleRate": 44_100, "outputSampleRate": 44_100, "resamplingActive": false, "canGoPrevious": false, "canGoNext": false })
     );
 }
 
@@ -80,7 +81,7 @@ fn serializes_paused_snapshot_with_camel_case_playback_id() {
 
     assert_eq!(
         serde_json::to_value(snapshot).unwrap(),
-        serde_json::json!({ "status": "paused", "revision": 0, "file": { "path": "C:/test.flac", "fileName": "test.flac", "extension": "flac" }, "playbackId": "1", "positionMs": 1_000, "durationMs": 60_000, "volume": 1.0, "muted": false, "outputSelection": { "kind": "systemDefault" }, "outputDevice": { "id": "test-device", "name": "Test device" }, "channelConversion": "none", "sourceSampleRate": 44_100, "outputSampleRate": 44_100, "resamplingActive": false })
+        serde_json::json!({ "status": "paused", "revision": 0, "file": { "path": "C:/test.flac", "fileName": "test.flac", "extension": "flac" }, "playbackId": "1", "positionMs": 1_000, "durationMs": 60_000, "volume": 1.0, "muted": false, "outputSelection": { "kind": "systemDefault" }, "outputDevice": { "id": "test-device", "name": "Test device" }, "channelConversion": "none", "sourceSampleRate": 44_100, "outputSampleRate": 44_100, "resamplingActive": false, "canGoPrevious": false, "canGoNext": false })
     );
 }
 
@@ -101,7 +102,9 @@ fn omits_missing_playback_id_from_failed_snapshot() {
             "error": "noOutputDevice",
             "volume": 1.0,
             "muted": false,
-            "outputSelection": { "kind": "systemDefault" }
+            "outputSelection": { "kind": "systemDefault" },
+            "canGoPrevious": false,
+            "canGoNext": false
         })
     );
 }
@@ -208,7 +211,7 @@ fn volume_state_is_present_in_initial_stopped_snapshot() {
     let service = PlaybackService::start().expect("worker should start");
     assert_eq!(
         serde_json::to_value(service.snapshot()).unwrap(),
-        serde_json::json!({"status": "stopped", "revision": 0, "file": null, "volume": 1.0, "muted": false, "outputSelection": { "kind": "systemDefault" }})
+        serde_json::json!({"status": "stopped", "revision": 0, "file": null, "volume": 1.0, "muted": false, "outputSelection": { "kind": "systemDefault" }, "canGoPrevious": false, "canGoNext": false})
     );
     service.shutdown();
 }
@@ -370,6 +373,32 @@ fn start_failure_without_playback_is_failed() {
 }
 
 #[test]
+fn navigation_decoder_failure_clears_the_sequence_and_publishes_failed_state() {
+    let mut worker = test_worker(PlaybackSnapshot::playing(
+        VolumeState::default(),
+        "1".into(),
+        0,
+        Some(60_000),
+    ));
+    worker.sequence = PlaybackSequence::new(vec![super::test_file(), super::test_file()]);
+    let (reply, receiver) = mpsc::sync_channel(1);
+
+    worker.navigate(true, reply);
+
+    assert_eq!(receiver.recv().unwrap(), Err(PlaybackServiceError::Decode));
+    assert!(worker.sequence.is_none());
+    assert!(matches!(
+        worker.current(),
+        PlaybackSnapshot::Failed {
+            error: PlaybackFailureCode::DecodeFailed,
+            can_go_previous: false,
+            can_go_next: false,
+            ..
+        }
+    ));
+}
+
+#[test]
 fn shutdown_joins_worker_thread() {
     let service = PlaybackService::start().expect("worker should start");
     service.shutdown();
@@ -442,6 +471,7 @@ fn test_worker(snapshot: PlaybackSnapshot) -> PlaybackWorker {
         next_output_stream_id: 0,
         next_snapshot_revision: 0,
         current_file: None,
+        sequence: None,
         volume_state: VolumeState::default(),
         effective_gain: super::super::volume::AtomicEffectiveGain::new(1.0),
         output_selection: AudioOutputSelection::SystemDefault,

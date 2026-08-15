@@ -5,13 +5,20 @@ import {
   listAudioOutputDevices,
   setAudioOutputSelection,
 } from "@/api/audio-devices";
-import { isStartLibraryTrackError, startLibraryTrack } from "@/api/library";
+import {
+  isStartLibraryAlbumError,
+  isStartLibraryTrackError,
+  startLibraryAlbum,
+  startLibraryTrack,
+} from "@/api/library";
 import {
   getPlaybackState,
   isPauseAudioPlaybackError,
   isResumeAudioPlaybackError,
   listenToPlaybackState,
   pauseAudioPlayback,
+  previousAudioPlayback,
+  nextAudioPlayback,
   resumeAudioPlayback,
   stopAudioPlayback,
 } from "@/api/audio-files";
@@ -35,8 +42,11 @@ type TransportOperation =
   | { type: "stop" }
   | { type: "pause" }
   | { type: "resume" }
-  | { type: "startTrack"; trackId: string };
-type PendingTransportCommand = "stop" | "pause" | "resume" | null;
+  | { type: "startTrack"; trackId: string }
+  | { type: "startAlbum"; albumId: string }
+  | { type: "previous" }
+  | { type: "next" };
+type PendingTransportCommand = "stop" | "pause" | "resume" | "previous" | "next" | null;
 function formatPlaybackFailure(code: PlaybackFailureCode): string {
   const messages: Record<PlaybackFailureCode, string> = {
     noOutputDevice: "No audio output device is available.",
@@ -163,22 +173,33 @@ function App() {
     const currentPlayback = latestPlaybackRef.current;
     const valid =
       command === "startTrack" ||
+      command === "startAlbum" ||
+      (command === "previous" && currentPlayback.canGoPrevious) ||
+      (command === "next" && currentPlayback.canGoNext) ||
       (command === "stop" &&
         (currentPlayback.status === "playing" || currentPlayback.status === "paused")) ||
       (command === "pause" && currentPlayback.status === "playing") ||
       (command === "resume" && currentPlayback.status === "paused");
     if (!valid) return;
     transportPendingRef.current = true;
-    setPendingTransportCommand(command === "startTrack" ? "resume" : command);
+    setPendingTransportCommand(
+      command === "startTrack" || command === "startAlbum" ? "resume" : command,
+    );
     try {
       const snapshot =
         command === "startTrack"
           ? await startLibraryTrack(operation.trackId)
-          : command === "stop"
-            ? await stopAudioPlayback()
-            : command === "pause"
-              ? await pauseAudioPlayback()
-              : await resumeAudioPlayback();
+          : command === "startAlbum"
+            ? await startLibraryAlbum(operation.albumId)
+            : command === "previous"
+              ? await previousAudioPlayback()
+              : command === "next"
+                ? await nextAudioPlayback()
+                : command === "stop"
+                  ? await stopAudioPlayback()
+                  : command === "pause"
+                    ? await pauseAudioPlayback()
+                    : await resumeAudioPlayback();
       applySnapshot(snapshot);
       dispatchPlaybackUi({ type: "commandSucceeded", lane: "transport" });
     } catch (error) {
@@ -190,11 +211,15 @@ function App() {
           isStartLibraryTrackError(error) &&
           error.code === "trackUnavailable"
             ? "This track is no longer available."
-            : command === "pause" && isPauseAudioPlaybackError(error)
-              ? "Playback cannot be paused in its current state."
-              : command === "resume" && isResumeAudioPlaybackError(error)
-                ? "Playback cannot be resumed in its current state."
-                : "The playback service is unavailable.",
+            : command === "startAlbum" &&
+                isStartLibraryAlbumError(error) &&
+                error.code === "noPlayableTracks"
+              ? "This album has no playable tracks."
+              : command === "pause" && isPauseAudioPlaybackError(error)
+                ? "Playback cannot be paused in its current state."
+                : command === "resume" && isResumeAudioPlaybackError(error)
+                  ? "Playback cannot be resumed in its current state."
+                  : "The playback service is unavailable.",
       });
       await refresh();
     } finally {
@@ -258,6 +283,9 @@ function App() {
         playbackAvailable={isPlaybackAvailable}
         onOpenSettings={() => setDestination("settings")}
         onPlayTrack={(id) => void requestTransport({ type: "startTrack", trackId: id })}
+        onPlayAlbum={(id) => void requestTransport({ type: "startAlbum", albumId: id })}
+        activeTrackId={activeTrack.id}
+        playbackStatus={playback.status}
         libraryRefreshKey={libraryRefreshKey}
         scan={scan}
         scanError={scanError}
@@ -311,6 +339,8 @@ function App() {
           onPlay={() => void requestTransport({ type: "resume" })}
           onPause={() => void requestTransport({ type: "pause" })}
           onResume={() => void requestTransport({ type: "resume" })}
+          onPrevious={() => void requestTransport({ type: "previous" })}
+          onNext={() => void requestTransport({ type: "next" })}
           onSeek={seekController.onSeek}
           onSeekCommit={(value) => void seekController.onSeekCommit(value)}
           onSeekCancel={seekController.onSeekCancel}

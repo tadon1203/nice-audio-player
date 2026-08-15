@@ -13,6 +13,9 @@ import { LibraryPresentationTabs } from "./LibraryPresentationTabs";
 interface Props {
   onOpenSettings: () => void;
   onPlayTrack: (id: string) => void;
+  onPlayAlbum: (id: string) => void;
+  activeTrackId: string | null;
+  playbackStatus: "stopped" | "playing" | "paused" | "failed";
   playbackAvailable: boolean;
   libraryRefreshKey?: number;
   scan?: LibraryScanSnapshot | null;
@@ -22,6 +25,9 @@ interface Props {
 export function LibraryView({
   onOpenSettings,
   onPlayTrack,
+  onPlayAlbum,
+  activeTrackId,
+  playbackStatus,
   playbackAvailable,
   libraryRefreshKey = 0,
   scan = null,
@@ -143,6 +149,9 @@ export function LibraryView({
       playbackAvailable={playbackAvailable}
       scrollElement={scrollElement}
       onPlayTrack={onPlayTrack}
+      onPlayAlbum={onPlayAlbum}
+      activeTrackId={activeTrackId}
+      playbackStatus={playbackStatus}
       onBack={() => {
         pendingFocusRef.current = "browser";
         setSelectedAlbum(null);

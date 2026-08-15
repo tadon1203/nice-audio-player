@@ -36,6 +36,8 @@ pub enum PlaybackSnapshot {
         volume: f32,
         muted: bool,
         output_selection: AudioOutputSelection,
+        can_go_previous: bool,
+        can_go_next: bool,
     },
     Playing {
         revision: u64,
@@ -52,6 +54,8 @@ pub enum PlaybackSnapshot {
         source_sample_rate: u32,
         output_sample_rate: u32,
         resampling_active: bool,
+        can_go_previous: bool,
+        can_go_next: bool,
     },
     Paused {
         revision: u64,
@@ -68,6 +72,8 @@ pub enum PlaybackSnapshot {
         source_sample_rate: u32,
         output_sample_rate: u32,
         resampling_active: bool,
+        can_go_previous: bool,
+        can_go_next: bool,
     },
     Failed {
         revision: u64,
@@ -79,6 +85,8 @@ pub enum PlaybackSnapshot {
         volume: f32,
         muted: bool,
         output_selection: AudioOutputSelection,
+        can_go_previous: bool,
+        can_go_next: bool,
     },
 }
 
@@ -143,6 +151,8 @@ impl PlaybackSnapshot {
             volume: volume.volume(),
             muted: volume.muted(),
             output_selection,
+            can_go_previous: false,
+            can_go_next: false,
         }
     }
 
@@ -190,6 +200,8 @@ impl PlaybackSnapshot {
             source_sample_rate: data.processing.source_sample_rate,
             output_sample_rate: data.processing.output_sample_rate,
             resampling_active: data.processing.resampling_active(),
+            can_go_previous: false,
+            can_go_next: false,
         }
     }
 
@@ -237,6 +249,8 @@ impl PlaybackSnapshot {
             source_sample_rate: data.processing.source_sample_rate,
             output_sample_rate: data.processing.output_sample_rate,
             resampling_active: data.processing.resampling_active(),
+            can_go_previous: false,
+            can_go_next: false,
         }
     }
 
@@ -255,6 +269,8 @@ impl PlaybackSnapshot {
             volume: volume.volume(),
             muted: volume.muted(),
             output_selection,
+            can_go_previous: false,
+            can_go_next: false,
         }
     }
 
@@ -300,6 +316,34 @@ impl PlaybackSnapshot {
             | Self::Failed {
                 revision: current, ..
             } => *current = revision,
+        }
+    }
+
+    fn set_navigation(&mut self, can_go_previous: bool, can_go_next: bool) {
+        match self {
+            Self::Stopped {
+                can_go_previous: previous,
+                can_go_next: next,
+                ..
+            }
+            | Self::Playing {
+                can_go_previous: previous,
+                can_go_next: next,
+                ..
+            }
+            | Self::Paused {
+                can_go_previous: previous,
+                can_go_next: next,
+                ..
+            }
+            | Self::Failed {
+                can_go_previous: previous,
+                can_go_next: next,
+                ..
+            } => {
+                *previous = can_go_previous;
+                *next = can_go_next;
+            }
         }
     }
 
@@ -403,6 +447,16 @@ enum PlaybackCommand {
         file: ValidatedAudioFile,
         reply: SyncSender<Result<PlaybackSnapshot, PlaybackServiceError>>,
     },
+    StartSequence {
+        files: Vec<ValidatedAudioFile>,
+        reply: SyncSender<Result<PlaybackSnapshot, PlaybackServiceError>>,
+    },
+    Previous {
+        reply: SyncSender<Result<PlaybackSnapshot, PlaybackServiceError>>,
+    },
+    Next {
+        reply: SyncSender<Result<PlaybackSnapshot, PlaybackServiceError>>,
+    },
     Stop {
         reply: SyncSender<Result<PlaybackSnapshot, PlaybackServiceError>>,
     },
@@ -471,6 +525,7 @@ impl PlaybackService {
                     next_output_stream_id: 0,
                     next_snapshot_revision: 0,
                     current_file: None,
+                    sequence: None,
                     volume_state,
                     effective_gain: worker_gain,
                     output_selection,
@@ -520,6 +575,18 @@ impl PlaybackServiceHandle {
         file: ValidatedAudioFile,
     ) -> Result<PlaybackSnapshot, PlaybackServiceError> {
         self.request(|reply| PlaybackCommand::Start { file, reply })
+    }
+    pub(crate) fn play_sequence(
+        &self,
+        files: Vec<ValidatedAudioFile>,
+    ) -> Result<PlaybackSnapshot, PlaybackServiceError> {
+        self.request(|reply| PlaybackCommand::StartSequence { files, reply })
+    }
+    pub(crate) fn previous(&self) -> Result<PlaybackSnapshot, PlaybackServiceError> {
+        self.request(|reply| PlaybackCommand::Previous { reply })
+    }
+    pub(crate) fn next(&self) -> Result<PlaybackSnapshot, PlaybackServiceError> {
+        self.request(|reply| PlaybackCommand::Next { reply })
     }
 
     pub(crate) fn stop(&self) -> Result<PlaybackSnapshot, PlaybackServiceError> {
@@ -602,6 +669,8 @@ struct PendingPlayback {
     sample_rate: u32,
     duration_ms: Option<u64>,
     reply: SyncSender<Result<PlaybackSnapshot, PlaybackServiceError>>,
+    start_paused: bool,
+    sequence_index: usize,
 }
 
 impl PendingPlayback {
@@ -621,6 +690,8 @@ impl PendingPlayback {
             sample_rate,
             duration_ms,
             reply,
+            start_paused: _,
+            sequence_index: _,
         } = self;
         (
             ActivePlayback {
@@ -668,6 +739,7 @@ struct PlaybackWorker {
     next_output_stream_id: u64,
     next_snapshot_revision: u64,
     current_file: Option<ValidatedAudioFile>,
+    sequence: Option<PlaybackSequence>,
     volume_state: VolumeState,
     effective_gain: AtomicEffectiveGain,
     output_selection: AudioOutputSelection,
@@ -677,6 +749,38 @@ struct PlaybackWorker {
     output_sender: SyncSender<OutputSignal>,
     output_receiver: Receiver<OutputSignal>,
 }
+
+#[derive(Debug, Clone)]
+struct PlaybackSequence {
+    files: Vec<ValidatedAudioFile>,
+    current_index: usize,
+}
+
+impl PlaybackSequence {
+    fn new(files: Vec<ValidatedAudioFile>) -> Option<Self> {
+        (!files.is_empty()).then_some(Self {
+            files,
+            current_index: 0,
+        })
+    }
+    fn current(&self) -> &ValidatedAudioFile {
+        &self.files[self.current_index]
+    }
+    fn previous(&self) -> Option<&ValidatedAudioFile> {
+        self.current_index
+            .checked_sub(1)
+            .and_then(|i| self.files.get(i))
+    }
+    fn next(&self) -> Option<&ValidatedAudioFile> {
+        self.files.get(self.current_index + 1)
+    }
+    fn can_go_previous(&self) -> bool {
+        self.previous().is_some()
+    }
+    fn can_go_next(&self) -> bool {
+        self.next().is_some()
+    }
+}
 impl PlaybackWorker {
     fn run(mut self) {
         loop {
@@ -685,7 +789,29 @@ impl PlaybackWorker {
             }
             match self.command_receiver.recv_timeout(Duration::from_millis(5)) {
                 Ok(PlaybackCommand::Start { file, reply }) => {
-                    self.begin_start(file, reply);
+                    self.sequence = PlaybackSequence::new(vec![file]);
+                    let file = self
+                        .sequence
+                        .as_ref()
+                        .expect("single-item sequence")
+                        .current()
+                        .clone();
+                    self.begin_start(file, reply, false, 0);
+                }
+                Ok(PlaybackCommand::StartSequence { files, reply }) => {
+                    let Some(sequence) = PlaybackSequence::new(files) else {
+                        let _ = reply.send(Err(PlaybackServiceError::InvalidPlaybackState));
+                        continue;
+                    };
+                    let file = sequence.current().clone();
+                    self.sequence = Some(sequence);
+                    self.begin_start(file, reply, false, 0);
+                }
+                Ok(PlaybackCommand::Previous { reply }) => {
+                    self.navigate(false, reply);
+                }
+                Ok(PlaybackCommand::Next { reply }) => {
+                    self.navigate(true, reply);
                 }
                 Ok(PlaybackCommand::Stop { reply }) => {
                     let _ = reply.send(Ok(self.stop()));
@@ -728,6 +854,8 @@ impl PlaybackWorker {
         &mut self,
         file: ValidatedAudioFile,
         reply: SyncSender<Result<PlaybackSnapshot, PlaybackServiceError>>,
+        start_paused: bool,
+        sequence_index: usize,
     ) {
         self.discard_pending();
         self.discard_pending_seek();
@@ -735,7 +863,12 @@ impl PlaybackWorker {
         let mut decoder = match open_playback_decoder(&file) {
             Ok(decoder) => decoder,
             Err(_) => {
-                let _ = reply.send(Err(PlaybackServiceError::Decode));
+                self.fail_start(
+                    reply,
+                    None,
+                    PlaybackFailureCode::DecodeFailed,
+                    PlaybackServiceError::Decode,
+                );
                 return;
             }
         };
@@ -744,7 +877,12 @@ impl PlaybackWorker {
         let mut first_packet = Vec::new();
         match decoder.decode_next(&mut first_packet) {
             Err(_) | Ok(DecodeStep::EndOfStream) => {
-                let _ = reply.send(Err(PlaybackServiceError::Decode));
+                self.fail_start(
+                    reply,
+                    None,
+                    PlaybackFailureCode::DecodeFailed,
+                    PlaybackServiceError::Decode,
+                );
                 return;
             }
             Ok(DecodeStep::Samples) => {}
@@ -757,7 +895,13 @@ impl PlaybackWorker {
         let resolved_device = match resolve_output_selection(&self.output_selection) {
             Ok(device) => device,
             Err(error) => {
-                let _ = reply.send(Err(self.start_device_failure(id, error)));
+                let code = device_resolution_failure_code(error);
+                self.fail_start(
+                    reply,
+                    Some(id.0.to_string()),
+                    code.clone(),
+                    PlaybackServiceError::Output(code),
+                );
                 return;
             }
         };
@@ -772,7 +916,13 @@ impl PlaybackWorker {
         ) {
             Ok(preparation) => preparation,
             Err(error) => {
-                let _ = reply.send(Err(self.start_failure(id, error)));
+                let code = output_failure_code(error);
+                self.fail_start(
+                    reply,
+                    Some(id.0.to_string()),
+                    code.clone(),
+                    PlaybackServiceError::Output(code),
+                );
                 return;
             }
         };
@@ -784,8 +934,12 @@ impl PlaybackWorker {
                 Ok(processor) => processor,
                 Err(_) => {
                     let error = PlaybackFailureCode::SampleRateConversionFailed;
-                    let _ = reply.send(Err(PlaybackServiceError::Output(error.clone())));
-                    self.publish(self.failed_snapshot(Some(id.0.to_string()), error));
+                    self.fail_start(
+                        reply,
+                        Some(id.0.to_string()),
+                        error.clone(),
+                        PlaybackServiceError::Output(error),
+                    );
                     return;
                 }
             },
@@ -802,8 +956,12 @@ impl PlaybackWorker {
             Ok(pipeline) => pipeline,
             Err(_) => {
                 let error = PlaybackFailureCode::SampleRateConversionFailed;
-                let _ = reply.send(Err(PlaybackServiceError::Output(error.clone())));
-                self.publish(self.failed_snapshot(Some(id.0.to_string()), error));
+                self.fail_start(
+                    reply,
+                    Some(id.0.to_string()),
+                    error.clone(),
+                    PlaybackServiceError::Output(error),
+                );
                 return;
             }
         };
@@ -824,7 +982,42 @@ impl PlaybackWorker {
             sample_rate,
             duration_ms,
             reply,
+            start_paused,
+            sequence_index,
         });
+    }
+
+    fn fail_start(
+        &mut self,
+        reply: SyncSender<Result<PlaybackSnapshot, PlaybackServiceError>>,
+        playback_id: Option<String>,
+        code: PlaybackFailureCode,
+        error: PlaybackServiceError,
+    ) {
+        self.sequence = None;
+        self.publish(self.failed_snapshot(playback_id, code));
+        let _ = reply.send(Err(error));
+    }
+
+    fn navigate(
+        &mut self,
+        forward: bool,
+        reply: SyncSender<Result<PlaybackSnapshot, PlaybackServiceError>>,
+    ) {
+        let paused = matches!(self.current(), PlaybackSnapshot::Paused { .. });
+        let target = self.sequence.as_ref().and_then(|sequence| {
+            let index = if forward {
+                sequence.current_index + 1
+            } else {
+                sequence.current_index.checked_sub(1)?
+            };
+            sequence.files.get(index).cloned().map(|file| (file, index))
+        });
+        let Some((file, index)) = target else {
+            let _ = reply.send(Ok(self.current()));
+            return;
+        };
+        self.begin_start(file, reply, paused, index);
     }
 
     fn begin_seek(
@@ -1120,30 +1313,52 @@ impl PlaybackWorker {
 
         let pending = self.pending.take().expect("pending playback exists");
         if state == ProducerState::DecodeFailed {
-            pending.decode_pipeline.cancel_and_join();
-            let _ = pending.reply.send(Err(PlaybackServiceError::Decode));
+            self.fail_pending_start(
+                pending,
+                PlaybackFailureCode::DecodeFailed,
+                PlaybackServiceError::Decode,
+            );
             return;
         }
         if state == ProducerState::SampleRateConversionFailed {
-            pending.decode_pipeline.cancel_and_join();
-            let _ = pending.reply.send(Err(PlaybackServiceError::Output(
-                PlaybackFailureCode::SampleRateConversionFailed,
-            )));
+            let code = PlaybackFailureCode::SampleRateConversionFailed;
+            self.fail_pending_start(pending, code.clone(), PlaybackServiceError::Output(code));
             return;
         }
-        if let Err(error) = pending.stream.start() {
-            pending.decode_pipeline.cancel_and_join();
-            let error = self.start_failure(pending.id, error);
-            let _ = pending.reply.send(Err(error));
-            return;
+        if !pending.start_paused {
+            if let Err(error) = pending.stream.start() {
+                let code = output_failure_code(error);
+                self.fail_pending_start(pending, code.clone(), PlaybackServiceError::Output(code));
+                return;
+            }
         }
+        let start_paused = pending.start_paused;
+        let sequence_index = pending.sequence_index;
         let (active, reply) = pending.into_active();
         let session_id = active.session_id;
         let duration_ms = active.duration_ms;
         self.current_file = Some(active.source_file.clone());
         self.active = Some(active);
-        let snapshot = self.publish(self.playing_snapshot(session_id.to_string(), 0, duration_ms));
+        if let Some(sequence) = self.sequence.as_mut() {
+            sequence.current_index = sequence_index;
+        }
+        let snapshot = if start_paused {
+            self.publish(self.paused_snapshot(session_id.to_string(), 0, duration_ms))
+        } else {
+            self.publish(self.playing_snapshot(session_id.to_string(), 0, duration_ms))
+        };
         let _ = reply.send(Ok(snapshot));
+    }
+
+    fn fail_pending_start(
+        &mut self,
+        pending: PendingPlayback,
+        code: PlaybackFailureCode,
+        error: PlaybackServiceError,
+    ) {
+        let playback_id = Some(pending.id.0.to_string());
+        pending.decode_pipeline.cancel_and_join();
+        self.fail_start(pending.reply, playback_id, code, error);
     }
 
     fn discard_pending(&mut self) {
@@ -1154,49 +1369,11 @@ impl PlaybackWorker {
                 .send(Err(PlaybackServiceError::WorkerUnavailable));
         }
     }
-    fn start_failure(
-        &mut self,
-        id: OutputStreamId,
-        error: AudioOutputError,
-    ) -> PlaybackServiceError {
-        let code = output_failure_code(error);
-
-        if let Some(snapshot) = start_failure_snapshot(
-            self.active.is_some(),
-            id,
-            code.clone(),
-            self.volume_state,
-            self.output_selection.clone(),
-            self.current_file.clone(),
-        ) {
-            self.publish(snapshot);
-        }
-
-        PlaybackServiceError::Output(code)
-    }
-
-    fn start_device_failure(
-        &mut self,
-        id: OutputStreamId,
-        error: DeviceResolutionError,
-    ) -> PlaybackServiceError {
-        let code = device_resolution_failure_code(error);
-        if let Some(snapshot) = start_failure_snapshot(
-            self.active.is_some(),
-            id,
-            code.clone(),
-            self.volume_state,
-            self.output_selection.clone(),
-            self.current_file.clone(),
-        ) {
-            self.publish(snapshot);
-        }
-        PlaybackServiceError::Output(code)
-    }
     fn stop(&mut self) -> PlaybackSnapshot {
         self.discard_pending();
         self.discard_pending_seek();
         self.discard_active();
+        self.sequence = None;
         if matches!(self.current(), PlaybackSnapshot::Stopped { .. }) {
             return self.current();
         }
@@ -1408,6 +1585,14 @@ impl PlaybackWorker {
         }
     }
     fn publish(&mut self, mut snapshot: PlaybackSnapshot) -> PlaybackSnapshot {
+        let (previous, next) = match (&snapshot, &self.sequence) {
+            (
+                PlaybackSnapshot::Playing { .. } | PlaybackSnapshot::Paused { .. },
+                Some(sequence),
+            ) => (sequence.can_go_previous(), sequence.can_go_next()),
+            _ => (false, false),
+        };
+        snapshot.set_navigation(previous, next);
         self.next_snapshot_revision = self.next_snapshot_revision.saturating_add(1);
         snapshot.set_revision(self.next_snapshot_revision);
         *self
@@ -1440,6 +1625,7 @@ impl PlaybackWorker {
             .map(|active| active.session_id.to_string());
         self.cancel_pending_seek_with(PlaybackServiceError::Output(error.clone()));
         self.discard_active();
+        self.sequence = None;
         self.publish(self.failed_snapshot(playback_id, error));
     }
 
@@ -1498,6 +1684,7 @@ impl PlaybackWorker {
                     PlaybackFailureCode::CompletionTimingFailed,
                 ));
                 self.discard_active();
+                self.sequence = None;
                 self.publish(
                     self.failed_snapshot(playback_id, PlaybackFailureCode::CompletionTimingFailed),
                 );
@@ -1509,6 +1696,7 @@ impl PlaybackWorker {
                     .map(|active| active.session_id.to_string());
                 self.cancel_pending_seek_with(PlaybackServiceError::Decode);
                 self.discard_active();
+                self.sequence = None;
                 self.publish(self.failed_snapshot(playback_id, PlaybackFailureCode::DecodeFailed));
             }
             OutputSignal::SampleRateConversionFailed { .. } => {
@@ -1520,6 +1708,7 @@ impl PlaybackWorker {
                     PlaybackFailureCode::SampleRateConversionFailed,
                 ));
                 self.discard_active();
+                self.sequence = None;
                 self.publish(
                     self.failed_snapshot(
                         playback_id,
@@ -1536,7 +1725,17 @@ impl PlaybackWorker {
         if is_due {
             self.discard_pending_seek();
             self.discard_active();
-            self.publish(self.stopped_snapshot());
+            let next = self.sequence.as_ref().and_then(|sequence| {
+                let index = sequence.current_index + 1;
+                sequence.files.get(index).cloned().map(|file| (file, index))
+            });
+            if let Some((file, index)) = next {
+                let (reply, _receiver) = mpsc::sync_channel(1);
+                self.begin_start(file, reply, false, index);
+            } else {
+                self.sequence = None;
+                self.publish(self.stopped_snapshot());
+            }
         }
     }
     fn update_playback_position(&mut self) {
@@ -1707,6 +1906,7 @@ fn failed_snapshot(id: OutputStreamId, error: PlaybackFailureCode) -> PlaybackSn
     PlaybackSnapshot::failed(VolumeState::default(), Some(id.0.to_string()), error)
 }
 
+#[cfg(test)]
 fn start_failure_snapshot(
     has_active_playback: bool,
     id: OutputStreamId,
