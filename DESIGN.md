@@ -437,6 +437,11 @@ Use motion only when a visible element changes state, appears, disappears, or is
 - State-indicator changes use `state`.
 - Text-group and region replacement use `content`.
 - Main-region transitions may use restrained opacity and translation; persistent navigation and playback surfaces remain stable.
+- A same-level destination replacement without a fixed spatial direction uses opacity only.
+- Ordered sibling navigation uses translation that follows the visible order of the siblings.
+- Entering a child surface uses the forward direction; returning to its parent uses the inverse direction.
+- One navigation change uses one primary replacement transition; competing entrance choreographies are not layered on top of it.
+- Directional translation is limited to main-region replacement and is never used for hover or focus feedback.
 - Visible-image replacement uses `image`.
 - Image replacement uses `image`; reflected-light changes follow the timing of the element they belong to.
 - Nothing bounces or overshoots.
@@ -446,7 +451,7 @@ Use motion only when a visible element changes state, appears, disappears, or is
 
 When reduced motion is active:
 
-- remove translation, scale, rotation, and morphing;
+- remove translation, scale, rotation, and morphing, including directional replacement movement and pressed feedback scale;
 - limit opacity transitions to 120ms;
 - preserve focus, selected, loading, and error distinctions.
 

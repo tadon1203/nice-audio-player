@@ -191,19 +191,9 @@
 }
 .library-view__track .library-view__artwork {
   inline-size: 64px;
-  transition: transform var(--motion-feedback) var(--ease-interface);
-}
-.library-view__track:hover .library-view__artwork,
-.library-view__track:focus-visible .library-view__artwork {
-  transform: scale(1.02);
 }
 .library-view__track-meta {
   min-inline-size: 0;
-  transition: transform var(--motion-feedback) var(--ease-interface);
-}
-.library-view__track:hover .library-view__track-meta,
-.library-view__track:focus-visible .library-view__track-meta {
-  transform: translateX(4px);
 }
 .library-view__track:disabled:hover .library-view__artwork,
 .library-view__track:disabled:focus-visible .library-view__artwork,
@@ -388,6 +378,7 @@
   inline-size: 3px;
   block-size: 7px;
   background: currentColor;
+  transform-origin: center bottom;
 }
 .album-detail__playing-bars i:nth-child(2) {
   block-size: 14px;
@@ -399,10 +390,10 @@
   animation: album-track-bars 700ms var(--ease-interface) infinite alternate;
 }
 .album-detail__playing-bars.is-playing i:nth-child(2) {
-  animation-delay: 140ms;
+  animation-delay: -140ms;
 }
 .album-detail__playing-bars.is-playing i:nth-child(3) {
-  animation-delay: 280ms;
+  animation-delay: -280ms;
 }
 @keyframes album-track-bars {
   to {
@@ -414,9 +405,18 @@
     animation: none;
   }
 }
-.album-detail__row:hover .album-detail__track-title-main,
-.album-detail__row:focus-visible .album-detail__track-title-main {
-  transform: translateX(4px);
+.album-detail__row:disabled {
+  color: var(--color-text-disabled);
+  cursor: not-allowed;
+}
+.album-detail__row:disabled .album-detail__track-title,
+.album-detail__row:disabled .album-detail__track-title small,
+.album-detail__row:disabled .album-detail__track-number,
+.album-detail__row:disabled .album-detail__duration {
+  color: var(--color-text-disabled);
+}
+.album-detail__row--single .album-detail__track-title {
+  color: var(--color-text-primary);
 }
 .album-detail__row:disabled {
   color: var(--color-text-disabled);
@@ -437,7 +437,6 @@
 }
 .album-detail__track-title-main {
   display: block;
-  transition: transform var(--motion-feedback) var(--ease-interface);
 }
 .album-detail__track-title {
   display: flex;
@@ -516,14 +515,6 @@
     padding-block-start: 0;
   }
 }
-@media (prefers-reduced-motion: reduce) {
-  .library-view__album-artwork-frame .library-view__artwork,
-  .library-view__track .library-view__artwork,
-  .library-view__track-meta,
-  .album-detail__track-title-main {
-    transition: none;
-  }
-}
 .library-view__album-artwork-frame {
   display: block;
   overflow: hidden;
@@ -533,10 +524,14 @@
 .library-view__album-artwork-frame .library-view__artwork {
   transition: transform var(--motion-feedback) var(--ease-interface);
 }
-.library-view__album-button:hover .library-view__album-artwork-frame .library-view__artwork {
-  transform: scale(1.025);
-}
 .library-view__album-button:active .library-view__album-artwork-frame .library-view__artwork {
   transform: scale(0.985);
 }
-
+@media (prefers-reduced-motion: reduce) {
+  .library-view__album-artwork-frame .library-view__artwork {
+    transition: none;
+  }
+  .library-view__album-button:active .library-view__album-artwork-frame .library-view__artwork {
+    transform: none;
+  }
+}

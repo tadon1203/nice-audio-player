@@ -17,4 +17,3 @@ pub(crate) fn attach(
     watcher.watch(root, RecursiveMode::Recursive)?;
     Ok(watcher)
 }
-

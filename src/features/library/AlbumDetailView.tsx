@@ -1,11 +1,9 @@
 import { useEffect, useRef } from "react";
-import { motion, useReducedMotion } from "motion/react";
 import type { LibraryAlbumSummary, LibraryAlbumTrackSummary } from "@/bindings";
 import { PlayIcon } from "@/components/icons";
 import { Button } from "@/components/ui/Button";
 import { formatLongPlaybackTime, formatPlaybackTime } from "@/lib/playback-time";
 import { formatLibraryDate } from "@/lib/library-date";
-import { interfaceEase, motionDurationSeconds, reducedMotionDurationSeconds } from "@/lib/motion";
 import { LibraryArtwork, useLibraryArtworkUrl } from "./LibraryArtwork";
 import { useAlbumDetailQuery } from "./use-album-detail-query";
 
@@ -39,13 +37,7 @@ export function AlbumDetailView({
   const detail = query.details;
   const summary = detail?.summary ?? album;
   const grouped = groupTracks(query.items);
-  const reducedMotion = useReducedMotion();
   const artworkUrl = useLibraryArtworkUrl(summary.artwork);
-  const imageTransition = {
-    duration: reducedMotion ? reducedMotionDurationSeconds : motionDurationSeconds.image,
-    delay: reducedMotion ? 0 : 0,
-    ease: interfaceEase,
-  };
   return (
     <section className="album-detail" aria-label={`${summary.title} album detail`}>
       <div className="album-detail__content">
@@ -53,30 +45,14 @@ export function AlbumDetailView({
           ← <span>Back to albums</span>
         </button>
         <div className="album-detail__hero">
-          <motion.div
-            className="album-detail__artwork-wrap"
-            initial={reducedMotion ? { opacity: 0 } : { opacity: 0, scale: 0.94 }}
-            animate={reducedMotion ? { opacity: 1 } : { opacity: 1, scale: 1 }}
-            transition={imageTransition}
-          >
+          <div className="album-detail__artwork-wrap">
             <LibraryArtwork
               artwork={summary.artwork}
               resolvedUrl={artworkUrl}
               className="album-detail__artwork"
             />
-          </motion.div>
-          <motion.div
-            className="album-detail__identity"
-            initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 24 }}
-            animate={reducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
-            transition={{
-              duration: reducedMotion
-                ? reducedMotionDurationSeconds
-                : motionDurationSeconds.content,
-              delay: reducedMotion ? 0 : 0.08,
-              ease: interfaceEase,
-            }}
-          >
+          </div>
+          <div className="album-detail__identity">
             <h1>{summary.title}</h1>
             <p className="album-detail__artist">{summary.albumArtist}</p>
             <p className="album-detail__meta">
@@ -103,7 +79,7 @@ export function AlbumDetailView({
             >
               <PlayIcon /> Play album
             </Button>
-          </motion.div>
+          </div>
         </div>
         {query.error ? (
           <div className="library-view__notice" role="alert">
@@ -116,18 +92,7 @@ export function AlbumDetailView({
         {query.loading && query.items.length === 0 ? (
           <p className="library-view__notice">Loading album…</p>
         ) : (
-          <motion.div
-            className="album-detail__tracks"
-            initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 16 }}
-            animate={reducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
-            transition={{
-              duration: reducedMotion
-                ? reducedMotionDurationSeconds
-                : motionDurationSeconds.content,
-              delay: reducedMotion ? 0 : 0.16,
-              ease: interfaceEase,
-            }}
-          >
+          <div className="album-detail__tracks">
             {[...grouped.entries()].map(([label, tracks]) => (
               <TrackGroup
                 key={label}
@@ -158,7 +123,7 @@ export function AlbumDetailView({
                 Load more
               </Button>
             ) : null}
-          </motion.div>
+          </div>
         )}
       </div>
     </section>

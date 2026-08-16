@@ -146,4 +146,3 @@ mod tests {
         assert!(receiver.try_recv().is_err());
     }
 }
-
