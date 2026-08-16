@@ -11,7 +11,7 @@ vi.mock("motion/react", async (importOriginal) => {
   return { ...actual, useReducedMotion: motionMocks.useReducedMotion };
 });
 
-import { PlayPauseIcon, VolumeIcon } from "./icons";
+import { MoreIcon, PlayPauseIcon, QueueIcon, RepeatIcon, ShuffleIcon, VolumeIcon } from "./icons";
 
 describe("project-owned icons", () => {
   afterEach(() => motionMocks.useReducedMotion.mockReturnValue(false));
@@ -21,6 +21,17 @@ describe("project-owned icons", () => {
     expect(svg).toHaveAttribute("aria-hidden", "true");
     expect(svg).toHaveAttribute("focusable", "false");
     expect(svg).toHaveAttribute("viewBox", "0 0 24 24");
+  });
+
+  it("uses the shared accessible SVG wrapper for toolbar icons", () => {
+    for (const Icon of [QueueIcon, ShuffleIcon, RepeatIcon, MoreIcon]) {
+      const { container, unmount } = render(<Icon />);
+      const svg = container.querySelector("svg");
+      expect(svg).toHaveAttribute("aria-hidden", "true");
+      expect(svg).toHaveAttribute("focusable", "false");
+      expect(svg).toHaveAttribute("viewBox", "0 0 24 24");
+      unmount();
+    }
   });
 
   it("builds Play/Pause from two compatible morph paths", () => {

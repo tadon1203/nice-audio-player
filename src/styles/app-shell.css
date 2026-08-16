@@ -28,28 +28,80 @@
   color: var(--color-error);
 }
 .app-shell__workspace {
+  --context-pane-size: 0px;
   position: relative;
   display: grid;
   grid-template-columns: 192px minmax(0, 1fr);
+  block-size: 100%;
   min-block-size: 0;
 }
 .app-shell__context-pane {
+  inline-size: 100%;
+  block-size: 100%;
   min-inline-size: 0;
   min-block-size: 0;
   overflow: hidden;
 }
+.app-shell__context-content {
+  inline-size: 100%;
+  block-size: 100%;
+  min-inline-size: 0;
+  min-block-size: 100%;
+  opacity: 0;
+  transform: translateX(calc(var(--spacing) * 6));
+  transition:
+    opacity var(--motion-content) var(--ease-interface),
+    transform var(--motion-content) var(--ease-interface);
+  will-change: opacity, transform;
+}
+.app-shell__context-pane[data-state="opening"],
+.app-shell__context-pane[data-state="closing"],
+.app-shell__context-pane[data-state="closed"] {
+  pointer-events: none;
+}
+.app-shell__context-content[data-state="open"] {
+  opacity: 1;
+  transform: translateX(0);
+  will-change: auto;
+}
+.app-shell__context-content[data-state="closing"] {
+  transition-duration: var(--motion-feedback);
+}
 @media (min-width: 1440px) {
   .app-shell__workspace:has(.app-shell__context-pane) {
-    grid-template-columns: 192px minmax(0, 1fr) minmax(360px, 400px);
+    grid-template-columns: 192px minmax(0, 1fr) var(--context-pane-size);
+    transition: --context-pane-size var(--motion-content) var(--ease-interface);
+  }
+  .app-shell__workspace:has(.app-shell__context-pane[data-state="opening"]),
+  .app-shell__workspace:has(.app-shell__context-pane[data-state="open"]) {
+    --context-pane-size: clamp(360px, 28vw, 400px);
+  }
+  .app-shell__workspace:has(.app-shell__context-pane[data-state="closing"]) {
+    transition-duration: var(--motion-feedback);
   }
 }
 .playback-queue {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
   block-size: 100%;
+  min-block-size: 100%;
   min-inline-size: 0;
   background: var(--color-surface);
   border-inline-start: 1px solid var(--color-border-subtle);
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-shell__context-content,
+  .app-shell__context-content[data-state="opening"],
+  .app-shell__context-content[data-state="closing"] {
+    transform: none;
+  }
+  .app-shell__workspace:has(.app-shell__context-pane) {
+    transition: none;
+  }
+  .app-shell__context-content,
+  .app-shell__context-content[data-state="closing"] {
+    transition: none;
+  }
 }
 .app-shell__navigation {
   display: grid;
@@ -126,24 +178,73 @@
     block-size: 3px;
     inline-size: auto;
   }
-  .app-shell__workspace:has(.app-shell__context-pane) {
+  .app-shell__workspace:has(.app-shell__context-pane[data-state="opening"]),
+  .app-shell__workspace:has(.app-shell__context-pane[data-state="open"]),
+  .app-shell__workspace:has(.app-shell__context-pane[data-state="closing"]) {
     grid-template-rows: auto minmax(0, 1fr);
   }
-  .app-shell__workspace:has(.app-shell__context-pane) .app-shell__main {
+  .app-shell__workspace:has(.app-shell__context-pane[data-state="opening"]) .app-shell__main,
+  .app-shell__workspace:has(.app-shell__context-pane[data-state="open"]) .app-shell__main,
+  .app-shell__workspace:has(.app-shell__context-pane[data-state="closing"]) .app-shell__main {
     display: none;
   }
   .app-shell__context-pane {
     grid-row: 2;
+    inline-size: 0;
+    transition: inline-size var(--motion-content) var(--ease-interface);
+  }
+  .app-shell__context-pane[data-state="opening"],
+  .app-shell__context-pane[data-state="open"] {
+    inline-size: 100%;
+  }
+  .app-shell__context-pane[data-state="closing"] {
+    inline-size: 0;
+    transition-duration: var(--motion-feedback);
+  }
+  .app-shell__context-content {
+    min-block-size: 100%;
   }
 }
 @media (min-width: 800px) and (max-width: 1439px) {
-  .app-shell__workspace:has(.app-shell__context-pane) {
+  .app-shell__workspace:has(.app-shell__context-pane[data-state="opening"]),
+  .app-shell__workspace:has(.app-shell__context-pane[data-state="open"]),
+  .app-shell__workspace:has(.app-shell__context-pane[data-state="closing"]) {
     grid-template-columns: 192px minmax(0, 1fr);
   }
-  .app-shell__workspace:has(.app-shell__context-pane) .app-shell__main {
+  .app-shell__workspace:has(.app-shell__context-pane[data-state="opening"]) .app-shell__main,
+  .app-shell__workspace:has(.app-shell__context-pane[data-state="open"]) .app-shell__main,
+  .app-shell__workspace:has(.app-shell__context-pane[data-state="closing"]) .app-shell__main {
     display: none;
   }
   .app-shell__context-pane {
     grid-column: 2;
+    inline-size: 0;
+    transition: inline-size var(--motion-content) var(--ease-interface);
+  }
+  .app-shell__context-pane[data-state="opening"],
+  .app-shell__context-pane[data-state="open"] {
+    inline-size: 100%;
+  }
+  .app-shell__context-pane[data-state="closing"] {
+    inline-size: 0;
+    transition-duration: var(--motion-feedback);
+  }
+  .app-shell__context-content {
+    min-block-size: 100%;
+  }
+}
+
+@property --context-pane-size {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell__context-content,
+  .app-shell__context-content[data-state="opening"],
+  .app-shell__context-content[data-state="open"],
+  .app-shell__context-content[data-state="closing"] {
+    transition: none;
   }
 }

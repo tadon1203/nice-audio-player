@@ -281,7 +281,27 @@ export function SettingsView({
           </button>
         </div>
       </section>
+      <section
+        className="settings-view__section settings-view__shortcuts"
+        aria-labelledby="shortcuts-title"
+      >
+        <h2 id="shortcuts-title">Keyboard shortcuts</h2>
+        <p>Keep playback within reach while you browse.</p>
+        <dl>
+          <div>
+            <dt>Space</dt>
+            <dd>Play or pause</dd>
+          </div>
+          <div>
+            <dt>Q</dt>
+            <dd>Open or close Queue</dd>
+          </div>
+          <div>
+            <dt>Escape</dt>
+            <dd>Close Queue or a menu</dd>
+          </div>
+        </dl>
+      </section>
     </section>
   );
 }
-

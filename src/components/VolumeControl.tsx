@@ -40,10 +40,12 @@ export function VolumeControl({
       <button
         type="button"
         aria-label={buttonLabel}
+        data-tooltip={buttonLabel}
+        title={buttonLabel}
         aria-busy={isMutePending || undefined}
         disabled={!isPlaybackAvailable || isMutePending}
         onClick={onVolumeButtonPress}
-        className="playback-dock__fixed-control playback-dock__volume-button grid size-10 place-items-center text-text-primary disabled:cursor-not-allowed disabled:text-text-disabled"
+        className="icon-button playback-dock__fixed-control playback-dock__volume-button text-text-primary disabled:cursor-not-allowed disabled:text-text-disabled"
       >
         <span data-testid="volume-icon-state" data-state={iconState}>
           <VolumeIcon state={iconState} className="playback-dock__volume-icon" />

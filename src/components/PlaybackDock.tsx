@@ -2,7 +2,7 @@ import type { PlaybackSnapshot } from "@/bindings";
 import { useEffect, useState } from "react";
 import { formatPlaybackTime } from "@/lib/playback-time";
 import { motionDurationSeconds } from "@/lib/motion";
-import { PlayPauseIcon, SkipTrackIcon } from "./icons";
+import { PlayPauseIcon, QueueIcon, SkipTrackIcon } from "./icons";
 import { RangeControl } from "./RangeControl";
 import { VolumeControl } from "./VolumeControl";
 
@@ -161,14 +161,18 @@ export function PlaybackDock({
           <div
             className={`playback-dock__timeline${
               isSeekPending || isTransportCommandPending ? " is-pending" : ""
-            }`}
+            }${!timed ? " is-idle" : ""}`}
           >
-            <div className="flex justify-between text-body-sm text-text-secondary">
-              <span className="tabular-nums">{formatPlaybackTime(seekValue)}</span>
-              <span className="tabular-nums">
-                {duration === null ? "--:--" : formatPlaybackTime(duration)}
-              </span>
-            </div>
+            {timed ? (
+              <div className="flex justify-between text-body-sm text-text-secondary">
+                <span className="tabular-nums">{formatPlaybackTime(seekValue)}</span>
+                <span className="tabular-nums">
+                  {duration === null ? "--:--" : formatPlaybackTime(duration)}
+                </span>
+              </div>
+            ) : (
+              <div aria-hidden="true" />
+            )}
             <RangeControl
               aria-label="Playback position"
               aria-valuetext={`${formatPlaybackTime(seekValue)} of ${duration === null ? "--:--" : formatPlaybackTime(duration)}`}
@@ -191,6 +195,16 @@ export function PlaybackDock({
           </div>
         </div>
         <div className="playback-dock__secondary">
+          <button
+            type="button"
+            className={`icon-button playback-dock__queue-button${isQueueOpen ? " is-selected" : ""}`}
+            aria-label={isQueueOpen ? "Close queue" : "Open queue"}
+            aria-expanded={isQueueOpen}
+            aria-controls="playback-queue"
+            onClick={onQueueToggle}
+          >
+            <QueueIcon />
+          </button>
           <VolumeControl
             playback={playback}
             value={volumeValue}
@@ -203,24 +217,6 @@ export function PlaybackDock({
             onInteractionCancel={onVolumePointerCancel}
             onVolumeButtonPress={onVolumeButtonPress}
           />
-          <button
-            type="button"
-            className="playback-dock__volume-button playback-dock__queue-button"
-            aria-label={isQueueOpen ? "Close queue" : "Open queue"}
-            aria-expanded={isQueueOpen}
-            aria-controls="playback-queue"
-            onClick={onQueueToggle}
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path
-                d="M5 6h14M5 12h14M5 18h9"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-              />
-            </svg>
-          </button>
         </div>
       </div>
       {playbackError ? (

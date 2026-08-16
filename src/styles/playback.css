@@ -10,7 +10,7 @@
   --playback-dock-artwork-size: calc(var(--spacing) * 20);
   --playback-dock-volume-width: calc(var(--spacing) * 48);
   --playback-dock-transport-offset-block: calc(var(--spacing) * 2);
-  --playback-dock-side-min-width: calc(var(--spacing) * 48);
+  --playback-dock-side-min-width: calc(var(--spacing) * 60);
   --playback-dock-core-min-width: calc(var(--spacing) * 52);
   --playback-dock-core-max-width: calc(var(--spacing) * 176);
   --playback-dock-timeline-label-size: calc(var(--spacing) * 5);
@@ -175,6 +175,9 @@
   inline-size: 100%;
   pointer-events: none;
 }
+.playback-dock__timeline.is-idle .range-control {
+  opacity: 0.55;
+}
 
 .playback-dock__timeline > .range-control {
   grid-row: 2;
@@ -188,25 +191,47 @@
   gap: calc(var(--spacing) * 2);
 }
 .playback-dock__secondary {
-  position: relative;
   grid-area: volume;
-  display: flex;
+  display: grid;
+  grid-template-columns: auto var(--playback-dock-volume-width);
   align-items: center;
   justify-content: flex-end;
+  column-gap: calc(var(--spacing) * 2);
   min-inline-size: 0;
 }
-.playback-dock__secondary .playback-dock__volume {
-  inline-size: 100%;
-  box-sizing: border-box;
-}
 .playback-dock__queue-button {
-  position: absolute;
-  inset-inline-end: 0;
-  flex: 0 0 40px;
+  display: grid;
+  place-items: center;
+  inline-size: calc(var(--spacing) * 10);
+  min-inline-size: calc(var(--spacing) * 10);
+  block-size: calc(var(--spacing) * 10);
+  min-block-size: calc(var(--spacing) * 10);
 }
 .playback-dock__queue-button svg {
-  inline-size: 22px;
-  block-size: 22px;
+  inline-size: 20px;
+  block-size: 20px;
+}
+.playback-dock__secondary .playback-dock__volume {
+  grid-area: auto;
+}
+@container playback-dock (max-width: 44rem) {
+  .playback-dock__layout {
+    --playback-dock-side-min-width: calc(var(--spacing) * 48);
+  }
+  .playback-dock__secondary {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: calc(var(--spacing) * 10) calc(var(--spacing) * 10);
+    align-content: center;
+    row-gap: 0;
+  }
+  .playback-dock__queue-button {
+    grid-row: 1;
+    justify-self: end;
+  }
+  .playback-dock__secondary .playback-dock__volume {
+    grid-row: 2;
+    inline-size: 100%;
+  }
 }
 
 .playback-dock__identity,
@@ -479,6 +504,11 @@
 }
 
 .playback-dock__volume-icon {
+  inline-size: var(--playback-dock-volume-icon-size);
+  block-size: var(--playback-dock-volume-icon-size);
+}
+
+.icon-button .playback-dock__volume-icon {
   inline-size: var(--playback-dock-volume-icon-size);
   block-size: var(--playback-dock-volume-icon-size);
 }

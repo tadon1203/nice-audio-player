@@ -9,6 +9,7 @@ interface AppShellProps {
   onDestinationChange?: (destination: "library" | "settings") => void;
   mainScrollRef?: Ref<HTMLElement>;
   contextPane?: ReactNode;
+  contextPaneState?: "closed" | "opening" | "open" | "closing";
 }
 
 export function AppShell({
@@ -19,6 +20,7 @@ export function AppShell({
   onDestinationChange = () => undefined,
   mainScrollRef,
   contextPane,
+  contextPaneState = "open",
 }: AppShellProps) {
   return (
     <div className="app-shell" data-testid="app-shell">
@@ -50,7 +52,28 @@ export function AppShell({
             {main}
           </ContentTransition>
         </main>
-        {contextPane ? <div className="app-shell__context-pane">{contextPane}</div> : null}
+        {contextPane ? (
+          <div
+            className="app-shell__context-pane"
+            data-state={contextPaneState}
+            aria-hidden={
+              contextPaneState === "closed" ||
+              contextPaneState === "opening" ||
+              contextPaneState === "closing" ||
+              undefined
+            }
+            inert={
+              contextPaneState === "closed" ||
+              contextPaneState === "opening" ||
+              contextPaneState === "closing" ||
+              undefined
+            }
+          >
+            <div className="app-shell__context-content" data-state={contextPaneState}>
+              {contextPane}
+            </div>
+          </div>
+        ) : null}
         <div className="app-shell__activity">{activity}</div>
       </div>
       <footer className="app-shell__persistent">{dock}</footer>
