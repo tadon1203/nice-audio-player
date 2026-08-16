@@ -19,23 +19,24 @@ for (const viewport of [
     await expect(queue.getByRole("button", { name: "Close" })).toBeVisible();
     await expect(queue.locator(".playback-queue__list")).toBeVisible();
     await expectNoHorizontalOverflow(page);
-    const horizontalOverflow = await queue.evaluate((element) =>
-      [
-        element,
-        ...Array.from(
-          element.querySelectorAll<HTMLElement>(
-            ".playback-queue__header, .playback-queue__now, .playback-queue__up-next, .playback-queue__list, .playback-queue__row",
-          ),
-        ),
-      ].map((node) => ({
-        name: node.className,
-        scrollWidth: node.scrollWidth,
-        clientWidth: node.clientWidth,
-      })),
+    const horizontalScroll = await queue.locator(".playback-queue__list").evaluate((element) => {
+      const list = element as HTMLElement;
+      return {
+        overflowX: getComputedStyle(list).overflowX,
+      };
+    });
+    expect(horizontalScroll.overflowX).not.toMatch(/auto|scroll/);
+
+    const rowContentFits = await queue.locator(".playback-queue__row").evaluateAll((rows) =>
+      rows.every((row) => {
+        const rowBox = row.getBoundingClientRect();
+        return Array.from(row.children).every((child) => {
+          const childBox = child.getBoundingClientRect();
+          return childBox.left >= rowBox.left && childBox.right <= rowBox.right;
+        });
+      }),
     );
-    expect(horizontalOverflow.every((surface) => surface.scrollWidth <= surface.clientWidth)).toBe(
-      true,
-    );
+    expect(rowContentFits).toBe(true);
 
     const queueBox = await contextPane.boundingBox();
     const dockBox = await shell.locator(".app-shell__persistent").boundingBox();

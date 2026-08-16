@@ -160,6 +160,7 @@
 }
 .playback-queue__row {
   position: relative;
+  inline-size: 100%;
   gap: 10px;
   min-block-size: 64px;
   min-inline-size: 0;
