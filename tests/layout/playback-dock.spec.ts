@@ -122,7 +122,26 @@ for (const width of [640, 800, 1120, 1440, 1760]) {
     ).toBeLessThanOrEqual(1);
     expect(
       Math.abs(volumeBox.y + volumeBox.height / 2 - (coreBox.y + coreBox.height / 2)),
-    ).toBeLessThanOrEqual(8);
+    ).toBeLessThanOrEqual(width <= 704 ? 24 : 8);
+
+    const queueBox = await page.getByRole("button", { name: "Open queue" }).boundingBox();
+    expect(queueBox).not.toBeNull();
+    if (queueBox) {
+      expect(
+        queueBox.x + queueBox.width <= volumeBox.x ||
+          volumeBox.x + volumeBox.width <= queueBox.x ||
+          queueBox.y + queueBox.height <= volumeBox.y ||
+          volumeBox.y + volumeBox.height <= queueBox.y,
+      ).toBe(true);
+      if (width <= 704) {
+        expect(queueBox.y + queueBox.height).toBeLessThanOrEqual(volumeBox.y);
+      } else {
+        expect(volumeBox.x - (queueBox.x + queueBox.width)).toBe(8);
+        expect(
+          Math.abs(queueBox.y + queueBox.height / 2 - (volumeBox.y + volumeBox.height / 2)),
+        ).toBeLessThanOrEqual(8);
+      }
+    }
   });
 }
 
@@ -193,8 +212,12 @@ test("minimum window width keeps the Dock in one anchored row", async ({ page })
     Math.abs(identity.y + identity.height / 2 - (core.y + core.height / 2)),
   ).toBeLessThanOrEqual(8);
   expect(Math.abs(volume.y + volume.height / 2 - (core.y + core.height / 2))).toBeLessThanOrEqual(
-    8,
+    24,
   );
+  const queue = dock.getByRole("button", { name: "Open queue" });
+  const queueBox = await queue.boundingBox();
+  expect(queueBox).not.toBeNull();
+  if (queueBox) expect(queueBox.y + queueBox.height).toBeLessThanOrEqual(volume.y);
   expect(timeline.y - (button.y + button.height)).toBeGreaterThanOrEqual(-6);
   expect(timeline.y - (button.y + button.height)).toBeLessThanOrEqual(4);
   await expectNoHorizontalOverflow(page);

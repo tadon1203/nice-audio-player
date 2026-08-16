@@ -107,9 +107,6 @@ export function AlbumDetailView({
                 hideHeading={
                   detail?.trackCount === 1 && query.items.length === 1 && query.nextOffset === null
                 }
-                hideTrackNumber={
-                  detail?.trackCount === 1 && query.items.length === 1 && query.nextOffset === null
-                }
               />
             ))}
             {query.nextOffset !== null ? (
@@ -155,7 +152,6 @@ function TrackGroup({
   activeTrackId,
   playbackStatus,
   hideHeading,
-  hideTrackNumber,
 }: {
   label: string;
   tracks: LibraryAlbumTrackSummary[];
@@ -166,7 +162,6 @@ function TrackGroup({
   activeTrackId: string | null;
   playbackStatus: "stopped" | "playing" | "paused" | "failed";
   hideHeading: boolean;
-  hideTrackNumber: boolean;
 }) {
   return (
     <section className="album-detail__group">
@@ -179,11 +174,7 @@ function TrackGroup({
             <li key={t.id}>
               <button
                 type="button"
-                className={`${
-                  hideTrackNumber
-                    ? "album-detail__row album-detail__row--single"
-                    : "album-detail__row"
-                }${active ? " album-detail__row--active" : ""}`}
+                className={`album-detail__row${active ? " album-detail__row--active" : ""}`}
                 disabled={!playbackAvailable || !t.playable}
                 aria-label={`${active ? "Restart " : "Play "}${t.title} by ${t.artist ?? albumArtist}`}
                 aria-description={
@@ -196,22 +187,20 @@ function TrackGroup({
                 aria-current={active ? "true" : undefined}
                 onClick={() => onPlayAlbumTrack(albumId, t.id)}
               >
-                {hideTrackNumber ? null : (
-                  <span className="album-detail__track-number type-numeric">
-                    {active ? (
-                      <span
-                        className={`album-detail__playing-bars${playbackStatus === "playing" ? " is-playing" : ""}`}
-                        aria-hidden="true"
-                      >
-                        <i />
-                        <i />
-                        <i />
-                      </span>
-                    ) : (
-                      (t.trackNumber ?? "—")
-                    )}
-                  </span>
-                )}
+                <span className="album-detail__track-number type-numeric">
+                  {active ? (
+                    <span
+                      className={`album-detail__playing-bars${playbackStatus === "playing" ? " is-playing" : ""}`}
+                      aria-hidden="true"
+                    >
+                      <i />
+                      <i />
+                      <i />
+                    </span>
+                  ) : (
+                    (t.trackNumber ?? "—")
+                  )}
+                </span>
                 <span className="album-detail__track-title">
                   <span className="album-detail__track-title-main">{t.title}</span>
                   {t.artist && t.artist.trim() !== albumArtist.trim() ? (
@@ -229,4 +218,3 @@ function TrackGroup({
     </section>
   );
 }
-

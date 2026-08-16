@@ -20,7 +20,8 @@ use audio::devices::{
     AudioOutputSelection,
 };
 use audio::playback::{
-    PlaybackFailureCode, PlaybackService, PlaybackServiceError, PlaybackSnapshot,
+    PlaybackEntrySeed, PlaybackFailureCode, PlaybackQueueMoveDirection, PlaybackQueueSnapshot,
+    PlaybackRepeatMode, PlaybackService, PlaybackServiceError, PlaybackSnapshot,
 };
 use library::{
     models::{
@@ -181,8 +182,15 @@ async fn start_library_track(
     let library = library.handle();
     let playback = playback.handle();
     tauri::async_runtime::spawn_blocking(move || {
-        let source = library.playable_source(track_id)?;
-        playback.play(source).map_err(map_start_library_error)
+        let entry = library.playable_entry(track_id)?;
+        playback
+            .play_entry(PlaybackEntrySeed {
+                file: entry.file,
+                title: entry.title,
+                artist: entry.artist,
+                duration_ms: entry.duration_ms,
+            })
+            .map_err(map_start_library_error)
     })
     .await
     .map_err(|_| StartLibraryTrackError::TaskFailed)?
@@ -198,9 +206,22 @@ async fn start_library_album(
     let library = library.handle();
     let playback = playback.handle();
     tauri::async_runtime::spawn_blocking(move || {
-        let sources = library.album_playable_sources(album_id)?;
+        let sources = library.album_playable_sources(album_id.clone())?;
+        let metadata = library
+            .album_tracks(album_id, 0)
+            .map_err(|_| StartLibraryAlbumError::PersistenceFailed)?;
+        let entries = sources
+            .into_iter()
+            .zip(metadata.items.into_iter().filter(|item| item.playable))
+            .map(|(file, item)| PlaybackEntrySeed {
+                file,
+                title: item.title,
+                artist: item.artist,
+                duration_ms: item.duration_ms,
+            })
+            .collect();
         playback
-            .play_sequence(sources)
+            .play_sequence_entries(entries)
             .map_err(map_start_library_album_error)
     })
     .await
@@ -218,9 +239,23 @@ async fn start_library_album_track(
     let library = library.handle();
     let playback = playback.handle();
     tauri::async_runtime::spawn_blocking(move || {
-        let (sources, index) = library.album_playable_sources_from_track(album_id, track_id)?;
+        let (sources, index) =
+            library.album_playable_sources_from_track(album_id.clone(), track_id)?;
+        let metadata = library
+            .album_tracks(album_id, 0)
+            .map_err(|_| StartLibraryTrackError::PersistenceFailed)?;
+        let entries = sources
+            .into_iter()
+            .zip(metadata.items.into_iter().filter(|item| item.playable))
+            .map(|(file, item)| PlaybackEntrySeed {
+                file,
+                title: item.title,
+                artist: item.artist,
+                duration_ms: item.duration_ms,
+            })
+            .collect();
         playback
-            .play_sequence_at(sources, index)
+            .play_sequence_entries_at(entries, index)
             .map_err(map_start_library_error)
     })
     .await
@@ -448,6 +483,9 @@ fn map_start_error(error: PlaybackServiceError) -> StartAudioFileError {
         PlaybackServiceError::InvalidDeviceId | PlaybackServiceError::OutputDeviceUnavailable => {
             StartAudioFileError::OutputFailed
         }
+        PlaybackServiceError::QueueItemNotFound | PlaybackServiceError::QueueBusy => {
+            StartAudioFileError::OutputFailed
+        }
     }
 }
 
@@ -507,6 +545,9 @@ fn map_pause_error(error: PlaybackServiceError) -> PauseAudioPlaybackError {
         PlaybackServiceError::InvalidDeviceId | PlaybackServiceError::OutputDeviceUnavailable => {
             PauseAudioPlaybackError::OutputFailed
         }
+        PlaybackServiceError::QueueItemNotFound | PlaybackServiceError::QueueBusy => {
+            PauseAudioPlaybackError::OutputFailed
+        }
     }
 }
 
@@ -539,6 +580,9 @@ fn map_resume_error(error: PlaybackServiceError) -> ResumeAudioPlaybackError {
         PlaybackServiceError::InvalidDeviceId | PlaybackServiceError::OutputDeviceUnavailable => {
             ResumeAudioPlaybackError::OutputFailed
         }
+        PlaybackServiceError::QueueItemNotFound | PlaybackServiceError::QueueBusy => {
+            ResumeAudioPlaybackError::OutputFailed
+        }
     }
 }
 
@@ -554,6 +598,9 @@ fn map_seek_error(error: PlaybackServiceError) -> SeekAudioPlaybackError {
         PlaybackServiceError::Decode => SeekAudioPlaybackError::DecodeFailed,
         PlaybackServiceError::Output(_) => SeekAudioPlaybackError::OutputFailed,
         PlaybackServiceError::InvalidDeviceId | PlaybackServiceError::OutputDeviceUnavailable => {
+            SeekAudioPlaybackError::OutputFailed
+        }
+        PlaybackServiceError::QueueItemNotFound | PlaybackServiceError::QueueBusy => {
             SeekAudioPlaybackError::OutputFailed
         }
     }
@@ -598,6 +645,9 @@ fn map_set_volume_error(error: PlaybackServiceError) -> SetPlaybackVolumeError {
         PlaybackServiceError::InvalidDeviceId | PlaybackServiceError::OutputDeviceUnavailable => {
             SetPlaybackVolumeError::PlaybackWorkerUnavailable
         }
+        PlaybackServiceError::QueueItemNotFound | PlaybackServiceError::QueueBusy => {
+            SetPlaybackVolumeError::PlaybackWorkerUnavailable
+        }
     }
 }
 
@@ -624,6 +674,9 @@ fn map_mute_error(error: PlaybackServiceError) -> PlaybackMuteError {
         | PlaybackServiceError::Output(_)
         | PlaybackServiceError::Decode => PlaybackMuteError::PlaybackWorkerUnavailable,
         PlaybackServiceError::InvalidDeviceId | PlaybackServiceError::OutputDeviceUnavailable => {
+            PlaybackMuteError::PlaybackWorkerUnavailable
+        }
+        PlaybackServiceError::QueueItemNotFound | PlaybackServiceError::QueueBusy => {
             PlaybackMuteError::PlaybackWorkerUnavailable
         }
     }
@@ -659,6 +712,96 @@ fn get_playback_state(playback: tauri::State<'_, PlaybackService>) -> PlaybackSn
     playback.snapshot()
 }
 
+#[derive(Debug, Clone, serde::Serialize, specta::Type, PartialEq, Eq)]
+#[serde(tag = "code", rename_all = "camelCase")]
+enum PlaybackQueueError {
+    QueueItemNotFound,
+    QueueBusy,
+    PlaybackWorkerUnavailable,
+    TaskFailed,
+}
+
+fn map_queue_error(error: PlaybackServiceError) -> PlaybackQueueError {
+    match error {
+        PlaybackServiceError::WorkerUnavailable => PlaybackQueueError::PlaybackWorkerUnavailable,
+        PlaybackServiceError::QueueItemNotFound => PlaybackQueueError::QueueItemNotFound,
+        PlaybackServiceError::QueueBusy => PlaybackQueueError::QueueBusy,
+        _ => PlaybackQueueError::TaskFailed,
+    }
+}
+
+#[tauri::command]
+#[specta::specta]
+fn get_playback_queue(playback: tauri::State<'_, PlaybackService>) -> PlaybackQueueSnapshot {
+    playback.queue_snapshot()
+}
+
+#[tauri::command]
+#[specta::specta]
+async fn set_playback_repeat_mode(
+    mode: PlaybackRepeatMode,
+    playback: tauri::State<'_, PlaybackService>,
+) -> Result<PlaybackQueueSnapshot, PlaybackQueueError> {
+    let playback = playback.handle();
+    tauri::async_runtime::spawn_blocking(move || playback.set_repeat_mode(mode))
+        .await
+        .map_err(|_| PlaybackQueueError::TaskFailed)?
+        .map_err(map_queue_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+async fn set_playback_shuffle(
+    enabled: bool,
+    playback: tauri::State<'_, PlaybackService>,
+) -> Result<PlaybackQueueSnapshot, PlaybackQueueError> {
+    let playback = playback.handle();
+    tauri::async_runtime::spawn_blocking(move || playback.set_shuffle(enabled))
+        .await
+        .map_err(|_| PlaybackQueueError::TaskFailed)?
+        .map_err(map_queue_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+async fn remove_playback_queue_item(
+    id: String,
+    playback: tauri::State<'_, PlaybackService>,
+) -> Result<PlaybackQueueSnapshot, PlaybackQueueError> {
+    let playback = playback.handle();
+    tauri::async_runtime::spawn_blocking(move || playback.remove_queue_item(id))
+        .await
+        .map_err(|_| PlaybackQueueError::TaskFailed)?
+        .map_err(map_queue_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+async fn move_playback_queue_item(
+    id: String,
+    direction: PlaybackQueueMoveDirection,
+    playback: tauri::State<'_, PlaybackService>,
+) -> Result<PlaybackQueueSnapshot, PlaybackQueueError> {
+    let playback = playback.handle();
+    tauri::async_runtime::spawn_blocking(move || playback.move_queue_item(id, direction))
+        .await
+        .map_err(|_| PlaybackQueueError::TaskFailed)?
+        .map_err(map_queue_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+async fn clear_playback_queue(
+    playback: tauri::State<'_, PlaybackService>,
+) -> Result<PlaybackQueueSnapshot, PlaybackQueueError> {
+    let playback = playback.handle();
+    tauri::async_runtime::spawn_blocking(move || playback.clear_queue())
+        .await
+        .map_err(|_| PlaybackQueueError::TaskFailed)?
+        .map_err(map_queue_error)
+}
+
+
 fn create_specta_builder() -> Builder<tauri::Wry> {
     Builder::<tauri::Wry>::new()
         .commands(collect_specta_commands())
@@ -681,6 +824,12 @@ fn collect_specta_commands<R: tauri::Runtime>() -> tauri_specta::Commands<R> {
         mute_audio_playback,
         unmute_audio_playback,
         get_playback_state,
+        get_playback_queue,
+        set_playback_repeat_mode,
+        set_playback_shuffle,
+        remove_playback_queue_item,
+        move_playback_queue_item,
+        clear_playback_queue,
         get_application_activities,
         get_library_status,
         list_library_roots,
@@ -804,6 +953,18 @@ pub fn run() {
                     }
                 });
             }
+            if let Some(receiver) = app
+                .state::<PlaybackService>()
+                .take_queue_state_changed_receiver()
+            {
+                let app_handle = app.handle().clone();
+                thread::spawn(move || {
+                    while receiver.recv().is_ok() {
+                        let snapshot = app_handle.state::<PlaybackService>().queue_snapshot();
+                        let _ = app_handle.emit("playback-queue-state-changed", snapshot);
+                    }
+                });
+            }
             Ok(())
         })
         .invoke_handler(specta_builder.invoke_handler())
@@ -819,4 +980,3 @@ pub fn run() {
         }
     });
 }
-

@@ -99,6 +99,27 @@
   color: var(--color-text-primary);
   padding-inline: 12px;
 }
+.settings-view__shortcuts dl {
+  display: grid;
+  gap: 8px;
+  max-inline-size: 32rem;
+  margin: 16px 0 0;
+}
+.settings-view__shortcuts dl > div {
+  display: grid;
+  grid-template-columns: 7rem minmax(0, 1fr);
+  gap: 16px;
+  padding-block: 8px;
+  border-block-end: 1px solid var(--color-border-subtle);
+}
+.settings-view__shortcuts dt {
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-medium);
+}
+.settings-view__shortcuts dd {
+  margin: 0;
+  color: var(--color-text-secondary);
+}
 @media (max-width: 799px) {
   .settings-view__section-head {
     align-items: start;

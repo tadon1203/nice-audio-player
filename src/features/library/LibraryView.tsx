@@ -60,8 +60,7 @@ export function LibraryView({
       .then(([, roots]) => setHasRoots(roots.length > 0))
       .catch(() => setHasRoots(null));
   }, []);
-  const empty =
-    hasRoots === false ? "Set up your library" : search ? "No matches" : "No indexed music yet";
+  const empty = hasRoots === false ? "Add a music folder to start" : "No indexed music yet";
   const query = presentation === "albums" ? albumQuery : trackQuery;
   const changePresentation = (next: "albums" | "tracks") => {
     if (next !== presentation) {
@@ -88,40 +87,47 @@ export function LibraryView({
   const browser = (
     <section className="library-view" data-presentation={presentation} aria-label="Library">
       <header className="library-view__header">
-        <div>
-          <h1>Library</h1>
+        <h1>Library</h1>
+        <div className="library-view__controls">
           <LibraryPresentationTabs presentation={presentation} onChange={changePresentation} />
+          <label className="library-view__search">
+            <span className="sr-only">Search your library</span>
+            <input
+              value={rawSearch}
+              onChange={(e) => setRawSearch(e.currentTarget.value)}
+              placeholder="Search your library..."
+            />
+          </label>
         </div>
-        <label className="library-view__search">
-          <span className="sr-only">Search your library</span>
-          <input
-            value={rawSearch}
-            onChange={(e) => setRawSearch(e.currentTarget.value)}
-            placeholder="Search your library..."
-          />
-        </label>
       </header>
-      {scanError ? (
-        <p className="library-view__notice" role="alert">
-          {scanError}
-        </p>
-      ) : null}
-      {query.error ? (
-        <div className="library-view__notice" role="alert">
-          {query.error}{" "}
-          <button type="button" onClick={query.retry}>
-            Retry
-          </button>
+      {scanError || query.error ? (
+        <div className="library-view__notice library-view__notice--error" role="alert">
+          <p>{scanError ?? query.error}</p>
+          <div className="library-view__notice-actions">
+            {query.error ? (
+              <button type="button" onClick={query.retry}>
+                Retry library
+              </button>
+            ) : null}
+            <button type="button" onClick={onOpenSettings}>
+              Open Library settings
+            </button>
+          </div>
         </div>
-      ) : null}
-      {query.loading && query.items.length === 0 ? (
+      ) : query.loading && query.items.length === 0 ? (
         <p className="library-view__notice">Loading library…</p>
       ) : query.items.length === 0 ? (
         <div className="library-view__empty">
-          <p>{empty}</p>
-          <button type="button" onClick={onOpenSettings}>
-            Open Library settings
-          </button>
+          <p>{search ? "No matches" : empty}</p>
+          {search ? (
+            <button type="button" onClick={() => setRawSearch("")}>
+              Clear search
+            </button>
+          ) : (
+            <button type="button" onClick={onOpenSettings}>
+              Open Library settings
+            </button>
+          )}
         </div>
       ) : presentation === "albums" ? (
         <ContentTransition contentKey="albums" direction={presentationDirection}>
@@ -275,4 +281,3 @@ function Tracks({
     </section>
   );
 }
-

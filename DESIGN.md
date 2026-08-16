@@ -385,6 +385,10 @@ Use `surface-pressed`. A scale reduction of no more than 2% is permitted for a d
 
 Use a 2px `focus-ring` outline with a 2px offset. The indicator remains visible against every adjacent surface and is not replaced by hover styling.
 
+### Browser surfaces
+
+Selection uses primary text over the canvas. Scrollbars stay quiet and deliberate: use a 12px canvas track with a 3px canvas inset around a `border-control` thumb, increasing the thumb to `text-secondary` only on hover. Native controls remain semantic, and forced-colors mode restores system scrollbar treatment.
+
 ### Selected
 
 Use at least two visible differences from rest. One difference may be color or luminance. The second difference must be shape, border, icon, text weight, or position of a non-layout-affecting marker.

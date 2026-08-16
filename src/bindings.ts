@@ -24,6 +24,16 @@ export const commands = {
   muteAudioPlayback: () => __TAURI_INVOKE<PlaybackSnapshot_Serialize>("mute_audio_playback"),
   unmuteAudioPlayback: () => __TAURI_INVOKE<PlaybackSnapshot_Serialize>("unmute_audio_playback"),
   getPlaybackState: () => __TAURI_INVOKE<PlaybackSnapshot_Serialize>("get_playback_state"),
+  getPlaybackQueue: () => __TAURI_INVOKE<PlaybackQueueSnapshot>("get_playback_queue"),
+  setPlaybackRepeatMode: (mode: PlaybackRepeatMode) =>
+    __TAURI_INVOKE<PlaybackQueueSnapshot>("set_playback_repeat_mode", { mode }),
+  setPlaybackShuffle: (enabled: boolean) =>
+    __TAURI_INVOKE<PlaybackQueueSnapshot>("set_playback_shuffle", { enabled }),
+  removePlaybackQueueItem: (id: string) =>
+    __TAURI_INVOKE<PlaybackQueueSnapshot>("remove_playback_queue_item", { id }),
+  movePlaybackQueueItem: (id: string, direction: PlaybackQueueMoveDirection) =>
+    __TAURI_INVOKE<PlaybackQueueSnapshot>("move_playback_queue_item", { id, direction }),
+  clearPlaybackQueue: () => __TAURI_INVOKE<PlaybackQueueSnapshot>("clear_playback_queue"),
   getApplicationActivities: () =>
     __TAURI_INVOKE<ApplicationActivity[]>("get_application_activities"),
   getLibraryStatus: () => __TAURI_INVOKE<LibraryStatus>("get_library_status"),
@@ -268,6 +278,31 @@ export type PlaybackNavigationError =
   | { code: "playbackWorkerUnavailable" }
   | { code: "taskFailed" };
 
+export type PlaybackQueueError =
+  | { code: "queueItemNotFound" }
+  | { code: "queueBusy" }
+  | { code: "playbackWorkerUnavailable" }
+  | { code: "taskFailed" };
+
+export type PlaybackQueueItem = {
+  id: string;
+  title: string;
+  artist: string | null;
+  durationMs: number | null;
+};
+
+export type PlaybackQueueMoveDirection = "earlier" | "later";
+
+export type PlaybackQueueSnapshot = {
+  revision: number;
+  current: PlaybackQueueItem | null;
+  upcoming: PlaybackQueueItem[];
+  repeatMode: PlaybackRepeatMode;
+  shuffleEnabled: boolean;
+};
+
+export type PlaybackRepeatMode = "off" | "all" | "one";
+
 export type PlaybackSnapshot = PlaybackSnapshot_Serialize | PlaybackSnapshot_Deserialize;
 
 export type PlaybackSnapshot_Deserialize =
@@ -495,4 +530,3 @@ export type ValidatedAudioFile = {
   fileName: string;
   extension: string;
 };
-

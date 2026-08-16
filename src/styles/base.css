@@ -60,6 +60,30 @@
     background: var(--color-text-primary);
     color: var(--color-canvas);
   }
+
+  * {
+    scrollbar-color: var(--color-border-control) var(--color-canvas);
+    scrollbar-width: thin;
+  }
+
+  *::-webkit-scrollbar {
+    inline-size: var(--scrollbar-size);
+    block-size: var(--scrollbar-size);
+  }
+
+  *::-webkit-scrollbar-track {
+    background: var(--color-canvas);
+  }
+
+  *::-webkit-scrollbar-thumb {
+    border: var(--scrollbar-thumb-inset) solid var(--color-canvas);
+    border-radius: var(--radius-full);
+    background: var(--color-border-control);
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background: var(--color-text-secondary);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -92,5 +116,9 @@
 
   :focus-visible {
     outline-color: Highlight;
+  }
+
+  * {
+    scrollbar-color: auto;
   }
 }

@@ -1,7 +1,8 @@
-import type { PlaybackSnapshot, ValidatedAudioFile } from "@/bindings";
+import type { PlaybackQueueItem, PlaybackSnapshot, ValidatedAudioFile } from "@/bindings";
 import { useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { PlaybackDock } from "@/components/PlaybackDock";
+import { PlaybackQueuePane } from "@/components/PlaybackQueuePane";
 import { Button } from "@/components/ui/Button";
 
 import type { LayoutFixtureName } from "./layout-fixture-state";
@@ -34,6 +35,9 @@ function audioFile(fileName: string): ValidatedAudioFile {
 
 export function LayoutFixtureApp({ fixture }: LayoutFixtureAppProps) {
   const [destination, setDestination] = useState<"library" | "settings">("library");
+  const [queueState, setQueueState] = useState<"open" | "closing" | null>(
+    fixture === "queue-open" ? "open" : null,
+  );
   const playback = fixturePlayback(fixture);
   const playbackError = fixture === "failed" ? layoutStressFixtures.longError : null;
 
@@ -42,6 +46,16 @@ export function LayoutFixtureApp({ fixture }: LayoutFixtureAppProps) {
       <AppShell
         destination={destination}
         onDestinationChange={setDestination}
+        contextPaneState={queueState ?? undefined}
+        contextPane={
+          queueState ? (
+            <PlaybackQueuePane
+              queue={layoutQueueFixture}
+              onClose={() => setQueueState("closing")}
+              playbackStatus="playing"
+            />
+          ) : undefined
+        }
         main={
           fixture === "album-detail-wide" && destination === "library" ? (
             <AlbumDetailLayoutFixture />
@@ -84,12 +98,36 @@ export function LayoutFixtureApp({ fixture }: LayoutFixtureAppProps) {
             onVolumeCommit={noop}
             onVolumePointerCancel={noop}
             onVolumeButtonPress={noop}
+            isQueueOpen={queueState === "open"}
+            onQueueToggle={() => setQueueState((state) => (state === "open" ? "closing" : "open"))}
           />
         }
       />
     </div>
   );
 }
+
+const queueItems: PlaybackQueueItem[] = Array.from({ length: 16 }, (_, index) => ({
+  id: `queue-fixture-${index + 1}`,
+  title: `Queue fixture track ${index + 1}`,
+  artist: "Fixture Artist",
+  durationMs: 180_000 + index * 1_000,
+}));
+
+const layoutQueueFixture = {
+  current: queueItems[0] ?? null,
+  upcoming: queueItems.slice(1),
+  repeatMode: "off" as const,
+  shuffleEnabled: false,
+  pending: false,
+  error: null,
+  refresh: async () => undefined,
+  setRepeatMode: noop,
+  setShuffle: noop,
+  removeItem: noop,
+  moveItem: noop,
+  clearUpcoming: noop,
+};
 
 function AlbumDetailLayoutFixture() {
   return (

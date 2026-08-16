@@ -124,10 +124,10 @@ describe("AlbumDetailView", () => {
     expect(onPlayTrack).toHaveBeenCalledWith("track-2");
   });
 
-  it("hides the disc heading and track number for a single-track album", () => {
+  it("hides the disc heading but keeps the track number for a single-track album", () => {
     renderDetail({ items: [track()] });
     expect(screen.queryByRole("heading", { name: "Disc 1" })).not.toBeInTheDocument();
-    expect(screen.queryByText("1", { selector: ".type-numeric" })).not.toBeInTheDocument();
+    expect(screen.getByText("1", { selector: ".type-numeric" })).toBeInTheDocument();
     expect(screen.getByText("Track title")).toBeInTheDocument();
     expect(screen.getByText("4:32")).toBeInTheDocument();
   });
@@ -161,4 +161,3 @@ describe("AlbumDetailView", () => {
     expect(screen.getByRole("button", { name: "Play album" })).toBeDisabled();
   });
 });
-

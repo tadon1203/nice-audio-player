@@ -39,7 +39,10 @@ import { useSeekController } from "./hooks/use-seek-controller";
 import { useVolumeController } from "./hooks/use-volume-controller";
 import { useLibraryScan } from "./features/library/use-library-scan";
 import { useApplicationActivities } from "./hooks/use-application-activities";
+import { usePlaybackQueue } from "./hooks/use-playback-queue";
+import { PlaybackQueuePane } from "./components/PlaybackQueuePane";
 import { initialPlaybackUiState, playbackUiReducer } from "./lib/playback-state";
+import { motionDurationSeconds } from "./lib/motion";
 
 type TransportOperation =
   | { type: "stop" }
@@ -51,6 +54,7 @@ type TransportOperation =
   | { type: "previous" }
   | { type: "next" };
 type PendingTransportCommand = "stop" | "pause" | "resume" | "previous" | "next" | null;
+type QueuePaneState = "opening" | "open" | "closing" | null;
 function formatPlaybackFailure(code: PlaybackFailureCode): string {
   const messages: Record<PlaybackFailureCode, string> = {
     noOutputDevice: "No audio output device is available.",
@@ -70,6 +74,7 @@ function formatPlaybackFailure(code: PlaybackFailureCode): string {
 
 function App() {
   const [destination, setDestination] = useState<"library" | "settings">("library");
+  const [queuePaneState, setQueuePaneState] = useState<QueuePaneState>(null);
   const [mainScrollElement, setMainScrollElement] = useState<HTMLElement | null>(null);
   const [outputDevices, setOutputDevices] = useState<AudioOutputDevice[] | null>(null);
   const [isLoadingDevices, setIsLoadingDevices] = useState(false);
@@ -87,6 +92,47 @@ function App() {
   const deviceRequest = useRef(0);
   const queuedTransportRef = useRef<TransportOperation | null>(null);
   const subscriptionHealthyRef = useRef(true);
+  const queueRemovalTimerRef = useRef<number | null>(null);
+  const queueOpenFrameRef = useRef<number | null>(null);
+
+  const clearQueueTransition = useCallback(() => {
+    if (queueRemovalTimerRef.current !== null) {
+      window.clearTimeout(queueRemovalTimerRef.current);
+      queueRemovalTimerRef.current = null;
+    }
+    if (queueOpenFrameRef.current !== null) {
+      window.cancelAnimationFrame(queueOpenFrameRef.current);
+      queueOpenFrameRef.current = null;
+    }
+  }, []);
+
+  const openQueue = useCallback(() => {
+    clearQueueTransition();
+    setQueuePaneState("opening");
+    queueOpenFrameRef.current = window.requestAnimationFrame(() => {
+      queueOpenFrameRef.current = null;
+      setQueuePaneState("open");
+    });
+  }, [clearQueueTransition]);
+
+  const closeQueue = useCallback(() => {
+    clearQueueTransition();
+    setQueuePaneState((current) => (current === null ? null : "closing"));
+    queueRemovalTimerRef.current = window.setTimeout(() => {
+      queueRemovalTimerRef.current = null;
+      setQueuePaneState(null);
+    }, motionDurationSeconds.feedback * 1000);
+  }, [clearQueueTransition]);
+
+  useEffect(() => clearQueueTransition, [clearQueueTransition]);
+
+  const isQueueOpen = queuePaneState === "opening" || queuePaneState === "open";
+  const transportRequestRef = useRef<(operation: TransportOperation) => Promise<void>>(
+    async () => undefined,
+  );
+  useEffect(() => {
+    transportRequestRef.current = requestTransport;
+  });
   useEffect(() => {
     latestPlaybackRef.current = playback;
     connectionRef.current = playbackUi.connection;
@@ -94,6 +140,7 @@ function App() {
   const isPlaybackAvailable = playbackUi.connection === "ready";
   const isTransportCommandPending = pendingTransportCommand !== null;
   const activeTrack = useActiveTrackIdentity(playback.file);
+  const queue = usePlaybackQueue();
   const applySnapshot = useCallback((snapshot: PlaybackSnapshot) => {
     if (snapshot.revision <= latestPlaybackRef.current.revision) return false;
     latestPlaybackRef.current = snapshot;
@@ -240,6 +287,38 @@ function App() {
       if (queued) void requestTransport(queued);
     }
   }
+  useEffect(() => {
+    function handleShortcut(event: KeyboardEvent) {
+      const target = event.target as HTMLElement | null;
+      const isTextEntry =
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        target?.isContentEditable;
+      if (isTextEntry || event.altKey || event.ctrlKey || event.metaKey) return;
+      if (event.key === "Escape") {
+        if (isQueueOpen) {
+          event.preventDefault();
+          closeQueue();
+        }
+        return;
+      }
+      if (event.key.toLowerCase() === "q") {
+        event.preventDefault();
+        if (isQueueOpen) closeQueue();
+        else openQueue();
+        return;
+      }
+      if (event.key === " " && (playback.status === "playing" || playback.status === "paused")) {
+        event.preventDefault();
+        void transportRequestRef.current({
+          type: playback.status === "playing" ? "pause" : "resume",
+        });
+      }
+    }
+    window.addEventListener("keydown", handleShortcut);
+    return () => window.removeEventListener("keydown", handleShortcut);
+  }, [closeQueue, isQueueOpen, openQueue, playback.status]);
   async function changeOutputSelection(selection: AudioOutputSelection) {
     if (
       outputPendingRef.current ||
@@ -324,9 +403,16 @@ function App() {
   return (
     <AppShell
       destination={destination}
-      onDestinationChange={setDestination}
+      onDestinationChange={(next) => {
+        closeQueue();
+        setDestination(next);
+      }}
       mainScrollRef={setMainScrollElement}
       main={main}
+      contextPaneState={queuePaneState ?? "closed"}
+      contextPane={
+        <PlaybackQueuePane queue={queue} onClose={closeQueue} playbackStatus={playback.status} />
+      }
       activity={<ApplicationActivityIndicator activity={applicationActivity} />}
       dock={
         <PlaybackDock
@@ -362,10 +448,11 @@ function App() {
           onVolumeCommit={volumeController.onVolumeCommit}
           onVolumePointerCancel={volumeController.onVolumePointerCancel}
           onVolumeButtonPress={volumeController.onVolumeButtonPress}
+          isQueueOpen={isQueueOpen}
+          onQueueToggle={() => (isQueueOpen ? closeQueue() : openQueue())}
         />
       }
     />
   );
 }
 export default App;
-

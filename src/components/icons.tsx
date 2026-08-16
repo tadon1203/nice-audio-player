@@ -17,6 +17,57 @@ function Svg({ children, className = "size-6" }: { children: ReactNode; classNam
   );
 }
 
+export function QueueIcon({ className }: { className?: string } = {}) {
+  return (
+    <Svg className={className}>
+      <path
+        d="M5 6h14M5 12h14M5 18h9"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="1.7"
+      />
+    </Svg>
+  );
+}
+
+export function MoreIcon({ className }: { className?: string } = {}) {
+  return (
+    <Svg className={className}>
+      <circle cx="5" cy="12" r="1.5" fill="currentColor" />
+      <circle cx="12" cy="12" r="1.5" fill="currentColor" />
+      <circle cx="19" cy="12" r="1.5" fill="currentColor" />
+    </Svg>
+  );
+}
+
+export function ShuffleIcon({ className }: { className?: string } = {}) {
+  return (
+    <Svg className={className}>
+      <path
+        d="M4 7h2c4 0 5 10 10 10h4M16 5l4 2-4 2M16 15l4 2-4 2M4 17h2c1.7 0 2.7-1.3 3.5-2.8M14.5 9.8C15.3 8.3 16.3 7 18 7h2"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.7"
+      />
+    </Svg>
+  );
+}
+
+export function RepeatIcon({ className }: { className?: string } = {}) {
+  return (
+    <Svg className={className}>
+      <path
+        d="M5 8h12l-2.5-2.5M19 16H7l2.5 2.5M19 8v3M5 16v-3"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.7"
+      />
+    </Svg>
+  );
+}
+
 export function PlayPauseIcon({ playing, className }: { playing: boolean; className?: string }) {
   const reducedMotion = useReducedMotion();
   const transition = reducedMotion
