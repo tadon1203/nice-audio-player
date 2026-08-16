@@ -44,7 +44,9 @@ export function AppShell({
           </button>
         </nav>
         <main ref={mainScrollRef} className="app-shell__main">
-          <ContentTransition contentKey={destination}>{main}</ContentTransition>
+          <ContentTransition contentKey={destination} direction="neutral">
+            {main}
+          </ContentTransition>
         </main>
         <div className="app-shell__activity">{activity}</div>
       </div>

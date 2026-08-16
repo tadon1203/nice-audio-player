@@ -10,4 +10,3 @@ pub(crate) struct ScanReport {
     pub failed_root_ids: HashSet<i64>,
     pub unavailable_root_ids: HashSet<i64>,
 }
-

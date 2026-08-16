@@ -34,4 +34,3 @@ describe("ApplicationActivityIndicator", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Library update needs attention");
   });
 });
-

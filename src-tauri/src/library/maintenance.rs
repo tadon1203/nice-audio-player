@@ -102,4 +102,3 @@ fn remove_unowned_files(data_dir: &Path, live_paths: &HashSet<String>) {
         }
     }
 }
-

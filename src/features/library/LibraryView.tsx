@@ -7,7 +7,10 @@ import { useTrackQuery } from "./use-track-query";
 import { AlbumsView } from "./AlbumsView";
 import { TrackRow } from "./TrackRow";
 import { AlbumDetailView } from "./AlbumDetailView";
-import { ContentTransition } from "@/components/ui/ContentTransition";
+import {
+  ContentTransition,
+  type ContentTransitionDirection,
+} from "@/components/ui/ContentTransition";
 import { LibraryPresentationTabs } from "./LibraryPresentationTabs";
 
 interface Props {
@@ -35,6 +38,10 @@ export function LibraryView({
   scrollElement = null,
 }: Props) {
   const [presentation, setPresentation] = useState<"albums" | "tracks">("albums");
+  const [presentationDirection, setPresentationDirection] =
+    useState<ContentTransitionDirection>("neutral");
+  const [navigationDirection, setNavigationDirection] =
+    useState<ContentTransitionDirection>("neutral");
   const [rawSearch, setRawSearch] = useState("");
   const [search, setSearch] = useState("");
   const [hasRoots, setHasRoots] = useState<boolean | null>(null);
@@ -56,6 +63,12 @@ export function LibraryView({
   const empty =
     hasRoots === false ? "Set up your library" : search ? "No matches" : "No indexed music yet";
   const query = presentation === "albums" ? albumQuery : trackQuery;
+  const changePresentation = (next: "albums" | "tracks") => {
+    if (next !== presentation) {
+      setPresentationDirection(next === "tracks" ? "forward" : "backward");
+      setPresentation(next);
+    }
+  };
   useLayoutEffect(() => {
     if (pendingFocusRef.current === "detail" && selectedAlbum) {
       document.querySelector<HTMLButtonElement>(".album-detail__back")?.focus();
@@ -77,7 +90,7 @@ export function LibraryView({
       <header className="library-view__header">
         <div>
           <h1>Library</h1>
-          <LibraryPresentationTabs presentation={presentation} onChange={setPresentation} />
+          <LibraryPresentationTabs presentation={presentation} onChange={changePresentation} />
         </div>
         <label className="library-view__search">
           <span className="sr-only">Search your library</span>
@@ -111,7 +124,7 @@ export function LibraryView({
           </button>
         </div>
       ) : presentation === "albums" ? (
-        <ContentTransition contentKey="albums">
+        <ContentTransition contentKey="albums" direction={presentationDirection}>
           <AlbumsView
             albums={albumQuery.items}
             onEnd={albumQuery.loadNext}
@@ -120,13 +133,14 @@ export function LibraryView({
               browserScrollTop.current = scrollElement?.scrollTop ?? 0;
               focusAlbumIdRef.current = album.id;
               pendingFocusRef.current = "detail";
+              setNavigationDirection("forward");
               setSelectedAlbum(album);
               scrollElement?.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
             }}
           />
         </ContentTransition>
       ) : (
-        <ContentTransition contentKey="tracks">
+        <ContentTransition contentKey="tracks" direction={presentationDirection}>
           <Tracks
             tracks={trackQuery.items}
             onEnd={trackQuery.loadNext}
@@ -153,12 +167,16 @@ export function LibraryView({
       playbackStatus={playbackStatus}
       onBack={() => {
         pendingFocusRef.current = "browser";
+        setNavigationDirection("backward");
         setSelectedAlbum(null);
       }}
     />
   ) : null;
   return (
-    <ContentTransition contentKey={selectedAlbum ? `album:${selectedAlbum.id}` : "browser"}>
+    <ContentTransition
+      contentKey={selectedAlbum ? `album:${selectedAlbum.id}` : "browser"}
+      direction={navigationDirection}
+    >
       {detail ?? browser}
     </ContentTransition>
   );

@@ -430,4 +430,3 @@ fn clear_activity(activity: &Option<ApplicationActivityHandle>) {
         activity.clear(LIBRARY_ACTIVITY_ID);
     }
 }
-

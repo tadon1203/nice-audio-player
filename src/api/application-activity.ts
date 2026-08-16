@@ -29,4 +29,3 @@ export function listenToApplicationActivities(
     else invalidPayloadHandler?.();
   });
 }
-
