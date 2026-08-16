@@ -321,9 +321,6 @@
 .album-detail__tracks {
   inline-size: 100%;
 }
-.album-detail__row--single {
-  grid-template-columns: minmax(0, 1fr) 72px;
-}
 .album-detail__group {
   margin-block-start: 28px;
 }
@@ -355,6 +352,9 @@
   padding: 6px 0;
   text-align: start;
   font: inherit;
+}
+.album-detail__row--single {
+  grid-template-columns: minmax(0, 1fr) 72px;
 }
 .album-detail__row--active {
   background: var(--color-surface-raised);
@@ -487,6 +487,9 @@
   .album-detail__row {
     grid-template-columns: 40px minmax(0, 1fr) 64px;
     gap: 8px;
+  }
+  .album-detail__row--single {
+    grid-template-columns: minmax(0, 1fr) 64px;
   }
 }
 @media (min-width: 800px) and (max-width: 1199px) {
