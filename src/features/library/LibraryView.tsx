@@ -14,6 +14,7 @@ interface Props {
   onOpenSettings: () => void;
   onPlayTrack: (id: string) => void;
   onPlayAlbum: (id: string) => void;
+  onPlayAlbumTrack: (albumId: string, trackId: string) => void;
   activeTrackId: string | null;
   playbackStatus: "stopped" | "playing" | "paused" | "failed";
   playbackAvailable: boolean;
@@ -25,6 +26,7 @@ export function LibraryView({
   onOpenSettings,
   onPlayTrack,
   onPlayAlbum,
+  onPlayAlbumTrack,
   activeTrackId,
   playbackStatus,
   playbackAvailable,
@@ -131,6 +133,8 @@ export function LibraryView({
             hasMore={Boolean(trackQuery.nextAfterId)}
             playbackAvailable={playbackAvailable}
             onPlayTrack={onPlayTrack}
+            activeTrackId={activeTrackId}
+            playbackStatus={playbackStatus}
             scrollElement={scrollElement}
           />
         </ContentTransition>
@@ -143,7 +147,7 @@ export function LibraryView({
       refreshKey={libraryRefreshKey}
       playbackAvailable={playbackAvailable}
       scrollElement={scrollElement}
-      onPlayTrack={onPlayTrack}
+      onPlayAlbumTrack={onPlayAlbumTrack}
       onPlayAlbum={onPlayAlbum}
       activeTrackId={activeTrackId}
       playbackStatus={playbackStatus}
@@ -165,6 +169,8 @@ function Tracks({
   hasMore,
   playbackAvailable,
   onPlayTrack,
+  activeTrackId,
+  playbackStatus,
   scrollElement,
 }: {
   tracks: LibraryTrackSummary[];
@@ -172,6 +178,8 @@ function Tracks({
   hasMore: boolean;
   playbackAvailable: boolean;
   onPlayTrack: (id: string) => void;
+  activeTrackId: string | null;
+  playbackStatus: "stopped" | "playing" | "paused" | "failed";
   scrollElement: HTMLElement | null;
 }) {
   const scrollRef = useRef<HTMLElement | null>(null);
@@ -233,7 +241,15 @@ function Tracks({
                 transform: `translateY(${item.start - scrollMargin}px)`,
               }}
             >
-              <TrackRow track={t} playbackAvailable={playbackAvailable} onPlayTrack={onPlayTrack} />
+              <TrackRow
+                track={t}
+                playbackAvailable={playbackAvailable}
+                onPlayTrack={onPlayTrack}
+                active={
+                  t.id === activeTrackId &&
+                  (playbackStatus === "playing" || playbackStatus === "paused")
+                }
+              />
             </div>
           );
         })}

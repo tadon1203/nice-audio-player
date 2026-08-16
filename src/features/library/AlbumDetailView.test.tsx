@@ -85,7 +85,7 @@ function renderDetail({
       refreshKey={0}
       playbackAvailable={playbackAvailable}
       onBack={vi.fn()}
-      onPlayTrack={onPlayTrack}
+      onPlayAlbumTrack={(_albumId, trackId) => onPlayTrack(trackId)}
       onPlayAlbum={onPlayAlbum}
       activeTrackId={null}
       playbackStatus="stopped"
@@ -133,9 +133,9 @@ describe("AlbumDetailView", () => {
   });
 
   it("keeps the disc heading and track number for multi-track albums", () => {
-    renderDetail({ items: [track(), track({ id: "track-2", trackNumber: 2 })] });
+    renderDetail({ items: [track(), track({ id: "track-2", trackNumber: 1, discNumber: 2 })] });
     expect(screen.getByRole("heading", { name: "Disc 1" })).toBeInTheDocument();
-    expect(screen.getByText("1", { selector: ".type-numeric" })).toBeInTheDocument();
+    expect(screen.getAllByText("1", { selector: ".type-numeric" })).toHaveLength(2);
   });
 
   it("uses Button variants for the album and load-more actions", () => {
@@ -161,3 +161,4 @@ describe("AlbumDetailView", () => {
     expect(screen.getByRole("button", { name: "Play album" })).toBeDisabled();
   });
 });
+

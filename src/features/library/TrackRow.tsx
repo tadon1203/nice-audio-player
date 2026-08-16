@@ -6,16 +6,19 @@ export function TrackRow({
   track,
   playbackAvailable,
   onPlayTrack,
+  active = false,
 }: {
   track: LibraryTrackSummary;
   playbackAvailable: boolean;
   onPlayTrack: (id: string) => void;
+  active?: boolean;
 }) {
   return (
     <button
       type="button"
-      className="library-view__track"
+      className={`library-view__track${active ? " library-view__track--active" : ""}`}
       disabled={!playbackAvailable || !track.playable}
+      aria-current={active ? "true" : undefined}
       aria-label={`Play ${track.title} by ${track.artist ?? "Unknown artist"}`}
       onClick={() => onPlayTrack(track.id)}
     >
@@ -32,3 +35,4 @@ export function TrackRow({
     </button>
   );
 }
+

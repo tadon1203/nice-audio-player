@@ -9,6 +9,7 @@ import {
   isStartLibraryAlbumError,
   isStartLibraryTrackError,
   startLibraryAlbum,
+  startLibraryAlbumTrack,
   startLibraryTrack,
 } from "@/api/library";
 import {
@@ -46,6 +47,7 @@ type TransportOperation =
   | { type: "resume" }
   | { type: "startTrack"; trackId: string }
   | { type: "startAlbum"; albumId: string }
+  | { type: "startAlbumTrack"; albumId: string; trackId: string }
   | { type: "previous" }
   | { type: "next" };
 type PendingTransportCommand = "stop" | "pause" | "resume" | "previous" | "next" | null;
@@ -177,6 +179,7 @@ function App() {
     const valid =
       command === "startTrack" ||
       command === "startAlbum" ||
+      command === "startAlbumTrack" ||
       (command === "previous" && currentPlayback.canGoPrevious) ||
       (command === "next" && currentPlayback.canGoNext) ||
       (command === "stop" &&
@@ -186,7 +189,9 @@ function App() {
     if (!valid) return;
     transportPendingRef.current = true;
     setPendingTransportCommand(
-      command === "startTrack" || command === "startAlbum" ? "resume" : command,
+      command === "startTrack" || command === "startAlbum" || command === "startAlbumTrack"
+        ? "resume"
+        : command,
     );
     try {
       const snapshot =
@@ -194,15 +199,17 @@ function App() {
           ? await startLibraryTrack(operation.trackId)
           : command === "startAlbum"
             ? await startLibraryAlbum(operation.albumId)
-            : command === "previous"
-              ? await previousAudioPlayback()
-              : command === "next"
-                ? await nextAudioPlayback()
-                : command === "stop"
-                  ? await stopAudioPlayback()
-                  : command === "pause"
-                    ? await pauseAudioPlayback()
-                    : await resumeAudioPlayback();
+            : command === "startAlbumTrack"
+              ? await startLibraryAlbumTrack(operation.albumId, operation.trackId)
+              : command === "previous"
+                ? await previousAudioPlayback()
+                : command === "next"
+                  ? await nextAudioPlayback()
+                  : command === "stop"
+                    ? await stopAudioPlayback()
+                    : command === "pause"
+                      ? await pauseAudioPlayback()
+                      : await resumeAudioPlayback();
       applySnapshot(snapshot);
       dispatchPlaybackUi({ type: "commandSucceeded", lane: "transport" });
     } catch (error) {
@@ -210,7 +217,7 @@ function App() {
         type: "commandFailed",
         lane: "transport",
         message:
-          command === "startTrack" &&
+          (command === "startTrack" || command === "startAlbumTrack") &&
           isStartLibraryTrackError(error) &&
           error.code === "trackUnavailable"
             ? "This track is no longer available."
@@ -287,6 +294,9 @@ function App() {
         onOpenSettings={() => setDestination("settings")}
         onPlayTrack={(id) => void requestTransport({ type: "startTrack", trackId: id })}
         onPlayAlbum={(id) => void requestTransport({ type: "startAlbum", albumId: id })}
+        onPlayAlbumTrack={(albumId, trackId) =>
+          void requestTransport({ type: "startAlbumTrack", albumId, trackId })
+        }
         activeTrackId={activeTrack.id}
         playbackStatus={playback.status}
         libraryRefreshKey={libraryRefreshKey}

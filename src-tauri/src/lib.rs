@@ -207,6 +207,26 @@ async fn start_library_album(
     .map_err(|_| StartLibraryAlbumError::TaskFailed)?
 }
 
+#[tauri::command]
+#[specta::specta]
+async fn start_library_album_track(
+    album_id: String,
+    track_id: String,
+    library: tauri::State<'_, LibraryService>,
+    playback: tauri::State<'_, PlaybackService>,
+) -> Result<PlaybackSnapshot, StartLibraryTrackError> {
+    let library = library.handle();
+    let playback = playback.handle();
+    tauri::async_runtime::spawn_blocking(move || {
+        let (sources, index) = library.album_playable_sources_from_track(album_id, track_id)?;
+        playback
+            .play_sequence_at(sources, index)
+            .map_err(map_start_library_error)
+    })
+    .await
+    .map_err(|_| StartLibraryTrackError::TaskFailed)?
+}
+
 fn map_start_library_album_error(error: PlaybackServiceError) -> StartLibraryAlbumError {
     match error {
         PlaybackServiceError::WorkerUnavailable => {
@@ -677,6 +697,7 @@ fn collect_specta_commands<R: tauri::Runtime>() -> tauri_specta::Commands<R> {
         get_library_track_for_path,
         start_library_track,
         start_library_album,
+        start_library_album_track,
         previous_audio_playback,
         next_audio_playback,
     ]
