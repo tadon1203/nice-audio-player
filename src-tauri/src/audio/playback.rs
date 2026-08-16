@@ -90,6 +90,48 @@ pub enum PlaybackSnapshot {
     },
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum PlaybackRepeatMode {
+    Off,
+    All,
+    One,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum PlaybackQueueMoveDirection {
+    Earlier,
+    Later,
+}
+
+#[derive(Debug, Clone, serde::Serialize, specta::Type, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaybackQueueItem {
+    pub id: String,
+    pub title: String,
+    pub artist: Option<String>,
+    pub duration_ms: Option<u64>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, specta::Type, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaybackQueueSnapshot {
+    pub revision: u64,
+    pub current: Option<PlaybackQueueItem>,
+    pub upcoming: Vec<PlaybackQueueItem>,
+    pub repeat_mode: PlaybackRepeatMode,
+    pub shuffle_enabled: bool,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct PlaybackEntrySeed {
+    pub file: ValidatedAudioFile,
+    pub title: String,
+    pub artist: Option<String>,
+    pub duration_ms: Option<u64>,
+}
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub enum PlaybackChannelConversion {
@@ -428,6 +470,8 @@ pub enum PlaybackFailureCode {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PlaybackServiceError {
     WorkerUnavailable,
+    QueueItemNotFound,
+    QueueBusy,
     InvalidVolume,
     InvalidDeviceId,
     OutputDeviceUnavailable,
@@ -444,15 +488,15 @@ pub enum PlaybackServiceStartError {
 
 enum PlaybackCommand {
     Start {
-        file: ValidatedAudioFile,
+        entry: PlaybackEntrySeed,
         reply: SyncSender<Result<PlaybackSnapshot, PlaybackServiceError>>,
     },
     StartSequence {
-        files: Vec<ValidatedAudioFile>,
+        entries: Vec<PlaybackEntrySeed>,
         reply: SyncSender<Result<PlaybackSnapshot, PlaybackServiceError>>,
     },
     StartSequenceAt {
-        files: Vec<ValidatedAudioFile>,
+        entries: Vec<PlaybackEntrySeed>,
         index: usize,
         reply: SyncSender<Result<PlaybackSnapshot, PlaybackServiceError>>,
     },
@@ -489,6 +533,26 @@ enum PlaybackCommand {
         selection: AudioOutputSelection,
         reply: SyncSender<Result<PlaybackSnapshot, PlaybackServiceError>>,
     },
+    SetRepeatMode {
+        mode: PlaybackRepeatMode,
+        reply: SyncSender<Result<PlaybackQueueSnapshot, PlaybackServiceError>>,
+    },
+    SetShuffle {
+        enabled: bool,
+        reply: SyncSender<Result<PlaybackQueueSnapshot, PlaybackServiceError>>,
+    },
+    RemoveQueueItem {
+        id: String,
+        reply: SyncSender<Result<PlaybackQueueSnapshot, PlaybackServiceError>>,
+    },
+    MoveQueueItem {
+        id: String,
+        direction: PlaybackQueueMoveDirection,
+        reply: SyncSender<Result<PlaybackQueueSnapshot, PlaybackServiceError>>,
+    },
+    ClearQueue {
+        reply: SyncSender<Result<PlaybackQueueSnapshot, PlaybackServiceError>>,
+    },
     Shutdown,
 }
 
@@ -496,12 +560,14 @@ enum PlaybackCommand {
 pub(crate) struct PlaybackServiceHandle {
     command_sender: SyncSender<PlaybackCommand>,
     snapshot: Arc<RwLock<PlaybackSnapshot>>,
+    queue_snapshot: Arc<RwLock<PlaybackQueueSnapshot>>,
 }
 
 pub struct PlaybackService {
     handle: PlaybackServiceHandle,
     worker: Mutex<Option<JoinHandle<()>>>,
     state_changed_receiver: Mutex<Option<Receiver<()>>>,
+    queue_state_changed_receiver: Mutex<Option<Receiver<()>>>,
 }
 
 impl PlaybackService {
@@ -509,6 +575,7 @@ impl PlaybackService {
         let (command_sender, command_receiver) = mpsc::sync_channel(4);
         let (state_changed_sender, state_changed_receiver) = mpsc::sync_channel(1);
         let (output_sender, output_receiver) = mpsc::sync_channel(4);
+        let (queue_state_changed_sender, queue_state_changed_receiver) = mpsc::sync_channel(1);
         let volume_state = VolumeState::default();
         let effective_gain = AtomicEffectiveGain::new(volume_state.effective_gain());
         let output_selection = AudioOutputSelection::SystemDefault;
@@ -517,6 +584,14 @@ impl PlaybackService {
             output_selection.clone(),
             None,
         )));
+        let queue_state = Arc::new(RwLock::new(PlaybackQueueSnapshot {
+            revision: 0,
+            current: None,
+            upcoming: Vec::new(),
+            repeat_mode: PlaybackRepeatMode::Off,
+            shuffle_enabled: false,
+        }));
+        let service_queue_state = Arc::clone(&queue_state);
         let worker_state = Arc::clone(&state);
         let worker_gain = effective_gain.clone();
         let worker = thread::Builder::new()
@@ -529,14 +604,20 @@ impl PlaybackService {
                     next_playback_session_id: 0,
                     next_output_stream_id: 0,
                     next_snapshot_revision: 0,
+                    next_queue_revision: 0,
+                    next_queue_item_id: 0,
                     current_file: None,
                     sequence: None,
+                    repeat_mode: PlaybackRepeatMode::Off,
+                    shuffle: false,
                     volume_state,
                     effective_gain: worker_gain,
                     output_selection,
                     snapshot: worker_state,
+                    queue_snapshot: Arc::clone(&queue_state),
                     command_receiver,
                     state_changed_sender,
+                    queue_state_changed_sender,
                     output_sender,
                     output_receiver,
                 }
@@ -547,15 +628,18 @@ impl PlaybackService {
             handle: PlaybackServiceHandle {
                 command_sender,
                 snapshot: state,
+                queue_snapshot: service_queue_state,
             },
             worker: Mutex::new(Some(worker)),
             state_changed_receiver: Mutex::new(Some(state_changed_receiver)),
+            queue_state_changed_receiver: Mutex::new(Some(queue_state_changed_receiver)),
         })
     }
     pub(crate) fn handle(&self) -> PlaybackServiceHandle {
         PlaybackServiceHandle {
             command_sender: self.handle.command_sender.clone(),
             snapshot: Arc::clone(&self.handle.snapshot),
+            queue_snapshot: Arc::clone(&self.handle.queue_snapshot),
         }
     }
     pub fn snapshot(&self) -> PlaybackSnapshot {
@@ -563,6 +647,16 @@ impl PlaybackService {
     }
     pub fn take_state_changed_receiver(&self) -> Option<Receiver<()>> {
         self.state_changed_receiver.lock().ok()?.take()
+    }
+    pub fn queue_snapshot(&self) -> PlaybackQueueSnapshot {
+        self.handle
+            .queue_snapshot
+            .read()
+            .map(|v| v.clone())
+            .unwrap_or_else(|e| e.into_inner().clone())
+    }
+    pub fn take_queue_state_changed_receiver(&self) -> Option<Receiver<()>> {
+        self.queue_state_changed_receiver.lock().ok()?.take()
     }
     pub fn shutdown(&self) {
         let _ = self.handle.command_sender.send(PlaybackCommand::Shutdown);
@@ -579,21 +673,35 @@ impl PlaybackServiceHandle {
         &self,
         file: ValidatedAudioFile,
     ) -> Result<PlaybackSnapshot, PlaybackServiceError> {
-        self.request(|reply| PlaybackCommand::Start { file, reply })
+        self.request(|reply| PlaybackCommand::Start {
+            entry: PlaybackEntrySeed {
+                title: file.file_name.clone(),
+                file,
+                artist: None,
+                duration_ms: None,
+            },
+            reply,
+        })
     }
-    pub(crate) fn play_sequence(
+    pub(crate) fn play_entry(
         &self,
-        files: Vec<ValidatedAudioFile>,
+        entry: PlaybackEntrySeed,
     ) -> Result<PlaybackSnapshot, PlaybackServiceError> {
-        self.request(|reply| PlaybackCommand::StartSequence { files, reply })
+        self.request(|reply| PlaybackCommand::Start { entry, reply })
     }
-    pub(crate) fn play_sequence_at(
+    pub(crate) fn play_sequence_entries(
         &self,
-        files: Vec<ValidatedAudioFile>,
+        entries: Vec<PlaybackEntrySeed>,
+    ) -> Result<PlaybackSnapshot, PlaybackServiceError> {
+        self.request(|reply| PlaybackCommand::StartSequence { entries, reply })
+    }
+    pub(crate) fn play_sequence_entries_at(
+        &self,
+        entries: Vec<PlaybackEntrySeed>,
         index: usize,
     ) -> Result<PlaybackSnapshot, PlaybackServiceError> {
         self.request(|reply| PlaybackCommand::StartSequenceAt {
-            files,
+            entries,
             index,
             reply,
         })
@@ -604,6 +712,39 @@ impl PlaybackServiceHandle {
     pub(crate) fn next(&self) -> Result<PlaybackSnapshot, PlaybackServiceError> {
         self.request(|reply| PlaybackCommand::Next { reply })
     }
+    pub(crate) fn set_repeat_mode(
+        &self,
+        mode: PlaybackRepeatMode,
+    ) -> Result<PlaybackQueueSnapshot, PlaybackServiceError> {
+        self.queue_request(|reply| PlaybackCommand::SetRepeatMode { mode, reply })
+    }
+    pub(crate) fn set_shuffle(
+        &self,
+        enabled: bool,
+    ) -> Result<PlaybackQueueSnapshot, PlaybackServiceError> {
+        self.queue_request(|reply| PlaybackCommand::SetShuffle { enabled, reply })
+    }
+    pub(crate) fn remove_queue_item(
+        &self,
+        id: String,
+    ) -> Result<PlaybackQueueSnapshot, PlaybackServiceError> {
+        self.queue_request(|reply| PlaybackCommand::RemoveQueueItem { id, reply })
+    }
+    pub(crate) fn move_queue_item(
+        &self,
+        id: String,
+        direction: PlaybackQueueMoveDirection,
+    ) -> Result<PlaybackQueueSnapshot, PlaybackServiceError> {
+        self.queue_request(|reply| PlaybackCommand::MoveQueueItem {
+            id,
+            direction,
+            reply,
+        })
+    }
+    pub(crate) fn clear_queue(&self) -> Result<PlaybackQueueSnapshot, PlaybackServiceError> {
+        self.queue_request(|reply| PlaybackCommand::ClearQueue { reply })
+    }
+
 
     pub(crate) fn stop(&self) -> Result<PlaybackSnapshot, PlaybackServiceError> {
         self.request(|reply| PlaybackCommand::Stop { reply })
@@ -644,6 +785,20 @@ impl PlaybackServiceHandle {
         &self,
         make: impl FnOnce(SyncSender<Result<PlaybackSnapshot, PlaybackServiceError>>) -> PlaybackCommand,
     ) -> Result<PlaybackSnapshot, PlaybackServiceError> {
+        let (reply_sender, reply_receiver) = mpsc::sync_channel(1);
+        self.command_sender
+            .send(make(reply_sender))
+            .map_err(|_| PlaybackServiceError::WorkerUnavailable)?;
+        reply_receiver
+            .recv()
+            .map_err(|_| PlaybackServiceError::WorkerUnavailable)?
+    }
+    fn queue_request(
+        &self,
+        make: impl FnOnce(
+            SyncSender<Result<PlaybackQueueSnapshot, PlaybackServiceError>>,
+        ) -> PlaybackCommand,
+    ) -> Result<PlaybackQueueSnapshot, PlaybackServiceError> {
         let (reply_sender, reply_receiver) = mpsc::sync_channel(1);
         self.command_sender
             .send(make(reply_sender))
@@ -754,47 +909,86 @@ struct PlaybackWorker {
     next_playback_session_id: u64,
     next_output_stream_id: u64,
     next_snapshot_revision: u64,
+    next_queue_revision: u64,
+    next_queue_item_id: u64,
     current_file: Option<ValidatedAudioFile>,
     sequence: Option<PlaybackSequence>,
+    repeat_mode: PlaybackRepeatMode,
+    shuffle: bool,
     volume_state: VolumeState,
     effective_gain: AtomicEffectiveGain,
     output_selection: AudioOutputSelection,
     snapshot: Arc<RwLock<PlaybackSnapshot>>,
+    queue_snapshot: Arc<RwLock<PlaybackQueueSnapshot>>,
     command_receiver: Receiver<PlaybackCommand>,
     state_changed_sender: SyncSender<()>,
+    queue_state_changed_sender: SyncSender<()>,
     output_sender: SyncSender<OutputSignal>,
     output_receiver: Receiver<OutputSignal>,
 }
 
 #[derive(Debug, Clone)]
 struct PlaybackSequence {
-    files: Vec<ValidatedAudioFile>,
+    entries: Vec<PlaybackQueueEntry>,
     current_index: usize,
+    manual_order: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+struct PlaybackQueueEntry {
+    id: String,
+    file: ValidatedAudioFile,
+    title: String,
+    artist: Option<String>,
+    duration_ms: Option<u64>,
 }
 
 impl PlaybackSequence {
+    #[cfg(test)]
     fn new(files: Vec<ValidatedAudioFile>) -> Option<Self> {
-        (!files.is_empty()).then_some(Self {
-            files,
+        let mut next_id = 0;
+        Self::new_entries(
+            files
+                .into_iter()
+                .map(|file| PlaybackEntrySeed {
+                    title: file.file_name.clone(),
+                    file,
+                    artist: None,
+                    duration_ms: None,
+                })
+                .collect(),
+            &mut next_id,
+        )
+    }
+    fn new_entries(entries: Vec<PlaybackEntrySeed>, next_id: &mut u64) -> Option<Self> {
+        let entries: Vec<_> = entries
+            .into_iter()
+            .map(|entry| {
+                *next_id = next_id.saturating_add(1);
+                PlaybackQueueEntry {
+                    id: format!("queue-item-{}", *next_id),
+                    file: entry.file,
+                    title: entry.title,
+                    artist: entry.artist,
+                    duration_ms: entry.duration_ms,
+                }
+            })
+            .collect();
+        let manual_order = entries.iter().map(|entry| entry.id.clone()).collect();
+        (!entries.is_empty()).then_some(Self {
+            entries,
             current_index: 0,
+            manual_order,
         })
     }
-    fn current(&self) -> &ValidatedAudioFile {
-        &self.files[self.current_index]
-    }
-    fn previous(&self) -> Option<&ValidatedAudioFile> {
-        self.current_index
-            .checked_sub(1)
-            .and_then(|i| self.files.get(i))
-    }
-    fn next(&self) -> Option<&ValidatedAudioFile> {
-        self.files.get(self.current_index + 1)
+    fn current(&self) -> &PlaybackQueueEntry {
+        &self.entries[self.current_index]
     }
     fn can_go_previous(&self) -> bool {
-        self.previous().is_some()
+        self.current_index > 0
     }
     fn can_go_next(&self) -> bool {
-        self.next().is_some()
+        self.current_index + 1 < self.entries.len()
     }
 }
 impl PlaybackWorker {
@@ -804,41 +998,53 @@ impl PlaybackWorker {
                 self.handle_signal(signal);
             }
             match self.command_receiver.recv_timeout(Duration::from_millis(5)) {
-                Ok(PlaybackCommand::Start { file, reply }) => {
-                    self.sequence = PlaybackSequence::new(vec![file]);
+                Ok(PlaybackCommand::Start { entry, reply }) => {
+                    self.sequence =
+                        PlaybackSequence::new_entries(vec![entry], &mut self.next_queue_item_id);
                     let file = self
                         .sequence
                         .as_ref()
                         .expect("single-item sequence")
                         .current()
+                        .file
                         .clone();
                     self.begin_start(file, reply, false, 0);
                 }
-                Ok(PlaybackCommand::StartSequence { files, reply }) => {
-                    let Some(sequence) = PlaybackSequence::new(files) else {
+                Ok(PlaybackCommand::StartSequence { entries, reply }) => {
+                    let Some(sequence) =
+                        PlaybackSequence::new_entries(entries, &mut self.next_queue_item_id)
+                    else {
                         let _ = reply.send(Err(PlaybackServiceError::InvalidPlaybackState));
                         continue;
                     };
-                    let file = sequence.current().clone();
+                    let file = sequence.current().file.clone();
                     self.sequence = Some(sequence);
+                    if self.shuffle {
+                        self.set_shuffle_order(true);
+                    }
                     self.begin_start(file, reply, false, 0);
                 }
                 Ok(PlaybackCommand::StartSequenceAt {
-                    files,
+                    entries,
                     index,
                     reply,
                 }) => {
-                    let Some(mut sequence) = PlaybackSequence::new(files) else {
+                    let Some(mut sequence) =
+                        PlaybackSequence::new_entries(entries, &mut self.next_queue_item_id)
+                    else {
                         let _ = reply.send(Err(PlaybackServiceError::InvalidPlaybackState));
                         continue;
                     };
-                    if index >= sequence.files.len() {
+                    if index >= sequence.entries.len() {
                         let _ = reply.send(Err(PlaybackServiceError::InvalidPlaybackState));
                         continue;
                     }
                     sequence.current_index = index;
-                    let file = sequence.current().clone();
+                    let file = sequence.current().file.clone();
                     self.sequence = Some(sequence);
+                    if self.shuffle {
+                        self.set_shuffle_order(true);
+                    }
                     self.begin_start(file, reply, false, index);
                 }
                 Ok(PlaybackCommand::Previous { reply }) => {
@@ -870,6 +1076,77 @@ impl PlaybackWorker {
                 }
                 Ok(PlaybackCommand::SetOutputSelection { selection, reply }) => {
                     let _ = reply.send(self.set_output_selection(selection));
+                }
+                Ok(PlaybackCommand::SetRepeatMode { mode, reply }) => {
+                    if self.repeat_mode == mode {
+                        let _ = reply.send(Ok(self.queue_snapshot()));
+                        continue;
+                    }
+                    self.repeat_mode = mode;
+                    let _ = reply.send(Ok(self.publish_queue()));
+                }
+                Ok(PlaybackCommand::SetShuffle { enabled, reply }) => {
+                    if self.shuffle == enabled {
+                        let _ = reply.send(Ok(self.queue_snapshot()));
+                        continue;
+                    }
+                    self.set_shuffle_order(enabled);
+                    self.shuffle = enabled;
+                    let _ = reply.send(Ok(self.publish_queue()));
+                }
+                Ok(PlaybackCommand::RemoveQueueItem { id, reply }) => {
+                    let result = self.edit_queue(&id, |entries, index| {
+                        entries.remove(index);
+                        true
+                    });
+                    let _ = reply.send(result.map(|changed| {
+                        if changed {
+                            self.publish_queue()
+                        } else {
+                            self.queue_snapshot()
+                        }
+                    }));
+                }
+                Ok(PlaybackCommand::MoveQueueItem {
+                    id,
+                    direction,
+                    reply,
+                }) => {
+                    let result = self.edit_queue(&id, |entries, index| {
+                        let target = if direction == PlaybackQueueMoveDirection::Earlier {
+                            index.checked_sub(1)
+                        } else {
+                            Some(index + 1)
+                        };
+                        if let Some(target) =
+                            target.filter(|i| *i > 0 && *i < entries.len() && *i != index)
+                        {
+                            entries.swap(index, target);
+                            true
+                        } else {
+                            false
+                        }
+                    });
+                    let _ = reply.send(result.map(|changed| {
+                        if changed {
+                            self.publish_queue()
+                        } else {
+                            self.queue_snapshot()
+                        }
+                    }));
+                }
+                Ok(PlaybackCommand::ClearQueue { reply }) => {
+                    let changed = self.sequence.as_ref().is_some_and(|sequence| {
+                        sequence.entries.len() > sequence.current_index + 1
+                    });
+                    if let Some(sequence) = self.sequence.as_mut() {
+                        sequence.entries.truncate(sequence.current_index + 1);
+                    }
+                    let _ = reply.send(Ok(if changed {
+                        self.publish_queue()
+                    } else {
+                        self.queue_snapshot()
+                    }));
                 }
                 Ok(PlaybackCommand::Shutdown) | Err(mpsc::RecvTimeoutError::Disconnected) => break,
                 Err(mpsc::RecvTimeoutError::Timeout) => {}
@@ -1029,6 +1306,7 @@ impl PlaybackWorker {
         error: PlaybackServiceError,
     ) {
         self.sequence = None;
+        self.publish_queue();
         self.publish(self.failed_snapshot(playback_id, code));
         let _ = reply.send(Err(error));
     }
@@ -1041,11 +1319,24 @@ impl PlaybackWorker {
         let paused = matches!(self.current(), PlaybackSnapshot::Paused { .. });
         let target = self.sequence.as_ref().and_then(|sequence| {
             let index = if forward {
-                sequence.current_index + 1
+                if sequence.current_index + 1 < sequence.entries.len() {
+                    sequence.current_index + 1
+                } else if self.repeat_mode == PlaybackRepeatMode::All {
+                    0
+                } else {
+                    return None;
+                }
+            } else if sequence.current_index > 0 {
+                sequence.current_index - 1
+            } else if self.repeat_mode == PlaybackRepeatMode::All {
+                sequence.entries.len().saturating_sub(1)
             } else {
-                sequence.current_index.checked_sub(1)?
+                return None;
             };
-            sequence.files.get(index).cloned().map(|file| (file, index))
+            sequence
+                .entries
+                .get(index)
+                .map(|entry| (entry.file.clone(), index))
         });
         let Some((file, index)) = target else {
             let _ = reply.send(Ok(self.current()));
@@ -1376,6 +1667,7 @@ impl PlaybackWorker {
         if let Some(sequence) = self.sequence.as_mut() {
             sequence.current_index = sequence_index;
         }
+        self.publish_queue();
         let snapshot = if start_paused {
             self.publish(self.paused_snapshot(session_id.to_string(), 0, duration_ms))
         } else {
@@ -1408,6 +1700,7 @@ impl PlaybackWorker {
         self.discard_pending_seek();
         self.discard_active();
         self.sequence = None;
+        self.publish_queue();
         if matches!(self.current(), PlaybackSnapshot::Stopped { .. }) {
             return self.current();
         }
@@ -1623,7 +1916,12 @@ impl PlaybackWorker {
             (
                 PlaybackSnapshot::Playing { .. } | PlaybackSnapshot::Paused { .. },
                 Some(sequence),
-            ) => (sequence.can_go_previous(), sequence.can_go_next()),
+            ) => (
+                sequence.can_go_previous()
+                    || (self.repeat_mode == PlaybackRepeatMode::All && sequence.entries.len() > 1),
+                sequence.can_go_next()
+                    || (self.repeat_mode == PlaybackRepeatMode::All && sequence.entries.len() > 1),
+            ),
             _ => (false, false),
         };
         snapshot.set_navigation(previous, next);
@@ -1635,6 +1933,115 @@ impl PlaybackWorker {
             .unwrap_or_else(std::sync::PoisonError::into_inner) = snapshot.clone();
         let _ = self.state_changed_sender.try_send(());
         snapshot
+    }
+
+    fn publish_queue(&mut self) -> PlaybackQueueSnapshot {
+        self.next_queue_revision = self.next_queue_revision.saturating_add(1);
+        let snapshot = PlaybackQueueSnapshot {
+            revision: self.next_queue_revision,
+            current: self.sequence.as_ref().map(|sequence| {
+                let entry = sequence.current();
+                PlaybackQueueItem {
+                    id: entry.id.clone(),
+                    title: entry.title.clone(),
+                    artist: entry.artist.clone(),
+                    duration_ms: entry.duration_ms,
+                }
+            }),
+            upcoming: self
+                .sequence
+                .as_ref()
+                .map(|sequence| {
+                    sequence
+                        .entries
+                        .iter()
+                        .skip(sequence.current_index + 1)
+                        .map(|entry| PlaybackQueueItem {
+                            id: entry.id.clone(),
+                            title: entry.title.clone(),
+                            artist: entry.artist.clone(),
+                            duration_ms: entry.duration_ms,
+                        })
+                        .collect()
+                })
+                .unwrap_or_default(),
+            repeat_mode: self.repeat_mode,
+            shuffle_enabled: self.shuffle,
+        };
+        *self
+            .queue_snapshot
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = snapshot.clone();
+        let _ = self.queue_state_changed_sender.try_send(());
+        snapshot
+    }
+
+    fn queue_snapshot(&self) -> PlaybackQueueSnapshot {
+        self.queue_snapshot
+            .read()
+            .map(|snapshot| snapshot.clone())
+            .unwrap_or_else(|error| error.into_inner().clone())
+    }
+
+    fn edit_queue(
+        &mut self,
+        id: &str,
+        edit: impl FnOnce(&mut Vec<PlaybackQueueEntry>, usize) -> bool,
+    ) -> Result<bool, PlaybackServiceError> {
+        if self.pending.is_some() {
+            return Err(PlaybackServiceError::QueueBusy);
+        }
+        let Some(sequence) = self.sequence.as_mut() else {
+            return Err(PlaybackServiceError::QueueItemNotFound);
+        };
+        let Some(index) = sequence.entries.iter().position(|entry| {
+            entry.id == id
+                && sequence
+                    .entries
+                    .iter()
+                    .position(|current| current.id == id)
+                    .is_some_and(|i| i > sequence.current_index)
+        }) else {
+            return Err(PlaybackServiceError::QueueItemNotFound);
+        };
+        let changed = edit(&mut sequence.entries, index);
+        if changed {
+            sequence.manual_order = sequence
+                .entries
+                .iter()
+                .map(|entry| entry.id.clone())
+                .collect();
+        }
+        Ok(changed)
+    }
+
+    fn set_shuffle_order(&mut self, enabled: bool) {
+        let Some(sequence) = self.sequence.as_mut() else {
+            return;
+        };
+        if enabled {
+            let start = sequence.current_index + 1;
+            sequence.entries[start..].reverse();
+        } else {
+            let current_id = sequence.current().id.clone();
+            let mut by_id = sequence
+                .entries
+                .drain(..)
+                .map(|entry| (entry.id.clone(), entry))
+                .collect::<std::collections::HashMap<_, _>>();
+            let mut restored = Vec::with_capacity(by_id.len());
+            for id in sequence.manual_order.iter() {
+                if let Some(entry) = by_id.remove(id) {
+                    restored.push(entry);
+                }
+            }
+            sequence.entries = restored;
+            sequence.current_index = sequence
+                .entries
+                .iter()
+                .position(|entry| entry.id == current_id)
+                .unwrap_or(0);
+        }
     }
 
     fn refresh_active_snapshot(&self) -> Option<PlaybackSnapshot> {
@@ -1660,6 +2067,7 @@ impl PlaybackWorker {
         self.cancel_pending_seek_with(PlaybackServiceError::Output(error.clone()));
         self.discard_active();
         self.sequence = None;
+        self.publish_queue();
         self.publish(self.failed_snapshot(playback_id, error));
     }
 
@@ -1719,6 +2127,7 @@ impl PlaybackWorker {
                 ));
                 self.discard_active();
                 self.sequence = None;
+                self.publish_queue();
                 self.publish(
                     self.failed_snapshot(playback_id, PlaybackFailureCode::CompletionTimingFailed),
                 );
@@ -1731,6 +2140,7 @@ impl PlaybackWorker {
                 self.cancel_pending_seek_with(PlaybackServiceError::Decode);
                 self.discard_active();
                 self.sequence = None;
+                self.publish_queue();
                 self.publish(self.failed_snapshot(playback_id, PlaybackFailureCode::DecodeFailed));
             }
             OutputSignal::SampleRateConversionFailed { .. } => {
@@ -1743,6 +2153,7 @@ impl PlaybackWorker {
                 ));
                 self.discard_active();
                 self.sequence = None;
+                self.publish_queue();
                 self.publish(
                     self.failed_snapshot(
                         playback_id,
@@ -1760,14 +2171,26 @@ impl PlaybackWorker {
             self.discard_pending_seek();
             self.discard_active();
             let next = self.sequence.as_ref().and_then(|sequence| {
-                let index = sequence.current_index + 1;
-                sequence.files.get(index).cloned().map(|file| (file, index))
+                let index = if self.repeat_mode == PlaybackRepeatMode::One {
+                    sequence.current_index
+                } else if sequence.current_index + 1 < sequence.entries.len() {
+                    sequence.current_index + 1
+                } else if self.repeat_mode == PlaybackRepeatMode::All {
+                    0
+                } else {
+                    return None;
+                };
+                sequence
+                    .entries
+                    .get(index)
+                    .map(|entry| (entry.file.clone(), index))
             });
             if let Some((file, index)) = next {
                 let (reply, _receiver) = mpsc::sync_channel(1);
                 self.begin_start(file, reply, false, index);
             } else {
                 self.sequence = None;
+                self.publish_queue();
                 self.publish(self.stopped_snapshot());
             }
         }
@@ -1993,4 +2416,3 @@ fn device_resolution_failure_code(error: DeviceResolutionError) -> PlaybackFailu
 
 #[cfg(test)]
 mod tests;
-

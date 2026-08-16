@@ -119,4 +119,3 @@ pub fn materialize(root: &Path, bytes: &[u8], mime_type: &str) -> Result<StoredA
         byte_length: bytes.len() as u64,
     })
 }
-

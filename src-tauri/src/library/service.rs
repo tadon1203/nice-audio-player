@@ -37,6 +37,23 @@ pub enum LibraryCommandError {
     PersistenceFailed,
     TaskFailed,
 }
+
+pub(crate) struct ResolvedPlaybackEntry {
+    pub file: ValidatedAudioFile,
+    pub title: String,
+    pub artist: Option<String>,
+    pub duration_ms: Option<u64>,
+}
+type PlayableEntryRow = (
+    String,
+    String,
+    String,
+    String,
+    String,
+    Option<String>,
+    Option<i64>,
+);
+
 // Kept separate from IPC errors so storage errors never expose SQLite implementation details.
 #[derive(Clone)]
 pub struct LibraryShared {
@@ -593,21 +610,22 @@ impl LibraryShared {
             .map_err(|_| LibraryCommandError::PersistenceFailed)?;
         c.query_row("SELECT t.id,f.file_name,f.availability,f.inspection_status,m.title,m.artist,m.album,m.album_artist,m.duration_ms,a.content_hash,a.mime_type,a.relative_path,m.artwork_status FROM tracks t JOIN library_files f ON f.id=t.file_id LEFT JOIN track_source_metadata m ON m.track_id=t.id AND m.source_revision=f.source_revision LEFT JOIN artwork_assets a ON a.id=m.artwork_id AND m.artwork_status='stored' WHERE f.root_id=?1 AND f.relative_path=?2", params![parse_id(&root.id)?, relative_path], summary_from_row).optional().map_err(|_|LibraryCommandError::PersistenceFailed)
     }
-    pub fn playable_source(
+    pub fn playable_entry(
         &self,
         id: String,
-    ) -> Result<ValidatedAudioFile, StartLibraryTrackError> {
-        let id = parse_id(&id).map_err(|_| StartLibraryTrackError::InvalidId)?;
+    ) -> Result<ResolvedPlaybackEntry, StartLibraryTrackError> {
+        let numeric_id = parse_id(&id).map_err(|_| StartLibraryTrackError::InvalidId)?;
         let c = self
             .db()
             .map_err(|_| StartLibraryTrackError::LibraryUnavailable)?
             .read()
             .map_err(|_| StartLibraryTrackError::PersistenceFailed)?;
-        let row: Option<(String, String, String, String)> = c.query_row(
-            "SELECT r.path,f.relative_path,f.availability,f.inspection_status FROM tracks t JOIN library_files f ON f.id=t.file_id JOIN library_roots r ON r.id=f.root_id WHERE t.id=?1",
-            params![id], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        let row: Option<PlayableEntryRow> = c.query_row(
+            "SELECT r.path,f.relative_path,f.availability,f.inspection_status,COALESCE(NULLIF(trim(m.title),''),f.file_name),m.artist,m.duration_ms FROM tracks t JOIN library_files f ON f.id=t.file_id JOIN library_roots r ON r.id=f.root_id LEFT JOIN track_source_metadata m ON m.track_id=t.id AND m.source_revision=f.source_revision WHERE t.id=?1",
+            params![numeric_id], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?))
         ).optional().map_err(|_| StartLibraryTrackError::PersistenceFailed)?;
-        let Some((root, relative, availability, inspection)) = row else {
+        let Some((root, relative, availability, inspection, title, artist, duration_ms)) = row
+        else {
             return Err(StartLibraryTrackError::TrackNotFound);
         };
         if availability == "missing" {
@@ -616,9 +634,14 @@ impl LibraryShared {
         if inspection != "indexed" {
             return Err(StartLibraryTrackError::TrackNotPlayable);
         }
-        let source = Path::new(&root).join(relative);
-        validate_audio_file(source.to_string_lossy().as_ref())
-            .map_err(|_| StartLibraryTrackError::TrackUnavailable)
+        let file = validate_audio_file(Path::new(&root).join(relative).to_string_lossy().as_ref())
+            .map_err(|_| StartLibraryTrackError::TrackUnavailable)?;
+        Ok(ResolvedPlaybackEntry {
+            file,
+            title,
+            artist: artist.filter(|value| !value.trim().is_empty()),
+            duration_ms: duration_ms.map(|value| value as u64),
+        })
     }
     pub fn album_playable_sources(
         &self,
@@ -1547,4 +1570,3 @@ mod tests {
         assert_eq!(literal.items[0].title, "Other album");
     }
 }
-

@@ -39,6 +39,8 @@ import { useSeekController } from "./hooks/use-seek-controller";
 import { useVolumeController } from "./hooks/use-volume-controller";
 import { useLibraryScan } from "./features/library/use-library-scan";
 import { useApplicationActivities } from "./hooks/use-application-activities";
+import { usePlaybackQueue } from "./hooks/use-playback-queue";
+import { PlaybackQueuePane } from "./components/PlaybackQueuePane";
 import { initialPlaybackUiState, playbackUiReducer } from "./lib/playback-state";
 
 type TransportOperation =
@@ -70,6 +72,7 @@ function formatPlaybackFailure(code: PlaybackFailureCode): string {
 
 function App() {
   const [destination, setDestination] = useState<"library" | "settings">("library");
+  const [isQueueOpen, setIsQueueOpen] = useState(false);
   const [mainScrollElement, setMainScrollElement] = useState<HTMLElement | null>(null);
   const [outputDevices, setOutputDevices] = useState<AudioOutputDevice[] | null>(null);
   const [isLoadingDevices, setIsLoadingDevices] = useState(false);
@@ -94,6 +97,7 @@ function App() {
   const isPlaybackAvailable = playbackUi.connection === "ready";
   const isTransportCommandPending = pendingTransportCommand !== null;
   const activeTrack = useActiveTrackIdentity(playback.file);
+  const queue = usePlaybackQueue();
   const applySnapshot = useCallback((snapshot: PlaybackSnapshot) => {
     if (snapshot.revision <= latestPlaybackRef.current.revision) return false;
     latestPlaybackRef.current = snapshot;
@@ -324,9 +328,22 @@ function App() {
   return (
     <AppShell
       destination={destination}
-      onDestinationChange={setDestination}
+      onDestinationChange={(next) => {
+        setIsQueueOpen(false);
+        setDestination(next);
+      }}
       mainScrollRef={setMainScrollElement}
       main={main}
+      contextPane={
+        isQueueOpen ? (
+          <PlaybackQueuePane
+            queue={queue}
+            onClose={() => setIsQueueOpen(false)}
+            currentTitle={activeTrack.title}
+            currentArtist={activeTrack.artist}
+          />
+        ) : undefined
+      }
       activity={<ApplicationActivityIndicator activity={applicationActivity} />}
       dock={
         <PlaybackDock
@@ -362,10 +379,11 @@ function App() {
           onVolumeCommit={volumeController.onVolumeCommit}
           onVolumePointerCancel={volumeController.onVolumePointerCancel}
           onVolumeButtonPress={volumeController.onVolumeButtonPress}
+          isQueueOpen={isQueueOpen}
+          onQueueToggle={() => setIsQueueOpen((open) => !open)}
         />
       }
     />
   );
 }
 export default App;
-

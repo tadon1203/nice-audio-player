@@ -8,6 +8,7 @@ interface AppShellProps {
   destination?: "library" | "settings";
   onDestinationChange?: (destination: "library" | "settings") => void;
   mainScrollRef?: Ref<HTMLElement>;
+  contextPane?: ReactNode;
 }
 
 export function AppShell({
@@ -17,6 +18,7 @@ export function AppShell({
   destination = "library",
   onDestinationChange = () => undefined,
   mainScrollRef,
+  contextPane,
 }: AppShellProps) {
   return (
     <div className="app-shell" data-testid="app-shell">
@@ -48,10 +50,10 @@ export function AppShell({
             {main}
           </ContentTransition>
         </main>
+        {contextPane ? <div className="app-shell__context-pane">{contextPane}</div> : null}
         <div className="app-shell__activity">{activity}</div>
       </div>
       <footer className="app-shell__persistent">{dock}</footer>
     </div>
   );
 }
-

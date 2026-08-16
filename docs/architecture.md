@@ -180,6 +180,13 @@ Ordered playback sequences are session-scoped Rust-owned playback state. The Lib
 identities and validates source files before they enter a sequence; neither library persistence nor
 sequence state enters the real-time audio callback.
 
+Playback Queue, Repeat, and Shuffle are also session-scoped Rust-owned state. Queue presentation is
+published through an independently revisioned snapshot containing the current item and upcoming
+items, separate from the high-frequency PlaybackSnapshot. Library display metadata is resolved
+before entries cross into playback. The worker maintains the effective traversal order used by
+Next, Previous, natural completion, and Repeat All; Queue edits and order construction remain
+outside real-time audio paths.
+
 ## 10. Provider and Credential Rules
 
 External providers must remain optional and isolated from local playback.

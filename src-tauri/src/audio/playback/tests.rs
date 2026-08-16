@@ -7,8 +7,8 @@ use super::{
     millis_to_frame, output_failure_code, pause_action, resume_action, should_finish,
     should_publish_position, signal_stream_id, source_to_output_frame, start_failure_snapshot,
     stream_signal_action, OutputSignal, OutputStreamId, PlaybackControlAction, PlaybackFailureCode,
-    PlaybackSequence, PlaybackService, PlaybackServiceError, PlaybackSnapshot, PlaybackWorker,
-    StreamSignalAction,
+    PlaybackQueueSnapshot, PlaybackRepeatMode, PlaybackSequence, PlaybackService,
+    PlaybackServiceError, PlaybackSnapshot, PlaybackWorker, StreamSignalAction,
 };
 use cpal::StreamInstant;
 use std::sync::{mpsc, Arc, RwLock};
@@ -470,14 +470,26 @@ fn test_worker(snapshot: PlaybackSnapshot) -> PlaybackWorker {
         next_playback_session_id: 0,
         next_output_stream_id: 0,
         next_snapshot_revision: 0,
+        next_queue_revision: 0,
+        next_queue_item_id: 0,
         current_file: None,
         sequence: None,
+        repeat_mode: PlaybackRepeatMode::Off,
+        shuffle: false,
         volume_state: VolumeState::default(),
         effective_gain: super::super::volume::AtomicEffectiveGain::new(1.0),
         output_selection: AudioOutputSelection::SystemDefault,
         snapshot: Arc::new(RwLock::new(snapshot)),
+        queue_snapshot: Arc::new(RwLock::new(PlaybackQueueSnapshot {
+            revision: 0,
+            current: None,
+            upcoming: Vec::new(),
+            repeat_mode: PlaybackRepeatMode::Off,
+            shuffle_enabled: false,
+        })),
         command_receiver,
         state_changed_sender,
+        queue_state_changed_sender: mpsc::sync_channel(1).0,
         output_sender,
         output_receiver,
     }

@@ -37,6 +37,8 @@ interface PlaybackDockProps {
   onVolumeCommit: (value: number) => void;
   onVolumePointerCancel: () => void;
   onVolumeButtonPress: () => void;
+  isQueueOpen?: boolean;
+  onQueueToggle?: () => void;
 }
 
 export function PlaybackDock({
@@ -68,6 +70,8 @@ export function PlaybackDock({
   onVolumeCommit,
   onVolumePointerCancel,
   onVolumeButtonPress,
+  isQueueOpen = false,
+  onQueueToggle = () => undefined,
 }: PlaybackDockProps) {
   const [artworkFailed, setArtworkFailed] = useState(false);
   useEffect(() => {
@@ -186,18 +190,38 @@ export function PlaybackDock({
             />
           </div>
         </div>
-        <VolumeControl
-          playback={playback}
-          value={volumeValue}
-          isPlaybackAvailable={isPlaybackAvailable}
-          isVolumeUpdatePending={isVolumeUpdatePending}
-          isMutePending={isMutePending}
-          onValueChange={onVolumeChange}
-          onInteractionStart={onVolumeInteractionStart}
-          onValueCommit={onVolumeCommit}
-          onInteractionCancel={onVolumePointerCancel}
-          onVolumeButtonPress={onVolumeButtonPress}
-        />
+        <div className="playback-dock__secondary">
+          <VolumeControl
+            playback={playback}
+            value={volumeValue}
+            isPlaybackAvailable={isPlaybackAvailable}
+            isVolumeUpdatePending={isVolumeUpdatePending}
+            isMutePending={isMutePending}
+            onValueChange={onVolumeChange}
+            onInteractionStart={onVolumeInteractionStart}
+            onValueCommit={onVolumeCommit}
+            onInteractionCancel={onVolumePointerCancel}
+            onVolumeButtonPress={onVolumeButtonPress}
+          />
+          <button
+            type="button"
+            className="playback-dock__volume-button playback-dock__queue-button"
+            aria-label={isQueueOpen ? "Close queue" : "Open queue"}
+            aria-expanded={isQueueOpen}
+            aria-controls="playback-queue"
+            onClick={onQueueToggle}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M5 6h14M5 12h14M5 18h9"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+              />
+            </svg>
+          </button>
+        </div>
       </div>
       {playbackError ? (
         <div className="playback-dock__status text-body-sm" data-region="status">

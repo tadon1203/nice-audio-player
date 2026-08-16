@@ -187,16 +187,39 @@
   align-items: center;
   gap: calc(var(--spacing) * 2);
 }
+.playback-dock__secondary {
+  position: relative;
+  grid-area: volume;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-inline-size: 0;
+}
+.playback-dock__secondary .playback-dock__volume {
+  inline-size: 100%;
+  box-sizing: border-box;
+}
+.playback-dock__queue-button {
+  position: absolute;
+  inset-inline-end: 0;
+  flex: 0 0 40px;
+}
+.playback-dock__queue-button svg {
+  inline-size: 22px;
+  block-size: 22px;
+}
 
 .playback-dock__identity,
 .playback-dock__playback-core,
 .playback-dock__timeline,
-.playback-dock__volume {
+.playback-dock__volume,
+.playback-dock__secondary {
   min-inline-size: 0;
 }
 
 .playback-dock__identity,
-.playback-dock__volume {
+.playback-dock__volume,
+.playback-dock__secondary {
   align-self: center;
 }
 
