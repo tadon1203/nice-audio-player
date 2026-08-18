@@ -40,7 +40,10 @@ import { useVolumeController } from "./hooks/use-volume-controller";
 import { useLibraryScan } from "./features/library/use-library-scan";
 import { useApplicationActivities } from "./hooks/use-application-activities";
 import { usePlaybackQueue } from "./hooks/use-playback-queue";
-import { PlaybackQueuePane } from "./components/PlaybackQueuePane";
+import { PlaybackQueueActions, PlaybackQueuePane } from "./components/PlaybackQueuePane";
+import { PlaybackContextPane } from "./components/PlaybackContextPane";
+import { LyricsPane } from "./components/LyricsPane";
+import { useTrackLyrics } from "./hooks/use-track-lyrics";
 import { initialPlaybackUiState, playbackUiReducer } from "./lib/playback-state";
 import { motionDurationSeconds } from "./lib/motion";
 
@@ -54,7 +57,9 @@ type TransportOperation =
   | { type: "previous" }
   | { type: "next" };
 type PendingTransportCommand = "stop" | "pause" | "resume" | "previous" | "next" | null;
-type QueuePaneState = "opening" | "open" | "closing" | null;
+type ContextPaneState = "opening" | "open" | "closing" | null;
+type PlaybackContextCloseReason = "closeButton" | "escape" | "trigger" | "navigation";
+type PlaybackContextMode = "queue" | "lyrics";
 function formatPlaybackFailure(code: PlaybackFailureCode): string {
   const messages: Record<PlaybackFailureCode, string> = {
     noOutputDevice: "No audio output device is available.",
@@ -74,7 +79,8 @@ function formatPlaybackFailure(code: PlaybackFailureCode): string {
 
 function App() {
   const [destination, setDestination] = useState<"library" | "settings">("library");
-  const [queuePaneState, setQueuePaneState] = useState<QueuePaneState>(null);
+  const [contextPaneState, setContextPaneState] = useState<ContextPaneState>(null);
+  const [contextMode, setContextMode] = useState<PlaybackContextMode | null>(null);
   const [mainScrollElement, setMainScrollElement] = useState<HTMLElement | null>(null);
   const [outputDevices, setOutputDevices] = useState<AudioOutputDevice[] | null>(null);
   const [isLoadingDevices, setIsLoadingDevices] = useState(false);
@@ -94,6 +100,9 @@ function App() {
   const subscriptionHealthyRef = useRef(true);
   const queueRemovalTimerRef = useRef<number | null>(null);
   const queueOpenFrameRef = useRef<number | null>(null);
+  const queueButtonRef = useRef<HTMLButtonElement | null>(null);
+  const lyricsButtonRef = useRef<HTMLButtonElement | null>(null);
+  const restoreContextModeRef = useRef<PlaybackContextMode | null>(null);
 
   const clearQueueTransition = useCallback(() => {
     if (queueRemovalTimerRef.current !== null) {
@@ -106,27 +115,45 @@ function App() {
     }
   }, []);
 
-  const openQueue = useCallback(() => {
-    clearQueueTransition();
-    setQueuePaneState("opening");
-    queueOpenFrameRef.current = window.requestAnimationFrame(() => {
-      queueOpenFrameRef.current = null;
-      setQueuePaneState("open");
-    });
-  }, [clearQueueTransition]);
+  const openContext = useCallback(
+    (mode: PlaybackContextMode) => {
+      clearQueueTransition();
+      setContextMode(mode);
+      setContextPaneState("opening");
+      queueOpenFrameRef.current = window.requestAnimationFrame(() => {
+        queueOpenFrameRef.current = null;
+        setContextPaneState("open");
+      });
+    },
+    [clearQueueTransition],
+  );
 
-  const closeQueue = useCallback(() => {
-    clearQueueTransition();
-    setQueuePaneState((current) => (current === null ? null : "closing"));
-    queueRemovalTimerRef.current = window.setTimeout(() => {
-      queueRemovalTimerRef.current = null;
-      setQueuePaneState(null);
-    }, motionDurationSeconds.feedback * 1000);
-  }, [clearQueueTransition]);
+  const closeContext = useCallback(
+    (reason: PlaybackContextCloseReason = "closeButton") => {
+      clearQueueTransition();
+      setContextPaneState((current) => (current === null ? null : "closing"));
+      restoreContextModeRef.current =
+        reason === "navigation" || reason === "trigger" ? null : contextMode;
+      queueRemovalTimerRef.current = window.setTimeout(() => {
+        queueRemovalTimerRef.current = null;
+        setContextPaneState(null);
+        setContextMode(null);
+      }, motionDurationSeconds.feedback * 1000);
+    },
+    [clearQueueTransition, contextMode],
+  );
+
+  useEffect(() => {
+    if (contextPaneState !== null || !restoreContextModeRef.current) return;
+    const target =
+      restoreContextModeRef.current === "queue" ? queueButtonRef.current : lyricsButtonRef.current;
+    restoreContextModeRef.current = null;
+    target?.focus();
+  }, [contextPaneState]);
 
   useEffect(() => clearQueueTransition, [clearQueueTransition]);
 
-  const isQueueOpen = queuePaneState === "opening" || queuePaneState === "open";
+  const isContextOpen = contextPaneState === "opening" || contextPaneState === "open";
   const transportRequestRef = useRef<(operation: TransportOperation) => Promise<void>>(
     async () => undefined,
   );
@@ -140,6 +167,7 @@ function App() {
   const isPlaybackAvailable = playbackUi.connection === "ready";
   const isTransportCommandPending = pendingTransportCommand !== null;
   const activeTrack = useActiveTrackIdentity(playback.file);
+  const trackLyrics = useTrackLyrics(activeTrack.id, isContextOpen && contextMode === "lyrics");
   const queue = usePlaybackQueue();
   const applySnapshot = useCallback((snapshot: PlaybackSnapshot) => {
     if (snapshot.revision <= latestPlaybackRef.current.revision) return false;
@@ -297,16 +325,17 @@ function App() {
         target?.isContentEditable;
       if (isTextEntry || event.altKey || event.ctrlKey || event.metaKey) return;
       if (event.key === "Escape") {
-        if (isQueueOpen) {
+        if (isContextOpen) {
           event.preventDefault();
-          closeQueue();
+          closeContext("escape");
         }
         return;
       }
       if (event.key.toLowerCase() === "q") {
         event.preventDefault();
-        if (isQueueOpen) closeQueue();
-        else openQueue();
+        if (contextMode === "queue") closeContext("trigger");
+        else if (isContextOpen) setContextMode("queue");
+        else openContext("queue");
         return;
       }
       if (event.key === " " && (playback.status === "playing" || playback.status === "paused")) {
@@ -318,7 +347,7 @@ function App() {
     }
     window.addEventListener("keydown", handleShortcut);
     return () => window.removeEventListener("keydown", handleShortcut);
-  }, [closeQueue, isQueueOpen, openQueue, playback.status]);
+  }, [closeContext, contextMode, isContextOpen, openContext, playback.status]);
   async function changeOutputSelection(selection: AudioOutputSelection) {
     if (
       outputPendingRef.current ||
@@ -404,14 +433,38 @@ function App() {
     <AppShell
       destination={destination}
       onDestinationChange={(next) => {
-        closeQueue();
+        closeContext("navigation");
         setDestination(next);
       }}
       mainScrollRef={setMainScrollElement}
       main={main}
-      contextPaneState={queuePaneState ?? "closed"}
+      contextPaneState={contextPaneState ?? "closed"}
       contextPane={
-        <PlaybackQueuePane queue={queue} onClose={closeQueue} playbackStatus={playback.status} />
+        contextMode ? (
+          <PlaybackContextPane
+            mode={contextMode}
+            onClose={closeContext}
+            actions={contextMode === "queue" ? <PlaybackQueueActions queue={queue} /> : undefined}
+            phase={contextPaneState ?? "open"}
+          >
+            {contextMode === "queue" ? (
+              <PlaybackQueuePane queue={queue} playbackStatus={playback.status} />
+            ) : (
+              <LyricsPane
+                trackTitle={activeTrack.title}
+                trackArtist={activeTrack.artist}
+                trackId={activeTrack.id}
+                identityPending={activeTrack.lookupPending}
+                playback={playback}
+                lyrics={trackLyrics.state}
+                onRetry={trackLyrics.retry}
+                canSeek={seekController.canSeek}
+                acceptedSeek={seekController.acceptedSeek}
+                onRequestSeek={seekController.requestSeek}
+              />
+            )}
+          </PlaybackContextPane>
+        ) : undefined
       }
       activity={<ApplicationActivityIndicator activity={applicationActivity} />}
       dock={
@@ -441,15 +494,21 @@ function App() {
           onPrevious={() => void requestTransport({ type: "previous" })}
           onNext={() => void requestTransport({ type: "next" })}
           onSeek={seekController.onSeek}
-          onSeekCommit={(value) => void seekController.onSeekCommit(value)}
+          onSeekCommit={(value) => void seekController.requestSeek(value)}
           onSeekCancel={seekController.onSeekCancel}
           onVolumeChange={volumeController.onVolumeChange}
           onVolumeInteractionStart={volumeController.onVolumePointerDown}
           onVolumeCommit={volumeController.onVolumeCommit}
           onVolumePointerCancel={volumeController.onVolumePointerCancel}
           onVolumeButtonPress={volumeController.onVolumeButtonPress}
-          isQueueOpen={isQueueOpen}
-          onQueueToggle={() => (isQueueOpen ? closeQueue() : openQueue())}
+          activeContextMode={isContextOpen ? contextMode : null}
+          onContextModeToggle={(mode) => {
+            if (isContextOpen && contextMode === mode) closeContext("trigger");
+            else if (isContextOpen) setContextMode(mode);
+            else openContext(mode);
+          }}
+          queueButtonRef={queueButtonRef}
+          lyricsButtonRef={lyricsButtonRef}
         />
       }
     />

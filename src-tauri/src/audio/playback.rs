@@ -745,7 +745,6 @@ impl PlaybackServiceHandle {
         self.queue_request(|reply| PlaybackCommand::ClearQueue { reply })
     }
 
-
     pub(crate) fn stop(&self) -> Result<PlaybackSnapshot, PlaybackServiceError> {
         self.request(|reply| PlaybackCommand::Stop { reply })
     }

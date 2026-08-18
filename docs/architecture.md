@@ -202,6 +202,13 @@ A shared provider interface should be introduced only when current providers sha
 
 React must not store per-frame PCM, FFT bins, waveform samples, peaks, or RMS values in ordinary component state or context.
 
+Lyrics content and resolution are separate from `PlaybackSnapshot`. Library converts an opaque track
+ID into validated source context, while the Lyrics domain owns local parsing and source precedence.
+One-shot sidecar or embedded resolution runs outside playback-critical work; React combines a
+resolved neutral `LyricsDocument` with the authoritative playback position for synchronized
+presentation. Future provider models must convert to that neutral domain before IPC, and a Lyrics
+failure remains regional: it must never change playback state.
+
 High-frequency visualization should use a dedicated rendering path such as a worker or canvas-owned state when current functionality justifies it. The renderer must keep only current useful data; stale snapshots should be replaced or dropped rather than queued.
 
 Visualization delays must not propagate back into audio production.
@@ -275,5 +282,13 @@ define its lifecycle separately before sharing this maintenance path.
 persistence. `LibraryRuntime` coordinates Library lifecycle work only; it is not a generic application
 background-job scheduler.
 
-Issue scope, branch names, temporary structures, migration steps, and implementation plans belong in GitHub Issues or pull requests, not here.
+Application-owned scroll positioning uses the shared frontend scroll controller. User-driven wheel,
+touch, keyboard, and scrollbar scrolling remains native. Features own the semantic reason for a
+movement; the shared layer owns geometry, timing, cancellation, reduced-motion handling, and
+programmatic/user classification.
 
+Authoritative playback snapshots describe audio state. Frontend-only accepted seek receipts may carry
+that a user-confirmed position change was accepted for presentation motion, but never redefine
+playback state or cross the IPC boundary.
+
+Issue scope, branch names, temporary structures, migration steps, and implementation plans belong in GitHub Issues or pull requests, not here.

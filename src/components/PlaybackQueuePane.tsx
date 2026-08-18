@@ -19,11 +19,9 @@ type QueueState = {
 
 export function PlaybackQueuePane({
   queue,
-  onClose,
   playbackStatus,
 }: {
   queue: QueueState;
-  onClose: () => void;
   playbackStatus: "playing" | "paused" | "stopped" | "failed";
 }) {
   const [menuId, setMenuId] = useState<string | null>(null);
@@ -31,12 +29,6 @@ export function PlaybackQueuePane({
   const menuRef = useRef<HTMLDivElement | null>(null);
   const current = queue.current;
   const upcoming = queue.upcoming;
-  const repeatLabel =
-    queue.repeatMode === "off"
-      ? "Repeat off"
-      : queue.repeatMode === "all"
-        ? "Repeat all"
-        : "Repeat one";
   useEffect(() => {
     const close = (event: MouseEvent) => {
       if (!(event.target as HTMLElement).closest(".playback-queue__menu-wrap")) setMenuId(null);
@@ -82,49 +74,7 @@ export function PlaybackQueuePane({
     }
   }
   return (
-    <aside
-      className="playback-queue"
-      id="playback-queue"
-      aria-labelledby="playback-queue-title"
-      data-testid="playback-queue"
-    >
-      <header className="playback-queue__header">
-        <h2 id="playback-queue-title">Queue</h2>
-        <div className="playback-queue__tools">
-          <button
-            type="button"
-            className={`icon-button playback-queue__icon-button${queue.shuffleEnabled ? " is-selected" : ""}`}
-            data-tooltip={queue.shuffleEnabled ? "Turn shuffle off" : "Turn shuffle on"}
-            title={queue.shuffleEnabled ? "Turn shuffle off" : "Turn shuffle on"}
-            aria-pressed={queue.shuffleEnabled}
-            aria-label={queue.shuffleEnabled ? "Turn shuffle off" : "Turn shuffle on"}
-            onClick={() => queue.setShuffle(!queue.shuffleEnabled)}
-          >
-            <ShuffleIcon />
-          </button>
-          <button
-            type="button"
-            className={`icon-button playback-queue__icon-button${queue.repeatMode !== "off" ? " is-selected" : ""}`}
-            data-tooltip={repeatLabel}
-            title={repeatLabel}
-            aria-label={repeatLabel}
-            onClick={() =>
-              queue.setRepeatMode(
-                queue.repeatMode === "off" ? "all" : queue.repeatMode === "all" ? "one" : "off",
-              )
-            }
-          >
-            <RepeatIcon />
-            {queue.repeatMode === "one" ? (
-              <span className="playback-queue__repeat-one">1</span>
-            ) : null}
-            <span className="sr-only">{repeatLabel}</span>
-          </button>
-          <button type="button" className="playback-queue__close" onClick={onClose}>
-            Close
-          </button>
-        </div>
-      </header>
+    <div className="playback-queue">
       {queue.error ? (
         <div className="playback-queue__error" role="alert">
           <p>Queue is unavailable. {queue.error}</p>
@@ -252,6 +202,46 @@ export function PlaybackQueuePane({
           </div>
         </section>
       ) : null}
-    </aside>
+    </div>
+  );
+}
+
+export function PlaybackQueueActions({ queue }: { queue: QueueState }) {
+  const repeatLabel =
+    queue.repeatMode === "off"
+      ? "Repeat off"
+      : queue.repeatMode === "all"
+        ? "Repeat all"
+        : "Repeat one";
+  return (
+    <div className="playback-queue__tools">
+      <button
+        type="button"
+        className={`icon-button playback-queue__icon-button${queue.shuffleEnabled ? " is-selected" : ""}`}
+        data-tooltip={queue.shuffleEnabled ? "Turn shuffle off" : "Turn shuffle on"}
+        title={queue.shuffleEnabled ? "Turn shuffle off" : "Turn shuffle on"}
+        aria-pressed={queue.shuffleEnabled}
+        aria-label={queue.shuffleEnabled ? "Turn shuffle off" : "Turn shuffle on"}
+        onClick={() => queue.setShuffle(!queue.shuffleEnabled)}
+      >
+        <ShuffleIcon />
+      </button>
+      <button
+        type="button"
+        className={`icon-button playback-queue__icon-button${queue.repeatMode !== "off" ? " is-selected" : ""}`}
+        data-tooltip={repeatLabel}
+        title={repeatLabel}
+        aria-label={repeatLabel}
+        onClick={() =>
+          queue.setRepeatMode(
+            queue.repeatMode === "off" ? "all" : queue.repeatMode === "all" ? "one" : "off",
+          )
+        }
+      >
+        <RepeatIcon />
+        {queue.repeatMode === "one" ? <span className="playback-queue__repeat-one">1</span> : null}
+        <span className="sr-only">{repeatLabel}</span>
+      </button>
+    </div>
   );
 }

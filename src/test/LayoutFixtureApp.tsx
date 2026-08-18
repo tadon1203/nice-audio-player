@@ -3,6 +3,7 @@ import { useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { PlaybackDock } from "@/components/PlaybackDock";
 import { PlaybackQueuePane } from "@/components/PlaybackQueuePane";
+import { PlaybackContextPane } from "@/components/PlaybackContextPane";
 import { Button } from "@/components/ui/Button";
 
 import type { LayoutFixtureName } from "./layout-fixture-state";
@@ -49,11 +50,13 @@ export function LayoutFixtureApp({ fixture }: LayoutFixtureAppProps) {
         contextPaneState={queueState ?? undefined}
         contextPane={
           queueState ? (
-            <PlaybackQueuePane
-              queue={layoutQueueFixture}
+            <PlaybackContextPane
+              mode="queue"
               onClose={() => setQueueState("closing")}
-              playbackStatus="playing"
-            />
+              phase={queueState === "open" ? "open" : "closing"}
+            >
+              <PlaybackQueuePane queue={layoutQueueFixture} playbackStatus="playing" />
+            </PlaybackContextPane>
           ) : undefined
         }
         main={
@@ -98,8 +101,10 @@ export function LayoutFixtureApp({ fixture }: LayoutFixtureAppProps) {
             onVolumeCommit={noop}
             onVolumePointerCancel={noop}
             onVolumeButtonPress={noop}
-            isQueueOpen={queueState === "open"}
-            onQueueToggle={() => setQueueState((state) => (state === "open" ? "closing" : "open"))}
+            activeContextMode={queueState === "open" ? "queue" : null}
+            onContextModeToggle={() =>
+              setQueueState((state) => (state === "open" ? "closing" : "open"))
+            }
           />
         }
       />

@@ -10,6 +10,7 @@ export interface ActiveTrackPresentation {
   artwork: ArtworkRef | null;
   artworkUrl: string | null;
   artworkLoading: boolean;
+  lookupPending: boolean;
 }
 
 interface ResolvedSummary {
@@ -36,12 +37,21 @@ function fallback(
       artwork: null,
       artworkUrl: null,
       artworkLoading: false,
+      lookupPending: false,
     };
   const suffix = `.${extension}`;
   const title = fileName.toLowerCase().endsWith(suffix.toLowerCase())
     ? fileName.slice(0, -suffix.length) || fileName
     : fileName;
-  return { id: null, title, artist: null, artwork: null, artworkUrl: null, artworkLoading: false };
+  return {
+    id: null,
+    title,
+    artist: null,
+    artwork: null,
+    artworkUrl: null,
+    artworkLoading: false,
+    lookupPending: Boolean(path),
+  };
 }
 
 export function useActiveTrackIdentity(file: ValidatedAudioFile | null): ActiveTrackPresentation {
@@ -112,5 +122,6 @@ export function useActiveTrackIdentity(file: ValidatedAudioFile | null): ActiveT
     artwork,
     artworkUrl,
     artworkLoading: artworkLoading && Boolean(path && artworkPath),
+    lookupPending: Boolean(path && resolvedSummary?.path !== path),
   };
 }

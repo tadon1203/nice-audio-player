@@ -10,7 +10,7 @@
   --playback-dock-artwork-size: calc(var(--spacing) * 20);
   --playback-dock-volume-width: calc(var(--spacing) * 48);
   --playback-dock-transport-offset-block: calc(var(--spacing) * 2);
-  --playback-dock-side-min-width: calc(var(--spacing) * 60);
+  --playback-dock-side-min-width: calc(var(--spacing) * 72);
   --playback-dock-core-min-width: calc(var(--spacing) * 52);
   --playback-dock-core-max-width: calc(var(--spacing) * 176);
   --playback-dock-timeline-label-size: calc(var(--spacing) * 5);
@@ -193,13 +193,20 @@
 .playback-dock__secondary {
   grid-area: volume;
   display: grid;
-  grid-template-columns: auto var(--playback-dock-volume-width);
+  grid-template-columns: calc(var(--spacing) * 22) var(--playback-dock-volume-width);
   align-items: center;
   justify-content: flex-end;
   column-gap: calc(var(--spacing) * 2);
   min-inline-size: 0;
+  justify-self: end;
 }
-.playback-dock__queue-button {
+.playback-dock__context-controls {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--spacing) * 2);
+  min-inline-size: 0;
+}
+.playback-dock__context-button {
   display: grid;
   place-items: center;
   inline-size: calc(var(--spacing) * 10);
@@ -207,14 +214,14 @@
   block-size: calc(var(--spacing) * 10);
   min-block-size: calc(var(--spacing) * 10);
 }
-.playback-dock__queue-button svg {
+.playback-dock__context-button svg {
   inline-size: 20px;
   block-size: 20px;
 }
 .playback-dock__secondary .playback-dock__volume {
   grid-area: auto;
 }
-@container playback-dock (max-width: 44rem) {
+@container playback-dock (max-width: 56rem) {
   .playback-dock__layout {
     --playback-dock-side-min-width: calc(var(--spacing) * 48);
   }
@@ -223,14 +230,17 @@
     grid-template-rows: calc(var(--spacing) * 10) calc(var(--spacing) * 10);
     align-content: center;
     row-gap: 0;
+    inline-size: var(--playback-dock-volume-width);
+    min-inline-size: var(--playback-dock-volume-width);
   }
-  .playback-dock__queue-button {
+  .playback-dock__context-controls {
     grid-row: 1;
-    justify-self: end;
+    justify-content: flex-end;
   }
   .playback-dock__secondary .playback-dock__volume {
     grid-row: 2;
     inline-size: 100%;
+    min-inline-size: var(--playback-dock-volume-width);
   }
 }
 

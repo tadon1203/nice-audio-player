@@ -10,6 +10,14 @@ type SeekInteraction =
   | { kind: "scrubbing"; positionMs: number }
   | { kind: "pending"; positionMs: number };
 
+/** A frontend-only receipt for a seek accepted by authoritative playback. */
+export interface AcceptedPlaybackSeek {
+  id: number;
+  playbackId: string;
+  acceptedRevision: number;
+  positionMs: number;
+}
+
 interface UseSeekControllerOptions {
   playback: PlaybackSnapshot;
   connection: PlaybackConnectionState;
@@ -31,6 +39,7 @@ export function useSeekController({
 }: UseSeekControllerOptions) {
   const [interaction, setInteraction] = useState<SeekInteraction>({ kind: "idle" });
   const pendingRef = useRef(false);
+  const acceptedSeekId = useRef(0);
   const playbackRef = useRef(playback);
   const connectionRef = useRef(connection);
   const transportPendingRef = useRef(isTransportCommandPending);
@@ -47,8 +56,10 @@ export function useSeekController({
     setInteraction({ kind: "scrubbing", positionMs: value });
   }, []);
 
-  const commitSeek = useCallback(
-    async (value: number) => {
+  const [acceptedSeek, setAcceptedSeek] = useState<AcceptedPlaybackSeek | null>(null);
+
+  const requestSeek = useCallback(
+    async (value: number): Promise<AcceptedPlaybackSeek | null> => {
       const current = playbackRef.current;
       if (
         (current.status !== "playing" && current.status !== "paused") ||
@@ -59,7 +70,7 @@ export function useSeekController({
         connectionRef.current !== "ready"
       ) {
         setInteraction({ kind: "idle" });
-        return;
+        return null;
       }
 
       const target = Math.max(0, Math.min(value, current.durationMs));
@@ -67,8 +78,24 @@ export function useSeekController({
       pendingRef.current = true;
       dispatchPlaybackUi({ type: "commandStarted", lane: "seek" });
       try {
-        applySnapshot(await seekAudioPlayback(target));
+        const snapshot = await seekAudioPlayback(target);
+        applySnapshot(snapshot);
+        if (
+          (snapshot.status === "playing" || snapshot.status === "paused") &&
+          snapshot.playbackId === current.playbackId
+        ) {
+          const receipt = {
+            id: ++acceptedSeekId.current,
+            playbackId: snapshot.playbackId,
+            acceptedRevision: snapshot.revision,
+            positionMs: snapshot.positionMs,
+          };
+          setAcceptedSeek(receipt);
+          dispatchPlaybackUi({ type: "commandSucceeded", lane: "seek" });
+          return receipt;
+        }
         dispatchPlaybackUi({ type: "commandSucceeded", lane: "seek" });
+        return null;
       } catch (error: unknown) {
         dispatchPlaybackUi({
           type: "commandFailed",
@@ -78,6 +105,7 @@ export function useSeekController({
             : "An unexpected playback error occurred.",
         });
         await refreshAuthoritativeSnapshot();
+        return null;
       } finally {
         pendingRef.current = false;
         setInteraction({ kind: "idle" });
@@ -91,10 +119,18 @@ export function useSeekController({
   }, []);
 
   return {
+    canSeek:
+      (playback.status === "playing" || playback.status === "paused") &&
+      playback.durationMs !== null &&
+      connection === "ready" &&
+      !isTransportCommandPending &&
+      !isOutputSelectionPending &&
+      interaction.kind !== "pending",
     seekPreviewMs: interaction.kind === "idle" ? null : interaction.positionMs,
     isSeekPending: interaction.kind === "pending",
+    acceptedSeek,
     onSeek: updateSeek,
-    onSeekCommit: commitSeek,
+    requestSeek,
     onSeekCancel: cancelSeek,
   };
 }
