@@ -1,8 +1,8 @@
 import type { PlaybackSnapshot } from "@/bindings";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type Ref } from "react";
 import { formatPlaybackTime } from "@/lib/playback-time";
 import { motionDurationSeconds } from "@/lib/motion";
-import { PlayPauseIcon, QueueIcon, SkipTrackIcon } from "./icons";
+import { LyricsIcon, PlayPauseIcon, QueueIcon, SkipTrackIcon } from "./icons";
 import { RangeControl } from "./RangeControl";
 import { VolumeControl } from "./VolumeControl";
 
@@ -37,8 +37,10 @@ interface PlaybackDockProps {
   onVolumeCommit: (value: number) => void;
   onVolumePointerCancel: () => void;
   onVolumeButtonPress: () => void;
-  isQueueOpen?: boolean;
-  onQueueToggle?: () => void;
+  activeContextMode?: "queue" | "lyrics" | null;
+  onContextModeToggle?: (mode: "queue" | "lyrics") => void;
+  queueButtonRef?: Ref<HTMLButtonElement>;
+  lyricsButtonRef?: Ref<HTMLButtonElement>;
 }
 
 export function PlaybackDock({
@@ -70,8 +72,10 @@ export function PlaybackDock({
   onVolumeCommit,
   onVolumePointerCancel,
   onVolumeButtonPress,
-  isQueueOpen = false,
-  onQueueToggle = () => undefined,
+  activeContextMode = null,
+  onContextModeToggle = () => undefined,
+  queueButtonRef,
+  lyricsButtonRef,
 }: PlaybackDockProps) {
   const [artworkFailed, setArtworkFailed] = useState(false);
   useEffect(() => {
@@ -195,16 +199,30 @@ export function PlaybackDock({
           </div>
         </div>
         <div className="playback-dock__secondary">
-          <button
-            type="button"
-            className={`icon-button playback-dock__queue-button${isQueueOpen ? " is-selected" : ""}`}
-            aria-label={isQueueOpen ? "Close queue" : "Open queue"}
-            aria-expanded={isQueueOpen}
-            aria-controls="playback-queue"
-            onClick={onQueueToggle}
-          >
-            <QueueIcon />
-          </button>
+          <div className="playback-dock__context-controls">
+            <button
+              ref={queueButtonRef}
+              type="button"
+              className={`icon-button playback-dock__context-button${activeContextMode === "queue" ? " is-selected" : ""}`}
+              aria-label={activeContextMode === "queue" ? "Close queue" : "Open queue"}
+              aria-expanded={activeContextMode === "queue"}
+              aria-controls="playback-context-pane"
+              onClick={() => onContextModeToggle("queue")}
+            >
+              <QueueIcon />
+            </button>
+            <button
+              ref={lyricsButtonRef}
+              type="button"
+              className={`icon-button playback-dock__context-button${activeContextMode === "lyrics" ? " is-selected" : ""}`}
+              aria-label={activeContextMode === "lyrics" ? "Close lyrics" : "Open lyrics"}
+              aria-expanded={activeContextMode === "lyrics"}
+              aria-controls="playback-context-pane"
+              onClick={() => onContextModeToggle("lyrics")}
+            >
+              <LyricsIcon />
+            </button>
+          </div>
           <VolumeControl
             playback={playback}
             value={volumeValue}

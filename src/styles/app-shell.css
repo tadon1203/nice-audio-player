@@ -86,8 +86,6 @@
   block-size: 100%;
   min-block-size: 100%;
   min-inline-size: 0;
-  background: var(--color-surface);
-  border-inline-start: 1px solid var(--color-border-subtle);
 }
 @media (prefers-reduced-motion: reduce) {
   .app-shell__context-content,

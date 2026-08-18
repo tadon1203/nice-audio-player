@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 import type { LibraryAlbumSummary, LibraryAlbumTrackSummary } from "@/bindings";
 import { PlayIcon } from "@/components/icons";
 import { Button } from "@/components/ui/Button";
@@ -16,7 +16,7 @@ export function AlbumDetailView({
   onPlayAlbum,
   activeTrackId,
   playbackStatus,
-  scrollElement,
+  scrollElement: _scrollElement,
 }: {
   album: LibraryAlbumSummary;
   refreshKey: number;
@@ -26,14 +26,10 @@ export function AlbumDetailView({
   onPlayAlbum: (id: string) => void;
   activeTrackId: string | null;
   playbackStatus: "stopped" | "playing" | "paused" | "failed";
-  scrollElement: HTMLElement | null;
+  scrollElement?: HTMLElement | null;
 }) {
   const backRef = useRef<HTMLButtonElement>(null);
   const query = useAlbumDetailQuery(album.id, refreshKey, true);
-  useEffect(() => {
-    backRef.current?.focus();
-    scrollElement?.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
-  }, [album.id, scrollElement]);
   const detail = query.details;
   const summary = detail?.summary ?? album;
   const grouped = groupTracks(query.items);

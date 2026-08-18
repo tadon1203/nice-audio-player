@@ -1,6 +1,7 @@
 mod activity;
 mod audio;
 mod library;
+mod lyrics;
 mod media;
 
 #[cfg(test)]
@@ -32,6 +33,7 @@ use library::{
         LibraryCommandError, LibraryService, StartLibraryAlbumError, StartLibraryTrackError,
     },
 };
+use lyrics::{LyricsCommandError, LyricsResolution, LyricsService};
 use media::inspection::{
     inspect_audio_file as inspect_validated_audio_file, AudioFileInfo, AudioFileInspectionError,
 };
@@ -171,6 +173,31 @@ async fn get_library_track_for_path(
     tauri::async_runtime::spawn_blocking(move || service.track_for_path(path))
         .await
         .map_err(|_| LibraryCommandError::TaskFailed)?
+}
+#[tauri::command]
+#[specta::specta]
+async fn get_library_track_lyrics(
+    track_id: String,
+    library: tauri::State<'_, LibraryService>,
+    lyrics: tauri::State<'_, LyricsService>,
+) -> Result<LyricsResolution, LyricsCommandError> {
+    let library = library.handle();
+    let lyrics = *lyrics.inner();
+    tauri::async_runtime::spawn_blocking(move || {
+        let context = library
+            .lyrics_context(track_id)
+            .map_err(|error| match error {
+                LibraryCommandError::InvalidId => LyricsCommandError::InvalidId,
+                LibraryCommandError::RootNotFound => LyricsCommandError::TrackNotFound,
+                LibraryCommandError::RootMissing => LyricsCommandError::TrackUnavailable,
+                LibraryCommandError::LibraryUnavailable => LyricsCommandError::LibraryUnavailable,
+                LibraryCommandError::PersistenceFailed => LyricsCommandError::PersistenceFailed,
+                _ => LyricsCommandError::TaskFailed,
+            })?;
+        Ok(lyrics.resolve(context))
+    })
+    .await
+    .map_err(|_| LyricsCommandError::TaskFailed)?
 }
 #[tauri::command]
 #[specta::specta]
@@ -801,7 +828,6 @@ async fn clear_playback_queue(
         .map_err(map_queue_error)
 }
 
-
 fn create_specta_builder() -> Builder<tauri::Wry> {
     Builder::<tauri::Wry>::new()
         .commands(collect_specta_commands())
@@ -844,6 +870,7 @@ fn collect_specta_commands<R: tauri::Runtime>() -> tauri_specta::Commands<R> {
         list_library_album_tracks,
         remove_library_root,
         get_library_track_for_path,
+        get_library_track_lyrics,
         start_library_track,
         start_library_album,
         start_library_album_track,
@@ -899,6 +926,7 @@ pub fn run() {
     let specta_builder = create_specta_builder();
     let app = tauri::Builder::default()
         .manage(playback_service)
+        .manage(LyricsService)
         .plugin(
             tauri_plugin_log::Builder::new()
                 .level(tauri_plugin_log::log::LevelFilter::Info)

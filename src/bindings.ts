@@ -66,6 +66,8 @@ export const commands = {
       availability: LibraryFileAvailability;
       playable: boolean;
     } | null>("get_library_track_for_path", { path }),
+  getLibraryTrackLyrics: (trackId: string) =>
+    __TAURI_INVOKE<LyricsResolution>("get_library_track_lyrics", { trackId }),
   startLibraryTrack: (trackId: string) =>
     __TAURI_INVOKE<PlaybackSnapshot_Serialize>("start_library_track", { trackId }),
   startLibraryAlbum: (albumId: string) =>
@@ -247,6 +249,42 @@ export type LibraryUnavailableReason =
   | "migrationFailed"
   | "schemaTooNew"
   | "databaseCorrupt";
+
+export type LyricsCommandError =
+  | { code: "invalidId" }
+  | { code: "trackNotFound" }
+  | { code: "trackUnavailable" }
+  | { code: "libraryUnavailable" }
+  | { code: "persistenceFailed" }
+  | { code: "taskFailed" };
+
+export type LyricsContent =
+  { kind: "plain"; lines: string[] } | { kind: "timed"; lines: LyricsTimedLine[] };
+
+export type LyricsDocument = {
+  source: LyricsSourceKind;
+  language: string | null;
+  content: LyricsContent;
+};
+
+export type LyricsResolution =
+  | {
+      status: "resolved";
+      track_id: string;
+      document: LyricsDocument;
+      notice: LyricsResolutionNotice | null;
+    }
+  | { status: "notFound"; track_id: string }
+  | { status: "sourceFailed"; track_id: string };
+
+export type LyricsResolutionNotice = "sidecarFailedUsingEmbedded";
+
+export type LyricsSourceKind = "sidecar" | "embedded";
+
+export type LyricsTimedLine = {
+  startMs: number;
+  text: string;
+};
 
 export type PauseAudioPlaybackError =
   | { code: "playbackWorkerUnavailable" }

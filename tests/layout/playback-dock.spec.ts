@@ -122,23 +122,27 @@ for (const width of [640, 800, 1120, 1440, 1760]) {
     ).toBeLessThanOrEqual(1);
     expect(
       Math.abs(volumeBox.y + volumeBox.height / 2 - (coreBox.y + coreBox.height / 2)),
-    ).toBeLessThanOrEqual(width <= 704 ? 24 : 8);
+    ).toBeLessThanOrEqual(width <= 800 ? 24 : 8);
 
     const queueBox = await page.getByRole("button", { name: "Open queue" }).boundingBox();
+    const lyricsBox = await page.getByRole("button", { name: "Open lyrics" }).boundingBox();
     expect(queueBox).not.toBeNull();
-    if (queueBox) {
+    expect(lyricsBox).not.toBeNull();
+    if (queueBox && lyricsBox) {
       expect(
         queueBox.x + queueBox.width <= volumeBox.x ||
           volumeBox.x + volumeBox.width <= queueBox.x ||
           queueBox.y + queueBox.height <= volumeBox.y ||
           volumeBox.y + volumeBox.height <= queueBox.y,
       ).toBe(true);
-      if (width <= 704) {
+      if (width <= 800) {
         expect(queueBox.y + queueBox.height).toBeLessThanOrEqual(volumeBox.y);
+        expect(lyricsBox.y + lyricsBox.height).toBeLessThanOrEqual(volumeBox.y);
       } else {
-        expect(volumeBox.x - (queueBox.x + queueBox.width)).toBe(8);
+        expect(lyricsBox.x - (queueBox.x + queueBox.width)).toBe(8);
+        expect(volumeBox.x - (lyricsBox.x + lyricsBox.width)).toBe(8);
         expect(
-          Math.abs(queueBox.y + queueBox.height / 2 - (volumeBox.y + volumeBox.height / 2)),
+          Math.abs(lyricsBox.y + lyricsBox.height / 2 - (volumeBox.y + volumeBox.height / 2)),
         ).toBeLessThanOrEqual(8);
       }
     }

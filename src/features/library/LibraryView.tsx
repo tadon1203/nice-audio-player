@@ -12,6 +12,7 @@ import {
   type ContentTransitionDirection,
 } from "@/components/ui/ContentTransition";
 import { LibraryPresentationTabs } from "./LibraryPresentationTabs";
+import { useScrollController } from "@/hooks/use-scroll-controller";
 
 interface Props {
   onOpenSettings: () => void;
@@ -49,6 +50,7 @@ export function LibraryView({
   const browserScrollTop = useRef(0);
   const pendingFocusRef = useRef<"detail" | "browser" | null>(null);
   const focusAlbumIdRef = useRef<string | null>(null);
+  const scrollController = useScrollController(scrollElement);
   const albumQuery = useAlbumQuery(search, libraryRefreshKey, presentation === "albums");
   const trackQuery = useTrackQuery(search, libraryRefreshKey, presentation === "tracks");
   useEffect(() => {
@@ -70,20 +72,19 @@ export function LibraryView({
   };
   useLayoutEffect(() => {
     if (pendingFocusRef.current === "detail" && selectedAlbum) {
-      document.querySelector<HTMLButtonElement>(".album-detail__back")?.focus();
+      document
+        .querySelector<HTMLButtonElement>(".album-detail__back")
+        ?.focus({ preventScroll: true });
       pendingFocusRef.current = null;
     } else if (pendingFocusRef.current === "browser" && !selectedAlbum) {
-      scrollElement?.scrollTo({
-        top: browserScrollTop.current,
-        behavior: "instant" as ScrollBehavior,
-      });
+      scrollController.scrollToPosition(browserScrollTop.current, "instant");
       const card = focusAlbumIdRef.current
         ? document.querySelector<HTMLButtonElement>(`[data-album-id="${focusAlbumIdRef.current}"]`)
         : null;
       card?.focus({ preventScroll: true });
       pendingFocusRef.current = null;
     }
-  }, [scrollElement, selectedAlbum]);
+  }, [scrollController, scrollElement, selectedAlbum]);
   const browser = (
     <section className="library-view" data-presentation={presentation} aria-label="Library">
       <header className="library-view__header">
@@ -141,7 +142,7 @@ export function LibraryView({
               pendingFocusRef.current = "detail";
               setNavigationDirection("forward");
               setSelectedAlbum(album);
-              scrollElement?.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
+              scrollController.scrollToPosition(0, "instant");
             }}
           />
         </ContentTransition>
@@ -166,7 +167,6 @@ export function LibraryView({
       album={selectedAlbum}
       refreshKey={libraryRefreshKey}
       playbackAvailable={playbackAvailable}
-      scrollElement={scrollElement}
       onPlayAlbumTrack={onPlayAlbumTrack}
       onPlayAlbum={onPlayAlbum}
       activeTrackId={activeTrackId}

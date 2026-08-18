@@ -30,6 +30,20 @@ export function QueueIcon({ className }: { className?: string } = {}) {
   );
 }
 
+export function LyricsIcon({ className }: { className?: string } = {}) {
+  return (
+    <Svg className={className}>
+      <path
+        d="M7 5v11.5a3 3 0 1 1-2-2.83M17 4v10.5a3 3 0 1 1-2-2.83V6.25l5-1.25v8"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.7"
+      />
+    </Svg>
+  );
+}
+
 export function MoreIcon({ className }: { className?: string } = {}) {
   return (
     <Svg className={className}>

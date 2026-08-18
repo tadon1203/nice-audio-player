@@ -2,6 +2,7 @@ use super::artwork;
 use super::runtime::LibraryRuntime;
 use super::{database::Database, models::*};
 use crate::activity::ApplicationActivityHandle;
+use crate::lyrics::model::LyricsTrackContext;
 use crate::media::{
     inspection::inspect_audio_file_internal,
     metadata::read_source_metadata,
@@ -641,6 +642,31 @@ impl LibraryShared {
             title,
             artist: artist.filter(|value| !value.trim().is_empty()),
             duration_ms: duration_ms.map(|value| value as u64),
+        })
+    }
+    pub fn lyrics_context(&self, id: String) -> Result<LyricsTrackContext, LibraryCommandError> {
+        let numeric_id = parse_id(&id).map_err(|_| LibraryCommandError::InvalidId)?;
+        let c = self
+            .db()?
+            .read()
+            .map_err(|_| LibraryCommandError::PersistenceFailed)?;
+        let row: Option<(String, String, String)> = c.query_row("SELECT r.path,f.relative_path,f.availability FROM tracks t JOIN library_files f ON f.id=t.file_id JOIN library_roots r ON r.id=f.root_id WHERE t.id=?1", params![numeric_id], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?))).optional().map_err(|_| LibraryCommandError::PersistenceFailed)?;
+        let Some((root, relative, availability)) = row else {
+            return Err(LibraryCommandError::RootNotFound);
+        };
+        if availability != "available" {
+            return Err(LibraryCommandError::RootMissing);
+        }
+        let root = dunce::canonicalize(root).map_err(|_| LibraryCommandError::RootMissing)?;
+        let source = dunce::canonicalize(root.join(relative))
+            .map_err(|_| LibraryCommandError::RootMissing)?;
+        if !source.starts_with(&root) {
+            return Err(LibraryCommandError::RootMissing);
+        }
+        Ok(LyricsTrackContext {
+            track_id: id,
+            source,
+            root,
         })
     }
     pub fn album_playable_sources(
