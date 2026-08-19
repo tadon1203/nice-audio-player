@@ -41,55 +41,91 @@
 .button--neutral:active:not(:disabled) {
   background: var(--color-surface-pressed);
 }
+.button--danger {
+  border: 1px solid var(--color-error);
+  background: transparent;
+  color: var(--color-error);
+}
+.button--danger:hover:not(:disabled) {
+  background: var(--color-error-surface);
+  color: var(--color-text-primary);
+}
+.button--danger:active:not(:disabled) {
+  background: var(--color-error);
+  color: var(--color-canvas);
+}
 .button:disabled {
   background: var(--color-surface-raised);
   color: var(--color-text-disabled);
   cursor: not-allowed;
 }
-.type-character-xl,
-.type-character-lg,
-.type-character-md,
-.type-character-sm {
+.playing-marker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  inline-size: 14px;
+  block-size: 14px;
+  flex: 0 0 14px;
+  color: var(--color-text-primary);
+}
+.playing-marker > span {
+  display: block;
+  inline-size: 2px;
+  background: currentColor;
+}
+.playing-marker > span:nth-child(1) {
+  block-size: 6px;
+}
+.playing-marker > span:nth-child(2) {
+  block-size: 11px;
+}
+.playing-marker > span:nth-child(3) {
+  block-size: 8px;
+}
+.page-frame {
+  box-sizing: border-box;
+  inline-size: 100%;
+  min-inline-size: 0;
+  padding-inline: var(--layout-inline-padding);
+}
+.content-frame {
+  inline-size: 100%;
+  max-inline-size: var(--content-max-width);
+  min-inline-size: 0;
+  margin-inline: auto;
+}
+.type-application-heading {
+  font-family: var(--font-interface);
+  font-size: var(--text-application-heading);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--text-application-heading--line-height);
+}
+.type-media-title {
   font-family: var(--font-character);
+  font-size: var(--text-media-title);
   font-weight: var(--font-weight-regular);
-}
-.type-character-xl {
-  font-size: var(--text-character-xl);
-  line-height: var(--text-character-xl--line-height);
-  letter-spacing: var(--tracking-character-tight);
-}
-.type-character-lg {
-  font-size: var(--text-character-lg);
-  line-height: var(--text-character-lg--line-height);
-  letter-spacing: var(--tracking-character-tight);
-}
-.type-character-md {
-  font-size: var(--text-character-md);
-  line-height: var(--text-character-md--line-height);
-  letter-spacing: var(--tracking-character-tight);
-}
-.type-character-sm {
-  font-size: var(--text-character-sm);
-  line-height: var(--text-character-sm--line-height);
+  line-height: var(--text-media-title--line-height);
   letter-spacing: var(--tracking-character-snug);
 }
-.type-display-lg,
-.type-display-md,
-.type-title {
+.type-media-title--interface {
   font-family: var(--font-interface);
+  font-size: var(--text-media-title-interface);
   font-weight: var(--font-weight-semibold);
+  line-height: var(--text-media-title-interface--line-height);
+  letter-spacing: normal;
 }
-.type-display-lg {
-  font-size: var(--text-display-lg);
-  line-height: var(--text-display-lg--line-height);
+.type-section-title {
+  font-family: var(--font-interface);
+  font-size: var(--text-section-title);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--text-section-title--line-height);
 }
-.type-display-md {
-  font-size: var(--text-display-md);
-  line-height: var(--text-display-md--line-height);
-}
-.type-title {
-  font-size: var(--text-title);
-  line-height: var(--text-title--line-height);
+.type-media-artist {
+  font-family: var(--font-interface);
+  font-size: var(--text-media-artist);
+  font-weight: var(--font-weight-regular);
+  line-height: var(--text-media-artist--line-height);
 }
 .type-body-lg,
 .type-body-md,
@@ -125,12 +161,38 @@
 .content-transition {
   grid-area: 1 / 1;
   min-inline-size: 0;
-  min-block-size: 100%;
+  min-block-size: 0;
+  block-size: 100%;
 }
 .content-transition-stage {
+  position: relative;
   display: grid;
   min-inline-size: 0;
-  min-block-size: 100%;
+  min-block-size: 0;
+  block-size: 100%;
+  overflow: hidden;
+}
+.content-transition__contents {
+  min-inline-size: 0;
+  min-block-size: 0;
+  block-size: 100%;
+}
+.content-transition__contents[data-state="exiting"] {
+  pointer-events: none;
+}
+.exclusive-region {
+  position: relative;
+  display: grid;
+  min-inline-size: 0;
+  min-block-size: 0;
+}
+.exclusive-region__item {
+  grid-area: 1 / 1;
+  min-inline-size: 0;
+  min-block-size: 0;
+}
+.exclusive-region__contents[data-state="exiting"] {
+  pointer-events: none;
 }
 .inline-notice {
   margin-block: 12px;
@@ -146,14 +208,14 @@
   display: grid;
   place-items: center;
   flex: 0 0 40px;
-  border: 0;
+  border: 1px solid transparent;
   border-radius: var(--radius-control);
   background: transparent;
   color: var(--color-text-secondary);
   cursor: pointer;
   transition:
-    background-color var(--motion-feedback) var(--ease-interface),
-    color var(--motion-feedback) var(--ease-interface);
+    background-color var(--effect-feedback) var(--ease-interface),
+    color var(--effect-feedback) var(--ease-interface);
 }
 .icon-button:hover:not(:disabled) {
   background: var(--color-surface-hover);
@@ -163,6 +225,7 @@
   background: var(--color-surface-pressed);
 }
 .icon-button.is-selected {
+  border-color: var(--color-border-control);
   background: var(--color-surface-pressed);
   color: var(--color-text-primary);
 }
@@ -190,35 +253,37 @@
   line-height: 1.2;
   opacity: 0;
   pointer-events: none;
-  transform: translate(-50%, -4px);
-  transition:
-    opacity var(--motion-feedback) var(--ease-interface),
-    transform var(--motion-feedback) var(--ease-interface);
+  transform: translateX(-50%);
+  transition: opacity var(--effect-feedback) var(--ease-interface);
   white-space: nowrap;
 }
 .icon-button[data-tooltip]:hover::after,
 .icon-button[data-tooltip]:focus-visible::after {
   opacity: 1;
-  transform: translate(-50%, 0);
 }
 .playback-dock .icon-button[data-tooltip]::after {
   inset-block-start: auto;
   inset-block-end: calc(100% + 8px);
-  transform: translate(-50%, 4px);
+  transform: translateX(-50%);
 }
 .playback-dock .icon-button[data-tooltip]:hover::after,
 .playback-dock .icon-button[data-tooltip]:focus-visible::after {
-  transform: translate(-50%, 0);
 }
 @media (prefers-reduced-motion: reduce) {
   .icon-button {
     transition:
-      background-color var(--motion-reduced),
-      color var(--motion-reduced);
+      background-color var(--effect-reduced),
+      color var(--effect-reduced);
   }
   .icon-button[data-tooltip]::after {
-    transition: opacity var(--motion-reduced);
-    transform: none;
+    transition: opacity var(--effect-reduced);
+  }
+}
+@media (max-width: 799px) {
+  .type-media-title {
+    font-size: var(--text-media-artist);
+    line-height: var(--text-media-artist--line-height);
+    letter-spacing: normal;
   }
 }
 @media (forced-colors: active) {
@@ -229,25 +294,30 @@
 .dialog-backdrop {
   position: absolute;
   inset: 0;
+  pointer-events: auto;
+}
+.dialog-presence {
+  position: absolute;
+  inset: 0;
   display: grid;
   place-items: center;
   padding: 24px;
-  background: rgb(0 0 0 / 60%);
-  pointer-events: auto;
+}
+.dialog-presence[data-state="closing"] {
+  pointer-events: none;
 }
 .dialog {
   inline-size: min(100%, 32rem);
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-surface);
   background: var(--color-surface-raised);
-  box-shadow: var(--shadow-raised);
   padding: 24px;
 }
 .dialog h2 {
   margin: 0 0 12px;
   color: var(--color-text-primary);
-  font-size: var(--text-title);
-  line-height: var(--text-title--line-height);
+  font-size: var(--text-section-title);
+  line-height: var(--text-section-title--line-height);
   font-weight: var(--font-weight-semibold);
 }
 .dialog p {
@@ -260,18 +330,6 @@
   justify-content: end;
   gap: 8px;
   margin-block-start: 20px;
-}
-.dialog__actions button {
-  min-block-size: 40px;
-  border: 1px solid var(--color-border-control);
-  border-radius: var(--radius-control);
-  background: transparent;
-  color: var(--color-text-primary);
-  padding-inline: 14px;
-}
-.dialog__actions button:disabled {
-  color: var(--color-text-disabled);
-  cursor: not-allowed;
 }
 @media (forced-colors: active) {
   .dialog {

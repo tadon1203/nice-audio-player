@@ -2,6 +2,8 @@ import { expect, test } from "@playwright/test";
 import { expectNoHorizontalOverflow, openFixture } from "./helpers";
 
 for (const viewport of [
+  { width: 640, height: 800 },
+  { width: 800, height: 600 },
   { width: 1120, height: 700 },
   { width: 1440, height: 900 },
   { width: 1920, height: 1080 },
@@ -21,13 +23,17 @@ for (const viewport of [
     expect(contentBox).not.toBeNull();
     expect(tracksBox).not.toBeNull();
     if (!contentBox || !tracksBox || !identityBox || !artworkBox) return;
-    expect(artworkBox.x + artworkBox.width).toBeLessThan(identityBox.x);
+    if (viewport.width < 1120) {
+      expect(identityBox.y).toBeGreaterThan(artworkBox.y + artworkBox.height - 1);
+    } else {
+      expect(artworkBox.x + artworkBox.width).toBeLessThan(identityBox.x);
+    }
     expect(Math.abs(tracksBox.x - contentBox.x)).toBeLessThanOrEqual(2);
     expect(tracksBox.x + tracksBox.width).toBeLessThanOrEqual(contentBox.x + contentBox.width + 1);
     expect(
       Math.abs(tracksBox.x + tracksBox.width - (contentBox.x + contentBox.width)),
     ).toBeLessThanOrEqual(2);
-    expect(tracksBox.x).toBeLessThan(identityBox.x);
+    if (viewport.width >= 1120) expect(tracksBox.x).toBeLessThan(identityBox.x);
     if (viewport.width >= 1400)
       expect(identityBox.x - (artworkBox.x + artworkBox.width)).toBeGreaterThan(20);
     const duration = page.locator(".album-detail__row").first().locator("span").nth(2);
@@ -35,8 +41,10 @@ for (const viewport of [
     const durationBox = await duration.boundingBox();
     expect(rowBox).not.toBeNull();
     expect(durationBox).not.toBeNull();
-    if (rowBox && durationBox)
-      expect(durationBox.x + durationBox.width).toBeLessThanOrEqual(rowBox.x + rowBox.width + 1);
+    if (rowBox && durationBox) {
+      expect(durationBox.x + durationBox.width).toBeLessThanOrEqual(rowBox.x + rowBox.width - 10);
+      expect(durationBox.x + durationBox.width).toBeGreaterThan(rowBox.x + rowBox.width - 18);
+    }
     const playButton = page.locator(".album-detail__play");
     const restColors = await playButton.evaluate((element) => {
       const style = getComputedStyle(element);

@@ -13,7 +13,7 @@ function mountRoots() {
 function FocusDialog({ onClose }: { onClose: () => void }) {
   const cancelRef = useRef<HTMLButtonElement>(null);
   return (
-    <Dialog title="Confirm" initialFocusRef={cancelRef} onClose={onClose}>
+    <Dialog open title="Confirm" initialFocusRef={cancelRef} onClose={onClose}>
       <button ref={cancelRef}>Cancel</button>
       <button>Remove</button>
     </Dialog>
@@ -29,7 +29,7 @@ describe("Dialog", () => {
   it("portals an alertdialog, labels it, and makes the app inert", () => {
     mountRoots();
     render(
-      <Dialog title="Remove folder" role="alertdialog" onClose={vi.fn()}>
+      <Dialog open title="Remove folder" role="alertdialog" onClose={vi.fn()}>
         <button>Cancel</button>
       </Dialog>,
     );
@@ -67,13 +67,38 @@ describe("Dialog", () => {
     document.getElementById("root")!.append(trigger, fallback);
     trigger.focus();
     const view = render(
-      <Dialog title="Confirm" fallbackFocusRef={{ current: fallback }} onClose={vi.fn()}>
+      <Dialog open title="Confirm" fallbackFocusRef={{ current: fallback }} onClose={vi.fn()}>
         <button>Cancel</button>
       </Dialog>,
     );
     trigger.remove();
     view.unmount();
     await awaitFocus(fallback);
+  });
+
+  it("releases app semantics immediately while the visual exit is present", () => {
+    mountRoots();
+    const trigger = document.createElement("button");
+    trigger.textContent = "Open";
+    document.getElementById("root")!.append(trigger);
+    trigger.focus();
+    const view = render(
+      <Dialog open title="Confirm" onClose={vi.fn()}>
+        <button>Cancel</button>
+      </Dialog>,
+    );
+    view.rerender(
+      <Dialog open={false} title="Confirm" onClose={vi.fn()}>
+        <button>Cancel</button>
+      </Dialog>,
+    );
+    expect(document.getElementById("root")).not.toHaveAttribute("inert");
+    expect(trigger).toHaveFocus();
+    const closing = document.querySelector('.dialog-presence[data-state="closing"]');
+    if (closing) {
+      expect(closing).toHaveAttribute("inert");
+      expect(closing).toHaveAttribute("aria-hidden", "true");
+    }
   });
 });
 

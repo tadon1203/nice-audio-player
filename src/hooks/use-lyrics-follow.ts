@@ -2,7 +2,7 @@ import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import type { LyricsTimedLine } from "@/bindings";
 import type { AcceptedPlaybackSeek } from "./use-seek-controller";
 import { activeLyricsGroup } from "@/lib/lyrics-sync";
-import { useScrollController } from "./use-scroll-controller";
+import { useScrollRegion } from "./use-scroll-region";
 
 export function useLyricsFollow(
   scrollRef: React.RefObject<HTMLDivElement | null>,
@@ -12,7 +12,6 @@ export function useLyricsFollow(
   playbackRevision: number,
   trackId: string,
   active: boolean,
-  viewport: HTMLDivElement | null,
   acceptedSeek: AcceptedPlaybackSeek | null,
 ) {
   const [following, setFollowing] = useState(true);
@@ -31,7 +30,7 @@ export function useLyricsFollow(
     manualScrollGeneration.current += 1;
     setFollowing(false);
   }, []);
-  const { scrollToElement } = useScrollController(viewport, onUserScroll);
+  const { scrollToElement, setViewportElement, setContentElement } = useScrollRegion(onUserScroll);
   const targetElement = useCallback(() => {
     const current = groupRef.current;
     return !current || current.clears
@@ -69,10 +68,8 @@ export function useLyricsFollow(
         (!previous || previous.trackId !== trackId || previous.key === groupKey))
     )
       return;
-    const mode =
-      isNewAcceptedSeek || Math.abs(group.ordinal - (previous?.ordinal ?? group.ordinal)) === 1
-        ? "smooth"
-        : "instant";
+    const ordinalDistance = Math.abs(group.ordinal - (previous?.ordinal ?? group.ordinal));
+    const mode = ordinalDistance <= 1 ? "smooth" : "instant";
     scrollToElement(targetElement()!, "center", mode);
   }, [
     acceptedSeek,
@@ -115,5 +112,7 @@ export function useLyricsFollow(
     cancelCueSeek,
     revealElement,
     group,
+    setViewportElement,
+    setContentElement,
   };
 }

@@ -1,16 +1,19 @@
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
 
-type ButtonVariant = "filled" | "neutral";
+type ButtonVariant = "filled" | "neutral" | "danger";
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: ButtonVariant;
   children: ReactNode;
 };
 
-export function Button({ variant = "neutral", className = "", children, ...props }: ButtonProps) {
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
+  { variant = "neutral", className = "", children, ...props },
+  ref,
+) {
   return (
-    <button {...props} className={`button button--${variant} ${className}`.trim()}>
+    <button ref={ref} {...props} className={`button button--${variant} ${className}`.trim()}>
       {children}
     </button>
   );
-}
+});

@@ -19,6 +19,7 @@ export default defineConfig(async () => ({
 
   test: {
     exclude: [...configDefaults.exclude, "tests/layout/**"],
+    setupFiles: ["./src/test/setup.ts"],
   },
 
   server: {

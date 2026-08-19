@@ -1,4 +1,6 @@
 .playback-dock {
+  /* Local calculation unit for this feature's established control geometry. */
+  --spacing: var(--space-1);
   container: playback-dock / inline-size;
   display: grid;
   grid-template-rows: minmax(var(--playback-dock-content-min-block-size), auto) auto;
@@ -60,11 +62,13 @@
   background: var(--color-surface-raised);
 }
 .playback-dock__artwork {
+  grid-area: 1 / 1;
   inline-size: 100%;
   block-size: 100%;
   object-fit: cover;
 }
 .playback-dock__artwork-placeholder {
+  grid-area: 1 / 1;
   inline-size: 100%;
   block-size: 100%;
   border: 1px solid var(--color-border-subtle);
@@ -125,28 +129,7 @@
 }
 
 .playback-dock__navigation-control {
-  display: grid;
-  place-items: center;
-  inline-size: calc(var(--spacing) * 10);
-  block-size: calc(var(--spacing) * 10);
-  border: 0;
-  border-radius: var(--radius-control);
-  background: transparent;
   color: var(--color-text-primary);
-}
-.playback-dock__navigation-control:hover:not(:disabled) {
-  background: var(--color-surface-hover);
-}
-.playback-dock__navigation-control:active:not(:disabled) {
-  background: var(--color-surface-pressed);
-}
-.playback-dock__navigation-control:focus-visible {
-  outline: 2px solid var(--color-focus-ring);
-  outline-offset: 2px;
-}
-.playback-dock__navigation-control:disabled {
-  color: var(--color-text-disabled);
-  cursor: not-allowed;
 }
 .playback-dock__navigation-icon {
   inline-size: calc(var(--spacing) * 6);
@@ -296,7 +279,7 @@
 .range-control__track {
   transform: translateY(-50%);
   background: var(--color-border-control);
-  transition: background-color var(--motion-feedback) var(--ease-interface);
+  transition: background-color var(--effect-feedback) var(--ease-interface);
 }
 
 .range-control__fill-position {
@@ -307,11 +290,7 @@
 .range-control__fill-visual {
   inset: 0;
   background: var(--color-text-primary);
-  transform: scaleY(1);
-  transform-origin: center;
-  transition:
-    background-color var(--motion-state) var(--ease-interface),
-    transform var(--motion-feedback) var(--ease-interface);
+  transition: background-color var(--effect-state) var(--ease-interface);
 }
 
 .range-control__thumb-position {
@@ -326,10 +305,8 @@
   block-size: calc(var(--spacing) * 4);
   border-radius: var(--radius-full);
   background: var(--color-text-primary);
-  transform: translate(-50%, -50%) scale(1);
-  transition:
-    background-color var(--motion-state) var(--ease-interface),
-    transform var(--motion-feedback) var(--ease-interface);
+  transform: translate(-50%, -50%);
+  transition: background-color var(--effect-state) var(--ease-interface);
 }
 
 .range-control__thumb-ring {
@@ -337,11 +314,9 @@
   border: 2px solid var(--color-focus-ring);
   border-radius: var(--radius-full);
   opacity: 0;
-  transform: scale(0.75);
   transition:
-    opacity var(--motion-feedback) var(--ease-interface),
-    border-color var(--motion-feedback) var(--ease-interface),
-    transform var(--motion-feedback) var(--ease-interface);
+    opacity var(--effect-feedback) var(--ease-interface),
+    border-color var(--effect-feedback) var(--ease-interface);
 }
 
 .range-control__input {
@@ -366,33 +341,13 @@
   background: var(--color-text-secondary);
 }
 
-.range-control:hover:not(.is-disabled) .range-control__fill-visual,
-.range-control.is-hovered:not(.is-disabled) .range-control__fill-visual {
-  transform: scaleY(1.15);
-}
-
-.range-control:hover:not(.is-disabled) .range-control__thumb-visual,
-.range-control.is-hovered:not(.is-disabled) .range-control__thumb-visual {
-  transform: translate(-50%, -50%) scale(1.1);
-}
-
 .range-control:hover:not(.is-disabled) .range-control__thumb-ring,
 .range-control.is-hovered:not(.is-disabled) .range-control__thumb-ring {
   opacity: 0.35;
-  transform: scale(1);
-}
-
-.range-control.is-active .range-control__fill-visual {
-  transform: scaleY(1.35);
-}
-
-.range-control.is-active .range-control__thumb-visual {
-  transform: translate(-50%, -50%) scale(1.18);
 }
 
 .range-control.is-active .range-control__thumb-ring {
   opacity: 0.55;
-  transform: scale(1.3);
 }
 
 .range-control.is-disabled {
@@ -462,31 +417,12 @@
 @media (prefers-reduced-motion: reduce) {
   .range-control__fill-visual,
   .range-control__thumb-visual {
-    transition: background-color var(--motion-reduced) var(--ease-interface);
-    transform: none;
+    transition: background-color var(--effect-reduced) var(--ease-interface);
   }
 
   .range-control__thumb-ring,
   .range-control__track {
-    transition-duration: var(--motion-reduced);
-  }
-
-  .range-control__thumb-ring {
-    transform: none;
-  }
-
-  .range-control__thumb-visual,
-  .range-control:hover:not(.is-disabled) .range-control__thumb-visual,
-  .range-control.is-hovered:not(.is-disabled) .range-control__thumb-visual,
-  .range-control.is-active .range-control__thumb-visual {
-    transform: translate(-50%, -50%) scale(1);
-  }
-
-  .range-control__fill-visual,
-  .range-control:hover:not(.is-disabled) .range-control__fill-visual,
-  .range-control.is-hovered:not(.is-disabled) .range-control__fill-visual,
-  .range-control.is-active .range-control__fill-visual {
-    transform: scaleY(1);
+    transition-duration: var(--effect-reduced);
   }
 }
 
@@ -498,17 +434,31 @@
 .playback-dock__primary-control {
   inline-size: var(--playback-dock-primary-control-size);
   block-size: var(--playback-dock-primary-control-size);
-  transform: scale(1);
-  transition:
-    opacity var(--motion-state) var(--ease-interface),
-    transform var(--motion-feedback) var(--ease-interface);
+  flex-basis: var(--playback-dock-primary-control-size);
+  border-radius: var(--radius-full);
+  background: var(--color-text-primary);
+  color: var(--color-canvas);
+  transition: opacity var(--effect-state) var(--ease-interface);
 }
-
+.playback-dock__primary-control:hover:not(:disabled) {
+  background: var(--color-text-primary);
+  color: var(--color-canvas);
+  opacity: 0.85;
+}
 .playback-dock__primary-control:active:not(:disabled) {
-  transform: scale(0.98);
+  background: var(--color-text-primary);
+}
+.playback-dock__primary-control:disabled {
+  background: var(--color-surface-pressed);
+  color: var(--color-text-disabled);
+  opacity: 0.8;
 }
 
 .playback-dock__primary-icon {
+  inline-size: var(--playback-dock-primary-icon-size);
+  block-size: var(--playback-dock-primary-icon-size);
+}
+.icon-button .playback-dock__primary-icon {
   inline-size: var(--playback-dock-primary-icon-size);
   block-size: var(--playback-dock-primary-icon-size);
 }
@@ -521,23 +471,6 @@
 .icon-button .playback-dock__volume-icon {
   inline-size: var(--playback-dock-volume-icon-size);
   block-size: var(--playback-dock-volume-icon-size);
-}
-
-.playback-dock__volume-button {
-  border: 0;
-  border-radius: var(--radius-control);
-  background: transparent;
-}
-
-.playback-dock__volume-button:hover:not(:disabled) {
-  background: var(--color-surface-hover);
-}
-.playback-dock__volume-button:active:not(:disabled) {
-  background: var(--color-surface-pressed);
-}
-.playback-dock__volume-button:focus-visible {
-  outline: 2px solid var(--color-focus-ring);
-  outline-offset: 2px;
 }
 
 .playback-dock__status {

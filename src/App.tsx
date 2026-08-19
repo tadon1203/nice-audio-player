@@ -45,7 +45,6 @@ import { PlaybackContextPane } from "./components/PlaybackContextPane";
 import { LyricsPane } from "./components/LyricsPane";
 import { useTrackLyrics } from "./hooks/use-track-lyrics";
 import { initialPlaybackUiState, playbackUiReducer } from "./lib/playback-state";
-import { motionDurationSeconds } from "./lib/motion";
 
 type TransportOperation =
   | { type: "stop" }
@@ -57,7 +56,6 @@ type TransportOperation =
   | { type: "previous" }
   | { type: "next" };
 type PendingTransportCommand = "stop" | "pause" | "resume" | "previous" | "next" | null;
-type ContextPaneState = "opening" | "open" | "closing" | null;
 type PlaybackContextCloseReason = "closeButton" | "escape" | "trigger" | "navigation";
 type PlaybackContextMode = "queue" | "lyrics";
 function formatPlaybackFailure(code: PlaybackFailureCode): string {
@@ -79,9 +77,7 @@ function formatPlaybackFailure(code: PlaybackFailureCode): string {
 
 function App() {
   const [destination, setDestination] = useState<"library" | "settings">("library");
-  const [contextPaneState, setContextPaneState] = useState<ContextPaneState>(null);
   const [contextMode, setContextMode] = useState<PlaybackContextMode | null>(null);
-  const [mainScrollElement, setMainScrollElement] = useState<HTMLElement | null>(null);
   const [outputDevices, setOutputDevices] = useState<AudioOutputDevice[] | null>(null);
   const [isLoadingDevices, setIsLoadingDevices] = useState(false);
   const [isOutputSelectionPending, setIsOutputSelectionPending] = useState(false);
@@ -98,62 +94,22 @@ function App() {
   const deviceRequest = useRef(0);
   const queuedTransportRef = useRef<TransportOperation | null>(null);
   const subscriptionHealthyRef = useRef(true);
-  const queueRemovalTimerRef = useRef<number | null>(null);
-  const queueOpenFrameRef = useRef<number | null>(null);
   const queueButtonRef = useRef<HTMLButtonElement | null>(null);
   const lyricsButtonRef = useRef<HTMLButtonElement | null>(null);
-  const restoreContextModeRef = useRef<PlaybackContextMode | null>(null);
-
-  const clearQueueTransition = useCallback(() => {
-    if (queueRemovalTimerRef.current !== null) {
-      window.clearTimeout(queueRemovalTimerRef.current);
-      queueRemovalTimerRef.current = null;
-    }
-    if (queueOpenFrameRef.current !== null) {
-      window.cancelAnimationFrame(queueOpenFrameRef.current);
-      queueOpenFrameRef.current = null;
-    }
-  }, []);
-
-  const openContext = useCallback(
-    (mode: PlaybackContextMode) => {
-      clearQueueTransition();
-      setContextMode(mode);
-      setContextPaneState("opening");
-      queueOpenFrameRef.current = window.requestAnimationFrame(() => {
-        queueOpenFrameRef.current = null;
-        setContextPaneState("open");
-      });
-    },
-    [clearQueueTransition],
-  );
+  const openContext = useCallback((mode: PlaybackContextMode) => setContextMode(mode), []);
 
   const closeContext = useCallback(
     (reason: PlaybackContextCloseReason = "closeButton") => {
-      clearQueueTransition();
-      setContextPaneState((current) => (current === null ? null : "closing"));
-      restoreContextModeRef.current =
-        reason === "navigation" || reason === "trigger" ? null : contextMode;
-      queueRemovalTimerRef.current = window.setTimeout(() => {
-        queueRemovalTimerRef.current = null;
-        setContextPaneState(null);
-        setContextMode(null);
-      }, motionDurationSeconds.feedback * 1000);
+      if (reason !== "navigation" && reason !== "trigger") {
+        const target = contextMode === "queue" ? queueButtonRef.current : lyricsButtonRef.current;
+        target?.focus({ preventScroll: true });
+      }
+      setContextMode(null);
     },
-    [clearQueueTransition, contextMode],
+    [contextMode],
   );
 
-  useEffect(() => {
-    if (contextPaneState !== null || !restoreContextModeRef.current) return;
-    const target =
-      restoreContextModeRef.current === "queue" ? queueButtonRef.current : lyricsButtonRef.current;
-    restoreContextModeRef.current = null;
-    target?.focus();
-  }, [contextPaneState]);
-
-  useEffect(() => clearQueueTransition, [clearQueueTransition]);
-
-  const isContextOpen = contextPaneState === "opening" || contextPaneState === "open";
+  const isContextOpen = contextMode !== null;
   const transportRequestRef = useRef<(operation: TransportOperation) => Promise<void>>(
     async () => undefined,
   );
@@ -334,10 +290,13 @@ function App() {
       if (event.key.toLowerCase() === "q") {
         event.preventDefault();
         if (contextMode === "queue") closeContext("trigger");
-        else if (isContextOpen) setContextMode("queue");
-        else openContext("queue");
+        else if (isContextOpen) {
+          queueButtonRef.current?.focus({ preventScroll: true });
+          setContextMode("queue");
+        } else openContext("queue");
         return;
       }
+      if (event.key === " " && target?.closest("[data-scroll-region]")) return;
       if (event.key === " " && (playback.status === "playing" || playback.status === "paused")) {
         event.preventDefault();
         void transportRequestRef.current({
@@ -409,7 +368,6 @@ function App() {
         playbackStatus={playback.status}
         libraryRefreshKey={libraryRefreshKey}
         scanError={scanError}
-        scrollElement={mainScrollElement}
       />
     ) : (
       <SettingsView
@@ -436,16 +394,13 @@ function App() {
         closeContext("navigation");
         setDestination(next);
       }}
-      mainScrollRef={setMainScrollElement}
       main={main}
-      contextPaneState={contextPaneState ?? "closed"}
       contextPane={
         contextMode ? (
           <PlaybackContextPane
             mode={contextMode}
             onClose={closeContext}
             actions={contextMode === "queue" ? <PlaybackQueueActions queue={queue} /> : undefined}
-            phase={contextPaneState ?? "open"}
           >
             {contextMode === "queue" ? (
               <PlaybackQueuePane queue={queue} playbackStatus={playback.status} />
@@ -466,7 +421,15 @@ function App() {
           </PlaybackContextPane>
         ) : undefined
       }
-      activity={<ApplicationActivityIndicator activity={applicationActivity} />}
+      activity={
+        <ApplicationActivityIndicator
+          activity={applicationActivity}
+          onOpenSettings={() => {
+            closeContext("navigation");
+            setDestination("settings");
+          }}
+        />
+      }
       dock={
         <PlaybackDock
           playback={playback}

@@ -1,8 +1,11 @@
 import type { PlaybackSnapshot } from "@/bindings";
 import { useEffect, useState, type Ref } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { formatPlaybackTime } from "@/lib/playback-time";
-import { motionDurationSeconds } from "@/lib/motion";
-import { LyricsIcon, PlayPauseIcon, QueueIcon, SkipTrackIcon } from "./icons";
+import { effectsMotion } from "@/lib/motion";
+import { AppIcon } from "./ui/AppIcon";
+import { StateIcon } from "./ui/StateIcon";
+import { IconButton } from "./ui/IconButton";
 import { RangeControl } from "./RangeControl";
 import { VolumeControl } from "./VolumeControl";
 
@@ -78,6 +81,7 @@ export function PlaybackDock({
   lyricsButtonRef,
 }: PlaybackDockProps) {
   const [artworkFailed, setArtworkFailed] = useState(false);
+  const reducedMotion = useReducedMotion();
   useEffect(() => {
     queueMicrotask(() => setArtworkFailed(false));
   }, [artworkUrl]);
@@ -101,16 +105,37 @@ export function PlaybackDock({
         <div className="playback-dock__identity" data-region="identity" aria-label="Current track">
           <div className="playback-dock__identity-content">
             <div className="playback-dock__artwork-frame" aria-busy={artworkLoading}>
-              {artworkUrl && !artworkFailed ? (
-                <img
-                  src={artworkUrl}
-                  alt=""
-                  className="playback-dock__artwork"
-                  onError={() => setArtworkFailed(true)}
-                />
-              ) : (
-                <span className="playback-dock__artwork-placeholder" aria-hidden="true" />
-              )}
+              <AnimatePresence initial={false}>
+                {artworkUrl && !artworkFailed ? (
+                  <motion.img
+                    key={artworkUrl}
+                    src={artworkUrl}
+                    alt=""
+                    className="playback-dock__artwork"
+                    onError={() => setArtworkFailed(true)}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{
+                      duration: reducedMotion ? effectsMotion.reduced : effectsMotion.image,
+                      ease: effectsMotion.ease,
+                    }}
+                  />
+                ) : (
+                  <motion.span
+                    key="placeholder"
+                    className="playback-dock__artwork-placeholder"
+                    aria-hidden="true"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{
+                      duration: reducedMotion ? effectsMotion.reduced : effectsMotion.image,
+                      ease: effectsMotion.ease,
+                    }}
+                  />
+                )}
+              </AnimatePresence>
             </div>
             <div className="playback-dock__identity-copy">
               <p className="playback-dock__title" title={presentationTitle}>
@@ -126,7 +151,7 @@ export function PlaybackDock({
           aria-busy={isSeekPending}
         >
           <div className="playback-dock__transport">
-            <button
+            <IconButton
               type="button"
               aria-label="Previous track"
               aria-busy={pendingTransportCommand === "previous"}
@@ -134,9 +159,9 @@ export function PlaybackDock({
               onClick={onPrevious}
               className="playback-dock__fixed-control playback-dock__navigation-control"
             >
-              <SkipTrackIcon direction="previous" />
-            </button>
-            <button
+              <AppIcon name="previous" />
+            </IconButton>
+            <IconButton
               type="button"
               aria-label={primaryLabel}
               aria-busy={primaryBusy}
@@ -144,14 +169,14 @@ export function PlaybackDock({
                 !isPlaybackAvailable || (playback.status !== "playing" && !hasResumablePlayback)
               }
               onClick={primaryAction}
-              className="playback-dock__fixed-control playback-dock__primary-control grid place-items-center rounded-full bg-text-primary text-canvas hover:opacity-85 disabled:cursor-not-allowed disabled:bg-surface-pressed disabled:text-text-disabled disabled:opacity-80"
+              className="playback-dock__fixed-control playback-dock__primary-control"
             >
-              <PlayPauseIcon
-                playing={playback.status === "playing"}
+              <StateIcon
+                state={playback.status === "playing" ? "pause" : "play"}
                 className="playback-dock__primary-icon"
               />
-            </button>
-            <button
+            </IconButton>
+            <IconButton
               type="button"
               aria-label="Next track"
               aria-busy={pendingTransportCommand === "next"}
@@ -159,8 +184,8 @@ export function PlaybackDock({
               onClick={onNext}
               className="playback-dock__fixed-control playback-dock__navigation-control"
             >
-              <SkipTrackIcon direction="next" />
-            </button>
+              <AppIcon name="next" />
+            </IconButton>
           </div>
           <div
             className={`playback-dock__timeline${
@@ -183,7 +208,6 @@ export function PlaybackDock({
               min={0}
               max={duration ?? 0}
               step={1}
-              positionTransitionDuration={motionDurationSeconds.content}
               value={seekValue}
               disabled={
                 !isPlaybackAvailable ||
@@ -200,28 +224,30 @@ export function PlaybackDock({
         </div>
         <div className="playback-dock__secondary">
           <div className="playback-dock__context-controls">
-            <button
+            <IconButton
               ref={queueButtonRef}
               type="button"
-              className={`icon-button playback-dock__context-button${activeContextMode === "queue" ? " is-selected" : ""}`}
+              className="playback-dock__context-button"
+              selected={activeContextMode === "queue"}
               aria-label={activeContextMode === "queue" ? "Close queue" : "Open queue"}
               aria-expanded={activeContextMode === "queue"}
               aria-controls="playback-context-pane"
               onClick={() => onContextModeToggle("queue")}
             >
-              <QueueIcon />
-            </button>
-            <button
+              <AppIcon name="queue" />
+            </IconButton>
+            <IconButton
               ref={lyricsButtonRef}
               type="button"
-              className={`icon-button playback-dock__context-button${activeContextMode === "lyrics" ? " is-selected" : ""}`}
+              className="playback-dock__context-button"
+              selected={activeContextMode === "lyrics"}
               aria-label={activeContextMode === "lyrics" ? "Close lyrics" : "Open lyrics"}
               aria-expanded={activeContextMode === "lyrics"}
               aria-controls="playback-context-pane"
               onClick={() => onContextModeToggle("lyrics")}
             >
-              <LyricsIcon />
-            </button>
+              <AppIcon name="lyrics" />
+            </IconButton>
           </div>
           <VolumeControl
             playback={playback}

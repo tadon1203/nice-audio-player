@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import "@testing-library/jest-dom/vitest";
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ApplicationActivity } from "@/bindings";
 import { ApplicationActivityIndicator } from "./ApplicationActivityIndicator";
@@ -29,8 +29,11 @@ describe("ApplicationActivityIndicator", () => {
   });
 
   it("shows attention immediately", () => {
-    render(<ApplicationActivityIndicator activity={attention} />);
+    const onOpenSettings = vi.fn();
+    render(<ApplicationActivityIndicator activity={attention} onOpenSettings={onOpenSettings} />);
     act(() => vi.advanceTimersByTime(0));
     expect(screen.getByRole("status")).toHaveTextContent("Library update needs attention");
+    fireEvent.click(screen.getByRole("button", { name: "Open settings" }));
+    expect(onOpenSettings).toHaveBeenCalledOnce();
   });
 });

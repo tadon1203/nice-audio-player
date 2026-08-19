@@ -1,36 +1,26 @@
+.settings-scroll-surface {
+  block-size: 100%;
+  min-block-size: 0;
+  min-inline-size: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
 .settings-view {
   box-sizing: border-box;
-  max-inline-size: var(--content-max-width);
-  margin-inline: auto;
-  padding: 60px var(--layout-inline-padding);
+  padding-block: 60px;
 }
 .settings-view h1 {
   margin: 0;
   color: var(--color-text-primary);
-  font-family: var(--font-character);
-  font-size: var(--text-character-md);
-  font-weight: var(--font-weight-regular);
-  line-height: var(--text-character-md--line-height);
-  letter-spacing: var(--tracking-character-tight);
 }
 .settings-view h2 {
   margin: 20px 0 12px;
   color: var(--color-text-primary);
-  font-size: var(--text-title);
-  line-height: var(--text-title--line-height);
-  font-weight: var(--font-weight-semibold);
 }
 .settings-view p {
   margin: 0;
   color: var(--color-text-secondary);
-}
-.settings-view button {
-  min-block-size: 40px;
-  border: 1px solid var(--color-border-control);
-  border-radius: var(--radius-control);
-  background: transparent;
-  color: var(--color-text-primary);
-  padding-inline: 14px;
 }
 .settings-view__section {
   margin-block-start: 48px;
@@ -64,6 +54,10 @@
 .settings-view__roots > div:last-child {
   border: 0;
 }
+.settings-view__roots > .settings-view__roots-empty {
+  min-block-size: 68px;
+  padding: 12px 16px;
+}
 .settings-view__roots span {
   min-inline-size: 0;
 }
@@ -76,6 +70,30 @@
 }
 .settings-view__roots small {
   color: var(--color-text-secondary);
+}
+.settings-view__root-actions,
+.settings-view__root-toggle {
+  display: flex;
+  align-items: center;
+}
+.settings-view__root-actions {
+  gap: 8px;
+  flex: 0 0 auto;
+}
+.settings-view__root-toggle {
+  gap: 8px;
+  min-block-size: 40px;
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+.settings-view__root-toggle input {
+  inline-size: 18px;
+  block-size: 18px;
+  accent-color: var(--color-action-filled);
+}
+.settings-view__root-toggle:has(input:disabled) {
+  color: var(--color-text-disabled);
+  cursor: not-allowed;
 }
 .settings-view__scan {
   margin-block-start: 12px !important;
@@ -124,5 +142,12 @@
   .settings-view__section-head {
     align-items: start;
     flex-direction: column;
+  }
+  .settings-view__roots > div {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .settings-view__root-actions {
+    flex-wrap: wrap;
   }
 }

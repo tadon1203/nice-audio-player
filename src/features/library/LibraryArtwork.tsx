@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import type { ArtworkRef } from "@/bindings";
 import { resolveArtworkUrl } from "@/lib/artwork-url";
+import { effectsMotion } from "@/lib/motion";
 
 const artworkUrlCache = new WeakMap<object, Promise<string | null>>();
 
@@ -37,12 +39,37 @@ export function LibraryArtwork({
 }) {
   const resolvedArtworkUrl = useLibraryArtworkUrl(artwork);
   const url = resolvedUrl === undefined ? resolvedArtworkUrl : resolvedUrl;
-  return url ? (
-    <img className={`library-view__artwork ${className ?? ""}`} src={url} alt="" />
-  ) : (
-    <span
-      className={`library-view__artwork library-view__artwork--placeholder ${className ?? ""}`}
-      aria-hidden="true"
-    />
+  const reducedMotion = useReducedMotion();
+  const transition = {
+    duration: reducedMotion ? effectsMotion.reduced : effectsMotion.image,
+    ease: effectsMotion.ease,
+  };
+  return (
+    <span className="library-artwork-transition">
+      <AnimatePresence initial={false}>
+        {url ? (
+          <motion.img
+            key={url}
+            className={`library-view__artwork ${className ?? ""}`}
+            src={url}
+            alt=""
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={transition}
+          />
+        ) : (
+          <motion.span
+            key="placeholder"
+            className={`library-view__artwork library-view__artwork--placeholder ${className ?? ""}`}
+            aria-hidden="true"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={transition}
+          />
+        )}
+      </AnimatePresence>
+    </span>
   );
 }

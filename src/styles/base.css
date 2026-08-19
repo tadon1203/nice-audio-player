@@ -32,7 +32,7 @@
   }
 
   .motion-feedback {
-    transition-duration: var(--motion-feedback);
+    transition-duration: var(--effect-feedback);
     transition-timing-function: var(--ease-interface);
   }
 
@@ -93,7 +93,7 @@
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-property: opacity, color, background-color, border-color !important;
-    transition-duration: var(--motion-reduced) !important;
+    transition-duration: var(--effect-reduced) !important;
     scroll-behavior: auto !important;
   }
 }

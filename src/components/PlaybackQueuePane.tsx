@@ -1,7 +1,11 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import type { PlaybackQueueItem, PlaybackQueueMoveDirection, PlaybackRepeatMode } from "@/bindings";
 import { formatPlaybackTime } from "@/lib/playback-time";
-import { MoreIcon, RepeatIcon, ShuffleIcon } from "./icons";
+import { AppIcon } from "./ui/AppIcon";
+import { StateIcon } from "./ui/StateIcon";
+import { IconButton } from "./ui/IconButton";
+import { PlayingMarker } from "./ui/PlayingMarker";
+import { useScrollRegion } from "@/hooks/use-scroll-region";
 type QueueState = {
   current: PlaybackQueueItem | null;
   upcoming: PlaybackQueueItem[];
@@ -26,7 +30,10 @@ export function PlaybackQueuePane({
 }) {
   const [menuId, setMenuId] = useState<string | null>(null);
   const menuButtonRef = useRef<HTMLButtonElement | null>(null);
+  const returnFocusRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const restoreMenuFocusRef = useRef(false);
+  const { setViewportElement, setContentElement, scrollToElement } = useScrollRegion();
   const current = queue.current;
   const upcoming = queue.upcoming;
   useEffect(() => {
@@ -39,11 +46,22 @@ export function PlaybackQueuePane({
   useEffect(() => {
     if (!menuId) return;
     const first = menuRef.current?.querySelector<HTMLButtonElement>("button:not(:disabled)");
-    first?.focus();
-  }, [menuId]);
+    if (!first) return;
+    first.focus({ preventScroll: true });
+    scrollToElement(first, "nearest", "instant");
+  }, [menuId, scrollToElement]);
+  useLayoutEffect(() => {
+    if (menuId || !restoreMenuFocusRef.current) return;
+    restoreMenuFocusRef.current = false;
+    const trigger = returnFocusRef.current;
+    returnFocusRef.current = null;
+    if (!trigger?.isConnected) return;
+    trigger.focus({ preventScroll: true });
+    scrollToElement(trigger, "nearest", "instant");
+  }, [menuId, scrollToElement]);
   function closeMenu(restoreFocus = true) {
+    restoreMenuFocusRef.current = restoreFocus;
     setMenuId(null);
-    if (restoreFocus) window.setTimeout(() => menuButtonRef.current?.focus(), 0);
   }
   function handleMenuKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     const actions = Array.from(
@@ -70,7 +88,9 @@ export function PlaybackQueuePane({
             ? actions.length - 1
             : (currentIndex + (event.key === "ArrowDown" ? 1 : -1) + actions.length) %
               actions.length;
-      actions[next]?.focus();
+      const target = actions[next];
+      target?.focus({ preventScroll: true });
+      if (target) scrollToElement(target, "nearest", "instant");
     }
   }
   return (
@@ -91,14 +111,7 @@ export function PlaybackQueuePane({
           {current ? (
             <div className="playback-queue__current">
               {playbackStatus === "stopped" || playbackStatus === "failed" ? null : (
-                <span
-                  className={`playback-queue__playing-bars${playbackStatus === "paused" ? " is-paused" : ""}`}
-                  aria-hidden="true"
-                >
-                  <i />
-                  <i />
-                  <i />
-                </span>
+                <PlayingMarker />
               )}
               <div>
                 <strong>{current.title}</strong>
@@ -123,82 +136,91 @@ export function PlaybackQueuePane({
               Clear upcoming
             </button>
           </div>
-          <div className="playback-queue__list">
-            {upcoming.length ? (
-              upcoming.map((item, index) => {
-                const absolute = index;
-                const first = index === 0;
-                const last = index === upcoming.length - 1;
-                return (
-                  <div className="playback-queue__row" key={item.id}>
-                    <span className="playback-queue__index">{absolute + 1}</span>
-                    <div className="playback-queue__track">
-                      <strong title={item.title}>{item.title}</strong>
-                      {item.artist ? <span>{item.artist}</span> : null}
-                    </div>
-                    {item.durationMs ? <time>{formatPlaybackTime(item.durationMs)}</time> : null}
-                    <div className="playback-queue__menu-wrap">
-                      <button
-                        ref={menuId === item.id ? menuButtonRef : undefined}
-                        type="button"
-                        className="icon-button playback-queue__more"
-                        data-tooltip="More actions"
-                        title="More actions"
-                        aria-label={`More actions for ${item.title}`}
-                        aria-haspopup="menu"
-                        aria-expanded={menuId === item.id}
-                        onClick={() => setMenuId(menuId === item.id ? null : item.id)}
-                      >
-                        <MoreIcon />
-                      </button>
-                      {menuId === item.id ? (
-                        <div
-                          ref={menuRef}
-                          className="playback-queue__menu"
-                          role="menu"
-                          onKeyDown={handleMenuKeyDown}
+          <div ref={setViewportElement} className="playback-queue__list" data-scroll-region>
+            <div ref={setContentElement} className="playback-queue__list-content">
+              {upcoming.length ? (
+                upcoming.map((item, index) => {
+                  const absolute = index;
+                  const first = index === 0;
+                  const last = index === upcoming.length - 1;
+                  return (
+                    <div className="playback-queue__row" key={item.id}>
+                      <span className="playback-queue__index">{absolute + 1}</span>
+                      <div className="playback-queue__track">
+                        <strong title={item.title}>{item.title}</strong>
+                        {item.artist ? <span>{item.artist}</span> : null}
+                      </div>
+                      {item.durationMs ? <time>{formatPlaybackTime(item.durationMs)}</time> : null}
+                      <div className="playback-queue__menu-wrap">
+                        <IconButton
+                          ref={menuId === item.id ? menuButtonRef : undefined}
+                          type="button"
+                          className="playback-queue__more"
+                          data-tooltip="More actions"
+                          title="More actions"
+                          aria-label={`More actions for ${item.title}`}
+                          aria-haspopup="menu"
+                          aria-expanded={menuId === item.id}
+                          onClick={(event) => {
+                            if (menuId === item.id) {
+                              closeMenu();
+                              return;
+                            }
+                            returnFocusRef.current = event.currentTarget;
+                            setMenuId(item.id);
+                          }}
                         >
-                          <button
-                            role="menuitem"
-                            disabled={first || queue.pending}
-                            onClick={() => {
-                              queue.moveItem(item.id, "earlier");
-                              closeMenu();
-                            }}
+                          <AppIcon name="more" />
+                        </IconButton>
+                        {menuId === item.id ? (
+                          <div
+                            ref={menuRef}
+                            className="playback-queue__menu"
+                            role="menu"
+                            onKeyDown={handleMenuKeyDown}
                           >
-                            Move earlier
-                          </button>
-                          <button
-                            role="menuitem"
-                            disabled={last || queue.pending}
-                            onClick={() => {
-                              queue.moveItem(item.id, "later");
-                              closeMenu();
-                            }}
-                          >
-                            Move later
-                          </button>
-                          <button
-                            role="menuitem"
-                            disabled={queue.pending}
-                            onClick={() => {
-                              queue.removeItem(item.id);
-                              closeMenu();
-                            }}
-                          >
-                            Remove from queue
-                          </button>
-                        </div>
-                      ) : null}
+                            <button
+                              role="menuitem"
+                              disabled={first || queue.pending}
+                              onClick={() => {
+                                queue.moveItem(item.id, "earlier");
+                                closeMenu();
+                              }}
+                            >
+                              Move earlier
+                            </button>
+                            <button
+                              role="menuitem"
+                              disabled={last || queue.pending}
+                              onClick={() => {
+                                queue.moveItem(item.id, "later");
+                                closeMenu();
+                              }}
+                            >
+                              Move later
+                            </button>
+                            <button
+                              role="menuitem"
+                              disabled={queue.pending}
+                              onClick={() => {
+                                queue.removeItem(item.id);
+                                closeMenu();
+                              }}
+                            >
+                              Remove from queue
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
                     </div>
-                  </div>
-                );
-              })
-            ) : (
-              <p className="playback-queue__empty">
-                {current ? "Nothing up next." : "Queue is empty."}
-              </p>
-            )}
+                  );
+                })
+              ) : (
+                <p className="playback-queue__empty">
+                  {current ? "Nothing up next." : "Queue is empty."}
+                </p>
+              )}
+            </div>
           </div>
         </section>
       ) : null}
@@ -215,20 +237,22 @@ export function PlaybackQueueActions({ queue }: { queue: QueueState }) {
         : "Repeat one";
   return (
     <div className="playback-queue__tools">
-      <button
+      <IconButton
         type="button"
-        className={`icon-button playback-queue__icon-button${queue.shuffleEnabled ? " is-selected" : ""}`}
+        className="playback-queue__icon-button"
+        selected={queue.shuffleEnabled}
         data-tooltip={queue.shuffleEnabled ? "Turn shuffle off" : "Turn shuffle on"}
         title={queue.shuffleEnabled ? "Turn shuffle off" : "Turn shuffle on"}
         aria-pressed={queue.shuffleEnabled}
         aria-label={queue.shuffleEnabled ? "Turn shuffle off" : "Turn shuffle on"}
         onClick={() => queue.setShuffle(!queue.shuffleEnabled)}
       >
-        <ShuffleIcon />
-      </button>
-      <button
+        <AppIcon name="shuffle" />
+      </IconButton>
+      <IconButton
         type="button"
-        className={`icon-button playback-queue__icon-button${queue.repeatMode !== "off" ? " is-selected" : ""}`}
+        className="playback-queue__icon-button"
+        selected={queue.repeatMode !== "off"}
         data-tooltip={repeatLabel}
         title={repeatLabel}
         aria-label={repeatLabel}
@@ -238,10 +262,9 @@ export function PlaybackQueueActions({ queue }: { queue: QueueState }) {
           )
         }
       >
-        <RepeatIcon />
-        {queue.repeatMode === "one" ? <span className="playback-queue__repeat-one">1</span> : null}
+        <StateIcon state={queue.repeatMode === "one" ? "repeatOne" : "repeat"} />
         <span className="sr-only">{repeatLabel}</span>
-      </button>
+      </IconButton>
     </div>
   );
 }
