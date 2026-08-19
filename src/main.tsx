@@ -1,5 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+import { MotionConfig } from "motion/react";
 import App from "./App";
 import { LayoutFixtureApp } from "./test/LayoutFixtureApp";
 import { resolveLayoutFixture } from "./test/layout-fixture-state";
@@ -13,5 +14,7 @@ const application =
   );
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
-  <React.StrictMode>{application}</React.StrictMode>,
+  <React.StrictMode>
+    <MotionConfig reducedMotion="user">{application}</MotionConfig>
+  </React.StrictMode>,
 );

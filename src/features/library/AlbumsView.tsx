@@ -7,11 +7,17 @@ export function AlbumsView({
   hasMore,
   onEnd,
   onOpen,
+  scrollRoot,
+  returnFocusAlbumId,
+  onReturnFocusRestored,
 }: {
   albums: LibraryAlbumSummary[];
   hasMore: boolean;
   onEnd: () => void;
   onOpen: (album: LibraryAlbumSummary) => void;
+  scrollRoot: HTMLElement | null;
+  returnFocusAlbumId: string | null;
+  onReturnFocusRestored: () => void;
 }) {
   const sentinelRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -20,16 +26,22 @@ export function AlbumsView({
       ([entry]) => {
         if (entry?.isIntersecting) onEnd();
       },
-      { root: document.querySelector(".app-shell__main") },
+      { root: scrollRoot },
     );
     observer.observe(sentinelRef.current);
     return () => observer.disconnect();
-  }, [hasMore, onEnd]);
+  }, [hasMore, onEnd, scrollRoot]);
   return (
     <section className="library-view__album-section" aria-label="Albums">
       <div className="library-view__album-grid">
         {albums.map((album) => (
-          <AlbumCard key={album.id} album={album} onOpen={onOpen} />
+          <AlbumCard
+            key={album.id}
+            album={album}
+            onOpen={onOpen}
+            returnFocus={returnFocusAlbumId === album.id}
+            onReturnFocusRestored={onReturnFocusRestored}
+          />
         ))}
       </div>
       <div ref={sentinelRef} aria-hidden="true" />

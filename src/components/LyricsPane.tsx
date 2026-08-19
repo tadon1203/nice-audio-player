@@ -38,14 +38,9 @@ function LyricsLines({
   onRequestSeek: (positionMs: number) => Promise<AcceptedPlaybackSeek | null>;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [viewport, setViewport] = useState<HTMLDivElement | null>(null);
   const content = document.content;
   const timed = content.kind === "timed" ? content.lines : null;
   const cueGroups = useMemo(() => (timed ? groupTimedLyrics(timed) : []), [timed]);
-  const assignViewport = useCallback((element: HTMLDivElement | null) => {
-    scrollRef.current = element;
-    setViewport(element);
-  }, []);
   const follow = useLyricsFollow(
     scrollRef,
     timed ?? [],
@@ -54,7 +49,6 @@ function LyricsLines({
     playbackRevision,
     trackId,
     Boolean(timed),
-    viewport,
     acceptedSeek,
   );
   const {
@@ -65,6 +59,8 @@ function LyricsLines({
     prepareCueSeek,
     cancelCueSeek,
     revealElement,
+    setViewportElement,
+    setContentElement,
   } = follow;
   const [rovingState, setRovingState] = useState<{ trackId: string; ordinal: number | null }>({
     trackId,
@@ -77,6 +73,13 @@ function LyricsLines({
     rovingOrdinal !== null && seekableGroups.some((cue) => cue.ordinal === rovingOrdinal)
       ? rovingOrdinal
       : (currentSeekable ?? seekableGroups[0]?.ordinal ?? null);
+  const assignViewport = useCallback(
+    (element: HTMLDivElement | null) => {
+      scrollRef.current = element;
+      setViewportElement(element);
+    },
+    [setViewportElement],
+  );
   const activateCue = useCallback(
     (_ordinal: number, startMs: number) => {
       if (!canSeek) return;
@@ -147,8 +150,8 @@ function LyricsLines({
       : [];
   return (
     <div className="lyrics-pane__viewport">
-      <div className="lyrics-pane__scroll" ref={assignViewport}>
-        <div className="lyrics-pane__body">
+      <div className="lyrics-pane__scroll" ref={assignViewport} data-scroll-region>
+        <div className="lyrics-pane__body" ref={setContentElement}>
           {timed
             ? cueGroups.map((cue) => {
                 const contentLines = cue.indices.map((index) => timed[index]!);

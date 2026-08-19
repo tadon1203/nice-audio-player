@@ -1,10 +1,11 @@
 import type { KeyboardEvent, ReactNode, RefObject } from "react";
-import { useEffect, useId, useRef } from "react";
+import { useId, useLayoutEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { motion, useReducedMotion } from "motion/react";
-import { interfaceEase, motionDurationSeconds, reducedMotionDurationSeconds } from "@/lib/motion";
+import { AnimatePresence, motion, useIsPresent, useReducedMotion } from "motion/react";
+import { effectsMotion } from "@/lib/motion";
 
 interface DialogProps {
+  open: boolean;
   title: string;
   children: ReactNode;
   role?: "dialog" | "alertdialog";
@@ -13,7 +14,22 @@ interface DialogProps {
   fallbackFocusRef?: RefObject<HTMLElement | null>;
 }
 
+function DialogPresence({ children }: { children: ReactNode }) {
+  const present = useIsPresent();
+  return (
+    <div
+      className="dialog-presence"
+      data-state={present ? "open" : "closing"}
+      inert={!present || undefined}
+      aria-hidden={!present || undefined}
+    >
+      {children}
+    </div>
+  );
+}
+
 export function Dialog({
+  open,
   title,
   children,
   role = "dialog",
@@ -22,24 +38,40 @@ export function Dialog({
   fallbackFocusRef,
 }: DialogProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
+  const returnFocusRef = useRef<HTMLElement | null>(null);
   const titleId = useId();
   const reducedMotion = useReducedMotion();
-  useEffect(() => {
+  useLayoutEffect(() => {
     const root = document.getElementById("root");
-    const returnFocusTarget =
-      document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const fallbackRef = fallbackFocusRef;
-    root?.setAttribute("inert", "");
-    initialFocusRef?.current?.focus();
-    return () => {
-      root?.removeAttribute("inert");
-      const fallbackFocusTarget = fallbackRef?.current;
-      const target = returnFocusTarget?.isConnected ? returnFocusTarget : fallbackFocusTarget;
-      window.setTimeout(() => {
-        if (target?.isConnected && !target.hasAttribute("disabled")) target.focus();
-      }, 0);
-    };
-  }, [fallbackFocusRef, initialFocusRef]);
+    if (open) {
+      returnFocusRef.current =
+        document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      root?.setAttribute("inert", "");
+      initialFocusRef?.current?.focus({ preventScroll: true });
+      return;
+    }
+    root?.removeAttribute("inert");
+    const target = returnFocusRef.current?.isConnected
+      ? returnFocusRef.current
+      : fallbackFocusRef?.current;
+    returnFocusRef.current = null;
+    if (target?.isConnected && !target.hasAttribute("disabled")) {
+      target.focus({ preventScroll: true });
+    }
+  }, [fallbackFocusRef, initialFocusRef, open]);
+  useLayoutEffect(
+    () => () => {
+      document.getElementById("root")?.removeAttribute("inert");
+      const target = returnFocusRef.current?.isConnected
+        ? returnFocusRef.current
+        : fallbackFocusRef?.current;
+      returnFocusRef.current = null;
+      if (target?.isConnected && !target.hasAttribute("disabled")) {
+        target.focus({ preventScroll: true });
+      }
+    },
+    [fallbackFocusRef],
+  );
   function trapFocus(event: KeyboardEvent<HTMLDivElement>) {
     if (event.key === "Escape") {
       event.preventDefault();
@@ -63,26 +95,46 @@ export function Dialog({
   }
   const overlay = document.getElementById("overlay-root");
   if (!overlay) return null;
+  const enterDuration = reducedMotion ? effectsMotion.reduced : effectsMotion.state;
+  const exitDuration = reducedMotion ? effectsMotion.reduced : effectsMotion.feedback;
   return createPortal(
-    <div className="dialog-backdrop" onMouseDown={(event) => event.stopPropagation()}>
-      <motion.div
-        ref={dialogRef}
-        role={role}
-        aria-modal="true"
-        aria-labelledby={titleId}
-        className="dialog"
-        onKeyDown={trapFocus}
-        initial={reducedMotion ? { opacity: 0 } : { opacity: 0, scale: 0.98, y: 8 }}
-        animate={reducedMotion ? { opacity: 1 } : { opacity: 1, scale: 1, y: 0 }}
-        transition={{
-          duration: reducedMotion ? reducedMotionDurationSeconds : motionDurationSeconds.state,
-          ease: interfaceEase,
-        }}
-      >
-        <h2 id={titleId}>{title}</h2>
-        {children}
-      </motion.div>
-    </div>,
+    <AnimatePresence initial={false}>
+      {open ? (
+        <motion.div
+          key="dialog"
+          className="dialog-backdrop"
+          onMouseDown={(event) => event.stopPropagation()}
+          initial={{ backgroundColor: "rgb(0 0 0 / 0%)" }}
+          animate={{ backgroundColor: "rgb(0 0 0 / 60%)" }}
+          exit={{
+            backgroundColor: "rgb(0 0 0 / 0%)",
+            transition: { duration: exitDuration, ease: effectsMotion.ease },
+          }}
+          transition={{ duration: enterDuration, ease: effectsMotion.ease }}
+        >
+          <DialogPresence>
+            <motion.div
+              ref={dialogRef}
+              role={role}
+              aria-modal="true"
+              aria-labelledby={titleId}
+              className="dialog"
+              onKeyDown={trapFocus}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{
+                opacity: 0,
+                transition: { duration: exitDuration, ease: effectsMotion.ease },
+              }}
+              transition={{ duration: enterDuration, ease: effectsMotion.ease }}
+            >
+              <h2 id={titleId}>{title}</h2>
+              {children}
+            </motion.div>
+          </DialogPresence>
+        </motion.div>
+      ) : null}
+    </AnimatePresence>,
     overlay,
   );
 }

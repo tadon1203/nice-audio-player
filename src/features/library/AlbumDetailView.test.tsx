@@ -54,30 +54,39 @@ function renderDetail({
   nextOffset = null,
   playbackAvailable = true,
   firstPlayableTrackId = items[0]?.id ?? null,
+  summary = album,
 }: {
   items?: LibraryAlbumTrackSummary[];
   nextOffset?: number | null;
   playbackAvailable?: boolean;
   firstPlayableTrackId?: string | null;
+  summary?: LibraryAlbumSummary;
 } = {}) {
   const onPlayTrack = vi.fn();
   const onPlayAlbum = vi.fn();
   const loadNext = vi.fn();
   mocks.useAlbumDetailQuery.mockReturnValue({
     details: {
-      summary: album,
-      date: "2000-09-27T09:00:00",
-      trackCount: items.length,
-      durationMs: 272_000,
-      firstPlayableTrackId,
+      value: {
+        summary,
+        date: "2000-09-27T09:00:00",
+        trackCount: items.length,
+        durationMs: 272_000,
+        firstPlayableTrackId,
+      },
+      loading: false,
+      error: null,
+      retry: vi.fn(),
     },
-    items,
-    error: null,
-    loading: false,
-    nextOffset,
-    loadingNext: false,
-    retry: vi.fn(),
-    loadNext,
+    tracks: {
+      items,
+      error: null,
+      loading: false,
+      nextOffset,
+      loadingNext: false,
+      retry: vi.fn(),
+      loadNext,
+    },
   });
   render(
     <AlbumDetailView
@@ -89,7 +98,6 @@ function renderDetail({
       onPlayAlbum={onPlayAlbum}
       activeTrackId={null}
       playbackStatus="stopped"
-      scrollElement={null}
     />,
   );
   return { loadNext, onPlayTrack, onPlayAlbum };
@@ -106,6 +114,19 @@ describe("AlbumDetailView", () => {
     renderDetail();
     expect(document.querySelectorAll("img")).toHaveLength(1);
     expect(document.querySelector(".album-detail__artwork")).toHaveAttribute("src", artworkUrl);
+  });
+
+  it("keeps Zodiak exclusive to Latin media titles and avoids mixed-script fallback", () => {
+    renderDetail();
+    expect(screen.getByRole("heading", { name: "Album title" })).not.toHaveClass(
+      "type-media-title--interface",
+    );
+    cleanup();
+
+    renderDetail({ summary: { ...album, title: "夜のアルバム Album" } });
+    expect(screen.getByRole("heading", { name: "夜のアルバム Album" })).toHaveClass(
+      "type-media-title--interface",
+    );
   });
 
   it("plays the album and clicked track, formats the date, and omits matching artists", () => {

@@ -265,7 +265,36 @@ A change that modifies a durable implementation rule or boundary must update thi
 
 A change that modifies visual or interaction principles must update `DESIGN.md`.
 
-CSS owns hover, focus, pressed, color, border, and ordinary opacity transitions. Motion for React owns coordinated SVG geometry transitions. Reduced-motion behavior follows `DESIGN.md`.
+React owns semantic and transient interaction state. CSS owns final responsive geometry and non-spatial visual
+state. Motion owns structural spatial continuity and presence between valid endpoint geometries. Lenis owns
+animated viewport movement for primary application scroll regions; native input owns directly manipulated
+position. Lucide owns static icon geometry and Morphicons owns same-control semantic icon continuity.
+Reduced-motion behavior follows `DESIGN.md`.
+
+Shared UI primitives own reusable control grammar, semantic typography metrics, and page/content frame
+relationships. Feature code composes those laws and retains only feature topology, content, and semantic
+reasons for movement; it must not override the primitive's interaction geometry or typography role.
+
+### Frontend change patterns
+
+Visible frontend changes are classified before a motion primitive is selected. A state update preserves the
+same semantic object and never changes a React key only to force animation. An exclusive replacement is a
+complete subtree replacing another complete subtree in one slot and uses the shared neutral `ExclusiveRegion`.
+An optional surface owns its own presence because it has a real surface relationship. Shared-identity drill-in
+uses `layoutId` only for the same semantic object, and that identity owner owns the visible projection box:
+size, clipping, and radius. It is never combined with an unrelated ancestor spatial transition.
+
+Progressive data keeps the existing surface and item identities while independently available resources resolve
+or pages append. Direct manipulation remains native and immediate. Resize, breakpoint, restoration, and
+re-anchoring are corrections, not navigation, and resolve to their final geometry immediately when motion would
+communicate a false cause.
+
+`AnimatePresence` belongs to the component that owns a subtree's mount/remove lifetime; it is not a wrapper for
+arbitrary changing content. Focus follows semantic interaction or navigation, not animation duration or exit
+completion. Timers may express an information-visibility policy, but never animation phases. Every application
+scroll surface owns its viewport, content element, Lenis controller, cleanup, and restoration state through the
+shared scroll-region hook. Children receive that scroll root explicitly and never discover it with a document-wide
+query.
 
 ## 17. Library Synchronization Boundaries
 
@@ -282,10 +311,22 @@ define its lifecycle separately before sharing this maintenance path.
 persistence. `LibraryRuntime` coordinates Library lifecycle work only; it is not a generic application
 background-job scheduler.
 
-Application-owned scroll positioning uses the shared frontend scroll controller. User-driven wheel,
-touch, keyboard, and scrollbar scrolling remains native. Features own the semantic reason for a
-movement; the shared layer owns geometry, timing, cancellation, reduced-motion handling, and
-programmatic/user classification.
+Primary application scroll regions use the shared frontend Lenis controller. Features own the semantic reason
+for a move; the shared region owns geometry, Lenis execution, interruption, reduced-motion conversion,
+cleanup, and programmatic/user classification. Lenis owns wheel and touch input processing; controller-owned
+programmatic travel must be invalidated without stopping that in-flight user input. Scrollbar and keyboard
+scrolling remain browser-directed. Programmatic spatial state is frontend-only and never enters
+playback snapshots, queue snapshots, IPC, or Rust authority.
+
+Each semantic surface owns its scroll viewport, content element, controller, and restoration state. A shell
+may clip and transition surfaces, but it does not lend one mutable `scrollTop` to entering and exiting
+destinations. While visual presence keeps an exiting surface mounted, its viewport remains frozen at its own
+position and the entering surface begins from its own valid position.
+
+Logical presence changes immediately. Exiting UI may remain mounted only for visual completion and becomes
+inert, hidden from the accessibility tree, and non-interactive as soon as exit begins. Responsive correction
+is discontinuous positioning: breakpoint changes snap to their final geometry and do not inherit an active
+layout projection.
 
 Authoritative playback snapshots describe audio state. Frontend-only accepted seek receipts may carry
 that a user-confirmed position change was accepted for presentation motion, but never redefine

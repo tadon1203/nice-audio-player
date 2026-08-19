@@ -1,11 +1,19 @@
-import { useRef } from "react";
+import { useLayoutEffect, useRef } from "react";
+import { motion, useReducedMotion } from "motion/react";
 import type { LibraryAlbumSummary, LibraryAlbumTrackSummary } from "@/bindings";
-import { PlayIcon } from "@/components/icons";
+import { AppIcon } from "@/components/ui/AppIcon";
 import { Button } from "@/components/ui/Button";
+import { PlayingMarker } from "@/components/ui/PlayingMarker";
 import { formatLongPlaybackTime, formatPlaybackTime } from "@/lib/playback-time";
+import { effectsMotion } from "@/lib/motion";
 import { formatLibraryDate } from "@/lib/library-date";
 import { LibraryArtwork, useLibraryArtworkUrl } from "./LibraryArtwork";
 import { useAlbumDetailQuery } from "./use-album-detail-query";
+import { AlbumArtworkIdentity } from "./AlbumArtworkIdentity";
+
+const latinMediaTitle = /^[\p{Script=Latin}\p{Number}\p{Punctuation}\p{Separator}\p{Mark}]+$/u;
+const usesCharacterTitle = (title: string) =>
+  latinMediaTitle.test(title) && title.trim().split(/\s+/u).length <= 6;
 
 export function AlbumDetailView({
   album,
@@ -16,7 +24,6 @@ export function AlbumDetailView({
   onPlayAlbum,
   activeTrackId,
   playbackStatus,
-  scrollElement: _scrollElement,
 }: {
   album: LibraryAlbumSummary;
   refreshKey: number;
@@ -26,31 +33,45 @@ export function AlbumDetailView({
   onPlayAlbum: (id: string) => void;
   activeTrackId: string | null;
   playbackStatus: "stopped" | "playing" | "paused" | "failed";
-  scrollElement?: HTMLElement | null;
 }) {
   const backRef = useRef<HTMLButtonElement>(null);
   const query = useAlbumDetailQuery(album.id, refreshKey, true);
-  const detail = query.details;
+  const reducedMotion = useReducedMotion();
+  const detail = query.details.value;
   const summary = detail?.summary ?? album;
-  const grouped = groupTracks(query.items);
+  const grouped = groupTracks(query.tracks.items);
   const artworkUrl = useLibraryArtworkUrl(summary.artwork);
+  useLayoutEffect(() => {
+    backRef.current?.focus({ preventScroll: true });
+  }, []);
   return (
-    <section className="album-detail" aria-label={`${summary.title} album detail`}>
-      <div className="album-detail__content">
+    <section className="album-detail page-frame" aria-label={`${summary.title} album detail`}>
+      <div className="album-detail__content content-frame">
         <button ref={backRef} type="button" className="album-detail__back" onClick={onBack}>
           ← <span>Back to albums</span>
         </button>
         <div className="album-detail__hero">
-          <div className="album-detail__artwork-wrap">
+          <AlbumArtworkIdentity
+            albumId={album.id}
+            className="album-artwork-identity album-detail__artwork-wrap"
+          >
             <LibraryArtwork
               artwork={summary.artwork}
               resolvedUrl={artworkUrl}
               className="album-detail__artwork"
             />
-          </div>
+          </AlbumArtworkIdentity>
           <div className="album-detail__identity">
-            <h1>{summary.title}</h1>
-            <p className="album-detail__artist">{summary.albumArtist}</p>
+            <h1
+              className={
+                usesCharacterTitle(summary.title)
+                  ? "type-media-title"
+                  : "type-media-title type-media-title--interface"
+              }
+            >
+              {summary.title}
+            </h1>
+            <p className="album-detail__artist type-media-artist">{summary.albumArtist}</p>
             <p className="album-detail__meta">
               {[
                 detail?.date ? formatLibraryDate(detail.date) : null,
@@ -73,19 +94,27 @@ export function AlbumDetailView({
               disabled={!playbackAvailable || !detail?.firstPlayableTrackId}
               onClick={() => onPlayAlbum(album.id)}
             >
-              <PlayIcon /> Play album
+              <AppIcon name="play" /> Play album
             </Button>
           </div>
         </div>
-        {query.error ? (
+        {query.details.error ? (
           <div className="library-view__notice" role="alert">
-            {query.error}{" "}
-            <button type="button" onClick={query.retry}>
+            {query.details.error}{" "}
+            <Button type="button" onClick={query.details.retry}>
               Retry
-            </button>
+            </Button>
           </div>
         ) : null}
-        {query.loading && query.items.length === 0 ? (
+        {query.tracks.error ? (
+          <div className="library-view__notice" role="alert">
+            {query.tracks.error}{" "}
+            <Button type="button" onClick={query.tracks.retry}>
+              Retry
+            </Button>
+          </div>
+        ) : null}
+        {query.tracks.loading && query.tracks.items.length === 0 ? (
           <p className="library-view__notice">Loading album…</p>
         ) : (
           <div className="album-detail__tracks">
@@ -101,17 +130,20 @@ export function AlbumDetailView({
                 activeTrackId={activeTrackId}
                 playbackStatus={playbackStatus}
                 hideHeading={
-                  detail?.trackCount === 1 && query.items.length === 1 && query.nextOffset === null
+                  detail?.trackCount === 1 &&
+                  query.tracks.items.length === 1 &&
+                  query.tracks.nextOffset === null
                 }
+                animateRows={!reducedMotion}
               />
             ))}
-            {query.nextOffset !== null ? (
+            {query.tracks.nextOffset !== null ? (
               <Button
                 type="button"
                 variant="neutral"
                 className="album-detail__load-more"
-                onClick={query.loadNext}
-                disabled={query.loadingNext}
+                onClick={query.tracks.loadNext}
+                disabled={query.tracks.loadingNext}
               >
                 Load more
               </Button>
@@ -148,6 +180,7 @@ function TrackGroup({
   activeTrackId,
   playbackStatus,
   hideHeading,
+  animateRows,
 }: {
   label: string;
   tracks: LibraryAlbumTrackSummary[];
@@ -158,16 +191,26 @@ function TrackGroup({
   activeTrackId: string | null;
   playbackStatus: "stopped" | "playing" | "paused" | "failed";
   hideHeading: boolean;
+  animateRows: boolean;
 }) {
   return (
     <section className="album-detail__group">
-      {hideHeading ? null : <h2>{label}</h2>}
+      {hideHeading ? null : <h2 className="type-section-title">{label}</h2>}
       <ul className="album-detail__table" aria-label={label}>
         {tracks.map((t) => {
           const active =
             t.id === activeTrackId && (playbackStatus === "playing" || playbackStatus === "paused");
           return (
-            <li key={t.id}>
+            <motion.li
+              key={t.id}
+              initial={animateRows ? { opacity: 0 } : false}
+              animate={{ opacity: 1 }}
+              transition={
+                animateRows
+                  ? { duration: effectsMotion.content, ease: effectsMotion.ease }
+                  : { duration: 0 }
+              }
+            >
               <button
                 type="button"
                 className={`album-detail__row${active ? " album-detail__row--active" : ""}`}
@@ -184,18 +227,7 @@ function TrackGroup({
                 onClick={() => onPlayAlbumTrack(albumId, t.id)}
               >
                 <span className="album-detail__track-number type-numeric">
-                  {active ? (
-                    <span
-                      className={`album-detail__playing-bars${playbackStatus === "playing" ? " is-playing" : ""}`}
-                      aria-hidden="true"
-                    >
-                      <i />
-                      <i />
-                      <i />
-                    </span>
-                  ) : (
-                    (t.trackNumber ?? "—")
-                  )}
+                  {active ? <PlayingMarker /> : (t.trackNumber ?? "—")}
                 </span>
                 <span className="album-detail__track-title">
                   <span className="album-detail__track-title-main">{t.title}</span>
@@ -207,7 +239,7 @@ function TrackGroup({
                   {t.durationMs === null ? "--:--" : formatPlaybackTime(t.durationMs)}
                 </span>
               </button>
-            </li>
+            </motion.li>
           );
         })}
       </ul>

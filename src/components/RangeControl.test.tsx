@@ -88,7 +88,7 @@ describe("RangeControl", () => {
     expect(container.querySelector(".range-control")).toHaveAttribute("data-progress", "0");
   });
 
-  it("keeps animated position motion while pointer dragging", () => {
+  it("uses immediate position motion while pointer dragging", () => {
     render(
       <RangeControl
         aria-label="Motion range"
@@ -111,8 +111,29 @@ describe("RangeControl", () => {
       "0.5",
     );
     fireEvent.pointerDown(slider);
-    expect(control).toHaveAttribute("data-position-motion", "settled");
+    expect(control).toHaveAttribute("data-position-motion", "immediate");
     fireEvent.pointerUp(slider);
+    expect(control).toHaveAttribute("data-position-motion", "settled");
+  });
+
+  it("returns keyboard manipulation to settled state on key release without losing focus", () => {
+    render(
+      <RangeControl
+        aria-label="Keyboard motion range"
+        value={50}
+        min={0}
+        max={100}
+        step={1}
+        onValueChange={vi.fn()}
+      />,
+    );
+    const slider = screen.getByRole("slider", { name: "Keyboard motion range" });
+    const control = slider.parentElement!;
+    slider.focus();
+    fireEvent.keyDown(slider, { key: "ArrowRight" });
+    expect(control).toHaveAttribute("data-position-motion", "immediate");
+    fireEvent.keyUp(slider, { key: "ArrowRight" });
+    expect(document.activeElement).toBe(slider);
     expect(control).toHaveAttribute("data-position-motion", "settled");
   });
 

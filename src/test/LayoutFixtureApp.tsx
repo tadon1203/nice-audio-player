@@ -1,5 +1,5 @@
 import type { PlaybackQueueItem, PlaybackSnapshot, ValidatedAudioFile } from "@/bindings";
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { PlaybackDock } from "@/components/PlaybackDock";
 import { PlaybackQueuePane } from "@/components/PlaybackQueuePane";
@@ -39,6 +39,13 @@ export function LayoutFixtureApp({ fixture }: LayoutFixtureAppProps) {
   const [queueState, setQueueState] = useState<"open" | "closing" | null>(
     fixture === "queue-open" ? "open" : null,
   );
+  const queueButtonRef = useRef<HTMLButtonElement>(null);
+  const restoreQueueFocusRef = useRef(false);
+  useLayoutEffect(() => {
+    if (queueState !== null || !restoreQueueFocusRef.current) return;
+    queueButtonRef.current?.focus({ preventScroll: true });
+    restoreQueueFocusRef.current = false;
+  }, [queueState]);
   const playback = fixturePlayback(fixture);
   const playbackError = fixture === "failed" ? layoutStressFixtures.longError : null;
 
@@ -47,13 +54,14 @@ export function LayoutFixtureApp({ fixture }: LayoutFixtureAppProps) {
       <AppShell
         destination={destination}
         onDestinationChange={setDestination}
-        contextPaneState={queueState ?? undefined}
         contextPane={
           queueState ? (
             <PlaybackContextPane
               mode="queue"
-              onClose={() => setQueueState("closing")}
-              phase={queueState === "open" ? "open" : "closing"}
+              onClose={() => {
+                restoreQueueFocusRef.current = true;
+                setQueueState(null);
+              }}
             >
               <PlaybackQueuePane queue={layoutQueueFixture} playbackStatus="playing" />
             </PlaybackContextPane>
@@ -64,12 +72,14 @@ export function LayoutFixtureApp({ fixture }: LayoutFixtureAppProps) {
             <AlbumDetailLayoutFixture />
           ) : (
             <section
-              className={destination === "library" ? "library-view" : "settings-view"}
+              className={`${destination === "library" ? "library-view" : "settings-view"} page-frame`}
               data-fixture-view={destination}
               aria-label={destination === "library" ? "Library" : "Settings"}
             >
-              <h1>{destination === "library" ? "Library" : "Settings"}</h1>
-              <p>Deterministic {destination} fixture content.</p>
+              <div className="content-frame">
+                <h1>{destination === "library" ? "Library" : "Settings"}</h1>
+                <p>Deterministic {destination} fixture content.</p>
+              </div>
             </section>
           )
         }
@@ -102,6 +112,7 @@ export function LayoutFixtureApp({ fixture }: LayoutFixtureAppProps) {
             onVolumePointerCancel={noop}
             onVolumeButtonPress={noop}
             activeContextMode={queueState === "open" ? "queue" : null}
+            queueButtonRef={queueButtonRef}
             onContextModeToggle={() =>
               setQueueState((state) => (state === "open" ? "closing" : "open"))
             }
@@ -136,13 +147,17 @@ const layoutQueueFixture = {
 
 function AlbumDetailLayoutFixture() {
   return (
-    <section className="album-detail" data-fixture-view="library" aria-label="Album detail">
-      <div className="album-detail__content">
+    <section
+      className="album-detail page-frame"
+      data-fixture-view="library"
+      aria-label="Album detail"
+    >
+      <div className="album-detail__content content-frame">
         <button type="button" className="album-detail__back">
           ← Back to albums
         </button>
         <div className="album-detail__hero">
-          <div className="album-detail__artwork-wrap">
+          <div className="album-artwork-identity album-detail__artwork-wrap">
             <img
               className="album-detail__artwork library-view__artwork"
               src="data:image/gif;base64,R0lGODlhAQABAAD/ACw="

@@ -9,10 +9,14 @@ const scrollMock = vi.hoisted(() => ({
   scrollToElement: vi.fn(),
 }));
 
-vi.mock("./use-scroll-controller", () => ({
-  useScrollController: (_element: HTMLElement | null, onUserScroll: () => void) => {
+vi.mock("./use-scroll-region", () => ({
+  useScrollRegion: (onUserScroll: () => void) => {
     scrollMock.onUserScroll = onUserScroll;
-    return { scrollToElement: scrollMock.scrollToElement };
+    return {
+      scrollToElement: scrollMock.scrollToElement,
+      setViewportElement: vi.fn(),
+      setContentElement: vi.fn(),
+    };
   },
 }));
 
@@ -26,6 +30,20 @@ const lines: LyricsTimedLine[] = [
 const playback = { id: "playback-1", revision: 1 };
 
 describe("useLyricsFollow", () => {
+  it("reveals direct keyboard focus immediately", () => {
+    const viewport = document.createElement("div");
+    const line = document.createElement("button");
+    line.dataset.cueOrdinal = "0";
+    viewport.append(line);
+    const scrollRef = { current: viewport };
+    const { result } = renderHook(() =>
+      useLyricsFollow(scrollRef, lines, 0, playback.id, playback.revision, "track-1", true, null),
+    );
+    scrollMock.scrollToElement.mockClear();
+    act(() => result.current.revealElement(line));
+    expect(scrollMock.scrollToElement).toHaveBeenLastCalledWith(line, "nearest", "instant");
+  });
+
   it("detaches on user scroll and returns with one smooth request", () => {
     const viewport = document.createElement("div");
     const line = document.createElement("p");
@@ -41,7 +59,6 @@ describe("useLyricsFollow", () => {
         playback.revision,
         "track-1",
         true,
-        viewport,
         null,
       ),
     );
@@ -74,7 +91,6 @@ describe("useLyricsFollow", () => {
           playback.revision,
           "track-1",
           true,
-          viewport,
           null,
         ),
       { initialProps: { positionMs: 0 } },
@@ -87,14 +103,15 @@ describe("useLyricsFollow", () => {
     expect(scrollMock.scrollToElement).toHaveBeenLastCalledWith(second, "center", "smooth");
   });
 
-  it("animates a successful accepted seek regardless of its control", () => {
+  it("reanchors a non-adjacent accepted seek immediately", () => {
     const jumpLines: LyricsTimedLine[] = [
       { startMs: 0, text: "First" },
-      { startMs: 10_000, text: "Distant" },
+      { startMs: 10_000, text: "Middle" },
+      { startMs: 20_000, text: "Distant" },
     ];
     const viewport = document.createElement("div");
     const target = document.createElement("p");
-    target.dataset.cueOrdinal = "1";
+    target.dataset.cueOrdinal = "2";
     viewport.append(target);
     const scrollRef = { current: viewport };
     const { result, rerender } = renderHook(
@@ -107,7 +124,6 @@ describe("useLyricsFollow", () => {
           revision,
           "track-1",
           true,
-          viewport,
           acceptedSeek,
         ),
       {
@@ -121,18 +137,18 @@ describe("useLyricsFollow", () => {
     scrollMock.scrollToElement.mockClear();
 
     rerender({
-      positionMs: 10_000,
+      positionMs: 20_000,
       revision: 2,
       acceptedSeek: {
         id: 1,
         playbackId: playback.id,
         acceptedRevision: 2,
-        positionMs: 10_000,
+        positionMs: 20_000,
       },
     });
 
     expect(result.current.following).toBe(true);
-    expect(scrollMock.scrollToElement).toHaveBeenLastCalledWith(target, "center", "smooth");
+    expect(scrollMock.scrollToElement).toHaveBeenLastCalledWith(target, "center", "instant");
   });
 
   it("keeps a manual detachment over an accepted seek", () => {
@@ -153,7 +169,6 @@ describe("useLyricsFollow", () => {
           revision,
           "track-1",
           true,
-          viewport,
           acceptedSeek,
         ),
       {
@@ -200,7 +215,6 @@ describe("useLyricsFollow", () => {
           revision,
           "track-1",
           true,
-          viewport,
           acceptedSeek,
         ),
       {

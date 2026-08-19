@@ -1,5 +1,5 @@
 import { motion, useReducedMotion } from "motion/react";
-import { interfaceEase, motionDurationSeconds } from "@/lib/motion";
+import { spatialIndicator } from "@/lib/motion";
 
 export function LibraryPresentationTabs({
   presentation,
@@ -29,7 +29,7 @@ export function LibraryPresentationTabs({
                 <motion.span
                   className="library-view__tab-indicator"
                   layoutId="library-presentation-indicator"
-                  transition={{ duration: motionDurationSeconds.state, ease: interfaceEase }}
+                  transition={spatialIndicator}
                   aria-hidden="true"
                 />
               )

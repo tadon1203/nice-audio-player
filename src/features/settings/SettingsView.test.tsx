@@ -65,6 +65,16 @@ describe("SettingsView root removal", () => {
     expect(buttons[1]).not.toHaveFocus();
   });
 
+  it("uses a labelled native checkbox and an independent danger action for each root", async () => {
+    mocks.listLibraryRoots.mockResolvedValue([root("1", "C:/Root A")]);
+    renderSettings();
+
+    const include = await screen.findByRole("checkbox", { name: "Include" });
+    expect(include).toBeChecked();
+    const remove = screen.getByRole("button", { name: "Remove" });
+    expect(remove).toHaveClass("button--danger");
+  });
+
   it("refreshes before closing and focuses Add folder after successful removal", async () => {
     const first = root("1", "C:/Root A");
     const second = root("2", "C:/Root B");
@@ -78,6 +88,6 @@ describe("SettingsView root removal", () => {
     );
     await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
     await waitFor(() => expect(screen.getByRole("button", { name: "Add folder" })).toHaveFocus());
-    expect(screen.queryByText("C:/Root A")).not.toBeInTheDocument();
+    expect(document.querySelector(".settings-view__roots")?.textContent).not.toContain("C:/Root A");
   });
 });

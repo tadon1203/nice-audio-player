@@ -17,6 +17,8 @@ import {
 } from "@/api/library";
 import { Dialog } from "@/components/ui/Dialog";
 import { InlineNotice } from "@/components/ui/InlineNotice";
+import { Button } from "@/components/ui/Button";
+import { useScrollRegion } from "@/hooks/use-scroll-region";
 
 interface SettingsViewProps {
   outputDevices: AudioOutputDevice[] | null;
@@ -40,6 +42,7 @@ export function SettingsView({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmRoot, setConfirmRoot] = useState<LibraryRoot | null>(null);
+  const { setViewportElement, setContentElement } = useScrollRegion();
   const cancelButtonRef = useRef<HTMLButtonElement>(null);
   const addFolderRef = useRef<HTMLButtonElement>(null);
   const [focusAddFolderAfterRemoval, setFocusAddFolderAfterRemoval] = useState(false);
@@ -158,150 +161,170 @@ export function SettingsView({
     }
   }
   return (
-    <section className="settings-view" aria-label="Settings">
-      <header>
-        <h1>Settings</h1>
-      </header>
-      {scanError ? <InlineNotice tone="error">{scanError}</InlineNotice> : null}
-      <section className="settings-view__section">
-        <div className="settings-view__section-head">
-          <div>
-            <h2>Library folders</h2>
-            <p>Choose locations to include in your music library.</p>
-          </div>
-          <div>
-            <button type="button" disabled={busy} onClick={() => void runScanAction()}>
-              {scanning ? "Cancel scan" : "Rescan library"}
-            </button>
-            <button
-              ref={addFolderRef}
-              type="button"
-              disabled={busy || scanning}
-              onClick={() => void addFolder()}
+    <div ref={setViewportElement} className="settings-scroll-surface" data-scroll-region>
+      <div ref={setContentElement}>
+        <section className="settings-view page-frame" aria-label="Settings">
+          <div className="settings-view__content content-frame">
+            <header>
+              <h1 className="type-application-heading">Settings</h1>
+            </header>
+            {scanError ? <InlineNotice tone="error">{scanError}</InlineNotice> : null}
+            <section className="settings-view__section">
+              <div className="settings-view__section-head">
+                <div>
+                  <h2 className="type-section-title">Library folders</h2>
+                  <p>Choose locations to include in your music library.</p>
+                </div>
+                <div>
+                  <Button type="button" disabled={busy} onClick={() => void runScanAction()}>
+                    {scanning ? "Cancel scan" : "Rescan library"}
+                  </Button>
+                  <Button
+                    ref={addFolderRef}
+                    type="button"
+                    variant="filled"
+                    disabled={busy || scanning}
+                    onClick={() => void addFolder()}
+                  >
+                    Add folder
+                  </Button>
+                </div>
+              </div>
+              {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
+              <div className="settings-view__roots">
+                {roots.map((root) => (
+                  <div key={root.id}>
+                    <span>
+                      <strong>{root.path}</strong>
+                      <small>{root.enabled ? "Included in scans" : "Excluded from scans"}</small>
+                    </span>
+                    <div className="settings-view__root-actions">
+                      <label className="settings-view__root-toggle">
+                        <input
+                          type="checkbox"
+                          checked={root.enabled}
+                          disabled={busy || scanning}
+                          onChange={() => void toggleRoot(root)}
+                        />
+                        <span>Include</span>
+                      </label>
+                      <Button
+                        type="button"
+                        variant="danger"
+                        disabled={busy || scanning}
+                        onClick={() => setConfirmRoot(root)}
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+                {roots.length === 0 ? (
+                  <p className="settings-view__roots-empty">No library folders added.</p>
+                ) : null}
+              </div>
+              {scan ? (
+                <p className="settings-view__scan">
+                  {scanning
+                    ? `Scanning: ${scan.indexedCount} tracks indexed`
+                    : scan.state === "completed"
+                      ? "Library scan is up to date."
+                      : scan.state === "cancelled"
+                        ? "Library scan was cancelled."
+                        : scan.state === "failed"
+                          ? "The last library scan did not complete."
+                          : null}
+                </p>
+              ) : null}
+            </section>
+            <Dialog
+              open={Boolean(confirmRoot)}
+              title="Remove library folder?"
+              role="alertdialog"
+              initialFocusRef={cancelButtonRef}
+              fallbackFocusRef={addFolderRef}
+              onClose={() => !busy && setConfirmRoot(null)}
             >
-              Add folder
-            </button>
-          </div>
-        </div>
-        {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
-        <div className="settings-view__roots">
-          {roots.map((root) => (
-            <div key={root.id}>
-              <span>
-                <strong>{root.path}</strong>
-                <small>{root.enabled ? "Included in scans" : "Excluded from scans"}</small>
-              </span>
-              <div>
-                <button
+              <p>{confirmRoot?.path}</p>
+              <p>This removes index entries but does not delete music files.</p>
+              {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
+              <div className="dialog__actions">
+                <Button
+                  ref={cancelButtonRef}
                   type="button"
-                  disabled={busy || scanning}
-                  onClick={() => void toggleRoot(root)}
+                  disabled={busy}
+                  onClick={() => setConfirmRoot(null)}
                 >
-                  {root.enabled ? "Disable" : "Enable"}
-                </button>
-                <button
+                  Cancel
+                </Button>
+                <Button
                   type="button"
-                  disabled={busy || scanning}
-                  onClick={() => setConfirmRoot(root)}
+                  variant="danger"
+                  disabled={busy}
+                  onClick={() => void removeRoot()}
                 >
                   Remove
-                </button>
+                </Button>
               </div>
-            </div>
-          ))}
-          {roots.length === 0 ? <p>No library folders added.</p> : null}
-        </div>
-        {scan ? (
-          <p className="settings-view__scan">
-            {scanning
-              ? `Scanning: ${scan.indexedCount} tracks indexed`
-              : scan.state === "completed"
-                ? "Library scan is up to date."
-                : scan.state === "cancelled"
-                  ? "Library scan was cancelled."
-                  : scan.state === "failed"
-                    ? "The last library scan did not complete."
-                    : null}
-          </p>
-        ) : null}
-      </section>
-      {confirmRoot ? (
-        <Dialog
-          title="Remove library folder?"
-          role="alertdialog"
-          initialFocusRef={cancelButtonRef}
-          fallbackFocusRef={addFolderRef}
-          onClose={() => !busy && setConfirmRoot(null)}
-        >
-          <p>{confirmRoot.path}</p>
-          <p>This removes index entries but does not delete music files.</p>
-          {error ? <InlineNotice tone="error">{error}</InlineNotice> : null}
-          <div className="dialog__actions">
-            <button
-              ref={cancelButtonRef}
-              type="button"
-              disabled={busy}
-              onClick={() => setConfirmRoot(null)}
+            </Dialog>
+            <section className="settings-view__section">
+              <h2 className="type-section-title">Audio</h2>
+              <p>Configure playback output and device settings.</p>
+              <div className="settings-view__output">
+                <label>
+                  Output device
+                  <select
+                    value={
+                      selectedOutput.kind === "device" ? selectedOutput.deviceId : "systemDefault"
+                    }
+                    disabled={outputDisabled}
+                    onChange={(event) =>
+                      onOutputSelectionChange(
+                        event.currentTarget.value === "systemDefault"
+                          ? { kind: "systemDefault" }
+                          : { kind: "device", deviceId: event.currentTarget.value },
+                      )
+                    }
+                  >
+                    <option value="systemDefault">System default</option>
+                    {outputDevices?.map((device) => (
+                      <option value={device.id} key={device.id}>
+                        {device.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <Button type="button" disabled={outputDisabled} onClick={onRefreshDevices}>
+                  Refresh
+                </Button>
+              </div>
+            </section>
+            <section
+              className="settings-view__section settings-view__shortcuts"
+              aria-labelledby="shortcuts-title"
             >
-              Cancel
-            </button>
-            <button type="button" disabled={busy} onClick={() => void removeRoot()}>
-              Remove
-            </button>
+              <h2 id="shortcuts-title" className="type-section-title">
+                Keyboard shortcuts
+              </h2>
+              <p>Keep playback within reach while you browse.</p>
+              <dl>
+                <div>
+                  <dt>Space</dt>
+                  <dd>Play or pause</dd>
+                </div>
+                <div>
+                  <dt>Q</dt>
+                  <dd>Open or close Queue</dd>
+                </div>
+                <div>
+                  <dt>Escape</dt>
+                  <dd>Close Queue or a menu</dd>
+                </div>
+              </dl>
+            </section>
           </div>
-        </Dialog>
-      ) : null}
-      <section className="settings-view__section">
-        <h2>Audio</h2>
-        <p>Configure playback output and device settings.</p>
-        <div className="settings-view__output">
-          <label>
-            Output device
-            <select
-              value={selectedOutput.kind === "device" ? selectedOutput.deviceId : "systemDefault"}
-              disabled={outputDisabled}
-              onChange={(event) =>
-                onOutputSelectionChange(
-                  event.currentTarget.value === "systemDefault"
-                    ? { kind: "systemDefault" }
-                    : { kind: "device", deviceId: event.currentTarget.value },
-                )
-              }
-            >
-              <option value="systemDefault">System default</option>
-              {outputDevices?.map((device) => (
-                <option value={device.id} key={device.id}>
-                  {device.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button type="button" disabled={outputDisabled} onClick={onRefreshDevices}>
-            Refresh
-          </button>
-        </div>
-      </section>
-      <section
-        className="settings-view__section settings-view__shortcuts"
-        aria-labelledby="shortcuts-title"
-      >
-        <h2 id="shortcuts-title">Keyboard shortcuts</h2>
-        <p>Keep playback within reach while you browse.</p>
-        <dl>
-          <div>
-            <dt>Space</dt>
-            <dd>Play or pause</dd>
-          </div>
-          <div>
-            <dt>Q</dt>
-            <dd>Open or close Queue</dd>
-          </div>
-          <div>
-            <dt>Escape</dt>
-            <dd>Close Queue or a menu</dd>
-          </div>
-        </dl>
-      </section>
-    </section>
+        </section>
+      </div>
+    </div>
   );
 }

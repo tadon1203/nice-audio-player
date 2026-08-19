@@ -1,6 +1,7 @@
 import type { PlaybackSnapshot } from "@/bindings";
 import { RangeControl } from "./RangeControl";
-import { VolumeIcon } from "./icons";
+import { StateIcon } from "./ui/StateIcon";
+import { IconButton } from "./ui/IconButton";
 
 interface VolumeControlProps {
   playback: PlaybackSnapshot;
@@ -37,7 +38,7 @@ export function VolumeControl({
       data-region="volume"
       aria-busy={isMutePending || undefined}
     >
-      <button
+      <IconButton
         type="button"
         aria-label={buttonLabel}
         data-tooltip={buttonLabel}
@@ -45,12 +46,12 @@ export function VolumeControl({
         aria-busy={isMutePending || undefined}
         disabled={!isPlaybackAvailable || isMutePending}
         onClick={onVolumeButtonPress}
-        className="icon-button playback-dock__fixed-control playback-dock__volume-button text-text-primary disabled:cursor-not-allowed disabled:text-text-disabled"
+        className="playback-dock__fixed-control playback-dock__volume-button text-text-primary disabled:cursor-not-allowed disabled:text-text-disabled"
       >
         <span data-testid="volume-icon-state" data-state={iconState}>
-          <VolumeIcon state={iconState} className="playback-dock__volume-icon" />
+          <StateIcon state={iconState} className="playback-dock__volume-icon" />
         </span>
-      </button>
+      </IconButton>
       <RangeControl
         aria-label="Playback volume"
         aria-valuetext={valueText}
