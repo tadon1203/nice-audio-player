@@ -38,62 +38,6 @@ Do not duplicate a durable rule from one source-of-truth document into another.
 If two sources of truth conflict about the same responsibility, STOP before implementation.
 Report the conflicting statements. Do not choose, merge, or reinterpret them.
 
-## Task Authorization
-
-### Read-only requests
-
-Review, research, investigation, diagnosis, critique, explanation, and planning are read-only.
-
-For a read-only request, MUST NOT:
-
-- modify repository-managed files;
-- format files;
-- regenerate files;
-- modify the Git worktree, index, branches, or refs;
-- perform GitHub writes.
-
-### Implementation requests
-
-An explicit request to implement, fix, refactor, update, or build authorizes repository-managed file
-edits within the requested scope and non-destructive validation.
-
-It does NOT authorize:
-
-- branch creation or switching;
-- staging;
-- commits or amendments;
-- stashing;
-- rebasing;
-- resets;
-- restoring or discarding changes;
-- fetching or pulling;
-- pushing;
-- PR or Issue writes;
-- merges;
-- branch deletion.
-
-Do not modify unrelated code.
-
-Do not change an accepted product, design, requirement, public contract, persistence contract, or
-architecture rule unless the requested task explicitly changes that contract.
-
-## Before Editing Existing Behavior
-
-Before changing existing behavior, identify:
-
-1. the caller that initiates the behavior;
-2. the authoritative state or policy;
-3. downstream consumers affected by the result;
-4. where affected state or resources are created, mutated, replaced, and destroyed;
-5. whether the operation can overlap, be cancelled, be superseded, or complete late;
-6. existing tests for the behavior;
-7. the applicable source of truth.
-
-Do not infer ownership from filenames, directory placement, or the location of the visible symptom.
-
-If multiple symptoms have one confirmed root cause, fix that root cause instead of adding independent
-local workarounds.
-
 ## Repository Rules
 
 Use TypeScript strict mode.
@@ -173,46 +117,9 @@ If `pnpm check` cannot complete because the required environment is unavailable,
 - the failing or unavailable dependency;
 - the validation that remains unverified.
 
-## Git and GitHub Authorization
-
-Read-only Git inspection is allowed when required for the task.
-
-Allowed without additional authorization:
-
-- `git status`;
-- `git diff`;
-- `git log`;
-- `git show`;
-- `git branch --show-current`.
-
-Any Git operation that changes the worktree, index, branches, refs, or remote state requires explicit
-user authorization.
-
-Any GitHub write requires explicit user authorization.
-
-Without explicit authorization, MUST NOT:
-
-- create or switch branches;
-- stage files;
-- commit or amend;
-- stash;
-- restore or discard changes;
-- reset;
-- rebase;
-- fetch or pull;
-- push or force-push;
-- delete branches;
-- create or modify Issues;
-- create or modify PRs;
-- submit GitHub comments or reviews;
-- merge.
-
-MUST NOT modify, stage, discard, or commit unrelated user changes.
-
-MUST NOT use `git reset --hard`, `git clean -fd`, force-push, or destructive restoration unless the
-user explicitly requests that exact destructive operation after its consequences are known.
-
 ## Git Workflow
+
+Use only `git` or `GitHub connector`. `gh` is not allowed.
 
 Use exactly:
 
@@ -244,20 +151,6 @@ PR and squash-merge title:
 Individual commits use the Conventional Commit type that truthfully describes that commit.
 
 Completed Issue work is integrated using Squash Merge only.
-
-### Start Issue branch
-
-Only perform this workflow when the user explicitly requests creation or start of the Issue branch.
-
-1. require a clean worktree;
-2. run `git fetch origin`;
-3. inspect local `main` and `origin/main`;
-4. STOP if local `main` contains commits not in `origin/main` or has diverged;
-5. switch to `main`;
-6. fast-forward local `main` to `origin/main` only;
-7. create the Issue branch from that exact commit.
-
-MUST NOT reset or rewrite local `main` to make it match `origin/main`.
 
 ### `commit`
 
