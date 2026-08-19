@@ -2,11 +2,10 @@ snapshotをワークスペースに上書き展開して。
 
 プロジェクトのドキュメントをすべて読んで。
 アーキテクチャ、コード構造が把握できる程度にコードを読んで。
-
+Project Contextからコンテキストを参照することが許可されているが、参照した情報がoutdatedでないことを保証する必要がある。
 
 //////////////////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////////////////
-
 
 # Diff Review Prompt
 
@@ -38,12 +37,12 @@ Base findings on practical operational problems. Consider the project size, esta
 
 Do not report problems only because of:
 
-* personal preference;
-* alternative design possibilities without a demonstrated advantage for the changed behavior;
-* stylistic disagreement;
-* theoretical concerns without evidence;
-* formal principle violations that have no practical consequence;
-* missing defensive checks when the relevant invariant is demonstrably guaranteed by an authoritative upstream boundary and the changed code is not responsible for re-validating it.
+- personal preference;
+- alternative design possibilities without a demonstrated advantage for the changed behavior;
+- stylistic disagreement;
+- theoretical concerns without evidence;
+- formal principle violations that have no practical consequence;
+- missing defensive checks when the relevant invariant is demonstrably guaranteed by an authoritative upstream boundary and the changed code is not responsible for re-validating it.
 
 ## UI / UX and Impeccable
 
@@ -65,17 +64,17 @@ When rendered evidence is available, inspect it before confirming visual or inte
 
 Check these areas during the review:
 
-* Correctness and expected behavior
-* Behavioral regressions and compatibility
-* State ownership, lifecycle, and synchronization
-* Architecture and responsibility boundaries
-* Security and data protection
-* Performance, resource usage, and reliability
-* Error handling and boundary conditions
-* Public contracts, generated bindings, configuration, and persistence when affected
-* Maintainability and change locality
-* UI hierarchy, interaction behavior, responsiveness, accessibility, and motion when affected
-* Missing tests that protect important behaviors
+- Correctness and expected behavior
+- Behavioral regressions and compatibility
+- State ownership, lifecycle, and synchronization
+- Architecture and responsibility boundaries
+- Security and data protection
+- Performance, resource usage, and reliability
+- Error handling and boundary conditions
+- Public contracts, generated bindings, configuration, and persistence when affected
+- Maintainability and change locality
+- UI hierarchy, interaction behavior, responsiveness, accessibility, and motion when affected
+- Missing tests that protect important behaviors
 
 Do not mechanically produce a finding for every review area. Report only confirmed problems that materially apply to the diff.
 
@@ -95,12 +94,12 @@ Evidence must establish why the current structure creates a practical problem fo
 
 A valid confirmed finding must meet all of these conditions:
 
-* The diff introduces, worsens, or newly exposes the problem.
-* You can identify the root cause rather than only the visible symptom.
-* You can explain the specific condition, execution path, state, input, environment, or sequence that triggers the problem.
-* The problem has a realistic impact.
-* You can show evidence from the code, callers, tests, configurations, types, rendered behavior, existing contracts, or repository documentation.
-* You can provide a concrete and executable correction at the appropriate level of abstraction.
+- The diff introduces, worsens, or newly exposes the problem.
+- You can identify the root cause rather than only the visible symptom.
+- You can explain the specific condition, execution path, state, input, environment, or sequence that triggers the problem.
+- The problem has a realistic impact.
+- You can show evidence from the code, callers, tests, configurations, types, rendered behavior, existing contracts, or repository documentation.
+- You can provide a concrete and executable correction at the appropriate level of abstraction.
 
 Do not report a possible lack of evidence or a theoretical concern as a confirmed problem.
 
@@ -116,10 +115,10 @@ Do not use an unconfirmed matter as a confirmed finding unless the uncertainty i
 
 Report a problem in existing code only when at least one of the following is true:
 
-* the diff introduces a new execution path through the problem;
-* the diff worsens the problem;
-* the diff exposes the problem in a newly relevant way;
-* the correctness, safety, or appropriateness of the proposed change depends on that existing behavior.
+- the diff introduces a new execution path through the problem;
+- the diff worsens the problem;
+- the diff exposes the problem in a newly relevant way;
+- the correctness, safety, or appropriateness of the proposed change depends on that existing behavior.
 
 Do not report unrelated pre-existing defects.
 
@@ -131,10 +130,10 @@ Do not report a problem only because the diff does not modify a test file.
 
 A missing-test finding must explain:
 
-* which changed behavior is not protected;
-* what realistic regression could escape;
-* why the existing tests do not already cover it;
-* what test would materially protect the behavior.
+- which changed behavior is not protected;
+- what realistic regression could escape;
+- why the existing tests do not already cover it;
+- what test would materially protect the behavior.
 
 Do not require duplicate tests for behavior already protected at an authoritative boundary.
 
@@ -174,19 +173,19 @@ Use this exact structure for every finding:
 
 ### [P0|P1|P2|P3] Short finding title
 
-* **Location:** `<file>:<line or symbol>` or the smallest useful code scope
-* **Root cause:** The underlying implementation, state, responsibility, contract, or interaction-design problem that produces the defect.
-* **Condition:** The concrete execution path, state, input, environment, or sequence that triggers the problem.
-* **Impact:** The realistic user, system, security, reliability, performance, compatibility, accessibility, or maintenance impact.
-* **Evidence:** The surrounding code, caller, type, test, configuration, rendered behavior, repository documentation, or established contract that confirms the problem.
-* **Fix:** The correction that best resolves the root cause in the context of the current repository. A local patch, refactor, responsibility shift, contract adjustment, or focused redesign is acceptable. Explain the necessary scope when the fix must be broader than the immediate symptom.
+- **Location:** `<file>:<line or symbol>` or the smallest useful code scope
+- **Root cause:** The underlying implementation, state, responsibility, contract, or interaction-design problem that produces the defect.
+- **Condition:** The concrete execution path, state, input, environment, or sequence that triggers the problem.
+- **Impact:** The realistic user, system, security, reliability, performance, compatibility, accessibility, or maintenance impact.
+- **Evidence:** The surrounding code, caller, type, test, configuration, rendered behavior, repository documentation, or established contract that confirms the problem.
+- **Fix:** The correction that best resolves the root cause in the context of the current repository. A local patch, refactor, responsibility shift, contract adjustment, or focused redesign is acceptable. Explain the necessary scope when the fix must be broader than the immediate symptom.
 
 ### Severity definitions
 
-* **P0 — Critical:** Catastrophic failure such as data loss, severe security vulnerability, system-wide outage, or an equivalently unacceptable failure.
-* **P1 — High:** A realistic correctness, reliability, security, accessibility, data-protection, compatibility, or structural defect in an important execution path with serious practical impact or repeated/systemic failure risk.
-* **P2 — Medium:** A confirmed defect, regression, or design problem with limited current scope but meaningful practical impact, including a structure that materially increases the cost or risk of evolving the changed behavior.
-* **P3 — Low:** A confirmed minor defect with limited practical impact.
+- **P0 — Critical:** Catastrophic failure such as data loss, severe security vulnerability, system-wide outage, or an equivalently unacceptable failure.
+- **P1 — High:** A realistic correctness, reliability, security, accessibility, data-protection, compatibility, or structural defect in an important execution path with serious practical impact or repeated/systemic failure risk.
+- **P2 — Medium:** A confirmed defect, regression, or design problem with limited current scope but meaningful practical impact, including a structure that materially increases the cost or risk of evolving the changed behavior.
+- **P3 — Low:** A confirmed minor defect with limited practical impact.
 
 Severity must reflect practical impact and likelihood, not code style, reviewer preference, or the size of the recommended fix.
 
@@ -202,16 +201,14 @@ Otherwise, list only matters that could not be confirmed after examining the ava
 
 For each item:
 
-* explain what is unknown;
-* explain why the available code or evidence does not resolve it;
-* state what evidence would resolve it, when useful.
+- explain what is unknown;
+- explain why the available code or evidence does not resolve it;
+- state what evidence would resolve it, when useful.
 
 Do not present questions or assumptions as confirmed defects.
 
-
 //////////////////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////////////////
-
 
 # Research, Design, and Implementation Planning Prompt for Issue #${ISSUE_NUMBER}
 
@@ -229,17 +226,17 @@ Independently determine repository-consistent technical choices when they preser
 
 Treat the following as fixed design inputs unless newer authoritative evidence applicable to the Issue explicitly supersedes them:
 
-* explicit Issue requirements;
-* acceptance conditions;
-* stated exclusions;
-* repository-established external contracts.
+- explicit Issue requirements;
+- acceptance conditions;
+- stated exclusions;
+- repository-established external contracts.
 
 Do not infer authorization to:
 
-* add product requirements not supported by the Issue or repository;
-* weaken or reinterpret an acceptance condition;
-* expand the change into unrelated cleanup or redesign;
-* perform implementation changes.
+- add product requirements not supported by the Issue or repository;
+- weaken or reinterpret an acceptance condition;
+- expand the change into unrelated cleanup or redesign;
+- perform implementation changes.
 
 Do not replace a confirmed requirement, acceptance condition, exclusion, or external contract during design selection unless authoritative evidence establishes that it has been superseded.
 
@@ -255,16 +252,16 @@ Establish the facts needed to select one coherent implementation approach.
 
 Determine, when relevant:
 
-* the problem, confirmed requirements, and observable target behavior;
-* the current behavior and the responsibilities that produce it;
-* the affected subsystems, interfaces, data, configuration, and workflows;
-* the implementation or structural cause of the affected behavior;
-* the affected data flows and control flows;
-* error behavior and boundary conditions;
-* compatibility, migration, deployment, and operability implications;
-* the tests required to establish the intended behavior;
-* the actual repository commands for testing, type checking, linting, building, and other validation;
-* the conditions that demonstrate completion of the Issue.
+- the problem, confirmed requirements, and observable target behavior;
+- the current behavior and the responsibilities that produce it;
+- the affected subsystems, interfaces, data, configuration, and workflows;
+- the implementation or structural cause of the affected behavior;
+- the affected data flows and control flows;
+- error behavior and boundary conditions;
+- compatibility, migration, deployment, and operability implications;
+- the tests required to establish the intended behavior;
+- the actual repository commands for testing, type checking, linting, building, and other validation;
+- the conditions that demonstrate completion of the Issue.
 
 For affected state, determine the relevant ownership and lifecycle properties, including creation, initialization, mutation, replacement, synchronization, lifetime, and cleanup.
 
@@ -308,12 +305,12 @@ Preserve the repository's established product world, design system, interaction 
 
 Use repository product and design documentation, existing components, rendered behavior when available, and relevant skill guidance to resolve concrete decisions about:
 
-* hierarchy and layout;
-* component responsibility;
-* interaction and visual states;
-* responsive behavior;
-* accessibility;
-* motion.
+- hierarchy and layout;
+- component responsibility;
+- interaction and visual states;
+- responsive behavior;
+- accessibility;
+- motion.
 
 Resolve implementation-relevant user-facing design decisions during planning rather than leaving them to the implementation agent.
 
@@ -341,11 +338,11 @@ Select the narrowest coherent responsibility and behavior scope that satisfies t
 
 The selected design must:
 
-* satisfy the confirmed requirements and completion conditions;
-* resolve the identified cause of the affected behavior;
-* introduce no unrelated behavior or contract changes;
-* give each affected authoritative responsibility or state a defined owner;
-* include the dependencies and supporting changes required for that responsibility to function through the actual execution path.
+- satisfy the confirmed requirements and completion conditions;
+- resolve the identified cause of the affected behavior;
+- introduce no unrelated behavior or contract changes;
+- give each affected authoritative responsibility or state a defined owner;
+- include the dependencies and supporting changes required for that responsibility to function through the actual execution path.
 
 The narrowest coherent scope does not mean the fewest changed lines, files, components, or layers.
 
@@ -363,12 +360,12 @@ Do not minimize the diff mechanically.
 
 A smaller patch is not preferable when it:
 
-* preserves the cause of the Issue;
-* duplicates authoritative state or policy;
-* leaves ownership materially ambiguous;
-* works around an incorrect responsibility boundary;
-* fails to propagate the selected design through required callers or consumers;
-* weakens the ability to establish correctness at the authoritative test boundary.
+- preserves the cause of the Issue;
+- duplicates authoritative state or policy;
+- leaves ownership materially ambiguous;
+- works around an incorrect responsibility boundary;
+- fails to propagate the selected design through required callers or consumers;
+- weakens the ability to establish correctness at the authoritative test boundary.
 
 A larger change is not preferable merely because it produces a cleaner or more elegant architecture.
 
@@ -386,14 +383,14 @@ Evaluate maintainability, security, performance, reliability, compatibility, ope
 
 Evaluate those qualities through repository-specific consequences such as:
 
-* duplicated authoritative state or policy;
-* dependency direction and cross-layer knowledge;
-* repeated modification of the same behavior across multiple subsystems;
-* changed resource or state lifetime;
-* additional synchronization, concurrency, cancellation, or failure paths;
-* public-contract or persistent-data compatibility;
-* deployment or migration requirements;
-* the location and stability of authoritative test boundaries.
+- duplicated authoritative state or policy;
+- dependency direction and cross-layer knowledge;
+- repeated modification of the same behavior across multiple subsystems;
+- changed resource or state lifetime;
+- additional synchronization, concurrency, cancellation, or failure paths;
+- public-contract or persistent-data compatibility;
+- deployment or migration requirements;
+- the location and stability of authoritative test boundaries.
 
 Do not introduce work solely to improve an abstract quality attribute without a concrete consequence for the confirmed change.
 
@@ -413,14 +410,14 @@ Select the coverage required to establish current behavior, protect affected con
 
 For each materially affected behavior, establish:
 
-* where the behavior or policy is currently decided;
-* where affected state is created, mutated, replaced, and destroyed;
-* which callers initiate the behavior;
-* which consumers depend on the result;
-* which component controls the relevant lifetime;
-* which interface or contract crosses each relevant subsystem boundary;
-* whether authoritative state or policy is independently maintained elsewhere;
-* whether one layer depends on implementation details of another layer that its own responsibility does not require.
+- where the behavior or policy is currently decided;
+- where affected state is created, mutated, replaced, and destroyed;
+- which callers initiate the behavior;
+- which consumers depend on the result;
+- which component controls the relevant lifetime;
+- which interface or contract crosses each relevant subsystem boundary;
+- whether authoritative state or policy is independently maintained elsewhere;
+- whether one layer depends on implementation details of another layer that its own responsibility does not require.
 
 When one responsibility or authoritative value is independently maintained in multiple places, establish one explicit authority unless a confirmed contract or execution constraint requires the duplication.
 
@@ -430,12 +427,12 @@ Do not treat such symptoms as unrelated local modifications.
 
 When multiple responsibility boundaries remain valid after applying established contracts and execution constraints, compare their effects on:
 
-* authoritative ownership;
-* dependency direction;
-* required cross-layer knowledge;
-* lifecycle control;
-* modification locality;
-* test boundaries.
+- authoritative ownership;
+- dependency direction;
+- required cross-layer knowledge;
+- lifecycle control;
+- modification locality;
+- test boundaries.
 
 Select the boundary that best satisfies the confirmed Issue and these concrete constraints.
 
@@ -443,11 +440,11 @@ Select the boundary that best satisfies the confirmed Issue and these concrete c
 
 For each project-specific numerical threshold, configuration default, dependency choice, public contract shape, error classification, persistent-data change, or user-visible behavior introduced by the design:
 
-* identify why the decision is required;
-* ground it in the Issue, repository constraints, measured evidence, or an authoritative source;
-* evaluate material alternatives when more than one defensible choice remains;
-* explain the relevant trade-off;
-* distinguish an internal technical default from a product requirement, acceptance condition, public contract, or compatibility guarantee.
+- identify why the decision is required;
+- ground it in the Issue, repository constraints, measured evidence, or an authoritative source;
+- evaluate material alternatives when more than one defensible choice remains;
+- explain the relevant trade-off;
+- distinguish an internal technical default from a product requirement, acceptance condition, public contract, or compatibility guarantee.
 
 Select technical defaults autonomously when their effects remain within the confirmed scope and established contracts.
 
@@ -488,10 +485,10 @@ When a material unresolved decision prevents selection of one coherent implement
 
 Output only:
 
-* the unresolved decision;
-* the evidence already established;
-* the materially different consequences of the available choices;
-* the specific user decision required.
+- the unresolved decision;
+- the evidence already established;
+- the materially different consequences of the available choices;
+- the specific user decision required.
 
 ## Plan Generation Standard
 
@@ -517,13 +514,13 @@ When the selected design changes or deliberately preserves a responsibility boun
 
 For each such decision, identify when relevant:
 
-* where the responsibility or authoritative state will live;
-* which callers initiate or depend on it;
-* which downstream consumers use it;
-* how data and control move through the resulting execution path;
-* how errors, cancellation, replacement, completion, and cleanup move through that path;
-* which previous duplication, coupling, cross-layer knowledge, or ambiguity is removed or intentionally retained;
-* which later implementation items depend on that structural decision.
+- where the responsibility or authoritative state will live;
+- which callers initiate or depend on it;
+- which downstream consumers use it;
+- how data and control move through the resulting execution path;
+- how errors, cancellation, replacement, completion, and cleanup move through that path;
+- which previous duplication, coupling, cross-layer knowledge, or ambiguity is removed or intentionally retained;
+- which later implementation items depend on that structural decision.
 
 When one structural decision resolves several local symptoms, organize the plan around that structural decision and its dependent changes.
 
@@ -533,21 +530,21 @@ Do not provide code, line-level edits, detailed pseudocode, or exhaustive file a
 
 Avoid decision-deferring language such as:
 
-* `handle appropriately`;
-* `add as needed`;
-* `follow the existing pattern`;
-* `consider`;
-* `choose a suitable value`;
-* `update the relevant files`.
+- `handle appropriately`;
+- `add as needed`;
+- `follow the existing pattern`;
+- `consider`;
+- `choose a suitable value`;
+- `update the relevant files`.
 
 The implementation agent must not need to:
 
-* locate the affected implementation;
-* compare competing implementation approaches;
-* choose responsibility boundaries;
-* invent technical defaults;
-* define edge-case behavior;
-* determine required tests.
+- locate the affected implementation;
+- compare competing implementation approaches;
+- choose responsibility boundaries;
+- invent technical defaults;
+- define edge-case behavior;
+- determine required tests.
 
 ## Final Output
 
@@ -577,9 +574,9 @@ Group items by subsystem or behavior when useful.
 
 Each item must identify:
 
-* the responsibility being changed;
-* its connection to the existing implementation;
-* the resulting behavior.
+- the responsibility being changed;
+- its connection to the existing implementation;
+- the resulting behavior.
 
 Include interface, configuration, error, compatibility, migration, documentation, test, and dependency details with the implementation item they affect.
 
@@ -611,12 +608,12 @@ Include manual validation only when automated tests cannot fully establish the b
 
 Cover each applicable category affected by the selected design:
 
-* changed observable acceptance behavior;
-* changed public, serialized, configuration, or persistent contract;
-* failure behavior introduced or modified by the design;
-* state transitions whose correctness depends on changed ownership, lifetime, replacement, synchronization, or cleanup;
-* stale, late, concurrent, or superseded-result behavior when the affected execution path permits it;
-* regression scenarios established by the current implementation, existing tests, Issue evidence, or the selected structural change.
+- changed observable acceptance behavior;
+- changed public, serialized, configuration, or persistent contract;
+- failure behavior introduced or modified by the design;
+- state transitions whose correctness depends on changed ownership, lifetime, replacement, synchronization, or cleanup;
+- stale, late, concurrent, or superseded-result behavior when the affected execution path permits it;
+- regression scenarios established by the current implementation, existing tests, Issue evidence, or the selected structural change.
 
 Place tests at the authoritative boundary that establishes the behavior.
 
@@ -630,9 +627,9 @@ Record material technical defaults and design decisions selected when the availa
 
 For each recorded decision, explain:
 
-* the evidence that constrained the choice;
-* the material alternatives when more than one remained viable;
-* why the selected choice was used within the confirmed scope.
+- the evidence that constrained the choice;
+- the material alternatives when more than one remained viable;
+- why the selected choice was used within the confirmed scope.
 
 Distinguish internal technical decisions from product requirements, acceptance conditions, public contracts, and compatibility guarantees.
 
