@@ -52,6 +52,6 @@ body:
     attributes:
       label: Suggested branch
       description: Optional branch name for implementing this task.
-      placeholder: feat/12-wasapi-exclusive-output
+      placeholder: <type>/<issue-number>-<kebab-case>
     validations:
       required: false
