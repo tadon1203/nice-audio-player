@@ -51,7 +51,7 @@ body:
     id: suggested-branch
     attributes:
       label: Suggested branch
-      description: Optional branch name for implementing this task.
+      description: Allowed types are `feat`, `fix`, `refactor`, `perf`, `docs`, `test`, `build`, `ci`, `chore`, and `revert`.
       placeholder: <type>/<issue-number>-<kebab-case>
     validations:
       required: false
