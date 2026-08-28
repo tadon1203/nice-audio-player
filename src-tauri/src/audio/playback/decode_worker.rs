@@ -373,7 +373,7 @@ fn notify_prebuffer_if_ready(
 #[cfg(test)]
 mod tests {
     use super::{prebuffer_frames, signal_failure, DecodeTaskInput, DecodeWorkerSetup};
-    use crate::audio::decoding::open_playback_decoder;
+    use crate::audio::compressed_source::{prepare_compressed_source, SourceLoadCancellation};
     use crate::audio::output::{OutputSignal, OutputStreamId, ProducerState};
     use crate::audio::output_processing::{OutputPcmProcessor, OutputProcessingError};
     use crate::audio::pcm_queue::bounded_pcm_queue;
@@ -413,7 +413,10 @@ mod tests {
         Arc<crate::audio::output::AtomicProducerState>,
         crate::audio::pcm_queue::PcmConsumer,
     ) {
-        let decoder = open_playback_decoder(file).unwrap();
+        let decoder = prepare_compressed_source(file, &SourceLoadCancellation::default())
+            .unwrap()
+            .open_decoder(&file.extension)
+            .unwrap();
         let spec = decoder.spec();
         let mut first_packet = Vec::new();
         assert!(decoder.duration_ms().is_some());

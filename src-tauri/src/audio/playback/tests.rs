@@ -2,13 +2,14 @@ use super::super::devices::AudioOutputSelection;
 use super::super::output::AudioOutputError;
 use super::super::output::StreamFailureKind;
 use super::super::volume::VolumeState;
+use super::source_loader::SourceLoadWorker;
 use super::{
     completion_time_reached, duration_ms, duration_to_frames, failed_snapshot, frame_to_millis,
     millis_to_frame, output_failure_code, pause_action, resume_action, should_finish,
     should_publish_position, signal_stream_id, source_to_output_frame, start_failure_snapshot,
-    stream_signal_action, OutputSignal, OutputStreamId, PlaybackControlAction, PlaybackFailureCode,
-    PlaybackQueueSnapshot, PlaybackRepeatMode, PlaybackSequence, PlaybackService,
-    PlaybackServiceError, PlaybackSnapshot, PlaybackWorker, StreamSignalAction,
+    stream_signal_action, OutputSignal, OutputStreamId, PendingSourceLoad, PlaybackControlAction,
+    PlaybackFailureCode, PlaybackQueueSnapshot, PlaybackRepeatMode, PlaybackSequence,
+    PlaybackService, PlaybackServiceError, PlaybackSnapshot, PlaybackWorker, StreamSignalAction,
 };
 use cpal::StreamInstant;
 use std::sync::{mpsc, Arc, RwLock};
@@ -385,7 +386,13 @@ fn navigation_decoder_failure_clears_the_sequence_and_publishes_failed_state() {
 
     worker.navigate(true, reply);
 
-    assert_eq!(receiver.recv().unwrap(), Err(PlaybackServiceError::Decode));
+    let result = (0..100).find_map(|_| {
+        worker.advance_pending_source_load();
+        receiver
+            .recv_timeout(std::time::Duration::from_millis(1))
+            .ok()
+    });
+    assert_eq!(result, Some(Err(PlaybackServiceError::Decode)));
     assert!(worker.sequence.is_none());
     assert!(matches!(
         worker.current(),
@@ -458,6 +465,26 @@ fn position_publication_requires_interval_and_a_changed_position() {
     ));
 }
 
+#[test]
+fn output_selection_is_rejected_during_source_loading() {
+    let mut worker = test_worker(PlaybackSnapshot::stopped(VolumeState::default()));
+    let (reply, _receiver) = mpsc::sync_channel(1);
+    worker.pending_source = Some(PendingSourceLoad {
+        file: super::test_file(),
+        worker: SourceLoadWorker::spawn(super::test_file()).unwrap(),
+        reply,
+        start_paused: false,
+        sequence_index: 0,
+    });
+
+    assert_eq!(
+        worker.set_output_selection(AudioOutputSelection::SystemDefault),
+        Err(PlaybackServiceError::InvalidPlaybackState)
+    );
+    assert_eq!(worker.output_selection, AudioOutputSelection::SystemDefault);
+    worker.discard_pending_source();
+}
+
 fn test_worker(snapshot: PlaybackSnapshot) -> PlaybackWorker {
     let (_, command_receiver) = mpsc::sync_channel(1);
     let (state_changed_sender, _) = mpsc::sync_channel(1);
@@ -466,6 +493,7 @@ fn test_worker(snapshot: PlaybackSnapshot) -> PlaybackWorker {
     PlaybackWorker {
         active: None,
         pending: None,
+        pending_source: None,
         pending_seek: None,
         next_playback_session_id: 0,
         next_output_stream_id: 0,

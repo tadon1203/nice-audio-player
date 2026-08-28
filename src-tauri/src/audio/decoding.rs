@@ -79,12 +79,6 @@ pub(crate) struct StreamingDecoder {
     finished: bool,
 }
 
-pub(crate) fn open_playback_decoder(
-    file: &ValidatedAudioFile,
-) -> Result<StreamingDecoder, PcmDecodeError> {
-    open_decoder(file, false)
-}
-
 fn open_verified_decoder(file: &ValidatedAudioFile) -> Result<StreamingDecoder, PcmDecodeError> {
     open_decoder(file, true)
 }
@@ -94,12 +88,25 @@ fn open_decoder(
     verify: bool,
 ) -> Result<StreamingDecoder, PcmDecodeError> {
     let source = File::open(&file.path).map_err(|_| PcmDecodeError::FileOpenFailed)?;
-    let media_source =
-        MediaSourceStream::new(Box::new(source), MediaSourceStreamOptions::default());
+    open_decoder_from_source(Box::new(source), &file.extension, verify)
+}
 
+pub(crate) fn open_decoder_from_source(
+    source: Box<dyn symphonia::core::io::MediaSource>,
+    extension: &str,
+    verify: bool,
+) -> Result<StreamingDecoder, PcmDecodeError> {
+    let media_source = MediaSourceStream::new(source, MediaSourceStreamOptions::default());
     let mut hint = Hint::new();
-    hint.with_extension(&file.extension);
+    hint.with_extension(extension);
+    open_decoder_from_media_source(media_source, hint, verify)
+}
 
+fn open_decoder_from_media_source(
+    media_source: MediaSourceStream<'static>,
+    hint: Hint,
+    verify: bool,
+) -> Result<StreamingDecoder, PcmDecodeError> {
     let format = get_probe()
         .probe(
             &hint,
@@ -142,7 +149,6 @@ fn open_decoder(
     let decoder = get_codecs()
         .make_audio_decoder(codec_params, &decoder_options)
         .map_err(map_decoder_creation_error)?;
-
     Ok(StreamingDecoder {
         format,
         decoder,
@@ -423,9 +429,10 @@ fn map_pcm_build_error(error: PcmBufferBuildError) -> PcmDecodeError {
 #[cfg(test)]
 mod tests {
     use super::{
-        decode_audio_file, decode_audio_file_with_cancel_check, open_playback_decoder,
-        DecodeCancellation, DecodeStep, PcmDecodeError, SeekStep,
+        decode_audio_file, decode_audio_file_with_cancel_check, DecodeCancellation, DecodeStep,
+        PcmDecodeError, SeekStep,
     };
+    use crate::audio::compressed_source::{prepare_compressed_source, SourceLoadCancellation};
     use crate::media::validation::ValidatedAudioFile;
     use crate::test_support::{write_pcm_i16_wav, TestDirectory};
     use std::fs::{File, OpenOptions};
@@ -437,6 +444,13 @@ mod tests {
             file_name: path.file_name().unwrap().to_string_lossy().into_owned(),
             extension: "wav".to_owned(),
         }
+    }
+
+    fn open_source_decoder(file: &ValidatedAudioFile) -> super::StreamingDecoder {
+        prepare_compressed_source(file, &SourceLoadCancellation::default())
+            .unwrap()
+            .open_decoder(&file.extension)
+            .unwrap()
     }
 
     #[test]
@@ -564,7 +578,7 @@ mod tests {
             samples.push(frame);
         }
         write_pcm_i16_wav(&path, 100_000, 1, &samples);
-        let mut decoder = open_playback_decoder(&validated(&path)).expect("decoder opens");
+        let mut decoder = open_source_decoder(&validated(&path));
         let result = decoder.seek_to_frame(500).expect("seek succeeds");
         let SeekStep::Samples(result) = result else {
             panic!("seek reached end of stream unexpectedly");

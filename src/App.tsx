@@ -97,6 +97,8 @@ function App() {
   const outputPendingRef = useRef(false);
   const deviceRequest = useRef(0);
   const queuedTransportRef = useRef<TransportOperation | null>(null);
+  const transportGenerationRef = useRef(0);
+  const supersededTransportGenerationRef = useRef<number | null>(null);
   const subscriptionHealthyRef = useRef(true);
   const queueButtonRef = useRef<HTMLButtonElement | null>(null);
   const lyricsButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -210,6 +212,14 @@ function App() {
   async function requestTransport(operation: TransportOperation) {
     if (transportPendingRef.current) {
       queuedTransportRef.current = operation;
+      if (
+        operation.type === "startTrack" ||
+        operation.type === "startAlbum" ||
+        operation.type === "startAlbumTrack"
+      ) {
+        supersededTransportGenerationRef.current = transportGenerationRef.current;
+        void stopAudioPlayback().catch(() => undefined);
+      }
       return;
     }
     if (connectionRef.current !== "ready") return;
@@ -227,6 +237,7 @@ function App() {
       (command === "resume" && currentPlayback.status === "paused");
     if (!valid) return;
     transportPendingRef.current = true;
+    const generation = ++transportGenerationRef.current;
     setPendingTransportCommand(
       command === "startTrack" || command === "startAlbum" || command === "startAlbumTrack"
         ? "resume"
@@ -249,58 +260,62 @@ function App() {
                     : command === "pause"
                       ? await pauseAudioPlayback()
                       : await resumeAudioPlayback();
-      applySnapshot(snapshot);
-      dispatchPlaybackUi({ type: "commandSucceeded", lane: "transport" });
+      if (supersededTransportGenerationRef.current !== generation) {
+        applySnapshot(snapshot);
+        dispatchPlaybackUi({ type: "commandSucceeded", lane: "transport" });
+      }
     } catch (error) {
-      diagnostics.warn("frontend.playback.transport_failed", {
-        cause: error,
-        context: {
-          operation: command,
-          revision: currentPlayback.revision,
-          ...(command === "startTrack" || command === "startAlbumTrack"
-            ? { track_id: operation.trackId }
-            : {}),
-        },
-      });
-      dispatchPlaybackUi({
-        type: "commandFailed",
-        lane: "transport",
-        message:
-          command === "startTrack" &&
-          isStartLibraryTrackError(error) &&
-          error.code === "trackUnavailable"
-            ? "This track is no longer available."
-            : command === "startAlbumTrack" &&
-                isStartLibraryAlbumTrackError(error) &&
-                error.code === "trackUnavailable"
-              ? "This track is no longer available in this album."
+      if (supersededTransportGenerationRef.current !== generation) {
+        diagnostics.warn("frontend.playback.transport_failed", {
+          cause: error,
+          context: {
+            operation: command,
+            revision: currentPlayback.revision,
+            ...(command === "startTrack" || command === "startAlbumTrack"
+              ? { track_id: operation.trackId }
+              : {}),
+          },
+        });
+        dispatchPlaybackUi({
+          type: "commandFailed",
+          lane: "transport",
+          message:
+            command === "startTrack" &&
+            isStartLibraryTrackError(error) &&
+            error.code === "trackUnavailable"
+              ? "This track is no longer available."
               : command === "startAlbumTrack" &&
                   isStartLibraryAlbumTrackError(error) &&
-                  error.code === "trackNotMember"
-                ? "This track does not belong to this album."
+                  error.code === "trackUnavailable"
+                ? "This track is no longer available in this album."
                 : command === "startAlbumTrack" &&
                     isStartLibraryAlbumTrackError(error) &&
-                    error.code === "trackNotPlayable"
-                  ? "This track cannot be played."
+                    error.code === "trackNotMember"
+                  ? "This track does not belong to this album."
                   : command === "startAlbumTrack" &&
                       isStartLibraryAlbumTrackError(error) &&
-                      error.code === "albumNotFound"
-                    ? "This album is no longer available."
+                      error.code === "trackNotPlayable"
+                    ? "This track cannot be played."
                     : command === "startAlbumTrack" &&
                         isStartLibraryAlbumTrackError(error) &&
-                        error.code === "noPlayableTracks"
-                      ? "This album has no playable tracks."
-                      : command === "startAlbum" &&
-                          isStartLibraryAlbumError(error) &&
+                        error.code === "albumNotFound"
+                      ? "This album is no longer available."
+                      : command === "startAlbumTrack" &&
+                          isStartLibraryAlbumTrackError(error) &&
                           error.code === "noPlayableTracks"
                         ? "This album has no playable tracks."
-                        : command === "pause" && isPauseAudioPlaybackError(error)
-                          ? "Playback cannot be paused in its current state."
-                          : command === "resume" && isResumeAudioPlaybackError(error)
-                            ? "Playback cannot be resumed in its current state."
-                            : "The playback service is unavailable.",
-      });
-      await refresh();
+                        : command === "startAlbum" &&
+                            isStartLibraryAlbumError(error) &&
+                            error.code === "noPlayableTracks"
+                          ? "This album has no playable tracks."
+                          : command === "pause" && isPauseAudioPlaybackError(error)
+                            ? "Playback cannot be paused in its current state."
+                            : command === "resume" && isResumeAudioPlaybackError(error)
+                              ? "Playback cannot be resumed in its current state."
+                              : "The playback service is unavailable.",
+        });
+        await refresh();
+      }
     } finally {
       transportPendingRef.current = false;
       setPendingTransportCommand(null);

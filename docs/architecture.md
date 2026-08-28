@@ -144,6 +144,10 @@ conversion, and cancellation failures remain immediate. The audio callback remai
 allocation-free in its steady-state path, and limited to
 bounded queue consumption, timing arithmetic, atomic state reads, and non-blocking signals.
 
+Playback owns one compressed source for the duration of an active session. Initial playback and seek
+replacement decoders obtain independent readers from that source; source preparation I/O occurs outside the
+playback and real-time callback paths. Decoded PCM remains bounded and streaming through the existing queue.
+
 ## 8. Concurrency and Background Work
 
 Each task, thread, or worker must have:
