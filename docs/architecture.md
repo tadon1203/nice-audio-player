@@ -266,9 +266,9 @@ A change that modifies a durable implementation rule or boundary must update thi
 A change that modifies visual or interaction principles must update `DESIGN.md`.
 
 React owns semantic and transient interaction state. CSS owns final responsive geometry and non-spatial visual
-state. Motion owns structural spatial continuity and presence between valid endpoint geometries. Lenis owns
-animated viewport movement for primary application scroll regions; native input owns directly manipulated
-position. Lucide owns static icon geometry and Morphicons owns same-control semantic icon continuity.
+state. Motion owns structural spatial continuity and presence between valid endpoint geometries. Native browser
+scrolling owns directly manipulated viewport movement. Lucide owns static icon geometry and Morphicons owns
+same-control semantic icon continuity.
 Reduced-motion behavior follows `DESIGN.md`.
 
 Shared UI primitives own reusable control grammar, semantic typography metrics, and page/content frame
@@ -292,11 +292,36 @@ communicate a false cause.
 `AnimatePresence` belongs to the component that owns a subtree's mount/remove lifetime; it is not a wrapper for
 arbitrary changing content. Focus follows semantic interaction or navigation, not animation duration or exit
 completion. Timers may express an information-visibility policy, but never animation phases. Every application
-scroll surface owns its viewport, content element, Lenis controller, cleanup, and restoration state through the
-shared scroll-region hook. Children receive that scroll root explicitly and never discover it with a document-wide
-query.
+scroll surface owns its viewport, cleanup, and restoration state through the shared native scroll-region hook.
+Children receive that scroll root explicitly and never discover it with a document-wide query.
 
 ## 17. Library Synchronization Boundaries
+
+Source-derived Library catalog entities use logical identity: an Album is identified by its effective
+album title and album artist, and an Album Artist by its effective name. Rust owns catalog projection,
+ordering, query-scoped opaque cursor pagination, membership, representative artwork, and playback
+resolution. React may retain session-scoped browse context and navigation frames, but does not become
+authoritative for catalog identity or playback sequence construction.
+The catalog owns the effective source-derived Track title conversion as well: a non-empty trimmed
+source title wins, otherwise the filename stem is used consistently in Track lists, Album tracks, and
+playback metadata. Album and Album Artist queries filter only their presentation identity fields;
+Track queries additionally include Track-level metadata.
+
+The Library workspace owns the root presentation/filter state and one semantic drill-in frame stack.
+Albums, Album Artists, and Tracks are peer root presentations; Album and Album Artist detail are the
+only stack frames. Every frame has a stable session identifier, logical key, opening focus identity,
+and feature-local retained query snapshots. Root snapshots survive peer presentation changes and
+Library/Settings replacement during the session. A detail snapshot survives while its frame remains on
+the stack and is released when that frame is permanently popped. Registry writes from visually exiting
+nodes cannot recreate a released frame. A refresh generation invalidates
+snapshots whose complete query owner no longer matches. No browse state is persisted across application
+restarts.
+
+Back is derived only from the remaining semantic stack and restores the popped frame's opening focus
+identity after the parent surface is synchronously rehydrated. Components must not maintain parallel
+selected-entity or return-parent state. Source-derived Catalog entities remain distinct from future
+Playlist, Favorite, History, or other user/playback-derived domains even when they reuse presentation
+mechanics.
 
 Filesystem watching is an invalidation-only signal. The scanner remains the sole authority for
 filesystem-to-SQLite reconciliation; watcher callbacks do not inspect files, write the database, or
@@ -311,14 +336,13 @@ define its lifecycle separately before sharing this maintenance path.
 persistence. `LibraryRuntime` coordinates Library lifecycle work only; it is not a generic application
 background-job scheduler.
 
-Primary application scroll regions use the shared frontend Lenis controller. Features own the semantic reason
-for a move; the shared region owns geometry, Lenis execution, interruption, reduced-motion conversion,
-cleanup, and programmatic/user classification. Lenis owns wheel and touch input processing; controller-owned
-programmatic travel must be invalidated without stopping that in-flight user input. Scrollbar and keyboard
-scrolling remain browser-directed. Programmatic spatial state is frontend-only and never enters
+Primary application scroll regions use the shared frontend native scroll-region hook. Features own the semantic
+reason for a move; the shared region owns geometry, explicit native movement, reduced-motion conversion, cleanup,
+and programmatic/user classification. Wheel, touch, scrollbar, and keyboard scrolling remain browser-directed.
+Programmatic spatial state is frontend-only and never enters
 playback snapshots, queue snapshots, IPC, or Rust authority.
 
-Each semantic surface owns its scroll viewport, content element, controller, and restoration state. A shell
+Each semantic surface owns its scroll viewport and restoration state. A shell
 may clip and transition surfaces, but it does not lend one mutable `scrollTop` to entering and exiting
 destinations. While visual presence keeps an exiting surface mounted, its viewport remains frozen at its own
 position and the entering surface begins from its own valid position.

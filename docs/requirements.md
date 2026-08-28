@@ -73,6 +73,18 @@ Normalization must avoid clipping. Processing must not run in a way that comprom
 
 ## 6. Local Library
 
+The Library browse experience includes Albums, Album Artists, and Tracks as peer presentations.
+Album Artists expose an Artist-to-Albums drill-in, scoped filtering, and restoration of the active
+browse context while moving between Library surfaces and Settings during the same application session.
+Back returns to the actual semantic parent, including nested Album Artist → Album → Album Artist
+flows. Albums, Album Artists, and Tracks retain their independent presentation, filter, and scroll
+contexts during peer switching and Library/Settings round trips in that session.
+
+Album filtering matches only effective Album title and Album Artist; Track-only title or performer
+terms do not make an Album match. Album Artist filtering matches only effective Album Artist, while
+Track filtering also matches Track title, Track Artist, Album, and Album Artist. Literal `\\`, `%`,
+and `_` characters remain searchable.
+
 The accepted library direction includes:
 
 - Registering local music folders
