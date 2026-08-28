@@ -14,6 +14,21 @@ for (const viewport of [
     const tracks = page.locator(".album-detail__tracks");
     const identity = page.locator(".album-detail__identity");
     const artwork = page.locator(".album-detail__artwork-wrap");
+    await expect
+      .poll(
+        async () => {
+          const [identityBox, artworkBox] = await Promise.all([
+            identity.boundingBox(),
+            artwork.boundingBox(),
+          ]);
+          if (!identityBox || !artworkBox) return false;
+          return viewport.width < 1120
+            ? identityBox.y > artworkBox.y + artworkBox.height - 1
+            : artworkBox.x + artworkBox.width < identityBox.x;
+        },
+        { timeout: 2000 },
+      )
+      .toBe(true);
     const [contentBox, tracksBox, identityBox, artworkBox] = await Promise.all([
       content.boundingBox(),
       tracks.boundingBox(),
@@ -36,7 +51,7 @@ for (const viewport of [
     if (viewport.width >= 1120) expect(tracksBox.x).toBeLessThan(identityBox.x);
     if (viewport.width >= 1400)
       expect(identityBox.x - (artworkBox.x + artworkBox.width)).toBeGreaterThan(20);
-    const duration = page.locator(".album-detail__row").first().locator("span").nth(2);
+    const duration = page.locator(".album-detail__row").first().locator(".album-detail__duration");
     const rowBox = await page.locator(".album-detail__row").first().boundingBox();
     const durationBox = await duration.boundingBox();
     expect(rowBox).not.toBeNull();

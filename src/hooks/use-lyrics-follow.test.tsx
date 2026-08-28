@@ -15,7 +15,6 @@ vi.mock("./use-scroll-region", () => ({
     return {
       scrollToElement: scrollMock.scrollToElement,
       setViewportElement: vi.fn(),
-      setContentElement: vi.fn(),
     };
   },
 }));

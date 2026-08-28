@@ -11,6 +11,8 @@ export type LayoutFixtureName =
   | "seek-pending"
   | "failed"
   | "album-detail-wide"
+  | "library-browse"
+  | "library-empty"
   | "queue-open";
 
 const fixtures = new Set<LayoutFixtureName>([
@@ -26,6 +28,8 @@ const fixtures = new Set<LayoutFixtureName>([
   "seek-pending",
   "failed",
   "album-detail-wide",
+  "library-browse",
+  "library-empty",
   "queue-open",
 ]);
 
