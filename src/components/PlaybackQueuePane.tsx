@@ -33,7 +33,7 @@ export function PlaybackQueuePane({
   const returnFocusRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const restoreMenuFocusRef = useRef(false);
-  const { setViewportElement, setContentElement, scrollToElement } = useScrollRegion();
+  const { setViewportElement, scrollToElement } = useScrollRegion();
   const current = queue.current;
   const upcoming = queue.upcoming;
   useEffect(() => {
@@ -137,7 +137,7 @@ export function PlaybackQueuePane({
             </button>
           </div>
           <div ref={setViewportElement} className="playback-queue__list" data-scroll-region>
-            <div ref={setContentElement} className="playback-queue__list-content">
+            <div className="playback-queue__list-content">
               {upcoming.length ? (
                 upcoming.map((item, index) => {
                   const absolute = index;

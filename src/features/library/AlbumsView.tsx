@@ -8,23 +8,19 @@ export function AlbumsView({
   onEnd,
   onOpen,
   scrollRoot,
-  returnFocusAlbumId,
-  onReturnFocusRestored,
 }: {
   albums: LibraryAlbumSummary[];
   hasMore: boolean;
   onEnd: () => void;
   onOpen: (album: LibraryAlbumSummary) => void;
   scrollRoot: HTMLElement | null;
-  returnFocusAlbumId: string | null;
-  onReturnFocusRestored: () => void;
 }) {
   const sentinelRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (!sentinelRef.current || !hasMore) return;
+    if (!sentinelRef.current || !hasMore || !scrollRoot) return;
     const observer = new IntersectionObserver(
       ([entry]) => {
-        if (entry?.isIntersecting) onEnd();
+        if (entry?.isIntersecting && scrollRoot.scrollTop > 0) onEnd();
       },
       { root: scrollRoot },
     );
@@ -36,11 +32,9 @@ export function AlbumsView({
       <div className="library-view__album-grid">
         {albums.map((album) => (
           <AlbumCard
-            key={album.id}
+            key={`${album.key.title}:${album.key.albumArtist}`}
             album={album}
             onOpen={onOpen}
-            returnFocus={returnFocusAlbumId === album.id}
-            onReturnFocusRestored={onReturnFocusRestored}
           />
         ))}
       </div>

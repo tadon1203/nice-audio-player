@@ -108,19 +108,41 @@ pub struct LibraryTrackPage {
     pub items: Vec<LibraryTrackSummary>,
     pub next_after_id: Option<String>,
 }
+#[derive(Debug, Clone, Serialize, serde::Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryAlbumKey {
+    pub title: String,
+    pub album_artist: String,
+}
+#[derive(Debug, Clone, Serialize, serde::Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryAlbumArtistKey {
+    pub name: String,
+}
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LibraryAlbumSummary {
-    pub id: String,
-    pub title: String,
-    pub album_artist: String,
+    pub key: LibraryAlbumKey,
     pub artwork: Option<ArtworkRef>,
 }
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LibraryAlbumPage {
     pub items: Vec<LibraryAlbumSummary>,
-    pub next_after_id: Option<String>,
+    pub next_cursor: Option<String>,
+}
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryAlbumArtistSummary {
+    pub key: LibraryAlbumArtistKey,
+    pub artwork: Option<ArtworkRef>,
+    pub album_count: u64,
+}
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryAlbumArtistPage {
+    pub items: Vec<LibraryAlbumArtistSummary>,
+    pub next_cursor: Option<String>,
 }
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]

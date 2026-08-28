@@ -8,8 +8,9 @@ import { formatLongPlaybackTime, formatPlaybackTime } from "@/lib/playback-time"
 import { effectsMotion } from "@/lib/motion";
 import { formatLibraryDate } from "@/lib/library-date";
 import { LibraryArtwork, useLibraryArtworkUrl } from "./LibraryArtwork";
-import { useAlbumDetailQuery } from "./use-album-detail-query";
 import { AlbumArtworkIdentity } from "./AlbumArtworkIdentity";
+import { albumArtistIdentity } from "./library-identity";
+import { useAlbumDetailQuery } from "./use-album-detail-query";
 
 const latinMediaTitle = /^[\p{Script=Latin}\p{Number}\p{Punctuation}\p{Separator}\p{Mark}]+$/u;
 const usesCharacterTitle = (title: string) =>
@@ -17,42 +18,47 @@ const usesCharacterTitle = (title: string) =>
 
 export function AlbumDetailView({
   album,
-  refreshKey,
+  refreshKey: _refreshKey,
   playbackAvailable,
   onBack,
   onPlayAlbumTrack,
   onPlayAlbum,
   activeTrackId,
   playbackStatus,
+  onOpenAlbumArtist,
+  query,
 }: {
   album: LibraryAlbumSummary;
   refreshKey: number;
   playbackAvailable: boolean;
   onBack: () => void;
-  onPlayAlbumTrack: (albumId: string, trackId: string) => void;
-  onPlayAlbum: (id: string) => void;
+  onPlayAlbumTrack: (albumKey: LibraryAlbumSummary["key"], trackId: string) => void;
+  onPlayAlbum: (key: LibraryAlbumSummary["key"]) => void;
   activeTrackId: string | null;
   playbackStatus: "stopped" | "playing" | "paused" | "failed";
+  onOpenAlbumArtist?: (key: { name: string }) => void;
+  query?: ReturnType<typeof useAlbumDetailQuery>;
 }) {
+  const fallbackQuery = useAlbumDetailQuery(album.key, _refreshKey, query === undefined, undefined);
+  const activeQuery = query ?? fallbackQuery;
   const backRef = useRef<HTMLButtonElement>(null);
-  const query = useAlbumDetailQuery(album.id, refreshKey, true);
   const reducedMotion = useReducedMotion();
-  const detail = query.details.value;
+  const detail = activeQuery.details.value;
   const summary = detail?.summary ?? album;
-  const grouped = groupTracks(query.tracks.items);
+  const grouped = groupTracks(activeQuery.tracks.items);
   const artworkUrl = useLibraryArtworkUrl(summary.artwork);
   useLayoutEffect(() => {
     backRef.current?.focus({ preventScroll: true });
   }, []);
   return (
-    <section className="album-detail page-frame" aria-label={`${summary.title} album detail`}>
+    <section className="album-detail page-frame" aria-label={`${summary.key.title} album detail`}>
       <div className="album-detail__content content-frame">
         <button ref={backRef} type="button" className="album-detail__back" onClick={onBack}>
-          ← <span>Back to albums</span>
+          <AppIcon name="chevronLeft" /> <span>Back</span>
         </button>
         <div className="album-detail__hero">
           <AlbumArtworkIdentity
-            albumId={album.id}
+            albumId={album.key}
             className="album-artwork-identity album-detail__artwork-wrap"
           >
             <LibraryArtwork
@@ -64,14 +70,25 @@ export function AlbumDetailView({
           <div className="album-detail__identity">
             <h1
               className={
-                usesCharacterTitle(summary.title)
+                usesCharacterTitle(summary.key.title)
                   ? "type-media-title"
                   : "type-media-title type-media-title--interface"
               }
             >
-              {summary.title}
+              {summary.key.title}
             </h1>
-            <p className="album-detail__artist type-media-artist">{summary.albumArtist}</p>
+            {onOpenAlbumArtist ? (
+              <button
+                type="button"
+                className="album-detail__artist album-detail__artist-button type-media-artist"
+                data-library-focus-id={albumArtistIdentity({ name: summary.key.albumArtist })}
+                onClick={() => onOpenAlbumArtist({ name: summary.key.albumArtist })}
+              >
+                {summary.key.albumArtist}
+              </button>
+            ) : (
+              <p className="album-detail__artist type-media-artist">{summary.key.albumArtist}</p>
+            )}
             <p className="album-detail__meta">
               {[
                 detail?.date ? formatLibraryDate(detail.date) : null,
@@ -92,29 +109,29 @@ export function AlbumDetailView({
               variant="filled"
               className="album-detail__play"
               disabled={!playbackAvailable || !detail?.firstPlayableTrackId}
-              onClick={() => onPlayAlbum(album.id)}
+              onClick={() => onPlayAlbum(summary.key)}
             >
               <AppIcon name="play" /> Play album
             </Button>
           </div>
         </div>
-        {query.details.error ? (
+        {activeQuery.details.error ? (
           <div className="library-view__notice" role="alert">
-            {query.details.error}{" "}
-            <Button type="button" onClick={query.details.retry}>
+            {activeQuery.details.error}{" "}
+            <Button type="button" onClick={activeQuery.details.retry}>
               Retry
             </Button>
           </div>
         ) : null}
-        {query.tracks.error ? (
+        {activeQuery.tracks.error ? (
           <div className="library-view__notice" role="alert">
-            {query.tracks.error}{" "}
-            <Button type="button" onClick={query.tracks.retry}>
+            {activeQuery.tracks.error}{" "}
+            <Button type="button" onClick={activeQuery.tracks.retry}>
               Retry
             </Button>
           </div>
         ) : null}
-        {query.tracks.loading && query.tracks.items.length === 0 ? (
+        {activeQuery.tracks.loading && activeQuery.tracks.items.length === 0 ? (
           <p className="library-view__notice">Loading album…</p>
         ) : (
           <div className="album-detail__tracks">
@@ -123,27 +140,27 @@ export function AlbumDetailView({
                 key={label}
                 label={label}
                 tracks={tracks}
-                albumId={album.id}
-                albumArtist={summary.albumArtist}
+                albumKey={summary.key}
+                albumArtist={summary.key.albumArtist}
                 playbackAvailable={playbackAvailable}
                 onPlayAlbumTrack={onPlayAlbumTrack}
                 activeTrackId={activeTrackId}
                 playbackStatus={playbackStatus}
                 hideHeading={
                   detail?.trackCount === 1 &&
-                  query.tracks.items.length === 1 &&
-                  query.tracks.nextOffset === null
+                  activeQuery.tracks.items.length === 1 &&
+                  activeQuery.tracks.nextOffset === null
                 }
                 animateRows={!reducedMotion}
               />
             ))}
-            {query.tracks.nextOffset !== null ? (
+            {activeQuery.tracks.nextOffset !== null ? (
               <Button
                 type="button"
                 variant="neutral"
                 className="album-detail__load-more"
-                onClick={query.tracks.loadNext}
-                disabled={query.tracks.loadingNext}
+                onClick={activeQuery.tracks.loadNext}
+                disabled={activeQuery.tracks.loadingNext}
               >
                 Load more
               </Button>
@@ -176,7 +193,7 @@ function TrackGroup({
   albumArtist,
   playbackAvailable,
   onPlayAlbumTrack,
-  albumId,
+  albumKey,
   activeTrackId,
   playbackStatus,
   hideHeading,
@@ -186,8 +203,8 @@ function TrackGroup({
   tracks: LibraryAlbumTrackSummary[];
   albumArtist: string;
   playbackAvailable: boolean;
-  onPlayAlbumTrack: (albumId: string, trackId: string) => void;
-  albumId: string;
+  onPlayAlbumTrack: (albumKey: LibraryAlbumSummary["key"], trackId: string) => void;
+  albumKey: LibraryAlbumSummary["key"];
   activeTrackId: string | null;
   playbackStatus: "stopped" | "playing" | "paused" | "failed";
   hideHeading: boolean;
@@ -224,7 +241,7 @@ function TrackGroup({
                     : undefined
                 }
                 aria-current={active ? "true" : undefined}
-                onClick={() => onPlayAlbumTrack(albumId, t.id)}
+                onClick={() => onPlayAlbumTrack(albumKey, t.id)}
               >
                 <span className="album-detail__track-number type-numeric">
                   {active ? <PlayingMarker /> : (t.trackNumber ?? "—")}

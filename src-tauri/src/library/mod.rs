@@ -1,8 +1,10 @@
 pub mod artwork;
+pub(crate) mod catalog;
 pub mod database;
 pub(crate) mod maintenance;
 pub mod migrations;
 pub mod models;
+pub(crate) mod policy;
 pub(crate) mod runtime;
 pub(crate) mod scanner;
 pub mod service;

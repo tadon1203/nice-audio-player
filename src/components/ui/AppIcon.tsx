@@ -14,6 +14,7 @@ import {
   VolumeX,
   Shuffle,
   Pause,
+  ChevronLeft,
 } from "lucide-react";
 
 const icons = {
@@ -31,6 +32,7 @@ const icons = {
   mute: VolumeX,
   refresh: RefreshCw,
   output: MonitorSpeaker,
+  chevronLeft: ChevronLeft,
 } as const;
 export type AppIconName = keyof typeof icons;
 export function AppIcon({

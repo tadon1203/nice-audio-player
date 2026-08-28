@@ -5,13 +5,13 @@ export function LibraryPresentationTabs({
   presentation,
   onChange,
 }: {
-  presentation: "albums" | "tracks";
-  onChange: (presentation: "albums" | "tracks") => void;
+  presentation: "albums" | "albumArtists" | "tracks";
+  onChange: (presentation: "albums" | "albumArtists" | "tracks") => void;
 }) {
   const reducedMotion = useReducedMotion();
   return (
     <div className="library-view__switch" role="group" aria-label="Library presentation">
-      {(["albums", "tracks"] as const).map((value) => {
+      {(["albums", "albumArtists", "tracks"] as const).map((value) => {
         const active = presentation === value;
         return (
           <button
@@ -21,7 +21,7 @@ export function LibraryPresentationTabs({
             aria-pressed={active}
             onClick={() => onChange(value)}
           >
-            {value[0].toUpperCase() + value.slice(1)}
+            {value === "albumArtists" ? "Album Artists" : value[0].toUpperCase() + value.slice(1)}
             {active ? (
               reducedMotion ? (
                 <span className="library-view__tab-indicator" aria-hidden="true" />

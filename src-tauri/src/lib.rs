@@ -26,11 +26,13 @@ use audio::playback::{
 };
 use library::{
     models::{
-        LibraryAlbumDetails, LibraryAlbumPage, LibraryAlbumTrackPage, LibraryRoot,
+        LibraryAlbumArtistKey, LibraryAlbumArtistPage, LibraryAlbumArtistSummary,
+        LibraryAlbumDetails, LibraryAlbumKey, LibraryAlbumPage, LibraryAlbumTrackPage, LibraryRoot,
         LibraryScanSnapshot, LibraryStatus, LibraryTrackPage, LibraryTrackSummary,
     },
     service::{
-        LibraryCommandError, LibraryService, StartLibraryAlbumError, StartLibraryTrackError,
+        LibraryCommandError, LibraryService, StartLibraryAlbumError, StartLibraryAlbumTrackError,
+        StartLibraryTrackError,
     },
 };
 use lyrics::{LyricsCommandError, LyricsResolution, LyricsService};
@@ -120,37 +122,76 @@ async fn list_library_tracks(
 #[tauri::command]
 #[specta::specta]
 async fn list_library_albums(
-    after_id: Option<String>,
+    after_cursor: Option<String>,
     search: Option<String>,
     library: tauri::State<'_, LibraryService>,
 ) -> Result<LibraryAlbumPage, LibraryCommandError> {
     let service = library.handle();
-    tauri::async_runtime::spawn_blocking(move || service.albums(after_id, search))
+    tauri::async_runtime::spawn_blocking(move || service.catalog_albums(after_cursor, search))
         .await
         .map_err(|_| LibraryCommandError::TaskFailed)?
 }
 #[tauri::command]
 #[specta::specta]
 async fn get_library_album_details(
-    album_id: String,
+    album_key: LibraryAlbumKey,
     library: tauri::State<'_, LibraryService>,
 ) -> Result<LibraryAlbumDetails, LibraryCommandError> {
     let service = library.handle();
-    tauri::async_runtime::spawn_blocking(move || service.album_details(album_id))
+    tauri::async_runtime::spawn_blocking(move || service.catalog_album_details(album_key))
         .await
         .map_err(|_| LibraryCommandError::TaskFailed)?
 }
 #[tauri::command]
 #[specta::specta]
 async fn list_library_album_tracks(
-    album_id: String,
+    album_key: LibraryAlbumKey,
     offset: u32,
     library: tauri::State<'_, LibraryService>,
 ) -> Result<LibraryAlbumTrackPage, LibraryCommandError> {
     let service = library.handle();
-    tauri::async_runtime::spawn_blocking(move || service.album_tracks(album_id, offset))
+    tauri::async_runtime::spawn_blocking(move || service.catalog_album_tracks(album_key, offset))
         .await
         .map_err(|_| LibraryCommandError::TaskFailed)?
+}
+#[tauri::command]
+#[specta::specta]
+async fn list_library_album_artists(
+    after_cursor: Option<String>,
+    search: Option<String>,
+    library: tauri::State<'_, LibraryService>,
+) -> Result<LibraryAlbumArtistPage, LibraryCommandError> {
+    let service = library.handle();
+    tauri::async_runtime::spawn_blocking(move || {
+        service.catalog_album_artists(after_cursor, search)
+    })
+    .await
+    .map_err(|_| LibraryCommandError::TaskFailed)?
+}
+#[tauri::command]
+#[specta::specta]
+async fn get_library_album_artist(
+    album_artist_key: LibraryAlbumArtistKey,
+    library: tauri::State<'_, LibraryService>,
+) -> Result<LibraryAlbumArtistSummary, LibraryCommandError> {
+    let service = library.handle();
+    tauri::async_runtime::spawn_blocking(move || service.catalog_artist(album_artist_key))
+        .await
+        .map_err(|_| LibraryCommandError::TaskFailed)?
+}
+#[tauri::command]
+#[specta::specta]
+async fn list_library_album_artist_albums(
+    album_artist_key: LibraryAlbumArtistKey,
+    after_cursor: Option<String>,
+    library: tauri::State<'_, LibraryService>,
+) -> Result<LibraryAlbumPage, LibraryCommandError> {
+    let service = library.handle();
+    tauri::async_runtime::spawn_blocking(move || {
+        service.catalog_artist_albums(album_artist_key, after_cursor)
+    })
+    .await
+    .map_err(|_| LibraryCommandError::TaskFailed)?
 }
 #[tauri::command]
 #[specta::specta]
@@ -226,25 +267,23 @@ async fn start_library_track(
 #[tauri::command]
 #[specta::specta]
 async fn start_library_album(
-    album_id: String,
+    album_key: LibraryAlbumKey,
     library: tauri::State<'_, LibraryService>,
     playback: tauri::State<'_, PlaybackService>,
 ) -> Result<PlaybackSnapshot, StartLibraryAlbumError> {
     let library = library.handle();
     let playback = playback.handle();
     tauri::async_runtime::spawn_blocking(move || {
-        let sources = library.album_playable_sources(album_id.clone())?;
-        let metadata = library
-            .album_tracks(album_id, 0)
-            .map_err(|_| StartLibraryAlbumError::PersistenceFailed)?;
-        let entries = sources
+        let (resolved, _) = library
+            .catalog_playback(album_key, None)
+            .map_err(map_start_library_album_track_error)?;
+        let entries = resolved
             .into_iter()
-            .zip(metadata.items.into_iter().filter(|item| item.playable))
-            .map(|(file, item)| PlaybackEntrySeed {
-                file,
-                title: item.title,
-                artist: item.artist,
-                duration_ms: item.duration_ms,
+            .map(|entry| PlaybackEntrySeed {
+                file: entry.file,
+                title: entry.title,
+                artist: entry.artist,
+                duration_ms: entry.duration_ms,
             })
             .collect();
         playback
@@ -258,35 +297,73 @@ async fn start_library_album(
 #[tauri::command]
 #[specta::specta]
 async fn start_library_album_track(
-    album_id: String,
+    album_key: LibraryAlbumKey,
     track_id: String,
     library: tauri::State<'_, LibraryService>,
     playback: tauri::State<'_, PlaybackService>,
-) -> Result<PlaybackSnapshot, StartLibraryTrackError> {
+) -> Result<PlaybackSnapshot, StartLibraryAlbumTrackError> {
     let library = library.handle();
     let playback = playback.handle();
     tauri::async_runtime::spawn_blocking(move || {
-        let (sources, index) =
-            library.album_playable_sources_from_track(album_id.clone(), track_id)?;
-        let metadata = library
-            .album_tracks(album_id, 0)
-            .map_err(|_| StartLibraryTrackError::PersistenceFailed)?;
-        let entries = sources
+        let (resolved, index) = library.catalog_playback(album_key, Some(track_id))?;
+        let entries = resolved
             .into_iter()
-            .zip(metadata.items.into_iter().filter(|item| item.playable))
-            .map(|(file, item)| PlaybackEntrySeed {
-                file,
-                title: item.title,
-                artist: item.artist,
-                duration_ms: item.duration_ms,
+            .map(|entry| PlaybackEntrySeed {
+                file: entry.file,
+                title: entry.title,
+                artist: entry.artist,
+                duration_ms: entry.duration_ms,
             })
             .collect();
         playback
             .play_sequence_entries_at(entries, index)
-            .map_err(map_start_library_error)
+            .map_err(map_start_library_album_track_playback_error)
     })
     .await
-    .map_err(|_| StartLibraryTrackError::TaskFailed)?
+    .map_err(|_| StartLibraryAlbumTrackError::TaskFailed)?
+}
+
+fn map_start_library_album_track_error(
+    error: StartLibraryAlbumTrackError,
+) -> StartLibraryAlbumError {
+    match error {
+        StartLibraryAlbumTrackError::InvalidAlbumKey => StartLibraryAlbumError::InvalidAlbumKey,
+        StartLibraryAlbumTrackError::AlbumNotFound => StartLibraryAlbumError::AlbumNotFound,
+        StartLibraryAlbumTrackError::NoPlayableTracks => StartLibraryAlbumError::NoPlayableTracks,
+        StartLibraryAlbumTrackError::SourceUnavailable => StartLibraryAlbumError::SourceUnavailable,
+        StartLibraryAlbumTrackError::LibraryUnavailable => {
+            StartLibraryAlbumError::LibraryUnavailable
+        }
+        StartLibraryAlbumTrackError::PersistenceFailed => StartLibraryAlbumError::PersistenceFailed,
+        StartLibraryAlbumTrackError::PlaybackWorkerUnavailable => {
+            StartLibraryAlbumError::PlaybackWorkerUnavailable
+        }
+        StartLibraryAlbumTrackError::NoOutputDevice => StartLibraryAlbumError::NoOutputDevice,
+        StartLibraryAlbumTrackError::OutputDeviceUnavailable => {
+            StartLibraryAlbumError::OutputDeviceUnavailable
+        }
+        StartLibraryAlbumTrackError::DecodeFailed => StartLibraryAlbumError::DecodeFailed,
+        _ => StartLibraryAlbumError::OutputFailed,
+    }
+}
+fn map_start_library_album_track_playback_error(
+    error: PlaybackServiceError,
+) -> StartLibraryAlbumTrackError {
+    match error {
+        PlaybackServiceError::WorkerUnavailable => {
+            StartLibraryAlbumTrackError::PlaybackWorkerUnavailable
+        }
+        PlaybackServiceError::Output(PlaybackFailureCode::NoOutputDevice) => {
+            StartLibraryAlbumTrackError::NoOutputDevice
+        }
+        PlaybackServiceError::Output(PlaybackFailureCode::OutputDeviceUnavailable) => {
+            StartLibraryAlbumTrackError::OutputDeviceUnavailable
+        }
+        PlaybackServiceError::Decode
+        | PlaybackServiceError::DurationUnavailable
+        | PlaybackServiceError::Seek => StartLibraryAlbumTrackError::DecodeFailed,
+        _ => StartLibraryAlbumTrackError::OutputFailed,
+    }
 }
 
 fn map_start_library_album_error(error: PlaybackServiceError) -> StartLibraryAlbumError {
@@ -866,6 +943,9 @@ fn collect_specta_commands<R: tauri::Runtime>() -> tauri_specta::Commands<R> {
         get_library_scan_state,
         list_library_tracks,
         list_library_albums,
+        list_library_album_artists,
+        get_library_album_artist,
+        list_library_album_artist_albums,
         get_library_album_details,
         list_library_album_tracks,
         remove_library_root,

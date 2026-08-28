@@ -30,7 +30,7 @@ export function useLyricsFollow(
     manualScrollGeneration.current += 1;
     setFollowing(false);
   }, []);
-  const { scrollToElement, setViewportElement, setContentElement } = useScrollRegion(onUserScroll);
+  const { scrollToElement, setViewportElement } = useScrollRegion(onUserScroll);
   const targetElement = useCallback(() => {
     const current = groupRef.current;
     return !current || current.clears
@@ -113,6 +113,5 @@ export function useLyricsFollow(
     revealElement,
     group,
     setViewportElement,
-    setContentElement,
   };
 }

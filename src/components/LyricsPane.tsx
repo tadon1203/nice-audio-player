@@ -60,7 +60,6 @@ function LyricsLines({
     cancelCueSeek,
     revealElement,
     setViewportElement,
-    setContentElement,
   } = follow;
   const [rovingState, setRovingState] = useState<{ trackId: string; ordinal: number | null }>({
     trackId,
@@ -151,7 +150,7 @@ function LyricsLines({
   return (
     <div className="lyrics-pane__viewport">
       <div className="lyrics-pane__scroll" ref={assignViewport} data-scroll-region>
-        <div className="lyrics-pane__body" ref={setContentElement}>
+        <div className="lyrics-pane__body">
           {timed
             ? cueGroups.map((cue) => {
                 const contentLines = cue.indices.map((index) => timed[index]!);

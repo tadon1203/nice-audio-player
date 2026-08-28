@@ -7,6 +7,7 @@ import {
 } from "@/api/audio-devices";
 import {
   isStartLibraryAlbumError,
+  isStartLibraryAlbumTrackError,
   isStartLibraryTrackError,
   startLibraryAlbum,
   startLibraryAlbumTrack,
@@ -28,11 +29,13 @@ import type {
   AudioOutputSelection,
   PlaybackFailureCode,
   PlaybackSnapshot,
+  LibraryAlbumKey,
 } from "@/bindings";
 import { AppShell } from "./components/AppShell";
 import { ApplicationActivityIndicator } from "./components/ApplicationActivityIndicator";
 import { PlaybackDock } from "./components/PlaybackDock";
 import { LibraryView } from "./features/library";
+import { LibraryWorkspaceProvider } from "./features/library/LibraryWorkspace";
 import { SettingsView } from "./features/settings";
 import { useActiveTrackIdentity } from "./hooks/use-active-track-identity";
 import { useSeekController } from "./hooks/use-seek-controller";
@@ -51,8 +54,8 @@ type TransportOperation =
   | { type: "pause" }
   | { type: "resume" }
   | { type: "startTrack"; trackId: string }
-  | { type: "startAlbum"; albumId: string }
-  | { type: "startAlbumTrack"; albumId: string; trackId: string }
+  | { type: "startAlbum"; albumKey: LibraryAlbumKey }
+  | { type: "startAlbumTrack"; albumKey: LibraryAlbumKey; trackId: string }
   | { type: "previous" }
   | { type: "next" };
 type PendingTransportCommand = "stop" | "pause" | "resume" | "previous" | "next" | null;
@@ -229,9 +232,9 @@ function App() {
         command === "startTrack"
           ? await startLibraryTrack(operation.trackId)
           : command === "startAlbum"
-            ? await startLibraryAlbum(operation.albumId)
+            ? await startLibraryAlbum(operation.albumKey)
             : command === "startAlbumTrack"
-              ? await startLibraryAlbumTrack(operation.albumId, operation.trackId)
+              ? await startLibraryAlbumTrack(operation.albumKey, operation.trackId)
               : command === "previous"
                 ? await previousAudioPlayback()
                 : command === "next"
@@ -248,19 +251,39 @@ function App() {
         type: "commandFailed",
         lane: "transport",
         message:
-          (command === "startTrack" || command === "startAlbumTrack") &&
+          command === "startTrack" &&
           isStartLibraryTrackError(error) &&
           error.code === "trackUnavailable"
             ? "This track is no longer available."
-            : command === "startAlbum" &&
-                isStartLibraryAlbumError(error) &&
-                error.code === "noPlayableTracks"
-              ? "This album has no playable tracks."
-              : command === "pause" && isPauseAudioPlaybackError(error)
-                ? "Playback cannot be paused in its current state."
-                : command === "resume" && isResumeAudioPlaybackError(error)
-                  ? "Playback cannot be resumed in its current state."
-                  : "The playback service is unavailable.",
+            : command === "startAlbumTrack" &&
+                isStartLibraryAlbumTrackError(error) &&
+                error.code === "trackUnavailable"
+              ? "This track is no longer available in this album."
+              : command === "startAlbumTrack" &&
+                  isStartLibraryAlbumTrackError(error) &&
+                  error.code === "trackNotMember"
+                ? "This track does not belong to this album."
+                : command === "startAlbumTrack" &&
+                    isStartLibraryAlbumTrackError(error) &&
+                    error.code === "trackNotPlayable"
+                  ? "This track cannot be played."
+                  : command === "startAlbumTrack" &&
+                      isStartLibraryAlbumTrackError(error) &&
+                      error.code === "albumNotFound"
+                    ? "This album is no longer available."
+                    : command === "startAlbumTrack" &&
+                        isStartLibraryAlbumTrackError(error) &&
+                        error.code === "noPlayableTracks"
+                      ? "This album has no playable tracks."
+                      : command === "startAlbum" &&
+                          isStartLibraryAlbumError(error) &&
+                          error.code === "noPlayableTracks"
+                        ? "This album has no playable tracks."
+                        : command === "pause" && isPauseAudioPlaybackError(error)
+                          ? "Playback cannot be paused in its current state."
+                          : command === "resume" && isResumeAudioPlaybackError(error)
+                            ? "Playback cannot be resumed in its current state."
+                            : "The playback service is unavailable.",
       });
       await refresh();
     } finally {
@@ -360,9 +383,9 @@ function App() {
         playbackAvailable={isPlaybackAvailable}
         onOpenSettings={() => setDestination("settings")}
         onPlayTrack={(id) => void requestTransport({ type: "startTrack", trackId: id })}
-        onPlayAlbum={(id) => void requestTransport({ type: "startAlbum", albumId: id })}
-        onPlayAlbumTrack={(albumId, trackId) =>
-          void requestTransport({ type: "startAlbumTrack", albumId, trackId })
+        onPlayAlbum={(albumKey) => void requestTransport({ type: "startAlbum", albumKey })}
+        onPlayAlbumTrack={(albumKey, trackId) =>
+          void requestTransport({ type: "startAlbumTrack", albumKey, trackId })
         }
         activeTrackId={activeTrack.id}
         playbackStatus={playback.status}
@@ -388,93 +411,95 @@ function App() {
       />
     );
   return (
-    <AppShell
-      destination={destination}
-      onDestinationChange={(next) => {
-        closeContext("navigation");
-        setDestination(next);
-      }}
-      main={main}
-      contextPane={
-        contextMode ? (
-          <PlaybackContextPane
-            mode={contextMode}
-            onClose={closeContext}
-            actions={contextMode === "queue" ? <PlaybackQueueActions queue={queue} /> : undefined}
-          >
-            {contextMode === "queue" ? (
-              <PlaybackQueuePane queue={queue} playbackStatus={playback.status} />
-            ) : (
-              <LyricsPane
-                trackTitle={activeTrack.title}
-                trackArtist={activeTrack.artist}
-                trackId={activeTrack.id}
-                identityPending={activeTrack.lookupPending}
-                playback={playback}
-                lyrics={trackLyrics.state}
-                onRetry={trackLyrics.retry}
-                canSeek={seekController.canSeek}
-                acceptedSeek={seekController.acceptedSeek}
-                onRequestSeek={seekController.requestSeek}
-              />
-            )}
-          </PlaybackContextPane>
-        ) : undefined
-      }
-      activity={
-        <ApplicationActivityIndicator
-          activity={applicationActivity}
-          onOpenSettings={() => {
-            closeContext("navigation");
-            setDestination("settings");
-          }}
-        />
-      }
-      dock={
-        <PlaybackDock
-          playback={playback}
-          hasResumablePlayback={playback.status === "paused"}
-          isPlaybackAvailable={isPlaybackAvailable}
-          isTransportCommandPending={isTransportCommandPending}
-          pendingTransportCommand={pendingTransportCommand}
-          seekPreviewMs={seekController.seekPreviewMs}
-          isSeekPending={seekController.isSeekPending}
-          volumeValue={volumeController.volumeValue}
-          isVolumeUpdatePending={volumeController.isVolumeUpdatePending}
-          isMutePending={volumeController.isMutePending}
-          playbackError={
-            playbackUi.commandError?.message ??
-            playbackUi.connectionError ??
-            (playback.status === "failed" ? formatPlaybackFailure(playback.error) : null)
-          }
-          presentationTitle={activeTrack.title}
-          presentationArtist={activeTrack.artist}
-          artworkUrl={activeTrack.artworkUrl}
-          artworkLoading={activeTrack.artworkLoading}
-          onPlay={() => void requestTransport({ type: "resume" })}
-          onPause={() => void requestTransport({ type: "pause" })}
-          onResume={() => void requestTransport({ type: "resume" })}
-          onPrevious={() => void requestTransport({ type: "previous" })}
-          onNext={() => void requestTransport({ type: "next" })}
-          onSeek={seekController.onSeek}
-          onSeekCommit={(value) => void seekController.requestSeek(value)}
-          onSeekCancel={seekController.onSeekCancel}
-          onVolumeChange={volumeController.onVolumeChange}
-          onVolumeInteractionStart={volumeController.onVolumePointerDown}
-          onVolumeCommit={volumeController.onVolumeCommit}
-          onVolumePointerCancel={volumeController.onVolumePointerCancel}
-          onVolumeButtonPress={volumeController.onVolumeButtonPress}
-          activeContextMode={isContextOpen ? contextMode : null}
-          onContextModeToggle={(mode) => {
-            if (isContextOpen && contextMode === mode) closeContext("trigger");
-            else if (isContextOpen) setContextMode(mode);
-            else openContext(mode);
-          }}
-          queueButtonRef={queueButtonRef}
-          lyricsButtonRef={lyricsButtonRef}
-        />
-      }
-    />
+    <LibraryWorkspaceProvider>
+      <AppShell
+        destination={destination}
+        onDestinationChange={(next) => {
+          closeContext("navigation");
+          setDestination(next);
+        }}
+        main={main}
+        contextPane={
+          contextMode ? (
+            <PlaybackContextPane
+              mode={contextMode}
+              onClose={closeContext}
+              actions={contextMode === "queue" ? <PlaybackQueueActions queue={queue} /> : undefined}
+            >
+              {contextMode === "queue" ? (
+                <PlaybackQueuePane queue={queue} playbackStatus={playback.status} />
+              ) : (
+                <LyricsPane
+                  trackTitle={activeTrack.title}
+                  trackArtist={activeTrack.artist}
+                  trackId={activeTrack.id}
+                  identityPending={activeTrack.lookupPending}
+                  playback={playback}
+                  lyrics={trackLyrics.state}
+                  onRetry={trackLyrics.retry}
+                  canSeek={seekController.canSeek}
+                  acceptedSeek={seekController.acceptedSeek}
+                  onRequestSeek={seekController.requestSeek}
+                />
+              )}
+            </PlaybackContextPane>
+          ) : undefined
+        }
+        activity={
+          <ApplicationActivityIndicator
+            activity={applicationActivity}
+            onOpenSettings={() => {
+              closeContext("navigation");
+              setDestination("settings");
+            }}
+          />
+        }
+        dock={
+          <PlaybackDock
+            playback={playback}
+            hasResumablePlayback={playback.status === "paused"}
+            isPlaybackAvailable={isPlaybackAvailable}
+            isTransportCommandPending={isTransportCommandPending}
+            pendingTransportCommand={pendingTransportCommand}
+            seekPreviewMs={seekController.seekPreviewMs}
+            isSeekPending={seekController.isSeekPending}
+            volumeValue={volumeController.volumeValue}
+            isVolumeUpdatePending={volumeController.isVolumeUpdatePending}
+            isMutePending={volumeController.isMutePending}
+            playbackError={
+              playbackUi.commandError?.message ??
+              playbackUi.connectionError ??
+              (playback.status === "failed" ? formatPlaybackFailure(playback.error) : null)
+            }
+            presentationTitle={activeTrack.title}
+            presentationArtist={activeTrack.artist}
+            artworkUrl={activeTrack.artworkUrl}
+            artworkLoading={activeTrack.artworkLoading}
+            onPlay={() => void requestTransport({ type: "resume" })}
+            onPause={() => void requestTransport({ type: "pause" })}
+            onResume={() => void requestTransport({ type: "resume" })}
+            onPrevious={() => void requestTransport({ type: "previous" })}
+            onNext={() => void requestTransport({ type: "next" })}
+            onSeek={seekController.onSeek}
+            onSeekCommit={(value) => void seekController.requestSeek(value)}
+            onSeekCancel={seekController.onSeekCancel}
+            onVolumeChange={volumeController.onVolumeChange}
+            onVolumeInteractionStart={volumeController.onVolumePointerDown}
+            onVolumeCommit={volumeController.onVolumeCommit}
+            onVolumePointerCancel={volumeController.onVolumePointerCancel}
+            onVolumeButtonPress={volumeController.onVolumeButtonPress}
+            activeContextMode={isContextOpen ? contextMode : null}
+            onContextModeToggle={(mode) => {
+              if (isContextOpen && contextMode === mode) closeContext("trigger");
+              else if (isContextOpen) setContextMode(mode);
+              else openContext(mode);
+            }}
+            queueButtonRef={queueButtonRef}
+            lyricsButtonRef={lyricsButtonRef}
+          />
+        }
+      />
+    </LibraryWorkspaceProvider>
   );
 }
 export default App;
