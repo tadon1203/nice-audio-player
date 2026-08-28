@@ -3,6 +3,8 @@ import argparse
 import subprocess
 import zipfile
 
+INTERNAL_FILES = {"_prompts.md"}
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -31,7 +33,7 @@ def main():
     files = [
         root / path.decode("utf-8")
         for path in result.stdout.split(b"\0")
-        if path
+        if path and path.decode("utf-8") not in INTERNAL_FILES
     ]
 
     with zipfile.ZipFile(

@@ -42,7 +42,7 @@ export function SettingsView({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmRoot, setConfirmRoot] = useState<LibraryRoot | null>(null);
-  const { setViewportElement, setContentElement } = useScrollRegion();
+  const { setViewportElement } = useScrollRegion();
   const cancelButtonRef = useRef<HTMLButtonElement>(null);
   const addFolderRef = useRef<HTMLButtonElement>(null);
   const [focusAddFolderAfterRemoval, setFocusAddFolderAfterRemoval] = useState(false);
@@ -162,7 +162,7 @@ export function SettingsView({
   }
   return (
     <div ref={setViewportElement} className="settings-scroll-surface" data-scroll-region>
-      <div ref={setContentElement}>
+      <div>
         <section className="settings-view page-frame" aria-label="Settings">
           <div className="settings-view__content content-frame">
             <header>

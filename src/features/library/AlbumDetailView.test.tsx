@@ -32,9 +32,7 @@ import { AlbumDetailView } from "./AlbumDetailView";
 
 const artwork: ArtworkRef = { contentHash: "hash", mimeType: "jpeg", relativePath: "cover.jpg" };
 const album: LibraryAlbumSummary = {
-  id: "album-1",
-  title: "Album title",
-  albumArtist: "Album artist",
+  key: { title: "Album title", albumArtist: "Album artist" },
   artwork,
 };
 const track = (overrides: Partial<LibraryAlbumTrackSummary> = {}): LibraryAlbumTrackSummary => ({
@@ -123,7 +121,7 @@ describe("AlbumDetailView", () => {
     );
     cleanup();
 
-    renderDetail({ summary: { ...album, title: "夜のアルバム Album" } });
+    renderDetail({ summary: { ...album, key: { ...album.key, title: "夜のアルバム Album" } } });
     expect(screen.getByRole("heading", { name: "夜のアルバム Album" })).toHaveClass(
       "type-media-title--interface",
     );
@@ -141,7 +139,7 @@ describe("AlbumDetailView", () => {
     expect(screen.getByText("Guest artist")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Play album" }));
     fireEvent.click(screen.getByRole("button", { name: "Play Guest track by Guest artist" }));
-    expect(onPlayAlbum).toHaveBeenCalledWith("album-1");
+    expect(onPlayAlbum).toHaveBeenCalledWith(album.key);
     expect(onPlayTrack).toHaveBeenCalledWith("track-2");
   });
 
@@ -168,7 +166,7 @@ describe("AlbumDetailView", () => {
     expect(loadMore).toHaveClass("button--neutral");
     fireEvent.click(playAlbum);
     fireEvent.click(loadMore);
-    expect(onPlayAlbum).toHaveBeenCalledWith("album-1");
+    expect(onPlayAlbum).toHaveBeenCalledWith(album.key);
     expect(loadNext).toHaveBeenCalledOnce();
   });
 

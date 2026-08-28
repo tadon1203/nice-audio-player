@@ -30,21 +30,21 @@ describe("AlbumArtworkIdentity", () => {
 
   it("uses one album-owned layout identity in normal motion", () => {
     render(
-      <AlbumArtworkIdentity albumId="album-1" className="artwork">
+      <AlbumArtworkIdentity albumId={{ title: "Album", albumArtist: "Artist" }} className="artwork">
         <span>Cover</span>
       </AlbumArtworkIdentity>,
     );
 
     expect(screen.getByText("Cover").parentElement).toHaveAttribute(
       "data-layout-id",
-      "album-artwork:album-1",
+      "album-artwork:album:%7B%22title%22%3A%22Album%22%2C%22albumArtist%22%3A%22Artist%22%7D",
     );
   });
 
   it("renders a static replacement under reduced motion", () => {
     motionState.reduced = true;
     render(
-      <AlbumArtworkIdentity albumId="album-1" className="artwork">
+      <AlbumArtworkIdentity albumId={{ title: "Album", albumArtist: "Artist" }} className="artwork">
         <span>Cover</span>
       </AlbumArtworkIdentity>,
     );

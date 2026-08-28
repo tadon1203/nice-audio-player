@@ -20,15 +20,17 @@ function PresenceContents({ children }: { children: ReactNode }) {
 export function ExclusiveRegion({
   activeKey,
   children,
+  className,
 }: {
   activeKey: string;
   children: ReactNode;
+  className?: string;
 }) {
   const reduced = useReducedMotion();
   const entry = reduced ? effectsMotion.reduced : effectsMotion.content;
   const exit = reduced ? effectsMotion.reduced : effectsMotion.feedback;
   return (
-    <div className="exclusive-region">
+    <div className={`exclusive-region${className ? ` ${className}` : ""}`}>
       <AnimatePresence initial={false} mode="popLayout">
         <motion.div
           key={activeKey}

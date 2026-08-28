@@ -6,9 +6,15 @@
   overflow-y: auto;
   scrollbar-gutter: stable;
 }
+.library-route-region,
+.library-route-region .exclusive-region__item,
+.library-route-region .exclusive-region__contents {
+  block-size: 100%;
+  min-block-size: 0;
+}
 .library-view {
   box-sizing: border-box;
-  padding-block: 60px;
+  padding-block: 64px;
 }
 .library-view h1 {
   margin: 0;
@@ -104,7 +110,7 @@
 }
 .library-view__album-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(200px, 210px));
   column-gap: 20px;
   row-gap: 40px;
 }
@@ -123,11 +129,22 @@
   color: var(--color-text-secondary);
   text-align: start;
 }
+.library-view__album-button .library-view__album-artwork-frame {
+  outline: 1px solid transparent;
+  outline-offset: -1px;
+  transition: outline-color 120ms ease;
+}
 .library-view__album-button:hover {
   background: transparent;
 }
+.library-view__album-button:hover .library-view__album-artwork-frame {
+  outline-color: var(--color-border-subtle);
+}
 .library-view__album-button:active {
   background: transparent;
+}
+.library-view__album-button:active .library-view__album-artwork-frame {
+  outline-color: var(--color-border-control);
 }
 .library-view__album-button:focus-visible {
   outline: 2px solid var(--color-focus-ring);
@@ -135,7 +152,7 @@
 }
 .library-view__album-button .library-view__album-title {
   display: block;
-  margin-block-start: 10px;
+  margin-block-start: 12px;
   color: var(--color-text-primary);
   font-size: var(--text-body-md);
   font-weight: var(--font-weight-medium);
@@ -145,13 +162,31 @@
 }
 .library-view__album-artist {
   display: block;
-  margin-block-start: 2px;
+  margin-block-start: 4px;
   color: var(--color-text-secondary);
   font-size: var(--text-body-sm);
   font-weight: var(--font-weight-regular);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.album-detail__artist-button {
+  display: block;
+  min-block-size: 40px;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-secondary);
+  padding: 0;
+  text-align: start;
+  cursor: pointer;
+}
+.album-detail__artist-button:hover,
+.album-detail__artist-button:active {
+  color: var(--color-text-primary);
+}
+.album-detail__artist-button:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
 }
 .library-artwork-transition {
   display: grid;
@@ -457,7 +492,7 @@
   container-type: inline-size;
   container-name: album-detail;
 }
-@container album-detail (min-width: 640px) {
+@container album-detail (min-width: 680px) {
   .album-detail__hero {
     --album-artwork-width: clamp(280px, 50cqi, 320px);
     grid-template-columns: minmax(280px, 320px) minmax(0, 1fr);

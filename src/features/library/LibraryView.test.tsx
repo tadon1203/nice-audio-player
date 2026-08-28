@@ -6,20 +6,24 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LibraryAlbumSummary } from "@/bindings";
 
 const album: LibraryAlbumSummary = {
-  id: "album-1",
-  title: "Album title",
-  albumArtist: "Album artist",
+  key: { title: "Album title", albumArtist: "Album artist" },
   artwork: null,
 };
 
 vi.mock("@/api/library", () => ({
   getLibraryStatus: vi.fn(async () => ({ indexing: false })),
   listLibraryRoots: vi.fn(async () => [{ id: "root-1" }]),
+  listLibraryAlbums: vi.fn(async () => ({ items: [], nextCursor: null })),
+  listLibraryAlbumArtists: vi.fn(async () => ({ items: [], nextCursor: null })),
+  getLibraryAlbumArtist: vi.fn(),
+  listLibraryAlbumArtistAlbums: vi.fn(async () => ({ items: [], nextCursor: null })),
+  getLibraryAlbumDetails: vi.fn(),
+  listLibraryAlbumTracks: vi.fn(),
 }));
 vi.mock("./use-album-query", () => ({
   useAlbumQuery: () => ({
     items: [album],
-    nextAfterId: null,
+    nextCursor: null,
     loading: false,
     error: null,
     retry: vi.fn(),
@@ -38,7 +42,7 @@ vi.mock("./use-track-query", () => ({
 }));
 vi.mock("./AlbumsView", () => ({
   AlbumsView: ({ onOpen }: { onOpen: (album: LibraryAlbumSummary) => void }) => (
-    <button type="button" data-album-id={album.id} onClick={() => onOpen(album)}>
+    <button type="button" data-album-id={album.key.title} onClick={() => onOpen(album)}>
       Open album
     </button>
   ),
@@ -58,7 +62,6 @@ vi.mock("@/hooks/use-scroll-region", async () => {
       return {
         element: viewport,
         setViewportElement: setViewport,
-        setContentElement: vi.fn(),
         scrollToPosition: useCallback(
           (top: number) => {
             if (viewport) viewport.scrollTop = top;
@@ -66,25 +69,27 @@ vi.mock("@/hooks/use-scroll-region", async () => {
           [viewport],
         ),
         scrollToElement: vi.fn(),
-        cancel: vi.fn(),
       };
     },
   };
 });
 
 import { LibraryView } from "./LibraryView";
+import { LibraryWorkspaceProvider } from "./LibraryWorkspace";
 
 function renderLibrary() {
   return render(
-    <LibraryView
-      onOpenSettings={vi.fn()}
-      onPlayTrack={vi.fn()}
-      onPlayAlbum={vi.fn()}
-      onPlayAlbumTrack={vi.fn()}
-      activeTrackId={null}
-      playbackStatus="stopped"
-      playbackAvailable
-    />,
+    <LibraryWorkspaceProvider>
+      <LibraryView
+        onOpenSettings={vi.fn()}
+        onPlayTrack={vi.fn()}
+        onPlayAlbum={vi.fn()}
+        onPlayAlbumTrack={vi.fn()}
+        activeTrackId={null}
+        playbackStatus="stopped"
+        playbackAvailable
+      />
+    </LibraryWorkspaceProvider>,
   );
 }
 

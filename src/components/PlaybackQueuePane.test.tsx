@@ -9,10 +9,8 @@ vi.mock("@/hooks/use-scroll-region", () => ({
   useScrollRegion: () => ({
     element: document.createElement("div"),
     setViewportElement: vi.fn(),
-    setContentElement: vi.fn(),
     scrollToPosition: vi.fn(),
     scrollToElement,
-    cancel: vi.fn(),
   }),
 }));
 

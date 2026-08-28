@@ -1,7 +1,10 @@
 import { isLibraryCommandError } from "@/api/library";
 
-export function formatLibraryQueryError(error: unknown, item: "albums" | "tracks"): string {
-  const name = item === "albums" ? "Albums" : "Tracks";
+export function formatLibraryQueryError(
+  error: unknown,
+  item: "albums" | "album artists" | "tracks",
+): string {
+  const name = item === "albums" ? "Albums" : item === "tracks" ? "Tracks" : "Album artists";
   if (isLibraryCommandError(error)) {
     if (error.code === "libraryUnavailable") return "The library database is unavailable.";
     if (error.code === "persistenceFailed")

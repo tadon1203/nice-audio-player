@@ -1,114 +1,162 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import type { LibraryAlbumSummary, LibraryTrackSummary } from "@/bindings";
+import type {
+  LibraryAlbumArtistKey,
+  LibraryAlbumArtistSummary,
+  LibraryAlbumKey,
+  LibraryAlbumSummary,
+  LibraryTrackSummary,
+} from "@/bindings";
 import { getLibraryStatus, listLibraryRoots } from "@/api/library";
 import { Button } from "@/components/ui/Button";
+import { ExclusiveRegion } from "@/components/ui/ExclusiveRegion";
 import { useScrollRegion } from "@/hooks/use-scroll-region";
 import { useAlbumQuery } from "./use-album-query";
+import { useAlbumArtistQuery } from "./use-album-artist-query";
 import { useTrackQuery } from "./use-track-query";
+import { useAlbumDetailQuery } from "./use-album-detail-query";
+import { useAlbumArtistDetailQuery } from "./use-album-artist-detail-query";
 import { AlbumsView } from "./AlbumsView";
-import { TrackRow } from "./TrackRow";
+import { AlbumArtistsView, AlbumArtistDetailView } from "./AlbumArtistsView";
 import { AlbumDetailView } from "./AlbumDetailView";
+import { TrackRow } from "./TrackRow";
 import { LibraryPresentationTabs } from "./LibraryPresentationTabs";
+import {
+  useLibraryFocusRestore,
+  useLibraryWorkspace,
+  type LibraryNavigationFrame,
+} from "./LibraryWorkspace";
 
 interface Props {
   onOpenSettings: () => void;
   onPlayTrack: (id: string) => void;
-  onPlayAlbum: (id: string) => void;
-  onPlayAlbumTrack: (albumId: string, trackId: string) => void;
+  onPlayAlbum: (key: LibraryAlbumKey) => void;
+  onPlayAlbumTrack: (albumKey: LibraryAlbumKey, trackId: string) => void;
   activeTrackId: string | null;
   playbackStatus: "stopped" | "playing" | "paused" | "failed";
   playbackAvailable: boolean;
   libraryRefreshKey?: number;
   scanError?: string | null;
 }
+function markScrollSurfacesExiting() {
+  document
+    .querySelectorAll<HTMLElement>("[data-library-surface]")
+    .forEach((surface) => (surface.dataset.scrollSurfaceExiting = "true"));
+}
 
-export function LibraryView({
+export function LibraryView(props: Props) {
+  const { presentation, currentFrame, back, setPresentation } = useLibraryWorkspace();
+  useLibraryFocusRestore();
+  if (currentFrame?.kind === "album") {
+    return (
+      <ExclusiveRegion activeKey={currentFrame.id} className="library-route-region">
+        <AlbumSurface {...props} frame={currentFrame} onBack={back} />
+      </ExclusiveRegion>
+    );
+  }
+  if (currentFrame?.kind === "albumArtist") {
+    return (
+      <ExclusiveRegion activeKey={currentFrame.id} className="library-route-region">
+        <AlbumArtistSurface {...props} frame={currentFrame} onBack={back} />
+      </ExclusiveRegion>
+    );
+  }
+  return (
+    <ExclusiveRegion activeKey={`root:${presentation}`} className="library-route-region">
+      <LibraryBrowserSurface
+        key={presentation}
+        {...props}
+        presentation={presentation}
+        onChangePresentation={setPresentation}
+      />
+    </ExclusiveRegion>
+  );
+}
+
+function LibraryBrowserSurface({
+  presentation,
+  onChangePresentation,
   onOpenSettings,
   onPlayTrack,
-  onPlayAlbum,
-  onPlayAlbumTrack,
   activeTrackId,
   playbackStatus,
   playbackAvailable,
   libraryRefreshKey = 0,
   scanError = null,
-}: Props) {
-  const [presentation, setPresentation] = useState<"albums" | "tracks">("albums");
-  const [rawSearch, setRawSearch] = useState("");
-  const [search, setSearch] = useState("");
-  const [hasRoots, setHasRoots] = useState<boolean | null>(null);
-  const [selectedAlbum, setSelectedAlbum] = useState<LibraryAlbumSummary | null>(null);
-  const [returnFocusAlbumId, setReturnFocusAlbumId] = useState<string | null>(null);
-  const browserScrollTop = useRef({ albums: 0, tracks: 0 });
+}: Props & {
+  presentation: "albums" | "albumArtists" | "tracks";
+  onChangePresentation: (value: "albums" | "albumArtists" | "tracks") => void;
+}) {
   const {
-    element: browserElement,
-    setViewportElement: setBrowserViewportElement,
-    setContentElement: setBrowserContentElement,
-    scrollToPosition: scrollBrowserToPosition,
-  } = useScrollRegion();
-  const {
-    setViewportElement: setDetailViewportElement,
-    setContentElement: setDetailContentElement,
-  } = useScrollRegion();
-  const albumQuery = useAlbumQuery(search, libraryRefreshKey, presentation === "albums");
-  const trackQuery = useTrackQuery(search, libraryRefreshKey, presentation === "tracks");
-
+    rawSearch,
+    setRawSearch,
+    committedSearch,
+    client,
+    scrollRegistry,
+    queryRetention,
+    openAlbum,
+    openAlbumArtist,
+  } = useLibraryWorkspace();
+  const search = committedSearch[presentation];
+  const rawValue = rawSearch[presentation];
+  const retention = useMemo(
+    () => ({ key: `root:${presentation}`, registry: queryRetention }),
+    [presentation, queryRetention],
+  );
+  const { element, setViewportElement, scrollToPosition } = useScrollRegion(
+    undefined,
+    useMemo(
+      () => ({ key: `root:${presentation}`, registry: scrollRegistry }),
+      [presentation, scrollRegistry],
+    ),
+  );
+  const albumQuery = useAlbumQuery(search, libraryRefreshKey, presentation === "albums", client, {
+    retention,
+  });
+  const artistQuery = useAlbumArtistQuery(
+    search,
+    libraryRefreshKey,
+    presentation === "albumArtists",
+    client,
+    { retention },
+  );
+  const trackQuery = useTrackQuery(search, libraryRefreshKey, presentation === "tracks", client, {
+    retention,
+  });
+  const previousSearch = useRef(search);
   useEffect(() => {
-    const timer = window.setTimeout(() => setSearch(rawSearch.trim()), 200);
-    return () => window.clearTimeout(timer);
-  }, [rawSearch]);
+    if (previousSearch.current !== search) {
+      scrollRegistry.set(`root:${presentation}`, 0);
+      scrollToPosition(0, "instant");
+    }
+    previousSearch.current = search;
+  }, [presentation, scrollRegistry, scrollToPosition, search]);
+  const [hasRoots, setHasRoots] = useState<boolean | null>(null);
   useEffect(() => {
     void Promise.all([getLibraryStatus(), listLibraryRoots()])
       .then(([, roots]) => setHasRoots(roots.length > 0))
       .catch(() => setHasRoots(null));
   }, []);
-  useLayoutEffect(() => {
-    if (!selectedAlbum) scrollBrowserToPosition(browserScrollTop.current[presentation], "instant");
-  }, [presentation, scrollBrowserToPosition, selectedAlbum]);
-
-  const changePresentation = (next: "albums" | "tracks") => {
-    if (next === presentation) return;
-    browserScrollTop.current[presentation] = browserElement?.scrollTop ?? 0;
-    setPresentation(next);
-  };
   const empty = hasRoots === false ? "Add a music folder to start" : "No indexed music yet";
   const query = presentation === "albums" ? albumQuery : trackQuery;
-
-  if (selectedAlbum) {
-    return (
-      <div
-        key="detail"
-        ref={setDetailViewportElement}
-        className="library-scroll-surface"
-        data-library-surface="detail"
-        data-scroll-region
-      >
-        <div ref={setDetailContentElement}>
-          <AlbumDetailView
-            album={selectedAlbum}
-            refreshKey={libraryRefreshKey}
-            playbackAvailable={playbackAvailable}
-            onPlayAlbumTrack={onPlayAlbumTrack}
-            onPlayAlbum={onPlayAlbum}
-            activeTrackId={activeTrackId}
-            playbackStatus={playbackStatus}
-            onBack={() => setSelectedAlbum(null)}
-          />
-        </div>
-      </div>
-    );
-  }
-
+  const handlePresentationChange = useCallback(
+    (next: "albums" | "albumArtists" | "tracks") => {
+      markScrollSurfacesExiting();
+      if (element) {
+        scrollRegistry.set(`root:${presentation}`, element.scrollTop);
+      }
+      onChangePresentation(next);
+    },
+    [element, onChangePresentation, presentation, scrollRegistry],
+  );
   return (
     <div
-      key="browser"
-      ref={setBrowserViewportElement}
+      ref={setViewportElement}
       className="library-scroll-surface"
       data-library-surface="browser"
       data-scroll-region
     >
-      <div ref={setBrowserContentElement}>
+      <div>
         <section
           className="library-view page-frame"
           data-presentation={presentation}
@@ -120,32 +168,40 @@ export function LibraryView({
               <div className="library-view__controls">
                 <LibraryPresentationTabs
                   presentation={presentation}
-                  onChange={changePresentation}
+                  onChange={handlePresentationChange}
                 />
                 <label className="library-view__search">
-                  <span className="sr-only">Search your library</span>
+                  <span className="sr-only">
+                    Filter {presentation === "albumArtists" ? "album artists" : presentation}
+                  </span>
                   <input
-                    value={rawSearch}
+                    value={rawValue}
                     onChange={(event) => setRawSearch(event.currentTarget.value)}
-                    placeholder="Search your library..."
+                    placeholder={
+                      presentation === "albums"
+                        ? "Filter albums…"
+                        : presentation === "albumArtists"
+                          ? "Filter album artists…"
+                          : "Filter tracks…"
+                    }
                   />
                 </label>
               </div>
             </header>
-            {scanError || query.error ? (
-              <div className="library-view__notice library-view__notice--error" role="alert">
-                <p>{scanError ?? query.error}</p>
-                <div className="library-view__notice-actions">
-                  {query.error ? (
-                    <Button type="button" onClick={query.retry}>
-                      Retry library
-                    </Button>
-                  ) : null}
-                  <Button type="button" onClick={onOpenSettings}>
-                    Open Library settings
-                  </Button>
-                </div>
-              </div>
+            {scanError ? (
+              <LibraryErrorNotice message={scanError} onOpenSettings={onOpenSettings} />
+            ) : presentation === "albumArtists" ? (
+              <AlbumArtistsView
+                scrollRoot={element}
+                onSelectArtist={(artist) => void openAlbumArtist(artist.key, artist)}
+                query={artistQuery}
+              />
+            ) : query.error ? (
+              <LibraryErrorNotice
+                message={query.error}
+                retry={query.retry}
+                onOpenSettings={onOpenSettings}
+              />
             ) : query.loading && query.items.length === 0 ? (
               <p className="library-view__notice">Loading library…</p>
             ) : query.items.length === 0 ? (
@@ -159,30 +215,163 @@ export function LibraryView({
               <AlbumsView
                 albums={albumQuery.items}
                 onEnd={albumQuery.loadNext}
-                hasMore={Boolean(albumQuery.nextAfterId)}
-                scrollRoot={browserElement}
-                returnFocusAlbumId={returnFocusAlbumId}
-                onReturnFocusRestored={() => setReturnFocusAlbumId(null)}
-                onOpen={(album) => {
-                  browserScrollTop.current.albums = browserElement?.scrollTop ?? 0;
-                  setReturnFocusAlbumId(album.id);
-                  setSelectedAlbum(album);
-                }}
+                hasMore={Boolean(albumQuery.nextCursor)}
+                scrollRoot={element}
+                onOpen={openAlbum}
               />
             ) : (
               <Tracks
                 tracks={trackQuery.items}
                 onEnd={trackQuery.loadNext}
-                hasMore={Boolean(trackQuery.nextAfterId)}
+                hasMore={Boolean(trackQuery.nextCursor)}
                 playbackAvailable={playbackAvailable}
                 onPlayTrack={onPlayTrack}
                 activeTrackId={activeTrackId}
                 playbackStatus={playbackStatus}
-                scrollElement={browserElement}
+                scrollElement={element}
               />
             )}
           </div>
         </section>
+      </div>
+    </div>
+  );
+}
+
+function LibraryErrorNotice({
+  message,
+  retry,
+  onOpenSettings,
+}: {
+  message: string;
+  retry?: () => Promise<void>;
+  onOpenSettings: () => void;
+}) {
+  return (
+    <div className="library-view__notice library-view__notice--error" role="alert">
+      <p>{message}</p>
+      <div className="library-view__notice-actions">
+        {retry ? (
+          <Button type="button" onClick={() => void retry()}>
+            Retry library
+          </Button>
+        ) : null}
+        <Button type="button" onClick={onOpenSettings}>
+          Open Library settings
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function AlbumSurface({
+  frame,
+  onBack,
+  ...props
+}: Props & { frame: LibraryNavigationFrame; onBack: () => void }) {
+  const { client, scrollRegistry, queryRetention } = useLibraryWorkspace();
+  const { setViewportElement } = useScrollRegion(
+    undefined,
+    useMemo(
+      () => ({ key: `frame:${frame.id}`, registry: scrollRegistry }),
+      [frame.id, scrollRegistry],
+    ),
+  );
+  const retention = useMemo(
+    () => ({ key: `frame:${frame.id}`, registry: queryRetention }),
+    [frame.id, queryRetention],
+  );
+  const album = frame.summary as LibraryAlbumSummary;
+  return (
+    <div
+      ref={setViewportElement}
+      className="library-scroll-surface"
+      data-library-surface="detail"
+      data-scroll-region
+    >
+      <div>
+        <AlbumDetailSurfaceContent
+          {...props}
+          album={album}
+          client={client}
+          retention={{ retention }}
+          refreshKey={props.libraryRefreshKey ?? 0}
+          onBack={onBack}
+        />
+      </div>
+    </div>
+  );
+}
+
+function AlbumDetailSurfaceContent({
+  album,
+  client,
+  retention,
+  refreshKey,
+  onBack,
+  ...props
+}: Props & {
+  album: LibraryAlbumSummary;
+  client: import("./LibraryWorkspace").LibraryBrowseClient;
+  retention: import("./use-paged-library-query").PagedLibraryQueryOptions;
+  refreshKey: number;
+  onBack: () => void;
+}) {
+  const { openAlbumArtist } = useLibraryWorkspace();
+  const query = useAlbumDetailQuery(album.key, refreshKey, true, client, retention);
+  return (
+    <AlbumDetailView
+      {...props}
+      album={album}
+      refreshKey={refreshKey}
+      onBack={onBack}
+      query={query}
+      onOpenAlbumArtist={(key) => void openAlbumArtist(key)}
+    />
+  );
+}
+
+function AlbumArtistSurface({
+  frame,
+  onBack,
+  ...props
+}: Props & { frame: LibraryNavigationFrame; onBack: () => void }) {
+  const { client, scrollRegistry, queryRetention } = useLibraryWorkspace();
+  const { element, setViewportElement } = useScrollRegion(
+    undefined,
+    useMemo(
+      () => ({ key: `frame:${frame.id}`, registry: scrollRegistry }),
+      [frame.id, scrollRegistry],
+    ),
+  );
+  const artistKey = frame.key as LibraryAlbumArtistKey;
+  const detail = useAlbumArtistDetailQuery(
+    artistKey,
+    frame.summary as LibraryAlbumArtistSummary | undefined,
+    props.libraryRefreshKey ?? 0,
+    client,
+    { retention: { key: `frame:${frame.id}`, registry: queryRetention } },
+  );
+  const { openAlbum } = useLibraryWorkspace();
+  return (
+    <div
+      ref={setViewportElement}
+      className="library-scroll-surface"
+      data-library-surface="artist-detail"
+      data-scroll-region
+    >
+      <div>
+        <AlbumArtistDetailView
+          artist={detail.summary}
+          artistKey={artistKey}
+          summaryLoading={detail.summaryLoading}
+          summaryError={detail.summaryError}
+          onRetrySummary={detail.retrySummary}
+          scrollRoot={element}
+          onBack={onBack}
+          onOpenAlbum={openAlbum}
+          query={detail.albums}
+        />
       </div>
     </div>
   );

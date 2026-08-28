@@ -10,12 +10,17 @@ import type {
   LibraryTrackPage,
   LibraryTrackSummary,
   LibraryAlbumPage,
+  LibraryAlbumKey,
+  LibraryAlbumArtistKey,
+  LibraryAlbumArtistPage,
+  LibraryAlbumArtistSummary,
   LibraryAlbumDetails,
   LibraryAlbumTrackPage,
   LibraryAlbumTrackSummary,
   PlaybackSnapshot,
   StartLibraryTrackError,
   StartLibraryAlbumError,
+  StartLibraryAlbumTrackError,
 } from "@/bindings";
 
 const startLibraryTrackErrorCodes = {
@@ -38,15 +43,15 @@ export async function startLibraryTrack(trackId: string): Promise<PlaybackSnapsh
   return commands.startLibraryTrack(trackId);
 }
 export async function startLibraryAlbumTrack(
-  albumId: string,
+  albumKey: LibraryAlbumKey,
   trackId: string,
 ): Promise<PlaybackSnapshot> {
-  validateId(albumId);
+  validateAlbumKey(albumKey);
   validateId(trackId);
-  return commands.startLibraryAlbumTrack(albumId, trackId);
+  return commands.startLibraryAlbumTrack(albumKey, trackId);
 }
 const startLibraryAlbumErrorCodes = {
-  invalidId: true,
+  invalidAlbumKey: true,
   albumNotFound: true,
   noPlayableTracks: true,
   sourceUnavailable: true,
@@ -59,9 +64,9 @@ const startLibraryAlbumErrorCodes = {
   playbackWorkerUnavailable: true,
   taskFailed: true,
 } satisfies Record<StartLibraryAlbumError["code"], true>;
-export async function startLibraryAlbum(albumId: string): Promise<PlaybackSnapshot> {
-  validateId(albumId);
-  return commands.startLibraryAlbum(albumId);
+export async function startLibraryAlbum(albumKey: LibraryAlbumKey): Promise<PlaybackSnapshot> {
+  validateAlbumKey(albumKey);
+  return commands.startLibraryAlbum(albumKey);
 }
 export function isStartLibraryAlbumError(value: unknown): value is StartLibraryAlbumError {
   return (
@@ -75,6 +80,33 @@ export function isStartLibraryTrackError(value: unknown): value is StartLibraryT
     isRecord(value) &&
     typeof value.code === "string" &&
     Object.prototype.hasOwnProperty.call(startLibraryTrackErrorCodes, value.code)
+  );
+}
+const startLibraryAlbumTrackErrorCodes = {
+  invalidAlbumKey: true,
+  invalidTrackId: true,
+  albumNotFound: true,
+  trackNotMember: true,
+  trackUnavailable: true,
+  trackNotPlayable: true,
+  noPlayableTracks: true,
+  sourceUnavailable: true,
+  libraryUnavailable: true,
+  persistenceFailed: true,
+  decodeFailed: true,
+  noOutputDevice: true,
+  outputDeviceUnavailable: true,
+  outputFailed: true,
+  playbackWorkerUnavailable: true,
+  taskFailed: true,
+} satisfies Record<StartLibraryAlbumTrackError["code"], true>;
+export function isStartLibraryAlbumTrackError(
+  value: unknown,
+): value is StartLibraryAlbumTrackError {
+  return (
+    isRecord(value) &&
+    typeof value.code === "string" &&
+    Object.prototype.hasOwnProperty.call(startLibraryAlbumTrackErrorCodes, value.code)
   );
 }
 
@@ -95,6 +127,10 @@ const errorCodes = {
   persistenceFailed: true,
   taskFailed: true,
   albumNotFound: true,
+  invalidCursor: true,
+  invalidAlbumKey: true,
+  invalidAlbumArtistKey: true,
+  albumArtistNotFound: true,
 } satisfies Record<LibraryCommandError["code"], true>;
 
 export async function getLibraryStatus(): Promise<LibraryStatus> {
@@ -139,28 +175,57 @@ export async function listLibraryTracks(
   return value;
 }
 export async function listLibraryAlbums(
-  afterId: string | null = null,
+  afterCursor: string | null = null,
   search: string | null = null,
 ): Promise<LibraryAlbumPage> {
-  if (afterId !== null) validateId(afterId);
-  const value: unknown = await commands.listLibraryAlbums(afterId, search);
+  if (afterCursor !== null) validateCursor(afterCursor);
+  const value: unknown = await commands.listLibraryAlbums(afterCursor, search);
   if (!isLibraryAlbumPage(value)) throw new Error("Invalid library albums payload.");
   return value;
 }
-export async function getLibraryAlbumDetails(albumId: string): Promise<LibraryAlbumDetails> {
-  validateId(albumId);
-  const value: unknown = await commands.getLibraryAlbumDetails(albumId);
+export async function listLibraryAlbumArtists(
+  afterCursor: string | null = null,
+  search: string | null = null,
+): Promise<LibraryAlbumArtistPage> {
+  if (afterCursor !== null) validateCursor(afterCursor);
+  const value: unknown = await commands.listLibraryAlbumArtists(afterCursor, search);
+  if (!isLibraryAlbumArtistPage(value)) throw new Error("Invalid library album artists payload.");
+  return value;
+}
+export async function getLibraryAlbumArtist(
+  key: LibraryAlbumArtistKey,
+): Promise<LibraryAlbumArtistSummary> {
+  validateAlbumArtistKey(key);
+  const value: unknown = await commands.getLibraryAlbumArtist(key);
+  if (!isLibraryAlbumArtistSummary(value)) throw new Error("Invalid library album artist payload.");
+  return value;
+}
+export async function listLibraryAlbumArtistAlbums(
+  key: LibraryAlbumArtistKey,
+  afterCursor: string | null = null,
+): Promise<LibraryAlbumPage> {
+  validateAlbumArtistKey(key);
+  if (afterCursor !== null) validateCursor(afterCursor);
+  const value: unknown = await commands.listLibraryAlbumArtistAlbums(key, afterCursor);
+  if (!isLibraryAlbumPage(value)) throw new Error("Invalid library artist albums payload.");
+  return value;
+}
+export async function getLibraryAlbumDetails(
+  albumKey: LibraryAlbumKey,
+): Promise<LibraryAlbumDetails> {
+  validateAlbumKey(albumKey);
+  const value: unknown = await commands.getLibraryAlbumDetails(albumKey);
   if (!isLibraryAlbumDetails(value)) throw new Error("Invalid library album details payload.");
   return value;
 }
 export async function listLibraryAlbumTracks(
-  albumId: string,
+  albumKey: LibraryAlbumKey,
   offset = 0,
 ): Promise<LibraryAlbumTrackPage> {
-  validateId(albumId);
+  validateAlbumKey(albumKey);
   if (!isNatural(offset))
     throw new Error("Album track offsets must be safe non-negative integers.");
-  const value: unknown = await commands.listLibraryAlbumTracks(albumId, offset);
+  const value: unknown = await commands.listLibraryAlbumTracks(albumKey, offset);
   if (!isLibraryAlbumTrackPage(value)) throw new Error("Invalid library album tracks payload.");
   return value;
 }
@@ -252,12 +317,34 @@ function isLibraryAlbumPage(value: unknown): value is LibraryAlbumPage {
     value.items.every(
       (item) =>
         isRecord(item) &&
-        isId(item.id) &&
-        typeof item.title === "string" &&
-        typeof item.albumArtist === "string" &&
+        isLibraryAlbumSummary(item) &&
         (item.artwork === null || isArtworkRef(item.artwork)),
     ) &&
-    (value.nextAfterId === null || isId(value.nextAfterId))
+    isCursorOrNull(value.nextCursor)
+  );
+}
+function isLibraryAlbumArtistPage(value: unknown): value is LibraryAlbumArtistPage {
+  return (
+    isRecord(value) &&
+    Array.isArray(value.items) &&
+    value.items.every(isLibraryAlbumArtistSummary) &&
+    isCursorOrNull(value.nextCursor)
+  );
+}
+function isLibraryAlbumArtistSummary(value: unknown): value is LibraryAlbumArtistSummary {
+  return (
+    isRecord(value) &&
+    isLibraryAlbumArtistKey(value.key) &&
+    (value.artwork === null || isArtworkRef(value.artwork)) &&
+    isNatural(value.albumCount)
+  );
+}
+function isLibraryAlbumArtistKey(value: unknown): value is LibraryAlbumArtistKey {
+  return (
+    isRecord(value) &&
+    typeof value.name === "string" &&
+    value.name.length > 0 &&
+    value.name.trim() === value.name
   );
 }
 function isLibraryAlbumDetails(value: unknown): value is LibraryAlbumDetails {
@@ -273,10 +360,19 @@ function isLibraryAlbumDetails(value: unknown): value is LibraryAlbumDetails {
 function isLibraryAlbumSummary(value: unknown): boolean {
   return (
     isRecord(value) &&
-    isId(value.id) &&
-    typeof value.title === "string" &&
-    typeof value.albumArtist === "string" &&
+    isLibraryAlbumKey(value.key) &&
     (value.artwork === null || isArtworkRef(value.artwork))
+  );
+}
+function isLibraryAlbumKey(value: unknown): value is LibraryAlbumKey {
+  return (
+    isRecord(value) &&
+    typeof value.title === "string" &&
+    value.title.length > 0 &&
+    value.title.trim() === value.title &&
+    typeof value.albumArtist === "string" &&
+    value.albumArtist.length > 0 &&
+    value.albumArtist.trim() === value.albumArtist
   );
 }
 function isLibraryAlbumTrack(value: unknown): value is LibraryAlbumTrackSummary {
@@ -331,6 +427,21 @@ async function readStatus(value: Promise<unknown>): Promise<LibraryStatus> {
 }
 function validateId(id: string): void {
   if (!isId(id)) throw new Error("Library IDs must be canonical positive decimal strings.");
+}
+function validateCursor(cursor: string): void {
+  if (typeof cursor !== "string" || cursor.length === 0)
+    throw new Error("Library cursors must be non-empty opaque strings.");
+}
+function isCursorOrNull(value: unknown): value is string | null {
+  return value === null || (typeof value === "string" && value.length > 0);
+}
+function validateAlbumKey(value: LibraryAlbumKey): void {
+  if (!isLibraryAlbumKey(value))
+    throw new Error("Library Album keys must contain canonical title and album artist strings.");
+}
+function validateAlbumArtistKey(value: LibraryAlbumArtistKey): void {
+  if (!isLibraryAlbumArtistKey(value))
+    throw new Error("Library Album Artist keys must contain a canonical name.");
 }
 function isId(value: unknown): value is string {
   return typeof value === "string" && /^[1-9][0-9]*$/.test(value);

@@ -12,9 +12,7 @@ vi.mock("./LibraryArtwork", () => ({
 import { AlbumCard } from "./AlbumCard";
 
 const album: LibraryAlbumSummary = {
-  id: "album-1",
-  title: "Album title",
-  albumArtist: "Album artist",
+  key: { title: "Album title", albumArtist: "Album artist" },
   artwork: null,
 };
 

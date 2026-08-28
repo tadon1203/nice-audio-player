@@ -1,15 +1,15 @@
 import type { ReactNode } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { spatialStructural } from "@/lib/motion";
-import type { LibraryAlbumKey } from "@/bindings";
-import { albumIdentity } from "./library-identity";
+import type { LibraryAlbumArtistKey } from "@/bindings";
+import { albumArtistIdentity } from "./library-identity";
 
-export function AlbumArtworkIdentity({
-  albumId,
+export function AlbumArtistArtworkIdentity({
+  artistId,
   className,
   children,
 }: {
-  albumId: LibraryAlbumKey;
+  artistId: LibraryAlbumArtistKey;
   className: string;
   children: ReactNode;
 }) {
@@ -18,7 +18,7 @@ export function AlbumArtworkIdentity({
   return (
     <motion.span
       className={className}
-      layoutId={`album-artwork:${albumIdentity(albumId)}`}
+      layoutId={`album-artist-artwork:${albumArtistIdentity(artistId)}`}
       transition={spatialStructural}
     >
       {children}

@@ -47,12 +47,24 @@ export const commands = {
   getLibraryScanState: () => __TAURI_INVOKE<LibraryScanSnapshot>("get_library_scan_state"),
   listLibraryTracks: (afterId: string | null, search: string | null) =>
     __TAURI_INVOKE<LibraryTrackPage>("list_library_tracks", { afterId, search }),
-  listLibraryAlbums: (afterId: string | null, search: string | null) =>
-    __TAURI_INVOKE<LibraryAlbumPage>("list_library_albums", { afterId, search }),
-  getLibraryAlbumDetails: (albumId: string) =>
-    __TAURI_INVOKE<LibraryAlbumDetails>("get_library_album_details", { albumId }),
-  listLibraryAlbumTracks: (albumId: string, offset: number) =>
-    __TAURI_INVOKE<LibraryAlbumTrackPage>("list_library_album_tracks", { albumId, offset }),
+  listLibraryAlbums: (afterCursor: string | null, search: string | null) =>
+    __TAURI_INVOKE<LibraryAlbumPage>("list_library_albums", { afterCursor, search }),
+  listLibraryAlbumArtists: (afterCursor: string | null, search: string | null) =>
+    __TAURI_INVOKE<LibraryAlbumArtistPage>("list_library_album_artists", { afterCursor, search }),
+  getLibraryAlbumArtist: (albumArtistKey: LibraryAlbumArtistKey) =>
+    __TAURI_INVOKE<LibraryAlbumArtistSummary>("get_library_album_artist", { albumArtistKey }),
+  listLibraryAlbumArtistAlbums: (
+    albumArtistKey: LibraryAlbumArtistKey,
+    afterCursor: string | null,
+  ) =>
+    __TAURI_INVOKE<LibraryAlbumPage>("list_library_album_artist_albums", {
+      albumArtistKey,
+      afterCursor,
+    }),
+  getLibraryAlbumDetails: (albumKey: LibraryAlbumKey) =>
+    __TAURI_INVOKE<LibraryAlbumDetails>("get_library_album_details", { albumKey }),
+  listLibraryAlbumTracks: (albumKey: LibraryAlbumKey, offset: number) =>
+    __TAURI_INVOKE<LibraryAlbumTrackPage>("list_library_album_tracks", { albumKey, offset }),
   removeLibraryRoot: (id: string) => __TAURI_INVOKE<null>("remove_library_root", { id }),
   getLibraryTrackForPath: (path: string) =>
     __TAURI_INVOKE<{
@@ -70,10 +82,10 @@ export const commands = {
     __TAURI_INVOKE<LyricsResolution>("get_library_track_lyrics", { trackId }),
   startLibraryTrack: (trackId: string) =>
     __TAURI_INVOKE<PlaybackSnapshot_Serialize>("start_library_track", { trackId }),
-  startLibraryAlbum: (albumId: string) =>
-    __TAURI_INVOKE<PlaybackSnapshot_Serialize>("start_library_album", { albumId }),
-  startLibraryAlbumTrack: (albumId: string, trackId: string) =>
-    __TAURI_INVOKE<PlaybackSnapshot_Serialize>("start_library_album_track", { albumId, trackId }),
+  startLibraryAlbum: (albumKey: LibraryAlbumKey) =>
+    __TAURI_INVOKE<PlaybackSnapshot_Serialize>("start_library_album", { albumKey }),
+  startLibraryAlbumTrack: (albumKey: LibraryAlbumKey, trackId: string) =>
+    __TAURI_INVOKE<PlaybackSnapshot_Serialize>("start_library_album_track", { albumKey, trackId }),
   previousAudioPlayback: () =>
     __TAURI_INVOKE<PlaybackSnapshot_Serialize>("previous_audio_playback"),
   nextAudioPlayback: () => __TAURI_INVOKE<PlaybackSnapshot_Serialize>("next_audio_playback"),
@@ -147,6 +159,21 @@ export type AudioOutputDeviceIdentity = {
 
 export type AudioOutputSelection = { kind: "systemDefault" } | { kind: "device"; deviceId: string };
 
+export type LibraryAlbumArtistKey = {
+  name: string;
+};
+
+export type LibraryAlbumArtistPage = {
+  items: LibraryAlbumArtistSummary[];
+  nextCursor: string | null;
+};
+
+export type LibraryAlbumArtistSummary = {
+  key: LibraryAlbumArtistKey;
+  artwork: ArtworkRef | null;
+  albumCount: number;
+};
+
 export type LibraryAlbumDetails = {
   summary: LibraryAlbumSummary;
   date: string | null;
@@ -155,15 +182,18 @@ export type LibraryAlbumDetails = {
   firstPlayableTrackId: string | null;
 };
 
+export type LibraryAlbumKey = {
+  title: string;
+  albumArtist: string;
+};
+
 export type LibraryAlbumPage = {
   items: LibraryAlbumSummary[];
-  nextAfterId: string | null;
+  nextCursor: string | null;
 };
 
 export type LibraryAlbumSummary = {
-  id: string;
-  title: string;
-  albumArtist: string;
+  key: LibraryAlbumKey;
   artwork: ArtworkRef | null;
 };
 
@@ -193,6 +223,10 @@ export type LibraryCommandError =
   | { code: "scanInProgress" }
   | { code: "invalidId" }
   | { code: "albumNotFound" }
+  | { code: "invalidCursor" }
+  | { code: "invalidAlbumKey" }
+  | { code: "invalidAlbumArtistKey" }
+  | { code: "albumArtistNotFound" }
   | { code: "rootMissing" }
   | { code: "scanAlreadyRunning" }
   | { code: "noEnabledRoots" }
@@ -534,8 +568,26 @@ export type StartAudioFileError =
   | { code: "taskFailed" };
 
 export type StartLibraryAlbumError =
-  | { code: "invalidId" }
+  | { code: "invalidAlbumKey" }
   | { code: "albumNotFound" }
+  | { code: "noPlayableTracks" }
+  | { code: "sourceUnavailable" }
+  | { code: "libraryUnavailable" }
+  | { code: "persistenceFailed" }
+  | { code: "decodeFailed" }
+  | { code: "noOutputDevice" }
+  | { code: "outputDeviceUnavailable" }
+  | { code: "outputFailed" }
+  | { code: "playbackWorkerUnavailable" }
+  | { code: "taskFailed" };
+
+export type StartLibraryAlbumTrackError =
+  | { code: "invalidAlbumKey" }
+  | { code: "invalidTrackId" }
+  | { code: "albumNotFound" }
+  | { code: "trackNotMember" }
+  | { code: "trackUnavailable" }
+  | { code: "trackNotPlayable" }
   | { code: "noPlayableTracks" }
   | { code: "sourceUnavailable" }
   | { code: "libraryUnavailable" }
