@@ -12,6 +12,7 @@ pub(crate) mod test_support;
 use std::path::{Path, PathBuf};
 use std::thread;
 
+use log::warn;
 use tauri::{Emitter, Manager};
 use tauri_specta::{collect_commands, Builder, ErrorHandlingMode};
 
@@ -42,6 +43,25 @@ use media::inspection::{
 use media::validation::{
     validate_audio_file as validate_audio_file_path, AudioFileValidationError, ValidatedAudioFile,
 };
+
+fn emit_event<R, S>(
+    app: &tauri::AppHandle<R>,
+    event: &'static str,
+    payload: S,
+    unhealthy: &mut bool,
+) where
+    R: tauri::Runtime,
+    S: serde::Serialize + Clone,
+{
+    if app.emit(event, payload).is_err() {
+        if !*unhealthy {
+            warn!("ipc.event_emit_failed event_name={}", event);
+            *unhealthy = true;
+        }
+    } else {
+        *unhealthy = false;
+    }
+}
 
 #[tauri::command]
 #[specta::specta]
@@ -1009,7 +1029,11 @@ pub fn run() {
         .manage(LyricsService)
         .plugin(
             tauri_plugin_log::Builder::new()
-                .level(tauri_plugin_log::log::LevelFilter::Info)
+                .level(if cfg!(debug_assertions) {
+                    log::LevelFilter::Debug
+                } else {
+                    log::LevelFilter::Info
+                })
                 .build(),
         )
         .plugin(tauri_plugin_dialog::init())
@@ -1031,12 +1055,18 @@ pub fn run() {
             {
                 let app_handle = app.handle().clone();
                 thread::spawn(move || {
+                    let mut unhealthy = false;
                     while receiver.recv().is_ok() {
                         let snapshot = app_handle
                             .state::<ApplicationActivityService>()
                             .handle()
                             .snapshot();
-                        let _ = app_handle.emit("application-activities-changed", snapshot);
+                        emit_event(
+                            &app_handle,
+                            "application-activities-changed",
+                            snapshot,
+                            &mut unhealthy,
+                        );
                     }
                 });
             }
@@ -1046,18 +1076,30 @@ pub fn run() {
             {
                 let app_handle = app.handle().clone();
                 thread::spawn(move || {
+                    let mut unhealthy = false;
                     while receiver.recv().is_ok() {
                         let snapshot = app_handle.state::<LibraryService>().handle().scan_state();
-                        let _ = app_handle.emit("library-scan-progress", snapshot);
+                        emit_event(
+                            &app_handle,
+                            "library-scan-progress",
+                            snapshot,
+                            &mut unhealthy,
+                        );
                     }
                 });
             }
             if let Some(receiver) = app.state::<PlaybackService>().take_state_changed_receiver() {
                 let app_handle = app.handle().clone();
                 thread::spawn(move || {
+                    let mut unhealthy = false;
                     while receiver.recv().is_ok() {
                         let snapshot = app_handle.state::<PlaybackService>().snapshot();
-                        let _ = app_handle.emit("playback-state-changed", snapshot);
+                        emit_event(
+                            &app_handle,
+                            "playback-state-changed",
+                            snapshot,
+                            &mut unhealthy,
+                        );
                     }
                 });
             }
@@ -1067,9 +1109,15 @@ pub fn run() {
             {
                 let app_handle = app.handle().clone();
                 thread::spawn(move || {
+                    let mut unhealthy = false;
                     while receiver.recv().is_ok() {
                         let snapshot = app_handle.state::<PlaybackService>().queue_snapshot();
-                        let _ = app_handle.emit("playback-queue-state-changed", snapshot);
+                        emit_event(
+                            &app_handle,
+                            "playback-queue-state-changed",
+                            snapshot,
+                            &mut unhealthy,
+                        );
                     }
                 });
             }

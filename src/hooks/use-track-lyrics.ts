@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { LyricsResolution } from "@/bindings";
 import { getLibraryTrackLyrics, isLyricsCommandError } from "@/api/lyrics";
+import { diagnostics } from "@/lib/diagnostics";
 
 export type TrackLyricsState =
   | { kind: "idle"; trackId: string | null }
@@ -33,6 +34,10 @@ export function useTrackLyrics(trackId: string | null, active: boolean) {
       })
       .catch((error: unknown) => {
         if (request !== generation.current) return;
+        diagnostics.warn("frontend.playback.lyrics_failed", {
+          cause: error,
+          context: { track_id: trackId },
+        });
         setState({
           kind: "error",
           trackId,

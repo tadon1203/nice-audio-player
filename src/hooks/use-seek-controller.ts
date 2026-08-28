@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { isSeekAudioPlaybackError, seekAudioPlayback } from "@/api/audio-files";
 import type { PlaybackSnapshot } from "@/bindings";
+import { diagnostics } from "@/lib/diagnostics";
 
 import type { PlaybackConnectionState, PlaybackUiAction } from "../lib/playback-state";
 
@@ -97,6 +98,10 @@ export function useSeekController({
         dispatchPlaybackUi({ type: "commandSucceeded", lane: "seek" });
         return null;
       } catch (error: unknown) {
+        diagnostics.warn("frontend.playback.seek_failed", {
+          cause: error,
+          context: { revision: playbackRef.current.revision },
+        });
         dispatchPlaybackUi({
           type: "commandFailed",
           lane: "seek",

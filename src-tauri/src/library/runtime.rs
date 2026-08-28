@@ -3,6 +3,7 @@ use crate::activity::{
     ApplicationActivity, ApplicationActivityHandle, ApplicationActivityKind,
     ApplicationActivityState,
 };
+use log::{info, warn};
 use notify::RecommendedWatcher;
 use std::{
     collections::{HashMap, HashSet},
@@ -131,7 +132,9 @@ impl LibraryRuntime {
         let _ = self.wake.try_send(());
         shared.shutdown();
         if let Some(thread) = self.thread.take() {
-            let _ = thread.join();
+            if thread.join().is_err() {
+                log::error!("library.runtime.worker_panicked");
+            }
         }
         if let Some(activity) = activity {
             activity.clear(LIBRARY_ACTIVITY_ID);
@@ -182,6 +185,10 @@ fn run(
         );
         if !watcher_attention.is_empty() {
             set_attention(&activity);
+        } else if matches!(shared.scan_state().state, LibraryScanState::Running) {
+            set_running(&activity);
+        } else {
+            clear_activity(&activity);
         }
         let timeout = debounce
             .map(|d| d.saturating_duration_since(Instant::now()))
@@ -385,6 +392,10 @@ fn refresh_watchers(
             Ok(watcher) => {
                 let was_retry = retries.remove(&id).is_some();
                 watchers.insert(id.clone(), watcher);
+                let recovered = attention.remove(&id);
+                if recovered {
+                    info!("library.watcher.recovered root_id={}", id);
+                }
                 if was_retry {
                     dirty.lock().expect("dirty roots").insert(id);
                     let _ = signal.try_send(());
@@ -399,8 +410,8 @@ fn refresh_watchers(
                         failed_once: true,
                     },
                 );
-                if failed_once {
-                    attention.insert(id);
+                if failed_once && attention.insert(id.clone()) {
+                    warn!("library.watcher.attach_failed root_id={}", id);
                 }
             }
         }

@@ -4,6 +4,7 @@ import type { LibraryAlbumDetails, LibraryAlbumKey, LibraryAlbumTrackSummary } f
 import { formatLibraryQueryError } from "./library-query-error";
 import type { LibraryBrowseClient } from "./LibraryWorkspace";
 import { usePagedLibraryQuery, type PagedLibraryQueryOptions } from "./use-paged-library-query";
+import { diagnostics } from "@/lib/diagnostics";
 
 export function useAlbumDetailQuery(
   albumKey: LibraryAlbumKey | null,
@@ -25,9 +26,12 @@ export function useAlbumDetailQuery(
       const nextDetails = await (client?.getAlbumDetails ?? getLibraryAlbumDetails)(albumKey);
       if (generation === detailsGeneration.current) setDetails(nextDetails);
     } catch (cause) {
-      if (generation === detailsGeneration.current) {
-        setDetailsError(formatLibraryQueryError(cause, "albums"));
-      }
+      if (generation !== detailsGeneration.current) return;
+      diagnostics.warn("frontend.library.query_failed", {
+        cause,
+        context: { phase: "album_detail" },
+      });
+      setDetailsError(formatLibraryQueryError(cause, "albums"));
     } finally {
       if (generation === detailsGeneration.current) setDetailsLoading(false);
     }

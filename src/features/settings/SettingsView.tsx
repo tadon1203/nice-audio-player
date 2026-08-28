@@ -19,6 +19,7 @@ import { Dialog } from "@/components/ui/Dialog";
 import { InlineNotice } from "@/components/ui/InlineNotice";
 import { Button } from "@/components/ui/Button";
 import { useScrollRegion } from "@/hooks/use-scroll-region";
+import { diagnostics } from "@/lib/diagnostics";
 
 interface SettingsViewProps {
   outputDevices: AudioOutputDevice[] | null;
@@ -51,7 +52,8 @@ export function SettingsView({
       const nextRoots = await listLibraryRoots();
       setRoots(nextRoots);
       return true;
-    } catch {
+    } catch (cause) {
+      diagnostics.error("frontend.settings.root_list_failed", { cause });
       setError("Library settings could not be loaded.");
       return false;
     }
@@ -78,6 +80,7 @@ export function SettingsView({
       await registerLibraryRoot(path);
       await reload();
     } catch (cause) {
+      diagnostics.warn("frontend.settings.registration_failed", { cause });
       if (!isLibraryCommandError(cause)) setError("The folder could not be added.");
       else {
         const messages: Record<string, string> = {
@@ -112,6 +115,10 @@ export function SettingsView({
       setFocusAddFolderAfterRemoval(true);
       setConfirmRoot(null);
     } catch (cause) {
+      diagnostics.warn("frontend.settings.removal_failed", {
+        cause,
+        context: { root_id: confirmRoot.id },
+      });
       setError(
         isLibraryCommandError(cause) && cause.code === "scanInProgress"
           ? "Wait for the current library scan to finish."
@@ -143,6 +150,10 @@ export function SettingsView({
       else await startLibraryScan();
       await reload();
     } catch (cause) {
+      diagnostics.warn(
+        scanning ? "frontend.settings.cancellation_failed" : "frontend.settings.scan_failed",
+        { cause },
+      );
       setError(formatOperationError(cause, scanning ? "cancel" : "scan"));
     } finally {
       setBusy(false);
@@ -155,6 +166,10 @@ export function SettingsView({
       await setLibraryRootEnabled(root.id, !root.enabled);
       await reload();
     } catch (cause) {
+      diagnostics.warn("frontend.settings.root_toggle_failed", {
+        cause,
+        context: { root_id: root.id },
+      });
       setError(formatOperationError(cause, "root"));
     } finally {
       setBusy(false);

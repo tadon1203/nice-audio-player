@@ -7,6 +7,7 @@ import type {
 import { formatLibraryQueryError } from "./library-query-error";
 import type { LibraryBrowseClient } from "./LibraryWorkspace";
 import { usePagedLibraryQuery, type PagedLibraryQueryOptions } from "./use-paged-library-query";
+import { diagnostics } from "@/lib/diagnostics";
 
 export function useAlbumArtistDetailQuery(
   artistKey: LibraryAlbumArtistKey,
@@ -27,7 +28,12 @@ export function useAlbumArtistDetailQuery(
       const nextSummary = await client.getArtist(artistKey);
       if (generationId === generation.current) setSummary(nextSummary);
     } catch (cause) {
-      if (generationId === generation.current) setError(cause);
+      if (generationId !== generation.current) return;
+      diagnostics.warn("frontend.library.query_failed", {
+        cause,
+        context: { phase: "artist_detail" },
+      });
+      setError(cause);
     } finally {
       if (generationId === generation.current) setLoading(false);
     }

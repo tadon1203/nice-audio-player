@@ -13,6 +13,7 @@ import {
   setPlaybackRepeatMode,
   setPlaybackShuffle,
 } from "@/api/playback-queue";
+import { diagnostics } from "@/lib/diagnostics";
 
 const emptyQueue: PlaybackQueueSnapshot = {
   revision: 0,
@@ -38,7 +39,11 @@ export function usePlaybackQueue() {
     try {
       accept(await getPlaybackQueue());
       setError(null);
-    } catch {
+    } catch (cause) {
+      diagnostics.error("frontend.playback_queue.sync_failed", {
+        cause,
+        context: { revision: revisionRef.current },
+      });
       setError("The queue could not be synchronized.");
     }
   }, [accept]);
@@ -52,11 +57,18 @@ export function usePlaybackQueue() {
             if (active) accept(next);
           },
           () => {
+            diagnostics.warn("frontend.playback_queue.subscription_failed", {
+              context: { revision: revisionRef.current },
+            });
             if (active) setError("Queue updates could not be read.");
           },
         );
         if (active) await refresh();
-      } catch {
+      } catch (cause) {
+        diagnostics.error("frontend.playback_queue.sync_failed", {
+          cause,
+          context: { revision: revisionRef.current },
+        });
         if (active) setError("The queue could not be synchronized.");
       }
     })();
@@ -73,7 +85,11 @@ export function usePlaybackQueue() {
       setError(null);
       try {
         accept(await operation());
-      } catch {
+      } catch (cause) {
+        diagnostics.warn("frontend.playback_queue.mutation_failed", {
+          cause,
+          context: { revision: revisionRef.current },
+        });
         setError("The queue change could not be applied.");
         await refresh();
       } finally {

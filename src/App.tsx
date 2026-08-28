@@ -48,6 +48,7 @@ import { PlaybackContextPane } from "./components/PlaybackContextPane";
 import { LyricsPane } from "./components/LyricsPane";
 import { useTrackLyrics } from "./hooks/use-track-lyrics";
 import { initialPlaybackUiState, playbackUiReducer } from "./lib/playback-state";
+import { diagnostics } from "./lib/diagnostics";
 
 type TransportOperation =
   | { type: "stop" }
@@ -137,7 +138,8 @@ function App() {
   const refresh = useCallback(async () => {
     try {
       applySnapshot(await getPlaybackState());
-    } catch {
+    } catch (cause) {
+      diagnostics.error("frontend.playback.sync_failed", { cause });
       dispatchPlaybackUi({
         type: "connectionUnavailable",
         message: "The playback service could not be synchronized.",
@@ -154,6 +156,7 @@ function App() {
             if (active) applySnapshot(snapshot);
           },
           () => {
+            diagnostics.error("frontend.playback.subscription_failed");
             subscriptionHealthyRef.current = false;
             dispatchPlaybackUi({
               type: "connectionUnavailable",
@@ -166,7 +169,8 @@ function App() {
           applySnapshot(snapshot);
           if (subscriptionHealthyRef.current) dispatchPlaybackUi({ type: "connectionReady" });
         }
-      } catch {
+      } catch (cause) {
+        diagnostics.error("frontend.playback.sync_failed", { cause });
         if (active)
           dispatchPlaybackUi({
             type: "connectionUnavailable",
@@ -186,6 +190,7 @@ function App() {
       const devices = await listAudioOutputDevices();
       if (token === deviceRequest.current) setOutputDevices(devices);
     } catch (error) {
+      diagnostics.warn("frontend.audio_output.device_list_failed", { cause: error });
       if (token === deviceRequest.current)
         dispatchPlaybackUi({
           type: "commandFailed",
@@ -247,6 +252,16 @@ function App() {
       applySnapshot(snapshot);
       dispatchPlaybackUi({ type: "commandSucceeded", lane: "transport" });
     } catch (error) {
+      diagnostics.warn("frontend.playback.transport_failed", {
+        cause: error,
+        context: {
+          operation: command,
+          revision: currentPlayback.revision,
+          ...(command === "startTrack" || command === "startAlbumTrack"
+            ? { track_id: operation.trackId }
+            : {}),
+        },
+      });
       dispatchPlaybackUi({
         type: "commandFailed",
         lane: "transport",
@@ -345,6 +360,13 @@ function App() {
     try {
       applySnapshot(await setAudioOutputSelection(selection));
     } catch (error) {
+      diagnostics.warn("frontend.audio_output.selection_failed", {
+        cause: error,
+        context: {
+          selection: selection.kind === "device" ? "device" : "system_default",
+          revision: latestPlaybackRef.current.revision,
+        },
+      });
       dispatchPlaybackUi({
         type: "commandFailed",
         lane: "output",
