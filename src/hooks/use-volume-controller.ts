@@ -7,6 +7,7 @@ import {
   unmuteAudioPlayback,
 } from "@/api/audio-files";
 import type { PlaybackSnapshot } from "@/bindings";
+import { diagnostics } from "@/lib/diagnostics";
 import type { PlaybackConnectionState, PlaybackUiAction } from "../lib/playback-state";
 
 type VolumeInteraction =
@@ -82,6 +83,10 @@ export function useVolumeController({
             applySnapshot(await setPlaybackVolume(volumeTarget / 100));
             dispatchPlaybackUi({ type: "commandSucceeded", lane: "volume" });
           } catch (error) {
+            diagnostics.warn("frontend.playback.volume_failed", {
+              cause: error,
+              context: { revision: playbackRef.current.revision },
+            });
             desiredVolume.current = null;
             desiredMute.current =
               desiredMute.current?.kind === "volumeInteraction" ? null : desiredMute.current;
@@ -111,6 +116,10 @@ export function useVolumeController({
           applySnapshot(await (muteTarget.target ? muteAudioPlayback() : unmuteAudioPlayback()));
           dispatchPlaybackUi({ type: "commandSucceeded", lane: "volume" });
         } catch (error) {
+          diagnostics.warn("frontend.playback.mute_failed", {
+            cause: error,
+            context: { revision: playbackRef.current.revision },
+          });
           dispatchPlaybackUi({
             type: "commandFailed",
             lane: "volume",

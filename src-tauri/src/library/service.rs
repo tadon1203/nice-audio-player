@@ -9,6 +9,7 @@ use crate::media::{
     metadata::read_source_metadata,
     validation::{is_supported_extension, validate_audio_file, ValidatedAudioFile},
 };
+use log::{error, info};
 use rusqlite::{params, OptionalExtension, Row};
 use std::{
     path::{Path, PathBuf},
@@ -73,32 +74,40 @@ pub struct LibraryShared {
     receiver: Arc<Mutex<Option<std::sync::mpsc::Receiver<()>>>>,
 }
 impl LibraryShared {
+    fn join_scan_worker(worker: JoinHandle<()>) {
+        if worker.join().is_err() {
+            log::error!("library.scan.worker_panicked");
+        }
+    }
+
     pub fn initialize(directory: PathBuf) -> Self {
         let (notify, receiver) = std::sync::mpsc::sync_channel(1);
         match Database::initialize(&directory) {
             Ok(database) => Self::ready(database),
-            Err(error) => Self {
-                database: None,
-                status: LibraryStatus::Unavailable {
-                    reason: match error {
-                        super::database::DatabaseError::Corrupt => {
-                            LibraryUnavailableReason::DatabaseCorrupt
-                        }
-                        super::database::DatabaseError::Migration(
-                            super::migrations::MigrationError::SchemaTooNew,
-                        ) => LibraryUnavailableReason::SchemaTooNew,
-                        super::database::DatabaseError::Migration(_) => {
-                            LibraryUnavailableReason::MigrationFailed
-                        }
-                        _ => LibraryUnavailableReason::DatabaseOpenFailed,
-                    },
-                },
-                state: Arc::new(Mutex::new(idle())),
-                cancel: Arc::new(AtomicBool::new(false)),
-                worker: Arc::new(Mutex::new(None)),
-                notify,
-                receiver: Arc::new(Mutex::new(Some(receiver))),
-            },
+            Err(error) => {
+                let reason = match error {
+                    super::database::DatabaseError::Corrupt => {
+                        LibraryUnavailableReason::DatabaseCorrupt
+                    }
+                    super::database::DatabaseError::Migration(
+                        super::migrations::MigrationError::SchemaTooNew,
+                    ) => LibraryUnavailableReason::SchemaTooNew,
+                    super::database::DatabaseError::Migration(_) => {
+                        LibraryUnavailableReason::MigrationFailed
+                    }
+                    _ => LibraryUnavailableReason::DatabaseOpenFailed,
+                };
+                error!("library.database.unavailable reason={:?}", reason);
+                Self {
+                    database: None,
+                    status: LibraryStatus::Unavailable { reason },
+                    state: Arc::new(Mutex::new(idle())),
+                    cancel: Arc::new(AtomicBool::new(false)),
+                    worker: Arc::new(Mutex::new(None)),
+                    notify,
+                    receiver: Arc::new(Mutex::new(Some(receiver))),
+                }
+            }
         }
     }
     fn ready(database: Database) -> Self {
@@ -375,7 +384,7 @@ impl LibraryShared {
         }
         if let Some(worker) = self.worker.lock().expect("worker lock").take() {
             if worker.is_finished() {
-                let _ = worker.join();
+                Self::join_scan_worker(worker);
             } else {
                 *self.worker.lock().expect("worker lock") = Some(worker);
                 return Err(LibraryCommandError::ScanAlreadyRunning);
@@ -394,6 +403,7 @@ impl LibraryShared {
             failed_count: 0,
             failure_code: None,
         };
+        info!("library.scan.started root_count={}", roots.len());
         self.notify();
         let db = self.db()?.clone();
         let state = self.state.clone();
@@ -411,7 +421,7 @@ impl LibraryShared {
     pub fn shutdown(&self) {
         self.cancel.store(true, Ordering::Release);
         if let Some(worker) = self.worker.lock().expect("worker lock").take() {
-            let _ = worker.join();
+            Self::join_scan_worker(worker);
         }
     }
 }
@@ -979,11 +989,18 @@ fn finish(
     f: Option<String>,
     notify: &std::sync::mpsc::SyncSender<()>,
 ) {
-    {
+    let snapshot = {
         let mut x = s.lock().expect("scan state lock");
         x.state = state;
         x.current_root = None;
         x.failure_code = f;
+        x.clone()
+    };
+    match snapshot.state {
+        LibraryScanState::Completed => info!("library.scan.completed discovered_count={} inspected_count={} indexed_count={} failed_count={}", snapshot.discovered_count, snapshot.inspected_count, snapshot.indexed_count, snapshot.failed_count),
+        LibraryScanState::Cancelled => info!("library.scan.cancelled discovered_count={} inspected_count={} indexed_count={} failed_count={}", snapshot.discovered_count, snapshot.inspected_count, snapshot.indexed_count, snapshot.failed_count),
+        LibraryScanState::Failed => error!("library.scan.failed discovered_count={} inspected_count={} indexed_count={} failed_count={} failure_code={:?}", snapshot.discovered_count, snapshot.inspected_count, snapshot.indexed_count, snapshot.failed_count, snapshot.failure_code),
+        LibraryScanState::Idle | LibraryScanState::Running => {}
     }
     let _ = notify.try_send(());
 }

@@ -18,6 +18,7 @@ use super::output_processing::{ChannelConversion, OutputPcmProcessor};
 use super::volume::{AtomicEffectiveGain, VolumeState};
 use crate::media::validation::ValidatedAudioFile;
 use cpal::StreamInstant;
+use log::{error, info};
 
 mod decode_worker;
 use decode_worker::{DecodePipeline, DecodeTaskInput, DecodeWorker, DecodeWorkerSetup};
@@ -467,6 +468,19 @@ pub enum PlaybackFailureCode {
     SampleRateConversionFailed,
 }
 
+#[derive(Debug, Copy, Clone)]
+enum StartFailurePhase {
+    DecoderOpen,
+    FirstPacketDecode,
+    OutputDeviceResolution,
+    OutputPrepare,
+    ProcessorCreate,
+    DecodeWorkerSpawn,
+    PrebufferDecode,
+    PrebufferConversion,
+    StreamStart,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PlaybackServiceError {
     WorkerUnavailable,
@@ -662,7 +676,9 @@ impl PlaybackService {
         let _ = self.handle.command_sender.send(PlaybackCommand::Shutdown);
         if let Ok(mut worker) = self.worker.lock() {
             if let Some(worker) = worker.take() {
-                let _ = worker.join();
+                if worker.join().is_err() {
+                    error!("playback.worker_panicked");
+                }
             }
         }
     }
@@ -1177,6 +1193,7 @@ impl PlaybackWorker {
                     reply,
                     None,
                     PlaybackFailureCode::DecodeFailed,
+                    StartFailurePhase::DecoderOpen,
                     PlaybackServiceError::Decode,
                 );
                 return;
@@ -1191,6 +1208,7 @@ impl PlaybackWorker {
                     reply,
                     None,
                     PlaybackFailureCode::DecodeFailed,
+                    StartFailurePhase::FirstPacketDecode,
                     PlaybackServiceError::Decode,
                 );
                 return;
@@ -1210,6 +1228,7 @@ impl PlaybackWorker {
                     reply,
                     Some(id.0.to_string()),
                     code.clone(),
+                    StartFailurePhase::OutputDeviceResolution,
                     PlaybackServiceError::Output(code),
                 );
                 return;
@@ -1231,6 +1250,7 @@ impl PlaybackWorker {
                     reply,
                     Some(id.0.to_string()),
                     code.clone(),
+                    StartFailurePhase::OutputPrepare,
                     PlaybackServiceError::Output(code),
                 );
                 return;
@@ -1248,6 +1268,7 @@ impl PlaybackWorker {
                         reply,
                         Some(id.0.to_string()),
                         error.clone(),
+                        StartFailurePhase::ProcessorCreate,
                         PlaybackServiceError::Output(error),
                     );
                     return;
@@ -1270,6 +1291,7 @@ impl PlaybackWorker {
                     reply,
                     Some(id.0.to_string()),
                     error.clone(),
+                    StartFailurePhase::DecodeWorkerSpawn,
                     PlaybackServiceError::Output(error),
                 );
                 return;
@@ -1302,8 +1324,13 @@ impl PlaybackWorker {
         reply: SyncSender<Result<PlaybackSnapshot, PlaybackServiceError>>,
         playback_id: Option<String>,
         code: PlaybackFailureCode,
+        phase: StartFailurePhase,
         error: PlaybackServiceError,
     ) {
+        error!(
+            "playback.start_failed code={:?} phase={:?} playback_id={:?}",
+            code, phase, playback_id
+        );
         self.sequence = None;
         self.publish_queue();
         self.publish(self.failed_snapshot(playback_id, code));
@@ -1640,19 +1667,30 @@ impl PlaybackWorker {
             self.fail_pending_start(
                 pending,
                 PlaybackFailureCode::DecodeFailed,
+                StartFailurePhase::PrebufferDecode,
                 PlaybackServiceError::Decode,
             );
             return;
         }
         if state == ProducerState::SampleRateConversionFailed {
             let code = PlaybackFailureCode::SampleRateConversionFailed;
-            self.fail_pending_start(pending, code.clone(), PlaybackServiceError::Output(code));
+            self.fail_pending_start(
+                pending,
+                code.clone(),
+                StartFailurePhase::PrebufferConversion,
+                PlaybackServiceError::Output(code),
+            );
             return;
         }
         if !pending.start_paused {
             if let Err(error) = pending.stream.start() {
                 let code = output_failure_code(error);
-                self.fail_pending_start(pending, code.clone(), PlaybackServiceError::Output(code));
+                self.fail_pending_start(
+                    pending,
+                    code.clone(),
+                    StartFailurePhase::StreamStart,
+                    PlaybackServiceError::Output(code),
+                );
                 return;
             }
         }
@@ -1679,11 +1717,12 @@ impl PlaybackWorker {
         &mut self,
         pending: PendingPlayback,
         code: PlaybackFailureCode,
+        phase: StartFailurePhase,
         error: PlaybackServiceError,
     ) {
         let playback_id = Some(pending.id.0.to_string());
         pending.decode_pipeline.cancel_and_join();
-        self.fail_start(pending.reply, playback_id, code, error);
+        self.fail_start(pending.reply, playback_id, code, phase, error);
     }
 
     fn discard_pending(&mut self) {
@@ -2105,18 +2144,25 @@ impl PlaybackWorker {
             OutputSignal::StreamFailed { kind, .. } => {
                 match stream_signal_action(&self.output_selection, kind) {
                     StreamSignalAction::RefreshDefaultDevice => {
+                        info!("playback.stream_interrupted stream_id={}", id.0);
                         self.cancel_pending_seek_with(PlaybackServiceError::Output(
                             PlaybackFailureCode::OutputDeviceUnavailable,
                         ));
-                        if !self.refresh_default_device() {
+                        if self.refresh_default_device() {
+                            info!("playback.output_recovered stream_id={}", id.0);
+                        } else {
                             self.fail_active_stream(PlaybackFailureCode::OutputDeviceUnavailable);
                         }
                     }
                     StreamSignalAction::PreservePlayback => {}
-                    StreamSignalAction::Fail(error) => self.fail_active_stream(error),
+                    StreamSignalAction::Fail(error) => {
+                        error!("playback.stream_failed stream_id={} code={:?}", id.0, error);
+                        self.fail_active_stream(error)
+                    }
                 }
             }
             OutputSignal::CompletionTimingFailed { .. } => {
+                error!("playback.completion_timing_failed stream_id={}", id.0);
                 let playback_id = self
                     .active
                     .as_ref()
@@ -2132,6 +2178,7 @@ impl PlaybackWorker {
                 );
             }
             OutputSignal::DecodeFailed { .. } => {
+                error!("playback.decode_failed stream_id={}", id.0);
                 let playback_id = self
                     .active
                     .as_ref()
@@ -2143,6 +2190,7 @@ impl PlaybackWorker {
                 self.publish(self.failed_snapshot(playback_id, PlaybackFailureCode::DecodeFailed));
             }
             OutputSignal::SampleRateConversionFailed { .. } => {
+                error!("playback.sample_rate_conversion_failed stream_id={}", id.0);
                 let playback_id = self
                     .active
                     .as_ref()

@@ -54,6 +54,21 @@ export default tseslint.config(
           varsIgnorePattern: "^_",
         },
       ],
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@tauri-apps/plugin-log",
+              message: "Use the project-owned diagnostics module.",
+            },
+          ],
+        },
+      ],
     },
+  },
+  {
+    files: ["src/lib/diagnostics.ts"],
+    rules: { "no-restricted-imports": "off" },
   },
 );

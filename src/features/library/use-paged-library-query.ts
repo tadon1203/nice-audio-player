@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { LibraryQueryRetention } from "./LibraryWorkspace";
+import { diagnostics } from "@/lib/diagnostics";
 
 export interface PagedLibraryPage<TItem, TCursor> {
   items: TItem[];
@@ -78,9 +79,9 @@ export function usePagedLibraryQuery<TItem, TCursor>(
       setNextCursor(page.nextCursor);
       publishSnapshot(nextPages, page.nextCursor, currentOwner);
     } catch (cause) {
-      if (generationId === generation.current && currentOwner === ownerRef.current) {
-        setError(cause);
-      }
+      if (generationId !== generation.current || currentOwner !== ownerRef.current) return;
+      diagnostics.warn("frontend.library.query_failed", { cause, context: { phase: "initial" } });
+      setError(cause);
     } finally {
       if (generationId === generation.current && currentOwner === ownerRef.current) {
         setLoading(false);
@@ -143,9 +144,14 @@ export function usePagedLibraryQuery<TItem, TCursor>(
       setNextCursor(page.nextCursor);
       publishSnapshot(nextPages, page.nextCursor, currentOwner);
     } catch (cause) {
-      if (generationId === generation.current && currentOwner === ownerRef.current) {
-        setError(cause);
-      }
+      const ownsRequest =
+        generationId === generation.current &&
+        currentOwner === ownerRef.current &&
+        nextRequest.current?.generation === generationId &&
+        nextRequest.current.cursor === cursor;
+      if (!ownsRequest) return;
+      diagnostics.warn("frontend.library.query_failed", { cause, context: { phase: "next" } });
+      setError(cause);
     } finally {
       if (
         nextRequest.current?.generation === generationId &&

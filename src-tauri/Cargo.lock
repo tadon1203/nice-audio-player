@@ -2515,6 +2515,7 @@ dependencies = [
  "cpal",
  "dunce",
  "lofty",
+ "log",
  "notify",
  "ringbuf",
  "rubato",

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { getLibraryScanState, listenToLibraryScanProgress } from "@/api/library";
 import type { LibraryScanSnapshot } from "@/bindings";
+import { diagnostics } from "@/lib/diagnostics";
 
 export function useLibraryScan() {
   const [snapshot, setSnapshot] = useState<LibraryScanSnapshot | null>(null);
@@ -20,7 +21,10 @@ export function useLibraryScan() {
               setLibraryRefreshKey((key) => key + 1);
             setSnapshot(next);
           },
-          () => setError("Library scan updates could not be read."),
+          () => {
+            diagnostics.warn("frontend.library.scan_subscription_failed");
+            setError("Library scan updates could not be read.");
+          },
         );
         if (!active) {
           stopListening();
@@ -31,7 +35,8 @@ export function useLibraryScan() {
         if (active && !receivedEvent) {
           setSnapshot(initial);
         }
-      } catch {
+      } catch (cause) {
+        diagnostics.error("frontend.library.scan_sync_failed", { cause });
         if (active && !receivedEvent) setError("Library scan state could not be loaded.");
       }
     })();

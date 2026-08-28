@@ -225,12 +225,30 @@ Do not silently ignore an error when it changes user-visible state, data integri
 
 Logging must not occur inside audio callbacks or other strict real-time paths.
 
+Frontend feature code uses only the project-owned `src/lib/diagnostics.ts` boundary; the Tauri log
+plugin is an infrastructure sink. Rust application and domain code uses the standard `log` facade;
+`tauri-plugin-log` is configured only as the sink. Event names are stable dotted lower-case
+identifiers (for example `playback.start_failed` and `library.scan.completed`), and context is
+carried as named scalar fields rather than embedded prose.
+
+`debug` is development detail, `info` is low-frequency successful lifecycle or summary information,
+`warn` is recoverable degradation or boundary failure, and `error` is terminal subsystem failure,
+panic, or an uncaught application error. Existing IDs and revisions provide correlation; the
+application does not introduce trace IDs or spans. Diagnostic calls never alter application control
+flow or user-facing error behavior.
+
 Logs must not contain:
 
 - Credentials or tokens
 - Full provider responses containing private data
 - Raw PCM or high-frequency analysis data
 - Unnecessary personal file information
+
+High-frequency state, successful IPC calls, individual scanned files, pointer/UI activity, PCM, and
+real-time callbacks remain excluded. Full source or library paths, device names, credentials, tokens,
+raw PCM, user search terms, and album or artist identity strings are not diagnostic context. Sensitive
+keys such as paths, files, URLs, tokens, credentials, and cookies are redacted, and unknown causes
+are reduced to sanitized error fields or a stable type classification.
 
 Use logs to record lifecycle changes, recoverable failures, and diagnostic context outside performance-critical code.
 

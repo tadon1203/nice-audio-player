@@ -4,6 +4,7 @@ import {
   listenToApplicationActivities,
 } from "@/api/application-activity";
 import type { ApplicationActivity } from "@/bindings";
+import { diagnostics } from "@/lib/diagnostics";
 
 export function useApplicationActivities() {
   const [activities, setActivities] = useState<ApplicationActivity[]>([]);
@@ -25,8 +26,8 @@ export function useApplicationActivities() {
         unsubscribe = stop;
         const initial = await getApplicationActivities();
         if (active && !receivedEvent) setActivities(initial);
-      } catch {
-        /* This supplemental surface is intentionally fail-quiet. */
+      } catch (cause) {
+        diagnostics.warn("frontend.application_activities.sync_failed", { cause });
       }
     })();
     return () => {

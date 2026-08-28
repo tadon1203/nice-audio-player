@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use cpal::traits::{DeviceTrait, StreamTrait};
 use cpal::{FromSample, Sample, SampleFormat, StreamConfig, StreamInstant, SupportedStreamConfig};
-use tauri_plugin_log::log::{error, info};
+use log::{error, info, warn};
 
 use super::devices::ResolvedAudioOutputDevice;
 use super::output_processing::{OutputProcessingError, OutputProcessingPlan};
@@ -463,14 +463,13 @@ pub(crate) fn prepare_output_stream(
     });
     match classify_native_attempt(native_result) {
         NativeAttemptDecision::Success(prepared) => {
-            info!("audio output path native: source_rate={source_rate}, source_channels={source_channels}, output_rate={source_rate}, output_channels={source_channels}, channel_conversion={:?}, sample_format={:?}",
+            info!("audio.output.configured path=native source_rate={} source_channels={} output_rate={} output_channels={} conversion={:?} sample_format={:?}",
+                source_rate, source_channels, source_rate, source_channels,
                 prepared.config.processing_plan.channel_conversion(), native_sample_format);
             return Ok(prepared);
         }
         NativeAttemptDecision::Fallback => {
-            tauri_plugin_log::log::warn!(
-                "native audio output configuration rejected; beginning selected-device fallback"
-            );
+            warn!("audio.output.native_fallback");
         }
         NativeAttemptDecision::Failure(error) => return Err(error),
     }
@@ -517,7 +516,8 @@ pub(crate) fn prepare_output_stream(
         capacity_sender,
         signal_sender,
     ))?;
-    info!("audio output path fallback: source_rate={source_rate}, source_channels={source_channels}, target_rate={target_rate}, target_channels={target_channels}, channel_conversion={:?}, sample_format={:?}", plan.channel_conversion(), fallback.sample_format());
+    info!("audio.output.configured path=fallback source_rate={} source_channels={} output_rate={} output_channels={} conversion={:?} sample_format={:?}",
+        source_rate, source_channels, target_rate, target_channels, plan.channel_conversion(), fallback.sample_format());
     let config = PreparedOutputConfig {
         device_id: device_id.clone(),
         device_name: device_name.clone(),
@@ -689,7 +689,7 @@ where
 #[allow(clippy::too_many_arguments)]
 fn build_stream<T>(
     device: &cpal::Device,
-    device_name: &str,
+    _device_name: &str,
     config: StreamConfig,
     sample_format: SampleFormat,
     stream_id: OutputStreamId,
@@ -768,13 +768,10 @@ where
             None,
         )
         .map_err(|error| {
-            error!(
-                "audio output stream build failed: device={device_name:?}, \
-                 sample_format={sample_format:?}, sample_rate={}, channels={}, \
-                 buffer_size={:?}, error={error:?}",
-                config_sample_rate, config_channels, config_buffer_size,
-            );
-            match error.kind() {
+            let error_kind = error.kind();
+            error!("audio.output.stream_build_failed kind={:?} sample_format={:?} sample_rate={} channels={} buffer_size={:?}",
+                error_kind, sample_format, config_sample_rate, config_channels, config_buffer_size);
+            match error_kind {
                 cpal::ErrorKind::DeviceNotAvailable => AudioOutputError::DeviceUnavailable,
                 cpal::ErrorKind::UnsupportedConfig => {
                     AudioOutputError::StreamConfigurationUnsupported

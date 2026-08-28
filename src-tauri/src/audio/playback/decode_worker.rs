@@ -1,3 +1,4 @@
+use log::error;
 use std::sync::{
     mpsc::{self, Receiver, SyncSender},
     Arc,
@@ -71,6 +72,7 @@ impl DecodeWorkerSetup {
         input: DecodeTaskInput,
     ) -> Result<DecodePipeline, OutputProcessingError> {
         let prebuffer_frames = prebuffer_frames(input.output_sample_rate);
+        let stream_id = input.stream_id;
         let task = DecodeTask {
             decoder: input.decoder,
             producer: input.producer,
@@ -80,7 +82,7 @@ impl DecodeWorkerSetup {
             cancellation: self.cancellation.clone(),
             producer_state: Arc::clone(&self.producer_state),
             signal_sender: input.signal_sender,
-            stream_id: input.stream_id,
+            stream_id,
             capacity_receiver: self.capacity_receiver,
             prebuffer_sender: self.prebuffer_sender,
             prebuffer_frames,
@@ -91,6 +93,7 @@ impl DecodeWorkerSetup {
                 cancellation: self.cancellation,
                 join_handle,
                 wake_sender: self.capacity_sender,
+                stream_id,
             },
             producer_state: self.producer_state,
             prebuffer_receiver: self.prebuffer_receiver,
@@ -123,13 +126,19 @@ pub(crate) struct DecodeWorker {
     cancellation: DecodeCancellation,
     join_handle: JoinHandle<()>,
     wake_sender: SyncSender<()>,
+    stream_id: OutputStreamId,
 }
 
 impl DecodeWorker {
     pub(crate) fn cancel_and_join(self) {
         self.cancellation.cancel();
         let _ = self.wake_sender.try_send(());
-        let _ = self.join_handle.join();
+        if self.join_handle.join().is_err() {
+            error!(
+                "playback.decode_worker_panicked stream_id={}",
+                self.stream_id.0
+            );
+        }
     }
 }
 
