@@ -9,6 +9,8 @@ The project is under active development and is built with Tauri v2, Rust, React,
 - [Requirements](docs/requirements.md): accepted product requirements
 - [Architecture](docs/architecture.md): implementation rules and boundaries
 - [Design](DESIGN.md): shared visual tokens and interaction principles
+- [Contributing](CONTRIBUTING.md): Issue, branch, commit, PR, and merge workflow
+- [Phylosophy](./PHILOSOPHY.md) — development and AI-agent engineering principles.
 
 Feature proposals, experiments, and implementation scope are tracked in GitHub Issues rather than long-lived documentation.
 
