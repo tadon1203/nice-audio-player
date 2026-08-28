@@ -5,7 +5,8 @@ use std::sync::{
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-use super::decoding::{open_playback_decoder, DecodeStep, PcmDecodeError, SeekStep};
+use super::compressed_source::{CompressedAudioSource, CompressedSourceError};
+use super::decoding::{DecodeStep, PcmDecodeError, SeekStep};
 use super::devices::{
     resolve_output_device_id, resolve_output_selection, AudioOutputDeviceIdentity,
     AudioOutputSelection, DeviceResolutionError,
@@ -21,7 +22,9 @@ use cpal::StreamInstant;
 use log::{error, info};
 
 mod decode_worker;
+mod source_loader;
 use decode_worker::{DecodePipeline, DecodeTaskInput, DecodeWorker, DecodeWorkerSetup};
+use source_loader::SourceLoadWorker;
 
 #[derive(Debug, Clone, serde::Serialize, specta::Type, PartialEq)]
 #[serde(
@@ -470,6 +473,11 @@ pub enum PlaybackFailureCode {
 
 #[derive(Debug, Copy, Clone)]
 enum StartFailurePhase {
+    SourceOpen,
+    SourceMetadata,
+    SourceRead,
+    SourceChanged,
+    SourceWorker,
     DecoderOpen,
     FirstPacketDecode,
     OutputDeviceResolution,
@@ -614,6 +622,7 @@ impl PlaybackService {
                 PlaybackWorker {
                     active: None,
                     pending: None,
+                    pending_source: None,
                     pending_seek: None,
                     next_playback_session_id: 0,
                     next_output_stream_id: 0,
@@ -833,6 +842,7 @@ struct ActivePlayback {
     session_id: u64,
     id: OutputStreamId,
     source_file: ValidatedAudioFile,
+    source: CompressedAudioSource,
     output_config: PreparedOutputConfig,
     stream: PreparedOutputStream,
     completion_time: Option<StreamInstant>,
@@ -848,6 +858,7 @@ struct ActivePlayback {
 struct PendingPlayback {
     session_id: u64,
     source_file: ValidatedAudioFile,
+    source: CompressedAudioSource,
     output_config: PreparedOutputConfig,
     id: OutputStreamId,
     stream: PreparedOutputStream,
@@ -869,6 +880,7 @@ impl PendingPlayback {
         let Self {
             session_id,
             source_file,
+            source,
             output_config,
             id,
             stream,
@@ -884,6 +896,7 @@ impl PendingPlayback {
                 session_id,
                 id,
                 source_file,
+                source,
                 output_config,
                 stream,
                 completion_time: None,
@@ -915,11 +928,20 @@ struct PendingSeek {
     reply: SyncSender<Result<PlaybackSnapshot, PlaybackServiceError>>,
 }
 
+struct PendingSourceLoad {
+    file: ValidatedAudioFile,
+    worker: SourceLoadWorker,
+    reply: SyncSender<Result<PlaybackSnapshot, PlaybackServiceError>>,
+    start_paused: bool,
+    sequence_index: usize,
+}
+
 const POSITION_UPDATE_INTERVAL: Duration = Duration::from_millis(250);
 
 struct PlaybackWorker {
     active: Option<ActivePlayback>,
     pending: Option<PendingPlayback>,
+    pending_source: Option<PendingSourceLoad>,
     pending_seek: Option<PendingSeek>,
     next_playback_session_id: u64,
     next_output_stream_id: u64,
@@ -1023,6 +1045,7 @@ impl PlaybackWorker {
                         .current()
                         .file
                         .clone();
+                    self.publish_queue();
                     self.begin_start(file, reply, false, 0);
                 }
                 Ok(PlaybackCommand::StartSequence { entries, reply }) => {
@@ -1037,6 +1060,7 @@ impl PlaybackWorker {
                     if self.shuffle {
                         self.set_shuffle_order(true);
                     }
+                    self.publish_queue();
                     self.begin_start(file, reply, false, 0);
                 }
                 Ok(PlaybackCommand::StartSequenceAt {
@@ -1060,6 +1084,7 @@ impl PlaybackWorker {
                     if self.shuffle {
                         self.set_shuffle_order(true);
                     }
+                    self.publish_queue();
                     self.begin_start(file, reply, false, index);
                 }
                 Ok(PlaybackCommand::Previous { reply }) => {
@@ -1166,12 +1191,14 @@ impl PlaybackWorker {
                 Ok(PlaybackCommand::Shutdown) | Err(mpsc::RecvTimeoutError::Disconnected) => break,
                 Err(mpsc::RecvTimeoutError::Timeout) => {}
             }
+            self.advance_pending_source_load();
             self.advance_pending_playback();
             self.advance_pending_seek();
             self.finish_if_due();
             self.update_playback_position();
         }
         self.discard_pending();
+        self.discard_pending_source();
         self.discard_pending_seek();
         self.discard_active();
         self.publish(self.stopped_snapshot());
@@ -1184,9 +1211,95 @@ impl PlaybackWorker {
         sequence_index: usize,
     ) {
         self.discard_pending();
+        self.discard_pending_source();
         self.discard_pending_seek();
         self.discard_active();
-        let mut decoder = match open_playback_decoder(&file) {
+        if !matches!(self.current(), PlaybackSnapshot::Stopped { .. }) {
+            self.publish(self.stopped_snapshot());
+        }
+        let worker = match SourceLoadWorker::spawn(file.clone()) {
+            Ok(worker) => worker,
+            Err(()) => {
+                self.fail_start(
+                    reply,
+                    None,
+                    PlaybackFailureCode::DecodeFailed,
+                    StartFailurePhase::SourceWorker,
+                    PlaybackServiceError::WorkerUnavailable,
+                );
+                return;
+            }
+        };
+        self.pending_source = Some(PendingSourceLoad {
+            file,
+            worker,
+            reply,
+            start_paused,
+            sequence_index,
+        });
+    }
+
+    fn advance_pending_source_load(&mut self) {
+        let Some(pending) = self.pending_source.as_mut() else {
+            return;
+        };
+        let completion = match pending.worker.try_complete() {
+            Ok(completion) => completion,
+            Err(()) => {
+                let pending = self.pending_source.take().expect("pending source exists");
+                self.fail_start(
+                    pending.reply,
+                    None,
+                    PlaybackFailureCode::DecodeFailed,
+                    StartFailurePhase::SourceWorker,
+                    PlaybackServiceError::WorkerUnavailable,
+                );
+                return;
+            }
+        };
+        let Some(result) = completion else {
+            return;
+        };
+        let pending = self.pending_source.take().expect("pending source exists");
+        let source = match result {
+            Ok(source) => source,
+            Err(CompressedSourceError::Cancelled) => return,
+            Err(error) => {
+                let phase = match error {
+                    CompressedSourceError::OpenFailed => StartFailurePhase::SourceOpen,
+                    CompressedSourceError::MetadataFailed => StartFailurePhase::SourceMetadata,
+                    CompressedSourceError::ReadFailed => StartFailurePhase::SourceRead,
+                    CompressedSourceError::SourceChanged => StartFailurePhase::SourceChanged,
+                    CompressedSourceError::Cancelled => unreachable!(),
+                };
+                self.fail_start(
+                    pending.reply,
+                    None,
+                    PlaybackFailureCode::DecodeFailed,
+                    phase,
+                    PlaybackServiceError::Decode,
+                );
+                return;
+            }
+        };
+        self.begin_playback_from_source(
+            pending.file,
+            source,
+            pending.reply,
+            pending.start_paused,
+            pending.sequence_index,
+        );
+    }
+
+    fn begin_playback_from_source(
+        &mut self,
+        file: ValidatedAudioFile,
+        source: CompressedAudioSource,
+        reply: SyncSender<Result<PlaybackSnapshot, PlaybackServiceError>>,
+        start_paused: bool,
+        sequence_index: usize,
+    ) {
+        let mut decoder = match source.open_decoder(&file.extension) {
             Ok(decoder) => decoder,
             Err(_) => {
                 self.fail_start(
@@ -1307,6 +1420,7 @@ impl PlaybackWorker {
         self.pending = Some(PendingPlayback {
             session_id,
             source_file: file,
+            source,
             output_config: preparation.config.clone(),
             id,
             stream,
@@ -1402,6 +1516,7 @@ impl PlaybackWorker {
         }
         let session_id = active.session_id;
         let source_file = active.source_file.clone();
+        let source = active.source.clone();
         let source_spec = active.output_config.processing_plan.source();
         let target_source_frame = millis_to_frame(target_ms, source_spec.sample_rate().get());
         let processing_plan = active.output_config.processing_plan;
@@ -1415,7 +1530,7 @@ impl PlaybackWorker {
             }
         };
         let preroll_frames = processor.seek_preroll_frames(target_source_frame);
-        let mut decoder = match open_playback_decoder(&source_file) {
+        let mut decoder = match source.open_decoder(&source_file.extension) {
             Ok(decoder) => decoder,
             Err(_) => {
                 let _ = reply.send(Err(PlaybackServiceError::Decode));
@@ -1614,6 +1729,7 @@ impl PlaybackWorker {
             session_id: pending.session_id,
             id: pending.id,
             source_file: old.source_file,
+            source: old.source,
             output_config: pending.output_config,
             stream: pending.stream,
             completion_time: None,
@@ -1733,8 +1849,17 @@ impl PlaybackWorker {
                 .send(Err(PlaybackServiceError::WorkerUnavailable));
         }
     }
+    fn discard_pending_source(&mut self) {
+        if let Some(pending) = self.pending_source.take() {
+            pending.worker.cancel_and_join();
+            let _ = pending
+                .reply
+                .send(Err(PlaybackServiceError::WorkerUnavailable));
+        }
+    }
     fn stop(&mut self) -> PlaybackSnapshot {
         self.discard_pending();
+        self.discard_pending_source();
         self.discard_pending_seek();
         self.discard_active();
         self.sequence = None;
@@ -1749,7 +1874,11 @@ impl PlaybackWorker {
         &mut self,
         selection: AudioOutputSelection,
     ) -> Result<PlaybackSnapshot, PlaybackServiceError> {
-        if self.active.is_some() || self.pending.is_some() || self.pending_seek.is_some() {
+        if self.active.is_some()
+            || self.pending.is_some()
+            || self.pending_source.is_some()
+            || self.pending_seek.is_some()
+        {
             return Err(PlaybackServiceError::InvalidPlaybackState);
         }
         if let AudioOutputSelection::Device { .. } = &selection {
@@ -2026,7 +2155,7 @@ impl PlaybackWorker {
         id: &str,
         edit: impl FnOnce(&mut Vec<PlaybackQueueEntry>, usize) -> bool,
     ) -> Result<bool, PlaybackServiceError> {
-        if self.pending.is_some() {
+        if self.pending.is_some() || self.pending_source.is_some() {
             return Err(PlaybackServiceError::QueueBusy);
         }
         let Some(sequence) = self.sequence.as_mut() else {

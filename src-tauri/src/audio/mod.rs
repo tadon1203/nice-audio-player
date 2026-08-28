@@ -1,3 +1,4 @@
+mod compressed_source;
 pub mod decoding;
 pub mod devices;
 pub mod output;
