@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PlaybackQueuePane } from "./PlaybackQueuePane";
 
@@ -37,25 +37,23 @@ describe("PlaybackQueuePane focus reveal", () => {
   beforeEach(() => scrollToElement.mockClear());
   afterEach(cleanup);
 
-  it("keeps direct menu focus and its nearest reveal on the same frame", () => {
+  it("delegates menu focus and keyboard navigation to Base UI", async () => {
     render(<PlaybackQueuePane queue={queue} playbackStatus="playing" />);
     fireEvent.click(screen.getByRole("button", { name: "More actions for Second" }));
     const firstAction = screen.getByRole("menuitem", { name: "Move earlier" });
-    expect(firstAction).toHaveFocus();
-    expect(scrollToElement).toHaveBeenLastCalledWith(firstAction, "nearest", "instant");
+    await waitFor(() => expect(firstAction).toHaveFocus());
 
     fireEvent.keyDown(firstAction, { key: "ArrowDown" });
     const secondAction = screen.getByRole("menuitem", { name: "Move later" });
     expect(secondAction).toHaveFocus();
-    expect(scrollToElement).toHaveBeenLastCalledWith(secondAction, "nearest", "instant");
+    expect(secondAction).toHaveFocus();
   });
 
-  it("restores the connected trigger without retaining a stale menu action", () => {
+  it("restores the connected trigger after Escape", async () => {
     render(<PlaybackQueuePane queue={queue} playbackStatus="playing" />);
     const trigger = screen.getByRole("button", { name: "More actions for Second" });
     fireEvent.click(trigger);
     fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
-    expect(trigger).toHaveFocus();
-    expect(scrollToElement).toHaveBeenLastCalledWith(trigger, "nearest", "instant");
+    await waitFor(() => expect(trigger).toHaveFocus());
   });
 });

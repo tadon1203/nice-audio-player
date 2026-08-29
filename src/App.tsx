@@ -1,36 +1,5 @@
-import { useCallback, useEffect, useReducer, useRef, useState } from "react";
-import {
-  isAudioDeviceListError,
-  isSetAudioOutputSelectionError,
-  listAudioOutputDevices,
-  setAudioOutputSelection,
-} from "@/api/audio-devices";
-import {
-  isStartLibraryAlbumError,
-  isStartLibraryAlbumTrackError,
-  isStartLibraryTrackError,
-  startLibraryAlbum,
-  startLibraryAlbumTrack,
-  startLibraryTrack,
-} from "@/api/library";
-import {
-  getPlaybackState,
-  isPauseAudioPlaybackError,
-  isResumeAudioPlaybackError,
-  listenToPlaybackState,
-  pauseAudioPlayback,
-  previousAudioPlayback,
-  nextAudioPlayback,
-  resumeAudioPlayback,
-  stopAudioPlayback,
-} from "@/api/audio-files";
-import type {
-  AudioOutputDevice,
-  AudioOutputSelection,
-  PlaybackFailureCode,
-  PlaybackSnapshot,
-  LibraryAlbumKey,
-} from "@/bindings";
+import { useState } from "react";
+import type { PlaybackFailureCode } from "@/bindings";
 import { AppShell } from "./components/AppShell";
 import { ApplicationActivityIndicator } from "./components/ApplicationActivityIndicator";
 import { PlaybackDock } from "./components/PlaybackDock";
@@ -47,21 +16,13 @@ import { PlaybackQueueActions, PlaybackQueuePane } from "./components/PlaybackQu
 import { PlaybackContextPane } from "./components/PlaybackContextPane";
 import { LyricsPane } from "./components/LyricsPane";
 import { useTrackLyrics } from "./hooks/use-track-lyrics";
-import { initialPlaybackUiState, playbackUiReducer } from "./lib/playback-state";
-import { diagnostics } from "./lib/diagnostics";
+import { usePlaybackSession } from "./hooks/use-playback-session";
+import { useTransportController } from "./hooks/use-transport-controller";
+import { useAudioOutputController } from "./hooks/use-audio-output-controller";
+import { usePlaybackContextController } from "./hooks/use-playback-context-controller";
+import { useAppShortcuts } from "./hooks/use-app-shortcuts";
 
-type TransportOperation =
-  | { type: "stop" }
-  | { type: "pause" }
-  | { type: "resume" }
-  | { type: "startTrack"; trackId: string }
-  | { type: "startAlbum"; albumKey: LibraryAlbumKey }
-  | { type: "startAlbumTrack"; albumKey: LibraryAlbumKey; trackId: string }
-  | { type: "previous" }
-  | { type: "next" };
-type PendingTransportCommand = "stop" | "pause" | "resume" | "previous" | "next" | null;
 type PlaybackContextCloseReason = "closeButton" | "escape" | "trigger" | "navigation";
-type PlaybackContextMode = "queue" | "lyrics";
 function formatPlaybackFailure(code: PlaybackFailureCode): string {
   const messages: Record<PlaybackFailureCode, string> = {
     noOutputDevice: "No audio output device is available.",
@@ -81,323 +42,72 @@ function formatPlaybackFailure(code: PlaybackFailureCode): string {
 
 function App() {
   const [destination, setDestination] = useState<"library" | "settings">("library");
-  const [contextMode, setContextMode] = useState<PlaybackContextMode | null>(null);
-  const [outputDevices, setOutputDevices] = useState<AudioOutputDevice[] | null>(null);
-  const [isLoadingDevices, setIsLoadingDevices] = useState(false);
-  const [isOutputSelectionPending, setIsOutputSelectionPending] = useState(false);
   const { snapshot: scan, error: scanError, libraryRefreshKey } = useLibraryScan();
   const { selected: applicationActivity } = useApplicationActivities();
-  const [playbackUi, dispatchPlaybackUi] = useReducer(playbackUiReducer, initialPlaybackUiState);
-  const [pendingTransportCommand, setPendingTransportCommand] =
-    useState<PendingTransportCommand>(null);
-  const playback = playbackUi.snapshot;
-  const latestPlaybackRef = useRef(playback);
-  const connectionRef = useRef(playbackUi.connection);
-  const transportPendingRef = useRef(false);
-  const outputPendingRef = useRef(false);
-  const deviceRequest = useRef(0);
-  const queuedTransportRef = useRef<TransportOperation | null>(null);
-  const transportGenerationRef = useRef(0);
-  const supersededTransportGenerationRef = useRef<number | null>(null);
-  const subscriptionHealthyRef = useRef(true);
-  const queueButtonRef = useRef<HTMLButtonElement | null>(null);
-  const lyricsButtonRef = useRef<HTMLButtonElement | null>(null);
-  const openContext = useCallback((mode: PlaybackContextMode) => setContextMode(mode), []);
-
-  const closeContext = useCallback(
-    (reason: PlaybackContextCloseReason = "closeButton") => {
-      if (reason !== "navigation" && reason !== "trigger") {
-        const target = contextMode === "queue" ? queueButtonRef.current : lyricsButtonRef.current;
-        target?.focus({ preventScroll: true });
-      }
-      setContextMode(null);
-    },
-    [contextMode],
-  );
-
-  const isContextOpen = contextMode !== null;
-  const transportRequestRef = useRef<(operation: TransportOperation) => Promise<void>>(
-    async () => undefined,
-  );
-  useEffect(() => {
-    transportRequestRef.current = requestTransport;
-  });
-  useEffect(() => {
-    latestPlaybackRef.current = playback;
-    connectionRef.current = playbackUi.connection;
-  }, [playback, playbackUi.connection]);
+  const {
+    playbackUi,
+    playback,
+    dispatchPlaybackUi,
+    applySnapshot,
+    refreshAuthoritativeSnapshot: refresh,
+  } = usePlaybackSession();
   const isPlaybackAvailable = playbackUi.connection === "ready";
-  const isTransportCommandPending = pendingTransportCommand !== null;
+  const contextController = usePlaybackContextController();
+  const {
+    mode: contextMode,
+    isOpen: isContextOpen,
+    open: openContext,
+    queueTriggerRef: queueButtonRef,
+    lyricsTriggerRef: lyricsButtonRef,
+  } = contextController;
+  const closeContext = (reason: PlaybackContextCloseReason = "closeButton") => {
+    contextController.close(reason !== "navigation" && reason !== "trigger");
+  };
+  const transportController = useTransportController({
+    playback,
+    connection: playbackUi.connection,
+    applySnapshot,
+    refreshAuthoritativeSnapshot: refresh,
+    dispatchPlaybackUi,
+  });
+  const { requestTransport, pendingTransportCommand, isTransportCommandPending } =
+    transportController;
+  useAppShortcuts({
+    contextMode,
+    onCloseContext: () => closeContext("escape"),
+    onToggleContext: (mode) => {
+      if (contextMode === mode) closeContext("trigger");
+      else {
+        if (contextMode) {
+          const trigger = mode === "queue" ? queueButtonRef : lyricsButtonRef;
+          trigger.current?.focus({ preventScroll: true });
+        }
+        openContext(mode);
+      }
+    },
+    onTogglePlayback: () => {
+      if (playback.status === "playing" || playback.status === "paused")
+        void requestTransport({ type: playback.status === "playing" ? "pause" : "resume" });
+    },
+  });
+  const outputController = useAudioOutputController({
+    playback,
+    isTransportPending: isTransportCommandPending,
+    isPlaybackAvailable,
+    applySnapshot,
+    dispatchPlaybackUi,
+    refreshAuthoritativeSnapshot: refresh,
+  });
+  const {
+    devices: outputDevices,
+    loading: isLoadingDevices,
+    pending: isOutputSelectionPending,
+    loadDevices: loadOutputDevices,
+    selectDevice: changeOutputSelection,
+  } = outputController;
   const activeTrack = useActiveTrackIdentity(playback.file);
   const trackLyrics = useTrackLyrics(activeTrack.id, isContextOpen && contextMode === "lyrics");
   const queue = usePlaybackQueue();
-  const applySnapshot = useCallback((snapshot: PlaybackSnapshot) => {
-    if (snapshot.revision <= latestPlaybackRef.current.revision) return false;
-    latestPlaybackRef.current = snapshot;
-    dispatchPlaybackUi({ type: "snapshotReceived", snapshot });
-    return true;
-  }, []);
-  const refresh = useCallback(async () => {
-    try {
-      applySnapshot(await getPlaybackState());
-    } catch (cause) {
-      diagnostics.error("frontend.playback.sync_failed", { cause });
-      dispatchPlaybackUi({
-        type: "connectionUnavailable",
-        message: "The playback service could not be synchronized.",
-      });
-    }
-  }, [applySnapshot]);
-  useEffect(() => {
-    let active = true;
-    let unsubscribe: (() => void) | undefined;
-    void (async () => {
-      try {
-        unsubscribe = await listenToPlaybackState(
-          (snapshot) => {
-            if (active) applySnapshot(snapshot);
-          },
-          () => {
-            diagnostics.error("frontend.playback.subscription_failed");
-            subscriptionHealthyRef.current = false;
-            dispatchPlaybackUi({
-              type: "connectionUnavailable",
-              message: "Playback updates could not be read.",
-            });
-          },
-        );
-        const snapshot = await getPlaybackState();
-        if (active) {
-          applySnapshot(snapshot);
-          if (subscriptionHealthyRef.current) dispatchPlaybackUi({ type: "connectionReady" });
-        }
-      } catch (cause) {
-        diagnostics.error("frontend.playback.sync_failed", { cause });
-        if (active)
-          dispatchPlaybackUi({
-            type: "connectionUnavailable",
-            message: "The playback service could not be synchronized.",
-          });
-      }
-    })();
-    return () => {
-      active = false;
-      unsubscribe?.();
-    };
-  }, [applySnapshot]);
-  async function loadOutputDevices() {
-    const token = ++deviceRequest.current;
-    setIsLoadingDevices(true);
-    try {
-      const devices = await listAudioOutputDevices();
-      if (token === deviceRequest.current) setOutputDevices(devices);
-    } catch (error) {
-      diagnostics.warn("frontend.audio_output.device_list_failed", { cause: error });
-      if (token === deviceRequest.current)
-        dispatchPlaybackUi({
-          type: "commandFailed",
-          lane: "output",
-          message: isAudioDeviceListError(error)
-            ? "Audio output devices could not be enumerated."
-            : "Audio output devices could not be loaded.",
-        });
-    } finally {
-      if (token === deviceRequest.current) setIsLoadingDevices(false);
-    }
-  }
-  useEffect(() => {
-    const timer = window.setTimeout(() => void loadOutputDevices(), 0);
-    return () => window.clearTimeout(timer);
-  }, []);
-  async function requestTransport(operation: TransportOperation) {
-    if (transportPendingRef.current) {
-      queuedTransportRef.current = operation;
-      if (
-        operation.type === "startTrack" ||
-        operation.type === "startAlbum" ||
-        operation.type === "startAlbumTrack"
-      ) {
-        supersededTransportGenerationRef.current = transportGenerationRef.current;
-        void stopAudioPlayback().catch(() => undefined);
-      }
-      return;
-    }
-    if (connectionRef.current !== "ready") return;
-    const command = operation.type;
-    const currentPlayback = latestPlaybackRef.current;
-    const valid =
-      command === "startTrack" ||
-      command === "startAlbum" ||
-      command === "startAlbumTrack" ||
-      (command === "previous" && currentPlayback.canGoPrevious) ||
-      (command === "next" && currentPlayback.canGoNext) ||
-      (command === "stop" &&
-        (currentPlayback.status === "playing" || currentPlayback.status === "paused")) ||
-      (command === "pause" && currentPlayback.status === "playing") ||
-      (command === "resume" && currentPlayback.status === "paused");
-    if (!valid) return;
-    transportPendingRef.current = true;
-    const generation = ++transportGenerationRef.current;
-    setPendingTransportCommand(
-      command === "startTrack" || command === "startAlbum" || command === "startAlbumTrack"
-        ? "resume"
-        : command,
-    );
-    try {
-      const snapshot =
-        command === "startTrack"
-          ? await startLibraryTrack(operation.trackId)
-          : command === "startAlbum"
-            ? await startLibraryAlbum(operation.albumKey)
-            : command === "startAlbumTrack"
-              ? await startLibraryAlbumTrack(operation.albumKey, operation.trackId)
-              : command === "previous"
-                ? await previousAudioPlayback()
-                : command === "next"
-                  ? await nextAudioPlayback()
-                  : command === "stop"
-                    ? await stopAudioPlayback()
-                    : command === "pause"
-                      ? await pauseAudioPlayback()
-                      : await resumeAudioPlayback();
-      if (supersededTransportGenerationRef.current !== generation) {
-        applySnapshot(snapshot);
-        dispatchPlaybackUi({ type: "commandSucceeded", lane: "transport" });
-      }
-    } catch (error) {
-      if (supersededTransportGenerationRef.current !== generation) {
-        diagnostics.warn("frontend.playback.transport_failed", {
-          cause: error,
-          context: {
-            operation: command,
-            revision: currentPlayback.revision,
-            ...(command === "startTrack" || command === "startAlbumTrack"
-              ? { track_id: operation.trackId }
-              : {}),
-          },
-        });
-        dispatchPlaybackUi({
-          type: "commandFailed",
-          lane: "transport",
-          message:
-            command === "startTrack" &&
-            isStartLibraryTrackError(error) &&
-            error.code === "trackUnavailable"
-              ? "This track is no longer available."
-              : command === "startAlbumTrack" &&
-                  isStartLibraryAlbumTrackError(error) &&
-                  error.code === "trackUnavailable"
-                ? "This track is no longer available in this album."
-                : command === "startAlbumTrack" &&
-                    isStartLibraryAlbumTrackError(error) &&
-                    error.code === "trackNotMember"
-                  ? "This track does not belong to this album."
-                  : command === "startAlbumTrack" &&
-                      isStartLibraryAlbumTrackError(error) &&
-                      error.code === "trackNotPlayable"
-                    ? "This track cannot be played."
-                    : command === "startAlbumTrack" &&
-                        isStartLibraryAlbumTrackError(error) &&
-                        error.code === "albumNotFound"
-                      ? "This album is no longer available."
-                      : command === "startAlbumTrack" &&
-                          isStartLibraryAlbumTrackError(error) &&
-                          error.code === "noPlayableTracks"
-                        ? "This album has no playable tracks."
-                        : command === "startAlbum" &&
-                            isStartLibraryAlbumError(error) &&
-                            error.code === "noPlayableTracks"
-                          ? "This album has no playable tracks."
-                          : command === "pause" && isPauseAudioPlaybackError(error)
-                            ? "Playback cannot be paused in its current state."
-                            : command === "resume" && isResumeAudioPlaybackError(error)
-                              ? "Playback cannot be resumed in its current state."
-                              : "The playback service is unavailable.",
-        });
-        await refresh();
-      }
-    } finally {
-      transportPendingRef.current = false;
-      setPendingTransportCommand(null);
-      const queued = queuedTransportRef.current;
-      queuedTransportRef.current = null;
-      if (queued) void requestTransport(queued);
-    }
-  }
-  useEffect(() => {
-    function handleShortcut(event: KeyboardEvent) {
-      const target = event.target as HTMLElement | null;
-      const isTextEntry =
-        target instanceof HTMLInputElement ||
-        target instanceof HTMLTextAreaElement ||
-        target instanceof HTMLSelectElement ||
-        target?.isContentEditable;
-      if (isTextEntry || event.altKey || event.ctrlKey || event.metaKey) return;
-      if (event.key === "Escape") {
-        if (isContextOpen) {
-          event.preventDefault();
-          closeContext("escape");
-        }
-        return;
-      }
-      if (event.key.toLowerCase() === "q") {
-        event.preventDefault();
-        if (contextMode === "queue") closeContext("trigger");
-        else if (isContextOpen) {
-          queueButtonRef.current?.focus({ preventScroll: true });
-          setContextMode("queue");
-        } else openContext("queue");
-        return;
-      }
-      if (event.key === " " && target?.closest("[data-scroll-region]")) return;
-      if (event.key === " " && (playback.status === "playing" || playback.status === "paused")) {
-        event.preventDefault();
-        void transportRequestRef.current({
-          type: playback.status === "playing" ? "pause" : "resume",
-        });
-      }
-    }
-    window.addEventListener("keydown", handleShortcut);
-    return () => window.removeEventListener("keydown", handleShortcut);
-  }, [closeContext, contextMode, isContextOpen, openContext, playback.status]);
-  async function changeOutputSelection(selection: AudioOutputSelection) {
-    if (
-      outputPendingRef.current ||
-      transportPendingRef.current ||
-      isLoadingDevices ||
-      !isPlaybackAvailable ||
-      playback.status === "playing" ||
-      playback.status === "paused"
-    )
-      return;
-    outputPendingRef.current = true;
-    setIsOutputSelectionPending(true);
-    try {
-      applySnapshot(await setAudioOutputSelection(selection));
-    } catch (error) {
-      diagnostics.warn("frontend.audio_output.selection_failed", {
-        cause: error,
-        context: {
-          selection: selection.kind === "device" ? "device" : "system_default",
-          revision: latestPlaybackRef.current.revision,
-        },
-      });
-      dispatchPlaybackUi({
-        type: "commandFailed",
-        lane: "output",
-        message:
-          isSetAudioOutputSelectionError(error) && error.code === "invalidPlaybackState"
-            ? "Stop playback before changing the output device."
-            : isSetAudioOutputSelectionError(error) && error.code === "outputDeviceUnavailable"
-              ? "The selected output device is unavailable."
-              : "The output device could not be changed.",
-      });
-      await refresh();
-    } finally {
-      outputPendingRef.current = false;
-      setIsOutputSelectionPending(false);
-    }
-  }
   const seekController = useSeekController({
     playback,
     connection: playbackUi.connection,
@@ -494,45 +204,53 @@ function App() {
         dock={
           <PlaybackDock
             playback={playback}
-            hasResumablePlayback={playback.status === "paused"}
-            isPlaybackAvailable={isPlaybackAvailable}
-            isTransportCommandPending={isTransportCommandPending}
-            pendingTransportCommand={pendingTransportCommand}
-            seekPreviewMs={seekController.seekPreviewMs}
-            isSeekPending={seekController.isSeekPending}
-            volumeValue={volumeController.volumeValue}
-            isVolumeUpdatePending={volumeController.isVolumeUpdatePending}
-            isMutePending={volumeController.isMutePending}
-            playbackError={
+            track={{
+              title: activeTrack.title,
+              artist: activeTrack.artist,
+              artworkUrl: activeTrack.artworkUrl,
+              artworkLoading: activeTrack.artworkLoading,
+            }}
+            transport={{
+              available: isPlaybackAvailable,
+              pending: isTransportCommandPending,
+              pendingCommand: pendingTransportCommand,
+              hasResumablePlayback: playback.status === "paused",
+              play: () => void requestTransport({ type: "resume" }),
+              pause: () => void requestTransport({ type: "pause" }),
+              resume: () => void requestTransport({ type: "resume" }),
+              previous: () => void requestTransport({ type: "previous" }),
+              next: () => void requestTransport({ type: "next" }),
+            }}
+            seek={{
+              previewMs: seekController.seekPreviewMs,
+              pending: seekController.isSeekPending,
+              change: seekController.onSeek,
+              commit: (value) => void seekController.requestSeek(value),
+              cancel: seekController.onSeekCancel,
+            }}
+            volume={{
+              value: volumeController.volumeValue,
+              updatePending: volumeController.isVolumeUpdatePending,
+              mutePending: volumeController.isMutePending,
+              change: volumeController.onVolumeChange,
+              commit: volumeController.onVolumeCommit,
+              cancel: volumeController.onVolumePointerCancel,
+              toggleMute: volumeController.onVolumeButtonPress,
+            }}
+            context={{
+              mode: isContextOpen ? contextMode : null,
+              toggle: (mode) => {
+                if (isContextOpen && contextMode === mode) closeContext("trigger");
+                else openContext(mode);
+              },
+              queueButtonRef,
+              lyricsButtonRef,
+            }}
+            error={
               playbackUi.commandError?.message ??
               playbackUi.connectionError ??
               (playback.status === "failed" ? formatPlaybackFailure(playback.error) : null)
             }
-            presentationTitle={activeTrack.title}
-            presentationArtist={activeTrack.artist}
-            artworkUrl={activeTrack.artworkUrl}
-            artworkLoading={activeTrack.artworkLoading}
-            onPlay={() => void requestTransport({ type: "resume" })}
-            onPause={() => void requestTransport({ type: "pause" })}
-            onResume={() => void requestTransport({ type: "resume" })}
-            onPrevious={() => void requestTransport({ type: "previous" })}
-            onNext={() => void requestTransport({ type: "next" })}
-            onSeek={seekController.onSeek}
-            onSeekCommit={(value) => void seekController.requestSeek(value)}
-            onSeekCancel={seekController.onSeekCancel}
-            onVolumeChange={volumeController.onVolumeChange}
-            onVolumeInteractionStart={volumeController.onVolumePointerDown}
-            onVolumeCommit={volumeController.onVolumeCommit}
-            onVolumePointerCancel={volumeController.onVolumePointerCancel}
-            onVolumeButtonPress={volumeController.onVolumeButtonPress}
-            activeContextMode={isContextOpen ? contextMode : null}
-            onContextModeToggle={(mode) => {
-              if (isContextOpen && contextMode === mode) closeContext("trigger");
-              else if (isContextOpen) setContextMode(mode);
-              else openContext(mode);
-            }}
-            queueButtonRef={queueButtonRef}
-            lyricsButtonRef={lyricsButtonRef}
           />
         }
       />

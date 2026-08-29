@@ -27,6 +27,23 @@ for (const path of files) {
   if (/transform\s*:[^;{}]*!important/.test(source)) {
     violations.push(`${path}: transform !important is not allowed`);
   }
+  if (
+    path.includes(`${join("src", "styles")}${join("", "")}`) &&
+    /playback(?:-queue)?\.css$/.test(path)
+  ) {
+    if (/\.range-control__/.test(source)) {
+      violations.push(`${path}: feature styles must not own slider internal geometry`);
+    }
+    if (/\.range-control[^\n{]*input/.test(source)) {
+      violations.push(`${path}: feature styles must not reach hidden slider inputs`);
+    }
+    if (/\.playback-dock__transport[^\n{]*\{[^}]*translate/.test(source)) {
+      violations.push(`${path}: Dock transport offset rules are not allowed`);
+    }
+  }
+  if (path.endsWith("playback-queue.css") && /\.playback-queue__menu\s+button/.test(source)) {
+    violations.push(`${path}: queue menu styles must not depend on button tag selectors`);
+  }
 }
 
 if (violations.length > 0) {

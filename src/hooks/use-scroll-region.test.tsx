@@ -1,11 +1,13 @@
 /** @vitest-environment jsdom */
 
 import { act, renderHook } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { useScrollRegion } from "./use-scroll-region";
 
-const motionState = vi.hoisted(() => ({ reduced: false }));
-vi.mock("motion/react", () => ({ useReducedMotion: () => motionState.reduced }));
+const reducedMotion = vi.hoisted(() => ({ value: false }));
+vi.mock("./use-reduced-motion-preference", () => ({
+  useReducedMotionPreference: () => reducedMotion.value,
+}));
 
 function viewport() {
   const element = document.createElement("div");
@@ -21,10 +23,6 @@ function viewport() {
 }
 
 describe("useScrollRegion", () => {
-  beforeEach(() => {
-    motionState.reduced = false;
-  });
-
   it("starts with a viewport only and applies pending requests", () => {
     const { result } = renderHook(() => useScrollRegion());
     act(() => result.current.scrollToPosition(120));
@@ -44,7 +42,7 @@ describe("useScrollRegion", () => {
   });
 
   it("converts smooth movement to instant under reduced motion", () => {
-    motionState.reduced = true;
+    reducedMotion.value = true;
     const { result } = renderHook(() => useScrollRegion());
     const element = viewport();
     act(() => result.current.setViewportElement(element));

@@ -1,99 +1,84 @@
 import type { PlaybackSnapshot } from "@/bindings";
 import { useEffect, useState, type Ref } from "react";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { formatPlaybackTime } from "@/lib/playback-time";
-import { effectsMotion } from "@/lib/motion";
 import { AppIcon } from "./ui/AppIcon";
 import { StateIcon } from "./ui/StateIcon";
-import { IconButton } from "./ui/IconButton";
-import { RangeControl } from "./RangeControl";
+import { Button } from "./ui/button";
+import { PlaybackTimeline } from "./PlaybackTimeline";
 import { VolumeControl } from "./VolumeControl";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 type PendingTransportCommand = "stop" | "pause" | "resume" | "previous" | "next" | null;
 
 interface PlaybackDockProps {
   playback: PlaybackSnapshot;
-  hasResumablePlayback?: boolean;
-  isPlaybackAvailable: boolean;
-  isTransportCommandPending: boolean;
-  pendingTransportCommand: PendingTransportCommand;
-  seekPreviewMs: number | null;
-  isSeekPending: boolean;
-  volumeValue: number;
-  isVolumeUpdatePending: boolean;
-  isMutePending: boolean;
-  playbackError: string | null;
-  presentationTitle: string;
-  presentationArtist: string | null;
-  artworkUrl: string | null;
-  artworkLoading: boolean;
-  onPlay: () => void;
-  onPause: () => void;
-  onResume: () => void;
-  onPrevious?: () => void;
-  onNext?: () => void;
-  onSeek: (value: number) => void;
-  onSeekCommit: (value: number) => void;
-  onSeekCancel: () => void;
-  onVolumeChange: (value: number) => void;
-  onVolumeInteractionStart: () => void;
-  onVolumeCommit: (value: number) => void;
-  onVolumePointerCancel: () => void;
-  onVolumeButtonPress: () => void;
-  activeContextMode?: "queue" | "lyrics" | null;
-  onContextModeToggle?: (mode: "queue" | "lyrics") => void;
-  queueButtonRef?: Ref<HTMLButtonElement>;
-  lyricsButtonRef?: Ref<HTMLButtonElement>;
+  track: {
+    title: string;
+    artist: string | null;
+    artworkUrl: string | null;
+    artworkLoading: boolean;
+  };
+  transport: {
+    available: boolean;
+    pending: boolean;
+    pendingCommand: PendingTransportCommand;
+    hasResumablePlayback: boolean;
+    play(): void;
+    pause(): void;
+    resume(): void;
+    previous(): void;
+    next(): void;
+  };
+  seek: {
+    previewMs: number | null;
+    pending: boolean;
+    change(value: number): void;
+    commit(value: number): void;
+    cancel(): void;
+  };
+  volume: {
+    value: number;
+    updatePending: boolean;
+    mutePending: boolean;
+    change(value: number): void;
+    commit(value: number): void;
+    cancel(): void;
+    toggleMute(): void;
+  };
+  context: {
+    mode: "queue" | "lyrics" | null;
+    toggle(mode: "queue" | "lyrics"): void;
+    queueButtonRef?: Ref<HTMLButtonElement>;
+    lyricsButtonRef?: Ref<HTMLButtonElement>;
+  };
+  error: string | null;
 }
 
 export function PlaybackDock({
   playback,
-  hasResumablePlayback,
-  isPlaybackAvailable,
-  isTransportCommandPending,
-  pendingTransportCommand,
-  seekPreviewMs,
-  isSeekPending,
-  volumeValue,
-  isVolumeUpdatePending,
-  isMutePending,
-  playbackError,
-  presentationTitle,
-  presentationArtist,
-  artworkUrl,
-  artworkLoading,
-  onPlay,
-  onPause,
-  onResume,
-  onPrevious = () => {},
-  onNext = () => {},
-  onSeek,
-  onSeekCommit,
-  onSeekCancel,
-  onVolumeChange,
-  onVolumeInteractionStart,
-  onVolumeCommit,
-  onVolumePointerCancel,
-  onVolumeButtonPress,
-  activeContextMode = null,
-  onContextModeToggle = () => undefined,
-  queueButtonRef,
-  lyricsButtonRef,
+  track,
+  transport,
+  seek,
+  volume,
+  context: { mode: contextMode, toggle: toggleContext, queueButtonRef, lyricsButtonRef },
+  error,
 }: PlaybackDockProps) {
   const [artworkFailed, setArtworkFailed] = useState(false);
-  const reducedMotion = useReducedMotion();
   useEffect(() => {
     queueMicrotask(() => setArtworkFailed(false));
-  }, [artworkUrl]);
+  }, [track.artworkUrl]);
   const timed = playback.status === "playing" || playback.status === "paused";
   const duration = timed ? playback.durationMs : null;
   const position = timed ? playback.positionMs : 0;
   const primaryLabel =
     playback.status === "playing" ? "Pause" : playback.status === "paused" ? "Resume" : "Play";
   const primaryAction =
-    playback.status === "playing" ? onPause : playback.status === "paused" ? onResume : onPlay;
-  const primaryBusy = pendingTransportCommand === "pause" || pendingTransportCommand === "resume";
-  const seekValue = Math.min(seekPreviewMs ?? position, duration ?? 0);
+    playback.status === "playing"
+      ? transport.pause
+      : playback.status === "paused"
+        ? transport.resume
+        : transport.play;
+  const primaryBusy = transport.pendingCommand === "pause" || transport.pendingCommand === "resume";
+  const seekValue = Math.min(seek.previewMs ?? position, duration ?? 0);
   return (
     <section
       className="playback-dock"
@@ -104,69 +89,63 @@ export function PlaybackDock({
       <div className="playback-dock__layout">
         <div className="playback-dock__identity" data-region="identity" aria-label="Current track">
           <div className="playback-dock__identity-content">
-            <div className="playback-dock__artwork-frame" aria-busy={artworkLoading}>
-              <AnimatePresence initial={false}>
-                {artworkUrl && !artworkFailed ? (
-                  <motion.img
-                    key={artworkUrl}
-                    src={artworkUrl}
-                    alt=""
-                    className="playback-dock__artwork"
-                    onError={() => setArtworkFailed(true)}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{
-                      duration: reducedMotion ? effectsMotion.reduced : effectsMotion.image,
-                      ease: effectsMotion.ease,
-                    }}
-                  />
-                ) : (
-                  <motion.span
-                    key="placeholder"
-                    className="playback-dock__artwork-placeholder"
-                    aria-hidden="true"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{
-                      duration: reducedMotion ? effectsMotion.reduced : effectsMotion.image,
-                      ease: effectsMotion.ease,
-                    }}
-                  />
-                )}
-              </AnimatePresence>
+            <div className="playback-dock__artwork-frame" aria-busy={track.artworkLoading}>
+              {track.artworkUrl && !artworkFailed ? (
+                <img
+                  key={track.artworkUrl}
+                  src={track.artworkUrl}
+                  alt=""
+                  className="playback-dock__artwork"
+                  onError={() => setArtworkFailed(true)}
+                />
+              ) : (
+                <span
+                  key="placeholder"
+                  className="playback-dock__artwork-placeholder"
+                  aria-hidden="true"
+                />
+              )}
             </div>
             <div className="playback-dock__identity-copy">
-              <p className="playback-dock__title" title={presentationTitle}>
-                {presentationTitle}
+              <p className="playback-dock__title" title={track.title}>
+                {track.title}
               </p>
-              <p className="playback-dock__artist">{presentationArtist ?? " "}</p>
+              <p className="playback-dock__artist">{track.artist ?? " "}</p>
             </div>
           </div>
         </div>
         <div
           className="playback-dock__playback-core"
           data-region="playback-core"
-          aria-busy={isSeekPending}
+          aria-busy={seek.pending}
         >
           <div className="playback-dock__transport">
-            <IconButton
-              type="button"
-              aria-label="Previous track"
-              aria-busy={pendingTransportCommand === "previous"}
-              disabled={!isPlaybackAvailable || !playback.canGoPrevious}
-              onClick={onPrevious}
-              className="playback-dock__fixed-control playback-dock__navigation-control"
-            >
-              <AppIcon name="previous" />
-            </IconButton>
-            <IconButton
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    size="icon"
+                    type="button"
+                    aria-label="Previous track"
+                    aria-busy={transport.pendingCommand === "previous"}
+                    disabled={!transport.available || !playback.canGoPrevious}
+                    onClick={transport.previous}
+                    className="playback-dock__fixed-control playback-dock__navigation-control"
+                  />
+                }
+              >
+                <AppIcon name="previous" />
+              </TooltipTrigger>
+              <TooltipContent>Previous track</TooltipContent>
+            </Tooltip>
+            <Button
+              size="icon-lg"
               type="button"
               aria-label={primaryLabel}
               aria-busy={primaryBusy}
               disabled={
-                !isPlaybackAvailable || (playback.status !== "playing" && !hasResumablePlayback)
+                !transport.available ||
+                (playback.status !== "playing" && !transport.hasResumablePlayback)
               }
               onClick={primaryAction}
               className="playback-dock__fixed-control playback-dock__primary-control"
@@ -175,98 +154,101 @@ export function PlaybackDock({
                 state={playback.status === "playing" ? "pause" : "play"}
                 className="playback-dock__primary-icon"
               />
-            </IconButton>
-            <IconButton
-              type="button"
-              aria-label="Next track"
-              aria-busy={pendingTransportCommand === "next"}
-              disabled={!isPlaybackAvailable || !playback.canGoNext}
-              onClick={onNext}
-              className="playback-dock__fixed-control playback-dock__navigation-control"
-            >
-              <AppIcon name="next" />
-            </IconButton>
+            </Button>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    size="icon"
+                    type="button"
+                    aria-label="Next track"
+                    aria-busy={transport.pendingCommand === "next"}
+                    disabled={!transport.available || !playback.canGoNext}
+                    onClick={transport.next}
+                    className="playback-dock__fixed-control playback-dock__navigation-control"
+                  />
+                }
+              >
+                <AppIcon name="next" />
+              </TooltipTrigger>
+              <TooltipContent>Next track</TooltipContent>
+            </Tooltip>
           </div>
-          <div
-            className={`playback-dock__timeline${
-              isSeekPending || isTransportCommandPending ? " is-pending" : ""
-            }${!timed ? " is-idle" : ""}`}
-          >
-            {timed ? (
-              <div className="flex justify-between text-body-sm text-text-secondary">
-                <span className="tabular-nums">{formatPlaybackTime(seekValue)}</span>
-                <span className="tabular-nums">
-                  {duration === null ? "--:--" : formatPlaybackTime(duration)}
-                </span>
-              </div>
-            ) : (
-              <div aria-hidden="true" />
-            )}
-            <RangeControl
-              aria-label="Playback position"
-              aria-valuetext={`${formatPlaybackTime(seekValue)} of ${duration === null ? "--:--" : formatPlaybackTime(duration)}`}
-              min={0}
-              max={duration ?? 0}
-              step={1}
-              value={seekValue}
-              disabled={
-                !isPlaybackAvailable ||
-                !timed ||
-                duration === null ||
-                isSeekPending ||
-                isTransportCommandPending
-              }
-              onValueChange={onSeek}
-              onValueCommit={onSeekCommit}
-              onInteractionCancel={onSeekCancel}
-            />
-          </div>
+          <PlaybackTimeline
+            duration={duration}
+            value={seekValue}
+            available={transport.available}
+            pending={seek.pending}
+            transportPending={transport.pending}
+            onChange={seek.change}
+            onCommit={seek.commit}
+            onCancel={seek.cancel}
+          />
         </div>
         <div className="playback-dock__secondary">
           <div className="playback-dock__context-controls">
-            <IconButton
-              ref={queueButtonRef}
-              type="button"
-              className="playback-dock__context-button"
-              selected={activeContextMode === "queue"}
-              aria-label={activeContextMode === "queue" ? "Close queue" : "Open queue"}
-              aria-expanded={activeContextMode === "queue"}
-              aria-controls="playback-context-pane"
-              onClick={() => onContextModeToggle("queue")}
-            >
-              <AppIcon name="queue" />
-            </IconButton>
-            <IconButton
-              ref={lyricsButtonRef}
-              type="button"
-              className="playback-dock__context-button"
-              selected={activeContextMode === "lyrics"}
-              aria-label={activeContextMode === "lyrics" ? "Close lyrics" : "Open lyrics"}
-              aria-expanded={activeContextMode === "lyrics"}
-              aria-controls="playback-context-pane"
-              onClick={() => onContextModeToggle("lyrics")}
-            >
-              <AppIcon name="lyrics" />
-            </IconButton>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    size="icon"
+                    ref={queueButtonRef}
+                    type="button"
+                    className="playback-dock__context-button"
+                    aria-pressed={contextMode === "queue"}
+                    aria-label={contextMode === "queue" ? "Close queue" : "Open queue"}
+                    aria-expanded={contextMode === "queue"}
+                    aria-controls="playback-context-pane"
+                    onClick={() => toggleContext("queue")}
+                  />
+                }
+              >
+                <AppIcon name="queue" />
+              </TooltipTrigger>
+              <TooltipContent>
+                {contextMode === "queue" ? "Close queue" : "Open queue"}
+              </TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    size="icon"
+                    ref={lyricsButtonRef}
+                    type="button"
+                    className="playback-dock__context-button"
+                    aria-pressed={contextMode === "lyrics"}
+                    aria-label={contextMode === "lyrics" ? "Close lyrics" : "Open lyrics"}
+                    aria-expanded={contextMode === "lyrics"}
+                    aria-controls="playback-context-pane"
+                    onClick={() => toggleContext("lyrics")}
+                  />
+                }
+              >
+                <AppIcon name="lyrics" />
+              </TooltipTrigger>
+              <TooltipContent>
+                {contextMode === "lyrics" ? "Close lyrics" : "Open lyrics"}
+              </TooltipContent>
+            </Tooltip>
           </div>
           <VolumeControl
             playback={playback}
-            value={volumeValue}
-            isPlaybackAvailable={isPlaybackAvailable}
-            isVolumeUpdatePending={isVolumeUpdatePending}
-            isMutePending={isMutePending}
-            onValueChange={onVolumeChange}
-            onInteractionStart={onVolumeInteractionStart}
-            onValueCommit={onVolumeCommit}
-            onInteractionCancel={onVolumePointerCancel}
-            onVolumeButtonPress={onVolumeButtonPress}
+            value={volume.value}
+            isPlaybackAvailable={transport.available}
+            isVolumeUpdatePending={volume.updatePending}
+            isMutePending={volume.mutePending}
+            onValueChange={volume.change}
+            onValueCommitted={volume.commit}
+            onInteractionCancel={volume.cancel}
+            onVolumeButtonPress={volume.toggleMute}
           />
         </div>
       </div>
-      {playbackError ? (
+      {error ? (
         <div className="playback-dock__status text-body-sm" data-region="status">
           <p className="playback-dock__error text-error" role="alert">
-            {playbackError}
+            {error}
           </p>
         </div>
       ) : null}

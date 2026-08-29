@@ -15,10 +15,7 @@ for (const viewport of [
     const queue = page.getByTestId("playback-queue");
 
     await expect(queue).toBeVisible();
-    await expect(contextPane.locator(".app-shell__context-content")).toHaveAttribute(
-      "data-state",
-      "open",
-    );
+    await expect(contextPane.locator(".playback-context-pane")).toBeVisible();
     await expect(queue.getByRole("button", { name: "Close" })).toBeVisible();
     await expect(queue.locator(".playback-queue__list")).toBeVisible();
     await expectNoHorizontalOverflow(page);
@@ -62,20 +59,19 @@ for (const viewport of [
   });
 }
 
-test("Queue exit is inert and uses no authored structural CSS transition", async ({ page }) => {
+test("Queue close releases the context slot without authored structural CSS transition", async ({
+  page,
+}) => {
   await openFixture(page, "queue-open", { width: 1120, height: 700 });
   const contextPane = page.locator(".app-shell__context-pane");
+  expect(
+    await contextPane.evaluate((element) => getComputedStyle(element).transitionProperty),
+  ).not.toContain("inline-size");
   await page
     .getByTestId("playback-queue")
     .getByRole("button", { name: "Close", exact: true })
     .click();
-  const contextContent = contextPane.locator(".app-shell__context-content");
-  await expect(contextContent).toHaveAttribute("data-state", "closing");
-  expect(
-    await contextPane.evaluate((element) => getComputedStyle(element).transitionProperty),
-  ).not.toContain("inline-size");
-  await expect(contextContent).toHaveCSS("pointer-events", "none");
-  await expect(contextContent).toHaveAttribute("aria-hidden", "true");
+  await expect(contextPane).toBeHidden();
 });
 
 for (const viewport of [
@@ -135,6 +131,53 @@ test("Queue preserves semantics and focus with reduced motion", async ({ page })
   await page.getByTestId("playback-queue").getByRole("button", { name: "Close" }).click();
   await expect(shell.locator(".app-shell__main")).not.toHaveAttribute("inert", "");
   await expect(page.getByRole("button", { name: "Open queue" })).toBeFocused();
+});
+
+test("Queue switches to the production Lyrics pane without closing the context slot", async ({
+  page,
+}) => {
+  await openFixture(page, "queue-open", { width: 1120, height: 700 });
+  await page.getByRole("button", { name: "Open lyrics" }).click();
+  await expect(page.getByRole("heading", { name: "Lyrics" })).toBeVisible();
+  await expect(page.locator(".lyrics-pane__cue")).toHaveCount(4);
+  await expect(page.getByTestId("app-shell").locator(".app-shell__workspace")).toHaveAttribute(
+    "data-context-open",
+    "true",
+  );
+  const firstCue = page.locator(".lyrics-pane__cue").first();
+  await firstCue.focus();
+  await page.keyboard.press("ArrowDown");
+  await expect(page.locator('.lyrics-pane__cue[data-cue-ordinal="1"]')).toBeFocused();
+});
+
+test("Queue icon actions expose shared geometry and menu keyboard semantics", async ({ page }) => {
+  await openFixture(page, "queue-open", { width: 1120, height: 700 });
+  const queue = page.getByTestId("playback-queue");
+  for (const button of [
+    page.locator(".playback-queue__tools button").nth(0),
+    page.locator(".playback-queue__tools button").nth(1),
+  ]) {
+    await expect(button).toHaveAttribute("aria-pressed", "false");
+    const box = await button.boundingBox();
+    expect(box?.width).toBe(40);
+    expect(box?.height).toBe(40);
+  }
+  const more = queue.getByRole("button", { name: /More actions for/ }).first();
+  const moreBox = await more.boundingBox();
+  expect(moreBox?.width).toBe(40);
+  expect(moreBox?.height).toBe(40);
+  await more.click();
+  const menu = page.getByRole("menu");
+  await expect(menu).toBeVisible();
+  await expect(menu.getByRole("menuitem", { name: "Move earlier" })).toBeVisible();
+  await page.keyboard.press("End");
+  await expect(menu.getByRole("menuitem", { name: "Remove from queue" })).toHaveAttribute(
+    "data-highlighted",
+    "",
+  );
+  await page.keyboard.press("Escape");
+  await expect(menu).toBeHidden();
+  await expect(more).toBeFocused();
 });
 
 test("scrollable surfaces use the dark interface scrollbar treatment", async ({ page }) => {

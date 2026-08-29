@@ -15,8 +15,10 @@ import type {
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { PlaybackDock } from "@/components/PlaybackDock";
-import { PlaybackQueuePane } from "@/components/PlaybackQueuePane";
+import { PlaybackQueueActions, PlaybackQueuePane } from "@/components/PlaybackQueuePane";
 import { PlaybackContextPane } from "@/components/PlaybackContextPane";
+import { LyricsPane } from "@/components/LyricsPane";
+import type { AcceptedPlaybackSeek } from "@/hooks/use-seek-controller";
 import { LibraryView } from "@/features/library/LibraryView";
 import {
   LibraryWorkspaceProvider,
@@ -24,11 +26,11 @@ import {
   type LibraryBrowseClient,
 } from "@/features/library/LibraryWorkspace";
 
-import type { LayoutFixtureName } from "./layout-fixture-state";
+import type { BrowserFixtureName } from "./browser-fixture-state";
 import { layoutStressFixtures } from "./layout-stress-fixtures";
 
-interface LayoutFixtureAppProps {
-  fixture: LayoutFixtureName;
+interface BrowserFixtureAppProps {
+  fixture: BrowserFixtureName;
 }
 
 const noop = () => undefined;
@@ -52,18 +54,21 @@ function audioFile(fileName: string): ValidatedAudioFile {
   };
 }
 
-export function LayoutFixtureApp({ fixture }: LayoutFixtureAppProps) {
+export function BrowserFixtureApp({ fixture }: BrowserFixtureAppProps) {
   const [destination, setDestination] = useState<"library" | "settings">("library");
-  const [queueState, setQueueState] = useState<"open" | "closing" | null>(
-    fixture === "queue-open" ? "open" : null,
+  const [contextMode, setContextMode] = useState<"queue" | "lyrics" | null>(
+    fixture === "queue-open" ? "queue" : null,
   );
   const queueButtonRef = useRef<HTMLButtonElement>(null);
-  const restoreQueueFocusRef = useRef(false);
+  const lyricsButtonRef = useRef<HTMLButtonElement>(null);
+  const restoreContextFocusRef = useRef<"queue" | "lyrics" | null>(null);
   useLayoutEffect(() => {
-    if (queueState !== null || !restoreQueueFocusRef.current) return;
-    queueButtonRef.current?.focus({ preventScroll: true });
-    restoreQueueFocusRef.current = false;
-  }, [queueState]);
+    if (contextMode !== null || !restoreContextFocusRef.current) return;
+    const target =
+      restoreContextFocusRef.current === "queue" ? queueButtonRef.current : lyricsButtonRef.current;
+    target?.focus({ preventScroll: true });
+    restoreContextFocusRef.current = null;
+  }, [contextMode]);
   const playback = fixturePlayback(fixture);
   const playbackError = fixture === "failed" ? layoutStressFixtures.longError : null;
 
@@ -76,15 +81,44 @@ export function LayoutFixtureApp({ fixture }: LayoutFixtureAppProps) {
           destination={destination}
           onDestinationChange={setDestination}
           contextPane={
-            queueState ? (
+            contextMode ? (
               <PlaybackContextPane
-                mode="queue"
+                mode={contextMode}
+                actions={
+                  contextMode === "queue" ? (
+                    <PlaybackQueueActions queue={layoutQueueFixture} />
+                  ) : undefined
+                }
                 onClose={() => {
-                  restoreQueueFocusRef.current = true;
-                  setQueueState(null);
+                  restoreContextFocusRef.current = contextMode;
+                  setContextMode(null);
                 }}
               >
-                <PlaybackQueuePane queue={layoutQueueFixture} playbackStatus="playing" />
+                {contextMode === "queue" ? (
+                  <PlaybackQueuePane queue={layoutQueueFixture} playbackStatus="playing" />
+                ) : (
+                  <LyricsPane
+                    trackTitle="Fixture lyric track"
+                    trackArtist="Fixture Artist"
+                    trackId="fixture-track-1"
+                    identityPending={false}
+                    playback={fixturePlayingPlayback(
+                      "Fixture lyric track.flac",
+                      playback.revision,
+                      "fixture-lyrics",
+                    )}
+                    lyrics={fixtureLyricsState}
+                    onRetry={noop}
+                    canSeek
+                    acceptedSeek={null}
+                    onRequestSeek={async (positionMs): Promise<AcceptedPlaybackSeek> => ({
+                      id: positionMs,
+                      playbackId: "fixture-lyrics",
+                      acceptedRevision: playback.revision,
+                      positionMs,
+                    })}
+                  />
+                )}
               </PlaybackContextPane>
             ) : undefined
           }
@@ -110,36 +144,46 @@ export function LayoutFixtureApp({ fixture }: LayoutFixtureAppProps) {
           dock={
             <PlaybackDock
               playback={playback}
-              hasResumablePlayback={playback.status === "paused"}
-              isPlaybackAvailable
-              isTransportCommandPending={false}
-              pendingTransportCommand={null}
-              seekPreviewMs={fixture === "seek-pending" ? 700 : null}
-              isSeekPending={fixture === "seek-pending"}
-              volumeValue={Math.round(playback.volume * 100)}
-              isVolumeUpdatePending={false}
-              isMutePending={false}
-              playbackError={playbackError}
-              presentationTitle={fixturePresentationTitle(fixture)}
-              presentationArtist={fixture === "playing" ? "Artist" : null}
-              artworkUrl={null}
-              artworkLoading={false}
-              onPlay={noop}
-              onPause={noop}
-              onResume={noop}
-              onSeek={noop}
-              onSeekCommit={noop}
-              onSeekCancel={noop}
-              onVolumeChange={noop}
-              onVolumeInteractionStart={noop}
-              onVolumeCommit={noop}
-              onVolumePointerCancel={noop}
-              onVolumeButtonPress={noop}
-              activeContextMode={queueState === "open" ? "queue" : null}
-              queueButtonRef={queueButtonRef}
-              onContextModeToggle={() =>
-                setQueueState((state) => (state === "open" ? "closing" : "open"))
-              }
+              track={{
+                title: fixturePresentationTitle(fixture),
+                artist: fixture === "playing" ? "Artist" : null,
+                artworkUrl: null,
+                artworkLoading: false,
+              }}
+              transport={{
+                available: true,
+                pending: false,
+                pendingCommand: null,
+                hasResumablePlayback: playback.status === "paused",
+                play: noop,
+                pause: noop,
+                resume: noop,
+                previous: noop,
+                next: noop,
+              }}
+              seek={{
+                previewMs: fixture === "seek-pending" ? 700 : null,
+                pending: fixture === "seek-pending",
+                change: noop,
+                commit: noop,
+                cancel: noop,
+              }}
+              volume={{
+                value: Math.round(playback.volume * 100),
+                updatePending: false,
+                mutePending: false,
+                change: noop,
+                commit: noop,
+                cancel: noop,
+                toggleMute: noop,
+              }}
+              context={{
+                mode: contextMode,
+                toggle: (mode) => setContextMode((current) => (current === mode ? null : mode)),
+                queueButtonRef,
+                lyricsButtonRef,
+              }}
+              error={playbackError}
             />
           }
         />
@@ -170,9 +214,38 @@ const layoutQueueFixture = {
   clearUpcoming: noop,
 };
 
+const fixtureLyricsState: import("@/hooks/use-track-lyrics").TrackLyricsState = {
+  kind: "resolved",
+  trackId: "fixture-track-1",
+  resolution: {
+    status: "resolved",
+    track_id: "fixture-track-1",
+    notice: null,
+    document: {
+      source: "embedded",
+      language: "en",
+      content: {
+        kind: "timed",
+        lines: [
+          { startMs: 0, text: "Fixture lyric opening" },
+          { startMs: 8_000, text: "Fixture lyric second line" },
+          { startMs: 16_000, text: "Fixture lyric third line" },
+          { startMs: 24_000, text: "Fixture lyric closing" },
+        ],
+      },
+    },
+  },
+};
+
+const fixtureArtwork = {
+  contentHash: "a".repeat(64),
+  mimeType: "jpeg" as const,
+  relativePath: `artwork/aa/${"a".repeat(64)}.jpg`,
+};
+
 const fixtureAlbum: LibraryAlbumSummary = {
   key: { title: "A Very Long Album Title For Layout Verification", albumArtist: "Fixture Artist" },
-  artwork: null,
+  artwork: fixtureArtwork,
 };
 const fixtureTracks: LibraryAlbumTrackSummary[] = Array.from({ length: 130 }, (_, index) => ({
   id: `fixture-track-${index + 1}`,
@@ -188,11 +261,11 @@ const fixtureTrackSummaries: LibraryTrackSummary[] = fixtureTracks.map((track) =
   ...track,
   album: fixtureAlbum.key.title,
   albumArtist: fixtureAlbum.key.albumArtist,
-  artwork: null,
+  artwork: fixtureArtwork,
 }));
 const fixtureArtist: LibraryAlbumArtistSummary = {
   key: { name: "Fixture Artist" },
-  artwork: null,
+  artwork: fixtureArtwork,
   albumCount: 105,
 };
 const fixtureClient: LibraryBrowseClient = {
@@ -223,10 +296,10 @@ const fixtureClient: LibraryBrowseClient = {
       "artist-albums",
     ),
   getArtist: async (key) =>
-    fixtureArtists.find((artist) => artist.key.name === key.name) ?? fixtureArtist,
+    structuredClone(fixtureArtists.find((artist) => artist.key.name === key.name) ?? fixtureArtist),
   getAlbumDetails: async (key: LibraryAlbumKey) =>
-    ({
-      summary: { artwork: null, key },
+    structuredClone({
+      summary: { artwork: fixtureArtwork, key },
       date: "2000-01-01",
       trackCount: fixtureTracks.length,
       durationMs: fixtureTracks.reduce((sum, track) => sum + (track.durationMs ?? 0), 0),
@@ -234,10 +307,10 @@ const fixtureClient: LibraryBrowseClient = {
     }) satisfies LibraryAlbumDetails,
   listAlbumTracks: async (_key, offset = 0) => {
     const items = fixtureTracks.slice(offset, offset + 100);
-    return {
+    return structuredClone({
       items,
       nextOffset: offset + items.length < fixtureTracks.length ? offset + items.length : null,
-    } satisfies LibraryAlbumTrackPage;
+    } satisfies LibraryAlbumTrackPage);
   },
   listTracks: async (afterId: string | null = null, search: string | null = null) => {
     const filtered = fixtureTrackSummaries.filter((track) =>
@@ -251,11 +324,11 @@ const fixtureClient: LibraryBrowseClient = {
       ? Math.max(0, filtered.findIndex((track) => track.id === afterId) + 1)
       : 0;
     const items = filtered.slice(start, start + 100);
-    return {
+    return structuredClone({
       items,
       nextAfterId:
         start + items.length < filtered.length ? (items[items.length - 1]?.id ?? null) : null,
-    } satisfies LibraryTrackPage;
+    } satisfies LibraryTrackPage);
   },
 };
 const emptyLibraryClient: LibraryBrowseClient = {
@@ -265,7 +338,7 @@ const emptyLibraryClient: LibraryBrowseClient = {
   listArtistAlbums: async () => ({ items: [], nextCursor: null }),
   getArtist: async () => fixtureArtist,
   getAlbumDetails: async (key) => ({
-    summary: { artwork: null, key },
+    summary: { artwork: fixtureArtwork, key },
     date: null,
     trackCount: 0,
     durationMs: null,
@@ -289,20 +362,20 @@ const fixtureArtistAlbums: LibraryAlbumSummary[] = [
               : `Fixture Artist Album ${String(index + 4).padStart(3, "0")}`,
       albumArtist: "Fixture Artist",
     },
-    artwork: null,
+    artwork: fixtureArtwork,
   })),
 ];
 const fixtureOtherArtists: LibraryAlbumArtistSummary[] = Array.from(
   { length: 104 },
   (_, index) => ({
     key: { name: `Artist ${String(index + 1).padStart(3, "0")}` },
-    artwork: null,
+    artwork: fixtureArtwork,
     albumCount: 1,
   }),
 );
 const fixtureOtherAlbums: LibraryAlbumSummary[] = fixtureOtherArtists.map((artist) => ({
   key: { title: `Album ${artist.key.name}`, albumArtist: artist.key.name },
-  artwork: null,
+  artwork: fixtureArtwork,
 }));
 const fixtureArtists: LibraryAlbumArtistSummary[] = [fixtureArtist, ...fixtureOtherArtists];
 const fixtureAlbums: LibraryAlbumSummary[] = [...fixtureArtistAlbums, ...fixtureOtherAlbums];
@@ -311,10 +384,10 @@ function fixturePage<T>(items: T[], cursor: string | null, kind: string) {
   const cursorPart = cursor?.split(":").pop();
   const offset = cursorPart ? Number(cursorPart) || 0 : 0;
   const page = items.slice(offset, offset + 100);
-  return {
+  return structuredClone({
     items: page,
     nextCursor: offset + page.length < items.length ? `${kind}:${offset + page.length}` : null,
-  };
+  });
 }
 
 function LibraryFixtureSurface({ initialDetail }: { initialDetail: boolean }) {
@@ -351,7 +424,7 @@ function FixtureAlbumDetail() {
   );
 }
 
-function fixturePresentationTitle(fixture: LayoutFixtureName): string {
+function fixturePresentationTitle(fixture: BrowserFixtureName): string {
   if (fixture === "empty") return "No audio selected";
   if (fixture === "unbroken-filename")
     return layoutStressFixtures.unbrokenFilename.replace(/\.[^.]+$/, "");
@@ -360,7 +433,34 @@ function fixturePresentationTitle(fixture: LayoutFixtureName): string {
   return layoutStressFixtures.longFilename.replace(/\.[^.]+$/, "");
 }
 
-function fixturePlayback(fixture: LayoutFixtureName): PlaybackSnapshot {
+function fixturePlayingPlayback(
+  fileName: string,
+  revision: number,
+  playbackId: string,
+  canGoPrevious = false,
+  canGoNext = false,
+): PlaybackSnapshot {
+  return {
+    status: "playing",
+    revision,
+    file: audioFile(fileName),
+    playbackId,
+    positionMs: 10_000,
+    durationMs: 180_000,
+    volume: 0.5,
+    muted: false,
+    outputSelection: { kind: "systemDefault" },
+    canGoPrevious,
+    canGoNext,
+    outputDevice: { id: "default", name: "System speakers" },
+    channelConversion: "none",
+    sourceSampleRate: 44_100,
+    outputSampleRate: 44_100,
+    resamplingActive: false,
+  };
+}
+
+function fixturePlayback(fixture: BrowserFixtureName): PlaybackSnapshot {
   if (
     fixture === "playing" ||
     fixture === "seek-pending" ||

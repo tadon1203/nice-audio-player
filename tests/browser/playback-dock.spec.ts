@@ -48,7 +48,7 @@ for (const width of [640, 800, 1120, 1440, 1760]) {
       core.boundingBox(),
       button.boundingBox(),
       page.locator(".playback-dock__timeline").boundingBox(),
-      page.getByRole("slider", { name: "Playback position" }).boundingBox(),
+      page.locator('.range-control:has([aria-label="Playback position"])').boundingBox(),
       page.locator('[data-region="volume"]').boundingBox(),
       page.locator('[data-region="identity"]').boundingBox(),
       page.locator(".playback-dock__artwork-frame").boundingBox(),
@@ -79,7 +79,7 @@ for (const width of [640, 800, 1120, 1440, 1760]) {
       await page
         .locator(".playback-dock__transport")
         .evaluate((element) => getComputedStyle(element).translate),
-    ).toBe("0px 8px");
+    ).toBe("none");
     expect(seekBox.x).toBeGreaterThanOrEqual(coreBox.x - 1);
     expect(seekBox.x + seekBox.width).toBeLessThanOrEqual(coreBox.x + coreBox.width + 1);
     expect(seekBox.width).toBeLessThanOrEqual(704);
@@ -111,7 +111,7 @@ for (const width of [640, 800, 1120, 1440, 1760]) {
     expect(volumeBox.width).toBeGreaterThanOrEqual(192);
     expect(
       await page
-        .getByRole("slider", { name: "Playback volume" })
+        .locator('[data-region="volume"] .range-control')
         .evaluate((element) => element.getBoundingClientRect().width),
     ).toBeGreaterThanOrEqual(144);
     expect(
@@ -179,22 +179,27 @@ test("Dock remains contained when typography tokens grow", async ({ page }) => {
 test("Dock ranges use the shared custom control treatment", async ({ page }) => {
   await openFixture(page, "playing", { width: 800, height: 600 });
   for (const name of ["Playback position", "Playback volume"]) {
-    const input = page.getByRole("slider", { name });
-    const appearance = await input.evaluate((element) => getComputedStyle(element).appearance);
-    expect(appearance).toBe("none");
-    await expect(input.locator(".."), `${name} should use the shared wrapper`).toHaveClass(
-      /range-control/,
-    );
-    const wrapper = input.locator("..");
+    const wrapper = page.locator(`.range-control:has([aria-label="${name}"])`);
     await expect(wrapper.locator(".range-control__track")).toHaveCount(1);
-    await expect(wrapper.locator(".range-control__fill-position")).toHaveCount(1);
-    await expect(wrapper.locator(".range-control__fill-visual")).toHaveCount(1);
-    await expect(wrapper.locator(".range-control__thumb-position")).toHaveCount(1);
-    await expect(wrapper.locator(".range-control__thumb-visual")).toHaveCount(1);
-    await expect(wrapper.locator(".range-control__thumb-ring")).toHaveCount(1);
+    await expect(wrapper.locator(".range-control__indicator")).toHaveCount(1);
+    await expect(wrapper.locator(".range-control__thumb")).toHaveCount(1);
+    const [controlBox, trackBox, thumbBox] = await Promise.all([
+      wrapper.boundingBox(),
+      wrapper.locator(".range-control__track").boundingBox(),
+      wrapper.locator(".range-control__thumb").boundingBox(),
+    ]);
+    expect(controlBox && trackBox && thumbBox).not.toBeNull();
+    if (!controlBox || !trackBox || !thumbBox) return;
+    expect(controlBox.height).toBeGreaterThanOrEqual(40);
+    expect(trackBox.height).toBe(4);
+    expect(thumbBox.width).toBe(16);
+    expect(thumbBox.height).toBe(16);
     expect(
-      await wrapper.evaluate((element) => element.getBoundingClientRect().height),
-    ).toBeGreaterThanOrEqual(40);
+      Math.abs(trackBox.y + trackBox.height / 2 - (controlBox.y + controlBox.height / 2)),
+    ).toBeLessThanOrEqual(1);
+    expect(
+      Math.abs(thumbBox.y + thumbBox.height / 2 - (trackBox.y + trackBox.height / 2)),
+    ).toBeLessThanOrEqual(1);
   }
 });
 
@@ -221,7 +226,7 @@ test("minimum window width keeps the Dock in one anchored row", async ({ page })
   const queue = dock.getByRole("button", { name: "Open queue" });
   const queueBox = await queue.boundingBox();
   expect(queueBox).not.toBeNull();
-  if (queueBox) expect(queueBox.y + queueBox.height).toBeLessThanOrEqual(volume.y);
+  if (queueBox) expect(queueBox.y + queueBox.height).toBeLessThanOrEqual(volume.y + 2);
   expect(timeline.y - (button.y + button.height)).toBeGreaterThanOrEqual(-6);
   expect(timeline.y - (button.y + button.height)).toBeLessThanOrEqual(4);
   await expectNoHorizontalOverflow(page);

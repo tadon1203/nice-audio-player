@@ -65,20 +65,9 @@
   min-block-size: 0;
   block-size: 100%;
 }
-.app-shell__main-surface > .exclusive-region,
-.app-shell__main-surface .exclusive-region__item,
-.app-shell__main-surface .exclusive-region__contents {
+.app-shell__main-surface > * {
   block-size: 100%;
   min-block-size: 0;
-}
-.app-shell__context-content[data-state="closing"] {
-  pointer-events: none;
-}
-.app-shell__context-content {
-  inline-size: 100%;
-  block-size: 100%;
-  min-inline-size: 0;
-  min-block-size: 100%;
 }
 @media (min-width: 1440px) {
   .app-shell__workspace[data-context-open="true"] {

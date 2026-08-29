@@ -63,6 +63,25 @@
 
 :root {
   color-scheme: dark;
+  --background: var(--color-canvas);
+  --foreground: var(--color-text-primary);
+  --card: var(--color-surface-raised);
+  --card-foreground: var(--color-text-primary);
+  --popover: var(--color-surface-raised);
+  --popover-foreground: var(--color-text-primary);
+  --primary: var(--color-action-filled);
+  --primary-foreground: var(--color-action-filled-foreground);
+  --secondary: var(--color-surface-hover);
+  --secondary-foreground: var(--color-text-primary);
+  --muted: var(--color-surface);
+  --muted-foreground: var(--color-text-secondary);
+  --accent: var(--color-surface-hover);
+  --accent-foreground: var(--color-text-primary);
+  --border: var(--color-border-subtle);
+  --input: var(--color-border-control);
+  --ring: var(--color-focus-ring);
+  --destructive: var(--color-error);
+  --destructive-foreground: var(--color-text-primary);
   --effect-feedback: 160ms;
   --effect-state: 220ms;
   --effect-content: 320ms;

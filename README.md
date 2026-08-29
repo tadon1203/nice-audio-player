@@ -44,7 +44,7 @@ pnpm test
 Run the real-browser responsive layout tests:
 
 ```bash
-pnpm test:layout
+pnpm test:browser
 ```
 
 Run all checks before completing a code change:

@@ -27,6 +27,10 @@ import {
 } from "@/api/library";
 
 export type LibraryPresentation = "albums" | "albumArtists" | "tracks";
+export const libraryRetentionKey = {
+  root: (presentation: LibraryPresentation) => `root:${presentation}`,
+  frame: (id: string) => `frame:${id}`,
+};
 export type LibraryNavigationFrame = {
   id: string;
   kind: "album" | "albumArtist";
@@ -66,9 +70,19 @@ export interface LibraryQueryRetention {
   release: (key: string) => void;
 }
 
+interface RuntimeState {
+  scrollRegistry: {
+    get: (key: string) => number | undefined;
+    set: (key: string, value: number) => void;
+    delete: (key: string) => void;
+    register: (key: string) => void;
+    release: (key: string) => void;
+  };
+  queryRetention: LibraryQueryRetention;
+  client: LibraryBrowseClient;
+}
 interface WorkspaceState {
   presentation: LibraryPresentation;
-  direction: number;
   selectPresentation: (value: LibraryPresentation) => void;
   rawSearch: Record<LibraryPresentation, string>;
   setRawSearch: (value: string) => void;
@@ -80,21 +94,17 @@ interface WorkspaceState {
   back: () => void;
   pendingFocusId: string | null;
   clearPendingFocus: () => void;
-  scrollRegistry: {
-    get: (key: string) => number | undefined;
-    set: (key: string, value: number) => void;
-    delete: (key: string) => void;
-    register: (key: string) => void;
-    release: (key: string) => void;
-  };
-  queryRetention: LibraryQueryRetention;
-  client: LibraryBrowseClient;
 }
+const RuntimeContext = createContext<RuntimeState | null>(null);
 const WorkspaceContext = createContext<WorkspaceState | null>(null);
 
 function createScrollRegistry() {
   const positions = new Map<string, number>();
-  const liveKeys = new Set(["root:albums", "root:albumArtists", "root:tracks"]);
+  const liveKeys = new Set([
+    libraryRetentionKey.root("albums"),
+    libraryRetentionKey.root("albumArtists"),
+    libraryRetentionKey.root("tracks"),
+  ]);
   return {
     get: (key: string) => positions.get(key),
     set: (key: string, value: number) => {
@@ -110,7 +120,11 @@ function createScrollRegistry() {
 }
 function createQueryRetention(): LibraryQueryRetention {
   const snapshots = new Map<string, RetainedPagedLibrarySnapshot<unknown, unknown>>();
-  const liveKeys = new Set(["root:albums", "root:albumArtists", "root:tracks"]);
+  const liveKeys = new Set([
+    libraryRetentionKey.root("albums"),
+    libraryRetentionKey.root("albumArtists"),
+    libraryRetentionKey.root("tracks"),
+  ]);
   return {
     get: <TItem, TCursor>(key: string) =>
       snapshots.get(key) as RetainedPagedLibrarySnapshot<TItem, TCursor> | undefined,
@@ -139,41 +153,27 @@ function restoreFocus(id: string | null) {
   target.focus({ preventScroll: true });
   return true;
 }
-function markActiveScrollSurfaceExiting() {
-  document.querySelectorAll<HTMLElement>("[data-library-surface]").forEach((element) => {
-    if (element.closest('[data-state="exiting"]')) return;
-    element.dataset.scrollSurfaceExiting = "true";
-    element.inert = true;
-    element.setAttribute("aria-hidden", "true");
-  });
-}
-
 type NavigationState = {
   presentation: LibraryPresentation;
   navigation: LibraryNavigationFrame[];
-  direction: number;
 };
 type NavigationAction =
   | { type: "select"; presentation: LibraryPresentation }
   | { type: "push"; frame: LibraryNavigationFrame }
   | { type: "pop" };
-const presentationOrder: LibraryPresentation[] = ["albums", "albumArtists", "tracks"];
 function navigationReducer(state: NavigationState, action: NavigationAction): NavigationState {
   if (action.type === "select") {
     if (action.presentation === state.presentation) return state;
     return {
       ...state,
       presentation: action.presentation,
-      direction:
-        presentationOrder.indexOf(action.presentation) -
-        presentationOrder.indexOf(state.presentation),
     };
   }
   if (action.type === "push") {
-    return { ...state, navigation: [...state.navigation, action.frame], direction: 1 };
+    return { ...state, navigation: [...state.navigation, action.frame] };
   }
   if (state.navigation.length === 0) return state;
-  return { ...state, navigation: state.navigation.slice(0, -1), direction: -1 };
+  return { ...state, navigation: state.navigation.slice(0, -1) };
 }
 
 export function LibraryWorkspaceProvider({
@@ -186,7 +186,6 @@ export function LibraryWorkspaceProvider({
   const [navigationState, dispatchNavigation] = useReducer(navigationReducer, {
     presentation: "albums",
     navigation: [],
-    direction: 0,
   });
   const [rawSearch, setRawSearchState] = useState<Record<LibraryPresentation, string>>({
     albums: "",
@@ -215,7 +214,6 @@ export function LibraryWorkspaceProvider({
   );
   const openAlbum = useCallback(
     (summary: LibraryAlbumSummary) => {
-      markActiveScrollSurfaceExiting();
       nextFrameId.current += 1;
       const id = `album-${nextFrameId.current}`;
       dispatchNavigation({
@@ -231,14 +229,13 @@ export function LibraryWorkspaceProvider({
               : null,
         },
       });
-      scrollRegistry.register(`frame:${id}`);
-      queryRetention.register(`frame:${id}`);
+      scrollRegistry.register(libraryRetentionKey.frame(id));
+      queryRetention.register(libraryRetentionKey.frame(id));
     },
     [queryRetention, scrollRegistry],
   );
   const openAlbumArtist = useCallback(
     (key: LibraryAlbumArtistKey, summary?: LibraryAlbumArtistSummary) => {
-      markActiveScrollSurfaceExiting();
       const originFocusId =
         document.activeElement instanceof HTMLElement
           ? (document.activeElement.dataset.libraryFocusId ?? null)
@@ -255,18 +252,17 @@ export function LibraryWorkspaceProvider({
           originFocusId,
         },
       });
-      scrollRegistry.register(`frame:${id}`);
-      queryRetention.register(`frame:${id}`);
+      scrollRegistry.register(libraryRetentionKey.frame(id));
+      queryRetention.register(libraryRetentionKey.frame(id));
     },
     [queryRetention, scrollRegistry],
   );
   const back = useCallback(() => {
     const popped = navigationState.navigation[navigationState.navigation.length - 1];
     if (!popped) return;
-    markActiveScrollSurfaceExiting();
     setPendingFocusId(popped.originFocusId);
-    queryRetention.release(`frame:${popped.id}`);
-    scrollRegistry.release(`frame:${popped.id}`);
+    queryRetention.release(libraryRetentionKey.frame(popped.id));
+    scrollRegistry.release(libraryRetentionKey.frame(popped.id));
     dispatchNavigation({ type: "pop" });
   }, [navigationState.navigation, queryRetention, scrollRegistry]);
   const selectPresentation = useCallback(
@@ -282,10 +278,13 @@ export function LibraryWorkspaceProvider({
     },
     [],
   );
+  const runtimeValue = useMemo<RuntimeState>(
+    () => ({ scrollRegistry, queryRetention, client }),
+    [client, queryRetention, scrollRegistry],
+  );
   const value = useMemo<WorkspaceState>(
     () => ({
       presentation: navigationState.presentation,
-      direction: navigationState.direction,
       selectPresentation,
       rawSearch,
       setRawSearch,
@@ -297,9 +296,6 @@ export function LibraryWorkspaceProvider({
       back,
       pendingFocusId,
       clearPendingFocus,
-      scrollRegistry,
-      queryRetention,
-      client,
     }),
     [
       navigationState,
@@ -312,12 +308,13 @@ export function LibraryWorkspaceProvider({
       back,
       pendingFocusId,
       clearPendingFocus,
-      scrollRegistry,
-      queryRetention,
-      client,
     ],
   );
-  return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;
+  return (
+    <RuntimeContext.Provider value={runtimeValue}>
+      <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>
+    </RuntimeContext.Provider>
+  );
 }
 export function useLibraryWorkspace(): WorkspaceState {
   const value = useContext(WorkspaceContext);
@@ -326,6 +323,11 @@ export function useLibraryWorkspace(): WorkspaceState {
 }
 export function useOptionalLibraryWorkspace(): WorkspaceState | null {
   return useContext(WorkspaceContext);
+}
+export function useLibraryRuntime(): RuntimeState {
+  const value = useContext(RuntimeContext);
+  if (!value) throw new Error("LibraryWorkspaceProvider is required.");
+  return value;
 }
 export function useLibraryFocusRestore() {
   const { pendingFocusId, clearPendingFocus } = useLibraryWorkspace();

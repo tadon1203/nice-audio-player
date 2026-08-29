@@ -8,11 +8,15 @@ import type { ArtworkRef, LibraryTrackSummary, ValidatedAudioFile } from "@/bind
 
 const mocks = vi.hoisted(() => ({
   getLibraryTrackForPath: vi.fn(),
-  resolveArtworkUrl: vi.fn(),
+  getCachedArtworkUrl: vi.fn(() => null),
+  resolveArtworkUrlCached: vi.fn(),
 }));
 
 vi.mock("@/api/library", () => ({ getLibraryTrackForPath: mocks.getLibraryTrackForPath }));
-vi.mock("@/lib/artwork-url", () => ({ resolveArtworkUrl: mocks.resolveArtworkUrl }));
+vi.mock("@/lib/artwork-url", () => ({
+  getCachedArtworkUrl: mocks.getCachedArtworkUrl,
+  resolveArtworkUrlCached: mocks.resolveArtworkUrlCached,
+}));
 
 import { useActiveTrackIdentity } from "./use-active-track-identity";
 
@@ -66,7 +70,7 @@ describe("useActiveTrackIdentity", () => {
       .mockReturnValueOnce(second.promise);
     const fileA = { path: "C:/Music/A.flac", fileName: "A.flac", extension: "flac" };
     const fileB = { path: "C:/Music/B.flac", fileName: "B.flac", extension: "flac" };
-    mocks.resolveArtworkUrl.mockResolvedValue("asset://track-b");
+    mocks.resolveArtworkUrlCached.mockResolvedValue("asset://track-b");
     const { rerender } = render(<Harness file={fileA} />);
     rerender(<Harness file={{ ...fileA }} />);
     expect(mocks.getLibraryTrackForPath).toHaveBeenCalledTimes(1);
@@ -77,7 +81,7 @@ describe("useActiveTrackIdentity", () => {
     await act(async () => first.resolve(track("Track A", true)));
 
     expect(screen.getByRole("status")).toHaveTextContent("Track B");
-    expect(mocks.resolveArtworkUrl).toHaveBeenCalledWith(artwork);
+    expect(mocks.resolveArtworkUrlCached).toHaveBeenCalledWith(artwork);
   });
 
   it("keeps the direct-file fallback when lookup or artwork URL resolution fails", async () => {
@@ -90,7 +94,7 @@ describe("useActiveTrackIdentity", () => {
 
   it("keeps indexed metadata when only artwork URL resolution fails", async () => {
     mocks.getLibraryTrackForPath.mockResolvedValueOnce(track("Indexed track", true));
-    mocks.resolveArtworkUrl.mockRejectedValueOnce(new Error("asset unavailable"));
+    mocks.resolveArtworkUrlCached.mockRejectedValueOnce(new Error("asset unavailable"));
     render(
       <Harness
         file={{ path: "C:/Music/indexed.flac", fileName: "indexed.flac", extension: "flac" }}

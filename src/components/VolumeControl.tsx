@@ -1,7 +1,8 @@
 import type { PlaybackSnapshot } from "@/bindings";
 import { RangeControl } from "./RangeControl";
+import { Button } from "./ui/button";
 import { StateIcon } from "./ui/StateIcon";
-import { IconButton } from "./ui/IconButton";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 interface VolumeControlProps {
   playback: PlaybackSnapshot;
@@ -10,8 +11,7 @@ interface VolumeControlProps {
   isVolumeUpdatePending: boolean;
   isMutePending: boolean;
   onValueChange: (value: number) => void;
-  onInteractionStart: () => void;
-  onValueCommit: (value: number) => void;
+  onValueCommitted: (value: number) => void;
   onInteractionCancel: () => void;
   onVolumeButtonPress: () => void;
 }
@@ -23,8 +23,7 @@ export function VolumeControl({
   isVolumeUpdatePending,
   isMutePending,
   onValueChange,
-  onInteractionStart,
-  onValueCommit,
+  onValueCommitted,
   onInteractionCancel,
   onVolumeButtonPress,
 }: VolumeControlProps) {
@@ -38,20 +37,26 @@ export function VolumeControl({
       data-region="volume"
       aria-busy={isMutePending || undefined}
     >
-      <IconButton
-        type="button"
-        aria-label={buttonLabel}
-        data-tooltip={buttonLabel}
-        title={buttonLabel}
-        aria-busy={isMutePending || undefined}
-        disabled={!isPlaybackAvailable || isMutePending}
-        onClick={onVolumeButtonPress}
-        className="playback-dock__fixed-control playback-dock__volume-button text-text-primary disabled:cursor-not-allowed disabled:text-text-disabled"
-      >
-        <span data-testid="volume-icon-state" data-state={iconState}>
-          <StateIcon state={iconState} className="playback-dock__volume-icon" />
-        </span>
-      </IconButton>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              size="icon"
+              type="button"
+              aria-label={buttonLabel}
+              aria-busy={isMutePending || undefined}
+              disabled={!isPlaybackAvailable || isMutePending}
+              onClick={onVolumeButtonPress}
+              className="playback-dock__fixed-control playback-dock__volume-button text-text-primary disabled:cursor-not-allowed disabled:text-text-disabled"
+            />
+          }
+        >
+          <span data-testid="volume-icon-state" data-state={iconState}>
+            <StateIcon state={iconState} className="playback-dock__volume-icon" />
+          </span>
+        </TooltipTrigger>
+        <TooltipContent>{buttonLabel}</TooltipContent>
+      </Tooltip>
       <RangeControl
         aria-label="Playback volume"
         aria-valuetext={valueText}
@@ -62,8 +67,7 @@ export function VolumeControl({
         subdued={muted}
         disabled={!isPlaybackAvailable}
         onValueChange={onValueChange}
-        onInteractionStart={onInteractionStart}
-        onValueCommit={onValueCommit}
+        onValueCommitted={onValueCommitted}
         onInteractionCancel={onInteractionCancel}
       />
       {isVolumeUpdatePending ? <span className="sr-only">Updating volume</span> : null}

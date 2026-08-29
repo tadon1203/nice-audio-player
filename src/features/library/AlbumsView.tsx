@@ -27,6 +27,18 @@ export function AlbumsView({
     observer.observe(sentinelRef.current);
     return () => observer.disconnect();
   }, [hasMore, onEnd, scrollRoot]);
+  useEffect(() => {
+    if (!hasMore || !scrollRoot) return;
+    const onScroll = () => {
+      if (
+        scrollRoot.scrollTop > 0 &&
+        scrollRoot.scrollTop + scrollRoot.clientHeight >= scrollRoot.scrollHeight - 2
+      )
+        onEnd();
+    };
+    scrollRoot.addEventListener("scroll", onScroll, { passive: true });
+    return () => scrollRoot.removeEventListener("scroll", onScroll);
+  }, [hasMore, onEnd, scrollRoot]);
   return (
     <section className="library-view__album-section" aria-label="Albums">
       <div className="library-view__album-grid">

@@ -1,42 +1,11 @@
-import { motion, useReducedMotion } from "motion/react";
-import { spatialIndicator } from "@/lib/motion";
+import { TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-export function LibraryPresentationTabs({
-  presentation,
-  onChange,
-}: {
-  presentation: "albums" | "albumArtists" | "tracks";
-  onChange: (presentation: "albums" | "albumArtists" | "tracks") => void;
-}) {
-  const reducedMotion = useReducedMotion();
+export function LibraryPresentationTabs() {
   return (
-    <div className="library-view__switch" role="group" aria-label="Library presentation">
-      {(["albums", "albumArtists", "tracks"] as const).map((value) => {
-        const active = presentation === value;
-        return (
-          <button
-            key={value}
-            type="button"
-            className={active ? "is-active" : ""}
-            aria-pressed={active}
-            onClick={() => onChange(value)}
-          >
-            {value === "albumArtists" ? "Album Artists" : value[0].toUpperCase() + value.slice(1)}
-            {active ? (
-              reducedMotion ? (
-                <span className="library-view__tab-indicator" aria-hidden="true" />
-              ) : (
-                <motion.span
-                  className="library-view__tab-indicator"
-                  layoutId="library-presentation-indicator"
-                  transition={spatialIndicator}
-                  aria-hidden="true"
-                />
-              )
-            ) : null}
-          </button>
-        );
-      })}
-    </div>
+    <TabsList variant="line" activateOnFocus={false} className="library-view__switch">
+      <TabsTrigger value="albums">Albums</TabsTrigger>
+      <TabsTrigger value="albumArtists">Album Artists</TabsTrigger>
+      <TabsTrigger value="tracks">Tracks</TabsTrigger>
+    </TabsList>
   );
 }

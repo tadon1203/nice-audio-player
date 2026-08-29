@@ -1,31 +1,33 @@
 import { useEffect, useState } from "react";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import type { ArtworkRef } from "@/bindings";
-import { resolveArtworkUrl } from "@/lib/artwork-url";
-import { effectsMotion } from "@/lib/motion";
-
-const artworkUrlCache = new WeakMap<object, Promise<string | null>>();
+import { getCachedArtworkUrl, resolveArtworkUrlCached } from "@/lib/artwork-url";
 
 export function useLibraryArtworkUrl(artwork: ArtworkRef | null) {
-  const [url, setUrl] = useState<string | null>(null);
+  const key = artwork?.contentHash ?? null;
+  const [state, setState] = useState<{ key: string | null; url: string | null }>(() => ({
+    key,
+    url: getCachedArtworkUrl(artwork),
+  }));
   useEffect(() => {
     let active = true;
-    if (!artwork) {
-      queueMicrotask(() => {
-        if (active) setUrl(null);
-      });
+    if (!artwork || !key) {
       return () => {
         active = false;
       };
     }
-    const pending = artworkUrlCache.get(artwork) ?? resolveArtworkUrl(artwork);
-    artworkUrlCache.set(artwork, pending);
-    void pending.then((next) => active && setUrl(next)).catch(() => active && setUrl(null));
+    const promise = resolveArtworkUrlCached(artwork);
+    if (getCachedArtworkUrl(artwork) === null) {
+      void promise
+        .then((next) => {
+          if (active) setState((current) => (current.key === key ? { key, url: next } : current));
+        })
+        .catch(() => undefined);
+    }
     return () => {
       active = false;
     };
-  }, [artwork]);
-  return url;
+  }, [artwork, key]);
+  return key === state.key ? state.url : getCachedArtworkUrl(artwork);
 }
 
 export function LibraryArtwork({
@@ -39,37 +41,26 @@ export function LibraryArtwork({
 }) {
   const resolvedArtworkUrl = useLibraryArtworkUrl(artwork);
   const url = resolvedUrl === undefined ? resolvedArtworkUrl : resolvedUrl;
-  const reducedMotion = useReducedMotion();
-  const transition = {
-    duration: reducedMotion ? effectsMotion.reduced : effectsMotion.image,
-    ease: effectsMotion.ease,
-  };
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  useEffect(() => {
+    queueMicrotask(() => setFailedUrl(null));
+  }, [url]);
+  const displayUrl = url && failedUrl !== url ? url : null;
   return (
     <span className="library-artwork-transition">
-      <AnimatePresence initial={false}>
-        {url ? (
-          <motion.img
-            key={url}
-            className={`library-view__artwork ${className ?? ""}`}
-            src={url}
-            alt=""
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={transition}
-          />
-        ) : (
-          <motion.span
-            key="placeholder"
-            className={`library-view__artwork library-view__artwork--placeholder ${className ?? ""}`}
-            aria-hidden="true"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={transition}
-          />
-        )}
-      </AnimatePresence>
+      {displayUrl ? (
+        <img
+          className={`library-view__artwork ${className ?? ""}`}
+          src={displayUrl}
+          onError={() => setFailedUrl(displayUrl)}
+          alt=""
+        />
+      ) : (
+        <span
+          className={`library-view__artwork library-view__artwork--placeholder ${className ?? ""}`}
+          aria-hidden="true"
+        />
+      )}
     </span>
   );
 }

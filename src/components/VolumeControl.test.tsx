@@ -21,8 +21,7 @@ const base = {
   isVolumeUpdatePending: false,
   isMutePending: false,
   onValueChange: vi.fn(),
-  onInteractionStart: vi.fn(),
-  onValueCommit: vi.fn(),
+  onValueCommitted: vi.fn(),
   onInteractionCancel: vi.fn(),
   onVolumeButtonPress: vi.fn(),
 };
@@ -35,9 +34,14 @@ describe("VolumeControl", () => {
     [50, false, "Mute", "50 percent", "high"],
     [80, true, "Unmute", "80 percent, muted", "silent"],
   ])("exposes action and value semantics for %s", (value, muted, label, valueText, iconState) => {
-    render(<VolumeControl {...base} playback={playback(value, muted)} value={value} />);
+    const { container } = render(
+      <VolumeControl {...base} playback={playback(value, muted)} value={value} />,
+    );
     expect(screen.getByRole("button")).toHaveAccessibleName(label);
-    expect(screen.getByRole("slider")).toHaveAttribute("aria-valuetext", valueText);
+    expect(container.querySelector('input[type="range"]')).toHaveAttribute(
+      "aria-valuetext",
+      valueText,
+    );
     expect(screen.getByTestId("volume-icon-state")).toHaveAttribute("data-state", iconState);
   });
 });
