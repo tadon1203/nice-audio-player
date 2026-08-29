@@ -268,16 +268,11 @@ Prefer deterministic tests around pure policy and boundary logic.
 
 ## 15. Responsive Layout
 
-- Application-level composition uses viewport queries.
-- Reusable feature components use container queries based on their allocated inline size.
-- Flexible Grid tracks use `minmax(0, 1fr)`.
-- Flexible Grid and Flex children use explicit zero minimum inline sizing.
-- Fixed interaction targets retain their documented dimensions.
-- Text and data regions use wrapping, clamping, scrolling, or reflow according to their content role.
-- Breakpoints derive from the minimum width required by the component's contents, controls, gaps, and padding.
-- Browser layout tests verify supported widths, stress-content fixtures, and text-token enlargement.
-- Windows display scaling at 100%, 125%, 150%, and 200% is verified manually in the Tauri application.
-- Horizontal scrolling represents an explicit feature requirement and receives a named scroll region.
+Frontend responsive ownership and enforcement rules live in
+[`architecture/frontend.md`](./architecture/frontend.md). Application-level composition uses viewport
+queries; reusable feature components use container queries based on their allocated inline size. Flexible
+tracks use `minmax(0, 1fr)`, and browser layout tests verify supported widths, stress content, and text
+enlargement. Windows display scaling at 100%, 125%, 150%, and 200% remains a manual Tauri check.
 
 ## 16. Change Rules
 
@@ -287,35 +282,9 @@ A change that modifies a durable implementation rule or boundary must update thi
 
 A change that modifies visual or interaction principles must update `DESIGN.md`.
 
-React owns semantic and transient interaction state. CSS owns final responsive geometry and non-spatial visual
-state. Motion owns structural spatial continuity and presence between valid endpoint geometries. Native browser
-scrolling owns directly manipulated viewport movement. Lucide owns static icon geometry and Morphicons owns
-same-control semantic icon continuity.
-Reduced-motion behavior follows `DESIGN.md`.
-
-Shared UI primitives own reusable control grammar, semantic typography metrics, and page/content frame
-relationships. Feature code composes those laws and retains only feature topology, content, and semantic
-reasons for movement; it must not override the primitive's interaction geometry or typography role.
-
-### Frontend change patterns
-
-Visible frontend changes are classified before a motion primitive is selected. A state update preserves the
-same semantic object and never changes a React key only to force animation. An exclusive replacement is a
-complete subtree replacing another complete subtree in one slot and uses the shared neutral `ExclusiveRegion`.
-An optional surface owns its own presence because it has a real surface relationship. Shared-identity drill-in
-uses `layoutId` only for the same semantic object, and that identity owner owns the visible projection box:
-size, clipping, and radius. It is never combined with an unrelated ancestor spatial transition.
-
-Progressive data keeps the existing surface and item identities while independently available resources resolve
-or pages append. Direct manipulation remains native and immediate. Resize, breakpoint, restoration, and
-re-anchoring are corrections, not navigation, and resolve to their final geometry immediately when motion would
-communicate a false cause.
-
-`AnimatePresence` belongs to the component that owns a subtree's mount/remove lifetime; it is not a wrapper for
-arbitrary changing content. Focus follows semantic interaction or navigation, not animation duration or exit
-completion. Timers may express an information-visibility policy, but never animation phases. Every application
-scroll surface owns its viewport, cleanup, and restoration state through the shared native scroll-region hook.
-Children receive that scroll root explicitly and never discover it with a document-wide query.
+Frontend ownership, Motion policy, presence lifecycle, and scroll boundaries are defined in
+[`architecture/frontend.md`](./architecture/frontend.md). Shared UI primitives own reusable control
+grammar, semantic typography metrics, and page/content frame relationships.
 
 ## 17. Library Synchronization Boundaries
 
@@ -358,21 +327,9 @@ define its lifecycle separately before sharing this maintenance path.
 persistence. `LibraryRuntime` coordinates Library lifecycle work only; it is not a generic application
 background-job scheduler.
 
-Primary application scroll regions use the shared frontend native scroll-region hook. Features own the semantic
-reason for a move; the shared region owns geometry, explicit native movement, reduced-motion conversion, cleanup,
-and programmatic/user classification. Wheel, touch, scrollbar, and keyboard scrolling remain browser-directed.
-Programmatic spatial state is frontend-only and never enters
-playback snapshots, queue snapshots, IPC, or Rust authority.
-
-Each semantic surface owns its scroll viewport and restoration state. A shell
-may clip and transition surfaces, but it does not lend one mutable `scrollTop` to entering and exiting
-destinations. While visual presence keeps an exiting surface mounted, its viewport remains frozen at its own
-position and the entering surface begins from its own valid position.
-
-Logical presence changes immediately. Exiting UI may remain mounted only for visual completion and becomes
-inert, hidden from the accessibility tree, and non-interactive as soon as exit begins. Responsive correction
-is discontinuous positioning: breakpoint changes snap to their final geometry and do not inherit an active
-layout projection.
+Scroll ownership and logical presence rules are defined in
+[`architecture/frontend.md`](./architecture/frontend.md). Programmatic spatial state remains frontend-only
+and never enters playback snapshots, queue snapshots, IPC, or Rust authority.
 
 Authoritative playback snapshots describe audio state. Frontend-only accepted seek receipts may carry
 that a user-confirmed position change was accepted for presentation motion, but never redefine

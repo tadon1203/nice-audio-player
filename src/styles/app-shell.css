@@ -52,12 +52,6 @@
   block-size: 100%;
   min-block-size: 0;
 }
-.app-shell__workspace[data-layout-correcting="true"] .app-shell__main,
-.app-shell__workspace[data-layout-correcting="true"] .app-shell__main-content,
-.app-shell__workspace[data-layout-correcting="true"] .app-shell__main-surface,
-.app-shell__workspace[data-layout-correcting="true"] .app-shell__context-pane {
-  transform: none !important;
-}
 .app-shell__context-pane {
   inline-size: 100%;
   block-size: 100%;
@@ -87,7 +81,7 @@
   min-block-size: 100%;
 }
 @media (min-width: 1440px) {
-  .app-shell__workspace[data-context-layout="split"][data-context-open="true"] {
+  .app-shell__workspace[data-context-open="true"] {
     grid-template-columns: 192px minmax(0, 1fr) clamp(360px, 28vw, 400px);
   }
 }
@@ -170,13 +164,13 @@
     block-size: 3px;
     inline-size: auto;
   }
-  .app-shell__workspace[data-context-layout="stacked"] .app-shell__main,
-  .app-shell__workspace[data-context-layout="stacked"] .app-shell__context-pane {
+  .app-shell__workspace[data-context-open="true"] .app-shell__main,
+  .app-shell__workspace[data-context-open="true"] .app-shell__context-pane {
     grid-row: 2;
     grid-column: 1;
     inline-size: 100%;
   }
-  .app-shell__workspace[data-context-layout="stacked"] .app-shell__context-pane {
+  .app-shell__workspace[data-context-open="true"] .app-shell__context-pane {
     z-index: 1;
   }
   .app-shell__context-content {
@@ -184,13 +178,13 @@
   }
 }
 @media (min-width: 800px) and (max-width: 1439px) {
-  .app-shell__workspace[data-context-layout="stacked"] .app-shell__main,
-  .app-shell__workspace[data-context-layout="stacked"] .app-shell__context-pane {
+  .app-shell__workspace[data-context-open="true"] .app-shell__main,
+  .app-shell__workspace[data-context-open="true"] .app-shell__context-pane {
     grid-row: 1;
     grid-column: 2;
     inline-size: 100%;
   }
-  .app-shell__workspace[data-context-layout="stacked"] .app-shell__context-pane {
+  .app-shell__workspace[data-context-open="true"] .app-shell__context-pane {
     z-index: 1;
   }
   .app-shell__context-content {

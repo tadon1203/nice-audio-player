@@ -6,6 +6,7 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
+  useReducer,
   useState,
   type ReactNode,
 } from "react";
@@ -67,7 +68,8 @@ export interface LibraryQueryRetention {
 
 interface WorkspaceState {
   presentation: LibraryPresentation;
-  setPresentation: (value: LibraryPresentation) => void;
+  direction: number;
+  selectPresentation: (value: LibraryPresentation) => void;
   rawSearch: Record<LibraryPresentation, string>;
   setRawSearch: (value: string) => void;
   committedSearch: Record<LibraryPresentation, string>;
@@ -138,9 +140,40 @@ function restoreFocus(id: string | null) {
   return true;
 }
 function markActiveScrollSurfaceExiting() {
-  document
-    .querySelectorAll<HTMLElement>("[data-library-surface]")
-    .forEach((element) => (element.dataset.scrollSurfaceExiting = "true"));
+  document.querySelectorAll<HTMLElement>("[data-library-surface]").forEach((element) => {
+    if (element.closest('[data-state="exiting"]')) return;
+    element.dataset.scrollSurfaceExiting = "true";
+    element.inert = true;
+    element.setAttribute("aria-hidden", "true");
+  });
+}
+
+type NavigationState = {
+  presentation: LibraryPresentation;
+  navigation: LibraryNavigationFrame[];
+  direction: number;
+};
+type NavigationAction =
+  | { type: "select"; presentation: LibraryPresentation }
+  | { type: "push"; frame: LibraryNavigationFrame }
+  | { type: "pop" };
+const presentationOrder: LibraryPresentation[] = ["albums", "albumArtists", "tracks"];
+function navigationReducer(state: NavigationState, action: NavigationAction): NavigationState {
+  if (action.type === "select") {
+    if (action.presentation === state.presentation) return state;
+    return {
+      ...state,
+      presentation: action.presentation,
+      direction:
+        presentationOrder.indexOf(action.presentation) -
+        presentationOrder.indexOf(state.presentation),
+    };
+  }
+  if (action.type === "push") {
+    return { ...state, navigation: [...state.navigation, action.frame], direction: 1 };
+  }
+  if (state.navigation.length === 0) return state;
+  return { ...state, navigation: state.navigation.slice(0, -1), direction: -1 };
 }
 
 export function LibraryWorkspaceProvider({
@@ -150,14 +183,17 @@ export function LibraryWorkspaceProvider({
   children: ReactNode;
   client?: LibraryBrowseClient;
 }) {
-  const [presentation, setPresentation] = useState<LibraryPresentation>("albums");
+  const [navigationState, dispatchNavigation] = useReducer(navigationReducer, {
+    presentation: "albums",
+    navigation: [],
+    direction: 0,
+  });
   const [rawSearch, setRawSearchState] = useState<Record<LibraryPresentation, string>>({
     albums: "",
     albumArtists: "",
     tracks: "",
   });
   const [committedSearch, setCommittedSearch] = useState(rawSearch);
-  const [navigation, setNavigation] = useState<LibraryNavigationFrame[]>([]);
   const [pendingFocusId, setPendingFocusId] = useState<string | null>(null);
   const nextFrameId = useRef(0);
   const searchTimers = useRef<Partial<Record<LibraryPresentation, number>>>({});
@@ -166,6 +202,7 @@ export function LibraryWorkspaceProvider({
 
   const setRawSearch = useCallback(
     (value: string) => {
+      const presentation = navigationState.presentation;
       setRawSearchState((old) => ({ ...old, [presentation]: value }));
       const previous = searchTimers.current[presentation];
       if (previous !== undefined) window.clearTimeout(previous);
@@ -174,16 +211,16 @@ export function LibraryWorkspaceProvider({
         200,
       );
     },
-    [presentation],
+    [navigationState.presentation],
   );
   const openAlbum = useCallback(
     (summary: LibraryAlbumSummary) => {
       markActiveScrollSurfaceExiting();
       nextFrameId.current += 1;
       const id = `album-${nextFrameId.current}`;
-      setNavigation((old) => [
-        ...old,
-        {
+      dispatchNavigation({
+        type: "push",
+        frame: {
           id,
           kind: "album",
           key: summary.key,
@@ -193,7 +230,7 @@ export function LibraryWorkspaceProvider({
               ? (document.activeElement.dataset.libraryFocusId ?? null)
               : null,
         },
-      ]);
+      });
       scrollRegistry.register(`frame:${id}`);
       queryRetention.register(`frame:${id}`);
     },
@@ -208,32 +245,34 @@ export function LibraryWorkspaceProvider({
           : null;
       nextFrameId.current += 1;
       const id = `album-artist-${nextFrameId.current}`;
-      setNavigation((old) => [
-        ...old,
-        {
+      dispatchNavigation({
+        type: "push",
+        frame: {
           id,
           kind: "albumArtist",
           key,
           summary,
           originFocusId,
         },
-      ]);
+      });
       scrollRegistry.register(`frame:${id}`);
       queryRetention.register(`frame:${id}`);
     },
     [queryRetention, scrollRegistry],
   );
   const back = useCallback(() => {
+    const popped = navigationState.navigation[navigationState.navigation.length - 1];
+    if (!popped) return;
     markActiveScrollSurfaceExiting();
-    setNavigation((old) => {
-      const popped = old[old.length - 1];
-      if (!popped) return old;
-      setPendingFocusId(popped.originFocusId);
-      queryRetention.release(`frame:${popped.id}`);
-      scrollRegistry.release(`frame:${popped.id}`);
-      return old.slice(0, -1);
-    });
-  }, [queryRetention, scrollRegistry]);
+    setPendingFocusId(popped.originFocusId);
+    queryRetention.release(`frame:${popped.id}`);
+    scrollRegistry.release(`frame:${popped.id}`);
+    dispatchNavigation({ type: "pop" });
+  }, [navigationState.navigation, queryRetention, scrollRegistry]);
+  const selectPresentation = useCallback(
+    (next: LibraryPresentation) => dispatchNavigation({ type: "select", presentation: next }),
+    [],
+  );
   const clearPendingFocus = useCallback(() => setPendingFocusId(null), []);
   useEffect(
     () => () => {
@@ -245,13 +284,14 @@ export function LibraryWorkspaceProvider({
   );
   const value = useMemo<WorkspaceState>(
     () => ({
-      presentation,
-      setPresentation,
+      presentation: navigationState.presentation,
+      direction: navigationState.direction,
+      selectPresentation,
       rawSearch,
       setRawSearch,
       committedSearch,
-      navigation,
-      currentFrame: navigation[navigation.length - 1] ?? null,
+      navigation: navigationState.navigation,
+      currentFrame: navigationState.navigation[navigationState.navigation.length - 1] ?? null,
       openAlbum,
       openAlbumArtist,
       back,
@@ -262,11 +302,11 @@ export function LibraryWorkspaceProvider({
       client,
     }),
     [
-      presentation,
+      navigationState,
       rawSearch,
       setRawSearch,
       committedSearch,
-      navigation,
+      selectPresentation,
       openAlbum,
       openAlbumArtist,
       back,

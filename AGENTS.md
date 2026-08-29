@@ -62,9 +62,14 @@ For changes affecting UI, interaction, layout, responsive behavior, typography, 
 accessibility:
 
 1. read [DESIGN.md](./DESIGN.md);
-2. read the applicable frontend rules in [docs/architecture.md](./docs/architecture.md);
+2. read the applicable frontend rules in [docs/architecture/frontend.md](./docs/architecture/frontend.md)
+   and the routing summary in [docs/architecture.md](./docs/architecture.md);
 3. use [.agents/skills/impeccable/SKILL.md](./.agents/skills/impeccable/SKILL.md) according to its
    current instructions.
+
+Responsive final geometry is CSS-owned. JavaScript viewport observation is limited to semantic and
+accessibility behavior; it must not determine Grid layout or Motion coordinates. Motion usage must follow
+the frontend architecture contract and its approved owners.
 
 DO NOT claim an Impeccable playbook was used unless it was actually read and applied.
 
