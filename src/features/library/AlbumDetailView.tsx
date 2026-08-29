@@ -1,14 +1,11 @@
 import { useLayoutEffect, useRef } from "react";
-import { motion, useReducedMotion } from "motion/react";
 import type { LibraryAlbumSummary, LibraryAlbumTrackSummary } from "@/bindings";
 import { AppIcon } from "@/components/ui/AppIcon";
-import { Button } from "@/components/ui/Button";
+import { Button } from "@/components/ui/button";
 import { PlayingMarker } from "@/components/ui/PlayingMarker";
 import { formatLongPlaybackTime, formatPlaybackTime } from "@/lib/playback-time";
-import { effectsMotion } from "@/lib/motion";
 import { formatLibraryDate } from "@/lib/library-date";
 import { LibraryArtwork, useLibraryArtworkUrl } from "./LibraryArtwork";
-import { AlbumArtworkIdentity } from "./AlbumArtworkIdentity";
 import { albumArtistIdentity } from "./library-identity";
 import { useAlbumDetailQuery } from "./use-album-detail-query";
 
@@ -42,7 +39,6 @@ export function AlbumDetailView({
   const fallbackQuery = useAlbumDetailQuery(album.key, _refreshKey, query === undefined, undefined);
   const activeQuery = query ?? fallbackQuery;
   const backRef = useRef<HTMLButtonElement>(null);
-  const reducedMotion = useReducedMotion();
   const detail = activeQuery.details.value;
   const summary = detail?.summary ?? album;
   const grouped = groupTracks(activeQuery.tracks.items);
@@ -57,16 +53,13 @@ export function AlbumDetailView({
           <AppIcon name="chevronLeft" /> <span>Back</span>
         </button>
         <div className="album-detail__hero">
-          <AlbumArtworkIdentity
-            albumId={album.key}
-            className="album-artwork-identity album-detail__artwork-wrap"
-          >
+          <span className="library-artwork-frame album-detail__artwork-wrap">
             <LibraryArtwork
               artwork={summary.artwork}
               resolvedUrl={artworkUrl}
               className="album-detail__artwork"
             />
-          </AlbumArtworkIdentity>
+          </span>
           <div className="album-detail__identity">
             <h1
               className={
@@ -151,7 +144,6 @@ export function AlbumDetailView({
                   activeQuery.tracks.items.length === 1 &&
                   activeQuery.tracks.nextOffset === null
                 }
-                animateRows={!reducedMotion}
               />
             ))}
             {activeQuery.tracks.nextOffset !== null ? (
@@ -197,7 +189,6 @@ function TrackGroup({
   activeTrackId,
   playbackStatus,
   hideHeading,
-  animateRows,
 }: {
   label: string;
   tracks: LibraryAlbumTrackSummary[];
@@ -208,7 +199,6 @@ function TrackGroup({
   activeTrackId: string | null;
   playbackStatus: "stopped" | "playing" | "paused" | "failed";
   hideHeading: boolean;
-  animateRows: boolean;
 }) {
   return (
     <section className="album-detail__group">
@@ -218,16 +208,7 @@ function TrackGroup({
           const active =
             t.id === activeTrackId && (playbackStatus === "playing" || playbackStatus === "paused");
           return (
-            <motion.li
-              key={t.id}
-              initial={animateRows ? { opacity: 0 } : false}
-              animate={{ opacity: 1 }}
-              transition={
-                animateRows
-                  ? { duration: effectsMotion.content, ease: effectsMotion.ease }
-                  : { duration: 0 }
-              }
-            >
+            <li key={t.id}>
               <button
                 type="button"
                 className={`album-detail__row${active ? " album-detail__row--active" : ""}`}
@@ -256,7 +237,7 @@ function TrackGroup({
                   {t.durationMs === null ? "--:--" : formatPlaybackTime(t.durationMs)}
                 </span>
               </button>
-            </motion.li>
+            </li>
           );
         })}
       </ul>

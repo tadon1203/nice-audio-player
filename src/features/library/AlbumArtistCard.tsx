@@ -1,6 +1,5 @@
 import type { LibraryAlbumArtistSummary } from "@/bindings";
 import { LibraryArtwork } from "./LibraryArtwork";
-import { AlbumArtistArtworkIdentity } from "./AlbumArtistArtworkIdentity";
 import { albumArtistIdentity } from "./library-identity";
 
 export function AlbumArtistCard({
@@ -18,12 +17,9 @@ export function AlbumArtistCard({
       onClick={() => onOpen(artist)}
       aria-label={`Open ${artist.key.name}`}
     >
-      <AlbumArtistArtworkIdentity
-        artistId={artist.key}
-        className="album-artwork-identity library-view__album-artwork-frame"
-      >
+      <span className="library-artwork-frame library-view__album-artwork-frame">
         <LibraryArtwork artwork={artist.artwork} />
-      </AlbumArtistArtworkIdentity>
+      </span>
       <span className="library-view__album-title">{artist.key.name}</span>
       <span className="library-view__album-artist">
         {artist.albumCount} {artist.albumCount === 1 ? "album" : "albums"}

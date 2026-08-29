@@ -9,6 +9,7 @@
 .library-root-surface {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
+  row-gap: var(--space-6);
   block-size: 100%;
   min-block-size: 0;
 }
@@ -19,17 +20,20 @@
   inline-size: 100%;
 }
 .library-presentation-region,
-.library-presentation-region .exclusive-region__item,
-.library-presentation-region .exclusive-region__contents {
+.library-route-region {
   block-size: 100%;
   min-block-size: 0;
   overflow-x: clip;
 }
-.library-route-region,
-.library-route-region .exclusive-region__item,
-.library-route-region .exclusive-region__contents {
-  block-size: 100%;
+.library-presentation-region {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  min-height: 0;
+  overflow-y: hidden;
+}
+.library-presentation-panel {
   min-block-size: 0;
+  overflow: hidden;
 }
 .library-view {
   box-sizing: border-box;
@@ -48,6 +52,12 @@
   font-size: var(--text-section-title);
   line-height: var(--text-section-title--line-height);
   font-weight: var(--font-weight-semibold);
+}
+.library-view__tracks-section > h2 {
+  margin-block-start: 0;
+}
+.library-view__tracks-section {
+  inline-size: 100%;
 }
 .library-view h3 {
   margin: 8px 0 0;
@@ -89,15 +99,16 @@
   padding: 0;
   font: inherit;
 }
-.library-view__switch button.is-active {
+.library-view__switch button[data-active] {
   color: var(--color-text-primary);
 }
-.library-view__tab-indicator {
+.library-view__switch button[data-active]::after {
   position: absolute;
-  inset-block-end: 0;
   inset-inline: 0;
+  inset-block-end: 0;
   block-size: 2px;
   background: var(--color-text-primary);
+  content: "";
 }
 .library-view__search input {
   box-sizing: border-box;
@@ -135,9 +146,6 @@
   grid-template-columns: repeat(auto-fill, minmax(200px, 210px));
   column-gap: 20px;
   row-gap: 40px;
-}
-.library-view__album-section {
-  margin-block-start: 24px;
 }
 .library-view__album {
   min-inline-size: 0;
@@ -238,7 +246,6 @@
 }
 .library-view__tracks {
   display: grid;
-  max-inline-size: 1040px;
   gap: 0;
 }
 .library-view__track {
@@ -546,7 +553,7 @@
     padding-block-start: 0;
   }
 }
-.album-artwork-identity {
+.library-artwork-frame {
   display: block;
   aspect-ratio: 1;
   overflow: hidden;

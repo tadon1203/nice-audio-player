@@ -14,6 +14,15 @@ export const supportedViewports: TestViewport[] = [
 
 export async function openFixture(page: Page, fixture: string, viewport: TestViewport) {
   await page.setViewportSize(viewport);
+  await page.route("http://asset.localhost/**", async (route) => {
+    await route.fulfill({
+      contentType: "image/png",
+      body: Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+        "base64",
+      ),
+    });
+  });
   await page.goto(`/?layoutFixture=${fixture}`);
   await expect(page.locator("[data-layout-fixture]")).toHaveAttribute(
     "data-layout-fixture",

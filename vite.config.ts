@@ -18,7 +18,7 @@ export default defineConfig(async () => ({
   clearScreen: false,
 
   test: {
-    exclude: [...configDefaults.exclude, "tests/layout/**"],
+    exclude: [...configDefaults.exclude, "tests/browser/**"],
     setupFiles: ["./src/test/setup.ts"],
   },
 

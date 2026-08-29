@@ -1,4 +1,4 @@
-export type LayoutFixtureName =
+export type BrowserFixtureName =
   | "empty"
   | "japanese-filename"
   | "long-filename"
@@ -15,7 +15,7 @@ export type LayoutFixtureName =
   | "library-empty"
   | "queue-open";
 
-const fixtures = new Set<LayoutFixtureName>([
+const fixtures = new Set<BrowserFixtureName>([
   "empty",
   "japanese-filename",
   "long-filename",
@@ -33,9 +33,9 @@ const fixtures = new Set<LayoutFixtureName>([
   "queue-open",
 ]);
 
-export function resolveLayoutFixture(search: string): LayoutFixtureName {
+export function resolveBrowserFixture(search: string): BrowserFixtureName {
   const requested = new URLSearchParams(search).get("layoutFixture");
-  return requested !== null && fixtures.has(requested as LayoutFixtureName)
-    ? (requested as LayoutFixtureName)
+  return requested !== null && fixtures.has(requested as BrowserFixtureName)
+    ? (requested as BrowserFixtureName)
     : "empty";
 }

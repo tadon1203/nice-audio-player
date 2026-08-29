@@ -1,5 +1,5 @@
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
-import { useReducedMotion } from "motion/react";
+import { useReducedMotionPreference } from "./use-reduced-motion-preference";
 import {
   clampScrollTop,
   elementScrollTop,
@@ -17,15 +17,6 @@ export interface ScrollRestorationRegistry {
   get: (key: string) => number | undefined;
   set: (key: string, value: number) => void;
 }
-function isExitingSurface(viewport: HTMLElement) {
-  return (
-    viewport.dataset.scrollSurfaceExiting === "true" ||
-    viewport.closest('[data-state="exiting"]') !== null
-  );
-}
-function isExplicitlyExiting(viewport: HTMLElement) {
-  return viewport.dataset.scrollSurfaceExiting === "true";
-}
 function isEditable(target: EventTarget | null) {
   return (
     target instanceof HTMLElement &&
@@ -41,7 +32,7 @@ export function useScrollRegion(
   const pendingPosition = useRef<{ top: number; mode: ScrollMode } | null>(null);
   const restorationApplied = useRef(true);
   const pendingUserIntent = useRef(false);
-  const reducedMotion = useReducedMotion();
+  const reducedMotion = useReducedMotionPreference();
   const setViewportElement = useCallback(
     (element: HTMLElement | null) => {
       setViewport(element);
@@ -51,12 +42,9 @@ export function useScrollRegion(
       }
       const restored = restoration?.registry.get(restoration.key);
       restorationApplied.current = restored === undefined || restored === 0;
-      if (restored !== undefined && restored > 0 && element.scrollHeight > element.clientHeight) {
-        element.scrollTo({ top: clampScrollTop(element, restored), behavior: "auto" });
-        restorationApplied.current = true;
-      }
       const pending = pendingPosition.current;
       if (pending) {
+        restorationApplied.current = true;
         element.scrollTo({
           top: clampScrollTop(element, pending.top),
           behavior: pending.mode === "smooth" && !reducedMotion ? "smooth" : "auto",
@@ -69,21 +57,42 @@ export function useScrollRegion(
   useLayoutEffect(() => {
     if (!viewport) return;
     const restored = restoration?.registry.get(restoration.key);
-    const applyRestoration = () => {
-      if (
-        restorationApplied.current ||
-        restored === undefined ||
-        (restored > 0 && viewport.scrollHeight <= viewport.clientHeight)
-      )
+    let restorationFrames = 0;
+    let restorationFrame = 0;
+    let verificationFrames = 0;
+    const verifyRestoration = () => {
+      if (restored === undefined || verificationFrames >= 120) {
+        restorationApplied.current = true;
         return;
-      viewport.scrollTo({ top: clampScrollTop(viewport, restored), behavior: "auto" });
-      restorationApplied.current = true;
+      }
+      verificationFrames += 1;
+      if (Math.abs(viewport.scrollTop - restored) > 1) {
+        restorationApplied.current = false;
+        applyRestoration();
+        return;
+      }
+      if (verificationFrames >= 120) {
+        restorationApplied.current = true;
+        return;
+      }
+      restorationFrame = requestAnimationFrame(verifyRestoration);
+    };
+    const applyRestoration = () => {
+      if (restorationApplied.current || restored === undefined) return;
+      if (restored > 0 && viewport.scrollHeight - viewport.clientHeight < restored) {
+        if (restorationFrames < 120) {
+          restorationFrames += 1;
+          restorationFrame = requestAnimationFrame(applyRestoration);
+        }
+        return;
+      }
+      viewport.scrollTo({ top: restored, behavior: "auto" });
+      restorationFrame = requestAnimationFrame(verifyRestoration);
     };
     applyRestoration();
     const onScroll = () => {
       applyRestoration();
       if (!restorationApplied.current) return;
-      if (isExitingSurface(viewport)) return;
       restoration?.registry.set(restoration.key, viewport.scrollTop);
       if (pendingUserIntent.current) {
         pendingUserIntent.current = false;
@@ -122,8 +131,13 @@ export function useScrollRegion(
         : new MutationObserver(applyRestoration);
     mutationObserver?.observe(viewport, { childList: true, subtree: true });
     return () => {
-      if (!isExplicitlyExiting(viewport)) {
-        restoration?.registry.set(restoration.key, viewport.scrollTop);
+      cancelAnimationFrame(restorationFrame);
+      if (restoration) {
+        const current = viewport.scrollTop;
+        const saved = restoration.registry.get(restoration.key);
+        if (current > 0 || saved === undefined || saved === 0) {
+          restoration.registry.set(restoration.key, current);
+        }
       }
       resizeObserver?.disconnect();
       mutationObserver?.disconnect();

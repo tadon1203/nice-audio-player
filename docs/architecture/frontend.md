@@ -1,56 +1,49 @@
 # Frontend Architecture Contract
 
-This document defines the implementation boundaries for React, CSS, Motion, and browser scrolling.
-Product rationale and visual intent belong in `DESIGN.md`; this document states the rules that code and
-tests must enforce.
+This document defines the implementation boundaries for React, CSS, Base UI, and browser behavior.
+Product rationale and visual intent belong in `DESIGN.md`.
 
 ## Ownership
 
-- CSS owns final responsive geometry, including viewport and container-query results.
-- React owns semantic state, navigation, focus, ARIA state, and temporary interaction state.
-- Motion owns only approved visual presence, shared semantic identity, and causally meaningful movement
-  between valid endpoint geometries.
-- Native browser scrolling owns wheel, touch, scrollbar, and keyboard viewport movement.
+- CSS owns final responsive geometry, visual styling, and non-spatial effects.
+- React owns domain state, semantic navigation, data orchestration, and feature-specific focus intent.
+- Repository-owned shadcn/Base UI primitives own reusable dialog, menu, tabs, slider, checkbox, tooltip,
+  and toggle keyboard, focus, pointer, and ARIA semantics.
+- `src/components/ui` is the project-owned modified shadcn source layer: preserve upstream anatomy,
+  public APIs, and `data-slot` state attributes; adapt visual classes to DESIGN tokens; keep domain
+  state and feature orchestration outside primitives. Feature code consumes these public components
+  and never imports Base UI internals directly.
+- `src/components/ui` primitives own their interaction geometry. Feature stylesheets do not reach into
+  primitive internals or hidden inputs; Popup placement belongs to Base UI Positioner, slider value
+  geometry belongs to Base UI Slider, and button sizing belongs to the Button variant.
+- The browser owns native scrolling and native form semantics.
 
-No two layers may determine the same visible geometry.
+No two layers may determine the same visible geometry or interaction lifecycle.
 
 ## Responsive layout
 
 - Application composition uses viewport media queries; reusable feature composition uses container queries.
 - JavaScript may observe a viewport breakpoint only when semantic behavior requires it, such as `inert`,
   `aria-hidden`, or focus management.
-- A viewport observation must not determine Grid tracks, element sizes, transform coordinates, or a Motion
-  layout state.
-- Resize and breakpoint changes are corrections, not navigation. They snap to final geometry and do not
-  inherit an active layout projection.
+- Viewport observation must not determine Grid tracks, element sizes, or transform coordinates.
+- Breakpoint changes snap to CSS endpoint geometry without correction state or structural transitions.
 
-## Motion policy
+## Interaction and accessibility
 
-- `AnimatePresence` belongs to the component that owns a subtree's mount/remove lifetime.
-- `layoutId` is allowed only when both elements represent the same semantic object; its owner also owns
-  the projection box, clipping, and radius.
-- `layout` is not a general responsive-layout mechanism and requires an explicitly approved use case.
-- Direct manipulation never waits for spatial animation. Width, height, Grid tracks, gaps, margins, and
-  padding are not time-interpolated.
-- Reduced motion removes spatial translation, scale, rotation, layout projection, and icon morphing while
-  preserving state, focus, and causality.
-
-## Presence and accessibility
-
-- Logical presence changes immediately. A visually exiting subtree becomes inert, hidden from the
-  accessibility tree, and non-interactive at exit start.
-- Focus follows the semantic action or navigation event, never animation completion.
-- A transition is optional and must not be the only indication of selected, current, playing, loading,
+- Logical presence changes immediately through normal conditional rendering.
+- Focus follows the semantic action or navigation event and never waits for a visual lifecycle.
+- Direct manipulation is immediate; native range controls remain the semantic control.
+- Reduced-motion preference is observed only for accessibility behavior such as choosing instant scrolling.
+- A visual effect is optional and never the only indication of selected, current, playing, loading,
   disabled, or error state.
 
 ## Enforcement
 
-- `pnpm lint` rejects unapproved direct Motion imports, direct viewport observation, and JSX `layout` use.
-- The direct-import allowlist is maintained in `eslint.config.js`; adding an owner requires a contract
-  rationale and a regression test in the same change.
-- `pnpm frontend:architecture:check` rejects layout-correction attributes and transform `!important`
-  overrides.
-- Browser tests assert final geometry, overflow, focus, ARIA, `inert`, and reduced-motion behavior rather
-  than implementation-only correction flags.
+- `pnpm lint` rejects Motion imports and direct Base UI imports outside `src/components/ui`.
+- `pnpm frontend:architecture:check` rejects layout-correction attributes, transform overrides, and
+  authored structural geometry transitions, feature CSS selectors that reach into slider internals,
+  and Dock transport offset rules.
+- Browser tests assert final geometry, overflow, focus, ARIA, `inert`, keyboard behavior, and media
+  lifecycle rather than intermediate frames.
 
-Exceptions require a documented owner, a reason tied to a current interaction, and a regression test.
+Exceptions require a documented owner, a current interaction reason, and a regression test.

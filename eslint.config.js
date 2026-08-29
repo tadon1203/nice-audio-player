@@ -58,13 +58,21 @@ export default tseslint.config(
         "error",
         {
           paths: [
+            { name: "motion", message: "Motion is not part of the frontend runtime." },
+            { name: "motion/react", message: "Motion is not part of the frontend runtime." },
             {
-              name: "motion/react",
-              message: "Use an approved Motion owner module and update the frontend contract.",
+              name: "@base-ui/react",
+              message: "Use repository-owned shadcn primitives from src/components/ui.",
             },
             {
               name: "@tauri-apps/plugin-log",
               message: "Use the project-owned diagnostics module.",
+            },
+          ],
+          patterns: [
+            {
+              group: ["@base-ui/react/*"],
+              message: "Use repository-owned shadcn primitives from src/components/ui.",
             },
           ],
         },
@@ -75,12 +83,12 @@ export default tseslint.config(
           selector: "MemberExpression[object.name='window'][property.name='matchMedia']",
           message: "Use the project-owned semantic viewport hook for matchMedia.",
         },
-        {
-          selector: "JSXAttribute[name.name='layout']",
-          message: "Responsive layout projection is not an approved Motion primitive.",
-        },
       ],
     },
+  },
+  {
+    files: ["src/components/ui/**/*.{ts,tsx}"],
+    rules: { "no-restricted-imports": "off" },
   },
   {
     files: ["src/lib/diagnostics.ts"],
@@ -88,37 +96,10 @@ export default tseslint.config(
   },
   {
     files: [
-      "src/main.tsx",
-      "src/components/AppShell.tsx",
-      "src/components/ApplicationActivityIndicator.tsx",
-      "src/components/PlaybackDock.tsx",
-      "src/components/RangeControl.tsx",
-      "src/components/ui/Dialog.tsx",
-      "src/components/ui/ExclusiveRegion.tsx",
-      "src/features/library/AlbumArtworkIdentity.tsx",
-      "src/features/library/AlbumArtistArtworkIdentity.tsx",
-      "src/features/library/LibraryArtwork.tsx",
-      "src/features/library/AlbumDetailView.tsx",
-      "src/features/library/LibraryPresentationTabs.tsx",
-      "src/features/library/LibraryView.tsx",
-      "src/hooks/use-scroll-region.ts",
+      "src/hooks/use-context-overlay-semantics.ts",
+      "src/hooks/use-reduced-motion-preference.ts",
+      "src/test/setup.ts",
     ],
-    rules: {
-      "no-restricted-imports": [
-        "error",
-        {
-          paths: [
-            {
-              name: "@tauri-apps/plugin-log",
-              message: "Use the project-owned diagnostics module.",
-            },
-          ],
-        },
-      ],
-    },
-  },
-  {
-    files: ["src/hooks/use-context-overlay-semantics.ts", "src/test/setup.ts"],
     rules: { "no-restricted-syntax": "off" },
   },
 );

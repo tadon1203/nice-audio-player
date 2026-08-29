@@ -1,13 +1,12 @@
 import { useEffect, useRef } from "react";
 import type { LibraryAlbumArtistSummary, LibraryAlbumSummary } from "@/bindings";
 import { AppIcon } from "@/components/ui/AppIcon";
-import { Button } from "@/components/ui/Button";
+import { Button } from "@/components/ui/button";
 import { LibraryArtwork } from "./LibraryArtwork";
 import { AlbumCard } from "./AlbumCard";
 import { AlbumArtistCard } from "./AlbumArtistCard";
 import type { useAlbumArtistQuery } from "./use-album-artist-query";
 import type { PagedLibraryQueryResult } from "./use-paged-library-query";
-import { AlbumArtistArtworkIdentity } from "./AlbumArtistArtworkIdentity";
 import { formatLibraryQueryError } from "./library-query-error";
 
 export function AlbumArtistsView({
@@ -101,12 +100,9 @@ export function AlbumArtistDetailView({
         </button>
         <div className="album-detail__hero">
           {artist ? (
-            <AlbumArtistArtworkIdentity
-              artistId={artist.key}
-              className="album-artwork-identity album-detail__artwork-wrap"
-            >
+            <span className="library-artwork-frame album-detail__artwork-wrap">
               <LibraryArtwork artwork={artist.artwork} className="album-detail__artwork" />
-            </AlbumArtistArtworkIdentity>
+            </span>
           ) : null}
           <div className="album-detail__identity">
             <h1 className="type-media-title-interface">{artist?.key.name ?? artistKey.name}</h1>

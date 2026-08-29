@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LibraryAlbumSummary } from "@/bindings";
 
@@ -55,10 +55,27 @@ vi.mock("./AlbumDetailView", () => ({
   ),
 }));
 vi.mock("@/hooks/use-scroll-region", async () => {
-  const { useCallback, useState } = await import("react");
+  const { useCallback, useEffect, useState } = await import("react");
   return {
-    useScrollRegion: () => {
+    useScrollRegion: (
+      _onUserScroll: (() => void) | undefined,
+      restoration:
+        | {
+            key: string;
+            registry: {
+              get: (key: string) => number | undefined;
+              set: (key: string, value: number) => void;
+            };
+          }
+        | undefined,
+    ) => {
       const [viewport, setViewport] = useState<HTMLElement | null>(null);
+      useEffect(() => {
+        if (!viewport || !restoration) return;
+        const restored = restoration.registry.get(restoration.key);
+        if (restored !== undefined) viewport.scrollTop = restored;
+        return () => restoration.registry.set(restoration.key, viewport.scrollTop);
+      }, [restoration, viewport]);
       return {
         element: viewport,
         setViewportElement: setViewport,
@@ -111,7 +128,7 @@ describe("LibraryView scroll-surface ownership", () => {
     expect(browser.scrollTop).toBe(240);
   });
 
-  it("restores a newly mounted browser without moving the exiting detail", () => {
+  it("restores a newly mounted browser without moving the detail", async () => {
     renderLibrary();
     const firstBrowser = document.querySelector<HTMLElement>('[data-library-surface="browser"]');
     expect(firstBrowser).not.toBeNull();
@@ -128,7 +145,7 @@ describe("LibraryView scroll-surface ownership", () => {
     const browsers = document.querySelectorAll<HTMLElement>('[data-library-surface="browser"]');
     const restored = browsers[browsers.length - 1];
     expect(restored).toBeDefined();
-    expect(restored?.scrollTop).toBe(180);
+    await waitFor(() => expect(restored?.scrollTop).toBe(180));
     expect(detail.scrollTop).toBe(72);
   });
 });

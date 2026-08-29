@@ -13,7 +13,6 @@ const endpoints = {
   repeatOne: Repeat1,
 } as const;
 
-/** Owns continuity between endpoints of one semantic control. */
 export function StateIcon({ state, className }: { state: StateIconState; className?: string }) {
   return (
     <MorphIcon

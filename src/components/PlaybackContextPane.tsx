@@ -1,5 +1,4 @@
 import { useEffect, useRef, type ReactNode } from "react";
-import { ExclusiveRegion } from "./ui/ExclusiveRegion";
 
 export function PlaybackContextPane({
   mode,
@@ -37,7 +36,7 @@ export function PlaybackContextPane({
           Close
         </button>
       </header>
-      <ExclusiveRegion activeKey={mode}>{children}</ExclusiveRegion>
+      {children}
     </aside>
   );
 }

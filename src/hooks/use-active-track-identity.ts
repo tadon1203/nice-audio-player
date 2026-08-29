@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ArtworkRef, LibraryTrackSummary, ValidatedAudioFile } from "@/bindings";
 import { getLibraryTrackForPath } from "@/api/library";
-import { resolveArtworkUrl } from "@/lib/artwork-url";
+import { getCachedArtworkUrl, resolveArtworkUrlCached } from "@/lib/artwork-url";
 
 export interface ActiveTrackPresentation {
   id: string | null;
@@ -20,7 +20,7 @@ interface ResolvedSummary {
 
 interface ResolvedArtworkUrl {
   path: string;
-  artworkPath: string;
+  artworkKey: string;
   url: string | null;
 }
 
@@ -69,9 +69,12 @@ export function useActiveTrackIdentity(file: ValidatedAudioFile | null): ActiveT
   const identity = summary ?? base;
   const artwork = identity.artwork;
   const artworkPath = artwork?.relativePath ?? null;
+  const artworkKey = artwork?.contentHash ?? null;
   const artworkUrl =
-    resolvedArtworkUrl?.path === path && resolvedArtworkUrl.artworkPath === artworkPath
-      ? resolvedArtworkUrl.url
+    path && artwork
+      ? resolvedArtworkUrl?.path === path && resolvedArtworkUrl.artworkKey === artworkKey
+        ? resolvedArtworkUrl.url
+        : getCachedArtworkUrl(artwork)
       : null;
 
   useEffect(() => {
@@ -93,7 +96,7 @@ export function useActiveTrackIdentity(file: ValidatedAudioFile | null): ActiveT
 
   useEffect(() => {
     const token = ++artworkRequest.current;
-    if (!path || !artwork || !artworkPath) {
+    if (!path || !artwork || !artworkPath || !artworkKey) {
       queueMicrotask(() => {
         if (token === artworkRequest.current) setArtworkLoading(false);
       });
@@ -102,18 +105,18 @@ export function useActiveTrackIdentity(file: ValidatedAudioFile | null): ActiveT
     queueMicrotask(() => {
       if (token === artworkRequest.current) setArtworkLoading(true);
     });
-    void resolveArtworkUrl(artwork)
+    void resolveArtworkUrlCached(artwork)
       .then((url) => {
-        if (token === artworkRequest.current) setResolvedArtworkUrl({ path, artworkPath, url });
+        if (token === artworkRequest.current) setResolvedArtworkUrl({ path, artworkKey, url });
       })
       .catch(() => {
         if (token === artworkRequest.current)
-          setResolvedArtworkUrl({ path, artworkPath, url: null });
+          setResolvedArtworkUrl({ path, artworkKey, url: null });
       })
       .finally(() => {
         if (token === artworkRequest.current) setArtworkLoading(false);
       });
-  }, [artwork, artworkPath, path]);
+  }, [artwork, artworkKey, artworkPath, path]);
 
   return {
     id: summary?.id ?? null,
