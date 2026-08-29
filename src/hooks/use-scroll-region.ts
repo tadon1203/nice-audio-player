@@ -23,6 +23,9 @@ function isExitingSurface(viewport: HTMLElement) {
     viewport.closest('[data-state="exiting"]') !== null
   );
 }
+function isExplicitlyExiting(viewport: HTMLElement) {
+  return viewport.dataset.scrollSurfaceExiting === "true";
+}
 function isEditable(target: EventTarget | null) {
   return (
     target instanceof HTMLElement &&
@@ -36,34 +39,50 @@ export function useScrollRegion(
 ): ScrollRegion {
   const [viewport, setViewport] = useState<HTMLElement | null>(null);
   const pendingPosition = useRef<{ top: number; mode: ScrollMode } | null>(null);
+  const restorationApplied = useRef(true);
   const pendingUserIntent = useRef(false);
   const reducedMotion = useReducedMotion();
+  const setViewportElement = useCallback(
+    (element: HTMLElement | null) => {
+      setViewport(element);
+      if (!element) {
+        restorationApplied.current = true;
+        return;
+      }
+      const restored = restoration?.registry.get(restoration.key);
+      restorationApplied.current = restored === undefined || restored === 0;
+      if (restored !== undefined && restored > 0 && element.scrollHeight > element.clientHeight) {
+        element.scrollTo({ top: clampScrollTop(element, restored), behavior: "auto" });
+        restorationApplied.current = true;
+      }
+      const pending = pendingPosition.current;
+      if (pending) {
+        element.scrollTo({
+          top: clampScrollTop(element, pending.top),
+          behavior: pending.mode === "smooth" && !reducedMotion ? "smooth" : "auto",
+        });
+        pendingPosition.current = null;
+      }
+    },
+    [reducedMotion, restoration],
+  );
   useLayoutEffect(() => {
     if (!viewport) return;
     const restored = restoration?.registry.get(restoration.key);
-    const pending = pendingPosition.current;
-    let restorationApplied = restored === undefined;
     const applyRestoration = () => {
       if (
-        restorationApplied ||
+        restorationApplied.current ||
         restored === undefined ||
-        viewport.scrollHeight <= viewport.clientHeight
+        (restored > 0 && viewport.scrollHeight <= viewport.clientHeight)
       )
         return;
       viewport.scrollTo({ top: clampScrollTop(viewport, restored), behavior: "auto" });
-      restorationApplied = true;
+      restorationApplied.current = true;
     };
     applyRestoration();
-    if (pending) {
-      viewport.scrollTo({
-        top: clampScrollTop(viewport, pending.top),
-        behavior: pending.mode === "smooth" && !reducedMotion ? "smooth" : "auto",
-      });
-      pendingPosition.current = null;
-    }
     const onScroll = () => {
       applyRestoration();
-      if (!restorationApplied) return;
+      if (!restorationApplied.current) return;
       if (isExitingSurface(viewport)) return;
       restoration?.registry.set(restoration.key, viewport.scrollTop);
       if (pendingUserIntent.current) {
@@ -93,13 +112,17 @@ export function useScrollRegion(
     viewport.addEventListener("pointerdown", onPointerDown, { passive: true });
     viewport.addEventListener("keydown", onKeyDown);
     const resizeObserver =
-      restored === undefined || restorationApplied ? null : new ResizeObserver(applyRestoration);
+      restored === undefined || restorationApplied.current
+        ? null
+        : new ResizeObserver(applyRestoration);
     resizeObserver?.observe(viewport.firstElementChild ?? viewport);
     const mutationObserver =
-      restored === undefined || restorationApplied ? null : new MutationObserver(applyRestoration);
+      restored === undefined || restorationApplied.current
+        ? null
+        : new MutationObserver(applyRestoration);
     mutationObserver?.observe(viewport, { childList: true, subtree: true });
     return () => {
-      if (!isExitingSurface(viewport)) {
+      if (!isExplicitlyExiting(viewport)) {
         restoration?.registry.set(restoration.key, viewport.scrollTop);
       }
       resizeObserver?.disconnect();
@@ -131,5 +154,5 @@ export function useScrollRegion(
     },
     [scrollToPosition, viewport],
   );
-  return { element: viewport, setViewportElement: setViewport, scrollToPosition, scrollToElement };
+  return { element: viewport, setViewportElement, scrollToPosition, scrollToElement };
 }

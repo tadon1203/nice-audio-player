@@ -50,15 +50,12 @@ for (const viewport of [
     ).toBeLessThanOrEqual(1);
 
     if (viewport.width < 1440) {
-      await expect(shell.locator(".app-shell__workspace")).toHaveAttribute(
-        "data-context-layout",
-        "stacked",
-      );
       await expect(shell.locator(".app-shell__main")).toBeVisible();
       await expect(shell.locator(".app-shell__main")).toHaveAttribute("inert", "");
       await expect(shell.locator(".app-shell__main")).toHaveAttribute("aria-hidden", "true");
     } else {
       await expect(shell.locator(".app-shell__main")).toBeVisible();
+      await expect(shell.locator(".app-shell__main")).not.toHaveAttribute("inert", "");
       const contextBox = await contextPane.boundingBox();
       expect(contextBox?.width).toBeGreaterThanOrEqual(360);
     }
@@ -115,72 +112,29 @@ test("Queue desktop endpoint changes without grid-track CSS interpolation", asyn
   await expect(shell.locator(".app-shell__main")).toBeVisible();
 });
 
-test("the 1439/1440 correction frame cannot retain layout projection", async ({ page }) => {
+test("the 1439/1440 breakpoint switches geometry and semantics without a correction state", async ({
+  page,
+}) => {
   await openFixture(page, "queue-open", { width: 1439, height: 800 });
-  await page.evaluate(() => {
-    const workspace = document.querySelector<HTMLElement>(".app-shell__workspace");
-    if (!workspace) return;
-    const captures: Array<Record<string, string>> = [];
-    const observer = new MutationObserver(() => {
-      if (workspace.dataset.layoutCorrecting !== "true") return;
-      const read = (selector: string) => {
-        const element = workspace.querySelector<HTMLElement>(selector);
-        return element ? getComputedStyle(element).transform : "missing";
-      };
-      captures.push({
-        main: read(".app-shell__main"),
-        content: read(".app-shell__main-content"),
-        surface: read(".app-shell__main-surface"),
-        context: read(".app-shell__context-pane"),
-      });
-    });
-    observer.observe(workspace, { attributes: true, attributeFilter: ["data-layout-correcting"] });
-    Object.assign(window, { __layoutCorrectionCaptures: captures });
-  });
-
+  await expect(page.locator(".app-shell__main")).toHaveAttribute("inert", "");
   await page.setViewportSize({ width: 1440, height: 800 });
-  await expect(page.locator(".app-shell__workspace")).toHaveAttribute(
-    "data-context-layout",
-    "split",
-  );
-  await expect(page.locator(".app-shell__workspace")).toHaveAttribute(
-    "data-layout-correcting",
-    "false",
-  );
-  const captures = await page.evaluate(
-    () =>
-      (
-        window as typeof window & {
-          __layoutCorrectionCaptures?: Array<Record<string, string>>;
-        }
-      ).__layoutCorrectionCaptures ?? [],
-  );
-  expect(captures.length).toBeGreaterThan(0);
-  expect(
-    captures.every((capture) => Object.values(capture).every((value) => value === "none")),
-  ).toBe(true);
+  await expect(page.locator(".app-shell__main")).not.toHaveAttribute("inert", "");
+  const splitContextBox = await page.locator(".app-shell__context-pane").boundingBox();
+  expect(splitContextBox?.width).toBeGreaterThanOrEqual(360);
 
   await page.setViewportSize({ width: 1439, height: 800 });
-  await expect(page.locator(".app-shell__workspace")).toHaveAttribute(
-    "data-context-layout",
-    "stacked",
-  );
-  await expect(page.locator(".app-shell__workspace")).toHaveAttribute(
-    "data-layout-correcting",
-    "false",
-  );
-  const reverseCaptures = await page.evaluate(
-    () =>
-      (
-        window as typeof window & {
-          __layoutCorrectionCaptures?: Array<Record<string, string>>;
-        }
-      ).__layoutCorrectionCaptures ?? [],
-  );
-  expect(reverseCaptures.length).toBeGreaterThan(captures.length);
-  expect(
-    reverseCaptures.every((capture) => Object.values(capture).every((value) => value === "none")),
-  ).toBe(true);
+  await expect(page.locator(".app-shell__main")).toHaveAttribute("inert", "");
+});
+
+test("Queue preserves semantics and focus with reduced motion", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await openFixture(page, "queue-open", { width: 1120, height: 700 });
+  const shell = page.getByTestId("app-shell");
+
+  await expect(shell.locator(".app-shell__main")).toHaveAttribute("inert", "");
+  await page.getByTestId("playback-queue").getByRole("button", { name: "Close" }).click();
+  await expect(shell.locator(".app-shell__main")).not.toHaveAttribute("inert", "");
+  await expect(page.getByRole("button", { name: "Open queue" })).toBeFocused();
 });
 
 test("scrollable surfaces use the dark interface scrollbar treatment", async ({ page }) => {

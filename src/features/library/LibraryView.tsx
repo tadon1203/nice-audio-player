@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { motion } from "motion/react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type {
   LibraryAlbumArtistKey,
@@ -38,44 +39,79 @@ interface Props {
   libraryRefreshKey?: number;
   scanError?: string | null;
 }
-function markScrollSurfacesExiting() {
-  document
-    .querySelectorAll<HTMLElement>("[data-library-surface]")
-    .forEach((surface) => (surface.dataset.scrollSurfaceExiting = "true"));
+export function LibraryView(props: Props) {
+  const { presentation, currentFrame, back, direction, selectPresentation } = useLibraryWorkspace();
+  useLibraryFocusRestore();
+  return (
+    <ExclusiveRegion
+      activeKey={currentFrame?.id ?? "root"}
+      direction={direction}
+      className="library-route-region"
+    >
+      {currentFrame?.kind === "album" ? (
+        <AlbumSurface {...props} frame={currentFrame} onBack={back} />
+      ) : currentFrame?.kind === "albumArtist" ? (
+        <AlbumArtistSurface {...props} frame={currentFrame} onBack={back} />
+      ) : (
+        <LibraryRootSurface
+          {...props}
+          presentation={presentation}
+          onChangePresentation={selectPresentation}
+        />
+      )}
+    </ExclusiveRegion>
+  );
 }
 
-export function LibraryView(props: Props) {
-  const { presentation, currentFrame, back, setPresentation } = useLibraryWorkspace();
-  useLibraryFocusRestore();
-  if (currentFrame?.kind === "album") {
-    return (
-      <ExclusiveRegion activeKey={currentFrame.id} className="library-route-region">
-        <AlbumSurface {...props} frame={currentFrame} onBack={back} />
-      </ExclusiveRegion>
-    );
-  }
-  if (currentFrame?.kind === "albumArtist") {
-    return (
-      <ExclusiveRegion activeKey={currentFrame.id} className="library-route-region">
-        <AlbumArtistSurface {...props} frame={currentFrame} onBack={back} />
-      </ExclusiveRegion>
-    );
-  }
+function LibraryRootSurface({
+  presentation,
+  onChangePresentation,
+  ...props
+}: Props & {
+  presentation: "albums" | "albumArtists" | "tracks";
+  onChangePresentation: (value: "albums" | "albumArtists" | "tracks") => void;
+}) {
+  const { rawSearch, setRawSearch, direction } = useLibraryWorkspace();
+  const rawValue = rawSearch[presentation];
   return (
-    <ExclusiveRegion activeKey={`root:${presentation}`} className="library-route-region">
-      <LibraryBrowserSurface
-        key={presentation}
-        {...props}
-        presentation={presentation}
-        onChangePresentation={setPresentation}
-      />
-    </ExclusiveRegion>
+    <div className="library-root-surface">
+      <header className="library-view__header page-frame">
+        <div className="content-frame library-view__header-content">
+          <h1 className="type-application-heading">Library</h1>
+          <div className="library-view__controls">
+            <LibraryPresentationTabs presentation={presentation} onChange={onChangePresentation} />
+            <label className="library-view__search">
+              <span className="sr-only">
+                Filter {presentation === "albumArtists" ? "album artists" : presentation}
+              </span>
+              <input
+                value={rawValue}
+                onChange={(event) => setRawSearch(event.currentTarget.value)}
+                placeholder={
+                  presentation === "albums"
+                    ? "Filter albums…"
+                    : presentation === "albumArtists"
+                      ? "Filter album artists…"
+                      : "Filter tracks…"
+                }
+              />
+            </label>
+          </div>
+        </div>
+      </header>
+      <ExclusiveRegion
+        activeKey={`root:${presentation}`}
+        direction={direction}
+        className="library-presentation-region"
+      >
+        <LibraryBrowserSurface key={presentation} {...props} presentation={presentation} />
+      </ExclusiveRegion>
+    </div>
   );
 }
 
 function LibraryBrowserSurface({
   presentation,
-  onChangePresentation,
   onOpenSettings,
   onPlayTrack,
   activeTrackId,
@@ -85,10 +121,8 @@ function LibraryBrowserSurface({
   scanError = null,
 }: Props & {
   presentation: "albums" | "albumArtists" | "tracks";
-  onChangePresentation: (value: "albums" | "albumArtists" | "tracks") => void;
 }) {
   const {
-    rawSearch,
     setRawSearch,
     committedSearch,
     client,
@@ -98,7 +132,6 @@ function LibraryBrowserSurface({
     openAlbumArtist,
   } = useLibraryWorkspace();
   const search = committedSearch[presentation];
-  const rawValue = rawSearch[presentation];
   const retention = useMemo(
     () => ({ key: `root:${presentation}`, registry: queryRetention }),
     [presentation, queryRetention],
@@ -139,19 +172,10 @@ function LibraryBrowserSurface({
   }, []);
   const empty = hasRoots === false ? "Add a music folder to start" : "No indexed music yet";
   const query = presentation === "albums" ? albumQuery : trackQuery;
-  const handlePresentationChange = useCallback(
-    (next: "albums" | "albumArtists" | "tracks") => {
-      markScrollSurfacesExiting();
-      if (element) {
-        scrollRegistry.set(`root:${presentation}`, element.scrollTop);
-      }
-      onChangePresentation(next);
-    },
-    [element, onChangePresentation, presentation, scrollRegistry],
-  );
   return (
-    <div
+    <motion.div
       ref={setViewportElement}
+      layoutScroll
       className="library-scroll-surface"
       data-library-surface="browser"
       data-scroll-region
@@ -163,31 +187,6 @@ function LibraryBrowserSurface({
           aria-label="Library"
         >
           <div className="library-view__content content-frame">
-            <header className="library-view__header">
-              <h1 className="type-application-heading">Library</h1>
-              <div className="library-view__controls">
-                <LibraryPresentationTabs
-                  presentation={presentation}
-                  onChange={handlePresentationChange}
-                />
-                <label className="library-view__search">
-                  <span className="sr-only">
-                    Filter {presentation === "albumArtists" ? "album artists" : presentation}
-                  </span>
-                  <input
-                    value={rawValue}
-                    onChange={(event) => setRawSearch(event.currentTarget.value)}
-                    placeholder={
-                      presentation === "albums"
-                        ? "Filter albums…"
-                        : presentation === "albumArtists"
-                          ? "Filter album artists…"
-                          : "Filter tracks…"
-                    }
-                  />
-                </label>
-              </div>
-            </header>
             {scanError ? (
               <LibraryErrorNotice message={scanError} onOpenSettings={onOpenSettings} />
             ) : presentation === "albumArtists" ? (
@@ -234,7 +233,7 @@ function LibraryBrowserSurface({
           </div>
         </section>
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -283,8 +282,9 @@ function AlbumSurface({
   );
   const album = frame.summary as LibraryAlbumSummary;
   return (
-    <div
+    <motion.div
       ref={setViewportElement}
+      layoutScroll
       className="library-scroll-surface"
       data-library-surface="detail"
       data-scroll-region
@@ -299,7 +299,7 @@ function AlbumSurface({
           onBack={onBack}
         />
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -354,8 +354,9 @@ function AlbumArtistSurface({
   );
   const { openAlbum } = useLibraryWorkspace();
   return (
-    <div
+    <motion.div
       ref={setViewportElement}
+      layoutScroll
       className="library-scroll-surface"
       data-library-surface="artist-detail"
       data-scroll-region
@@ -373,7 +374,7 @@ function AlbumArtistSurface({
           query={detail.albums}
         />
       </div>
-    </div>
+    </motion.div>
   );
 }
 

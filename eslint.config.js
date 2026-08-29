@@ -59,6 +59,56 @@ export default tseslint.config(
         {
           paths: [
             {
+              name: "motion/react",
+              message: "Use an approved Motion owner module and update the frontend contract.",
+            },
+            {
+              name: "@tauri-apps/plugin-log",
+              message: "Use the project-owned diagnostics module.",
+            },
+          ],
+        },
+      ],
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "MemberExpression[object.name='window'][property.name='matchMedia']",
+          message: "Use the project-owned semantic viewport hook for matchMedia.",
+        },
+        {
+          selector: "JSXAttribute[name.name='layout']",
+          message: "Responsive layout projection is not an approved Motion primitive.",
+        },
+      ],
+    },
+  },
+  {
+    files: ["src/lib/diagnostics.ts"],
+    rules: { "no-restricted-imports": "off" },
+  },
+  {
+    files: [
+      "src/main.tsx",
+      "src/components/AppShell.tsx",
+      "src/components/ApplicationActivityIndicator.tsx",
+      "src/components/PlaybackDock.tsx",
+      "src/components/RangeControl.tsx",
+      "src/components/ui/Dialog.tsx",
+      "src/components/ui/ExclusiveRegion.tsx",
+      "src/features/library/AlbumArtworkIdentity.tsx",
+      "src/features/library/AlbumArtistArtworkIdentity.tsx",
+      "src/features/library/LibraryArtwork.tsx",
+      "src/features/library/AlbumDetailView.tsx",
+      "src/features/library/LibraryPresentationTabs.tsx",
+      "src/features/library/LibraryView.tsx",
+      "src/hooks/use-scroll-region.ts",
+    ],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
               name: "@tauri-apps/plugin-log",
               message: "Use the project-owned diagnostics module.",
             },
@@ -68,7 +118,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ["src/lib/diagnostics.ts"],
-    rules: { "no-restricted-imports": "off" },
+    files: ["src/hooks/use-context-overlay-semantics.ts", "src/test/setup.ts"],
+    rules: { "no-restricted-syntax": "off" },
   },
 );

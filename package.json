@@ -18,6 +18,7 @@
     "format": "prettier --write . && cargo fmt --manifest-path src-tauri/Cargo.toml",
     "format:check": "prettier --check . && cargo fmt --manifest-path src-tauri/Cargo.toml -- --check",
     "design:lint": "designmd lint DESIGN.md",
+    "frontend:architecture:check": "node scripts/frontend-architecture.mjs",
     "fonts:check": "node scripts/fonts.mjs check",
     "package": "pnpm fonts:check && pnpm tauri build",
     "test": "vitest run",
@@ -28,7 +29,7 @@
     "rust:check": "cargo check --manifest-path src-tauri/Cargo.toml",
     "rust:clippy": "cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings",
     "rust:test": "cargo test --manifest-path src-tauri/Cargo.toml",
-    "check": "pnpm design:lint && pnpm build && pnpm lint && pnpm format:check && pnpm test && pnpm test:layout && pnpm bindings:check && pnpm rust:clippy && pnpm rust:test"
+    "check": "pnpm design:lint && pnpm frontend:architecture:check && pnpm build && pnpm lint && pnpm format:check && pnpm test && pnpm test:layout && pnpm bindings:check && pnpm rust:clippy && pnpm rust:test"
   },
   "dependencies": {
     "@fontsource-variable/noto-sans-jp": "^5.3.0",

@@ -7,6 +7,7 @@ export const effectsMotion = {
   reduced: 0.12,
   ease: [0.22, 1, 0.36, 1] as const,
 } as const;
+export const contentNavigationDisplacement = 24;
 
 /** Non-oscillating shared profiles for structural continuity and short indicators. */
 export const spatialStructural = {

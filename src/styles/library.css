@@ -6,6 +6,25 @@
   overflow-y: auto;
   scrollbar-gutter: stable;
 }
+.library-root-surface {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  block-size: 100%;
+  min-block-size: 0;
+}
+.library-root-surface > .library-view__header {
+  padding-block-start: 64px;
+}
+.library-view__header-content {
+  inline-size: 100%;
+}
+.library-presentation-region,
+.library-presentation-region .exclusive-region__item,
+.library-presentation-region .exclusive-region__contents {
+  block-size: 100%;
+  min-block-size: 0;
+  overflow-x: clip;
+}
 .library-route-region,
 .library-route-region .exclusive-region__item,
 .library-route-region .exclusive-region__contents {
@@ -15,6 +34,9 @@
 .library-view {
   box-sizing: border-box;
   padding-block: 64px;
+}
+.library-root-surface .library-view {
+  padding-block: 0 64px;
 }
 .library-view h1 {
   margin: 0;
