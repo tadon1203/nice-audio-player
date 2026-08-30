@@ -48,9 +48,11 @@ export function LibraryBrowserSurface({
   const trackQuery = useTrackQuery(search, libraryRefreshKey, presentation === "tracks", client, {
     retention,
   });
+  const query = presentation === "albums" ? albumQuery : trackQuery;
   const previousSearch = useRef(search);
   useEffect(() => {
-    if (previousSearch.current !== search) {
+    const savedScroll = scrollRegistry.get(libraryRetentionKey.root(presentation));
+    if (previousSearch.current !== search && (savedScroll === undefined || savedScroll === 0)) {
       scrollRegistry.set(`root:${presentation}`, 0);
       scrollToPosition(0, "instant");
     }
@@ -63,21 +65,23 @@ export function LibraryBrowserSurface({
       .catch(() => setHasRoots(null));
   }, []);
   const empty = hasRoots === false ? "Add a music folder to start" : "No indexed music yet";
-  const query = presentation === "albums" ? albumQuery : trackQuery;
   return (
     <div
       ref={setViewportElement}
-      className="library-scroll-surface"
+      className="h-full min-h-0 min-w-0 overflow-x-hidden overflow-y-auto [scrollbar-gutter:stable]"
       data-library-surface="browser"
       data-scroll-region
     >
       <div>
         <section
-          className="library-view page-frame"
+          className="box-border w-full px-[var(--layout-inline-padding)] pb-16"
           data-presentation={presentation}
           aria-label="Library"
         >
-          <div className="library-view__content content-frame">
+          <div
+            data-library-layout-owner
+            className="mx-auto w-full max-w-[var(--content-max-width)]"
+          >
             {scanError ? (
               <LibraryErrorNotice message={scanError} onOpenSettings={onOpenSettings} />
             ) : presentation === "albumArtists" ? (
@@ -93,9 +97,9 @@ export function LibraryBrowserSurface({
                 onOpenSettings={onOpenSettings}
               />
             ) : query.loading && query.items.length === 0 ? (
-              <p className="library-view__notice">Loading library…</p>
+              <p className="my-12 text-text-secondary">Loading library…</p>
             ) : query.items.length === 0 ? (
-              <div className="library-view__empty">
+              <div className="my-12 text-text-secondary">
                 <p>{search ? "No matches" : empty}</p>
                 <Button type="button" onClick={search ? () => setRawSearch("") : onOpenSettings}>
                   {search ? "Clear search" : "Open Library settings"}
@@ -119,7 +123,7 @@ export function LibraryBrowserSurface({
                 activeTrackId={activeTrackId}
                 playbackStatus={playbackStatus}
                 scrollElement={element}
-                className="library-view__tracks-section"
+                className="w-full"
               />
             )}
           </div>
@@ -139,9 +143,9 @@ function LibraryErrorNotice({
   onOpenSettings: () => void;
 }) {
   return (
-    <div className="library-view__notice library-view__notice--error" role="alert">
+    <div className="my-12 max-w-[70ch] text-error" role="alert">
       <p>{message}</p>
-      <div className="library-view__notice-actions">
+      <div className="mt-4 flex flex-wrap gap-2">
         {retry ? (
           <Button type="button" onClick={() => void retry()}>
             Retry library

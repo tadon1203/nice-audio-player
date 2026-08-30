@@ -59,7 +59,12 @@
   --radius-media: 16px;
   --radius-full: 9999px;
   --ease-interface: cubic-bezier(0.22, 1, 0.36, 1);
+  --spacing: 4px;
+  --breakpoint-app-wide: 800px;
+  --breakpoint-context-split: 1440px;
 }
+
+@custom-variant short-window (@media (max-height: 640px));
 
 :root {
   color-scheme: dark;
@@ -87,21 +92,8 @@
   --effect-content: 320ms;
   --effect-image: 600ms;
   --effect-reduced: 120ms;
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 20px;
-  --space-6: 24px;
-  --space-8: 32px;
-  --space-10: 40px;
-  --space-12: 48px;
-  --space-16: 64px;
-  --space-20: 80px;
-  --space-24: 96px;
   --scrollbar-size: 12px;
   --scrollbar-thumb-inset: 3px;
   --content-max-width: 1360px;
-  --layout-gutter: 24px;
   --layout-inline-padding: clamp(24px, 5vw, 80px);
 }

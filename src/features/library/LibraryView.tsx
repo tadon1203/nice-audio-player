@@ -9,7 +9,7 @@ export function LibraryView(props: LibraryViewProps) {
   const { presentation, currentFrame, back, selectPresentation } = useLibraryWorkspace();
   useLibraryFocusRestore();
   return (
-    <div className="library-route-region">
+    <div className="h-full min-h-0 overflow-x-clip">
       {currentFrame?.kind === "album" ? (
         <AlbumDetailSurface {...props} frame={currentFrame} onBack={back} />
       ) : currentFrame?.kind === "albumArtist" ? (

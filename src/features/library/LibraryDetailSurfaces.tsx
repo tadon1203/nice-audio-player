@@ -37,7 +37,7 @@ export function AlbumDetailSurface({
   return (
     <div
       ref={setViewportElement}
-      className="library-scroll-surface"
+      className="h-full min-h-0 min-w-0 overflow-x-hidden overflow-y-auto [scrollbar-gutter:stable]"
       data-library-surface="detail"
       data-scroll-region
     >
@@ -106,7 +106,7 @@ export function AlbumArtistDetailSurface({
   return (
     <div
       ref={setViewportElement}
-      className="library-scroll-surface"
+      className="h-full min-h-0 min-w-0 overflow-x-hidden overflow-y-auto [scrollbar-gutter:stable]"
       data-library-surface="artist-detail"
       data-scroll-region
     >

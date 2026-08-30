@@ -148,9 +148,13 @@ function LyricsLines({
       ? content.lines
       : [];
   return (
-    <div className="lyrics-pane__viewport">
-      <div className="lyrics-pane__scroll" ref={assignViewport} data-scroll-region>
-        <div className="lyrics-pane__body">
+    <div className="relative h-full min-h-0 overflow-hidden">
+      <div
+        className="h-full min-h-0 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]"
+        ref={assignViewport}
+        data-scroll-region
+      >
+        <div className="mx-auto max-w-[40rem] px-6 pb-20 pt-12 short-window:pb-16 short-window:pt-6">
           {timed
             ? cueGroups.map((cue) => {
                 const contentLines = cue.indices.map((index) => timed[index]!);
@@ -161,7 +165,8 @@ function LyricsLines({
                     <span
                       key={`${sourceIndex}-${line.text}`}
                       data-lyric-index={sourceIndex}
-                      className={`lyrics-pane__line${current ? " is-current" : ""}`}
+                      data-current={current ? "true" : undefined}
+                      className="mb-1 block min-w-0 overflow-wrap-anywhere text-body-lg leading-[1.5] text-text-secondary transition-colors duration-[var(--effect-state)] ease-interface last:mb-0 data-[current=true]:font-semibold data-[current=true]:text-text-primary"
                     >
                       {line.text}
                     </span>
@@ -171,7 +176,7 @@ function LyricsLines({
                   <button
                     key={cue.ordinal}
                     type="button"
-                    className="lyrics-pane__cue"
+                    className="-ms-2 mb-4 block min-h-10 w-fit max-w-full rounded-control border-0 bg-transparent p-2 text-start hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-focus-ring"
                     data-cue-ordinal={cue.ordinal}
                     tabIndex={canSeek && rovingTarget === cue.ordinal ? 0 : -1}
                     aria-disabled={!canSeek}
@@ -182,20 +187,28 @@ function LyricsLines({
                     {children}
                   </button>
                 ) : (
-                  <div key={cue.ordinal} className="lyrics-pane__cue-static">
+                  <div key={cue.ordinal} className="mb-4 block">
                     {children}
                   </div>
                 );
               })
             : lines.map((line, index) => (
-                <p key={`${index}-${line}`} data-lyric-index={index} className="lyrics-pane__line">
+                <p
+                  key={`${index}-${line}`}
+                  data-lyric-index={index}
+                  className="mb-4 block min-w-0 overflow-wrap-anywhere text-body-lg leading-[1.5] text-text-secondary"
+                >
                   {line || "\u00a0"}
                 </p>
               ))}
         </div>
       </div>
       {!following && timed ? (
-        <button type="button" className="lyrics-pane__return" onClick={returnToCurrentLine}>
+        <button
+          type="button"
+          className="absolute bottom-6 end-6 min-h-10 rounded-control border border-border-control bg-surface-raised px-3 text-text-primary hover:bg-surface-hover"
+          onClick={returnToCurrentLine}
+        >
           Return to current line
         </button>
       ) : null}
@@ -219,56 +232,76 @@ export function LyricsPane({
     playback.status === "playing" || playback.status === "paused" ? playback.positionMs : 0;
   const playbackId =
     playback.status === "playing" || playback.status === "paused" ? playback.playbackId : null;
-  if (!playback.file) return <p className="lyrics-pane__state">Play a track to view lyrics.</p>;
+  if (!playback.file)
+    return (
+      <p className="p-12 px-6 text-body-md text-text-secondary">Play a track to view lyrics.</p>
+    );
   if (identityPending)
     return (
-      <p className="lyrics-pane__state" role="status">
+      <p className="p-12 px-6 text-body-md text-text-secondary" role="status">
         Finding track…
       </p>
     );
   if (!trackId)
-    return <p className="lyrics-pane__state">Lyrics are available for indexed Library tracks.</p>;
+    return (
+      <p className="p-12 px-6 text-body-md text-text-secondary">
+        Lyrics are available for indexed Library tracks.
+      </p>
+    );
   if (lyrics.kind === "loading" || lyrics.kind === "idle")
     return (
-      <p className="lyrics-pane__state" role="status">
+      <p className="p-12 px-6 text-body-md text-text-secondary" role="status">
         Resolving lyrics…
       </p>
     );
   if (lyrics.kind === "notFound")
     return (
-      <div className="lyrics-pane__state">
+      <div className="p-12 px-6 text-body-md text-text-secondary">
         <p>No lyrics found for this track.</p>
         <p>
           Place a <code>.lrc</code> file with the same filename as the audio file beside it.
         </p>
-        <button type="button" onClick={onRetry}>
+        <button
+          className="min-h-10 rounded-control border border-border-control px-3 hover:bg-surface-hover"
+          type="button"
+          onClick={onRetry}
+        >
           Retry lyrics
         </button>
       </div>
     );
   if (lyrics.kind === "sourceFailed" || lyrics.kind === "error")
     return (
-      <div className="lyrics-pane__state" role="alert">
+      <div className="p-12 px-6 text-body-md text-error" role="alert">
         <p>
           {lyrics.kind === "error" ? lyrics.message : "Lyrics couldn't be read for this track."}
         </p>
-        <button type="button" onClick={onRetry}>
+        <button
+          className="min-h-10 rounded-control border border-border-control px-3 text-text-primary hover:bg-surface-hover"
+          type="button"
+          onClick={onRetry}
+        >
           Retry lyrics
         </button>
       </div>
     );
   const notice = lyrics.resolution.notice === "sidecarFailedUsingEmbedded";
   return (
-    <div className="lyrics-pane__document">
-      <div className="lyrics-pane__identity">
-        <strong>{trackTitle}</strong>
-        <span>
+    <div className="grid h-full min-h-0 grid-rows-[auto_auto_minmax(0,1fr)] overflow-hidden">
+      <div className="grid min-w-0 gap-1 px-6 pt-6 short-window:px-4 short-window:pt-3">
+        <strong className="overflow-wrap-anywhere text-body-md text-text-primary">
+          {trackTitle}
+        </strong>
+        <span className="overflow-wrap-anywhere text-caption text-text-muted">
           {trackArtist ?? " "} ·{" "}
           {lyrics.resolution.document.source === "sidecar" ? "Local LRC" : "Embedded"}
         </span>
       </div>
       {notice ? (
-        <p className="lyrics-pane__notice" role="status">
+        <p
+          className="mx-6 mt-4 rounded-control border border-border-subtle p-3 text-body-sm text-text-secondary"
+          role="status"
+        >
           Embedded lyrics are shown because the local .lrc file could not be read.
         </p>
       ) : null}

@@ -33,7 +33,7 @@ export function VolumeControl({
   const valueText = value === 0 ? "0 percent, silent" : `${value} percent${muted ? ", muted" : ""}`;
   return (
     <div
-      className="playback-dock__volume"
+      className="grid w-[192px] grid-cols-[auto_minmax(0,1fr)] items-center gap-2"
       data-region="volume"
       aria-busy={isMutePending || undefined}
     >
@@ -41,18 +41,21 @@ export function VolumeControl({
         <TooltipTrigger
           render={
             <Button
-              size="icon"
+              variant="icon-primary"
               type="button"
               aria-label={buttonLabel}
               aria-busy={isMutePending || undefined}
               disabled={!isPlaybackAvailable || isMutePending}
               onClick={onVolumeButtonPress}
-              className="playback-dock__fixed-control playback-dock__volume-button text-text-primary disabled:cursor-not-allowed disabled:text-text-disabled"
             />
           }
         >
-          <span data-testid="volume-icon-state" data-state={iconState}>
-            <StateIcon state={iconState} className="playback-dock__volume-icon" />
+          <span
+            className="[&>svg]:h-7 [&>svg]:w-7"
+            data-testid="volume-icon-state"
+            data-state={iconState}
+          >
+            <StateIcon state={iconState} size={28} />
           </span>
         </TooltipTrigger>
         <TooltipContent>{buttonLabel}</TooltipContent>
@@ -64,7 +67,7 @@ export function VolumeControl({
         min={0}
         max={100}
         step={1}
-        subdued={muted}
+        appearance={muted ? "subdued" : "default"}
         disabled={!isPlaybackAvailable}
         onValueChange={onValueChange}
         onValueCommitted={onValueCommitted}

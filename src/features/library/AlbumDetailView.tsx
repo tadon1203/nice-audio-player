@@ -8,10 +8,13 @@ import { formatLibraryDate } from "@/lib/library-date";
 import { LibraryArtwork, useLibraryArtworkUrl } from "./LibraryArtwork";
 import { albumArtistIdentity } from "./library-identity";
 import { useAlbumDetailQuery } from "./use-album-detail-query";
-
-const latinMediaTitle = /^[\p{Script=Latin}\p{Number}\p{Punctuation}\p{Separator}\p{Mark}]+$/u;
-const usesCharacterTitle = (title: string) =>
-  latinMediaTitle.test(title) && title.trim().split(/\s+/u).length <= 6;
+import { usesCharacterTitle } from "./library-title-presentation";
+import {
+  albumDetailArtworkClass,
+  albumDetailContentClass,
+  albumDetailHeroClass,
+  albumDetailIdentityClass,
+} from "./album-detail-layout";
 
 export function AlbumDetailView({
   album,
@@ -47,25 +50,29 @@ export function AlbumDetailView({
     backRef.current?.focus({ preventScroll: true });
   }, []);
   return (
-    <section className="album-detail page-frame" aria-label={`${summary.key.title} album detail`}>
-      <div className="album-detail__content content-frame">
-        <button ref={backRef} type="button" className="album-detail__back" onClick={onBack}>
+    <section
+      className="relative isolate box-border w-full px-[var(--layout-inline-padding)] py-6 pb-[60px]"
+      aria-label={`${summary.key.title} album detail`}
+    >
+      <div data-region="album-detail-content" className={albumDetailContentClass}>
+        <button
+          ref={backRef}
+          type="button"
+          className="min-h-10 border-0 bg-transparent p-0 text-text-secondary hover:text-text-primary"
+          onClick={onBack}
+        >
           <AppIcon name="chevronLeft" /> <span>Back</span>
         </button>
-        <div className="album-detail__hero">
-          <span className="library-artwork-frame album-detail__artwork-wrap">
-            <LibraryArtwork
-              artwork={summary.artwork}
-              resolvedUrl={artworkUrl}
-              className="album-detail__artwork"
-            />
+        <div className={albumDetailHeroClass}>
+          <span data-region="album-detail-artwork" className={albumDetailArtworkClass}>
+            <LibraryArtwork artwork={summary.artwork} resolvedUrl={artworkUrl} />
           </span>
-          <div className="album-detail__identity">
+          <div data-region="album-detail-identity" className={albumDetailIdentityClass}>
             <h1
               className={
                 usesCharacterTitle(summary.key.title)
-                  ? "type-media-title"
-                  : "type-media-title type-media-title--interface"
+                  ? "font-interface text-media-artist font-regular leading-media-artist tracking-normal app-wide:font-character app-wide:text-media-title app-wide:leading-media-title app-wide:tracking-character-snug"
+                  : "font-interface text-media-artist font-semibold leading-media-artist app-wide:text-media-title-interface app-wide:leading-media-title-interface"
               }
             >
               {summary.key.title}
@@ -73,16 +80,18 @@ export function AlbumDetailView({
             {onOpenAlbumArtist ? (
               <button
                 type="button"
-                className="album-detail__artist album-detail__artist-button type-media-artist"
+                className="block min-h-10 border-0 bg-transparent p-0 text-start text-media-artist font-regular leading-media-artist text-text-secondary hover:text-text-primary"
                 data-library-focus-id={albumArtistIdentity({ name: summary.key.albumArtist })}
                 onClick={() => onOpenAlbumArtist({ name: summary.key.albumArtist })}
               >
                 {summary.key.albumArtist}
               </button>
             ) : (
-              <p className="album-detail__artist type-media-artist">{summary.key.albumArtist}</p>
+              <p className="my-3 mb-5 text-media-artist font-regular leading-media-artist text-text-secondary">
+                {summary.key.albumArtist}
+              </p>
             )}
-            <p className="album-detail__meta">
+            <p className="min-h-6 text-body-sm text-text-secondary">
               {[
                 detail?.date ? formatLibraryDate(detail.date) : null,
                 detail
@@ -97,19 +106,20 @@ export function AlbumDetailView({
                 .filter(Boolean)
                 .join(" · ")}
             </p>
-            <Button
-              type="button"
-              variant="filled"
-              className="album-detail__play"
-              disabled={!playbackAvailable || !detail?.firstPlayableTrackId}
-              onClick={() => onPlayAlbum(summary.key)}
-            >
-              <AppIcon name="play" /> Play album
-            </Button>
+            <div className="mt-6">
+              <Button
+                type="button"
+                variant="filled"
+                disabled={!playbackAvailable || !detail?.firstPlayableTrackId}
+                onClick={() => onPlayAlbum(summary.key)}
+              >
+                <AppIcon name="play" /> Play album
+              </Button>
+            </div>
           </div>
         </div>
         {activeQuery.details.error ? (
-          <div className="library-view__notice" role="alert">
+          <div className="my-12 text-error" role="alert">
             {activeQuery.details.error}{" "}
             <Button type="button" onClick={activeQuery.details.retry}>
               Retry
@@ -117,7 +127,7 @@ export function AlbumDetailView({
           </div>
         ) : null}
         {activeQuery.tracks.error ? (
-          <div className="library-view__notice" role="alert">
+          <div className="my-12 text-error" role="alert">
             {activeQuery.tracks.error}{" "}
             <Button type="button" onClick={activeQuery.tracks.retry}>
               Retry
@@ -125,9 +135,9 @@ export function AlbumDetailView({
           </div>
         ) : null}
         {activeQuery.tracks.loading && activeQuery.tracks.items.length === 0 ? (
-          <p className="library-view__notice">Loading album…</p>
+          <p className="my-12 text-text-secondary">Loading album…</p>
         ) : (
-          <div className="album-detail__tracks">
+          <div data-region="album-detail-tracks" className="w-full">
             {[...grouped.entries()].map(([label, tracks]) => (
               <TrackGroup
                 key={label}
@@ -147,15 +157,16 @@ export function AlbumDetailView({
               />
             ))}
             {activeQuery.tracks.nextOffset !== null ? (
-              <Button
-                type="button"
-                variant="neutral"
-                className="album-detail__load-more"
-                onClick={activeQuery.tracks.loadNext}
-                disabled={activeQuery.tracks.loadingNext}
-              >
-                Load more
-              </Button>
+              <div className="my-5">
+                <Button
+                  type="button"
+                  variant="neutral"
+                  onClick={activeQuery.tracks.loadNext}
+                  disabled={activeQuery.tracks.loadingNext}
+                >
+                  Load more
+                </Button>
+              </div>
             ) : null}
           </div>
         )}
@@ -201,9 +212,11 @@ function TrackGroup({
   hideHeading: boolean;
 }) {
   return (
-    <section className="album-detail__group">
-      {hideHeading ? null : <h2 className="type-section-title">{label}</h2>}
-      <ul className="album-detail__table" aria-label={label}>
+    <section className="mt-7">
+      {hideHeading ? null : (
+        <h2 className="mb-2 text-section-title font-semibold leading-section-title">{label}</h2>
+      )}
+      <ul className="m-0 list-none border-t border-border-subtle p-0" aria-label={label}>
         {tracks.map((t) => {
           const active =
             t.id === activeTrackId && (playbackStatus === "playing" || playbackStatus === "paused");
@@ -211,7 +224,8 @@ function TrackGroup({
             <li key={t.id}>
               <button
                 type="button"
-                className={`album-detail__row${active ? " album-detail__row--active" : ""}`}
+                data-slot="album-track-row"
+                className={`grid min-h-10 w-full grid-cols-[40px_minmax(0,1fr)_64px] items-center gap-2 border-0 border-b border-border-subtle bg-transparent px-3 py-1.5 text-start text-text-primary app-wide:grid-cols-[48px_minmax(0,1fr)_72px] app-wide:gap-4 disabled:cursor-not-allowed disabled:text-text-disabled ${active ? "bg-surface-raised" : ""}`}
                 disabled={!playbackAvailable || !t.playable}
                 aria-label={`${active ? "Restart " : "Play "}${t.title} by ${t.artist ?? albumArtist}`}
                 aria-description={
@@ -224,16 +238,24 @@ function TrackGroup({
                 aria-current={active ? "true" : undefined}
                 onClick={() => onPlayAlbumTrack(albumKey, t.id)}
               >
-                <span className="album-detail__track-number type-numeric">
+                <span
+                  data-slot="album-track-number"
+                  className="justify-self-center text-caption tabular-nums text-text-secondary"
+                >
                   {active ? <PlayingMarker /> : (t.trackNumber ?? "—")}
                 </span>
-                <span className="album-detail__track-title">
-                  <span className="album-detail__track-title-main">{t.title}</span>
+                <span className="flex min-w-0 flex-col justify-center overflow-hidden text-body-md">
+                  <span className="block overflow-hidden text-ellipsis whitespace-nowrap">
+                    {t.title}
+                  </span>
                   {t.artist && t.artist.trim() !== albumArtist.trim() ? (
                     <small>{t.artist}</small>
                   ) : null}
                 </span>
-                <span className="album-detail__duration type-numeric">
+                <span
+                  data-slot="album-track-duration"
+                  className="justify-self-end text-caption tabular-nums text-text-secondary"
+                >
                   {t.durationMs === null ? "--:--" : formatPlaybackTime(t.durationMs)}
                 </span>
               </button>

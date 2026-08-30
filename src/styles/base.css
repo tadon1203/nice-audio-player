@@ -1,4 +1,10 @@
 @layer base {
+  #overlay-root {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    pointer-events: none;
+  }
   *,
   *::before,
   *::after {
@@ -29,11 +35,6 @@
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-  }
-
-  .motion-feedback {
-    transition-duration: var(--effect-feedback);
-    transition-timing-function: var(--ease-interface);
   }
 
   button,

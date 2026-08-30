@@ -44,7 +44,7 @@ export function TracksView({
         );
     };
     update();
-    const owner = listRef.current?.closest<HTMLElement>(".library-view");
+    const owner = listRef.current?.closest<HTMLElement>("[data-library-layout-owner]");
     const observer = new ResizeObserver(update);
     if (owner) observer.observe(owner);
     window.addEventListener("resize", update);
@@ -59,10 +59,10 @@ export function TracksView({
   }, [hasMore, onEnd, tracks.length, virtualItems]);
   return (
     <section className={className}>
-      <h2>Tracks</h2>
+      <h2 className="mb-3 text-section-title font-semibold">Tracks</h2>
       <div
         ref={listRef}
-        className="library-view__tracks"
+        className="grid gap-0"
         role="list"
         style={{ height: `${rowVirtualizer.getTotalSize()}px`, position: "relative" }}
       >

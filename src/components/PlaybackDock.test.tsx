@@ -56,7 +56,7 @@ describe("PlaybackDock", () => {
       Array.from(screen.getByTestId("playback-dock").querySelectorAll("[data-region]"), (e) =>
         e.getAttribute("data-region"),
       ),
-    ).toEqual(["identity", "playback-core", "volume"]);
+    ).toEqual(["playback-identity", "playback-core", "volume"]);
     expect(screen.getByRole("button", { name: "Play" })).toBeEnabled();
     expect(screen.getByDisplayValue("0")).toBeDisabled();
     expect(screen.getByRole("button", { name: "Mute" })).toBeEnabled();
@@ -94,7 +94,7 @@ describe("PlaybackDock", () => {
     );
     const frame = screen
       .getByTestId("playback-dock")
-      .querySelector(".playback-dock__artwork-frame")!;
+      .querySelector('[data-slot="playback-artwork-frame"]')!;
     const image = screen.getByTestId("playback-dock").querySelector("img")!;
     fireEvent.error(image);
     expect(screen.queryByRole("img")).toBeNull();
