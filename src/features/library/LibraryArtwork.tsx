@@ -32,11 +32,9 @@ export function useLibraryArtworkUrl(artwork: ArtworkRef | null) {
 
 export function LibraryArtwork({
   artwork,
-  className,
   resolvedUrl,
 }: {
   artwork: ArtworkRef | null;
-  className?: string;
   resolvedUrl?: string | null;
 }) {
   const resolvedArtworkUrl = useLibraryArtworkUrl(artwork);
@@ -47,17 +45,17 @@ export function LibraryArtwork({
   }, [url]);
   const displayUrl = url && failedUrl !== url ? url : null;
   return (
-    <span className="library-artwork-transition">
+    <span data-slot="library-artwork" className="grid aspect-square w-full">
       {displayUrl ? (
         <img
-          className={`library-view__artwork ${className ?? ""}`}
+          className="col-start-1 row-start-1 block aspect-square w-full rounded-[inherit] object-cover"
           src={displayUrl}
           onError={() => setFailedUrl(displayUrl)}
           alt=""
         />
       ) : (
         <span
-          className={`library-view__artwork library-view__artwork--placeholder ${className ?? ""}`}
+          className="col-start-1 row-start-1 block aspect-square w-full rounded-[inherit] border border-border-subtle bg-surface-raised"
           aria-hidden="true"
         />
       )}

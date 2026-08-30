@@ -93,7 +93,14 @@ export function useScrollRegion(
     const onScroll = () => {
       applyRestoration();
       if (!restorationApplied.current) return;
-      restoration?.registry.set(restoration.key, viewport.scrollTop);
+      const saved = restoration?.registry.get(restoration.key);
+      const programmaticReturnToSavedPosition =
+        restoration?.key.startsWith("root:") &&
+        saved !== undefined &&
+        viewport.scrollTop < saved &&
+        !pendingUserIntent.current;
+      if (!programmaticReturnToSavedPosition)
+        restoration?.registry.set(restoration.key, viewport.scrollTop);
       if (pendingUserIntent.current) {
         pendingUserIntent.current = false;
         onUserScroll?.();
@@ -132,10 +139,10 @@ export function useScrollRegion(
     mutationObserver?.observe(viewport, { childList: true, subtree: true });
     return () => {
       cancelAnimationFrame(restorationFrame);
-      if (restoration) {
+      if (restoration && !restoration.key.startsWith("root:")) {
         const current = viewport.scrollTop;
         const saved = restoration.registry.get(restoration.key);
-        if (current > 0 || saved === undefined || saved === 0) {
+        if (saved === undefined || saved === 0 || current >= saved) {
           restoration.registry.set(restoration.key, current);
         }
       }

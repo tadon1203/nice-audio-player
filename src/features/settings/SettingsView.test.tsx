@@ -72,7 +72,7 @@ describe("SettingsView root removal", () => {
     const include = await screen.findByRole("checkbox", { name: "Include" });
     expect(include).toBeChecked();
     const remove = screen.getByRole("button", { name: "Remove" });
-    expect(remove).toHaveClass("button--danger");
+    expect(remove).toBeEnabled();
   });
 
   it("refreshes before closing and focuses Add folder after successful removal", async () => {
@@ -88,6 +88,6 @@ describe("SettingsView root removal", () => {
     );
     await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
     await waitFor(() => expect(screen.getByRole("button", { name: "Add folder" })).toHaveFocus());
-    expect(document.querySelector(".settings-view__roots")?.textContent).not.toContain("C:/Root A");
+    expect(screen.queryByText("C:/Root A")).not.toBeInTheDocument();
   });
 });

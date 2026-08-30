@@ -7,8 +7,8 @@ for (const viewport of supportedViewports) {
     await openFixture(page, "long-filename", viewport);
 
     const shell = page.getByTestId("app-shell");
-    const main = shell.locator(".app-shell__main");
-    const dock = shell.locator(".app-shell__persistent");
+    const main = shell.locator('[data-slot="app-main"]');
+    const dock = shell.locator('[data-slot="app-persistent"]');
     const overlay = page.locator("#overlay-root");
     const [shellBox, mainBox, dockBox, overlayBox] = await Promise.all([
       shell.boundingBox(),
@@ -38,7 +38,7 @@ test("destination transition overlaps content without moving persistent regions"
   page,
 }) => {
   await openFixture(page, "long-filename", { width: 800, height: 600 });
-  const main = page.locator(".app-shell__main");
+  const main = page.locator('[data-slot="app-main"]');
   const dock = page.getByTestId("playback-dock");
   const mainBefore = await main.boundingBox();
   const dockBefore = await dock.boundingBox();

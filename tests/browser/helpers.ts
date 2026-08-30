@@ -7,8 +7,10 @@ export interface TestViewport {
 
 export const supportedViewports: TestViewport[] = [
   { width: 640, height: 800 },
+  { width: 799, height: 600 },
   { width: 800, height: 600 },
   { width: 1120, height: 700 },
+  { width: 1439, height: 900 },
   { width: 1440, height: 900 },
 ];
 

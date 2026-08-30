@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import type { ApplicationActivity } from "@/bindings";
-import { Button } from "./ui/button";
 import { Spinner } from "./ui/spinner";
 
 export function ApplicationActivityIndicator({
@@ -37,21 +36,22 @@ export function ApplicationActivityIndicator({
   }, [activity, visible]);
   if (!visible) return null;
   return (
-    <div className={`application-activity application-activity--${visible.state}`}>
-      <div
-        className="application-activity__contents"
-        role="status"
-        aria-live="polite"
-        aria-atomic="true"
-      >
+    <div
+      className={`pointer-events-auto overflow-wrap-anywhere rounded-control border border-border-subtle bg-surface-raised px-3 py-2 text-caption ${visible.state === "attentionRequired" ? "text-error" : "text-text-secondary"}`}
+    >
+      <div className="flex items-center gap-3" role="status" aria-live="polite" aria-atomic="true">
         {visible.state === "running" ? <Spinner /> : null}
         <span>
           {visible.state === "running" ? "Updating library…" : "Library update needs attention"}
         </span>
         {visible.state === "attentionRequired" ? (
-          <Button type="button" onClick={onOpenSettings}>
+          <button
+            className="min-h-10 rounded-control border-0 bg-transparent px-2.5 text-text-primary hover:bg-surface-hover"
+            type="button"
+            onClick={onOpenSettings}
+          >
             Open settings
-          </Button>
+          </button>
         ) : null}
       </div>
     </div>

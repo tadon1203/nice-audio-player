@@ -130,7 +130,7 @@ export function BrowserFixtureApp({ fixture }: BrowserFixtureAppProps) {
               <LibraryFixtureSurface initialDetail={fixture === "album-detail-wide"} />
             ) : (
               <section
-                className={`${destination === "library" ? "library-view" : "settings-view"} page-frame`}
+                className="box-border w-full px-[var(--layout-inline-padding)]"
                 data-fixture-view={destination}
                 aria-label={destination === "library" ? "Library" : "Settings"}
               >

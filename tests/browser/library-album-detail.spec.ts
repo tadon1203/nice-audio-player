@@ -10,10 +10,10 @@ for (const viewport of [
 ]) {
   test(`album detail geometry stays aligned at ${viewport.width}px`, async ({ page }) => {
     await openFixture(page, "album-detail-wide", viewport);
-    const content = page.locator(".album-detail__content");
-    const tracks = page.locator(".album-detail__tracks");
-    const identity = page.locator(".album-detail__identity");
-    const artwork = page.locator(".album-detail__artwork-wrap");
+    const content = page.locator('[data-region="album-detail-content"]');
+    const tracks = page.locator('[data-region="album-detail-tracks"]');
+    const identity = page.locator('[data-region="album-detail-identity"]');
+    const artwork = page.locator('[data-region="album-detail-artwork"]');
     await expect
       .poll(
         async () => {
@@ -51,8 +51,11 @@ for (const viewport of [
     if (viewport.width >= 1120) expect(tracksBox.x).toBeLessThan(identityBox.x);
     if (viewport.width >= 1400)
       expect(identityBox.x - (artworkBox.x + artworkBox.width)).toBeGreaterThan(20);
-    const duration = page.locator(".album-detail__row").first().locator(".album-detail__duration");
-    const rowBox = await page.locator(".album-detail__row").first().boundingBox();
+    const duration = page
+      .locator('[data-slot="album-track-row"]')
+      .first()
+      .locator('[data-slot="album-track-duration"]');
+    const rowBox = await page.locator('[data-slot="album-track-row"]').first().boundingBox();
     const durationBox = await duration.boundingBox();
     expect(rowBox).not.toBeNull();
     expect(durationBox).not.toBeNull();
@@ -60,18 +63,21 @@ for (const viewport of [
       expect(durationBox.x + durationBox.width).toBeLessThanOrEqual(rowBox.x + rowBox.width - 10);
       expect(durationBox.x + durationBox.width).toBeGreaterThan(rowBox.x + rowBox.width - 18);
     }
-    const playButton = page.locator(".album-detail__play");
+    const playButton = page.getByRole("button", { name: "Play album" });
     const restColors = await playButton.evaluate((element) => {
       const style = getComputedStyle(element);
       return { color: style.color, background: style.backgroundColor };
     });
-    await playButton.hover();
-    const hoverColors = await playButton.evaluate((element) => {
-      const style = getComputedStyle(element);
-      return { color: style.color, background: style.backgroundColor };
-    });
     expect(restColors).toEqual({ color: "rgb(5, 5, 5)", background: "rgb(244, 244, 244)" });
-    expect(hoverColors).toEqual({ color: "rgb(5, 5, 5)", background: "rgb(221, 221, 221)" });
+    await playButton.hover();
+    await expect
+      .poll(() =>
+        playButton.evaluate((element) => {
+          const style = getComputedStyle(element);
+          return { color: style.color, background: style.backgroundColor };
+        }),
+      )
+      .toEqual({ color: "rgb(5, 5, 5)", background: "rgb(221, 221, 221)" });
     await expectNoHorizontalOverflow(page);
   });
 }

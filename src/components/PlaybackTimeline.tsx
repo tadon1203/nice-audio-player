@@ -23,9 +23,12 @@ export function PlaybackTimeline({
   onCancel,
 }: PlaybackTimelineProps) {
   const timed = duration !== null;
+  const appearance =
+    pending || transportPending ? "pending" : !timed ? "idle" : ("default" as const);
   return (
     <div
-      className={`playback-dock__timeline${pending || transportPending ? " is-pending" : ""}${!timed ? " is-idle" : ""}`}
+      data-slot="playback-timeline"
+      className="grid h-[60px] w-full min-w-0 grid-rows-[20px_40px]"
     >
       {timed ? (
         <div className="flex justify-between text-body-sm text-text-secondary">
@@ -43,6 +46,7 @@ export function PlaybackTimeline({
         step={1}
         value={value}
         disabled={!available || !timed || pending || transportPending}
+        appearance={appearance}
         onValueChange={onChange}
         onValueCommitted={onCommit}
         onInteractionCancel={onCancel}

@@ -123,16 +123,18 @@ describe("useLibraryArtworkUrl", () => {
   it("uses a placeholder after an image error and recovers for a new URL", async () => {
     const view = render(<LibraryArtwork artwork={null} resolvedUrl="asset://broken" />);
     await act(async () => undefined);
-    const image = document.querySelector(".library-view__artwork");
+    const image = document.querySelector('[data-slot="library-artwork"] img');
     expect(image).not.toBeNull();
     if (!image) return;
     fireEvent.error(image);
     await waitFor(() =>
-      expect(document.querySelector(".library-view__artwork[src]")).not.toBeInTheDocument(),
+      expect(
+        document.querySelector('[data-slot="library-artwork"] img[src]'),
+      ).not.toBeInTheDocument(),
     );
     view.rerender(<LibraryArtwork artwork={null} resolvedUrl="asset://recovered" />);
     await waitFor(() =>
-      expect(document.querySelector(".library-view__artwork[src]")).toHaveAttribute(
+      expect(document.querySelector('[data-slot="library-artwork"] img[src]')).toHaveAttribute(
         "src",
         "asset://recovered",
       ),

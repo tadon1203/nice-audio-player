@@ -49,7 +49,7 @@ vi.mock("./AlbumsView", () => ({
 }));
 vi.mock("./AlbumDetailView", () => ({
   AlbumDetailView: ({ onBack }: { onBack: () => void }) => (
-    <button type="button" className="album-detail__back" onClick={onBack}>
+    <button type="button" onClick={onBack}>
       Back
     </button>
   ),

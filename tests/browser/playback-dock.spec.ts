@@ -12,7 +12,7 @@ for (const viewport of [
     const dock = page.getByTestId("playback-dock");
     const regions = dock.locator("[data-region]");
     await expect(regions).toHaveCount(3);
-    for (const region of ["identity", "playback-core", "volume"])
+    for (const region of ["playback-identity", "playback-core", "volume"])
       await expect(dock.locator(`[data-region="${region}"]`)).toBeVisible();
     for (let index = 0; index < (await regions.count()); index += 1)
       await expectContainedBy(regions.nth(index), dock);
@@ -27,7 +27,7 @@ for (const viewport of [
 for (const width of [640, 800, 1120, 1440, 1760]) {
   test(`Play/Pause remains centered in the Dock at ${width}px`, async ({ page }) => {
     await openFixture(page, "playing", { width, height: 700 });
-    const grid = page.locator(".playback-dock__layout");
+    const grid = page.locator('[data-slot="playback-layout"]');
     const core = page.locator('[data-region="playback-core"]');
     const button = page.getByRole("button", { name: "Pause" });
     const [
@@ -47,11 +47,11 @@ for (const width of [640, 800, 1120, 1440, 1760]) {
       page.getByTestId("playback-dock").boundingBox(),
       core.boundingBox(),
       button.boundingBox(),
-      page.locator(".playback-dock__timeline").boundingBox(),
-      page.locator('.range-control:has([aria-label="Playback position"])').boundingBox(),
+      page.locator('[data-slot="playback-timeline"]').boundingBox(),
+      page.locator('[data-slot="slider"]:has([aria-label="Playback position"])').boundingBox(),
       page.locator('[data-region="volume"]').boundingBox(),
-      page.locator('[data-region="identity"]').boundingBox(),
-      page.locator(".playback-dock__artwork-frame").boundingBox(),
+      page.locator('[data-region="playback-identity"]').boundingBox(),
+      page.locator('[data-slot="playback-artwork-frame"]').boundingBox(),
       button.locator("svg").boundingBox(),
       page.getByRole("button", { name: "Mute" }).locator("svg").boundingBox(),
     ]);
@@ -77,7 +77,7 @@ for (const width of [640, 800, 1120, 1440, 1760]) {
     ).toBeLessThanOrEqual(1);
     expect(
       await page
-        .locator(".playback-dock__transport")
+        .locator('[data-slot="playback-transport"]')
         .evaluate((element) => getComputedStyle(element).translate),
     ).toBe("none");
     expect(seekBox.x).toBeGreaterThanOrEqual(coreBox.x - 1);
@@ -111,7 +111,7 @@ for (const width of [640, 800, 1120, 1440, 1760]) {
     expect(volumeBox.width).toBeGreaterThanOrEqual(192);
     expect(
       await page
-        .locator('[data-region="volume"] .range-control')
+        .locator('[data-region="volume"] [data-slot="slider"]')
         .evaluate((element) => element.getBoundingClientRect().width),
     ).toBeGreaterThanOrEqual(144);
     expect(
@@ -171,7 +171,7 @@ test("Dock remains contained when typography tokens grow", async ({ page }) => {
   await openFixture(page, "playing", { width: 800, height: 600 });
   const dock = page.getByTestId("playback-dock");
   await page.addStyleTag({ content: ":root { --text-body-sm: 26px; --text-body-md: 28px; }" });
-  for (const region of ["identity", "playback-core", "volume"])
+  for (const region of ["playback-identity", "playback-core", "volume"])
     await expectContainedBy(dock.locator(`[data-region="${region}"]`), dock);
   await expectNoHorizontalOverflow(page);
 });
@@ -179,14 +179,14 @@ test("Dock remains contained when typography tokens grow", async ({ page }) => {
 test("Dock ranges use the shared custom control treatment", async ({ page }) => {
   await openFixture(page, "playing", { width: 800, height: 600 });
   for (const name of ["Playback position", "Playback volume"]) {
-    const wrapper = page.locator(`.range-control:has([aria-label="${name}"])`);
-    await expect(wrapper.locator(".range-control__track")).toHaveCount(1);
-    await expect(wrapper.locator(".range-control__indicator")).toHaveCount(1);
-    await expect(wrapper.locator(".range-control__thumb")).toHaveCount(1);
+    const wrapper = page.locator(`[data-slot="slider"]:has([aria-label="${name}"])`);
+    await expect(wrapper.locator('[data-slot="slider-track"]')).toHaveCount(1);
+    await expect(wrapper.locator('[data-slot="slider-range"]')).toHaveCount(1);
+    await expect(wrapper.locator('[data-slot="slider-thumb"]')).toHaveCount(1);
     const [controlBox, trackBox, thumbBox] = await Promise.all([
       wrapper.boundingBox(),
-      wrapper.locator(".range-control__track").boundingBox(),
-      wrapper.locator(".range-control__thumb").boundingBox(),
+      wrapper.locator('[data-slot="slider-track"]').boundingBox(),
+      wrapper.locator('[data-slot="slider-thumb"]').boundingBox(),
     ]);
     expect(controlBox && trackBox && thumbBox).not.toBeNull();
     if (!controlBox || !trackBox || !thumbBox) return;
@@ -207,11 +207,11 @@ test("minimum window width keeps the Dock in one anchored row", async ({ page })
   await openFixture(page, "playing", { width: 640, height: 800 });
   const dock = page.getByTestId("playback-dock");
   const [identity, core, volume, button, timeline] = await Promise.all([
-    dock.locator('[data-region="identity"]').boundingBox(),
+    dock.locator('[data-region="playback-identity"]').boundingBox(),
     dock.locator('[data-region="playback-core"]').boundingBox(),
     dock.locator('[data-region="volume"]').boundingBox(),
     dock.getByRole("button", { name: "Pause" }).boundingBox(),
-    dock.locator(".playback-dock__timeline").boundingBox(),
+    dock.locator('[data-slot="playback-timeline"]').boundingBox(),
   ]);
   expect(identity && core && volume && button && timeline).not.toBeNull();
   if (!identity || !core || !volume || !button || !timeline) return;

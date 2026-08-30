@@ -1,4 +1,4 @@
-import { Slider } from "./ui/slider";
+import { Slider, type SliderAppearance } from "./ui/slider";
 
 interface RangeControlProps {
   value: number;
@@ -6,7 +6,7 @@ interface RangeControlProps {
   max: number;
   step: number;
   disabled?: boolean;
-  subdued?: boolean;
+  appearance?: SliderAppearance;
   "aria-label": string;
   "aria-valuetext"?: string;
   onValueChange: (value: number) => void;
@@ -20,7 +20,7 @@ export function RangeControl({
   max,
   step,
   disabled = false,
-  subdued = false,
+  appearance = "default",
   onValueChange,
   onValueCommitted,
   onInteractionCancel,
@@ -34,7 +34,7 @@ export function RangeControl({
       max={effectiveMax}
       step={step}
       disabled={disabled}
-      className={subdued ? "is-subdued" : undefined}
+      appearance={appearance}
       onValueChange={(next) => onValueChange(typeof next === "number" ? next : (next[0] ?? min))}
       onValueCommitted={(next) =>
         onValueCommitted?.(typeof next === "number" ? next : (next[0] ?? min))

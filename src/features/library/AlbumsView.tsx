@@ -40,8 +40,11 @@ export function AlbumsView({
     return () => scrollRoot.removeEventListener("scroll", onScroll);
   }, [hasMore, onEnd, scrollRoot]);
   return (
-    <section className="library-view__album-section" aria-label="Albums">
-      <div className="library-view__album-grid">
+    <section aria-label="Albums">
+      <div
+        data-region="album-grid"
+        className="grid grid-cols-[repeat(auto-fill,minmax(200px,210px))] gap-x-5 gap-y-10"
+      >
         {albums.map((album) => (
           <AlbumCard
             key={`${album.key.title}:${album.key.albumArtist}`}

@@ -4,6 +4,7 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ArtworkRef, LibraryAlbumSummary, LibraryAlbumTrackSummary } from "@/bindings";
+import { usesCharacterTitle } from "./library-title-presentation";
 
 const artworkUrl = "asset://album-art.jpg";
 const mocks = vi.hoisted(() => ({
@@ -111,20 +112,19 @@ describe("AlbumDetailView", () => {
   it("renders only the foreground artwork", () => {
     renderDetail();
     expect(document.querySelectorAll("img")).toHaveLength(1);
-    expect(document.querySelector(".album-detail__artwork")).toHaveAttribute("src", artworkUrl);
+    expect(document.querySelector('[data-region="album-detail-artwork"] img')).toHaveAttribute(
+      "src",
+      artworkUrl,
+    );
   });
 
   it("keeps Zodiak exclusive to Latin media titles and avoids mixed-script fallback", () => {
     renderDetail();
-    expect(screen.getByRole("heading", { name: "Album title" })).not.toHaveClass(
-      "type-media-title--interface",
-    );
+    expect(usesCharacterTitle("Album title")).toBe(true);
     cleanup();
 
     renderDetail({ summary: { ...album, key: { ...album.key, title: "夜のアルバム Album" } } });
-    expect(screen.getByRole("heading", { name: "夜のアルバム Album" })).toHaveClass(
-      "type-media-title--interface",
-    );
+    expect(usesCharacterTitle("夜のアルバム Album")).toBe(false);
   });
 
   it("plays the album and clicked track, formats the date, and omits matching artists", () => {
@@ -146,7 +146,9 @@ describe("AlbumDetailView", () => {
   it("hides the disc heading but keeps the track number for a single-track album", () => {
     renderDetail({ items: [track()] });
     expect(screen.queryByRole("heading", { name: "Disc 1" })).not.toBeInTheDocument();
-    expect(screen.getByText("1", { selector: ".type-numeric" })).toBeInTheDocument();
+    expect(
+      screen.getByText("1", { selector: '[data-slot="album-track-number"]' }),
+    ).toBeInTheDocument();
     expect(screen.getByText("Track title")).toBeInTheDocument();
     expect(screen.getByText("4:32")).toBeInTheDocument();
   });
@@ -154,16 +156,18 @@ describe("AlbumDetailView", () => {
   it("keeps the disc heading and track number for multi-track albums", () => {
     renderDetail({ items: [track(), track({ id: "track-2", trackNumber: 1, discNumber: 2 })] });
     expect(screen.getByRole("heading", { name: "Disc 1" })).toBeInTheDocument();
-    expect(screen.getAllByText("1", { selector: ".type-numeric" })).toHaveLength(2);
+    expect(screen.getAllByText("1", { selector: '[data-slot="album-track-number"]' })).toHaveLength(
+      2,
+    );
   });
 
-  it("uses Button variants for the album and load-more actions", () => {
+  it("exposes album and load-more actions", () => {
     const { loadNext, onPlayAlbum } = renderDetail({ nextOffset: 20 });
     const playAlbum = screen.getByRole("button", { name: "Play album" });
     const loadMore = screen.getByRole("button", { name: "Load more" });
 
-    expect(playAlbum).toHaveClass("button--filled");
-    expect(loadMore).toHaveClass("button--neutral");
+    expect(playAlbum).toBeEnabled();
+    expect(loadMore).toBeEnabled();
     fireEvent.click(playAlbum);
     fireEvent.click(loadMore);
     expect(onPlayAlbum).toHaveBeenCalledWith(album.key);

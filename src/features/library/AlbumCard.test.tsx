@@ -22,8 +22,8 @@ describe("AlbumCard", () => {
   it("uses explicit title and artist hierarchy classes and opens the album", () => {
     const onOpen = vi.fn();
     render(<AlbumCard album={album} onOpen={onOpen} />);
-    expect(document.querySelector(".library-view__album-title")).toHaveTextContent("Album title");
-    expect(document.querySelector(".library-view__album-artist")).toHaveTextContent("Album artist");
+    expect(screen.getByText("Album title")).toBeInTheDocument();
+    expect(screen.getByText("Album artist")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Open Album title by Album artist" }));
     expect(onOpen).toHaveBeenCalledWith(album);
   });

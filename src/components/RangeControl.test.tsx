@@ -19,7 +19,7 @@ describe("RangeControl", () => {
       />,
     );
     expect(screen.getByDisplayValue("50")).toHaveAttribute("aria-valuetext", "50 percent");
-    expect(document.querySelector(".range-control__track")).toBeInTheDocument();
+    expect(document.querySelector('[data-slot="slider-track"]')).toBeInTheDocument();
   });
 
   it("keeps the product hit region and disabled semantics", () => {
@@ -34,7 +34,7 @@ describe("RangeControl", () => {
         onValueChange={vi.fn()}
       />,
     );
-    expect(container.querySelector(".range-control")).toHaveAttribute("data-disabled");
+    expect(container.querySelector('[data-slot="slider"]')).toHaveAttribute("data-disabled");
     expect(screen.getByDisplayValue("0")).toBeDisabled();
   });
 });

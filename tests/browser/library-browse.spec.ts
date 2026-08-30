@@ -3,20 +3,18 @@ import { openFixture } from "./helpers";
 
 test("Library root owns a persistent 24px header-to-content gap", async ({ page }) => {
   await openFixture(page, "library-browse", { width: 1120, height: 700 });
-  const root = page.locator(".library-root-surface");
+  const root = page.locator('[data-slot="tabs-root"]');
   await expect(root).toHaveCSS("row-gap", "24px");
   for (const tab of ["Albums", "Album Artists", "Tracks"]) {
     await page.getByRole("tab", { name: tab, exact: true }).click();
     const geometry = await page.evaluate(() => {
-      const header = document.querySelector(".library-root-surface > .library-view__header");
-      const surface = document.querySelector(
-        '.library-root-surface .library-scroll-surface[data-library-surface="browser"]',
-      );
+      const header = document.querySelector('[data-slot="library-header"]');
+      const surface = document.querySelector('[data-library-surface="browser"]');
       if (!header || !surface) throw new Error("Library geometry is unavailable");
       return {
         gap: surface.getBoundingClientRect().top - header.getBoundingClientRect().bottom,
         albumMargin: getComputedStyle(
-          document.querySelector(".library-view__album-section") ?? surface,
+          document.querySelector('[data-region="album-grid"]') ?? surface,
         ).marginBlockStart,
       };
     });
@@ -29,8 +27,8 @@ test("Tracks inherit the Library content measure", async ({ page }) => {
   await openFixture(page, "library-browse", { width: 1440, height: 900 });
   await page.getByRole("tab", { name: "Tracks", exact: true }).click();
   const geometry = await page.evaluate(() => {
-    const header = document.querySelector<HTMLElement>(".library-view__header-content");
-    const tracks = document.querySelector<HTMLElement>(".library-view__tracks-section");
+    const header = document.querySelector<HTMLElement>('[data-slot="library-header-content"]');
+    const tracks = document.querySelector<HTMLElement>("[data-library-layout-owner]");
     if (!header || !tracks) throw new Error("Library content measure is unavailable");
     return {
       headerLeft: header.getBoundingClientRect().left,
@@ -47,12 +45,12 @@ test("Artist artwork survives the cloned seed-to-detail summary boundary", async
   await openFixture(page, "library-browse", { width: 1120, height: 700 });
   await page.getByRole("tab", { name: "Album Artists", exact: true }).click();
   const artist = page.getByRole("button", { name: "Open Fixture Artist", exact: true });
-  await expect(artist.locator("img.library-view__artwork")).toHaveAttribute(
+  await expect(artist.locator('[data-slot="library-artwork"] img')).toHaveAttribute(
     "src",
     /asset.localhost/,
   );
   await artist.click();
-  const hero = page.locator(".album-detail__artwork-wrap img");
+  const hero = page.locator('[data-region="album-detail-artwork"] img');
   await expect(hero).toHaveAttribute("src", /asset.localhost/);
 });
 
@@ -74,7 +72,7 @@ test("library browse keeps peer presentations and hierarchical navigation intera
   );
   await page.getByRole("tab", { name: "Albums" }).click();
   const browserSurface = page.locator('[data-library-surface="browser"]').last();
-  const albumGrid = page.locator(".library-view__album-grid");
+  const albumGrid = page.locator('[data-region="album-grid"]');
   await expect(albumGrid.locator(":scope > article > button")).toHaveCount(100);
   await browserSurface.evaluate((element) => {
     element.scrollTop = element.scrollHeight;
@@ -108,7 +106,7 @@ test("library browse keeps peer presentations and hierarchical navigation intera
 
   await page.getByRole("tab", { name: "Album Artists" }).click();
   await expect(page.getByRole("region", { name: "Album artists" })).toBeVisible();
-  const artistGrid = page.locator('[aria-label="Album artists"] .library-view__album-grid');
+  const artistGrid = page.locator('[aria-label="Album artists"] [data-region="album-grid"]');
   await expect(artistGrid.locator(":scope > button")).toHaveCount(100);
   await browserSurface.evaluate((element) => {
     element.scrollTop = element.scrollHeight;
@@ -119,7 +117,9 @@ test("library browse keeps peer presentations and hierarchical navigation intera
   await expect(
     page.getByRole("region", { name: /Fixture Artist album artist detail/ }),
   ).toBeVisible();
-  const artistAlbumGrid = page.locator(".album-detail .library-view__album-grid");
+  const artistAlbumGrid = page.locator(
+    '[data-library-surface="artist-detail"] [data-region="album-grid"]',
+  );
   await expect(artistAlbumGrid.locator(":scope > article > button")).toHaveCount(100);
   await page
     .locator('[data-library-surface="artist-detail"]')
@@ -137,17 +137,17 @@ test("library browse keeps peer presentations and hierarchical navigation intera
 
   await page.getByRole("tab", { name: "Tracks" }).click();
   await expect(page.getByRole("heading", { name: "Tracks" })).toBeVisible();
-  await expect(page.locator('.library-view__tracks [data-index="0"]')).toBeVisible();
+  await expect(page.getByRole("listitem").first()).toBeVisible();
   await browserSurface.evaluate((element) => {
     element.scrollTop = element.scrollHeight;
     element.dispatchEvent(new Event("scroll"));
   });
-  await expect.poll(() => page.locator('.library-view__tracks [data-index="100"]').count()).toBe(1);
+  await expect.poll(() => page.locator('[data-index="100"]').count()).toBe(1);
   await browserSurface.evaluate((element) => {
     element.scrollTop = element.scrollHeight;
     element.dispatchEvent(new Event("scroll"));
   });
-  await expect.poll(() => page.locator('.library-view__tracks [data-index="129"]').count()).toBe(1);
+  await expect.poll(() => page.locator('[data-index="129"]').count()).toBe(1);
   await page.getByRole("tab", { name: "Albums" }).click();
   await expect(page.getByRole("region", { name: "Albums" })).toBeVisible();
   const albumsSurface = page.locator(
@@ -212,7 +212,7 @@ test("an empty library renders the production browse surface without catalog ite
   await expect(page.getByRole("region", { name: "Library" })).toBeVisible();
   await expect(page.getByText("No indexed music yet")).toBeVisible();
   await expect(
-    page.locator('[data-presentation="albums"] .library-view__album-button'),
+    page.locator('[data-presentation="albums"] [data-region="album-grid"] > article > button'),
   ).toHaveCount(0);
 });
 
@@ -220,8 +220,10 @@ test("album and artist tiles provide pointer feedback without changing geometry"
   page,
 }) => {
   await openFixture(page, "library-browse", { width: 800, height: 600 });
-  const album = page.locator('[data-presentation="albums"] .library-view__album-button').first();
-  const albumArtwork = album.locator(".library-view__album-artwork-frame");
+  const album = page
+    .locator('[data-presentation="albums"] [data-region="album-grid"] > article > button')
+    .first();
+  const albumArtwork = album.locator('[data-slot="album-card-artwork"]');
   const albumBox = await albumArtwork.boundingBox();
   await album.hover();
   await expect
@@ -237,8 +239,10 @@ test("album and artist tiles provide pointer feedback without changing geometry"
   await page.mouse.up();
 
   await page.getByRole("tab", { name: "Album Artists" }).click();
-  const artist = page.locator('[aria-label="Album artists"] .library-view__album-button').first();
-  const artistArtwork = artist.locator(".library-view__album-artwork-frame");
+  const artist = page
+    .locator('[aria-label="Album artists"] [data-region="album-grid"] > button')
+    .first();
+  const artistArtwork = artist.locator('[data-slot="album-card-artwork"]');
   await artist.hover();
   await expect
     .poll(() => artistArtwork.evaluate((element) => getComputedStyle(element).outlineColor))

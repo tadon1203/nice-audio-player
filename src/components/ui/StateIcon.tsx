@@ -13,17 +13,17 @@ const endpoints = {
   repeatOne: Repeat1,
 } as const;
 
-export function StateIcon({ state, className }: { state: StateIconState; className?: string }) {
+export function StateIcon({ state, size }: { state: StateIconState; size?: 20 | 24 | 28 }) {
   return (
     <MorphIcon
       icon={endpoints[state]}
       spring="smooth"
       reducedMotion="user"
-      className={className}
-      size={state === "play" || state === "pause" ? 24 : 20}
+      size={size ?? (state === "play" || state === "pause" ? 24 : 20)}
       strokeWidth={2}
       aria-hidden="true"
       focusable="false"
+      className={size === 28 ? "h-7 w-7" : size === 24 ? "h-6 w-6" : "h-5 w-5"}
     />
   );
 }

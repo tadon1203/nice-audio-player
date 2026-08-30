@@ -40,41 +40,63 @@ export function PlaybackQueuePane({
   const current = queue.current;
   const upcoming = queue.upcoming;
   return (
-    <div className="playback-queue">
+    <div className="grid h-full min-h-full min-w-0 grid-rows-[auto_minmax(0,1fr)] overflow-x-clip">
       {queue.error ? (
-        <div className="playback-queue__error" role="alert">
+        <div className="max-w-[70ch] p-6 text-error" role="alert">
           <p>Queue is unavailable. {queue.error}</p>
-          <button type="button" onClick={() => void queue.refresh()} disabled={queue.pending}>
+          <button
+            className="mt-3 min-h-10 rounded-control border border-border-control bg-transparent px-3 text-text-primary hover:bg-surface-hover disabled:text-text-disabled"
+            type="button"
+            onClick={() => void queue.refresh()}
+            disabled={queue.pending}
+          >
             Retry queue
           </button>
         </div>
       ) : null}
       {!queue.error ? (
-        <section className="playback-queue__now" aria-labelledby="now-playing-title">
-          <p className="playback-queue__eyebrow" id="now-playing-title">
+        <section className="min-w-0 px-6 pb-5 pt-2" aria-labelledby="now-playing-title">
+          <p className="mb-2.5 text-caption text-text-muted" id="now-playing-title">
             Now playing
           </p>
           {current ? (
-            <div className="playback-queue__current">
+            <div className="flex min-w-0 items-center gap-3">
               {playbackStatus === "stopped" || playbackStatus === "failed" ? null : (
                 <PlayingMarker />
               )}
-              <div>
-                <strong>{current.title}</strong>
-                <span>{current.artist ?? " "}</span>
+              <div className="grid min-w-0 gap-0.5">
+                <strong className="overflow-hidden text-ellipsis whitespace-nowrap text-body-sm font-medium">
+                  {current.title}
+                </strong>
+                <span className="overflow-hidden text-ellipsis whitespace-nowrap text-caption text-text-muted">
+                  {current.artist ?? " "}
+                </span>
               </div>
-              {current.durationMs ? <time>{formatPlaybackTime(current.durationMs)}</time> : null}
+              {current.durationMs ? (
+                <time className="ms-auto flex-none text-caption tabular-nums text-text-muted">
+                  {formatPlaybackTime(current.durationMs)}
+                </time>
+              ) : null}
             </div>
           ) : (
-            <p className="playback-queue__empty">Queue is empty.</p>
+            <p className="text-text-secondary">Queue is empty.</p>
           )}
         </section>
       ) : null}
       {!queue.error ? (
-        <section className="playback-queue__up-next" aria-labelledby="up-next-title">
-          <div className="playback-queue__section-heading">
-            <h3 id="up-next-title">Up next</h3>
+        <section
+          className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)]"
+          aria-labelledby="up-next-title"
+        >
+          <div className="flex items-center justify-between gap-4 px-6 py-4">
+            <h3
+              id="up-next-title"
+              className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-body-md font-semibold"
+            >
+              Up next
+            </h3>
             <button
+              className="min-h-10 rounded-control border-0 bg-transparent px-2.5 text-text-secondary hover:bg-surface-hover hover:text-text-primary"
               type="button"
               disabled={!upcoming.length || queue.pending}
               onClick={queue.clearUpcoming}
@@ -82,22 +104,44 @@ export function PlaybackQueuePane({
               Clear upcoming
             </button>
           </div>
-          <div ref={setViewportElement} className="playback-queue__list" data-scroll-region>
-            <div className="playback-queue__list-content">
+          <div
+            ref={setViewportElement}
+            className="min-h-0 overflow-x-clip overflow-y-auto"
+            data-scroll-region
+            data-slot="queue-list"
+          >
+            <div>
               {upcoming.length ? (
                 upcoming.map((item, index) => {
                   const absolute = index;
                   const first = index === 0;
                   const last = index === upcoming.length - 1;
                   return (
-                    <div className="playback-queue__row" key={item.id}>
-                      <span className="playback-queue__index">{absolute + 1}</span>
-                      <div className="playback-queue__track">
-                        <strong title={item.title}>{item.title}</strong>
-                        {item.artist ? <span>{item.artist}</span> : null}
+                    <div
+                      className="grid min-h-[68px] grid-cols-[24px_minmax(0,1fr)_56px_40px] items-center gap-3 border-b border-border-subtle px-6 py-2"
+                      key={item.id}
+                      data-slot="queue-row"
+                    >
+                      <span className="text-numeric text-text-secondary">{absolute + 1}</span>
+                      <div className="grid min-w-0 gap-0.5">
+                        <strong
+                          className="overflow-hidden text-ellipsis whitespace-nowrap text-body-sm font-medium"
+                          title={item.title}
+                        >
+                          {item.title}
+                        </strong>
+                        {item.artist ? (
+                          <span className="overflow-hidden text-ellipsis whitespace-nowrap text-caption text-text-muted">
+                            {item.artist}
+                          </span>
+                        ) : null}
                       </div>
-                      {item.durationMs ? <time>{formatPlaybackTime(item.durationMs)}</time> : null}
-                      <div className="playback-queue__menu-wrap">
+                      {item.durationMs ? (
+                        <time className="ms-auto flex-none text-caption tabular-nums text-text-muted">
+                          {formatPlaybackTime(item.durationMs)}
+                        </time>
+                      ) : null}
+                      <div>
                         <DropdownMenu>
                           <Tooltip>
                             <TooltipTrigger
@@ -105,8 +149,7 @@ export function PlaybackQueuePane({
                                 <DropdownMenuTrigger
                                   render={
                                     <Button
-                                      size="icon"
-                                      variant="ghost"
+                                      variant="icon"
                                       aria-label={`More actions for ${item.title}`}
                                     />
                                   }
@@ -152,7 +195,7 @@ export function PlaybackQueuePane({
                   );
                 })
               ) : (
-                <p className="playback-queue__empty">
+                <p className="p-6 text-text-secondary">
                   {current ? "Nothing up next." : "Queue is empty."}
                 </p>
               )}
@@ -172,13 +215,12 @@ export function PlaybackQueueActions({ queue }: { queue: QueueState }) {
         ? "Repeat all"
         : "Repeat one";
   return (
-    <div className="playback-queue__tools">
+    <div className="flex items-center gap-1" data-slot="queue-tools">
       <Tooltip>
         <TooltipTrigger
           render={
             <Toggle
               type="button"
-              className="playback-queue__icon-button"
               pressed={queue.shuffleEnabled}
               aria-pressed={queue.shuffleEnabled}
               aria-label={queue.shuffleEnabled ? "Turn shuffle off" : "Turn shuffle on"}
@@ -196,9 +238,8 @@ export function PlaybackQueueActions({ queue }: { queue: QueueState }) {
         <TooltipTrigger
           render={
             <Button
-              size="icon"
+              variant="icon"
               type="button"
-              className="playback-queue__icon-button"
               aria-pressed={queue.repeatMode !== "off"}
               aria-label={repeatLabel}
               onClick={() =>

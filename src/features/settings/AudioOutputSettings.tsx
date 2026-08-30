@@ -9,6 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { typographyVariants } from "@/components/ui/typography";
 interface AudioOutputSettingsProps {
   outputDevices: AudioOutputDevice[] | null;
   selectedOutput: AudioOutputSelection;
@@ -35,11 +36,11 @@ export function AudioOutputSettings({
     else onOutputSelectionChange({ kind: "device", deviceId: value });
   }
   return (
-    <section className="settings-view__section">
-      <h2 className="type-section-title">Audio</h2>
+    <section className="mt-12">
+      <h2 className={typographyVariants({ role: "section-title" })}>Audio</h2>
       <p>Configure playback output and device settings.</p>
-      <div className="settings-view__output">
-        <Field>
+      <div className="mt-4 flex items-end gap-3">
+        <Field className="flex-1">
           <FieldLabel id="output-device-label">Output device</FieldLabel>
           <Select value={selectedValue} disabled={outputDisabled} onValueChange={handleValueChange}>
             <SelectTrigger aria-labelledby="output-device-label">
