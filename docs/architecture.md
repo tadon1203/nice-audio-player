@@ -1,6 +1,12 @@
 # Architecture
 
-This document describes the architecture of Nice Audio Player at the system level. It is intended to provide a stable map of the project rather than document individual implementation details.
+This document describes the system-level architecture of Nice Audio Player. It defines the major technologies, layers, modules, boundaries, responsibilities, ownership, and dependency relationships that shape the system.
+
+It exists to provide a stable shared mental model of how the project is structured and how its major parts relate.
+
+Update this document when a change alters that system-level mental model. Changes that affect only local implementation details should remain expressed in code.
+
+As a practical test: if understanding the change requires a reader to revise how they think the major parts of the system are structured, owned, or connected, the architecture documentation should change with it.
 
 ## Technology Stack
 
