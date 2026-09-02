@@ -2,33 +2,21 @@
 
 This document defines accepted product requirements for Nice Audio Player.
 
-It describes user-visible behavior, supported environments, quality expectations, and data-safety requirements. Implementation rules belong in `architecture.md`; visual and interaction principles belong in `DESIGN.md`; proposed features and implementation scope belong in GitHub Issues.
+Implementation structure belongs in `architecture.md`. Visual and interaction design belongs in `DESIGN.md`. Change-specific scope belongs in GitHub Issues.
 
-## 1. Product Purpose
+## Platform
 
 Nice Audio Player is a Windows desktop application for playing and managing local audio files.
 
-The product should prioritize:
-
-- Reliable, high-quality playback
-- Clear and responsive interaction
-- Safe handling of local files and credentials
-- A polished, artwork-led listening experience
-- Responsiveness with large local libraries
-
-Audio stability has priority over visual work. Delayed visual updates may be skipped rather than allowed to interfere with playback.
-
-## 2. Target Environment
-
 The initial supported platform is Windows 11.
 
-The application is implemented with Tauri v2, Rust, React, TypeScript, Vite, and Tailwind CSS. Persistent library data may use SQLite when library functionality is introduced.
+The application must remain usable across ordinary desktop window sizes and common Windows display-scaling levels.
 
-The interface must remain usable at common Windows display-scaling levels and across ordinary desktop window sizes.
+Audio stability takes priority over visual work.
 
-## 3. Audio Files
+## Audio Files
 
-The initial target formats are:
+Supported formats are:
 
 - MP3
 - FLAC
@@ -36,136 +24,152 @@ The initial target formats are:
 - AAC
 - M4A
 
-A file is supported only when its container and selected audio stream can be validated and decoded. File extensions alone are not proof that a file is valid or supported.
+A file is supported only when its container and selected audio stream can be validated and decoded. File extension alone is not sufficient.
 
-Additional formats may be accepted through focused feature work when they can be supported without weakening playback reliability.
+Additional formats require separate acceptance.
 
-## 4. Playback
+## Playback
 
-The accepted playback direction includes:
+Playback supports:
 
-- Play, pause, resume, and stop
-- Seeking and playback-position reporting
-- Previous and next track behavior
-- Volume and mute
-- Queue playback
-- Repeat and shuffle
-- Output-device selection
-- Shared output mode
-- Playback completion and structured failure reporting
+- play, pause, resume, and stop;
+- seeking and playback-position reporting;
+- previous and next;
+- volume and mute;
+- queue playback;
+- repeat and shuffle;
+- output-device selection;
+- shared output mode;
+- playback completion and structured failure reporting.
 
-Playback behavior must reflect the actual audio state. The UI must not present a successful or active state after the underlying operation has failed or ended.
+Presented playback state must reflect actual audio state.
 
-Application-side high-quality fixed-rate resampling and channel conversion are accepted when the selected shared output configuration requires them. Conversion must preserve channel order and source-media duration, bypass sample-rate conversion exactly when rates match, and expose source rate, output rate, and active resampling in playback state. Construction or completion failures must be reported as structured playback failures. Gapless playback, exclusive output, and bit-perfect playback still require separate acceptance and focused implementation scope.
+When the selected shared output configuration requires sample-rate or channel conversion:
 
-## 5. Audio Processing
+- channel order and source-media duration must be preserved;
+- sample-rate conversion must be bypassed when source and output rates match;
+- source rate, output rate, and active resampling must be visible in playback state;
+- unsupported conversion and processing failures must produce structured playback failures.
 
-Optional audio processing may include loudness normalization and ReplayGain support when separately accepted.
+Matching channel layouts preserve the source layout. Mono may be converted to stereo by duplicating each sample to left and right.
 
-When the selected output requires channel adaptation, matching channel layouts preserve the source layout,
-mono sources may play through stereo output by duplicating each sample to left and right, and the active
-conversion is visible in playback state. Unsupported channel-layout combinations produce a structured
-playback failure.
+Gapless playback, exclusive output, and bit-perfect playback require separate acceptance.
 
-Any processing that changes sample values must be explicit, user-visible, and bypassable where the product mode requires an unmodified path.
+## Audio Processing
 
-Normalization must avoid clipping. Processing must not run in a way that compromises real-time playback stability.
+Processing that changes sample values must be explicit and user-visible.
 
-## 6. Local Library
+Where the selected product mode requires an unmodified path, processing must be bypassable.
 
-The Library browse experience includes Albums, Album Artists, and Tracks as peer presentations.
-Album Artists expose an Artist-to-Albums drill-in, scoped filtering, and restoration of the active
-browse context while moving between Library surfaces and Settings during the same application session.
-Back returns to the actual semantic parent, including nested Album Artist → Album → Album Artist
-flows. Albums, Album Artists, and Tracks retain their independent presentation, filter, and scroll
-contexts during peer switching and Library/Settings round trips in that session.
+Normalization must avoid clipping.
 
-Album filtering matches only effective Album title and Album Artist; Track-only title or performer
-terms do not make an Album match. Album Artist filtering matches only effective Album Artist, while
-Track filtering also matches Track title, Track Artist, Album, and Album Artist. Literal `\\`, `%`,
-and `_` characters remain searchable.
+Audio processing must not compromise playback stability.
 
-The accepted library direction includes:
+Loudness normalization and ReplayGain require separate acceptance.
 
-- Registering local music folders
-- Discovering and indexing supported audio files
-- Updating records when files change
-- Representing missing files without destructive automatic actions
-- Searching, sorting, and filtering
-- Track, album, artist, playlist, recent, and favorite views where the required data exists
-- Responsive presentation for large collections
+## Library
 
-Long-running scans and analysis should expose progress and cancellation where practical.
+Library browsing provides Albums, Album Artists, and Tracks as peer presentations.
 
-Automatic deletion or destructive duplicate handling is not permitted.
+Album Artists support drill-in to their Albums.
 
-## 7. Metadata and Source Files
+Albums, Album Artists, and Tracks retain independent filter and scroll context during the application session, including peer switching and Library/Settings round trips.
 
-The application may display available metadata such as:
+Back navigation returns to the semantic parent, including nested Album Artist → Album → Album Artist navigation.
 
-- Track, album, artist, and album artist
-- Track and disc numbers
-- Genre and date
-- Duration
-- File format and codec
-- Sample rate, channel count, bit depth, and bit rate where meaningful
-- File path
+Filtering behaves as follows:
 
-Application-level metadata overrides may be supported.
+- Albums match Album title and Album Artist.
+- Album Artists match Album Artist.
+- Tracks match Track title, Track Artist, Album, and Album Artist.
+- Literal `\`, `%`, and `_` remain searchable.
 
-Writing metadata back to source files must require explicit user action. Source files must remain unchanged unless the user deliberately requests a modification.
+The library supports:
 
-## 8. Playlists and Playback History
+- registering local music folders;
+- discovering and indexing supported audio files;
+- updating indexed records when files change;
+- representing missing files without destructive automatic action;
+- searching, sorting, and filtering;
+- track, album, and album-artist browsing;
+- responsive presentation for large collections.
 
-The accepted product direction includes manually managed playlists and playback-derived views such as recently played or frequently played.
+Long-running scans expose progress and cancellation where practical.
 
-Any play count, skip count, history, or completion statistic must use a clearly defined threshold. A brief preview or accidental start must not automatically count as a completed play.
+Automatic deletion and destructive duplicate handling are not permitted.
 
-Smart playlists and advanced statistics require separate accepted feature scope.
+Playlists, recent views, favorites, and other additional library presentations require their underlying product capability to be accepted and implemented.
 
-## 9. Lyrics and Artwork
+## Metadata and Source Files
 
-The product may use local, embedded, cached, manually selected, or external lyrics and artwork sources when those sources are separately implemented.
+The application may display available metadata including:
 
-A confirmed user selection must not be silently replaced by an automatic provider result.
+- track, album, artist, and album artist;
+- track and disc numbers;
+- genre and date;
+- duration;
+- file format and codec;
+- sample rate, channel count, bit depth, and bit rate where meaningful;
+- file path.
 
-Provider attribution and usage requirements must be respected. External-provider failures must not prevent local playback.
+Source audio and metadata files must remain unchanged unless the user explicitly requests a modification.
 
-Artwork and lyrics processing must not delay or destabilize audio playback.
+Application-level metadata overrides require separate acceptance.
 
-## 10. Visualization
+## Playlists and Playback History
 
-Visualization is supplementary and must never be required to understand playback state.
+The product may support manually managed playlists and playback-derived views such as recently or frequently played.
 
-Visualizer rendering must remain isolated from playback-critical work. Stale or delayed visual frames may be discarded rather than queued. The implementation may adapt update frequency or skip frames to preserve audio stability, provided the user-facing result remains coherent.
+Any play count, skip count, history entry, or completion statistic must use a defined threshold. A brief preview or accidental start must not count as completed playback.
 
-Specific visualizer modes and quality targets require focused feature acceptance.
+Smart playlists and advanced statistics require separate acceptance.
 
-## 11. Data, Credentials, and Privacy
+## Lyrics and Artwork
 
-Local library data should remain local unless the user explicitly enables an external service.
+Lyrics and artwork may come from local, embedded, cached, manually selected, or separately accepted external sources.
+
+A confirmed user selection must not be silently replaced by an automatic source.
+
+Provider attribution and usage requirements must be respected.
+
+External-provider failure must not prevent local playback.
+
+Lyrics and artwork processing must not delay or destabilize playback.
+
+## Visualization
+
+Visualization is supplementary and must not be required to understand playback state.
+
+Visualization work must not interfere with playback. Stale or delayed visual updates may be dropped rather than queued.
+
+Specific visualization modes require separate acceptance.
+
+## Data and Privacy
+
+Local library data remains local unless the user explicitly enables an external service.
 
 Credentials must:
 
-- Be stored using an operating-system-backed credential mechanism where available
-- Never be returned to the frontend as secret values
-- Never appear in logs, error messages, database records, debug output, or serialized events
+- use operating-system-backed storage where available;
+- never be returned to the frontend as secret values;
+- never appear in logs, error messages, application databases, debug output, or serialized events.
 
-External network access must be limited to user-enabled features and clearly identified providers.
+External network access is limited to user-enabled features and identified providers.
 
-## 12. Reliability and Safety
+## Reliability and Safety
 
 The application must:
 
-- Report validation, decode, output, provider, and persistence failures clearly
-- Preserve unrelated user data after recoverable failures
-- Avoid silent fallback when fallback would change an explicitly selected playback mode
-- Avoid destructive file operations without confirmation
-- Shut down owned background and audio resources cleanly
-- Keep hardware-dependent behavior manually verifiable where deterministic automated testing is not practical
+- report validation, decoding, output, provider, and persistence failures clearly;
+- preserve unrelated user data after recoverable failures;
+- avoid silent fallback when it would change an explicitly selected playback mode;
+- avoid destructive file operations without confirmation;
+- shut down owned background and audio resources cleanly.
 
-## 13. Scope Management
+Hardware-dependent behavior must remain manually verifiable when deterministic automated testing is impractical.
 
-A capability is not an accepted requirement merely because it is described in an idea, roadmap, or Issue.
+## Scope
 
-New capabilities should be accepted through a focused Issue before being added here. This document should describe durable product expectations, not temporary implementation status, branch plans, or speculative class and module structures.
+A capability is not an accepted requirement solely because it appears in an idea, roadmap, or Issue.
+
+New product capabilities require focused acceptance before being added here.

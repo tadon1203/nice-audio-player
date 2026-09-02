@@ -1,15 +1,37 @@
 # Development Philosophy
 
-- **Do not reimplement the harness.** Use capabilities already provided by the active model and environment. Add only the smallest scaffold needed when a required capability is actually missing.
+This document defines the software engineering principles used to evolve Nice Audio Player.
 
-- **Provide only project-specific knowledge.** Focus repository instructions on this project's requirements, responsibility boundaries, constraints, generated artifacts, contribution workflow, and completion criteria.
+## Goals
 
-- **Treat the repository as the interface.** Important knowledge should be discoverable from clear sources of truth, code, and tests rather than depending on conversation history or prompts.
+- **Minimize cognitive load.** Reduce the number of independent concepts, rules, exceptions, and relationships needed to understand and change the project.
+- **Localize change.** Keep the effects of a change within the smallest responsible part of the system.
+- **Minimize uncertainty.** Make ownership, behavior, failure, and completion explicit and verifiable.
 
-- **Improve the environment before the prompt.** When an agent struggles, prefer better tests, types, validation, APIs, responsibility boundaries, and repository legibility over adding more instructions.
+These goals apply to architecture, code, tooling, and documentation.
 
-- **Make completion observable.** Completion is determined by required tests, checks, and acceptance conditions, not by statements such as “mostly done” or “temporarily complete.”
+## Macro Design
 
-- **Give context a purpose.** Use broad repository context where reasoning and decisions are required, then give implementation agents a self-contained plan without carrying over unnecessary research history or rejected alternatives.
+- **Use maintained capabilities.** Prefer platform, framework, and library capabilities over project-specific implementations. Add thin boundaries where isolation is needed; do not reproduce the capability behind them.
 
-- **Architect context delivery.** AI-driven development succeeds on the structures built to supply just the right context—no more, no less. Establish clean modularity, indexable references, and predictable retrieval paths so agents receive exact, relevant inputs without noise.
+- **Structure by responsibility and ownership.** Layers and modules exist to separate real responsibilities, ownership, or dependency direction. Boundaries isolate domains, processes, trust levels, or external dependencies. Do not add structure for hypothetical reuse, replacement, or future flexibility.
+
+- **Make structure legible.** Organize layers, modules, directories, and boundaries so responsibility, ownership, and dependency direction are apparent from the repository structure. Use consistent structural patterns for equivalent responsibilities; structural differences should reflect meaningful differences.
+
+## Micro Design
+
+- **Keep contracts and data flow explicit.** Prefer explicit dependencies, typed contracts, structured errors, and clear ownership over hidden coupling or duplicated authority.
+
+- **Make lifecycle explicit.** Treat failure, interruption, cancellation, replacement, and shutdown as normal states where they apply. Long-lived work has an owner and a defined end.
+
+- **Make intent legible.** Use consistent vocabulary, names, APIs, and local code patterns for the same concepts so responsibility, data flow, and lifecycle are understandable without tracing unnecessary implementation detail. Differences should communicate meaningful differences.
+
+## Documentation
+
+Documentation is a tree of small sources of truth. Each document owns one responsibility, information is written once and linked elsewhere, and only current decisions and behavior are documented.
+
+Keep documentation as short as possible without losing information needed for correct implementation or use.
+
+Prefer one broadly applicable statement over several narrow examples.
+
+Do not repeat information that is already clear from code, types, tests, tooling, or another source of truth.
