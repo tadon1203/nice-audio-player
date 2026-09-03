@@ -1,0 +1,48 @@
+use crate::lyrics::{
+    lrc::{self, LrcParse},
+    model::LyricsContent,
+};
+use lofty::{config::ParseOptions, file::TaggedFileExt, probe::Probe, tag::ItemKey};
+
+#[derive(Debug, Clone, Copy)]
+pub enum EmbeddedLyricsError {
+    Read,
+    Malformed,
+}
+
+/// Converts Lofty tag data into the provider-neutral Lyrics domain.
+/// No Lofty frame or tag types leave this module.
+pub fn read_embedded_lyrics(
+    path: &std::path::Path,
+) -> Result<Option<(Option<String>, LyricsContent)>, EmbeddedLyricsError> {
+    let tagged = Probe::open(path)
+        .map_err(|_| EmbeddedLyricsError::Read)?
+        .options(ParseOptions::new().read_properties(false))
+        .read()
+        .map_err(|_| EmbeddedLyricsError::Read)?;
+    let mut saw_lyrics = false;
+    for tag in tagged.tags().iter().chain(tagged.primary_tag()) {
+        if let Some(value) = tag.get_string(ItemKey::Lyrics) {
+            saw_lyrics = true;
+            match lrc::parse(value) {
+                LrcParse::Parsed(language, content) => return Ok(Some((language, content))),
+                LrcParse::Empty => {}
+                LrcParse::Malformed => return Err(EmbeddedLyricsError::Malformed),
+            }
+            if let Some(parsed) = lrc::parse_plain(value) {
+                return Ok(Some(parsed));
+            }
+        }
+        if let Some(value) = tag.get_string(ItemKey::UnsyncLyrics) {
+            saw_lyrics = true;
+            if let Some(parsed) = lrc::parse_plain(value) {
+                return Ok(Some(parsed));
+            }
+        }
+    }
+    if saw_lyrics {
+        Err(EmbeddedLyricsError::Malformed)
+    } else {
+        Ok(None)
+    }
+}

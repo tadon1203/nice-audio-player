@@ -1,0 +1,56 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Nice Audio Player: dev",
+			"type": "shell",
+			"command": "pnpm.cmd",
+			"args": ["dev"],
+			"options": { "cwd": "${workspaceFolder}" },
+			"isBackground": true,
+			"problemMatcher": []
+		},
+		{
+			"label": "Nice Audio Player: build",
+			"type": "shell",
+			"command": "pnpm.cmd",
+			"args": ["build"],
+			"options": { "cwd": "${workspaceFolder}" },
+			"group": { "kind": "build", "isDefault": true },
+			"problemMatcher": []
+		},
+		{
+			"label": "Nice Audio Player: test",
+			"type": "shell",
+			"command": "pnpm.cmd",
+			"args": ["test"],
+			"options": { "cwd": "${workspaceFolder}" },
+			"group": { "kind": "test", "isDefault": true },
+			"problemMatcher": []
+		},
+		{
+			"label": "Nice Audio Player: validate",
+			"type": "shell",
+			"command": "pnpm.cmd",
+			"args": ["validate"],
+			"options": { "cwd": "${workspaceFolder}" },
+			"problemMatcher": []
+		},
+		{
+			"label": "Nice Audio Player: generate bindings",
+			"type": "shell",
+			"command": "pnpm.cmd",
+			"args": ["generate:bindings"],
+			"options": { "cwd": "${workspaceFolder}" },
+			"problemMatcher": []
+		},
+		{
+			"label": "Nice Audio Player: check bindings",
+			"type": "shell",
+			"command": "pnpm.cmd",
+			"args": ["check:bindings"],
+			"options": { "cwd": "${workspaceFolder}" },
+			"problemMatcher": []
+		}
+	]
+}
