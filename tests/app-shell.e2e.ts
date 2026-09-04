@@ -17,6 +17,23 @@ test('redirects the root to Library and navigates semantically', async ({ page }
 	await expect(page).toHaveURL(/\/settings$/);
 });
 
+test('supports keyboard navigation with a visible focus indicator', async ({ page }) => {
+	await page.goto('/library');
+
+	const libraryLink = page.getByRole('link', { name: 'Library' });
+	const settingsLink = page.getByRole('link', { name: 'Settings' });
+
+	await page.locator('body').press('Tab');
+	await expect(libraryLink).toBeFocused();
+	await expect(libraryLink).toHaveCSS('outline-style', 'solid');
+	await expect(libraryLink).toHaveCSS('outline-width', '2px');
+
+	await page.locator('body').press('Tab');
+	await expect(settingsLink).toBeFocused();
+	await page.keyboard.press('Enter');
+	await expect(page).toHaveURL(/\/settings$/);
+});
+
 for (const viewport of supportedViewports) {
 	test(`shell fits ${viewport.width}px viewport`, async ({ page }) => {
 		await page.setViewportSize(viewport);
