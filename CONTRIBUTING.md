@@ -26,12 +26,12 @@ Merge completed Issue work with Squash Merge only.
 
 Use this format:
 
-`<type>(<scope>)!: <imperative summary>`
+`<type>(<scope>): <imperative summary>`
 
-The scope and `!` are optional. Use the type list above, keep the summary concise,
-start it with a lowercase verb, and omit the final period. Use the body when the
-reason or trade-off is not clear from the summary. Use footers for issue references
-or breaking-change details. Keep each commit focused on one logical change.
+The scope is optional. Use the type list above, keep the summary concise, start it
+with a lowercase verb, and omit the final period. Use the body when the reason or
+trade-off is not clear from the summary. Use footers for issue references or
+breaking-change details. Keep each commit focused on one logical change.
 
 For example:
 
