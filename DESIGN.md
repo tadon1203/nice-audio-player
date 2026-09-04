@@ -20,17 +20,17 @@ Apple's human-interface work is a reference for interaction quality and spatial 
 
 ```yaml
 colors:
-  canvas: "#050505"
-  surface: "#0C0C0C"
-  surface-raised: "#121212"
-  surface-hover: "#181818"
-  surface-pressed: "#202020"
-  border-subtle: "#2A2A2A"
-  text-primary: "#F4F4F4"
-  text-secondary: "#A5A5A5"
-  text-muted: "#7A7A7A"
-  focus-ring: "#FFFFFF"
-  error: "#FF5C68"
+  canvas: '#050505'
+  surface: '#0C0C0C'
+  surface-raised: '#121212'
+  surface-hover: '#181818'
+  surface-pressed: '#202020'
+  border-subtle: '#2A2A2A'
+  text-primary: '#F4F4F4'
+  text-secondary: '#A5A5A5'
+  text-muted: '#7A7A7A'
+  focus-ring: '#FFFFFF'
+  error: '#FF5C68'
 ```
 
 The permanent interface is grayscale.
@@ -43,8 +43,8 @@ Chromatic color is reserved for semantic state such as errors. Artwork does not 
 
 ```yaml
 typography:
-  latin: "Satoshi"
-  japanese: "Noto Sans JP"
+  latin: 'Satoshi'
+  japanese: 'Noto Sans JP'
 ```
 
 Satoshi is the Latin typeface. Noto Sans JP is used for Japanese text.
@@ -60,7 +60,7 @@ layout:
   content-max: 1360px
   columns: 12
   column-gap: 24px
-  horizontal-padding: "clamp(24px, 5vw, 80px)"
+  horizontal-padding: 'clamp(24px, 5vw, 80px)'
 ```
 
 Artwork, typography, alignment, and distance establish the composition before containers do.

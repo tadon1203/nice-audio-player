@@ -1,0 +1,31 @@
+@theme static {
+	--*: initial;
+	--color-canvas: #050505;
+	--color-surface: #0c0c0c;
+	--color-surface-raised: #121212;
+	--color-surface-hover: #181818;
+	--color-surface-pressed: #202020;
+	--color-border-subtle: #2a2a2a;
+	--color-text-primary: #f4f4f4;
+	--color-text-secondary: #a5a5a5;
+	--color-text-muted: #7a7a7a;
+	--color-focus-ring: #ffffff;
+	--color-error: #ff5c68;
+	--font-interface: 'Satoshi', 'Noto Sans JP Variable', 'Segoe UI', system-ui, sans-serif;
+	--text-body-lg: 18px;
+	--text-body-lg--line-height: 1.5;
+	--text-body-md: 16px;
+	--text-body-md--line-height: 1.45;
+	--radius-control: 8px;
+	--radius-full: 9999px;
+	--spacing: 4px;
+	--breakpoint-app-wide: 800px;
+	--breakpoint-context-split: 1440px;
+}
+
+:root {
+	color-scheme: dark;
+
+	--content-max-width: 1360px;
+	--layout-inline-padding: clamp(24px, 5vw, 80px);
+}

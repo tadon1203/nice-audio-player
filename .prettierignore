@@ -1,10 +1,19 @@
-# Package Managers
-package-lock.json
-pnpm-lock.yaml
-yarn.lock
-bun.lock
-bun.lockb
+# Generated output and caches
+.svelte-kit
+build
+dist-electron
+backend/target
+test-results
 
-# Miscellaneous
-/static/
-/src/lib/api/generated/
+# Tool-managed local instructions and assets
+.agents
+.impeccable
+
+# Generated source
+src/lib/api/generated
+
+# Package-manager lockfile
+pnpm-lock.yaml
+
+# Locally acquired binary assets
+static/fonts/fontshare/*.woff2

@@ -21,8 +21,10 @@ app
 			);
 		manager.onEvent((event) => getMainWindow()?.webContents.send('app:event', event));
 		await createMainWindow();
-		app.on('activate', async () => {
-			if (BrowserWindow.getAllWindows().length === 0) await createMainWindow();
+		app.on('activate', () => {
+			void (async () => {
+				if (BrowserWindow.getAllWindows().length === 0) await createMainWindow();
+			})();
 		});
 	})
 	.catch((error: unknown) => {

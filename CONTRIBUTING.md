@@ -22,6 +22,38 @@ Individual commits use the Conventional Commit type that describes that commit.
 
 Merge completed Issue work with Squash Merge only.
 
+## Commit messages
+
+Use this format:
+
+`<type>(<scope>)!: <imperative summary>`
+
+The scope and `!` are optional. Use the type list above, keep the summary concise,
+start it with a lowercase verb, and omit the final period. Use the body when the
+reason or trade-off is not clear from the summary. Use footers for issue references
+or breaking-change details. Keep each commit focused on one logical change.
+
+For example:
+
+`fix(transport): reject malformed backend responses`
+
+This follows the [Conventional Commits specification](https://www.conventionalcommits.org/en/v1.0.0/).
+
+## Local verification
+
+Use `pnpm verify` for consistency checks and tests:
+
+- generated binding consistency
+- Svelte and TypeScript checks
+- Prettier, ESLint, and Stylelint
+- Rust formatting, Clippy, and tests
+- unit and end-to-end tests
+
+Use `pnpm validate` when the renderer, Electron bundle, and backend release
+artifacts must also be built. End-to-end tests build a temporary renderer to
+serve the application. `pnpm format` and `pnpm lint:format` use the same
+explicit file set; the former writes changes and the latter only checks them.
+
 ## Git and GitHub
 
 Use `git` for local Git operations and the GitHub connector for supported GitHub operations.

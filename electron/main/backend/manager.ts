@@ -73,10 +73,11 @@ export class BackendManager {
 	}
 
 	private waitForReady(): Promise<void> {
-		if (!this.transport) return Promise.reject(new Error('Backend transport unavailable'));
+		const transport = this.transport;
+		if (!transport) return Promise.reject(new Error('Backend transport unavailable'));
 		return new Promise((resolve, reject) => {
-			let unsubscribeEvent = () => {};
-			let unsubscribeClose = () => {};
+			let unsubscribeEvent: () => void = () => {};
+			let unsubscribeClose: () => void = () => {};
 			const cleanup = () => {
 				clearTimeout(timeout);
 				unsubscribeEvent();
@@ -86,12 +87,12 @@ export class BackendManager {
 				cleanup();
 				reject(new Error('Backend ready timeout'));
 			}, 5000);
-			unsubscribeEvent = this.transport.onEvent((event) => {
+			unsubscribeEvent = transport.onEvent((event) => {
 				if (event.event !== 'ready') return;
 				cleanup();
 				resolve();
 			});
-			unsubscribeClose = this.transport.onClose((error) => {
+			unsubscribeClose = transport.onClose((error) => {
 				cleanup();
 				reject(error);
 			});

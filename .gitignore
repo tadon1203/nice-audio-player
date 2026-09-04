@@ -3,6 +3,10 @@ node_modules
 /dist-electron
 /nice-audio-player-scaffold
 
+# Fontshare assets installed locally.
+static/fonts/fontshare/*.woff2
+!static/fonts/fontshare/README.md
+
 # Output
 .output
 .vercel

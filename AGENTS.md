@@ -26,6 +26,23 @@ Do not manually edit generated files.
 
 Application code must not import GSAP directly. Use `$lib/animation`.
 
+## Frontend
+
+- Renderer code under `src/**` MUST NOT import `electron`, `node:*`, or repository files under `electron/**`.
+- Code outside `src/lib/animation/**` MUST NOT import `gsap` or `gsap/*`.
+- Renderer access to native/backend capabilities MUST go through `$lib/api`.
+- Product design tokens MUST be declared in `src/lib/styles/theme.css`.
+- Literal color values MUST NOT appear outside `src/lib/styles/theme.css`.
+- Reusable colors, typography, radii, shadows, easing curves, spacing values, and responsive breakpoints MUST use a named token.
+- Component-specific layout geometry MAY use Tailwind arbitrary values.
+- An arbitrary value MUST NOT be used when an equivalent named Tailwind utility exists.
+- `!important` is prohibited.
+- Routed destinations MUST use SvelteKit routing as their authoritative state.
+- A component MUST NOT duplicate routed destination state in `$state`.
+- Direct DOM mutation is prohibited. DOM structure and content MUST be expressed through Svelte rendering.
+- New or changed product-visible behavior MUST include automated coverage in the same change.
+- ESLint, Stylelint, TypeScript, Svelte compiler, Prettier, and test failures MUST be fixed at their cause. Their checks MUST NOT be disabled, suppressed, or weakened to make a change pass.
+
 ## Git and GitHub
 
 Git and GitHub writes require an explicit user request.
@@ -42,3 +59,14 @@ You are able to use the Svelte MCP server, with comprehensive Svelte 5 and Svelt
 - Analyze the returned use cases and use `get-documentation` for every relevant section.
 - Whenever writing Svelte code, use `svelte-autofixer` before presenting the result and continue until it reports no issues or suggestions.
 - Use `playground-link` only after the code is complete, after asking the user for confirmation, and never for code written to project files.
+
+## Commands
+
+The canonical command definitions are in [package.json](./package.json).
+Detailed contributor workflow is documented in [CONTRIBUTING.md](./CONTRIBUTING.md#local-verification).
+
+- Use `pnpm verify` for consistency checks and tests.
+- Use `pnpm validate` for checks, tests, and all production builds.
+- Use `pnpm format` to write formatting changes.
+- Use `pnpm lint:format` to check formatting without modifying files.
+- Use `pnpm fonts:download` to acquire and verify the official Fontshare asset.

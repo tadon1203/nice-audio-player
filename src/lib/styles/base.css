@@ -1,0 +1,64 @@
+@layer base {
+	*,
+	*::before,
+	*::after {
+		box-sizing: border-box;
+	}
+
+	html,
+	body {
+		width: 100%;
+		min-width: 320px;
+		height: 100%;
+		margin: 0;
+		background: var(--color-canvas);
+	}
+
+	body {
+		overflow: hidden;
+		color: var(--color-text-primary);
+		font-family: var(--font-interface);
+		font-size: var(--text-body-md);
+		line-height: var(--text-body-md--line-height);
+		font-synthesis: none;
+		text-rendering: optimizelegibility;
+		-webkit-font-smoothing: antialiased;
+	}
+
+	button,
+	input,
+	select,
+	textarea {
+		max-inline-size: 100%;
+		font: inherit;
+	}
+
+	img,
+	svg,
+	video,
+	canvas {
+		max-inline-size: 100%;
+	}
+
+	:focus-visible {
+		outline: 2px solid var(--color-focus-ring);
+		outline-offset: 2px;
+	}
+
+	::selection {
+		background: var(--color-text-primary);
+		color: var(--color-canvas);
+	}
+}
+
+@media (forced-colors: active) {
+	html,
+	body {
+		background: Canvas;
+		color: CanvasText;
+	}
+
+	:focus-visible {
+		outline-color: Highlight;
+	}
+}

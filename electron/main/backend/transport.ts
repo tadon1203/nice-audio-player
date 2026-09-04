@@ -4,7 +4,10 @@ import type { BackendRequest, BackendResponse } from '../../../src/lib/api/gener
 
 export type Method = BackendRequest['method'];
 export type RequestFor<M extends Method> = Extract<BackendRequest, { method: M }>;
-export type ResponseFor<M extends Method> = Extract<BackendResponse, { method: M }>['result'];
+type ResponseByMethod = {
+	[M in BackendResponse['method']]: Extract<BackendResponse, { method: M }>['result'];
+};
+export type ResponseFor<M extends Method> = ResponseByMethod[M];
 
 export type BackendWireEvent = { event: string; payload?: unknown };
 export type BackendWireResponse = {
@@ -12,6 +15,29 @@ export type BackendWireResponse = {
 	result?: unknown;
 	error?: { code: string; message: string };
 };
+type Decoder<T> = (value: unknown) => T;
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+	typeof value === 'object' && value !== null;
+
+const isWireError = (value: unknown): value is { code: string; message: string } =>
+	isRecord(value) && typeof value.code === 'string' && typeof value.message === 'string';
+
+function parseWireMessage(value: unknown): BackendWireResponse | BackendWireEvent | undefined {
+	if (!isRecord(value)) return undefined;
+	const message = value;
+	if (typeof message.id === 'number') {
+		if (message.error !== undefined && !isWireError(message.error)) return undefined;
+		const response: BackendWireResponse = {
+			id: message.id,
+			result: message.result
+		};
+		if (message.error) response.error = message.error;
+		return response;
+	}
+	if (typeof message.event === 'string') return { event: message.event, payload: message.payload };
+	return undefined;
+}
 
 export class BackendTransport {
 	private nextId = 0;
@@ -38,11 +64,23 @@ export class BackendTransport {
 		);
 	}
 
-	send<M extends Method>(request: RequestFor<M>): Promise<ResponseFor<M>> {
+	send<M extends Method>(
+		request: RequestFor<M>,
+		decode: Decoder<ResponseFor<M>>
+	): Promise<ResponseFor<M>> {
 		if (this.closed) return Promise.reject(this.closeError ?? new Error('Backend is not running'));
 		const id = ++this.nextId;
-		return new Promise((resolve, reject) => {
-			this.pending.set(id, { resolve, reject });
+		return new Promise<ResponseFor<M>>((resolve, reject) => {
+			this.pending.set(id, {
+				resolve: (value) => {
+					try {
+						resolve(decode(value));
+					} catch (error) {
+						reject(error instanceof Error ? error : new Error(String(error)));
+					}
+				},
+				reject
+			});
 			this.child.stdin.write(`${JSON.stringify({ ...request, id })}\n`);
 		});
 	}
@@ -88,8 +126,9 @@ export class BackendTransport {
 
 	private receive(line: string): void {
 		try {
-			const message = JSON.parse(line) as BackendWireResponse & BackendWireEvent;
-			if (typeof message.id === 'number') {
+			const message = parseWireMessage(JSON.parse(line));
+			if (!message) throw new Error('Invalid backend message shape');
+			if ('id' in message) {
 				const request = this.pending.get(message.id);
 				if (!request) return;
 				this.pending.delete(message.id);

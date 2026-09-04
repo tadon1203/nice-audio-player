@@ -10,7 +10,9 @@ This document defines the software engineering principles used to evolve Nice Au
 
 These goals apply to architecture, code, tooling, and documentation.
 
-## Macro Design
+## Design Principles
+
+### Structure and Boundaries
 
 - **Use maintained capabilities.** Prefer platform, framework, and library capabilities over project-specific implementations. Add thin boundaries where isolation is needed; do not reproduce the capability behind them.
 
@@ -18,13 +20,27 @@ These goals apply to architecture, code, tooling, and documentation.
 
 - **Make structure legible.** Organize layers, modules, directories, and boundaries so responsibility, ownership, and dependency direction are apparent from the repository structure. Use consistent structural patterns for equivalent responsibilities; structural differences should reflect meaningful differences.
 
-## Micro Design
+### Contracts and Lifecycle
 
 - **Keep contracts and data flow explicit.** Prefer explicit dependencies, typed contracts, structured errors, and clear ownership over hidden coupling or duplicated authority.
 
 - **Make lifecycle explicit.** Treat failure, interruption, cancellation, replacement, and shutdown as normal states where they apply. Long-lived work has an owner and a defined end.
 
 - **Make intent legible.** Use consistent vocabulary, names, APIs, and local code patterns for the same concepts so responsibility, data flow, and lifecycle are understandable without tracing unnecessary implementation detail. Differences should communicate meaningful differences.
+
+### Long-term Evolution
+
+- **Optimize for continued change.** Prefer structures that remain understandable as the system, team, and requirements evolve.
+
+- **Preserve clear ownership.** Keep responsibilities, authority, and contracts explicit so that changes do not create hidden dependencies or competing sources of truth.
+
+- **Prefer repeatable confidence.** Favor decisions whose correctness can be checked consistently rather than relying on memory, convention, or individual judgment.
+
+- **Localize unavoidable complexity.** When complexity or exceptions cannot be removed, isolate them behind a clear boundary so they do not spread through the system.
+
+- **Avoid temporary permanence.** Do not turn a short-term constraint, workaround, or incidental implementation detail into an architectural commitment without deliberate justification.
+
+- **Leave the system easier to change.** A change should reduce or preserve the effort required to understand and modify the affected area.
 
 ## Documentation
 
