@@ -1,8 +1,8 @@
 import { ipcMain } from 'electron';
-import type { BackendManager } from './backend/manager';
-import { validateSender } from './security';
+import type { BackendManager } from '../backend/manager';
+import { validateSender } from '../security';
 
-export function registerIpc(manager: BackendManager): void {
+export function registerPlaybackIpc(manager: BackendManager): void {
 	const api = manager.api;
 	ipcMain.handle(
 		'app:ping',

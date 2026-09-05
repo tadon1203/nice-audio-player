@@ -3,6 +3,7 @@ use serde_json::Value;
 use std::io::{self, BufRead, Write};
 
 pub mod event;
+pub mod output;
 pub mod request;
 pub mod response;
 pub use response::{ProtocolError, Response};

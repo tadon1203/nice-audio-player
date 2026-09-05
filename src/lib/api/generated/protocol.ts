@@ -9,6 +9,14 @@ export type ApplicationActivityKind = "librarySync";
 
 export type ApplicationActivityState = "running" | "attentionRequired";
 
+export type ArtworkMimeType = "jpeg" | "png";
+
+export type ArtworkRef = {
+	contentHash: string,
+	mimeType: ArtworkMimeType,
+	relativePath: string,
+};
+
 export type AudioFileValidationError = { code: "emptyPath" } | { code: "notFound" } | { code: "notAFile" } | { code: "unsupportedExtension"; details: {
 	extension: string | null,
 } } | { code: "invalidFileName" };
@@ -28,21 +36,110 @@ export type AudioOutputSelection = { kind: "systemDefault" } | { kind: "device";
 
 export type BackendEvent = BackendEvent_Serialize | BackendEvent_Deserialize;
 
-export type BackendEvent_Deserialize = ({ event: "ready" }) & { payload?: never } | { event: "playbackStateChanged"; payload: PlaybackSnapshot_Deserialize } | { event: "playbackQueueStateChanged"; payload: PlaybackQueueSnapshot };
+export type BackendEvent_Deserialize = ({ event: "ready" }) & { payload?: never } | { event: "playbackStateChanged"; payload: PlaybackSnapshot_Deserialize } | { event: "playbackQueueStateChanged"; payload: PlaybackQueueSnapshot } | { event: "applicationActivitiesChanged"; payload: ApplicationActivity[] } | { event: "libraryScanStateChanged"; payload: LibraryScanSnapshot };
 
-export type BackendEvent_Serialize = ({ event: "ready" }) & { payload?: never } | { event: "playbackStateChanged"; payload: PlaybackSnapshot_Serialize } | { event: "playbackQueueStateChanged"; payload: PlaybackQueueSnapshot };
+export type BackendEvent_Serialize = ({ event: "ready" }) & { payload?: never } | { event: "playbackStateChanged"; payload: PlaybackSnapshot_Serialize } | { event: "playbackQueueStateChanged"; payload: PlaybackQueueSnapshot } | { event: "applicationActivitiesChanged"; payload: ApplicationActivity[] } | { event: "libraryScanStateChanged"; payload: LibraryScanSnapshot };
 
 export type BackendRequest = { method: "ping" } | { method: "getPlaybackState" } | { method: "getPlaybackQueue" } | { method: "listAudioOutputDevices" } | { method: "getApplicationActivities" } | { method: "getLibraryStatus" } | { method: "validateAudioFile"; params: {
 	path: string,
+} } | { method: "listLibraryRoots" } | { method: "registerLibraryRoot"; params: {
+	path: string,
+} } | { method: "setLibraryRootEnabled"; params: {
+	id: string,
+	enabled: boolean,
+} } | { method: "removeLibraryRoot"; params: {
+	id: string,
+} } | { method: "getLibraryScanState" } | { method: "startLibraryScan" } | { method: "cancelLibraryScan" } | { method: "listLibraryTracks"; params: {
+	after_id: string | null,
+	search: string | null,
+} } | { method: "listLibraryAlbums"; params: {
+	after_cursor: string | null,
+	search: string | null,
+} } | { method: "listLibraryAlbumArtists"; params: {
+	after_cursor: string | null,
+	search: string | null,
+} } | { method: "startLibraryTrack"; params: {
+	track_id: string,
+} } | { method: "startLibraryAlbum"; params: {
+	album_key: LibraryAlbumKey,
 } };
 
 export type BackendResponse = BackendResponse_Serialize | BackendResponse_Deserialize;
 
-export type BackendResponse_Deserialize = { method: "ping"; result: string } | { method: "getPlaybackState"; result: PlaybackSnapshot_Deserialize } | { method: "getPlaybackQueue"; result: PlaybackQueueSnapshot } | { method: "listAudioOutputDevices"; result: AudioOutputDevice[] } | { method: "getApplicationActivities"; result: ApplicationActivity[] } | { method: "getLibraryStatus"; result: LibraryStatus } | { method: "validateAudioFile"; result: Result<ValidatedAudioFile, AudioFileValidationError> };
+export type BackendResponse_Deserialize = { method: "ping"; result: string } | { method: "getPlaybackState"; result: PlaybackSnapshot_Deserialize } | { method: "getPlaybackQueue"; result: PlaybackQueueSnapshot } | { method: "listAudioOutputDevices"; result: AudioOutputDevice[] } | { method: "getApplicationActivities"; result: ApplicationActivity[] } | { method: "getLibraryStatus"; result: LibraryStatus } | { method: "validateAudioFile"; result: Result<ValidatedAudioFile, AudioFileValidationError> } | { method: "listLibraryRoots"; result: LibraryRoot[] } | { method: "registerLibraryRoot"; result: LibraryRoot } | { method: "setLibraryRootEnabled"; result: LibraryRoot } | { method: "removeLibraryRoot"; result: null } | { method: "getLibraryScanState"; result: LibraryScanSnapshot } | { method: "startLibraryScan"; result: null } | { method: "cancelLibraryScan"; result: null } | { method: "listLibraryTracks"; result: LibraryTrackPage } | { method: "listLibraryAlbums"; result: LibraryAlbumPage } | { method: "listLibraryAlbumArtists"; result: LibraryAlbumArtistPage } | { method: "startLibraryTrack"; result: PlaybackSnapshot_Deserialize } | { method: "startLibraryAlbum"; result: PlaybackSnapshot_Deserialize };
 
-export type BackendResponse_Serialize = { method: "ping"; result: string } | { method: "getPlaybackState"; result: PlaybackSnapshot_Serialize } | { method: "getPlaybackQueue"; result: PlaybackQueueSnapshot } | { method: "listAudioOutputDevices"; result: AudioOutputDevice[] } | { method: "getApplicationActivities"; result: ApplicationActivity[] } | { method: "getLibraryStatus"; result: LibraryStatus } | { method: "validateAudioFile"; result: Result<ValidatedAudioFile, AudioFileValidationError> };
+export type BackendResponse_Serialize = { method: "ping"; result: string } | { method: "getPlaybackState"; result: PlaybackSnapshot_Serialize } | { method: "getPlaybackQueue"; result: PlaybackQueueSnapshot } | { method: "listAudioOutputDevices"; result: AudioOutputDevice[] } | { method: "getApplicationActivities"; result: ApplicationActivity[] } | { method: "getLibraryStatus"; result: LibraryStatus } | { method: "validateAudioFile"; result: Result<ValidatedAudioFile, AudioFileValidationError> } | { method: "listLibraryRoots"; result: LibraryRoot[] } | { method: "registerLibraryRoot"; result: LibraryRoot } | { method: "setLibraryRootEnabled"; result: LibraryRoot } | { method: "removeLibraryRoot"; result: null } | { method: "getLibraryScanState"; result: LibraryScanSnapshot } | { method: "startLibraryScan"; result: null } | { method: "cancelLibraryScan"; result: null } | { method: "listLibraryTracks"; result: LibraryTrackPage } | { method: "listLibraryAlbums"; result: LibraryAlbumPage } | { method: "listLibraryAlbumArtists"; result: LibraryAlbumArtistPage } | { method: "startLibraryTrack"; result: PlaybackSnapshot_Serialize } | { method: "startLibraryAlbum"; result: PlaybackSnapshot_Serialize };
+
+export type LibraryAlbumArtistKey = {
+	name: string,
+};
+
+export type LibraryAlbumArtistPage = {
+	items: LibraryAlbumArtistSummary[],
+	nextCursor: string | null,
+};
+
+export type LibraryAlbumArtistSummary = {
+	key: LibraryAlbumArtistKey,
+	artwork: ArtworkRef | null,
+	albumCount: number | null,
+};
+
+export type LibraryAlbumKey = {
+	title: string,
+	albumArtist: string,
+};
+
+export type LibraryAlbumPage = {
+	items: LibraryAlbumSummary[],
+	nextCursor: string | null,
+};
+
+export type LibraryAlbumSummary = {
+	key: LibraryAlbumKey,
+	artwork: ArtworkRef | null,
+};
+
+export type LibraryFileAvailability = "available" | "missing";
+
+export type LibraryRoot = {
+	id: string,
+	path: string,
+	enabled: boolean,
+	scanGeneration: number | null,
+	lastSuccessfulScanAtMs: number | null,
+};
+
+export type LibraryScanSnapshot = {
+	state: LibraryScanState,
+	currentRoot: LibraryRoot | null,
+	discoveredCount: number | null,
+	inspectedCount: number | null,
+	indexedCount: number | null,
+	failedCount: number | null,
+	failureCode: string | null,
+};
+
+export type LibraryScanState = "idle" | "running" | "completed" | "cancelled" | "failed";
 
 export type LibraryStatus = { status: "ready" } | { status: "unavailable"; reason: LibraryUnavailableReason };
+
+export type LibraryTrackPage = {
+	items: LibraryTrackSummary[],
+	nextAfterId: string | null,
+};
+
+export type LibraryTrackSummary = {
+	id: string,
+	title: string,
+	artist: string | null,
+	album: string | null,
+	albumArtist: string | null,
+	artwork: ArtworkRef | null,
+	durationMs: number | null,
+	availability: LibraryFileAvailability,
+	playable: boolean,
+};
 
 export type LibraryUnavailableReason = "storageUnavailable" | "databaseOpenFailed" | "migrationFailed" | "schemaTooNew" | "databaseCorrupt";
 

@@ -1,8 +1,6 @@
+<script lang="ts">
+	import LibraryBrowser from '$lib/features/library/LibraryBrowser.svelte';
+</script>
+
 <svelte:head><title>Library — Nice Audio Player</title></svelte:head>
-<section
-	data-page="library"
-	class="h-full min-h-0 overflow-hidden"
-	aria-labelledby="library-page-title"
->
-	<h1 id="library-page-title" class="sr-only">Library</h1>
-</section>
+<div data-page="library" class="h-full min-h-0 overflow-hidden"><LibraryBrowser /></div>

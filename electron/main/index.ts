@@ -1,7 +1,7 @@
 import { app, BrowserWindow, protocol } from 'electron';
 import { join } from 'node:path';
 import { BackendManager } from './backend/manager';
-import { registerIpc } from './ipc';
+import { registerIpc } from './ipc/index';
 import { serveRendererRequest } from './renderer-protocol';
 import { createMainWindow, getMainWindow } from './window';
 

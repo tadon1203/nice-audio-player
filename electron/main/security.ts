@@ -18,10 +18,23 @@ export function secureWindow(window: BrowserWindow): void {
 	window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
 }
 
-export function validateSender<T>(handler: () => T | Promise<T>) {
-	return (event: Electron.IpcMainInvokeEvent): T | Promise<T> => {
+export function validateSender<TArgs extends unknown[], T>(
+	handler: (...args: TArgs) => T | Promise<T>
+) {
+	return async (event: Electron.IpcMainInvokeEvent, ...args: TArgs): Promise<T> => {
 		if (!event.senderFrame || !isTrustedRendererUrl(event.senderFrame.url))
 			throw new Error('Untrusted IPC sender');
-		return handler();
+		try {
+			return await handler(...args);
+		} catch (error) {
+			if (typeof error === 'object' && error !== null && 'code' in error) {
+				const code = (error as { code?: unknown }).code;
+				if (typeof code === 'string') {
+					const message = error instanceof Error ? error.message : 'Backend operation failed';
+					throw new Error(`[${code}] ${message}`, { cause: error });
+				}
+			}
+			throw error;
+		}
 	};
 }

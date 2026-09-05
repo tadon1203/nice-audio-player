@@ -1,5 +1,6 @@
 /** @type {import('stylelint').Config} */
 export default {
+	ignoreFiles: ['src/lib/components/ui/**/*.svelte'],
 	extends: ['stylelint-config-standard'],
 	referenceFiles: ['src/lib/styles/theme.css', 'src/routes/layout.css'],
 	rules: {

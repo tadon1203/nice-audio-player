@@ -2,88 +2,31 @@ import type { BackendTransport } from './transport';
 import type {
 	AudioOutputDevice,
 	PlaybackQueue,
-	PlaybackState
+	PlaybackState,
+	LibraryAlbumArtistPage,
+	LibraryAlbumKey,
+	LibraryAlbumPage,
+	LibraryRoot,
+	LibraryScanSnapshot,
+	LibraryTrackPage
 } from '../../../src/lib/api/contracts';
-import type {
-	PlaybackSnapshot,
-	PlaybackQueueSnapshot
-} from '../../../src/lib/api/generated/protocol';
+import {
+	decodeLibraryAlbumArtists,
+	decodeLibraryAlbums,
+	decodeLibraryRoot,
+	decodeLibraryRoots,
+	decodeLibraryScanState,
+	decodeLibraryTracks
+} from './decoders/library';
+import {
+	decodePlaybackQueue,
+	decodePlaybackState,
+	decodeLibraryPlaybackState
+} from './decoders/playback';
+import { decodeNull } from './decoders/shared';
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
 	typeof value === 'object' && value !== null;
-
-const isNullableNumber = (value: unknown): value is number | null =>
-	value === null || typeof value === 'number';
-
-const isStringValue = (values: readonly string[], value: unknown): value is string =>
-	typeof value === 'string' && values.includes(value);
-
-const isValidatedAudioFile = (value: unknown): boolean =>
-	isRecord(value) &&
-	typeof value.path === 'string' &&
-	typeof value.fileName === 'string' &&
-	typeof value.extension === 'string';
-
-const isOutputSelection = (value: unknown): boolean =>
-	isRecord(value) &&
-	(value.kind === 'systemDefault' ||
-		(value.kind === 'device' && typeof value.deviceId === 'string'));
-
-const isDeviceIdentity = (value: unknown): boolean =>
-	isRecord(value) && typeof value.id === 'string' && typeof value.name === 'string';
-
-const isPlaybackSnapshot = (value: unknown): value is PlaybackSnapshot => {
-	if (
-		!isRecord(value) ||
-		!isStringValue(['stopped', 'playing', 'paused', 'failed'], value.status) ||
-		!isNullableNumber(value.revision) ||
-		!isNullableNumber(value.volume) ||
-		typeof value.muted !== 'boolean' ||
-		!isOutputSelection(value.outputSelection) ||
-		typeof value.canGoPrevious !== 'boolean' ||
-		typeof value.canGoNext !== 'boolean'
-	)
-		return false;
-	if (value.status === 'stopped') return value.file === null || isValidatedAudioFile(value.file);
-	if (value.status === 'failed')
-		return (
-			(value.file === null || isValidatedAudioFile(value.file)) &&
-			(value.playbackId === null || typeof value.playbackId === 'string') &&
-			typeof value.error === 'string'
-		);
-	return (
-		isValidatedAudioFile(value.file) &&
-		typeof value.playbackId === 'string' &&
-		isNullableNumber(value.positionMs) &&
-		isNullableNumber(value.durationMs) &&
-		isDeviceIdentity(value.outputDevice) &&
-		typeof value.channelConversion === 'string' &&
-		typeof value.sourceSampleRate === 'number' &&
-		typeof value.outputSampleRate === 'number' &&
-		typeof value.resamplingActive === 'boolean'
-	);
-};
-
-const isPlaybackQueue = (value: unknown): value is PlaybackQueueSnapshot =>
-	isRecord(value) &&
-	isNullableNumber(value.revision) &&
-	(value.current === null ||
-		(isRecord(value.current) &&
-			typeof value.current.id === 'string' &&
-			typeof value.current.title === 'string' &&
-			(value.current.artist === null || typeof value.current.artist === 'string') &&
-			isNullableNumber(value.current.durationMs))) &&
-	Array.isArray(value.upcoming) &&
-	value.upcoming.every(
-		(item) =>
-			isRecord(item) &&
-			typeof item.id === 'string' &&
-			typeof item.title === 'string' &&
-			(item.artist === null || typeof item.artist === 'string') &&
-			isNullableNumber(item.durationMs)
-	) &&
-	isStringValue(['off', 'all', 'one'], value.repeatMode) &&
-	typeof value.shuffleEnabled === 'boolean';
 
 const isAudioOutputDevices = (value: unknown): value is AudioOutputDevice[] =>
 	Array.isArray(value) &&
@@ -102,10 +45,6 @@ function decode<T>(value: unknown, guard: (value: unknown) => value is T, name: 
 
 const decodeString = (value: unknown): string =>
 	decode(value, (item): item is string => typeof item === 'string', 'ping');
-const decodePlaybackState = (value: unknown): PlaybackState =>
-	decode(value, isPlaybackSnapshot, 'getPlaybackState');
-const decodePlaybackQueue = (value: unknown): PlaybackQueueSnapshot =>
-	decode(value, isPlaybackQueue, 'getPlaybackQueue');
 const decodeOutputDevices = (value: unknown): AudioOutputDevice[] =>
 	decode(value, isAudioOutputDevices, 'listAudioOutputDevices');
 
@@ -123,5 +62,71 @@ export class BackendApi {
 	}
 	listAudioOutputDevices(): Promise<AudioOutputDevice[]> {
 		return this.transport.send({ method: 'listAudioOutputDevices' }, decodeOutputDevices);
+	}
+	listLibraryRoots(): Promise<LibraryRoot[]> {
+		return this.transport.send({ method: 'listLibraryRoots' }, decodeLibraryRoots);
+	}
+	registerLibraryRoot(path: string): Promise<LibraryRoot> {
+		return this.transport.send(
+			{ method: 'registerLibraryRoot', params: { path } },
+			decodeLibraryRoot
+		);
+	}
+	setLibraryRootEnabled(id: string, enabled: boolean): Promise<LibraryRoot> {
+		return this.transport.send(
+			{ method: 'setLibraryRootEnabled', params: { id, enabled } },
+			decodeLibraryRoot
+		);
+	}
+	async removeLibraryRoot(id: string): Promise<void> {
+		await this.transport.send({ method: 'removeLibraryRoot', params: { id } }, (value) =>
+			decodeNull(value, 'removeLibraryRoot')
+		);
+	}
+	getLibraryScanState(): Promise<LibraryScanSnapshot> {
+		return this.transport.send({ method: 'getLibraryScanState' }, decodeLibraryScanState);
+	}
+	async startLibraryScan(): Promise<void> {
+		await this.transport.send({ method: 'startLibraryScan' }, (value) =>
+			decodeNull(value, 'startLibraryScan')
+		);
+	}
+	async cancelLibraryScan(): Promise<void> {
+		await this.transport.send({ method: 'cancelLibraryScan' }, (value) =>
+			decodeNull(value, 'cancelLibraryScan')
+		);
+	}
+	listLibraryTracks(afterId: string | null, search: string | null): Promise<LibraryTrackPage> {
+		return this.transport.send(
+			{ method: 'listLibraryTracks', params: { after_id: afterId, search } },
+			decodeLibraryTracks
+		);
+	}
+	listLibraryAlbums(afterCursor: string | null, search: string | null): Promise<LibraryAlbumPage> {
+		return this.transport.send(
+			{ method: 'listLibraryAlbums', params: { after_cursor: afterCursor, search } },
+			decodeLibraryAlbums
+		);
+	}
+	listLibraryAlbumArtists(
+		afterCursor: string | null,
+		search: string | null
+	): Promise<LibraryAlbumArtistPage> {
+		return this.transport.send(
+			{ method: 'listLibraryAlbumArtists', params: { after_cursor: afterCursor, search } },
+			decodeLibraryAlbumArtists
+		);
+	}
+	startLibraryTrack(trackId: string): Promise<PlaybackState> {
+		return this.transport.send(
+			{ method: 'startLibraryTrack', params: { track_id: trackId } },
+			decodeLibraryPlaybackState
+		);
+	}
+	startLibraryAlbum(albumKey: LibraryAlbumKey): Promise<PlaybackState> {
+		return this.transport.send(
+			{ method: 'startLibraryAlbum', params: { album_key: albumKey } },
+			decodeLibraryPlaybackState
+		);
 	}
 }

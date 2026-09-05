@@ -17,6 +17,16 @@ export type BackendWireResponse = {
 };
 type Decoder<T> = (value: unknown) => T;
 
+export class BackendProtocolError extends Error {
+	constructor(
+		readonly code: string,
+		message: string
+	) {
+		super(message);
+		this.name = 'BackendProtocolError';
+	}
+}
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
 	typeof value === 'object' && value !== null;
 
@@ -132,7 +142,8 @@ export class BackendTransport {
 				const request = this.pending.get(message.id);
 				if (!request) return;
 				this.pending.delete(message.id);
-				if (message.error) request.reject(new Error(message.error.message));
+				if (message.error)
+					request.reject(new BackendProtocolError(message.error.code, message.error.message));
 				else request.resolve(message.result);
 				return;
 			}

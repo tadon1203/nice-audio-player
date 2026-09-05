@@ -14,6 +14,8 @@
 	--font-interface: 'Satoshi', 'Noto Sans JP Variable', 'Segoe UI', system-ui, sans-serif;
 	--text-body-lg: 18px;
 	--text-body-lg--line-height: 1.5;
+	--text-body-sm: 13px;
+	--text-body-sm--line-height: 1.35;
 	--text-body-md: 16px;
 	--text-body-md--line-height: 1.45;
 	--radius-control: 8px;

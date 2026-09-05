@@ -14,6 +14,7 @@ export default defineConfig(
 		'.agents/**',
 		'.impeccable/**',
 		'.svelte-kit/**',
+		'src/lib/components/ui/**',
 		'build/**',
 		'dist-electron/**',
 		'project_snapshot.zip'
@@ -93,7 +94,18 @@ export default defineConfig(
 			'svelte/no-unused-props': ['error', { checkImportedTypes: true }],
 			'tailwindcss/classnames-order': 'off',
 			'tailwindcss/no-contradicting-classname': 'error',
-			'tailwindcss/no-custom-classname': ['error', { whitelist: ['inset-block-end-3'] }],
+			'tailwindcss/no-custom-classname': [
+				'error',
+				{
+					whitelist: [
+						'inset-block-end-3',
+						'bg-surface-muted',
+						'rounded-panel',
+						'shadow-panel',
+						'classValues'
+					]
+				}
+			],
 			'tailwindcss/no-unnecessary-arbitrary-value': 'error'
 		}
 	},

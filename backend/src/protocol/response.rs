@@ -20,6 +20,18 @@ pub enum BackendResponse {
     GetApplicationActivities(Vec<ApplicationActivity>),
     GetLibraryStatus(LibraryStatus),
     ValidateAudioFile(Result<ValidatedAudioFile, AudioFileValidationError>),
+    ListLibraryRoots(Vec<crate::library::models::LibraryRoot>),
+    RegisterLibraryRoot(crate::library::models::LibraryRoot),
+    SetLibraryRootEnabled(crate::library::models::LibraryRoot),
+    RemoveLibraryRoot(()),
+    GetLibraryScanState(crate::library::models::LibraryScanSnapshot),
+    StartLibraryScan(()),
+    CancelLibraryScan(()),
+    ListLibraryTracks(crate::library::models::LibraryTrackPage),
+    ListLibraryAlbums(crate::library::models::LibraryAlbumPage),
+    ListLibraryAlbumArtists(crate::library::models::LibraryAlbumArtistPage),
+    StartLibraryTrack(PlaybackSnapshot),
+    StartLibraryAlbum(PlaybackSnapshot),
 }
 
 #[derive(Debug, Serialize, Deserialize)]

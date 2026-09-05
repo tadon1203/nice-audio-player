@@ -1,3 +1,4 @@
+use crate::library::models::LibraryAlbumKey;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -10,7 +11,41 @@ pub enum BackendRequest {
     ListAudioOutputDevices,
     GetApplicationActivities,
     GetLibraryStatus,
-    ValidateAudioFile { path: String },
+    ValidateAudioFile {
+        path: String,
+    },
+    ListLibraryRoots,
+    RegisterLibraryRoot {
+        path: String,
+    },
+    SetLibraryRootEnabled {
+        id: String,
+        enabled: bool,
+    },
+    RemoveLibraryRoot {
+        id: String,
+    },
+    GetLibraryScanState,
+    StartLibraryScan,
+    CancelLibraryScan,
+    ListLibraryTracks {
+        after_id: Option<String>,
+        search: Option<String>,
+    },
+    ListLibraryAlbums {
+        after_cursor: Option<String>,
+        search: Option<String>,
+    },
+    ListLibraryAlbumArtists {
+        after_cursor: Option<String>,
+        search: Option<String>,
+    },
+    StartLibraryTrack {
+        track_id: String,
+    },
+    StartLibraryAlbum {
+        album_key: LibraryAlbumKey,
+    },
 }
 
 #[derive(Debug, Deserialize)]
