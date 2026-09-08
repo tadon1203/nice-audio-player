@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import type { LibraryRoot, LibraryScanSnapshot } from '../src/lib/api/contracts';
+import type { LibraryRoot, LibraryScanSnapshot } from '@shared/native-app-api';
 
 test.beforeEach(async ({ page }) => {
 	await page.addInitScript(() => {

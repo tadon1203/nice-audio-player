@@ -1,8 +1,7 @@
 /** @type {import('stylelint').Config} */
 export default {
-	ignoreFiles: ['src/lib/components/ui/**/*.svelte'],
 	extends: ['stylelint-config-standard'],
-	referenceFiles: ['src/lib/styles/theme.css', 'src/routes/layout.css'],
+	referenceFiles: ['src/styles/theme.css', 'src/styles.css'],
 	rules: {
 		'no-unknown-custom-properties': true,
 		'import-notation': 'string',
@@ -30,9 +29,8 @@ export default {
 		'custom-property-pattern': '^(?:[a-z][a-z0-9-]*(?:--[a-z0-9-]+)*|\\*)$'
 	},
 	overrides: [
-		{ files: ['**/*.svelte'], customSyntax: 'postcss-html' },
 		{
-			files: ['src/lib/styles/theme.css'],
+			files: ['src/styles/theme.css'],
 			rules: {
 				'color-no-hex': null,
 				'color-hex-length': null,

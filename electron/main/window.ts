@@ -8,6 +8,7 @@ export async function createMainWindow(): Promise<BrowserWindow> {
 	const window = new BrowserWindow({
 		width: 1280,
 		height: 800,
+		title: 'Nice Audio Player',
 		show: false,
 		webPreferences: {
 			preload: join(__dirname, 'preload/index.cjs'),

@@ -24,24 +24,79 @@ Do not weaken type checking, linting, tests, security, accessibility, or perform
 
 Do not manually edit generated files.
 
-Application code must not import GSAP directly. Use `$lib/animation`.
+## TypeScript Best Practices
+
+See the [Angular style guide](https://angular.dev/style-guide).
+
+- Use strict type checking.
+- Prefer type inference when the type is obvious.
+- Avoid the `any` type; use `unknown` when the type is uncertain.
+
+## Angular Best Practices
+
+- Always use standalone components over NgModules.
+- Do not set `standalone: true` inside Angular decorators; it is the default in Angular v20+.
+- Do not set `changeDetection: ChangeDetectionStrategy.OnPush` explicitly; OnPush is the default in Angular v22+.
+- Use signals for state management.
+- Implement lazy loading for feature routes.
+- Do not use the `@HostBinding` and `@HostListener` decorators. Put host bindings inside the `host` object of the `@Component` or `@Directive` decorator instead.
+- Use `NgOptimizedImage` for all static images. `NgOptimizedImage` does not work for inline base64 images.
+
+### Accessibility Requirements
+
+- The application MUST pass all AXE checks.
+- The application MUST follow all WCAG AA minimums, including focus management, color contrast, and ARIA attributes.
+
+### Components
+
+- Keep components small and focused on a single responsibility.
+- Use `input()` and `output()` functions instead of decorators.
+- Use `model()` for two-way bound properties with `[(prop)]` syntax instead of pairing `input()` with `output()`.
+- Use `computed()` for derived state.
+- Use `linkedSignal()` for writable state that is intrinsically dependent on other reactive state.
+- Prefer inline templates for small components.
+- Prefer Signal Forms (`@angular/forms/signals`) for new forms. They are stable in Angular v22+ and provide signal-based state, type-safe field access, and schema-based validation.
+- When not using Signal Forms, prefer Reactive Forms over template-driven forms.
+- Do not use `ngClass`; use `class` bindings instead.
+- Do not use `ngStyle`; use `style` bindings instead.
+- When using external templates or styles, use paths relative to the component TypeScript file.
+
+### State Management
+
+- Use signals for local component state.
+- Use `computed()` for derived state.
+- Keep state transformations pure and predictable.
+- Do not use `mutate` on signals; use `update` or `set` instead.
+
+### Templates
+
+- Keep templates simple and avoid complex logic.
+- Use native control flow (`@if`, `@for`, `@switch`) instead of `*ngIf`, `*ngFor`, `*ngSwitch`.
+- Use the async pipe to handle observables.
+- Do not assume globals such as `new Date()` are available in templates.
+
+### Services
+
+- Design services around a single responsibility.
+- Use the `@Service` decorator for ordinary root-provided singleton services.
+- Use `@Injectable()` when constructor injection, advanced provider configuration, or another `providedIn` scope is required.
+- Use route or component providers when lifetime should be scoped to that route or component.
+- Use the `inject()` function instead of constructor injection.
 
 ## Frontend
 
 - Renderer code under `src/**` MUST NOT import `electron`, `node:*`, or repository files under `electron/**`.
-- Code outside `src/lib/animation/**` MUST NOT import `gsap` or `gsap/*`.
-- Renderer access to native/backend capabilities MUST go through `$lib/api`.
-- Product design tokens MUST be declared in `src/lib/styles/theme.css`.
-- Literal color values MUST NOT appear outside `src/lib/styles/theme.css`.
+- Renderer access to native/backend capabilities MUST go through the shared native API contract.
+- Product design tokens MUST be declared in `src/styles/theme.css`.
+- Literal color values MUST NOT appear outside `src/styles/theme.css`.
 - Reusable colors, typography, radii, shadows, easing curves, spacing values, and responsive breakpoints MUST use a named token.
 - Component-specific layout geometry MAY use Tailwind arbitrary values.
 - An arbitrary value MUST NOT be used when an equivalent named Tailwind utility exists.
 - `!important` is prohibited.
-- Routed destinations MUST use SvelteKit routing as their authoritative state.
-- A component MUST NOT duplicate routed destination state in `$state`.
-- Direct DOM mutation is prohibited. DOM structure and content MUST be expressed through Svelte rendering.
+- Routed destinations MUST use Angular Router as their authoritative state.
+- Direct DOM mutation is prohibited. DOM structure and content MUST be expressed through Angular templates and bindings.
 - New or changed product-visible behavior MUST include automated coverage in the same change.
-- ESLint, Stylelint, TypeScript, Svelte compiler, Prettier, and test failures MUST be fixed at their cause. Their checks MUST NOT be disabled, suppressed, or weakened to make a change pass.
+- ESLint, Stylelint, TypeScript, Angular compiler, Prettier, and test failures MUST be fixed at their cause. Their checks MUST NOT be disabled, suppressed, or weakened to make a change pass.
 
 ## Git and GitHub
 
@@ -50,15 +105,6 @@ Git and GitHub writes require an explicit user request.
 Choose GitHub connector first.
 
 Follow [CONTRIBUTING.md](./CONTRIBUTING.md).
-
-## Svelte MCP and skills
-
-You are able to use the Svelte MCP server, with comprehensive Svelte 5 and SvelteKit documentation.
-
-- When asked about Svelte or SvelteKit, use `list-sections` first.
-- Analyze the returned use cases and use `get-documentation` for every relevant section.
-- Whenever writing Svelte code, use `svelte-autofixer` before presenting the result and continue until it reports no issues or suggestions.
-- Use `playground-link` only after the code is complete, after asking the user for confirmation, and never for code written to project files.
 
 ## Commands
 

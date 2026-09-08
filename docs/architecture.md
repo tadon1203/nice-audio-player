@@ -16,7 +16,7 @@ Nice Audio Player consists of three system-level components:
 
 ```
 Renderer
-SvelteKit / Svelte 5 / TypeScript / GSAP + Flip
+Angular / TypeScript
         ↓
 Desktop Host
 Electron / TypeScript
@@ -25,7 +25,7 @@ Backend
 Rust
 ```
 
-The **Renderer** owns presentation, interaction, navigation, and frontend-local state.
+The **Renderer** owns presentation, interaction, navigation, and renderer-local state.
 
 The **Desktop Host** owns the desktop process and trust boundaries, application lifecycle, platform integration, and communication between the Renderer and Backend.
 
@@ -33,21 +33,55 @@ The **Backend** owns application domain behavior, persistent state, filesystem w
 
 ## Renderer
 
-The Renderer is the SvelteKit application running in Electron's renderer process.
+The Renderer is the standalone Angular application running in Electron's renderer process.
 
-SvelteKit and Svelte 5 provide application structure, navigation, rendering, and UI state. TypeScript defines frontend contracts. GSAP and Flip provide animation capabilities through the project animation boundary.
+Angular Router is the navigation authority. Hierarchical dependency injection defines service ownership and lifetime. Signals represent current renderer state, while RxJS represents event and stream semantics. Angular components should remain small and focused; feature behavior belongs in feature services and stores rather than in templates.
 
-| Module     | Location             | Responsibility                                 |
-| ---------- | -------------------- | ---------------------------------------------- |
-| Routes     | `src/routes`         | Semantic navigation and page composition       |
-| Features   | `src/lib/features`   | Feature-specific presentation and interaction  |
-| API        | `src/lib/api`        | Renderer-facing native capability boundary     |
-| Animation  | `src/lib/animation`  | Project animation semantics and GSAP isolation |
-| Components | `src/lib/components` | Reusable UI composition                        |
+The Renderer is organized around application ownership rather than framework-specific route files:
 
-Feature code consumes shared capabilities through project boundaries rather than depending directly on Electron, backend infrastructure, or external implementation details.
+```
+src/
+├── main.ts
+├── styles/
+└── app/
+    ├── core/
+    │   ├── backend/
+    │   └── shell/
+    ├── library/
+    ├── playback/
+    ├── settings/
+    ├── app.config.ts
+    └── app.routes.ts
+```
 
-Persistent application surfaces are composed through SvelteKit layouts.
+| Area     | Location             | Responsibility                                    |
+| -------- | -------------------- | ------------------------------------------------- |
+| Core     | `src/app/core`       | Cross-feature services and application boundaries |
+| Shell    | `src/app/core/shell` | Persistent surfaces and application chrome        |
+| Library  | `src/app/library`    | Library UI, state, and interactions               |
+| Playback | `src/app/playback`   | Playback UI, state, and interactions              |
+| Settings | `src/app/settings`   | Settings UI, state, and interactions              |
+
+Feature routes should be lazy-loaded. Route-level providers are used when a service lifetime belongs to a lazy route; component-level providers are used when a lifetime belongs to a component subtree. Root providers are reserved for application-wide services.
+
+Persistent application surfaces are owned by the root application shell and composed around the Angular Router outlet.
+
+The Renderer does not import Electron or Node APIs. Native and backend capabilities are accessed through the shared native API contract exposed by Preload.
+
+## Shared Contracts
+
+Shared contracts are not runtime components, but they define the system boundary between Renderer and Desktop Host and therefore belong in the architecture:
+
+```
+shared/
+├── native-app-api.ts
+└── protocol/
+    └── generated.ts
+```
+
+`native-app-api.ts` defines the narrow API available to the Renderer through Preload. `protocol/generated.ts` is generated from the Rust protocol and defines the typed transport contract consumed by Electron and the shared boundary code.
+
+Renderer and Electron both consume these contracts. Neither side owns them; changes to the contracts are boundary changes and must preserve the trust and type boundaries between the processes.
 
 ## Desktop Host
 
@@ -55,12 +89,12 @@ The Desktop Host is implemented with Electron and TypeScript.
 
 It hosts the Renderer, defines its trust boundary, manages the desktop application lifecycle, connects the Renderer to the Backend, and owns Electron-specific platform integration.
 
-| Module  | Location           | Responsibility                                                                                                       |
-| ------- | ------------------ | -------------------------------------------------------------------------------------------------------------------- |
-| Preload | `electron/preload` | Exposes the narrow application API available to the Renderer across the trust boundary                               |
-| Main    | `electron/main`    | Application and window lifecycle, Renderer IPC routing, Backend process lifecycle, and Electron-specific integration |
+| Module  | Location           | Responsibility                                                                                     |
+| ------- | ------------------ | -------------------------------------------------------------------------------------------------- |
+| Preload | `electron/preload` | Exposes the narrow application API available to the Renderer across the trust boundary             |
+| Main    | `electron/main`    | Application and window lifecycle, Renderer IPC routing, Backend process lifecycle, and integration |
 
-The Desktop Host connects processes and platform capabilities without owning application domain behavior.
+The packaged Renderer runs with context isolation and sandboxing, receives only narrow Preload capabilities, and privileged IPC validates its sender. The Desktop Host connects processes and platform capabilities without owning application domain behavior.
 
 ## Backend
 
@@ -87,43 +121,62 @@ The Application coordinates operations that span backend modules without replaci
 The primary dependency flow is:
 
 ```
-Renderer
-   ↓
-Renderer API
-   ↓
+Angular Feature
+    ↓
+Renderer Backend Boundary
+    ↓
+Shared Native API Contract
+    ↓
 Preload
-   ↓
+    ↓
 Electron Main
-   ↓
+    ↓
 Backend Protocol
-   ↓
+    ↓
 Backend Application
-   ↓
+    ↓
 Backend Modules
 ```
 
 Dependencies follow responsibility boundaries toward the code that owns the required capability.
 
-The Renderer does not depend directly on Electron or Backend infrastructure.
+The Renderer does not depend directly on Electron or Backend infrastructure. The Desktop Host mediates trust, process, and platform boundaries without becoming a domain layer. The Backend Protocol transports operations and events without defining domain behavior.
 
-The Desktop Host mediates trust, process, and platform boundaries without becoming a domain layer.
+Each authoritative state has one owner. Rust is authoritative for domain and persistent state:
 
-The Backend Protocol transports operations and events without defining domain behavior.
+```
+Rust authoritative state
+        ↓ events / responses
+Renderer service/store
+        ↓ Signal mirrors
+Angular components
+```
 
-External dependencies are isolated behind thin project boundaries when isolation is needed. Those boundaries do not reproduce the dependency's implementation.
-
-Each authoritative state has one owner. Other parts of the system may present, cache, or mirror that state without creating competing authority.
+Renderer services and stores may cache or mirror backend state, but they must not become a competing authority. Signal propagation should use `computed()` and `linkedSignal()` where appropriate; `effect()` is not used to propagate state between signals.
 
 Renderer-owned state is limited to presentation, interaction, navigation, cached reads, and temporary user input. Mirrored Backend state preserves the identity and ordering semantics defined by its Backend owner.
 
-## Naming
+## Build and Distribution
 
-Svelte components use `PascalCase.svelte`.
+Build and packaging responsibilities are deliberately separated:
 
-TypeScript modules use `kebab-case.ts`.
+```
+Angular CLI     → Renderer build/dev server
+esbuild         → Electron main/preload
+Cargo           → Rust Backend
+Electron Forge  → package / make / signing / distribution
+```
 
-Svelte-reactive TypeScript modules use `.svelte.ts`.
+Angular CLI owns the Renderer application build using the standard `@angular/build:application` builder. esbuild owns the Electron main and Preload bundles. Cargo owns the Rust Backend binary. Electron Forge packages the completed artifacts and produces distribution outputs; it is not the Renderer or Backend build system.
 
-Rust modules and files use `snake_case`.
+Development runtime:
 
-Modules and boundaries are named for the responsibility they represent. Equivalent responsibilities use consistent terminology and structure; differences in naming or structure should reflect meaningful differences.
+```
+Angular dev server → Electron
+```
+
+The Electron window loads the Angular dev server during development. In a packaged application, the custom `nice-player://renderer/` protocol serves the Angular static build from `dist-renderer/browser/`.
+
+Angular Router uses `withHashLocation()` for Electron routing:
+
+Hash routing keeps navigation state in the URL fragment, so the static Renderer protocol does not need a server-side SPA fallback for Angular routes.

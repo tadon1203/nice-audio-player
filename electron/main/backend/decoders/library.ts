@@ -4,7 +4,7 @@ import type {
 	LibraryRoot,
 	LibraryScanSnapshot,
 	LibraryTrackPage
-} from '../../../../src/lib/api/contracts';
+} from '@shared/native-app-api';
 import { decode, isNullableNumber, isNullableString, isRecord } from './shared';
 
 const isArtwork = (value: unknown): boolean => {

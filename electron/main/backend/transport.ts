@@ -1,6 +1,6 @@
 import { createInterface } from 'node:readline';
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
-import type { BackendRequest, BackendResponse } from '../../../src/lib/api/generated/protocol';
+import type { BackendRequest, BackendResponse } from '@shared/protocol/generated';
 
 export type Method = BackendRequest['method'];
 export type RequestFor<M extends Method> = Extract<BackendRequest, { method: M }>;

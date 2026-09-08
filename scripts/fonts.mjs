@@ -18,8 +18,9 @@ const FONT_ARCHIVE_URL = 'https://api.fontshare.com/v2/fonts/download/satoshi';
 const EXPECTED_FONT_SHA256 = 'E739AFF9B4D02C264341D6D4872EDCDA28E79373AEDA936F659566A1CD3EB47F';
 const LICENSE_PATH = 'static/fonts/fontshare/LICENSE.txt';
 
-/** @param {string} repositoryRoot */
+/** @param {string} repositoryRoot @returns {string[]} */
 export function checkFonts(repositoryRoot) {
+	/** @type {string[]} */
 	const errors = [];
 	for (const relativePath of [EXPECTED_FONT_FILE]) {
 		try {

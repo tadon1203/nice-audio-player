@@ -44,7 +44,7 @@ This follows the [Conventional Commits specification](https://www.conventionalco
 Use `pnpm verify` for consistency checks and tests:
 
 - generated binding consistency
-- Svelte and TypeScript checks
+- Angular, Electron, shared TypeScript, and generated binding checks
 - Prettier, ESLint, and Stylelint
 - Rust formatting, Clippy, and tests
 - unit and end-to-end tests

@@ -1,4 +1,5 @@
 node_modules
+/.pnpm-store
 /backend/target
 /dist-electron
 /nice-audio-player-scaffold
@@ -12,8 +13,12 @@ static/fonts/fontshare/*.woff2
 .vercel
 .netlify
 .wrangler
-/.svelte-kit
+/.angular
 /build
+/dist-renderer
+/dist-backend
+/dist-package
+/out
 
 # OS
 .DS_Store
@@ -25,8 +30,5 @@ Thumbs.db
 !.env.example
 !.env.test
 
-# Vite
-vite.config.js.timestamp-*
-vite.config.ts.timestamp-*
 # Playwright
 test-results

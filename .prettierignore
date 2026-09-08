@@ -1,7 +1,8 @@
 # Generated output and caches
-.svelte-kit
+.angular
 build
 dist-electron
+dist-renderer
 backend/target
 test-results
 
@@ -10,7 +11,7 @@ test-results
 .impeccable
 
 # Generated source
-src/lib/api/generated
+shared/protocol/generated.ts
 
 # Package-manager lockfile
 pnpm-lock.yaml

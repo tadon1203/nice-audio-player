@@ -9,7 +9,7 @@ import type {
 	LibraryRoot,
 	LibraryScanSnapshot,
 	LibraryTrackPage
-} from '../../../src/lib/api/contracts';
+} from '@shared/native-app-api';
 import {
 	decodeLibraryAlbumArtists,
 	decodeLibraryAlbums,

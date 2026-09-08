@@ -1,7 +1,4 @@
-import type {
-	PlaybackQueueSnapshot,
-	PlaybackSnapshot
-} from '../../../../src/lib/api/generated/protocol';
+import type { PlaybackQueueSnapshot, PlaybackSnapshot } from '@shared/protocol/generated';
 import { decode, isNullableNumber, isRecord } from './shared';
 
 const isStringValue = (values: readonly string[], value: unknown): value is string =>

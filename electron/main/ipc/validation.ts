@@ -1,4 +1,4 @@
-import type { LibraryAlbumKey } from '../../../src/lib/api/contracts';
+import type { LibraryAlbumKey } from '@shared/native-app-api';
 
 export function requireString(value: unknown, name: string): string {
 	if (typeof value !== 'string' || value.length === 0)

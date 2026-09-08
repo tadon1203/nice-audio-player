@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { NativeAppApi } from '../../src/lib/api/contracts';
+import type { NativeAppApi } from '@shared/native-app-api';
 
 function invoke<T>(channel: string, ...args: unknown[]): Promise<T> {
 	return ipcRenderer.invoke(channel, ...args).catch((error: unknown) => {
