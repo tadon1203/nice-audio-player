@@ -9,8 +9,7 @@ import {
 } from '@angular/router';
 import { TestBed } from '@angular/core/testing';
 import { Subject } from 'rxjs';
-import { Motion } from './motion';
-import { PendingSharedTransition } from './motion.types';
+import { Motion, PendingSharedTransition } from './motion';
 import { RouteMotion } from './route-motion';
 
 describe('RouteMotion', () => {
@@ -19,7 +18,7 @@ describe('RouteMotion', () => {
 		const complete = vi.fn();
 		const cancel = vi.fn();
 		const pending: PendingSharedTransition = { complete, cancel };
-		const scope = { beginSharedTransition: vi.fn(() => pending), dispose: vi.fn() };
+		const scope = { beginSharedTransition: vi.fn(() => pending) };
 		const router = { events } as unknown as Router;
 
 		@Component({ template: '' })

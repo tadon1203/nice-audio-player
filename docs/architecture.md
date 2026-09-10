@@ -67,7 +67,7 @@ Feature routes should be lazy-loaded. Route-level providers are used when a serv
 
 Persistent application surfaces are owned by the root application shell and composed around the Angular Router outlet.
 
-The `core/motion` boundary is the sole owner of time-based visual motion, semantic object identity, motion tokens, reduced-motion policy, and Angular lifecycle/router coordination. GSAP is integrated only inside this boundary. Angular owns DOM structure, navigation, and state; GSAP owns interpolation and FLIP calculations. Features never depend directly on GSAP.
+The `core/motion` boundary is the sole Renderer boundary for time-based visual motion and GSAP integration. It owns motion tokens, reduced-motion policy, motion identity mapping, and Angular render/router coordination. Domain and feature object identity remains owned by the code that defines it; `core/motion` only maps a supplied semantic identity to motion correlation metadata. Angular owns DOM structure, navigation, and state; GSAP owns interpolation and FLIP calculations. Features never depend directly on GSAP.
 
 The Renderer does not import Electron or Node APIs. Native and backend capabilities are accessed through the shared native API contract exposed by Preload.
 

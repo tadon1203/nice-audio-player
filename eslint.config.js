@@ -86,7 +86,7 @@ export default defineConfig(
 		}
 	},
 	{
-		files: ['src/app/core/motion/internal/**/*.ts'],
+		files: ['src/app/core/motion/motion.ts', 'src/app/core/motion/motion.spec.ts'],
 		rules: {
 			'no-restricted-imports': [
 				'error',
@@ -111,7 +111,7 @@ export default defineConfig(
 	},
 	{
 		files: ['src/**/*.ts'],
-		ignores: ['src/app/core/motion/internal/**/*.ts'],
+		ignores: ['src/app/core/motion/motion.ts', 'src/app/core/motion/motion.spec.ts'],
 		rules: {
 			'no-restricted-imports': [
 				'error',

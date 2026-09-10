@@ -15,8 +15,7 @@ import {
 	Router,
 	RouterOutlet
 } from '@angular/router';
-import { Motion } from './motion';
-import { PendingSharedTransition } from './motion.types';
+import { Motion, PendingSharedTransition } from './motion';
 
 @Component({
 	imports: [RouterOutlet],
@@ -56,6 +55,7 @@ export class RouteMotion {
 		afterNextRender(
 			{
 				mixedReadWrite: () => {
+					// Flip.from() performs synchronous layout reads and writes, so this integration stays mixed.
 					if (this.pending !== pending) return;
 					pending.complete();
 					this.pending = null;
