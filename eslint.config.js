@@ -64,19 +64,44 @@ export default defineConfig(
 		}
 	},
 	{
-		files: ['src/**/*.ts'],
-		languageOptions: { parserOptions: { projectService: true } },
+		files: ['src/app/core/motion/internal/**/*.ts'],
 		rules: {
 			'no-restricted-imports': [
 				'error',
 				{
 					paths: [
-						{ name: 'electron', message: 'Renderer code must use the shared host contract.' }
+						{ name: 'electron', message: 'Renderer code must use the shared host contract.' },
+						{ name: '@angular/animations', message: 'Use the core motion boundary.' }
 					],
 					patterns: [
 						{
 							group: ['node:*', '**/electron/**'],
 							message: 'Renderer code must not depend on Node or Electron.'
+						}
+					]
+				}
+			]
+		}
+	},
+	{
+		files: ['src/**/*.ts'],
+		ignores: ['src/app/core/motion/internal/**/*.ts'],
+		rules: {
+			'no-restricted-imports': [
+				'error',
+				{
+					paths: [
+						{ name: 'electron', message: 'Renderer code must use the shared host contract.' },
+						{ name: '@angular/animations', message: 'Use the core motion boundary.' }
+					],
+					patterns: [
+						{
+							group: ['node:*', '**/electron/**'],
+							message: 'Renderer code must not depend on Node or Electron.'
+						},
+						{
+							group: ['gsap', 'gsap/*'],
+							message: 'Use src/app/core/motion instead of importing GSAP directly.'
 						}
 					]
 				}

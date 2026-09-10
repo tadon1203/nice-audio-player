@@ -46,6 +46,7 @@ src/
 └── app/
     ├── core/
     │   ├── backend/
+    │   ├── motion/
     │   └── shell/
     ├── library/
     ├── playback/
@@ -65,6 +66,8 @@ src/
 Feature routes should be lazy-loaded. Route-level providers are used when a service lifetime belongs to a lazy route; component-level providers are used when a lifetime belongs to a component subtree. Root providers are reserved for application-wide services.
 
 Persistent application surfaces are owned by the root application shell and composed around the Angular Router outlet.
+
+The `core/motion` boundary is the sole owner of time-based visual motion, semantic object identity, motion tokens, reduced-motion policy, and Angular lifecycle/router coordination. GSAP is integrated only inside this boundary. Angular owns DOM structure, navigation, and state; GSAP owns interpolation and FLIP calculations. Features never depend directly on GSAP.
 
 The Renderer does not import Electron or Node APIs. Native and backend capabilities are accessed through the shared native API contract exposed by Preload.
 

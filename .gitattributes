@@ -1,0 +1,26 @@
+# Normalize all text files to LF in the repository and working tree.
+* text eol=lf
+
+# Keep binary assets opaque to Git's text conversion.
+*.7z binary
+*.asar binary
+*.bin binary
+*.dat binary
+*.db binary
+*.dll binary
+*.exe binary
+*.gif binary
+*.ico binary
+*.jpeg binary
+*.jpg binary
+*.mp3 binary
+*.mp4 binary
+*.ogg binary
+*.pak binary
+*.png binary
+*.db-lock binary
+*.wav binary
+*.webm binary
+*.woff binary
+*.woff2 binary
+*.zip binary

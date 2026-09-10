@@ -87,9 +87,11 @@ See the [Angular style guide](https://angular.dev/style-guide).
 
 - Renderer code under `src/**` MUST NOT import `electron`, `node:*`, or repository files under `electron/**`.
 - Renderer access to native/backend capabilities MUST go through the shared native API contract.
-- Product design tokens MUST be declared in `src/styles/theme.css`.
+- Product design tokens MUST be declared in `src/styles/theme.css`, except motion duration and easing tokens, which MUST be declared in `src/app/core/motion/motion-tokens.ts`.
 - Literal color values MUST NOT appear outside `src/styles/theme.css`.
-- Reusable colors, typography, radii, shadows, easing curves, spacing values, and responsive breakpoints MUST use a named token.
+- Reusable colors, typography, radii, shadows, spacing values, and responsive breakpoints MUST use a named token from `src/styles/theme.css`.
+- Reusable motion durations and easing curves MUST use a named token from `src/app/core/motion/motion-tokens.ts`.
+- All time-based visual motion MUST go through `src/app/core/motion`; features and shell code MUST NOT depend directly on GSAP or browser animation APIs.
 - Component-specific layout geometry MAY use Tailwind arbitrary values.
 - An arbitrary value MUST NOT be used when an equivalent named Tailwind utility exists.
 - `!important` is prohibited.

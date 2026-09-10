@@ -12,6 +12,23 @@ export default {
 		'declaration-no-important': true,
 		'selector-max-id': 0,
 		'color-no-hex': true,
+		'property-disallowed-list': [
+			'animation',
+			'animation-delay',
+			'animation-direction',
+			'animation-duration',
+			'animation-fill-mode',
+			'animation-iteration-count',
+			'animation-name',
+			'animation-play-state',
+			'animation-timing-function',
+			'transition',
+			'transition-behavior',
+			'transition-delay',
+			'transition-duration',
+			'transition-property',
+			'transition-timing-function'
+		],
 		'function-disallowed-list': [
 			'rgb',
 			'rgba',
