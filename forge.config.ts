@@ -7,9 +7,10 @@ import type { ForgeConfig } from '@electron-forge/shared-types';
 const execAsync = promisify(exec);
 
 const config: ForgeConfig = {
+	outDir: resolve('build', 'forge'),
 	packagerConfig: {
 		asar: true,
-		extraResource: [resolve('dist-backend', 'backend')]
+		extraResource: [resolve('build', 'backend')]
 	},
 	makers: [
 		{
@@ -31,7 +32,7 @@ const config: ForgeConfig = {
 		packageAfterCopy: async (_config, buildPath) => {
 			await rm(buildPath, { recursive: true, force: true });
 			await mkdir(buildPath, { recursive: true });
-			await cp(resolve('dist-package'), buildPath, { recursive: true });
+			await cp(resolve('build', 'runtime'), buildPath, { recursive: true });
 		}
 	}
 };

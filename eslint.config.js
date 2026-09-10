@@ -15,8 +15,6 @@ export default defineConfig(
 		'.impeccable/**',
 		'.angular/**',
 		'build/**',
-		'dist-electron/**',
-		'dist-renderer/**',
 		'backend/target/**',
 		'project_snapshot.zip'
 	]),

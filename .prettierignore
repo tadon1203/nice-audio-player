@@ -1,8 +1,6 @@
 # Generated output and caches
 .angular
 build
-dist-electron
-dist-renderer
 backend/target
 test-results
 

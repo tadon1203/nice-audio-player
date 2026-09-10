@@ -20,7 +20,7 @@ app
 		registerIpc(manager);
 		if (process.env.NICE_AUDIO_PLAYER_DEV_SERVER_URL === undefined)
 			protocol.handle('nice-player', (request) =>
-				serveRendererRequest(join(app.getAppPath(), 'dist-renderer', 'browser'), request.url)
+				serveRendererRequest(join(app.getAppPath(), 'renderer', 'browser'), request.url)
 			);
 		manager.onEvent((event) => getMainWindow()?.webContents.send('app:event', event));
 		await createMainWindow();

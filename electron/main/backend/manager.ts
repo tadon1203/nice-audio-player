@@ -17,7 +17,7 @@ export class BackendManager {
 		this.state = 'starting';
 		const config: BackendLaunchConfig = { dataDir: join(app.getPath('userData'), 'backend') };
 		const env = { ...process.env, NICE_AUDIO_PLAYER_DATA_DIR: config.dataDir };
-		const projectRoot = join(__dirname, '..');
+		const projectRoot = app.getAppPath();
 		const child = app.isPackaged
 			? spawn(join(process.resourcesPath, 'backend', 'nice-audio-player-backend.exe'), [], { env })
 			: spawn(

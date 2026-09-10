@@ -18,7 +18,7 @@
 					"options": {
 						"browser": "src/main.ts",
 						"tsConfig": "tsconfig.app.json",
-						"outputPath": "dist-renderer",
+						"outputPath": "build/renderer",
 						"assets": [
 							{
 								"glob": "**/*",

@@ -34,7 +34,7 @@
 		"scripts/**/*.mjs",
 		"*.config.ts"
 	],
-	"exclude": ["node_modules", "build", "dist-electron", "dist-renderer", "backend/target"],
+	"exclude": ["node_modules", "build", "backend/target"],
 	"angularCompilerOptions": {
 		"enableI18nLegacyMessageIdFormat": false,
 		"strictInjectionParameters": true,

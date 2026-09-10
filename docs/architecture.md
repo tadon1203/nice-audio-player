@@ -178,7 +178,7 @@ Development runtime:
 Angular dev server → Electron
 ```
 
-The Electron window loads the Angular dev server during development. In a packaged application, the custom `nice-player://renderer/` protocol serves the Angular static build from `dist-renderer/browser/`.
+The Electron window loads the Angular dev server during development. In a packaged application, the custom `nice-player://renderer/` protocol serves the Angular static build from the staged `renderer/browser/` directory.
 
 Angular Router uses `withHashLocation()` for Electron routing:
 

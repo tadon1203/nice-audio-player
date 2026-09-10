@@ -1,7 +1,6 @@
 node_modules
 /.pnpm-store
 /backend/target
-/dist-electron
 /nice-audio-player-scaffold
 
 # Fontshare assets installed locally.
@@ -13,12 +12,8 @@ static/fonts/fontshare/*.woff2
 .vercel
 .netlify
 .wrangler
-/.angular
 /build
-/dist-renderer
-/dist-backend
-/dist-package
-/out
+/.angular
 
 # OS
 .DS_Store

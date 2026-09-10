@@ -6,13 +6,13 @@
 	"engines": {
 		"node": "^24.21.0"
 	},
-	"main": "dist-electron/main.cjs",
+	"main": "build/electron/main.cjs",
 	"version": "0.0.1",
 	"type": "module",
 	"scripts": {
 		"dev": "pnpm build:electron && concurrently --kill-others --success first --names renderer,electron \"pnpm dev:renderer\" \"wait-on --timeout 15000 http://127.0.0.1:5173/ && pnpm dev:electron\"",
 		"dev:renderer": "ng serve --host 127.0.0.1 --port 5173",
-		"dev:electron": "cross-env NICE_AUDIO_PLAYER_DEV_SERVER_URL=http://127.0.0.1:5173 electron dist-electron/main.cjs",
+		"dev:electron": "cross-env NICE_AUDIO_PLAYER_DEV_SERVER_URL=http://127.0.0.1:5173 electron build/electron/main.cjs",
 		"build:electron": "node scripts/build-electron.mjs",
 		"build:renderer": "pnpm fonts:check && ng build",
 		"fonts:download": "node scripts/fonts.mjs download",
@@ -20,7 +20,7 @@
 		"build:backend": "cargo build --release --manifest-path backend/Cargo.toml && node scripts/stage-backend.mjs",
 		"generate:bindings": "cargo run --manifest-path backend/Cargo.toml --bin generate-bindings",
 		"check:bindings": "cargo run --manifest-path backend/Cargo.toml --bin generate-bindings -- --check",
-		"electron": "pnpm build && electron dist-electron/main.cjs",
+		"electron": "pnpm build && electron build/electron/main.cjs",
 		"build": "pnpm generate:bindings && pnpm build:renderer && pnpm build:electron && pnpm build:backend",
 		"stage:runtime": "node scripts/stage-runtime.mjs",
 		"forge:package": "electron-forge package",
