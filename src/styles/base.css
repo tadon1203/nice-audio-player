@@ -1,16 +1,9 @@
 @layer base {
-	*,
-	*::before,
-	*::after {
-		box-sizing: border-box;
-	}
-
 	html,
 	body {
 		width: 100%;
 		min-width: 320px;
 		height: 100%;
-		margin: 0;
 		background: var(--color-canvas);
 	}
 
@@ -30,7 +23,6 @@
 	select,
 	textarea {
 		max-inline-size: 100%;
-		font: inherit;
 	}
 
 	img,

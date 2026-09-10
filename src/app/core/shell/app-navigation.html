@@ -1,24 +1,19 @@
 <nav
-	class="grid grid-cols-2 content-start gap-2 border-b border-border-subtle bg-surface px-6 py-2 app-wide:h-full app-wide:grid-cols-1 app-wide:border-b-0 app-wide:border-e app-wide:px-3 app-wide:pb-6 app-wide:pt-[72px]"
+	class="grid grid-cols-2 content-start gap-2 border-b border-border-subtle bg-surface px-6 py-2 app-wide:h-full app-wide:grid-cols-1 app-wide:border-e app-wide:border-b-0 app-wide:px-3 app-wide:pt-18 app-wide:pb-6"
 	aria-label="Application"
 >
 	@for (destination of destinations; track destination.route) {
 	<a
-		#active="routerLinkActive"
 		[routerLink]="destination.route"
 		routerLinkActive
 		ariaCurrentWhenActive="page"
-		class="relative flex min-h-12 items-center justify-center rounded-control px-3 text-body-lg no-underline hover:bg-surface-hover hover:text-text-primary active:bg-surface-pressed app-wide:justify-start app-wide:px-6"
-		[class.bg-surface-raised]="active.isActive"
-		[class.text-text-primary]="active.isActive"
-		[class.text-text-secondary]="!active.isActive"
+		class="group relative flex min-h-12 items-center justify-center rounded-control px-3 text-body-lg text-text-secondary no-underline hover:bg-surface-hover hover:text-text-primary active:bg-surface-pressed aria-[current=page]:bg-surface-raised aria-[current=page]:text-text-primary app-wide:justify-start app-wide:px-6"
 	>
-		{{ destination.label }} @if (active.isActive) {
+		{{ destination.label }}
 		<span
 			aria-hidden="true"
-			class="absolute inset-x-3 bottom-0 h-[3px] rounded-full bg-current app-wide:inset-x-auto app-wide:inset-y-2 app-wide:bottom-auto app-wide:start-1 app-wide:h-auto app-wide:w-[3px]"
+			class="absolute inset-x-3 bottom-0 hidden h-[3px] rounded-full bg-current group-aria-[current=page]:block app-wide:inset-x-auto app-wide:inset-y-2 app-wide:start-1 app-wide:bottom-auto app-wide:h-auto app-wide:w-[3px]"
 		></span>
-		}
 	</a>
 	}
 </nav>

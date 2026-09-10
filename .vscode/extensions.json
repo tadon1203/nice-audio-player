@@ -1,6 +1,6 @@
 {
 	"recommendations": [
-		"svelte.svelte-vscode",
+		"Angular.ng-template",
 		"esbenp.prettier-vscode",
 		"dbaeumer.vscode-eslint",
 		"bradlc.vscode-tailwindcss"

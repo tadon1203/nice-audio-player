@@ -1,8 +1,10 @@
 import prettier from 'eslint-config-prettier';
+import angular from 'angular-eslint';
 import path from 'node:path';
 import js from '@eslint/js';
 import { defineConfig, includeIgnoreFile, globalIgnores } from 'eslint/config';
 import globals from 'globals';
+import tailwindcss from 'eslint-plugin-tailwindcss';
 import ts from 'typescript-eslint';
 
 const gitignorePath = path.resolve(import.meta.dirname, '.gitignore');
@@ -31,7 +33,31 @@ export default defineConfig(
 	})),
 	prettier,
 	{
-		files: ['src/**/*.ts', 'shared/**/*.ts', 'electron/**/*.ts', 'tests/**/*.ts'],
+		files: ['src/**/*.ts'],
+		languageOptions: { globals: globals.browser },
+		rules: { 'no-undef': 'off' }
+	},
+	{
+		files: ['electron/**/*.ts', 'tests/**/*.ts', '*.config.ts'],
+		languageOptions: { globals: globals.node },
+		rules: { 'no-undef': 'off' }
+	},
+	{
+		files: ['scripts/**/*.mjs'],
+		languageOptions: { globals: globals.node },
+		rules: { 'no-undef': 'off' }
+	},
+	{
+		files: ['src/**/*.ts'],
+		extends: [...angular.configs.tsRecommended],
+		processor: angular.processInlineTemplates
+	},
+	{
+		files: ['src/**/*.html'],
+		extends: [...angular.configs.templateRecommended, ...angular.configs.templateAccessibility]
+	},
+	{
+		files: ['shared/**/*.ts', 'tests/**/*.ts'],
 		rules: {
 			'no-restricted-imports': [
 				'error',
@@ -45,10 +71,6 @@ export default defineConfig(
 				}
 			]
 		}
-	},
-	{
-		languageOptions: { globals: { ...globals.browser, ...globals.node } },
-		rules: { 'no-undef': 'off' }
 	},
 	{
 		files: ['src/**/*.ts', 'shared/**/*.ts', 'electron/**/*.ts', 'tests/**/*.ts'],
@@ -75,6 +97,10 @@ export default defineConfig(
 					],
 					patterns: [
 						{
+							group: ['../../**'],
+							message: 'Use a configured path alias instead of a deep relative import.'
+						},
+						{
 							group: ['node:*', '**/electron/**'],
 							message: 'Renderer code must not depend on Node or Electron.'
 						}
@@ -96,6 +122,10 @@ export default defineConfig(
 					],
 					patterns: [
 						{
+							group: ['../../**'],
+							message: 'Use a configured path alias instead of a deep relative import.'
+						},
+						{
 							group: ['node:*', '**/electron/**'],
 							message: 'Renderer code must not depend on Node or Electron.'
 						},
@@ -109,12 +139,17 @@ export default defineConfig(
 		}
 	},
 	{
-		files: ['electron/**/*.ts'],
-		languageOptions: { globals: globals.node },
-		rules: { 'no-restricted-imports': 'off' }
-	},
-	{
-		files: ['tests/**/*.ts'],
-		languageOptions: { globals: globals.node }
+		files: ['src/**/*.html'],
+		plugins: { tailwindcss },
+		settings: {
+			tailwindcss: {
+				attributes: ['class'],
+				cssConfigPath: './src/styles.css'
+			}
+		},
+		rules: {
+			'tailwindcss/no-contradicting-classname': 'error',
+			'tailwindcss/no-unnecessary-arbitrary-value': 'error'
+		}
 	}
 );

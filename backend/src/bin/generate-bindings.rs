@@ -16,8 +16,7 @@ fn generate(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let output =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../shared/protocol/generated.ts");
+    let output = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../shared/protocol/generated.ts");
     if std::env::args().any(|argument| argument == "--check") {
         let temporary = std::env::temp_dir().join("nice-audio-player-protocol.ts");
         generate(&temporary)?;

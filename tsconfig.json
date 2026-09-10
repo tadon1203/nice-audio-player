@@ -16,6 +16,7 @@
 		"experimentalDecorators": true,
 		"moduleResolution": "bundler",
 		"paths": {
+			"@app/*": ["./src/app/*"],
 			"@shared/*": ["./shared/*"]
 		},
 		"importHelpers": true,

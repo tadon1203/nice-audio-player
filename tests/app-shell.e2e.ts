@@ -4,12 +4,20 @@ import { expectNoHorizontalOverflow, supportedViewports } from './helpers';
 test('redirects the root to Library and navigates semantically', async ({ page }) => {
 	await page.goto('/');
 	await expect(page).toHaveURL(/\/library$/);
-	await expect(page.getByRole('link', { name: 'Library' })).toHaveAttribute('aria-current', 'page');
-	await page.getByRole('link', { name: 'Settings' }).click();
+	const libraryLink = page.getByRole('link', { name: 'Library' });
+	const settingsLink = page.getByRole('link', { name: 'Settings' });
+	await expect(libraryLink).toHaveAttribute('aria-current', 'page');
+	const libraryColor = await libraryLink.evaluate((element) => getComputedStyle(element).color);
+	const settingsColor = await settingsLink.evaluate((element) => getComputedStyle(element).color);
+	expect(libraryColor).not.toBe(settingsColor);
+	await settingsLink.click();
 	await expect(page).toHaveURL(/\/settings$/);
-	await expect(page.getByRole('link', { name: 'Settings' })).toHaveAttribute(
-		'aria-current',
-		'page'
+	await expect(settingsLink).toHaveAttribute('aria-current', 'page');
+	expect(await libraryLink.evaluate((element) => getComputedStyle(element).color)).toBe(
+		settingsColor
+	);
+	expect(await settingsLink.evaluate((element) => getComputedStyle(element).color)).toBe(
+		libraryColor
 	);
 	await page.goBack();
 	await expect(page).toHaveURL(/\/library$/);
@@ -40,5 +48,17 @@ for (const viewport of supportedViewports) {
 		await page.goto('/library');
 		await expect(page.getByTestId('app-shell')).toBeVisible();
 		await expectNoHorizontalOverflow(page);
+		if (viewport.width >= 800) {
+			const shellBox = await page.getByTestId('app-shell').boundingBox();
+			const navigationBox = await page
+				.getByRole('navigation', { name: 'Application' })
+				.boundingBox();
+
+			expect(shellBox).not.toBeNull();
+			expect(navigationBox).not.toBeNull();
+			expect(
+				Math.abs(navigationBox!.y + navigationBox!.height - (shellBox!.y + shellBox!.height))
+			).toBeLessThanOrEqual(1);
+		}
 	});
 }

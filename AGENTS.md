@@ -92,13 +92,22 @@ See the [Angular style guide](https://angular.dev/style-guide).
 - Reusable colors, typography, radii, shadows, spacing values, and responsive breakpoints MUST use a named token from `src/styles/theme.css`.
 - Reusable motion durations and easing curves MUST use a named token from `src/app/core/motion/motion-tokens.ts`.
 - All time-based visual motion MUST go through `src/app/core/motion`; features and shell code MUST NOT depend directly on GSAP or browser animation APIs.
-- Component-specific layout geometry MAY use Tailwind arbitrary values.
-- An arbitrary value MUST NOT be used when an equivalent named Tailwind utility exists.
 - `!important` is prohibited.
 - Routed destinations MUST use Angular Router as their authoritative state.
 - Direct DOM mutation is prohibited. DOM structure and content MUST be expressed through Angular templates and bindings.
 - New or changed product-visible behavior MUST include automated coverage in the same change.
 - ESLint, Stylelint, TypeScript, Angular compiler, Prettier, and test failures MUST be fixed at their cause. Their checks MUST NOT be disabled, suppressed, or weakened to make a change pass.
+
+### Tailwind CSS
+
+- Every Tailwind utility name MUST appear completely and statically in source. Utility names MUST NOT be constructed by interpolation or string concatenation.
+- A named Tailwind utility MUST be used when it represents the required value. An arbitrary value MAY be used only when no equivalent named utility exists and the value is component-specific geometry.
+- Two utilities that write the same CSS property MUST NOT be applied in the same variant. Overrides across different responsive, pseudo-class, ARIA, or `data-*` variants are allowed.
+- If a visual state is already represented by a native state, an ARIA attribute, or a `data-*` attribute, its styling MUST use the corresponding Tailwind variant. An Angular class binding MUST NOT be created only to duplicate that state for styling.
+- Repeated application markup with the same styling and behavior MUST be deduplicated with Angular control flow or a focused Angular component. `@apply` or a class-string helper MUST NOT be introduced only to shorten a Tailwind class list.
+- When a direct Grid or Flex child is extracted into an Angular component, the new component host MUST preserve the sizing and placement responsibilities of the replaced element.
+- Tailwind class ordering MUST be produced by `prettier-plugin-tailwindcss`. Class order MUST NOT be maintained manually.
+- Unit tests MUST assert semantic behavior and MUST NOT assert Tailwind class names as implementation details.
 
 ## Git and GitHub
 
