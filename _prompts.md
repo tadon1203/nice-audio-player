@@ -26,7 +26,7 @@ DO NOT write comments instead of code.
 
 snapshotをワークスペースに上書き展開して。
 
-AGENTS.mdと、そこから今回の作業に関係するsource of truthを読んで。
+AGENTS.mdと、そこからすべてのdocsを読んで。
 アーキテクチャ、コード構造、実行経路が把握できる程度に、現在のコード・caller・testを読んで。
 
 Project Contextからコンテキストを参照することが許可されているが、参照した情報がoutdatedでないことを、提供されたsnapshotやdiffに対して保証する必要がある。
