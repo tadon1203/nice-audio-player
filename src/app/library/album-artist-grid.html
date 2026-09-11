@@ -1,32 +1,45 @@
-<div
-	class="h-full min-h-0 [scrollbar-gutter:stable] overflow-y-auto"
-	[scrollTop]="state().scrollTop"
-	(scroll)="onScroll($event)"
->
-	@if (state().loadState === 'loading' && state().items.length === 0) {
-	<p class="p-8 text-body-md text-text-secondary" role="status">Loading artists…</p>
-	} @else if (state().error) {
-	<p class="p-8 text-body-md text-error" role="alert">{{ state().error }}</p>
-	} @else if (state().items.length === 0) {
-	<p class="p-8 text-body-md text-text-secondary" role="status">
-		@if (state().filter === '') { No artists in your library. } @else { No results for “{{
-		state().filter }}”. }
-	</p>
-	} @else {
-	<div class="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-6 p-8">
-		@for (artist of state().items; track artist.key.name) {
-		<article class="min-w-0 p-2">
-			<app-artwork class="w-full" [artwork]="artist.artwork" [alt]="artist.key.name + ' artwork'" />
-			<h2 class="mt-3 truncate text-body-md text-text-primary">{{ artist.key.name }}</h2>
-			@if (artist.albumCount !== null) {
-			<p class="mt-1 text-body-sm text-text-secondary">{{ artist.albumCount }} albums</p>
+<app-page-frame class="h-full min-h-0">
+	<div
+		data-library-scroll-region
+		class="h-full min-h-0 [scrollbar-gutter:stable] overflow-y-auto"
+		[scrollTop]="state().scrollTop"
+		(scroll)="onScroll($event)"
+	>
+		@if (state().loadState === 'loading' && state().items.length === 0) {
+		<p class="py-8 text-body-md text-text-secondary" role="status">Loading artists…</p>
+		} @else if (state().error) {
+		<p class="py-8 text-body-md text-error" role="alert">{{ state().error }}</p>
+		} @else if (state().items.length === 0) {
+		<p class="py-8 text-body-md text-text-secondary" role="status">
+			@if (state().filter === '') { No artists in your library. } @else { No results for “{{
+			state().filter }}”. }
+		</p>
+		} @else {
+		<div class="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-6">
+			@for (artist of state().items; track artist.key.name) {
+			<button
+				type="button"
+				appButton="secondary"
+				class="min-w-0 flex-col items-stretch gap-3 p-2 text-start"
+				[aria-label]="'Browse albums by ' + artist.key.name"
+				(click)="selectArtist.emit(artist.key.name)"
+			>
+				<app-artwork
+					class="w-full"
+					[artwork]="artist.artwork"
+					[alt]="artist.key.name + ' artwork'"
+				/>
+				<span class="truncate text-body-md text-text-primary">{{ artist.key.name }}</span>
+				@if (artist.albumCount !== null) {
+				<span class="text-body-sm text-text-secondary">{{ artist.albumCount }} albums</span>
+				}
+			</button>
 			}
-		</article>
-		}
+		</div>
+		@if (state().nextCursor !== null) {
+		<div class="flex justify-center pb-8">
+			<button type="button" appButton="secondary" (click)="loadMore.emit()">Load more</button>
+		</div>
+		} }
 	</div>
-	@if (state().nextCursor !== null) {
-	<div class="flex justify-center px-8 pb-8">
-		<button type="button" appButton="secondary" (click)="loadMore.emit()">Load more</button>
-	</div>
-	} }
-</div>
+</app-page-frame>

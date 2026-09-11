@@ -9,6 +9,11 @@ import { createMainWindow, getMainWindow } from './window';
 
 if (squirrelStartup) app.quit();
 
+if (process.env.NICE_AUDIO_PLAYER_E2E === '1') {
+	const testDataDirectory = process.env.NICE_AUDIO_PLAYER_TEST_DATA_DIR;
+	if (testDataDirectory) app.setPath('userData', testDataDirectory);
+}
+
 protocol.registerSchemesAsPrivileged([
 	{ scheme: 'nice-player', privileges: { standard: true, secure: true, supportFetchAPI: true } },
 	{ scheme: 'nice-artwork', privileges: { standard: true, secure: true, supportFetchAPI: true } }

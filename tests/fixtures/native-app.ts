@@ -240,7 +240,7 @@ export async function installNativeAppFixture(page: Page): Promise<void> {
 			listLibraryAlbums: (_afterCursor: string | null, search: string | null) =>
 				Promise.resolve({
 					items:
-						roots.length === 0 || (search !== null && !'Test album'.includes(search))
+						roots.length === 0 || (search !== null && !'Test album Test artist'.includes(search))
 							? []
 							: [{ key: { title: 'Test album', albumArtist: 'Test artist' }, artwork: null }],
 					nextCursor: null

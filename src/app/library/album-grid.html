@@ -1,36 +1,43 @@
-<div
-	class="h-full min-h-0 [scrollbar-gutter:stable] overflow-y-auto"
-	[scrollTop]="state().scrollTop"
-	(scroll)="onScroll($event)"
->
-	@if (state().loadState === 'loading' && state().items.length === 0) {
-	<p class="p-8 text-body-md text-text-secondary" role="status">Loading albums…</p>
-	} @else if (state().error) {
-	<p class="p-8 text-body-md text-error" role="alert">{{ state().error }}</p>
-	} @else if (state().items.length === 0) {
-	<p class="p-8 text-body-md text-text-secondary" role="status">
-		@if (state().filter === '') { No albums in your library. } @else { No results for “{{
-		state().filter }}”. }
-	</p>
-	} @else {
-	<div class="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-6 p-8">
-		@for (album of state().items; track album.key.title + album.key.albumArtist) {
-		<button
-			type="button"
-			appButton="secondary"
-			class="min-w-0 flex-col items-stretch gap-3 p-2 text-start"
-			[aria-label]="'Play album ' + album.key.title + ' by ' + album.key.albumArtist"
-			(click)="playAlbum.emit(album.key)"
-		>
-			<app-artwork class="w-full" [artwork]="album.artwork" [alt]="album.key.title + ' artwork'" />
-			<span class="truncate text-body-md text-text-primary">{{ album.key.title }}</span>
-			<span class="truncate text-body-sm text-text-secondary">{{ album.key.albumArtist }}</span>
-		</button>
-		}
+<app-page-frame class="h-full min-h-0">
+	<div
+		data-library-scroll-region
+		class="h-full min-h-0 [scrollbar-gutter:stable] overflow-y-auto"
+		[scrollTop]="state().scrollTop"
+		(scroll)="onScroll($event)"
+	>
+		@if (state().loadState === 'loading' && state().items.length === 0) {
+		<p class="py-8 text-body-md text-text-secondary" role="status">Loading albums…</p>
+		} @else if (state().error) {
+		<p class="py-8 text-body-md text-error" role="alert">{{ state().error }}</p>
+		} @else if (state().items.length === 0) {
+		<p class="py-8 text-body-md text-text-secondary" role="status">
+			@if (state().filter === '') { No albums in your library. } @else { No results for “{{
+			state().filter }}”. }
+		</p>
+		} @else {
+		<div class="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-6">
+			@for (album of state().items; track album.key.title + album.key.albumArtist) {
+			<button
+				type="button"
+				appButton="secondary"
+				class="min-w-0 flex-col items-stretch gap-3 p-2 text-start"
+				[aria-label]="'Play album ' + album.key.title + ' by ' + album.key.albumArtist"
+				(click)="playAlbum.emit(album.key)"
+			>
+				<app-artwork
+					class="w-full"
+					[artwork]="album.artwork"
+					[alt]="album.key.title + ' artwork'"
+				/>
+				<span class="truncate text-body-md text-text-primary">{{ album.key.title }}</span>
+				<span class="truncate text-body-sm text-text-secondary">{{ album.key.albumArtist }}</span>
+			</button>
+			}
+		</div>
+		@if (state().nextCursor !== null) {
+		<div class="flex justify-center pb-8">
+			<button type="button" appButton="secondary" (click)="loadMore.emit()">Load more</button>
+		</div>
+		} }
 	</div>
-	@if (state().nextCursor !== null) {
-	<div class="flex justify-center px-8 pb-8">
-		<button type="button" appButton="secondary" (click)="loadMore.emit()">Load more</button>
-	</div>
-	} }
-</div>
+</app-page-frame>

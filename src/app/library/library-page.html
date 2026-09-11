@@ -51,7 +51,14 @@
 	</header>
 
 	<div class="min-h-0">
-		<div ngTabPanel value="albums" class="h-full min-h-0" [preserveContent]="true">
+		<div
+			ngTabPanel
+			#albumsPanel="ngTabPanel"
+			value="albums"
+			class="h-full min-h-0"
+			[hidden]="!albumsPanel.visible()"
+			[preserveContent]="true"
+		>
 			<ng-template ngTabContent>
 				@if (library.initializing()) {
 				<p class="p-8 text-body-md text-text-secondary" role="status">Loading library…</p>
@@ -67,7 +74,14 @@
 				}
 			</ng-template>
 		</div>
-		<div ngTabPanel value="albumArtists" class="h-full min-h-0" [preserveContent]="true">
+		<div
+			ngTabPanel
+			#albumArtistsPanel="ngTabPanel"
+			value="albumArtists"
+			class="h-full min-h-0"
+			[hidden]="!albumArtistsPanel.visible()"
+			[preserveContent]="true"
+		>
 			<ng-template ngTabContent>
 				@if (library.initializing()) {
 				<p class="p-8 text-body-md text-text-secondary" role="status">Loading library…</p>
@@ -76,13 +90,21 @@
 				} @else {
 				<app-album-artist-grid
 					[state]="workspace.albumArtists()"
+					(selectArtist)="openArtistAlbums($event)"
 					(loadMore)="workspace.loadMore('albumArtists')"
 					(scrollTopChange)="onScroll('albumArtists', $event)"
 				/>
 				}
 			</ng-template>
 		</div>
-		<div ngTabPanel value="tracks" class="h-full min-h-0" [preserveContent]="true">
+		<div
+			ngTabPanel
+			#tracksPanel="ngTabPanel"
+			value="tracks"
+			class="h-full min-h-0"
+			[hidden]="!tracksPanel.visible()"
+			[preserveContent]="true"
+		>
 			<ng-template ngTabContent>
 				@if (library.initializing()) {
 				<p class="p-8 text-body-md text-text-secondary" role="status">Loading library…</p>

@@ -56,6 +56,11 @@ export class LibraryPage {
 		this.workspace.setFilter(presentation, (event.target as HTMLInputElement).value);
 	}
 
+	openArtistAlbums(artistName: string): void {
+		this.workspace.setFilter('albums', artistName);
+		this.workspace.selectPresentation('albums');
+	}
+
 	onScroll(presentation: LibraryPresentation, top: number): void {
 		this.workspace.setScrollTop(presentation, top);
 	}
