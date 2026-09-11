@@ -8,6 +8,8 @@ import type {
 	LibraryAlbumPage,
 	LibraryRoot,
 	LibraryScanSnapshot,
+	LibraryStatus,
+	LibraryTrackSummary,
 	LibraryTrackPage
 } from '@shared/native-app-api';
 import {
@@ -16,6 +18,8 @@ import {
 	decodeLibraryRoot,
 	decodeLibraryRoots,
 	decodeLibraryScanState,
+	decodeLibraryStatus,
+	decodeLibraryTrack,
 	decodeLibraryTracks
 } from './decoders/library';
 import {
@@ -60,11 +64,50 @@ export class BackendApi {
 	getPlaybackQueue(): Promise<PlaybackQueue> {
 		return this.transport.send({ method: 'getPlaybackQueue' }, decodePlaybackQueue);
 	}
+	pausePlayback(): Promise<PlaybackState> {
+		return this.transport.send({ method: 'pausePlayback' }, decodePlaybackState);
+	}
+	resumePlayback(): Promise<PlaybackState> {
+		return this.transport.send({ method: 'resumePlayback' }, decodePlaybackState);
+	}
+	previousPlayback(): Promise<PlaybackState> {
+		return this.transport.send({ method: 'previousPlayback' }, decodePlaybackState);
+	}
+	nextPlayback(): Promise<PlaybackState> {
+		return this.transport.send({ method: 'nextPlayback' }, decodePlaybackState);
+	}
+	seekPlayback(positionMs: number): Promise<PlaybackState> {
+		return this.transport.send(
+			{ method: 'seekPlayback', params: { position_ms: positionMs } },
+			decodePlaybackState
+		);
+	}
+	setPlaybackVolume(volume: number): Promise<PlaybackState> {
+		return this.transport.send(
+			{ method: 'setPlaybackVolume', params: { volume } },
+			decodePlaybackState
+		);
+	}
+	setPlaybackMuted(muted: boolean): Promise<PlaybackState> {
+		return this.transport.send(
+			{ method: 'setPlaybackMuted', params: { muted } },
+			decodePlaybackState
+		);
+	}
 	listAudioOutputDevices(): Promise<AudioOutputDevice[]> {
 		return this.transport.send({ method: 'listAudioOutputDevices' }, decodeOutputDevices);
 	}
 	listLibraryRoots(): Promise<LibraryRoot[]> {
 		return this.transport.send({ method: 'listLibraryRoots' }, decodeLibraryRoots);
+	}
+	getLibraryStatus(): Promise<LibraryStatus> {
+		return this.transport.send({ method: 'getLibraryStatus' }, decodeLibraryStatus);
+	}
+	getLibraryTrackForPath(path: string): Promise<LibraryTrackSummary | null> {
+		return this.transport.send(
+			{ method: 'getLibraryTrackForPath', params: { path } },
+			decodeLibraryTrack
+		);
 	}
 	registerLibraryRoot(path: string): Promise<LibraryRoot> {
 		return this.transport.send(

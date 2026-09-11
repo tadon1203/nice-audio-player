@@ -17,6 +17,18 @@ export function requireBoolean(value: unknown, name: string): boolean {
 	return value;
 }
 
+export function requireNonNegativeInteger(value: unknown, name: string): number {
+	if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0)
+		throw new TypeError(`${name} must be a non-negative safe integer`);
+	return value;
+}
+
+export function requireUnitInterval(value: unknown, name: string): number {
+	if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 1)
+		throw new TypeError(`${name} must be between 0 and 1`);
+	return value;
+}
+
 export function requireAlbumKey(value: unknown): LibraryAlbumKey {
 	if (
 		typeof value !== 'object' ||

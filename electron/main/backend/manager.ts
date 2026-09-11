@@ -1,8 +1,11 @@
 import { spawn } from 'node:child_process';
-import { join } from 'node:path';
 import { app } from 'electron';
 import { BackendApi } from './api';
-import { resolveDevelopmentBackend, resolvePackagedBackendExecutable } from '../runtime-paths';
+import {
+	resolveBackendDataDirectory,
+	resolveDevelopmentBackend,
+	resolvePackagedBackendExecutable
+} from '../runtime-paths';
 import { BackendTransport, type BackendWireEvent } from './transport';
 
 export type BackendLaunchConfig = { dataDir: string };
@@ -16,7 +19,9 @@ export class BackendManager {
 	async start(): Promise<BackendApi> {
 		if (this.state !== 'created') throw new Error(`Backend cannot start from ${this.state}`);
 		this.state = 'starting';
-		const config: BackendLaunchConfig = { dataDir: join(app.getPath('userData'), 'backend') };
+		const config: BackendLaunchConfig = {
+			dataDir: resolveBackendDataDirectory(app.getPath('userData'))
+		};
 		const env = { ...process.env, NICE_AUDIO_PLAYER_DATA_DIR: config.dataDir };
 		const projectRoot = app.getAppPath();
 		const developmentPaths = resolveDevelopmentBackend(projectRoot);

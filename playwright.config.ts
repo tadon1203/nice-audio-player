@@ -2,7 +2,7 @@ import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
 	webServer: {
-		command: 'pnpm exec ng serve --host 127.0.0.1 --port 4200',
+		command: 'pnpm run test:renderer',
 		port: 4200
 	},
 	testMatch: '**/*.e2e.{ts,js}',

@@ -55,8 +55,32 @@ impl BackendApp {
             BackendRequest::GetLibraryStatus => serialize(self.library.status()),
             BackendRequest::GetPlaybackState => serialize(self.playback.snapshot()),
             BackendRequest::GetPlaybackQueue => serialize(self.playback.queue_snapshot()),
+            BackendRequest::PausePlayback => encode(self.playback.handle().pause(), playback_error),
+            BackendRequest::ResumePlayback => {
+                encode(self.playback.handle().resume(), playback_error)
+            }
+            BackendRequest::PreviousPlayback => {
+                encode(self.playback.handle().previous(), playback_error)
+            }
+            BackendRequest::NextPlayback => encode(self.playback.handle().next(), playback_error),
+            BackendRequest::SeekPlayback { position_ms } => {
+                encode(self.playback.handle().seek(position_ms), playback_error)
+            }
+            BackendRequest::SetPlaybackVolume { volume } => {
+                encode(self.playback.handle().set_volume(volume), playback_error)
+            }
+            BackendRequest::SetPlaybackMuted { muted } => {
+                if muted {
+                    encode(self.playback.handle().mute(), playback_error)
+                } else {
+                    encode(self.playback.handle().unmute(), playback_error)
+                }
+            }
             BackendRequest::ListAudioOutputDevices => serialize(list_output_devices()),
             BackendRequest::ValidateAudioFile { path } => self.validate(path),
+            BackendRequest::GetLibraryTrackForPath { path } => {
+                encode(self.library.handle().track_for_path(path), library_error)
+            }
             BackendRequest::ListLibraryRoots => {
                 encode(self.library.handle().roots(), library_error)
             }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BackendProtocolError } from '../electron/main/backend/transport';
+import { resolveArtworkRequest } from '../electron/main/artwork-protocol';
 import { isTrustedRendererUrl, validateSender } from '../electron/main/security';
 import {
 	resolveDevelopmentBackend,
@@ -45,5 +46,32 @@ describe('Electron boundaries', () => {
 			cwd: 'C:/repository',
 			manifestPath: 'C:\\repository\\backend\\Cargo.toml'
 		});
+	});
+
+	it('accepts only canonical artwork URLs under the backend data root', () => {
+		const hash = 'abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789';
+		const valid = `nice-artwork://asset/artwork/ab/${hash}.jpg`;
+		expect(resolveArtworkRequest('C:/user-data/backend', valid)).toEqual({
+			path: 'C:\\user-data\\backend\\artwork\\ab\\' + hash + '.jpg',
+			mimeType: 'image/jpeg'
+		});
+		expect(
+			resolveArtworkRequest('C:/user-data/backend', `nice-artwork://asset/artwork/../${hash}.jpg`)
+		).toBeNull();
+		expect(
+			resolveArtworkRequest(
+				'C:/user-data/backend',
+				`nice-artwork://asset/artwork/%2e%2e/${hash}.jpg`
+			)
+		).toBeNull();
+		expect(
+			resolveArtworkRequest('C:/user-data/backend', `nice-artwork://other/artwork/ab/${hash}.jpg`)
+		).toBeNull();
+		expect(
+			resolveArtworkRequest('C:/user-data/backend', `nice-artwork://asset/artwork/ac/${hash}.jpg`)
+		).toBeNull();
+		expect(
+			resolveArtworkRequest('C:/user-data/backend', `nice-artwork://asset/artwork/ab/${hash}.gif`)
+		).toBeNull();
 	});
 });

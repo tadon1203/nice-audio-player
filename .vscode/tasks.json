@@ -40,7 +40,7 @@
 			"label": "Nice Audio Player: generate bindings",
 			"type": "shell",
 			"command": "pnpm.cmd",
-			"args": ["generate:bindings"],
+			"args": ["bindings:generate"],
 			"options": { "cwd": "${workspaceFolder}" },
 			"problemMatcher": []
 		},
@@ -48,7 +48,7 @@
 			"label": "Nice Audio Player: check bindings",
 			"type": "shell",
 			"command": "pnpm.cmd",
-			"args": ["check:bindings"],
+			"args": ["bindings:check"],
 			"options": { "cwd": "${workspaceFolder}" },
 			"problemMatcher": []
 		}

@@ -49,15 +49,17 @@ for (const viewport of supportedViewports) {
 		await expect(page.getByTestId('app-shell')).toBeVisible();
 		await expectNoHorizontalOverflow(page);
 		if (viewport.width >= 800) {
-			const shellBox = await page.getByTestId('app-shell').boundingBox();
+			const workspaceBox = await page.locator('[data-slot="app-workspace"]').boundingBox();
 			const navigationBox = await page
 				.getByRole('navigation', { name: 'Application' })
 				.boundingBox();
 
-			expect(shellBox).not.toBeNull();
+			expect(workspaceBox).not.toBeNull();
 			expect(navigationBox).not.toBeNull();
 			expect(
-				Math.abs(navigationBox!.y + navigationBox!.height - (shellBox!.y + shellBox!.height))
+				Math.abs(
+					navigationBox!.y + navigationBox!.height - (workspaceBox!.y + workspaceBox!.height)
+				)
 			).toBeLessThanOrEqual(1);
 		}
 	});

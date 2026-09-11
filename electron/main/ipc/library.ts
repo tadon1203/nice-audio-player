@@ -11,6 +11,14 @@ import {
 export function registerLibraryIpc(manager: BackendManager): void {
 	const api = manager.api;
 	ipcMain.handle(
+		'library:get-status',
+		validateSender(() => api.getLibraryStatus())
+	);
+	ipcMain.handle(
+		'library:get-track-for-path',
+		validateSender((path: unknown) => api.getLibraryTrackForPath(requireString(path, 'path')))
+	);
+	ipcMain.handle(
 		'library:list-roots',
 		validateSender(() => api.listLibraryRoots())
 	);

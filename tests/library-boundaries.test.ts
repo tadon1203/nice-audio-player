@@ -3,7 +3,9 @@ import {
 	requireAlbumKey,
 	requireBoolean,
 	requireNullableString,
-	requireString
+	requireString,
+	requireNonNegativeInteger,
+	requireUnitInterval
 } from '../electron/main/ipc/validation';
 import {
 	decodeLibraryAlbumArtists,
@@ -18,6 +20,8 @@ describe('slice boundary contracts', () => {
 		expect(() => requireNullableString(1, 'search')).toThrow();
 		expect(() => requireBoolean('true', 'enabled')).toThrow();
 		expect(() => requireAlbumKey({ title: 'Album' })).toThrow();
+		expect(() => requireNonNegativeInteger(-1, 'positionMs')).toThrow();
+		expect(() => requireUnitInterval(1.1, 'volume')).toThrow();
 	});
 
 	it('rejects malformed catalog and playback responses', () => {

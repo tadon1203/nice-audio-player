@@ -1,12 +1,18 @@
 import type {
 	AudioOutputDevice as GeneratedAudioOutputDevice,
+	ArtworkRef,
 	BackendEvent,
 	LibraryAlbumArtistPage,
+	LibraryAlbumArtistSummary,
 	LibraryAlbumKey,
 	LibraryAlbumPage,
+	LibraryAlbumSummary,
 	LibraryRoot,
 	LibraryScanSnapshot,
 	LibraryTrackPage,
+	LibraryTrackSummary,
+	LibraryStatus,
+	PlaybackFailureCode,
 	PlaybackQueueSnapshot,
 	PlaybackSnapshot
 } from './protocol/generated';
@@ -16,19 +22,33 @@ export type PlaybackState = PlaybackSnapshot;
 export type PlaybackQueue = PlaybackQueueSnapshot;
 export type AppEvent = BackendEvent;
 export type {
+	ArtworkRef,
 	LibraryAlbumArtistPage,
+	LibraryAlbumArtistSummary,
 	LibraryAlbumKey,
 	LibraryAlbumPage,
+	LibraryAlbumSummary,
 	LibraryRoot,
 	LibraryScanSnapshot,
-	LibraryTrackPage
+	LibraryStatus,
+	LibraryTrackPage,
+	LibraryTrackSummary,
+	PlaybackFailureCode
 };
 export interface NativeAppApi {
 	ping(): Promise<string>;
 	getPlaybackState(): Promise<PlaybackState>;
 	getPlaybackQueue(): Promise<PlaybackQueue>;
+	pausePlayback(): Promise<PlaybackState>;
+	resumePlayback(): Promise<PlaybackState>;
+	previousPlayback(): Promise<PlaybackState>;
+	nextPlayback(): Promise<PlaybackState>;
+	seekPlayback(positionMs: number): Promise<PlaybackState>;
+	setPlaybackVolume(volume: number): Promise<PlaybackState>;
+	setPlaybackMuted(muted: boolean): Promise<PlaybackState>;
 	listAudioOutputDevices(): Promise<AudioOutputDevice[]>;
 	selectLibraryDirectory(): Promise<string | null>;
+	getLibraryStatus(): Promise<LibraryStatus>;
 	listLibraryRoots(): Promise<LibraryRoot[]>;
 	registerLibraryRoot(path: string): Promise<LibraryRoot>;
 	setLibraryRootEnabled(id: string, enabled: boolean): Promise<LibraryRoot>;
@@ -42,6 +62,7 @@ export interface NativeAppApi {
 		afterCursor: string | null,
 		search: string | null
 	): Promise<LibraryAlbumArtistPage>;
+	getLibraryTrackForPath(path: string): Promise<LibraryTrackSummary | null>;
 	startLibraryTrack(trackId: string): Promise<PlaybackState>;
 	startLibraryAlbum(albumKey: LibraryAlbumKey): Promise<PlaybackState>;
 	onEvent(listener: (event: AppEvent) => void): () => void;

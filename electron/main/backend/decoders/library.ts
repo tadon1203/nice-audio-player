@@ -3,17 +3,26 @@ import type {
 	LibraryAlbumPage,
 	LibraryRoot,
 	LibraryScanSnapshot,
+	LibraryStatus,
+	LibraryTrackSummary,
 	LibraryTrackPage
 } from '@shared/native-app-api';
 import { decode, isNullableNumber, isNullableString, isRecord } from './shared';
 
 const isArtwork = (value: unknown): boolean => {
 	if (value === null) return true;
+	const hashPattern = /^[0-9a-f]{64}$/;
 	return (
 		isRecord(value) &&
 		typeof value.contentHash === 'string' &&
+		hashPattern.test(value.contentHash) &&
 		(value.mimeType === 'jpeg' || value.mimeType === 'png') &&
-		typeof value.relativePath === 'string'
+		typeof value.relativePath === 'string' &&
+		new RegExp(
+			`^artwork/${value.contentHash.slice(0, 2)}/${value.contentHash}\\.(?:jpg|png)$`
+		).test(value.relativePath) &&
+		((value.mimeType === 'jpeg' && value.relativePath.endsWith('.jpg')) ||
+			(value.mimeType === 'png' && value.relativePath.endsWith('.png')))
 	);
 };
 
@@ -51,6 +60,18 @@ const isArtist = (value: unknown): boolean =>
 	isArtwork(value.artwork) &&
 	isNullableNumber(value.albumCount);
 
+const isLibraryStatus = (value: unknown): value is LibraryStatus =>
+	isRecord(value) &&
+	(value.status === 'ready' ||
+		(value.status === 'unavailable' &&
+			[
+				'storageUnavailable',
+				'databaseOpenFailed',
+				'migrationFailed',
+				'schemaTooNew',
+				'databaseCorrupt'
+			].includes(value.reason as string)));
+
 export const decodeLibraryRoots = (value: unknown): LibraryRoot[] =>
 	decode(
 		value,
@@ -60,6 +81,16 @@ export const decodeLibraryRoots = (value: unknown): LibraryRoot[] =>
 
 export const decodeLibraryRoot = (value: unknown): LibraryRoot =>
 	decode(value, isRoot, 'libraryRoot');
+
+export const decodeLibraryStatus = (value: unknown): LibraryStatus =>
+	decode(value, isLibraryStatus, 'getLibraryStatus');
+
+export const decodeLibraryTrack = (value: unknown): LibraryTrackSummary | null =>
+	decode(
+		value,
+		(item): item is LibraryTrackSummary | null => item === null || isTrack(item),
+		'getLibraryTrackForPath'
+	);
 
 export const decodeLibraryScanState = (value: unknown): LibraryScanSnapshot =>
 	decode(

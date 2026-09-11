@@ -175,15 +175,15 @@ Angular CLI owns the Renderer application build using the standard `@angular/bui
 The build pipeline has one producer per artifact and one assembly step:
 
 ```
-generate:bindings → shared/protocol/generated.ts
+bindings:generate → shared/protocol/generated.ts
 build:renderer   → build/renderer
 build:electron   → build/electron
 build:backend    → build/backend
-stage:runtime    → build/runtime
+build:runtime    → build/runtime
 Forge package    → build/forge
 ```
 
-The `build:*` commands compile or stage only their owned artifact. `build` runs all producers in dependency order and then assembles the packaged runtime. `stage:runtime` does not compile code; it copies the already-built Electron and Renderer artifacts and writes the packaged runtime manifest. Forge's `prePackage` invokes `build`, while `packageAfterCopy` only replaces Forge's temporary application directory with `build/runtime`.
+The `build:*` commands compile or stage only their owned artifact. `build` runs all producers in dependency order and then assembles the packaged runtime. `build:runtime` does not compile code; it copies the already-built Electron and Renderer artifacts and writes the packaged runtime manifest. Forge's `prePackage` invokes `build`, while `packageAfterCopy` only replaces Forge's temporary application directory with `build/runtime`.
 
 Development runtime:
 

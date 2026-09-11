@@ -12,6 +12,12 @@
 	--color-focus-ring: #ffffff;
 	--color-error: #ff5c68;
 	--font-interface: 'Satoshi', 'Noto Sans JP Variable', 'Segoe UI', system-ui, sans-serif;
+	--font-weight-medium: 500;
+	--font-weight-semibold: 600;
+	--text-heading-lg: 32px;
+	--text-heading-lg--line-height: 1.15;
+	--text-heading-md: 24px;
+	--text-heading-md--line-height: 1.2;
 	--text-body-lg: 18px;
 	--text-body-lg--line-height: 1.5;
 	--text-body-sm: 13px;

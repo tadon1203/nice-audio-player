@@ -132,7 +132,7 @@ Detailed contributor workflow is documented in [CONTRIBUTING.md](./CONTRIBUTING.
 - Use `pnpm verify` for consistency checks and tests.
 - Use `pnpm validate` for checks, tests, and all production builds.
 - Use `pnpm format` to write formatting changes.
-- Use `pnpm lint:format` to check formatting without modifying files.
+- Use `pnpm format:check` to check formatting without modifying files.
 - Use `pnpm fonts:download` to acquire and verify the official Fontshare asset.
 - ESLint, Stylelint, TypeScript, Angular compiler, Prettier, and test failures MUST be fixed at their cause. Their checks MUST NOT be disabled, suppressed, or weakened to make a change pass.
 

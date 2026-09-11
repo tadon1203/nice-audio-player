@@ -1,0 +1,75 @@
+<section aria-labelledby="library-folders-heading">
+	<header class="flex flex-wrap items-end justify-between gap-4">
+		<div>
+			<h2 id="library-folders-heading" class="text-heading-md font-semibold text-text-primary">
+				Library folders
+			</h2>
+			<p class="mt-2 text-body-md text-text-secondary">Choose where your music lives.</p>
+		</div>
+		<button type="button" appButton="primary" [disabled]="scanRunning" (click)="addFolder()">
+			Add folder
+		</button>
+	</header>
+
+	@if (roots.error()) {
+	<p class="mt-6 text-body-md text-error" role="alert">{{ roots.error() }}</p>
+	} @if (roots.loading()) {
+	<p class="mt-8 text-body-md text-text-secondary" role="status">Loading library folders…</p>
+	} @else {
+	<ul class="mt-8 divide-y divide-border-subtle border-y border-border-subtle">
+		@for (root of roots.roots(); track root.id) {
+		<li class="flex flex-wrap items-center justify-between gap-4 py-5">
+			<div class="min-w-0 flex-1 text-body-md break-all text-text-primary">{{ root.path }}</div>
+			<div class="flex items-center gap-5">
+				<label class="inline-flex items-center gap-2 text-body-sm text-text-secondary">
+					<input
+						type="checkbox"
+						[checked]="root.enabled"
+						[disabled]="scanRunning || roots.pendingIds().has(root.id)"
+						(change)="setEnabled(root, $event)"
+					/>
+					Enabled
+				</label>
+				<button
+					type="button"
+					appButton="danger"
+					[disabled]="scanRunning || roots.pendingIds().has(root.id)"
+					(click)="remove(root)"
+				>
+					Remove
+				</button>
+			</div>
+		</li>
+		} @empty {
+		<li class="py-6 text-body-md text-text-secondary">No library folders yet.</li>
+		}
+	</ul>
+	}
+
+	<div aria-live="polite" class="mt-8 text-body-sm text-text-secondary" role="status">
+		@if (library.scan(); as scan) { @if (scan.state === 'running') {
+		<p>Scanning{{ scan.currentRoot ? ' ' + scan.currentRoot.path : '' }}…</p>
+		<p>
+			{{ scan.discoveredCount ?? 0 }} discovered, {{ scan.inspectedCount ?? 0 }} inspected, {{
+			scan.indexedCount ?? 0 }} indexed, {{ scan.failedCount ?? 0 }} failed.
+		</p>
+		} @else if (scan.state === 'completed') {
+		<p>
+			Scan complete: {{ scan.discoveredCount ?? 0 }} discovered, {{ scan.inspectedCount ?? 0 }}
+			inspected, {{ scan.indexedCount ?? 0 }} indexed, {{ scan.failedCount ?? 0 }} failed.
+		</p>
+		} @else if (scan.state === 'cancelled') {
+		<p>Scan cancelled.</p>
+		} @else if (scan.state === 'failed') {
+		<p>Scan failed.</p>
+		} }
+	</div>
+
+	<div class="mt-5">
+		@if (scanRunning) {
+		<button type="button" appButton="secondary" (click)="cancelScan()">Cancel scan</button>
+		} @else {
+		<button type="button" appButton="secondary" (click)="rescan()">Rescan</button>
+		}
+	</div>
+</section>

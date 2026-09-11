@@ -1,4 +1,5 @@
 @import 'tailwindcss';
+@import '@angular/cdk/overlay-prebuilt.css';
 @import './styles/fonts.css';
 @import './styles/theme.css';
 @import './styles/base.css';

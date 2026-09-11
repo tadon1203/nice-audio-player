@@ -51,7 +51,7 @@ Use `pnpm verify` for consistency checks and tests:
 
 Use `pnpm validate` when the renderer, Electron bundle, and backend release
 artifacts must also be built. End-to-end tests build a temporary renderer to
-serve the application. `pnpm format` and `pnpm lint:format` use the same
+serve the application. `pnpm format` and `pnpm format:check` use the same
 explicit file set; the former writes changes and the latter only checks them.
 
 ## Git and GitHub

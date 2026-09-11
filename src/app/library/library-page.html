@@ -1,0 +1,104 @@
+<div ngTabs class="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
+	<header class="pt-16">
+		<app-page-frame>
+			<div class="flex flex-wrap items-end justify-between gap-6">
+				<h1 class="text-heading-lg font-semibold text-text-primary">Library</h1>
+				<label class="max-w-md w-full">
+					<span class="sr-only">Filter library</span>
+					<input
+						type="search"
+						class="h-11 w-full rounded-control border border-border-subtle bg-surface px-4 text-body-md text-text-primary outline-none placeholder:text-text-muted focus-visible:ring-2 focus-visible:ring-focus-ring"
+						[placeholder]="'Search ' + (workspace.presentation() === 'albumArtists' ? 'artists' : workspace.presentation())"
+						[value]="currentFilter()"
+						(input)="onFilterInput(workspace.presentation(), $event)"
+					/>
+				</label>
+			</div>
+			<div
+				ngTabList
+				class="mt-8 flex gap-6 overflow-x-auto border-b border-border-subtle"
+				orientation="horizontal"
+				selectionMode="follow"
+				[selectedTab]="workspace.presentation()"
+				(selectedTabChange)="onPresentationChange($event)"
+			>
+				<button
+					type="button"
+					ngTab
+					value="albums"
+					class="min-h-12 shrink-0 border-b-2 border-transparent px-1 text-body-md text-text-secondary outline-none focus-visible:ring-2 focus-visible:ring-focus-ring aria-[selected=true]:border-text-primary aria-[selected=true]:text-text-primary"
+				>
+					Albums
+				</button>
+				<button
+					type="button"
+					ngTab
+					value="albumArtists"
+					class="min-h-12 shrink-0 border-b-2 border-transparent px-1 text-body-md text-text-secondary outline-none focus-visible:ring-2 focus-visible:ring-focus-ring aria-[selected=true]:border-text-primary aria-[selected=true]:text-text-primary"
+				>
+					Album Artists
+				</button>
+				<button
+					type="button"
+					ngTab
+					value="tracks"
+					class="min-h-12 shrink-0 border-b-2 border-transparent px-1 text-body-md text-text-secondary outline-none focus-visible:ring-2 focus-visible:ring-focus-ring aria-[selected=true]:border-text-primary aria-[selected=true]:text-text-primary"
+				>
+					Tracks
+				</button>
+			</div>
+		</app-page-frame>
+	</header>
+
+	<div class="min-h-0">
+		<div ngTabPanel value="albums" class="h-full min-h-0" [preserveContent]="true">
+			<ng-template ngTabContent>
+				@if (library.initializing()) {
+				<p class="p-8 text-body-md text-text-secondary" role="status">Loading library…</p>
+				} @else if (statusMessage(); as message) {
+				<p class="p-8 text-body-md text-error" role="alert">{{ message }}</p>
+				} @else {
+				<app-album-grid
+					[state]="workspace.albums()"
+					(playAlbum)="playAlbum($event)"
+					(loadMore)="workspace.loadMore('albums')"
+					(scrollTopChange)="onScroll('albums', $event)"
+				/>
+				}
+			</ng-template>
+		</div>
+		<div ngTabPanel value="albumArtists" class="h-full min-h-0" [preserveContent]="true">
+			<ng-template ngTabContent>
+				@if (library.initializing()) {
+				<p class="p-8 text-body-md text-text-secondary" role="status">Loading library…</p>
+				} @else if (statusMessage(); as message) {
+				<p class="p-8 text-body-md text-error" role="alert">{{ message }}</p>
+				} @else {
+				<app-album-artist-grid
+					[state]="workspace.albumArtists()"
+					(loadMore)="workspace.loadMore('albumArtists')"
+					(scrollTopChange)="onScroll('albumArtists', $event)"
+				/>
+				}
+			</ng-template>
+		</div>
+		<div ngTabPanel value="tracks" class="h-full min-h-0" [preserveContent]="true">
+			<ng-template ngTabContent>
+				@if (library.initializing()) {
+				<p class="p-8 text-body-md text-text-secondary" role="status">Loading library…</p>
+				} @else if (statusMessage(); as message) {
+				<p class="p-8 text-body-md text-error" role="alert">{{ message }}</p>
+				} @else {
+				<app-track-list
+					[state]="workspace.tracks()"
+					[activeTrackId]="activeTrackId()"
+					[playbackStatus]="playbackStatus()"
+					(playTrack)="playTrack($event)"
+					(loadMore)="workspace.loadMore('tracks')"
+					(scrollTopChange)="onScroll('tracks', $event)"
+				/>
+				}
+			</ng-template>
+		</div>
+	</div>
+</div>

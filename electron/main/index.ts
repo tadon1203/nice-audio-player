@@ -2,20 +2,25 @@ import { app, BrowserWindow, protocol } from 'electron';
 import squirrelStartup from 'electron-squirrel-startup';
 import { BackendManager } from './backend/manager';
 import { registerIpc } from './ipc/index';
+import { serveArtworkRequest } from './artwork-protocol';
 import { serveRendererRequest } from './renderer-protocol';
-import { resolveRendererRoot } from './runtime-paths';
+import { resolveBackendDataDirectory, resolveRendererRoot } from './runtime-paths';
 import { createMainWindow, getMainWindow } from './window';
 
 if (squirrelStartup) app.quit();
 
 protocol.registerSchemesAsPrivileged([
-	{ scheme: 'nice-player', privileges: { standard: true, secure: true, supportFetchAPI: true } }
+	{ scheme: 'nice-player', privileges: { standard: true, secure: true, supportFetchAPI: true } },
+	{ scheme: 'nice-artwork', privileges: { standard: true, secure: true, supportFetchAPI: true } }
 ]);
 const manager = new BackendManager();
 let quitting = false;
 app
 	.whenReady()
 	.then(async () => {
+		protocol.handle('nice-artwork', (request) =>
+			serveArtworkRequest(resolveBackendDataDirectory(app.getPath('userData')), request.url)
+		);
 		await manager.start();
 		registerIpc(manager);
 		if (process.env.NICE_AUDIO_PLAYER_DEV_SERVER_URL === undefined)

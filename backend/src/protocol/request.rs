@@ -8,9 +8,26 @@ pub enum BackendRequest {
     Ping,
     GetPlaybackState,
     GetPlaybackQueue,
+    PausePlayback,
+    ResumePlayback,
+    PreviousPlayback,
+    NextPlayback,
+    SeekPlayback {
+        #[specta(type = f64)]
+        position_ms: u64,
+    },
+    SetPlaybackVolume {
+        volume: f32,
+    },
+    SetPlaybackMuted {
+        muted: bool,
+    },
     ListAudioOutputDevices,
     GetApplicationActivities,
     GetLibraryStatus,
+    GetLibraryTrackForPath {
+        path: String,
+    },
     ValidateAudioFile {
         path: String,
     },

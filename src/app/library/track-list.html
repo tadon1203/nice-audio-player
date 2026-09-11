@@ -1,0 +1,55 @@
+<div
+	class="h-full min-h-0 [scrollbar-gutter:stable] overflow-y-auto"
+	[scrollTop]="state().scrollTop"
+	(scroll)="onScroll($event)"
+>
+	@if (state().loadState === 'loading' && state().items.length === 0) {
+	<p class="p-8 text-body-md text-text-secondary" role="status">Loading tracks…</p>
+	} @else if (state().error) {
+	<p class="p-8 text-body-md text-error" role="alert">{{ state().error }}</p>
+	} @else if (state().items.length === 0) {
+	<p class="p-8 text-body-md text-text-secondary" role="status">
+		@if (state().filter === '') { No tracks in your library. } @else { No results for “{{
+		state().filter }}”. }
+	</p>
+	} @else {
+	<ul class="divide-y divide-border-subtle px-8" aria-label="Tracks">
+		@for (track of state().items; track track.id) {
+		<li>
+			<button
+				type="button"
+				appButton="secondary"
+				class="grid min-h-16 w-full grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto] justify-start gap-4 rounded-none border-0 px-2 text-start"
+				[disabled]="!track.playable || track.availability !== 'available'"
+				[aria-label]="'Play ' + track.title"
+				(click)="playTrack.emit(track.id)"
+			>
+				<span class="min-w-0 truncate text-body-md text-text-primary">{{ track.title }}</span>
+				<span class="min-w-0 truncate text-body-sm text-text-secondary"
+					>{{ track.artist ?? 'Unknown artist' }}</span
+				>
+				<span class="min-w-0 truncate text-body-sm text-text-secondary"
+					>{{ track.album ?? 'Unknown album' }}</span
+				>
+				<span class="text-body-sm text-text-secondary"
+					>{{ track.durationMs | formatDuration }}</span
+				>
+				@if (track.availability === 'missing') {
+				<span class="col-span-full text-body-sm text-error">Missing</span>
+				} @else if (!track.playable) {
+				<span class="col-span-full text-body-sm text-text-muted">Unavailable</span>
+				} @if (activeTrackId() === track.id && playbackStatus() === 'playing') {
+				<span class="col-span-full text-body-sm text-text-primary">Playing</span>
+				} @else if (activeTrackId() === track.id && playbackStatus() === 'paused') {
+				<span class="col-span-full text-body-sm text-text-primary">Paused</span>
+				}
+			</button>
+		</li>
+		}
+	</ul>
+	@if (state().nextCursor !== null) {
+	<div class="flex justify-center px-8 py-8">
+		<button type="button" appButton="secondary" (click)="loadMore.emit()">Load more</button>
+	</div>
+	} }
+</div>

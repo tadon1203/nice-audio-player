@@ -6,6 +6,10 @@ export function resolveRendererRoot(appPath: string): string {
 	return join(appPath, 'renderer', 'browser');
 }
 
+export function resolveBackendDataDirectory(userDataPath: string): string {
+	return join(userDataPath, 'backend');
+}
+
 export function resolvePackagedBackendExecutable(
 	resourcesPath: string,
 	platform: NodeJS.Platform
