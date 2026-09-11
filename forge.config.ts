@@ -2,15 +2,20 @@ import { exec } from 'node:child_process';
 import { cp, mkdir, rm } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import type { ForgeConfig } from '@electron-forge/shared-types';
-import { buildPaths, repositoryRoot } from './scripts/build-paths.mjs';
+import {
+	backendOutput,
+	forgeOutput,
+	repositoryRoot,
+	runtimeOutput
+} from './scripts/build-paths.mjs';
 
 const execAsync = promisify(exec);
 
 const config: ForgeConfig = {
-	outDir: buildPaths.forge,
+	outDir: forgeOutput,
 	packagerConfig: {
 		asar: true,
-		extraResource: [buildPaths.backend]
+		extraResource: [backendOutput]
 	},
 	makers: [
 		{
@@ -22,7 +27,7 @@ const config: ForgeConfig = {
 			}
 		}
 	],
-		hooks: {
+	hooks: {
 		prePackage: async () => {
 			await execAsync('pnpm build', {
 				cwd: repositoryRoot,
@@ -32,7 +37,7 @@ const config: ForgeConfig = {
 		packageAfterCopy: async (_config, buildPath) => {
 			await rm(buildPath, { recursive: true, force: true });
 			await mkdir(buildPath, { recursive: true });
-			await cp(buildPaths.runtime, buildPath, { recursive: true });
+			await cp(runtimeOutput, buildPath, { recursive: true });
 		}
 	}
 };

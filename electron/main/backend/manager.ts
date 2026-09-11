@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { join } from 'node:path';
 import { app } from 'electron';
 import { BackendApi } from './api';
+import { resolveDevelopmentBackend, resolvePackagedBackendExecutable } from '../runtime-paths';
 import { BackendTransport, type BackendWireEvent } from './transport';
 
 export type BackendLaunchConfig = { dataDir: string };
@@ -18,21 +19,24 @@ export class BackendManager {
 		const config: BackendLaunchConfig = { dataDir: join(app.getPath('userData'), 'backend') };
 		const env = { ...process.env, NICE_AUDIO_PLAYER_DATA_DIR: config.dataDir };
 		const projectRoot = app.getAppPath();
+		const developmentPaths = resolveDevelopmentBackend(projectRoot);
 		const child = app.isPackaged
-			? spawn(join(process.resourcesPath, 'backend', 'nice-audio-player-backend.exe'), [], { env })
+			? spawn(resolvePackagedBackendExecutable(process.resourcesPath, process.platform), [], {
+					env
+				})
 			: spawn(
 					'cargo',
 					[
 						'run',
 						'--quiet',
 						'--manifest-path',
-						join(projectRoot, 'backend', 'Cargo.toml'),
+						developmentPaths.manifestPath,
 						'--bin',
 						'nice-audio-player-backend'
 					],
 					{
 						env,
-						cwd: projectRoot
+						cwd: developmentPaths.cwd
 					}
 				);
 		const transport = new BackendTransport(child);

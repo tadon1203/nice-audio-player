@@ -1,6 +1,6 @@
-# Generated output and caches
-.angular
+# Generated output and caches (also ignored by Git)
 build
+.angular
 backend/target
 test-results
 

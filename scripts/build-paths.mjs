@@ -1,12 +1,10 @@
 import { resolve } from 'node:path';
 
 export const repositoryRoot = resolve(import.meta.dirname, '..');
-const buildRoot = resolve(repositoryRoot, 'build');
+export const buildRoot = resolve(repositoryRoot, 'build');
 
-export const buildPaths = Object.freeze({
-	backend: resolve(buildRoot, 'backend'),
-	electron: resolve(buildRoot, 'electron'),
-	forge: resolve(buildRoot, 'forge'),
-	renderer: resolve(buildRoot, 'renderer'),
-	runtime: resolve(buildRoot, 'runtime')
-});
+export const electronOutput = resolve(buildRoot, 'electron');
+export const rendererOutput = resolve(buildRoot, 'renderer');
+export const backendOutput = resolve(buildRoot, 'backend');
+export const runtimeOutput = resolve(buildRoot, 'runtime');
+export const forgeOutput = resolve(buildRoot, 'forge');

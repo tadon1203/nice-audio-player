@@ -3,7 +3,7 @@
 the dev workflow is like:
 a nice model like gpt5.6 sol high on chatgpt web interface with entire codebase on its workspace generates super clear plan, cheap models luna mid or high impl it on codex.
 "the web" is defined here as ChatGPT web inferface.
-use `./create-zip.py` to provide the web the entire codebase. currently we use `Project` sources. use `git diff HEAD` or `git diff` to update the codebase on the web.
+use `python scripts/create-project-snapshot.py` to provide the web the entire codebase. currently we use `Project` sources. use `git diff HEAD` or `git diff` to update the codebase on the web.
 use the web, which is not included in codex usage, to save the codex usage (money as well).
 set /goal and the below prompt for cheap models to prevent it from stop implementing even it's not complete.
 "user" is defined here as the manual interop-er between codex and the web.

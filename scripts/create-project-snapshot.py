@@ -3,11 +3,12 @@ import argparse
 import subprocess
 import zipfile
 
+
 INTERNAL_FILES = {"_prompts.md"}
 
 
 def main():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="Create a zip snapshot of the project worktree.")
     parser.add_argument("output", nargs="?", default="project_snapshot.zip")
     parser.add_argument("--root", default=".")
     args = parser.parse_args()

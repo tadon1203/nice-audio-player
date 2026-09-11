@@ -1,6 +1,5 @@
 node_modules
 /.pnpm-store
-/backend/target
 /nice-audio-player-scaffold
 
 # Fontshare assets installed locally.
@@ -14,6 +13,8 @@ static/fonts/fontshare/*.woff2
 .wrangler
 /build
 /.angular
+/backend/target
+/test-results
 
 # OS
 .DS_Store
@@ -24,6 +25,3 @@ Thumbs.db
 .env.*
 !.env.example
 !.env.test
-
-# Playwright
-test-results

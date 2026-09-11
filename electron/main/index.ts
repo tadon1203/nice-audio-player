@@ -1,9 +1,9 @@
 import { app, BrowserWindow, protocol } from 'electron';
 import squirrelStartup from 'electron-squirrel-startup';
-import { join } from 'node:path';
 import { BackendManager } from './backend/manager';
 import { registerIpc } from './ipc/index';
 import { serveRendererRequest } from './renderer-protocol';
+import { resolveRendererRoot } from './runtime-paths';
 import { createMainWindow, getMainWindow } from './window';
 
 if (squirrelStartup) app.quit();
@@ -20,7 +20,7 @@ app
 		registerIpc(manager);
 		if (process.env.NICE_AUDIO_PLAYER_DEV_SERVER_URL === undefined)
 			protocol.handle('nice-player', (request) =>
-				serveRendererRequest(join(app.getAppPath(), 'renderer', 'browser'), request.url)
+				serveRendererRequest(resolveRendererRoot(app.getAppPath()), request.url)
 			);
 		manager.onEvent((event) => getMainWindow()?.webContents.send('app:event', event));
 		await createMainWindow();

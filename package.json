@@ -17,6 +17,7 @@
 		"build:renderer": "pnpm fonts:check && ng build",
 		"fonts:download": "node scripts/fonts.mjs download",
 		"fonts:check": "node scripts/fonts.mjs check",
+		"snapshot": "python scripts/create-project-snapshot.py",
 		"build:backend": "cargo build --release --manifest-path backend/Cargo.toml && node scripts/stage-backend.mjs",
 		"generate:bindings": "cargo run --manifest-path backend/Cargo.toml --bin generate-bindings",
 		"check:bindings": "cargo run --manifest-path backend/Cargo.toml --bin generate-bindings -- --check",
