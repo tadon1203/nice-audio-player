@@ -1,0 +1,87 @@
+<div class="overflow-x-auto">
+	<table class="w-full min-w-track-table table-fixed border-collapse text-start">
+		<caption class="sr-only">
+			{{ caption() }}
+		</caption>
+		<colgroup>
+			@for (column of columns(); track column) {
+			<col [attr.data-column]="column" [style.width]="columnWidth(column)" />
+			}
+		</colgroup>
+		<thead>
+			<tr class="h-track-table-row border-b border-outline-variant text-label-large text-secondary">
+				@for (column of columns(); track column) {
+				<th
+					scope="col"
+					class="px-2"
+					[attr.data-column]="column"
+					[class.text-start]="column !== 'duration'"
+					[class.text-end]="column === 'duration'"
+				>
+					{{ columnLabel(column) }}
+				</th>
+				}
+			</tr>
+		</thead>
+		<tbody class="divide-y divide-outline-variant">
+			@for (row of rows(); track row.id) {
+			<tr
+				class="h-track-table-row text-body-small text-secondary data-[playback-state=paused]:bg-surface-container data-[playback-state=playing]:bg-surface-container-high"
+				[attr.data-playback-state]="playbackState(row)"
+				[attr.data-availability]="row.availability"
+			>
+				@for (column of columns(); track column) { @switch (column) { @case ('number') {
+				<td
+					class="px-2 text-start tabular-nums"
+					[attr.data-column]="column"
+					[attr.aria-label]="'Track ' + trackNumberLabel(row)"
+				>
+					{{ trackNumberLabel(row) }}
+				</td>
+				} @case ('title') {
+				<td class="max-w-0 px-2 text-start" [attr.data-column]="column">
+					<button
+						type="button"
+						appButton="secondary"
+						class="group min-h-track-table-row w-full justify-start truncate rounded-none border-0 px-0 text-start text-body-small"
+						[disabled]="!row.playable || row.availability !== 'available'"
+						[aria-label]="'Play ' + row.title"
+						(click)="playTrack.emit(row.id)"
+					>
+						@if (isActive(row) && playbackStatus() === 'playing') {
+						<svg lucidePause aria-hidden="true" class="size-4 shrink-0 text-on-surface"></svg>
+						} @else if (isActive(row) && playbackStatus() === 'paused') {
+						<svg lucidePlay aria-hidden="true" class="size-4 shrink-0 text-on-surface"></svg>
+						}
+						<span class="truncate text-on-surface">{{ row.title }}</span>
+						@if (statusLabel(row); as status) {
+						<span class="text-label-small shrink-0 text-secondary">{{ status }}</span>
+						}
+					</button>
+				</td>
+				} @case ('artist') {
+				<td class="max-w-0 truncate px-2 text-start" [attr.data-column]="column">
+					{{ row.artist ?? 'Unknown artist' }}
+				</td>
+				} @case ('album') {
+				<td class="max-w-0 truncate px-2 text-start" [attr.data-column]="column">
+					{{ row.album ?? 'Unknown album' }}
+				</td>
+				} @case ('format') {
+				<td class="truncate px-2 text-start" [attr.data-column]="column">
+					{{ row.format ?? '—' }}
+				</td>
+				} @case ('quality') {
+				<td class="truncate px-2 text-start tabular-nums" [attr.data-column]="column">
+					{{ row.quality ?? '—' }}
+				</td>
+				} @case ('duration') {
+				<td class="px-2 text-end tabular-nums" [attr.data-column]="column">
+					{{ row.durationMs | formatDuration }}
+				</td>
+				} } }
+			</tr>
+			}
+		</tbody>
+	</table>
+</div>

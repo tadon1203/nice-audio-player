@@ -6,8 +6,8 @@
 		type="button"
 		appButton="album"
 		class="group min-w-0 flex-col items-stretch gap-1"
-		[aria-label]="'Play album ' + album.key.title + ' by ' + album.key.albumArtist"
-		(click)="playAlbum.emit(album.key)"
+		[aria-label]="'Open album ' + album.key.title + ' by ' + album.key.albumArtist"
+		(click)="openAlbum.emit(album.key)"
 	>
 		<app-artwork
 			class="w-media-tile rounded-small group-hover:bg-surface-container"

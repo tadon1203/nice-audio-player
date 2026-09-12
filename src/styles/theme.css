@@ -105,6 +105,9 @@
 	--md-sys-size-control-volume-width: 144px;
 	--md-sys-size-control-volume-readout-width: 72px;
 	--md-sys-size-media-tile: 164px;
+	--md-sys-size-media-detail: 188px;
+	--md-sys-size-track-table-row: 44px;
+	--md-sys-size-track-table-min-width: 640px;
 	--md-sys-size-playback-track-thin: 4px;
 	--md-sys-size-playback-track-active: 8px;
 	--md-sys-size-volume-track-thin: 4px;
@@ -183,6 +186,10 @@
 	--spacing-control-volume-width: var(--md-sys-size-control-volume-width);
 	--spacing-control-volume-readout-width: var(--md-sys-size-control-volume-readout-width);
 	--spacing-media-tile: var(--md-sys-size-media-tile);
+	--spacing-media-detail: var(--md-sys-size-media-detail);
+	--spacing-track-table-row: var(--md-sys-size-track-table-row);
+	--spacing-track-table: var(--md-sys-size-track-table-min-width);
+	--spacing-track-table-min-width: var(--md-sys-size-track-table-min-width);
 	--spacing-playback-track-thin: var(--md-sys-size-playback-track-thin);
 	--spacing-playback-track-active: var(--md-sys-size-playback-track-active);
 	--spacing-volume-track-thin: var(--md-sys-size-volume-track-thin);

@@ -4,8 +4,10 @@ import type {
 	AppEvent,
 	AudioOutputDevice,
 	LibraryAlbumArtistPage,
+	LibraryAlbumDetails,
 	LibraryAlbumKey,
 	LibraryAlbumPage,
+	LibraryAlbumTrackPage,
 	LibraryRoot,
 	LibraryScanSnapshot,
 	LibraryStatus,
@@ -101,6 +103,15 @@ export class Backend {
 		search: string | null
 	): Promise<LibraryAlbumArtistPage> {
 		return this.requireApi().listLibraryAlbumArtists(afterCursor, search);
+	}
+	getLibraryAlbumDetails(albumKey: LibraryAlbumKey): Promise<LibraryAlbumDetails> {
+		return this.requireApi().getLibraryAlbumDetails(albumKey);
+	}
+	listLibraryAlbumTracks(
+		albumKey: LibraryAlbumKey,
+		offset: number
+	): Promise<LibraryAlbumTrackPage> {
+		return this.requireApi().listLibraryAlbumTracks(albumKey, offset);
 	}
 	getLibraryTrackForPath(path: string): Promise<LibraryTrackSummary | null> {
 		return this.requireApi().getLibraryTrackForPath(path);

@@ -9,7 +9,9 @@ import {
 } from '../electron/main/ipc/validation';
 import {
 	decodeLibraryAlbumArtists,
+	decodeLibraryAlbumDetails,
 	decodeLibraryAlbums,
+	decodeLibraryAlbumTracks,
 	decodeLibraryScanState
 } from '../electron/main/backend/decoders/library';
 import { decodeLibraryPlaybackState } from '../electron/main/backend/decoders/playback';
@@ -27,6 +29,10 @@ describe('slice boundary contracts', () => {
 	it('rejects malformed catalog and playback responses', () => {
 		expect(() => decodeLibraryAlbums({ items: [{ key: {} }], nextCursor: null })).toThrow();
 		expect(() => decodeLibraryAlbumArtists({ items: [{ key: {} }], nextCursor: null })).toThrow();
+		expect(() => decodeLibraryAlbumDetails({ summary: { key: {} } })).toThrow();
+		expect(() =>
+			decodeLibraryAlbumTracks({ items: [{ id: 'track-1' }], nextOffset: null })
+		).toThrow();
 		expect(() => decodeLibraryScanState({ state: 'running' })).toThrow();
 		expect(() => decodeLibraryPlaybackState({ status: 'playing', revision: 1 })).toThrow();
 	});

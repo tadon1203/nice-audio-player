@@ -16,7 +16,9 @@ const messages: Record<string, string> = {
 	schemaTooNew: 'This library database was created by a newer version.',
 	migrationFailed: 'The library database could not be upgraded.',
 	databaseOpenFailed: 'The library storage is unavailable.',
-	storageUnavailable: 'The library storage is unavailable.'
+	storageUnavailable: 'The library storage is unavailable.',
+	albumNotFound: 'That album could not be found.',
+	invalidAlbumKey: 'That album reference is invalid.'
 };
 
 export function libraryStatusMessage(status: LibraryStatus): string | null {

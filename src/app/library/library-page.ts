@@ -3,19 +3,25 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { map } from 'rxjs';
 import { LucideSearch } from '@lucide/angular';
-import type { LibraryAlbumKey } from '@shared/native-app-api';
+import type { LibraryTrackSummary } from '@shared/native-app-api';
 import { Button } from '@app/ui/button';
 import { PageFrame } from '@app/ui/page-frame';
 import { PlaybackSession } from '@app/playback/playback-session';
+import { ScrollRegion } from '@app/ui/scroll-region';
 import { AlbumArtistGrid } from './album-artist-grid';
 import { AlbumGrid } from './album-grid';
 import { LibrarySession } from './library-session';
 import { libraryStatusMessage } from './library-errors';
 import { LibraryPresentation, LibraryWorkspace } from './library-workspace';
-import { TrackList } from './track-list';
+import {
+	TrackTable,
+	libraryTrackTableColumns,
+	type TrackTableRow,
+	type TrackTablePlaybackStatus
+} from './track-table';
 
 @Component({
-	imports: [AlbumArtistGrid, AlbumGrid, Button, LucideSearch, PageFrame, TrackList],
+	imports: [AlbumArtistGrid, AlbumGrid, Button, LucideSearch, PageFrame, ScrollRegion, TrackTable],
 	selector: 'app-library-page',
 	host: {
 		class: 'block h-full min-h-0 min-w-0 overflow-hidden',
@@ -24,6 +30,7 @@ import { TrackList } from './track-list';
 	templateUrl: './library-page.html'
 })
 export class LibraryPage {
+	protected readonly trackTableColumns = libraryTrackTableColumns;
 	private readonly route = inject(ActivatedRoute);
 	private readonly router = inject(Router);
 	protected readonly workspace = inject(LibraryWorkspace);
@@ -35,7 +42,12 @@ export class LibraryPage {
 	);
 	protected readonly currentFilter = computed(() => this.viewFor(this.presentation()).filter);
 	protected readonly activeTrackId = computed(() => this.playback.currentTrack()?.id ?? null);
-	protected readonly playbackStatus = computed(() => this.playback.snapshot()?.status ?? 'stopped');
+	protected readonly playbackStatus = computed<TrackTablePlaybackStatus>(
+		() => this.playback.snapshot()?.status ?? 'stopped'
+	);
+	protected readonly trackRows = computed<readonly TrackTableRow[]>(() =>
+		this.workspace.tracks().items.map((track) => trackRowFromSummary(track))
+	);
 	protected readonly pageMeta = computed(() => presentationMeta[this.presentation()]);
 	protected readonly currentView = computed(() => this.viewFor(this.presentation()));
 	protected readonly resultCount = computed(() => {
@@ -66,16 +78,16 @@ export class LibraryPage {
 		void this.router.navigate(['/library/albums']);
 	}
 
+	openAlbum(key: { title: string; albumArtist: string }): void {
+		void this.router.navigate(['/library/albums', key.albumArtist, key.title]);
+	}
+
 	onScroll(event: Event): void {
 		this.workspace.setScrollTop(this.presentation(), (event.target as HTMLElement).scrollTop);
 	}
 
 	playTrack(id: string): void {
 		void this.playback.startLibraryTrack(id);
-	}
-
-	playAlbum(key: LibraryAlbumKey): void {
-		void this.playback.startLibraryAlbum(key);
 	}
 
 	private viewFor(presentation: LibraryPresentation) {
@@ -89,6 +101,20 @@ export class LibraryPage {
 		}
 	}
 }
+
+const trackRowFromSummary = (track: LibraryTrackSummary): TrackTableRow => ({
+	id: track.id,
+	title: track.title,
+	artist: track.artist,
+	album: track.album,
+	trackNumber: null,
+	discNumber: null,
+	format: null,
+	quality: null,
+	durationMs: track.durationMs,
+	availability: track.availability,
+	playable: track.playable
+});
 
 const presentationMeta: Record<LibraryPresentation, PresentationMeta> = {
 	albums: {

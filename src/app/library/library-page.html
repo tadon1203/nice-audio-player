@@ -1,76 +1,83 @@
-<div class="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
-	<header class="pt-10">
-		<app-page-frame>
-			<div class="flex flex-wrap items-center justify-between gap-4">
-				<h1 class="text-headline-small text-on-surface">{{ pageMeta().title }}</h1>
-				<label class="me-3 w-full max-w-control-search-width app-wide:w-control-search-width">
-					<span class="sr-only">Filter library</span>
-					<div class="relative">
-						<svg
-							lucideSearch
-							aria-hidden="true"
-							class="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-secondary"
-						></svg>
-						<input
-							type="search"
-							class="h-control-compact w-full rounded-full border border-outline-variant bg-surface-container ps-9 pe-3 text-body-small text-on-surface outline-none placeholder:text-on-surface-variant focus-visible:ring-2 focus-visible:ring-primary"
-							[placeholder]="pageMeta().searchPlaceholder"
-							[value]="currentFilter()"
-							(input)="onFilterInput($event)"
-						/>
-					</div>
-				</label>
-			</div>
-			<div class="mt-6 flex flex-wrap items-center gap-x-8 gap-y-2 text-body-small text-secondary">
-				<span class="tabular-nums">{{ resultCount() }}</span>
-				<span>{{ pageMeta().sortLabel }}</span>
-			</div>
-		</app-page-frame>
-	</header>
-
-	<div class="min-h-0">
-		<app-page-frame class="h-full min-h-0">
-			<div
-				data-library-scroll-region
-				class="h-full min-h-0 [scrollbar-gutter:stable] overflow-y-auto pt-7"
-				[scrollTop]="currentView().scrollTop"
-				(scroll)="onScroll($event)"
-			>
-				@if (library.initializing() || currentView().loadState === 'loading') {
-				<p class="py-8 text-body-medium text-secondary" role="status">Loading library…</p>
-				} @else if (statusMessage(); as message) {
-				<p class="py-8 text-body-medium text-error" role="alert">{{ message }}</p>
-				} @else if (currentView().error; as error) {
-				<p class="py-8 text-body-medium text-error" role="alert">{{ error }}</p>
-				} @else if (currentView().items.length === 0) {
-				<p class="py-8 text-body-medium text-secondary" role="status">{{ emptyMessage() }}</p>
-				} @else { @switch (presentation()) { @case ('albums') {
-				<app-album-grid [state]="workspace.albums()" (playAlbum)="playAlbum($event)" />
-				} @case ('albumArtists') {
-				<app-album-artist-grid
-					[state]="workspace.albumArtists()"
-					(selectArtist)="openArtistAlbums($event)"
-				/>
-				} @case ('tracks') {
-				<app-track-list
-					[state]="workspace.tracks()"
-					[activeTrackId]="activeTrackId()"
-					[playbackStatus]="playbackStatus()"
-					(playTrack)="playTrack($event)"
-				/>
-				} } @if (currentView().nextCursor !== null) {
-				<div class="flex justify-center py-8">
-					<button
-						type="button"
-						appButton="secondary"
-						[disabled]="currentView().loadState === 'loadingMore'"
-						(click)="workspace.loadMore(presentation())"
-					>
-						{{ currentView().loadState === 'loadingMore' ? 'Loading…' : 'Load more' }}
-					</button>
+<div
+	appScrollRegion
+	data-library-scroll-region
+	[scrollTop]="currentView().scrollTop"
+	(scroll)="onScroll($event)"
+>
+	<div class="grid min-h-full grid-rows-[auto_minmax(0,1fr)]">
+		<header class="pt-10">
+			<app-page-frame>
+				<div class="flex flex-wrap items-center justify-between gap-4">
+					<h1 class="text-headline-small text-on-surface">{{ pageMeta().title }}</h1>
+					<label class="me-3 w-full max-w-control-search-width app-wide:w-control-search-width">
+						<span class="sr-only">Filter library</span>
+						<div class="relative">
+							<svg
+								lucideSearch
+								aria-hidden="true"
+								class="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-secondary"
+							></svg>
+							<input
+								type="search"
+								class="h-control-compact w-full rounded-full border border-outline-variant bg-surface-container ps-9 pe-3 text-body-small text-on-surface outline-none placeholder:text-on-surface-variant focus-visible:ring-2 focus-visible:ring-primary"
+								[placeholder]="pageMeta().searchPlaceholder"
+								[value]="currentFilter()"
+								(input)="onFilterInput($event)"
+							/>
+						</div>
+					</label>
 				</div>
-				} }
-			</div>
-		</app-page-frame>
+				<div
+					class="mt-6 flex flex-wrap items-center gap-x-8 gap-y-2 text-body-small text-secondary"
+				>
+					<span class="tabular-nums">{{ resultCount() }}</span>
+					<span>{{ pageMeta().sortLabel }}</span>
+				</div>
+			</app-page-frame>
+		</header>
+
+		<div class="min-h-0">
+			<app-page-frame class="min-h-full">
+				<div class="pt-7">
+					@if (library.initializing() || currentView().loadState === 'loading') {
+					<p class="py-8 text-body-medium text-secondary" role="status">Loading library…</p>
+					} @else if (statusMessage(); as message) {
+					<p class="py-8 text-body-medium text-error" role="alert">{{ message }}</p>
+					} @else if (currentView().error; as error) {
+					<p class="py-8 text-body-medium text-error" role="alert">{{ error }}</p>
+					} @else if (currentView().items.length === 0) {
+					<p class="py-8 text-body-medium text-secondary" role="status">{{ emptyMessage() }}</p>
+					} @else { @switch (presentation()) { @case ('albums') {
+					<app-album-grid [state]="workspace.albums()" (openAlbum)="openAlbum($event)" />
+					} @case ('albumArtists') {
+					<app-album-artist-grid
+						[state]="workspace.albumArtists()"
+						(selectArtist)="openArtistAlbums($event)"
+					/>
+					} @case ('tracks') {
+					<app-track-table
+						[rows]="trackRows()"
+						[columns]="trackTableColumns"
+						layout="library"
+						caption="Library tracks"
+						[activeTrackId]="activeTrackId()"
+						[playbackStatus]="playbackStatus()"
+						(playTrack)="playTrack($event)"
+					/>
+					} } @if (currentView().nextCursor !== null) {
+					<div class="flex justify-center py-8">
+						<button
+							type="button"
+							appButton="secondary"
+							[disabled]="currentView().loadState === 'loadingMore'"
+							(click)="workspace.loadMore(presentation())"
+						>
+							{{ currentView().loadState === 'loadingMore' ? 'Loading…' : 'Load more' }}
+						</button>
+					</div>
+					} }
+				</div>
+			</app-page-frame>
+		</div>
 	</div>
 </div>

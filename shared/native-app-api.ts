@@ -5,6 +5,9 @@ import type {
 	LibraryAlbumArtistPage,
 	LibraryAlbumArtistSummary,
 	LibraryAlbumKey,
+	LibraryAlbumDetails,
+	LibraryAlbumTrackPage,
+	LibraryAlbumTrackSummary,
 	LibraryAlbumPage,
 	LibraryAlbumSummary,
 	LibraryRoot,
@@ -26,6 +29,9 @@ export type {
 	LibraryAlbumArtistPage,
 	LibraryAlbumArtistSummary,
 	LibraryAlbumKey,
+	LibraryAlbumDetails,
+	LibraryAlbumTrackPage,
+	LibraryAlbumTrackSummary,
 	LibraryAlbumPage,
 	LibraryAlbumSummary,
 	LibraryRoot,
@@ -62,6 +68,8 @@ export interface NativeAppApi {
 		afterCursor: string | null,
 		search: string | null
 	): Promise<LibraryAlbumArtistPage>;
+	getLibraryAlbumDetails(albumKey: LibraryAlbumKey): Promise<LibraryAlbumDetails>;
+	listLibraryAlbumTracks(albumKey: LibraryAlbumKey, offset: number): Promise<LibraryAlbumTrackPage>;
 	getLibraryTrackForPath(path: string): Promise<LibraryTrackSummary | null>;
 	startLibraryTrack(trackId: string): Promise<PlaybackState>;
 	startLibraryAlbum(albumKey: LibraryAlbumKey): Promise<PlaybackState>;

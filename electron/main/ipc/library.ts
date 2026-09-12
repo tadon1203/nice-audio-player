@@ -5,6 +5,7 @@ import {
 	requireAlbumKey,
 	requireBoolean,
 	requireNullableString,
+	requireNonNegativeInteger,
 	requireString
 } from './validation';
 
@@ -72,6 +73,19 @@ export function registerLibraryIpc(manager: BackendManager): void {
 			api.listLibraryAlbumArtists(
 				requireNullableString(afterCursor, 'afterCursor'),
 				requireNullableString(search, 'search')
+			)
+		)
+	);
+	ipcMain.handle(
+		'library:get-album-details',
+		validateSender((albumKey: unknown) => api.getLibraryAlbumDetails(requireAlbumKey(albumKey)))
+	);
+	ipcMain.handle(
+		'library:list-album-tracks',
+		validateSender((albumKey: unknown, offset: unknown) =>
+			api.listLibraryAlbumTracks(
+				requireAlbumKey(albumKey),
+				requireNonNegativeInteger(offset, 'offset')
 			)
 		)
 	);

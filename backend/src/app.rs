@@ -121,6 +121,16 @@ impl BackendApp {
                     .catalog_album_artists(after_cursor, search),
                 library_error,
             ),
+            BackendRequest::GetLibraryAlbumDetails { album_key } => encode(
+                self.library.handle().catalog_album_details(album_key),
+                library_error,
+            ),
+            BackendRequest::ListLibraryAlbumTracks { album_key, offset } => encode(
+                self.library
+                    .handle()
+                    .catalog_album_tracks(album_key, offset),
+                library_error,
+            ),
             BackendRequest::StartLibraryTrack { track_id } => self.start_library_track(track_id),
             BackendRequest::StartLibraryAlbum { album_key } => self.start_library_album(album_key),
         };

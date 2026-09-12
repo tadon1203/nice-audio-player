@@ -120,7 +120,8 @@ const CATALOG_MEMBER_PROJECTION: &str = r#"SELECT t.id, f.root_id, f.relative_pa
   f.availability, f.inspection_status, m.title, m.artist, m.album, m.album_artist,
   m.disc_number, m.track_number, m.artwork_id, m.duration_ms, m.date,
   COALESCE(NULLIF(trim(m.album),''),'Unknown album') AS album_title,
-  COALESCE(NULLIF(trim(m.album_artist),''),NULLIF(trim(m.artist),''),'Unknown artist') AS effective_artist
+  COALESCE(NULLIF(trim(m.album_artist),''),NULLIF(trim(m.artist),''),'Unknown artist') AS effective_artist,
+  m.file_format, m.bit_depth, m.sample_rate
 FROM tracks t
 JOIN library_files f ON f.id=t.file_id
 LEFT JOIN track_source_metadata m ON m.track_id=t.id AND m.source_revision=f.source_revision"#;
@@ -539,7 +540,7 @@ impl LibraryShared {
             .read()
             .map_err(|_| LibraryCommandError::PersistenceFailed)?;
         let sql = format!(
-            r#"WITH members AS MATERIALIZED ({}) SELECT id,file_name,title,artist,track_number,disc_number,duration_ms,availability,inspection_status FROM members WHERE album_title=?1 AND effective_artist=?2 ORDER BY CASE WHEN disc_number IS NULL THEN 1 ELSE 0 END,disc_number,CASE WHEN track_number IS NULL THEN 1 ELSE 0 END,track_number,id LIMIT 101 OFFSET ?3"#,
+            r#"WITH members AS MATERIALIZED ({}) SELECT id,file_name,title,artist,track_number,disc_number,file_format,bit_depth,sample_rate,duration_ms,availability,inspection_status FROM members WHERE album_title=?1 AND effective_artist=?2 ORDER BY CASE WHEN disc_number IS NULL THEN 1 ELSE 0 END,disc_number,CASE WHEN track_number IS NULL THEN 1 ELSE 0 END,track_number,id LIMIT 101 OFFSET ?3"#,
             CATALOG_MEMBER_PROJECTION
         );
         let mut s = c
@@ -554,22 +555,41 @@ impl LibraryShared {
                     r.get::<_, Option<String>>(3)?,
                     r.get::<_, Option<i64>>(4)?,
                     r.get::<_, Option<i64>>(5)?,
-                    r.get::<_, Option<i64>>(6)?,
-                    r.get::<_, String>(7)?,
-                    r.get::<_, String>(8)?,
+                    r.get::<_, Option<String>>(6)?,
+                    r.get::<_, Option<i64>>(7)?,
+                    r.get::<_, Option<i64>>(8)?,
+                    r.get::<_, Option<i64>>(9)?,
+                    r.get::<_, String>(10)?,
+                    r.get::<_, String>(11)?,
                 ))
             })
             .map_err(|_| LibraryCommandError::PersistenceFailed)?;
         let mut items = rows
             .map(|x| {
                 x.map(
-                    |(id, file, title, artist, track, disc, duration, availability, inspection)| {
+                    |(
+                        id,
+                        file,
+                        title,
+                        artist,
+                        track,
+                        disc,
+                        file_format,
+                        bit_depth,
+                        sample_rate,
+                        duration,
+                        availability,
+                        inspection,
+                    )| {
                         LibraryAlbumTrackSummary {
                             id: id.to_string(),
                             title: effective_track_title(title.as_deref(), &file),
                             artist: artist.filter(|v| !v.trim().is_empty()),
                             track_number: track.map(|v| v as u32),
                             disc_number: disc.map(|v| v as u32),
+                            file_format: file_format.filter(|v| !v.trim().is_empty()),
+                            bit_depth: bit_depth.map(|v| v as u32),
+                            sample_rate: sample_rate.map(|v| v as u32),
                             duration_ms: duration.map(|v| v as u64),
                             availability: if availability == "available" {
                                 LibraryFileAvailability::Available

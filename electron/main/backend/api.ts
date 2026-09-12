@@ -4,8 +4,10 @@ import type {
 	PlaybackQueue,
 	PlaybackState,
 	LibraryAlbumArtistPage,
+	LibraryAlbumDetails,
 	LibraryAlbumKey,
 	LibraryAlbumPage,
+	LibraryAlbumTrackPage,
 	LibraryRoot,
 	LibraryScanSnapshot,
 	LibraryStatus,
@@ -14,7 +16,9 @@ import type {
 } from '@shared/native-app-api';
 import {
 	decodeLibraryAlbumArtists,
+	decodeLibraryAlbumDetails,
 	decodeLibraryAlbums,
+	decodeLibraryAlbumTracks,
 	decodeLibraryRoot,
 	decodeLibraryRoots,
 	decodeLibraryScanState,
@@ -158,6 +162,21 @@ export class BackendApi {
 		return this.transport.send(
 			{ method: 'listLibraryAlbumArtists', params: { after_cursor: afterCursor, search } },
 			decodeLibraryAlbumArtists
+		);
+	}
+	getLibraryAlbumDetails(albumKey: LibraryAlbumKey): Promise<LibraryAlbumDetails> {
+		return this.transport.send(
+			{ method: 'getLibraryAlbumDetails', params: { album_key: albumKey } },
+			decodeLibraryAlbumDetails
+		);
+	}
+	listLibraryAlbumTracks(
+		albumKey: LibraryAlbumKey,
+		offset: number
+	): Promise<LibraryAlbumTrackPage> {
+		return this.transport.send(
+			{ method: 'listLibraryAlbumTracks', params: { album_key: albumKey, offset } },
+			decodeLibraryAlbumTracks
 		);
 	}
 	startLibraryTrack(trackId: string): Promise<PlaybackState> {

@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
 	decodeLibraryRoot,
 	decodeLibraryStatus,
+	decodeLibraryAlbumDetails,
+	decodeLibraryAlbumTracks,
 	decodeLibraryTrack,
 	decodeLibraryTracks
 } from '../electron/main/backend/decoders/library';
@@ -65,5 +67,38 @@ describe('library backend decoders', () => {
 			})
 		).toThrow();
 		expect(decodeLibraryStatus({ status: 'ready' })).toEqual({ status: 'ready' });
+	});
+
+	it('accepts album details and album track technical metadata', () => {
+		const details = {
+			summary: { key: { title: 'Album', albumArtist: 'Artist' }, artwork: null },
+			date: '2020',
+			trackCount: 2,
+			durationMs: 300000,
+			firstPlayableTrackId: 'track-1'
+		};
+		const tracks = {
+			items: [
+				{
+					id: 'track-1',
+					title: 'Track',
+					artist: 'Artist',
+					trackNumber: 1,
+					discNumber: null,
+					fileFormat: 'FLAC',
+					bitDepth: 24,
+					sampleRate: 96000,
+					durationMs: 120000,
+					availability: 'available',
+					playable: true
+				}
+			],
+			nextOffset: null
+		};
+		expect(decodeLibraryAlbumDetails(details)).toEqual(details);
+		expect(decodeLibraryAlbumTracks(tracks)).toEqual(tracks);
+		expect(() =>
+			decodeLibraryAlbumTracks({ items: [{ ...tracks.items[0], sampleRate: '96000' }] })
+		).toThrow();
 	});
 });

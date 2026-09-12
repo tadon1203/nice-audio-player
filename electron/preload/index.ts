@@ -36,6 +36,9 @@ const api: NativeAppApi = {
 	listLibraryAlbums: (afterCursor, search) => invoke('library:list-albums', afterCursor, search),
 	listLibraryAlbumArtists: (afterCursor, search) =>
 		invoke('library:list-album-artists', afterCursor, search),
+	getLibraryAlbumDetails: (albumKey) => invoke('library:get-album-details', albumKey),
+	listLibraryAlbumTracks: (albumKey, offset) =>
+		invoke('library:list-album-tracks', albumKey, offset),
 	getLibraryTrackForPath: (path) => invoke('library:get-track-for-path', path),
 	startLibraryTrack: (trackId) => invoke('library:start-track', trackId),
 	startLibraryAlbum: (albumKey) => invoke('library:start-album', albumKey),

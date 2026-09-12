@@ -176,6 +176,11 @@ pub struct LibraryAlbumTrackSummary {
     pub artist: Option<String>,
     pub track_number: Option<u32>,
     pub disc_number: Option<u32>,
+    pub file_format: Option<String>,
+    #[specta(type = Option<f64>)]
+    pub bit_depth: Option<u32>,
+    #[specta(type = Option<f64>)]
+    pub sample_rate: Option<u32>,
     #[specta(type = Option<f64>)]
     pub duration_ms: Option<u64>,
     pub availability: LibraryFileAvailability,

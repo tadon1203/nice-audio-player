@@ -1,6 +1,8 @@
 import type { Page } from '@playwright/test';
 import type {
 	AppEvent,
+	LibraryAlbumDetails,
+	LibraryAlbumTrackPage,
 	LibraryRoot,
 	LibraryScanSnapshot,
 	LibraryTrackSummary,
@@ -59,6 +61,29 @@ export async function installNativeAppFixture(page: Page): Promise<void> {
 			playable: false
 		};
 		const tracks = [track1, track2, literalTrack, missingTrack, unavailableTrack];
+		const albumDetails: LibraryAlbumDetails = {
+			summary: { key: { title: 'Test album', albumArtist: 'Test artist' }, artwork: null },
+			date: '2020',
+			trackCount: 2,
+			durationMs: 300000,
+			firstPlayableTrackId: track1.id
+		};
+		const albumTracks: LibraryAlbumTrackPage = {
+			items: [track1, track2].map((track, index) => ({
+				id: track.id,
+				title: track.title,
+				artist: track.artist,
+				trackNumber: index + 1,
+				discNumber: null,
+				fileFormat: 'FLAC',
+				bitDepth: 24,
+				sampleRate: 96000,
+				durationMs: track.durationMs,
+				availability: track.availability,
+				playable: track.playable
+			})),
+			nextOffset: null
+		};
 		const fileFor = (track: LibraryTrackSummary) => ({
 			path: `C:/Music/${track.id === 'track-1' ? 'track' : track.id === 'track-2' ? 'second' : 'literal'}.wav`,
 			fileName: `${track.id}.wav`,
@@ -263,6 +288,16 @@ export async function installNativeAppFixture(page: Page): Promise<void> {
 						roots.length === 0 || (search !== null && !'Test artist'.includes(search)) ? 0 : 1,
 					nextCursor: null
 				}),
+			getLibraryAlbumDetails: (albumKey) =>
+				albumKey.title === albumDetails.summary.key.title &&
+				albumKey.albumArtist === albumDetails.summary.key.albumArtist
+					? Promise.resolve(albumDetails)
+					: rejected('albumNotFound'),
+			listLibraryAlbumTracks: (albumKey) =>
+				albumKey.title === albumDetails.summary.key.title &&
+				albumKey.albumArtist === albumDetails.summary.key.albumArtist
+					? Promise.resolve(albumTracks)
+					: rejected('albumNotFound'),
 			getLibraryTrackForPath: (path: string) =>
 				Promise.resolve(tracks.find((track) => fileFor(track).path === path) ?? null),
 			startLibraryTrack: (trackId: string) => {

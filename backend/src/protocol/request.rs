@@ -57,6 +57,13 @@ pub enum BackendRequest {
         after_cursor: Option<String>,
         search: Option<String>,
     },
+    GetLibraryAlbumDetails {
+        album_key: LibraryAlbumKey,
+    },
+    ListLibraryAlbumTracks {
+        album_key: LibraryAlbumKey,
+        offset: u32,
+    },
     StartLibraryTrack {
         track_id: String,
     },

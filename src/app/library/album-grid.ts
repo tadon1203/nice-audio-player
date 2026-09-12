@@ -1,5 +1,5 @@
 import { Component, input, output } from '@angular/core';
-import type { LibraryAlbumKey, LibraryAlbumSummary } from '@shared/native-app-api';
+import type { LibraryAlbumSummary } from '@shared/native-app-api';
 import { Button } from '@app/ui/button';
 import { Artwork } from '@app/ui/artwork';
 import type { CatalogView } from './library-workspace';
@@ -11,5 +11,5 @@ import type { CatalogView } from './library-workspace';
 })
 export class AlbumGrid {
 	readonly state = input.required<CatalogView<LibraryAlbumSummary>>();
-	readonly playAlbum = output<LibraryAlbumKey>();
+	readonly openAlbum = output<LibraryAlbumSummary['key']>();
 }

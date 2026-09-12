@@ -1,10 +1,11 @@
 import { Component, inject } from '@angular/core';
 import { PageFrame } from '@app/ui/page-frame';
+import { ScrollRegion } from '@app/ui/scroll-region';
 import { LibraryFoldersSection } from './library-folders-section';
 import { LibraryRootsStore } from './library-roots-store';
 
 @Component({
-	imports: [LibraryFoldersSection, PageFrame],
+	imports: [LibraryFoldersSection, PageFrame, ScrollRegion],
 	providers: [LibraryRootsStore],
 	selector: 'app-settings-page',
 	host: {

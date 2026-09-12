@@ -38,6 +38,8 @@ pub enum BackendResponse {
     ListLibraryTracks(crate::library::models::LibraryTrackPage),
     ListLibraryAlbums(crate::library::models::LibraryAlbumPage),
     ListLibraryAlbumArtists(crate::library::models::LibraryAlbumArtistPage),
+    GetLibraryAlbumDetails(crate::library::models::LibraryAlbumDetails),
+    ListLibraryAlbumTracks(crate::library::models::LibraryAlbumTrackPage),
     StartLibraryTrack(PlaybackSnapshot),
     StartLibraryAlbum(PlaybackSnapshot),
 }

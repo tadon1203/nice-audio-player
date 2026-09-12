@@ -1,6 +1,8 @@
 import type {
 	LibraryAlbumArtistPage,
+	LibraryAlbumDetails,
 	LibraryAlbumPage,
+	LibraryAlbumTrackPage,
 	LibraryRoot,
 	LibraryScanSnapshot,
 	LibraryStatus,
@@ -52,6 +54,20 @@ const isAlbum = (value: unknown): boolean =>
 	typeof value.key.title === 'string' &&
 	typeof value.key.albumArtist === 'string' &&
 	isArtwork(value.artwork);
+
+const isAlbumTrack = (value: unknown): boolean =>
+	isRecord(value) &&
+	typeof value.id === 'string' &&
+	typeof value.title === 'string' &&
+	isNullableString(value.artist) &&
+	isNullableNumber(value.trackNumber) &&
+	isNullableNumber(value.discNumber) &&
+	isNullableString(value.fileFormat) &&
+	isNullableNumber(value.bitDepth) &&
+	isNullableNumber(value.sampleRate) &&
+	isNullableNumber(value.durationMs) &&
+	(value.availability === 'available' || value.availability === 'missing') &&
+	typeof value.playable === 'boolean';
 
 const isArtist = (value: unknown): boolean =>
 	isRecord(value) &&
@@ -145,4 +161,28 @@ export const decodeLibraryAlbumArtists = (value: unknown): LibraryAlbumArtistPag
 			isNullableNumber(item.totalCount) &&
 			isNullableString(item.nextCursor),
 		'listLibraryAlbumArtists'
+	);
+
+export const decodeLibraryAlbumDetails = (value: unknown): LibraryAlbumDetails =>
+	decode(
+		value,
+		(item): item is LibraryAlbumDetails =>
+			isRecord(item) &&
+			isAlbum(item.summary) &&
+			isNullableString(item.date) &&
+			isNullableNumber(item.trackCount) &&
+			isNullableNumber(item.durationMs) &&
+			isNullableString(item.firstPlayableTrackId),
+		'getLibraryAlbumDetails'
+	);
+
+export const decodeLibraryAlbumTracks = (value: unknown): LibraryAlbumTrackPage =>
+	decode(
+		value,
+		(item): item is LibraryAlbumTrackPage =>
+			isRecord(item) &&
+			Array.isArray(item.items) &&
+			item.items.every(isAlbumTrack) &&
+			isNullableNumber(item.nextOffset),
+		'listLibraryAlbumTracks'
 	);

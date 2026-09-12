@@ -71,12 +71,13 @@ Library presentations are peer child routes rather than tab-local navigation:
 ```
 /library             → /library/albums
 /library/albums
+/library/albums/:albumArtist/:albumTitle
 /library/album-artists
 /library/tracks
 /settings
 ```
 
-The Library feature owns presentation-specific cached data, filters, and scroll positions. The Router owns the active presentation and the navigation links expose that state through `aria-current`. Playback Dock and signal-status UI remain shell-owned so playback state stays visible while routes change.
+The Library feature owns presentation-specific cached data, filters, and scroll positions. Album Details is a child route of Albums and owns a route-scoped album details workspace for album metadata and paged album tracks. The Router owns the active presentation and the navigation links expose that state through `aria-current`. Playback Dock and signal-status UI remain shell-owned so playback state stays visible while routes change.
 
 Time-based visual motion is owned by the component or directive that owns the state being changed. Simple state transitions use CSS and named motion tokens from `src/styles/theme.css`. A complex animation library may be introduced locally when a concrete feature requires sequencing, FLIP, or dynamic interruption; motion does not create a second state store or cross-feature service.
 
