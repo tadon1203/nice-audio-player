@@ -97,8 +97,7 @@
 		background: transparent;
 	}
 
-	.range-control:has(.range-control-input:hover:not(:disabled)),
-	.range-control:has(.range-control-input:focus:not(:disabled)) {
+	.range-control:has(.range-control-input:hover:not(:disabled)) {
 		--md-state-range-track-height: var(--md-state-range-track-active);
 	}
 
