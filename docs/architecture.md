@@ -46,7 +46,6 @@ src/
 └── app/
     ├── core/
     │   ├── backend/
-    │   ├── motion/
     │   └── shell/
     ├── library/
     ├── playback/
@@ -65,9 +64,21 @@ src/
 
 Feature routes should be lazy-loaded. Route-level providers are used when a service lifetime belongs to a lazy route; component-level providers are used when a lifetime belongs to a component subtree. Root providers are reserved for application-wide services.
 
-Persistent application surfaces are owned by the root application shell and composed around the Angular Router outlet.
+Persistent application surfaces are owned by the root application shell and composed around the Angular Router outlet. The desktop shell is a flexible workspace followed by a 128px playback area composed of a 104px Playback Dock and a 24px playback signal-status bar. At wide widths the workspace uses a fixed 224px navigation column beside the routed main area; narrow widths rearrange navigation above the main area without changing route ownership.
 
-The `core/motion` boundary is the sole Renderer boundary for time-based visual motion and GSAP integration. It owns motion tokens, reduced-motion policy, motion identity mapping, and Angular render/router coordination. Domain and feature object identity remains owned by the code that defines it; `core/motion` only maps a supplied semantic identity to motion correlation metadata. Angular owns DOM structure, navigation, and state; GSAP owns interpolation and FLIP calculations. Features never depend directly on GSAP.
+Library presentations are peer child routes rather than tab-local navigation:
+
+```
+/library             → /library/albums
+/library/albums
+/library/album-artists
+/library/tracks
+/settings
+```
+
+The Library feature owns presentation-specific cached data, filters, and scroll positions. The Router owns the active presentation and the navigation links expose that state through `aria-current`. Playback Dock and signal-status UI remain shell-owned so playback state stays visible while routes change.
+
+Time-based visual motion is owned by the component or directive that owns the state being changed. Simple state transitions use CSS and named motion tokens from `src/styles/theme.css`. A complex animation library may be introduced locally when a concrete feature requires sequencing, FLIP, or dynamic interruption; motion does not create a second state store or cross-feature service.
 
 The Renderer does not import Electron or Node APIs. Native and backend capabilities are accessed through the shared native API contract exposed by Preload.
 
@@ -172,18 +183,18 @@ Electron Forge  → package / make / signing / distribution
 
 Angular CLI owns the Renderer application build using the standard `@angular/build:application` builder. esbuild owns the Electron main and Preload bundles. Cargo owns the Rust Backend binary. Electron Forge packages the completed artifacts and produces distribution outputs; it is not the Renderer or Backend build system.
 
-The build pipeline has one producer per artifact and one assembly step:
+The `pnpm build` pipeline has one producer per artifact and one assembly step:
 
 ```
-bindings:generate → shared/protocol/generated.ts
-build:renderer   → build/renderer
-build:electron   → build/electron
-build:backend    → build/backend
-build:runtime    → build/runtime
-Forge package    → build/forge
+binding generation → shared/protocol/generated.ts
+Angular CLI        → build/renderer
+esbuild             → build/electron
+Cargo               → build/backend
+runtime staging     → build/runtime
+Forge package       → build/forge
 ```
 
-The `build:*` commands compile or stage only their owned artifact. `build` runs all producers in dependency order and then assembles the packaged runtime. `build:runtime` does not compile code; it copies the already-built Electron and Renderer artifacts and writes the packaged runtime manifest. Forge's `prePackage` invokes `build`, while `packageAfterCopy` only replaces Forge's temporary application directory with `build/runtime`.
+`pnpm build` runs all producers in dependency order and then assembles the packaged runtime. Runtime staging does not compile code; it copies the already-built Electron and Renderer artifacts and writes the packaged runtime manifest. Forge's `prePackage` invokes `pnpm build`, while `packageAfterCopy` only replaces Forge's temporary application directory with `build/runtime`.
 
 Development runtime:
 

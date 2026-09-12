@@ -1,11 +1,10 @@
 import { defineConfig } from '@playwright/test';
 
-const pnpmCommand = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
 const baseURL = 'http://127.0.0.1:4200';
 
 export default defineConfig({
 	webServer: {
-		command: `${pnpmCommand} run test:renderer`,
+		command: 'ng serve --host 127.0.0.1 --port 4200',
 		port: 4200,
 		timeout: 120_000,
 		reuseExistingServer: true

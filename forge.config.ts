@@ -29,7 +29,7 @@ const config: ForgeConfig = {
 	],
 	hooks: {
 		prePackage: async () => {
-			await execAsync('pnpm run build', {
+			await execAsync('pnpm build', {
 				cwd: repositoryRoot,
 				windowsHide: true
 			});

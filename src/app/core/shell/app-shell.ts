@@ -1,13 +1,14 @@
 import { Component } from '@angular/core';
-import { RouteMotion } from '../motion/route-motion';
+import { RouterOutlet } from '@angular/router';
 import { AppNavigation } from './app-navigation';
 import { PlaybackDock } from '@app/playback/playback-dock';
+import { PlaybackStatusBar } from '@app/playback/playback-status-bar';
 
 @Component({
-	imports: [AppNavigation, PlaybackDock, RouteMotion],
+	imports: [AppNavigation, PlaybackDock, PlaybackStatusBar, RouterOutlet],
 	selector: 'app-shell',
 	host: {
-		class: 'grid h-dvh w-full grid-rows-[minmax(0,1fr)_auto] overflow-hidden bg-canvas',
+		class: 'block h-dvh w-full overflow-hidden bg-canvas',
 		'data-testid': 'app-shell'
 	},
 	templateUrl: './app-shell.html'

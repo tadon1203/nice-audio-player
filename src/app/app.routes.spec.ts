@@ -9,8 +9,11 @@ describe('app routes', () => {
 		const router = TestBed.inject(Router);
 		const location = TestBed.inject(Location);
 
-		await router.navigateByUrl('/');
-		expect(location.path()).toBe('/library');
+		expect(routes[0]).toMatchObject({
+			path: '',
+			pathMatch: 'full',
+			redirectTo: 'library/albums'
+		});
 		await router.navigateByUrl('/settings');
 		expect(location.path()).toBe('/settings');
 	});

@@ -25,6 +25,86 @@
 		max-inline-size: 100%;
 	}
 
+	.range-control {
+		--range-track-height: var(--range-track-idle);
+		--range-fill-color: var(--color-range-fill);
+
+		min-inline-size: 0;
+	}
+
+	.range-control-progress {
+		--range-track-idle: var(--range-progress-idle-thickness);
+		--range-track-active: var(--range-progress-active-thickness);
+	}
+
+	.range-control-volume {
+		--range-track-idle: var(--range-volume-idle-thickness);
+		--range-track-active: var(--range-volume-active-thickness);
+	}
+
+	.range-control-volume[data-muted] {
+		--range-fill-color: var(--color-text-muted);
+	}
+
+	.range-control-track {
+		block-size: var(--range-track-height);
+		border-radius: var(--radius-full);
+		background: linear-gradient(
+			to right,
+			var(--range-fill-color) 0%,
+			var(--range-fill-color) calc(var(--range-progress, 0) * 1%),
+			var(--color-range-track) calc(var(--range-progress, 0) * 1%),
+			var(--color-range-track) 100%
+		);
+		transition: block-size var(--motion-duration-feedback) var(--motion-ease-interface);
+	}
+
+	.range-control-input {
+		appearance: none;
+		inline-size: 100%;
+		margin: 0;
+		background: transparent;
+		cursor: pointer;
+	}
+
+	.range-control-input::-webkit-slider-runnable-track {
+		block-size: var(--range-hit-height);
+		background: transparent;
+	}
+
+	.range-control-input::-webkit-slider-thumb {
+		appearance: none;
+		block-size: 100%;
+		inline-size: 0;
+		background: transparent;
+	}
+
+	.range-control-input::-moz-range-track {
+		block-size: var(--range-hit-height);
+		border: 0;
+		background: transparent;
+	}
+
+	.range-control-input::-moz-range-progress {
+		background: transparent;
+	}
+
+	.range-control-input::-moz-range-thumb {
+		block-size: 100%;
+		inline-size: 0;
+		border: 0;
+		background: transparent;
+	}
+
+	.range-control:has(.range-control-input:hover:not(:disabled)),
+	.range-control:has(.range-control-input:focus:not(:disabled)) {
+		--range-track-height: var(--range-track-active);
+	}
+
+	.range-control-input:disabled {
+		cursor: default;
+	}
+
 	img,
 	svg,
 	video,
@@ -40,6 +120,12 @@
 	::selection {
 		background: var(--color-text-primary);
 		color: var(--color-canvas);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.range-control-track {
+		transition-duration: 0s;
 	}
 }
 

@@ -199,10 +199,8 @@ Motion explains change; it does not decorate it.
 
 ```yaml
 motion:
-  micro: 90ms
-  pane: 160ms
-  navigation: 220ms
-  easing: 'ease-out'
+  feedback: 90ms
+  easing: 'cubic-bezier(0.22, 1, 0.36, 1)'
 ```
 
 Transitions are short, interruptible, and mechanical.

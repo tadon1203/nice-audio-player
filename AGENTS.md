@@ -91,14 +91,15 @@ See the [Angular style guide](https://angular.dev/style-guide).
 
 ### Tokens
 
-- Product design tokens MUST be declared in `src/styles/theme.css`, except motion duration and easing tokens, which MUST be declared in `src/app/core/motion/motion-tokens.ts`.
+- Product design tokens, including motion durations and easing curves, MUST be declared in `src/styles/theme.css`.
 - Literal color values MUST NOT appear outside `src/styles/theme.css`.
 - Reusable colors, typography, radii, shadows, spacing values, and responsive breakpoints MUST use a named token from `src/styles/theme.css`.
 
 ### Motion
 
-- Reusable motion durations and easing curves MUST use a named token from `src/app/core/motion/motion-tokens.ts`.
-- All time-based visual motion MUST go through `src/app/core/motion`; features and shell code MUST NOT depend directly on GSAP or browser animation APIs.
+- Prefer CSS transitions for simple UI state changes.
+- Reusable motion durations and easing curves MUST use named tokens from `src/styles/theme.css`.
+- Introduce a complex animation library only when a concrete feature requires sequencing, FLIP, or dynamic interruption; the feature or component that owns that behavior owns the implementation.
 - `!important` is prohibited.
 
 ## Accessibility
@@ -112,6 +113,9 @@ See the [Angular style guide](https://angular.dev/style-guide).
 
 - Every Tailwind utility name MUST appear completely and statically in source. Utility names MUST NOT be constructed by interpolation or string concatenation.
 - A named Tailwind utility MUST be used when it represents the required value. An arbitrary value MAY be used only when no equivalent named utility exists and the value is component-specific geometry.
+- Arbitrary values are restricted to token-backed values and structural layout expressions. Arbitrary colors, typography, spacing, radii, shadows, and motion values MUST NOT be written directly in templates or component styles.
+- Reusable product values and component geometry MUST be declared in `src/styles/theme.css` and referenced through a named utility or `var(--...)`. Structural expressions such as `minmax()`, `repeat()`, `calc()`, and `clamp()` MAY remain inline when they describe layout structure rather than a reusable visual value.
+- Arbitrary variants and arbitrary properties, such as `aria-[current=page]:...` and `[scrollbar-gutter:stable]`, MAY remain inline because they express selectors or CSS properties rather than design values.
 - Two utilities that write the same CSS property MUST NOT be applied in the same variant. Overrides across different responsive, pseudo-class, ARIA, or `data-*` variants are allowed.
 - If a visual state is already represented by a native state, an ARIA attribute, or a `data-*` attribute, its styling MUST use the corresponding Tailwind variant. An Angular class binding MUST NOT be created only to duplicate that state for styling.
 - Repeated application markup with the same structure, styling, and behavior MUST have exactly one implementation. Render repeated data with Angular control flow; extract repeated interactive or semantic UI into a focused Angular component.
@@ -129,11 +133,10 @@ The canonical command definitions are in `package.json`.
 
 Detailed contributor workflow is documented in [CONTRIBUTING.md](./CONTRIBUTING.md#local-verification).
 
-- Use `pnpm verify` for consistency checks and tests.
-- Use `pnpm validate` for checks, tests, and all production builds.
+- Use `pnpm validate` for consistency checks, tests, and all production builds.
 - Use `pnpm format` to write formatting changes.
-- Use `pnpm format:check` to check formatting without modifying files.
-- Use `pnpm fonts:download` to acquire and verify the official Fontshare asset.
+- Use `pnpm fonts` to verify the bundled Fontshare asset.
+- Use `pnpm fonts -- download` to acquire the official Fontshare asset.
 - ESLint, Stylelint, TypeScript, Angular compiler, Prettier, and test failures MUST be fixed at their cause. Their checks MUST NOT be disabled, suppressed, or weakened to make a change pass.
 
 ## Git and GitHub

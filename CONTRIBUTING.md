@@ -41,18 +41,18 @@ This follows the [Conventional Commits specification](https://www.conventionalco
 
 ## Local verification
 
-Use `pnpm verify` for consistency checks and tests:
+Use `pnpm validate` for consistency checks, tests, and production builds:
 
 - generated binding consistency
 - Angular, Electron, shared TypeScript, and generated binding checks
 - Prettier, ESLint, and Stylelint
 - Rust formatting, Clippy, and tests
 - unit and end-to-end tests
+- production renderer, Electron, backend, and runtime builds
 
-Use `pnpm validate` when the renderer, Electron bundle, and backend release
-artifacts must also be built. End-to-end tests build a temporary renderer to
-serve the application. `pnpm format` and `pnpm format:check` use the same
-explicit file set; the former writes changes and the latter only checks them.
+Use `pnpm test` when only the test suites are needed. End-to-end tests build a
+temporary renderer to serve the application. `pnpm format` writes formatting
+changes; formatting is checked as part of `pnpm validate`.
 
 ## Git and GitHub
 

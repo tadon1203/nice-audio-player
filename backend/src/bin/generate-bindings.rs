@@ -24,9 +24,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let actual = std::fs::read(&temporary)?;
         std::fs::remove_file(temporary)?;
         if expected != actual {
-            return Err(
-                "generated protocol bindings are out of date; run pnpm bindings:generate".into(),
-            );
+            return Err("generated protocol bindings are out of date; run pnpm build".into());
         }
     } else {
         if let Some(parent) = output.parent() {

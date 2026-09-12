@@ -84,39 +84,17 @@ export default defineConfig(
 		}
 	},
 	{
-		files: ['src/app/core/motion/motion.ts', 'src/app/core/motion/motion.spec.ts'],
-		rules: {
-			'no-restricted-imports': [
-				'error',
-				{
-					paths: [
-						{ name: 'electron', message: 'Renderer code must use the shared host contract.' },
-						{ name: '@angular/animations', message: 'Use the core motion boundary.' }
-					],
-					patterns: [
-						{
-							group: ['../../**'],
-							message: 'Use a configured path alias instead of a deep relative import.'
-						},
-						{
-							group: ['node:*', '**/electron/**'],
-							message: 'Renderer code must not depend on Node or Electron.'
-						}
-					]
-				}
-			]
-		}
-	},
-	{
 		files: ['src/**/*.ts'],
-		ignores: ['src/app/core/motion/motion.ts', 'src/app/core/motion/motion.spec.ts'],
 		rules: {
 			'no-restricted-imports': [
 				'error',
 				{
 					paths: [
 						{ name: 'electron', message: 'Renderer code must use the shared host contract.' },
-						{ name: '@angular/animations', message: 'Use the core motion boundary.' }
+						{
+							name: '@angular/animations',
+							message: 'Prefer CSS transitions or an owner-local animation implementation.'
+						}
 					],
 					patterns: [
 						{
@@ -126,10 +104,6 @@ export default defineConfig(
 						{
 							group: ['node:*', '**/electron/**'],
 							message: 'Renderer code must not depend on Node or Electron.'
-						},
-						{
-							group: ['gsap', 'gsap/*'],
-							message: 'Use src/app/core/motion instead of importing GSAP directly.'
 						}
 					]
 				}

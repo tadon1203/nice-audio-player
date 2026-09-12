@@ -1,7 +1,7 @@
 import { Routes } from '@angular/router';
 
 export const routes: Routes = [
-	{ path: '', pathMatch: 'full', redirectTo: 'library' },
+	{ path: '', pathMatch: 'full', redirectTo: 'library/albums' },
 	{
 		path: 'library',
 		loadChildren: () =>

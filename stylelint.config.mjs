@@ -21,13 +21,7 @@ export default {
 			'animation-iteration-count',
 			'animation-name',
 			'animation-play-state',
-			'animation-timing-function',
-			'transition',
-			'transition-behavior',
-			'transition-delay',
-			'transition-duration',
-			'transition-property',
-			'transition-timing-function'
+			'animation-timing-function'
 		],
 		'function-disallowed-list': [
 			'rgb',

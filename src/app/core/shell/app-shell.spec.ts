@@ -13,6 +13,8 @@ describe('AppShell', () => {
 		const root = fixture.nativeElement as HTMLElement;
 
 		expect(root.querySelector('app-navigation')).not.toBeNull();
-		expect(root.querySelector('app-route-motion')).not.toBeNull();
+		expect(root.querySelector('router-outlet')).not.toBeNull();
+		expect(root.querySelector('app-playback-dock')).not.toBeNull();
+		expect(root.querySelector('app-playback-status-bar')).not.toBeNull();
 	});
 });

@@ -6,6 +6,9 @@ importers:
   .:
     configDependencies: {}
     packageManagerDependencies:
+      '@pnpm/exe':
+        specifier: 12.3.4
+        version: 12.3.4
       pnpm:
         specifier: 12.3.4
         version: 12.3.4
@@ -56,6 +59,11 @@ packages:
     cpu: [x64]
     os: [win32]
 
+  '@pnpm/exe@12.3.4':
+    resolution: {integrity: sha512-Rq7JokWAyYF9IFfn8zofB/q2AgnZlmoMuH5fMHB2+Ta61I9aD7sNm+woZpx6iH+5vb38chdSoYRvOtSqlH72YQ==}
+    engines: {node: '>=18.*'}
+    hasBin: true
+
   pnpm@12.3.4:
     resolution: {integrity: sha512-lhqkH7B32joEpEHZ+OFevAyW2o73ELLrZ7+e58sGEOq9SPH9hfUc/+c4RnhfoPh8VqOocqHYk/hEZ0G1zORUVw==}
     engines: {node: '>=18.*'}
@@ -86,6 +94,17 @@ snapshots:
 
   '@pnpm/exe.win32-x64@12.3.4':
     optional: true
+
+  '@pnpm/exe@12.3.4':
+    optionalDependencies:
+      '@pnpm/exe.darwin-arm64': 12.3.4
+      '@pnpm/exe.darwin-x64': 12.3.4
+      '@pnpm/exe.linux-arm64': 12.3.4
+      '@pnpm/exe.linux-arm64-musl': 12.3.4
+      '@pnpm/exe.linux-x64': 12.3.4
+      '@pnpm/exe.linux-x64-musl': 12.3.4
+      '@pnpm/exe.win32-arm64': 12.3.4
+      '@pnpm/exe.win32-x64': 12.3.4
 
   pnpm@12.3.4:
     optionalDependencies:
@@ -139,9 +158,6 @@ importers:
       electron-squirrel-startup:
         specifier: ^1.0.1
         version: 1.0.1(supports-color@10.2.2)
-      gsap:
-        specifier: ^3.15.0
-        version: 3.15.0
       rxjs:
         specifier: ~7.8.0
         version: 7.8.2
@@ -3350,9 +3366,6 @@ packages:
 
   graceful-fs@4.2.11:
     resolution: {integrity: sha512-RbJ5/jmFcNNCcDV5o9eTnBLJ/HszWV0P73bc+Ff4nS/rJj+YaS6IGyiOL0VoBYX+l1Wrl3k63h/KrH+nhJ0XvQ==}
-
-  gsap@3.15.0:
-    resolution: {integrity: sha512-dMW4CWBTUK1AEEDeZc1g4xpPGIrSf9fJF960qbTZmN/QwZIWY5wgliS6JWl9/25fpTGJrMRtSjGtOmPnfjZB+A==}
 
   has-flag@4.0.0:
     resolution: {integrity: sha512-EykJT/Q1KjTWctppgIAgfSO0tKVuZUjhgMr17kqTumMl6Afv3EISleU7qZUzoXDFTAHTDC4NOoG/ZxU3EvlMPQ==}
@@ -8739,8 +8752,6 @@ snapshots:
       responselike: 2.0.1
 
   graceful-fs@4.2.11: {}
-
-  gsap@3.15.0: {}
 
   has-flag@4.0.0: {}
 

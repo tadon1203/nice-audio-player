@@ -16,11 +16,9 @@ A local-first Windows desktop music player focused on reliable playback and a ca
 pnpm install
 pnpm dev
 pnpm test
-pnpm verify
 pnpm validate
 ```
 
-Use `pnpm dev` for the Angular development server and Electron shell. Use `pnpm verify`
-for the full consistency, lint, type-check, Rust, unit, and end-to-end gate. Use
-`pnpm validate` when production renderer, Electron, backend, and runtime artifacts
-must also be built.
+Use `pnpm dev` for the Angular development server and Electron shell. Use `pnpm test`
+to run tests only. Use `pnpm validate` for the complete consistency, lint, type-check,
+Rust, test, and production-build gate.
