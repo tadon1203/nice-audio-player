@@ -3,7 +3,7 @@ import { Component } from '@angular/core';
 @Component({
 	selector: 'app-page-frame',
 	host: {
-		class: 'mx-auto block w-full max-w-[var(--content-max-width)] px-[var(--layout-inline-padding)]'
+		class: 'mx-auto block w-full max-w-layout-content-max px-layout-inline'
 	},
 	template: '<ng-content />'
 })

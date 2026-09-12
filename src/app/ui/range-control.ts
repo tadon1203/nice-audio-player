@@ -8,7 +8,7 @@ import { Component, input, output } from '@angular/core';
 			class="range-control-track absolute inset-x-0 top-1/2 -translate-y-1/2"
 			aria-hidden="true"
 			data-range-track
-			[style.--range-progress]="progress()"
+			[style.--md-state-range-progress]="progress()"
 		></span>
 		<input
 			type="range"
@@ -19,7 +19,7 @@ import { Component, input, output } from '@angular/core';
 			[disabled]="disabled()"
 			[attr.aria-label]="label()"
 			[attr.aria-valuetext]="valueText()"
-			class="range-control-input absolute inset-x-0 top-1/2 z-10 h-[var(--range-hit-height)] w-full -translate-y-1/2"
+			class="range-control-input absolute inset-x-0 top-1/2 z-10 h-hit-target-min w-full -translate-y-1/2"
 			(input)="emitInput($event)"
 			(change)="emitChange($event)"
 		/>

@@ -1,4 +1,4 @@
-<div class="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-6">
+<div class="grid grid-cols-[repeat(auto-fill,minmax(var(--spacing-media-tile),1fr))] gap-6">
 	@for (artist of state().items; track artist.key.name) {
 	<button
 		type="button"
@@ -8,9 +8,9 @@
 		(click)="selectArtist.emit(artist.key.name)"
 	>
 		<app-artwork class="w-full" [artwork]="artist.artwork" [alt]="artist.key.name + ' artwork'" />
-		<span class="truncate text-body-md text-text-primary">{{ artist.key.name }}</span>
+		<span class="truncate text-body-medium text-on-surface">{{ artist.key.name }}</span>
 		@if (artist.albumCount !== null) {
-		<span class="text-body-sm text-text-secondary">{{ artist.albumCount }} albums</span>
+		<span class="text-body-small text-secondary">{{ artist.albumCount }} albums</span>
 		}
 	</button>
 	}

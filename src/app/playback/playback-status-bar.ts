@@ -60,13 +60,13 @@ export function formatPlaybackStatus(
 	host: { class: 'block min-w-0' },
 	template: `
 		<section
-			class="grid h-full min-w-0 grid-cols-3 items-center divide-x divide-border-subtle/60 border-t border-border-subtle bg-status-surface px-[var(--shell-dock-inline-padding)] text-status text-text-secondary"
+			class="grid h-full min-w-0 grid-cols-3 items-center divide-x divide-outline-variant/60 border-t border-outline-variant bg-surface-container-low px-layout-inline text-body-small text-secondary"
 			aria-label="Playback signal status"
 			data-testid="playback-status-bar"
 		>
 			@for (line of statusLines(); track line.label) {
 				<div class="min-w-0 truncate" [attr.data-status-line]="line.label">
-					<span class="text-text-secondary">{{ line.label }}</span>
+					<span class="text-secondary">{{ line.label }}</span>
 					<span class="ms-2 tabular-nums">{{ line.value }}</span>
 				</div>
 			}

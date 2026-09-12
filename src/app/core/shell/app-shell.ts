@@ -8,7 +8,7 @@ import { PlaybackStatusBar } from '@app/playback/playback-status-bar';
 	imports: [AppNavigation, PlaybackDock, PlaybackStatusBar, RouterOutlet],
 	selector: 'app-shell',
 	host: {
-		class: 'block h-dvh w-full overflow-hidden bg-canvas',
+		class: 'block h-dvh w-full overflow-hidden bg-surface-container-lowest',
 		'data-testid': 'app-shell'
 	},
 	templateUrl: './app-shell.html'

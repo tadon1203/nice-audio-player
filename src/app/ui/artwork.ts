@@ -4,7 +4,7 @@ import { artworkUrl } from '@app/core/backend/artwork-url';
 
 @Component({
 	selector: 'app-artwork',
-	host: { class: 'block aspect-square overflow-hidden bg-surface-raised' },
+	host: { class: 'block aspect-square overflow-hidden bg-surface-container' },
 	template: `
 		@if (url() && failedUrl() !== url()) {
 			<img
@@ -15,7 +15,7 @@ import { artworkUrl } from '@app/core/backend/artwork-url';
 				class="h-full w-full object-cover"
 			/>
 		} @else {
-			<span aria-hidden="true" class="block h-full w-full bg-surface-raised"></span>
+			<span aria-hidden="true" class="block h-full w-full bg-surface-container"></span>
 		}
 	`
 })

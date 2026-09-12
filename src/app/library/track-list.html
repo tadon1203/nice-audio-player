@@ -1,4 +1,4 @@
-<ul class="divide-y divide-border-subtle" aria-label="Tracks">
+<ul class="divide-y divide-outline-variant" aria-label="Tracks">
 	@for (track of state().items; track track.id) {
 	<li>
 		<button
@@ -9,22 +9,22 @@
 			[aria-label]="'Play ' + track.title"
 			(click)="playTrack.emit(track.id)"
 		>
-			<span class="min-w-0 truncate text-body-md text-text-primary">{{ track.title }}</span>
-			<span class="min-w-0 truncate text-body-sm text-text-secondary"
+			<span class="min-w-0 truncate text-body-medium text-on-surface">{{ track.title }}</span>
+			<span class="min-w-0 truncate text-body-small text-secondary"
 				>{{ track.artist ?? 'Unknown artist' }}</span
 			>
-			<span class="min-w-0 truncate text-body-sm text-text-secondary"
+			<span class="min-w-0 truncate text-body-small text-secondary"
 				>{{ track.album ?? 'Unknown album' }}</span
 			>
-			<span class="text-body-sm text-text-secondary">{{ track.durationMs | formatDuration }}</span>
+			<span class="text-body-small text-secondary">{{ track.durationMs | formatDuration }}</span>
 			@if (track.availability === 'missing') {
-			<span class="col-span-full text-body-sm text-error">Missing</span>
+			<span class="col-span-full text-body-small text-error">Missing</span>
 			} @else if (!track.playable) {
-			<span class="col-span-full text-body-sm text-text-muted">Unavailable</span>
+			<span class="col-span-full text-body-small text-on-surface-variant">Unavailable</span>
 			} @if (activeTrackId() === track.id && playbackStatus() === 'playing') {
-			<span class="col-span-full text-body-sm text-text-primary">Playing</span>
+			<span class="col-span-full text-body-small text-on-surface">Playing</span>
 			} @else if (activeTrackId() === track.id && playbackStatus() === 'paused') {
-			<span class="col-span-full text-body-sm text-text-primary">Paused</span>
+			<span class="col-span-full text-body-small text-on-surface">Paused</span>
 			}
 		</button>
 	</li>

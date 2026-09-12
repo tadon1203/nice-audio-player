@@ -21,21 +21,32 @@ Apple's human-interface work is a reference for continuity, direct manipulation,
 
 A successful screen should answer four questions without explanation: what matters now, what belongs together, what state the system is in, and where an action will take effect.
 
+## Design tokens
+
+The token system follows the Material 3 reference/system/component model and uses the [Material Web theming model](https://github.com/material-components/material-web/blob/main/docs/theming/README.md) as its implementation reference. Material 3 provides the token vocabulary and semantic roles; it does not determine the visual identity of Nice Audio Player.
+
+Reference tokens (`--md-ref-*`) own concrete values. System tokens (`--md-sys-*`) own semantic roles. Component tokens may only alias system tokens and may not contain concrete color, typography, size, shape, or motion values. Tailwind `@theme` aliases (`--color-*`, `--text-*`, `--spacing-*`, `--radius-*`, and `--breakpoint-*`) are utility-generation adapters and never own concrete values.
+
+The product does not use `@material/web`, `@material/material-color-utilities`, dynamic color generation, Style Dictionary, or project-specific token-generation scripts. Album artwork remains the primary source of non-semantic color.
+
+All interface text is at least 14px. Material 3 roles that would resolve below that floor are not used at their default size and are remapped to the product's minimum. New product-specific token names are not added when an existing Material 3 role or approved system size can express the requirement.
+
 ## Colors
 
 ```yaml
 colors:
-  canvas: '#050505'
-  surface: '#0C0C0C'
-  surface-raised: '#121212'
-  surface-hover: '#181818'
-  surface-pressed: '#202020'
-  border-subtle: '#2A2A2A'
-  text-primary: '#F4F4F4'
-  text-secondary: '#A5A5A5'
-  text-muted: '#7A7A7A'
-  focus-ring: '#FFFFFF'
-  error: '#FF5C68'
+  surface: md-sys-color-surface
+  surface-container-low: md-sys-color-surface-container-low
+  surface-container: md-sys-color-surface-container
+  surface-container-high: md-sys-color-surface-container-high
+  surface-container-highest: md-sys-color-surface-container-highest
+  secondary-container: md-sys-color-secondary-container
+  outline-variant: md-sys-color-outline-variant
+  on-surface: md-sys-color-on-surface
+  secondary: md-sys-color-secondary
+  on-surface-variant: md-sys-color-on-surface-variant
+  primary: md-sys-color-primary
+  error: md-sys-color-error
 ```
 
 The permanent application chrome is grayscale.
@@ -199,8 +210,8 @@ Motion explains change; it does not decorate it.
 
 ```yaml
 motion:
-  feedback: 90ms
-  easing: 'cubic-bezier(0.22, 1, 0.36, 1)'
+  feedback: 100ms
+  easing: 'cubic-bezier(0.2, 0, 0, 1)'
 ```
 
 Transitions are short, interruptible, and mechanical.

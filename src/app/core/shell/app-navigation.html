@@ -1,15 +1,15 @@
 <nav
-	class="flex min-h-0 flex-wrap items-center gap-1 border-b border-border-subtle bg-surface px-4 py-2 app-wide:h-full app-wide:flex-col app-wide:items-stretch app-wide:border-e app-wide:border-b-0 app-wide:px-3 app-wide:pt-12 app-wide:pb-6"
+	class="flex min-h-0 flex-wrap items-center gap-1 border-b border-outline-variant bg-surface px-4 py-2 app-wide:h-full app-wide:flex-col app-wide:items-stretch app-wide:border-e app-wide:border-b-0 app-wide:px-3 app-wide:pt-12 app-wide:pb-6"
 	aria-label="Application"
 >
 	<div class="flex min-w-0 flex-1 flex-wrap gap-1 app-wide:flex-none app-wide:flex-col">
-		<p class="mb-3 hidden px-3 text-body-sm text-text-muted app-wide:block">Library</p>
+		<p class="mb-3 hidden px-3 text-body-small text-on-surface-variant app-wide:block">Library</p>
 		@for (destination of destinations; track destination.route) {
 		<a
 			[routerLink]="destination.route"
 			routerLinkActive
 			ariaCurrentWhenActive="page"
-			class="group relative flex h-[var(--shell-nav-item-height)] min-w-0 flex-1 items-center justify-center gap-2 rounded-control px-3 text-body-sm text-text-secondary no-underline hover:bg-surface-hover hover:text-text-primary active:bg-surface-pressed aria-[current=page]:bg-surface-selected aria-[current=page]:text-text-primary app-wide:flex-none app-wide:justify-start app-wide:px-3"
+			class="group relative flex h-control-default min-w-0 flex-1 items-center justify-center gap-2 rounded-small px-3 text-label-large text-secondary no-underline hover:bg-surface-container hover:text-on-surface active:bg-surface-container-high aria-[current=page]:bg-secondary-container aria-[current=page]:text-on-secondary-container app-wide:flex-none app-wide:justify-start app-wide:px-3"
 		>
 			@switch (destination.id) { @case ('albums') {
 			<svg lucideDisc aria-hidden="true" class="size-4 shrink-0"></svg>
@@ -26,7 +26,7 @@
 		[routerLink]="'/settings'"
 		routerLinkActive
 		ariaCurrentWhenActive="page"
-		class="group relative flex h-[var(--shell-nav-item-height)] min-w-0 flex-1 items-center justify-center gap-2 rounded-control px-3 text-body-sm text-text-secondary no-underline hover:bg-surface-hover hover:text-text-primary active:bg-surface-pressed aria-[current=page]:bg-surface-selected aria-[current=page]:text-text-primary app-wide:mt-auto app-wide:flex-none app-wide:justify-start app-wide:px-3"
+		class="group relative flex h-control-default min-w-0 flex-1 items-center justify-center gap-2 rounded-small px-3 text-label-large text-secondary no-underline hover:bg-surface-container hover:text-on-surface active:bg-surface-container-high aria-[current=page]:bg-secondary-container aria-[current=page]:text-on-secondary-container app-wide:mt-auto app-wide:flex-none app-wide:justify-start app-wide:px-3"
 	>
 		<svg lucideSettings aria-hidden="true" class="size-4 shrink-0"></svg>
 		<span class="truncate">Settings</span>

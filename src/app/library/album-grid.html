@@ -1,5 +1,5 @@
 <div
-	class="grid grid-cols-[repeat(auto-fill,minmax(var(--album-tile-size),max-content))] gap-x-7 gap-y-3"
+	class="grid grid-cols-[repeat(auto-fill,minmax(var(--spacing-media-tile),max-content))] gap-x-7 gap-y-3"
 >
 	@for (album of state().items; track album.key.title + album.key.albumArtist) {
 	<button
@@ -10,14 +10,12 @@
 		(click)="playAlbum.emit(album.key)"
 	>
 		<app-artwork
-			class="w-[var(--album-tile-size)] rounded-control group-hover:bg-surface-hover"
+			class="w-media-tile rounded-small group-hover:bg-surface-container"
 			[artwork]="album.artwork"
 			[alt]="album.key.title + ' artwork'"
 		/>
-		<span class="w-[var(--album-tile-size)] truncate text-body-sm text-text-primary"
-			>{{ album.key.title }}</span
-		>
-		<span class="w-[var(--album-tile-size)] truncate text-body-sm text-text-secondary"
+		<span class="w-media-tile truncate text-body-small text-on-surface">{{ album.key.title }}</span>
+		<span class="w-media-tile truncate text-body-small text-secondary"
 			>{{ album.key.albumArtist }}</span
 		>
 	</button>
