@@ -118,6 +118,7 @@ export const decodeLibraryTracks = (value: unknown): LibraryTrackPage =>
 			isRecord(item) &&
 			Array.isArray(item.items) &&
 			item.items.every(isTrack) &&
+			isNullableNumber(item.totalCount) &&
 			isNullableString(item.nextAfterId),
 		'listLibraryTracks'
 	);
@@ -129,6 +130,7 @@ export const decodeLibraryAlbums = (value: unknown): LibraryAlbumPage =>
 			isRecord(item) &&
 			Array.isArray(item.items) &&
 			item.items.every(isAlbum) &&
+			isNullableNumber(item.totalCount) &&
 			isNullableString(item.nextCursor),
 		'listLibraryAlbums'
 	);
@@ -140,6 +142,7 @@ export const decodeLibraryAlbumArtists = (value: unknown): LibraryAlbumArtistPag
 			isRecord(item) &&
 			Array.isArray(item.items) &&
 			item.items.every(isArtist) &&
+			isNullableNumber(item.totalCount) &&
 			isNullableString(item.nextCursor),
 		'listLibraryAlbumArtists'
 	);

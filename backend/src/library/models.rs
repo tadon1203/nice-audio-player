@@ -112,6 +112,8 @@ pub struct LibraryTrackDetails {
 #[serde(rename_all = "camelCase")]
 pub struct LibraryTrackPage {
     pub items: Vec<LibraryTrackSummary>,
+    #[specta(type = f64)]
+    pub total_count: u64,
     pub next_after_id: Option<String>,
 }
 #[derive(Debug, Clone, Serialize, serde::Deserialize, specta::Type)]
@@ -135,6 +137,8 @@ pub struct LibraryAlbumSummary {
 #[serde(rename_all = "camelCase")]
 pub struct LibraryAlbumPage {
     pub items: Vec<LibraryAlbumSummary>,
+    #[specta(type = f64)]
+    pub total_count: u64,
     pub next_cursor: Option<String>,
 }
 #[derive(Debug, Clone, Serialize, specta::Type)]
@@ -149,6 +153,8 @@ pub struct LibraryAlbumArtistSummary {
 #[serde(rename_all = "camelCase")]
 pub struct LibraryAlbumArtistPage {
     pub items: Vec<LibraryAlbumArtistSummary>,
+    #[specta(type = f64)]
+    pub total_count: u64,
     pub next_cursor: Option<String>,
 }
 #[derive(Debug, Clone, Serialize, specta::Type)]

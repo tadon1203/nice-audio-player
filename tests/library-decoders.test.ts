@@ -26,6 +26,17 @@ describe('library backend decoders', () => {
 		expect(() => decodeLibraryTracks({ items: [{ id: 'track-1' }], nextAfterId: null })).toThrow(
 			/Invalid backend response/
 		);
+		expect(() => decodeLibraryTracks({ items: [], nextAfterId: null })).toThrow(
+			/Invalid backend response/
+		);
+	});
+
+	it('accepts a catalog page with an explicit total count', () => {
+		expect(decodeLibraryTracks({ items: [], totalCount: 184, nextAfterId: null })).toEqual({
+			items: [],
+			totalCount: 184,
+			nextAfterId: null
+		});
 	});
 
 	it('requires canonical artwork references and supports nullable track lookup', () => {

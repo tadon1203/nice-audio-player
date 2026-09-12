@@ -142,6 +142,20 @@ impl LibraryShared {
             .db()?
             .read()
             .map_err(|_| LibraryCommandError::PersistenceFailed)?;
+        let total_count = c
+            .query_row(
+                r#"SELECT COUNT(*)
+                FROM tracks t
+                JOIN library_files f ON f.id=t.file_id
+                LEFT JOIN track_source_metadata m ON m.track_id=t.id AND m.source_revision=f.source_revision
+                WHERE ?1='' OR COALESCE(NULLIF(trim(m.title),''),CASE WHEN f.extension='' THEN f.file_name ELSE substr(f.file_name,1,length(f.file_name)-length(f.extension)-1) END) LIKE ?2 ESCAPE '\'
+                  OR COALESCE(m.artist,'') LIKE ?2 ESCAPE '\'
+                  OR COALESCE(NULLIF(trim(m.album),''),'Unknown album') LIKE ?2 ESCAPE '\'
+                  OR COALESCE(NULLIF(trim(m.album_artist),''),NULLIF(trim(m.artist),''),'Unknown artist') LIKE ?2 ESCAPE '\'"#,
+                params![search, pattern],
+                |row| row.get::<_, i64>(0),
+            )
+            .map_err(|_| LibraryCommandError::PersistenceFailed)? as u64;
         let mut statement = c
             .prepare(r#"SELECT t.id,f.file_name,f.availability,f.inspection_status,m.title,m.artist,m.album,m.album_artist,m.duration_ms,a.content_hash,a.mime_type,a.relative_path,m.artwork_status
                 FROM tracks t
@@ -149,7 +163,7 @@ impl LibraryShared {
                 LEFT JOIN track_source_metadata m ON m.track_id=t.id AND m.source_revision=f.source_revision
                 LEFT JOIN artwork_assets a ON a.id=m.artwork_id AND m.artwork_status='stored'
                 WHERE t.id>?1
-                  AND (?2='' OR f.file_name LIKE ?3 ESCAPE '\'
+                  AND (?2='' OR COALESCE(NULLIF(trim(m.title),''),CASE WHEN f.extension='' THEN f.file_name ELSE substr(f.file_name,1,length(f.file_name)-length(f.extension)-1) END) LIKE ?3 ESCAPE '\'
                     OR COALESCE(m.artist,'') LIKE ?3 ESCAPE '\'
                     OR COALESCE(NULLIF(trim(m.album),''),'Unknown album') LIKE ?3 ESCAPE '\'
                     OR COALESCE(NULLIF(trim(m.album_artist),''),NULLIF(trim(m.artist),''),'Unknown artist') LIKE ?3 ESCAPE '\')
@@ -180,6 +194,7 @@ impl LibraryShared {
         };
         Ok(LibraryTrackPage {
             items,
+            total_count,
             next_after_id,
         })
     }
@@ -196,6 +211,17 @@ impl LibraryShared {
             .db()?
             .read()
             .map_err(|_| LibraryCommandError::PersistenceFailed)?;
+        let total_count = c
+            .query_row(
+                &format!(
+                    r#"WITH members AS MATERIALIZED ({}), groups AS (SELECT album_title,effective_artist FROM members GROUP BY album_title,effective_artist)
+                    SELECT COUNT(*) FROM groups WHERE (?1='' OR album_title LIKE ?2 ESCAPE '\' OR effective_artist LIKE ?2 ESCAPE '\')"#,
+                    CATALOG_MEMBER_PROJECTION
+                ),
+                params![search, pattern],
+                |row| row.get::<_, i64>(0),
+            )
+            .map_err(|_| LibraryCommandError::PersistenceFailed)? as u64;
         let sql = format!(
             r#"WITH members AS MATERIALIZED ({}) , groups AS (SELECT album_title,effective_artist FROM members GROUP BY album_title,effective_artist), page AS (
           SELECT album_title,effective_artist FROM groups WHERE (?1='' OR album_title LIKE ?2 ESCAPE '\' OR effective_artist LIKE ?2 ESCAPE '\') AND (?3 IS NULL OR album_title COLLATE NOCASE > ?3 COLLATE NOCASE OR (album_title COLLATE NOCASE = ?3 COLLATE NOCASE AND effective_artist COLLATE NOCASE > ?4 COLLATE NOCASE) OR (album_title COLLATE NOCASE = ?3 COLLATE NOCASE AND effective_artist COLLATE NOCASE = ?4 COLLATE NOCASE AND (album_title > ?3 OR (album_title = ?3 AND effective_artist > ?4)))) ORDER BY album_title COLLATE NOCASE,effective_artist COLLATE NOCASE,album_title,effective_artist LIMIT 101
@@ -243,6 +269,7 @@ impl LibraryShared {
             .collect();
         Ok(LibraryAlbumPage {
             items,
+            total_count,
             next_cursor: next,
         })
     }
@@ -259,6 +286,17 @@ impl LibraryShared {
             .db()?
             .read()
             .map_err(|_| LibraryCommandError::PersistenceFailed)?;
+        let total_count = c
+            .query_row(
+                &format!(
+                    r#"WITH members AS MATERIALIZED ({}), groups AS (SELECT effective_artist AS artist_name FROM members GROUP BY effective_artist)
+                    SELECT COUNT(*) FROM groups WHERE (?1='' OR artist_name LIKE ?2 ESCAPE '\')"#,
+                    CATALOG_MEMBER_PROJECTION
+                ),
+                params![search, pattern],
+                |row| row.get::<_, i64>(0),
+            )
+            .map_err(|_| LibraryCommandError::PersistenceFailed)? as u64;
         let sql = format!(
             r#"WITH members AS MATERIALIZED ({}), groups AS (SELECT effective_artist AS artist_name,COUNT(DISTINCT album_title) album_count FROM members GROUP BY effective_artist), page AS (SELECT artist_name,album_count FROM groups WHERE (?1='' OR artist_name LIKE ?2 ESCAPE '\') AND (?3 IS NULL OR artist_name COLLATE NOCASE > ?3 COLLATE NOCASE OR (artist_name COLLATE NOCASE = ?3 COLLATE NOCASE AND artist_name > ?3)) ORDER BY artist_name COLLATE NOCASE,artist_name LIMIT 101), first_albums AS (SELECT effective_artist AS artist_name,album_title FROM (SELECT effective_artist,album_title,ROW_NUMBER() OVER(PARTITION BY effective_artist ORDER BY album_title COLLATE NOCASE,album_title) rank FROM members) WHERE rank=1), ranked AS (SELECT p.artist_name,p.album_count,a.content_hash,a.mime_type,a.relative_path,ROW_NUMBER() OVER(PARTITION BY p.artist_name ORDER BY CASE WHEN a.id IS NULL THEN 1 ELSE 0 END,CASE WHEN m.disc_number IS NULL THEN 1 ELSE 0 END,m.disc_number,CASE WHEN m.track_number IS NULL THEN 1 ELSE 0 END,m.track_number,m.id) rank FROM page p JOIN first_albums fa ON fa.artist_name=p.artist_name JOIN members m ON m.effective_artist=fa.artist_name AND m.album_title=fa.album_title LEFT JOIN artwork_assets a ON a.id=m.artwork_id AND a.mime_type IN ('image/jpeg','image/png')) SELECT artist_name,album_count,content_hash,mime_type,relative_path FROM ranked WHERE rank=1 ORDER BY artist_name COLLATE NOCASE,artist_name"#,
             CATALOG_MEMBER_PROJECTION
@@ -300,6 +338,7 @@ impl LibraryShared {
             .collect();
         Ok(LibraryAlbumArtistPage {
             items,
+            total_count,
             next_cursor: next,
         })
     }
@@ -325,6 +364,16 @@ impl LibraryShared {
         if !artist_exists {
             return Err(LibraryCommandError::AlbumArtistNotFound);
         }
+        let total_count = c
+            .query_row(
+                &format!(
+                    "WITH members AS MATERIALIZED ({}), albums AS (SELECT album_title FROM members WHERE effective_artist=?1 GROUP BY album_title) SELECT COUNT(*) FROM albums",
+                    CATALOG_MEMBER_PROJECTION
+                ),
+                params![artist.name],
+                |row| row.get::<_, i64>(0),
+            )
+            .map_err(|_| LibraryCommandError::PersistenceFailed)? as u64;
         let sql = format!(
             r#"WITH members AS MATERIALIZED ({}), albums AS (SELECT album_title FROM members WHERE effective_artist=?1 GROUP BY album_title), page AS (SELECT album_title FROM albums WHERE (?2 IS NULL OR album_title COLLATE NOCASE > ?2 COLLATE NOCASE OR (album_title COLLATE NOCASE=?2 AND album_title>?2)) ORDER BY album_title COLLATE NOCASE,album_title LIMIT 101), ranked AS (SELECT p.album_title,a.content_hash,a.mime_type,a.relative_path,ROW_NUMBER() OVER(PARTITION BY p.album_title ORDER BY CASE WHEN a.id IS NULL THEN 1 ELSE 0 END,CASE WHEN m.disc_number IS NULL THEN 1 ELSE 0 END,m.disc_number,CASE WHEN m.track_number IS NULL THEN 1 ELSE 0 END,m.track_number,m.id) rank FROM page p JOIN members m ON m.album_title=p.album_title AND m.effective_artist=?1 LEFT JOIN artwork_assets a ON a.id=m.artwork_id AND a.mime_type IN ('image/jpeg','image/png')) SELECT album_title,content_hash,mime_type,relative_path FROM ranked WHERE rank=1 ORDER BY album_title COLLATE NOCASE,album_title"#,
             CATALOG_MEMBER_PROJECTION
@@ -372,6 +421,7 @@ impl LibraryShared {
             .collect();
         Ok(LibraryAlbumPage {
             items,
+            total_count,
             next_cursor: next,
         })
     }

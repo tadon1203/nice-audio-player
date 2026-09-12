@@ -5,12 +5,16 @@
 	--color-surface-raised: #121212;
 	--color-surface-hover: #181818;
 	--color-surface-pressed: #202020;
+	--color-surface-selected: #202020;
 	--color-border-subtle: #2a2a2a;
 	--color-text-primary: #f4f4f4;
 	--color-text-secondary: #a5a5a5;
 	--color-text-muted: #7a7a7a;
 	--color-focus-ring: #ffffff;
 	--color-error: #ff5c68;
+	--color-status-surface: #101010;
+	--color-range-track: #202020;
+	--color-range-fill: #b3b3b3;
 	--font-interface: 'Satoshi', 'Noto Sans JP Variable', 'Segoe UI', system-ui, sans-serif;
 	--font-weight-medium: 500;
 	--font-weight-semibold: 600;
@@ -20,13 +24,33 @@
 	--text-heading-md--line-height: 1.2;
 	--text-body-lg: 18px;
 	--text-body-lg--line-height: 1.5;
-	--text-body-sm: 13px;
+	--text-body-sm: 14px;
 	--text-body-sm--line-height: 1.35;
 	--text-body-md: 16px;
 	--text-body-md--line-height: 1.45;
+	--text-status: 11px;
+	--text-status--line-height: 1.2;
 	--radius-control: 8px;
 	--radius-full: 9999px;
 	--spacing: 4px;
+	--shell-sidebar-width: 224px;
+	--shell-playback-height: 104px;
+	--shell-status-height: 24px;
+	--shell-search-width: 190px;
+	--shell-search-height: 30px;
+	--shell-nav-item-height: 34px;
+	--shell-dock-inline-padding: 18px;
+	--shell-dock-block-padding: 11px;
+	--album-tile-size: 164px;
+	--range-progress-idle-thickness: 3px;
+	--range-progress-active-thickness: 8px;
+	--range-volume-idle-thickness: 4px;
+	--range-volume-active-thickness: 8px;
+	--range-volume-width: 142px;
+	--range-volume-readout-width: 72px;
+	--range-hit-height: 16px;
+	--motion-duration-feedback: 120ms;
+	--motion-ease-interface: cubic-bezier(0.22, 1, 0.36, 1);
 	--breakpoint-app-wide: 800px;
 	--breakpoint-context-split: 1440px;
 }
@@ -35,5 +59,5 @@
 	color-scheme: dark;
 
 	--content-max-width: 1360px;
-	--layout-inline-padding: clamp(24px, 5vw, 80px);
+	--layout-inline-padding: clamp(24px, 3vw, 40px);
 }

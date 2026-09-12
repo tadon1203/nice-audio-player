@@ -84,6 +84,7 @@ export type LibraryAlbumArtistKey = {
 
 export type LibraryAlbumArtistPage = {
 	items: LibraryAlbumArtistSummary[],
+	totalCount: number | null,
 	nextCursor: string | null,
 };
 
@@ -100,6 +101,7 @@ export type LibraryAlbumKey = {
 
 export type LibraryAlbumPage = {
 	items: LibraryAlbumSummary[],
+	totalCount: number | null,
 	nextCursor: string | null,
 };
 
@@ -134,6 +136,7 @@ export type LibraryStatus = { status: "ready" } | { status: "unavailable"; reaso
 
 export type LibraryTrackPage = {
 	items: LibraryTrackSummary[],
+	totalCount: number | null,
 	nextAfterId: string | null,
 };
 

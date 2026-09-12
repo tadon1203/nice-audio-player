@@ -22,9 +22,11 @@ describe('LibraryWorkspace', () => {
 				failedCount: null,
 				failureCode: null
 			}),
-			listLibraryAlbums: vi.fn().mockResolvedValue({ items: [], nextCursor: null }),
-			listLibraryAlbumArtists: vi.fn().mockResolvedValue({ items: [], nextCursor: null }),
-			listLibraryTracks: vi.fn().mockResolvedValue({ items: [], nextAfterId: null })
+			listLibraryAlbums: vi.fn().mockResolvedValue({ items: [], totalCount: 0, nextCursor: null }),
+			listLibraryAlbumArtists: vi
+				.fn()
+				.mockResolvedValue({ items: [], totalCount: 0, nextCursor: null }),
+			listLibraryTracks: vi.fn().mockResolvedValue({ items: [], totalCount: 0, nextAfterId: null })
 		};
 		TestBed.configureTestingModule({
 			providers: [{ provide: Backend, useValue: fake }, LibrarySession, LibraryWorkspace]
@@ -49,6 +51,7 @@ describe('LibraryWorkspace', () => {
 	it('normalizes track pagination and appends a next page', async () => {
 		(fake.listLibraryTracks as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
 			items: [],
+			totalCount: 0,
 			nextAfterId: 'track-1'
 		});
 		const workspace = TestBed.inject(LibraryWorkspace);
@@ -56,9 +59,33 @@ describe('LibraryWorkspace', () => {
 		expect(workspace.tracks().nextCursor).toBe('track-1');
 		(fake.listLibraryTracks as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
 			items: [],
+			totalCount: 0,
 			nextAfterId: null
 		});
 		await workspace.loadMore('tracks');
 		expect(workspace.tracks().loadState).toBe('ready');
+	});
+
+	it('keeps the backend total separate from the loaded item count', async () => {
+		(fake.listLibraryAlbums as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+			items: [],
+			totalCount: 184,
+			nextCursor: 'album-100'
+		});
+		const workspace = TestBed.inject(LibraryWorkspace);
+
+		await workspace.ensureLoaded('albums');
+
+		expect(workspace.albums().items).toHaveLength(0);
+		expect(workspace.albums().totalCount).toBe(184);
+
+		(fake.listLibraryAlbums as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+			items: [],
+			totalCount: 184,
+			nextCursor: null
+		});
+		await workspace.loadMore('albums');
+
+		expect(workspace.albums().totalCount).toBe(184);
 	});
 });

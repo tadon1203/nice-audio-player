@@ -1,19 +1,34 @@
 <nav
-	class="grid grid-cols-2 content-start gap-2 border-b border-border-subtle bg-surface px-6 py-2 app-wide:h-full app-wide:grid-cols-1 app-wide:border-e app-wide:border-b-0 app-wide:px-3 app-wide:pt-18 app-wide:pb-6"
+	class="flex min-h-0 flex-wrap items-center gap-1 border-b border-border-subtle bg-surface px-4 py-2 app-wide:h-full app-wide:flex-col app-wide:items-stretch app-wide:border-e app-wide:border-b-0 app-wide:px-3 app-wide:pt-12 app-wide:pb-6"
 	aria-label="Application"
 >
-	@for (destination of destinations; track destination.route) {
+	<div class="flex min-w-0 flex-1 flex-wrap gap-1 app-wide:flex-none app-wide:flex-col">
+		<p class="mb-3 hidden px-3 text-body-sm text-text-muted app-wide:block">Library</p>
+		@for (destination of destinations; track destination.route) {
+		<a
+			[routerLink]="destination.route"
+			routerLinkActive
+			ariaCurrentWhenActive="page"
+			class="group relative flex h-[var(--shell-nav-item-height)] min-w-0 flex-1 items-center justify-center gap-2 rounded-control px-3 text-body-sm text-text-secondary no-underline hover:bg-surface-hover hover:text-text-primary active:bg-surface-pressed aria-[current=page]:bg-surface-selected aria-[current=page]:text-text-primary app-wide:flex-none app-wide:justify-start app-wide:px-3"
+		>
+			@switch (destination.id) { @case ('albums') {
+			<svg lucideDisc aria-hidden="true" class="size-4 shrink-0"></svg>
+			} @case ('albumArtists') {
+			<svg lucideUsersRound aria-hidden="true" class="size-4 shrink-0"></svg>
+			} @case ('tracks') {
+			<svg lucideListMusic aria-hidden="true" class="size-4 shrink-0"></svg>
+			} }
+			<span class="truncate">{{ destination.label }}</span>
+		</a>
+		}
+	</div>
 	<a
-		[routerLink]="destination.route"
+		[routerLink]="'/settings'"
 		routerLinkActive
 		ariaCurrentWhenActive="page"
-		class="group relative flex min-h-12 items-center justify-center rounded-control px-3 text-body-lg text-text-secondary no-underline hover:bg-surface-hover hover:text-text-primary active:bg-surface-pressed aria-[current=page]:bg-surface-raised aria-[current=page]:text-text-primary app-wide:justify-start app-wide:px-6"
+		class="group relative flex h-[var(--shell-nav-item-height)] min-w-0 flex-1 items-center justify-center gap-2 rounded-control px-3 text-body-sm text-text-secondary no-underline hover:bg-surface-hover hover:text-text-primary active:bg-surface-pressed aria-[current=page]:bg-surface-selected aria-[current=page]:text-text-primary app-wide:mt-auto app-wide:flex-none app-wide:justify-start app-wide:px-3"
 	>
-		{{ destination.label }}
-		<span
-			aria-hidden="true"
-			class="absolute inset-x-3 bottom-0 hidden h-[3px] rounded-full bg-current group-aria-[current=page]:block app-wide:inset-x-auto app-wide:inset-y-2 app-wide:start-1 app-wide:bottom-auto app-wide:h-auto app-wide:w-[3px]"
-		></span>
+		<svg lucideSettings aria-hidden="true" class="size-4 shrink-0"></svg>
+		<span class="truncate">Settings</span>
 	</a>
-	}
 </nav>

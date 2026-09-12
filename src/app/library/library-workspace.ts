@@ -16,6 +16,7 @@ export interface CatalogView<T> {
 	readonly filter: string;
 	readonly scrollTop: number;
 	readonly items: readonly T[];
+	readonly totalCount: number | null;
 	readonly nextCursor: string | null;
 	readonly loadState: CatalogLoadState;
 	readonly error: string | null;
@@ -29,6 +30,7 @@ const initialView = <T>(): CatalogView<T> => ({
 	filter: '',
 	scrollTop: 0,
 	items: [],
+	totalCount: null,
 	nextCursor: null,
 	loadState: 'idle',
 	error: null,
@@ -40,7 +42,6 @@ export class LibraryWorkspace {
 	private readonly backend = inject(Backend);
 	private readonly session = inject(LibrarySession);
 	private readonly destroyRef = inject(DestroyRef);
-	private readonly presentationState = signal<LibraryPresentation>('albums');
 	private readonly albumsState = signal<CatalogView<LibraryAlbumSummary>>(initialView());
 	private readonly albumArtistsState =
 		signal<CatalogView<LibraryAlbumArtistSummary>>(initialView());
@@ -52,7 +53,6 @@ export class LibraryWorkspace {
 		tracks: 0
 	};
 
-	readonly presentation: Signal<LibraryPresentation> = this.presentationState.asReadonly();
 	readonly albums: Signal<CatalogView<LibraryAlbumSummary>> = this.albumsState.asReadonly();
 	readonly albumArtists: Signal<CatalogView<LibraryAlbumArtistSummary>> =
 		this.albumArtistsState.asReadonly();
@@ -73,13 +73,10 @@ export class LibraryWorkspace {
 			this.resetCache('albums');
 			this.resetCache('albumArtists');
 			this.resetCache('tracks');
-			void this.reload(this.presentationState());
+			void this.reload('albums');
+			void this.reload('albumArtists');
+			void this.reload('tracks');
 		});
-	}
-
-	selectPresentation(value: LibraryPresentation): void {
-		this.presentationState.set(value);
-		void this.ensureLoaded(value);
 	}
 
 	setFilter(presentation: LibraryPresentation, filter: string): void {
@@ -90,6 +87,7 @@ export class LibraryWorkspace {
 			...view,
 			filter,
 			items: [],
+			totalCount: null,
 			nextCursor: null,
 			loadState: 'idle',
 			error: null,
@@ -127,6 +125,7 @@ export class LibraryWorkspace {
 			this.write(presentation, {
 				...this.view(presentation)(),
 				items: [...this.view(presentation)().items, ...page.items],
+				totalCount: page.totalCount,
 				nextCursor: page.nextCursor,
 				loadState: 'ready',
 				loadedFilter: view.filter,
@@ -148,6 +147,7 @@ export class LibraryWorkspace {
 		this.write(presentation, {
 			...view,
 			items: [],
+			totalCount: null,
 			nextCursor: null,
 			loadState: 'loading',
 			error: null,
@@ -160,6 +160,7 @@ export class LibraryWorkspace {
 			this.write(presentation, {
 				...this.view(presentation)(),
 				items: page.items,
+				totalCount: page.totalCount,
 				nextCursor: page.nextCursor,
 				loadState: 'ready',
 				loadedFilter: view.filter,
@@ -179,7 +180,7 @@ export class LibraryWorkspace {
 		presentation: LibraryPresentation,
 		cursor: string | null,
 		search: string | null
-	): Promise<{ items: readonly unknown[]; nextCursor: string | null }> {
+	): Promise<{ items: readonly unknown[]; totalCount: number | null; nextCursor: string | null }> {
 		switch (presentation) {
 			case 'albums':
 				return this.backend.listLibraryAlbums(cursor, search).then((page) => page);
@@ -188,6 +189,7 @@ export class LibraryWorkspace {
 			case 'tracks':
 				return this.backend.listLibraryTracks(cursor, search).then((page) => ({
 					items: page.items,
+					totalCount: page.totalCount,
 					nextCursor: page.nextAfterId
 				}));
 		}
@@ -224,6 +226,7 @@ export class LibraryWorkspace {
 		this.write(presentation, {
 			...view,
 			items: [],
+			totalCount: null,
 			nextCursor: null,
 			loadState: 'idle',
 			error: null,

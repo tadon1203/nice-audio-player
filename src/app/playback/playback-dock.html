@@ -1,14 +1,27 @@
 <section
 	aria-label="Playback controls"
-	class="border-t border-border-subtle bg-surface px-6 py-4"
+	class="grid h-full min-h-0 grid-rows-[var(--range-progress-idle-thickness)_minmax(0,1fr)] bg-surface"
 	data-testid="playback-dock"
 >
+	<app-range-control
+		class="range-control-progress h-[var(--range-progress-idle-thickness)]"
+		data-range-control="playback"
+		[min]="0"
+		[max]="session.durationMs() ?? 0"
+		[step]="100"
+		[value]="seekValue()"
+		[progress]="progressPercent()"
+		label="Playback position"
+		[disabled]="!canSeek"
+		(valueInput)="onSeekInput($event)"
+		(valueChange)="onSeekChange($event)"
+	></app-range-control>
 	<div
-		class="mx-auto grid w-full max-w-[var(--content-max-width)] gap-4 app-wide:grid-cols-[minmax(180px,1fr)_minmax(280px,2fr)_minmax(180px,1fr)] app-wide:items-center"
+		class="grid min-h-0 min-w-0 grid-cols-[minmax(0,1fr)_auto] grid-rows-[auto_auto] items-center gap-x-4 px-[var(--layout-inline-padding)] py-[var(--shell-dock-block-padding)] app-wide:w-full app-wide:grid-cols-[minmax(0,1fr)_minmax(360px,2fr)_minmax(0,1fr)] app-wide:grid-rows-1 app-wide:gap-6 app-wide:px-[var(--layout-inline-padding)] app-wide:py-[var(--shell-dock-block-padding)]"
 	>
 		<div class="flex min-w-0 items-center gap-3" data-region="playback-identity">
 			<app-artwork
-				class="size-14 shrink-0 rounded-control"
+				class="size-10 shrink-0 rounded-control app-wide:size-10"
 				[artwork]="session.artwork()"
 				[alt]="session.title() + ' artwork'"
 				loading="eager"
@@ -21,8 +34,11 @@
 			</div>
 		</div>
 
-		<div class="min-w-0" data-region="playback-core">
+		<div class="col-span-2 min-w-0 app-wide:col-span-1" data-region="playback-core">
 			<div class="flex items-center justify-center gap-3" aria-label="Transport controls">
+				<span class="text-body-sm text-text-secondary tabular-nums"
+					>{{ seekValue() | formatDuration }}</span
+				>
 				<button
 					type="button"
 					appButton="transport"
@@ -54,32 +70,13 @@
 				>
 					<svg lucideSkipForward aria-hidden="true" class="size-5"></svg>
 				</button>
-			</div>
-			<div
-				class="mt-2 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2"
-				data-region="timeline"
-			>
-				<span class="text-body-sm text-text-secondary"
-					>{{ session.positionMs() | formatDuration }}</span
-				>
-				<input
-					type="range"
-					min="0"
-					[max]="session.durationMs() ?? 0"
-					step="100"
-					[value]="seekValue()"
-					aria-label="Playback position"
-					[disabled]="!canSeek"
-					(input)="onSeekInput($event)"
-					(change)="onSeekChange()"
-				/>
-				<span class="text-body-sm text-text-secondary"
+				<span class="text-body-sm text-text-secondary tabular-nums"
 					>{{ session.durationMs() | formatDuration }}</span
 				>
 			</div>
 		</div>
 
-		<div class="flex items-center justify-end gap-3" data-region="volume">
+		<div class="flex min-w-0 items-center justify-end gap-2" data-region="volume">
 			<button
 				type="button"
 				appButton="icon"
@@ -93,15 +90,24 @@
 				<svg lucideVolume2 aria-hidden="true" class="size-5"></svg>
 				}
 			</button>
-			<input
-				type="range"
-				min="0"
-				max="1"
-				step="0.01"
+			<app-range-control
+				class="range-control-volume h-[var(--range-hit-height)] app-wide:w-[var(--range-volume-width)] app-wide:flex-none"
+				data-range-control="volume"
+				[attr.data-muted]="session.muted() ? '' : null"
+				[min]="0"
+				[max]="1"
+				[step]="0.01"
 				[value]="session.volume()"
-				aria-label="Volume"
-				(input)="onVolumeInput($event)"
-			/>
+				[progress]="volumePercent()"
+				label="Volume"
+				[valueText]="session.muted() ? 'Muted' : null"
+				(valueInput)="onVolumeInput($event)"
+			></app-range-control>
+			<span
+				class="hidden w-[var(--range-volume-readout-width)] shrink-0 text-end text-body-sm text-text-secondary tabular-nums app-wide:inline"
+				data-region="volume-readout"
+				>{{ volumeDb() }}</span
+			>
 		</div>
 	</div>
 	@if (session.commandError(); as error) {

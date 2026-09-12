@@ -3,29 +3,31 @@ import { installNativeAppFixture } from './fixtures/native-app';
 
 test.beforeEach(async ({ page }) => installNativeAppFixture(page));
 
+test.use({ viewport: { width: 1360, height: 900 } });
+
 test('renders distinct content for every Library presentation', async ({ page }, testInfo) => {
-	await page.goto('/library');
+	await page.goto('/library/albums');
 	await page.getByRole('link', { name: 'Settings' }).click();
 	await page.getByRole('button', { name: 'Add folder' }).click();
-	await page.getByRole('link', { name: 'Library' }).click();
+	await page.getByRole('link', { name: 'Albums' }).click();
 
 	const presentations = [
-		{ tab: 'Albums', content: page.getByRole('button', { name: /Play album Test album/ }) },
+		{ route: 'Albums', content: page.getByRole('button', { name: /Play album Test album/ }) },
 		{
-			tab: 'Album Artists',
+			route: 'Album Artists',
 			content: page.getByRole('button', { name: 'Browse albums by Test artist' })
 		},
-		{ tab: 'Tracks', content: page.getByRole('button', { name: 'Play Test track' }) }
+		{ route: 'Tracks', content: page.getByRole('button', { name: 'Play Test track' }) }
 	] as const;
 
 	for (const presentation of presentations) {
-		await page.getByRole('tab', { name: presentation.tab }).click();
-		await expect(page.getByRole('tab', { name: presentation.tab })).toHaveAttribute(
-			'aria-selected',
-			'true'
+		await page.getByRole('link', { name: presentation.route }).click();
+		await expect(page.getByRole('link', { name: presentation.route })).toHaveAttribute(
+			'aria-current',
+			'page'
 		);
 		await expect(presentation.content).toBeVisible();
-		const screenshotName = `library-${presentation.tab.toLowerCase().replaceAll(' ', '-')}.png`;
+		const screenshotName = `library-${presentation.route.toLowerCase().replaceAll(' ', '-')}.png`;
 		await page.screenshot({
 			path: testInfo.outputPath(screenshotName),
 			fullPage: true
@@ -37,42 +39,63 @@ test('renders distinct content for every Library presentation', async ({ page },
 	}
 });
 
-test('keeps the selected Library panel as the only visible panel', async ({ page }) => {
-	await page.goto('/library');
+test('navigates each Library presentation as a distinct route', async ({ page }) => {
+	await page.goto('/library/albums');
 	await page.getByRole('link', { name: 'Settings' }).click();
 	await page.getByRole('button', { name: 'Add folder' }).click();
-	await page.getByRole('link', { name: 'Library' }).click();
+	await page.getByRole('link', { name: 'Albums' }).click();
 
-	const panels = page.locator('[role="tabpanel"]');
-	await expect(panels).toHaveCount(3);
+	for (const route of [
+		{ label: 'Albums', path: '/library/albums' },
+		{ label: 'Album Artists', path: '/library/album-artists' },
+		{ label: 'Tracks', path: '/library/tracks' }
+	]) {
+		await page.getByRole('link', { name: route.label }).click();
+		await expect(page).toHaveURL(new RegExp(`${route.path.replaceAll('/', '\\/')}$`));
+		await expect(page.getByRole('link', { name: route.label })).toHaveAttribute(
+			'aria-current',
+			'page'
+		);
+	}
+});
 
-	for (const tab of ['Albums', 'Album Artists', 'Tracks']) {
-		await page.getByRole('tab', { name: tab }).click();
-		await expect(page.locator('[role="tabpanel"]').filter({ visible: true })).toHaveCount(1);
+test('shows the backend total for each Library presentation', async ({ page }) => {
+	await page.goto('/library/albums');
+	await page.getByRole('link', { name: 'Settings' }).click();
+	await page.getByRole('button', { name: 'Add folder' }).click();
+	await page.getByRole('link', { name: 'Albums' }).click();
+
+	for (const presentation of [
+		{ label: 'Albums', count: '1 album' },
+		{ label: 'Album Artists', count: '1 album artist' },
+		{ label: 'Tracks', count: '5 tracks' }
+	]) {
+		await page.getByRole('link', { name: presentation.label }).click();
+		await expect(page.getByText(presentation.count, { exact: true })).toBeVisible();
+		await expect(page.getByText('Filter', { exact: true })).toHaveCount(0);
 	}
 });
 
 test('drills from an Album Artist into its Albums', async ({ page }) => {
-	await page.goto('/library');
+	await page.goto('/library/albums');
 	await page.getByRole('link', { name: 'Settings' }).click();
 	await page.getByRole('button', { name: 'Add folder' }).click();
-	await page.getByRole('link', { name: 'Library' }).click();
-	await page.getByRole('tab', { name: 'Album Artists' }).click();
+	await page.getByRole('link', { name: 'Album Artists' }).click();
 
 	const artist = page.getByRole('button', { name: 'Browse albums by Test artist' });
 	await artist.focus();
 	await artist.press('Enter');
-	await expect(page.getByRole('tab', { name: 'Albums' })).toHaveAttribute('aria-selected', 'true');
+	await expect(page).toHaveURL(/\/library\/albums$/);
 	await expect(page.getByRole('searchbox', { name: 'Filter library' })).toHaveValue('Test artist');
 	await expect(page.getByRole('button', { name: /Play album Test album/ })).toBeVisible();
 });
 
 test('keeps the Albums grid aligned with the shared page frame', async ({ page }) => {
 	await page.setViewportSize({ width: 1800, height: 1000 });
-	await page.goto('/library');
+	await page.goto('/library/albums');
 	await page.getByRole('link', { name: 'Settings' }).click();
 	await page.getByRole('button', { name: 'Add folder' }).click();
-	await page.getByRole('link', { name: 'Library' }).click();
+	await page.getByRole('link', { name: 'Albums' }).click();
 	await expect(page.getByRole('button', { name: /Play album Test album/ })).toBeVisible();
 
 	const pageFrames = page.locator('app-page-frame');
@@ -104,16 +127,12 @@ test('keeps the Albums grid aligned with the shared page frame', async ({ page }
 
 test('keeps every Library presentation inside a narrow viewport', async ({ page }) => {
 	await page.setViewportSize({ width: 390, height: 844 });
-	await page.goto('/library');
+	await page.goto('/library/albums');
 	await page.getByRole('link', { name: 'Settings' }).click();
 	await page.getByRole('button', { name: 'Add folder' }).click();
-	await page.getByRole('link', { name: 'Library' }).click();
-	for (const tab of ['Albums', 'Album Artists', 'Tracks']) {
-		await page.getByRole('tab', { name: tab }).click();
-		const scrollRegion = page
-			.locator('[role="tabpanel"]')
-			.filter({ visible: true })
-			.locator('[data-library-scroll-region]');
+	for (const route of ['/library/albums', '/library/album-artists', '/library/tracks']) {
+		await page.goto(route);
+		const scrollRegion = page.locator('[data-library-scroll-region]');
 		await expect(scrollRegion).toHaveCount(1);
 		const metrics = await scrollRegion.evaluate((element) => ({
 			clientWidth: element.clientWidth,

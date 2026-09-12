@@ -235,7 +235,11 @@ export async function installNativeAppFixture(page: Page): Promise<void> {
 					roots.length === 0
 						? []
 						: tracks.filter((track) => search === null || track.title.includes(search));
-				return Promise.resolve({ items: filtered, nextAfterId: null });
+				return Promise.resolve({
+					items: filtered,
+					totalCount: filtered.length,
+					nextAfterId: null
+				});
 			},
 			listLibraryAlbums: (_afterCursor: string | null, search: string | null) =>
 				Promise.resolve({
@@ -243,6 +247,10 @@ export async function installNativeAppFixture(page: Page): Promise<void> {
 						roots.length === 0 || (search !== null && !'Test album Test artist'.includes(search))
 							? []
 							: [{ key: { title: 'Test album', albumArtist: 'Test artist' }, artwork: null }],
+					totalCount:
+						roots.length === 0 || (search !== null && !'Test album Test artist'.includes(search))
+							? 0
+							: 1,
 					nextCursor: null
 				}),
 			listLibraryAlbumArtists: (_afterCursor: string | null, search: string | null) =>
@@ -251,6 +259,8 @@ export async function installNativeAppFixture(page: Page): Promise<void> {
 						roots.length === 0 || (search !== null && !'Test artist'.includes(search))
 							? []
 							: [{ key: { name: 'Test artist' }, artwork: null, albumCount: 1 }],
+					totalCount:
+						roots.length === 0 || (search !== null && !'Test artist'.includes(search)) ? 0 : 1,
 					nextCursor: null
 				}),
 			getLibraryTrackForPath: (path: string) =>

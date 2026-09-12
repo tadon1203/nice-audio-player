@@ -1187,6 +1187,7 @@ mod tests {
 
         let all = library.catalog_albums(None, None).expect("album page");
         assert_eq!(all.items.len(), 2);
+        assert_eq!(all.total_count, 2);
         let shared = all
             .items
             .iter()
@@ -1209,6 +1210,7 @@ mod tests {
             .catalog_albums(None, Some("Shared".into()))
             .expect("album title search page");
         assert_eq!(searched.items.len(), 1);
+        assert_eq!(searched.total_count, 1);
         assert_eq!(searched.items[0].key.title, "Shared");
         let literal = library
             .catalog_albums(None, Some("%".into()))
@@ -1240,6 +1242,7 @@ mod tests {
             .catalog_album_artists(None, None)
             .expect("catalog artists");
         assert_eq!(artists.items.len(), 2);
+        assert_eq!(artists.total_count, 2);
         assert_eq!(artists.items[0].album_count, 1);
         let artist_albums = library
             .catalog_artist_albums(
@@ -1250,6 +1253,7 @@ mod tests {
             )
             .expect("artist albums");
         assert_eq!(artist_albums.items.len(), 1);
+        assert_eq!(artist_albums.total_count, 1);
         assert_eq!(artist_albums.items[0].key.title, "Shared");
 
         let details = library
@@ -1393,12 +1397,13 @@ mod tests {
             .catalog_tracks(None, Some("multi.part".into()))
             .expect("stem search");
         assert_eq!(stem_match.items.len(), 1);
+        assert_eq!(stem_match.total_count, 1);
         assert_eq!(stem_match.items[0].title, "multi.part");
-        assert!(library
+        let extension_match = library
             .catalog_tracks(None, Some("flac".into()))
-            .expect("extension search")
-            .items
-            .is_empty());
+            .expect("extension search");
+        assert!(extension_match.items.is_empty());
+        assert_eq!(extension_match.total_count, 0);
     }
 
     #[test]
@@ -1437,11 +1442,13 @@ mod tests {
             .catalog_albums(None, None)
             .expect("first catalog page");
         assert_eq!(first.items.len(), 100);
+        assert_eq!(first.total_count, 106);
         let cursor = first.next_cursor.clone().expect("next cursor");
         let second = library
             .catalog_albums(Some(cursor.clone()), None)
             .expect("second catalog page");
         assert_eq!(second.items.len(), 6);
+        assert_eq!(second.total_count, 106);
         assert!(second.items[0].key.title > first.items[99].key.title);
         assert!(first.items.iter().all(|item| {
             !second.items.iter().any(|next| {
