@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 const PAGE_SIZE: usize = 100;
-const CURSOR_VERSION: u8 = 2;
+const CURSOR_VERSION: u8 = 3;
 type AlbumDetailsRow = (
     i64,
     Option<i64>,
@@ -28,9 +28,9 @@ struct CatalogCursor {
     version: u8,
     kind: String,
     owner: String,
-    first: String,
-    second: String,
-    third: Option<String>,
+    sort_key: String,
+    direction: LibrarySortDirection,
+    offset: u64,
 }
 
 fn validate_album_key(key: &LibraryAlbumKey) -> Result<(), LibraryCommandError> {
@@ -53,6 +53,8 @@ fn cursor(
     raw: Option<String>,
     kind: &str,
     owner: &str,
+    sort_key: &str,
+    direction: LibrarySortDirection,
 ) -> Result<Option<CatalogCursor>, LibraryCommandError> {
     let Some(raw) = raw else {
         return Ok(None);
@@ -62,21 +64,46 @@ fn cursor(
     }
     let value: CatalogCursor =
         serde_json::from_str(&raw).map_err(|_| LibraryCommandError::InvalidCursor)?;
-    if value.version != CURSOR_VERSION || value.kind != kind || value.owner != owner {
+    if value.version != CURSOR_VERSION
+        || value.kind != kind
+        || value.owner != owner
+        || value.sort_key != sort_key
+        || value.direction != direction
+    {
         return Err(LibraryCommandError::InvalidCursor);
     }
     Ok(Some(value))
 }
-fn encode(kind: &str, owner: &str, first: String, second: String, third: Option<String>) -> String {
+fn encode(
+    kind: &str,
+    owner: &str,
+    sort_key: &str,
+    direction: LibrarySortDirection,
+    offset: usize,
+) -> String {
     serde_json::to_string(&CatalogCursor {
         version: CURSOR_VERSION,
         kind: kind.into(),
         owner: owner.into(),
-        first,
-        second,
-        third,
+        sort_key: sort_key.into(),
+        direction,
+        offset: offset as u64,
     })
     .expect("catalog cursor serialization")
+}
+fn direction_sql(direction: LibrarySortDirection) -> &'static str {
+    match direction {
+        LibrarySortDirection::Ascending => "ASC",
+        LibrarySortDirection::Descending => "DESC",
+    }
+}
+fn sort_key_name<K: std::fmt::Debug>(key: K) -> String {
+    format!("{key:?}")
+}
+fn parse_year(value: Option<&str>) -> Option<i32> {
+    let value = value?.trim();
+    let year = value.get(..4)?.parse().ok()?;
+    (1000..=9999).contains(&year).then_some(year)
 }
 fn literal_like_pattern(value: &str) -> String {
     let escaped = value
@@ -132,12 +159,14 @@ impl LibraryShared {
         &self,
         after: Option<String>,
         search: Option<String>,
+        sort_key: LibraryTrackSortKey,
+        sort_direction: LibrarySortDirection,
     ) -> Result<LibraryTrackPage, LibraryCommandError> {
-        let after = match after {
-            Some(value) => super::service::parse_id(&value)?,
-            None => 0,
-        };
         let search = search.unwrap_or_default().trim().to_owned();
+        let sort_name = sort_key_name(sort_key);
+        let offset = cursor(after, "tracks", &search, &sort_name, sort_direction)?
+            .map(|value| value.offset as usize)
+            .unwrap_or(0);
         let pattern = literal_like_pattern(&search);
         let c = self
             .db()?
@@ -157,23 +186,40 @@ impl LibraryShared {
                 |row| row.get::<_, i64>(0),
             )
             .map_err(|_| LibraryCommandError::PersistenceFailed)? as u64;
+        let title_expr = "COALESCE(NULLIF(trim(m.title),''),CASE WHEN f.extension='' THEN f.file_name ELSE substr(f.file_name,1,length(f.file_name)-length(f.extension)-1) END)";
+        let artist_expr = "COALESCE(NULLIF(trim(m.artist),''),'Unknown artist')";
+        let album_expr = "COALESCE(NULLIF(trim(m.album),''),'Unknown album')";
+        let direction = direction_sql(sort_direction);
+        let order_sql = match sort_key {
+            LibraryTrackSortKey::Title => {
+                format!("{title_expr} COLLATE NOCASE {direction},{title_expr} {direction}")
+            }
+            LibraryTrackSortKey::Artist => {
+                format!("{artist_expr} COLLATE NOCASE {direction},{artist_expr} {direction}")
+            }
+            LibraryTrackSortKey::Album => {
+                format!("{album_expr} COLLATE NOCASE {direction},{album_expr} {direction}")
+            }
+            LibraryTrackSortKey::Duration => format!(
+                "CASE WHEN m.duration_ms IS NULL THEN 1 ELSE 0 END ASC,m.duration_ms {direction}"
+            ),
+        };
         let mut statement = c
-            .prepare(r#"SELECT t.id,f.file_name,f.availability,f.inspection_status,m.title,m.artist,m.album,m.album_artist,m.duration_ms,a.content_hash,a.mime_type,a.relative_path,m.artwork_status
+            .prepare(&format!(r#"SELECT t.id,f.file_name,f.availability,f.inspection_status,m.title,m.artist,m.album,m.album_artist,m.duration_ms,a.content_hash,a.mime_type,a.relative_path,m.artwork_status
                 FROM tracks t
                 JOIN library_files f ON f.id=t.file_id
                 LEFT JOIN track_source_metadata m ON m.track_id=t.id AND m.source_revision=f.source_revision
                 LEFT JOIN artwork_assets a ON a.id=m.artwork_id AND m.artwork_status='stored'
-                WHERE t.id>?1
-                  AND (?2='' OR COALESCE(NULLIF(trim(m.title),''),CASE WHEN f.extension='' THEN f.file_name ELSE substr(f.file_name,1,length(f.file_name)-length(f.extension)-1) END) LIKE ?3 ESCAPE '\'
-                    OR COALESCE(m.artist,'') LIKE ?3 ESCAPE '\'
-                    OR COALESCE(NULLIF(trim(m.album),''),'Unknown album') LIKE ?3 ESCAPE '\'
-                    OR COALESCE(NULLIF(trim(m.album_artist),''),NULLIF(trim(m.artist),''),'Unknown artist') LIKE ?3 ESCAPE '\')
-                ORDER BY t.id"#)
+                WHERE (?1='' OR {title_expr} LIKE ?2 ESCAPE '\'
+                    OR COALESCE(m.artist,'') LIKE ?2 ESCAPE '\'
+                    OR {album_expr} LIKE ?2 ESCAPE '\'
+                    OR COALESCE(NULLIF(trim(m.album_artist),''),NULLIF(trim(m.artist),''),'Unknown artist') LIKE ?2 ESCAPE '\')
+                ORDER BY {order_sql},t.id ASC"#))
             .map_err(|_| LibraryCommandError::PersistenceFailed)?;
         let mut rows = statement
-            .query(params![after, search, pattern])
+            .query(params![search, pattern])
             .map_err(|_| LibraryCommandError::PersistenceFailed)?;
-        let mut items = Vec::with_capacity(PAGE_SIZE + 1);
+        let mut all_items = Vec::new();
         while let Some(row) = rows
             .next()
             .map_err(|_| LibraryCommandError::PersistenceFailed)?
@@ -181,15 +227,14 @@ impl LibraryShared {
             let track =
                 summary_from_row(row).map_err(|_| LibraryCommandError::PersistenceFailed)?;
             if track_search_matches(&track, &search) {
-                items.push(track);
-                if items.len() > PAGE_SIZE {
-                    break;
-                }
+                all_items.push(track);
             }
         }
-        let next_after_id = if items.len() > PAGE_SIZE {
-            items.pop();
-            items.last().map(|item| item.id.clone())
+        let start = offset.min(all_items.len());
+        let end = (start + PAGE_SIZE).min(all_items.len());
+        let items = all_items[start..end].to_vec();
+        let next_after_id = if end < all_items.len() {
+            Some(encode("tracks", &search, &sort_name, sort_direction, end))
         } else {
             None
         };
@@ -204,9 +249,14 @@ impl LibraryShared {
         &self,
         after: Option<String>,
         search: Option<String>,
+        sort_key: LibraryAlbumSortKey,
+        sort_direction: LibrarySortDirection,
     ) -> Result<LibraryAlbumPage, LibraryCommandError> {
         let search = search.unwrap_or_default().trim().to_owned();
-        let after = cursor(after, "albums", &search)?;
+        let sort_name = sort_key_name(sort_key);
+        let offset = cursor(after, "albums", &search, &sort_name, sort_direction)?
+            .map(|value| value.offset as usize)
+            .unwrap_or(0);
         let pattern = literal_like_pattern(&search);
         let c = self
             .db()?
@@ -223,50 +273,54 @@ impl LibraryShared {
                 |row| row.get::<_, i64>(0),
             )
             .map_err(|_| LibraryCommandError::PersistenceFailed)? as u64;
+        let direction = direction_sql(sort_direction);
+        let order_sql = match sort_key {
+            LibraryAlbumSortKey::Title => format!("album_title COLLATE NOCASE {direction},album_title {direction},effective_artist COLLATE NOCASE {direction},effective_artist {direction}"),
+            LibraryAlbumSortKey::Artist => format!("effective_artist COLLATE NOCASE {direction},effective_artist {direction},album_title COLLATE NOCASE {direction},album_title {direction}"),
+            LibraryAlbumSortKey::Year => format!("CASE WHEN album_year IS NULL THEN 1 ELSE 0 END ASC,album_year {direction},album_title COLLATE NOCASE {direction},album_title {direction},effective_artist COLLATE NOCASE {direction},effective_artist {direction}"),
+        };
         let sql = format!(
-            r#"WITH members AS MATERIALIZED ({}) , groups AS (SELECT album_title,effective_artist FROM members GROUP BY album_title,effective_artist), page AS (
-          SELECT album_title,effective_artist FROM groups WHERE (?1='' OR album_title LIKE ?2 ESCAPE '\' OR effective_artist LIKE ?2 ESCAPE '\') AND (?3 IS NULL OR album_title COLLATE NOCASE > ?3 COLLATE NOCASE OR (album_title COLLATE NOCASE = ?3 COLLATE NOCASE AND effective_artist COLLATE NOCASE > ?4 COLLATE NOCASE) OR (album_title COLLATE NOCASE = ?3 COLLATE NOCASE AND effective_artist COLLATE NOCASE = ?4 COLLATE NOCASE AND (album_title > ?3 OR (album_title = ?3 AND effective_artist > ?4)))) ORDER BY album_title COLLATE NOCASE,effective_artist COLLATE NOCASE,album_title,effective_artist LIMIT 101
-        ), ranked AS (SELECT p.*,a.content_hash,a.mime_type,a.relative_path,ROW_NUMBER() OVER (PARTITION BY p.album_title,p.effective_artist ORDER BY CASE WHEN a.id IS NULL THEN 1 ELSE 0 END,CASE WHEN m.disc_number IS NULL THEN 1 ELSE 0 END,m.disc_number,CASE WHEN m.track_number IS NULL THEN 1 ELSE 0 END,m.track_number,m.id) rank FROM page p JOIN members m ON m.album_title=p.album_title AND m.effective_artist=p.effective_artist LEFT JOIN artwork_assets a ON a.id=m.artwork_id AND a.mime_type IN ('image/jpeg','image/png'))
-        SELECT album_title,effective_artist,content_hash,mime_type,relative_path FROM ranked WHERE rank=1 ORDER BY album_title COLLATE NOCASE,effective_artist COLLATE NOCASE,album_title,effective_artist"#,
+            r#"WITH members AS MATERIALIZED ({}), groups AS (SELECT album_title,effective_artist,MIN(CASE WHEN trim(date) GLOB '[0-9][0-9][0-9][0-9]*' THEN CAST(substr(trim(date),1,4) AS INTEGER) END) AS album_year FROM members WHERE (?1='' OR album_title LIKE ?2 ESCAPE '\' OR effective_artist LIKE ?2 ESCAPE '\') GROUP BY album_title,effective_artist), ranked AS (SELECT g.album_title,g.effective_artist,g.album_year,a.content_hash,a.mime_type,a.relative_path,ROW_NUMBER() OVER (PARTITION BY g.album_title,g.effective_artist ORDER BY CASE WHEN a.id IS NULL THEN 1 ELSE 0 END,CASE WHEN m.disc_number IS NULL THEN 1 ELSE 0 END,m.disc_number,CASE WHEN m.track_number IS NULL THEN 1 ELSE 0 END,m.track_number,m.id) rank FROM groups g JOIN members m ON m.album_title=g.album_title AND m.effective_artist=g.effective_artist LEFT JOIN artwork_assets a ON a.id=m.artwork_id AND a.mime_type IN ('image/jpeg','image/png')) SELECT album_title,effective_artist,album_year,content_hash,mime_type,relative_path FROM ranked WHERE rank=1 ORDER BY {order_sql}"#,
             CATALOG_MEMBER_PROJECTION
         );
-        let (first, second) = after
-            .as_ref()
-            .map(|v| (Some(v.first.as_str()), Some(v.second.as_str())))
-            .unwrap_or((None, None));
         let mut stmt = c
             .prepare(&sql)
             .map_err(|_| LibraryCommandError::PersistenceFailed)?;
         let rows = stmt
-            .query_map(params![search, pattern, first, second], |r| {
+            .query_map(params![search, pattern], |r| {
                 Ok((
                     r.get::<_, String>(0)?,
                     r.get::<_, String>(1)?,
-                    r.get::<_, Option<String>>(2)?,
+                    r.get::<_, Option<i64>>(2)?,
                     r.get::<_, Option<String>>(3)?,
                     r.get::<_, Option<String>>(4)?,
+                    r.get::<_, Option<String>>(5)?,
                 ))
             })
             .map_err(|_| LibraryCommandError::PersistenceFailed)?;
-        let mut raw = rows
+        let raw = rows
             .collect::<Result<Vec<_>, _>>()
             .map_err(|_| LibraryCommandError::PersistenceFailed)?;
-        let next = if raw.len() > PAGE_SIZE {
-            raw.pop();
-            raw.last()
-                .map(|r| encode("albums", &search, r.0.clone(), r.1.clone(), None))
+        let start = offset.min(raw.len());
+        let end = (start + PAGE_SIZE).min(raw.len());
+        let page = &raw[start..end];
+        let next = if end < raw.len() {
+            Some(encode("albums", &search, &sort_name, sort_direction, end))
         } else {
             None
         };
-        let items = raw
-            .into_iter()
-            .map(|(title, artist, hash, mime, path)| LibraryAlbumSummary {
-                key: LibraryAlbumKey {
-                    title,
-                    album_artist: artist,
+        let items = page
+            .iter()
+            .map(
+                |(title, artist, year, hash, mime, path)| LibraryAlbumSummary {
+                    key: LibraryAlbumKey {
+                        title: title.clone(),
+                        album_artist: artist.clone(),
+                    },
+                    artwork: artwork(hash.clone(), mime.clone(), path.clone()),
+                    year: year.map(|value| value as i32),
                 },
-                artwork: artwork(hash, mime, path),
-            })
+            )
             .collect();
         Ok(LibraryAlbumPage {
             items,
@@ -279,9 +333,14 @@ impl LibraryShared {
         &self,
         after: Option<String>,
         search: Option<String>,
+        sort_key: LibraryAlbumArtistSortKey,
+        sort_direction: LibrarySortDirection,
     ) -> Result<LibraryAlbumArtistPage, LibraryCommandError> {
         let search = search.unwrap_or_default().trim().to_owned();
-        let after = cursor(after, "albumArtists", &search)?;
+        let sort_name = sort_key_name(sort_key);
+        let offset = cursor(after, "albumArtists", &search, &sort_name, sort_direction)?
+            .map(|value| value.offset as usize)
+            .unwrap_or(0);
         let pattern = literal_like_pattern(&search);
         let c = self
             .db()?
@@ -298,16 +357,27 @@ impl LibraryShared {
                 |row| row.get::<_, i64>(0),
             )
             .map_err(|_| LibraryCommandError::PersistenceFailed)? as u64;
+        let direction = direction_sql(sort_direction);
+        let order_sql = match sort_key {
+            LibraryAlbumArtistSortKey::Artist => {
+                format!("artist_name COLLATE NOCASE {direction},artist_name {direction}")
+            }
+            LibraryAlbumArtistSortKey::AlbumCount => {
+                format!("album_count {direction},artist_name COLLATE NOCASE ASC,artist_name ASC")
+            }
+            LibraryAlbumArtistSortKey::TrackCount => {
+                format!("track_count {direction},artist_name COLLATE NOCASE ASC,artist_name ASC")
+            }
+        };
         let sql = format!(
-            r#"WITH members AS MATERIALIZED ({}), groups AS (SELECT effective_artist AS artist_name,COUNT(DISTINCT album_title) album_count,COUNT(*) track_count FROM members GROUP BY effective_artist), page AS (SELECT artist_name,album_count,track_count FROM groups WHERE (?1='' OR artist_name LIKE ?2 ESCAPE '\') AND (?3 IS NULL OR artist_name COLLATE NOCASE > ?3 COLLATE NOCASE OR (artist_name COLLATE NOCASE = ?3 COLLATE NOCASE AND artist_name > ?3)) ORDER BY artist_name COLLATE NOCASE,artist_name LIMIT 101), first_albums AS (SELECT effective_artist AS artist_name,album_title FROM (SELECT effective_artist,album_title,ROW_NUMBER() OVER(PARTITION BY effective_artist ORDER BY album_title COLLATE NOCASE,album_title) rank FROM members) WHERE rank=1), ranked AS (SELECT p.artist_name,p.album_count,p.track_count,a.content_hash,a.mime_type,a.relative_path,ROW_NUMBER() OVER(PARTITION BY p.artist_name ORDER BY CASE WHEN a.id IS NULL THEN 1 ELSE 0 END,CASE WHEN m.disc_number IS NULL THEN 1 ELSE 0 END,m.disc_number,CASE WHEN m.track_number IS NULL THEN 1 ELSE 0 END,m.track_number,m.id) rank FROM page p JOIN first_albums fa ON fa.artist_name=p.artist_name JOIN members m ON m.effective_artist=fa.artist_name AND m.album_title=fa.album_title LEFT JOIN artwork_assets a ON a.id=m.artwork_id AND a.mime_type IN ('image/jpeg','image/png')) SELECT artist_name,album_count,track_count,content_hash,mime_type,relative_path FROM ranked WHERE rank=1 ORDER BY artist_name COLLATE NOCASE,artist_name"#,
+            r#"WITH members AS MATERIALIZED ({}), groups AS (SELECT effective_artist AS artist_name,COUNT(DISTINCT album_title) album_count,COUNT(*) track_count FROM members WHERE (?1='' OR effective_artist LIKE ?2 ESCAPE '\') GROUP BY effective_artist), first_albums AS (SELECT effective_artist AS artist_name,album_title FROM (SELECT effective_artist,album_title,ROW_NUMBER() OVER(PARTITION BY effective_artist ORDER BY album_title COLLATE NOCASE,album_title) rank FROM members) WHERE rank=1), ranked AS (SELECT g.artist_name,g.album_count,g.track_count,a.content_hash,a.mime_type,a.relative_path,ROW_NUMBER() OVER(PARTITION BY g.artist_name ORDER BY CASE WHEN a.id IS NULL THEN 1 ELSE 0 END,CASE WHEN m.disc_number IS NULL THEN 1 ELSE 0 END,m.disc_number,CASE WHEN m.track_number IS NULL THEN 1 ELSE 0 END,m.track_number,m.id) rank FROM groups g JOIN first_albums fa ON fa.artist_name=g.artist_name JOIN members m ON m.effective_artist=fa.artist_name AND m.album_title=fa.album_title LEFT JOIN artwork_assets a ON a.id=m.artwork_id AND a.mime_type IN ('image/jpeg','image/png')) SELECT artist_name,album_count,track_count,content_hash,mime_type,relative_path FROM ranked WHERE rank=1 ORDER BY {order_sql}"#,
             CATALOG_MEMBER_PROJECTION
         );
         let mut stmt = c
             .prepare(&sql)
             .map_err(|_| LibraryCommandError::PersistenceFailed)?;
-        let after_name = after.as_ref().map(|v| v.first.as_str());
         let rows = stmt
-            .query_map(params![search, pattern, after_name], |r| {
+            .query_map(params![search, pattern], |r| {
                 Ok((
                     r.get::<_, String>(0)?,
                     r.get::<_, i64>(1)?,
@@ -318,24 +388,31 @@ impl LibraryShared {
                 ))
             })
             .map_err(|_| LibraryCommandError::PersistenceFailed)?;
-        let mut raw = rows
+        let raw = rows
             .collect::<Result<Vec<_>, _>>()
             .map_err(|_| LibraryCommandError::PersistenceFailed)?;
-        let next = if raw.len() > PAGE_SIZE {
-            raw.pop();
-            raw.last()
-                .map(|r| encode("albumArtists", &search, r.0.clone(), r.0.clone(), None))
+        let start = offset.min(raw.len());
+        let end = (start + PAGE_SIZE).min(raw.len());
+        let page = &raw[start..end];
+        let next = if end < raw.len() {
+            Some(encode(
+                "albumArtists",
+                &search,
+                &sort_name,
+                sort_direction,
+                end,
+            ))
         } else {
             None
         };
-        let items = raw
-            .into_iter()
+        let items = page
+            .iter()
             .map(
                 |(name, album_count, track_count, hash, mime, path)| LibraryAlbumArtistSummary {
-                    key: LibraryAlbumArtistKey { name },
-                    artwork: artwork(hash, mime, path),
-                    album_count: album_count as u64,
-                    track_count: track_count as u64,
+                    key: LibraryAlbumArtistKey { name: name.clone() },
+                    artwork: artwork(hash.clone(), mime.clone(), path.clone()),
+                    album_count: *album_count as u64,
+                    track_count: *track_count as u64,
                 },
             )
             .collect();
@@ -350,9 +427,20 @@ impl LibraryShared {
         &self,
         artist: LibraryAlbumArtistKey,
         after: Option<String>,
+        sort_key: LibraryArtistAlbumSortKey,
+        sort_direction: LibrarySortDirection,
     ) -> Result<LibraryAlbumPage, LibraryCommandError> {
         artist_key(&artist)?;
-        let after = cursor(after, "artistAlbums", &artist.name)?;
+        let sort_name = sort_key_name(sort_key);
+        let offset = cursor(
+            after,
+            "artistAlbums",
+            &artist.name,
+            &sort_name,
+            sort_direction,
+        )?
+        .map(|value| value.offset as usize)
+        .unwrap_or(0);
         let c = self
             .db()?
             .read()
@@ -377,49 +465,55 @@ impl LibraryShared {
                 |row| row.get::<_, i64>(0),
             )
             .map_err(|_| LibraryCommandError::PersistenceFailed)? as u64;
+        let direction = direction_sql(sort_direction);
+        let order_sql = match sort_key {
+            LibraryArtistAlbumSortKey::Title => format!("album_title COLLATE NOCASE {direction},album_title {direction}"),
+            LibraryArtistAlbumSortKey::Year => format!("CASE WHEN album_year IS NULL THEN 1 ELSE 0 END ASC,album_year {direction},album_title COLLATE NOCASE {direction},album_title {direction}"),
+        };
         let sql = format!(
-            r#"WITH members AS MATERIALIZED ({}), albums AS (SELECT album_title FROM members WHERE effective_artist=?1 GROUP BY album_title), page AS (SELECT album_title FROM albums WHERE (?2 IS NULL OR album_title COLLATE NOCASE > ?2 COLLATE NOCASE OR (album_title COLLATE NOCASE=?2 AND album_title>?2)) ORDER BY album_title COLLATE NOCASE,album_title LIMIT 101), ranked AS (SELECT p.album_title,a.content_hash,a.mime_type,a.relative_path,ROW_NUMBER() OVER(PARTITION BY p.album_title ORDER BY CASE WHEN a.id IS NULL THEN 1 ELSE 0 END,CASE WHEN m.disc_number IS NULL THEN 1 ELSE 0 END,m.disc_number,CASE WHEN m.track_number IS NULL THEN 1 ELSE 0 END,m.track_number,m.id) rank FROM page p JOIN members m ON m.album_title=p.album_title AND m.effective_artist=?1 LEFT JOIN artwork_assets a ON a.id=m.artwork_id AND a.mime_type IN ('image/jpeg','image/png')) SELECT album_title,content_hash,mime_type,relative_path FROM ranked WHERE rank=1 ORDER BY album_title COLLATE NOCASE,album_title"#,
+            r#"WITH members AS MATERIALIZED ({}), albums AS (SELECT album_title,MIN(CASE WHEN trim(date) GLOB '[0-9][0-9][0-9][0-9]*' THEN CAST(substr(trim(date),1,4) AS INTEGER) END) AS album_year FROM members WHERE effective_artist=?1 GROUP BY album_title), ranked AS (SELECT g.album_title,g.album_year,a.content_hash,a.mime_type,a.relative_path,ROW_NUMBER() OVER(PARTITION BY g.album_title ORDER BY CASE WHEN a.id IS NULL THEN 1 ELSE 0 END,CASE WHEN m.disc_number IS NULL THEN 1 ELSE 0 END,m.disc_number,CASE WHEN m.track_number IS NULL THEN 1 ELSE 0 END,m.track_number,m.id) rank FROM albums g JOIN members m ON m.album_title=g.album_title AND m.effective_artist=?1 LEFT JOIN artwork_assets a ON a.id=m.artwork_id AND a.mime_type IN ('image/jpeg','image/png')) SELECT album_title,album_year,content_hash,mime_type,relative_path FROM ranked WHERE rank=1 ORDER BY {order_sql}"#,
             CATALOG_MEMBER_PROJECTION
         );
         let mut stmt = c
             .prepare(&sql)
             .map_err(|_| LibraryCommandError::PersistenceFailed)?;
-        let after_title = after.as_ref().map(|v| v.first.as_str());
         let rows = stmt
-            .query_map(params![artist.name, after_title], |r| {
+            .query_map(params![artist.name], |r| {
                 Ok((
                     r.get::<_, String>(0)?,
-                    r.get::<_, Option<String>>(1)?,
+                    r.get::<_, Option<i64>>(1)?,
                     r.get::<_, Option<String>>(2)?,
                     r.get::<_, Option<String>>(3)?,
+                    r.get::<_, Option<String>>(4)?,
                 ))
             })
             .map_err(|_| LibraryCommandError::PersistenceFailed)?;
-        let mut raw = rows
+        let raw = rows
             .collect::<Result<Vec<_>, _>>()
             .map_err(|_| LibraryCommandError::PersistenceFailed)?;
-        let next = if raw.len() > PAGE_SIZE {
-            raw.pop();
-            raw.last().map(|r| {
-                encode(
-                    "artistAlbums",
-                    &artist.name,
-                    r.0.clone(),
-                    artist.name.clone(),
-                    None,
-                )
-            })
+        let start = offset.min(raw.len());
+        let end = (start + PAGE_SIZE).min(raw.len());
+        let page = &raw[start..end];
+        let next = if end < raw.len() {
+            Some(encode(
+                "artistAlbums",
+                &artist.name,
+                &sort_name,
+                sort_direction,
+                end,
+            ))
         } else {
             None
         };
-        let items = raw
-            .into_iter()
-            .map(|(title, hash, mime, path)| LibraryAlbumSummary {
+        let items = page
+            .iter()
+            .map(|(title, year, hash, mime, path)| LibraryAlbumSummary {
                 key: LibraryAlbumKey {
-                    title,
+                    title: title.clone(),
                     album_artist: artist.name.clone(),
                 },
-                artwork: artwork(hash, mime, path),
+                artwork: artwork(hash.clone(), mime.clone(), path.clone()),
+                year: year.map(|value| value as i32),
             })
             .collect();
         Ok(LibraryAlbumPage {
@@ -523,6 +617,7 @@ impl LibraryShared {
             summary: LibraryAlbumSummary {
                 key,
                 artwork: cover,
+                year: parse_year(date.as_deref()),
             },
             date,
             track_count: count as u64,

@@ -18,7 +18,11 @@ const state: CatalogView<LibraryAlbumArtistSummary> = {
 	nextCursor: null,
 	loadState: 'ready',
 	error: null,
-	loadedFilter: ''
+	loadedFilter: '',
+	sortKey: 'artist',
+	sortDirection: 'ascending',
+	loadedSortKey: 'artist',
+	loadedSortDirection: 'ascending'
 };
 
 describe('AlbumArtistGrid', () => {

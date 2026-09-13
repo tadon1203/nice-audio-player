@@ -246,8 +246,10 @@ impl LibraryShared {
         &self,
         after: Option<String>,
         search: Option<String>,
+        sort_key: LibraryTrackSortKey,
+        sort_direction: LibrarySortDirection,
     ) -> Result<LibraryTrackPage, LibraryCommandError> {
-        self.catalog_tracks(after, search)
+        self.catalog_tracks(after, search, sort_key, sort_direction)
     }
     pub fn remove_root(&self, id: String) -> Result<(), LibraryCommandError> {
         if scanning(&self.state) {
@@ -1185,7 +1187,14 @@ mod tests {
             },
         );
 
-        let all = library.catalog_albums(None, None).expect("album page");
+        let all = library
+            .catalog_albums(
+                None,
+                None,
+                LibraryAlbumSortKey::Title,
+                LibrarySortDirection::Ascending,
+            )
+            .expect("album page");
         assert_eq!(all.items.len(), 2);
         assert_eq!(all.total_count, 2);
         let shared = all
@@ -1203,30 +1212,55 @@ mod tests {
         ));
 
         let track_only = library
-            .catalog_albums(None, Some("Needle".into()))
+            .catalog_albums(
+                None,
+                Some("Needle".into()),
+                LibraryAlbumSortKey::Title,
+                LibrarySortDirection::Ascending,
+            )
             .expect("search page");
         assert!(track_only.items.is_empty());
         let searched = library
-            .catalog_albums(None, Some("Shared".into()))
+            .catalog_albums(
+                None,
+                Some("Shared".into()),
+                LibraryAlbumSortKey::Title,
+                LibrarySortDirection::Ascending,
+            )
             .expect("album title search page");
         assert_eq!(searched.items.len(), 1);
         assert_eq!(searched.total_count, 1);
         assert_eq!(searched.items[0].key.title, "Shared");
         let literal = library
-            .catalog_albums(None, Some("%".into()))
+            .catalog_albums(
+                None,
+                Some("%".into()),
+                LibraryAlbumSortKey::Title,
+                LibrarySortDirection::Ascending,
+            )
             .expect("literal search page");
         assert_eq!(literal.items.len(), 1);
         assert_eq!(literal.items[0].key.title, "Other %_\\ album");
         for literal_term in ["_", "\\"] {
             let literal = library
-                .catalog_albums(None, Some(literal_term.into()))
+                .catalog_albums(
+                    None,
+                    Some(literal_term.into()),
+                    LibraryAlbumSortKey::Title,
+                    LibrarySortDirection::Ascending,
+                )
                 .expect("literal catalog search");
             assert_eq!(literal.items.len(), 1);
             assert_eq!(literal.items[0].key.title, "Other %_\\ album");
         }
 
         let catalog = library
-            .catalog_albums(None, Some("Album Artist".into()))
+            .catalog_albums(
+                None,
+                Some("Album Artist".into()),
+                LibraryAlbumSortKey::Title,
+                LibrarySortDirection::Ascending,
+            )
             .expect("catalog album page");
         assert_eq!(catalog.items.len(), 1);
         assert_eq!(catalog.items[0].key.album_artist, "Album Artist");
@@ -1239,7 +1273,12 @@ mod tests {
         ));
 
         let artists = library
-            .catalog_album_artists(None, None)
+            .catalog_album_artists(
+                None,
+                None,
+                LibraryAlbumArtistSortKey::Artist,
+                LibrarySortDirection::Ascending,
+            )
             .expect("catalog artists");
         assert_eq!(artists.items.len(), 2);
         assert_eq!(artists.total_count, 2);
@@ -1251,6 +1290,8 @@ mod tests {
                     name: "Album Artist".into(),
                 },
                 None,
+                LibraryArtistAlbumSortKey::Year,
+                LibrarySortDirection::Ascending,
             )
             .expect("artist albums");
         assert_eq!(artist_albums.items.len(), 1);
@@ -1269,7 +1310,12 @@ mod tests {
             .expect("logical album tracks");
         assert_eq!(tracks.items.len(), 2);
         assert!(library
-            .catalog_albums(Some("not-json".into()), None)
+            .catalog_albums(
+                Some("not-json".into()),
+                None,
+                LibraryAlbumSortKey::Title,
+                LibrarySortDirection::Ascending
+            )
             .is_err());
         assert!(matches!(
             library.catalog_playback(
@@ -1395,13 +1441,23 @@ mod tests {
             .expect("filename");
 
         let stem_match = library
-            .catalog_tracks(None, Some("multi.part".into()))
+            .catalog_tracks(
+                None,
+                Some("multi.part".into()),
+                LibraryTrackSortKey::Title,
+                LibrarySortDirection::Ascending,
+            )
             .expect("stem search");
         assert_eq!(stem_match.items.len(), 1);
         assert_eq!(stem_match.total_count, 1);
         assert_eq!(stem_match.items[0].title, "multi.part");
         let extension_match = library
-            .catalog_tracks(None, Some("flac".into()))
+            .catalog_tracks(
+                None,
+                Some("flac".into()),
+                LibraryTrackSortKey::Title,
+                LibrarySortDirection::Ascending,
+            )
             .expect("extension search");
         assert!(extension_match.items.is_empty());
         assert_eq!(extension_match.total_count, 0);
@@ -1440,13 +1496,23 @@ mod tests {
             },
         );
         let first = library
-            .catalog_albums(None, None)
+            .catalog_albums(
+                None,
+                None,
+                LibraryAlbumSortKey::Title,
+                LibrarySortDirection::Ascending,
+            )
             .expect("first catalog page");
         assert_eq!(first.items.len(), 100);
         assert_eq!(first.total_count, 106);
         let cursor = first.next_cursor.clone().expect("next cursor");
         let second = library
-            .catalog_albums(Some(cursor.clone()), None)
+            .catalog_albums(
+                Some(cursor.clone()),
+                None,
+                LibraryAlbumSortKey::Title,
+                LibrarySortDirection::Ascending,
+            )
             .expect("second catalog page");
         assert_eq!(second.items.len(), 6);
         assert_eq!(second.total_count, 106);
@@ -1457,7 +1523,12 @@ mod tests {
             })
         }));
         assert!(matches!(
-            library.catalog_albums(Some(cursor), Some("different".into())),
+            library.catalog_albums(
+                Some(cursor),
+                Some("different".into()),
+                LibraryAlbumSortKey::Title,
+                LibrarySortDirection::Ascending
+            ),
             Err(LibraryCommandError::InvalidCursor)
         ));
         let artist_page = library
@@ -1466,6 +1537,8 @@ mod tests {
                     name: "Artist".into(),
                 },
                 None,
+                LibraryArtistAlbumSortKey::Title,
+                LibrarySortDirection::Ascending,
             )
             .expect("artist album page");
         let artist_cursor = artist_page.next_cursor.expect("artist continuation");
@@ -1475,11 +1548,18 @@ mod tests {
                     name: "Other artist".into(),
                 },
                 Some(artist_cursor),
+                LibraryArtistAlbumSortKey::Title,
+                LibrarySortDirection::Ascending,
             ),
             Err(LibraryCommandError::InvalidCursor)
         ));
         assert!(library
-            .catalog_album_artists(None, Some("Artist".into()))
+            .catalog_album_artists(
+                None,
+                Some("Artist".into()),
+                LibraryAlbumArtistSortKey::Artist,
+                LibrarySortDirection::Ascending
+            )
             .is_ok());
         let artist = library
             .catalog_artist(LibraryAlbumArtistKey {
@@ -1546,7 +1626,12 @@ mod tests {
         }
 
         let albums = library
-            .catalog_albums(None, None)
+            .catalog_albums(
+                None,
+                None,
+                LibraryAlbumSortKey::Title,
+                LibrarySortDirection::Ascending,
+            )
             .expect("case-sensitive albums");
         let case_titles: Vec<_> = albums
             .items
@@ -1644,7 +1729,12 @@ mod tests {
             },
         );
         let artists = library
-            .catalog_album_artists(None, None)
+            .catalog_album_artists(
+                None,
+                None,
+                LibraryAlbumArtistSortKey::Artist,
+                LibrarySortDirection::Ascending,
+            )
             .expect("album artists");
         assert_eq!(artists.items.len(), 1);
         assert_eq!(artists.items[0].track_count, 2);
@@ -1732,7 +1822,14 @@ mod tests {
         }
         tx.commit().expect("commit source tracks");
         let started = Instant::now();
-        let albums = library.catalog_albums(None, None).expect("albums page");
+        let albums = library
+            .catalog_albums(
+                None,
+                None,
+                LibraryAlbumSortKey::Title,
+                LibrarySortDirection::Ascending,
+            )
+            .expect("albums page");
         let albums_elapsed = started.elapsed();
         assert_eq!(albums.items.len(), 100);
         assert!(albums.next_cursor.is_some());
@@ -1748,6 +1845,8 @@ mod tests {
                     name: "Artist".into(),
                 },
                 None,
+                LibraryArtistAlbumSortKey::Year,
+                LibrarySortDirection::Ascending,
             )
             .expect("artist albums page");
         let artist_elapsed = started.elapsed();
@@ -1784,7 +1883,12 @@ mod tests {
         tx.commit().expect("commit dense tracks");
         let started = Instant::now();
         let dense = library
-            .catalog_albums(None, Some("Dense".into()))
+            .catalog_albums(
+                None,
+                Some("Dense".into()),
+                LibraryAlbumSortKey::Title,
+                LibrarySortDirection::Ascending,
+            )
             .expect("dense albums page");
         let dense_elapsed = started.elapsed();
         assert_eq!(dense.items.len(), 20);

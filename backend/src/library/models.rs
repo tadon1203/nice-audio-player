@@ -1,5 +1,6 @@
 #![allow(dead_code)] // Public IPC models are introduced ahead of the library browser UI.
 use crate::media::inspection::AudioCodec;
+use serde::Deserialize;
 use serde::Serialize;
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
@@ -40,6 +41,46 @@ pub enum LibraryInspectionStatus {
     Indexed,
     Unsupported,
     Failed,
+}
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, specta::Type, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum LibrarySortDirection {
+    Ascending,
+    Descending,
+}
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, specta::Type, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum LibraryAlbumSortKey {
+    Title,
+    Artist,
+    Year,
+}
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, specta::Type, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum LibraryAlbumArtistSortKey {
+    Artist,
+    AlbumCount,
+    TrackCount,
+}
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, specta::Type, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum LibraryArtistAlbumSortKey {
+    Year,
+    Title,
+}
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, specta::Type, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum LibraryTrackSortKey {
+    Title,
+    Artist,
+    Album,
+    Duration,
+}
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, specta::Type, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct LibrarySort<K> {
+    pub key: K,
+    pub direction: LibrarySortDirection,
 }
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
@@ -132,6 +173,8 @@ pub struct LibraryAlbumArtistKey {
 pub struct LibraryAlbumSummary {
     pub key: LibraryAlbumKey,
     pub artwork: Option<ArtworkRef>,
+    #[specta(type = Option<f64>)]
+    pub year: Option<i32>,
 }
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]

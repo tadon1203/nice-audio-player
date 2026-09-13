@@ -101,24 +101,61 @@ impl BackendApp {
             BackendRequest::CancelLibraryScan => {
                 encode(self.library.handle().cancel_scan(), library_error)
             }
-            BackendRequest::ListLibraryTracks { after_id, search } => encode(
-                self.library.handle().tracks(after_id, search),
+            BackendRequest::ListLibraryTracks {
+                after_id,
+                search,
+                sort_key,
+                sort_direction,
+            } => encode(
+                self.library
+                    .handle()
+                    .tracks(after_id, search, sort_key, sort_direction),
                 library_error,
             ),
             BackendRequest::ListLibraryAlbums {
                 after_cursor,
                 search,
+                sort_key,
+                sort_direction,
             } => encode(
-                self.library.handle().catalog_albums(after_cursor, search),
+                self.library.handle().catalog_albums(
+                    after_cursor,
+                    search,
+                    sort_key,
+                    sort_direction,
+                ),
                 library_error,
             ),
             BackendRequest::ListLibraryAlbumArtists {
                 after_cursor,
                 search,
+                sort_key,
+                sort_direction,
             } => encode(
-                self.library
-                    .handle()
-                    .catalog_album_artists(after_cursor, search),
+                self.library.handle().catalog_album_artists(
+                    after_cursor,
+                    search,
+                    sort_key,
+                    sort_direction,
+                ),
+                library_error,
+            ),
+            BackendRequest::GetLibraryAlbumArtist { artist_key } => encode(
+                self.library.handle().catalog_artist(artist_key),
+                library_error,
+            ),
+            BackendRequest::ListLibraryArtistAlbums {
+                artist_key,
+                after_cursor,
+                sort_key,
+                sort_direction,
+            } => encode(
+                self.library.handle().catalog_artist_albums(
+                    artist_key,
+                    after_cursor,
+                    sort_key,
+                    sort_direction,
+                ),
                 library_error,
             ),
             BackendRequest::GetLibraryAlbumDetails { album_key } => encode(

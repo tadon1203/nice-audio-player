@@ -17,6 +17,16 @@ export function requireBoolean(value: unknown, name: string): boolean {
 	return value;
 }
 
+export function requireOneOf<T extends string>(
+	value: unknown,
+	name: string,
+	values: readonly T[]
+): T {
+	if (typeof value !== 'string' || !values.includes(value as T))
+		throw new TypeError(`${name} must be one of: ${values.join(', ')}`);
+	return value as T;
+}
+
 export function requireNonNegativeInteger(value: unknown, name: string): number {
 	if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0)
 		throw new TypeError(`${name} must be a non-negative safe integer`);

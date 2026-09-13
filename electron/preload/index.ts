@@ -32,10 +32,15 @@ const api: NativeAppApi = {
 	getLibraryScanState: () => invoke('library:get-scan-state'),
 	startLibraryScan: () => invoke('library:start-scan'),
 	cancelLibraryScan: () => invoke('library:cancel-scan'),
-	listLibraryTracks: (afterId, search) => invoke('library:list-tracks', afterId, search),
-	listLibraryAlbums: (afterCursor, search) => invoke('library:list-albums', afterCursor, search),
-	listLibraryAlbumArtists: (afterCursor, search) =>
-		invoke('library:list-album-artists', afterCursor, search),
+	listLibraryTracks: (afterId, search, sortKey, sortDirection) =>
+		invoke('library:list-tracks', afterId, search, sortKey, sortDirection),
+	listLibraryAlbums: (afterCursor, search, sortKey, sortDirection) =>
+		invoke('library:list-albums', afterCursor, search, sortKey, sortDirection),
+	listLibraryAlbumArtists: (afterCursor, search, sortKey, sortDirection) =>
+		invoke('library:list-album-artists', afterCursor, search, sortKey, sortDirection),
+	getLibraryAlbumArtist: (artistKey) => invoke('library:get-album-artist', artistKey),
+	listLibraryArtistAlbums: (artistKey, afterCursor, sortKey, sortDirection) =>
+		invoke('library:list-artist-albums', artistKey, afterCursor, sortKey, sortDirection),
 	getLibraryAlbumDetails: (albumKey) => invoke('library:get-album-details', albumKey),
 	listLibraryAlbumTracks: (albumKey, offset) =>
 		invoke('library:list-album-tracks', albumKey, offset),

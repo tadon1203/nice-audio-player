@@ -1,7 +1,7 @@
-<div class="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
+<div class="grid h-full min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)]">
 	<header class="pt-10">
 		<app-page-frame>
-			<div class="flex flex-wrap items-center justify-between gap-4">
+			<div class="flex min-w-0 flex-wrap items-center justify-between gap-4">
 				<h1 class="text-headline-small text-on-surface">{{ pageMeta().title }}</h1>
 				<label
 					class="me-3 w-full max-w-control-search-width app-wide:w-control-search-width app-wide:-translate-y-layout-search-offset"
@@ -23,9 +23,18 @@
 					</div>
 				</label>
 			</div>
-			<div class="mt-6 flex flex-wrap items-center gap-x-8 gap-y-2 text-body-small text-secondary">
+			<div
+				class="mt-6 flex min-w-0 flex-wrap items-center justify-between gap-x-8 gap-y-2 text-body-small text-secondary"
+			>
 				<span class="tabular-nums">{{ resultCount() }}</span>
-				<span>{{ pageMeta().sortLabel }}</span>
+				@if (presentation() !== 'tracks') {
+				<app-sort-control
+					[options]="pageMeta().sortOptions"
+					[selectedKey]="currentView().sortKey"
+					[direction]="currentView().sortDirection"
+					(sortChange)="onSortChange($event)"
+				/>
+				}
 			</div>
 		</app-page-frame>
 	</header>
@@ -63,6 +72,9 @@
 						caption="Library tracks"
 						[activeTrackId]="activeTrackId()"
 						[playbackStatus]="playbackStatus()"
+						[sortKey]="trackSortKey()"
+						[sortDirection]="currentView().sortDirection"
+						(sortChange)="onSortChange($event)"
 						(playTrack)="playTrack($event)"
 					/>
 					} } @if (currentView().nextCursor !== null) {

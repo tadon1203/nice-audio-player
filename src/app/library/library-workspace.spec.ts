@@ -88,4 +88,15 @@ describe('LibraryWorkspace', () => {
 
 		expect(workspace.albums().totalCount).toBe(184);
 	});
+
+	it('keeps sort state per view and carries it through reload and pagination', async () => {
+		const workspace = TestBed.inject(LibraryWorkspace);
+		workspace.setSort('albums', { key: 'year', direction: 'descending' });
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(workspace.albums().sortKey).toBe('year');
+		expect(workspace.albums().sortDirection).toBe('descending');
+		expect(workspace.tracks().sortKey).toBe('title');
+		expect(fake.listLibraryAlbums).toHaveBeenCalledWith(null, null, 'year', 'descending');
+	});
 });

@@ -3,25 +3,36 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { map } from 'rxjs';
 import { LucideSearch } from '@lucide/angular';
-import type { LibraryTrackSummary } from '@shared/native-app-api';
+import type { LibraryTrackSortKey, LibraryTrackSummary } from '@shared/native-app-api';
 import { Button } from '@app/ui/button';
 import { PageFrame } from '@app/ui/page-frame';
 import { PlaybackSession } from '@app/playback/playback-session';
 import { ScrollRegion } from '@app/ui/scroll-region';
+import { SortControl, type SortChange, type SortOption } from '@app/ui/sort-control';
 import { AlbumArtistGrid } from './album-artist-grid';
 import { AlbumGrid } from './album-grid';
 import { LibrarySession } from './library-session';
 import { libraryStatusMessage } from './library-errors';
-import { LibraryPresentation, LibraryWorkspace } from './library-workspace';
+import { LibraryPresentation, LibraryWorkspace, type LibrarySortKey } from './library-workspace';
 import {
 	TrackTable,
 	libraryTrackTableColumns,
 	type TrackTableRow,
-	type TrackTablePlaybackStatus
+	type TrackTablePlaybackStatus,
+	type TrackTableSortChange
 } from './track-table';
 
 @Component({
-	imports: [AlbumArtistGrid, AlbumGrid, Button, LucideSearch, PageFrame, ScrollRegion, TrackTable],
+	imports: [
+		AlbumArtistGrid,
+		AlbumGrid,
+		Button,
+		LucideSearch,
+		PageFrame,
+		ScrollRegion,
+		SortControl,
+		TrackTable
+	],
 	selector: 'app-library-page',
 	host: {
 		class: 'block h-full min-h-0 min-w-0 overflow-hidden',
@@ -48,6 +59,9 @@ export class LibraryPage {
 	protected readonly trackRows = computed<readonly TrackTableRow[]>(() =>
 		this.workspace.tracks().items.map((track) => trackRowFromSummary(track))
 	);
+	protected readonly trackSortKey = computed(
+		() => this.workspace.tracks().sortKey as LibraryTrackSortKey
+	);
 	protected readonly pageMeta = computed(() => presentationMeta[this.presentation()]);
 	protected readonly currentView = computed(() => this.viewFor(this.presentation()));
 	protected readonly resultCount = computed(() => {
@@ -73,9 +87,15 @@ export class LibraryPage {
 		this.workspace.setFilter(this.presentation(), (event.target as HTMLInputElement).value);
 	}
 
+	onSortChange(change: SortChange | TrackTableSortChange): void {
+		this.workspace.setSort(this.presentation(), {
+			key: change.key as LibrarySortKey,
+			direction: change.direction
+		});
+	}
+
 	openArtistAlbums(artistName: string): void {
-		this.workspace.setFilter('albums', artistName);
-		void this.router.navigate(['/library/albums']);
+		void this.router.navigate(['/library/album-artists', artistName]);
 	}
 
 	openAlbum(key: { title: string; albumArtist: string }): void {
@@ -122,21 +142,34 @@ const presentationMeta: Record<LibraryPresentation, PresentationMeta> = {
 		singularNoun: 'album',
 		pluralNoun: 'albums',
 		searchPlaceholder: 'Search music…',
-		sortLabel: 'Sort: Album title'
+		sortOptions: [
+			{ key: 'title', label: 'Album title' },
+			{ key: 'artist', label: 'Album artist' },
+			{ key: 'year', label: 'Year' }
+		]
 	},
 	albumArtists: {
 		title: 'Album Artists',
 		singularNoun: 'album artist',
 		pluralNoun: 'album artists',
 		searchPlaceholder: 'Search music…',
-		sortLabel: 'Sort: Artist'
+		sortOptions: [
+			{ key: 'artist', label: 'Artist' },
+			{ key: 'albumCount', label: 'Album count' },
+			{ key: 'trackCount', label: 'Track count' }
+		]
 	},
 	tracks: {
 		title: 'Tracks',
 		singularNoun: 'track',
 		pluralNoun: 'tracks',
 		searchPlaceholder: 'Search music…',
-		sortLabel: 'Sort: Added order'
+		sortOptions: [
+			{ key: 'title', label: 'Title' },
+			{ key: 'artist', label: 'Artist' },
+			{ key: 'album', label: 'Album' },
+			{ key: 'duration', label: 'Time' }
+		]
 	}
 };
 
@@ -145,5 +178,5 @@ interface PresentationMeta {
 	readonly singularNoun: string;
 	readonly pluralNoun: string;
 	readonly searchPlaceholder: string;
-	readonly sortLabel: string;
+	readonly sortOptions: readonly SortOption[];
 }

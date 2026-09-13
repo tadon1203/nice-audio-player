@@ -3,16 +3,22 @@ import type {
 	ArtworkRef,
 	BackendEvent,
 	LibraryAlbumArtistPage,
+	LibraryAlbumArtistKey,
 	LibraryAlbumArtistSummary,
 	LibraryAlbumKey,
 	LibraryAlbumDetails,
 	LibraryAlbumTrackPage,
 	LibraryAlbumTrackSummary,
 	LibraryAlbumPage,
+	LibraryAlbumArtistSortKey,
+	LibraryAlbumSortKey,
+	LibraryArtistAlbumSortKey,
+	LibrarySortDirection,
 	LibraryAlbumSummary,
 	LibraryRoot,
 	LibraryScanSnapshot,
 	LibraryTrackPage,
+	LibraryTrackSortKey,
 	LibraryTrackSummary,
 	LibraryStatus,
 	PlaybackFailureCode,
@@ -27,17 +33,23 @@ export type AppEvent = BackendEvent;
 export type {
 	ArtworkRef,
 	LibraryAlbumArtistPage,
+	LibraryAlbumArtistKey,
 	LibraryAlbumArtistSummary,
 	LibraryAlbumKey,
 	LibraryAlbumDetails,
 	LibraryAlbumTrackPage,
 	LibraryAlbumTrackSummary,
 	LibraryAlbumPage,
+	LibraryAlbumArtistSortKey,
+	LibraryAlbumSortKey,
+	LibraryArtistAlbumSortKey,
+	LibrarySortDirection,
 	LibraryAlbumSummary,
 	LibraryRoot,
 	LibraryScanSnapshot,
 	LibraryStatus,
 	LibraryTrackPage,
+	LibraryTrackSortKey,
 	LibraryTrackSummary,
 	PlaybackFailureCode
 };
@@ -62,12 +74,31 @@ export interface NativeAppApi {
 	getLibraryScanState(): Promise<LibraryScanSnapshot>;
 	startLibraryScan(): Promise<void>;
 	cancelLibraryScan(): Promise<void>;
-	listLibraryTracks(afterId: string | null, search: string | null): Promise<LibraryTrackPage>;
-	listLibraryAlbums(afterCursor: string | null, search: string | null): Promise<LibraryAlbumPage>;
+	listLibraryTracks(
+		afterId: string | null,
+		search: string | null,
+		sortKey: LibraryTrackSortKey,
+		sortDirection: LibrarySortDirection
+	): Promise<LibraryTrackPage>;
+	listLibraryAlbums(
+		afterCursor: string | null,
+		search: string | null,
+		sortKey: LibraryAlbumSortKey,
+		sortDirection: LibrarySortDirection
+	): Promise<LibraryAlbumPage>;
 	listLibraryAlbumArtists(
 		afterCursor: string | null,
-		search: string | null
+		search: string | null,
+		sortKey: LibraryAlbumArtistSortKey,
+		sortDirection: LibrarySortDirection
 	): Promise<LibraryAlbumArtistPage>;
+	getLibraryAlbumArtist(artistKey: LibraryAlbumArtistKey): Promise<LibraryAlbumArtistSummary>;
+	listLibraryArtistAlbums(
+		artistKey: LibraryAlbumArtistKey,
+		afterCursor: string | null,
+		sortKey: LibraryArtistAlbumSortKey,
+		sortDirection: LibrarySortDirection
+	): Promise<LibraryAlbumPage>;
 	getLibraryAlbumDetails(albumKey: LibraryAlbumKey): Promise<LibraryAlbumDetails>;
 	listLibraryAlbumTracks(albumKey: LibraryAlbumKey, offset: number): Promise<LibraryAlbumTrackPage>;
 	getLibraryTrackForPath(path: string): Promise<LibraryTrackSummary | null>;

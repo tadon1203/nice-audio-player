@@ -4,14 +4,21 @@ import type {
 	AppEvent,
 	AudioOutputDevice,
 	LibraryAlbumArtistPage,
+	LibraryAlbumArtistKey,
+	LibraryAlbumArtistSortKey,
+	LibraryAlbumArtistSummary,
 	LibraryAlbumDetails,
 	LibraryAlbumKey,
 	LibraryAlbumPage,
+	LibraryAlbumSortKey,
 	LibraryAlbumTrackPage,
+	LibraryArtistAlbumSortKey,
+	LibrarySortDirection,
 	LibraryRoot,
 	LibraryScanSnapshot,
 	LibraryStatus,
 	LibraryTrackPage,
+	LibraryTrackSortKey,
 	LibraryTrackSummary,
 	NativeAppApi,
 	PlaybackQueue,
@@ -92,17 +99,45 @@ export class Backend {
 	cancelLibraryScan(): Promise<void> {
 		return this.requireApi().cancelLibraryScan();
 	}
-	listLibraryTracks(afterId: string | null, search: string | null): Promise<LibraryTrackPage> {
-		return this.requireApi().listLibraryTracks(afterId, search);
+	listLibraryTracks(
+		afterId: string | null,
+		search: string | null,
+		sortKey: LibraryTrackSortKey,
+		sortDirection: LibrarySortDirection
+	): Promise<LibraryTrackPage> {
+		return this.requireApi().listLibraryTracks(afterId, search, sortKey, sortDirection);
 	}
-	listLibraryAlbums(afterCursor: string | null, search: string | null): Promise<LibraryAlbumPage> {
-		return this.requireApi().listLibraryAlbums(afterCursor, search);
+	listLibraryAlbums(
+		afterCursor: string | null,
+		search: string | null,
+		sortKey: LibraryAlbumSortKey,
+		sortDirection: LibrarySortDirection
+	): Promise<LibraryAlbumPage> {
+		return this.requireApi().listLibraryAlbums(afterCursor, search, sortKey, sortDirection);
 	}
 	listLibraryAlbumArtists(
 		afterCursor: string | null,
-		search: string | null
+		search: string | null,
+		sortKey: LibraryAlbumArtistSortKey,
+		sortDirection: LibrarySortDirection
 	): Promise<LibraryAlbumArtistPage> {
-		return this.requireApi().listLibraryAlbumArtists(afterCursor, search);
+		return this.requireApi().listLibraryAlbumArtists(afterCursor, search, sortKey, sortDirection);
+	}
+	getLibraryAlbumArtist(artistKey: LibraryAlbumArtistKey): Promise<LibraryAlbumArtistSummary> {
+		return this.requireApi().getLibraryAlbumArtist(artistKey);
+	}
+	listLibraryArtistAlbums(
+		artistKey: LibraryAlbumArtistKey,
+		afterCursor: string | null,
+		sortKey: LibraryArtistAlbumSortKey,
+		sortDirection: LibrarySortDirection
+	): Promise<LibraryAlbumPage> {
+		return this.requireApi().listLibraryArtistAlbums(
+			artistKey,
+			afterCursor,
+			sortKey,
+			sortDirection
+		);
 	}
 	getLibraryAlbumDetails(albumKey: LibraryAlbumKey): Promise<LibraryAlbumDetails> {
 		return this.requireApi().getLibraryAlbumDetails(albumKey);

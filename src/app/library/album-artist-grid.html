@@ -1,5 +1,5 @@
 <div
-	class="grid grid-cols-[repeat(1,var(--spacing-media-artist-tile))] gap-x-10 gap-y-8 library-compact:grid-cols-[repeat(2,var(--spacing-media-artist-tile))] app-wide:grid-cols-[repeat(3,var(--spacing-media-artist-tile))] library-wide:grid-cols-[repeat(4,var(--spacing-media-artist-tile))]"
+	class="grid grid-cols-[repeat(auto-fill,minmax(var(--spacing-media-artist-tile),var(--spacing-media-artist-tile)))] gap-x-10 gap-y-8"
 	data-testid="album-artist-grid"
 >
 	@for (artist of state().items; track artist.key.name) {

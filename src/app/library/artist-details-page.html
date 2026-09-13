@@ -1,0 +1,95 @@
+<div appScrollRegion data-artist-details-scroll-region>
+	<app-page-frame class="min-h-full">
+		<div class="py-8">
+			<a
+				routerLink="/library/album-artists"
+				class="min-h-hit-target inline-flex items-center gap-2 text-body-small text-secondary outline-none hover:text-on-surface focus-visible:ring-2 focus-visible:ring-primary"
+			>
+				<svg lucideArrowLeft aria-hidden="true" class="size-4"></svg>
+				<span>Album Artists</span>
+			</a>
+
+			@if (workspace.loadState() === 'loading') {
+			<p class="py-10 text-body-medium text-secondary" role="status">Loading artist…</p>
+			} @else if (workspace.error(); as error) {
+			<p class="py-10 text-body-medium text-error" role="alert">{{ error }}</p>
+			} @else if (artist(); as artistSummary) {
+			<section
+				class="mt-8 grid grid-cols-1 gap-8 app-wide:grid-cols-[220px_minmax(0,1fr)]"
+				aria-labelledby="artist-title"
+			>
+				<div class="text-center app-wide:text-start">
+					<app-artwork
+						class="mx-auto w-media-detail rounded-full app-wide:mx-0"
+						[artwork]="artistSummary.artwork"
+						[alt]="artistSummary.key.name + ' artwork'"
+					/>
+					<h1 id="artist-title" class="mt-5 text-headline-large text-on-surface">
+						{{ artistSummary.key.name }}
+					</h1>
+					<p class="mt-2 text-body-medium text-secondary tabular-nums">
+						{{ artistSummary.albumCount ?? '—' }} albums · {{ artistSummary.trackCount ?? '—' }}
+						tracks
+					</p>
+				</div>
+
+				<section aria-labelledby="artist-albums-title">
+					<div class="flex flex-wrap items-center justify-between gap-4">
+						<h2
+							id="artist-albums-title"
+							class="tracking-wide text-body-large text-secondary uppercase"
+						>
+							Albums
+						</h2>
+						<app-sort-control
+							[options]="sortOptions"
+							[selectedKey]="sort().key"
+							[direction]="sort().direction"
+							(sortChange)="onSortChange($event)"
+						/>
+					</div>
+					@if (albums().length === 0) {
+					<p class="py-8 text-body-medium text-secondary" role="status">
+						No albums for this artist.
+					</p>
+					} @else {
+					<div
+						class="mt-5 grid grid-cols-[repeat(auto-fill,minmax(var(--spacing-media-tile),max-content))] gap-x-7 gap-y-8"
+					>
+						@for (album of albums(); track album.key.title + album.key.albumArtist) {
+						<a
+							class="group min-w-0 outline-none focus-visible:ring-2 focus-visible:ring-primary"
+							[routerLink]="openAlbum(album.key)"
+							[aria-label]="'Open album ' + album.key.title"
+						>
+							<app-artwork
+								class="w-media-tile rounded-small group-hover:bg-surface-container"
+								[artwork]="album.artwork"
+								[alt]="album.key.title + ' artwork'"
+							/>
+							<span class="mt-2 block w-media-tile truncate text-body-small text-on-surface"
+								>{{ album.key.title }}</span
+							>
+							<span class="block w-media-tile text-body-small text-secondary tabular-nums"
+								>{{ album.year ?? 'Unknown year' }}</span
+							>
+						</a>
+						}
+					</div>
+					@if (workspace.nextCursor() !== null) {
+					<div class="flex justify-center py-8">
+						<button
+							type="button"
+							class="min-h-control-default rounded-small border border-outline-variant px-4 text-label-large text-on-surface outline-none hover:bg-surface-container focus-visible:ring-2 focus-visible:ring-primary"
+							(click)="workspace.loadMore()"
+						>
+							{{ workspace.loadState() === 'loadingMore' ? 'Loading…' : 'Load more' }}
+						</button>
+					</div>
+					} }
+				</section>
+			</section>
+			}
+		</div>
+	</app-page-frame>
+</div>

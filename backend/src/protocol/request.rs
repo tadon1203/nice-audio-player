@@ -1,4 +1,7 @@
-use crate::library::models::LibraryAlbumKey;
+use crate::library::models::{
+    LibraryAlbumArtistSortKey, LibraryAlbumKey, LibraryAlbumSortKey, LibraryArtistAlbumSortKey,
+    LibrarySortDirection, LibraryTrackSortKey,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -48,14 +51,29 @@ pub enum BackendRequest {
     ListLibraryTracks {
         after_id: Option<String>,
         search: Option<String>,
+        sort_key: LibraryTrackSortKey,
+        sort_direction: LibrarySortDirection,
     },
     ListLibraryAlbums {
         after_cursor: Option<String>,
         search: Option<String>,
+        sort_key: LibraryAlbumSortKey,
+        sort_direction: LibrarySortDirection,
     },
     ListLibraryAlbumArtists {
         after_cursor: Option<String>,
         search: Option<String>,
+        sort_key: LibraryAlbumArtistSortKey,
+        sort_direction: LibrarySortDirection,
+    },
+    GetLibraryAlbumArtist {
+        artist_key: crate::library::models::LibraryAlbumArtistKey,
+    },
+    ListLibraryArtistAlbums {
+        artist_key: crate::library::models::LibraryAlbumArtistKey,
+        after_cursor: Option<String>,
+        sort_key: LibraryArtistAlbumSortKey,
+        sort_direction: LibrarySortDirection,
     },
     GetLibraryAlbumDetails {
         album_key: LibraryAlbumKey,

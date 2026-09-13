@@ -72,7 +72,11 @@ export async function installNativeAppFixture(page: Page): Promise<void> {
 			{ key: { name: 'Floating Points' }, artwork: null, albumCount: 5, trackCount: 57 }
 		];
 		const albumDetails: LibraryAlbumDetails = {
-			summary: { key: { title: 'Test album', albumArtist: 'Test artist' }, artwork: null },
+			summary: {
+				key: { title: 'Test album', albumArtist: 'Test artist' },
+				artwork: null,
+				year: 2020
+			},
 			date: '2020',
 			trackCount: 2,
 			durationMs: 300000,
@@ -265,7 +269,14 @@ export async function installNativeAppFixture(page: Page): Promise<void> {
 				emit({ event: 'libraryScanStateChanged', payload: scan });
 				return Promise.resolve();
 			},
-			listLibraryTracks: (_afterId: string | null, search: string | null) => {
+			listLibraryTracks: (
+				_afterId: string | null,
+				search: string | null,
+				_sortKey,
+				_sortDirection
+			) => {
+				void _sortKey;
+				void _sortDirection;
 				const filtered =
 					roots.length === 0
 						? []
@@ -276,20 +287,37 @@ export async function installNativeAppFixture(page: Page): Promise<void> {
 					nextAfterId: null
 				});
 			},
-			listLibraryAlbums: (_afterCursor: string | null, search: string | null) =>
-				Promise.resolve({
+			listLibraryAlbums: (
+				_afterCursor: string | null,
+				search: string | null,
+				_sortKey,
+				_sortDirection
+			) => {
+				void _afterCursor;
+				void _sortKey;
+				void _sortDirection;
+				return Promise.resolve({
 					items:
 						roots.length === 0 || (search !== null && !'Test album Test artist'.includes(search))
 							? []
-							: [{ key: { title: 'Test album', albumArtist: 'Test artist' }, artwork: null }],
+							: [albumDetails.summary],
 					totalCount:
 						roots.length === 0 || (search !== null && !'Test album Test artist'.includes(search))
 							? 0
 							: 1,
 					nextCursor: null
-				}),
-			listLibraryAlbumArtists: (_afterCursor: string | null, search: string | null) =>
-				Promise.resolve({
+				});
+			},
+			listLibraryAlbumArtists: (
+				_afterCursor: string | null,
+				search: string | null,
+				_sortKey,
+				_sortDirection
+			) => {
+				void _afterCursor;
+				void _sortKey;
+				void _sortDirection;
+				return Promise.resolve({
 					items:
 						roots.length === 0
 							? []
@@ -303,7 +331,20 @@ export async function installNativeAppFixture(page: Page): Promise<void> {
 									(artist) => search === null || artist.key.name.includes(search)
 								).length,
 					nextCursor: null
-				}),
+				});
+			},
+			getLibraryAlbumArtist: (artistKey) => {
+				const artist = artistSummaries.find((candidate) => candidate.key.name === artistKey.name);
+				return artist ? Promise.resolve(artist) : rejected('albumArtistNotFound');
+			},
+			listLibraryArtistAlbums: (artistKey, _afterCursor, _sortKey, _sortDirection) => {
+				void _afterCursor;
+				void _sortKey;
+				void _sortDirection;
+				return artistKey.name === 'Test artist'
+					? Promise.resolve({ items: [albumDetails.summary], totalCount: 1, nextCursor: null })
+					: rejected('albumArtistNotFound');
+			},
 			getLibraryAlbumDetails: (albumKey) =>
 				albumKey.title === albumDetails.summary.key.title &&
 				albumKey.albumArtist === albumDetails.summary.key.albumArtist

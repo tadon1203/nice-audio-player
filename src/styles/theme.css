@@ -207,8 +207,6 @@
 
 	/* Breakpoints are compile-time media-query inputs; CSS variables are invalid here. */
 	--breakpoint-app-wide: 800px;
-	--breakpoint-library-compact: 520px;
-	--breakpoint-library-wide: 1120px;
 }
 
 [data-theme='light'] {

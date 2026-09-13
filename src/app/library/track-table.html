@@ -13,12 +13,27 @@
 				@for (column of columns(); track column) {
 				<th
 					scope="col"
-					class="px-2"
+					class="px-2 uppercase"
 					[attr.data-column]="column"
+					[attr.aria-sort]="sortAria(column)"
 					[class.text-start]="column !== 'duration'"
 					[class.text-end]="column === 'duration'"
 				>
-					{{ columnLabel(column) }}
+					@if (layout() === 'library' && sortKeyForColumn(column); as sortableKey) {
+					<button
+						type="button"
+						class="min-h-hit-target inline-flex items-center gap-1 border-0 bg-transparent p-0 text-label-large text-secondary outline-none hover:text-on-surface focus-visible:rounded-small focus-visible:ring-2 focus-visible:ring-primary"
+						[attr.aria-label]="'Sort by ' + columnLabel(column)"
+						(click)="toggleSort(column)"
+					>
+						<span>{{ columnLabel(column) }}</span>
+						@if (isSortActive(column)) { @if (sortDirection() === 'ascending') {
+						<svg lucideArrowUp aria-hidden="true" class="size-4"></svg>
+						} @else {
+						<svg lucideArrowDown aria-hidden="true" class="size-4"></svg>
+						} }
+					</button>
+					} @else { {{ columnLabel(column) }} }
 				</th>
 				}
 			</tr>

@@ -3,7 +3,12 @@ import { debounceTime, distinctUntilChanged, Subject } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import type {
 	LibraryAlbumArtistSummary,
+	LibraryAlbumArtistSortKey,
+	LibraryAlbumSortKey,
+	LibraryArtistAlbumSortKey,
+	LibrarySortDirection,
 	LibraryAlbumSummary,
+	LibraryTrackSortKey,
 	LibraryTrackSummary
 } from '@shared/native-app-api';
 import { Backend } from '@app/core/backend/backend';
@@ -11,6 +16,9 @@ import { libraryCommandErrorMessage } from './library-errors';
 import { LibrarySession } from './library-session';
 
 export type LibraryPresentation = 'albums' | 'albumArtists' | 'tracks';
+export type LibrarySortKey =
+	LibraryAlbumSortKey | LibraryAlbumArtistSortKey | LibraryArtistAlbumSortKey | LibraryTrackSortKey;
+export type SortSelection = { key: LibrarySortKey; direction: LibrarySortDirection };
 export type CatalogLoadState = 'idle' | 'loading' | 'ready' | 'loadingMore' | 'error';
 export interface CatalogView<T> {
 	readonly filter: string;
@@ -21,12 +29,16 @@ export interface CatalogView<T> {
 	readonly loadState: CatalogLoadState;
 	readonly error: string | null;
 	readonly loadedFilter: string | null;
+	readonly sortKey: LibrarySortKey;
+	readonly sortDirection: LibrarySortDirection;
+	readonly loadedSortKey: LibrarySortKey | null;
+	readonly loadedSortDirection: LibrarySortDirection | null;
 }
 
 type AnyCatalog = CatalogView<unknown>;
 type FilterChange = { presentation: LibraryPresentation; filter: string };
 
-const initialView = <T>(): CatalogView<T> => ({
+const initialView = <T>(sortKey: LibrarySortKey): CatalogView<T> => ({
 	filter: '',
 	scrollTop: 0,
 	items: [],
@@ -34,7 +46,11 @@ const initialView = <T>(): CatalogView<T> => ({
 	nextCursor: null,
 	loadState: 'idle',
 	error: null,
-	loadedFilter: null
+	loadedFilter: null,
+	sortKey,
+	sortDirection: 'ascending',
+	loadedSortKey: null,
+	loadedSortDirection: null
 });
 
 @Service()
@@ -42,10 +58,15 @@ export class LibraryWorkspace {
 	private readonly backend = inject(Backend);
 	private readonly session = inject(LibrarySession);
 	private readonly destroyRef = inject(DestroyRef);
-	private readonly albumsState = signal<CatalogView<LibraryAlbumSummary>>(initialView());
-	private readonly albumArtistsState =
-		signal<CatalogView<LibraryAlbumArtistSummary>>(initialView());
-	private readonly tracksState = signal<CatalogView<LibraryTrackSummary>>(initialView());
+	private readonly albumsState = signal<CatalogView<LibraryAlbumSummary>>(
+		initialView<LibraryAlbumSummary>('title')
+	);
+	private readonly albumArtistsState = signal<CatalogView<LibraryAlbumArtistSummary>>(
+		initialView<LibraryAlbumArtistSummary>('artist')
+	);
+	private readonly tracksState = signal<CatalogView<LibraryTrackSummary>>(
+		initialView<LibraryTrackSummary>('title')
+	);
 	private readonly filterChanged = new Subject<FilterChange>();
 	private readonly generations: Record<LibraryPresentation, number> = {
 		albums: 0,
@@ -96,6 +117,27 @@ export class LibraryWorkspace {
 		this.filterChanged.next({ presentation, filter });
 	}
 
+	setSort(presentation: LibraryPresentation, selection: SortSelection): void {
+		const view = this.view(presentation)();
+		if (view.sortKey === selection.key && view.sortDirection === selection.direction) return;
+		this.generations[presentation]++;
+		this.write(presentation, {
+			...view,
+			sortKey: selection.key,
+			sortDirection: selection.direction,
+			items: [],
+			totalCount: null,
+			nextCursor: null,
+			loadState: 'idle',
+			error: null,
+			loadedFilter: null,
+			loadedSortKey: null,
+			loadedSortDirection: null,
+			scrollTop: 0
+		});
+		void this.reload(presentation);
+	}
+
 	setScrollTop(presentation: LibraryPresentation, scrollTop: number): void {
 		const view = this.view(presentation)();
 		this.write(presentation, { ...view, scrollTop: Math.max(0, scrollTop) });
@@ -104,7 +146,13 @@ export class LibraryWorkspace {
 	async ensureLoaded(presentation: LibraryPresentation): Promise<void> {
 		const view = this.view(presentation)();
 		if (view.loadState === 'loading' || view.loadState === 'loadingMore') return;
-		if (view.loadedFilter === view.filter && view.loadState === 'ready') return;
+		if (
+			view.loadedFilter === view.filter &&
+			view.loadedSortKey === view.sortKey &&
+			view.loadedSortDirection === view.sortDirection &&
+			view.loadState === 'ready'
+		)
+			return;
 		await this.reload(presentation);
 	}
 
@@ -120,7 +168,13 @@ export class LibraryWorkspace {
 		this.write(presentation, { ...view, loadState: 'loadingMore', error: null });
 		try {
 			const search = view.filter === '' ? null : view.filter;
-			const page = await this.loadPage(presentation, view.nextCursor, search);
+			const page = await this.loadPage(
+				presentation,
+				view.nextCursor,
+				search,
+				view.sortKey,
+				view.sortDirection
+			);
 			if (generation !== this.generations[presentation]) return;
 			this.write(presentation, {
 				...this.view(presentation)(),
@@ -129,6 +183,8 @@ export class LibraryWorkspace {
 				nextCursor: page.nextCursor,
 				loadState: 'ready',
 				loadedFilter: view.filter,
+				loadedSortKey: view.sortKey,
+				loadedSortDirection: view.sortDirection,
 				error: null
 			});
 		} catch (error) {
@@ -155,7 +211,13 @@ export class LibraryWorkspace {
 		});
 		try {
 			const search = view.filter === '' ? null : view.filter;
-			const page = await this.loadPage(presentation, null, search);
+			const page = await this.loadPage(
+				presentation,
+				null,
+				search,
+				view.sortKey,
+				view.sortDirection
+			);
 			if (generation !== this.generations[presentation]) return;
 			this.write(presentation, {
 				...this.view(presentation)(),
@@ -164,6 +226,8 @@ export class LibraryWorkspace {
 				nextCursor: page.nextCursor,
 				loadState: 'ready',
 				loadedFilter: view.filter,
+				loadedSortKey: view.sortKey,
+				loadedSortDirection: view.sortDirection,
 				error: null
 			});
 		} catch (error) {
@@ -179,19 +243,32 @@ export class LibraryWorkspace {
 	private loadPage(
 		presentation: LibraryPresentation,
 		cursor: string | null,
-		search: string | null
+		search: string | null,
+		sortKey: LibrarySortKey,
+		sortDirection: LibrarySortDirection
 	): Promise<{ items: readonly unknown[]; totalCount: number | null; nextCursor: string | null }> {
 		switch (presentation) {
 			case 'albums':
-				return this.backend.listLibraryAlbums(cursor, search).then((page) => page);
+				return this.backend
+					.listLibraryAlbums(cursor, search, sortKey as LibraryAlbumSortKey, sortDirection)
+					.then((page) => page);
 			case 'albumArtists':
-				return this.backend.listLibraryAlbumArtists(cursor, search).then((page) => page);
+				return this.backend
+					.listLibraryAlbumArtists(
+						cursor,
+						search,
+						sortKey as LibraryAlbumArtistSortKey,
+						sortDirection
+					)
+					.then((page) => page);
 			case 'tracks':
-				return this.backend.listLibraryTracks(cursor, search).then((page) => ({
-					items: page.items,
-					totalCount: page.totalCount,
-					nextCursor: page.nextAfterId
-				}));
+				return this.backend
+					.listLibraryTracks(cursor, search, sortKey as LibraryTrackSortKey, sortDirection)
+					.then((page) => ({
+						items: page.items,
+						totalCount: page.totalCount,
+						nextCursor: page.nextAfterId
+					}));
 		}
 	}
 
@@ -230,7 +307,9 @@ export class LibraryWorkspace {
 			nextCursor: null,
 			loadState: 'idle',
 			error: null,
-			loadedFilter: null
+			loadedFilter: null,
+			loadedSortKey: null,
+			loadedSortDirection: null
 		});
 	}
 }

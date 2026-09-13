@@ -1,5 +1,6 @@
 import type {
 	LibraryAlbumArtistPage,
+	LibraryAlbumArtistSummary,
 	LibraryAlbumDetails,
 	LibraryAlbumPage,
 	LibraryAlbumTrackPage,
@@ -53,7 +54,8 @@ const isAlbum = (value: unknown): boolean =>
 	isRecord(value.key) &&
 	typeof value.key.title === 'string' &&
 	typeof value.key.albumArtist === 'string' &&
-	isArtwork(value.artwork);
+	isArtwork(value.artwork) &&
+	isNullableNumber(value.year);
 
 const isAlbumTrack = (value: unknown): boolean =>
 	isRecord(value) &&
@@ -69,7 +71,7 @@ const isAlbumTrack = (value: unknown): boolean =>
 	(value.availability === 'available' || value.availability === 'missing') &&
 	typeof value.playable === 'boolean';
 
-const isArtist = (value: unknown): boolean =>
+const isArtist = (value: unknown): value is LibraryAlbumArtistSummary =>
 	isRecord(value) &&
 	isRecord(value.key) &&
 	typeof value.key.name === 'string' &&
@@ -163,6 +165,9 @@ export const decodeLibraryAlbumArtists = (value: unknown): LibraryAlbumArtistPag
 			isNullableString(item.nextCursor),
 		'listLibraryAlbumArtists'
 	);
+
+export const decodeLibraryAlbumArtist = (value: unknown): LibraryAlbumArtistSummary =>
+	decode(value, isArtist, 'getLibraryAlbumArtist');
 
 export const decodeLibraryAlbumDetails = (value: unknown): LibraryAlbumDetails =>
 	decode(

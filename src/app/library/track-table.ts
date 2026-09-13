@@ -1,6 +1,10 @@
 import { Component, input, output } from '@angular/core';
-import { LucidePause, LucidePlay } from '@lucide/angular';
-import type { LibraryFileAvailability } from '@shared/protocol/generated';
+import { LucideArrowDown, LucideArrowUp, LucidePause, LucidePlay } from '@lucide/angular';
+import type {
+	LibraryFileAvailability,
+	LibrarySortDirection,
+	LibraryTrackSortKey
+} from '@shared/protocol/generated';
 import { Button } from '@app/ui/button';
 import { FormatDurationPipe } from '@app/ui/format-duration';
 
@@ -8,6 +12,10 @@ export type TrackTableColumn =
 	'number' | 'title' | 'artist' | 'album' | 'format' | 'quality' | 'duration';
 export type TrackTableLayout = 'library' | 'album';
 export type TrackTablePlaybackStatus = 'stopped' | 'playing' | 'paused' | 'failed';
+export interface TrackTableSortChange {
+	readonly key: LibraryTrackSortKey;
+	readonly direction: LibrarySortDirection;
+}
 export const libraryTrackTableColumns: readonly TrackTableColumn[] = [
 	'title',
 	'artist',
@@ -38,7 +46,7 @@ export interface TrackTableRow {
 
 @Component({
 	selector: 'app-track-table',
-	imports: [Button, FormatDurationPipe, LucidePause, LucidePlay],
+	imports: [Button, FormatDurationPipe, LucideArrowDown, LucideArrowUp, LucidePause, LucidePlay],
 	templateUrl: './track-table.html'
 })
 export class TrackTable {
@@ -48,7 +56,10 @@ export class TrackTable {
 	readonly caption = input('Tracks');
 	readonly activeTrackId = input<string | null>(null);
 	readonly playbackStatus = input<TrackTablePlaybackStatus>('stopped');
+	readonly sortKey = input<LibraryTrackSortKey>('title');
+	readonly sortDirection = input<LibrarySortDirection>('ascending');
 	readonly playTrack = output<string>();
+	readonly sortChange = output<TrackTableSortChange>();
 
 	columnWidth(column: TrackTableColumn): string {
 		const width = trackTableColumnWidths[this.layout()][column];
@@ -72,6 +83,33 @@ export class TrackTable {
 			case 'duration':
 				return 'Time';
 		}
+	}
+
+	sortKeyForColumn(column: TrackTableColumn): LibraryTrackSortKey | null {
+		if (column === 'title' || column === 'artist' || column === 'album' || column === 'duration')
+			return column;
+		return null;
+	}
+
+	isSortActive(column: TrackTableColumn): boolean {
+		return this.sortKeyForColumn(column) === this.sortKey();
+	}
+
+	sortAria(column: TrackTableColumn): 'ascending' | 'descending' | 'none' {
+		if (!this.isSortActive(column)) return 'none';
+		return this.sortDirection();
+	}
+
+	toggleSort(column: TrackTableColumn): void {
+		const key = this.sortKeyForColumn(column);
+		if (!key) return;
+		this.sortChange.emit({
+			key,
+			direction:
+				this.isSortActive(column) && this.sortDirection() === 'ascending'
+					? 'descending'
+					: 'ascending'
+		});
 	}
 
 	trackNumberLabel(row: TrackTableRow): string {

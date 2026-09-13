@@ -1,5 +1,6 @@
 import { Routes } from '@angular/router';
 import { AlbumDetailsPage } from './album-details-page';
+import { ArtistDetailsPage } from './artist-details-page';
 import { LibraryPage } from './library-page';
 
 export const libraryRoutes: Routes = [
@@ -8,6 +9,11 @@ export const libraryRoutes: Routes = [
 		path: 'albums/:albumArtist/:albumTitle',
 		component: AlbumDetailsPage,
 		title: 'Album Details'
+	},
+	{
+		path: 'album-artists/:artistName',
+		component: ArtistDetailsPage,
+		title: 'Artist Details'
 	},
 	{ path: 'albums', component: LibraryPage, data: { presentation: 'albums' }, title: 'Albums' },
 	{

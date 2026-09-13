@@ -4,18 +4,26 @@ import type {
 	PlaybackQueue,
 	PlaybackState,
 	LibraryAlbumArtistPage,
+	LibraryAlbumArtistKey,
+	LibraryAlbumArtistSortKey,
+	LibraryAlbumArtistSummary,
 	LibraryAlbumDetails,
 	LibraryAlbumKey,
 	LibraryAlbumPage,
+	LibraryAlbumSortKey,
 	LibraryAlbumTrackPage,
+	LibraryArtistAlbumSortKey,
+	LibrarySortDirection,
 	LibraryRoot,
 	LibraryScanSnapshot,
 	LibraryStatus,
 	LibraryTrackSummary,
-	LibraryTrackPage
+	LibraryTrackPage,
+	LibraryTrackSortKey
 } from '@shared/native-app-api';
 import {
 	decodeLibraryAlbumArtists,
+	decodeLibraryAlbumArtist,
 	decodeLibraryAlbumDetails,
 	decodeLibraryAlbums,
 	decodeLibraryAlbumTracks,
@@ -143,25 +151,81 @@ export class BackendApi {
 			decodeNull(value, 'cancelLibraryScan')
 		);
 	}
-	listLibraryTracks(afterId: string | null, search: string | null): Promise<LibraryTrackPage> {
+	listLibraryTracks(
+		afterId: string | null,
+		search: string | null,
+		sortKey: LibraryTrackSortKey,
+		sortDirection: LibrarySortDirection
+	): Promise<LibraryTrackPage> {
 		return this.transport.send(
-			{ method: 'listLibraryTracks', params: { after_id: afterId, search } },
+			{
+				method: 'listLibraryTracks',
+				params: { after_id: afterId, search, sort_key: sortKey, sort_direction: sortDirection }
+			},
 			decodeLibraryTracks
 		);
 	}
-	listLibraryAlbums(afterCursor: string | null, search: string | null): Promise<LibraryAlbumPage> {
+	listLibraryAlbums(
+		afterCursor: string | null,
+		search: string | null,
+		sortKey: LibraryAlbumSortKey,
+		sortDirection: LibrarySortDirection
+	): Promise<LibraryAlbumPage> {
 		return this.transport.send(
-			{ method: 'listLibraryAlbums', params: { after_cursor: afterCursor, search } },
+			{
+				method: 'listLibraryAlbums',
+				params: {
+					after_cursor: afterCursor,
+					search,
+					sort_key: sortKey,
+					sort_direction: sortDirection
+				}
+			},
 			decodeLibraryAlbums
 		);
 	}
 	listLibraryAlbumArtists(
 		afterCursor: string | null,
-		search: string | null
+		search: string | null,
+		sortKey: LibraryAlbumArtistSortKey,
+		sortDirection: LibrarySortDirection
 	): Promise<LibraryAlbumArtistPage> {
 		return this.transport.send(
-			{ method: 'listLibraryAlbumArtists', params: { after_cursor: afterCursor, search } },
+			{
+				method: 'listLibraryAlbumArtists',
+				params: {
+					after_cursor: afterCursor,
+					search,
+					sort_key: sortKey,
+					sort_direction: sortDirection
+				}
+			},
 			decodeLibraryAlbumArtists
+		);
+	}
+	getLibraryAlbumArtist(artistKey: LibraryAlbumArtistKey): Promise<LibraryAlbumArtistSummary> {
+		return this.transport.send(
+			{ method: 'getLibraryAlbumArtist', params: { artist_key: artistKey } },
+			decodeLibraryAlbumArtist
+		);
+	}
+	listLibraryArtistAlbums(
+		artistKey: LibraryAlbumArtistKey,
+		afterCursor: string | null,
+		sortKey: LibraryArtistAlbumSortKey,
+		sortDirection: LibrarySortDirection
+	): Promise<LibraryAlbumPage> {
+		return this.transport.send(
+			{
+				method: 'listLibraryArtistAlbums',
+				params: {
+					artist_key: artistKey,
+					after_cursor: afterCursor,
+					sort_key: sortKey,
+					sort_direction: sortDirection
+				}
+			},
+			decodeLibraryAlbums
 		);
 	}
 	getLibraryAlbumDetails(albumKey: LibraryAlbumKey): Promise<LibraryAlbumDetails> {

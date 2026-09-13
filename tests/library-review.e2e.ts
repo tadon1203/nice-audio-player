@@ -127,9 +127,10 @@ test('drills from an Album Artist into its Albums', async ({ page }) => {
 	const artist = page.getByRole('button', { name: 'Browse albums by Test artist' });
 	await artist.focus();
 	await artist.press('Enter');
-	await expect(page).toHaveURL(/\/library\/albums$/);
-	await expect(page.getByRole('searchbox', { name: 'Filter library' })).toHaveValue('Test artist');
-	await expect(page.getByRole('button', { name: /Open album Test album/ })).toBeVisible();
+	await expect(page).toHaveURL(/\/library\/album-artists\/Test%20artist$/);
+	await expect(page.getByRole('heading', { name: 'Test artist' })).toBeVisible();
+	await expect(page.getByRole('link', { name: 'Open album Test album' })).toBeVisible();
+	await expect(page.getByRole('combobox', { name: 'Sort by Sort' })).toHaveValue('year');
 });
 
 test('keeps the Albums grid aligned with the shared page frame', async ({ page }) => {
@@ -203,6 +204,68 @@ test('keeps the Library search aligned to the full header frame', async ({ page 
 		expect(Math.abs(position.x - positions[0].x)).toBeLessThanOrEqual(1);
 		expect(Math.abs(position.y - positions[0].y)).toBeLessThanOrEqual(1);
 	}
+});
+
+test('keeps Album Artists header controls inside the Electron-sized frame', async ({ page }) => {
+	await page.setViewportSize({ width: 1280, height: 800 });
+	await page.goto('/library/albums');
+	await page.getByRole('link', { name: 'Settings' }).click();
+	await page.getByRole('button', { name: 'Add folder' }).click();
+	await page.getByRole('link', { name: 'Album Artists' }).click();
+
+	const frame = page.locator('app-library-page header app-page-frame');
+	const search = page.getByRole('searchbox', { name: 'Filter library' });
+	const sort = page.locator('app-sort-control');
+	await expect(search).toBeVisible();
+	await expect(sort).toBeVisible();
+
+	const frameContentRight = await frame.evaluate((element) => {
+		const styles = getComputedStyle(element);
+		const box = element.getBoundingClientRect();
+		return box.right - Number.parseFloat(styles.paddingRight);
+	});
+	const [searchBox, sortBox] = await Promise.all([search.boundingBox(), sort.boundingBox()]);
+	expect(searchBox).not.toBeNull();
+	expect(sortBox).not.toBeNull();
+	if (!searchBox || !sortBox) return;
+
+	expect(searchBox.x + searchBox.width).toBeLessThanOrEqual(frameContentRight + 1);
+	expect(sortBox.x + sortBox.width).toBeLessThanOrEqual(frameContentRight + 1);
+});
+
+test('keeps Album Artists content inside the frame at the wide-grid boundary', async ({ page }) => {
+	await page.setViewportSize({ width: 1120, height: 800 });
+	await page.goto('/library/albums');
+	await page.getByRole('link', { name: 'Settings' }).click();
+	await page.getByRole('button', { name: 'Add folder' }).click();
+	await page.getByRole('link', { name: 'Album Artists' }).click();
+
+	const main = page.locator('main[data-slot="app-main"]');
+	const frame = page.locator('app-library-page app-page-frame').nth(1);
+	const grid = page.getByTestId('album-artist-grid');
+	await expect(grid).toBeVisible();
+
+	const metrics = await Promise.all([
+		main.boundingBox(),
+		frame.boundingBox(),
+		grid.boundingBox(),
+		grid.evaluate((element) => ({
+			clientWidth: element.clientWidth,
+			scrollWidth: element.scrollWidth,
+			columns: getComputedStyle(element).gridTemplateColumns
+		}))
+	]);
+	const [mainBox, frameBox, gridBox, gridMetrics] = metrics;
+	expect(mainBox).not.toBeNull();
+	expect(frameBox).not.toBeNull();
+	expect(gridBox).not.toBeNull();
+	if (!mainBox || !frameBox || !gridBox) return;
+
+	expect(await page.evaluate(() => document.body.scrollWidth)).toBeLessThanOrEqual(1120);
+	expect(frameBox.x + frameBox.width).toBeLessThanOrEqual(mainBox.x + mainBox.width + 1);
+	expect(gridBox.x + gridBox.width).toBeLessThanOrEqual(frameBox.x + frameBox.width + 1);
+	expect(gridMetrics.scrollWidth).toBeLessThanOrEqual(gridMetrics.clientWidth);
+	expect(gridMetrics.columns.split(' ').length).toBe(3);
 });
 
 test('matches the Album Artists reference geometry at the desktop viewport', async ({ page }) => {
