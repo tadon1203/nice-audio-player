@@ -1,5 +1,9 @@
 # Requirements
 
+## Document responsibility
+
+This document is the source of truth for accepted product behavior and constraints. It does not define implementation structure, visual design, or change-specific scope.
+
 This document defines accepted product requirements for Nice Audio Player.
 
 Implementation structure belongs in `architecture.md`. Visual and interaction design belongs in `DESIGN.md`. Change-specific scope belongs in GitHub Issues.

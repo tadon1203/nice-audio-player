@@ -5,6 +5,10 @@
 name: Nice Audio Player
 ---
 
+## Document responsibility
+
+This document is the source of truth for visual and interaction design rules. It does not define accepted product behavior, system architecture, or contribution workflow.
+
 ## Overview
 
 Nice Audio Player resembles a music-library workstation on the desk of a mastering engineer: a large local collection within easy reach, precise track and file information close at hand, and the active playback session continuously understandable without leaving the library.
@@ -99,6 +103,8 @@ Visual balance is functional. Adding information to one side should not casually
 Additional width may remain unused when stretching content would reduce scanability or weaken relationships.
 
 Responsive layouts rearrange regions rather than proportionally scaling the interface. Secondary information yields before primary content becomes cramped or unreadable. Contextual information may move to an overlay instead of compressing the working area indefinitely.
+
+Responsive content must remain inside the region that owns it. Content may reflow or scroll within that region, but it must not expand unrelated shell regions or displace persistent controls.
 
 ## Information Density
 

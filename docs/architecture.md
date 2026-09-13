@@ -1,5 +1,9 @@
 # Architecture
 
+## Document responsibility
+
+This document is the source of truth for system structure, boundaries, ownership, and dependencies. It does not define product acceptance, visual design, or local implementation details.
+
 This document describes the system-level architecture of Nice Audio Player. It defines the major technologies, components, modules, boundaries, responsibilities, ownership, and dependency relationships that shape the system.
 
 Its purpose is to provide a stable shared mental model of how the project is structured and how its major parts relate.
@@ -35,7 +39,7 @@ The **Backend** owns application domain behavior, persistent state, filesystem w
 
 The Renderer is the standalone Angular application running in Electron's renderer process.
 
-Angular Router is the navigation authority. Hierarchical dependency injection defines service ownership and lifetime. Signals represent current renderer state, while RxJS represents event and stream semantics. Angular components should remain small and focused; feature behavior belongs in feature services and stores rather than in templates.
+Angular Router is the navigation authority. Feature services and stores own renderer-local state, while components present that state.
 
 The Renderer is organized around application ownership rather than framework-specific route files:
 
@@ -62,24 +66,9 @@ src/
 | Playback | `src/app/playback`   | Playback UI, state, and interactions              |
 | Settings | `src/app/settings`   | Settings UI, state, and interactions              |
 
-Feature routes should be lazy-loaded. Route-level providers are used when a service lifetime belongs to a lazy route; component-level providers are used when a lifetime belongs to a component subtree. Root providers are reserved for application-wide services.
+Persistent application surfaces are owned by the root application shell and composed around the Angular Router outlet. The shell owns persistent navigation and playback surfaces around the routed workspace; feature routes own the content presented in that workspace.
 
-Persistent application surfaces are owned by the root application shell and composed around the Angular Router outlet. The desktop shell is a flexible workspace followed by a 128px playback area composed of a 104px Playback Dock and a 24px playback signal-status bar. At wide widths the workspace uses a fixed 224px navigation column beside the routed main area; narrow widths rearrange navigation above the main area without changing route ownership.
-
-Library presentations are peer child routes rather than tab-local navigation:
-
-```
-/library             → /library/albums
-/library/albums
-/library/albums/:albumArtist/:albumTitle
-/library/album-artists
-/library/tracks
-/settings
-```
-
-The Library feature owns presentation-specific cached data, filters, and scroll positions. Album Details is a child route of Albums and owns a route-scoped album details workspace for album metadata and paged album tracks. The Router owns the active presentation and the navigation links expose that state through `aria-current`. Playback Dock and signal-status UI remain shell-owned so playback state stays visible while routes change.
-
-Time-based visual motion is owned by the component or directive that owns the state being changed. Simple state transitions use CSS and named motion tokens from `src/styles/theme.css`. A complex animation library may be introduced locally when a concrete feature requires sequencing, FLIP, or dynamic interruption; motion does not create a second state store or cross-feature service.
+Library presentations are sibling views within the Library feature. Album Details is a child view of Albums. The Library owns presentation-specific cached data, filters, and scroll positions, while playback remains shell-owned so playback state stays visible while routes change.
 
 The Renderer does not import Electron or Node APIs. Native and backend capabilities are accessed through the shared native API contract exposed by Preload.
 
@@ -173,38 +162,4 @@ Renderer-owned state is limited to presentation, interaction, navigation, cached
 
 ## Build and Distribution
 
-Build and packaging responsibilities are deliberately separated:
-
-```
-Angular CLI     → Renderer build/dev server
-esbuild         → Electron main/preload
-Cargo           → Rust Backend
-Electron Forge  → package / make / signing / distribution
-```
-
-Angular CLI owns the Renderer application build using the standard `@angular/build:application` builder. esbuild owns the Electron main and Preload bundles. Cargo owns the Rust Backend binary. Electron Forge packages the completed artifacts and produces distribution outputs; it is not the Renderer or Backend build system.
-
-The `pnpm build` pipeline has one producer per artifact and one assembly step:
-
-```
-binding generation → shared/protocol/generated.ts
-Angular CLI        → build/renderer
-esbuild             → build/electron
-Cargo               → build/backend
-runtime staging     → build/runtime
-Forge package       → build/forge
-```
-
-`pnpm build` runs all producers in dependency order and then assembles the packaged runtime. Runtime staging does not compile code; it copies the already-built Electron and Renderer artifacts and writes the packaged runtime manifest. Forge's `prePackage` invokes `pnpm build`, while `packageAfterCopy` only replaces Forge's temporary application directory with `build/runtime`.
-
-Development runtime:
-
-```
-Angular dev server → Electron
-```
-
-The Electron window loads the Angular dev server during development. In a packaged application, the custom `nice-player://renderer/` protocol serves the Angular static build from the staged `renderer/browser/` directory.
-
-Angular Router uses `withHashLocation()` for Electron routing:
-
-Hash routing keeps navigation state in the URL fragment, so the static Renderer protocol does not need a server-side SPA fallback for Angular routes.
+Build and packaging responsibilities are separated by runtime boundary: the Angular application produces the Renderer, the Desktop Host and Preload are bundled independently, the Backend is compiled by Cargo, and Electron Forge assembles the distributable application. Development loads the Renderer through its dev server; packaged applications serve the built Renderer through the desktop protocol.
