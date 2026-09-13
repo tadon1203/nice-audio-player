@@ -125,7 +125,7 @@ const CATALOG_MEMBER_PROJECTION: &str = r#"SELECT t.id, f.root_id, f.relative_pa
 FROM tracks t
 JOIN library_files f ON f.id=t.file_id
 LEFT JOIN track_source_metadata m ON m.track_id=t.id AND m.source_revision=f.source_revision"#;
-type ArtistSummaryRow = (i64, Option<String>, Option<String>, Option<String>);
+type ArtistSummaryRow = (i64, i64, Option<String>, Option<String>, Option<String>);
 
 impl LibraryShared {
     pub fn catalog_tracks(
@@ -299,7 +299,7 @@ impl LibraryShared {
             )
             .map_err(|_| LibraryCommandError::PersistenceFailed)? as u64;
         let sql = format!(
-            r#"WITH members AS MATERIALIZED ({}), groups AS (SELECT effective_artist AS artist_name,COUNT(DISTINCT album_title) album_count FROM members GROUP BY effective_artist), page AS (SELECT artist_name,album_count FROM groups WHERE (?1='' OR artist_name LIKE ?2 ESCAPE '\') AND (?3 IS NULL OR artist_name COLLATE NOCASE > ?3 COLLATE NOCASE OR (artist_name COLLATE NOCASE = ?3 COLLATE NOCASE AND artist_name > ?3)) ORDER BY artist_name COLLATE NOCASE,artist_name LIMIT 101), first_albums AS (SELECT effective_artist AS artist_name,album_title FROM (SELECT effective_artist,album_title,ROW_NUMBER() OVER(PARTITION BY effective_artist ORDER BY album_title COLLATE NOCASE,album_title) rank FROM members) WHERE rank=1), ranked AS (SELECT p.artist_name,p.album_count,a.content_hash,a.mime_type,a.relative_path,ROW_NUMBER() OVER(PARTITION BY p.artist_name ORDER BY CASE WHEN a.id IS NULL THEN 1 ELSE 0 END,CASE WHEN m.disc_number IS NULL THEN 1 ELSE 0 END,m.disc_number,CASE WHEN m.track_number IS NULL THEN 1 ELSE 0 END,m.track_number,m.id) rank FROM page p JOIN first_albums fa ON fa.artist_name=p.artist_name JOIN members m ON m.effective_artist=fa.artist_name AND m.album_title=fa.album_title LEFT JOIN artwork_assets a ON a.id=m.artwork_id AND a.mime_type IN ('image/jpeg','image/png')) SELECT artist_name,album_count,content_hash,mime_type,relative_path FROM ranked WHERE rank=1 ORDER BY artist_name COLLATE NOCASE,artist_name"#,
+            r#"WITH members AS MATERIALIZED ({}), groups AS (SELECT effective_artist AS artist_name,COUNT(DISTINCT album_title) album_count,COUNT(*) track_count FROM members GROUP BY effective_artist), page AS (SELECT artist_name,album_count,track_count FROM groups WHERE (?1='' OR artist_name LIKE ?2 ESCAPE '\') AND (?3 IS NULL OR artist_name COLLATE NOCASE > ?3 COLLATE NOCASE OR (artist_name COLLATE NOCASE = ?3 COLLATE NOCASE AND artist_name > ?3)) ORDER BY artist_name COLLATE NOCASE,artist_name LIMIT 101), first_albums AS (SELECT effective_artist AS artist_name,album_title FROM (SELECT effective_artist,album_title,ROW_NUMBER() OVER(PARTITION BY effective_artist ORDER BY album_title COLLATE NOCASE,album_title) rank FROM members) WHERE rank=1), ranked AS (SELECT p.artist_name,p.album_count,p.track_count,a.content_hash,a.mime_type,a.relative_path,ROW_NUMBER() OVER(PARTITION BY p.artist_name ORDER BY CASE WHEN a.id IS NULL THEN 1 ELSE 0 END,CASE WHEN m.disc_number IS NULL THEN 1 ELSE 0 END,m.disc_number,CASE WHEN m.track_number IS NULL THEN 1 ELSE 0 END,m.track_number,m.id) rank FROM page p JOIN first_albums fa ON fa.artist_name=p.artist_name JOIN members m ON m.effective_artist=fa.artist_name AND m.album_title=fa.album_title LEFT JOIN artwork_assets a ON a.id=m.artwork_id AND a.mime_type IN ('image/jpeg','image/png')) SELECT artist_name,album_count,track_count,content_hash,mime_type,relative_path FROM ranked WHERE rank=1 ORDER BY artist_name COLLATE NOCASE,artist_name"#,
             CATALOG_MEMBER_PROJECTION
         );
         let mut stmt = c
@@ -311,9 +311,10 @@ impl LibraryShared {
                 Ok((
                     r.get::<_, String>(0)?,
                     r.get::<_, i64>(1)?,
-                    r.get::<_, Option<String>>(2)?,
+                    r.get::<_, i64>(2)?,
                     r.get::<_, Option<String>>(3)?,
                     r.get::<_, Option<String>>(4)?,
+                    r.get::<_, Option<String>>(5)?,
                 ))
             })
             .map_err(|_| LibraryCommandError::PersistenceFailed)?;
@@ -330,10 +331,11 @@ impl LibraryShared {
         let items = raw
             .into_iter()
             .map(
-                |(name, count, hash, mime, path)| LibraryAlbumArtistSummary {
+                |(name, album_count, track_count, hash, mime, path)| LibraryAlbumArtistSummary {
                     key: LibraryAlbumArtistKey { name },
                     artwork: artwork(hash, mime, path),
-                    album_count: count as u64,
+                    album_count: album_count as u64,
+                    track_count: track_count as u64,
                 },
             )
             .collect();
@@ -459,7 +461,7 @@ impl LibraryShared {
                   JOIN canonical_album ca ON ca.album_title=m.album_title
                   LEFT JOIN artwork_assets a ON a.id=m.artwork_id AND a.mime_type IN ('image/jpeg','image/png')
                 )
-                SELECT COUNT(DISTINCT album_title),
+                SELECT COUNT(DISTINCT album_title), COUNT(*),
                   (SELECT content_hash FROM ranked_artwork WHERE rank=1),
                   (SELECT mime_type FROM ranked_artwork WHERE rank=1),
                   (SELECT relative_path FROM ranked_artwork WHERE rank=1)
@@ -468,17 +470,18 @@ impl LibraryShared {
                     CATALOG_MEMBER_PROJECTION
                 ),
                 params![artist.name],
-                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
             )
             .optional()
             .map_err(|_| LibraryCommandError::PersistenceFailed)?;
-        let Some((album_count, hash, mime, path)) = row else {
+        let Some((album_count, track_count, hash, mime, path)) = row else {
             return Err(LibraryCommandError::AlbumArtistNotFound);
         };
         Ok(LibraryAlbumArtistSummary {
             key: artist,
             artwork: artwork(hash, mime, path),
             album_count: album_count as u64,
+            track_count: track_count as u64,
         })
     }
 

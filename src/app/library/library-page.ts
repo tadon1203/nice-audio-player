@@ -129,7 +129,7 @@ const presentationMeta: Record<LibraryPresentation, PresentationMeta> = {
 		singularNoun: 'album artist',
 		pluralNoun: 'album artists',
 		searchPlaceholder: 'Search music…',
-		sortLabel: 'Sort: Artist name'
+		sortLabel: 'Sort: Artist'
 	},
 	tracks: {
 		title: 'Tracks',

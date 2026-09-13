@@ -67,7 +67,7 @@ test('shows the backend total for each Library presentation', async ({ page }) =
 
 	for (const presentation of [
 		{ label: 'Albums', count: '1 album' },
-		{ label: 'Album Artists', count: '1 album artist' },
+		{ label: 'Album Artists', count: '8 album artists' },
 		{ label: 'Tracks', count: '5 tracks' }
 	]) {
 		await page.getByRole('link', { name: presentation.label }).click();
@@ -85,7 +85,7 @@ test('keeps Tracks table headers and rows on the same geometry', async ({ page }
 	await expectTrackTableGeometry(page.getByRole('table', { name: 'Library tracks' }), 4);
 });
 
-test('keeps every page scroll region at the main content edge', async ({ page }) => {
+test('keeps every page scroll region aligned with its owning layout frame', async ({ page }) => {
 	await page.goto('/library/albums');
 	await page.getByRole('link', { name: 'Settings' }).click();
 	await page.getByRole('button', { name: 'Add folder' }).click();
@@ -101,10 +101,20 @@ test('keeps every page scroll region at the main content edge', async ({ page })
 		expect(mainBox).not.toBeNull();
 		expect(scrollBox).not.toBeNull();
 		if (!mainBox || !scrollBox) return;
-		expect(Math.abs(scrollBox.x - mainBox.x)).toBeLessThanOrEqual(1);
-		expect(
-			Math.abs(scrollBox.x + scrollBox.width - (mainBox.x + mainBox.width))
-		).toBeLessThanOrEqual(1);
+		const frame =
+			(await page.locator('[data-page="library"]').count()) > 0
+				? page.locator('[data-page="library"] app-page-frame').nth(1)
+				: page.locator('main[data-slot="app-main"]');
+		const frameContent = await frame.evaluate((element) => {
+			const styles = getComputedStyle(element);
+			const box = element.getBoundingClientRect();
+			return {
+				left: box.left + Number.parseFloat(styles.paddingLeft),
+				right: box.right - Number.parseFloat(styles.paddingRight)
+			};
+		});
+		expect(Math.abs(scrollBox.x - frameContent.left)).toBeLessThanOrEqual(1);
+		expect(Math.abs(scrollBox.x + scrollBox.width - frameContent.right)).toBeLessThanOrEqual(1);
 	}
 });
 
@@ -155,6 +165,98 @@ test('keeps the Albums grid aligned with the shared page frame', async ({ page }
 	});
 	expect(Math.abs(headerContentLeft - contentLeft)).toBeLessThanOrEqual(1);
 	expect(Math.abs(contentLeft - gridBox.x)).toBeLessThanOrEqual(1);
+});
+
+test('keeps the Library search aligned to the full header frame', async ({ page }) => {
+	await page.goto('/library/albums');
+	const headerFrame = page.locator('app-library-page header app-page-frame');
+	const search = page.getByRole('searchbox', { name: 'Filter library' });
+	await expect(search).toBeVisible();
+
+	const expectedSearchRight = await headerFrame.evaluate((element) => {
+		const frameStyles = getComputedStyle(element);
+		const searchLabel = element.querySelector('label');
+		if (!searchLabel) throw new Error('Library search label is missing');
+		const frame = element.getBoundingClientRect();
+		const labelStyles = getComputedStyle(searchLabel);
+		return (
+			frame.right -
+			Number.parseFloat(frameStyles.paddingRight) -
+			Number.parseFloat(labelStyles.marginRight)
+		);
+	});
+	const positions: Array<{ x: number; y: number; right: number }> = [];
+
+	for (const route of ['Albums', 'Album Artists', 'Tracks']) {
+		await page.getByRole('link', { name: route }).click();
+		await expect(page.getByRole('heading', { name: route })).toBeVisible();
+		const box = await search.boundingBox();
+		expect(box).not.toBeNull();
+		if (!box) return;
+		positions.push({ x: box.x, y: box.y, right: box.x + box.width });
+	}
+
+	for (const position of positions) {
+		expect(Math.abs(position.right - expectedSearchRight)).toBeLessThanOrEqual(1);
+	}
+	for (const position of positions.slice(1)) {
+		expect(Math.abs(position.x - positions[0].x)).toBeLessThanOrEqual(1);
+		expect(Math.abs(position.y - positions[0].y)).toBeLessThanOrEqual(1);
+	}
+});
+
+test('matches the Album Artists reference geometry at the desktop viewport', async ({ page }) => {
+	await page.goto('/library/albums');
+	await page.getByRole('link', { name: 'Settings' }).click();
+	await page.getByRole('button', { name: 'Add folder' }).click();
+	await page.getByRole('link', { name: 'Album Artists' }).click();
+	await expect(page.getByTestId('album-artist-grid')).toBeVisible();
+
+	const grid = page.getByTestId('album-artist-grid');
+	const artworks = grid.locator('app-artwork');
+	await expect(artworks).toHaveCount(8);
+	const [gridBox, firstBox, secondBox, secondRowBox, dockBox, statusBox, navigationBox] =
+		await Promise.all([
+			grid.boundingBox(),
+			artworks.nth(0).boundingBox(),
+			artworks.nth(1).boundingBox(),
+			artworks.nth(4).boundingBox(),
+			page.getByTestId('playback-dock').boundingBox(),
+			page.getByTestId('playback-status-bar').boundingBox(),
+			page.getByRole('navigation', { name: 'Application' }).boundingBox()
+		]);
+
+	for (const box of [
+		gridBox,
+		firstBox,
+		secondBox,
+		secondRowBox,
+		dockBox,
+		statusBox,
+		navigationBox
+	]) {
+		expect(box).not.toBeNull();
+	}
+	if (
+		!gridBox ||
+		!firstBox ||
+		!secondBox ||
+		!secondRowBox ||
+		!dockBox ||
+		!statusBox ||
+		!navigationBox
+	)
+		return;
+
+	expect(Math.abs(gridBox.x - 264)).toBeLessThanOrEqual(1);
+	expect(Math.abs(firstBox.x - 264)).toBeLessThanOrEqual(1);
+	expect(Math.abs(firstBox.width - 220)).toBeLessThanOrEqual(1);
+	expect(Math.abs(firstBox.height - 220)).toBeLessThanOrEqual(1);
+	expect(Math.abs(secondBox.x - firstBox.x - 260)).toBeLessThanOrEqual(1);
+	expect(Math.abs(secondRowBox.y - firstBox.y - 320)).toBeLessThanOrEqual(1);
+	expect(Math.abs(dockBox.y - 812)).toBeLessThanOrEqual(1);
+	expect(Math.abs(statusBox.y - 876)).toBeLessThanOrEqual(1);
+	expect(navigationBox.width).toBe(224);
 });
 
 test('opens Album Details with the shared track table', async ({ page }) => {

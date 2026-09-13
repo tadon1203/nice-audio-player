@@ -1244,6 +1244,7 @@ mod tests {
         assert_eq!(artists.items.len(), 2);
         assert_eq!(artists.total_count, 2);
         assert_eq!(artists.items[0].album_count, 1);
+        assert_eq!(artists.items[0].track_count, 2);
         let artist_albums = library
             .catalog_artist_albums(
                 LibraryAlbumArtistKey {
@@ -1486,6 +1487,7 @@ mod tests {
             })
             .expect("logical album artist detail");
         assert_eq!(artist.album_count, 105);
+        assert_eq!(artist.track_count, 105);
     }
 
     #[test]
@@ -1590,6 +1592,15 @@ mod tests {
                 .album_count,
             1
         );
+        assert_eq!(
+            library
+                .catalog_artist(LibraryAlbumArtistKey {
+                    name: "Fallback Artist".into(),
+                })
+                .expect("fallback artist track count")
+                .track_count,
+            1
+        );
     }
 
     #[test]
@@ -1636,14 +1647,15 @@ mod tests {
             .catalog_album_artists(None, None)
             .expect("album artists");
         assert_eq!(artists.items.len(), 1);
+        assert_eq!(artists.items[0].track_count, 2);
         assert!(artists.items[0].artwork.is_none());
-        assert!(library
+        let artist = library
             .catalog_artist(LibraryAlbumArtistKey {
                 name: "Artist".into(),
             })
-            .expect("artist detail")
-            .artwork
-            .is_none());
+            .expect("artist detail");
+        assert_eq!(artist.track_count, 2);
+        assert!(artist.artwork.is_none());
     }
 
     #[test]

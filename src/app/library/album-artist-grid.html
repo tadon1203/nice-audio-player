@@ -1,16 +1,29 @@
-<div class="grid grid-cols-[repeat(auto-fill,minmax(var(--spacing-media-tile),1fr))] gap-6">
+<div
+	class="grid grid-cols-[repeat(1,var(--spacing-media-artist-tile))] gap-x-10 gap-y-8 library-compact:grid-cols-[repeat(2,var(--spacing-media-artist-tile))] app-wide:grid-cols-[repeat(3,var(--spacing-media-artist-tile))] library-wide:grid-cols-[repeat(4,var(--spacing-media-artist-tile))]"
+	data-testid="album-artist-grid"
+>
 	@for (artist of state().items; track artist.key.name) {
 	<button
 		type="button"
-		appButton="secondary"
-		class="min-w-0 flex-col items-stretch gap-3 p-2 text-start"
+		appButton="album"
+		class="group w-media-artist-tile min-w-0 flex-col items-stretch gap-3 text-start"
 		[aria-label]="'Browse albums by ' + artist.key.name"
 		(click)="selectArtist.emit(artist.key.name)"
 	>
-		<app-artwork class="w-full" [artwork]="artist.artwork" [alt]="artist.key.name + ' artwork'" />
-		<span class="truncate text-body-medium text-on-surface">{{ artist.key.name }}</span>
-		@if (artist.albumCount !== null) {
-		<span class="text-body-small text-secondary">{{ artist.albumCount }} albums</span>
+		<app-artwork
+			class="w-full rounded-full group-hover:bg-surface-container"
+			[artwork]="artist.artwork"
+			[alt]="artist.key.name + ' artwork'"
+		/>
+		<span class="truncate text-center text-body-large text-on-surface">{{ artist.key.name }}</span>
+		@if (artist.albumCount !== null && artist.trackCount !== null) {
+		<span class="text-center text-body-medium text-secondary tabular-nums"
+			>{{ artist.albumCount }} albums · {{ artist.trackCount }} tracks</span
+		>
+		} @else if (artist.albumCount !== null) {
+		<span class="text-center text-body-medium text-secondary tabular-nums"
+			>{{ artist.albumCount }} albums</span
+		>
 		}
 	</button>
 	}

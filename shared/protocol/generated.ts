@@ -97,6 +97,7 @@ export type LibraryAlbumArtistSummary = {
 	key: LibraryAlbumArtistKey,
 	artwork: ArtworkRef | null,
 	albumCount: number | null,
+	trackCount: number | null,
 };
 
 export type LibraryAlbumDetails = {

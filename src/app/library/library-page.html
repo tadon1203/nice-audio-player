@@ -1,44 +1,45 @@
-<div
-	appScrollRegion
-	data-library-scroll-region
-	[scrollTop]="currentView().scrollTop"
-	(scroll)="onScroll($event)"
->
-	<div class="grid min-h-full grid-rows-[auto_minmax(0,1fr)]">
-		<header class="pt-10">
-			<app-page-frame>
-				<div class="flex flex-wrap items-center justify-between gap-4">
-					<h1 class="text-headline-small text-on-surface">{{ pageMeta().title }}</h1>
-					<label class="me-3 w-full max-w-control-search-width app-wide:w-control-search-width">
-						<span class="sr-only">Filter library</span>
-						<div class="relative">
-							<svg
-								lucideSearch
-								aria-hidden="true"
-								class="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-secondary"
-							></svg>
-							<input
-								type="search"
-								class="h-control-compact w-full rounded-full border border-outline-variant bg-surface-container ps-9 pe-3 text-body-small text-on-surface outline-none placeholder:text-on-surface-variant focus-visible:ring-2 focus-visible:ring-primary"
-								[placeholder]="pageMeta().searchPlaceholder"
-								[value]="currentFilter()"
-								(input)="onFilterInput($event)"
-							/>
-						</div>
-					</label>
-				</div>
-				<div
-					class="mt-6 flex flex-wrap items-center gap-x-8 gap-y-2 text-body-small text-secondary"
+<div class="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
+	<header class="pt-10">
+		<app-page-frame>
+			<div class="flex flex-wrap items-center justify-between gap-4">
+				<h1 class="text-headline-small text-on-surface">{{ pageMeta().title }}</h1>
+				<label
+					class="me-3 w-full max-w-control-search-width app-wide:w-control-search-width app-wide:-translate-y-layout-search-offset"
 				>
-					<span class="tabular-nums">{{ resultCount() }}</span>
-					<span>{{ pageMeta().sortLabel }}</span>
-				</div>
-			</app-page-frame>
-		</header>
+					<span class="sr-only">Filter library</span>
+					<div class="relative">
+						<svg
+							lucideSearch
+							aria-hidden="true"
+							class="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-secondary"
+						></svg>
+						<input
+							type="search"
+							class="h-control-search-height w-full rounded-full border border-outline-variant bg-surface-container ps-9 pe-3 text-body-small text-on-surface outline-none placeholder:text-on-surface-variant focus-visible:ring-2 focus-visible:ring-primary"
+							[placeholder]="pageMeta().searchPlaceholder"
+							[value]="currentFilter()"
+							(input)="onFilterInput($event)"
+						/>
+					</div>
+				</label>
+			</div>
+			<div class="mt-6 flex flex-wrap items-center gap-x-8 gap-y-2 text-body-small text-secondary">
+				<span class="tabular-nums">{{ resultCount() }}</span>
+				<span>{{ pageMeta().sortLabel }}</span>
+			</div>
+		</app-page-frame>
+	</header>
 
-		<div class="min-h-0">
-			<app-page-frame class="min-h-full">
-				<div class="pt-7">
+	<div class="min-h-0">
+		<app-page-frame class="h-full min-h-0">
+			<div
+				appScrollRegion
+				data-library-scroll-region
+				[scrollTop]="currentView().scrollTop"
+				(scroll)="onScroll($event)"
+				class="h-full"
+			>
+				<div class="pt-5">
 					@if (library.initializing() || currentView().loadState === 'loading') {
 					<p class="py-8 text-body-medium text-secondary" role="status">Loading library…</p>
 					} @else if (statusMessage(); as message) {
@@ -77,7 +78,7 @@
 					</div>
 					} }
 				</div>
-			</app-page-frame>
-		</div>
+			</div>
+		</app-page-frame>
 	</div>
 </div>

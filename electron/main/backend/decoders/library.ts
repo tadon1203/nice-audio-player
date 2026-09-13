@@ -74,7 +74,8 @@ const isArtist = (value: unknown): boolean =>
 	isRecord(value.key) &&
 	typeof value.key.name === 'string' &&
 	isArtwork(value.artwork) &&
-	isNullableNumber(value.albumCount);
+	isNullableNumber(value.albumCount) &&
+	isNullableNumber(value.trackCount);
 
 const isLibraryStatus = (value: unknown): value is LibraryStatus =>
 	isRecord(value) &&

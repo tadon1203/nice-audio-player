@@ -35,8 +35,7 @@ local unless an explicitly accepted external feature is enabled.
 
 ## Brand Commitments
 
-The product name is Nice Audio Player. The incumbent visual system is a dark,
-artwork-led desktop interface with quiet monochrome application chrome.
+The product name is Nice Audio Player.
 
 ## Evidence on Hand
 

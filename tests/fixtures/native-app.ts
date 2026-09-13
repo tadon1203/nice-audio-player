@@ -61,6 +61,16 @@ export async function installNativeAppFixture(page: Page): Promise<void> {
 			playable: false
 		};
 		const tracks = [track1, track2, literalTrack, missingTrack, unavailableTrack];
+		const artistSummaries = [
+			{ key: { name: 'Test artist' }, artwork: null, albumCount: 1, trackCount: 5 },
+			{ key: { name: 'Björk' }, artwork: null, albumCount: 10, trackCount: 126 },
+			{ key: { name: 'Massive Attack' }, artwork: null, albumCount: 6, trackCount: 74 },
+			{ key: { name: 'Portishead' }, artwork: null, albumCount: 3, trackCount: 35 },
+			{ key: { name: 'Aphex Twin' }, artwork: null, albumCount: 7, trackCount: 118 },
+			{ key: { name: 'Joni Mitchell' }, artwork: null, albumCount: 18, trackCount: 221 },
+			{ key: { name: 'Sigur Rós' }, artwork: null, albumCount: 8, trackCount: 93 },
+			{ key: { name: 'Floating Points' }, artwork: null, albumCount: 5, trackCount: 57 }
+		];
 		const albumDetails: LibraryAlbumDetails = {
 			summary: { key: { title: 'Test album', albumArtist: 'Test artist' }, artwork: null },
 			date: '2020',
@@ -281,11 +291,17 @@ export async function installNativeAppFixture(page: Page): Promise<void> {
 			listLibraryAlbumArtists: (_afterCursor: string | null, search: string | null) =>
 				Promise.resolve({
 					items:
-						roots.length === 0 || (search !== null && !'Test artist'.includes(search))
+						roots.length === 0
 							? []
-							: [{ key: { name: 'Test artist' }, artwork: null, albumCount: 1 }],
+							: artistSummaries.filter(
+									(artist) => search === null || artist.key.name.includes(search)
+								),
 					totalCount:
-						roots.length === 0 || (search !== null && !'Test artist'.includes(search)) ? 0 : 1,
+						roots.length === 0
+							? 0
+							: artistSummaries.filter(
+									(artist) => search === null || artist.key.name.includes(search)
+								).length,
 					nextCursor: null
 				}),
 			getLibraryAlbumDetails: (albumKey) =>

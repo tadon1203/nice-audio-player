@@ -3,6 +3,7 @@ import {
 	decodeLibraryRoot,
 	decodeLibraryStatus,
 	decodeLibraryAlbumDetails,
+	decodeLibraryAlbumArtists,
 	decodeLibraryAlbumTracks,
 	decodeLibraryTrack,
 	decodeLibraryTracks
@@ -39,6 +40,21 @@ describe('library backend decoders', () => {
 			totalCount: 184,
 			nextAfterId: null
 		});
+	});
+
+	it('requires album artist aggregate counts', () => {
+		const artist = {
+			items: [{ key: { name: 'Artist' }, artwork: null, albumCount: 2, trackCount: 12 }],
+			totalCount: 1,
+			nextCursor: null
+		};
+		expect(decodeLibraryAlbumArtists(artist)).toEqual(artist);
+		expect(() =>
+			decodeLibraryAlbumArtists({
+				...artist,
+				items: [{ ...artist.items[0], trackCount: '12' }]
+			})
+		).toThrow(/Invalid backend response/);
 	});
 
 	it('requires canonical artwork references and supports nullable track lookup', () => {

@@ -148,6 +148,8 @@ pub struct LibraryAlbumArtistSummary {
     pub artwork: Option<ArtworkRef>,
     #[specta(type = f64)]
     pub album_count: u64,
+    #[specta(type = f64)]
+    pub track_count: u64,
 }
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]

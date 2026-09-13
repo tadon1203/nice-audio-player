@@ -97,14 +97,16 @@
 	--md-sys-size-control-prominent: 48px;
 	--md-sys-size-hit-target-min: 40px;
 	--md-sys-size-layout-sidebar: 224px;
-	--md-sys-size-layout-playback: 104px;
+	--md-sys-size-layout-playback: 88px;
 	--md-sys-size-layout-status: 24px;
 	--md-sys-size-layout-content-max: 1360px;
 	--md-sys-size-layout-playback-core-min: 360px;
-	--md-sys-size-control-search-width: 192px;
+	--md-sys-size-control-search-width: 190px;
+	--md-sys-size-control-search-height: 30px;
 	--md-sys-size-control-volume-width: 144px;
 	--md-sys-size-control-volume-readout-width: 72px;
 	--md-sys-size-media-tile: 164px;
+	--md-sys-size-media-artist-tile: clamp(152px, 20vw, 220px);
 	--md-sys-size-media-detail: 188px;
 	--md-sys-size-track-table-row: 44px;
 	--md-sys-size-track-table-min-width: 640px;
@@ -114,6 +116,8 @@
 	--md-sys-size-volume-track-active: 8px;
 	--md-sys-spacing-layout-inline: clamp(24px, 3vw, 40px);
 	--md-sys-spacing-layout-dock-block: 12px;
+	--md-sys-spacing-layout-compact-inline: 18px;
+	--md-sys-spacing-layout-search-offset: 6px;
 
 	/* Tailwind adapter aliases. These contain no concrete design values. */
 	--color-surface: var(--md-sys-color-surface);
@@ -183,9 +187,11 @@
 	--spacing-layout-content-max: var(--md-sys-size-layout-content-max);
 	--spacing-layout-playback-core-min: var(--md-sys-size-layout-playback-core-min);
 	--spacing-control-search-width: var(--md-sys-size-control-search-width);
+	--spacing-control-search-height: var(--md-sys-size-control-search-height);
 	--spacing-control-volume-width: var(--md-sys-size-control-volume-width);
 	--spacing-control-volume-readout-width: var(--md-sys-size-control-volume-readout-width);
 	--spacing-media-tile: var(--md-sys-size-media-tile);
+	--spacing-media-artist-tile: var(--md-sys-size-media-artist-tile);
 	--spacing-media-detail: var(--md-sys-size-media-detail);
 	--spacing-track-table-row: var(--md-sys-size-track-table-row);
 	--spacing-track-table: var(--md-sys-size-track-table-min-width);
@@ -196,9 +202,13 @@
 	--spacing-volume-track-active: var(--md-sys-size-volume-track-active);
 	--spacing-layout-inline: var(--md-sys-spacing-layout-inline);
 	--spacing-layout-dock-block: var(--md-sys-spacing-layout-dock-block);
+	--spacing-layout-compact-inline: var(--md-sys-spacing-layout-compact-inline);
+	--spacing-layout-search-offset: var(--md-sys-spacing-layout-search-offset);
 
 	/* Breakpoints are compile-time media-query inputs; CSS variables are invalid here. */
 	--breakpoint-app-wide: 800px;
+	--breakpoint-library-compact: 520px;
+	--breakpoint-library-wide: 1120px;
 }
 
 [data-theme='light'] {
