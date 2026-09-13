@@ -38,7 +38,7 @@ Project Contextからコンテキストを参照することが許可されて�
 
 既存のUI コードではなく、SVG 側を完成形として考えて。
 
-SVGをInkscapeのCLIでPNGへレンダリング
+viewごとにSVGを作成し、それぞれのSVGをInkscapeのCLIで4080×2700 pxのPNGへレンダリングし、zipにまとめて出力して。
 
 長期的に一貫するが過剰にならないように設計する。
 
