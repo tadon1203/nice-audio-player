@@ -6,6 +6,12 @@ This document is the source of truth for engineering conventions and contributio
 
 This document defines the repository engineering conventions and contribution/Git/GitHub workflow.
 
+## Documentation
+
+Every source document listed in `AGENTS.md` MUST begin with its document title, followed by a `## Document responsibility` heading. That section MUST state what the document is authoritative for and what it does not define.
+
+Keep responsibility definitions concise, and keep each rule in the document that owns it rather than duplicating rules across documents.
+
 ## Engineering rules
 
 These rules are the shared implementation contract for contributors and coding agents. Product behavior, visual direction, and system architecture remain defined in the documents listed in `AGENTS.md`.
