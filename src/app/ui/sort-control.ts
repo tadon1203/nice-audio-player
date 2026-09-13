@@ -1,12 +1,8 @@
 import { Component, input, output } from '@angular/core';
-import { LucideArrowDown, LucideArrowUp, LucideChevronDown } from '@lucide/angular';
+import { LucideArrowDown, LucideArrowUp } from '@lucide/angular';
 import type { LibrarySortDirection } from '@shared/native-app-api';
+import { AppSelect, type SelectOption } from './app-select';
 import { Button } from './button';
-
-export interface SortOption {
-	readonly key: string;
-	readonly label: string;
-}
 
 export interface SortChange {
 	readonly key: string;
@@ -15,30 +11,18 @@ export interface SortChange {
 
 @Component({
 	selector: 'app-sort-control',
-	imports: [Button, LucideArrowDown, LucideArrowUp, LucideChevronDown],
+	imports: [AppSelect, Button, LucideArrowDown, LucideArrowUp],
 	template: `
 		<div
 			class="flex min-h-control-default max-w-full min-w-0 flex-wrap items-center gap-2 text-body-small text-secondary"
 		>
-			<label [attr.for]="selectId()">{{ label() }}</label>
-			<div class="relative">
-				<select
-					class="h-control-default w-control-search-width appearance-none rounded-small border border-transparent bg-surface-container ps-3 pe-9 text-body-small text-on-surface transition-colors outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary"
-					[attr.id]="selectId()"
-					[attr.aria-label]="'Sort by ' + label()"
-					[value]="selectedKey()"
-					(change)="onKeyChange($event)"
-				>
-					@for (option of options(); track option.key) {
-						<option [value]="option.key">{{ option.label }}</option>
-					}
-				</select>
-				<svg
-					lucideChevronDown
-					aria-hidden="true"
-					class="pointer-events-none absolute end-3 top-1/2 size-4 -translate-y-1/2 text-secondary"
-				></svg>
-			</div>
+			<app-select
+				[label]="label()"
+				[options]="options()"
+				[selectedKey]="selectedKey()"
+				[selectId]="selectId()"
+				(selectionChange)="onKeyChange($event)"
+			/>
 			<button
 				type="button"
 				appButton="icon"
@@ -60,15 +44,15 @@ export interface SortChange {
 })
 export class SortControl {
 	readonly label = input('Sort');
-	readonly options = input.required<readonly SortOption[]>();
+	readonly options = input.required<readonly SelectOption[]>();
 	readonly selectedKey = input.required<string>();
 	readonly direction = input.required<LibrarySortDirection>();
 	readonly sortChange = output<SortChange>();
 	readonly selectId = input(`sort-${Math.random().toString(36).slice(2)}`);
 
-	onKeyChange(event: Event): void {
+	onKeyChange(key: string): void {
 		this.sortChange.emit({
-			key: (event.target as HTMLSelectElement).value,
+			key,
 			direction: 'ascending'
 		});
 	}

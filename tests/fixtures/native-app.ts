@@ -11,8 +11,32 @@ import type {
 	PlaybackState
 } from '@shared/native-app-api';
 
+export interface LibraryRequestRecord {
+	readonly view: 'albums' | 'albumArtists' | 'tracks' | 'artistAlbums';
+	readonly sortKey: string;
+	readonly sortDirection: string;
+}
+
 export async function installNativeAppFixture(page: Page): Promise<void> {
 	await page.addInitScript(() => {
+		type BrowserLibraryRequest = LibraryRequestRecord;
+		const libraryRequests: BrowserLibraryRequest[] = [];
+		(
+			window as unknown as Window & {
+				__niceAudioPlayerLibraryRequests: BrowserLibraryRequest[];
+			}
+		).__niceAudioPlayerLibraryRequests = libraryRequests;
+		const recordLibraryRequest = (
+			view: BrowserLibraryRequest['view'],
+			sortKey: unknown,
+			sortDirection: unknown
+		) => {
+			libraryRequests.push({
+				view,
+				sortKey: String(sortKey),
+				sortDirection: String(sortDirection)
+			});
+		};
 		const rootsKey = '__nice_audio_player_test_roots';
 		let roots: LibraryRoot[] = JSON.parse(localStorage.getItem(rootsKey) ?? '[]') as LibraryRoot[];
 		const persistRoots = () => localStorage.setItem(rootsKey, JSON.stringify(roots));
@@ -272,11 +296,10 @@ export async function installNativeAppFixture(page: Page): Promise<void> {
 			listLibraryTracks: (
 				_afterId: string | null,
 				search: string | null,
-				_sortKey,
-				_sortDirection
+				sortKey,
+				sortDirection
 			) => {
-				void _sortKey;
-				void _sortDirection;
+				recordLibraryRequest('tracks', sortKey, sortDirection);
 				const filtered =
 					roots.length === 0
 						? []
@@ -290,12 +313,11 @@ export async function installNativeAppFixture(page: Page): Promise<void> {
 			listLibraryAlbums: (
 				_afterCursor: string | null,
 				search: string | null,
-				_sortKey,
-				_sortDirection
+				sortKey,
+				sortDirection
 			) => {
 				void _afterCursor;
-				void _sortKey;
-				void _sortDirection;
+				recordLibraryRequest('albums', sortKey, sortDirection);
 				return Promise.resolve({
 					items:
 						roots.length === 0 || (search !== null && !'Test album Test artist'.includes(search))
@@ -311,12 +333,11 @@ export async function installNativeAppFixture(page: Page): Promise<void> {
 			listLibraryAlbumArtists: (
 				_afterCursor: string | null,
 				search: string | null,
-				_sortKey,
-				_sortDirection
+				sortKey,
+				sortDirection
 			) => {
 				void _afterCursor;
-				void _sortKey;
-				void _sortDirection;
+				recordLibraryRequest('albumArtists', sortKey, sortDirection);
 				return Promise.resolve({
 					items:
 						roots.length === 0
@@ -337,10 +358,9 @@ export async function installNativeAppFixture(page: Page): Promise<void> {
 				const artist = artistSummaries.find((candidate) => candidate.key.name === artistKey.name);
 				return artist ? Promise.resolve(artist) : rejected('albumArtistNotFound');
 			},
-			listLibraryArtistAlbums: (artistKey, _afterCursor, _sortKey, _sortDirection) => {
+			listLibraryArtistAlbums: (artistKey, _afterCursor, sortKey, sortDirection) => {
 				void _afterCursor;
-				void _sortKey;
-				void _sortDirection;
+				recordLibraryRequest('artistAlbums', sortKey, sortDirection);
 				return artistKey.name === 'Test artist'
 					? Promise.resolve({ items: [albumDetails.summary], totalCount: 1, nextCursor: null })
 					: rejected('albumArtistNotFound');

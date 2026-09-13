@@ -8,7 +8,8 @@ import { Button } from '@app/ui/button';
 import { PageFrame } from '@app/ui/page-frame';
 import { PlaybackSession } from '@app/playback/playback-session';
 import { ScrollRegion } from '@app/ui/scroll-region';
-import { SortControl, type SortChange, type SortOption } from '@app/ui/sort-control';
+import type { SelectOption } from '@app/ui/app-select';
+import { SortControl, type SortChange } from '@app/ui/sort-control';
 import { AlbumArtistGrid } from './album-artist-grid';
 import { AlbumGrid } from './album-grid';
 import { LibrarySession } from './library-session';
@@ -178,5 +179,5 @@ interface PresentationMeta {
 	readonly singularNoun: string;
 	readonly pluralNoun: string;
 	readonly searchPlaceholder: string;
-	readonly sortOptions: readonly SortOption[];
+	readonly sortOptions: readonly SelectOption[];
 }

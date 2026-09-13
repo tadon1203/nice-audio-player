@@ -1,5 +1,5 @@
 import { expect, test, type Locator } from '@playwright/test';
-import { installNativeAppFixture } from './fixtures/native-app';
+import { installNativeAppFixture, type LibraryRequestRecord } from './fixtures/native-app';
 
 test.beforeEach(async ({ page }) => installNativeAppFixture(page));
 
@@ -130,7 +130,51 @@ test('drills from an Album Artist into its Albums', async ({ page }) => {
 	await expect(page).toHaveURL(/\/library\/album-artists\/Test%20artist$/);
 	await expect(page.getByRole('heading', { name: 'Test artist' })).toBeVisible();
 	await expect(page.getByRole('link', { name: 'Open album Test album' })).toBeVisible();
-	await expect(page.getByRole('combobox', { name: 'Sort by Sort' })).toHaveValue('year');
+	await expect(page.getByRole('combobox', { name: 'Sort by Sort' })).toHaveAttribute(
+		'data-value',
+		'year'
+	);
+});
+
+test('retains Album Artists sort selection and direction across Settings', async ({ page }) => {
+	await page.goto('/library/albums');
+	await page.getByRole('link', { name: 'Settings' }).click();
+	await page.getByRole('button', { name: 'Add folder' }).click();
+	await page.getByRole('link', { name: 'Album Artists' }).click();
+
+	const sort = page.getByRole('combobox', { name: 'Sort by Sort' });
+	await sort.click();
+	await page.getByRole('option', { name: 'Album count', exact: true }).click();
+	await expect(sort).toHaveAttribute('data-value', 'albumCount');
+	await expect(sort).toHaveText('Album count');
+
+	await page.getByRole('button', { name: 'Sort descending' }).click();
+	await expect(page.getByRole('button', { name: 'Sort ascending' })).toBeVisible();
+	const requests = await page.evaluate(() =>
+		(
+			window as unknown as Window & { __niceAudioPlayerLibraryRequests: LibraryRequestRecord[] }
+		).__niceAudioPlayerLibraryRequests.filter((request) => request.view === 'albumArtists')
+	);
+	expect(requests.at(-1)).toEqual({
+		view: 'albumArtists',
+		sortKey: 'albumCount',
+		sortDirection: 'descending'
+	});
+
+	await page.getByRole('link', { name: 'Settings' }).click();
+	await page.getByRole('link', { name: 'Album Artists' }).click();
+	await expect(page.getByRole('combobox', { name: 'Sort by Sort' })).toHaveAttribute(
+		'data-value',
+		'albumCount'
+	);
+	await expect(page.getByRole('combobox', { name: 'Sort by Sort' })).toHaveText('Album count');
+	await expect(page.getByRole('button', { name: 'Sort ascending' })).toBeVisible();
+
+	await page.getByRole('link', { name: 'Albums' }).click();
+	await expect(page.getByRole('combobox', { name: 'Sort by Sort' })).toHaveAttribute(
+		'data-value',
+		'title'
+	);
 });
 
 test('keeps the Albums grid aligned with the shared page frame', async ({ page }) => {

@@ -5,9 +5,10 @@ import { LucideArrowLeft } from '@lucide/angular';
 import { map } from 'rxjs';
 import type { LibraryAlbumArtistKey, LibraryArtistAlbumSortKey } from '@shared/native-app-api';
 import { Artwork } from '@app/ui/artwork';
+import type { SelectOption } from '@app/ui/app-select';
 import { PageFrame } from '@app/ui/page-frame';
 import { ScrollRegion } from '@app/ui/scroll-region';
-import { SortControl, type SortOption } from '@app/ui/sort-control';
+import { SortControl } from '@app/ui/sort-control';
 import { ArtistDetailsWorkspace } from './artist-details-workspace';
 
 @Component({
@@ -32,7 +33,7 @@ export class ArtistDetailsPage {
 		),
 		{ initialValue: this.readArtistKey() }
 	);
-	protected readonly sortOptions: readonly SortOption[] = [
+	protected readonly sortOptions: readonly SelectOption[] = [
 		{ key: 'year', label: 'Year' },
 		{ key: 'title', label: 'Album title' }
 	];
