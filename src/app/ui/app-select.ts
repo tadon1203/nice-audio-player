@@ -55,7 +55,7 @@ function createSelectId(): string {
 				#trigger
 				cdkOverlayOrigin
 				type="button"
-				class="inline-flex h-control-default w-control-search-width min-w-0 cursor-pointer items-center justify-between gap-3 rounded-small border border-transparent bg-surface-container px-4 text-start text-body-small text-on-surface transition-colors outline-none hover:bg-surface-container-high focus-visible:border-primary focus-visible:bg-surface-container-highest focus-visible:ring-2 focus-visible:ring-primary active:bg-surface-container-highest disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-45"
+				class="inline-flex h-control-default w-control-search-width min-w-0 cursor-pointer items-center justify-between gap-2 rounded-medium border border-outline bg-surface px-3 py-2 text-start text-body-small text-on-surface shadow-sm transition-colors outline-none hover:bg-surface-container-low focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30 active:bg-surface-container disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-45"
 				role="combobox"
 				[attr.id]="selectId()"
 				[value]="selectedKey()"
@@ -69,7 +69,7 @@ function createSelectId(): string {
 				(keydown)="onTriggerKeydown($event)"
 			>
 				<span class="min-w-0 truncate">{{ selectedOption()?.label ?? selectedKey() }}</span>
-				<svg lucideChevronDown aria-hidden="true" class="size-4 shrink-0 text-secondary"></svg>
+				<svg lucideChevronDown aria-hidden="true" class="size-4 shrink-0 text-on-surface-variant"></svg>
 			</button>
 		</div>
 
@@ -95,7 +95,7 @@ function createSelectId(): string {
 				[selectionMode]="'explicit'"
 				[focusMode]="'roving'"
 				[wrap]="true"
-				class="max-h-[60vh] w-full min-w-0 overflow-y-auto rounded-small border border-outline-variant bg-surface-container-high p-2 text-on-surface outline-none"
+				class="max-h-[60vh] w-full min-w-0 overflow-y-auto rounded-medium border border-outline-variant bg-surface-container p-1 text-on-surface shadow-lg outline-none"
 				(click)="onListboxClick($event)"
 				(keydown)="onListboxKeydown($event)"
 			>
@@ -106,11 +106,12 @@ function createSelectId(): string {
 						[label]="option.label"
 						[disabled]="option.disabled ?? false"
 						[attr.data-select-key]="option.key"
-						class="min-h-hit-target flex w-full cursor-pointer items-center justify-between gap-3 rounded-small px-3 py-3 text-body-small text-on-surface outline-none hover:bg-surface-container-high focus-visible:bg-surface-container-highest aria-disabled:pointer-events-none aria-disabled:cursor-not-allowed aria-disabled:opacity-45 data-[active=true]:bg-surface-container-highest data-[active=true]:text-on-surface"
+						[attr.data-selected]="option.key === selectedKey()"
+						class="min-h-hit-target flex w-full cursor-default select-none items-center justify-between gap-2 rounded-medium px-3 py-2 text-body-small text-on-surface outline-none hover:bg-surface-container-highest focus-visible:bg-surface-container-highest focus-visible:text-on-surface aria-disabled:pointer-events-none aria-disabled:cursor-not-allowed aria-disabled:opacity-45 data-[active=true]:bg-surface-container-highest data-[active=true]:text-on-surface data-[selected=true]:bg-secondary-container data-[selected=true]:text-on-secondary-container"
 					>
 						<span class="min-w-0 truncate">{{ option.label }}</span>
 						@if (option.key === selectedKey()) {
-							<svg lucideCheck aria-hidden="true" class="size-4 shrink-0 text-primary"></svg>
+							<svg lucideCheck aria-hidden="true" class="size-4 shrink-0 text-on-secondary-container"></svg>
 						} @else {
 							<span aria-hidden="true" class="size-4 shrink-0"></span>
 						}

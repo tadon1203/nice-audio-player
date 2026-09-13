@@ -23,6 +23,10 @@ test('connects folder registration, scan, catalog selection, and playback dock',
 	await expect(stoppedSeek).toBeDisabled();
 	await page.getByRole('button', { name: /Test track/ }).click();
 	await expect(page.getByTestId('playback-dock')).toContainText('Test track');
+	const playbackStatusLabel = page.locator('.text-label-small').first();
+	await expect(playbackStatusLabel).toHaveText('Playing');
+	await expect(playbackStatusLabel).toHaveCSS('font-size', '14px');
+	await expect(playbackStatusLabel).toHaveCSS('line-height', '20px');
 	await expect(
 		page.getByTestId('playback-status-bar').locator('[data-status-line="SOURCE"]')
 	).toContainText('WAV');
