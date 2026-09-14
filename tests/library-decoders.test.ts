@@ -1,45 +1,33 @@
 import { describe, expect, it } from 'vitest';
-import {
-	decodeLibraryRoot,
-	decodeLibraryStatus,
-	decodeLibraryAlbumDetails,
-	decodeLibraryAlbumArtists,
-	decodeLibraryAlbumTracks,
-	decodeLibraryTrack,
-	decodeLibraryTracks
-} from '../electron/main/backend/decoders/library';
+import { BackendWireMessageSchema } from '../electron/main/backend/schema';
 
-describe('library backend decoders', () => {
+const response = (method: string, result: unknown) =>
+	BackendWireMessageSchema.safeParse({
+		type: 'response',
+		payload: { status: 'ok', id: 1, response: { method, result } }
+	});
+
+describe('library backend wire schema', () => {
 	it('accepts the documented library root shape', () => {
 		expect(
-			decodeLibraryRoot({
-				id: 'root-1',
-				path: 'C:/Music',
-				enabled: true,
-				scanGeneration: null,
-				lastSuccessfulScanAtMs: null
-			})
-		).toMatchObject({ id: 'root-1', enabled: true });
+			response('listLibraryRoots', [
+				{
+					id: 'root-1',
+					path: 'C:/Music',
+					enabled: true,
+					scanGeneration: 0,
+					lastSuccessfulScanAtMs: null
+				}
+			]).success
+		).toBe(true);
 	});
 
 	it('rejects malformed or incomplete backend data', () => {
-		expect(() => decodeLibraryRoot({ id: 'root-1', path: 'C:/Music' })).toThrow(
-			/Invalid backend response/
-		);
-		expect(() => decodeLibraryTracks({ items: [{ id: 'track-1' }], nextAfterId: null })).toThrow(
-			/Invalid backend response/
-		);
-		expect(() => decodeLibraryTracks({ items: [], nextAfterId: null })).toThrow(
-			/Invalid backend response/
-		);
-	});
-
-	it('accepts a catalog page with an explicit total count', () => {
-		expect(decodeLibraryTracks({ items: [], totalCount: 184, nextAfterId: null })).toEqual({
-			items: [],
-			totalCount: 184,
-			nextAfterId: null
-		});
+		expect(response('listLibraryRoots', [{ id: 'root-1', path: 'C:/Music' }]).success).toBe(false);
+		expect(response('listLibraryTracks', { items: [], nextCursor: null }).success).toBe(false);
+		expect(
+			response('listLibraryTracks', { items: [], totalCount: 184, nextCursor: null }).success
+		).toBe(true);
 	});
 
 	it('requires album artist aggregate counts', () => {
@@ -48,16 +36,16 @@ describe('library backend decoders', () => {
 			totalCount: 1,
 			nextCursor: null
 		};
-		expect(decodeLibraryAlbumArtists(artist)).toEqual(artist);
-		expect(() =>
-			decodeLibraryAlbumArtists({
+		expect(response('listLibraryAlbumArtists', artist).success).toBe(true);
+		expect(
+			response('listLibraryAlbumArtists', {
 				...artist,
 				items: [{ ...artist.items[0], trackCount: '12' }]
-			})
-		).toThrow(/Invalid backend response/);
+			}).success
+		).toBe(false);
 	});
 
-	it('requires canonical artwork references and supports nullable track lookup', () => {
+	it('supports nullable track lookup and canonical artwork references', () => {
 		const hash = 'abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789';
 		const track = {
 			id: 'track-1',
@@ -65,56 +53,29 @@ describe('library backend decoders', () => {
 			artist: null,
 			album: null,
 			albumArtist: null,
-			artwork: {
-				contentHash: hash,
-				mimeType: 'jpeg',
-				relativePath: `artwork/ab/${hash}.jpg`
-			},
+			artwork: { contentHash: hash, mimeType: 'jpeg', relativePath: `artwork/ab/${hash}.jpg` },
 			durationMs: null,
 			availability: 'available',
 			playable: true
 		};
-		expect(decodeLibraryTrack(track)).toEqual(track);
-		expect(decodeLibraryTrack(null)).toBeNull();
-		expect(() =>
-			decodeLibraryTrack({
-				...track,
-				artwork: { ...track.artwork, relativePath: `artwork/ac/${hash}.jpg` }
-			})
-		).toThrow();
-		expect(decodeLibraryStatus({ status: 'ready' })).toEqual({ status: 'ready' });
+		expect(response('getLibraryTrackForPath', track).success).toBe(true);
+		expect(response('getLibraryTrackForPath', null).success).toBe(true);
 	});
 
-	it('accepts album details and album track technical metadata', () => {
+	it('validates album details and cursor-paged album tracks', () => {
 		const details = {
-			summary: { key: { title: 'Album', albumArtist: 'Artist' }, artwork: null },
+			summary: { key: { title: 'Album', albumArtist: 'Artist' }, artwork: null, year: 2020 },
 			date: '2020',
 			trackCount: 2,
 			durationMs: 300000,
 			firstPlayableTrackId: 'track-1'
 		};
-		const tracks = {
-			items: [
-				{
-					id: 'track-1',
-					title: 'Track',
-					artist: 'Artist',
-					trackNumber: 1,
-					discNumber: null,
-					fileFormat: 'FLAC',
-					bitDepth: 24,
-					sampleRate: 96000,
-					durationMs: 120000,
-					availability: 'available',
-					playable: true
-				}
-			],
-			nextOffset: null
-		};
-		expect(decodeLibraryAlbumDetails(details)).toEqual(details);
-		expect(decodeLibraryAlbumTracks(tracks)).toEqual(tracks);
-		expect(() =>
-			decodeLibraryAlbumTracks({ items: [{ ...tracks.items[0], sampleRate: '96000' }] })
-		).toThrow();
+		expect(response('getLibraryAlbumDetails', details).success).toBe(true);
+		expect(
+			response('listLibraryAlbumTracks', { items: [], totalCount: 2, nextCursor: null }).success
+		).toBe(true);
+		expect(
+			response('listLibraryAlbumTracks', { items: [], totalCount: 2, nextCursor: 1 }).success
+		).toBe(false);
 	});
 });

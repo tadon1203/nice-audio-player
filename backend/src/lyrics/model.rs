@@ -1,27 +1,27 @@
 use std::path::PathBuf;
 
-#[derive(Debug, Clone, serde::Serialize, specta::Type)]
+#[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum LyricsSourceKind {
     Sidecar,
     Embedded,
 }
 
-#[derive(Debug, Clone, serde::Serialize, specta::Type)]
+#[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LyricsTimedLine {
     pub start_ms: u64,
     pub text: String,
 }
 
-#[derive(Debug, Clone, serde::Serialize, specta::Type)]
+#[derive(Debug, Clone, serde::Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum LyricsContent {
     Plain { lines: Vec<String> },
     Timed { lines: Vec<LyricsTimedLine> },
 }
 
-#[derive(Debug, Clone, serde::Serialize, specta::Type)]
+#[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LyricsDocument {
     pub source: LyricsSourceKind,
@@ -29,13 +29,13 @@ pub struct LyricsDocument {
     pub content: LyricsContent,
 }
 
-#[derive(Debug, Clone, serde::Serialize, specta::Type)]
+#[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum LyricsResolutionNotice {
     SidecarFailedUsingEmbedded,
 }
 
-#[derive(Debug, Clone, serde::Serialize, specta::Type)]
+#[derive(Debug, Clone, serde::Serialize)]
 #[serde(tag = "status", rename_all = "camelCase")]
 pub enum LyricsResolution {
     Resolved {
@@ -51,7 +51,7 @@ pub enum LyricsResolution {
     },
 }
 
-#[derive(Debug, Clone, serde::Serialize, specta::Type)]
+#[derive(Debug, Clone, serde::Serialize)]
 #[serde(tag = "code", rename_all = "camelCase")]
 pub enum LyricsCommandError {
     InvalidId,

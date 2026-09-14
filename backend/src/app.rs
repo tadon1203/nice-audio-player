@@ -6,23 +6,19 @@ use crate::{
     },
     lyrics::LyricsService,
     protocol::{
-        event::BackendEvent, output::ProtocolOutput, read_requests, request::BackendRequest,
+        event::BackendEvent,
+        request::BackendRequest,
+        response::{BackendResponse, NullResult, ValidateAudioFileResult},
         Message, ProtocolError, Response,
     },
 };
-use serde_json::Value;
 use std::path::PathBuf;
-use std::{
-    io::{self, BufReader},
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
-    thread,
-    time::Duration,
-};
+use std::{io, sync::Arc, thread};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
+use tokio::sync::mpsc;
+use tokio_util::{sync::CancellationToken, task::TaskTracker};
 
-struct BackendApp {
+pub struct BackendApp {
     playback: PlaybackService,
     activities: ApplicationActivityService,
     library: LibraryService,
@@ -30,7 +26,7 @@ struct BackendApp {
 }
 
 impl BackendApp {
-    fn initialize() -> io::Result<Self> {
+    pub fn initialize() -> io::Result<Self> {
         let activities = ApplicationActivityService::new();
         let data_dir = std::env::var_os("NICE_AUDIO_PLAYER_DATA_DIR")
             .map(PathBuf::from)
@@ -47,144 +43,203 @@ impl BackendApp {
         })
     }
     fn request(&self, id: u64, request: BackendRequest) -> Response {
-        let result = match request {
-            BackendRequest::Ping => Ok(Value::String("pong".into())),
-            BackendRequest::GetApplicationActivities => {
-                serialize(self.activities.handle().snapshot())
+        if request.validate_request().is_err() {
+            return Response::Error {
+                id,
+                error: ProtocolError {
+                    code: "validationFailed".into(),
+                    message: "Request validation failed".into(),
+                },
+            };
+        }
+        let result: Result<BackendResponse, ProtocolError> = match request {
+            BackendRequest::Ping => Ok(BackendResponse::Ping("pong".into())),
+            BackendRequest::GetApplicationActivities => Ok(
+                BackendResponse::GetApplicationActivities(self.activities.handle().snapshot()),
+            ),
+            BackendRequest::GetLibraryStatus => {
+                Ok(BackendResponse::GetLibraryStatus(self.library.status()))
             }
-            BackendRequest::GetLibraryStatus => serialize(self.library.status()),
-            BackendRequest::GetPlaybackState => serialize(self.playback.snapshot()),
-            BackendRequest::GetPlaybackQueue => serialize(self.playback.queue_snapshot()),
-            BackendRequest::PausePlayback => encode(self.playback.handle().pause(), playback_error),
-            BackendRequest::ResumePlayback => {
-                encode(self.playback.handle().resume(), playback_error)
+            BackendRequest::GetPlaybackState => {
+                Ok(BackendResponse::GetPlaybackState(self.playback.snapshot()))
             }
-            BackendRequest::PreviousPlayback => {
-                encode(self.playback.handle().previous(), playback_error)
-            }
-            BackendRequest::NextPlayback => encode(self.playback.handle().next(), playback_error),
-            BackendRequest::SeekPlayback { position_ms } => {
-                encode(self.playback.handle().seek(position_ms), playback_error)
-            }
-            BackendRequest::SetPlaybackVolume { volume } => {
-                encode(self.playback.handle().set_volume(volume), playback_error)
-            }
+            BackendRequest::GetPlaybackQueue => Ok(BackendResponse::GetPlaybackQueue(
+                self.playback.queue_snapshot(),
+            )),
+            BackendRequest::PausePlayback => encode(
+                self.playback.handle().pause(),
+                BackendResponse::PausePlayback,
+                playback_error,
+            ),
+            BackendRequest::ResumePlayback => encode(
+                self.playback.handle().resume(),
+                BackendResponse::ResumePlayback,
+                playback_error,
+            ),
+            BackendRequest::PreviousPlayback => encode(
+                self.playback.handle().previous(),
+                BackendResponse::PreviousPlayback,
+                playback_error,
+            ),
+            BackendRequest::NextPlayback => encode(
+                self.playback.handle().next(),
+                BackendResponse::NextPlayback,
+                playback_error,
+            ),
+            BackendRequest::SeekPlayback { position_ms } => encode(
+                self.playback.handle().seek(position_ms),
+                BackendResponse::SeekPlayback,
+                playback_error,
+            ),
+            BackendRequest::SetPlaybackVolume { volume } => encode(
+                self.playback.handle().set_volume(volume),
+                BackendResponse::SetPlaybackVolume,
+                playback_error,
+            ),
             BackendRequest::SetPlaybackMuted { muted } => {
                 if muted {
-                    encode(self.playback.handle().mute(), playback_error)
+                    encode(
+                        self.playback.handle().mute(),
+                        BackendResponse::SetPlaybackMuted,
+                        playback_error,
+                    )
                 } else {
-                    encode(self.playback.handle().unmute(), playback_error)
+                    encode(
+                        self.playback.handle().unmute(),
+                        BackendResponse::SetPlaybackMuted,
+                        playback_error,
+                    )
                 }
             }
-            BackendRequest::ListAudioOutputDevices => serialize(list_output_devices()),
-            BackendRequest::ValidateAudioFile { path } => self.validate(path),
-            BackendRequest::GetLibraryTrackForPath { path } => {
-                encode(self.library.handle().track_for_path(path), library_error)
-            }
-            BackendRequest::ListLibraryRoots => {
-                encode(self.library.handle().roots(), library_error)
-            }
-            BackendRequest::RegisterLibraryRoot { path } => {
-                encode(self.library.handle().register_root(path), library_error)
-            }
-            BackendRequest::SetLibraryRootEnabled { id, enabled } => encode(
-                self.library.handle().set_root_enabled(id, enabled),
+            BackendRequest::ListAudioOutputDevices => encode(
+                list_output_devices(),
+                BackendResponse::ListAudioOutputDevices,
+                device_error,
+            ),
+            BackendRequest::ValidateAudioFile { path } => Ok(BackendResponse::ValidateAudioFile(
+                match crate::media::validation::validate_audio_file(&path) {
+                    Ok(file) => ValidateAudioFileResult::Ok(file),
+                    Err(error) => ValidateAudioFileResult::Err(error),
+                },
+            )),
+            BackendRequest::GetLibraryTrackForPath { path } => encode(
+                self.library.handle().track_for_path(path),
+                BackendResponse::GetLibraryTrackForPath,
                 library_error,
             ),
-            BackendRequest::RemoveLibraryRoot { id } => {
-                encode(self.library.handle().remove_root(id), library_error)
-            }
-            BackendRequest::GetLibraryScanState => serialize(self.library.handle().scan_state()),
-            BackendRequest::StartLibraryScan => {
-                encode(self.library.handle().start_scan(), library_error)
-            }
-            BackendRequest::CancelLibraryScan => {
-                encode(self.library.handle().cancel_scan(), library_error)
-            }
+            BackendRequest::ListLibraryRoots => encode(
+                self.library.handle().roots(),
+                BackendResponse::ListLibraryRoots,
+                library_error,
+            ),
+            BackendRequest::RegisterLibraryRoot { path } => encode(
+                self.library.handle().register_root(path),
+                BackendResponse::RegisterLibraryRoot,
+                library_error,
+            ),
+            BackendRequest::SetLibraryRootEnabled { id, enabled } => encode(
+                self.library.handle().set_root_enabled(id, enabled),
+                BackendResponse::SetLibraryRootEnabled,
+                library_error,
+            ),
+            BackendRequest::RemoveLibraryRoot { id } => encode(
+                self.library.handle().remove_root(id).map(|_| NullResult),
+                BackendResponse::RemoveLibraryRoot,
+                library_error,
+            ),
+            BackendRequest::GetLibraryScanState => Ok(BackendResponse::GetLibraryScanState(
+                self.library.handle().scan_state(),
+            )),
+            BackendRequest::StartLibraryScan => encode(
+                self.library.handle().start_scan().map(|_| NullResult),
+                BackendResponse::StartLibraryScan,
+                library_error,
+            ),
+            BackendRequest::CancelLibraryScan => encode(
+                self.library.handle().cancel_scan().map(|_| NullResult),
+                BackendResponse::CancelLibraryScan,
+                library_error,
+            ),
             BackendRequest::ListLibraryTracks {
-                after_id,
+                cursor,
                 search,
                 sort_key,
                 sort_direction,
             } => encode(
                 self.library
                     .handle()
-                    .tracks(after_id, search, sort_key, sort_direction),
+                    .tracks(cursor, search, sort_key, sort_direction),
+                BackendResponse::ListLibraryTracks,
                 library_error,
             ),
             BackendRequest::ListLibraryAlbums {
-                after_cursor,
+                cursor,
                 search,
                 sort_key,
                 sort_direction,
             } => encode(
-                self.library.handle().catalog_albums(
-                    after_cursor,
-                    search,
-                    sort_key,
-                    sort_direction,
-                ),
+                self.library
+                    .handle()
+                    .catalog_albums(cursor, search, sort_key, sort_direction),
+                BackendResponse::ListLibraryAlbums,
                 library_error,
             ),
             BackendRequest::ListLibraryAlbumArtists {
-                after_cursor,
+                cursor,
                 search,
                 sort_key,
                 sort_direction,
             } => encode(
                 self.library.handle().catalog_album_artists(
-                    after_cursor,
+                    cursor,
                     search,
                     sort_key,
                     sort_direction,
                 ),
+                BackendResponse::ListLibraryAlbumArtists,
                 library_error,
             ),
             BackendRequest::GetLibraryAlbumArtist { artist_key } => encode(
                 self.library.handle().catalog_artist(artist_key),
+                BackendResponse::GetLibraryAlbumArtist,
                 library_error,
             ),
             BackendRequest::ListLibraryArtistAlbums {
                 artist_key,
-                after_cursor,
+                cursor,
                 sort_key,
                 sort_direction,
             } => encode(
                 self.library.handle().catalog_artist_albums(
                     artist_key,
-                    after_cursor,
+                    cursor,
                     sort_key,
                     sort_direction,
                 ),
+                BackendResponse::ListLibraryArtistAlbums,
                 library_error,
             ),
             BackendRequest::GetLibraryAlbumDetails { album_key } => encode(
                 self.library.handle().catalog_album_details(album_key),
+                BackendResponse::GetLibraryAlbumDetails,
                 library_error,
             ),
-            BackendRequest::ListLibraryAlbumTracks { album_key, offset } => encode(
+            BackendRequest::ListLibraryAlbumTracks { album_key, cursor } => encode(
                 self.library
                     .handle()
-                    .catalog_album_tracks(album_key, offset),
+                    .catalog_album_tracks(album_key, cursor),
+                BackendResponse::ListLibraryAlbumTracks,
                 library_error,
             ),
             BackendRequest::StartLibraryTrack { track_id } => self.start_library_track(track_id),
             BackendRequest::StartLibraryAlbum { album_key } => self.start_library_album(album_key),
         };
         match result {
-            Ok(result) => Response {
-                id,
-                result: Some(result),
-                error: None,
-            },
-            Err(error) => Response {
-                id,
-                result: None,
-                error: Some(error),
-            },
+            Ok(response) => Response::Ok { id, response },
+            Err(error) => Response::Error { id, error },
         }
     }
-    fn start_library_track(&self, track_id: String) -> Result<Value, ProtocolError> {
+    fn start_library_track(&self, track_id: String) -> Result<BackendResponse, ProtocolError> {
         let entry = self
             .library
             .handle()
@@ -200,12 +255,12 @@ impl BackendApp {
                 duration_ms: entry.duration_ms,
             })
             .map_err(playback_error)?;
-        serialize(snapshot)
+        Ok(BackendResponse::StartLibraryTrack(snapshot))
     }
     fn start_library_album(
         &self,
         album_key: crate::library::models::LibraryAlbumKey,
-    ) -> Result<Value, ProtocolError> {
+    ) -> Result<BackendResponse, ProtocolError> {
         let (entries, index) = self
             .library
             .handle()
@@ -225,18 +280,8 @@ impl BackendApp {
             .handle()
             .play_sequence_entries_at(entries, index)
             .map_err(playback_error)?;
-        serialize(snapshot)
+        Ok(BackendResponse::StartLibraryAlbum(snapshot))
     }
-    fn validate(&self, path: String) -> Result<Value, ProtocolError> {
-        serialize(crate::media::validation::validate_audio_file(&path))
-    }
-}
-
-fn serialize<T: serde::Serialize>(value: T) -> Result<Value, ProtocolError> {
-    serde_json::to_value(value).map_err(|_| ProtocolError {
-        code: "serializationFailed".into(),
-        message: "Backend response could not be serialized".into(),
-    })
 }
 
 fn mapped_error(code: &'static str) -> ProtocolError {
@@ -244,6 +289,12 @@ fn mapped_error(code: &'static str) -> ProtocolError {
         code: code.into(),
         message: format!("Backend operation failed: {code}"),
     }
+}
+
+fn device_error(error: crate::audio::devices::AudioDeviceListError) -> ProtocolError {
+    mapped_error(match error {
+        crate::audio::devices::AudioDeviceListError::EnumerationFailed => "enumerationFailed",
+    })
 }
 
 fn library_error(error: LibraryCommandError) -> ProtocolError {
@@ -360,24 +411,63 @@ fn playback_error(error: crate::audio::playback::PlaybackServiceError) -> Protoc
     }
 }
 
-fn encode<T: serde::Serialize, E>(
+fn encode<T, E>(
     value: Result<T, E>,
+    wrap: fn(T) -> BackendResponse,
     map_error: fn(E) -> ProtocolError,
-) -> Result<Value, ProtocolError> {
-    value.map_err(map_error).and_then(serialize)
+) -> Result<BackendResponse, ProtocolError> {
+    value.map(wrap).map_err(map_error)
 }
 
-pub fn run() -> io::Result<()> {
-    let app = Arc::new(BackendApp::initialize()?);
-    let stdin = io::stdin();
-    let mut stdout = io::BufWriter::new(io::stdout().lock());
-    let output = ProtocolOutput::new();
-    let output_sender = output.sender();
-    if !output.send(Message::Event(BackendEvent::Ready)) {
-        return Err(io::Error::other("output closed"));
+/// Serves newline-delimited Serde protocol frames over stdin/stdout.
+///
+/// Request work is isolated in blocking tasks because the current library and
+/// playback handles are synchronous internally. The transport itself remains
+/// asynchronous and has exactly one stdout writer, so concurrent requests can
+/// complete out of order without interleaving JSON frames.
+pub async fn serve(app: Arc<BackendApp>) -> io::Result<()> {
+    enum EventBridgeMessage {
+        Event(Box<BackendEvent>),
+        Stop,
     }
-    let event_stop = Arc::new(AtomicBool::new(false));
-    let mut event_threads = Vec::new();
+
+    let (output_sender, mut output_receiver) = mpsc::channel::<Message>(128);
+    let writer = tokio::spawn(async move {
+        let mut stdout = tokio::io::BufWriter::new(tokio::io::stdout());
+        while let Some(message) = output_receiver.recv().await {
+            let bytes = serde_json::to_vec(&message)
+                .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+            stdout.write_all(&bytes).await?;
+            stdout.write_all(b"\n").await?;
+            stdout.flush().await?;
+        }
+        stdout.flush().await
+    });
+
+    output_sender
+        .send(Message::Event(BackendEvent::Ready))
+        .await
+        .map_err(|_| io::Error::new(io::ErrorKind::BrokenPipe, "stdout writer closed"))?;
+
+    let cancellation = CancellationToken::new();
+    let (event_sender, event_receiver) = std::sync::mpsc::channel::<EventBridgeMessage>();
+    let event_router_sender = output_sender.clone();
+    let event_router = tokio::task::spawn_blocking(move || {
+        while let Ok(message) = event_receiver.recv() {
+            match message {
+                EventBridgeMessage::Event(event) => {
+                    if event_router_sender
+                        .blocking_send(Message::Event(*event))
+                        .is_err()
+                    {
+                        break;
+                    }
+                }
+                EventBridgeMessage::Stop => break,
+            }
+        }
+    });
+
     for (receiver, make_event) in [
         (
             app.activities.take_changed_receiver(),
@@ -393,62 +483,93 @@ pub fn run() -> io::Result<()> {
             Box::new({
                 let app = Arc::clone(&app);
                 move || BackendEvent::LibraryScanStateChanged(app.library.handle().scan_state())
-            }) as Box<dyn Fn() -> BackendEvent + Send>,
+            }),
         ),
         (
             app.playback.take_state_changed_receiver(),
             Box::new({
                 let app = Arc::clone(&app);
                 move || BackendEvent::PlaybackStateChanged(app.playback.snapshot())
-            }) as Box<dyn Fn() -> BackendEvent + Send>,
+            }),
         ),
         (
             app.playback.take_queue_state_changed_receiver(),
             Box::new({
                 let app = Arc::clone(&app);
                 move || BackendEvent::PlaybackQueueStateChanged(app.playback.queue_snapshot())
-            }) as Box<dyn Fn() -> BackendEvent + Send>,
+            }),
         ),
     ] {
         if let Some(receiver) = receiver {
-            let output = output_sender.clone();
-            let stop = Arc::clone(&event_stop);
-            event_threads.push(thread::spawn(move || {
-                while !stop.load(Ordering::Acquire) {
-                    if receiver.recv_timeout(Duration::from_millis(100)).is_err() {
-                        continue;
+            let event_sender = event_sender.clone();
+            let cancellation = cancellation.clone();
+            thread::spawn(move || {
+                while !cancellation.is_cancelled() {
+                    let Ok(()) = receiver.recv() else { break };
+                    if event_sender
+                        .send(EventBridgeMessage::Event(Box::new(make_event())))
+                        .is_err()
+                    {
+                        break;
                     }
-                    let _ = output.send(Message::Event(make_event()));
                 }
-            }));
+            });
         }
     }
-    let requests = Arc::clone(&app);
-    let output_requests = output_sender.clone();
-    let (done_sender, done_receiver) = std::sync::mpsc::channel();
-    let request_thread = thread::spawn(move || {
-        for request in read_requests(BufReader::new(stdin.lock())) {
-            match request {
-                Ok(request) => {
-                    let _ = output_requests.send(Message::Response(
-                        requests.request(request.id, request.request),
-                    ));
-                }
-                Err(error) => eprintln!("backend protocol input error: {error}"),
+    let stop_sender = event_sender.clone();
+    drop(event_sender);
+
+    let mut lines = tokio::io::BufReader::new(tokio::io::stdin()).lines();
+    let requests = TaskTracker::new();
+    let mut input_error = None;
+    while let Some(line) = lines.next_line().await? {
+        let envelope: crate::protocol::request::Envelope = match serde_json::from_str(&line) {
+            Ok(envelope) => envelope,
+            Err(error) => {
+                input_error = Some(io::Error::new(io::ErrorKind::InvalidData, error));
+                break;
             }
-        }
-        let _ = done_sender.send(());
-    });
+        };
+        let app = Arc::clone(&app);
+        let output_sender = output_sender.clone();
+        requests.spawn(async move {
+            let id = envelope.id;
+            let response = tokio::task::spawn_blocking(move || app.request(id, envelope.request))
+                .await
+                .unwrap_or_else(|_| Response::Error {
+                    id,
+                    error: ProtocolError {
+                        code: "taskFailed".into(),
+                        message: "Backend request task failed".into(),
+                    },
+                });
+            let _ = output_sender.send(Message::Response(response)).await;
+        });
+    }
+
+    requests.close();
+    requests.wait().await;
+    cancellation.cancel();
+    let _ = stop_sender.send(EventBridgeMessage::Stop);
+    event_router
+        .await
+        .map_err(|error| io::Error::other(format!("event router failed: {error}")))?;
     drop(output_sender);
-    output.write_until(&mut stdout, || done_receiver.try_recv().is_ok())?;
-    event_stop.store(true, Ordering::Release);
+    writer
+        .await
+        .map_err(|error| io::Error::other(format!("stdout writer failed: {error}")))??;
     app.playback.shutdown();
     app.library.shutdown();
-    let _ = request_thread.join();
-    for event_thread in event_threads {
-        let _ = event_thread.join();
-    }
-    Ok(())
+    input_error.map_or(Ok(()), Err)
+}
+
+pub fn run() -> io::Result<()> {
+    let app = Arc::new(BackendApp::initialize()?);
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .map_err(|error| io::Error::other(format!("tokio runtime failed: {error}")))?
+        .block_on(serve(app))
 }
 
 #[cfg(test)]
@@ -477,21 +598,19 @@ mod tests {
 
     #[test]
     fn response_serialization_keeps_success_and_error_separate() {
-        let success = Response {
+        let success = Response::Ok {
             id: 1,
-            result: Some(serde_json::json!({ "value": true })),
-            error: None,
+            response: BackendResponse::Ping("pong".into()),
         };
-        let failure = Response {
+        let failure = Response::Error {
             id: 2,
-            result: None,
-            error: Some(mapped_error("trackNotFound")),
+            error: mapped_error("trackNotFound"),
         };
         let success_json = serde_json::to_value(success).expect("success response serializes");
         let failure_json = serde_json::to_value(failure).expect("error response serializes");
-        assert_eq!(success_json["result"]["value"], true);
-        assert!(success_json.get("error").is_none());
+        assert_eq!(success_json["response"]["result"], "pong");
+        assert_eq!(success_json["status"], "ok");
         assert_eq!(failure_json["error"]["code"], "trackNotFound");
-        assert!(failure_json.get("result").is_none());
+        assert_eq!(failure_json["status"], "error");
     }
 }

@@ -2,7 +2,7 @@
 use crate::media::inspection::AudioCodec;
 use serde::Deserialize;
 use serde::Serialize;
-#[derive(Debug, Clone, Serialize, specta::Type)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum LibraryUnavailableReason {
     StorageUnavailable,
@@ -11,30 +11,28 @@ pub enum LibraryUnavailableReason {
     SchemaTooNew,
     DatabaseCorrupt,
 }
-#[derive(Debug, Clone, Serialize, specta::Type)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(tag = "status", rename_all = "camelCase")]
 pub enum LibraryStatus {
     Ready,
     Unavailable { reason: LibraryUnavailableReason },
 }
-#[derive(Debug, Clone, Serialize, specta::Type)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LibraryRoot {
     pub id: String,
     pub path: String,
     pub enabled: bool,
-    #[specta(type = f64)]
     pub scan_generation: u64,
-    #[specta(type = Option<f64>)]
     pub last_successful_scan_at_ms: Option<u64>,
 }
-#[derive(Debug, Clone, Serialize, specta::Type)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum LibraryFileAvailability {
     Available,
     Missing,
 }
-#[derive(Debug, Clone, Serialize, specta::Type)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum LibraryInspectionStatus {
     Pending,
@@ -42,33 +40,33 @@ pub enum LibraryInspectionStatus {
     Unsupported,
     Failed,
 }
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, specta::Type, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum LibrarySortDirection {
     Ascending,
     Descending,
 }
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, specta::Type, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum LibraryAlbumSortKey {
     Title,
     Artist,
     Year,
 }
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, specta::Type, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum LibraryAlbumArtistSortKey {
     Artist,
     AlbumCount,
     TrackCount,
 }
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, specta::Type, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum LibraryArtistAlbumSortKey {
     Year,
     Title,
 }
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, specta::Type, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum LibraryTrackSortKey {
     Title,
@@ -76,26 +74,26 @@ pub enum LibraryTrackSortKey {
     Album,
     Duration,
 }
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, specta::Type, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct LibrarySort<K> {
     pub key: K,
     pub direction: LibrarySortDirection,
 }
-#[derive(Debug, Clone, Serialize, specta::Type)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ArtworkMimeType {
     Jpeg,
     Png,
 }
-#[derive(Debug, Clone, Serialize, specta::Type)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ArtworkRef {
     pub content_hash: String,
     pub mime_type: ArtworkMimeType,
     pub relative_path: String,
 }
-#[derive(Debug, Clone, Serialize, specta::Type)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LibraryTrackSummary {
     pub id: String,
@@ -104,12 +102,11 @@ pub struct LibraryTrackSummary {
     pub album: Option<String>,
     pub album_artist: Option<String>,
     pub artwork: Option<ArtworkRef>,
-    #[specta(type = Option<f64>)]
     pub duration_ms: Option<u64>,
     pub availability: LibraryFileAvailability,
     pub playable: bool,
 }
-#[derive(Debug, Clone, Serialize, specta::Type)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LibraryTrackSourceMetadata {
     pub title: Option<String>,
@@ -122,19 +119,17 @@ pub struct LibraryTrackSourceMetadata {
     pub disc_total: Option<u32>,
     pub genre: Option<String>,
     pub date: Option<String>,
-    #[specta(type = Option<f64>)]
     pub duration_ms: Option<u64>,
     pub file_format: String,
     pub codec: AudioCodec,
     pub sample_rate: u32,
     pub channel_count: u16,
     pub bit_depth: Option<u32>,
-    #[specta(type = Option<f64>)]
     pub bitrate_kbps: Option<u64>,
     pub tag_status: String,
     pub artwork: Option<ArtworkRef>,
 }
-#[derive(Debug, Clone, Serialize, specta::Type)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LibraryTrackDetails {
     pub summary: LibraryTrackSummary,
@@ -143,77 +138,68 @@ pub struct LibraryTrackDetails {
     pub relative_path: String,
     pub file_name: String,
     pub extension: String,
-    #[specta(type = f64)]
     pub source_revision: u64,
     pub inspection_status: LibraryInspectionStatus,
     pub inspection_error: Option<String>,
     pub metadata: Option<LibraryTrackSourceMetadata>,
 }
-#[derive(Debug, Clone, Serialize, specta::Type)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LibraryTrackPage {
     pub items: Vec<LibraryTrackSummary>,
-    #[specta(type = f64)]
     pub total_count: u64,
-    pub next_after_id: Option<String>,
+    pub next_cursor: Option<String>,
 }
-#[derive(Debug, Clone, Serialize, serde::Deserialize, specta::Type)]
+#[derive(Debug, Clone, Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LibraryAlbumKey {
     pub title: String,
     pub album_artist: String,
 }
-#[derive(Debug, Clone, Serialize, serde::Deserialize, specta::Type)]
+#[derive(Debug, Clone, Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LibraryAlbumArtistKey {
     pub name: String,
 }
-#[derive(Debug, Clone, Serialize, specta::Type)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LibraryAlbumSummary {
     pub key: LibraryAlbumKey,
     pub artwork: Option<ArtworkRef>,
-    #[specta(type = Option<f64>)]
     pub year: Option<i32>,
 }
-#[derive(Debug, Clone, Serialize, specta::Type)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LibraryAlbumPage {
     pub items: Vec<LibraryAlbumSummary>,
-    #[specta(type = f64)]
     pub total_count: u64,
     pub next_cursor: Option<String>,
 }
-#[derive(Debug, Clone, Serialize, specta::Type)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LibraryAlbumArtistSummary {
     pub key: LibraryAlbumArtistKey,
     pub artwork: Option<ArtworkRef>,
-    #[specta(type = f64)]
     pub album_count: u64,
-    #[specta(type = f64)]
     pub track_count: u64,
 }
-#[derive(Debug, Clone, Serialize, specta::Type)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LibraryAlbumArtistPage {
     pub items: Vec<LibraryAlbumArtistSummary>,
-    #[specta(type = f64)]
     pub total_count: u64,
     pub next_cursor: Option<String>,
 }
-#[derive(Debug, Clone, Serialize, specta::Type)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LibraryAlbumDetails {
     pub summary: LibraryAlbumSummary,
     pub date: Option<String>,
-    #[specta(type = f64)]
     pub track_count: u64,
-    #[specta(type = Option<f64>)]
     pub duration_ms: Option<u64>,
     pub first_playable_track_id: Option<String>,
 }
-#[derive(Debug, Clone, Serialize, specta::Type)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LibraryAlbumTrackSummary {
     pub id: String,
@@ -222,22 +208,20 @@ pub struct LibraryAlbumTrackSummary {
     pub track_number: Option<u32>,
     pub disc_number: Option<u32>,
     pub file_format: Option<String>,
-    #[specta(type = Option<f64>)]
     pub bit_depth: Option<u32>,
-    #[specta(type = Option<f64>)]
     pub sample_rate: Option<u32>,
-    #[specta(type = Option<f64>)]
     pub duration_ms: Option<u64>,
     pub availability: LibraryFileAvailability,
     pub playable: bool,
 }
-#[derive(Debug, Clone, Serialize, specta::Type)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LibraryAlbumTrackPage {
     pub items: Vec<LibraryAlbumTrackSummary>,
-    pub next_offset: Option<u32>,
+    pub total_count: u64,
+    pub next_cursor: Option<String>,
 }
-#[derive(Debug, Clone, Serialize, specta::Type)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum LibraryScanState {
     Idle,
@@ -246,18 +230,14 @@ pub enum LibraryScanState {
     Cancelled,
     Failed,
 }
-#[derive(Debug, Clone, Serialize, specta::Type)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LibraryScanSnapshot {
     pub state: LibraryScanState,
     pub current_root: Option<LibraryRoot>,
-    #[specta(type = f64)]
     pub discovered_count: u64,
-    #[specta(type = f64)]
     pub inspected_count: u64,
-    #[specta(type = f64)]
     pub indexed_count: u64,
-    #[specta(type = f64)]
     pub failed_count: u64,
     pub failure_code: Option<String>,
 }

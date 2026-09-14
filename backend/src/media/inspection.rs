@@ -10,7 +10,7 @@ use symphonia::core::meta::MetadataOptions;
 use symphonia::core::units::Timestamp;
 use symphonia::default::{get_codecs, get_probe};
 
-#[derive(Debug, Clone, Serialize, specta::Type, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct AudioFileInfo {
     pub codec: AudioCodec,
@@ -18,7 +18,7 @@ pub struct AudioFileInfo {
     pub channel_count: u16,
     pub duration_ms: Option<u64>,
 }
-#[derive(Debug, Clone, Serialize, specta::Type, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum AudioCodec {
     Aac,
@@ -32,7 +32,7 @@ pub enum AudioCodec {
     Vorbis,
     Other,
 }
-#[derive(Debug, Clone, Serialize, specta::Type, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(tag = "code", rename_all = "camelCase")]
 pub enum AudioFileInspectionError {
     ValidationFailed { error: AudioFileValidationError },

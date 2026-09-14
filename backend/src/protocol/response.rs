@@ -8,9 +8,27 @@ use crate::{
     media::validation::{AudioFileValidationError, ValidatedAudioFile},
 };
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
-#[derive(Debug, Serialize, specta::Type)]
+#[derive(Debug, Clone)]
+pub struct NullResult;
+
+impl serde::Serialize for NullResult {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_unit()
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub enum ValidateAudioFileResult {
+    Ok(ValidatedAudioFile),
+    Err(AudioFileValidationError),
+}
+
+#[derive(Debug, Serialize)]
 #[serde(tag = "method", content = "result", rename_all = "camelCase")]
 pub enum BackendResponse {
     Ping(String),
@@ -27,14 +45,14 @@ pub enum BackendResponse {
     GetApplicationActivities(Vec<ApplicationActivity>),
     GetLibraryStatus(LibraryStatus),
     GetLibraryTrackForPath(Option<crate::library::models::LibraryTrackSummary>),
-    ValidateAudioFile(Result<ValidatedAudioFile, AudioFileValidationError>),
+    ValidateAudioFile(ValidateAudioFileResult),
     ListLibraryRoots(Vec<crate::library::models::LibraryRoot>),
     RegisterLibraryRoot(crate::library::models::LibraryRoot),
     SetLibraryRootEnabled(crate::library::models::LibraryRoot),
-    RemoveLibraryRoot(()),
+    RemoveLibraryRoot(NullResult),
     GetLibraryScanState(crate::library::models::LibraryScanSnapshot),
-    StartLibraryScan(()),
-    CancelLibraryScan(()),
+    StartLibraryScan(NullResult),
+    CancelLibraryScan(NullResult),
     ListLibraryTracks(crate::library::models::LibraryTrackPage),
     ListLibraryAlbums(crate::library::models::LibraryAlbumPage),
     ListLibraryAlbumArtists(crate::library::models::LibraryAlbumArtistPage),
@@ -46,17 +64,14 @@ pub enum BackendResponse {
     StartLibraryAlbum(PlaybackSnapshot),
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct BackendWireResponse {
-    pub id: u64,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub result: Option<Value>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<ProtocolError>,
+#[derive(Debug, Serialize)]
+#[serde(tag = "status", rename_all = "camelCase")]
+pub enum BackendWireResponse {
+    Ok { id: u64, response: BackendResponse },
+    Error { id: u64, error: ProtocolError },
 }
 
-#[derive(Debug, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProtocolError {
     pub code: String,

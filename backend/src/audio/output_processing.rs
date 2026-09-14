@@ -232,7 +232,7 @@ impl OutputPcmProcessor {
         input: &[f32],
         output: &mut Vec<f32>,
     ) -> Result<(), OutputProcessingError> {
-        if self.finished || input.len() % self.source_channels != 0 {
+        if self.finished || !input.len().is_multiple_of(self.source_channels) {
             return Err(OutputProcessingError::MisalignedSamples);
         }
         if input.iter().any(|sample| !sample.is_finite()) {

@@ -105,7 +105,7 @@ fn read_text(path: PathBuf) -> Option<String> {
     String::from_utf8(bytes).ok()
 }
 fn decode_utf16(bytes: &[u8], little: bool) -> Option<String> {
-    let units = bytes.chunks_exact(2).map(|pair| {
+    let units = bytes.as_chunks::<2>().0.iter().map(|pair| {
         if little {
             u16::from_le_bytes([pair[0], pair[1]])
         } else {

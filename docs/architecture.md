@@ -83,7 +83,7 @@ shared/
 └── protocol/
 ```
 
-The `shared/` directory defines the narrow native API available to the Renderer through Preload. Its `protocol/` directory contains the generated typed transport contract consumed by Electron and the shared boundary code.
+The `shared/` directory defines the narrow native API available to the Renderer through Preload. Its `protocol/` directory contains the manually maintained typed transport contract consumed by Electron and the shared boundary code, while Electron owns the runtime Zod schema for incoming backend frames.
 
 Renderer and Electron both consume these contracts. Neither side owns them; changes to the contracts are boundary changes and must preserve the trust and type boundaries between the processes.
 

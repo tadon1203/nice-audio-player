@@ -6,7 +6,8 @@ import {
 	resolveDevelopmentBackend,
 	resolvePackagedBackendExecutable
 } from '../runtime-paths';
-import { BackendTransport, type BackendWireEvent } from './transport';
+import { BackendTransport } from './transport';
+import type { BackendWireEvent } from './schema';
 
 export type BackendLaunchConfig = { dataDir: string };
 type BackendState = 'created' | 'starting' | 'running' | 'stopped';

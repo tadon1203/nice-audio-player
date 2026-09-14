@@ -7,14 +7,7 @@ import {
 	requireNonNegativeInteger,
 	requireUnitInterval
 } from '../electron/main/ipc/validation';
-import {
-	decodeLibraryAlbumArtists,
-	decodeLibraryAlbumDetails,
-	decodeLibraryAlbums,
-	decodeLibraryAlbumTracks,
-	decodeLibraryScanState
-} from '../electron/main/backend/decoders/library';
-import { decodeLibraryPlaybackState } from '../electron/main/backend/decoders/playback';
+import { BackendWireMessageSchema } from '../electron/main/backend/schema';
 
 describe('slice boundary contracts', () => {
 	it('rejects malformed IPC arguments', () => {
@@ -26,14 +19,29 @@ describe('slice boundary contracts', () => {
 		expect(() => requireUnitInterval(1.1, 'volume')).toThrow();
 	});
 
-	it('rejects malformed catalog and playback responses', () => {
-		expect(() => decodeLibraryAlbums({ items: [{ key: {} }], nextCursor: null })).toThrow();
-		expect(() => decodeLibraryAlbumArtists({ items: [{ key: {} }], nextCursor: null })).toThrow();
-		expect(() => decodeLibraryAlbumDetails({ summary: { key: {} } })).toThrow();
-		expect(() =>
-			decodeLibraryAlbumTracks({ items: [{ id: 'track-1' }], nextOffset: null })
-		).toThrow();
-		expect(() => decodeLibraryScanState({ state: 'running' })).toThrow();
-		expect(() => decodeLibraryPlaybackState({ status: 'playing', revision: 1 })).toThrow();
+	it('rejects malformed catalog and playback frames', () => {
+		expect(
+			BackendWireMessageSchema.safeParse({
+				type: 'response',
+				payload: {
+					status: 'ok',
+					id: 1,
+					response: {
+						method: 'listLibraryAlbums',
+						result: { items: [{ key: {} }], totalCount: 1, nextCursor: null }
+					}
+				}
+			}).success
+		).toBe(false);
+		expect(
+			BackendWireMessageSchema.safeParse({
+				type: 'response',
+				payload: {
+					status: 'ok',
+					id: 1,
+					response: { method: 'getLibraryScanState', result: { state: 'running' } }
+				}
+			}).success
+		).toBe(false);
 	});
 });

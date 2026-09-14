@@ -10,12 +10,23 @@
 	"version": "0.0.1",
 	"type": "module",
 	"scripts": {
-		"dev": "node scripts/build-electron.mjs && concurrently --kill-others --success first --names renderer,electron \"ng serve --host 127.0.0.1 --port 5173\" \"wait-on --timeout 15000 http://127.0.0.1:5173/ && cross-env NICE_AUDIO_PLAYER_DEV_SERVER_URL=http://127.0.0.1:5173 electron .\"",
+		"check:ts": "tsc -p tsconfig.json --noEmit",
+		"check:format": "prettier . --check",
+		"check:lint": "pnpm lint",
+		"check:rust": "cargo fmt --manifest-path backend/Cargo.toml -- --check && cargo clippy --manifest-path backend/Cargo.toml --all-targets -- -D warnings",
+		"test:angular": "ng test --watch=false",
+		"test:node": "vitest run tests",
+		"test:rust": "cargo test --manifest-path backend/Cargo.toml",
+		"test:e2e": "playwright test",
+		"build:renderer": "ng build",
+		"build:electron": "node scripts/build-electron.mjs",
+		"build:backend": "cargo build --release --manifest-path backend/Cargo.toml",
+		"dev": "node scripts/dev-electron.mjs",
 		"start": "electron .",
-		"build": "cargo run --manifest-path backend/Cargo.toml --bin generate-bindings && node scripts/fonts.mjs check && ng build && node scripts/build-electron.mjs && cargo build --release --manifest-path backend/Cargo.toml && node scripts/stage-backend.mjs && node scripts/stage-runtime.mjs",
-		"test": "ng test --watch=false && playwright test --project=renderer && node scripts/build-electron.mjs && playwright test --project=electron && cargo test --manifest-path backend/Cargo.toml",
+		"build": "node scripts/fonts.mjs check && pnpm build:renderer && pnpm build:electron && pnpm build:backend && node scripts/stage-backend.mjs && node scripts/stage-runtime.mjs",
+		"test": "pnpm test:angular && pnpm test:node && pnpm test:rust && pnpm test:e2e",
 		"lint": "node scripts/check-design-tokens.mjs && eslint . && stylelint \"src/**/*.css\"",
-		"validate": "cargo run --manifest-path backend/Cargo.toml --bin generate-bindings -- --check && tsc -p tsconfig.json --noEmit && ng build --configuration development && prettier . --check && pnpm lint && cargo fmt --manifest-path backend/Cargo.toml -- --check && cargo clippy --manifest-path backend/Cargo.toml --all-targets -- -D warnings && pnpm test && pnpm build",
+		"validate": "pnpm check:ts && pnpm check:format && pnpm check:lint && pnpm check:rust && pnpm test && pnpm build",
 		"format": "prettier . --write",
 		"fonts": "node scripts/fonts.mjs",
 		"snapshot": "python scripts/create-project-snapshot.py",
@@ -68,6 +79,7 @@
 		"@lucide/angular": "1.43.0",
 		"electron-squirrel-startup": "^1.0.1",
 		"rxjs": "~7.8.0",
-		"tslib": "^2.3.0"
+		"tslib": "^2.3.0",
+		"zod": "^4.4.3"
 	}
 }

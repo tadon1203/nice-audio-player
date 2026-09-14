@@ -24,12 +24,21 @@ import type {
 	PlaybackFailureCode,
 	PlaybackQueueSnapshot,
 	PlaybackSnapshot
-} from './protocol/generated';
+} from './protocol/types';
 
 export type AudioOutputDevice = GeneratedAudioOutputDevice;
 export type PlaybackState = PlaybackSnapshot;
 export type PlaybackQueue = PlaybackQueueSnapshot;
 export type AppEvent = BackendEvent;
+
+export type IpcError = {
+	readonly code: string;
+	readonly message: string;
+};
+
+export type IpcResult<T> =
+	{ readonly ok: true; readonly value: T } | { readonly ok: false; readonly error: IpcError };
+
 export type {
 	ArtworkRef,
 	LibraryAlbumArtistPage,
@@ -75,19 +84,19 @@ export interface NativeAppApi {
 	startLibraryScan(): Promise<void>;
 	cancelLibraryScan(): Promise<void>;
 	listLibraryTracks(
-		afterId: string | null,
+		cursor: string | null,
 		search: string | null,
 		sortKey: LibraryTrackSortKey,
 		sortDirection: LibrarySortDirection
 	): Promise<LibraryTrackPage>;
 	listLibraryAlbums(
-		afterCursor: string | null,
+		cursor: string | null,
 		search: string | null,
 		sortKey: LibraryAlbumSortKey,
 		sortDirection: LibrarySortDirection
 	): Promise<LibraryAlbumPage>;
 	listLibraryAlbumArtists(
-		afterCursor: string | null,
+		cursor: string | null,
 		search: string | null,
 		sortKey: LibraryAlbumArtistSortKey,
 		sortDirection: LibrarySortDirection
@@ -95,12 +104,15 @@ export interface NativeAppApi {
 	getLibraryAlbumArtist(artistKey: LibraryAlbumArtistKey): Promise<LibraryAlbumArtistSummary>;
 	listLibraryArtistAlbums(
 		artistKey: LibraryAlbumArtistKey,
-		afterCursor: string | null,
+		cursor: string | null,
 		sortKey: LibraryArtistAlbumSortKey,
 		sortDirection: LibrarySortDirection
 	): Promise<LibraryAlbumPage>;
 	getLibraryAlbumDetails(albumKey: LibraryAlbumKey): Promise<LibraryAlbumDetails>;
-	listLibraryAlbumTracks(albumKey: LibraryAlbumKey, offset: number): Promise<LibraryAlbumTrackPage>;
+	listLibraryAlbumTracks(
+		albumKey: LibraryAlbumKey,
+		cursor: string | null
+	): Promise<LibraryAlbumTrackPage>;
 	getLibraryTrackForPath(path: string): Promise<LibraryTrackSummary | null>;
 	startLibraryTrack(trackId: string): Promise<PlaybackState>;
 	startLibraryAlbum(albumKey: LibraryAlbumKey): Promise<PlaybackState>;

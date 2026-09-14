@@ -120,7 +120,8 @@ export async function installNativeAppFixture(page: Page): Promise<void> {
 				availability: track.availability,
 				playable: track.playable
 			})),
-			nextOffset: null
+			totalCount: 2,
+			nextCursor: null
 		};
 		const fileFor = (track: LibraryTrackSummary) => ({
 			path: `C:/Music/${track.id === 'track-1' ? 'track' : track.id === 'track-2' ? 'second' : 'literal'}.wav`,
@@ -294,7 +295,7 @@ export async function installNativeAppFixture(page: Page): Promise<void> {
 				return Promise.resolve();
 			},
 			listLibraryTracks: (
-				_afterId: string | null,
+				_cursor: string | null,
 				search: string | null,
 				sortKey,
 				sortDirection
@@ -307,16 +308,16 @@ export async function installNativeAppFixture(page: Page): Promise<void> {
 				return Promise.resolve({
 					items: filtered,
 					totalCount: filtered.length,
-					nextAfterId: null
+					nextCursor: null
 				});
 			},
 			listLibraryAlbums: (
-				_afterCursor: string | null,
+				_cursor: string | null,
 				search: string | null,
 				sortKey,
 				sortDirection
 			) => {
-				void _afterCursor;
+				void _cursor;
 				recordLibraryRequest('albums', sortKey, sortDirection);
 				return Promise.resolve({
 					items:
@@ -331,12 +332,12 @@ export async function installNativeAppFixture(page: Page): Promise<void> {
 				});
 			},
 			listLibraryAlbumArtists: (
-				_afterCursor: string | null,
+				_cursor: string | null,
 				search: string | null,
 				sortKey,
 				sortDirection
 			) => {
-				void _afterCursor;
+				void _cursor;
 				recordLibraryRequest('albumArtists', sortKey, sortDirection);
 				return Promise.resolve({
 					items:
@@ -358,8 +359,8 @@ export async function installNativeAppFixture(page: Page): Promise<void> {
 				const artist = artistSummaries.find((candidate) => candidate.key.name === artistKey.name);
 				return artist ? Promise.resolve(artist) : rejected('albumArtistNotFound');
 			},
-			listLibraryArtistAlbums: (artistKey, _afterCursor, sortKey, sortDirection) => {
-				void _afterCursor;
+			listLibraryArtistAlbums: (artistKey, _cursor, sortKey, sortDirection) => {
+				void _cursor;
 				recordLibraryRequest('artistAlbums', sortKey, sortDirection);
 				return artistKey.name === 'Test artist'
 					? Promise.resolve({ items: [albumDetails.summary], totalCount: 1, nextCursor: null })

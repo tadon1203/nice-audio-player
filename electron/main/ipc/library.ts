@@ -6,14 +6,13 @@ import type {
 	LibraryArtistAlbumSortKey,
 	LibrarySortDirection,
 	LibraryTrackSortKey
-} from '@shared/protocol/generated';
+} from '@shared/protocol/types';
 import type { BackendManager } from '../backend/manager';
 import { validateSender } from '../security';
 import {
 	requireAlbumKey,
 	requireBoolean,
 	requireNullableString,
-	requireNonNegativeInteger,
 	requireOneOf,
 	requireString
 } from './validation';
@@ -95,9 +94,9 @@ export function registerLibraryIpc(manager: BackendManager): void {
 	);
 	ipcMain.handle(
 		'library:list-tracks',
-		validateSender((afterId: unknown, search: unknown, sortKey: unknown, sortDirection: unknown) =>
+		validateSender((cursor: unknown, search: unknown, sortKey: unknown, sortDirection: unknown) =>
 			api.listLibraryTracks(
-				requireNullableString(afterId, 'afterId'),
+				requireNullableString(cursor, 'cursor'),
 				requireNullableString(search, 'search'),
 				requireOneOf(sortKey, 'sortKey', TRACK_SORT_KEYS),
 				requireOneOf(sortDirection, 'sortDirection', SORT_DIRECTIONS)
@@ -106,26 +105,24 @@ export function registerLibraryIpc(manager: BackendManager): void {
 	);
 	ipcMain.handle(
 		'library:list-albums',
-		validateSender(
-			(afterCursor: unknown, search: unknown, sortKey: unknown, sortDirection: unknown) =>
-				api.listLibraryAlbums(
-					requireNullableString(afterCursor, 'afterCursor'),
-					requireNullableString(search, 'search'),
-					requireOneOf(sortKey, 'sortKey', ALBUM_SORT_KEYS),
-					requireOneOf(sortDirection, 'sortDirection', SORT_DIRECTIONS)
-				)
+		validateSender((cursor: unknown, search: unknown, sortKey: unknown, sortDirection: unknown) =>
+			api.listLibraryAlbums(
+				requireNullableString(cursor, 'cursor'),
+				requireNullableString(search, 'search'),
+				requireOneOf(sortKey, 'sortKey', ALBUM_SORT_KEYS),
+				requireOneOf(sortDirection, 'sortDirection', SORT_DIRECTIONS)
+			)
 		)
 	);
 	ipcMain.handle(
 		'library:list-album-artists',
-		validateSender(
-			(afterCursor: unknown, search: unknown, sortKey: unknown, sortDirection: unknown) =>
-				api.listLibraryAlbumArtists(
-					requireNullableString(afterCursor, 'afterCursor'),
-					requireNullableString(search, 'search'),
-					requireOneOf(sortKey, 'sortKey', ARTIST_SORT_KEYS),
-					requireOneOf(sortDirection, 'sortDirection', SORT_DIRECTIONS)
-				)
+		validateSender((cursor: unknown, search: unknown, sortKey: unknown, sortDirection: unknown) =>
+			api.listLibraryAlbumArtists(
+				requireNullableString(cursor, 'cursor'),
+				requireNullableString(search, 'search'),
+				requireOneOf(sortKey, 'sortKey', ARTIST_SORT_KEYS),
+				requireOneOf(sortDirection, 'sortDirection', SORT_DIRECTIONS)
+			)
 		)
 	);
 	ipcMain.handle(
@@ -135,10 +132,10 @@ export function registerLibraryIpc(manager: BackendManager): void {
 	ipcMain.handle(
 		'library:list-artist-albums',
 		validateSender(
-			(artistKey: unknown, afterCursor: unknown, sortKey: unknown, sortDirection: unknown) =>
+			(artistKey: unknown, cursor: unknown, sortKey: unknown, sortDirection: unknown) =>
 				api.listLibraryArtistAlbums(
 					requireArtistKey(artistKey),
-					requireNullableString(afterCursor, 'afterCursor'),
+					requireNullableString(cursor, 'cursor'),
 					requireOneOf(sortKey, 'sortKey', ARTIST_ALBUM_SORT_KEYS),
 					requireOneOf(sortDirection, 'sortDirection', SORT_DIRECTIONS)
 				)
@@ -150,11 +147,8 @@ export function registerLibraryIpc(manager: BackendManager): void {
 	);
 	ipcMain.handle(
 		'library:list-album-tracks',
-		validateSender((albumKey: unknown, offset: unknown) =>
-			api.listLibraryAlbumTracks(
-				requireAlbumKey(albumKey),
-				requireNonNegativeInteger(offset, 'offset')
-			)
+		validateSender((albumKey: unknown, cursor: unknown) =>
+			api.listLibraryAlbumTracks(requireAlbumKey(albumKey), requireNullableString(cursor, 'cursor'))
 		)
 	);
 	ipcMain.handle(

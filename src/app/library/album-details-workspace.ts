@@ -14,7 +14,7 @@ export class AlbumDetailsWorkspace {
 	private readonly backend = inject(Backend);
 	private readonly detailsState = signal<LibraryAlbumDetails | null>(null);
 	private readonly tracksState = signal<readonly LibraryAlbumTrackSummary[]>([]);
-	private readonly nextOffsetState = signal<number | null>(null);
+	private readonly nextCursorState = signal<string | null>(null);
 	private readonly loadStateState = signal<AlbumDetailsLoadState>('idle');
 	private readonly errorState = signal<string | null>(null);
 	private currentKey: LibraryAlbumKey | null = null;
@@ -22,7 +22,7 @@ export class AlbumDetailsWorkspace {
 
 	readonly details: Signal<LibraryAlbumDetails | null> = this.detailsState.asReadonly();
 	readonly tracks: Signal<readonly LibraryAlbumTrackSummary[]> = this.tracksState.asReadonly();
-	readonly nextOffset: Signal<number | null> = this.nextOffsetState.asReadonly();
+	readonly nextCursor: Signal<string | null> = this.nextCursorState.asReadonly();
 	readonly loadState: Signal<AlbumDetailsLoadState> = this.loadStateState.asReadonly();
 	readonly error: Signal<string | null> = this.errorState.asReadonly();
 
@@ -34,19 +34,19 @@ export class AlbumDetailsWorkspace {
 		const generation = ++this.generation;
 		this.detailsState.set(null);
 		this.tracksState.set([]);
-		this.nextOffsetState.set(null);
+		this.nextCursorState.set(null);
 		this.errorState.set(null);
 		this.loadStateState.set('loading');
 
 		try {
 			const [details, page] = await Promise.all([
 				this.backend.getLibraryAlbumDetails(key),
-				this.backend.listLibraryAlbumTracks(key, 0)
+				this.backend.listLibraryAlbumTracks(key, null)
 			]);
 			if (generation !== this.generation) return;
 			this.detailsState.set(details);
 			this.tracksState.set(page.items);
-			this.nextOffsetState.set(page.nextOffset);
+			this.nextCursorState.set(page.nextCursor);
 			this.loadStateState.set('ready');
 		} catch (error) {
 			if (generation !== this.generation) return;
@@ -57,16 +57,16 @@ export class AlbumDetailsWorkspace {
 
 	async loadMore(): Promise<void> {
 		const key = this.currentKey;
-		const offset = this.nextOffset();
-		if (!key || offset === null || this.loadState() === 'loadingMore') return;
+		const cursor = this.nextCursor();
+		if (!key || cursor === null || this.loadState() === 'loadingMore') return;
 
 		const generation = this.generation;
 		this.loadStateState.set('loadingMore');
 		try {
-			const page = await this.backend.listLibraryAlbumTracks(key, offset);
+			const page = await this.backend.listLibraryAlbumTracks(key, cursor);
 			if (generation !== this.generation) return;
 			this.tracksState.set([...this.tracks(), ...page.items]);
-			this.nextOffsetState.set(page.nextOffset);
+			this.nextCursorState.set(page.nextCursor);
 			this.loadStateState.set('ready');
 		} catch (error) {
 			if (generation !== this.generation) return;

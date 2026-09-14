@@ -26,7 +26,7 @@ describe('LibraryWorkspace', () => {
 			listLibraryAlbumArtists: vi
 				.fn()
 				.mockResolvedValue({ items: [], totalCount: 0, nextCursor: null }),
-			listLibraryTracks: vi.fn().mockResolvedValue({ items: [], totalCount: 0, nextAfterId: null })
+			listLibraryTracks: vi.fn().mockResolvedValue({ items: [], totalCount: 0, nextCursor: null })
 		};
 		TestBed.configureTestingModule({
 			providers: [{ provide: Backend, useValue: fake }, LibrarySession, LibraryWorkspace]
@@ -52,7 +52,7 @@ describe('LibraryWorkspace', () => {
 		(fake.listLibraryTracks as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
 			items: [],
 			totalCount: 0,
-			nextAfterId: 'track-1'
+			nextCursor: 'track-1'
 		});
 		const workspace = TestBed.inject(LibraryWorkspace);
 		await workspace.ensureLoaded('tracks');
@@ -60,7 +60,7 @@ describe('LibraryWorkspace', () => {
 		(fake.listLibraryTracks as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
 			items: [],
 			totalCount: 0,
-			nextAfterId: null
+			nextCursor: null
 		});
 		await workspace.loadMore('tracks');
 		expect(workspace.tracks().loadState).toBe('ready');

@@ -488,7 +488,7 @@ fn output_selection_is_rejected_during_source_loading() {
 fn test_worker(snapshot: PlaybackSnapshot) -> PlaybackWorker {
     let (_, command_receiver) = mpsc::sync_channel(1);
     let (state_changed_sender, _) = mpsc::sync_channel(1);
-    let (output_sender, output_receiver) = mpsc::sync_channel(1);
+    let (output_sender, _output_receiver) = mpsc::sync_channel(1);
 
     PlaybackWorker {
         active: None,
@@ -519,7 +519,6 @@ fn test_worker(snapshot: PlaybackSnapshot) -> PlaybackWorker {
         state_changed_sender,
         queue_state_changed_sender: mpsc::sync_channel(1).0,
         output_sender,
-        output_receiver,
     }
 }
 

@@ -26,7 +26,7 @@ mod source_loader;
 use decode_worker::{DecodePipeline, DecodeTaskInput, DecodeWorker, DecodeWorkerSetup};
 use source_loader::SourceLoadWorker;
 
-#[derive(Debug, Clone, serde::Serialize, specta::Type, PartialEq)]
+#[derive(Debug, Clone, serde::Serialize, PartialEq)]
 #[serde(
     tag = "status",
     rename_all = "camelCase",
@@ -34,10 +34,8 @@ use source_loader::SourceLoadWorker;
 )]
 pub enum PlaybackSnapshot {
     Stopped {
-        #[specta(type = f64)]
         revision: u64,
         file: Option<ValidatedAudioFile>,
-        #[specta(type = f64)]
         volume: f32,
         muted: bool,
         output_selection: AudioOutputSelection,
@@ -45,15 +43,11 @@ pub enum PlaybackSnapshot {
         can_go_next: bool,
     },
     Playing {
-        #[specta(type = f64)]
         revision: u64,
         file: ValidatedAudioFile,
         playback_id: String,
-        #[specta(type = f64)]
         position_ms: u64,
-        #[specta(type = Option<f64>)]
         duration_ms: Option<u64>,
-        #[specta(type = f64)]
         volume: f32,
         muted: bool,
         output_selection: AudioOutputSelection,
@@ -66,15 +60,11 @@ pub enum PlaybackSnapshot {
         can_go_next: bool,
     },
     Paused {
-        #[specta(type = f64)]
         revision: u64,
         file: ValidatedAudioFile,
         playback_id: String,
-        #[specta(type = f64)]
         position_ms: u64,
-        #[specta(type = Option<f64>)]
         duration_ms: Option<u64>,
-        #[specta(type = f64)]
         volume: f32,
         muted: bool,
         output_selection: AudioOutputSelection,
@@ -87,13 +77,11 @@ pub enum PlaybackSnapshot {
         can_go_next: bool,
     },
     Failed {
-        #[specta(type = f64)]
         revision: u64,
         file: Option<ValidatedAudioFile>,
         #[serde(skip_serializing_if = "Option::is_none")]
         playback_id: Option<String>,
         error: PlaybackFailureCode,
-        #[specta(type = f64)]
         volume: f32,
         muted: bool,
         output_selection: AudioOutputSelection,
@@ -102,7 +90,7 @@ pub enum PlaybackSnapshot {
     },
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, specta::Type)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum PlaybackRepeatMode {
     Off,
@@ -110,27 +98,25 @@ pub enum PlaybackRepeatMode {
     One,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, specta::Type)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum PlaybackQueueMoveDirection {
     Earlier,
     Later,
 }
 
-#[derive(Debug, Clone, serde::Serialize, specta::Type, PartialEq, Eq)]
+#[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct PlaybackQueueItem {
     pub id: String,
     pub title: String,
     pub artist: Option<String>,
-    #[specta(type = Option<f64>)]
     pub duration_ms: Option<u64>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, specta::Type, PartialEq, Eq)]
+#[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct PlaybackQueueSnapshot {
-    #[specta(type = f64)]
     pub revision: u64,
     pub current: Option<PlaybackQueueItem>,
     pub upcoming: Vec<PlaybackQueueItem>,
@@ -146,7 +132,7 @@ pub struct PlaybackEntrySeed {
     pub duration_ms: Option<u64>,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, specta::Type)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum PlaybackChannelConversion {
     None,
@@ -465,7 +451,7 @@ fn test_file() -> ValidatedAudioFile {
     }
 }
 
-#[derive(Debug, Clone, serde::Serialize, specta::Type, PartialEq, Eq)]
+#[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum PlaybackFailureCode {
     NoOutputDevice,
@@ -585,6 +571,7 @@ enum PlaybackCommand {
     ClearQueue {
         reply: SyncSender<Result<PlaybackQueueSnapshot, PlaybackServiceError>>,
     },
+    Output(OutputSignal),
     Shutdown,
 }
 
@@ -598,6 +585,7 @@ pub struct PlaybackServiceHandle {
 pub struct PlaybackService {
     handle: PlaybackServiceHandle,
     worker: Mutex<Option<JoinHandle<()>>>,
+    signal_bridge: Mutex<Option<JoinHandle<()>>>,
     state_changed_receiver: Mutex<Option<Receiver<()>>>,
     queue_state_changed_receiver: Mutex<Option<Receiver<()>>>,
 }
@@ -626,6 +614,20 @@ impl PlaybackService {
         let service_queue_state = Arc::clone(&queue_state);
         let worker_state = Arc::clone(&state);
         let worker_gain = effective_gain.clone();
+        let signal_bridge_sender = command_sender.clone();
+        let signal_bridge = thread::Builder::new()
+            .name("audio-playback-signal-bridge".into())
+            .spawn(move || {
+                while let Ok(signal) = output_receiver.recv() {
+                    if signal_bridge_sender
+                        .send(PlaybackCommand::Output(signal))
+                        .is_err()
+                    {
+                        break;
+                    }
+                }
+            })
+            .map_err(|_| PlaybackServiceStartError::WorkerStartFailed)?;
         let worker = thread::Builder::new()
             .name("audio-playback".into())
             .spawn(move || {
@@ -652,7 +654,6 @@ impl PlaybackService {
                     state_changed_sender,
                     queue_state_changed_sender,
                     output_sender,
-                    output_receiver,
                 }
                 .run();
             })
@@ -664,6 +665,7 @@ impl PlaybackService {
                 queue_snapshot: service_queue_state,
             },
             worker: Mutex::new(Some(worker)),
+            signal_bridge: Mutex::new(Some(signal_bridge)),
             state_changed_receiver: Mutex::new(Some(state_changed_receiver)),
             queue_state_changed_receiver: Mutex::new(Some(queue_state_changed_receiver)),
         })
@@ -697,6 +699,13 @@ impl PlaybackService {
             if let Some(worker) = worker.take() {
                 if worker.join().is_err() {
                     error!("playback.worker_panicked");
+                }
+            }
+        }
+        if let Ok(mut bridge) = self.signal_bridge.lock() {
+            if let Some(bridge) = bridge.take() {
+                if bridge.join().is_err() {
+                    error!("playback.signal_bridge_panicked");
                 }
             }
         }
@@ -968,7 +977,6 @@ struct PlaybackWorker {
     state_changed_sender: SyncSender<()>,
     queue_state_changed_sender: SyncSender<()>,
     output_sender: SyncSender<OutputSignal>,
-    output_receiver: Receiver<OutputSignal>,
 }
 
 #[derive(Debug, Clone)]
@@ -1038,10 +1046,7 @@ impl PlaybackSequence {
 impl PlaybackWorker {
     fn run(mut self) {
         loop {
-            while let Ok(signal) = self.output_receiver.try_recv() {
-                self.handle_signal(signal);
-            }
-            match self.command_receiver.recv_timeout(Duration::from_millis(5)) {
+            match self.command_receiver.recv() {
                 Ok(PlaybackCommand::Start { entry, reply }) => {
                     self.sequence =
                         PlaybackSequence::new_entries(vec![entry], &mut self.next_queue_item_id);
@@ -1195,8 +1200,8 @@ impl PlaybackWorker {
                         self.queue_snapshot()
                     }));
                 }
-                Ok(PlaybackCommand::Shutdown) | Err(mpsc::RecvTimeoutError::Disconnected) => break,
-                Err(mpsc::RecvTimeoutError::Timeout) => {}
+                Ok(PlaybackCommand::Output(signal)) => self.handle_signal(signal),
+                Ok(PlaybackCommand::Shutdown) | Err(mpsc::RecvError) => break,
             }
             self.advance_pending_source_load();
             self.advance_pending_playback();

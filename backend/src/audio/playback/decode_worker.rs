@@ -4,7 +4,6 @@ use std::sync::{
     Arc,
 };
 use std::thread::{self, JoinHandle};
-use std::time::Duration;
 
 use super::super::decoding::{DecodeCancellation, DecodeStep, StreamingDecoder};
 use super::super::output::{AtomicProducerState, OutputSignal, OutputStreamId, ProducerState};
@@ -351,8 +350,8 @@ fn write_packet_fully(
         let pushed = producer.push_samples(&samples[offset..]);
         offset += pushed;
         notify_prebuffer_if_ready(producer, prebuffer_frames, prebuffer_sent, prebuffer_sender);
-        if pushed == 0 {
-            let _ = capacity_receiver.recv_timeout(Duration::from_millis(10));
+        if pushed == 0 && capacity_receiver.recv().is_err() {
+            return QueueWriteResult::Cancelled;
         }
     }
     QueueWriteResult::Completed

@@ -267,7 +267,7 @@ export class LibraryWorkspace {
 					.then((page) => ({
 						items: page.items,
 						totalCount: page.totalCount,
-						nextCursor: page.nextAfterId
+						nextCursor: page.nextCursor
 					}));
 		}
 	}

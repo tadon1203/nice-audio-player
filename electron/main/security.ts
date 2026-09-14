@@ -1,4 +1,5 @@
 import type { BrowserWindow } from 'electron';
+import type { IpcError, IpcResult } from '@shared/native-app-api';
 
 export function isTrustedRendererUrl(value: string): boolean {
 	try {
@@ -21,20 +22,34 @@ export function secureWindow(window: BrowserWindow): void {
 export function validateSender<TArgs extends unknown[], T>(
 	handler: (...args: TArgs) => T | Promise<T>
 ) {
-	return async (event: Electron.IpcMainInvokeEvent, ...args: TArgs): Promise<T> => {
-		if (!event.senderFrame || !isTrustedRendererUrl(event.senderFrame.url))
-			throw new Error('Untrusted IPC sender');
+	return async (
+		event: Electron.IpcMainInvokeEvent,
+		...args: TArgs
+	): Promise<IpcResult<Awaited<T>>> => {
+		if (!event.senderFrame || !isTrustedRendererUrl(event.senderFrame.url)) {
+			return {
+				ok: false,
+				error: { code: 'untrustedSender', message: 'Untrusted IPC sender' }
+			};
+		}
 		try {
-			return await handler(...args);
+			return { ok: true, value: await handler(...args) };
 		} catch (error) {
-			if (typeof error === 'object' && error !== null && 'code' in error) {
-				const code = (error as { code?: unknown }).code;
-				if (typeof code === 'string') {
-					const message = error instanceof Error ? error.message : 'Backend operation failed';
-					throw new Error(`[${code}] ${message}`, { cause: error });
-				}
-			}
-			throw error;
+			return { ok: false, error: normalizeIpcError(error) };
 		}
 	};
+}
+
+function normalizeIpcError(error: unknown): IpcError {
+	if (typeof error === 'object' && error !== null && 'code' in error) {
+		const code = (error as { code?: unknown }).code;
+		if (typeof code === 'string') {
+			return {
+				code,
+				message: error instanceof Error ? error.message : 'Backend operation failed'
+			};
+		}
+	}
+	if (error instanceof TypeError) return { code: 'invalidArgument', message: error.message };
+	return { code: 'internalError', message: 'Internal application error' };
 }

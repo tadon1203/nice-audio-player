@@ -20,7 +20,7 @@ use std::{
     thread::{self, JoinHandle},
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
-#[derive(Debug, Clone, serde::Serialize, specta::Type)]
+#[derive(Debug, Clone, serde::Serialize)]
 #[serde(tag = "code", rename_all = "camelCase")]
 pub enum LibraryCommandError {
     InvalidRoot,
@@ -244,12 +244,12 @@ impl LibraryShared {
     }
     pub fn tracks(
         &self,
-        after: Option<String>,
+        cursor: Option<String>,
         search: Option<String>,
         sort_key: LibraryTrackSortKey,
         sort_direction: LibrarySortDirection,
     ) -> Result<LibraryTrackPage, LibraryCommandError> {
-        self.catalog_tracks(after, search, sort_key, sort_direction)
+        self.catalog_tracks(cursor, search, sort_key, sort_direction)
     }
     pub fn remove_root(&self, id: String) -> Result<(), LibraryCommandError> {
         if scanning(&self.state) {
@@ -427,7 +427,7 @@ impl LibraryShared {
         }
     }
 }
-#[derive(Debug, Clone, serde::Serialize, specta::Type)]
+#[derive(Debug, Clone, serde::Serialize)]
 #[serde(tag = "code", rename_all = "camelCase")]
 pub enum StartLibraryTrackError {
     InvalidId,
@@ -443,7 +443,7 @@ pub enum StartLibraryTrackError {
     PlaybackWorkerUnavailable,
     TaskFailed,
 }
-#[derive(Debug, Clone, serde::Serialize, specta::Type)]
+#[derive(Debug, Clone, serde::Serialize)]
 #[serde(tag = "code", rename_all = "camelCase")]
 pub enum StartLibraryAlbumError {
     InvalidAlbumKey,
@@ -459,7 +459,7 @@ pub enum StartLibraryAlbumError {
     PlaybackWorkerUnavailable,
     TaskFailed,
 }
-#[derive(Debug, Clone, serde::Serialize, specta::Type)]
+#[derive(Debug, Clone, serde::Serialize)]
 #[serde(tag = "code", rename_all = "camelCase")]
 pub enum StartLibraryAlbumTrackError {
     InvalidAlbumKey,
@@ -819,6 +819,10 @@ fn scan(
                             crate::media::metadata::ArtworkRead::Unavailable,
                         ),
                     };
+                    let track_number = track_number.map(i64::from);
+                    let track_total = track_total.map(i64::from);
+                    let disc_number = disc_number.map(i64::from);
+                    let disc_total = disc_total.map(i64::from);
                     let stored = match artwork_read {
                         crate::media::metadata::ArtworkRead::Selected {
                             ref bytes,
@@ -836,7 +840,8 @@ fn scan(
                         }
                     };
                     let bitrate_kbps =
-                        average_bitrate_kbps(metadata.len(), inspection.info.duration_ms);
+                        average_bitrate_kbps(metadata.len(), inspection.info.duration_ms)
+                            .map(|value| value as i64);
                     let artwork_id = match stored.as_ref() {
                         Some(asset) => match c.query_row("INSERT INTO artwork_assets(content_hash,mime_type,relative_path,byte_length,created_at_ms) VALUES(?1,?2,?3,?4,?5) ON CONFLICT(content_hash) DO UPDATE SET content_hash=excluded.content_hash RETURNING id", params![asset.hash,asset.mime_type,asset.relative_path,asset.byte_length as i64,now()], |r| r.get::<_, i64>(0)) {
                             Ok(id) => Some(id),
@@ -1306,7 +1311,7 @@ mod tests {
             .expect("logical album details");
         assert_eq!(details.track_count, 2);
         let tracks = library
-            .catalog_album_tracks(details.summary.key.clone(), 0)
+            .catalog_album_tracks(details.summary.key.clone(), None)
             .expect("logical album tracks");
         assert_eq!(tracks.items.len(), 2);
         assert!(library

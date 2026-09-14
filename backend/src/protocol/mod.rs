@@ -1,29 +1,19 @@
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde::Serialize;
 use std::io::{self, BufRead, Write};
 
 pub mod event;
-pub mod output;
 pub mod request;
 pub mod response;
 pub use response::{ProtocolError, Response};
 
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct WireRequest {
-    pub id: u64,
-    pub method: String,
-    #[serde(default)]
-    pub params: Value,
-}
-
 #[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase", untagged)]
-pub enum Message {
-    Ready { event: &'static str },
-    Response(response::Response),
+#[serde(tag = "type", content = "payload", rename_all = "camelCase")]
+pub enum BackendWireMessage {
+    Response(response::BackendWireResponse),
     Event(event::BackendEvent),
 }
+
+pub type Message = BackendWireMessage;
 
 pub fn write_message<T: Serialize>(writer: &mut impl Write, message: &T) -> io::Result<()> {
     serde_json::to_writer(&mut *writer, message)?;
@@ -34,10 +24,9 @@ pub fn write_message<T: Serialize>(writer: &mut impl Write, message: &T) -> io::
 pub fn read_requests(reader: impl BufRead) -> impl Iterator<Item = io::Result<request::Envelope>> {
     reader.lines().map(|line| {
         let line = line?;
-        let wire: WireRequest = serde_json::from_str(&line)
+        let wire: request::Envelope = serde_json::from_str(&line)
             .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
-        request::parse(wire.id, &wire.method, wire.params)
-            .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))
+        Ok(wire)
     })
 }
 
@@ -49,8 +38,8 @@ mod tests {
     #[test]
     fn round_trips_newline_delimited_requests() {
         let requests: Vec<_> = read_requests(Cursor::new(
-            br#"{"id":7,"method":"ping"}
-{"id":8,"method":"unknown","params":{}}"#,
+            br#"{"id":7,"request":{"method":"ping"}}
+{"id":8,"request":{"method":"unknown","params":{}}}"#,
         ))
         .collect();
         assert_eq!(requests.len(), 2);

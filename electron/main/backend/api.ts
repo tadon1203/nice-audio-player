@@ -21,238 +21,154 @@ import type {
 	LibraryTrackPage,
 	LibraryTrackSortKey
 } from '@shared/native-app-api';
-import {
-	decodeLibraryAlbumArtists,
-	decodeLibraryAlbumArtist,
-	decodeLibraryAlbumDetails,
-	decodeLibraryAlbums,
-	decodeLibraryAlbumTracks,
-	decodeLibraryRoot,
-	decodeLibraryRoots,
-	decodeLibraryScanState,
-	decodeLibraryStatus,
-	decodeLibraryTrack,
-	decodeLibraryTracks
-} from './decoders/library';
-import {
-	decodePlaybackQueue,
-	decodePlaybackState,
-	decodeLibraryPlaybackState
-} from './decoders/playback';
-import { decodeNull } from './decoders/shared';
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-	typeof value === 'object' && value !== null;
-
-const isAudioOutputDevices = (value: unknown): value is AudioOutputDevice[] =>
-	Array.isArray(value) &&
-	value.every(
-		(item) =>
-			isRecord(item) &&
-			typeof item.id === 'string' &&
-			typeof item.name === 'string' &&
-			typeof item.isDefault === 'boolean'
-	);
-
-function decode<T>(value: unknown, guard: (value: unknown) => value is T, name: string): T {
-	if (!guard(value)) throw new Error(`Invalid backend response for ${name}`);
-	return value;
-}
-
-const decodeString = (value: unknown): string =>
-	decode(value, (item): item is string => typeof item === 'string', 'ping');
-const decodeOutputDevices = (value: unknown): AudioOutputDevice[] =>
-	decode(value, isAudioOutputDevices, 'listAudioOutputDevices');
 
 export class BackendApi {
 	constructor(private readonly transport: BackendTransport) {}
 
 	ping(): Promise<string> {
-		return this.transport.send({ method: 'ping' }, decodeString);
+		return this.transport.send({ method: 'ping' });
 	}
 	getPlaybackState(): Promise<PlaybackState> {
-		return this.transport.send({ method: 'getPlaybackState' }, decodePlaybackState);
+		return this.transport.send({ method: 'getPlaybackState' });
 	}
 	getPlaybackQueue(): Promise<PlaybackQueue> {
-		return this.transport.send({ method: 'getPlaybackQueue' }, decodePlaybackQueue);
+		return this.transport.send({ method: 'getPlaybackQueue' });
 	}
 	pausePlayback(): Promise<PlaybackState> {
-		return this.transport.send({ method: 'pausePlayback' }, decodePlaybackState);
+		return this.transport.send({ method: 'pausePlayback' });
 	}
 	resumePlayback(): Promise<PlaybackState> {
-		return this.transport.send({ method: 'resumePlayback' }, decodePlaybackState);
+		return this.transport.send({ method: 'resumePlayback' });
 	}
 	previousPlayback(): Promise<PlaybackState> {
-		return this.transport.send({ method: 'previousPlayback' }, decodePlaybackState);
+		return this.transport.send({ method: 'previousPlayback' });
 	}
 	nextPlayback(): Promise<PlaybackState> {
-		return this.transport.send({ method: 'nextPlayback' }, decodePlaybackState);
+		return this.transport.send({ method: 'nextPlayback' });
 	}
 	seekPlayback(positionMs: number): Promise<PlaybackState> {
-		return this.transport.send(
-			{ method: 'seekPlayback', params: { position_ms: positionMs } },
-			decodePlaybackState
-		);
+		return this.transport.send({ method: 'seekPlayback', params: { position_ms: positionMs } });
 	}
 	setPlaybackVolume(volume: number): Promise<PlaybackState> {
-		return this.transport.send(
-			{ method: 'setPlaybackVolume', params: { volume } },
-			decodePlaybackState
-		);
+		return this.transport.send({ method: 'setPlaybackVolume', params: { volume } });
 	}
 	setPlaybackMuted(muted: boolean): Promise<PlaybackState> {
-		return this.transport.send(
-			{ method: 'setPlaybackMuted', params: { muted } },
-			decodePlaybackState
-		);
+		return this.transport.send({ method: 'setPlaybackMuted', params: { muted } });
 	}
 	listAudioOutputDevices(): Promise<AudioOutputDevice[]> {
-		return this.transport.send({ method: 'listAudioOutputDevices' }, decodeOutputDevices);
+		return this.transport.send({ method: 'listAudioOutputDevices' });
 	}
 	listLibraryRoots(): Promise<LibraryRoot[]> {
-		return this.transport.send({ method: 'listLibraryRoots' }, decodeLibraryRoots);
+		return this.transport.send({ method: 'listLibraryRoots' });
 	}
 	getLibraryStatus(): Promise<LibraryStatus> {
-		return this.transport.send({ method: 'getLibraryStatus' }, decodeLibraryStatus);
+		return this.transport.send({ method: 'getLibraryStatus' });
 	}
 	getLibraryTrackForPath(path: string): Promise<LibraryTrackSummary | null> {
-		return this.transport.send(
-			{ method: 'getLibraryTrackForPath', params: { path } },
-			decodeLibraryTrack
-		);
+		return this.transport.send({ method: 'getLibraryTrackForPath', params: { path } });
 	}
 	registerLibraryRoot(path: string): Promise<LibraryRoot> {
-		return this.transport.send(
-			{ method: 'registerLibraryRoot', params: { path } },
-			decodeLibraryRoot
-		);
+		return this.transport.send({ method: 'registerLibraryRoot', params: { path } });
 	}
 	setLibraryRootEnabled(id: string, enabled: boolean): Promise<LibraryRoot> {
-		return this.transport.send(
-			{ method: 'setLibraryRootEnabled', params: { id, enabled } },
-			decodeLibraryRoot
-		);
+		return this.transport.send({ method: 'setLibraryRootEnabled', params: { id, enabled } });
 	}
 	async removeLibraryRoot(id: string): Promise<void> {
-		await this.transport.send({ method: 'removeLibraryRoot', params: { id } }, (value) =>
-			decodeNull(value, 'removeLibraryRoot')
-		);
+		await this.transport.send({ method: 'removeLibraryRoot', params: { id } });
 	}
 	getLibraryScanState(): Promise<LibraryScanSnapshot> {
-		return this.transport.send({ method: 'getLibraryScanState' }, decodeLibraryScanState);
+		return this.transport.send({ method: 'getLibraryScanState' });
 	}
 	async startLibraryScan(): Promise<void> {
-		await this.transport.send({ method: 'startLibraryScan' }, (value) =>
-			decodeNull(value, 'startLibraryScan')
-		);
+		await this.transport.send({ method: 'startLibraryScan' });
 	}
 	async cancelLibraryScan(): Promise<void> {
-		await this.transport.send({ method: 'cancelLibraryScan' }, (value) =>
-			decodeNull(value, 'cancelLibraryScan')
-		);
+		await this.transport.send({ method: 'cancelLibraryScan' });
 	}
 	listLibraryTracks(
-		afterId: string | null,
+		cursor: string | null,
 		search: string | null,
 		sortKey: LibraryTrackSortKey,
 		sortDirection: LibrarySortDirection
 	): Promise<LibraryTrackPage> {
-		return this.transport.send(
-			{
-				method: 'listLibraryTracks',
-				params: { after_id: afterId, search, sort_key: sortKey, sort_direction: sortDirection }
-			},
-			decodeLibraryTracks
-		);
+		return this.transport.send({
+			method: 'listLibraryTracks',
+			params: { cursor, search, sort_key: sortKey, sort_direction: sortDirection }
+		});
 	}
 	listLibraryAlbums(
-		afterCursor: string | null,
+		cursor: string | null,
 		search: string | null,
 		sortKey: LibraryAlbumSortKey,
 		sortDirection: LibrarySortDirection
 	): Promise<LibraryAlbumPage> {
-		return this.transport.send(
-			{
-				method: 'listLibraryAlbums',
-				params: {
-					after_cursor: afterCursor,
-					search,
-					sort_key: sortKey,
-					sort_direction: sortDirection
-				}
-			},
-			decodeLibraryAlbums
-		);
+		return this.transport.send({
+			method: 'listLibraryAlbums',
+			params: {
+				cursor,
+				search,
+				sort_key: sortKey,
+				sort_direction: sortDirection
+			}
+		});
 	}
 	listLibraryAlbumArtists(
-		afterCursor: string | null,
+		cursor: string | null,
 		search: string | null,
 		sortKey: LibraryAlbumArtistSortKey,
 		sortDirection: LibrarySortDirection
 	): Promise<LibraryAlbumArtistPage> {
-		return this.transport.send(
-			{
-				method: 'listLibraryAlbumArtists',
-				params: {
-					after_cursor: afterCursor,
-					search,
-					sort_key: sortKey,
-					sort_direction: sortDirection
-				}
-			},
-			decodeLibraryAlbumArtists
-		);
+		return this.transport.send({
+			method: 'listLibraryAlbumArtists',
+			params: {
+				cursor,
+				search,
+				sort_key: sortKey,
+				sort_direction: sortDirection
+			}
+		});
 	}
 	getLibraryAlbumArtist(artistKey: LibraryAlbumArtistKey): Promise<LibraryAlbumArtistSummary> {
-		return this.transport.send(
-			{ method: 'getLibraryAlbumArtist', params: { artist_key: artistKey } },
-			decodeLibraryAlbumArtist
-		);
+		return this.transport.send({
+			method: 'getLibraryAlbumArtist',
+			params: { artist_key: artistKey }
+		});
 	}
 	listLibraryArtistAlbums(
 		artistKey: LibraryAlbumArtistKey,
-		afterCursor: string | null,
+		cursor: string | null,
 		sortKey: LibraryArtistAlbumSortKey,
 		sortDirection: LibrarySortDirection
 	): Promise<LibraryAlbumPage> {
-		return this.transport.send(
-			{
-				method: 'listLibraryArtistAlbums',
-				params: {
-					artist_key: artistKey,
-					after_cursor: afterCursor,
-					sort_key: sortKey,
-					sort_direction: sortDirection
-				}
-			},
-			decodeLibraryAlbums
-		);
+		return this.transport.send({
+			method: 'listLibraryArtistAlbums',
+			params: {
+				artist_key: artistKey,
+				cursor,
+				sort_key: sortKey,
+				sort_direction: sortDirection
+			}
+		});
 	}
 	getLibraryAlbumDetails(albumKey: LibraryAlbumKey): Promise<LibraryAlbumDetails> {
-		return this.transport.send(
-			{ method: 'getLibraryAlbumDetails', params: { album_key: albumKey } },
-			decodeLibraryAlbumDetails
-		);
+		return this.transport.send({
+			method: 'getLibraryAlbumDetails',
+			params: { album_key: albumKey }
+		});
 	}
 	listLibraryAlbumTracks(
 		albumKey: LibraryAlbumKey,
-		offset: number
+		cursor: string | null
 	): Promise<LibraryAlbumTrackPage> {
-		return this.transport.send(
-			{ method: 'listLibraryAlbumTracks', params: { album_key: albumKey, offset } },
-			decodeLibraryAlbumTracks
-		);
+		return this.transport.send({
+			method: 'listLibraryAlbumTracks',
+			params: { album_key: albumKey, cursor }
+		});
 	}
 	startLibraryTrack(trackId: string): Promise<PlaybackState> {
-		return this.transport.send(
-			{ method: 'startLibraryTrack', params: { track_id: trackId } },
-			decodeLibraryPlaybackState
-		);
+		return this.transport.send({ method: 'startLibraryTrack', params: { track_id: trackId } });
 	}
 	startLibraryAlbum(albumKey: LibraryAlbumKey): Promise<PlaybackState> {
-		return this.transport.send(
-			{ method: 'startLibraryAlbum', params: { album_key: albumKey } },
-			decodeLibraryPlaybackState
-		);
+		return this.transport.send({ method: 'startLibraryAlbum', params: { album_key: albumKey } });
 	}
 }
