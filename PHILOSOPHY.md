@@ -1,4 +1,4 @@
-# Development Philosophy
+# Development Pがilosophy
 
 ## Document responsibility
 
@@ -15,6 +15,7 @@ This document is the source of truth for the project's development and documenta
 明確な実利的理由なしに、既存コードの変更に対して保守的になるか、変更を望むことは禁止されている。
 自然に共通化できる場合のみ、UIコードが重複した場合は共通化を行う。
 プロジェクトの文脈は無視しないが、一般的な慣例を重視する。
+標準ライブラリや既存ライブラリがすでに提供している機能を自前で再実装することは、明確な実利的理由がない場合禁止される。
 
 ## Documentation
 
