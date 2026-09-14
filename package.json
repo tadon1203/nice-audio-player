@@ -14,7 +14,7 @@
 		"start": "electron .",
 		"build": "cargo run --manifest-path backend/Cargo.toml --bin generate-bindings && node scripts/fonts.mjs check && ng build && node scripts/build-electron.mjs && cargo build --release --manifest-path backend/Cargo.toml && node scripts/stage-backend.mjs && node scripts/stage-runtime.mjs",
 		"test": "ng test --watch=false && playwright test --project=renderer && node scripts/build-electron.mjs && playwright test --project=electron && cargo test --manifest-path backend/Cargo.toml",
-		"lint": "eslint . && stylelint \"src/**/*.css\"",
+		"lint": "node scripts/check-design-tokens.mjs && eslint . && stylelint \"src/**/*.css\"",
 		"validate": "cargo run --manifest-path backend/Cargo.toml --bin generate-bindings -- --check && tsc -p tsconfig.json --noEmit && ng build --configuration development && prettier . --check && pnpm lint && cargo fmt --manifest-path backend/Cargo.toml -- --check && cargo clippy --manifest-path backend/Cargo.toml --all-targets -- -D warnings && pnpm test && pnpm build",
 		"format": "prettier . --write",
 		"fonts": "node scripts/fonts.mjs",

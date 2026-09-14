@@ -8,11 +8,9 @@ This document describes the system-level architecture of Nice Audio Player. It d
 
 Its purpose is to provide a stable shared mental model of how the project is structured and how its major parts relate.
 
-## Maintaining This Document
+It may describe durable system components, responsibility boundaries, dependency direction, authoritative state ownership, shared contracts, and stable directory boundaries. Use abstract responsibilities first and add only the smallest concrete directory examples needed to make a boundary unambiguous, such as `src/app/playback`, `backend/src/audio`, or `shared/protocol`.
 
-Update this document when a change alters that system-level mental model. Local implementation details remain expressed in code.
-
-If understanding a change requires revising how the major parts of the system are structured, owned, or connected, update this document.
+It must not describe individual files, file names, selectors, local component structure, token values, route-by-route details, or other short-lived implementation choices. For example, `src/app/playback` is an appropriate architectural location; a path to one implementation item inside that directory is not.
 
 ## System Overview
 
@@ -41,30 +39,34 @@ The Renderer is the standalone Angular application running in Electron's rendere
 
 Angular Router is the navigation authority. Feature services and stores own renderer-local state, while components present that state.
 
-The Renderer is organized around application ownership rather than framework-specific route files:
+The Renderer is organized around application ownership and stable directory boundaries:
 
 ```
 src/
-├── main.ts
 ├── styles/
+│   └── tokens/
 └── app/
     ├── core/
     │   ├── backend/
     │   └── shell/
+    ├── ui/
     ├── library/
     ├── playback/
-    ├── settings/
-    ├── app.config.ts
-    └── app.routes.ts
+    └── settings/
 ```
 
-| Area     | Location             | Responsibility                                    |
-| -------- | -------------------- | ------------------------------------------------- |
-| Core     | `src/app/core`       | Cross-feature services and application boundaries |
-| Shell    | `src/app/core/shell` | Persistent surfaces and application chrome        |
-| Library  | `src/app/library`    | Library UI, state, and interactions               |
-| Playback | `src/app/playback`   | Playback UI, state, and interactions              |
-| Settings | `src/app/settings`   | Settings UI, state, and interactions              |
+Renderer styling is owned by the `styles/` directory. The `styles/tokens/` directory owns raw primitives and public semantic tokens, while the style entry boundary owns Tailwind adapters and base rules. A component-specific contract belongs beside the component that owns it and must not be consumed by another component. Token decisions remain owned by the visual design source document.
+
+| Area     | Location             | Responsibility                                            |
+| -------- | -------------------- | --------------------------------------------------------- |
+| Core     | `src/app/core`       | Cross-feature services and application boundaries         |
+| Shell    | `src/app/core/shell` | Persistent surfaces and application chrome                |
+| UI       | `src/app/ui`         | Reusable renderer presentation and interaction primitives |
+| Library  | `src/app/library`    | Library UI, state, and interactions                       |
+| Playback | `src/app/playback`   | Playback UI, state, and interactions                      |
+| Settings | `src/app/settings`   | Settings UI, state, and interactions                      |
+
+The UI area owns reusable renderer primitives and their presentation contracts. UI primitives may depend on Angular platform facilities, accessibility primitives, and shared semantic tokens, but they must not depend on feature state or feature directories. Feature areas compose UI primitives and remain responsible for domain-specific state, labels, and event handling.
 
 Persistent application surfaces are owned by the root application shell and composed around the Angular Router outlet. The shell owns persistent navigation and playback surfaces around the routed workspace; feature routes own the content presented in that workspace.
 
@@ -78,12 +80,10 @@ Shared contracts are not runtime components, but they define the system boundary
 
 ```
 shared/
-├── native-app-api.ts
 └── protocol/
-    └── generated.ts
 ```
 
-`native-app-api.ts` defines the narrow API available to the Renderer through Preload. `protocol/generated.ts` is generated from the Rust protocol and defines the typed transport contract consumed by Electron and the shared boundary code.
+The `shared/` directory defines the narrow native API available to the Renderer through Preload. Its `protocol/` directory contains the generated typed transport contract consumed by Electron and the shared boundary code.
 
 Renderer and Electron both consume these contracts. Neither side owns them; changes to the contracts are boundary changes and must preserve the trust and type boundaries between the processes.
 
@@ -106,15 +106,14 @@ The Backend is a separate native process implemented in Rust.
 
 It owns domain behavior and native work that does not belong to the Renderer or Desktop Host.
 
-| Module      | Location                  | Responsibility                                            |
-| ----------- | ------------------------- | --------------------------------------------------------- |
-| Protocol    | `backend/src/protocol`    | Transport between the Desktop Host and Backend            |
-| Application | `backend/src/app.rs`      | Coordination across backend responsibilities              |
-| Audio       | `backend/src/audio`       | Playback and audio processing                             |
-| Library     | `backend/src/library`     | Music catalog, filesystem reconciliation, and persistence |
-| Lyrics      | `backend/src/lyrics`      | Lyrics resolution and parsing                             |
-| Media       | `backend/src/media`       | Media-file validation and inspection                      |
-| Activity    | `backend/src/activity.rs` | Long-running backend activity state                       |
+| Module      | Location               | Responsibility                                                  |
+| ----------- | ---------------------- | --------------------------------------------------------------- |
+| Protocol    | `backend/src/protocol` | Transport between the Desktop Host and Backend                  |
+| Application | `backend/src`          | Coordination across backend responsibilities and activity state |
+| Audio       | `backend/src/audio`    | Playback and audio processing                                   |
+| Library     | `backend/src/library`  | Music catalog, filesystem reconciliation, and persistence       |
+| Lyrics      | `backend/src/lyrics`   | Lyrics resolution and parsing                                   |
+| Media       | `backend/src/media`    | Media-file validation and inspection                            |
 
 The Protocol handles requests, responses, events, serialization, and message correlation without owning domain behavior.
 

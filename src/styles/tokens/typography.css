@@ -1,0 +1,18 @@
+:root {
+	--nap-font-interface: var(--nap-ref-font-interface);
+	--nap-type-object-title-size: var(--nap-ref-size-object-title);
+	--nap-type-object-title-line-height: var(--nap-ref-line-object-title);
+	--nap-type-object-title-weight: var(--nap-ref-weight-regular);
+	--nap-type-page-title-size: var(--nap-ref-size-page-title);
+	--nap-type-page-title-line-height: var(--nap-ref-line-page-title);
+	--nap-type-page-title-weight: var(--nap-ref-weight-regular);
+	--nap-type-section-size: var(--nap-ref-size-section);
+	--nap-type-section-line-height: var(--nap-ref-line-section);
+	--nap-type-section-weight: var(--nap-ref-weight-regular);
+	--nap-type-body-size: var(--nap-ref-size-body);
+	--nap-type-body-line-height: var(--nap-ref-line-body);
+	--nap-type-body-weight: var(--nap-ref-weight-regular);
+	--nap-type-label-size: var(--nap-ref-size-body);
+	--nap-type-label-line-height: var(--nap-ref-line-body);
+	--nap-type-label-weight: var(--nap-ref-weight-label);
+}

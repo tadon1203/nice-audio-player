@@ -1,22 +1,24 @@
 <nav
-	class="flex min-h-0 flex-wrap items-center gap-1 border-b border-outline-variant bg-surface px-4 py-2 app-wide:h-full app-wide:flex-col app-wide:items-stretch app-wide:border-e app-wide:border-b-0 app-wide:px-3 app-wide:pt-12 app-wide:pb-6"
+	class="flex min-h-0 flex-wrap items-center gap-tight border-b border-stroke-subtle bg-surface-chrome px-group py-control app-wide:h-full app-wide:flex-col app-wide:items-stretch app-wide:border-e app-wide:border-b-0 app-wide:px-related app-wide:pt-layout-inline app-wide:pb-related"
 	aria-label="Application"
 >
-	<div class="flex min-w-0 flex-1 flex-wrap gap-1 app-wide:flex-none app-wide:flex-col">
-		<p class="mb-3 hidden px-3 text-body-small text-on-surface-variant app-wide:block">Library</p>
+	<div class="flex min-w-0 flex-1 flex-wrap gap-tight app-wide:flex-none app-wide:flex-col">
+		<p class="mb-related hidden px-control text-body text-content-secondary app-wide:block">
+			Library
+		</p>
 		@for (destination of destinations; track destination.route) {
 		<a
 			[routerLink]="destination.route"
 			routerLinkActive
 			ariaCurrentWhenActive="page"
-			class="group relative flex h-control-default min-w-0 flex-1 items-center justify-center gap-2 rounded-small px-3 text-label-large text-secondary no-underline hover:bg-surface-container hover:text-on-surface active:bg-surface-container-high aria-[current=page]:bg-secondary-container aria-[current=page]:text-on-secondary-container app-wide:flex-none app-wide:justify-start app-wide:px-3"
+			class="group relative flex h-nav-row min-w-0 flex-1 items-center justify-center gap-control rounded-control px-control text-label text-content-secondary no-underline hover:bg-surface-hover hover:text-content-primary active:bg-surface-pressed aria-[current=page]:bg-surface-selected aria-[current=page]:text-content-primary app-wide:flex-none app-wide:justify-start app-wide:px-control"
 		>
 			@switch (destination.id) { @case ('albums') {
-			<svg lucideDisc aria-hidden="true" class="size-4 shrink-0"></svg>
+			<svg lucideDisc aria-hidden="true" class="size-icon-small shrink-0"></svg>
 			} @case ('albumArtists') {
-			<svg lucideUsersRound aria-hidden="true" class="size-4 shrink-0"></svg>
+			<svg lucideUsersRound aria-hidden="true" class="size-icon-small shrink-0"></svg>
 			} @case ('tracks') {
-			<svg lucideListMusic aria-hidden="true" class="size-4 shrink-0"></svg>
+			<svg lucideListMusic aria-hidden="true" class="size-icon-small shrink-0"></svg>
 			} }
 			<span class="truncate">{{ destination.label }}</span>
 		</a>
@@ -26,9 +28,9 @@
 		[routerLink]="'/settings'"
 		routerLinkActive
 		ariaCurrentWhenActive="page"
-		class="group relative flex h-control-default min-w-0 flex-1 items-center justify-center gap-2 rounded-small px-3 text-label-large text-secondary no-underline hover:bg-surface-container hover:text-on-surface active:bg-surface-container-high aria-[current=page]:bg-secondary-container aria-[current=page]:text-on-secondary-container app-wide:mt-auto app-wide:flex-none app-wide:justify-start app-wide:px-3"
+		class="group relative flex h-nav-row min-w-0 flex-1 items-center justify-center gap-control rounded-control px-control text-label text-content-secondary no-underline hover:bg-surface-hover hover:text-content-primary active:bg-surface-pressed aria-[current=page]:bg-surface-selected aria-[current=page]:text-content-primary app-wide:mt-auto app-wide:flex-none app-wide:justify-start app-wide:px-control"
 	>
-		<svg lucideSettings aria-hidden="true" class="size-4 shrink-0"></svg>
+		<svg lucideSettings aria-hidden="true" class="size-icon-small shrink-0"></svg>
 		<span class="truncate">Settings</span>
 	</a>
 </nav>

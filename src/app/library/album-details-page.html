@@ -1,51 +1,53 @@
 <div appScrollRegion data-album-details-scroll-region>
 	<app-page-frame class="min-h-full">
-		<div class="py-8">
+		<div class="py-region">
 			<a
 				routerLink="/library/albums"
-				class="inline-flex min-h-hit-target-min items-center gap-2 text-body-small text-secondary outline-none hover:text-on-surface focus-visible:ring-2 focus-visible:ring-primary"
+				class="inline-flex min-h-control-prominent items-center gap-control text-body text-content-secondary hover:text-content-primary"
 			>
-				<svg lucideArrowLeft aria-hidden="true" class="size-4"></svg>
+				<svg lucideArrowLeft aria-hidden="true" class="size-icon-small"></svg>
 				<span>Albums</span>
 			</a>
 
 			@if (workspace.loadState() === 'loading') {
-			<p class="py-10 text-body-medium text-secondary" role="status">Loading album…</p>
+			<p class="py-region text-body text-content-secondary" role="status">Loading album…</p>
 			} @else if (workspace.error(); as error) {
-			<p class="py-10 text-body-medium text-error" role="alert">{{ error }}</p>
+			<p class="py-region text-body text-danger" role="alert">{{ error }}</p>
 			} @else if (details(); as album) {
 			<section
-				class="mt-7 grid grid-cols-1 items-end gap-6 app-wide:grid-cols-[auto_minmax(0,1fr)]"
+				class="mt-section grid grid-cols-1 items-end gap-region app-wide:grid-cols-[var(--spacing-media-detail)_minmax(0,1fr)]"
 				aria-labelledby="album-title"
 			>
 				<app-artwork
-					class="w-media-detail rounded-small"
+					class="w-full max-w-media-detail rounded-artwork"
 					[artwork]="album.summary.artwork"
 					[alt]="album.summary.key.title + ' artwork'"
 				/>
-				<div class="min-w-0 pb-1">
-					<h1 id="album-title" class="truncate text-headline-small text-on-surface">
+				<div class="pb-1 min-w-0">
+					<h1 id="album-title" class="truncate text-page-title text-content-primary">
 						{{ album.summary.key.title }}
 					</h1>
-					<p class="mt-2 truncate text-body-large text-secondary">
+					<p class="mt-control truncate text-body text-content-secondary">
 						{{ album.summary.key.albumArtist }}
 					</p>
-					<p class="mt-3 text-body-small text-secondary tabular-nums">
+					<p class="mt-related text-body text-content-secondary tabular-nums">
 						{{ album.date ?? 'Unknown year' }} · {{ album.trackCount }} tracks · {{ album.durationMs
 						| formatDuration }}
 					</p>
-					<button type="button" appButton="primary" class="mt-6" (click)="playAlbum()">
+					<button type="button" appButton="primary" class="mt-section" (click)="playAlbum()">
 						Play album
 					</button>
 				</div>
 			</section>
 
-			<section class="mt-10" aria-labelledby="album-tracks-title">
-				<h2 id="album-tracks-title" class="text-body-large text-on-surface">Tracks</h2>
+			<section class="mt-region" aria-labelledby="album-tracks-title">
+				<h2 id="album-tracks-title" class="text-section text-content-primary">Tracks</h2>
 				@if (tracks().length === 0) {
-				<p class="py-8 text-body-medium text-secondary" role="status">No tracks in this album.</p>
+				<p class="py-region text-body text-content-secondary" role="status">
+					No tracks in this album.
+				</p>
 				} @else {
-				<div class="mt-4">
+				<div class="mt-group">
 					<app-track-table
 						[rows]="tracks()"
 						[columns]="trackTableColumns"
@@ -57,7 +59,7 @@
 					/>
 				</div>
 				@if (workspace.nextOffset() !== null) {
-				<div class="flex justify-center py-8">
+				<div class="flex justify-center py-region">
 					<button
 						type="button"
 						appButton="secondary"

@@ -6,13 +6,13 @@ import { Button } from '@app/ui/button';
 @Component({
 	imports: [Button],
 	template: `
-		<div class="w-[min(90vw,32rem)] bg-surface-container-low p-8" role="document">
-			<h2 class="font-normal text-headline-small text-on-surface">Remove library folder?</h2>
-			<p class="mt-4 text-body-medium break-words text-on-surface">{{ data.path }}</p>
-			<p class="mt-3 text-body-small text-secondary">
+		<div class="w-full max-w-layout-context-pane-width bg-surface-chrome p-region" role="document">
+			<h2 class="text-page-title text-content-primary">Remove library folder?</h2>
+			<p class="mt-group text-body break-words text-content-primary">{{ data.path }}</p>
+			<p class="mt-related text-body text-content-secondary">
 				This removes indexed library records for this folder. It does not delete audio files.
 			</p>
-			<div class="mt-8 flex justify-end gap-3">
+			<div class="mt-region flex justify-end gap-related">
 				<button type="button" appButton="secondary" (click)="dialogRef.close(false)">Cancel</button>
 				<button type="button" appButton="danger" (click)="dialogRef.close(true)">Remove</button>
 			</div>

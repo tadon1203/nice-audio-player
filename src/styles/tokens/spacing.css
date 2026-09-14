@@ -1,0 +1,8 @@
+:root {
+	--nap-space-tight: var(--nap-ref-space-1);
+	--nap-space-control: var(--nap-ref-space-2);
+	--nap-space-related: var(--nap-ref-space-3);
+	--nap-space-group: var(--nap-ref-space-4);
+	--nap-space-section: var(--nap-ref-space-6);
+	--nap-space-region: var(--nap-ref-space-8);
+}

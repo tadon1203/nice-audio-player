@@ -1,7 +1,7 @@
 /** @type {import('stylelint').Config} */
 export default {
 	extends: ['stylelint-config-standard'],
-	referenceFiles: ['src/styles/theme.css', 'src/styles.css'],
+	referenceFiles: ['src/styles/theme.css', 'src/styles/tokens/*.css', 'src/styles.css'],
 	rules: {
 		'no-unknown-custom-properties': true,
 		'import-notation': 'string',
@@ -41,11 +41,15 @@ export default {
 	},
 	overrides: [
 		{
-			files: ['src/styles/theme.css'],
+			files: ['src/styles/theme.css', 'src/styles/tokens/reference.css'],
 			rules: {
 				'color-no-hex': null,
 				'color-hex-length': null,
-				'function-disallowed-list': null
+				'function-disallowed-list': null,
+				'lightness-notation': null,
+				'hue-degree-notation': null,
+				'alpha-value-notation': null,
+				'custom-property-empty-line-before': null
 			}
 		}
 	]

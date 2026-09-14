@@ -49,13 +49,14 @@ function createSelectId(): string {
 	changeDetection: ChangeDetectionStrategy.OnPush,
 	imports: [CdkConnectedOverlay, CdkOverlayOrigin, Listbox, Option, LucideCheck, LucideChevronDown],
 	template: `
-		<div class="inline-flex max-w-full min-w-0 items-center gap-2">
+		<div class="inline-flex max-w-full min-w-0 items-center gap-control">
 			<label class="shrink-0" [attr.for]="selectId()">{{ label() }}</label>
 			<button
 				#trigger
 				cdkOverlayOrigin
 				type="button"
-				class="inline-flex h-control-default w-control-search-width min-w-0 cursor-pointer items-center justify-between gap-2 rounded-medium border border-outline bg-surface px-3 py-2 text-start text-body-small text-on-surface shadow-sm transition-colors outline-none hover:bg-surface-container-low focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30 active:bg-surface-container disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-45"
+				data-select-part="trigger"
+				class="inline-flex h-control-default w-sort-control min-w-0 cursor-pointer items-center justify-between gap-control rounded-control border border-stroke-control bg-surface-control px-control text-start text-body text-content-primary transition-colors duration-feedback ease-nap hover:bg-surface-hover active:bg-surface-pressed disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-45"
 				role="combobox"
 				[attr.id]="selectId()"
 				[value]="selectedKey()"
@@ -69,7 +70,11 @@ function createSelectId(): string {
 				(keydown)="onTriggerKeydown($event)"
 			>
 				<span class="min-w-0 truncate">{{ selectedOption()?.label ?? selectedKey() }}</span>
-				<svg lucideChevronDown aria-hidden="true" class="size-4 shrink-0 text-on-surface-variant"></svg>
+				<svg
+					lucideChevronDown
+					aria-hidden="true"
+					class="pointer-events-none size-icon-small shrink-0 text-content-muted"
+				></svg>
 			</button>
 		</div>
 
@@ -88,6 +93,7 @@ function createSelectId(): string {
 			<ul
 				#listbox="ngListbox"
 				ngListbox
+				data-select-part="listbox"
 				[id]="listboxId()"
 				[value]="selectedValues()"
 				[disabled]="disabled()"
@@ -95,7 +101,7 @@ function createSelectId(): string {
 				[selectionMode]="'explicit'"
 				[focusMode]="'roving'"
 				[wrap]="true"
-				class="max-h-[60vh] w-full min-w-0 overflow-y-auto rounded-medium border border-outline-variant bg-surface-container p-1 text-on-surface shadow-lg outline-none"
+				class="max-h-[60vh] w-full min-w-0 overflow-y-auto rounded-control border border-stroke-subtle bg-surface-control p-tight text-content-primary shadow-floating"
 				(click)="onListboxClick($event)"
 				(keydown)="onListboxKeydown($event)"
 			>
@@ -104,16 +110,21 @@ function createSelectId(): string {
 						ngOption
 						[value]="option.key"
 						[label]="option.label"
+						data-select-part="option"
 						[disabled]="option.disabled ?? false"
 						[attr.data-select-key]="option.key"
 						[attr.data-selected]="option.key === selectedKey()"
-						class="min-h-hit-target flex w-full cursor-default select-none items-center justify-between gap-2 rounded-medium px-3 py-2 text-body-small text-on-surface outline-none hover:bg-surface-container-highest focus-visible:bg-surface-container-highest focus-visible:text-on-surface aria-disabled:pointer-events-none aria-disabled:cursor-not-allowed aria-disabled:opacity-45 data-[active=true]:bg-surface-container-highest data-[active=true]:text-on-surface data-[selected=true]:bg-secondary-container data-[selected=true]:text-on-secondary-container"
+						class="flex min-h-control-prominent w-full cursor-default items-center justify-between gap-control rounded-control px-control text-body text-content-primary select-none hover:bg-surface-hover focus-visible:text-content-primary aria-disabled:pointer-events-none aria-disabled:cursor-not-allowed aria-disabled:opacity-45 data-[active=true]:bg-surface-hover data-[active=true]:text-content-primary data-[selected=true]:bg-surface-selected data-[selected=true]:text-content-primary"
 					>
 						<span class="min-w-0 truncate">{{ option.label }}</span>
 						@if (option.key === selectedKey()) {
-							<svg lucideCheck aria-hidden="true" class="size-4 shrink-0 text-on-secondary-container"></svg>
+							<svg
+								lucideCheck
+								aria-hidden="true"
+								class="pointer-events-none size-icon-small shrink-0 text-content-primary"
+							></svg>
 						} @else {
-							<span aria-hidden="true" class="size-4 shrink-0"></span>
+							<span aria-hidden="true" class="size-icon-small shrink-0"></span>
 						}
 					</li>
 				}

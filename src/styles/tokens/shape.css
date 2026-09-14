@@ -1,0 +1,6 @@
+:root {
+	--nap-radius-none: var(--nap-ref-radius-none);
+	--nap-radius-control: var(--nap-ref-radius-control);
+	--nap-radius-artwork: var(--nap-ref-radius-artwork);
+	--nap-radius-round: var(--nap-ref-radius-round);
+}

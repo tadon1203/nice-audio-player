@@ -1,0 +1,20 @@
+:root {
+	--nap-size-control-compact: var(--nap-ref-size-control-compact);
+	--nap-size-control: var(--nap-ref-size-control);
+	--nap-size-control-prominent: var(--nap-ref-size-control-prominent);
+	--nap-size-nav-row: var(--nap-ref-size-nav-row);
+	--nap-size-track-row: var(--nap-ref-size-track-row);
+	--nap-size-icon-small: var(--nap-ref-size-icon-small);
+	--nap-size-icon: var(--nap-ref-size-icon);
+	--nap-size-icon-large: var(--nap-ref-size-icon-large);
+	--nap-size-search-width: var(--nap-ref-size-search-width);
+	--nap-size-sort-control: var(--nap-ref-size-sort-control);
+	--nap-size-media-tile: var(--nap-ref-size-media-tile);
+	--nap-size-media-artist-tile: clamp(
+		var(--nap-ref-size-media-artist-min),
+		var(--nap-ref-size-media-artist-fluid),
+		var(--nap-ref-size-media-artist-max)
+	);
+	--nap-size-media-detail: var(--nap-ref-size-media-detail);
+	--nap-size-media-detail-tile: var(--nap-ref-size-media-detail-tile);
+}

@@ -4,15 +4,15 @@
 		width: 100%;
 		min-width: 320px;
 		height: 100%;
-		background: var(--md-sys-color-surface-container-lowest);
+		background: var(--nap-color-surface-canvas);
 	}
 
 	body {
 		overflow: hidden;
-		color: var(--md-sys-color-on-surface);
-		font-family: var(--md-ref-typeface-plain);
-		font-size: var(--md-sys-typescale-body-medium-size);
-		line-height: var(--md-sys-typescale-body-medium-line-height);
+		color: var(--nap-color-content-primary);
+		font-family: var(--nap-font-interface);
+		font-size: var(--nap-type-body-size);
+		line-height: var(--nap-type-body-line-height);
 		font-synthesis: none;
 		text-rendering: optimizelegibility;
 		-webkit-font-smoothing: antialiased;
@@ -26,38 +26,20 @@
 	}
 
 	.range-control {
-		--md-state-range-track-height: var(--md-state-range-track-idle);
-		--md-state-range-fill-color: var(--md-sys-color-tertiary);
-
 		min-inline-size: 0;
 	}
 
-	.range-control-progress {
-		--md-state-range-track-idle: var(--md-sys-size-playback-track-thin);
-		--md-state-range-track-active: var(--md-sys-size-playback-track-active);
-	}
-
-	.range-control-volume {
-		--md-state-range-track-idle: var(--md-sys-size-volume-track-thin);
-		--md-state-range-track-active: var(--md-sys-size-volume-track-active);
-	}
-
-	.range-control-volume[data-muted] {
-		--md-state-range-fill-color: var(--md-sys-color-on-surface-variant);
-	}
-
 	.range-control-track {
-		block-size: var(--md-state-range-track-height);
-		border-radius: var(--md-sys-shape-corner-full);
+		block-size: var(--nap-space-tight);
+		border-radius: var(--nap-radius-round);
 		background: linear-gradient(
 			to right,
-			var(--md-state-range-fill-color) 0%,
-			var(--md-state-range-fill-color) calc(var(--md-state-range-progress, 0) * 1%),
-			var(--md-sys-color-secondary-container) calc(var(--md-state-range-progress, 0) * 1%),
-			var(--md-sys-color-secondary-container) 100%
+			var(--nap-color-content-secondary) 0%,
+			var(--nap-color-content-secondary) calc(var(--range-progress, 0) * 1%),
+			var(--nap-color-surface-control) calc(var(--range-progress, 0) * 1%),
+			var(--nap-color-surface-control) 100%
 		);
-		transition: block-size var(--md-sys-motion-duration-short-2)
-			var(--md-sys-motion-easing-standard);
+		transition: block-size var(--nap-motion-feedback-duration) var(--nap-motion-easing);
 	}
 
 	.range-control-input {
@@ -69,7 +51,7 @@
 	}
 
 	.range-control-input::-webkit-slider-runnable-track {
-		block-size: var(--md-sys-size-hit-target-min);
+		block-size: var(--nap-size-control-prominent);
 		background: transparent;
 	}
 
@@ -81,7 +63,7 @@
 	}
 
 	.range-control-input::-moz-range-track {
-		block-size: var(--md-sys-size-hit-target-min);
+		block-size: var(--nap-size-control-prominent);
 		border: 0;
 		background: transparent;
 	}
@@ -97,8 +79,8 @@
 		background: transparent;
 	}
 
-	.range-control:has(.range-control-input:hover:not(:disabled)) {
-		--md-state-range-track-height: var(--md-state-range-track-active);
+	.range-control:has(.range-control-input:hover:not(:disabled)) .range-control-track {
+		block-size: var(--nap-space-control);
 	}
 
 	.range-control-input:disabled {
@@ -113,13 +95,13 @@
 	}
 
 	:focus-visible {
-		outline: 2px solid var(--md-sys-color-primary);
-		outline-offset: 2px;
+		outline: var(--nap-focus-width) solid var(--nap-color-focus);
+		outline-offset: var(--nap-focus-offset);
 	}
 
 	::selection {
-		background: var(--md-sys-color-on-surface);
-		color: var(--md-sys-color-surface);
+		background: var(--nap-color-content-primary);
+		color: var(--nap-color-surface-canvas);
 	}
 }
 
@@ -139,4 +121,20 @@
 	:focus-visible {
 		outline-color: Highlight;
 	}
+}
+
+.range-control-input:focus,
+.range-control-input:focus-visible {
+	outline: none;
+	outline-offset: 0;
+}
+
+.range-control-volume[data-muted] .range-control-track {
+	background: linear-gradient(
+		to right,
+		var(--nap-color-content-muted) 0%,
+		var(--nap-color-content-muted) calc(var(--range-progress, 0) * 1%),
+		var(--nap-color-surface-control) calc(var(--range-progress, 0) * 1%),
+		var(--nap-color-surface-control) 100%
+	);
 }

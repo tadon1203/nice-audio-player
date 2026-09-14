@@ -2,13 +2,17 @@ import { Component, input, output } from '@angular/core';
 
 @Component({
 	selector: 'app-range-control',
-	host: { class: 'range-control relative block min-w-0' },
+	host: {
+		class: 'range-control relative block min-w-0',
+		'data-range-part': 'root'
+	},
 	template: `
 		<span
 			class="range-control-track absolute inset-x-0 top-1/2 -translate-y-1/2"
 			aria-hidden="true"
+			data-range-part="track"
 			data-range-track
-			[style.--md-state-range-progress]="progress()"
+			[style.--range-progress]="progress()"
 		></span>
 		<input
 			type="range"
@@ -19,7 +23,8 @@ import { Component, input, output } from '@angular/core';
 			[disabled]="disabled()"
 			[attr.aria-label]="label()"
 			[attr.aria-valuetext]="valueText()"
-			class="range-control-input absolute inset-x-0 top-1/2 z-10 h-hit-target-min w-full -translate-y-1/2"
+			data-range-part="input"
+			class="range-control-input absolute inset-x-0 top-1/2 z-chrome h-control-prominent w-full -translate-y-1/2"
 			(input)="emitInput($event)"
 			(change)="emitChange($event)"
 		/>

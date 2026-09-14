@@ -27,31 +27,73 @@ A successful screen should answer four questions without explanation: what matte
 
 ## Design tokens
 
-The token system follows the Material 3 reference/system/component model and uses the [Material Web theming model](https://github.com/material-components/material-web/blob/main/docs/theming/README.md) as its implementation reference. Material 3 provides the token vocabulary and semantic roles; it does not determine the visual identity of Nice Audio Player.
+Nice Audio Player uses a deliberately small semantic token system:
 
-Reference tokens (`--md-ref-*`) own concrete values. System tokens (`--md-sys-*`) own semantic roles. Component tokens may only alias system tokens and may not contain concrete color, typography, size, shape, or motion values. Tailwind `@theme` aliases (`--color-*`, `--text-*`, `--spacing-*`, `--radius-*`, and `--breakpoint-*`) are utility-generation adapters and never own concrete values.
-
-The product does not use `@material/web`, `@material/material-color-utilities`, dynamic color generation, Style Dictionary, or project-specific token-generation scripts. Album artwork remains the primary source of non-semantic color.
-
-All interface text is at least 14px. Material 3 roles that would resolve below that floor are not used at their default size and are remapped to the product's minimum. New product-specific token names are not added when an existing Material 3 role or approved system size can express the requirement.
-
-## Colors
-
-```yaml
-colors:
-  surface: md-sys-color-surface
-  surface-container-low: md-sys-color-surface-container-low
-  surface-container: md-sys-color-surface-container
-  surface-container-high: md-sys-color-surface-container-high
-  surface-container-highest: md-sys-color-surface-container-highest
-  secondary-container: md-sys-color-secondary-container
-  outline-variant: md-sys-color-outline-variant
-  on-surface: md-sys-color-on-surface
-  secondary: md-sys-color-secondary
-  on-surface-variant: md-sys-color-on-surface-variant
-  primary: md-sys-color-primary
-  error: md-sys-color-error
+```text
+reference primitives → public semantic tokens → UI components
 ```
+
+`src/styles/tokens/reference.css` is the only raw-value layer. Category files turn those primitives into public semantic `--nap-*` tokens; `theme.css` exposes their Tailwind adapters. UI code never references `reference.css` directly.
+
+When deciding whether to add a token, use this order:
+
+```text
+1. Can an existing public semantic token express the meaning?
+   YES → use that token directly
+   NO  → continue
+
+2. Is the value only a local adjustment?
+   YES → do not add a token; revisit the layout or component design
+   NO  → continue
+
+3. Does the meaning recur across multiple components?
+   YES → add a public semantic token
+   NO  → continue
+
+4. Does it repeat within one component and need independent change?
+   YES → add a private component token beside that component
+   NO  → do not tokenize it
+```
+
+The normal dependency is `public semantic token → component`. Use `public semantic token → private component token → component` only for a genuine component-specific contract. A private token that merely aliases an existing semantic token is prohibited; use the semantic token directly. Private tokens belong in an adjacent `*.tokens.css` file and must not be used by another component. Structural values such as `0`, `100%`, `auto`, `none`, `inherit`, `1fr`, grid spans, and media-query boundaries are allowed when they describe layout rather than appearance.
+
+### Colors
+
+| Token                           | Role              | Use                                |
+| ------------------------------- | ----------------- | ---------------------------------- |
+| `--nap-color-surface-canvas`    | canvas            | workspace background               |
+| `--nap-color-surface-chrome`    | chrome            | sidebar and playback               |
+| `--nap-color-surface-control`   | control           | input, select, button, menu        |
+| `--nap-color-surface-hover`     | hover             | hover                              |
+| `--nap-color-surface-selected`  | selected          | selection                          |
+| `--nap-color-surface-pressed`   | pressed           | press                              |
+| `--nap-color-content-primary`   | primary content   | important text/icon                |
+| `--nap-color-content-secondary` | secondary content | metadata, supporting text          |
+| `--nap-color-content-muted`     | muted content     | tertiary text, placeholder         |
+| `--nap-color-content-disabled`  | disabled content  | unavailable content                |
+| `--nap-color-stroke-subtle`     | subtle stroke     | divider, structural rule           |
+| `--nap-color-stroke-control`    | control stroke    | control boundary                   |
+| `--nap-color-focus`             | focus             | keyboard focus only                |
+| `--nap-color-overlay`           | overlay           | modal scrim                        |
+| `--nap-color-danger`            | danger            | error and destructive actions only |
+
+The application is dark-only and mostly monochrome. Artwork provides the visual color. `primary`, `secondary`, `accent`, `outline`, and `surface-container-*` are not token roles. Playback uses glyph/state semantics to remain distinguishable from selection; it does not receive a dedicated color.
+
+### Typography
+
+The interface uses Satoshi for Latin, Noto Sans JP for Japanese, and `Segoe UI, system-ui, sans-serif` as fallback. The public type tokens are `object-title` (28/36, 400), `page-title` (24/32, 400), `section` (18/24, 400), `body` (14/20, 400), and `label` (14/20, 500). Technical values use the `numeric-tabular` modifier. Interface text is never below 14px.
+
+### Spacing, shape, size, and state
+
+Spacing is semantic: `tight` 4px, `control` 8px, `related` 12px, `group` 16px, `section` 24px, and `region` 32px. Shapes are `none` 0, `control` 6px, `artwork` 8px, and `round` 9999px. Sizes are compact control 32px, control 36px, prominent control 40px, navigation row 40px, track row 44px, icons 16/20/24px, album tile 188px, detail artwork 224px, and detail album tile 176px. Artist artwork is responsive and capped at 220px so its grid can reflow without page-specific column rules. Search and sort controls use stable widths of 190px and 188px respectively.
+
+Normal boundaries use a 1px border and a stroke token. Focus always uses `2px solid var(--nap-color-focus)` with `2px` offset. Motion is limited to feedback 100ms, spatial 160ms, and `cubic-bezier(0.2, 0, 0, 1)`. Only `shadow-none` and `shadow-floating` exist; persistent UI has no shadow. Layers are content 0, chrome 10, floating 20, and modal 30.
+
+### Tailwind and layout
+
+Tailwind exposes only semantic adapters such as `bg-surface-canvas`, `bg-surface-control`, `bg-surface-selected`, `text-content-primary`, `text-content-secondary`, `text-content-muted`, `border-stroke-subtle`, `border-stroke-control`, `rounded-control`, `rounded-artwork`, `gap-group`, `gap-section`, `h-control-default`, and `h-track-row`. `control` is the 8px spacing token; `control-default` is the 36px control-size adapter and must be used for control heights, so the two meanings are never mixed. Tailwind's default palette, spacing, radius, shadow, and motion values are not UI design values.
+
+The structural layout contract is a 1360px reference width, 12 columns, 24px column gap, 224px sidebar, and 320px contextual pane. Page content uses a responsive inline inset of `clamp(24px, 3vw, 40px)`. The persistent playback region is 88px high, including its 24px technical status strip. Responsive layouts rearrange regions rather than scaling typography. The existing 800px `app-wide` boundary remains a structural media-query boundary.
 
 The permanent application chrome is grayscale.
 

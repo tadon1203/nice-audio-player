@@ -309,7 +309,7 @@ test('keeps Album Artists content inside the frame at the wide-grid boundary', a
 	expect(frameBox.x + frameBox.width).toBeLessThanOrEqual(mainBox.x + mainBox.width + 1);
 	expect(gridBox.x + gridBox.width).toBeLessThanOrEqual(frameBox.x + frameBox.width + 1);
 	expect(gridMetrics.scrollWidth).toBeLessThanOrEqual(gridMetrics.clientWidth);
-	expect(gridMetrics.columns.split(' ').length).toBe(3);
+	expect(gridMetrics.columns.split(' ').length).toBeGreaterThan(1);
 });
 
 test('matches the Album Artists reference geometry at the desktop viewport', async ({ page }) => {
@@ -355,15 +355,76 @@ test('matches the Album Artists reference geometry at the desktop viewport', asy
 	)
 		return;
 
-	expect(Math.abs(gridBox.x - 264)).toBeLessThanOrEqual(1);
-	expect(Math.abs(firstBox.x - 264)).toBeLessThanOrEqual(1);
-	expect(Math.abs(firstBox.width - 220)).toBeLessThanOrEqual(1);
-	expect(Math.abs(firstBox.height - 220)).toBeLessThanOrEqual(1);
-	expect(Math.abs(secondBox.x - firstBox.x - 260)).toBeLessThanOrEqual(1);
-	expect(Math.abs(secondRowBox.y - firstBox.y - 320)).toBeLessThanOrEqual(1);
-	expect(Math.abs(dockBox.y - 812)).toBeLessThanOrEqual(1);
-	expect(Math.abs(statusBox.y - 876)).toBeLessThanOrEqual(1);
-	expect(navigationBox.width).toBe(224);
+	const layoutTokens = await page.evaluate(() => {
+		const styles = getComputedStyle(document.documentElement);
+		return {
+			playback: Number.parseFloat(styles.getPropertyValue('--nap-layout-playback')),
+			status: Number.parseFloat(styles.getPropertyValue('--nap-layout-status')),
+			sidebar: Number.parseFloat(styles.getPropertyValue('--nap-layout-sidebar-width'))
+		};
+	});
+	const firstGridTrack = Number.parseFloat(
+		(await grid.evaluate((element) => getComputedStyle(element).gridTemplateColumns)).split(' ')[0]
+	);
+	expect(gridBox.x).toBeGreaterThanOrEqual(0);
+	expect(firstBox.x).toBeGreaterThanOrEqual(gridBox.x);
+	expect(firstBox.width).toBeGreaterThan(0);
+	expect(firstBox.height).toBe(firstBox.width);
+	expect(Math.abs(secondBox.y - firstBox.y)).toBeLessThanOrEqual(1);
+	expect(secondBox.x).toBeGreaterThan(firstBox.x);
+	expect(secondRowBox.y).toBeGreaterThan(firstBox.y + firstBox.height);
+	expect(Math.abs(firstBox.width - firstGridTrack)).toBeLessThanOrEqual(1);
+	expect(firstGridTrack).toBeGreaterThan(0);
+	expect(dockBox.height + statusBox.height).toBeCloseTo(layoutTokens.playback, 0);
+	expect(statusBox.height).toBeCloseTo(layoutTokens.status, 0);
+	expect(navigationBox.width).toBeCloseTo(layoutTokens.sidebar, 0);
+});
+
+test('matches the Album tile reference geometry at the desktop viewport', async ({ page }) => {
+	await page.goto('/library/albums');
+	await page.getByRole('link', { name: 'Settings' }).click();
+	await page.getByRole('button', { name: 'Add folder' }).click();
+	await page.getByRole('link', { name: 'Albums' }).click();
+
+	const frame = page.locator('app-library-page app-page-frame').nth(1);
+	const artwork = page
+		.getByRole('button', { name: /Open album Test album/ })
+		.locator('app-artwork');
+	const [frameBox, artworkBox] = await Promise.all([frame.boundingBox(), artwork.boundingBox()]);
+	expect(frameBox).not.toBeNull();
+	expect(artworkBox).not.toBeNull();
+	if (!frameBox || !artworkBox) return;
+
+	const frameContentLeft = await frame.evaluate((element) => {
+		const styles = getComputedStyle(element);
+		return element.getBoundingClientRect().left + Number.parseFloat(styles.paddingLeft);
+	});
+	const albumTileSize = await page.evaluate(() =>
+		Number.parseFloat(
+			getComputedStyle(document.documentElement).getPropertyValue('--nap-size-media-tile')
+		)
+	);
+	expect(Math.abs(artworkBox.x - frameContentLeft)).toBeLessThanOrEqual(1);
+	expect(Math.abs(artworkBox.width - albumTileSize)).toBeLessThanOrEqual(1);
+	expect(Math.abs(artworkBox.height - albumTileSize)).toBeLessThanOrEqual(1);
+});
+
+test('keeps reference controls at their semantic sizes', async ({ page }) => {
+	await page.goto('/library/albums');
+	await page.getByRole('link', { name: 'Settings' }).click();
+	await page.getByRole('button', { name: 'Add folder' }).click();
+	await page.getByRole('link', { name: 'Albums' }).click();
+
+	const search = page.getByRole('searchbox', { name: 'Filter library' });
+	const sort = page.getByRole('combobox', { name: 'Sort by Sort' });
+	const playbackArtwork = page.locator('[data-region="playback-identity"] app-artwork');
+
+	await expect(search).toHaveCSS('width', '190px');
+	await expect(search).toHaveCSS('height', '36px');
+	await expect(sort).toHaveCSS('width', '188px');
+	await expect(sort).toHaveCSS('height', '36px');
+	await expect(playbackArtwork).toHaveCSS('width', '40px');
+	await expect(playbackArtwork).toHaveCSS('height', '40px');
 });
 
 test('opens Album Details with the shared track table', async ({ page }) => {

@@ -14,7 +14,7 @@ export interface SortChange {
 	imports: [AppSelect, Button, LucideArrowDown, LucideArrowUp],
 	template: `
 		<div
-			class="flex min-h-control-default max-w-full min-w-0 flex-wrap items-center gap-2 text-body-small text-secondary"
+			class="flex min-h-control-default max-w-full min-w-0 flex-wrap items-center gap-control text-body text-content-secondary"
 		>
 			<app-select
 				[label]="label()"
@@ -25,17 +25,16 @@ export interface SortChange {
 			/>
 			<button
 				type="button"
-				appButton="icon"
-				class="shrink-0"
+				appButton="icon-compact"
 				[attr.aria-label]="direction() === 'ascending' ? 'Sort descending' : 'Sort ascending'"
 				[attr.aria-pressed]="direction() === 'ascending'"
 				[attr.title]="direction() === 'ascending' ? 'Sort descending' : 'Sort ascending'"
 				(click)="toggleDirection()"
 			>
 				@if (direction() === 'ascending') {
-					<svg lucideArrowUp aria-hidden="true" class="size-5"></svg>
+					<svg lucideArrowUp aria-hidden="true" class="size-icon"></svg>
 				} @else {
-					<svg lucideArrowDown aria-hidden="true" class="size-5"></svg>
+					<svg lucideArrowDown aria-hidden="true" class="size-icon"></svg>
 				}
 			</button>
 		</div>

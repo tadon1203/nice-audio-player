@@ -1,21 +1,19 @@
 <div class="grid h-full min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)]">
-	<header class="pt-10">
+	<header class="pt-region">
 		<app-page-frame>
-			<div class="flex min-w-0 flex-wrap items-center justify-between gap-4">
-				<h1 class="text-headline-small text-on-surface">{{ pageMeta().title }}</h1>
-				<label
-					class="me-3 w-full max-w-control-search-width app-wide:w-control-search-width app-wide:-translate-y-layout-search-offset"
-				>
+			<div class="flex min-w-0 flex-wrap items-center justify-between gap-group">
+				<h1 class="text-page-title text-content-primary">{{ pageMeta().title }}</h1>
+				<label class="me-control w-full app-wide:w-search-width">
 					<span class="sr-only">Filter library</span>
 					<div class="relative">
 						<svg
 							lucideSearch
 							aria-hidden="true"
-							class="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-secondary"
+							class="pointer-events-none absolute start-control top-1/2 size-icon-small -translate-y-1/2 text-content-secondary"
 						></svg>
 						<input
 							type="search"
-							class="h-control-search-height w-full rounded-full border border-outline-variant bg-surface-container ps-9 pe-3 text-body-small text-on-surface outline-none placeholder:text-on-surface-variant focus-visible:ring-2 focus-visible:ring-primary"
+							class="h-control-default w-full rounded-control border border-stroke-control bg-surface-control ps-region pe-control text-body text-content-primary placeholder:text-content-muted"
 							[placeholder]="pageMeta().searchPlaceholder"
 							[value]="currentFilter()"
 							(input)="onFilterInput($event)"
@@ -24,7 +22,7 @@
 				</label>
 			</div>
 			<div
-				class="mt-6 flex min-w-0 flex-wrap items-center justify-between gap-x-8 gap-y-2 text-body-small text-secondary"
+				class="mt-section flex min-w-0 flex-wrap items-center justify-between gap-x-section gap-y-control text-body text-content-secondary"
 			>
 				<span class="tabular-nums">{{ resultCount() }}</span>
 				@if (presentation() !== 'tracks') {
@@ -48,15 +46,17 @@
 				(scroll)="onScroll($event)"
 				class="h-full"
 			>
-				<div class="pt-5">
+				<div class="pt-group">
 					@if (library.initializing() || currentView().loadState === 'loading') {
-					<p class="py-8 text-body-medium text-secondary" role="status">Loading library…</p>
+					<p class="py-region text-body text-content-secondary" role="status">Loading library…</p>
 					} @else if (statusMessage(); as message) {
-					<p class="py-8 text-body-medium text-error" role="alert">{{ message }}</p>
+					<p class="py-region text-body text-danger" role="alert">{{ message }}</p>
 					} @else if (currentView().error; as error) {
-					<p class="py-8 text-body-medium text-error" role="alert">{{ error }}</p>
+					<p class="py-region text-body text-danger" role="alert">{{ error }}</p>
 					} @else if (currentView().items.length === 0) {
-					<p class="py-8 text-body-medium text-secondary" role="status">{{ emptyMessage() }}</p>
+					<p class="py-region text-body text-content-secondary" role="status">
+						{{ emptyMessage() }}
+					</p>
 					} @else { @switch (presentation()) { @case ('albums') {
 					<app-album-grid [state]="workspace.albums()" (openAlbum)="openAlbum($event)" />
 					} @case ('albumArtists') {
@@ -78,7 +78,7 @@
 						(playTrack)="playTrack($event)"
 					/>
 					} } @if (currentView().nextCursor !== null) {
-					<div class="flex justify-center py-8">
+					<div class="flex justify-center py-region">
 						<button
 							type="button"
 							appButton="secondary"

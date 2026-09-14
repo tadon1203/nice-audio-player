@@ -1,0 +1,17 @@
+:root {
+	--nap-color-surface-canvas: var(--nap-ref-neutral-950);
+	--nap-color-surface-chrome: var(--nap-ref-neutral-925);
+	--nap-color-surface-control: var(--nap-ref-neutral-900);
+	--nap-color-surface-hover: var(--nap-ref-neutral-875);
+	--nap-color-surface-selected: var(--nap-ref-neutral-850);
+	--nap-color-surface-pressed: var(--nap-ref-neutral-800);
+	--nap-color-content-primary: var(--nap-ref-neutral-50);
+	--nap-color-content-secondary: var(--nap-ref-neutral-300);
+	--nap-color-content-muted: var(--nap-ref-neutral-500);
+	--nap-color-content-disabled: var(--nap-ref-neutral-650);
+	--nap-color-stroke-subtle: var(--nap-ref-white-08);
+	--nap-color-stroke-control: var(--nap-ref-white-16);
+	--nap-color-focus: var(--nap-ref-focus);
+	--nap-color-overlay: var(--nap-ref-black-60);
+	--nap-color-danger: var(--nap-ref-danger);
+}

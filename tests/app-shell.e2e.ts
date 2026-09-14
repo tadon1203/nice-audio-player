@@ -25,50 +25,31 @@ test('redirects the root to Albums and navigates semantically', async ({ page })
 	await expect(page).toHaveURL(/\/settings$/);
 });
 
-test('uses the M3 theme roles and shape aliases', async ({ page }) => {
+test('uses the Nice Audio Player semantic tokens and control shape', async ({ page }) => {
 	await page.goto('/library/albums');
 
 	const darkTokens = await page.evaluate(() => {
 		const styles = getComputedStyle(document.documentElement);
 		return {
-			primary: styles.getPropertyValue('--md-sys-color-primary').trim(),
-			onSurface: styles.getPropertyValue('--md-sys-color-on-surface').trim(),
-			surfaceContainerLowest: styles
-				.getPropertyValue('--md-sys-color-surface-container-lowest')
-				.trim()
+			canvas: styles.getPropertyValue('--nap-color-surface-canvas').trim(),
+			primary: styles.getPropertyValue('--nap-color-content-primary').trim(),
+			control: styles.getPropertyValue('--nap-color-surface-control').trim()
 		};
 	});
 	expect(darkTokens).toEqual({
-		primary: 'rgb(198 198 198)',
-		onSurface: 'rgb(226 226 226)',
-		surfaceContainerLowest: 'rgb(14 14 14)'
+		canvas: 'oklch(0.145 0 0)',
+		primary: 'oklch(0.985 0 0)',
+		control: 'oklch(0.205 0 0)'
 	});
 
 	await expect(page.getByRole('searchbox', { name: 'Filter library' })).toHaveCSS(
 		'border-radius',
-		'4px'
+		'6px'
 	);
 	await expect(page.getByRole('combobox', { name: 'Sort by Sort' })).toHaveCSS(
 		'border-radius',
-		'4px'
+		'6px'
 	);
-
-	const lightTokens = await page.evaluate(() => {
-		document.documentElement.dataset.theme = 'light';
-		const styles = getComputedStyle(document.documentElement);
-		return {
-			primary: styles.getPropertyValue('--md-sys-color-primary').trim(),
-			onSurface: styles.getPropertyValue('--md-sys-color-on-surface').trim(),
-			surfaceContainerLowest: styles
-				.getPropertyValue('--md-sys-color-surface-container-lowest')
-				.trim()
-		};
-	});
-	expect(lightTokens).toEqual({
-		primary: 'rgb(0 0 0)',
-		onSurface: 'rgb(27 27 27)',
-		surfaceContainerLowest: 'rgb(255 255 255)'
-	});
 });
 
 test('supports keyboard navigation with a visible focus indicator', async ({ page }) => {

@@ -6,6 +6,7 @@ import { map } from 'rxjs';
 import type { LibraryAlbumArtistKey, LibraryArtistAlbumSortKey } from '@shared/native-app-api';
 import { Artwork } from '@app/ui/artwork';
 import type { SelectOption } from '@app/ui/app-select';
+import { Button } from '@app/ui/button';
 import { PageFrame } from '@app/ui/page-frame';
 import { ScrollRegion } from '@app/ui/scroll-region';
 import { SortControl } from '@app/ui/sort-control';
@@ -13,7 +14,7 @@ import { ArtistDetailsWorkspace } from './artist-details-workspace';
 
 @Component({
 	selector: 'app-artist-details-page',
-	imports: [Artwork, LucideArrowLeft, PageFrame, RouterLink, ScrollRegion, SortControl],
+	imports: [Artwork, Button, LucideArrowLeft, PageFrame, RouterLink, ScrollRegion, SortControl],
 	host: {
 		class: 'block h-full min-h-0 min-w-0 overflow-hidden',
 		'data-page': 'artist-details'

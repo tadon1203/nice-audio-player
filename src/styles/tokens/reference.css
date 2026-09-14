@@ -1,0 +1,83 @@
+:root {
+	/* Raw reference primitives. Semantic token files are the only consumers. */
+	--nap-ref-neutral-950: oklch(0.145 0 0);
+	--nap-ref-neutral-925: oklch(0.175 0 0);
+	--nap-ref-neutral-900: oklch(0.205 0 0);
+	--nap-ref-neutral-875: oklch(0.235 0 0);
+	--nap-ref-neutral-850: oklch(0.269 0 0);
+	--nap-ref-neutral-800: oklch(0.32 0 0);
+	--nap-ref-neutral-50: oklch(0.985 0 0);
+	--nap-ref-neutral-300: oklch(0.708 0 0);
+	--nap-ref-neutral-500: oklch(0.556 0 0);
+	--nap-ref-neutral-650: oklch(0.45 0 0);
+	--nap-ref-white-08: oklch(1 0 0 / 0.08);
+	--nap-ref-white-16: oklch(1 0 0 / 0.16);
+	--nap-ref-focus: oklch(0.82 0 0);
+	--nap-ref-black-60: oklch(0 0 0 / 0.6);
+	--nap-ref-danger: oklch(0.704 0.191 22.216);
+
+	--nap-ref-font-interface: 'Satoshi', 'Noto Sans JP', 'Segoe UI', system-ui, sans-serif;
+	--nap-ref-size-object-title: 28px;
+	--nap-ref-line-object-title: 36px;
+	--nap-ref-size-page-title: 24px;
+	--nap-ref-line-page-title: 32px;
+	--nap-ref-size-section: 18px;
+	--nap-ref-line-section: 24px;
+	--nap-ref-size-body: 14px;
+	--nap-ref-line-body: 20px;
+	--nap-ref-weight-regular: 400;
+	--nap-ref-weight-label: 500;
+
+	--nap-ref-space-1: 4px;
+	--nap-ref-space-2: 8px;
+	--nap-ref-space-3: 12px;
+	--nap-ref-space-4: 16px;
+	--nap-ref-space-6: 24px;
+	--nap-ref-space-8: 32px;
+
+	--nap-ref-radius-none: 0;
+	--nap-ref-radius-control: 6px;
+	--nap-ref-radius-artwork: 8px;
+	--nap-ref-radius-round: 9999px;
+
+	--nap-ref-size-control-compact: 32px;
+	--nap-ref-size-control: 36px;
+	--nap-ref-size-control-prominent: 40px;
+	--nap-ref-size-nav-row: 40px;
+	--nap-ref-size-track-row: 44px;
+	--nap-ref-size-icon-small: 16px;
+	--nap-ref-size-icon: 20px;
+	--nap-ref-size-icon-large: 24px;
+	--nap-ref-size-search-width: 190px;
+	--nap-ref-size-sort-control: 188px;
+	--nap-ref-size-media-tile: 188px;
+	--nap-ref-size-media-artist-min: 152px;
+	--nap-ref-size-media-artist-fluid: 20vw;
+	--nap-ref-size-media-artist-max: 220px;
+	--nap-ref-size-media-detail: 224px;
+	--nap-ref-size-media-detail-tile: 176px;
+
+	--nap-ref-stroke-width: 1px;
+	--nap-ref-focus-width: 2px;
+	--nap-ref-focus-offset: 2px;
+	--nap-ref-duration-feedback: 100ms;
+	--nap-ref-duration-spatial: 160ms;
+	--nap-ref-easing: cubic-bezier(0.2, 0, 0, 1);
+	--nap-ref-shadow-none: none;
+	--nap-ref-shadow-floating: 0 8px 24px oklch(0 0 0 / 0.24);
+	--nap-ref-layer-content: 0;
+	--nap-ref-layer-chrome: 10;
+	--nap-ref-layer-floating: 20;
+	--nap-ref-layer-modal: 30;
+
+	--nap-ref-layout-reference-width: 1360px;
+	--nap-ref-layout-columns: 12;
+	--nap-ref-layout-column-gap: 24px;
+	--nap-ref-layout-inline-min: 24px;
+	--nap-ref-layout-inline-fluid: 3vw;
+	--nap-ref-layout-inline-max: 40px;
+	--nap-ref-layout-sidebar-width: 224px;
+	--nap-ref-layout-context-pane-width: 320px;
+	--nap-ref-layout-playback: 88px;
+	--nap-ref-layout-status: 24px;
+}

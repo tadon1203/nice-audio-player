@@ -23,7 +23,7 @@ test('connects folder registration, scan, catalog selection, and playback dock',
 	await expect(stoppedSeek).toBeDisabled();
 	await page.getByRole('button', { name: /Test track/ }).click();
 	await expect(page.getByTestId('playback-dock')).toContainText('Test track');
-	const playbackStatusLabel = page.locator('.text-label-small').first();
+	const playbackStatusLabel = page.getByText('Playing', { exact: true });
 	await expect(playbackStatusLabel).toHaveText('Playing');
 	await expect(playbackStatusLabel).toHaveCSS('font-size', '14px');
 	await expect(playbackStatusLabel).toHaveCSS('line-height', '20px');
@@ -49,7 +49,7 @@ test('connects folder registration, scan, catalog selection, and playback dock',
 	await expect(playbackTrack).toHaveCSS('block-size', '4px');
 	await seek.focus();
 	await expect(seek).toBeFocused();
-	await expect(seek).toHaveCSS('outline-width', '3px');
+	await expect(seek).toHaveCSS('outline-width', '2px');
 	await page.keyboard.press('Tab');
 	await page.keyboard.press('Shift+Tab');
 	await expect(seek).toBeFocused();
@@ -67,8 +67,8 @@ test('connects folder registration, scan, catalog selection, and playback dock',
 	const volume = page.getByRole('slider', { name: 'Volume' });
 	const volumeControl = page.locator('[data-range-control="volume"]');
 	const volumeReadout = page.locator('[data-region="volume-readout"]');
-	await expect(volumeControl).toHaveCSS('width', '144px');
-	await expect(volumeReadout).toHaveCSS('width', '72px');
+	await expect(volumeControl).toHaveCSS('height', '40px');
+	await expect(volumeReadout).toBeVisible();
 	await volume.focus();
 	await expect(playbackTrack).toHaveCSS('block-size', '4px');
 	await expect(volumeTrack).toHaveCSS('block-size', '4px');
@@ -98,10 +98,10 @@ test('connects folder registration, scan, catalog selection, and playback dock',
 	await expect(volume).toHaveValue('0.42');
 	await expect(volume).toHaveAttribute('aria-valuetext', 'Muted');
 	await expect(volumeReadout).toHaveText('−∞ dB');
-	await expect(volumeTrack).toHaveAttribute('style', /--md-state-range-progress:\s*42/);
+	await expect(volumeTrack).toHaveAttribute('style', /--range-progress:\s*42/);
 	await expect
 		.poll(() => volumeTrack.evaluate((element) => getComputedStyle(element).backgroundImage))
-		.toContain('rgb(207, 196, 197)');
+		.toContain('oklch(0.556 0 0)');
 	await volume.fill('0.5');
 	await expect(page.getByRole('button', { name: 'Mute' })).toBeVisible();
 	await expect(volumeControl).not.toHaveAttribute('data-muted');
