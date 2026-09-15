@@ -4,7 +4,7 @@ import type {
 	LibraryFileAvailability,
 	LibrarySortDirection,
 	LibraryTrackSortKey
-} from '@shared/protocol/types';
+} from '@shared/native-backend';
 import { Button } from '@app/ui/button';
 import { FormatDurationPipe } from '@app/ui/format-duration';
 

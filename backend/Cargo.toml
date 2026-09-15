@@ -3,17 +3,16 @@ name = "nice-audio-player-backend"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.98"
-default-run = "nice-audio-player-backend"
 
-[[bin]]
-name = "nice-audio-player-backend"
-path = "src/main.rs"
+[lib]
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-garde = { version = "=0.22.1", features = ["derive"] }
-tokio = { version = "=1.53.1", features = ["macros", "rt-multi-thread", "sync", "time", "io-util", "io-std"] }
+napi = { version = "3", features = ["async"] }
+napi-derive = "3"
+tokio = { version = "=1.53.1", features = ["macros", "rt-multi-thread", "sync", "time"] }
 tokio-util = { version = "=0.7.16", features = ["rt"] }
 notify-debouncer-full = "=0.7.0"
 rusqlite_migration = "=2.6.0"
@@ -31,6 +30,9 @@ dunce = "=1.0.5"
 blake3 = "=1.8.5"
 notify = "=8.2.0"
 rubato = { version = "4.0.0", default-features = false, features = ["fft_resampler"] }
+
+[build-dependencies]
+napi-build = "2.4.2"
 
 [profile.release]
 strip = true

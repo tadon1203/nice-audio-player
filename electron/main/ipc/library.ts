@@ -6,8 +6,8 @@ import type {
 	LibraryArtistAlbumSortKey,
 	LibrarySortDirection,
 	LibraryTrackSortKey
-} from '@shared/protocol/types';
-import type { BackendManager } from '../backend/manager';
+} from '@shared/native-backend';
+import type { NativeBackend } from '@shared/native-backend';
 import { validateSender } from '../security';
 import {
 	requireAlbumKey,
@@ -52,50 +52,49 @@ function requireArtistKey(value: unknown): LibraryAlbumArtistKey {
 	return value as LibraryAlbumArtistKey;
 }
 
-export function registerLibraryIpc(manager: BackendManager): void {
-	const api = manager.api;
+export function registerLibraryIpc(backend: NativeBackend): void {
 	ipcMain.handle(
 		'library:get-status',
-		validateSender(() => api.getLibraryStatus())
+		validateSender(() => backend.getLibraryStatus())
 	);
 	ipcMain.handle(
 		'library:get-track-for-path',
-		validateSender((path: unknown) => api.getLibraryTrackForPath(requireString(path, 'path')))
+		validateSender((path: unknown) => backend.getLibraryTrackForPath(requireString(path, 'path')))
 	);
 	ipcMain.handle(
 		'library:list-roots',
-		validateSender(() => api.listLibraryRoots())
+		validateSender(() => backend.listLibraryRoots())
 	);
 	ipcMain.handle(
 		'library:register-root',
-		validateSender((path: unknown) => api.registerLibraryRoot(requireString(path, 'path')))
+		validateSender((path: unknown) => backend.registerLibraryRoot(requireString(path, 'path')))
 	);
 	ipcMain.handle(
 		'library:set-root-enabled',
 		validateSender((id: unknown, enabled: unknown) =>
-			api.setLibraryRootEnabled(requireString(id, 'id'), requireBoolean(enabled, 'enabled'))
+			backend.setLibraryRootEnabled(requireString(id, 'id'), requireBoolean(enabled, 'enabled'))
 		)
 	);
 	ipcMain.handle(
 		'library:remove-root',
-		validateSender((id: unknown) => api.removeLibraryRoot(requireString(id, 'id')))
+		validateSender((id: unknown) => backend.removeLibraryRoot(requireString(id, 'id')))
 	);
 	ipcMain.handle(
 		'library:get-scan-state',
-		validateSender(() => api.getLibraryScanState())
+		validateSender(() => backend.getLibraryScanState())
 	);
 	ipcMain.handle(
 		'library:start-scan',
-		validateSender(() => api.startLibraryScan())
+		validateSender(() => backend.startLibraryScan())
 	);
 	ipcMain.handle(
 		'library:cancel-scan',
-		validateSender(() => api.cancelLibraryScan())
+		validateSender(() => backend.cancelLibraryScan())
 	);
 	ipcMain.handle(
 		'library:list-tracks',
 		validateSender((cursor: unknown, search: unknown, sortKey: unknown, sortDirection: unknown) =>
-			api.listLibraryTracks(
+			backend.listLibraryTracks(
 				requireNullableString(cursor, 'cursor'),
 				requireNullableString(search, 'search'),
 				requireOneOf(sortKey, 'sortKey', TRACK_SORT_KEYS),
@@ -106,7 +105,7 @@ export function registerLibraryIpc(manager: BackendManager): void {
 	ipcMain.handle(
 		'library:list-albums',
 		validateSender((cursor: unknown, search: unknown, sortKey: unknown, sortDirection: unknown) =>
-			api.listLibraryAlbums(
+			backend.listLibraryAlbums(
 				requireNullableString(cursor, 'cursor'),
 				requireNullableString(search, 'search'),
 				requireOneOf(sortKey, 'sortKey', ALBUM_SORT_KEYS),
@@ -117,7 +116,7 @@ export function registerLibraryIpc(manager: BackendManager): void {
 	ipcMain.handle(
 		'library:list-album-artists',
 		validateSender((cursor: unknown, search: unknown, sortKey: unknown, sortDirection: unknown) =>
-			api.listLibraryAlbumArtists(
+			backend.listLibraryAlbumArtists(
 				requireNullableString(cursor, 'cursor'),
 				requireNullableString(search, 'search'),
 				requireOneOf(sortKey, 'sortKey', ARTIST_SORT_KEYS),
@@ -127,13 +126,15 @@ export function registerLibraryIpc(manager: BackendManager): void {
 	);
 	ipcMain.handle(
 		'library:get-album-artist',
-		validateSender((artistKey: unknown) => api.getLibraryAlbumArtist(requireArtistKey(artistKey)))
+		validateSender((artistKey: unknown) =>
+			backend.getLibraryAlbumArtist(requireArtistKey(artistKey))
+		)
 	);
 	ipcMain.handle(
 		'library:list-artist-albums',
 		validateSender(
 			(artistKey: unknown, cursor: unknown, sortKey: unknown, sortDirection: unknown) =>
-				api.listLibraryArtistAlbums(
+				backend.listLibraryArtistAlbums(
 					requireArtistKey(artistKey),
 					requireNullableString(cursor, 'cursor'),
 					requireOneOf(sortKey, 'sortKey', ARTIST_ALBUM_SORT_KEYS),
@@ -143,20 +144,25 @@ export function registerLibraryIpc(manager: BackendManager): void {
 	);
 	ipcMain.handle(
 		'library:get-album-details',
-		validateSender((albumKey: unknown) => api.getLibraryAlbumDetails(requireAlbumKey(albumKey)))
+		validateSender((albumKey: unknown) => backend.getLibraryAlbumDetails(requireAlbumKey(albumKey)))
 	);
 	ipcMain.handle(
 		'library:list-album-tracks',
 		validateSender((albumKey: unknown, cursor: unknown) =>
-			api.listLibraryAlbumTracks(requireAlbumKey(albumKey), requireNullableString(cursor, 'cursor'))
+			backend.listLibraryAlbumTracks(
+				requireAlbumKey(albumKey),
+				requireNullableString(cursor, 'cursor')
+			)
 		)
 	);
 	ipcMain.handle(
 		'library:start-track',
-		validateSender((trackId: unknown) => api.startLibraryTrack(requireString(trackId, 'trackId')))
+		validateSender((trackId: unknown) =>
+			backend.startLibraryTrack(requireString(trackId, 'trackId'))
+		)
 	);
 	ipcMain.handle(
 		'library:start-album',
-		validateSender((albumKey: unknown) => api.startLibraryAlbum(requireAlbumKey(albumKey)))
+		validateSender((albumKey: unknown) => backend.startLibraryAlbum(requireAlbumKey(albumKey)))
 	);
 }

@@ -199,8 +199,7 @@ export async function installNativeAppFixture(page: Page): Promise<void> {
 			Object.defineProperty(error, 'code', { value: code });
 			return Promise.reject(error);
 		};
-		window.app = {
-			ping: () => Promise.resolve('pong'),
+		window.nativeApp = {
 			getPlaybackState: () => Promise.resolve(playback),
 			getPlaybackQueue: () => Promise.resolve(queue),
 			pausePlayback: () => {

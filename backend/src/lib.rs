@@ -4,7 +4,8 @@ pub mod audio;
 pub mod library;
 pub mod lyrics;
 pub mod media;
-pub mod protocol;
+
+mod napi;
 
 #[cfg(test)]
 #[path = "audio/test_support.rs"]

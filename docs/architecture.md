@@ -8,13 +8,13 @@ This document describes the system-level architecture of Nice Audio Player. It d
 
 Its purpose is to provide a stable shared mental model of how the project is structured and how its major parts relate.
 
-It may describe durable system components, responsibility boundaries, dependency direction, authoritative state ownership, shared contracts, and stable directory boundaries. Use abstract responsibilities first and add only the smallest concrete directory examples needed to make a boundary unambiguous, such as `src/app/playback`, `backend/src/audio`, or `shared/protocol`.
+It may describe durable system components, responsibility boundaries, dependency direction, authoritative state ownership, shared contracts, and stable directory boundaries. Use abstract responsibilities first and add only the smallest concrete directory examples needed to make a boundary unambiguous, such as `src/app/playback`, `backend/src/audio`, or `shared`.
 
 It must not describe individual files, file names, selectors, local component structure, token values, route-by-route details, or other short-lived implementation choices. For example, `src/app/playback` is an appropriate architectural location; a path to one implementation item inside that directory is not.
 
 ## System Overview
 
-Nice Audio Player consists of three system-level components:
+Nice Audio Player consists of three system-level components. The native backend is loaded in Electron Main; it is not a child process.
 
 ```
 Renderer
@@ -23,15 +23,15 @@ Angular / TypeScript
 Desktop Host
 Electron / TypeScript
         ↓
-Backend
-Rust
+Native Backend addon
+NAPI-RS / Rust
 ```
 
 The **Renderer** owns presentation, interaction, navigation, and renderer-local state.
 
-The **Desktop Host** owns the desktop process and trust boundaries, application lifecycle, platform integration, and communication between the Renderer and Backend.
+The **Desktop Host** owns the desktop process and trust boundaries, application lifecycle, platform integration, and communication between the Renderer and the in-process Native Backend.
 
-The **Backend** owns application domain behavior, persistent state, filesystem work, audio playback, and other native work.
+The **Native Backend** owns application domain behavior, persistent state, filesystem work, audio playback, and other native work. Its only JavaScript-facing class is `NativeBackend`.
 
 ## Renderer
 
@@ -80,44 +80,44 @@ Shared contracts are not runtime components, but they define the system boundary
 
 ```
 shared/
-└── protocol/
+└── native-backend.d.ts
 ```
 
-The `shared/` directory defines the narrow native API available to the Renderer through Preload. Its `protocol/` directory contains the manually maintained typed transport contract consumed by Electron and the shared boundary code, while Electron owns the runtime Zod schema for incoming backend frames.
+The `shared/` directory contains the generated TypeScript declaration for the NAPI addon and the renderer-facing application API types. `native-backend.d.ts` is generated from Rust and checked for drift; it is not a transport schema.
 
-Renderer and Electron both consume these contracts. Neither side owns them; changes to the contracts are boundary changes and must preserve the trust and type boundaries between the processes.
+Renderer and Electron both consume these contracts. Renderer calls Preload, while Main calls the addon directly.
 
 ## Desktop Host
 
 The Desktop Host is implemented with Electron and TypeScript.
 
-It hosts the Renderer, defines its trust boundary, manages the desktop application lifecycle, connects the Renderer to the Backend, and owns Electron-specific platform integration.
+It hosts the Renderer, defines its trust boundary, manages the desktop application lifecycle, connects the Renderer to the Native Backend, and owns Electron-specific platform integration.
 
-| Module  | Location           | Responsibility                                                                                     |
-| ------- | ------------------ | -------------------------------------------------------------------------------------------------- |
-| Preload | `electron/preload` | Exposes the narrow application API available to the Renderer across the trust boundary             |
-| Main    | `electron/main`    | Application and window lifecycle, Renderer IPC routing, Backend process lifecycle, and integration |
+| Module  | Location           | Responsibility                                                                                           |
+| ------- | ------------------ | -------------------------------------------------------------------------------------------------------- |
+| Preload | `electron/preload` | Exposes the narrow application API available to the Renderer across the trust boundary                   |
+| Main    | `electron/main`    | Application and window lifecycle, Renderer IPC routing, addon loading, native lifecycle, and integration |
 
-The packaged Renderer runs with context isolation and sandboxing, receives only narrow Preload capabilities, and privileged IPC validates its sender. The Desktop Host connects processes and platform capabilities without owning application domain behavior.
+The packaged Renderer runs with context isolation and sandboxing, receives only narrow Preload capabilities, and privileged IPC validates its sender. The Desktop Host connects the Renderer to native capabilities without owning application domain behavior.
 
-## Backend
+## Native Backend
 
-The Backend is a separate native process implemented in Rust.
+The Native Backend is an in-process NAPI-RS addon implemented in Rust.
 
 It owns domain behavior and native work that does not belong to the Renderer or Desktop Host.
 
-| Module      | Location               | Responsibility                                                  |
-| ----------- | ---------------------- | --------------------------------------------------------------- |
-| Protocol    | `backend/src/protocol` | Transport between the Desktop Host and Backend                  |
-| Application | `backend/src`          | Coordination across backend responsibilities and activity state |
-| Audio       | `backend/src/audio`    | Playback and audio processing                                   |
-| Library     | `backend/src/library`  | Music catalog, filesystem reconciliation, and persistence       |
-| Lyrics      | `backend/src/lyrics`   | Lyrics resolution and parsing                                   |
-| Media       | `backend/src/media`    | Media-file validation and inspection                            |
+| Module      | Location              | Responsibility                                                       |
+| ----------- | --------------------- | -------------------------------------------------------------------- |
+| NAPI        | `backend/src/napi`    | `NativeBackend`, DTO conversion, event conversion, and error mapping |
+| Application | `backend/src`         | Coordination across backend responsibilities and activity state      |
+| Audio       | `backend/src/audio`   | Playback and audio processing                                        |
+| Library     | `backend/src/library` | Music catalog, filesystem reconciliation, and persistence            |
+| Lyrics      | `backend/src/lyrics`  | Lyrics resolution and parsing                                        |
+| Media       | `backend/src/media`   | Media-file validation and inspection                                 |
 
-The Protocol handles requests, responses, events, serialization, and message correlation without owning domain behavior.
+The NAPI boundary is the only JavaScript-facing backend surface. It converts between JavaScript-safe DTOs and domain values, validates safe integers and nullable values, maps native failures to stable error codes, and exposes event delivery through `nextEvent()`.
 
-The Application coordinates operations that span backend modules without replacing the responsibilities they own.
+The Application coordinates operations that span backend modules without replacing the responsibilities they own. Synchronous domain work is scheduled on blocking workers before it crosses the asynchronous NAPI boundary.
 
 ## Boundaries, Dependencies, and Ownership
 
@@ -134,7 +134,7 @@ Preload
     ↓
 Electron Main
     ↓
-Backend Protocol
+NativeBackend addon
     ↓
 Backend Application
     ↓
@@ -143,7 +143,7 @@ Backend Modules
 
 Dependencies follow responsibility boundaries toward the code that owns the required capability.
 
-The Renderer does not depend directly on Electron or Backend infrastructure. The Desktop Host mediates trust, process, and platform boundaries without becoming a domain layer. The Backend Protocol transports operations and events without defining domain behavior.
+The Renderer does not depend directly on Electron or Backend infrastructure. The Desktop Host mediates trust and platform boundaries without becoming a domain layer. Electron IPC is a renderer trust boundary; Main-to-native calls are direct addon calls without JSON frames, request correlation, ready handshakes, or backend process orchestration.
 
 Each authoritative state has one owner. Rust is authoritative for domain and persistent state:
 
@@ -161,4 +161,6 @@ Renderer-owned state is limited to presentation, interaction, navigation, cached
 
 ## Build and Distribution
 
-Build and packaging responsibilities are separated by runtime boundary: the Angular application produces the Renderer, the Desktop Host and Preload are bundled independently, the Backend is compiled by Cargo, and Electron Forge assembles the distributable application. Development loads the Renderer through its dev server; packaged applications serve the built Renderer through the desktop protocol.
+Build and packaging responsibilities are separated by runtime boundary: the Angular application produces the Renderer, the Desktop Host and Preload are bundled independently, NAPI-RS/Cargo produces the Windows x64 `.node` addon and generated declaration, and Electron Forge packages the prepared `build` directory. The addon is unpacked from ASAR. Development builds the addon before launching Electron; packaged applications serve the built Renderer through the desktop protocol.
+
+Native storage is rooted at the absolute `app.getPath('userData')` path passed to `NativeBackend.open()`. No environment-variable, current-working-directory, legacy `userData/backend` lookup, or automatic data migration is part of the architecture.

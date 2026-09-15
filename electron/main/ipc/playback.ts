@@ -1,56 +1,51 @@
 import { ipcMain } from 'electron';
-import type { BackendManager } from '../backend/manager';
+import type { NativeBackend } from '@shared/native-backend';
 import { validateSender } from '../security';
 import { requireBoolean, requireNonNegativeInteger, requireUnitInterval } from './validation';
 
-export function registerPlaybackIpc(manager: BackendManager): void {
-	const api = manager.api;
-	ipcMain.handle(
-		'app:ping',
-		validateSender(() => api.ping())
-	);
+export function registerPlaybackIpc(backend: NativeBackend): void {
 	ipcMain.handle(
 		'playback:get-state',
-		validateSender(() => api.getPlaybackState())
+		validateSender(() => backend.getPlaybackState())
 	);
 	ipcMain.handle(
 		'playback:get-queue',
-		validateSender(() => api.getPlaybackQueue())
+		validateSender(() => backend.getPlaybackQueue())
 	);
 	ipcMain.handle(
 		'playback:pause',
-		validateSender(() => api.pausePlayback())
+		validateSender(() => backend.pausePlayback())
 	);
 	ipcMain.handle(
 		'playback:resume',
-		validateSender(() => api.resumePlayback())
+		validateSender(() => backend.resumePlayback())
 	);
 	ipcMain.handle(
 		'playback:previous',
-		validateSender(() => api.previousPlayback())
+		validateSender(() => backend.previousPlayback())
 	);
 	ipcMain.handle(
 		'playback:next',
-		validateSender(() => api.nextPlayback())
+		validateSender(() => backend.nextPlayback())
 	);
 	ipcMain.handle(
 		'playback:seek',
 		validateSender((positionMs: unknown) =>
-			api.seekPlayback(requireNonNegativeInteger(positionMs, 'positionMs'))
+			backend.seekPlayback(requireNonNegativeInteger(positionMs, 'positionMs'))
 		)
 	);
 	ipcMain.handle(
 		'playback:set-volume',
 		validateSender((volume: unknown) =>
-			api.setPlaybackVolume(requireUnitInterval(volume, 'volume'))
+			backend.setPlaybackVolume(requireUnitInterval(volume, 'volume'))
 		)
 	);
 	ipcMain.handle(
 		'playback:set-muted',
-		validateSender((muted: unknown) => api.setPlaybackMuted(requireBoolean(muted, 'muted')))
+		validateSender((muted: unknown) => backend.setPlaybackMuted(requireBoolean(muted, 'muted')))
 	);
 	ipcMain.handle(
 		'audio:list-output-devices',
-		validateSender(() => api.listAudioOutputDevices())
+		validateSender(() => backend.listAudioOutputDevices())
 	);
 }

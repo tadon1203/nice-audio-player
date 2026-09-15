@@ -27,7 +27,7 @@ import type {
 
 @Service()
 export class Backend {
-	private readonly api: NativeAppApi | null = window.app ?? null;
+	private readonly api: NativeAppApi | null = window.nativeApp ?? null;
 	private readonly eventSubject = new Subject<AppEvent>();
 	private readonly destroyRef = inject(DestroyRef);
 
@@ -39,9 +39,6 @@ export class Backend {
 		this.destroyRef.onDestroy(() => unsubscribe?.());
 	}
 
-	ping(): Promise<string> {
-		return this.requireApi().ping();
-	}
 	getPlaybackState(): Promise<PlaybackState> {
 		return this.requireApi().getPlaybackState();
 	}

@@ -1,22 +1,30 @@
-import { exec } from 'node:child_process';
-import { cp, mkdir, rm } from 'node:fs/promises';
-import { promisify } from 'node:util';
+import { relative, resolve } from 'node:path';
 import type { ForgeConfig } from '@electron-forge/shared-types';
-import {
-	backendOutput,
-	forgeOutput,
-	repositoryRoot,
-	runtimeOutput
-} from './scripts/build-paths.mjs';
 
-const execAsync = promisify(exec);
+const repositoryRoot = import.meta.dirname;
+const runtimeRoots = ['build/electron', 'build/native', 'build/renderer'] as const;
+
+function keepRuntimePath(absolutePath: string): boolean {
+	const path = relative(repositoryRoot, absolutePath).replaceAll('\\', '/');
+
+	if (path === '') return true;
+	if (path === 'package.json') return true;
+	if (path === 'build') return true;
+
+	return runtimeRoots.some((root) => path === root || path.startsWith(`${root}/`));
+}
 
 const config: ForgeConfig = {
-	outDir: forgeOutput,
+	outDir: resolve(repositoryRoot, 'build/forge'),
+
 	packagerConfig: {
-		asar: true,
-		extraResource: [backendOutput]
+		asar: {
+			unpack: '**/*.node'
+		},
+
+		ignore: (absolutePath) => !keepRuntimePath(absolutePath)
 	},
+
 	makers: [
 		{
 			name: '@electron-forge/maker-squirrel',
@@ -26,20 +34,7 @@ const config: ForgeConfig = {
 				name: 'nice_audio_player'
 			}
 		}
-	],
-	hooks: {
-		prePackage: async () => {
-			await execAsync('pnpm build', {
-				cwd: repositoryRoot,
-				windowsHide: true
-			});
-		},
-		packageAfterCopy: async (_config, buildPath) => {
-			await rm(buildPath, { recursive: true, force: true });
-			await mkdir(buildPath, { recursive: true });
-			await cp(runtimeOutput, buildPath, { recursive: true });
-		}
-	}
+	]
 };
 
 export default config;

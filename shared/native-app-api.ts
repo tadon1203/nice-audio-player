@@ -24,7 +24,7 @@ import type {
 	PlaybackFailureCode,
 	PlaybackQueueSnapshot,
 	PlaybackSnapshot
-} from './protocol/types';
+} from './native-backend';
 
 export type AudioOutputDevice = GeneratedAudioOutputDevice;
 export type PlaybackState = PlaybackSnapshot;
@@ -63,7 +63,6 @@ export type {
 	PlaybackFailureCode
 };
 export interface NativeAppApi {
-	ping(): Promise<string>;
 	getPlaybackState(): Promise<PlaybackState>;
 	getPlaybackQueue(): Promise<PlaybackQueue>;
 	pausePlayback(): Promise<PlaybackState>;

@@ -1,5 +1,6 @@
 import type { BrowserWindow } from 'electron';
 import type { IpcError, IpcResult } from '@shared/native-app-api';
+import { readNativeErrorCode } from './native-error';
 
 export function isTrustedRendererUrl(value: string): boolean {
 	try {
@@ -41,14 +42,12 @@ export function validateSender<TArgs extends unknown[], T>(
 }
 
 function normalizeIpcError(error: unknown): IpcError {
-	if (typeof error === 'object' && error !== null && 'code' in error) {
-		const code = (error as { code?: unknown }).code;
-		if (typeof code === 'string') {
-			return {
-				code,
-				message: error instanceof Error ? error.message : 'Backend operation failed'
-			};
-		}
+	const code = readNativeErrorCode(error);
+	if (code !== undefined) {
+		return {
+			code,
+			message: error instanceof Error ? error.message : 'Backend operation failed'
+		};
 	}
 	if (error instanceof TypeError) return { code: 'invalidArgument', message: error.message };
 	return { code: 'internalError', message: 'Internal application error' };

@@ -3,6 +3,7 @@ build
 .angular
 backend/target
 test-results
+.napi-rs-filesystem-transaction.*
 
 # Tool-managed local instructions and assets
 .agents
@@ -10,6 +11,7 @@ test-results
 
 # Generated source
 shared/protocol/generated.ts
+shared/native-backend.d.ts
 
 # Package-manager lockfile
 pnpm-lock.yaml

@@ -1,24 +1,13 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import { z } from 'zod';
 import type { IpcResult, NativeAppApi } from '@shared/native-app-api';
 
-const ipcResultSchema = z.union([
-	z.object({ ok: z.literal(true), value: z.unknown() }).strict(),
-	z
-		.object({
-			ok: z.literal(false),
-			error: z.object({ code: z.string(), message: z.string() }).strict()
-		})
-		.strict()
-]);
-
-class NativeIpcError extends Error {
+class AppError extends Error {
 	constructor(
 		readonly code: string,
 		message: string
 	) {
 		super(message);
-		this.name = 'NativeIpcError';
+		this.name = 'AppError';
 	}
 }
 
@@ -27,17 +16,25 @@ async function invoke<T>(channel: string, ...args: unknown[]): Promise<T> {
 	try {
 		raw = await ipcRenderer.invoke(channel, ...args);
 	} catch {
-		throw new NativeIpcError('ipcError', 'IPC invocation failed');
+		throw new AppError('ipcError', 'IPC invocation failed');
 	}
-	const parsed = ipcResultSchema.safeParse(raw);
-	if (!parsed.success) throw new NativeIpcError('ipcProtocolError', 'Invalid IPC result');
-	const result = parsed.data as IpcResult<T>;
-	if (!result.ok) throw new NativeIpcError(result.error.code, result.error.message);
+	const result = raw as IpcResult<T>;
+	if (typeof result !== 'object' || result === null || typeof result.ok !== 'boolean')
+		throw new AppError('ipcProtocolError', 'Invalid IPC result');
+	if (!result.ok) {
+		if (
+			typeof result.error !== 'object' ||
+			result.error === null ||
+			typeof result.error.code !== 'string' ||
+			typeof result.error.message !== 'string'
+		)
+			throw new AppError('ipcProtocolError', 'Invalid IPC result');
+		throw new AppError(result.error.code, result.error.message);
+	}
 	return result.value;
 }
 
 const api: NativeAppApi = {
-	ping: () => invoke('app:ping'),
 	getPlaybackState: () => invoke('playback:get-state'),
 	getPlaybackQueue: () => invoke('playback:get-queue'),
 	pausePlayback: () => invoke('playback:pause'),
@@ -79,4 +76,4 @@ const api: NativeAppApi = {
 		return () => ipcRenderer.removeListener('app:event', handler);
 	}
 };
-contextBridge.exposeInMainWorld('app', api);
+contextBridge.exposeInMainWorld('nativeApp', api);

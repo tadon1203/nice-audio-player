@@ -1,14 +1,24 @@
 import { expect, test } from '../fixtures/electron-app';
 
-test('starts the desktop runtime through Preload and the backend', async ({ electronPage }) => {
+test('starts the desktop runtime through Preload and the native backend', async ({
+	electronPage
+}) => {
 	await expect(electronPage.getByRole('heading', { level: 1, name: 'Albums' })).toBeVisible();
 	await expect
 		.poll(() =>
 			electronPage.evaluate(() => {
-				if (!window.app) throw new Error('Preload API is unavailable');
-				return window.app.ping();
+				if (!window.nativeApp) throw new Error('Preload API is unavailable');
+				return window.nativeApp.getPlaybackState();
 			})
 		)
-		.toBe('pong');
+		.toMatchObject({ status: 'stopped' });
+	await expect
+		.poll(() =>
+			electronPage.evaluate(() => {
+				if (!window.nativeApp) throw new Error('Preload API is unavailable');
+				return window.nativeApp.getLibraryStatus();
+			})
+		)
+		.toMatchObject({ status: 'ready' });
 	expect(await electronPage.evaluate(() => typeof window.require)).toBe('undefined');
 });

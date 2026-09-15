@@ -953,6 +953,7 @@ struct PendingSourceLoad {
 }
 
 const POSITION_UPDATE_INTERVAL: Duration = Duration::from_millis(250);
+const WORKER_TICK_INTERVAL: Duration = Duration::from_millis(50);
 
 struct PlaybackWorker {
     active: Option<ActivePlayback>,
@@ -1046,7 +1047,7 @@ impl PlaybackSequence {
 impl PlaybackWorker {
     fn run(mut self) {
         loop {
-            match self.command_receiver.recv() {
+            match self.command_receiver.recv_timeout(WORKER_TICK_INTERVAL) {
                 Ok(PlaybackCommand::Start { entry, reply }) => {
                     self.sequence =
                         PlaybackSequence::new_entries(vec![entry], &mut self.next_queue_item_id);
@@ -1201,7 +1202,8 @@ impl PlaybackWorker {
                     }));
                 }
                 Ok(PlaybackCommand::Output(signal)) => self.handle_signal(signal),
-                Ok(PlaybackCommand::Shutdown) | Err(mpsc::RecvError) => break,
+                Ok(PlaybackCommand::Shutdown) | Err(mpsc::RecvTimeoutError::Disconnected) => break,
+                Err(mpsc::RecvTimeoutError::Timeout) => {}
             }
             self.advance_pending_source_load();
             self.advance_pending_playback();

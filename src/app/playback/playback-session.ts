@@ -150,7 +150,6 @@ export class PlaybackSession {
 			case 'playbackQueueStateChanged':
 				this.acceptQueue(event.payload);
 				return;
-			case 'ready':
 			case 'applicationActivitiesChanged':
 			case 'libraryScanStateChanged':
 				return;
