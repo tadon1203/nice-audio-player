@@ -19,6 +19,6 @@ pnpm test
 pnpm validate
 ```
 
-Use `pnpm dev` for the Angular development server and Electron shell. Use `pnpm test`
-to run tests only. Use `pnpm validate` for the complete consistency, lint, type-check,
-Rust, test, and production-build gate.
+`pnpm dev` starts the desktop development session. `pnpm test` runs all automated
+tests, including E2E coverage. `pnpm validate` is the complete local/CI
+verification gate.

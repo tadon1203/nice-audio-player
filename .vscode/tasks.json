@@ -3,11 +3,10 @@
 	"tasks": [
 		{
 			"label": "Nice Audio Player: dev",
-			"type": "shell",
-			"command": "pnpm.cmd",
-			"args": ["dev"],
+			"type": "process",
+			"command": "node",
+			"args": ["scripts/dev.mjs"],
 			"options": { "cwd": "${workspaceFolder}" },
-			"isBackground": true,
 			"problemMatcher": []
 		},
 		{
@@ -37,10 +36,10 @@
 			"problemMatcher": []
 		},
 		{
-			"label": "Nice Audio Player: generate bindings",
+			"label": "Nice Audio Player: update bindings",
 			"type": "shell",
 			"command": "pnpm.cmd",
-			"args": ["bindings:generate"],
+			"args": ["bindings:update"],
 			"options": { "cwd": "${workspaceFolder}" },
 			"problemMatcher": []
 		},

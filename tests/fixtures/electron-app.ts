@@ -25,7 +25,6 @@ export const test = base.extend<ElectronFixtures>({
 				env: {
 					...process.env,
 					NICE_AUDIO_PLAYER_E2E: '1',
-					NICE_AUDIO_PLAYER_DEV_SERVER_URL: 'http://127.0.0.1:4200',
 					NICE_AUDIO_PLAYER_TEST_DATA_DIR: testDataDirectory
 				}
 			});

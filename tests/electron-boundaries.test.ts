@@ -53,7 +53,7 @@ describe('Electron boundaries', () => {
 	});
 
 	it('resolves the packaged renderer path from the Electron root', () => {
-		expect(resolveRendererRoot('C:/app')).toBe('C:\\app\\renderer\\browser');
+		expect(resolveRendererRoot('C:/app')).toBe('C:\\app\\build\\renderer\\browser');
 	});
 
 	it('accepts only canonical artwork URLs under the user data root', () => {
