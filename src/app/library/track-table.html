@@ -22,15 +22,25 @@
 					@if (layout() === 'library' && sortKeyForColumn(column); as sortableKey) {
 					<button
 						type="button"
-						appButton="table-sort"
+						hlmBtn
+						variant="ghost"
+						size="icon-sm"
 						[attr.aria-label]="'Sort by ' + columnLabel(column)"
 						(click)="toggleSort(column)"
 					>
 						<span>{{ columnLabel(column) }}</span>
 						@if (isSortActive(column)) { @if (sortDirection() === 'ascending') {
-						<svg lucideArrowUp aria-hidden="true" class="size-icon-small"></svg>
+						<ng-icon
+							name="lucideArrowUp"
+							aria-hidden="true"
+							class="size-icon-small text-icon-small"
+						/>
 						} @else {
-						<svg lucideArrowDown aria-hidden="true" class="size-icon-small"></svg>
+						<ng-icon
+							name="lucideArrowDown"
+							aria-hidden="true"
+							class="size-icon-small text-icon-small"
+						/>
 						} }
 					</button>
 					} @else { {{ columnLabel(column) }} }
@@ -57,23 +67,25 @@
 				<td class="max-w-0 px-control text-start" [attr.data-column]="column">
 					<button
 						type="button"
-						appButton="track-title"
+						hlmBtn
+						variant="ghost"
+						class="justify-start text-start"
 						[disabled]="!row.playable || row.availability !== 'available'"
 						[aria-label]="'Play ' + row.title"
 						(click)="playTrack.emit(row.id)"
 					>
 						@if (isActive(row) && playbackStatus() === 'playing') {
-						<svg
-							lucidePause
+						<ng-icon
+							name="lucidePause"
 							aria-hidden="true"
-							class="size-icon-small shrink-0 text-content-primary"
-						></svg>
+							class="size-icon-small shrink-0 text-icon-small text-content-primary"
+						/>
 						} @else if (isActive(row) && playbackStatus() === 'paused') {
-						<svg
-							lucidePlay
+						<ng-icon
+							name="lucidePlay"
 							aria-hidden="true"
-							class="size-icon-small shrink-0 text-content-primary"
-						></svg>
+							class="size-icon-small shrink-0 text-icon-small text-content-primary"
+						/>
 						}
 						<span class="truncate text-content-primary">{{ row.title }}</span>
 						@if (statusLabel(row); as status) {

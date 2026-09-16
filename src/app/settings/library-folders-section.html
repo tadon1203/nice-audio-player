@@ -31,7 +31,8 @@
 						</label>
 						<button
 							type="button"
-							appButton="danger"
+							hlmBtn
+							variant="destructive"
 							[disabled]="scanRunning || roots.pendingIds().has(root.id)"
 							(click)="remove(root)"
 						>
@@ -46,7 +47,13 @@
 			}
 
 			<div class="mt-group">
-				<button type="button" appButton="primary" [disabled]="scanRunning" (click)="addFolder()">
+				<button
+					type="button"
+					hlmBtn
+					variant="default"
+					[disabled]="scanRunning"
+					(click)="addFolder()"
+				>
 					Add folder
 				</button>
 			</div>
@@ -72,9 +79,9 @@
 
 			<div class="mt-group">
 				@if (scanRunning) {
-				<button type="button" appButton="secondary" (click)="cancelScan()">Cancel scan</button>
+				<button type="button" hlmBtn variant="outline" (click)="cancelScan()">Cancel scan</button>
 				} @else {
-				<button type="button" appButton="secondary" (click)="rescan()">Rescan</button>
+				<button type="button" hlmBtn variant="outline" (click)="rescan()">Rescan</button>
 				}
 			</div>
 		</div>

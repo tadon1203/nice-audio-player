@@ -1,10 +1,11 @@
 import { Component, computed, DestroyRef, inject } from '@angular/core';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { LucideArrowLeft } from '@lucide/angular';
+import { NgIcon, provideIcons } from '@ng-icons/core';
+import { lucideArrowLeft } from '@ng-icons/lucide';
 import { map } from 'rxjs';
 import type { LibraryAlbumKey, LibraryAlbumTrackSummary } from '@shared/native-app-api';
-import { Button } from '@app/ui/button';
+import { HlmButton } from '@app/ui/spartan/button';
 import { Artwork } from '@app/ui/artwork';
 import { FormatDurationPipe } from '@app/ui/format-duration';
 import { PageFrame } from '@app/ui/page-frame';
@@ -22,15 +23,15 @@ import {
 	selector: 'app-album-details-page',
 	imports: [
 		Artwork,
-		Button,
+		HlmButton,
 		FormatDurationPipe,
-		LucideArrowLeft,
+		NgIcon,
 		PageFrame,
 		RouterLink,
 		ScrollRegion,
 		TrackTable
 	],
-	providers: [AlbumDetailsWorkspace],
+	providers: [AlbumDetailsWorkspace, provideIcons({ lucideArrowLeft })],
 	host: {
 		class: 'block h-full min-h-0 min-w-0 overflow-hidden',
 		'data-page': 'album-details'

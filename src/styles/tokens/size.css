@@ -1,20 +1,23 @@
 :root {
-	--nap-size-control-compact: var(--nap-ref-size-control-compact);
-	--nap-size-control: var(--nap-ref-size-control);
-	--nap-size-control-prominent: var(--nap-ref-size-control-prominent);
-	--nap-size-nav-row: var(--nap-ref-size-nav-row);
-	--nap-size-track-row: var(--nap-ref-size-track-row);
-	--nap-size-icon-small: var(--nap-ref-size-icon-small);
-	--nap-size-icon: var(--nap-ref-size-icon);
-	--nap-size-icon-large: var(--nap-ref-size-icon-large);
-	--nap-size-search-width: var(--nap-ref-size-search-width);
-	--nap-size-sort-control: var(--nap-ref-size-sort-control);
-	--nap-size-media-tile: var(--nap-ref-size-media-tile);
-	--nap-size-media-artist-tile: clamp(
-		var(--nap-ref-size-media-artist-min),
-		var(--nap-ref-size-media-artist-fluid),
-		var(--nap-ref-size-media-artist-max)
-	);
-	--nap-size-media-detail: var(--nap-ref-size-media-detail);
-	--nap-size-media-detail-tile: var(--nap-ref-size-media-detail-tile);
+	--nap-size-control-compact: 32px;
+	--nap-size-control: 36px;
+	--nap-size-control-prominent: 40px;
+
+	--nap-size-nav-row: 40px;
+	--nap-size-track-row: 44px;
+
+	--nap-size-icon-small: 16px;
+	--nap-size-icon: 20px;
+	--nap-size-icon-large: 24px;
+
+	--nap-size-search-width: 190px;
+	--nap-size-sort-control: 188px;
+
+	--nap-size-media-tile: 188px;
+	--nap-size-media-artist-tile: clamp(152px, 20vw, 220px);
+	--nap-size-media-detail: 224px;
+	--nap-size-media-detail-tile: 176px;
+
+	--nap-focus-width: 2px;
+	--nap-focus-offset: 2px;
 }

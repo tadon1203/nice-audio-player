@@ -1,12 +1,12 @@
 import { Component, input, output } from '@angular/core';
 import type { LibraryAlbumArtistSummary } from '@shared/native-app-api';
-import { Button } from '@app/ui/button';
+import { HlmButton } from '@app/ui/spartan/button';
 import { Artwork } from '@app/ui/artwork';
 import type { CatalogView } from './library-workspace';
 
 @Component({
 	selector: 'app-album-artist-grid',
-	imports: [Artwork, Button],
+	imports: [Artwork, HlmButton],
 	templateUrl: './album-artist-grid.html'
 })
 export class AlbumArtistGrid {

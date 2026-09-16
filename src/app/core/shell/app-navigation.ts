@@ -1,16 +1,11 @@
 import { Component } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
-import { LucideDisc, LucideListMusic, LucideSettings, LucideUsersRound } from '@lucide/angular';
+import { NgIcon, provideIcons } from '@ng-icons/core';
+import { lucideDisc, lucideListMusic, lucideSettings, lucideUsersRound } from '@ng-icons/lucide';
 
 @Component({
-	imports: [
-		LucideDisc,
-		LucideListMusic,
-		LucideSettings,
-		LucideUsersRound,
-		RouterLink,
-		RouterLinkActive
-	],
+	imports: [NgIcon, RouterLink, RouterLinkActive],
+	providers: [provideIcons({ lucideDisc, lucideListMusic, lucideSettings, lucideUsersRound })],
 	selector: 'app-navigation',
 	host: { class: 'block min-h-0 app-wide:h-full' },
 	templateUrl: './app-navigation.html'

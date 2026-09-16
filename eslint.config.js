@@ -13,6 +13,7 @@ export default defineConfig(
 	globalIgnores([
 		'.agents/**',
 		'.impeccable/**',
+		'src/app/ui/spartan/**',
 		'.angular/**',
 		'build/**',
 		'backend/target/**',
@@ -92,11 +93,23 @@ export default defineConfig(
 					paths: [
 						{ name: 'electron', message: 'Renderer code must use the shared host contract.' },
 						{
+							name: '@angular/aria',
+							message: 'Use the local Spartan integration instead of Angular Aria.'
+						},
+						{
+							name: '@angular/cdk/dialog',
+							message: 'Use the local Spartan dialog integration.'
+						},
+						{
 							name: '@angular/animations',
 							message: 'Prefer CSS transitions or an owner-local animation implementation.'
 						}
 					],
 					patterns: [
+						{
+							group: ['@spartan-ng/helm/*'],
+							message: 'Import Spartan UI through the repo-owned local Helm entry point.'
+						},
 						{
 							group: ['../../**'],
 							message: 'Use a configured path alias instead of a deep relative import.'
@@ -104,6 +117,23 @@ export default defineConfig(
 						{
 							group: ['node:*', '**/electron/**'],
 							message: 'Renderer code must not depend on Node or Electron.'
+						}
+					]
+				}
+			]
+		}
+	},
+	{
+		files: ['src/app/**/*.ts'],
+		ignores: ['src/app/ui/spartan/**/*.ts'],
+		rules: {
+			'no-restricted-imports': [
+				'error',
+				{
+					patterns: [
+						{
+							group: ['@spartan-ng/brain/*'],
+							message: 'Import Spartan Brain only through repo-owned local Helm source.'
 						}
 					]
 				}

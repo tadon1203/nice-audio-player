@@ -1,13 +1,14 @@
 import { Component, computed, inject, signal } from '@angular/core';
+import { NgIcon, provideIcons } from '@ng-icons/core';
 import {
-	LucidePause,
-	LucidePlay,
-	LucideSkipBack,
-	LucideSkipForward,
-	LucideVolume2,
-	LucideVolumeX
-} from '@lucide/angular';
-import { Button } from '@app/ui/button';
+	lucidePause,
+	lucidePlay,
+	lucideSkipBack,
+	lucideSkipForward,
+	lucideVolume2,
+	lucideVolumeX
+} from '@ng-icons/lucide';
+import { HlmButton } from '@app/ui/spartan/button';
 import { Artwork } from '@app/ui/artwork';
 import { FormatDurationPipe } from '@app/ui/format-duration';
 import { RangeControl } from '@app/ui/range-control';
@@ -19,32 +20,26 @@ export function formatVolumeDb(volume: number): string {
 }
 
 @Component({
-	imports: [
-		Artwork,
-		Button,
-		FormatDurationPipe,
-		RangeControl,
-		LucidePause,
-		LucidePlay,
-		LucideSkipBack,
-		LucideSkipForward,
-		LucideVolume2,
-		LucideVolumeX
+	imports: [Artwork, HlmButton, FormatDurationPipe, RangeControl, NgIcon],
+	providers: [
+		provideIcons({
+			lucidePause,
+			lucidePlay,
+			lucideSkipBack,
+			lucideSkipForward,
+			lucideVolume2,
+			lucideVolumeX
+		})
 	],
 	selector: 'app-playback-dock',
 	host: { class: 'block h-full min-h-0 min-w-0' },
+	styleUrl: './playback-dock.css',
 	templateUrl: './playback-dock.html'
 })
 export class PlaybackDock {
 	protected readonly session = inject(PlaybackSession);
 	protected readonly seekPreviewMs = signal<number | null>(null);
 	protected readonly seekValue = computed(() => this.seekPreviewMs() ?? this.session.positionMs());
-	protected readonly progressPercent = computed(() => {
-		const duration = this.session.durationMs();
-		if (duration === null || duration <= 0) return 0;
-		return Math.min(100, Math.max(0, (this.seekValue() / duration) * 100));
-	});
-	protected readonly volumePercent = computed(() => this.session.volume() * 100);
 	protected readonly volumeDb = computed(() =>
 		this.session.muted() ? '−∞ dB' : formatVolumeDb(this.session.volume())
 	);
@@ -70,7 +65,7 @@ export class PlaybackDock {
 		this.seekPreviewMs.set(value);
 	}
 
-	async onSeekChange(value: number): Promise<void> {
+	async onSeekCommit(value: number): Promise<void> {
 		try {
 			await this.session.seek(value);
 		} finally {

@@ -2,14 +2,14 @@ import { Component, computed, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { map } from 'rxjs';
-import { LucideSearch } from '@lucide/angular';
+import { NgIcon, provideIcons } from '@ng-icons/core';
+import { lucideSearch } from '@ng-icons/lucide';
 import type { LibraryTrackSortKey, LibraryTrackSummary } from '@shared/native-app-api';
-import { Button } from '@app/ui/button';
+import { HlmButton } from '@app/ui/spartan/button';
 import { PageFrame } from '@app/ui/page-frame';
 import { PlaybackSession } from '@app/playback/playback-session';
 import { ScrollRegion } from '@app/ui/scroll-region';
-import type { SelectOption } from '@app/ui/app-select';
-import { SortControl, type SortChange } from '@app/ui/sort-control';
+import { SortControl, type SortChange, type SortOption } from '@app/ui/sort-control';
 import { AlbumArtistGrid } from './album-artist-grid';
 import { AlbumGrid } from './album-grid';
 import { LibrarySession } from './library-session';
@@ -27,13 +27,14 @@ import {
 	imports: [
 		AlbumArtistGrid,
 		AlbumGrid,
-		Button,
-		LucideSearch,
+		HlmButton,
+		NgIcon,
 		PageFrame,
 		ScrollRegion,
 		SortControl,
 		TrackTable
 	],
+	providers: [provideIcons({ lucideSearch })],
 	selector: 'app-library-page',
 	host: {
 		class: 'block h-full min-h-0 min-w-0 overflow-hidden',
@@ -179,5 +180,5 @@ interface PresentationMeta {
 	readonly singularNoun: string;
 	readonly pluralNoun: string;
 	readonly searchPlaceholder: string;
-	readonly sortOptions: readonly SelectOption[];
+	readonly sortOptions: readonly SortOption[];
 }

@@ -1,11 +1,12 @@
 import { Component, input, output } from '@angular/core';
-import { LucideArrowDown, LucideArrowUp, LucidePause, LucidePlay } from '@lucide/angular';
+import { NgIcon, provideIcons } from '@ng-icons/core';
+import { lucideArrowDown, lucideArrowUp, lucidePause, lucidePlay } from '@ng-icons/lucide';
 import type {
 	LibraryFileAvailability,
 	LibrarySortDirection,
 	LibraryTrackSortKey
 } from '@shared/native-backend';
-import { Button } from '@app/ui/button';
+import { HlmButton } from '@app/ui/spartan/button';
 import { FormatDurationPipe } from '@app/ui/format-duration';
 
 export type TrackTableColumn =
@@ -46,7 +47,8 @@ export interface TrackTableRow {
 
 @Component({
 	selector: 'app-track-table',
-	imports: [Button, FormatDurationPipe, LucideArrowDown, LucideArrowUp, LucidePause, LucidePlay],
+	imports: [HlmButton, FormatDurationPipe, NgIcon],
+	providers: [provideIcons({ lucideArrowDown, lucideArrowUp, lucidePause, lucidePlay })],
 	templateUrl: './track-table.html'
 })
 export class TrackTable {

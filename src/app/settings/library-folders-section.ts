@@ -1,21 +1,21 @@
 import { Component, DestroyRef, inject } from '@angular/core';
-import { Dialog } from '@angular/cdk/dialog';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import type { LibraryRoot } from '@shared/native-app-api';
-import { Button } from '@app/ui/button';
+import { HlmButton } from '@app/ui/spartan/button';
+import { HlmDialogService } from '@app/ui/spartan/dialog';
 import { LibrarySession } from '@app/library/library-session';
 import { LibraryRootsStore } from './library-roots-store';
 import { RemoveLibraryRootDialog } from './remove-library-root-dialog';
 
 @Component({
-	imports: [Button],
+	imports: [HlmButton],
 	selector: 'app-library-folders-section',
 	templateUrl: './library-folders-section.html'
 })
 export class LibraryFoldersSection {
 	protected readonly roots = inject(LibraryRootsStore);
 	protected readonly library = inject(LibrarySession);
-	private readonly dialog = inject(Dialog);
+	private readonly dialog = inject(HlmDialogService);
 	private readonly destroyRef = inject(DestroyRef);
 
 	protected get scanRunning(): boolean {
@@ -34,14 +34,17 @@ export class LibraryFoldersSection {
 	remove(root: LibraryRoot): void {
 		if (this.scanRunning) return;
 		const ref = this.dialog.open<boolean, LibraryRoot>(RemoveLibraryRootDialog, {
-			data: root,
+			context: root,
+			contentClass: 'max-w-layout-context-pane-width',
+			showCloseButton: false,
 			role: 'alertdialog',
-			ariaLabel: 'Remove library folder',
-			disableClose: false
+			ariaLabel: 'Remove library folder'
 		});
-		ref.closed.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((confirmed) => {
-			if (confirmed) void this.roots.remove(root);
-		});
+		ref.closed$
+			.pipe(takeUntilDestroyed(this.destroyRef))
+			.subscribe((confirmed: boolean | undefined) => {
+				if (confirmed) void this.roots.remove(root);
+			});
 	}
 
 	rescan(): void {

@@ -28,7 +28,7 @@ describe('TrackTable', () => {
 		const headers = root.querySelectorAll('th');
 		expect(headers[0].getAttribute('aria-sort')).toBe('ascending');
 		expect(headers[1].getAttribute('aria-sort')).toBe('none');
-		expect(headers[0]?.querySelector('svg[lucideArrowUp]')).not.toBeNull();
+		expect(headers[0]?.querySelector('ng-icon[name="lucideArrowUp"]')).not.toBeNull();
 		expect(root.querySelectorAll('thead button')).toHaveLength(4);
 	});
 

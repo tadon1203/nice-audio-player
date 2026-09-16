@@ -5,8 +5,9 @@
 	@for (artist of state().items; track artist.key.name) {
 	<button
 		type="button"
-		appButton="album"
-		class="group min-w-0 flex-col gap-related text-start"
+		hlmBtn
+		variant="ghost"
+		class="group !h-auto min-w-0 flex-col gap-related !border-0 !p-0 text-start"
 		[aria-label]="'Browse albums by ' + artist.key.name"
 		(click)="selectArtist.emit(artist.key.name)"
 	>

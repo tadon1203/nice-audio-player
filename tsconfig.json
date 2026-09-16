@@ -17,7 +17,12 @@
 		"moduleResolution": "bundler",
 		"paths": {
 			"@app/*": ["./src/app/*"],
-			"@shared/*": ["./shared/*"]
+			"@shared/*": ["./shared/*"],
+			"@app/ui/spartan/button": ["./src/app/ui/spartan/button/src/index.ts"],
+			"@app/ui/spartan/utils": ["./src/app/ui/spartan/utils/src/index.ts"],
+			"@app/ui/spartan/select": ["./src/app/ui/spartan/select/src/index.ts"],
+			"@app/ui/spartan/dialog": ["./src/app/ui/spartan/dialog/src/index.ts"],
+			"@app/ui/spartan/slider": ["./src/app/ui/spartan/slider/src/index.ts"]
 		},
 		"importHelpers": true,
 		"target": "ES2022",

@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Locator } from '@playwright/test';
 import { installNativeAppFixture } from './fixtures/native-app';
 
 test.beforeEach(async ({ page }) => installNativeAppFixture(page));
@@ -6,7 +6,19 @@ test.beforeEach(async ({ page }) => installNativeAppFixture(page));
 test('connects folder registration, scan, catalog selection, and playback dock', async ({
 	page
 }) => {
+	const clickSliderAt = async (track: Locator, fraction: number) => {
+		const box = await track.boundingBox();
+		expect(box).not.toBeNull();
+		if (!box) return;
+		await page.mouse.click(box.x + box.width * fraction, box.y + box.height / 2);
+	};
+
 	await page.goto('/library/albums');
+	for (const label of ['Albums', 'Album Artists', 'Tracks', 'Settings']) {
+		const icon = page.getByRole('link', { name: label }).locator('ng-icon');
+		await expect(icon).toHaveCSS('width', '16px');
+		await expect(icon).toHaveCSS('height', '16px');
+	}
 	await page.getByRole('link', { name: 'Settings' }).click();
 	await page.getByRole('button', { name: 'Add folder' }).click();
 	await expect(page.getByText('C:/Music')).toBeVisible();
@@ -23,6 +35,12 @@ test('connects folder registration, scan, catalog selection, and playback dock',
 	await expect(stoppedSeek).toBeDisabled();
 	await page.getByRole('button', { name: /Test track/ }).click();
 	await expect(page.getByTestId('playback-dock')).toContainText('Test track');
+	const transportIcons = page.locator('[data-region="playback-core"] ng-icon');
+	await expect(transportIcons).toHaveCount(3);
+	for (let index = 0; index < 3; index += 1) {
+		await expect(transportIcons.nth(index)).toHaveCSS('width', '20px');
+		await expect(transportIcons.nth(index)).toHaveCSS('height', '20px');
+	}
 	const playbackStatusLabel = page.getByText('Playing', { exact: true });
 	await expect(playbackStatusLabel).toHaveText('Playing');
 	await expect(playbackStatusLabel).toHaveCSS('font-size', '14px');
@@ -41,13 +59,73 @@ test('connects folder registration, scan, catalog selection, and playback dock',
 	await expect(page.getByTestId('playback-dock')).toContainText('Second track');
 	await page.getByRole('button', { name: 'Previous track' }).click();
 	await expect(page.getByTestId('playback-dock')).toContainText('Test track');
+	const pauseButton = page.getByRole('button', { name: 'Pause' });
+	const pauseBox = await pauseButton.boundingBox();
+	expect(pauseBox).not.toBeNull();
+	if (!pauseBox) return;
+	await page.mouse.move(pauseBox.x + pauseBox.width / 2, pauseBox.y + pauseBox.height / 2);
+	await page.mouse.down();
+	const pressedPauseBox = await pauseButton.boundingBox();
+	expect(pressedPauseBox).not.toBeNull();
+	if (!pressedPauseBox) return;
+	expect(Math.abs(pressedPauseBox.x - pauseBox.x)).toBeLessThanOrEqual(1);
+	expect(Math.abs(pressedPauseBox.y - pauseBox.y)).toBeLessThanOrEqual(1);
+	await page.mouse.up();
+	await expect(page.getByRole('button', { name: 'Resume' })).toBeVisible();
+	await page.getByRole('button', { name: 'Resume' }).click();
+	await expect(page.getByRole('button', { name: 'Pause' })).toBeVisible();
 
 	const seek = page.getByRole('slider', { name: 'Playback position' });
-	const playbackTrack = page.locator('[data-range-control="playback"] .range-control-track');
-	const volumeTrack = page.locator('[data-range-control="volume"] .range-control-track');
+	const playbackControl = page.locator('app-range-control').filter({ has: seek });
+	const playbackTrack = playbackControl.locator('[brnSliderTrack]');
+	const volume = page.getByRole('slider', { name: 'Volume' });
+	const volumeControl = page.locator('app-range-control').filter({ has: volume });
+	const volumeTrack = volumeControl.locator('[brnSliderTrack]');
+	const volumeRange = volumeControl.locator('[brnSliderRange]');
+	const readDockGeometry = async () =>
+		page.evaluate(() => {
+			const box = (element: Element | null) => {
+				if (!element) throw new Error('Expected playback geometry element');
+				const { x, y, width, height } = element.getBoundingClientRect();
+				return { x, y, width, height };
+			};
+			const rangeControls = [...document.querySelectorAll('app-range-control')];
+			const rangeFor = (label: string) =>
+				rangeControls.find((control) => control.querySelector(`[aria-label="${label}"]`)) ?? null;
+			return {
+				dock: box(document.querySelector('[data-testid="playback-dock"]')),
+				identity: box(document.querySelector('[data-region="playback-identity"]')),
+				transport: box(document.querySelector('[data-region="playback-core"]')),
+				volume: box(document.querySelector('[data-region="volume"]')),
+				seekHost: box(rangeFor('Playback position')),
+				volumeHost: box(rangeFor('Volume')),
+				seekTrack: box(rangeFor('Playback position')?.querySelector('[brnSliderTrack]') ?? null),
+				volumeTrack: box(rangeFor('Volume')?.querySelector('[brnSliderTrack]') ?? null)
+			};
+		});
+	const expectStableGeometry = (
+		before: Awaited<ReturnType<typeof readDockGeometry>>,
+		after: Awaited<ReturnType<typeof readDockGeometry>>
+	) => {
+		for (const region of [
+			'dock',
+			'identity',
+			'transport',
+			'volume',
+			'seekHost',
+			'volumeHost'
+		] as const) {
+			for (const property of ['x', 'y', 'width', 'height'] as const) {
+				expect(Math.abs(after[region][property] - before[region][property])).toBeLessThanOrEqual(1);
+			}
+		}
+	};
 	await expect(seek).toHaveCount(1);
+	await expect(playbackControl).toHaveCSS('height', '4px');
 	await expect(playbackTrack).toHaveCSS('block-size', '4px');
 	await seek.focus();
+	await page.keyboard.press('Tab');
+	await page.keyboard.press('Shift+Tab');
 	await expect(seek).toBeFocused();
 	await expect(seek).toHaveCSS('outline-width', '2px');
 	await page.keyboard.press('Tab');
@@ -58,17 +136,14 @@ test('connects folder registration, scan, catalog selection, and playback dock',
 	await expect(playbackTrack).toHaveCSS('block-size', '8px');
 	await page.mouse.move(400, 400);
 	await expect(playbackTrack).toHaveCSS('block-size', '4px');
-	await seek.fill('60000');
+	await clickSliderAt(playbackTrack, 0.5);
 	await expect(page.getByTestId('playback-dock')).toContainText('1:00');
-	await seek.press('Enter');
-	await expect(page.getByTestId('playback-dock')).toContainText('1:00');
-	await expect(seek).toHaveValue('60000');
+	await expect(seek).toHaveAttribute('aria-valuenow', '60000');
 	await expect(playbackTrack).toHaveCSS('opacity', '1');
-	const volume = page.getByRole('slider', { name: 'Volume' });
-	const volumeControl = page.locator('[data-range-control="volume"]');
 	const volumeReadout = page.locator('[data-region="volume-readout"]');
 	await expect(volumeControl).toHaveCSS('height', '40px');
 	await expect(volumeReadout).toBeVisible();
+	await page.mouse.move(400, 400);
 	await volume.focus();
 	await expect(playbackTrack).toHaveCSS('block-size', '4px');
 	await expect(volumeTrack).toHaveCSS('block-size', '4px');
@@ -85,28 +160,48 @@ test('connects folder registration, scan, catalog selection, and playback dock',
 	await expect(volumeTrack).toHaveCSS('block-size', '4px');
 	await volume.blur();
 	await expect(volumeTrack).toHaveCSS('block-size', '4px');
-	await volume.fill('0.42');
-	await expect(volume).toHaveValue('0.42');
+	await clickSliderAt(volumeTrack, 0.42);
+	await expect(volume).toHaveAttribute('aria-valuenow', '0.42');
 	await expect(page.getByTestId('playback-dock')).toContainText('-7.5 dB');
+	const normalGeometry = await readDockGeometry();
+	for (const pair of [
+		[normalGeometry.identity, normalGeometry.transport],
+		[normalGeometry.identity, normalGeometry.volume]
+	] as const) {
+		expect(
+			Math.abs(pair[0].y + pair[0].height / 2 - (pair[1].y + pair[1].height / 2))
+		).toBeLessThanOrEqual(1);
+	}
+	expect(normalGeometry.seekHost.height).toBeCloseTo(4, 0);
+	expect(normalGeometry.volumeHost.height).toBeCloseTo(40, 0);
+	for (const [host, track] of [
+		[normalGeometry.seekHost, normalGeometry.seekTrack],
+		[normalGeometry.volumeHost, normalGeometry.volumeTrack]
+	] as const) {
+		expect(Math.abs(host.y + host.height / 2 - (track.y + track.height / 2))).toBeLessThanOrEqual(
+			1
+		);
+	}
 	await page.emulateMedia({ reducedMotion: 'reduce' });
 	await seek.focus();
 	await expect(playbackTrack).toHaveCSS('transition-duration', '0s');
 	await expect(playbackTrack).toHaveCSS('block-size', '4px');
 	await page.getByRole('button', { name: 'Mute' }).click();
-	await expect(page.getByRole('button', { name: 'Unmute' })).toBeVisible();
-	await expect(volumeControl).toHaveAttribute('data-muted', '');
-	await expect(volume).toHaveValue('0.42');
+	const unmuteButton = page.getByRole('button', { name: 'Unmute' });
+	await expect(unmuteButton).toBeVisible();
+	await expect(unmuteButton).toBeEnabled();
+	const mutedGeometry = await readDockGeometry();
+	expectStableGeometry(normalGeometry, mutedGeometry);
+	await expect(volumeControl.locator('hlm-slider')).toHaveAttribute('data-tone', 'subdued');
+	await expect(volume).toHaveAttribute('aria-valuenow', '0.42');
 	await expect(volume).toHaveAttribute('aria-valuetext', 'Muted');
 	await expect(volumeReadout).toHaveText('−∞ dB');
-	await expect(volumeTrack).toHaveAttribute('style', /--range-progress:\s*42/);
-	await expect
-		.poll(() => volumeTrack.evaluate((element) => getComputedStyle(element).backgroundImage))
-		.toContain('oklch(0.556 0 0)');
-	await volume.fill('0.5');
-	await expect(page.getByRole('button', { name: 'Mute' })).toBeVisible();
-	await expect(volumeControl).not.toHaveAttribute('data-muted');
-	await expect(volume).toHaveValue('0.5');
-	await expect(volumeReadout).toHaveText('-6.0 dB');
+	await expect(volumeRange).toHaveCSS('background-color', 'oklch(0.556 0 0)');
+	await page.getByRole('button', { name: 'Unmute', exact: true }).click();
+	await expect(page.getByRole('button', { name: 'Mute', exact: true })).toBeVisible();
+	await expect(volumeControl.locator('hlm-slider')).toHaveAttribute('data-tone', 'default');
+	const restoredGeometry = await readDockGeometry();
+	expectStableGeometry(normalGeometry, restoredGeometry);
 
 	const missing = page.getByRole('button', { name: 'Play Missing track' });
 	await expect(missing).toBeDisabled();

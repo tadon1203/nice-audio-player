@@ -1,18 +1,23 @@
 :root {
-	--nap-font-interface: var(--nap-ref-font-interface);
-	--nap-type-object-title-size: var(--nap-ref-size-object-title);
-	--nap-type-object-title-line-height: var(--nap-ref-line-object-title);
-	--nap-type-object-title-weight: var(--nap-ref-weight-regular);
-	--nap-type-page-title-size: var(--nap-ref-size-page-title);
-	--nap-type-page-title-line-height: var(--nap-ref-line-page-title);
-	--nap-type-page-title-weight: var(--nap-ref-weight-regular);
-	--nap-type-section-size: var(--nap-ref-size-section);
-	--nap-type-section-line-height: var(--nap-ref-line-section);
-	--nap-type-section-weight: var(--nap-ref-weight-regular);
-	--nap-type-body-size: var(--nap-ref-size-body);
-	--nap-type-body-line-height: var(--nap-ref-line-body);
-	--nap-type-body-weight: var(--nap-ref-weight-regular);
-	--nap-type-label-size: var(--nap-ref-size-body);
-	--nap-type-label-line-height: var(--nap-ref-line-body);
-	--nap-type-label-weight: var(--nap-ref-weight-label);
+	--nap-font-interface: 'Satoshi', 'Noto Sans JP', 'Segoe UI', system-ui, sans-serif;
+
+	--nap-type-object-title-size: 28px;
+	--nap-type-object-title-line-height: 36px;
+	--nap-type-object-title-weight: 400;
+
+	--nap-type-page-title-size: 24px;
+	--nap-type-page-title-line-height: 32px;
+	--nap-type-page-title-weight: 400;
+
+	--nap-type-section-size: 18px;
+	--nap-type-section-line-height: 24px;
+	--nap-type-section-weight: 400;
+
+	--nap-type-body-size: 14px;
+	--nap-type-body-line-height: 20px;
+	--nap-type-body-weight: 400;
+
+	--nap-type-label-size: 14px;
+	--nap-type-label-line-height: 20px;
+	--nap-type-label-weight: 500;
 }

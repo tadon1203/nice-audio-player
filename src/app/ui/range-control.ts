@@ -1,33 +1,43 @@
-import { Component, input, output } from '@angular/core';
+import { Component, computed, input, output, signal } from '@angular/core';
+import { HlmSliderImports } from '@app/ui/spartan/slider';
+
+export type RangeControlTone = 'default' | 'subdued';
+export type RangeControlLayoutHeight = 'tight' | 'prominent';
+
+const COMMIT_KEYS = new Set([
+	'ArrowLeft',
+	'ArrowRight',
+	'ArrowUp',
+	'ArrowDown',
+	'PageUp',
+	'PageDown',
+	'Home',
+	'End'
+]);
 
 @Component({
 	selector: 'app-range-control',
+	imports: [...HlmSliderImports],
 	host: {
-		class: 'range-control relative block min-w-0',
-		'data-range-part': 'root'
+		class: 'relative block min-w-0',
+		'[class.h-tight]': "layoutHeight() === 'tight'",
+		'[class.h-control-prominent]': "layoutHeight() === 'prominent'"
 	},
 	template: `
-		<span
-			class="range-control-track absolute inset-x-0 top-1/2 -translate-y-1/2"
-			aria-hidden="true"
-			data-range-part="track"
-			data-range-track
-			[style.--range-progress]="progress()"
-		></span>
-		<input
-			type="range"
+		<hlm-slider
+			class="absolute inset-x-0 top-1/2 -translate-y-1/2"
 			[min]="min()"
 			[max]="max()"
 			[step]="step()"
-			[value]="value()"
+			[value]="sliderValue()"
 			[disabled]="disabled()"
-			[attr.aria-label]="label()"
-			[attr.aria-valuetext]="valueText()"
-			data-range-part="input"
-			class="range-control-input absolute inset-x-0 top-1/2 z-chrome h-control-prominent w-full -translate-y-1/2"
-			(input)="emitInput($event)"
-			(change)="emitChange($event)"
-		/>
+			[aria-label]="label()"
+			[aria-valuetext]="valueText()"
+			[attr.data-tone]="tone()"
+			(valueChange)="onValueChange($event)"
+			(pointerup)="commitPending()"
+			(keyup)="onKeyup($event)"
+		></hlm-slider>
 	`
 })
 export class RangeControl {
@@ -35,22 +45,32 @@ export class RangeControl {
 	readonly max = input.required<number>();
 	readonly step = input(1);
 	readonly value = input.required<number>();
-	readonly progress = input(0);
 	readonly label = input.required<string>();
 	readonly valueText = input<string | null>(null);
 	readonly disabled = input(false);
+	readonly tone = input<RangeControlTone>('default');
+	readonly layoutHeight = input<RangeControlLayoutHeight>('prominent');
 	readonly valueInput = output<number>();
-	readonly valueChange = output<number>();
+	readonly valueCommit = output<number>();
 
-	protected emitInput(event: Event): void {
-		this.valueInput.emit(this.readValue(event));
+	protected readonly sliderValue = computed(() => [this.value()]);
+	private readonly pendingCommit = signal<number | null>(null);
+
+	protected onValueChange(values: number[]): void {
+		const value = values[0];
+		if (value === undefined || value === this.value()) return;
+		this.pendingCommit.set(value);
+		this.valueInput.emit(value);
 	}
 
-	protected emitChange(event: Event): void {
-		this.valueChange.emit(this.readValue(event));
+	protected onKeyup(event: KeyboardEvent): void {
+		if (COMMIT_KEYS.has(event.key)) this.commitPending();
 	}
 
-	private readValue(event: Event): number {
-		return Number((event.target as HTMLInputElement).value);
+	protected commitPending(): void {
+		const value = this.pendingCommit();
+		if (value === null) return;
+		this.pendingCommit.set(null);
+		this.valueCommit.emit(value);
 	}
 }

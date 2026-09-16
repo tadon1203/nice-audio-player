@@ -6,11 +6,11 @@
 				<label class="me-control w-full app-wide:w-search-width">
 					<span class="sr-only">Filter library</span>
 					<div class="relative">
-						<svg
-							lucideSearch
+						<ng-icon
+							name="lucideSearch"
 							aria-hidden="true"
-							class="pointer-events-none absolute start-control top-1/2 size-icon-small -translate-y-1/2 text-content-secondary"
-						></svg>
+							class="pointer-events-none absolute start-control top-1/2 size-icon-small -translate-y-1/2 text-icon-small text-content-secondary"
+						/>
 						<input
 							type="search"
 							class="h-control-default w-full rounded-control border border-stroke-control bg-surface-control ps-region pe-control text-body text-content-primary placeholder:text-content-muted"
@@ -81,7 +81,8 @@
 					<div class="flex justify-center py-region">
 						<button
 							type="button"
-							appButton="secondary"
+							hlmBtn
+							variant="outline"
 							[disabled]="currentView().loadState === 'loadingMore'"
 							(click)="workspace.loadMore(presentation())"
 						>

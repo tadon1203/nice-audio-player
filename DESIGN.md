@@ -30,32 +30,36 @@ A successful screen should answer four questions without explanation: what matte
 Nice Audio Player uses a deliberately small semantic token system:
 
 ```text
-reference primitives → public semantic tokens → UI components
+public semantic product tokens
+        ├──→ Nice Player Tailwind adapters
+        │       └──→ product UI
+        └──→ Spartan semantic adapters
+                └──→ local Helm
 ```
 
-`src/styles/tokens/reference.css` is the only raw-value layer. Category files turn those primitives into public semantic `--nap-*` tokens; `theme.css` exposes their Tailwind adapters. UI code never references `reference.css` directly.
+`src/styles/tokens/*.css` owns the public semantic `--nap-*` values. `theme.css` adapts them to Nice Audio Player Tailwind utilities, while `spartan.css` adapts them to Spartan semantic variables. Product code never references Spartan variables directly.
 
 When deciding whether to add a token, use this order:
 
 ```text
-1. Can an existing public semantic token express the meaning?
+1. Can an existing product token express the meaning?
    YES → use that token directly
    NO  → continue
 
-2. Is the value only a local adjustment?
-   YES → do not add a token; revisit the layout or component design
+2. Does the meaning recur across the application?
+   YES → add a new `--nap-*` token
    NO  → continue
 
-3. Does the meaning recur across multiple components?
-   YES → add a public semantic token
+3. Is it only a Spartan semantic translation?
+   YES → add it to `spartan.css`
    NO  → continue
 
-4. Does it repeat within one component and need independent change?
-   YES → add a private component token beside that component
+4. Is it one-component structural implementation?
+   YES → keep it beside the owning component or local Helm source
    NO  → do not tokenize it
 ```
 
-The normal dependency is `public semantic token → component`. Use `public semantic token → private component token → component` only for a genuine component-specific contract. A private token that merely aliases an existing semantic token is prohibited; use the semantic token directly. Private tokens belong in an adjacent `*.tokens.css` file and must not be used by another component. Structural values such as `0`, `100%`, `auto`, `none`, `inherit`, `1fr`, grid spans, and media-query boundaries are allowed when they describe layout rather than appearance.
+The normal dependency is `public product token → adapter → component`. Spartan default theme values are not product design values. Structural values such as `0`, `100%`, `auto`, `none`, `inherit`, `1fr`, grid spans, and media-query boundaries are allowed when they describe layout rather than appearance.
 
 ### Colors
 

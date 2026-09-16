@@ -5,7 +5,11 @@
 				routerLink="/library/albums"
 				class="inline-flex min-h-control-prominent items-center gap-control text-body text-content-secondary hover:text-content-primary"
 			>
-				<svg lucideArrowLeft aria-hidden="true" class="size-icon-small"></svg>
+				<ng-icon
+					name="lucideArrowLeft"
+					aria-hidden="true"
+					class="size-icon-small text-icon-small"
+				/>
 				<span>Albums</span>
 			</a>
 
@@ -34,7 +38,7 @@
 						{{ album.date ?? 'Unknown year' }} · {{ album.trackCount }} tracks · {{ album.durationMs
 						| formatDuration }}
 					</p>
-					<button type="button" appButton="primary" class="mt-section" (click)="playAlbum()">
+					<button type="button" hlmBtn variant="default" class="mt-section" (click)="playAlbum()">
 						Play album
 					</button>
 				</div>
@@ -62,7 +66,8 @@
 				<div class="flex justify-center py-region">
 					<button
 						type="button"
-						appButton="secondary"
+						hlmBtn
+						variant="outline"
 						[disabled]="workspace.loadState() === 'loadingMore'"
 						(click)="workspace.loadMore()"
 					>

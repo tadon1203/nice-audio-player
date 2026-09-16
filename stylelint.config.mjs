@@ -21,7 +21,8 @@ export default {
 			'animation-iteration-count',
 			'animation-name',
 			'animation-play-state',
-			'animation-timing-function'
+			'animation-timing-function',
+			'/^--nap-/i'
 		],
 		'function-disallowed-list': [
 			'rgb',
@@ -41,15 +42,26 @@ export default {
 	},
 	overrides: [
 		{
-			files: ['src/styles/theme.css', 'src/styles/tokens/reference.css'],
+			files: ['src/styles/theme.css', 'src/styles/spartan.css', 'src/styles/tokens/*.css'],
 			rules: {
 				'color-no-hex': null,
 				'color-hex-length': null,
 				'function-disallowed-list': null,
+				'property-disallowed-list': [
+					'animation',
+					'animation-delay',
+					'animation-direction',
+					'animation-duration',
+					'animation-fill-mode',
+					'animation-iteration-count',
+					'animation-name',
+					'animation-play-state',
+					'animation-timing-function'
+				],
+				'custom-property-empty-line-before': null,
 				'lightness-notation': null,
 				'hue-degree-notation': null,
-				'alpha-value-notation': null,
-				'custom-property-empty-line-before': null
+				'alpha-value-notation': null
 			}
 		}
 	]

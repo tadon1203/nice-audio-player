@@ -1,8 +1,5 @@
 :root {
-	--nap-stroke-width: var(--nap-ref-stroke-width);
-	--nap-focus-width: var(--nap-ref-focus-width);
-	--nap-focus-offset: var(--nap-ref-focus-offset);
-	--nap-motion-feedback-duration: var(--nap-ref-duration-feedback);
-	--nap-motion-spatial-duration: var(--nap-ref-duration-spatial);
-	--nap-motion-easing: var(--nap-ref-easing);
+	--nap-motion-feedback-duration: 100ms;
+	--nap-motion-spatial-duration: 160ms;
+	--nap-motion-easing: cubic-bezier(0.2, 0, 0, 1);
 }

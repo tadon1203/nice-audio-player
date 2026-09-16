@@ -55,7 +55,7 @@ src/
     └── settings/
 ```
 
-Renderer styling is owned by the `styles/` directory. The `styles/tokens/` directory owns raw primitives and public semantic tokens, while the style entry boundary owns Tailwind adapters and base rules. A component-specific contract belongs beside the component that owns it and must not be consumed by another component. Token decisions remain owned by the visual design source document.
+Renderer styling is owned by the `styles/` directory. The `styles/tokens/` directory owns public product tokens; the style entry boundary owns Tailwind and Spartan adapters; and local Helm owns Spartan presentation. A component-specific contract belongs beside the component that owns it and must not be consumed by another component. Token decisions remain owned by the visual design source document.
 
 | Area     | Location             | Responsibility                                            |
 | -------- | -------------------- | --------------------------------------------------------- |
@@ -66,7 +66,7 @@ Renderer styling is owned by the `styles/` directory. The `styles/tokens/` direc
 | Playback | `src/app/playback`   | Playback UI, state, and interactions                      |
 | Settings | `src/app/settings`   | Settings UI, state, and interactions                      |
 
-The UI area owns reusable renderer primitives and their presentation contracts. UI primitives may depend on Angular platform facilities, accessibility primitives, and shared semantic tokens, but they must not depend on feature state or feature directories. Feature areas compose UI primitives and remain responsible for domain-specific state, labels, and event handling.
+The UI area owns reusable renderer primitives and their presentation contracts. Its Spartan integration is split between locally-owned Helm presentation and npm-managed Brain interaction primitives. The dependency direction is feature → local UI/Helm → Spartan Brain → Angular/CDK/browser. UI primitives may depend on Angular platform facilities, accessibility primitives, and shared semantic tokens, but they must not depend on feature state or feature directories. Feature areas compose UI primitives and remain responsible for domain-specific state, labels, and event handling; feature code does not import Brain or CDK component implementations directly.
 
 Persistent application surfaces are owned by the root application shell and composed around the Angular Router outlet. The shell owns persistent navigation and playback surfaces around the routed workspace; feature routes own the content presented in that workspace.
 

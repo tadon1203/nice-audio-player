@@ -4,8 +4,9 @@
 	@for (album of state().items; track album.key.title + album.key.albumArtist) {
 	<button
 		type="button"
-		appButton="album"
-		class="group min-w-0 flex-col gap-tight"
+		hlmBtn
+		variant="ghost"
+		class="group !h-auto w-full min-w-0 flex-col !items-stretch gap-tight rounded-none !border-0 !p-0 text-start hover:bg-transparent active:bg-transparent"
 		[aria-label]="'Open album ' + album.key.title + ' by ' + album.key.albumArtist"
 		(click)="openAlbum.emit(album.key)"
 	>

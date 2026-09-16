@@ -1,0 +1,31 @@
+:root {
+	--background: var(--nap-color-surface-canvas);
+	--foreground: var(--nap-color-content-primary);
+
+	--card: var(--nap-color-surface-chrome);
+	--card-foreground: var(--nap-color-content-primary);
+
+	--popover: var(--nap-color-surface-control);
+	--popover-foreground: var(--nap-color-content-primary);
+
+	--primary: var(--nap-color-surface-selected);
+	--primary-foreground: var(--nap-color-content-primary);
+
+	--secondary: var(--nap-color-surface-control);
+	--secondary-foreground: var(--nap-color-content-primary);
+
+	--muted: var(--nap-color-surface-control);
+	--muted-foreground: var(--nap-color-content-muted);
+
+	--accent: var(--nap-color-surface-hover);
+	--accent-foreground: var(--nap-color-content-primary);
+
+	--destructive: var(--nap-color-danger);
+
+	--border: var(--nap-color-stroke-subtle);
+	--input: var(--nap-color-stroke-control);
+	--ring: var(--nap-color-focus);
+
+	--radius: var(--nap-radius-control);
+	--font-sans: var(--nap-font-interface);
+}

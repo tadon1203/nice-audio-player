@@ -1,20 +1,19 @@
 <section
 	aria-label="Playback controls"
-	class="grid h-full min-h-0 grid-rows-[var(--nap-space-tight)_minmax(0,1fr)] bg-surface-chrome"
+	class="grid h-full min-h-0 grid-rows-[var(--spacing-tight)_minmax(0,1fr)] bg-surface-chrome"
 	data-testid="playback-dock"
 >
 	<app-range-control
-		class="range-control-progress h-tight"
-		data-range-control="playback"
+		class="min-w-0"
+		layoutHeight="tight"
 		[min]="0"
 		[max]="session.durationMs() ?? 0"
 		[step]="100"
 		[value]="seekValue()"
-		[progress]="progressPercent()"
 		label="Playback position"
 		[disabled]="!canSeek"
 		(valueInput)="onSeekInput($event)"
-		(valueChange)="onSeekChange($event)"
+		(valueCommit)="onSeekCommit($event)"
 	></app-range-control>
 	<div
 		class="grid min-h-0 min-w-0 grid-cols-[minmax(0,1fr)_auto] grid-rows-[auto_auto] items-center gap-x-group px-group py-related app-wide:w-full app-wide:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_minmax(0,0.75fr)] app-wide:grid-rows-1 app-wide:gap-group app-wide:px-group app-wide:py-related"
@@ -41,34 +40,43 @@
 				>
 				<button
 					type="button"
-					appButton="transport"
+					hlmBtn
+					variant="ghost"
+					size="icon-sm"
+					class="rounded-round text-content-secondary"
 					aria-label="Previous track"
 					[disabled]="!session.snapshot()?.canGoPrevious || session.transportPending() !== null"
 					(click)="session.previous()"
 				>
-					<svg lucideSkipBack aria-hidden="true" class="size-icon"></svg>
+					<ng-icon name="lucideSkipBack" aria-hidden="true" class="size-icon text-icon" />
 				</button>
 				<button
 					type="button"
-					appButton="transport"
+					hlmBtn
+					variant="ghost"
+					size="icon-sm"
+					class="rounded-round text-content-secondary"
 					[aria-label]="isPlaying ? 'Pause' : 'Resume'"
 					[disabled]="session.snapshot()?.status !== 'playing' && session.snapshot()?.status !== 'paused' || session.transportPending() !== null"
 					(click)="togglePlayback()"
 				>
 					@if (isPlaying) {
-					<svg lucidePause aria-hidden="true" class="size-icon"></svg>
+					<ng-icon name="lucidePause" aria-hidden="true" class="size-icon text-icon" />
 					} @else {
-					<svg lucidePlay aria-hidden="true" class="size-icon"></svg>
+					<ng-icon name="lucidePlay" aria-hidden="true" class="size-icon text-icon" />
 					}
 				</button>
 				<button
 					type="button"
-					appButton="transport"
+					hlmBtn
+					variant="ghost"
+					size="icon-sm"
+					class="rounded-round text-content-secondary"
 					aria-label="Next track"
 					[disabled]="!session.snapshot()?.canGoNext || session.transportPending() !== null"
 					(click)="session.next()"
 				>
-					<svg lucideSkipForward aria-hidden="true" class="size-icon"></svg>
+					<ng-icon name="lucideSkipForward" aria-hidden="true" class="size-icon text-icon" />
 				</button>
 				<span class="shrink-0 text-body text-content-secondary tabular-nums"
 					>{{ session.durationMs() | formatDuration }}</span
@@ -79,32 +87,33 @@
 		<div class="flex min-w-0 items-center justify-end gap-control" data-region="volume">
 			<button
 				type="button"
-				appButton="icon"
+				hlmBtn
+				variant="ghost"
+				size="icon"
 				[aria-label]="session.muted() ? 'Unmute' : 'Mute'"
 				[disabled]="session.mutePending()"
 				(click)="session.toggleMute()"
 			>
 				@if (session.muted()) {
-				<svg lucideVolumeX aria-hidden="true" class="size-icon"></svg>
+				<ng-icon name="lucideVolumeX" aria-hidden="true" class="size-icon text-icon" />
 				} @else {
-				<svg lucideVolume2 aria-hidden="true" class="size-icon"></svg>
+				<ng-icon name="lucideVolume2" aria-hidden="true" class="size-icon text-icon" />
 				}
 			</button>
 			<app-range-control
-				class="range-control-volume h-control-prominent min-w-0 flex-1"
-				data-range-control="volume"
-				[attr.data-muted]="session.muted() ? '' : null"
+				class="min-w-0 flex-1"
+				layoutHeight="prominent"
 				[min]="0"
 				[max]="1"
 				[step]="0.01"
 				[value]="session.volume()"
-				[progress]="volumePercent()"
 				label="Volume"
 				[valueText]="session.muted() ? 'Muted' : null"
+				[tone]="session.muted() ? 'subdued' : 'default'"
 				(valueInput)="onVolumeInput($event)"
 			></app-range-control>
 			<span
-				class="hidden shrink-0 text-end text-body text-content-secondary tabular-nums app-wide:inline"
+				class="volume-readout hidden shrink-0 text-end text-body text-content-secondary tabular-nums app-wide:inline"
 				data-region="volume-readout"
 				>{{ volumeDb() }}</span
 			>

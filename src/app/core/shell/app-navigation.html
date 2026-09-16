@@ -14,11 +14,23 @@
 			class="group relative flex h-nav-row min-w-0 flex-1 items-center justify-center gap-control rounded-control px-control text-label text-content-secondary no-underline hover:bg-surface-hover hover:text-content-primary active:bg-surface-pressed aria-[current=page]:bg-surface-selected aria-[current=page]:text-content-primary app-wide:flex-none app-wide:justify-start app-wide:px-control"
 		>
 			@switch (destination.id) { @case ('albums') {
-			<svg lucideDisc aria-hidden="true" class="size-icon-small shrink-0"></svg>
+			<ng-icon
+				name="lucideDisc"
+				aria-hidden="true"
+				class="size-icon-small shrink-0 text-icon-small"
+			/>
 			} @case ('albumArtists') {
-			<svg lucideUsersRound aria-hidden="true" class="size-icon-small shrink-0"></svg>
+			<ng-icon
+				name="lucideUsersRound"
+				aria-hidden="true"
+				class="size-icon-small shrink-0 text-icon-small"
+			/>
 			} @case ('tracks') {
-			<svg lucideListMusic aria-hidden="true" class="size-icon-small shrink-0"></svg>
+			<ng-icon
+				name="lucideListMusic"
+				aria-hidden="true"
+				class="size-icon-small shrink-0 text-icon-small"
+			/>
 			} }
 			<span class="truncate">{{ destination.label }}</span>
 		</a>
@@ -30,7 +42,11 @@
 		ariaCurrentWhenActive="page"
 		class="group relative flex h-nav-row min-w-0 flex-1 items-center justify-center gap-control rounded-control px-control text-label text-content-secondary no-underline hover:bg-surface-hover hover:text-content-primary active:bg-surface-pressed aria-[current=page]:bg-surface-selected aria-[current=page]:text-content-primary app-wide:mt-auto app-wide:flex-none app-wide:justify-start app-wide:px-control"
 	>
-		<svg lucideSettings aria-hidden="true" class="size-icon-small shrink-0"></svg>
+		<ng-icon
+			name="lucideSettings"
+			aria-hidden="true"
+			class="size-icon-small shrink-0 text-icon-small"
+		/>
 		<span class="truncate">Settings</span>
 	</a>
 </nav>

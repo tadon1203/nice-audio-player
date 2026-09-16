@@ -2,7 +2,7 @@
 	html,
 	body {
 		width: 100%;
-		min-width: 320px;
+		min-width: var(--nap-layout-min-width);
 		height: 100%;
 		background: var(--nap-color-surface-canvas);
 	}
@@ -25,68 +25,6 @@
 		max-inline-size: 100%;
 	}
 
-	.range-control {
-		min-inline-size: 0;
-	}
-
-	.range-control-track {
-		block-size: var(--nap-space-tight);
-		border-radius: var(--nap-radius-round);
-		background: linear-gradient(
-			to right,
-			var(--nap-color-content-secondary) 0%,
-			var(--nap-color-content-secondary) calc(var(--range-progress, 0) * 1%),
-			var(--nap-color-surface-control) calc(var(--range-progress, 0) * 1%),
-			var(--nap-color-surface-control) 100%
-		);
-		transition: block-size var(--nap-motion-feedback-duration) var(--nap-motion-easing);
-	}
-
-	.range-control-input {
-		appearance: none;
-		inline-size: 100%;
-		margin: 0;
-		background: transparent;
-		cursor: pointer;
-	}
-
-	.range-control-input::-webkit-slider-runnable-track {
-		block-size: var(--nap-size-control-prominent);
-		background: transparent;
-	}
-
-	.range-control-input::-webkit-slider-thumb {
-		appearance: none;
-		block-size: 100%;
-		inline-size: 0;
-		background: transparent;
-	}
-
-	.range-control-input::-moz-range-track {
-		block-size: var(--nap-size-control-prominent);
-		border: 0;
-		background: transparent;
-	}
-
-	.range-control-input::-moz-range-progress {
-		background: transparent;
-	}
-
-	.range-control-input::-moz-range-thumb {
-		block-size: 100%;
-		inline-size: 0;
-		border: 0;
-		background: transparent;
-	}
-
-	.range-control:has(.range-control-input:hover:not(:disabled)) .range-control-track {
-		block-size: var(--nap-space-control);
-	}
-
-	.range-control-input:disabled {
-		cursor: default;
-	}
-
 	img,
 	svg,
 	video,
@@ -105,12 +43,6 @@
 	}
 }
 
-@media (prefers-reduced-motion: reduce) {
-	.range-control-track {
-		transition-duration: 0s;
-	}
-}
-
 @media (forced-colors: active) {
 	html,
 	body {
@@ -121,20 +53,4 @@
 	:focus-visible {
 		outline-color: Highlight;
 	}
-}
-
-.range-control-input:focus,
-.range-control-input:focus-visible {
-	outline: none;
-	outline-offset: 0;
-}
-
-.range-control-volume[data-muted] .range-control-track {
-	background: linear-gradient(
-		to right,
-		var(--nap-color-content-muted) 0%,
-		var(--nap-color-content-muted) calc(var(--range-progress, 0) * 1%),
-		var(--nap-color-surface-control) calc(var(--range-progress, 0) * 1%),
-		var(--nap-color-surface-control) 100%
-	);
 }

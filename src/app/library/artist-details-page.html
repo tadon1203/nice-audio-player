@@ -5,7 +5,11 @@
 				routerLink="/library/album-artists"
 				class="inline-flex min-h-control-prominent items-center gap-control text-body text-content-secondary hover:text-content-primary"
 			>
-				<svg lucideArrowLeft aria-hidden="true" class="size-icon-small"></svg>
+				<ng-icon
+					name="lucideArrowLeft"
+					aria-hidden="true"
+					class="size-icon-small text-icon-small"
+				/>
 				<span>Album Artists</span>
 			</a>
 
@@ -78,7 +82,7 @@
 					</div>
 					@if (workspace.nextCursor() !== null) {
 					<div class="flex justify-center py-region">
-						<button type="button" appButton="secondary" (click)="workspace.loadMore()">
+						<button type="button" hlmBtn variant="outline" (click)="workspace.loadMore()">
 							{{ workspace.loadState() === 'loadingMore' ? 'Loading…' : 'Load more' }}
 						</button>
 					</div>

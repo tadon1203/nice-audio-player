@@ -46,10 +46,7 @@ test('uses the Nice Audio Player semantic tokens and control shape', async ({ pa
 		'border-radius',
 		'6px'
 	);
-	await expect(page.getByRole('combobox', { name: 'Sort by Sort' })).toHaveCSS(
-		'border-radius',
-		'6px'
-	);
+	await expect(page.getByRole('combobox', { name: 'Sort' })).toHaveCSS('border-radius', '6px');
 });
 
 test('supports keyboard navigation with a visible focus indicator', async ({ page }) => {

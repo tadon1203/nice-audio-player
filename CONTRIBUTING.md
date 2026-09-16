@@ -17,7 +17,7 @@ Keep each rule in its owning document and avoid duplication.
 - Do not weaken type checking, linting, tests, security, accessibility, or performance constraints to make a change pass.
 - Keep each change focused on one logical responsibility.
 - New or changed product-visible behavior MUST include automated coverage in the same change.
-- Generated files MUST be changed only by their owning generator or build command.
+- Generated files MUST be changed only by their owning generator or build command. The initial Spartan CLI output under `src/app/ui/spartan` becomes repo-owned source after generation and may then be changed manually; upstream updates require an explicit diff review and manual port.
 
 ### Angular
 
@@ -78,8 +78,17 @@ See the [Angular style guide](https://angular.dev/style-guide).
 
 #### Tokens
 
-- Product design tokens MUST be declared in `src/styles/theme.css`.
-- Literal colors MUST NOT appear outside `src/styles/theme.css`.
+- Public product design tokens MUST be declared only in `src/styles/tokens/*.css`.
+- `src/styles/theme.css` adapts product tokens to Nice Audio Player Tailwind utilities.
+- `src/styles/spartan.css` adapts product tokens to Spartan semantic variables.
+- Literal renderer colors MUST appear only in `src/styles/tokens/color.css`.
+- Product code MUST NOT reference Spartan semantic CSS variables directly.
+- Product templates MUST use Nice Audio Player semantic Tailwind utilities.
+- Spartan Brain is the renderer's generic composite interaction primitive authority.
+- Spartan Helm source under `src/app/ui/spartan` is owned and styled by Nice Audio Player after initial CLI generation.
+- Feature code MUST import Spartan UI through local Helm entry points.
+- Feature code MUST NOT import `@spartan-ng/brain`, `@spartan-ng/helm`, `@angular/aria`, or CDK component implementations directly.
+- Native HTML and product/layout components remain appropriate when no composite UI primitive is required.
 - Reusable colors, typography, radii, shadows, spacing, motion, and responsive breakpoints MUST use named tokens.
 
 #### Motion
@@ -98,7 +107,7 @@ See the [Angular style guide](https://angular.dev/style-guide).
 
 - Tailwind utility names MUST appear completely and statically in source; do not construct them dynamically.
 - Use a named utility when one exists. Arbitrary values are allowed only for token-backed values or component-specific structural geometry.
-- Reusable product values and component geometry MUST live in `src/styles/theme.css` and be referenced through named utilities or `var(--...)`. Structural expressions such as `minmax()`, `repeat()`, `calc()`, and `clamp()` may remain inline.
+- Reusable product values and component geometry MUST live in `src/styles/tokens/*.css`, be adapted through named utilities, and be referenced through those utilities. Structural expressions such as `minmax()`, `repeat()`, `calc()`, and `clamp()` may remain inline.
 - Arbitrary variants and properties may be used for selectors and CSS properties, such as `aria-[current=page]:...` and `[scrollbar-gutter:stable]`.
 - Do not apply two utilities that write the same CSS property in the same variant.
 - If state already exists as native state, ARIA, or `data-*`, style it with the corresponding Tailwind variant instead of duplicating it with an Angular class binding.
