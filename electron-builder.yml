@@ -1,0 +1,27 @@
+appId: com.niceaudioplayer.app
+productName: Nice Audio Player
+asar: true
+directories:
+  output: release
+files:
+  - out/**
+  - package.json
+extraResources:
+  - from: build/native
+    to: build/native
+publish: null
+electronFuses:
+  runAsNode: false
+  enableCookieEncryption: true
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
+  enableEmbeddedAsarIntegrityValidation: true
+  onlyLoadAppFromAsar: true
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+nsis:
+  oneClick: false
+  perMachine: false

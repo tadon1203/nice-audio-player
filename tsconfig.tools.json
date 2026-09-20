@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.node.json",
+  "compilerOptions": {
+    "composite": true,
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.tools.tsbuildinfo",
+    "module": "esnext",
+    "types": ["node"]
+  },
+  "include": [
+    "vite*.config.ts",
+    "electron.vite.config.ts",
+    "scripts/**/*.mjs",
+    "vitest.config.ts",
+    "playwright.config.ts"
+  ]
+}

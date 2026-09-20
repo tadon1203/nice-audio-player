@@ -1,49 +1,28 @@
 {
-	"compileOnSave": false,
-	"compilerOptions": {
-		"allowJs": true,
-		"checkJs": true,
-		"outDir": "./out-tsc",
-		"strict": true,
-		"noImplicitOverride": true,
-		"noImplicitReturns": true,
-		"noFallthroughCasesInSwitch": true,
-		"skipLibCheck": true,
-		"isolatedModules": true,
-		"esModuleInterop": true,
-		"sourceMap": true,
-		"declaration": false,
-		"experimentalDecorators": true,
-		"moduleResolution": "bundler",
-		"paths": {
-			"@app/*": ["./src/app/*"],
-			"@shared/*": ["./shared/*"],
-			"@app/ui/spartan/button": ["./src/app/ui/spartan/button/src/index.ts"],
-			"@app/ui/spartan/utils": ["./src/app/ui/spartan/utils/src/index.ts"],
-			"@app/ui/spartan/select": ["./src/app/ui/spartan/select/src/index.ts"],
-			"@app/ui/spartan/dialog": ["./src/app/ui/spartan/dialog/src/index.ts"],
-			"@app/ui/spartan/slider": ["./src/app/ui/spartan/slider/src/index.ts"]
-		},
-		"importHelpers": true,
-		"target": "ES2022",
-		"module": "preserve",
-		"useDefineForClassFields": false,
-		"lib": ["ES2022", "dom"],
-		"types": ["vitest/globals"]
-	},
-	"include": [
-		"src/**/*.ts",
-		"shared/**/*.ts",
-		"electron/**/*.ts",
-		"tests/**/*.ts",
-		"scripts/**/*.mjs",
-		"*.config.ts"
-	],
-	"exclude": ["node_modules", "build", "backend/target"],
-	"angularCompilerOptions": {
-		"enableI18nLegacyMessageIdFormat": false,
-		"strictInjectionParameters": true,
-		"strictInputAccessModifiers": true,
-		"strictTemplates": true
-	}
+  "files": [],
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": [
+        "./src/*"
+      ]
+    }
+  },
+  "references": [
+    {
+      "path": "./tsconfig.renderer.json"
+    },
+    {
+      "path": "./tsconfig.main.json"
+    },
+    {
+      "path": "./tsconfig.preload.json"
+    },
+    {
+      "path": "./tsconfig.tools.json"
+    },
+    {
+      "path": "./tests/tsconfig.json"
+    }
+  ]
 }

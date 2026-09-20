@@ -5,7 +5,7 @@ Nice Audio Player uses Satoshi as specified by `DESIGN.md`.
 Download Satoshi from the official Fontshare distribution with:
 
 ```text
-pnpm fonts -- download
+pnpm fonts:download
 ```
 
 The command downloads `https://api.fontshare.com/v2/fonts/download/satoshi`,

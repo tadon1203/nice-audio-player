@@ -1,8 +1,0 @@
-:root {
-	--nap-shadow-floating: 0 8px 24px var(--nap-color-shadow);
-
-	--nap-layer-content: 0;
-	--nap-layer-chrome: 10;
-	--nap-layer-floating: 20;
-	--nap-layer-modal: 30;
-}

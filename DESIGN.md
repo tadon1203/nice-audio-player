@@ -2,8 +2,7 @@
 
 ---
 
-name: Nice Audio Player
----
+## name: Nice Audio Player
 
 ## Document responsibility
 
@@ -17,7 +16,7 @@ It is a working desktop utility, not a streaming storefront. Album artwork is al
 
 The interface should feel as though it has been used every day for years. Nothing is enlarged merely to attract attention, and nothing useful is hidden merely to appear simple. Familiarity should make the application faster to read, because important regions keep their meaning and controls stay where users learn to expect them.
 
-The design is neither sparse for the sake of elegance nor dense for the sake of expertise. Density follows the work. Artwork-led browsing can breathe; tables, metadata, settings, queue information, and playback status can become compact and technical. Dense information is welcome when its relationships remain obvious.
+The design is neither sparse for the sake of elegance nor dense for the sake of expertise. Density follows the work. Artwork-led browsing can breathe; tables, metadata, settings, and playback status can become compact and technical. Dense information is welcome when its relationships remain obvious.
 
 The permanent interface is dark and mostly monochrome. Artwork provides most of the visual color. The application itself communicates precision through alignment, typography, state clarity, and stable geometry rather than decorative effects or imitation of physical hardware.
 
@@ -30,74 +29,72 @@ A successful screen should answer four questions without explanation: what matte
 Nice Audio Player uses a deliberately small semantic token system:
 
 ```text
-public semantic product tokens
-        ├──→ Nice Player Tailwind adapters
-        │       └──→ product UI
-        └──→ Spartan semantic adapters
-                └──→ local Helm
+Tailwind built-in theme
+        + minimal custom @theme values
+        + shadcn semantic CSS variables
+                ↓
+        @theme inline adapters
+                ↓
+        shadcn primitives and React product UI
 ```
 
-`src/styles/tokens/*.css` owns the public semantic `--nap-*` values. `theme.css` adapts them to Nice Audio Player Tailwind utilities, while `spartan.css` adapts them to Spartan semantic variables. Product code never references Spartan variables directly.
+`src/app/renderer/styles.css` owns the dark-only shadcn semantic variables, the `@theme inline` adapters, the application font, and global base styles. Product code uses semantic utilities such as `bg-background`, `text-foreground`, `bg-muted`, `border-border`, and `ring-ring` rather than raw interface palette values.
 
 When deciding whether to add a token, use this order:
 
 ```text
-1. Can an existing product token express the meaning?
+1. Can an existing shadcn semantic token express the meaning?
    YES → use that token directly
    NO  → continue
 
-2. Does the meaning recur across the application?
-   YES → add a new `--nap-*` token
+2. Can a Tailwind built-in utility or an arbitrary structural value express it?
+   YES → use that utility directly
    NO  → continue
 
-3. Is it only a Spartan semantic translation?
-   YES → add it to `spartan.css`
+3. Does the custom meaning recur across the product?
+   YES → add the smallest possible value to `@theme` in `styles.css`
    NO  → continue
 
 4. Is it one-component structural implementation?
-   YES → keep it beside the owning component or local Helm source
+   YES → keep it beside the owning component or local primitive source
    NO  → do not tokenize it
 ```
 
-The normal dependency is `public product token → adapter → component`. Spartan default theme values are not product design values. Structural values such as `0`, `100%`, `auto`, `none`, `inherit`, `1fr`, grid spans, and media-query boundaries are allowed when they describe layout rather than appearance.
+The normal dependency is `shadcn semantic variable → @theme inline adapter → Tailwind utility → React component`. Tailwind built-in spacing, type, radius, motion, and z-index utilities are the default primitive layer. Structural values such as `0`, `100%`, `auto`, `none`, `inherit`, `1fr`, grid spans, arbitrary values, and media-query boundaries are allowed when they describe layout rather than appearance.
 
 ### Colors
 
-| Token                           | Role              | Use                                |
-| ------------------------------- | ----------------- | ---------------------------------- |
-| `--nap-color-surface-canvas`    | canvas            | workspace background               |
-| `--nap-color-surface-chrome`    | chrome            | sidebar and playback               |
-| `--nap-color-surface-control`   | control           | input, select, button, menu        |
-| `--nap-color-surface-hover`     | hover             | hover                              |
-| `--nap-color-surface-selected`  | selected          | selection                          |
-| `--nap-color-surface-pressed`   | pressed           | press                              |
-| `--nap-color-content-primary`   | primary content   | important text/icon                |
-| `--nap-color-content-secondary` | secondary content | metadata, supporting text          |
-| `--nap-color-content-muted`     | muted content     | tertiary text, placeholder         |
-| `--nap-color-content-disabled`  | disabled content  | unavailable content                |
-| `--nap-color-stroke-subtle`     | subtle stroke     | divider, structural rule           |
-| `--nap-color-stroke-control`    | control stroke    | control boundary                   |
-| `--nap-color-focus`             | focus             | keyboard focus only                |
-| `--nap-color-overlay`           | overlay           | modal scrim                        |
-| `--nap-color-danger`            | danger            | error and destructive actions only |
+| Token                | Role              | Use                                |
+| -------------------- | ----------------- | ---------------------------------- |
+| `--background`       | canvas            | workspace background               |
+| `--sidebar`          | chrome            | sidebar and playback               |
+| `--popover`          | control           | input, select, button, menu        |
+| `--accent`           | hover             | hover                              |
+| `--muted`            | selected          | selection                          |
+| `--foreground`       | primary content   | important text/icon                |
+| `--muted-foreground` | secondary content | metadata and supporting text       |
+| `--border`           | subtle stroke     | divider and structural rule        |
+| `--input`            | control stroke    | control boundary                   |
+| `--ring`             | focus             | keyboard focus only                |
+| `--destructive`      | danger            | error and destructive actions only |
 
-The application is dark-only and mostly monochrome. Artwork provides the visual color. `primary`, `secondary`, `accent`, `outline`, and `surface-container-*` are not token roles. Playback uses glyph/state semantics to remain distinguishable from selection; it does not receive a dedicated color.
+The application is dark-only and mostly monochrome. Artwork provides the visual color. `primary`, `secondary`, and `accent` remain the standard shadcn semantic roles used by generated primitives; product compositions do not invent additional meanings for them. `outline` and `surface-container-*` are not product token roles. Playback uses glyph/state semantics to remain distinguishable from selection; it does not receive a dedicated color.
 
 ### Typography
 
-The interface uses Satoshi for Latin, Noto Sans JP for Japanese, and `Segoe UI, system-ui, sans-serif` as fallback. The public type tokens are `object-title` (28/36, 400), `page-title` (24/32, 400), `section` (18/24, 400), `body` (14/20, 400), and `label` (14/20, 500). Technical values use the `numeric-tabular` modifier. Interface text is never below 14px.
+The interface uses Satoshi for Latin, Noto Sans JP for Japanese, and `Segoe UI, system-ui, sans-serif` as fallback through the `font-interface` theme value. Use Tailwind's standard `text-sm`, `text-base`, `text-lg`, and `text-2xl` utilities for the existing hierarchy. Technical values use the `tabular-nums` modifier. Interface text is never below 14px.
 
 ### Spacing, shape, size, and state
 
-Spacing is semantic: `tight` 4px, `control` 8px, `related` 12px, `group` 16px, `section` 24px, and `region` 32px. Shapes are `none` 0, `control` 6px, `artwork` 8px, and `round` 9999px. Sizes are compact control 32px, control 36px, prominent control 40px, navigation row 40px, track row 44px, icons 16/20/24px, album tile 188px, detail artwork 224px, and detail album tile 176px. Artist artwork is responsive and capped at 220px so its grid can reflow without page-specific column rules. Search and sort controls use stable widths of 190px and 188px respectively.
+Use Tailwind's standard spacing, radius, sizing, and duration utilities first. Exact product geometry remains explicit at the owning composition: compact controls use `h-8`, navigation rows use `h-10`, artwork uses `rounded-lg`, icons use `size-4`/`size-5`/`size-6`, and repeated shell values use standard or local arbitrary utilities. Search and sort controls use stable widths of 190px and 188px respectively.
 
-Normal boundaries use a 1px border and a stroke token. Focus always uses `2px solid var(--nap-color-focus)` with `2px` offset. Motion is limited to feedback 100ms, spatial 160ms, and `cubic-bezier(0.2, 0, 0, 1)`. Only `shadow-none` and `shadow-floating` exist; persistent UI has no shadow. Layers are content 0, chrome 10, floating 20, and modal 30.
+Normal boundaries use a 1px `--border` or `--input` border. Focus uses `2px solid var(--ring)` with `2px` offset. Motion is limited to feedback 100ms, spatial 160ms, and `cubic-bezier(0.2, 0, 0, 1)`. Only `shadow-none` and `shadow-floating` exist; persistent UI has no shadow. Layers are content 0, chrome 10, floating 20, and modal 30.
 
 ### Tailwind and layout
 
-Tailwind exposes only semantic adapters such as `bg-surface-canvas`, `bg-surface-control`, `bg-surface-selected`, `text-content-primary`, `text-content-secondary`, `text-content-muted`, `border-stroke-subtle`, `border-stroke-control`, `rounded-control`, `rounded-artwork`, `gap-group`, `gap-section`, `h-control-default`, and `h-track-row`. `control` is the 8px spacing token; `control-default` is the 36px control-size adapter and must be used for control heights, so the two meanings are never mixed. Tailwind's default palette, spacing, radius, shadow, and motion values are not UI design values.
+Tailwind exposes the standard shadcn utilities such as `bg-background`, `bg-card`, `bg-muted`, `bg-accent`, `text-foreground`, `text-muted-foreground`, `border-border`, `border-input`, and `ring-ring`. Product-specific layout is composed with utility classes in React. Only recurring values that Tailwind cannot express cleanly belong in the `@theme` block in `styles.css`.
 
-The structural layout contract is a 1360px reference width, 12 columns, 24px column gap, 224px sidebar, and 320px contextual pane. Page content uses a responsive inline inset of `clamp(24px, 3vw, 40px)`. The persistent playback region is 88px high, including its 24px technical status strip. Responsive layouts rearrange regions rather than scaling typography. The existing 800px `app-wide` boundary remains a structural media-query boundary.
+The structural layout contract is a 1360px reference width, 12 columns, 24px column gap, and 224px desktop navigation. Page content uses a responsive inline inset of `clamp(24px, 3vw, 40px)`. The persistent playback region is 88px high, including its 24px technical status strip. Responsive layouts rearrange regions rather than scaling typography. Viewport breakpoints use the application shell breakpoint; composed detail surfaces use container queries.
 
 The permanent application chrome is grayscale.
 
@@ -106,6 +103,10 @@ The near-black canvas is a neutral working surface, not an atmospheric or cinema
 Artwork is the primary source of non-semantic color. It may be vivid, muted, photographic, or graphic without changing the surrounding interface. Persistent controls, text, borders, and background surfaces do not inherit artwork color.
 
 Chromatic interface color is reserved for semantic information that genuinely benefits from stronger distinction, especially errors. Color is never the only indication of state.
+
+### Component primitives
+
+Reusable controls are local shadcn components under `src/renderer/shared/ui` (the `@/renderer/shared/ui` alias). Use `Button`, `Input`, `Slider`, `Toggle`, `ToggleGroup`, and `Tooltip` for interaction surfaces instead of duplicating their focus, disabled, keyboard, and state styles in page CSS. Product-specific compositions such as the playback dock, album tile, and settings folder list may combine these primitives without becoming generic shadcn containers.
 
 ## Typography
 
@@ -140,7 +141,7 @@ layout:
 
 The interface behaves as one continuous spatial system rather than a collection of unrelated pages.
 
-At desktop sizes it is organized around persistent navigation, a primary working area, optional contextual information, and persistent playback controls. These regions retain their roles across views so repeated use builds spatial memory.
+At desktop sizes it is organized around persistent navigation, a library or media detail workspace, and persistent playback controls. These regions retain their roles across views so repeated use builds spatial memory.
 
 Alignment is structural. Tables, artwork, panes, playback controls, and technical readouts should share alignment lines as though they belong to one piece of equipment. An edge that almost aligns is often worse than one that clearly does not.
 
@@ -148,7 +149,7 @@ Visual balance is functional. Adding information to one side should not casually
 
 Additional width may remain unused when stretching content would reduce scanability or weaken relationships.
 
-Responsive layouts rearrange regions rather than proportionally scaling the interface. Secondary information yields before primary content becomes cramped or unreadable. Contextual information may move to an overlay instead of compressing the working area indefinitely.
+Responsive layouts rearrange regions rather than proportionally scaling the interface. Secondary metadata yields before primary content becomes cramped or unreadable.
 
 Responsive content must remain inside the region that owns it. Content may reflow or scroll within that region, but it must not expand unrelated shell regions or displace persistent controls.
 
@@ -160,7 +161,7 @@ A track table should feel closer to a professional file browser than to a stream
 
 An album grid should feel closer to records laid out for browsing than to a dashboard of cards. Artwork can carry visual weight without requiring surrounding panels, badges, or inflated spacing.
 
-Metadata, queue information, settings, and technical playback status may be dense because comparison and monitoring benefit from compact presentation.
+Metadata, library folder settings, and technical playback status may be dense because comparison and monitoring benefit from compact presentation.
 
 Do not use large padding as a substitute for hierarchy. Dense information remains readable through grouping, baselines, fixed columns, contrast, and predictable placement.
 
@@ -174,7 +175,7 @@ The application uses a small number of meaningful layers:
 
 - the application canvas;
 - persistent application surfaces;
-- contextual panes;
+- temporary dialogs and popovers;
 - temporary raised surfaces;
 - modal or system overlays when truly necessary.
 
@@ -192,11 +193,7 @@ The interface may feel technical, but it should not cosplay physical equipment. 
 
 Global and local actions should be spatially distinguishable.
 
-Global search occupies a stable location and should read as one persistent capability, not as the beginning of a generic toolbar.
-
-Controls that modify the current collection or view belong near that content. Their placement should make their scope obvious through proximity and alignment.
-
-Search should feel like an expansion of the existing workspace rather than a separate visual product.
+The filter occupies a stable location within each library presentation and retains that presentation's query while the user switches views. Controls that modify the current collection or view belong near that content. Their placement should make their scope obvious through proximity and alignment.
 
 ## Playback
 
@@ -212,23 +209,15 @@ Volume is a direct manipulation control and should remain geometrically simple: 
 
 The playback area can carry more information than an ordinary consumer player. Its discipline comes from fixed regions, repeatable alignment, and clear state—not from hiding data.
 
-## Contextual Information
+## Media Details
 
-Contextual information appears beside the user's current object or task without becoming another permanent navigation destination.
-
-Object inspection contains information that belongs to the selected item itself: file properties, metadata, relationships, and file-level actions.
-
-Session-specific information belongs with playback rather than being mixed into object metadata.
-
-Contextual panes should share enough placement and interaction behavior that users learn one pattern for opening, reading, resizing, and dismissing them.
-
-They should feel attached to the current work, not like independent mini-applications.
+Album and artist detail views establish the selected media identity before showing related tracks or albums. Back navigation returns to the semantic parent and preserves the relationship between an artist and its albums. Playback session information remains in the persistent playback region.
 
 ## Collections and Objects
 
 Different content types use different representations because they support different kinds of reading.
 
-Albums can be artwork-led. Artists can be primarily textual. Tracks benefit from tabular comparison. Playlists benefit from direct lists with useful aggregate information.
+Albums can be artwork-led. Artists can be primarily textual. Tracks benefit from tabular comparison. Each representation keeps its own filter, sorting, and scroll context.
 
 Consistency comes from shared typography, spacing logic, state behavior, and navigation—not from making every object look the same.
 

@@ -8,6 +8,10 @@ This document defines accepted product requirements for Nice Audio Player.
 
 Implementation structure belongs in `architecture.md`. Visual and interaction design belongs in `DESIGN.md`. Change-specific scope belongs in GitHub Issues.
 
+## #91 migration scope
+
+The final Angular implementation at commit `0e51ea49ec9f0547dbf10a6f03260dc2ed1b1ab2` defines semantic UI parity and therefore the renderer migration scope for #91. Preserve its views, operations, states, navigation hierarchy, and responsive regions. General product requirements continue to govern domain behavior and constraints; they do not justify adding renderer views or shell decoration that are absent from that implementation.
+
 ## Platform
 
 Nice Audio Player is a Windows desktop application for playing and managing local audio files.

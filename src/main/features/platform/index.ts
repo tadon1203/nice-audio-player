@@ -1,0 +1,1 @@
+export { createPlatformHandlers } from "./ipc";

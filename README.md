@@ -1,12 +1,12 @@
 # Nice Audio Player
 
-A local-first Windows desktop music player focused on reliable playback and a calm, artwork-led listening experience.
+A local-first Windows desktop music player focused on reliable playback and a calm, artwork-led library.
 
 ## Documentation
 
 - [Requirements](./docs/requirements.md) — accepted product behavior
 - [Design](./DESIGN.md) — visual and interaction system
-- [Architecture](./docs/architecture.md) — system structure and boundaries
+- [Architecture](./docs/architecture.md) — Electron process boundaries and ownership
 - [Development Philosophy](./PHILOSOPHY.md) — development principles
 - [Contributing](./CONTRIBUTING.md) — contribution workflow
 
@@ -15,10 +15,12 @@ A local-first Windows desktop music player focused on reliable playback and a ca
 ```text
 pnpm install
 pnpm dev
+pnpm check
 pnpm test
 pnpm validate
+pnpm package
 ```
 
-`pnpm dev` starts the desktop development session. `pnpm test` runs all automated
-tests, including E2E coverage. `pnpm validate` is the complete local/CI
-verification gate.
+The renderer is React + TypeScript built by raw Vite. Electron Main and Preload are separate Vite build entries, and electron-builder owns packaging. Rust/NAPI remains the authority for playback, library, persistence, and native work.
+
+The renderer follows Feature-Sliced Design. Generated shadcn/ui Base UI primitives live under `src/renderer/shared/ui` (`@/renderer/shared/ui`), use semantic tokens from `src/app/renderer/styles.css`, and are configured by `components.json`. Add primitives with `pnpm exec shadcn add <component>` and keep product-specific compositions in their renderer slices.

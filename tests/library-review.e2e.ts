@@ -1,510 +1,181 @@
-import { expect, test, type Locator } from '@playwright/test';
-import { installNativeAppFixture, type LibraryRequestRecord } from './fixtures/native-app';
+import { expect, test } from "@playwright/test";
+import { installElectronApi } from "./fixtures/electron-api";
 
-test.beforeEach(async ({ page }) => installNativeAppFixture(page));
+test.beforeEach(async ({ page }) => installElectronApi(page));
 
-test.use({ viewport: { width: 1360, height: 900 } });
+test("keeps each library filter and sort when switching peers and visiting Settings", async ({
+  page,
+}) => {
+  await page.goto("/library/albums");
+  const filter = page.getByRole("searchbox", { name: "Filter library" });
+  await filter.fill("Test album");
+  await expect(page.getByText("1 album", { exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/\/library\/albums\?/);
+  await page.getByRole("combobox", { name: "Sort library" }).click();
+  await page.getByRole("option", { name: "Year", exact: true }).click();
+  await page.getByRole("button", { name: "Sort descending" }).click();
+  await expect.poll(() => new URL(page.url()).searchParams.get("albumsFilter")).toBe("Test album");
 
-test('renders distinct content for every Library presentation', async ({ page }, testInfo) => {
-	await page.goto('/library/albums');
-	await page.getByRole('link', { name: 'Settings' }).click();
-	await page.getByRole('button', { name: 'Add folder' }).click();
-	await page.getByRole('link', { name: 'Albums' }).click();
+  await page.getByRole("link", { name: "Album Artists", exact: true }).click();
+  await filter.fill("Test artist");
+  await page.getByRole("combobox", { name: "Sort library" }).click();
+  await page.getByRole("option", { name: "Track count", exact: true }).click();
+  await page.getByRole("button", { name: "Sort descending" }).click();
 
-	const presentations = [
-		{ route: 'Albums', content: page.getByRole('button', { name: /Open album Test album/ }) },
-		{
-			route: 'Album Artists',
-			content: page.getByRole('button', { name: 'Browse albums by Test artist' })
-		},
-		{ route: 'Tracks', content: page.getByRole('button', { name: 'Play Test track' }) }
-	] as const;
+  await page.getByRole("link", { name: "Tracks", exact: true }).click();
+  await filter.fill("Test track");
+  await page.getByRole("button", { name: "Sort by Title", exact: true }).click();
+  await expect.poll(() => new URL(page.url()).searchParams.get("tracksFilter")).toBe("Test track");
 
-	for (const presentation of presentations) {
-		await page.getByRole('link', { name: presentation.route }).click();
-		await expect(page.getByRole('link', { name: presentation.route })).toHaveAttribute(
-			'aria-current',
-			'page'
-		);
-		await expect(presentation.content).toBeVisible();
-		const screenshotName = `library-${presentation.route.toLowerCase().replaceAll(' ', '-')}.png`;
-		await page.screenshot({
-			path: testInfo.outputPath(screenshotName),
-			fullPage: true
-		});
-		await expect(page).toHaveScreenshot(screenshotName, {
-			animations: 'disabled',
-			fullPage: true
-		});
-	}
+  await page
+    .getByRole("navigation", { name: "Application" })
+    .getByRole("link", { name: "Settings", exact: true })
+    .click();
+  await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
+  await page.getByRole("link", { name: "Tracks", exact: true }).click();
+  await expect(page.getByRole("searchbox", { name: "Filter library" })).toHaveValue("Test track");
+  await page.getByRole("link", { name: "Album Artists", exact: true }).click();
+  await expect(page.getByRole("searchbox", { name: "Filter library" })).toHaveValue("Test artist");
+  await page
+    .getByRole("navigation", { name: "Application" })
+    .getByRole("link", { name: "Albums", exact: true })
+    .click();
+  await expect(page.getByRole("searchbox", { name: "Filter library" })).toHaveValue("Test album");
+
+  const params = new URL(page.url()).searchParams;
+  expect(params.get("albumsSort")).toBe("year");
+  expect(params.get("albumsDirection")).toBe("descending");
+  expect(params.get("artistsSort")).toBe("trackCount");
+  expect(params.get("artistsDirection")).toBe("descending");
+  expect(params.get("tracksFilter")).toBe("Test track");
+  expect(params.get("tracksSort")).toBe("title");
 });
 
-test('navigates each Library presentation as a distinct route', async ({ page }) => {
-	await page.goto('/library/albums');
-	await page.getByRole('link', { name: 'Settings' }).click();
-	await page.getByRole('button', { name: 'Add folder' }).click();
-	await page.getByRole('link', { name: 'Albums' }).click();
-
-	for (const route of [
-		{ label: 'Albums', path: '/library/albums' },
-		{ label: 'Album Artists', path: '/library/album-artists' },
-		{ label: 'Tracks', path: '/library/tracks' }
-	]) {
-		await page.getByRole('link', { name: route.label }).click();
-		await expect(page).toHaveURL(new RegExp(`${route.path.replaceAll('/', '\\/')}$`));
-		await expect(page.getByRole('link', { name: route.label })).toHaveAttribute(
-			'aria-current',
-			'page'
-		);
-	}
+test("returns from an album to its semantic artist parent", async ({ page }) => {
+  await page.goto("/library/album-artists");
+  await page.getByRole("link", { name: "Browse albums by Test artist" }).click();
+  await expect(page.getByRole("heading", { name: "Test artist" })).toBeVisible();
+  await page.getByRole("link", { name: "Open album Test album" }).click();
+  await expect(page.getByRole("heading", { name: "Test album" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Tracks", level: 2 })).toBeVisible();
+  await page.getByRole("link", { name: "Test artist", exact: true }).click();
+  await expect(page).toHaveURL(/\/library\/album-artists\/Test%20artist/);
+  await expect(page.getByRole("heading", { name: "Test artist" })).toBeVisible();
 });
 
-test('shows the backend total for each Library presentation', async ({ page }) => {
-	await page.goto('/library/albums');
-	await page.getByRole('link', { name: 'Settings' }).click();
-	await page.getByRole('button', { name: 'Add folder' }).click();
-	await page.getByRole('link', { name: 'Albums' }).click();
-
-	for (const presentation of [
-		{ label: 'Albums', count: '1 album' },
-		{ label: 'Album Artists', count: '8 album artists' },
-		{ label: 'Tracks', count: '5 tracks' }
-	]) {
-		await page.getByRole('link', { name: presentation.label }).click();
-		await expect(page.getByText(presentation.count, { exact: true })).toBeVisible();
-		await expect(page.getByText('Filter', { exact: true })).toHaveCount(0);
-	}
+test("returns from an album opened from Albums to the Albums presentation", async ({ page }) => {
+  await page.goto("/library/albums");
+  await page.getByRole("link", { name: "Open album Test album by Test artist" }).click();
+  await expect(page.getByRole("heading", { name: "Test album" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Tracks", level: 2 })).toBeVisible();
+  await page
+    .getByRole("navigation", { name: "Application" })
+    .getByRole("link", { name: "Albums", exact: true })
+    .click();
+  await expect(page).toHaveURL(/\/library\/albums/);
+  await expect(page.getByRole("heading", { name: "Albums" })).toBeVisible();
 });
 
-test('keeps Tracks table headers and rows on the same geometry', async ({ page }) => {
-	await page.goto('/library/albums');
-	await page.getByRole('link', { name: 'Settings' }).click();
-	await page.getByRole('button', { name: 'Add folder' }).click();
-	await page.getByRole('link', { name: 'Tracks' }).click();
+test("sorts tracks, disables missing files, and loads more rows", async ({ page }) => {
+  await page.goto("/library/tracks");
+  const table = page.getByRole("table", { name: "Library tracks" });
+  await expect(table.getByRole("row", { name: /Missing track/ })).toBeVisible();
+  await expect(table.getByRole("button", { name: "Play Missing track" })).toBeDisabled();
+  await expect(page.getByText("140 tracks", { exact: true })).toBeVisible();
 
-	await expectTrackTableGeometry(page.getByRole('table', { name: 'Library tracks' }), 4);
+  const titleHeader = table.getByRole("button", { name: "Sort by Title", exact: true });
+  await titleHeader.click();
+  await expect
+    .poll(() => new URL(page.url()).searchParams.get("tracksDirection"))
+    .toBe("descending");
+  await expect(page).toHaveURL(/\/library\/tracks\?/);
+  await expect(table.getByRole("columnheader", { name: "Title" })).toHaveAttribute(
+    "aria-sort",
+    "descending",
+  );
+
+  await page.getByRole("button", { name: "Load more" }).click();
+  await expect(table.getByRole("row", { name: /Track 080/ })).toBeVisible();
 });
 
-test('keeps every page scroll region aligned with its owning layout frame', async ({ page }) => {
-	await page.goto('/library/albums');
-	await page.getByRole('link', { name: 'Settings' }).click();
-	await page.getByRole('button', { name: 'Add folder' }).click();
+test("restores the virtual track container after switching library presentations", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1360, height: 900 });
+  await page.goto("/library/tracks");
+  await page.getByRole("button", { name: "Load more" }).click();
+  await page.getByRole("button", { name: "Load more" }).click();
+  const scrollRegion = page.locator('[data-scroll-restoration-id="library-tracks"]');
+  await scrollRegion.evaluate((element) => {
+    element.scrollTop = 1_600;
+  });
+  await expect
+    .poll(() => scrollRegion.evaluate((element) => element.scrollTop))
+    .toBeGreaterThan(1_000);
 
-	for (const route of [
-		'/library/tracks',
-		'/library/albums/Test%20artist/Test%20album',
-		'/settings'
-	]) {
-		await page.goto(route);
-		const mainBox = await page.locator('main[data-slot="app-main"]').boundingBox();
-		const scrollBox = await page.locator('[data-scroll-region]').boundingBox();
-		expect(mainBox).not.toBeNull();
-		expect(scrollBox).not.toBeNull();
-		if (!mainBox || !scrollBox) return;
-		const frame =
-			(await page.locator('[data-page="library"]').count()) > 0
-				? page.locator('[data-page="library"] app-page-frame').nth(1)
-				: page.locator('main[data-slot="app-main"]');
-		const frameContent = await frame.evaluate((element) => {
-			const styles = getComputedStyle(element);
-			const box = element.getBoundingClientRect();
-			return {
-				left: box.left + Number.parseFloat(styles.paddingLeft),
-				right: box.right - Number.parseFloat(styles.paddingRight)
-			};
-		});
-		expect(Math.abs(scrollBox.x - frameContent.left)).toBeLessThanOrEqual(1);
-		expect(Math.abs(scrollBox.x + scrollBox.width - frameContent.right)).toBeLessThanOrEqual(1);
-	}
+  await page.getByRole("link", { name: "Albums", exact: true }).click();
+  await page.getByRole("link", { name: "Tracks", exact: true }).click();
+  await expect
+    .poll(() => scrollRegion.evaluate((element) => element.scrollTop))
+    .toBeGreaterThan(1_000);
 });
 
-test('drills from an Album Artist into its Albums', async ({ page }) => {
-	await page.goto('/library/albums');
-	await page.getByRole('link', { name: 'Settings' }).click();
-	await page.getByRole('button', { name: 'Add folder' }).click();
-	await page.getByRole('link', { name: 'Album Artists' }).click();
+test("manages folders and shows scan progress and terminal states", async ({ page }) => {
+  await page.goto("/settings");
+  await page.getByRole("button", { name: "Add folder" }).click();
+  await expect(page.getByText("C:/More Music", { exact: true })).toBeVisible();
 
-	const artist = page.getByRole('button', { name: 'Browse albums by Test artist' });
-	await artist.focus();
-	await artist.press('Enter');
-	await expect(page).toHaveURL(/\/library\/album-artists\/Test%20artist$/);
-	await expect(page.getByRole('heading', { name: 'Test artist' })).toBeVisible();
-	await expect(page.getByRole('link', { name: 'Open album Test album' })).toBeVisible();
-	await expect(page.getByRole('combobox', { name: 'Sort' })).toHaveText('Year');
+  const include = page.getByRole("checkbox", { name: "Enabled" }).first();
+  await include.uncheck();
+  await expect(page.getByText("Excluded from library")).toBeVisible();
+  await include.check();
+  await expect(page.getByText("Included in library")).toBeVisible();
+
+  await page.getByRole("button", { name: "Rescan" }).click();
+  await expect(page.getByRole("status")).toContainText("Scanning");
+  await expect(page.getByRole("progressbar", { name: "Scan progress" })).toBeVisible();
+  await page.getByRole("button", { name: "Cancel scan" }).click();
+  await expect(page.getByRole("status")).toContainText("Scan cancelled");
+
+  await page.evaluate(() => window.__niceAudioPlayerTest?.setScanState("completed"));
+  await expect(
+    page.getByText(/Scan complete: 20 discovered, 20 inspected, 18 indexed, 0 failed/),
+  ).toBeVisible();
+  await page.evaluate(() => window.__niceAudioPlayerTest?.setScanState("failed"));
+  await expect(page.getByRole("alert")).toContainText("Scan failed: scanFailed");
+
+  await page.getByRole("button", { name: "Remove", exact: true }).nth(1).click();
+  const dialog = page.getByRole("alertdialog");
+  await expect(dialog).toContainText("C:/More Music");
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(dialog).toBeHidden();
+  await page.getByRole("button", { name: "Remove", exact: true }).nth(1).click();
+  await dialog.getByRole("button", { name: "Remove", exact: true }).click();
+  await expect(page.getByText("C:/More Music", { exact: true })).toHaveCount(0);
 });
 
-test('retains Album Artists sort selection and direction across Settings', async ({ page }) => {
-	await page.goto('/library/albums');
-	await page.getByRole('link', { name: 'Settings' }).click();
-	await page.getByRole('button', { name: 'Add folder' }).click();
-	await page.getByRole('link', { name: 'Album Artists' }).click();
+test("invalidates mounted library queries after terminal scan events and root changes", async ({
+  page,
+}) => {
+  await page.goto("/library/tracks");
+  const getCount = () =>
+    page.evaluate(() => window.__niceAudioPlayerTest?.getRequestCount("tracks") ?? 0);
+  await expect.poll(getCount).toBeGreaterThan(0);
 
-	const sort = page.getByRole('combobox', { name: 'Sort' });
-	await sort.click();
-	await page.getByRole('option', { name: 'Album count', exact: true }).click();
-	await expect(sort).toHaveText('Album count');
+  let requestCount = await getCount();
+  await page.evaluate(() => window.__niceAudioPlayerTest?.setScanState("completed"));
+  await expect.poll(getCount).toBeGreaterThan(requestCount);
+  requestCount = await getCount();
+  await page.evaluate(() => window.__niceAudioPlayerTest?.setScanState("cancelled"));
+  await expect.poll(getCount).toBeGreaterThan(requestCount);
+  requestCount = await getCount();
+  await page.evaluate(() => window.__niceAudioPlayerTest?.setScanState("failed"));
+  await expect.poll(getCount).toBeGreaterThan(requestCount);
 
-	await page.getByRole('button', { name: 'Sort descending' }).click();
-	await expect(page.getByRole('button', { name: 'Sort ascending' })).toBeVisible();
-	const requests = await page.evaluate(() =>
-		(
-			window as unknown as Window & { __niceAudioPlayerLibraryRequests: LibraryRequestRecord[] }
-		).__niceAudioPlayerLibraryRequests.filter((request) => request.view === 'albumArtists')
-	);
-	expect(requests.at(-1)).toEqual({
-		view: 'albumArtists',
-		sortKey: 'albumCount',
-		sortDirection: 'descending'
-	});
-
-	await page.getByRole('link', { name: 'Settings' }).click();
-	await page.getByRole('link', { name: 'Album Artists' }).click();
-	await expect(page.getByRole('combobox', { name: 'Sort' })).toHaveText('Album count');
-	await expect(page.getByRole('button', { name: 'Sort ascending' })).toBeVisible();
-
-	await page.getByRole('link', { name: 'Albums' }).click();
-	await expect(page.getByRole('combobox', { name: 'Sort' })).toHaveText('Album title');
-});
-
-test('keeps the Albums grid aligned with the shared page frame', async ({ page }) => {
-	await page.setViewportSize({ width: 1800, height: 1000 });
-	await page.goto('/library/albums');
-	await page.getByRole('link', { name: 'Settings' }).click();
-	await page.getByRole('button', { name: 'Add folder' }).click();
-	await page.getByRole('link', { name: 'Albums' }).click();
-	await expect(page.getByRole('button', { name: /Open album Test album/ })).toBeVisible();
-
-	const pageFrames = page.locator('app-page-frame');
-	const headerFrame = pageFrames.nth(0);
-	const albumFrame = pageFrames.nth(1);
-	const albumGrid = page.locator('app-album-grid .grid').first();
-	const [headerBox, albumFrameBox, gridBox] = await Promise.all([
-		headerFrame.boundingBox(),
-		albumFrame.boundingBox(),
-		albumGrid.boundingBox()
-	]);
-
-	expect(headerBox).not.toBeNull();
-	expect(albumFrameBox).not.toBeNull();
-	expect(gridBox).not.toBeNull();
-	if (!headerBox || !albumFrameBox || !gridBox) return;
-
-	const contentLeft = await albumFrame.evaluate((element) => {
-		const styles = getComputedStyle(element);
-		return element.getBoundingClientRect().left + Number.parseFloat(styles.paddingLeft);
-	});
-	const headerContentLeft = await headerFrame.evaluate((element) => {
-		const styles = getComputedStyle(element);
-		return element.getBoundingClientRect().left + Number.parseFloat(styles.paddingLeft);
-	});
-	expect(Math.abs(headerContentLeft - contentLeft)).toBeLessThanOrEqual(1);
-	expect(Math.abs(contentLeft - gridBox.x)).toBeLessThanOrEqual(1);
-});
-
-test('keeps the Library search aligned to the full header frame', async ({ page }) => {
-	await page.goto('/library/albums');
-	const headerFrame = page.locator('app-library-page header app-page-frame');
-	const search = page.getByRole('searchbox', { name: 'Filter library' });
-	await expect(search).toBeVisible();
-
-	const expectedSearchRight = await headerFrame.evaluate((element) => {
-		const frameStyles = getComputedStyle(element);
-		const searchLabel = element.querySelector('label');
-		if (!searchLabel) throw new Error('Library search label is missing');
-		const frame = element.getBoundingClientRect();
-		const labelStyles = getComputedStyle(searchLabel);
-		return (
-			frame.right -
-			Number.parseFloat(frameStyles.paddingRight) -
-			Number.parseFloat(labelStyles.marginRight)
-		);
-	});
-	const positions: Array<{ x: number; y: number; right: number }> = [];
-
-	for (const route of ['Albums', 'Album Artists', 'Tracks']) {
-		await page.getByRole('link', { name: route }).click();
-		await expect(page.getByRole('heading', { name: route })).toBeVisible();
-		const box = await search.boundingBox();
-		expect(box).not.toBeNull();
-		if (!box) return;
-		positions.push({ x: box.x, y: box.y, right: box.x + box.width });
-	}
-
-	for (const position of positions) {
-		expect(Math.abs(position.right - expectedSearchRight)).toBeLessThanOrEqual(1);
-	}
-	for (const position of positions.slice(1)) {
-		expect(Math.abs(position.x - positions[0].x)).toBeLessThanOrEqual(1);
-		expect(Math.abs(position.y - positions[0].y)).toBeLessThanOrEqual(1);
-	}
-});
-
-test('keeps Album Artists header controls inside the Electron-sized frame', async ({ page }) => {
-	await page.setViewportSize({ width: 1280, height: 800 });
-	await page.goto('/library/albums');
-	await page.getByRole('link', { name: 'Settings' }).click();
-	await page.getByRole('button', { name: 'Add folder' }).click();
-	await page.getByRole('link', { name: 'Album Artists' }).click();
-
-	const frame = page.locator('app-library-page header app-page-frame');
-	const search = page.getByRole('searchbox', { name: 'Filter library' });
-	const sort = page.locator('app-sort-control');
-	await expect(search).toBeVisible();
-	await expect(sort).toBeVisible();
-
-	const frameContentRight = await frame.evaluate((element) => {
-		const styles = getComputedStyle(element);
-		const box = element.getBoundingClientRect();
-		return box.right - Number.parseFloat(styles.paddingRight);
-	});
-	const [searchBox, sortBox] = await Promise.all([search.boundingBox(), sort.boundingBox()]);
-	expect(searchBox).not.toBeNull();
-	expect(sortBox).not.toBeNull();
-	if (!searchBox || !sortBox) return;
-
-	expect(searchBox.x + searchBox.width).toBeLessThanOrEqual(frameContentRight + 1);
-	expect(sortBox.x + sortBox.width).toBeLessThanOrEqual(frameContentRight + 1);
-});
-
-test('keeps Album Artists content inside the frame at the wide-grid boundary', async ({ page }) => {
-	await page.setViewportSize({ width: 1120, height: 800 });
-	await page.goto('/library/albums');
-	await page.getByRole('link', { name: 'Settings' }).click();
-	await page.getByRole('button', { name: 'Add folder' }).click();
-	await page.getByRole('link', { name: 'Album Artists' }).click();
-
-	const main = page.locator('main[data-slot="app-main"]');
-	const frame = page.locator('app-library-page app-page-frame').nth(1);
-	const grid = page.getByTestId('album-artist-grid');
-	await expect(grid).toBeVisible();
-
-	const metrics = await Promise.all([
-		main.boundingBox(),
-		frame.boundingBox(),
-		grid.boundingBox(),
-		grid.evaluate((element) => ({
-			clientWidth: element.clientWidth,
-			scrollWidth: element.scrollWidth,
-			columns: getComputedStyle(element).gridTemplateColumns
-		}))
-	]);
-	const [mainBox, frameBox, gridBox, gridMetrics] = metrics;
-	expect(mainBox).not.toBeNull();
-	expect(frameBox).not.toBeNull();
-	expect(gridBox).not.toBeNull();
-	if (!mainBox || !frameBox || !gridBox) return;
-
-	expect(await page.evaluate(() => document.body.scrollWidth)).toBeLessThanOrEqual(1120);
-	expect(frameBox.x + frameBox.width).toBeLessThanOrEqual(mainBox.x + mainBox.width + 1);
-	expect(gridBox.x + gridBox.width).toBeLessThanOrEqual(frameBox.x + frameBox.width + 1);
-	expect(gridMetrics.scrollWidth).toBeLessThanOrEqual(gridMetrics.clientWidth);
-	expect(gridMetrics.columns.split(' ').length).toBeGreaterThan(1);
-});
-
-test('matches the Album Artists reference geometry at the desktop viewport', async ({ page }) => {
-	await page.goto('/library/albums');
-	await page.getByRole('link', { name: 'Settings' }).click();
-	await page.getByRole('button', { name: 'Add folder' }).click();
-	await page.getByRole('link', { name: 'Album Artists' }).click();
-	await expect(page.getByTestId('album-artist-grid')).toBeVisible();
-
-	const grid = page.getByTestId('album-artist-grid');
-	const artworks = grid.locator('app-artwork');
-	await expect(artworks).toHaveCount(8);
-	const [gridBox, firstBox, secondBox, secondRowBox, dockBox, statusBox, navigationBox] =
-		await Promise.all([
-			grid.boundingBox(),
-			artworks.nth(0).boundingBox(),
-			artworks.nth(1).boundingBox(),
-			artworks.nth(4).boundingBox(),
-			page.getByTestId('playback-dock').boundingBox(),
-			page.getByTestId('playback-status-bar').boundingBox(),
-			page.getByRole('navigation', { name: 'Application' }).boundingBox()
-		]);
-
-	for (const box of [
-		gridBox,
-		firstBox,
-		secondBox,
-		secondRowBox,
-		dockBox,
-		statusBox,
-		navigationBox
-	]) {
-		expect(box).not.toBeNull();
-	}
-	if (
-		!gridBox ||
-		!firstBox ||
-		!secondBox ||
-		!secondRowBox ||
-		!dockBox ||
-		!statusBox ||
-		!navigationBox
-	)
-		return;
-
-	const layoutTokens = await page.evaluate(() => {
-		const styles = getComputedStyle(document.documentElement);
-		return {
-			playback: Number.parseFloat(styles.getPropertyValue('--nap-layout-playback')),
-			status: Number.parseFloat(styles.getPropertyValue('--nap-layout-status')),
-			sidebar: Number.parseFloat(styles.getPropertyValue('--nap-layout-sidebar-width'))
-		};
-	});
-	const firstGridTrack = Number.parseFloat(
-		(await grid.evaluate((element) => getComputedStyle(element).gridTemplateColumns)).split(' ')[0]
-	);
-	expect(gridBox.x).toBeGreaterThanOrEqual(0);
-	expect(firstBox.x).toBeGreaterThanOrEqual(gridBox.x);
-	expect(firstBox.width).toBeGreaterThan(0);
-	expect(firstBox.height).toBe(firstBox.width);
-	expect(Math.abs(secondBox.y - firstBox.y)).toBeLessThanOrEqual(1);
-	expect(secondBox.x).toBeGreaterThan(firstBox.x);
-	expect(secondRowBox.y).toBeGreaterThan(firstBox.y + firstBox.height);
-	expect(Math.abs(firstBox.width - firstGridTrack)).toBeLessThanOrEqual(1);
-	expect(firstGridTrack).toBeGreaterThan(0);
-	expect(dockBox.height + statusBox.height).toBeCloseTo(layoutTokens.playback, 0);
-	expect(statusBox.height).toBeCloseTo(layoutTokens.status, 0);
-	expect(navigationBox.width).toBeCloseTo(layoutTokens.sidebar, 0);
-});
-
-test('matches the Album tile reference geometry at the desktop viewport', async ({ page }) => {
-	await page.goto('/library/albums');
-	await page.getByRole('link', { name: 'Settings' }).click();
-	await page.getByRole('button', { name: 'Add folder' }).click();
-	await page.getByRole('link', { name: 'Albums' }).click();
-
-	const frame = page.locator('app-library-page app-page-frame').nth(1);
-	const artwork = page
-		.getByRole('button', { name: /Open album Test album/ })
-		.locator('app-artwork');
-	const [frameBox, artworkBox] = await Promise.all([frame.boundingBox(), artwork.boundingBox()]);
-	expect(frameBox).not.toBeNull();
-	expect(artworkBox).not.toBeNull();
-	if (!frameBox || !artworkBox) return;
-
-	const frameContentLeft = await frame.evaluate((element) => {
-		const styles = getComputedStyle(element);
-		return element.getBoundingClientRect().left + Number.parseFloat(styles.paddingLeft);
-	});
-	const albumTileSize = await page.evaluate(() =>
-		Number.parseFloat(
-			getComputedStyle(document.documentElement).getPropertyValue('--nap-size-media-tile')
-		)
-	);
-	expect(Math.abs(artworkBox.x - frameContentLeft)).toBeLessThanOrEqual(1);
-	expect(Math.abs(artworkBox.width - albumTileSize)).toBeLessThanOrEqual(1);
-	expect(Math.abs(artworkBox.height - albumTileSize)).toBeLessThanOrEqual(1);
-});
-
-test('keeps reference controls at their semantic sizes', async ({ page }) => {
-	await page.goto('/library/albums');
-	await page.getByRole('link', { name: 'Settings' }).click();
-	await page.getByRole('button', { name: 'Add folder' }).click();
-	await page.getByRole('link', { name: 'Albums' }).click();
-
-	const search = page.getByRole('searchbox', { name: 'Filter library' });
-	const sort = page.getByRole('combobox', { name: 'Sort' });
-	const playbackArtwork = page.locator('[data-region="playback-identity"] app-artwork');
-
-	await expect(search).toHaveCSS('width', '190px');
-	await expect(search).toHaveCSS('height', '36px');
-	await expect(sort).toHaveCSS('width', '188px');
-	await expect(sort).toHaveCSS('height', '36px');
-	await expect(playbackArtwork).toHaveCSS('width', '40px');
-	await expect(playbackArtwork).toHaveCSS('height', '40px');
-});
-
-test('opens Album Details with the shared track table', async ({ page }) => {
-	await page.goto('/library/albums');
-	await page.getByRole('link', { name: 'Settings' }).click();
-	await page.getByRole('button', { name: 'Add folder' }).click();
-	await page.getByRole('link', { name: 'Albums' }).click();
-	await page.getByRole('button', { name: /Open album Test album/ }).click();
-
-	await expect(page).toHaveURL(/\/library\/albums\/Test%20artist\/Test%20album$/);
-	await expect(page.getByRole('heading', { name: 'Test album' })).toBeVisible();
-	await expect(page.getByRole('table', { name: 'Album tracks' })).toBeVisible();
-	await expectTrackTableGeometry(page.getByRole('table', { name: 'Album tracks' }), 5);
-	await expect(page.getByRole('button', { name: 'Play album' })).toBeVisible();
-	await expect(page.getByText('Inspector', { exact: true })).toHaveCount(0);
-
-	await page.locator('[data-page="album-details"]').getByRole('link', { name: 'Albums' }).click();
-	await expect(page).toHaveURL(/\/library\/albums$/);
-});
-
-async function expectTrackTableGeometry(table: Locator, columnCount: number): Promise<void> {
-	await expect(table).toBeVisible();
-	await expect(table).toHaveCSS('table-layout', 'fixed');
-
-	const headers = table.locator('thead th');
-	const rows = table.locator('tbody tr');
-	await expect(headers).toHaveCount(columnCount);
-	await expect(rows).not.toHaveCount(0);
-
-	const headerBoxes = await headers.evaluateAll((elements) =>
-		elements.map((element) => {
-			const { x, width, right } = element.getBoundingClientRect();
-			return { x, width, right };
-		})
-	);
-	const headerPadding = await headers.first().evaluate((element) => {
-		const styles = getComputedStyle(element);
-		return { left: styles.paddingLeft, right: styles.paddingRight };
-	});
-	const cellPadding = await rows
-		.first()
-		.locator('td')
-		.first()
-		.evaluate((element) => {
-			const styles = getComputedStyle(element);
-			return { left: styles.paddingLeft, right: styles.paddingRight };
-		});
-	expect(headerPadding).toEqual(cellPadding);
-	const firstRowMetrics = await rows.first().evaluate((element) => ({
-		computedHeight: Number.parseFloat(getComputedStyle(element).height),
-		rectHeight: element.getBoundingClientRect().height
-	}));
-	expect(firstRowMetrics.computedHeight).toBeGreaterThanOrEqual(44);
-	expect(firstRowMetrics.computedHeight).toBeLessThanOrEqual(45);
-	expect(firstRowMetrics.rectHeight).toBeGreaterThanOrEqual(44);
-	expect(firstRowMetrics.rectHeight).toBeLessThanOrEqual(45);
-
-	for (let rowIndex = 0; rowIndex < (await rows.count()); rowIndex += 1) {
-		const cells = rows.nth(rowIndex).locator('td');
-		const cellBoxes = await cells.evaluateAll((elements) =>
-			elements.map((element) => {
-				const { x, width, right } = element.getBoundingClientRect();
-				return { x, width, right };
-			})
-		);
-		await expect(cells).toHaveCount(columnCount);
-
-		for (let columnIndex = 0; columnIndex < columnCount; columnIndex += 1) {
-			const header = headerBoxes[columnIndex];
-			const cell = cellBoxes[columnIndex];
-			expect(Math.abs(header.x - cell.x)).toBeLessThanOrEqual(1);
-			expect(Math.abs(header.width - cell.width)).toBeLessThanOrEqual(1);
-			expect(Math.abs(header.right - cell.right)).toBeLessThanOrEqual(1);
-		}
-	}
-}
-
-test('keeps every Library presentation inside a narrow viewport', async ({ page }) => {
-	await page.setViewportSize({ width: 390, height: 844 });
-	await page.goto('/library/albums');
-	await page.getByRole('link', { name: 'Settings' }).click();
-	await page.getByRole('button', { name: 'Add folder' }).click();
-	for (const route of ['/library/albums', '/library/album-artists', '/library/tracks']) {
-		await page.goto(route);
-		const scrollRegion = page.locator('[data-library-scroll-region]');
-		await expect(scrollRegion).toHaveCount(1);
-		const metrics = await scrollRegion.evaluate((element) => ({
-			clientWidth: element.clientWidth,
-			scrollWidth: element.scrollWidth
-		}));
-
-		expect(metrics.scrollWidth).toBeLessThanOrEqual(metrics.clientWidth);
-	}
+  requestCount = await getCount();
+  await page.getByRole("link", { name: "Settings", exact: true }).click();
+  await page.getByRole("checkbox", { name: "Enabled" }).first().uncheck();
+  await page.getByRole("link", { name: "Tracks", exact: true }).click();
+  await expect.poll(getCount).toBeGreaterThan(requestCount);
+  await expect(page.getByText("0 tracks", { exact: true })).toBeVisible();
 });

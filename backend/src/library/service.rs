@@ -479,7 +479,7 @@ pub enum StartLibraryAlbumTrackError {
     PlaybackWorkerUnavailable,
     TaskFailed,
 }
-/// The Tauri-managed owner. Only this type owns scanner shutdown.
+/// The library runtime owner. Only this type owns scanner shutdown.
 pub struct LibraryService {
     shared: LibraryShared,
     runtime: Mutex<Option<LibraryRuntime>>,

@@ -1,5 +1,21 @@
 {
-	"componentsPath": "src/app/ui/spartan",
-	"importAlias": "@app/ui/spartan",
-	"style": "nova"
+  "$schema": "https://ui.shadcn.com/schema.json",
+  "style": "base-nova",
+  "rsc": false,
+  "tsx": true,
+  "tailwind": {
+    "config": "",
+    "css": "src/app/renderer/styles.css",
+    "baseColor": "neutral",
+    "cssVariables": true,
+    "prefix": ""
+  },
+  "aliases": {
+    "components": "@/renderer/shared",
+    "utils": "@/renderer/shared/lib/utils",
+    "ui": "@/renderer/shared/ui",
+    "lib": "@/renderer/shared/lib",
+    "hooks": "@/renderer/shared/hooks"
+  },
+  "iconLibrary": "lucide"
 }

@@ -1,27 +1,33 @@
-node_modules
-/.pnpm-store
+# Dependencies and generated data
+node_modules/
+/.pnpm-store/
+/.angular/
+/.agents/
+backend/target/
+build/
+dist/
+out/
+test-results/
+playwright-report/
+release/
+project_snapshot.zip
+
+# Local application scaffold and tool output
 /nice-audio-player-scaffold
+/.output/
+/.vercel/
+/.netlify/
+/.wrangler/
 
 # Fontshare assets installed locally.
 static/fonts/fontshare/*.woff2
 !static/fonts/fontshare/README.md
 
-# Output
-.output
-.vercel
-.netlify
-.wrangler
-/build
-/.angular
-/backend/target
-/test-results
-
-# OS
+# OS files
 .DS_Store
 Thumbs.db
 
-# Env
+# Environment files
 .env
 .env.*
 !.env.example
-!.env.test

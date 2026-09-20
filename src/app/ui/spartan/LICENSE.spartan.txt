@@ -1,7 +1,0 @@
-Nice Audio Player's local Spartan Helm sources were initially generated from Spartan v1.4.1.
-
-Spartan is distributed under the MIT License. The local Helm source remains owned and
-maintained by Nice Audio Player after initial generation. Upstream updates are reviewed
-and ported manually; the CLI must not overwrite these files without an explicit diff.
-
-Source: https://github.com/spartan-ng/spartan

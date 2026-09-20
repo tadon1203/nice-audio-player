@@ -1,55 +1,190 @@
 {
-	"version": "2.0.0",
-	"tasks": [
-		{
-			"label": "Nice Audio Player: dev",
-			"type": "process",
-			"command": "node",
-			"args": ["scripts/dev.mjs"],
-			"options": { "cwd": "${workspaceFolder}" },
-			"problemMatcher": []
-		},
-		{
-			"label": "Nice Audio Player: build",
-			"type": "shell",
-			"command": "pnpm.cmd",
-			"args": ["build"],
-			"options": { "cwd": "${workspaceFolder}" },
-			"group": { "kind": "build", "isDefault": true },
-			"problemMatcher": []
-		},
-		{
-			"label": "Nice Audio Player: test",
-			"type": "shell",
-			"command": "pnpm.cmd",
-			"args": ["test"],
-			"options": { "cwd": "${workspaceFolder}" },
-			"group": { "kind": "test", "isDefault": true },
-			"problemMatcher": []
-		},
-		{
-			"label": "Nice Audio Player: validate",
-			"type": "shell",
-			"command": "pnpm.cmd",
-			"args": ["validate"],
-			"options": { "cwd": "${workspaceFolder}" },
-			"problemMatcher": []
-		},
-		{
-			"label": "Nice Audio Player: update bindings",
-			"type": "shell",
-			"command": "pnpm.cmd",
-			"args": ["bindings:update"],
-			"options": { "cwd": "${workspaceFolder}" },
-			"problemMatcher": []
-		},
-		{
-			"label": "Nice Audio Player: check bindings",
-			"type": "shell",
-			"command": "pnpm.cmd",
-			"args": ["bindings:check"],
-			"options": { "cwd": "${workspaceFolder}" },
-			"problemMatcher": []
-		}
-	]
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Nice Audio Player: dev",
+      "type": "shell",
+      "command": "pnpm.cmd",
+      "args": ["dev"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Nice Audio Player: preview",
+      "type": "shell",
+      "command": "pnpm.cmd",
+      "args": ["preview"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Nice Audio Player: build",
+      "type": "shell",
+      "command": "pnpm.cmd",
+      "args": ["build"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "Nice Audio Player: package",
+      "type": "shell",
+      "command": "pnpm.cmd",
+      "args": ["package"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "Nice Audio Player: smoke packaged",
+      "type": "shell",
+      "command": "pnpm.cmd",
+      "args": ["smoke:packaged"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "Nice Audio Player: typecheck",
+      "type": "shell",
+      "command": "pnpm.cmd",
+      "args": ["typecheck"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Nice Audio Player: lint",
+      "type": "shell",
+      "command": "pnpm.cmd",
+      "args": ["lint"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Nice Audio Player: format",
+      "type": "shell",
+      "command": "pnpm.cmd",
+      "args": ["format"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Nice Audio Player: format check",
+      "type": "shell",
+      "command": "pnpm.cmd",
+      "args": ["format:check"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Nice Audio Player: check",
+      "type": "shell",
+      "command": "pnpm.cmd",
+      "args": ["check"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Nice Audio Player: check native",
+      "type": "shell",
+      "command": "pnpm.cmd",
+      "args": ["check:native"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Nice Audio Player: validate",
+      "type": "shell",
+      "command": "pnpm.cmd",
+      "args": ["validate"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Nice Audio Player: test",
+      "type": "shell",
+      "command": "pnpm.cmd",
+      "args": ["test"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": { "kind": "test", "isDefault": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "Nice Audio Player: test renderer",
+      "type": "shell",
+      "command": "pnpm.cmd",
+      "args": ["test:renderer"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "Nice Audio Player: test main",
+      "type": "shell",
+      "command": "pnpm.cmd",
+      "args": ["test:main"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "Nice Audio Player: test shared",
+      "type": "shell",
+      "command": "pnpm.cmd",
+      "args": ["test:shared"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "Nice Audio Player: test native",
+      "type": "shell",
+      "command": "pnpm.cmd",
+      "args": ["test:native"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "Nice Audio Player: test e2e",
+      "type": "shell",
+      "command": "pnpm.cmd",
+      "args": ["test:e2e"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "Nice Audio Player: update bindings",
+      "type": "shell",
+      "command": "pnpm.cmd",
+      "args": ["bindings:update"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Nice Audio Player: check bindings",
+      "type": "shell",
+      "command": "pnpm.cmd",
+      "args": ["bindings:check"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Nice Audio Player: check fonts",
+      "type": "shell",
+      "command": "pnpm.cmd",
+      "args": ["fonts:check"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Nice Audio Player: download fonts",
+      "type": "shell",
+      "command": "pnpm.cmd",
+      "args": ["fonts:download"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    }
+  ]
 }
