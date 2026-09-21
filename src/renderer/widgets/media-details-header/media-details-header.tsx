@@ -19,7 +19,7 @@ export function MediaDetailsHeader({
 }) {
   return (
     <div className="@container mt-8">
-      <header className="grid grid-cols-[minmax(0,224px)_minmax(0,1fr)] items-end gap-8 @max-md:grid-cols-1 @max-md:items-start">
+      <header className="grid grid-cols-1 items-start gap-8 @md:grid-cols-[minmax(0,14rem)_minmax(0,1fr)] @md:items-end">
         <Artwork
           artwork={artwork}
           alt={`${title} artwork`}
@@ -27,10 +27,10 @@ export function MediaDetailsHeader({
           loading="eager"
         />
         <div className="min-w-0">
-          <p className="mb-2 text-sm font-medium uppercase tracking-[0.12em] text-muted-foreground">
+          <p className="mb-2 text-sm font-medium uppercase tracking-widest text-muted-foreground">
             {kind}
           </p>
-          <h1 className="text-3xl font-normal leading-tight tracking-[-0.03em] text-foreground">
+          <h1 className="text-3xl font-normal leading-tight tracking-tight text-foreground">
             {title}
           </h1>
           {artist ? <p className="mt-2 text-base text-muted-foreground">{artist}</p> : null}

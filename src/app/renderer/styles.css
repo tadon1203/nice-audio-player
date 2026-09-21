@@ -12,8 +12,7 @@
 }
 
 @theme {
-  --font-interface: "Satoshi", "Noto Sans JP", "Segoe UI", system-ui, sans-serif;
-  --breakpoint-app-wide: 800px;
+  --font-sans: "Satoshi", "Noto Sans JP", "Segoe UI", system-ui, sans-serif;
 }
 
 @theme inline {
@@ -102,30 +101,14 @@
     @apply border-border outline-ring/50;
   }
 
-  body {
-    @apply h-screen overflow-hidden bg-background text-foreground font-interface antialiased;
-    min-width: 320px;
-    margin: 0;
-    font-size: 14px;
-    font-synthesis: none;
-    text-rendering: optimizeLegibility;
-  }
-
   html,
+  body,
   #root {
     height: 100%;
   }
 
-  button,
-  input {
-    font: inherit;
-  }
-
-  button:focus-visible,
-  a:focus-visible,
-  input:focus-visible {
-    outline: 2px solid var(--ring);
-    outline-offset: 2px;
+  body {
+    @apply overflow-hidden bg-background font-sans text-sm text-foreground antialiased;
   }
 
   ::selection {
@@ -135,11 +118,6 @@
 
   :where(input, textarea) {
     caret-color: var(--foreground);
-  }
-
-  * {
-    scrollbar-color: var(--muted) var(--background);
-    scrollbar-width: thin;
   }
 }
 

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { AlertCircle, Check, FolderPlus, LoaderCircle, RefreshCw, X } from "lucide-react";
+import { AlertCircle, Check, FolderPlus, RefreshCw, X } from "lucide-react";
 import {
   libraryCommandErrorMessage,
   useAddLibraryRoot,
@@ -11,18 +11,20 @@ import {
   useStartLibraryScan,
   type LibraryRoot,
 } from "@/renderer/entities/library";
-import { Alert, AlertDescription } from "@/renderer/shared/ui/alert";
-import { Button } from "@/renderer/shared/ui/button";
-import { Checkbox } from "@/renderer/shared/ui/checkbox";
-import { Field, FieldLabel } from "@/renderer/shared/ui/field";
+import { Alert, AlertDescription } from "@/renderer/shared/ui/shadcn/alert";
+import { Button } from "@/renderer/shared/ui/shadcn/button";
+import { Checkbox } from "@/renderer/shared/ui/shadcn/checkbox";
+import { Field, FieldLabel } from "@/renderer/shared/ui/shadcn/field";
 import {
   Item,
+  ItemActions,
   ItemContent,
   ItemDescription,
   ItemGroup,
   ItemTitle,
-} from "@/renderer/shared/ui/item";
-import { Progress } from "@/renderer/shared/ui/progress";
+} from "@/renderer/shared/ui/shadcn/item";
+import { Progress } from "@/renderer/shared/ui/shadcn/progress";
+import { Spinner } from "@/renderer/shared/ui/shadcn/spinner";
 import { RemoveLibraryRootDialog } from "./remove-library-root-dialog";
 
 function formatCount(value: number | null, noun: string): string {
@@ -94,7 +96,7 @@ export function LibraryFoldersSection() {
           disabled={scanRunning || addRoot.isPending}
         >
           {addRoot.isPending ? (
-            <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+            <Spinner className="size-4" />
           ) : (
             <FolderPlus className="size-4" aria-hidden="true" />
           )}
@@ -169,7 +171,7 @@ export function LibraryFoldersSection() {
           className="mt-5 flex items-center gap-2 border-y border-border py-6 text-sm text-muted-foreground"
           role="status"
         >
-          <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+          <Spinner className="size-4" />
           Loading library folders…
         </div>
       ) : rootsQuery.isError ? null : roots.length === 0 ? (
@@ -189,7 +191,7 @@ export function LibraryFoldersSection() {
               <Item
                 key={root.id}
                 role="listitem"
-                className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 rounded-none border-0 px-0 py-4 max-sm:items-start"
+                className="items-start gap-4 rounded-none border-0 px-0 py-4 sm:flex-nowrap sm:items-center"
               >
                 <ItemContent>
                   <ItemTitle title={root.path} className="font-normal text-foreground">
@@ -200,7 +202,7 @@ export function LibraryFoldersSection() {
                     {root.lastSuccessfulScanAtMs !== null ? " · Scanned" : " · Not scanned"}
                   </ItemDescription>
                 </ItemContent>
-                <div className="flex items-center gap-3">
+                <ItemActions className="w-full justify-end gap-3 sm:w-auto">
                   <Field className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Checkbox
                       id={`enabled-${root.id}`}
@@ -226,7 +228,7 @@ export function LibraryFoldersSection() {
                   >
                     Remove
                   </Button>
-                </div>
+                </ItemActions>
               </Item>
             );
           })}

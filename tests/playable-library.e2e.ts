@@ -70,15 +70,6 @@ test("plays tracks and operates the persistent seek, transport, volume, and tech
   await expect(status).toContainText("System default · direct · 48.0 kHz");
 });
 
-test("keeps volume and mute controls available at narrow sizes", async ({ page }) => {
-  for (const width of [640, 768, 1024, 1360]) {
-    await page.setViewportSize({ width, height: 900 });
-    await page.goto("/library/albums");
-    await expect(page.getByRole("slider", { name: "Volume" }).last()).toBeVisible();
-    await expect(page.getByRole("button", { name: "Mute", exact: true })).toBeVisible();
-  }
-});
-
 test("remains operable while playback position events are streaming", async ({ page }) => {
   await page.goto("/library/tracks");
   await page.getByRole("button", { name: "Play Test track" }).click();

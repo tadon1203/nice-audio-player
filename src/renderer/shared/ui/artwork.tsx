@@ -19,7 +19,7 @@ function Artwork({ artwork, alt = "", loading = "lazy", className }: ArtworkProp
     <span
       data-slot="artwork"
       className={cn(
-        "block aspect-square [aspect-ratio:1/1] overflow-hidden rounded-lg bg-muted",
+        "block aspect-square overflow-hidden rounded-lg bg-muted",
         className,
       )}
     >
@@ -28,11 +28,11 @@ function Artwork({ artwork, alt = "", loading = "lazy", className }: ArtworkProp
           src={url}
           alt={alt}
           loading={loading}
-          className="h-full w-full object-cover"
+          className="size-full object-cover"
           onError={() => setFailedUrl(url)}
         />
       ) : (
-        <span aria-hidden="true" className="block h-full w-full bg-muted" />
+        <span aria-hidden="true" className="block size-full bg-muted" />
       )}
     </span>
   );

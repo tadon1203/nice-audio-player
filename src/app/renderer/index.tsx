@@ -2,7 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
-import { TooltipProvider } from "@/renderer/shared/ui/tooltip";
+import { TooltipProvider } from "@/renderer/shared/ui/shadcn/tooltip";
 import { NativeSession } from "./native-session";
 import { queryClient } from "./providers";
 import { router } from "./router";

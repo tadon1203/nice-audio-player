@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { Pause, Play, SkipBack, SkipForward, Volume2, VolumeX } from "lucide-react";
-import { Button } from "@/renderer/shared/ui/button";
-import { Artwork } from "@/renderer/shared/ui/artwork";
-import { Slider } from "@/renderer/shared/ui/slider";
-import { formatDuration } from "@/renderer/shared/lib/format-duration";
 import { usePlaybackSession } from "@/renderer/features/playback-control";
+import { formatDuration } from "@/renderer/shared/lib/format-duration";
+import { Artwork } from "@/renderer/shared/ui/artwork";
+import { Button } from "@/renderer/shared/ui/shadcn/button";
+import { Slider } from "@/renderer/shared/ui/shadcn/slider";
 
 export function PlaybackDock() {
   const playback = usePlaybackSession();
@@ -25,7 +25,7 @@ export function PlaybackDock() {
       aria-label="Playback controls"
       data-slot="playback-dock"
     >
-      <div className="flex min-w-0 items-center px-3" data-region="seek">
+      <div className="flex min-w-0 items-center px-4 lg:px-6" data-region="seek">
         <PlaybackSlider
           max={duration}
           value={Math.min(seekValue, duration)}
@@ -40,8 +40,11 @@ export function PlaybackDock() {
         />
       </div>
 
-      <div className="grid min-h-0 min-w-0 grid-cols-[minmax(0,1fr)_minmax(104px,0.8fr)] grid-rows-[auto_auto] items-center gap-x-2 px-4 pb-1 app-wide:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_minmax(0,0.75fr)] app-wide:grid-rows-1 app-wide:gap-6 app-wide:px-[clamp(24px,3vw,40px)] app-wide:pb-0">
-        <div className="flex min-w-0 items-center gap-2.5" data-region="playback-identity">
+      <div className="grid min-h-0 min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 px-4 py-1 lg:gap-6 lg:px-6">
+        <div
+          className="flex min-w-0 items-center gap-2.5 justify-self-start"
+          data-region="playback-identity"
+        >
           <Artwork
             artwork={playback.artwork}
             alt={playback.title === "Nothing playing" ? "" : `${playback.title} artwork`}
@@ -65,11 +68,11 @@ export function PlaybackDock() {
         </div>
 
         <div
-          className="col-span-2 row-start-2 flex min-w-0 items-center justify-center gap-2 app-wide:col-span-1 app-wide:row-start-1 app-wide:gap-3"
+          className="flex min-w-0 items-center justify-self-center gap-2 lg:gap-3"
           data-region="playback-core"
           aria-label="Transport controls"
         >
-          <span className="shrink-0 text-sm tabular-nums text-muted-foreground">
+          <span className="hidden shrink-0 text-sm tabular-nums text-muted-foreground sm:inline">
             {formatDuration(seekValue)}
           </span>
           <TransportButton
@@ -98,12 +101,15 @@ export function PlaybackDock() {
           >
             <SkipForward aria-hidden="true" />
           </TransportButton>
-          <span className="shrink-0 text-sm tabular-nums text-muted-foreground">
+          <span className="hidden shrink-0 text-sm tabular-nums text-muted-foreground sm:inline">
             {formatDuration(playback.durationMs)}
           </span>
         </div>
 
-        <div className="flex min-w-0 items-center justify-end gap-1.5" data-region="volume">
+        <div
+          className="flex min-w-0 items-center justify-self-end gap-1.5"
+          data-region="volume"
+        >
           <Button
             type="button"
             size="icon-sm"
@@ -125,10 +131,10 @@ export function PlaybackDock() {
               playback.setVolume(value);
               if (playback.muted && !playback.mutePending) void playback.toggleMute();
             }}
-            className="min-w-0 flex-1"
+            className="w-28"
           />
           <span
-            className="hidden min-w-20 shrink-0 text-right text-sm tabular-nums text-muted-foreground app-wide:inline"
+            className="hidden min-w-20 shrink-0 text-right text-sm tabular-nums text-muted-foreground lg:inline"
             data-region="volume-readout"
           >
             {volumeDb}

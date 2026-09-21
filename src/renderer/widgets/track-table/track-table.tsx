@@ -1,15 +1,9 @@
 import { useMemo, type RefObject } from "react";
-import {
-  createColumnHelper,
-  flexRender,
-  getCoreRowModel,
-  useReactTable,
-  type ColumnDef,
-} from "@tanstack/react-table";
+import { flexRender, getCoreRowModel, useReactTable } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { ArrowDown, ArrowUp, Pause, Play } from "lucide-react";
 import type { LibrarySortDirection, LibraryTrackSortKey } from "@/renderer/entities/library";
-import { Button } from "@/renderer/shared/ui/button";
+import { Button } from "@/renderer/shared/ui/shadcn/button";
 import {
   Table,
   TableBody,
@@ -18,22 +12,10 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/renderer/shared/ui/table";
-import { formatDuration } from "@/renderer/shared/lib/format-duration";
-
-export type TrackTableRow = {
-  id: string;
-  title: string;
-  artist: string | null;
-  album?: string | null;
-  trackNumber?: number | null;
-  fileFormat?: string | null;
-  bitDepth?: number | null;
-  sampleRate?: number | null;
-  durationMs: number | null;
-  availability: "available" | "missing";
-  playable: boolean;
-};
+} from "@/renderer/shared/ui/shadcn/table";
+import { createAlbumTrackColumns } from "./album-track-columns";
+import { createLibraryTrackColumns } from "./library-track-columns";
+import type { TrackTableRow } from "./types";
 
 type TrackTableProps = {
   rows: readonly TrackTableRow[];
@@ -51,8 +33,6 @@ type TrackTableProps = {
   onResumeActive?: () => void;
 };
 
-const helper = createColumnHelper<TrackTableRow>();
-
 export function TrackTable({
   rows,
   layout,
@@ -68,75 +48,21 @@ export function TrackTable({
   onPauseActive,
   onResumeActive,
 }: TrackTableProps) {
-  const columns = useMemo<ColumnDef<TrackTableRow, any>[]>(
-    () =>
-      layout === "library"
-        ? [
-            helper.accessor("title", {
-              header: () => "Title",
-              cell: ({ row }) => (
-                <TrackTitle
-                  row={row.original}
-                  active={row.original.id === activeTrackId}
-                  playbackStatus={playbackStatus}
-                  onPlayTrack={onPlayTrack}
-                  onPauseActive={onPauseActive}
-                  onResumeActive={onResumeActive}
-                />
-              ),
-            }),
-            helper.accessor("artist", {
-              header: () => "Artist",
-              cell: (info) => info.getValue() ?? "—",
-            }),
-            helper.accessor("album", {
-              header: () => "Album",
-              cell: (info) => info.getValue() ?? "—",
-            }),
-            helper.accessor("durationMs", {
-              header: () => "Time",
-              cell: (info) => formatDuration(info.getValue()),
-            }),
-          ]
-        : [
-            helper.accessor("trackNumber", {
-              header: () => "#",
-              cell: (info) => info.getValue() ?? "—",
-            }),
-            helper.accessor("title", {
-              header: () => "Title",
-              cell: ({ row }) => (
-                <TrackTitle
-                  row={row.original}
-                  active={row.original.id === activeTrackId}
-                  playbackStatus={playbackStatus}
-                  onPlayTrack={onPlayTrack}
-                  onPauseActive={onPauseActive}
-                  onResumeActive={onResumeActive}
-                />
-              ),
-            }),
-            helper.accessor("fileFormat", {
-              header: () => "Format",
-              cell: (info) => info.getValue() ?? "—",
-            }),
-            helper.accessor("sampleRate", {
-              header: () => "Quality",
-              cell: ({ row }) => {
-                const rate = row.original.sampleRate;
-                const depth = row.original.bitDepth;
-                return rate
-                  ? `${(rate / 1000).toFixed(1)} kHz${depth ? ` · ${depth}-bit` : ""}`
-                  : "—";
-              },
-            }),
-            helper.accessor("durationMs", {
-              header: () => "Time",
-              cell: (info) => formatDuration(info.getValue()),
-            }),
-          ],
-    [activeTrackId, layout, onPauseActive, onPlayTrack, onResumeActive, playbackStatus],
-  );
+  const columns = useMemo(() => {
+    const renderTitle = (row: TrackTableRow) => (
+      <TrackTitle
+        row={row}
+        active={row.id === activeTrackId}
+        playbackStatus={playbackStatus}
+        onPlayTrack={onPlayTrack}
+        onPauseActive={onPauseActive}
+        onResumeActive={onResumeActive}
+      />
+    );
+    return layout === "library"
+      ? createLibraryTrackColumns(renderTitle)
+      : createAlbumTrackColumns(renderTitle);
+  }, [activeTrackId, layout, onPauseActive, onPlayTrack, onResumeActive, playbackStatus]);
   const data = useMemo(() => [...rows], [rows]);
   const table = useReactTable({ data, columns, getCoreRowModel: getCoreRowModel() });
   const allRows = table.getRowModel().rows;
@@ -159,6 +85,7 @@ export function TrackTable({
   return (
     <div className="contents">
       <Table className="w-full table-fixed border-collapse text-sm" aria-label={caption}>
+        <TrackColumnWidths layout={layout} />
         <TableCaption className="sr-only">{caption}</TableCaption>
         <TableHeader className="sticky top-0 z-10 bg-background text-left text-muted-foreground">
           {table.getHeaderGroups().map((group) => (
@@ -170,7 +97,7 @@ export function TrackTable({
                   <TableHead
                     key={header.id}
                     scope="col"
-                    className="px-3 font-medium first:w-[42%] last:w-24 last:text-right"
+                    className="px-3 font-medium last:text-right"
                     aria-sort={
                       active
                         ? sortDirection === "ascending"
@@ -236,6 +163,25 @@ export function TrackTable({
         </TableBody>
       </Table>
     </div>
+  );
+}
+
+function TrackColumnWidths({ layout }: { layout: TrackTableProps["layout"] }) {
+  return layout === "library" ? (
+    <colgroup>
+      <col />
+      <col className="w-32" />
+      <col className="w-32" />
+      <col className="w-20" />
+    </colgroup>
+  ) : (
+    <colgroup>
+      <col className="w-12" />
+      <col />
+      <col className="w-24" />
+      <col className="w-36" />
+      <col className="w-20" />
+    </colgroup>
   );
 }
 

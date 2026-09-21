@@ -5,11 +5,12 @@ import { useAlbumDetailsWorkspace } from "../model/use-album-details-workspace";
 import { libraryCommandErrorMessage } from "@/renderer/entities/library";
 import { usePlaybackActions, useTrackPlaybackState } from "@/renderer/features/playback-control";
 import { formatDuration } from "@/renderer/shared/lib/format-duration";
-import { Alert } from "@/renderer/shared/ui/alert";
-import { Button } from "@/renderer/shared/ui/button";
-import { Empty, EmptyDescription } from "@/renderer/shared/ui/empty";
-import { ScrollArea } from "@/renderer/shared/ui/scroll-area";
-import { Spinner } from "@/renderer/shared/ui/spinner";
+import { WorkspaceContainer } from "@/renderer/shared/layout/workspace-container";
+import { Alert } from "@/renderer/shared/ui/shadcn/alert";
+import { Button } from "@/renderer/shared/ui/shadcn/button";
+import { Empty, EmptyDescription } from "@/renderer/shared/ui/shadcn/empty";
+import { ScrollArea } from "@/renderer/shared/ui/shadcn/scroll-area";
+import { Spinner } from "@/renderer/shared/ui/shadcn/spinner";
 import { MediaDetailsHeader } from "@/renderer/widgets/media-details-header";
 import { TrackTable, type TrackTableRow } from "@/renderer/widgets/track-table";
 
@@ -46,7 +47,7 @@ export function AlbumDetailsPage({
   return (
     <div className="h-full min-h-0 overflow-hidden">
       <ScrollArea className="h-full">
-        <div className="mx-auto max-w-[1360px] px-[clamp(24px,3vw,40px)] py-8 pb-16">
+        <WorkspaceContainer className="py-8 pb-16">
           {parentArtist ? (
             <Link
               to="/library/album-artists/$artistName"
@@ -144,7 +145,7 @@ export function AlbumDetailsPage({
               ) : null}
             </>
           )}
-        </div>
+        </WorkspaceContainer>
       </ScrollArea>
     </div>
   );

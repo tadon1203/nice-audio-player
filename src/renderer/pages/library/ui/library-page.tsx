@@ -12,10 +12,12 @@ import {
   useLibraryStatus,
 } from "@/renderer/entities/library";
 import { usePlaybackActions, useTrackPlaybackState } from "@/renderer/features/playback-control";
-import { Alert } from "@/renderer/shared/ui/alert";
-import { Button } from "@/renderer/shared/ui/button";
-import { Empty, EmptyDescription } from "@/renderer/shared/ui/empty";
-import { Spinner } from "@/renderer/shared/ui/spinner";
+import { Alert } from "@/renderer/shared/ui/shadcn/alert";
+import { Button } from "@/renderer/shared/ui/shadcn/button";
+import { Empty, EmptyDescription } from "@/renderer/shared/ui/shadcn/empty";
+import { Spinner } from "@/renderer/shared/ui/shadcn/spinner";
+import { WorkspaceContainer } from "@/renderer/shared/layout/workspace-container";
+import { MediaGrid } from "@/renderer/widgets/media-grid";
 import { TrackTable, type TrackTableRow } from "@/renderer/widgets/track-table";
 import { useLibraryView, type LibraryPresentation } from "../model/use-library-view";
 import { AlbumCard } from "./album-card";
@@ -103,7 +105,7 @@ export function LibraryPage({ presentation }: { presentation: LibraryPresentatio
       />
 
       <div className="min-h-0">
-        <div className="mx-auto h-full min-h-0 min-w-0 max-w-[1360px] px-[clamp(24px,3vw,40px)]">
+        <WorkspaceContainer className="h-full min-h-0 min-w-0">
           <div
             ref={scrollContainerRef}
             data-scroll-restoration-id={scrollRestorationId}
@@ -186,7 +188,7 @@ export function LibraryPage({ presentation }: { presentation: LibraryPresentatio
               ) : null}
             </div>
           </div>
-        </div>
+        </WorkspaceContainer>
       </div>
     </div>
   );
@@ -194,21 +196,21 @@ export function LibraryPage({ presentation }: { presentation: LibraryPresentatio
 
 function AlbumGrid({ albums }: { albums: readonly LibraryAlbumSummary[] }) {
   return (
-    <div className="grid grid-cols-[repeat(auto-fill,188px)] gap-x-5 gap-y-8">
+    <MediaGrid>
       {albums.map((album) => (
         <AlbumCard key={`${album.key.albumArtist}\u0000${album.key.title}`} album={album} />
       ))}
-    </div>
+    </MediaGrid>
   );
 }
 
 function ArtistGrid({ artists }: { artists: readonly LibraryAlbumArtistSummary[] }) {
   return (
-    <div className="grid grid-cols-2 gap-x-5 gap-y-8 md:grid-cols-4">
+    <MediaGrid>
       {artists.map((artist) => (
         <ArtistCard key={artist.key.name} artist={artist} />
       ))}
-    </div>
+    </MediaGrid>
   );
 }
 

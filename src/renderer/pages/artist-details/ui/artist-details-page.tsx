@@ -1,25 +1,20 @@
 import { useMemo } from "react";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
-import { ArrowDown, ArrowLeft, ArrowUp } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { useArtistDetailsWorkspace } from "../model/use-artist-details-workspace";
 import {
   libraryCommandErrorMessage,
   type LibraryAlbumArtistKey,
 } from "@/renderer/entities/library";
-import { Alert } from "@/renderer/shared/ui/alert";
+import { CollectionSortControl } from "@/renderer/shared/components/collection-sort-control";
+import { WorkspaceContainer } from "@/renderer/shared/layout/workspace-container";
+import { Alert } from "@/renderer/shared/ui/shadcn/alert";
 import { Artwork } from "@/renderer/shared/ui/artwork";
-import { Button } from "@/renderer/shared/ui/button";
-import { Empty, EmptyDescription } from "@/renderer/shared/ui/empty";
-import { Field, FieldLabel } from "@/renderer/shared/ui/field";
-import { ScrollArea } from "@/renderer/shared/ui/scroll-area";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/renderer/shared/ui/select";
-import { Spinner } from "@/renderer/shared/ui/spinner";
+import { Button } from "@/renderer/shared/ui/shadcn/button";
+import { Empty, EmptyDescription } from "@/renderer/shared/ui/shadcn/empty";
+import { ScrollArea } from "@/renderer/shared/ui/shadcn/scroll-area";
+import { Spinner } from "@/renderer/shared/ui/shadcn/spinner";
+import { MediaGrid } from "@/renderer/widgets/media-grid";
 import { MediaDetailsHeader } from "@/renderer/widgets/media-details-header";
 
 const sortOptions = [
@@ -50,7 +45,7 @@ export function ArtistDetailsPage({ artistName }: { artistName: string }) {
   return (
     <div className="h-full min-h-0 overflow-hidden">
       <ScrollArea className="h-full">
-        <div className="mx-auto max-w-[1360px] px-[clamp(24px,3vw,40px)] py-8 pb-16">
+        <WorkspaceContainer className="py-8 pb-16">
           <Link
             to="/library/album-artists"
             className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -86,66 +81,32 @@ export function ArtistDetailsPage({ artistName }: { artistName: string }) {
               </MediaDetailsHeader>
 
               <section className="mt-10" aria-labelledby="artist-albums-title">
-                <div className="mb-5 flex items-center justify-between gap-4 max-md:flex-col max-md:items-start">
+                <div className="mb-5 flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
                   <h2 id="artist-albums-title" className="text-base font-medium text-foreground">
                     Albums
                   </h2>
-                  <Field className="flex w-auto items-center gap-2">
-                    <FieldLabel className="text-sm text-muted-foreground">Sort</FieldLabel>
-                    <Select
-                      value={selection.key}
-                      items={sortOptions.map((option) => ({
-                        label: option.label,
-                        value: option.key,
-                      }))}
-                      onValueChange={(value) => {
-                        if (value === "year" || value === "title") {
-                          void setSort({ key: value, direction: "ascending" });
-                        }
-                      }}
-                    >
-                      <SelectTrigger
-                        className="h-9 w-[188px] shrink-0"
-                        aria-label="Sort artist albums"
-                      >
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {sortOptions.map((option) => (
-                          <SelectItem key={option.key} value={option.key}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label={
-                        selection.direction === "ascending"
-                          ? "Sort descending"
-                          : "Sort ascending"
+                  <CollectionSortControl
+                    selectLabel="Sort artist albums"
+                    value={selection.key}
+                    options={sortOptions}
+                    direction={selection.direction}
+                    onValueChange={(value) => {
+                      if (value === "year" || value === "title") {
+                        void setSort({ key: value, direction: "ascending" });
                       }
-                      onClick={() =>
-                        void setSort({
-                          key: selection.key,
-                          direction:
-                            selection.direction === "ascending" ? "descending" : "ascending",
-                        })
-                      }
-                    >
-                      {selection.direction === "ascending" ? (
-                        <ArrowUp aria-hidden="true" />
-                      ) : (
-                        <ArrowDown aria-hidden="true" />
-                      )}
-                    </Button>
-                  </Field>
+                    }}
+                    onToggleDirection={() =>
+                      void setSort({
+                        key: selection.key,
+                        direction:
+                          selection.direction === "ascending" ? "descending" : "ascending",
+                      })
+                    }
+                  />
                 </div>
 
                 {workspace.albums.length > 0 ? (
-                  <div className="grid grid-cols-[repeat(auto-fill,minmax(176px,1fr))] gap-x-5 gap-y-8">
+                  <MediaGrid>
                     {workspace.albums.map((album) => (
                       <Link
                         key={`${album.key.albumArtist}\u0000${album.key.title}`}
@@ -158,7 +119,7 @@ export function ArtistDetailsPage({ artistName }: { artistName: string }) {
                         <Artwork
                           artwork={album.artwork}
                           alt={`${album.key.title} artwork`}
-                          className="transition-opacity group-hover:opacity-80"
+                          className="w-full transition-opacity group-hover:opacity-80"
                         />
                         <span className="mt-3 block w-full truncate text-sm font-medium text-foreground">
                           {album.key.title}
@@ -168,7 +129,7 @@ export function ArtistDetailsPage({ artistName }: { artistName: string }) {
                         </span>
                       </Link>
                     ))}
-                  </div>
+                  </MediaGrid>
                 ) : (
                   <Empty className="mt-8" role="status">
                     <EmptyDescription>No albums were indexed for this artist.</EmptyDescription>
@@ -190,7 +151,7 @@ export function ArtistDetailsPage({ artistName }: { artistName: string }) {
               ) : null}
             </>
           )}
-        </div>
+        </WorkspaceContainer>
       </ScrollArea>
     </div>
   );

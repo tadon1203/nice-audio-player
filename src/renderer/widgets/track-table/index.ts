@@ -1,1 +1,2 @@
-export { TrackTable, type TrackTableRow } from "./track-table";
+export { TrackTable } from "./track-table";
+export type { TrackTableRow } from "./types";

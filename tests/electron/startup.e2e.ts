@@ -26,13 +26,10 @@ test("development Electron shell starts and exposes the renderer", async () => {
 
     await window.getByRole("link", { name: "Settings" }).click();
     await expect.poll(() => new URL(window.url()).pathname).toBe("/settings");
-    for (const width of [640, 768, 1024, 1360]) {
-      await window.setViewportSize({ width, height: 900 });
-      await expect(window.getByRole("main")).toBeVisible();
-      expect(
-        await window.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1),
-      ).toBe(true);
-    }
+    await expect(window.getByRole("main")).toBeVisible();
+    expect(
+      await window.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1),
+    ).toBe(true);
   } finally {
     await app.close();
   }

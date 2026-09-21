@@ -29,7 +29,7 @@ Every source document listed in `AGENTS.md` begins with its title and a `## Docu
 
 - `src/app/renderer/styles.css` owns the shadcn semantic variables, `@theme inline` adapters, font theme value, and global base styles.
 - Product surfaces use shadcn semantic tokens such as `background`, `foreground`, `muted`, `border`, `input`, `ring`, and `destructive`; product code does not use raw palette values for interface surfaces.
-- Use shadcn-generated local primitives under `src/renderer/shared/ui` (the `@/renderer/shared/ui` alias) and Lucide icons for reusable interaction surfaces. Keep `components.json` and the shadcn CLI configuration in sync with generated components. Add a new primitive with `pnpm exec shadcn add <component>`, then compose it in the owning renderer slice.
+- Use shadcn-generated local primitives under `src/renderer/shared/ui/shadcn` and Lucide icons for reusable interaction surfaces. Keep product-specific components and behavior outside that directory. Keep `components.json` and the shadcn CLI configuration in sync with generated components. Add a new primitive with `pnpm exec shadcn add <component>`, then compose it in the owning renderer slice.
 - Keep shadcn registry output and its generated `use-mobile` hook in upstream formatting; Oxfmt does not rewrite those generated files. Product compositions and non-generated shared code remain subject to repository formatting.
 - Use Tailwind built-in spacing, typography, radius, motion, and z-index utilities before adding a custom `@theme` value. Keep one-component structural values local to that component.
 - Do not use gradients, glass, glow, decorative shadows, or oversized headings as substitutes for hierarchy.

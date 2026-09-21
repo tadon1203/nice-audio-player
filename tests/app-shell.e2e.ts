@@ -25,25 +25,35 @@ test("navigates between the three library presentations and Settings", async ({ 
   await expect(page.getByText("Native audio engine", { exact: true })).toHaveCount(0);
 });
 
-for (const width of [640, 768, 1024, 1360]) {
+for (const width of [640, 767, 768, 1024, 1360, 1920]) {
   test(`keeps navigation and playback inside a ${width}px window`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
     await page.goto("/library/albums");
     await expect(page.getByRole("main")).toBeVisible();
-    await expect(page.getByRole("link", { name: "Albums", exact: true })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Settings", exact: true })).toBeVisible();
     await expect(page.getByRole("contentinfo", { name: "Playback controls" })).toBeVisible();
     await expect(page.getByRole("slider", { name: "Volume" }).last()).toBeVisible();
     await expect(page.getByRole("button", { name: "Mute", exact: true })).toBeVisible();
 
     const navigation = page.getByRole("navigation", { name: "Application" });
-    if (width < 800) {
+    const trigger = page.getByRole("button", { name: "Open navigation" });
+
+    if (width < 768) {
+      await expect(trigger).toBeVisible();
+      await trigger.click();
       await expect(navigation).toBeVisible();
+      await expect(navigation.getByRole("link", { name: "Albums", exact: true })).toBeVisible();
+      const settings = navigation.getByRole("link", { name: "Settings", exact: true });
+      await expect(settings).toBeVisible();
+      await settings.click();
+      await expect(page).toHaveURL(/\/settings(?:\?|$)/);
+      await expect(navigation).toBeHidden();
     } else {
+      await expect(trigger).toBeHidden();
       await expect(navigation).toBeVisible();
       const navigationBox = await navigation.boundingBox();
-      expect(navigationBox?.width).toBe(224);
+      expect(navigationBox?.width).toBe(256);
     }
+
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1),
     ).toBe(true);

@@ -1,39 +1,59 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
+  "plugins": [
+    "react",
+    "typescript",
+    "oxc"
+  ],
   "rules": {
     "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
+    "react/only-export-components": [
+      "warn",
+      {
+        "allowConstantExport": true
+      }
+    ]
   },
   "overrides": [
     {
-      "files": ["src/app/renderer/routes/**/*.tsx"],
+      "files": [
+        "src/app/renderer/routes/**/*.tsx"
+      ],
       "rules": {
         "react/only-export-components": [
           "warn",
-          { "allowConstantExport": true, "allowExportNames": ["Route"] }
+          {
+            "allowConstantExport": true,
+            "allowExportNames": [
+              "Route"
+            ]
+          }
         ]
       }
     },
     {
       "files": [
-        "src/renderer/shared/ui/button.tsx",
-        "src/renderer/shared/ui/button-group.tsx",
-        "src/renderer/shared/ui/sidebar.tsx",
-        "src/renderer/shared/ui/toggle.tsx"
+        "src/renderer/shared/ui/shadcn/button.tsx",
+        "src/renderer/shared/ui/shadcn/button-group.tsx",
+        "src/renderer/shared/ui/shadcn/sidebar.tsx",
+        "src/renderer/shared/ui/shadcn/toggle.tsx"
       ],
       "rules": {
         "react/only-export-components": "off"
       }
     },
     {
-      "files": ["src/renderer/shared/hooks/use-mobile.ts"],
+      "files": [
+        "src/renderer/shared/hooks/use-mobile.ts"
+      ],
       "rules": {
         "react/set-state-in-effect": "off"
       }
     },
     {
-      "files": ["src/renderer/widgets/track-table/track-table.tsx"],
+      "files": [
+        "src/renderer/widgets/track-table/track-table.tsx"
+      ],
       "rules": {
         "react/incompatible-library": "off"
       }

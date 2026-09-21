@@ -8,7 +8,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/renderer/shared/ui/alert-dialog";
+} from "@/renderer/shared/ui/shadcn/alert-dialog";
 
 export function RemoveLibraryRootDialog({
   root,

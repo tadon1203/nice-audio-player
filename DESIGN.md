@@ -82,19 +82,19 @@ The application is dark-only and mostly monochrome. Artwork provides the visual 
 
 ### Typography
 
-The interface uses Satoshi for Latin, Noto Sans JP for Japanese, and `Segoe UI, system-ui, sans-serif` as fallback through the `font-interface` theme value. Use Tailwind's standard `text-sm`, `text-base`, `text-lg`, and `text-2xl` utilities for the existing hierarchy. Technical values use the `tabular-nums` modifier. Interface text is never below 14px.
+The interface uses Satoshi for Latin, Noto Sans JP for Japanese, and `Segoe UI, system-ui, sans-serif` as fallback through Tailwind's standard `font-sans` theme value. Use Tailwind's standard `text-sm`, `text-base`, `text-lg`, and `text-2xl` utilities for the existing hierarchy. Technical values use the `tabular-nums` modifier. Interface text is never below 14px.
 
 ### Spacing, shape, size, and state
 
-Use Tailwind's standard spacing, radius, sizing, and duration utilities first. Exact product geometry remains explicit at the owning composition: compact controls use `h-8`, navigation rows use `h-10`, artwork uses `rounded-lg`, icons use `size-4`/`size-5`/`size-6`, and repeated shell values use standard or local arbitrary utilities. Search and sort controls use stable widths of 190px and 188px respectively.
+Use Tailwind's standard spacing, radius, sizing, and duration utilities first. Exact product geometry remains explicit at the owning composition when it represents product behavior; otherwise prefer Tailwind's built-in scale. Compact controls use standard shadcn sizing, artwork uses `rounded-lg`, and common icon sizes use `size-4`/`size-5`/`size-6`.
 
-Normal boundaries use a 1px `--border` or `--input` border. Focus uses `2px solid var(--ring)` with `2px` offset. Motion is limited to feedback 100ms, spatial 160ms, and `cubic-bezier(0.2, 0, 0, 1)`. Only `shadow-none` and `shadow-floating` exist; persistent UI has no shadow. Layers are content 0, chrome 10, floating 20, and modal 30.
+Normal boundaries use a 1px `--border` or `--input` border. Focus appearance is owned by shadcn primitives and local interactive components rather than a global override. Motion is limited to feedback 100ms, spatial 160ms, and `cubic-bezier(0.2, 0, 0, 1)`. Only `shadow-none` and `shadow-floating` exist; persistent UI has no shadow. Layers are content 0, chrome 10, floating 20, and modal 30.
 
 ### Tailwind and layout
 
 Tailwind exposes the standard shadcn utilities such as `bg-background`, `bg-card`, `bg-muted`, `bg-accent`, `text-foreground`, `text-muted-foreground`, `border-border`, `border-input`, and `ring-ring`. Product-specific layout is composed with utility classes in React. Only recurring values that Tailwind cannot express cleanly belong in the `@theme` block in `styles.css`.
 
-The structural layout contract is a 1360px reference width, 12 columns, 24px column gap, and 224px desktop navigation. Page content uses a responsive inline inset of `clamp(24px, 3vw, 40px)`. The persistent playback region is 88px high, including its 24px technical status strip. Responsive layouts rearrange regions rather than scaling typography. Viewport breakpoints use the application shell breakpoint; composed detail surfaces use container queries.
+Layout uses Tailwind's standard spacing, container widths, and mobile-first breakpoints. Prefer intrinsic layout such as flex wrapping and content-driven sizing before adding a breakpoint. Reusable compositions use container queries when their layout depends on available component width. The shadcn Sidebar owns navigation responsiveness at its standard `md` boundary. The persistent playback region is 88px high. Custom layout values are introduced only when a product requirement cannot be expressed clearly with the standard system.
 
 The permanent application chrome is grayscale.
 
@@ -106,7 +106,7 @@ Chromatic interface color is reserved for semantic information that genuinely be
 
 ### Component primitives
 
-Reusable controls are local shadcn components under `src/renderer/shared/ui` (the `@/renderer/shared/ui` alias). Use `Button`, `Input`, `Slider`, `Toggle`, `ToggleGroup`, and `Tooltip` for interaction surfaces instead of duplicating their focus, disabled, keyboard, and state styles in page CSS. Product-specific compositions such as the playback dock, album tile, and settings folder list may combine these primitives without becoming generic shadcn containers.
+Reusable shadcn controls live under `src/renderer/shared/ui/shadcn` (the `components.json` `ui` alias). Keep product-specific UI outside that directory. Use `Button`, `Input`, `Slider`, `Toggle`, `ToggleGroup`, `Tooltip`, and other shadcn primitives for interaction surfaces instead of duplicating their focus, disabled, keyboard, and state styles in page CSS. Product-specific compositions such as the playback dock, album tile, and settings folder list may combine these primitives without becoming generic shadcn containers.
 
 ## Typography
 
@@ -130,16 +130,7 @@ Do not use monospace merely to make the application look technical. A profession
 
 ## Layout
 
-```yaml
-layout:
-  reference-width: 1360px
-  columns: 12
-  column-gap: 24px
-  sidebar-width: 224px
-  adjacent-pane-default: 320px
-```
-
-The interface behaves as one continuous spatial system rather than a collection of unrelated pages.
+The interface behaves as one continuous spatial system rather than a collection of unrelated pages. Workspace views share the same horizontal inset and begin from the same left edge. Media grids fill from left to right and may leave unused space on the right rather than introducing view-specific centering or page widths.
 
 At desktop sizes it is organized around persistent navigation, a library or media detail workspace, and persistent playback controls. These regions retain their roles across views so repeated use builds spatial memory.
 

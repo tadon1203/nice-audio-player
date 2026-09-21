@@ -1,3 +1,5 @@
+"use client"
+
 import * as React from "react"
 import { mergeProps } from "@base-ui/react/merge-props"
 import { useRender } from "@base-ui/react/use-render"
@@ -5,22 +7,22 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "cn"
 
 import { useIsMobile } from "@/renderer/shared/hooks/use-mobile"
-import { Button } from "@/renderer/shared/ui/button"
-import { Input } from "@/renderer/shared/ui/input"
-import { Separator } from "@/renderer/shared/ui/separator"
+import { Button } from "@/renderer/shared/ui/shadcn/button"
+import { Input } from "@/renderer/shared/ui/shadcn/input"
+import { Separator } from "@/renderer/shared/ui/shadcn/separator"
 import {
   Sheet,
   SheetContent,
   SheetDescription,
   SheetHeader,
   SheetTitle,
-} from "@/renderer/shared/ui/sheet"
-import { Skeleton } from "@/renderer/shared/ui/skeleton"
+} from "@/renderer/shared/ui/shadcn/sheet"
+import { Skeleton } from "@/renderer/shared/ui/shadcn/skeleton"
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-} from "@/renderer/shared/ui/tooltip"
+} from "@/renderer/shared/ui/shadcn/tooltip"
 import { PanelLeftIcon } from "lucide-react"
 
 const SIDEBAR_COOKIE_NAME = "sidebar_state"
