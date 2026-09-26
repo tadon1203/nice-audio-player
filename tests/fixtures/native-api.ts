@@ -8,8 +8,8 @@ import type {
   LibraryScanSnapshot,
   LibraryScanState,
   LibraryTrackSummary,
-  PlaybackQueue,
-  PlaybackState,
+  PlaybackQueueSnapshot,
+  PlaybackSnapshot,
   TNativeAPI,
 } from "@/shared/ipc";
 
@@ -41,7 +41,7 @@ export async function installNativeApi(page: Page, options: InstallNativeApiOpti
       id: "root-1",
       path: "C:/Music",
       enabled: true,
-      scanGeneration: null,
+      scanGeneration: 0,
       lastSuccessfulScanAtMs: null,
     };
     let roots = [root];
@@ -120,7 +120,7 @@ export async function installNativeApi(page: Page, options: InstallNativeApiOpti
     let queueRevision = 1;
     let currentTrack: LibraryTrackSummary | null = null;
     let currentSequence: LibraryTrackSummary[] = [];
-    let playback: PlaybackState = {
+    let playback: PlaybackSnapshot = {
       status: "stopped",
       revision: playbackRevision,
       file: null,
@@ -130,7 +130,7 @@ export async function installNativeApi(page: Page, options: InstallNativeApiOpti
       canGoPrevious: false,
       canGoNext: false,
     };
-    let queue: PlaybackQueue = {
+    let queue: PlaybackQueueSnapshot = {
       revision: queueRevision,
       current: null,
       upcoming: [],
@@ -216,20 +216,20 @@ export async function installNativeApi(page: Page, options: InstallNativeApiOpti
     let scan: LibraryScanSnapshot = {
       state: "idle",
       currentRoot: null,
-      discoveredCount: null,
-      inspectedCount: null,
-      indexedCount: null,
-      failedCount: null,
+      discoveredCount: 0,
+      inspectedCount: 0,
+      indexedCount: 0,
+      failedCount: 0,
       failureCode: null,
     };
     const setScanState = (state: LibraryScanState) => {
       scan = {
         state,
         currentRoot: state === "running" ? scanRoot() : null,
-        discoveredCount: state === "idle" ? null : 20,
-        inspectedCount: state === "idle" ? null : state === "running" ? 8 : 20,
-        indexedCount: state === "idle" ? null : state === "running" ? 6 : 18,
-        failedCount: state === "idle" ? null : state === "failed" ? 2 : 0,
+        discoveredCount: state === "idle" ? 0 : 20,
+        inspectedCount: state === "idle" ? 0 : state === "running" ? 8 : 20,
+        indexedCount: state === "idle" ? 0 : state === "running" ? 6 : 18,
+        failedCount: state === "idle" ? 0 : state === "failed" ? 2 : 0,
         failureCode: state === "failed" ? "scanFailed" : null,
       };
       emit({ event: "libraryScanStateChanged", payload: scan });
@@ -310,15 +310,17 @@ export async function installNativeApi(page: Page, options: InstallNativeApiOpti
       },
       removeLibraryRoot: async (id) => {
         roots = roots.filter((item) => item.id !== id);
+        return null;
       },
+      listAudioOutputDevices: async () => [],
       getLibraryScanState: async () => scan,
       startLibraryScan: async () => {
         setScanState("running");
-        return undefined;
+        return null;
       },
       cancelLibraryScan: async () => {
         setScanState("cancelled");
-        return undefined;
+        return null;
       },
       listLibraryTracks: async (cursor, search) => {
         recordRequest("tracks");

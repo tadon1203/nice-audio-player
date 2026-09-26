@@ -1,7 +1,7 @@
 use cpal::traits::{DeviceTrait, HostTrait};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, specta::Type, Deserialize, PartialEq, Eq)]
 #[serde(
     tag = "kind",
     rename_all = "camelCase",
@@ -12,14 +12,14 @@ pub enum AudioOutputSelection {
     Device { device_id: String },
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, specta::Type, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct AudioOutputDeviceIdentity {
     pub id: String,
     pub name: String,
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, specta::Type, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct AudioOutputDevice {
     pub id: String,
@@ -27,7 +27,7 @@ pub struct AudioOutputDevice {
     pub is_default: bool,
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, specta::Type, PartialEq, Eq)]
 #[serde(tag = "code", rename_all = "camelCase")]
 pub enum AudioDeviceListError {
     EnumerationFailed,

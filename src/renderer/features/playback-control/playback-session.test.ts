@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import type { PlaybackQueue, PlaybackState, TNativeAPI } from "@/shared/ipc";
+import type { PlaybackQueueSnapshot, PlaybackSnapshot, TNativeAPI } from "@/shared/ipc";
 import { createPlaybackController, createPlaybackStore } from "./playback-session";
 
 type PlaybackApi = TNativeAPI;
 
-const stopped = (revision: number, path: string | null): PlaybackState => ({
+const stopped = (revision: number, path: string | null): PlaybackSnapshot => ({
   status: "stopped",
   revision,
   file: path ? { path, fileName: path, extension: "mp3" } : null,
@@ -15,7 +15,7 @@ const stopped = (revision: number, path: string | null): PlaybackState => ({
   canGoNext: false,
 });
 
-const queue = (revision: number | null): PlaybackQueue => ({
+const queue = (revision: number): PlaybackQueueSnapshot => ({
   revision,
   current: null,
   upcoming: [],

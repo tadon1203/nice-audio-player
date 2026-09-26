@@ -3,8 +3,8 @@ import { useShallow } from "zustand/react/shallow";
 import type {
   AppEvent,
   LibraryAlbumKey,
-  PlaybackQueue,
-  PlaybackState,
+  PlaybackQueueSnapshot,
+  PlaybackSnapshot,
   TNativeAPI,
 } from "@/shared/ipc";
 import { useLibraryTrackForPath } from "@/renderer/entities/library";
@@ -20,8 +20,8 @@ export type TransportCommand =
   | "next";
 
 export type PlaybackStoreState = {
-  snapshot: PlaybackState | null;
-  queue: PlaybackQueue | null;
+  snapshot: PlaybackSnapshot | null;
+  queue: PlaybackQueueSnapshot | null;
   playbackRevision: number | null;
   queueRevision: number | null;
   connection: PlaybackConnection;
@@ -62,13 +62,13 @@ export function createPlaybackController(store: UseBoundStore<StoreApi<PlaybackS
   const setError = (error: unknown) =>
     store.setState({ error: error ? playbackCommandErrorMessage(error) : null });
 
-  const acceptPlayback = (snapshot: PlaybackState) => {
+  const acceptPlayback = (snapshot: PlaybackSnapshot) => {
     const current = store.getState().playbackRevision;
     if (!acceptsRevision(snapshot.revision, current)) return;
     store.setState({ snapshot, playbackRevision: snapshot.revision });
   };
 
-  const acceptQueue = (queue: PlaybackQueue) => {
+  const acceptQueue = (queue: PlaybackQueueSnapshot) => {
     const current = store.getState().queueRevision;
     if (!acceptsRevision(queue.revision, current)) return;
     store.setState({ queue, queueRevision: queue.revision });
@@ -81,7 +81,7 @@ export function createPlaybackController(store: UseBoundStore<StoreApi<PlaybackS
 
   const runTransport = async (
     command: TransportCommand,
-    operation: () => Promise<PlaybackState>,
+    operation: () => Promise<PlaybackSnapshot>,
   ) => {
     if (!api || store.getState().transportPending !== null) return;
     store.setState({ transportPending: command, error: null });
@@ -186,13 +186,13 @@ export function createPlaybackController(store: UseBoundStore<StoreApi<PlaybackS
   };
 }
 
-function selectDuration(snapshot: PlaybackState | null) {
+function selectDuration(snapshot: PlaybackSnapshot | null) {
   return snapshot?.status === "playing" || snapshot?.status === "paused"
     ? snapshot.durationMs
     : null;
 }
 
-function selectMuted(snapshot: PlaybackState | null) {
+function selectMuted(snapshot: PlaybackSnapshot | null) {
   return snapshot?.muted ?? false;
 }
 

@@ -13,7 +13,7 @@ Every source document listed in `AGENTS.md` begins with its title and a `## Docu
 - Keep each change focused on one logical responsibility.
 - Do not weaken type checking, linting, tests, security, accessibility, or performance constraints to make a change pass.
 - New or changed product-visible behavior includes automated coverage in the same change.
-- Keep Tauri commands and the typed IPC contracts in `src/shared/ipc` in sync.
+- Register Tauri commands in `src-tauri/src/bindings.rs` and regenerate `src/shared/ipc/bindings.ts` with `pnpm bindings`; never edit the generated file by hand.
 - Rust remains authoritative for domain and persistent state. Renderer state may cache or mirror backend state but must not replace it.
 - TanStack Router is the navigation authority. TanStack Query owns native read caches. Zustand owns renderer-local interaction state.
 

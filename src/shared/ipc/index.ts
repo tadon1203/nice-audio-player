@@ -1,3 +1,2 @@
-export * from "./channels";
-export * from "./schemas";
+export * from "./bindings";
 export * from "./native-api";

@@ -11,7 +11,7 @@ use symphonia::default::{get_codecs, get_probe};
 
 use super::validation::{AudioFileValidationError, ValidatedAudioFile};
 
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, specta::Type, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct AudioFileInfo {
     pub codec: AudioCodec,
@@ -20,7 +20,7 @@ pub struct AudioFileInfo {
     pub duration_ms: Option<u64>,
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, specta::Type, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum AudioCodec {
     Aac,
@@ -35,7 +35,7 @@ pub enum AudioCodec {
     Other,
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, specta::Type, PartialEq, Eq)]
 #[serde(tag = "code", rename_all = "camelCase")]
 pub enum AudioFileInspectionError {
     ValidationFailed { error: AudioFileValidationError },

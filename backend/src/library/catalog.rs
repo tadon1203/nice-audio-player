@@ -23,7 +23,7 @@ type AlbumDetailsRow = (
     Option<String>,
 );
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, specta::Type, Deserialize)]
 struct CatalogCursor {
     version: u8,
     kind: String,

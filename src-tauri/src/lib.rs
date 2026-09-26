@@ -4,9 +4,12 @@ use backend::app::BackendApp;
 use tauri::Manager;
 
 mod artwork;
+mod bindings;
 mod commands;
 mod errors;
 mod events;
+
+pub use bindings::render_typescript as render_typescript_bindings;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -34,36 +37,7 @@ pub fn run() {
             events::forward_events(app.handle(), &backend);
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![
-            commands::playback::get_playback_state,
-            commands::playback::get_playback_queue,
-            commands::playback::pause_playback,
-            commands::playback::resume_playback,
-            commands::playback::previous_playback,
-            commands::playback::next_playback,
-            commands::playback::seek_playback,
-            commands::playback::set_playback_volume,
-            commands::playback::set_playback_muted,
-            commands::playback::list_audio_output_devices,
-            commands::library::get_library_status,
-            commands::library::get_library_scan_state,
-            commands::library::list_library_roots,
-            commands::library::register_library_root,
-            commands::library::set_library_root_enabled,
-            commands::library::remove_library_root,
-            commands::library::start_library_scan,
-            commands::library::cancel_library_scan,
-            commands::library::list_library_tracks,
-            commands::library::list_library_albums,
-            commands::library::list_library_album_artists,
-            commands::library::get_library_album_artist,
-            commands::library::list_library_artist_albums,
-            commands::library::get_library_album_details,
-            commands::library::list_library_album_tracks,
-            commands::library::get_library_track_for_path,
-            commands::library::start_library_track,
-            commands::library::start_library_album
-        ])
+        .invoke_handler(bindings::builder().invoke_handler())
         .build(tauri::generate_context!())
         .expect("failed to build Tauri application");
 

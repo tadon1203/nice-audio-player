@@ -49,6 +49,7 @@
   ],
   "ignorePatterns": [
     "dist",
+    "src/shared/ipc/bindings.ts",
     "out",
     "build",
     "node_modules",

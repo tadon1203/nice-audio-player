@@ -17,7 +17,7 @@ Rust owns domain behavior, persistence, filesystem work, audio playback, and the
 ```text
 src/app/renderer                 renderer entry point and composition
 src/renderer/{pages,widgets,features,entities,shared}  FSD renderer slices
-src/shared/ipc                   validated command and event contract
+src/shared/ipc                   generated command, DTO, and event contract
 src-tauri                        Tauri shell, commands, capabilities, packaging
 backend                          Rust domain services, persistence, and audio
 ```
@@ -30,6 +30,6 @@ TanStack Router owns navigation, validated search state, URL history, and scroll
 
 ## IPC and distribution
 
-`src/shared/ipc` defines command identifiers, Zod request/response validation, DTOs, and event schemas. `src/renderer/shared/lib/native.ts` is the sole frontend adapter: it validates requests and responses and exposes only the typed application API. Tauri capabilities grant the main window only the native permissions required by the application.
+Rust is authoritative for the IPC contract. Tauri commands are registered once in `src-tauri/src/bindings.rs`, and tauri-specta generates `src/shared/ipc/bindings.ts` (commands, DTOs, structured `{ code }` errors, and the `app:event` payload) with `pnpm bindings`; `pnpm bindings:check` fails when it is stale. `src/renderer/shared/lib/native.ts` is the sole frontend adapter: it wraps the generated commands, converts structured errors to `NativeCommandError`, and exposes only the typed application API. Tauri capabilities grant the main window only the native permissions required by the application.
 
 Vite builds the React renderer into `dist`; the Tauri CLI builds and packages the Rust host and Windows NSIS installer. Tauri's `nice-artwork` URI handler (`src-tauri/src/artwork.rs`) serves only canonical content-addressed artwork beneath application data; on Windows the renderer loads it from `http://nice-artwork.localhost`. The Tauri host is split into `commands/` (IPC handlers), `events.rs` (backend event forwarding), `errors.rs` (IPC error mapping), and `artwork.rs`. The frameless Tauri window uses the app-owned 40px title surface and Tauri's explicit drag-region support.

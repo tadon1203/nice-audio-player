@@ -26,7 +26,7 @@ mod source_loader;
 use decode_worker::{DecodePipeline, DecodeTaskInput, DecodeWorker, DecodeWorkerSetup};
 use source_loader::SourceLoadWorker;
 
-#[derive(Debug, Clone, serde::Serialize, PartialEq)]
+#[derive(Debug, Clone, serde::Serialize, specta::Type, PartialEq)]
 #[serde(
     tag = "status",
     rename_all = "camelCase",
@@ -79,7 +79,6 @@ pub enum PlaybackSnapshot {
     Failed {
         revision: u64,
         file: Option<ValidatedAudioFile>,
-        #[serde(skip_serializing_if = "Option::is_none")]
         playback_id: Option<String>,
         error: PlaybackFailureCode,
         volume: f32,
@@ -90,7 +89,7 @@ pub enum PlaybackSnapshot {
     },
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, specta::Type, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum PlaybackRepeatMode {
     Off,
@@ -98,14 +97,14 @@ pub enum PlaybackRepeatMode {
     One,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, specta::Type, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum PlaybackQueueMoveDirection {
     Earlier,
     Later,
 }
 
-#[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, serde::Serialize, specta::Type, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct PlaybackQueueItem {
     pub id: String,
@@ -114,7 +113,7 @@ pub struct PlaybackQueueItem {
     pub duration_ms: Option<u64>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, serde::Serialize, specta::Type, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct PlaybackQueueSnapshot {
     pub revision: u64,
@@ -132,7 +131,7 @@ pub struct PlaybackEntrySeed {
     pub duration_ms: Option<u64>,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub enum PlaybackChannelConversion {
     None,
@@ -451,7 +450,7 @@ fn test_file() -> ValidatedAudioFile {
     }
 }
 
-#[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, serde::Serialize, specta::Type, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum PlaybackFailureCode {
     NoOutputDevice,

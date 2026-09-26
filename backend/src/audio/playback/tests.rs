@@ -87,7 +87,7 @@ fn serializes_paused_snapshot_with_camel_case_playback_id() {
 }
 
 #[test]
-fn omits_missing_playback_id_from_failed_snapshot() {
+fn serializes_missing_playback_id_as_null_in_failed_snapshot() {
     let snapshot = PlaybackSnapshot::failed(
         VolumeState::default(),
         None,
@@ -98,6 +98,7 @@ fn omits_missing_playback_id_from_failed_snapshot() {
         serde_json::to_value(snapshot).unwrap(),
         serde_json::json!({
             "status": "failed",
+            "playbackId": null,
             "revision": 0,
             "file": null,
             "error": "noOutputDevice",

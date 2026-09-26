@@ -20,7 +20,7 @@ use std::{
     thread::{self, JoinHandle},
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, specta::Type)]
 #[serde(tag = "code", rename_all = "camelCase")]
 pub enum LibraryCommandError {
     InvalidRoot,
@@ -427,7 +427,7 @@ impl LibraryShared {
         }
     }
 }
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, specta::Type)]
 #[serde(tag = "code", rename_all = "camelCase")]
 pub enum StartLibraryTrackError {
     InvalidId,
@@ -443,7 +443,7 @@ pub enum StartLibraryTrackError {
     PlaybackWorkerUnavailable,
     TaskFailed,
 }
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, specta::Type)]
 #[serde(tag = "code", rename_all = "camelCase")]
 pub enum StartLibraryAlbumError {
     InvalidAlbumKey,
@@ -459,7 +459,7 @@ pub enum StartLibraryAlbumError {
     PlaybackWorkerUnavailable,
     TaskFailed,
 }
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, specta::Type)]
 #[serde(tag = "code", rename_all = "camelCase")]
 pub enum StartLibraryAlbumTrackError {
     InvalidAlbumKey,

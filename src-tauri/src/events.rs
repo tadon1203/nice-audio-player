@@ -11,7 +11,7 @@ use backend::{
 use serde::Serialize;
 use tauri::Emitter;
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Serialize, specta::Type)]
 #[serde(tag = "event", content = "payload", rename_all = "camelCase")]
 pub enum AppEvent {
     #[serde(rename = "playbackStateChanged")]
