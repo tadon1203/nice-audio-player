@@ -20,6 +20,7 @@
 *.png binary
 *.db-lock binary
 *.wav binary
+*.ttf binary
 *.webm binary
 *.woff binary
 *.woff2 binary
