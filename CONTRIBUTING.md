@@ -1,57 +1,23 @@
 # Contributing
 
-## Document responsibility
+## Rules that matter
 
-This document is the source of truth for engineering conventions, verification, Git, and GitHub workflow. It does not define product behavior, visual design, or system architecture.
-
-## Documentation
-
-Every source document listed in `AGENTS.md` begins with its title and a `## Document responsibility` section. Keep each rule in its owning document and avoid duplication.
-
-## Engineering rules
-
-- Keep each change focused on one logical responsibility.
-- Do not weaken type checking, linting, tests, security, accessibility, or performance constraints to make a change pass.
-- New or changed product-visible behavior includes automated coverage in the same change.
 - Register Tauri commands in `src-tauri/src/bindings.rs` and regenerate `src/shared/ipc/bindings.ts` with `pnpm bindings`; never edit the generated file by hand.
-- Rust remains authoritative for domain and persistent state. Renderer state may cache or mirror backend state but must not replace it.
-- TanStack Router is the navigation authority. TanStack Query owns native read caches. Zustand owns renderer-local interaction state.
-
-## Renderer boundaries
-
-- Renderer code under `src/renderer/**` must not import `node:*` or Tauri Rust implementation modules.
-- Renderer access to native capabilities goes through the typed Tauri adapter in `src/renderer/shared/lib/native.ts`.
-- Tauri commands validate arguments and return typed results; capabilities expose only required native APIs.
-- Direct DOM mutation is prohibited; use React rendering and event handlers.
-- Use semantic HTML and preserve visible keyboard focus, logical focus order, and WCAG AA contrast.
-
-## Design system
-
-- `src/app/renderer/styles.css` owns the shadcn semantic variables, `@theme inline` adapters, font theme value, and global base styles.
-- Product surfaces use shadcn semantic tokens such as `background`, `foreground`, `muted`, `border`, `input`, `ring`, and `destructive`; product code does not use raw palette values for interface surfaces.
-- Use shadcn-generated local primitives under `src/renderer/shared/ui/shadcn` and Lucide icons for reusable interaction surfaces. Keep product-specific components and behavior outside that directory. Keep `components.json` and the shadcn CLI configuration in sync with generated components. Add a new primitive with `pnpm exec shadcn add <component>`, then compose it in the owning renderer slice.
-- Keep shadcn registry output and any hook it generates in upstream formatting; Oxfmt does not rewrite those generated files. Product compositions and non-generated shared code remain subject to repository formatting.
-- Use Tailwind built-in spacing, typography, radius, motion, and z-index utilities before adding a custom `@theme` value. Keep one-component structural values local to that component.
-- Do not use gradients, glass, glow, decorative shadows, or oversized headings as substitutes for hierarchy.
-- Keep controls at least 14px text and preserve the dark, mostly monochrome, artwork-led visual system defined in `DESIGN.md`.
+- Rust owns domain and persistent state. Renderer state only caches or mirrors it.
+- TanStack Router owns navigation, TanStack Query owns native read caches, Zustand owns renderer-local interaction state.
+- Renderer code under `src/renderer/**` reaches native features only through `src/renderer/shared/lib/native.ts`, and never imports `node:*`.
+- Use shadcn primitives (`pnpm exec shadcn add <component>`) and semantic tokens; no raw palette values for UI surfaces.
+- Do not weaken type checking or lint rules just to make a change pass.
 
 ## Workflow
 
-- Use one Issue, one branch, and one pull request per change.
-- Branch names use `<type>/<issue-number>-<kebab-case>`.
-- Commit messages use Conventional Commits: `<type>(<scope>): <imperative summary>`.
-- Do not push directly to `main` or force-push without explicit authorization.
+- Commit directly to `main`. Use a branch or PR only for big or risky changes.
+- Commit messages: short and descriptive. Conventional Commits are optional.
+- Tests are welcome for fragile logic but not required for every change.
 
-## Local verification
+## Verification
 
-Use the smallest command that covers the change:
-
-- `pnpm check` — TypeScript, Oxfmt, and Oxlint
-- `pnpm test` — Vitest tests
-- `pnpm build` — production renderer build
-- `pnpm test:e2e` — renderer Playwright and Tauri desktop WebDriver tests
-- `pnpm package` — Tauri Windows installer
-- `pnpm fonts:check` — bundled font integrity check
-- `pnpm validate` — full repository validation, including backend and Tauri checks, tests, E2E, and production build
-
-Run native tests when backend code changes and E2E tests when startup, IPC, routing, or packaged integration changes.
+- Usually: `pnpm check` (and `pnpm test` if logic changed).
+- Backend changes: `pnpm check:native` and `pnpm test:native`.
+- Startup, IPC, or routing changes: `pnpm test:e2e`.
+- Before a release: `pnpm validate`, then `pnpm package`.

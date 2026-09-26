@@ -8,7 +8,7 @@ A local-first Windows desktop music player focused on reliable playback and a ca
 - [Design](./DESIGN.md) — visual and interaction system
 - [Architecture](./docs/architecture.md) — Tauri and Rust boundaries and ownership
 - [Development Philosophy](./PHILOSOPHY.md) — development principles
-- [Contributing](./CONTRIBUTING.md) — contribution workflow
+- [Contributing](./CONTRIBUTING.md) — engineering rules
 
 ## Development
 

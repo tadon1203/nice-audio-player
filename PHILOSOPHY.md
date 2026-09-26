@@ -1,8 +1,4 @@
-# Development Pがilosophy
-
-## Document responsibility
-
-This document is the source of truth for the project's development and documentation principles. It does not define product requirements, system architecture, or operational contribution rules.
+# Development Philosophy
 
 ## Goals
 

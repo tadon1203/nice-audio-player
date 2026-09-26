@@ -1,9 +1,5 @@
 # Architecture
 
-## Document responsibility
-
-This document defines system structure, ownership, and dependency direction. Product acceptance belongs in `requirements.md`; visual rules belong in `DESIGN.md`.
-
 ## System overview
 
 ```text
