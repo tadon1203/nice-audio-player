@@ -1,4 +1,4 @@
-import { useMemo, type MouseEvent, type RefObject } from "react";
+import { useMemo, type MouseEvent } from "react";
 import { flexRender, getCoreRowModel, useReactTable, type ColumnMeta } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { ArrowDown, ArrowUp } from "lucide-react";
@@ -32,8 +32,11 @@ type TrackTableProps = {
   playbackStatus?: TrackPlaybackStatus;
   sortKey?: LibraryTrackSortKey;
   sortDirection?: LibrarySortDirection;
-  /** The scroll element to virtualize rows against; without it every row renders. */
-  scrollContainerRef?: RefObject<HTMLDivElement | null>;
+  /**
+   * The scroll element to virtualize rows against, or `null` while it is still mounting.
+   * Omit it to render every row.
+   */
+  scrollElement?: HTMLElement | null;
   initialOffset?: number;
   onSortChange?: (key: LibraryTrackSortKey, direction: LibrarySortDirection) => void;
   onPlayTrack: (id: string) => void;
@@ -49,7 +52,7 @@ export function TrackTable({
   playbackStatus = "stopped",
   sortKey,
   sortDirection = "ascending",
-  scrollContainerRef,
+  scrollElement,
   initialOffset,
   onSortChange,
   onPlayTrack,
@@ -73,10 +76,10 @@ export function TrackTable({
     getCoreRowModel: getCoreRowModel(),
   });
   const allRows = table.getRowModel().rows;
-  const virtualized = scrollContainerRef !== undefined;
+  const virtualized = scrollElement !== undefined;
   const virtualizer = useVirtualizer({
     count: virtualized ? allRows.length : 0,
-    getScrollElement: () => scrollContainerRef?.current ?? null,
+    getScrollElement: () => scrollElement ?? null,
     estimateSize: () => TRACK_ROW_HEIGHT,
     overscan: 10,
     initialOffset,

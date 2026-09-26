@@ -32,7 +32,7 @@ export function TracksPage() {
           rows={tracks}
           layout="library"
           caption="Library tracks"
-          scrollContainerRef={scroll.viewportRef}
+          scrollElement={scroll.viewport}
           initialOffset={scroll.initialOffset}
           activeTrackId={playbackState.activeTrackId}
           playbackStatus={playbackState.playbackStatus}

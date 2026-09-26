@@ -1,4 +1,4 @@
-import { useRef, type ReactNode, type RefObject } from "react";
+import { useState, type ReactNode } from "react";
 import { useElementScrollRestoration } from "@tanstack/react-router";
 import { libraryCommandErrorMessage } from "@/renderer/entities/library";
 import { formatCount } from "@/renderer/shared/lib/format";
@@ -24,7 +24,8 @@ export type LibraryPresentationMeta = {
 };
 
 export type LibraryScroll = {
-  viewportRef: RefObject<HTMLDivElement | null>;
+  /** `null` until the scroll region has mounted. */
+  viewport: HTMLDivElement | null;
   initialOffset: number | undefined;
 };
 
@@ -59,9 +60,10 @@ export function LibraryWorkspace<Item, Key extends string>({
   catalog: LibraryCatalogState<Item>;
   children: (items: Item[], scroll: LibraryScroll) => ReactNode;
 }) {
-  const viewportRef = useRef<HTMLDivElement>(null);
+  // State rather than a ref: descendants (the virtualizer) must re-render once the viewport exists.
+  const [viewport, setViewport] = useState<HTMLDivElement | null>(null);
   const scrollEntry = useElementScrollRestoration({ id: scrollRestorationId });
-  useScrollTopOnChange(viewportRef, stateKey);
+  useScrollTopOnChange(viewport, stateKey);
   const { statusQuery, statusMessage, query, viewState } = catalog;
 
   return (
@@ -80,7 +82,7 @@ export function LibraryWorkspace<Item, Key extends string>({
       <div className="min-h-0">
         <WorkspaceScroll
           scrollRestorationId={scrollRestorationId}
-          viewportRef={viewportRef}
+          viewportRef={setViewport}
           contentClassName="pt-6 pb-16"
         >
           {viewState === "loading" ? <LoadingStatus>Loading library…</LoadingStatus> : null}
@@ -109,7 +111,7 @@ export function LibraryWorkspace<Item, Key extends string>({
 
           {viewState === "content" ? (
             <>
-              {children(query.items, { viewportRef, initialOffset: scrollEntry?.scrollY })}
+              {children(query.items, { viewport, initialOffset: scrollEntry?.scrollY })}
               {query.hasNextPage ? (
                 <LoadMoreButton
                   pending={query.isFetchingNextPage}
