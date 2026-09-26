@@ -26,8 +26,8 @@ export function TitleBar({ pathname }: { pathname: string }) {
               <Button
                 type="button"
                 variant="ghost"
-                size="icon-sm"
-                className="size-9 md:hidden"
+                size="icon-lg"
+                className="md:hidden"
                 aria-label="Open navigation"
               />
             }
@@ -46,8 +46,7 @@ export function TitleBar({ pathname }: { pathname: string }) {
                   <Button
                     type="button"
                     variant="ghost"
-                    size="icon-sm"
-                    className="size-9"
+                    size="icon-lg"
                     aria-label="Close navigation"
                   />
                 }

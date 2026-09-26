@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import type { ArtworkRef } from "@/shared/ipc";
+import { cn } from "@/renderer/shared/lib/utils";
 import { Artwork } from "@/renderer/shared/ui/artwork";
+import { PageTitle } from "@/renderer/shared/ui/headings";
 
 export function MediaDetailsHeader({
   kind,
@@ -23,16 +25,14 @@ export function MediaDetailsHeader({
         <Artwork
           artwork={artwork}
           alt={`${title} artwork`}
-          className={`w-full max-w-56 ${round ? "rounded-full" : ""}`}
+          className={cn("w-full max-w-56", round && "rounded-full")}
           loading="eager"
         />
         <div className="min-w-0">
           <p className="mb-2 text-sm font-medium uppercase tracking-widest text-muted-foreground">
             {kind}
           </p>
-          <h1 className="text-2xl font-normal leading-tight tracking-tight text-foreground">
-            {title}
-          </h1>
+          <PageTitle>{title}</PageTitle>
           {artist ? <p className="mt-2 text-base text-muted-foreground">{artist}</p> : null}
           {children}
         </div>

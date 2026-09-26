@@ -1,10 +1,10 @@
 import { Link } from "@tanstack/react-router";
-import type { LibraryAlbumArtistSummary } from "@/renderer/entities/library";
+import type { LibraryAlbumArtistSummary } from "@/shared/ipc";
 import { formatCount } from "@/renderer/shared/lib/format";
 import { cn } from "@/renderer/shared/lib/utils";
 import { Artwork } from "@/renderer/shared/ui/artwork";
 
-export function ArtistCard({
+export function ArtistTile({
   artist,
   className,
 }: {
@@ -17,7 +17,7 @@ export function ArtistCard({
       params={{ artistName: artist.key.name }}
       aria-label={`Browse albums by ${artist.key.name}`}
       className={cn(
-        "group min-w-0 rounded-md text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "group block min-w-0 rounded-lg text-center outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
         className,
       )}
     >
@@ -26,7 +26,9 @@ export function ArtistCard({
         alt={`${artist.key.name} artwork`}
         className="mx-auto w-full rounded-full transition-opacity group-hover:opacity-80"
       />
-      <h2 className="mt-3 truncate text-sm font-medium text-foreground">{artist.key.name}</h2>
+      <p className="mt-3 truncate text-sm font-medium text-foreground" title={artist.key.name}>
+        {artist.key.name}
+      </p>
       <p className="mt-1 text-sm tabular-nums text-muted-foreground">
         {formatCount(artist.albumCount, "album")} · {formatCount(artist.trackCount, "track")}
       </p>

@@ -281,9 +281,9 @@ function TrackAction({
       <Button
         type="button"
         variant="ghost"
-        size="icon-sm"
+        size="icon-lg"
         className={cn(
-          "absolute size-9 transition-opacity",
+          "absolute transition-opacity",
           !action.persistent &&
             "opacity-0 group-hover/track:opacity-100 group-focus-within/track:opacity-100",
           disabled && !action.persistent && "pointer-events-none opacity-0",

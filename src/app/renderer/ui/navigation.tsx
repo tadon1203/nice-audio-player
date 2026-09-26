@@ -1,6 +1,7 @@
 import { Album, LibraryBig, ListMusic, Settings2, type LucideIcon } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { cn } from "@/renderer/shared/lib/utils";
+import { buttonVariants } from "@/renderer/shared/ui/shadcn/button";
 
 type NavigationItem = {
   label: string;
@@ -71,11 +72,12 @@ function NavigationLink({
       activeProps={{ "aria-current": "page" }}
       onClick={onNavigate}
       className={cn(
-        "flex h-10 w-full items-center gap-2 rounded-md px-2 text-sm text-muted-foreground outline-none transition-colors hover:bg-sidebar-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring",
-        active && "bg-muted text-foreground",
+        buttonVariants({ variant: "ghost", size: "lg" }),
+        "h-10 w-full justify-start gap-2 px-2 text-muted-foreground hover:bg-sidebar-accent",
+        active && "bg-muted text-foreground hover:bg-muted",
       )}
     >
-      <Icon aria-hidden="true" size={16} strokeWidth={1.8} />
+      <Icon aria-hidden="true" />
       <span className="truncate">{item.label}</span>
     </Link>
   );
