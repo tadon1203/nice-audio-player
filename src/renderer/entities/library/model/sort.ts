@@ -5,7 +5,7 @@ import type {
   LibrarySortDirection,
   LibraryTrackSortKey,
 } from "@/shared/ipc";
-import type { SortOption } from "@/renderer/shared/components/collection-sort-control";
+import type { SortOption } from "@/renderer/shared/ui/collection-sort-control";
 
 /**
  * Derives the ordered keys, select options, and type guard for one sort-key set

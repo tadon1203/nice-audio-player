@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { AlertCircle, Check, FolderPlus, RefreshCw, X } from "lucide-react";
+import { Check, FolderPlus, RefreshCw, X } from "lucide-react";
 import {
   libraryCommandErrorMessage,
   libraryScanFailureMessage,
@@ -14,7 +14,7 @@ import {
   type LibraryScanState,
 } from "@/renderer/entities/library";
 import { formatNumber } from "@/renderer/shared/lib/format";
-import { Alert, AlertDescription } from "@/renderer/shared/ui/shadcn/alert";
+import { SectionTitle } from "@/renderer/shared/ui/headings";
 import { Button } from "@/renderer/shared/ui/shadcn/button";
 import { Checkbox } from "@/renderer/shared/ui/shadcn/checkbox";
 import { Field, FieldLabel } from "@/renderer/shared/ui/shadcn/field";
@@ -28,6 +28,7 @@ import {
 } from "@/renderer/shared/ui/shadcn/item";
 import { Progress } from "@/renderer/shared/ui/shadcn/progress";
 import { Spinner } from "@/renderer/shared/ui/shadcn/spinner";
+import { EmptyStatus, ErrorAlert, LoadingStatus } from "@/renderer/shared/ui/workspace-status";
 import { RemoveLibraryRootDialog } from "./remove-library-root-dialog";
 
 function formatProgress(value: number | null, label: string): string {
@@ -80,9 +81,7 @@ export function LibraryFoldersSection() {
     <section aria-labelledby="library-heading" className="mt-8">
       <div className="flex flex-wrap items-start justify-between gap-5">
         <div>
-          <h2 id="library-heading" className="text-lg font-medium text-foreground">
-            Library
-          </h2>
+          <SectionTitle id="library-heading">Library</SectionTitle>
           <p className="mt-1 text-sm leading-5 text-muted-foreground">
             Choose where your music lives.
           </p>
@@ -97,9 +96,9 @@ export function LibraryFoldersSection() {
             disabled={scanRunning || addRoot.isPending}
           >
             {addRoot.isPending ? (
-              <Spinner className="size-4" />
+              <Spinner data-icon="inline-start" aria-hidden="true" role="presentation" />
             ) : (
-              <FolderPlus className="size-4" aria-hidden="true" />
+              <FolderPlus data-icon="inline-start" aria-hidden="true" />
             )}
             Add folder
           </Button>
@@ -112,10 +111,10 @@ export function LibraryFoldersSection() {
       </div>
 
       {rootsQuery.isError ? (
-        <Alert variant="destructive" className="mt-5" role="alert">
-          <AlertCircle aria-hidden="true" />
-          <AlertDescription>{libraryCommandErrorMessage(rootsQuery.error)}</AlertDescription>
-        </Alert>
+        <ErrorAlert
+          message={libraryCommandErrorMessage(rootsQuery.error)}
+          onRetry={() => void rootsQuery.refetch()}
+        />
       ) : null}
 
       <div className="mt-6 flex flex-wrap items-start justify-between gap-4">
@@ -143,7 +142,7 @@ export function LibraryFoldersSection() {
                 }}
                 disabled={cancelScan.isPending}
               >
-                <X className="size-4" aria-hidden="true" />
+                <X data-icon="inline-start" aria-hidden="true" />
                 Cancel scan
               </Button>
             ) : (
@@ -156,7 +155,7 @@ export function LibraryFoldersSection() {
                 }}
                 disabled={scanQuery.isPending || roots.length === 0 || startScan.isPending}
               >
-                <RefreshCw className="size-4" aria-hidden="true" />
+                <RefreshCw data-icon="inline-start" aria-hidden="true" />
                 Rescan
               </Button>
             )}
@@ -192,20 +191,11 @@ export function LibraryFoldersSection() {
       ) : null}
 
       {rootsQuery.isPending && roots.length === 0 ? (
-        <div
-          className="mt-5 flex items-center gap-2 border-y border-border py-6 text-sm text-muted-foreground"
-          role="status"
-        >
-          <Spinner className="size-4" />
-          Loading library folders…
-        </div>
+        <LoadingStatus>Loading library folders…</LoadingStatus>
       ) : rootsQuery.isError ? null : roots.length === 0 ? (
-        <div
-          className="mt-5 border-y border-border py-8 text-sm text-muted-foreground"
-          role="status"
-        >
+        <EmptyStatus>
           No library folders yet. Add a folder to start building your library.
-        </div>
+        </EmptyStatus>
       ) : (
         <ItemGroup
           className="mt-5 gap-0 divide-y divide-border border-y border-border"

@@ -57,7 +57,7 @@ export function PlaybackDock() {
             artwork={playback.artwork}
             alt={playback.title === "Nothing playing" ? "" : `${playback.title} artwork`}
             loading="eager"
-            className="size-10 shrink-0 rounded-md"
+            className="size-10 shrink-0"
           />
           <div className="min-w-0">
             <strong
@@ -136,9 +136,8 @@ export function PlaybackDock() {
         <div className="flex min-w-0 items-center justify-self-end gap-1.5" data-region="volume">
           <Button
             type="button"
-            size="icon-sm"
+            size="icon-lg"
             variant="ghost"
-            className="size-9"
             aria-label={playback.muted ? "Unmute" : "Mute"}
             disabled={playback.mutePending || playback.connection !== "ready"}
             onClick={() => void playback.toggleMute()}
@@ -227,9 +226,8 @@ function TransportButton({
   return (
     <Button
       type="button"
-      size="icon-sm"
+      size="icon-lg"
       variant={variant}
-      className="size-9"
       aria-label={label}
       title={label}
       disabled={disabled}

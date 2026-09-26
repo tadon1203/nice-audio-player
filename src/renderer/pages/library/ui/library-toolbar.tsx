@@ -3,8 +3,9 @@ import type { LibrarySortDirection } from "@/renderer/entities/library";
 import {
   CollectionSortControl,
   type SortOption,
-} from "@/renderer/shared/components/collection-sort-control";
-import { WorkspaceContainer } from "@/renderer/shared/layout/workspace-container";
+} from "@/renderer/shared/ui/collection-sort-control";
+import { PageTitle } from "@/renderer/shared/ui/headings";
+import { WorkspaceContainer } from "@/renderer/shared/ui/workspace-container";
 import {
   InputGroup,
   InputGroupAddon,
@@ -40,7 +41,7 @@ export function LibraryToolbar<Key extends string>({
     <header className="pt-8">
       <WorkspaceContainer>
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-6">
-          <h1 className="text-2xl font-normal leading-8 tracking-tight text-foreground">{title}</h1>
+          <PageTitle>{title}</PageTitle>
           <InputGroup className="h-9 w-full sm:w-52">
             <InputGroupInput
               aria-label={searchLabel}
@@ -54,10 +55,8 @@ export function LibraryToolbar<Key extends string>({
             </InputGroupAddon>
           </InputGroup>
         </div>
-        <div className="mt-6 flex min-w-0 flex-wrap items-start justify-between gap-x-8 gap-y-3 text-sm text-muted-foreground">
-          <div
-            className={sort ? "flex items-center gap-2 self-end pb-1.5" : "flex items-center gap-2"}
-          >
+        <div className="mt-6 flex min-w-0 flex-wrap items-end justify-between gap-x-8 gap-y-3 text-sm text-muted-foreground">
+          <div className="flex h-8 items-center gap-2">
             <span className="tabular-nums">{countLabel}</span>
             {updating ? (
               <span role="status" aria-live="polite" className="text-muted-foreground">

@@ -6,6 +6,8 @@ import type {
   LibraryTrackSummary,
 } from "@/renderer/entities/library";
 import {
+  AlbumTile,
+  ArtistTile,
   albumArtistSortOptions,
   albumSortOptions,
   libraryCommandErrorMessage,
@@ -15,17 +17,25 @@ import {
 } from "@/renderer/entities/library";
 import { usePlaybackActions, useTrackPlaybackState } from "@/renderer/features/playback-control";
 import { formatCount } from "@/renderer/shared/lib/format";
-import { Alert, AlertAction, AlertDescription } from "@/renderer/shared/ui/shadcn/alert";
-import { Button } from "@/renderer/shared/ui/shadcn/button";
-import { Empty, EmptyDescription } from "@/renderer/shared/ui/shadcn/empty";
-import { Spinner } from "@/renderer/shared/ui/shadcn/spinner";
-import { WorkspaceContainer } from "@/renderer/shared/layout/workspace-container";
-import { MediaGrid } from "@/renderer/widgets/media-grid";
+import { MediaGrid } from "@/renderer/shared/ui/media-grid";
+import { WorkspaceScroll } from "@/renderer/shared/ui/workspace-scroll";
+import {
+  EmptyStatus,
+  ErrorAlert,
+  LoadMoreButton,
+  LoadingStatus,
+} from "@/renderer/shared/ui/workspace-status";
 import { TrackTable, type TrackTableRow } from "@/renderer/widgets/track-table";
 import { useLibraryView, type LibraryPresentation } from "../model/use-library-view";
-import { AlbumCard } from "./album-card";
-import { ArtistCard } from "./artist-card";
 import { LibraryToolbar } from "./library-toolbar";
+
+type LibraryViewState =
+  | "loading"
+  | "statusError"
+  | "unavailable"
+  | "catalogError"
+  | "empty"
+  | "content";
 
 const presentationMeta = {
   albums: {
@@ -78,8 +88,19 @@ export function LibraryPage({ presentation }: { presentation: LibraryPresentatio
   );
   const count = query.totalCount;
   const countLabel = formatCount(count, meta.singular, meta.plural);
-  const initialLoading = statusQuery.isPending || (catalogEnabled && query.isPending);
-  const catalogVisible = catalogEnabled && !statusQuery.isError && statusMessage === null;
+  const viewState: LibraryViewState = statusQuery.isError
+    ? "statusError"
+    : statusMessage !== null
+      ? "unavailable"
+      : statusQuery.isPending || query.isPending
+        ? "loading"
+        : query.isError
+          ? "catalogError"
+          : query.items.length === 0
+            ? "empty"
+            : "content";
+  const catalogSettled =
+    viewState === "content" || viewState === "empty" || viewState === "catalogError";
   const viewStateKey = `${view.presentation}\u0000${view.filter}\u0000${view.sortKey}\u0000${view.direction}`;
 
   useEffect(() => {
@@ -102,8 +123,7 @@ export function LibraryPage({ presentation }: { presentation: LibraryPresentatio
         searchPlaceholder={meta.searchPlaceholder}
         filter={view.filter}
         updating={
-          catalogVisible &&
-          !query.isPending &&
+          catalogSettled &&
           !query.isFetchingNextPage &&
           (query.isFetching || query.isPlaceholderData)
         }
@@ -130,115 +150,71 @@ export function LibraryPage({ presentation }: { presentation: LibraryPresentatio
       />
 
       <div className="min-h-0">
-        <WorkspaceContainer className="h-full min-h-0 min-w-0">
-          <div
-            ref={scrollContainerRef}
-            data-scroll-restoration-id={scrollRestorationId}
-            className="h-full min-h-0 min-w-0 overflow-y-auto [scrollbar-gutter:stable]"
-          >
-            <div className="pt-6 pb-16">
-              {initialLoading ? (
-                <div
-                  role="status"
-                  className="flex items-center gap-2 py-8 text-sm text-muted-foreground"
-                >
-                  <Spinner className="size-4" />
-                  Loading library…
-                </div>
-              ) : null}
+        <WorkspaceScroll
+          scrollRestorationId={scrollRestorationId}
+          viewportRef={scrollContainerRef}
+          contentClassName="pt-6 pb-16"
+        >
+          {viewState === "loading" ? <LoadingStatus>Loading library…</LoadingStatus> : null}
 
-              {statusQuery.isError ? (
-                <Alert variant="destructive" className="my-4" role="alert">
-                  <AlertDescription>
-                    {libraryCommandErrorMessage(statusQuery.error)}
-                  </AlertDescription>
-                  <AlertAction>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => void statusQuery.refetch()}
-                    >
-                      Retry
-                    </Button>
-                  </AlertAction>
-                </Alert>
-              ) : null}
+          {viewState === "statusError" ? (
+            <ErrorAlert
+              message={libraryCommandErrorMessage(statusQuery.error)}
+              onRetry={() => void statusQuery.refetch()}
+            />
+          ) : null}
 
-              {!statusQuery.isError && statusMessage ? (
-                <Alert variant="destructive" className="my-4" role="alert">
-                  <AlertDescription>{statusMessage}</AlertDescription>
-                </Alert>
-              ) : null}
+          {viewState === "unavailable" ? <ErrorAlert message={statusMessage ?? ""} /> : null}
 
-              {catalogVisible && query.isError ? (
-                <Alert variant="destructive" className="my-4" role="alert">
-                  <AlertDescription>{libraryCommandErrorMessage(query.error)}</AlertDescription>
-                  <AlertAction>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => void query.refetch()}
-                    >
-                      Retry
-                    </Button>
-                  </AlertAction>
-                </Alert>
-              ) : null}
+          {viewState === "catalogError" ? (
+            <ErrorAlert
+              message={libraryCommandErrorMessage(query.error)}
+              onRetry={() => void query.refetch()}
+            />
+          ) : null}
 
-              {catalogVisible && !query.isPending && !query.isError && query.items.length === 0 ? (
-                <Empty className="my-4" role="status">
-                  <EmptyDescription>
-                    {view.filter === ""
-                      ? `No ${meta.plural} in your library.`
-                      : `No results for “${view.filter}”.`}
-                  </EmptyDescription>
-                </Empty>
-              ) : null}
+          {viewState === "empty" ? (
+            <EmptyStatus>
+              {view.filter === ""
+                ? `No ${meta.plural} in your library.`
+                : `No results for “${view.filter}”.`}
+            </EmptyStatus>
+          ) : null}
 
-              {catalogVisible && !query.isPending && !query.isError && query.items.length > 0 ? (
-                <>
-                  {view.presentation === "albums" ? (
-                    <AlbumGrid albums={query.items as readonly LibraryAlbumSummary[]} />
-                  ) : null}
-                  {view.presentation === "albumArtists" ? (
-                    <ArtistGrid artists={query.items as readonly LibraryAlbumArtistSummary[]} />
-                  ) : null}
-                  {view.presentation === "tracks" ? (
-                    <TrackTable
-                      rows={trackRows}
-                      layout="library"
-                      caption="Library tracks"
-                      scrollContainerRef={scrollContainerRef}
-                      initialOffset={scrollEntry?.scrollY}
-                      activeTrackId={playbackState.activeTrackId}
-                      playbackStatus={playbackState.playbackStatus}
-                      sortKey={view.sortKey}
-                      sortDirection={view.direction}
-                      onSortChange={(key, direction) => void view.setTrackSort(key, direction)}
-                      onPlayTrack={(id) => void playback.startLibraryTrack(id)}
-                      onPauseActive={() => void playback.pause()}
-                      onResumeActive={() => void playback.resume()}
-                    />
-                  ) : null}
-                  {query.hasNextPage ? (
-                    <div className="flex justify-center py-8">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        disabled={query.isFetchingNextPage}
-                        onClick={() => void query.fetchNextPage()}
-                      >
-                        {query.isFetchingNextPage ? "Loading…" : "Load more"}
-                      </Button>
-                    </div>
-                  ) : null}
-                </>
+          {viewState === "content" ? (
+            <>
+              {view.presentation === "albums" ? (
+                <AlbumGrid albums={query.items as readonly LibraryAlbumSummary[]} />
               ) : null}
-            </div>
-          </div>
-        </WorkspaceContainer>
+              {view.presentation === "albumArtists" ? (
+                <ArtistGrid artists={query.items as readonly LibraryAlbumArtistSummary[]} />
+              ) : null}
+              {view.presentation === "tracks" ? (
+                <TrackTable
+                  rows={trackRows}
+                  layout="library"
+                  caption="Library tracks"
+                  scrollContainerRef={scrollContainerRef}
+                  initialOffset={scrollEntry?.scrollY}
+                  activeTrackId={playbackState.activeTrackId}
+                  playbackStatus={playbackState.playbackStatus}
+                  sortKey={view.sortKey}
+                  sortDirection={view.direction}
+                  onSortChange={(key, direction) => void view.setTrackSort(key, direction)}
+                  onPlayTrack={(id) => void playback.startLibraryTrack(id)}
+                  onPauseActive={() => void playback.pause()}
+                  onResumeActive={() => void playback.resume()}
+                />
+              ) : null}
+              {query.hasNextPage ? (
+                <LoadMoreButton
+                  pending={query.isFetchingNextPage}
+                  onClick={() => void query.fetchNextPage()}
+                />
+              ) : null}
+            </>
+          ) : null}
+        </WorkspaceScroll>
       </div>
     </div>
   );
@@ -248,7 +224,9 @@ function AlbumGrid({ albums }: { albums: readonly LibraryAlbumSummary[] }) {
   return (
     <MediaGrid>
       {albums.map((album) => (
-        <AlbumCard key={`${album.key.albumArtist}\u0000${album.key.title}`} album={album} />
+        <li key={`${album.key.albumArtist}\u0000${album.key.title}`}>
+          <AlbumTile album={album} />
+        </li>
       ))}
     </MediaGrid>
   );
@@ -258,7 +236,9 @@ function ArtistGrid({ artists }: { artists: readonly LibraryAlbumArtistSummary[]
   return (
     <MediaGrid>
       {artists.map((artist) => (
-        <ArtistCard key={artist.key.name} artist={artist} />
+        <li key={artist.key.name}>
+          <ArtistTile artist={artist} />
+        </li>
       ))}
     </MediaGrid>
   );

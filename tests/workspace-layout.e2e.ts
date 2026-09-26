@@ -104,3 +104,37 @@ test("keeps album track number compact while title owns the flexible column", as
   expect(title.width).toBeGreaterThan(quality.width);
   expect(title.width).toBeGreaterThan(time.width);
 });
+
+test("shares one scroll region edge across views and aligns toolbar with content", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1360, height: 900 });
+  const right = async (locator: Locator) => {
+    await expect(locator).toBeVisible();
+    const box = await boxOf(locator);
+    return box.x + box.width;
+  };
+  const viewport = page.locator('[data-slot="scroll-area-viewport"]');
+
+  await page.goto("/library/tracks");
+  const mainRight = await right(page.getByRole("main"));
+  const searchRight = await right(page.getByRole("searchbox", { name: "Search tracks" }));
+  const tableRight = await right(page.getByRole("table", { name: "Library tracks" }));
+  expect(Math.abs(searchRight - tableRight)).toBeLessThan(2);
+  expect(Math.abs((await right(viewport)) - mainRight)).toBeLessThan(2);
+
+  const scrollbar = page.locator('[data-slot="scroll-area-scrollbar"]');
+  await expect(scrollbar).toHaveCSS("opacity", "0");
+  await viewport.hover();
+  await expect(scrollbar).toHaveCSS("opacity", "1");
+
+  await page.getByRole("link", { name: "Albums", exact: true }).click();
+  expect(Math.abs((await right(viewport)) - mainRight)).toBeLessThan(2);
+  await page
+    .getByRole("link", { name: /Open album .* by Test artist/ })
+    .first()
+    .click();
+  expect(Math.abs((await right(viewport)) - mainRight)).toBeLessThan(2);
+  await page.getByRole("link", { name: "Settings", exact: true }).click();
+  expect(Math.abs((await right(viewport)) - mainRight)).toBeLessThan(2);
+});

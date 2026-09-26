@@ -1,3 +1,5 @@
+export { AlbumTile } from "./ui/album-tile";
+export { ArtistTile } from "./ui/artist-tile";
 export {
   libraryCommandErrorMessage,
   libraryScanFailureMessage,
