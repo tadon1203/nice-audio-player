@@ -2,7 +2,12 @@ import { useMemo, type MouseEvent, type RefObject } from "react";
 import { flexRender, getCoreRowModel, useReactTable } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { ArrowDown, ArrowUp, Pause, Play } from "lucide-react";
-import type { LibrarySortDirection, LibraryTrackSortKey } from "@/renderer/entities/library";
+import {
+  toggleSortDirection,
+  trackSortLabels,
+  type LibrarySortDirection,
+  type LibraryTrackSortKey,
+} from "@/renderer/entities/library";
 import { Button } from "@/renderer/shared/ui/shadcn/button";
 import {
   Table,
@@ -119,11 +124,11 @@ export function TrackTable({
                         variant="ghost"
                         size="sm"
                         className="-mx-2 h-8 px-2 text-sm"
-                        aria-label={`Sort by ${trackColumnLabel(key)}`}
+                        aria-label={`Sort by ${trackSortLabels[key]}`}
                         onClick={() =>
                           onSortChange(
                             key,
-                            active && sortDirection === "ascending" ? "descending" : "ascending",
+                            active ? toggleSortDirection(sortDirection) : "ascending",
                           )
                         }
                       >
@@ -362,18 +367,5 @@ function sortKeyForColumnId(id: string): LibraryTrackSortKey | undefined {
       return "duration";
     default:
       return undefined;
-  }
-}
-
-function trackColumnLabel(key: LibraryTrackSortKey) {
-  switch (key) {
-    case "title":
-      return "Title";
-    case "artist":
-      return "Artist";
-    case "album":
-      return "Album";
-    case "duration":
-      return "Time";
   }
 }

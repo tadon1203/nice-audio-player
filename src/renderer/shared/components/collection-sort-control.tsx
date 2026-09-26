@@ -9,11 +9,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/renderer/shared/ui/shadcn/select";
+import type { LibrarySortDirection } from "@/shared/ipc";
 
-type SortOption = { readonly key: string; readonly label: string };
-type SortDirection = "ascending" | "descending";
+export type SortOption<Key extends string = string> = {
+  readonly key: Key;
+  readonly label: string;
+};
 
-export function CollectionSortControl({
+export function CollectionSortControl<Key extends string>({
   label = "Sort",
   selectLabel,
   value,
@@ -24,10 +27,10 @@ export function CollectionSortControl({
 }: {
   label?: string;
   selectLabel: string;
-  value: string;
-  options: readonly SortOption[];
-  direction: SortDirection;
-  onValueChange: (value: string) => void;
+  value: Key;
+  options: readonly SortOption<Key>[];
+  direction: LibrarySortDirection;
+  onValueChange: (value: Key) => void;
   onToggleDirection: () => void;
 }) {
   return (
@@ -38,7 +41,8 @@ export function CollectionSortControl({
           value={value}
           items={options.map((option) => ({ label: option.label, value: option.key }))}
           onValueChange={(nextValue) => {
-            if (typeof nextValue === "string") onValueChange(nextValue);
+            const option = options.find((candidate) => candidate.key === nextValue);
+            if (option) onValueChange(option.key);
           }}
         >
           <SelectTrigger className="w-40 shrink-0" aria-label={selectLabel}>

@@ -1,4 +1,24 @@
-export { libraryCommandErrorMessage, libraryStatusMessage } from "./model/library-errors";
+export {
+  libraryCommandErrorMessage,
+  libraryScanFailureMessage,
+  libraryStatusMessage,
+} from "./model/library-errors";
+export {
+  albumArtistSortKeys,
+  albumArtistSortOptions,
+  albumSortKeys,
+  albumSortOptions,
+  artistAlbumSortKeys,
+  artistAlbumSortOptions,
+  isAlbumArtistSortKey,
+  isAlbumSortKey,
+  isArtistAlbumSortKey,
+  isTrackSortKey,
+  sortDirections,
+  toggleSortDirection,
+  trackSortKeys,
+  trackSortLabels,
+} from "./model/sort";
 export {
   libraryQueryKeys,
   useAlbumArtist,
@@ -31,6 +51,7 @@ export type {
   LibraryArtistAlbumSortKey,
   LibraryRoot,
   LibraryScanSnapshot,
+  LibraryScanState,
   LibrarySortDirection,
   LibraryStatus,
   LibraryTrackSortKey,

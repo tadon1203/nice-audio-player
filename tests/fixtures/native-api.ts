@@ -230,7 +230,7 @@ export async function installNativeApi(page: Page, options: InstallNativeApiOpti
         inspectedCount: state === "idle" ? 0 : state === "running" ? 8 : 20,
         indexedCount: state === "idle" ? 0 : state === "running" ? 6 : 18,
         failedCount: state === "idle" ? 0 : state === "failed" ? 2 : 0,
-        failureCode: state === "failed" ? "scanFailed" : null,
+        failureCode: state === "failed" ? "rootTraversalFailed" : null,
       };
       emit({ event: "libraryScanStateChanged", payload: scan });
     };

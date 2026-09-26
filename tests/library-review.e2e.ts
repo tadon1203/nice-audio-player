@@ -149,7 +149,9 @@ test("manages folders and shows scan progress and terminal states", async ({ pag
     page.getByText(/Scan complete: 20 discovered, 20 inspected, 18 indexed, 0 failed/),
   ).toBeVisible();
   await page.evaluate(() => window.__niceAudioPlayerTest?.setScanState("failed"));
-  await expect(page.getByRole("alert")).toContainText("Scan failed: scanFailed");
+  await expect(page.getByRole("alert")).toContainText(
+    "Scan failed: a library folder could not be read.",
+  );
 
   await page.getByRole("button", { name: "Remove C:/More Music from library" }).click();
   const dialog = page.getByRole("alertdialog");

@@ -1,5 +1,6 @@
 export { playbackCommandErrorMessage } from "./playback-errors";
 export {
+  isActivePlayback,
   playbackController,
   usePlaybackActions,
   usePlaybackSession,

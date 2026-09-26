@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import type { LibraryAlbumSummary } from "@/renderer/entities/library";
+import { MISSING } from "@/renderer/shared/lib/format";
 import { cn } from "@/renderer/shared/lib/utils";
 import { Artwork } from "@/renderer/shared/ui/artwork";
 
@@ -31,7 +32,7 @@ export function AlbumCard({
           <p className="min-w-0 flex-1 truncate" title={album.key.albumArtist}>
             {album.key.albumArtist}
           </p>
-          <span className="shrink-0 tabular-nums">{album.year ?? "—"}</span>
+          <span className="shrink-0 tabular-nums">{album.year ?? MISSING}</span>
         </div>
       </div>
     </Link>

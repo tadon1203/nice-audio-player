@@ -1,10 +1,11 @@
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import type {
-  LibraryAlbumArtistSortKey,
-  LibraryAlbumSortKey,
-  LibraryCatalogRequest,
-  LibrarySortDirection,
-  LibraryTrackSortKey,
+import {
+  isAlbumArtistSortKey,
+  isAlbumSortKey,
+  toggleSortDirection,
+  type LibraryCatalogRequest,
+  type LibrarySortDirection,
+  type LibraryTrackSortKey,
 } from "@/renderer/entities/library";
 
 export type LibraryPresentation = "albums" | "albumArtists" | "tracks";
@@ -56,7 +57,7 @@ export function useLibraryView(presentation: LibraryPresentation) {
           replace: true,
           search: (previous) => ({
             ...previous,
-            albumsDirection: flipDirection(search.albumsDirection),
+            albumsDirection: toggleSortDirection(search.albumsDirection),
           }),
         }),
     } as const;
@@ -82,7 +83,7 @@ export function useLibraryView(presentation: LibraryPresentation) {
           search: (previous) => ({ ...previous, artistsFilter: filter }),
         }),
       setSort: (sortKey: string) => {
-        if (!isArtistSortKey(sortKey)) return Promise.resolve();
+        if (!isAlbumArtistSortKey(sortKey)) return Promise.resolve();
         return navigate({
           to: presentationPath.albumArtists,
           replace: true,
@@ -99,7 +100,7 @@ export function useLibraryView(presentation: LibraryPresentation) {
           replace: true,
           search: (previous) => ({
             ...previous,
-            artistsDirection: flipDirection(search.artistsDirection),
+            artistsDirection: toggleSortDirection(search.artistsDirection),
           }),
         }),
     } as const;
@@ -134,16 +135,4 @@ export function useLibraryView(presentation: LibraryPresentation) {
         }),
       }),
   } as const;
-}
-
-function flipDirection(direction: LibrarySortDirection): LibrarySortDirection {
-  return direction === "ascending" ? "descending" : "ascending";
-}
-
-function isAlbumSortKey(value: string): value is LibraryAlbumSortKey {
-  return value === "title" || value === "artist" || value === "year";
-}
-
-function isArtistSortKey(value: string): value is LibraryAlbumArtistSortKey {
-  return value === "artist" || value === "albumCount" || value === "trackCount";
 }

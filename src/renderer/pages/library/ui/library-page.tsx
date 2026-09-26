@@ -6,12 +6,15 @@ import type {
   LibraryTrackSummary,
 } from "@/renderer/entities/library";
 import {
+  albumArtistSortOptions,
+  albumSortOptions,
   libraryCommandErrorMessage,
   libraryStatusMessage,
   useLibraryPresentationQuery,
   useLibraryStatus,
 } from "@/renderer/entities/library";
 import { usePlaybackActions, useTrackPlaybackState } from "@/renderer/features/playback-control";
+import { formatCount } from "@/renderer/shared/lib/format";
 import { Alert, AlertAction, AlertDescription } from "@/renderer/shared/ui/shadcn/alert";
 import { Button } from "@/renderer/shared/ui/shadcn/button";
 import { Empty, EmptyDescription } from "@/renderer/shared/ui/shadcn/empty";
@@ -31,11 +34,6 @@ const presentationMeta = {
     plural: "albums",
     searchLabel: "Search albums",
     searchPlaceholder: "Search albums…",
-    sortOptions: [
-      { key: "title", label: "Album title" },
-      { key: "artist", label: "Album artist" },
-      { key: "year", label: "Year" },
-    ],
   },
   albumArtists: {
     title: "Album Artists",
@@ -43,11 +41,6 @@ const presentationMeta = {
     plural: "album artists",
     searchLabel: "Search album artists",
     searchPlaceholder: "Search album artists…",
-    sortOptions: [
-      { key: "artist", label: "Artist" },
-      { key: "albumCount", label: "Album count" },
-      { key: "trackCount", label: "Track count" },
-    ],
   },
   tracks: {
     title: "Tracks",
@@ -55,7 +48,6 @@ const presentationMeta = {
     plural: "tracks",
     searchLabel: "Search tracks",
     searchPlaceholder: "Search tracks…",
-    sortOptions: [],
   },
 } as const;
 
@@ -85,9 +77,7 @@ export function LibraryPage({ presentation }: { presentation: LibraryPresentatio
     [view.presentation, query.items],
   );
   const count = query.totalCount;
-  const countLabel = `${count === null ? "—" : count.toLocaleString()} ${
-    count === 1 ? meta.singular : meta.plural
-  }`;
+  const countLabel = formatCount(count, meta.singular, meta.plural);
   const initialLoading = statusQuery.isPending || (catalogEnabled && query.isPending);
   const catalogVisible = catalogEnabled && !statusQuery.isError && statusMessage === null;
   const viewStateKey = `${view.presentation}\u0000${view.filter}\u0000${view.sortKey}\u0000${view.direction}`;
@@ -119,15 +109,23 @@ export function LibraryPage({ presentation }: { presentation: LibraryPresentatio
         }
         onFilterChange={(filter) => void view.setFilter(filter)}
         sort={
-          view.presentation === "tracks"
-            ? undefined
-            : {
+          view.presentation === "albums"
+            ? {
                 key: view.sortKey,
                 direction: view.direction,
-                options: meta.sortOptions,
+                options: albumSortOptions,
                 onKeyChange: (key) => void view.setSort(key),
                 onToggleDirection: () => void view.toggleDirection(),
               }
+            : view.presentation === "albumArtists"
+              ? {
+                  key: view.sortKey,
+                  direction: view.direction,
+                  options: albumArtistSortOptions,
+                  onKeyChange: (key) => void view.setSort(key),
+                  onToggleDirection: () => void view.toggleDirection(),
+                }
+              : undefined
         }
       />
 
