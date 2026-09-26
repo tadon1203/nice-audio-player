@@ -9,7 +9,7 @@ export const router = createRouter({
   getScrollRestorationKey: (location) =>
     location.pathname.startsWith("/library/") || location.pathname === "/library"
       ? location.pathname
-      : location.state.__TSR_key!,
+      : (location.state.__TSR_key ?? location.pathname),
 });
 
 declare module "@tanstack/react-router" {

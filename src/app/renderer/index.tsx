@@ -4,7 +4,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
 import { TooltipProvider } from "@/renderer/shared/ui/shadcn/tooltip";
 import { NativeSession } from "./native-session";
-import { queryClient } from "./providers";
+import { queryClient } from "./query-client";
 import { router } from "./router";
 import "./styles.css";
 

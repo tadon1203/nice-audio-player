@@ -1,13 +1,11 @@
-import { useEffect, useRef } from "react";
-import { libraryQueryKeys } from "@/renderer/entities/library";
+import { useEffect } from "react";
+import { applyLibraryEvent } from "@/renderer/entities/library";
 import { playbackController } from "@/renderer/features/playback-control";
 import { getNativeApiOrNull } from "@/renderer/shared/lib/native";
-import { queryClient } from "./providers";
+import { queryClient } from "./query-client";
 
-/** Owns the renderer's single subscription to push events from Preload. */
+/** Owns the renderer's single subscription to backend push events. */
 export function NativeSession() {
-  const previousScanState = useRef<string | null>(null);
-
   useEffect(() => {
     const api = getNativeApiOrNull();
     if (api === null) return;
@@ -15,15 +13,7 @@ export function NativeSession() {
     void playbackController.initialize(api);
     return api.onEvent((event) => {
       playbackController.acceptEvent(event);
-
-      if (event.event !== "libraryScanStateChanged") return;
-      const previous = previousScanState.current;
-      previousScanState.current = event.payload.state;
-      queryClient.setQueryData(libraryQueryKeys.scan, event.payload);
-      const terminal = ["completed", "cancelled", "failed"].includes(event.payload.state);
-      if (terminal && previous !== event.payload.state) {
-        void queryClient.invalidateQueries({ queryKey: libraryQueryKeys.data });
-      }
+      applyLibraryEvent(queryClient, event);
     });
   }, []);
 

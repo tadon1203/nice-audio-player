@@ -99,6 +99,9 @@ test("sorts tracks, disables missing files, and loads more rows", async ({ page 
   );
 
   await page.getByRole("button", { name: "Load more" }).click();
+  await page.locator('[data-slot="scroll-area-viewport"]').evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
   await expect(table.getByRole("row", { name: /Track 080/ })).toBeVisible();
 });
 

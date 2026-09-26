@@ -11,6 +11,7 @@ export function PlaybackDock() {
   const playback = usePlaybackSession();
   const active = isActivePlayback(playback.snapshot);
   const playing = playback.snapshot?.status === "playing";
+  const title = playback.title ?? "Nothing playing";
   const [seekPreviewMs, setSeekPreviewMs] = useState<number | null>(null);
   const [errorTooltipOpen, setErrorTooltipOpen] = useState(false);
   const canSeek = active && playback.durationMs !== null;
@@ -55,16 +56,13 @@ export function PlaybackDock() {
         >
           <Artwork
             artwork={playback.artwork}
-            alt={playback.title === "Nothing playing" ? "" : `${playback.title} artwork`}
+            alt={playback.title === null ? "" : `${playback.title} artwork`}
             loading="eager"
             className="size-10 shrink-0"
           />
           <div className="min-w-0">
-            <strong
-              className="block truncate text-sm font-medium text-foreground"
-              title={playback.title}
-            >
-              {playback.title}
+            <strong className="block truncate text-sm font-medium text-foreground" title={title}>
+              {title}
             </strong>
             {playback.commandError ? (
               <Tooltip open={errorTooltipOpen} onOpenChange={setErrorTooltipOpen}>

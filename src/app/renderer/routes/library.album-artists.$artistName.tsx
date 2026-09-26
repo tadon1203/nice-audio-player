@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { ArtistDetailsRoute } from "@/app/renderer/ui/artist-details-route";
+import { ArtistDetailsPage } from "@/renderer/pages/artist-details";
 
 export const Route = createFileRoute("/library/album-artists/$artistName")({
-  component: ArtistDetailsRoute,
+  component: ArtistDetailsPage,
 });
