@@ -1,26 +1,29 @@
 import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
-  testDir: "./tests/browser",
+  testDir: "./tests",
+  outputDir: "test-results/playwright",
   fullyParallel: true,
-  forbidOnly: Boolean(process.env.CI),
-  retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
   reporter: "list",
-  use: {
-    baseURL: "http://127.0.0.1:1420",
-    colorScheme: "dark",
-    trace: "on-first-retry",
-  },
+  snapshotPathTemplate:
+    "{snapshotDir}/{testFileDir}/{testFileName}-snapshots/{arg}-{platform}{ext}",
   webServer: {
-    command: "pnpm exec vite --mode test --host 127.0.0.1",
-    url: "http://127.0.0.1:1420",
-    reuseExistingServer: !process.env.CI,
+    command: "pnpm exec vite --host 127.0.0.1 --port 5173 --strictPort",
+    url: "http://127.0.0.1:5173",
+    reuseExistingServer: false,
+    timeout: 30_000,
   },
   projects: [
     {
-      name: "chromium",
-      use: { ...devices["Desktop Chrome"] },
+      name: "renderer",
+      testMatch: "**/*.e2e.{ts,js}",
+      testIgnore: "**/tauri/**",
+      use: {
+        ...devices["Desktop Chrome"],
+        baseURL: "http://127.0.0.1:5173",
+        trace: "retain-on-failure",
+        screenshot: "only-on-failure",
+      },
     },
   ],
 });

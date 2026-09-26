@@ -1,0 +1,17 @@
+{
+  "extends": "../tsconfig.app.json",
+  "compilerOptions": {
+    "composite": true,
+    "tsBuildInfoFile": "../node_modules/.tmp/tsconfig.tests.tsbuildinfo",
+    "types": [
+      "node",
+      "vite/client",
+      "vitest/globals",
+      "@playwright/test",
+      "@wdio/mocha-framework",
+      "@wdio/globals/types"
+    ],
+    "lib": ["ES2023", "DOM"]
+  },
+  "include": ["./**/*.ts", "./**/*.tsx", "../src/shared/ipc/**/*.ts"]
+}

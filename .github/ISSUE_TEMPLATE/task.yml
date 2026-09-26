@@ -34,7 +34,7 @@ body:
       label: Done
       description: Define task-specific completion criteria.
       placeholder: |
-        - [ ] `pnpm check` passes
+        - [ ] `pnpm validate` passes
     validations:
       required: true
 

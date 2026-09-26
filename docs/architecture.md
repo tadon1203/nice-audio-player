@@ -1,338 +1,35 @@
 # Architecture
 
-This document defines implementation rules and boundaries for Nice Audio Player.
+## Document responsibility
 
-It describes constraints that should remain valid as the codebase evolves. It does not prescribe a final class diagram, list future features, or duplicate Issue-specific implementation plans. Product behavior belongs in `requirements.md`; visual and interaction principles belong in `DESIGN.md`.
+This document defines system structure, ownership, and dependency direction. Product acceptance belongs in `requirements.md`; visual rules belong in `DESIGN.md`.
 
-## 1. Core Principles
-
-- Rust owns authoritative audio state, persistent application state, credentials, and long-running native work.
-- React owns presentation, navigation, forms, and temporary interaction state.
-- Audio stability has priority over UI and visualization work.
-- Real-time code must be bounded, non-blocking, and allocation-conscious.
-- Infrastructure-specific types must remain behind the boundary that uses them.
-- Data crossing Tauri IPC must use stable, explicit transport types.
-- Long-running work must have clear ownership, termination, and error behavior.
-- Generated files under `src-tauri/gen/` must not be edited manually.
-
-## 2. Responsibility and Ownership
-
-Ownership must follow the lifetime and authority of the state.
-
-- Long-lived playback state, when introduced, belongs in Rust.
-- React may mirror Rust state for display but must not independently reconstruct authoritative playback state.
-- Every published playback snapshot carries a session-scoped monotonic revision. Frontend command
-  responses, initial reads, and events pass through one revision-aware acceptance path so late
-  delivery cannot replace newer authoritative state.
-- A resource-owning operation must make the owner of streams, threads, tasks, buffers, database transactions, and cancellation handles clear.
-- Drop-based cleanup is preferred when ownership alone can guarantee release.
-- Explicit shutdown is required when a long-lived worker or external resource cannot be safely released by ordinary ownership.
-
-Do not introduce a playback controller, worker, service, repository, provider registry, or shared interface until the current feature requires that responsibility.
-
-## 3. Dependency Direction
-
-Dependencies must point from policy and application behavior toward narrower infrastructure boundaries, not the reverse.
+## System overview
 
 ```text
-React UI
-    ↓
-Frontend API adapters and transport types
-    ↓
-Tauri command and event adapters
-    ↓
-Rust application and domain logic
-    ↓
-Infrastructure such as CPAL, Symphonia, filesystem, SQLite, OS APIs, and HTTP
+React Renderer → Tauri commands/events → Rust backend/SQLite
 ```
 
-Rules:
+Rust owns domain behavior, persistence, filesystem work, audio playback, and the privileged desktop boundary. Tauri owns the Windows WebView host, command/event transport, capability policy, window lifecycle, and local artwork protocol. React owns view composition only.
 
-- React must not depend on Rust infrastructure details.
-- Tauri commands must not expose CPAL, Symphonia, SQL, operating-system, or provider-specific types.
-- Audio policy must not depend directly on backend-specific stream or device types.
-- Persistence models must not become universal application transport types.
-- Provider-specific response models must be converted at the provider boundary.
-- Circular module dependencies are not allowed.
+## Source boundaries
 
-## 4. Abstraction Rules
+```text
+src/app/renderer                 renderer entry point and composition
+src/renderer/{pages,widgets,features,entities,shared}  FSD renderer slices
+src/shared/ipc                   generated command, DTO, and event contract
+src-tauri                        Tauri shell, commands, capabilities, packaging
+backend                          Rust domain services, persistence, and audio
+```
 
-Do not introduce an abstraction solely for a hypothetical future implementation.
+Renderer code never imports Rust implementation details. Renderer-to-native access is restricted to named Tauri commands, the dialog plugin, window APIs, and validated events. Rust command handlers call the existing backend services; no N-API addon or parallel domain implementation is used.
 
-A shared interface is justified when at least one of the following is demonstrated:
+## Renderer state
 
-- Multiple implementations must coexist
-- Multiple independent consumers need the same boundary
-- A backend must be replaceable for a current requirement
-- Testing requires separation from a real external dependency
-- Existing duplication represents the same stable policy rather than coincidental code
+TanStack Router owns navigation, validated search state, URL history, and scroll restoration. TanStack Query owns native read-model caching and event-driven cache updates. Zustand is restricted to push-driven playback state and never duplicates library data or Rust authority.
 
-Prefer a concrete, narrow module until that evidence exists. Architecture documentation describes constraints, not a forecast of the final module structure.
+## IPC and distribution
 
-## 5. Tauri Commands and Events
+Rust is authoritative for the IPC contract. Tauri commands are registered once in `src-tauri/src/bindings.rs`, and tauri-specta generates `src/shared/ipc/bindings.ts` (commands, DTOs, structured `{ code }` errors, and the `app:event` payload) with `pnpm bindings`; `pnpm bindings:check` fails when it is stale. `src/renderer/shared/lib/native.ts` is the sole frontend adapter: it wraps the generated commands, converts structured errors to `NativeCommandError`, and exposes only the typed application API. Tauri capabilities grant the main window only the native permissions required by the application.
 
-Tauri commands are transport adapters.
-
-A command should:
-
-1. Accept an explicit request
-2. Validate untrusted transport input
-3. Delegate substantial work to Rust modules
-4. Convert results into stable response and error types
-5. Move blocking or CPU-heavy work off the async executor
-
-Commands must not:
-
-- Execute SQL or control an audio callback directly
-- Own long-lived playback state
-- Return secret values
-- Return infrastructure-specific errors or objects
-
-Tauri events are appropriate for asynchronous, low-frequency notifications such as state changes, progress, completion, or device changes.
-
-High-frequency PCM, FFT, waveform, peak, or RMS data must not be serialized as large JSON event streams. Event producers must use bounded or replace-latest delivery so slow consumers cannot create unbounded queues.
-
-## 6. Real-Time Audio Rules
-
-An audio callback must not:
-
-- Perform file or network I/O
-- Access a database
-- Decode compressed audio
-- Allocate or grow collections in the steady-state callback path
-- Log
-- Invoke Tauri IPC
-- Sleep
-- Wait on a blocking mutex, condition variable, or blocking channel
-- Perform unbounded work
-- Call UI code
-
-An audio callback may:
-
-- Read prepared PCM or bounded lock-free state
-- Perform bounded sample conversion or gain processing
-- Advance local or atomic positions
-- Fill unused output with silence
-- Publish bounded, non-blocking completion or error signals
-
-All callback inputs must be prepared before the callback needs them. Callback failure handling must transfer only minimal state to non-real-time code.
-
-## 7. PCM and Decode Boundaries
-
-Decoded PCM must use an owned representation with explicit sample rate, channel count, layout contract, and validated invariants.
-
-When source and selected output rates differ, the decode worker uses Rubato `Fft<f32>` with a 1,024-frame hint and `FixedSync::Both`. Decoder packet boundaries are accumulated into reusable interleaved buffers; channel conversion runs before sample-rate conversion. The worker trims the library-reported startup delay, flushes partial input and silent tail chunks, and emits exactly the ceiling of source frames multiplied by output rate divided by source rate. Input and output samples are finite-checked, output is saturated to the normalized range, and all Rubato types remain inside `output_processing.rs`. This adds approximately one resampler chunk plus the reported filter delay to the unchanged approximately 250 ms playback prebuffer. Equal-rate processing bypasses Rubato exactly.
-Seek replacement starts decoding from a source preroll large enough to warm the new filter, aligned to the resampler input chunk boundary. The converted preroll frames are discarded before queue insertion so the active output position remains at the requested seek target.
-
-- Decoder-specific types stay inside the decode infrastructure.
-- Output-backend types stay inside the output infrastructure.
-- Decoding occurs outside the audio callback.
-- Errors and cancellation must not return partial PCM unless an API explicitly promises partial results.
-- Resampling, remixing, normalization, or gain changes must not occur implicitly.
-- A processing-bypass or bit-perfect claim may be reported only when every application-controlled condition has been verified.
-
-Output processing is an explicit boundary between `StreamingDecoder` and the bounded PCM queue. Source and
-output PCM formats are represented explicitly, and a validated output-processing plan is created before worker
-startup. Channel-layout adaptation and application-side sample-rate adaptation run in the decode worker;
-the real-time callback consumes output-ready interleaved PCM. Channel conversion, sample-rate conversion,
-gain, and scalar sample-format conversion remain separately identifiable responsibilities.
-
-Playback decoding prioritizes successful streaming and seekable decoding with codec, packet, and frame
-validation. Whole-file integrity verification requires decoding the complete source from its beginning through
-EOF and belongs to a separate verification workflow; it is not a playback success condition. Packet, read,
-conversion, and cancellation failures remain immediate. The audio callback remains non-blocking, I/O-free,
-allocation-free in its steady-state path, and limited to
-bounded queue consumption, timing arithmetic, atomic state reads, and non-blocking signals.
-
-Playback owns one compressed source for the duration of an active session. Initial playback and seek
-replacement decoders obtain independent readers from that source; source preparation I/O occurs outside the
-playback and real-time callback paths. Decoded PCM remains bounded and streaming through the existing queue.
-
-## 8. Concurrency and Background Work
-
-Each task, thread, or worker must have:
-
-- A clear owner
-- A defined start condition
-- A defined completion or shutdown condition
-- Bounded communication
-- Structured error reporting
-- Cancellation where abandoning work is a current requirement
-
-Do not add a persistent worker for a one-shot operation unless persistence is required by current behavior.
-
-Do not hold a lock across I/O, decoding, IPC, or callbacks. Prefer immutable ownership transfer, atomics for simple flags and counters, and bounded channels for discrete control messages.
-
-## 9. Persistence and Filesystem Rules
-
-React and Tauri transport adapters must not execute SQL directly.
-
-When persistence is introduced:
-
-- Schema changes use migrations
-- Multi-step writes use transactions when partial completion would be invalid
-- Queries used by large lists support bounded pagination or streaming
-- Database records are converted into application-facing models at a boundary
-
-Filesystem operations must validate paths and expected file types at the Rust boundary. Source audio and metadata files must not be modified without explicit user intent.
-
-Reusable media validation and technical inspection are separate from playback ownership. Symphonia is authoritative for whether an audio source is playable and for its technical properties; best-effort metadata parsing cannot redefine that decision.
-
-The local-library database, file traversal, and scan lifecycle are Rust-owned background work and remain isolated from playback workers and audio callbacks. Source-derived records are revisioned independently from future application-derived analysis. Embedded artwork is stored as app-owned assets and referenced by application models; it is not a database BLOB or playback-snapshot payload.
-
-Ordered playback sequences are session-scoped Rust-owned playback state. The Library resolves library
-identities and validates source files before they enter a sequence; neither library persistence nor
-sequence state enters the real-time audio callback.
-
-Playback Queue, Repeat, and Shuffle are also session-scoped Rust-owned state. Queue presentation is
-published through an independently revisioned snapshot containing the current item and upcoming
-items, separate from the high-frequency PlaybackSnapshot. Library display metadata is resolved
-before entries cross into playback. The worker maintains the effective traversal order used by
-Next, Previous, natural completion, and Repeat All; Queue edits and order construction remain
-outside real-time audio paths.
-
-## 10. Provider and Credential Rules
-
-External providers must remain optional and isolated from local playback.
-
-- Provider failures must not prevent unrelated providers or local functionality from working.
-- Provider-specific models must be converted before leaving the provider boundary.
-- Network access must be explicit and attributable to an enabled feature.
-- Secret values must stay in Rust and must never be included in IPC, logs, database records, plain-text settings, or debug output.
-
-A shared provider interface should be introduced only when current providers share a meaningful stable capability.
-
-## 11. UI and Visualization Boundaries
-
-React must not store per-frame PCM, FFT bins, waveform samples, peaks, or RMS values in ordinary component state or context.
-
-Lyrics content and resolution are separate from `PlaybackSnapshot`. Library converts an opaque track
-ID into validated source context, while the Lyrics domain owns local parsing and source precedence.
-One-shot sidecar or embedded resolution runs outside playback-critical work; React combines a
-resolved neutral `LyricsDocument` with the authoritative playback position for synchronized
-presentation. Future provider models must convert to that neutral domain before IPC, and a Lyrics
-failure remains regional: it must never change playback state.
-
-High-frequency visualization should use a dedicated rendering path such as a worker or canvas-owned state when current functionality justifies it. The renderer must keep only current useful data; stale snapshots should be replaced or dropped rather than queued.
-
-Visualization delays must not propagate back into audio production.
-
-## 12. Error Handling
-
-Infrastructure errors must be converted at their boundary into stable application errors.
-
-Errors should preserve useful categories without exposing unstable implementation details. Raw error strings may be logged outside real-time code when they do not contain secrets, but transport contracts should use structured codes and fields.
-
-Do not silently ignore an error when it changes user-visible state, data integrity, or an explicitly selected mode. Automatic fallback must be intentional and user-visible when it changes behavior or quality.
-
-## 13. Logging
-
-Logging must not occur inside audio callbacks or other strict real-time paths.
-
-Frontend feature code uses only the project-owned `src/lib/diagnostics.ts` boundary; the Tauri log
-plugin is an infrastructure sink. Rust application and domain code uses the standard `log` facade;
-`tauri-plugin-log` is configured only as the sink. Event names are stable dotted lower-case
-identifiers (for example `playback.start_failed` and `library.scan.completed`), and context is
-carried as named scalar fields rather than embedded prose.
-
-`debug` is development detail, `info` is low-frequency successful lifecycle or summary information,
-`warn` is recoverable degradation or boundary failure, and `error` is terminal subsystem failure,
-panic, or an uncaught application error. Existing IDs and revisions provide correlation; the
-application does not introduce trace IDs or spans. Diagnostic calls never alter application control
-flow or user-facing error behavior.
-
-Logs must not contain:
-
-- Credentials or tokens
-- Full provider responses containing private data
-- Raw PCM or high-frequency analysis data
-- Unnecessary personal file information
-
-High-frequency state, successful IPC calls, individual scanned files, pointer/UI activity, PCM, and
-real-time callbacks remain excluded. Full source or library paths, device names, credentials, tokens,
-raw PCM, user search terms, and album or artist identity strings are not diagnostic context. Sensitive
-keys such as paths, files, URLs, tokens, credentials, and cookies are redacted, and unknown causes
-are reduced to sanitized error fields or a stable type classification.
-
-Use logs to record lifecycle changes, recoverable failures, and diagnostic context outside performance-critical code.
-
-## 14. Testing Boundaries
-
-Prefer deterministic tests around pure policy and boundary logic.
-
-- Test validation, conversion, configuration selection, buffer behavior, state transitions, and error mapping without requiring hardware where possible.
-- Generate narrow fixtures rather than depending on user files.
-- Do not make automated test success depend on a particular audio device, driver, display, network service, or credential store.
-- Keep hardware- or operating-system-dependent behavior in explicit manual verification steps.
-- Tests must not weaken production invariants merely to simplify fixtures.
-
-## 15. Responsive Layout
-
-Frontend responsive ownership and enforcement rules live in
-[`architecture/frontend.md`](./architecture/frontend.md). Application-level composition uses viewport
-queries; reusable feature components use container queries based on their allocated inline size. Flexible
-tracks use `minmax(0, 1fr)`, and browser layout tests verify supported widths, stress content, and text
-enlargement. Windows display scaling at 100%, 125%, 150%, and 200% remains a manual Tauri check.
-
-## 16. Change Rules
-
-A change that modifies an accepted product requirement must update `requirements.md`.
-
-A change that modifies a durable implementation rule or boundary must update this document.
-
-A change that modifies visual or interaction principles must update `DESIGN.md`.
-
-Frontend ownership, Motion policy, presence lifecycle, and scroll boundaries are defined in
-[`architecture/frontend.md`](./architecture/frontend.md). Shared UI primitives own reusable control
-grammar, semantic typography metrics, and page/content frame relationships.
-
-## 17. Library Synchronization Boundaries
-
-Source-derived Library catalog entities use logical identity: an Album is identified by its effective
-album title and album artist, and an Album Artist by its effective name. Rust owns catalog projection,
-ordering, query-scoped opaque cursor pagination, membership, representative artwork, and playback
-resolution. React may retain session-scoped browse context and navigation frames, but does not become
-authoritative for catalog identity or playback sequence construction.
-The catalog owns the effective source-derived Track title conversion as well: a non-empty trimmed
-source title wins, otherwise the filename stem is used consistently in Track lists, Album tracks, and
-playback metadata. Album and Album Artist queries filter only their presentation identity fields;
-Track queries additionally include Track-level metadata.
-
-The Library workspace owns the root presentation/filter state and one semantic drill-in frame stack.
-Albums, Album Artists, and Tracks are peer root presentations; Album and Album Artist detail are the
-only stack frames. Every frame has a stable session identifier, logical key, opening focus identity,
-and feature-local retained query snapshots. Root snapshots survive peer presentation changes and
-Library/Settings replacement during the session. A detail snapshot survives while its frame remains on
-the stack and is released when that frame is permanently popped. Registry writes from visually exiting
-nodes cannot recreate a released frame. A refresh generation invalidates
-snapshots whose complete query owner no longer matches. No browse state is persisted across application
-restarts.
-
-Back is derived only from the remaining semantic stack and restores the popped frame's opening focus
-identity after the parent surface is synchronously rehydrated. Components must not maintain parallel
-selected-entity or return-parent state. Source-derived Catalog entities remain distinct from future
-Playlist, Favorite, History, or other user/playback-derived domains even when they reuse presentation
-mechanics.
-
-Filesystem watching is an invalidation-only signal. The scanner remains the sole authority for
-filesystem-to-SQLite reconciliation; watcher callbacks do not inspect files, write the database, or
-publish user-facing state. Automatic invalidations are coalesced by root and scheduled through one
-Library runtime worker. Watcher failure cannot destructively alter indexed content.
-
-Source-artwork maintenance is reference-based, serialized with scanning, and limited to the current
-embedded/source artwork ownership domain. Any future user- or provider-owned artwork layout must
-define its lifecycle separately before sharing this maintenance path.
-
-`ApplicationActivity` is a transient, user-facing operational channel separate from logs and domain
-persistence. `LibraryRuntime` coordinates Library lifecycle work only; it is not a generic application
-background-job scheduler.
-
-Scroll ownership and logical presence rules are defined in
-[`architecture/frontend.md`](./architecture/frontend.md). Programmatic spatial state remains frontend-only
-and never enters playback snapshots, queue snapshots, IPC, or Rust authority.
-
-Authoritative playback snapshots describe audio state. Frontend-only accepted seek receipts may carry
-that a user-confirmed position change was accepted for presentation motion, but never redefine
-playback state or cross the IPC boundary.
-
-Issue scope, branch names, temporary structures, migration steps, and implementation plans belong in GitHub Issues or pull requests, not here.
+Vite builds the React renderer into `dist`; the Tauri CLI builds and packages the Rust host and Windows NSIS installer. Tauri's `nice-artwork` URI handler (`src-tauri/src/artwork.rs`) serves only canonical content-addressed artwork beneath application data; on Windows the renderer loads it from `http://nice-artwork.localhost`. The Tauri host is split into `commands/` (IPC handlers), `events.rs` (backend event forwarding), `errors.rs` (IPC error mapping), and `artwork.rs`. The frameless Tauri window uses the app-owned 40px title surface and Tauri's explicit drag-region support.

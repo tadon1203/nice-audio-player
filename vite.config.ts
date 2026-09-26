@@ -1,40 +1,29 @@
-import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
+import { tanstackRouter } from "@tanstack/router-plugin/vite";
+import { resolve } from "node:path";
 import { defineConfig } from "vite";
-import { configDefaults } from "vitest/config";
-import { fileURLToPath, URL } from "node:url";
 
-const host = process.env.TAURI_DEV_HOST;
+const root = import.meta.dirname;
 
-export default defineConfig(async () => ({
-  plugins: [react(), tailwindcss()],
-
-  resolve: {
-    alias: {
-      "@": fileURLToPath(new URL("./src", import.meta.url)),
-    },
-  },
-
+export default defineConfig({
+  plugins: [
+    tanstackRouter({
+      routesDirectory: resolve(root, "src/app/renderer/routes"),
+      generatedRouteTree: resolve(root, "src/app/renderer/routeTree.gen.ts"),
+      autoCodeSplitting: true,
+    }),
+    react(),
+    tailwindcss(),
+  ],
+  resolve: { alias: { "@": resolve(root, "src") } },
+  root: resolve(root, "src/app/renderer"),
+  publicDir: resolve(root, "static"),
+  server: { host: "127.0.0.1", port: 1420, strictPort: true },
   clearScreen: false,
-
-  test: {
-    exclude: [...configDefaults.exclude, "tests/browser/**"],
-    setupFiles: ["./src/test/setup.ts"],
+  build: {
+    outDir: resolve(root, "dist"),
+    emptyOutDir: true,
+    rollupOptions: { input: resolve(root, "src/app/renderer/index.html") },
   },
-
-  server: {
-    port: 1420,
-    strictPort: true,
-    host: host || false,
-    hmr: host
-      ? {
-          protocol: "ws",
-          host,
-          port: 1421,
-        }
-      : undefined,
-    watch: {
-      ignored: ["**/src-tauri/**"],
-    },
-  },
-}));
+});

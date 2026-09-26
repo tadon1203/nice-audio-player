@@ -1,0 +1,18 @@
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "composite": true,
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.renderer.tsbuildinfo",
+    "types": ["vite/client"],
+    "lib": ["ES2023", "DOM"]
+  },
+  "include": [
+    "src/app/renderer/**/*.ts",
+    "src/app/renderer/**/*.tsx",
+    "src/renderer/**/*.ts",
+    "src/renderer/**/*.tsx",
+    "src/shared/ipc/**/*.ts",
+    "src/renderer/shared/**/*.ts",
+    "src/renderer/shared/**/*.tsx"
+  ]
+}

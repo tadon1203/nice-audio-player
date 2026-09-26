@@ -1,499 +1,321 @@
----
-version: alpha
+# DESIGN.md
 
-name: Nice Audio Player
-
-description: "A dark, artwork-led desktop interface built as one coherent physical and perceptual world: monochrome structure, disciplined typography, deliberate negative space, direct control, and semantic status color."
-
-colors:
-  canvas: "#050505"
-  surface: "#0C0C0C"
-  surface-raised: "#121212"
-  surface-hover: "#181818"
-  surface-pressed: "#202020"
-  border-subtle: "#2A2A2A"
-  border-control: "#6A6A6A"
-  text-primary: "#F4F4F4"
-  text-secondary: "#A5A5A5"
-  text-muted: "#7A7A7A"
-  text-disabled: "#707070"
-  focus-ring: "#FFFFFF"
-  action-filled: "#F4F4F4"
-  action-filled-hover: "#DDDDDD"
-  action-filled-pressed: "#C8C8C8"
-  action-filled-foreground: "#050505"
-  error: "#FF5C68"
-  error-surface: "#2A1014"
-  transparent: "transparent"
-
-typography:
-  application-heading:
-    fontFamily: "Switzer, Noto Sans JP, Segoe UI, system-ui, sans-serif"
-    fontSize: 44px
-    fontWeight: 600
-    lineHeight: 1.12
-  media-title:
-    fontFamily: "Zodiak, Georgia, Times New Roman, serif"
-    fontSize: 44px
-    fontWeight: 400
-    lineHeight: 1
-    letterSpacing: -0.015em
-  media-title-interface:
-    fontFamily: "Switzer, Noto Sans JP, Segoe UI, system-ui, sans-serif"
-    fontSize: 44px
-    fontWeight: 600
-    lineHeight: 1.12
-  media-artist:
-    fontFamily: "Switzer, Noto Sans JP, Segoe UI, system-ui, sans-serif"
-    fontSize: 34px
-    fontWeight: 600
-    lineHeight: 1.18
-  section-title:
-    fontFamily: "Switzer, Noto Sans JP, Segoe UI, system-ui, sans-serif"
-    fontSize: 22px
-    fontWeight: 600
-    lineHeight: 1.3
-  body-lg:
-    fontFamily: "Switzer, Noto Sans JP, Segoe UI, system-ui, sans-serif"
-    fontSize: 18px
-    fontWeight: 400
-    lineHeight: 1.5
-  body-md:
-    fontFamily: "Switzer, Noto Sans JP, Segoe UI, system-ui, sans-serif"
-    fontSize: 16px
-    fontWeight: 400
-    lineHeight: 1.45
-  body-sm:
-    fontFamily: "Switzer, Noto Sans JP, Segoe UI, system-ui, sans-serif"
-    fontSize: 14px
-    fontWeight: 400
-    lineHeight: 1.4
-  caption:
-    fontFamily: "Switzer, Noto Sans JP, Segoe UI, system-ui, sans-serif"
-    fontSize: 13px
-    fontWeight: 500
-    lineHeight: 1.35
-
-spacing:
-  s1: 4px
-  s2: 8px
-  s3: 12px
-  s4: 16px
-  s5: 20px
-  s6: 24px
-  s8: 32px
-  s10: 40px
-  s12: 48px
-  s16: 64px
-  s20: 80px
-  s24: 96px
-
-rounded:
-  none: 0px
-  control: 8px
-  surface: 12px
-  media: 16px
-  full: 9999px
-
-components:
-  action-filled:
-    backgroundColor: "{colors.action-filled}"
-    textColor: "{colors.action-filled-foreground}"
-    rounded: "{rounded.surface}"
-
-  action-filled-hover:
-    backgroundColor: "{colors.action-filled-hover}"
-
-  action-filled-pressed:
-    backgroundColor: "{colors.action-filled-pressed}"
-
-  action-neutral:
-    backgroundColor: "{colors.transparent}"
-    textColor: "{colors.text-primary}"
-    rounded: "{rounded.control}"
-
-  action-neutral-hover:
-    backgroundColor: "{colors.surface-hover}"
-
-  action-neutral-pressed:
-    backgroundColor: "{colors.surface-pressed}"
-
-  surface-raised:
-    backgroundColor: "{colors.surface-raised}"
-    textColor: "{colors.text-primary}"
-    rounded: "{rounded.surface}"
-
-  notice-error:
-    backgroundColor: "{colors.error-surface}"
-    textColor: "{colors.text-primary}"
-    rounded: "{rounded.control}"
 ---
 
-This document defines how Nice Audio Player looks, feels, and behaves across features and screens.
+## name: Nice Audio Player
 
-The prose carries the design. Tokens provide shared reference values for that design; they are not a substitute for judgment.
+## Document responsibility
 
-This document does not define product capabilities, domain state, data contracts, persistence, command behavior, backend architecture, or source-code structure. A feature does not require a change here unless it introduces a visual or interaction law intended to hold beyond that feature.
+This document is the source of truth for visual and interaction design rules. It does not define accepted product behavior, system architecture, or contribution workflow.
 
 ## Overview
 
-Nice Audio Player is a dark, artwork-led Windows music player whose interface behaves as one coherent world.
+Nice Audio Player resembles a music-library workstation on the desk of a mastering engineer: a large local collection within easy reach, precise track and file information close at hand, and the active playback session continuously understandable without leaving the library.
 
-Its visual character resembles a monochrome type specimen displayed on a black screen: large areas are allowed to remain empty; typography, artwork, alignment, and distance carry more weight than containers; permanent chrome is grayscale; color appears only when it has semantic work to do.
+It is a working desktop utility, not a streaming storefront. Album artwork is allowed to be expressive, but the surrounding interface behaves like professional equipment software: compact where comparison matters, spacious where imagery matters, precisely aligned, and stable enough to operate from memory.
 
-The interface is designed for long, attentive listening sessions. It does not ask for attention merely because screen space is available. Controls become evident when needed, state remains legible when nothing is moving, and the music retains visual priority over the machinery that operates it.
+The interface should feel as though it has been used every day for years. Nothing is enlarged merely to attract attention, and nothing useful is hidden merely to appear simple. Familiarity should make the application faster to read, because important regions keep their meaning and controls stay where users learn to expect them.
 
-Apple's enduring human-interface philosophy is an explicit reference for this design. The reference is philosophical rather than stylistic. Nice Audio Player adopts the qualities that have survived changes in Apple's appearance — purpose, agency, familiarity, consistency, direct manipulation, intelligible feedback, spatial continuity, simplicity, and craft — without reproducing the current appearance of macOS, iOS, or any particular generation of Apple software.
+The design is neither sparse for the sake of elegance nor dense for the sake of expertise. Density follows the work. Artwork-led browsing can breathe; tables, metadata, settings, and playback status can become compact and technical. Dense information is welcome when its relationships remain obvious.
 
-Apple-specific chrome, SF typography, SF Symbols, Liquid Glass, glass materials, contemporary Apple radii, decorative depth, and other fashion-dependent surface treatments are not part of the design merely because Apple uses them. Every visible decision must make sense for Nice Audio Player itself: a dark, local-first Windows desktop player centered on music, artwork, and direct control.
+The permanent interface is dark and mostly monochrome. Artwork provides most of the visual color. The application itself communicates precision through alignment, typography, state clarity, and stable geometry rather than decorative effects or imitation of physical hardware.
 
-## Physical and perceptual model
+Apple's human-interface work is a reference for continuity, direct manipulation, and interaction quality. Professional audio software is a reference for operational clarity, persistent status, and information density. Neither should be copied literally.
 
-The interface behaves as though its surfaces and controls occupy one continuous, learnable space.
+A successful screen should answer four questions without explanation: what matters now, what belongs together, what state the system is in, and where an action will take effect.
 
-A panel that belongs to the right arrives from the right and returns there. A child surface advances from its parent and returns along the inverse path. An object that remains semantically the same remains perceptually traceable instead of disappearing and being recreated elsewhere. Responsive layouts may rearrange those relationships, but a breakpoint does not create a different interaction universe.
+## Design tokens
 
-Objects do not teleport, stretch, reverse direction, or acquire a new apparent physical character without a reason established by the interaction. Layout changes move objects through space; they do not make text, artwork, icons, or controls appear elastically deformed.
+Nice Audio Player uses a deliberately small semantic token system:
 
-Direct manipulation stays attached to the user's action. Seek, volume, scrollbar, touch, and other directly manipulated values respond without perceptible settling lag. A new valid user action may supersede an in-progress transition immediately.
+```text
+Tailwind built-in theme
+        + minimal custom @theme values
+        + shadcn semantic CSS variables
+                ↓
+        @theme inline adapters
+                ↓
+        shadcn primitives and React product UI
+```
 
-Different phenomena are allowed to feel different because they are physically different. Layout movement, viewport scrolling, optical state changes, direct manipulation, icon-state continuity, and corrective positioning do not need one universal motion behavior. What matters is that each phenomenon is internally coherent and does not compete with another authority for the same visible state.
+`src/app/renderer/styles.css` owns the dark-only shadcn semantic variables, the `@theme inline` adapters, the application font, and global base styles. Product code uses semantic utilities such as `bg-background`, `text-foreground`, `bg-muted`, `border-border`, and `ring-ring` rather than raw interface palette values.
 
-Physical consistency is a prerequisite for perceptual clarity.
+When deciding whether to add a token, use this order:
 
-The interface must also make its state knowable. A person should be able to determine where they are, what is current, selected, playing, disabled, loading, or unavailable, what can be operated, what changed after an action, and whether the current state can be interrupted, reversed, left, or recovered from.
+```text
+1. Can an existing shadcn semantic token express the meaning?
+   YES → use that token directly
+   NO  → continue
 
-Feedback exists to reduce uncertainty, not to decorate an action. Motion, typography, contrast, position, spacing, borders, and markers are information channels. Essential state never depends on animation alone, and no effect may imply a causal, spatial, or semantic relationship that does not actually exist.
+2. Can a Tailwind built-in utility or an arbitrary structural value express it?
+   YES → use that utility directly
+   NO  → continue
 
-## Beauty, simplicity, and craft
+3. Does the custom meaning recur across the product?
+   YES → add the smallest possible value to `@theme` in `styles.css`
+   NO  → continue
 
-Nice Audio Player does not treat beauty as a decorative layer.
+4. Is it one-component structural implementation?
+   YES → keep it beside the owning component or local primitive source
+   NO  → do not tokenize it
+```
 
-Beauty is the perceptual result of correct proportions, precise alignment, intentional rhythm, clear hierarchy, disciplined typography, stable object relationships, negative space, immediate feedback, and the absence of unnecessary parts.
+The normal dependency is `shadcn semantic variable → @theme inline adapter → Tailwind utility → React component`. Tailwind built-in spacing, type, radius, motion, and z-index utilities are the default primitive layer. Structural values such as `0`, `100%`, `auto`, `none`, `inherit`, `1fr`, grid spans, arbitrary values, and media-query boundaries are allowed when they describe layout rather than appearance.
 
-Simplicity therefore does not mean removing function. It means reducing independent rules, unnecessary representation, and avoidable decisions. A large interface can remain simple when the same few laws explain its layout, interaction, typography, state, and motion everywhere.
+### Colors
 
-When a surface feels weak, repair it in this order:
+| Token                | Role              | Use                                |
+| -------------------- | ----------------- | ---------------------------------- |
+| `--background`       | canvas            | workspace background               |
+| `--sidebar`          | chrome            | sidebar and playback               |
+| `--popover`          | control           | input, select, button, menu        |
+| `--accent`           | hover             | hover                              |
+| `--muted`            | selected          | selection                          |
+| `--foreground`       | primary content   | important text/icon                |
+| `--muted-foreground` | secondary content | metadata and supporting text       |
+| `--border`           | subtle stroke     | divider and structural rule        |
+| `--input`            | control stroke    | control boundary                   |
+| `--ring`             | focus             | keyboard focus only                |
+| `--destructive`      | danger            | error and destructive actions only |
 
-1. information priority;
-2. geometry and alignment;
-3. grouping and spacing;
-4. typography;
-5. state clarity;
-6. interaction behavior;
-7. only then, additional visual treatment when that treatment communicates something necessary.
+The application is dark-only and mostly monochrome. Artwork provides the visual color. `primary`, `secondary`, and `accent` remain the standard shadcn semantic roles used by generated primitives; product compositions do not invent additional meanings for them. `outline` and `surface-container-*` are not product token roles. Playback uses glyph/state semantics to remain distinguishable from selection; it does not receive a dedicated color.
 
-An effect earns its place only when removing it would make hierarchy, state, feedback, operability, or spatial understanding worse.
+### Typography
 
-Craft means resolving ordinary states with the same care as showcase states: long metadata, empty libraries, loading, failure, disabled controls, reduced motion, forced colors, narrow windows, display scaling, focus order, repeated interaction, interruption, and recovery are all part of the design.
+The interface uses Satoshi for Latin, Noto Sans JP for Japanese, and `Segoe UI, system-ui, sans-serif` as fallback through Tailwind's standard `font-sans` theme value. Use Tailwind's standard `text-sm`, `text-base`, `text-lg`, and `text-2xl` utilities for the existing hierarchy. Technical values use the `tabular-nums` modifier. Interface text is never below 14px.
 
-## Colors
+### Spacing, shape, size, and state
 
-The permanent interface is monochrome.
+Use Tailwind's standard spacing, radius, sizing, and duration utilities first. Exact product geometry remains explicit at the owning composition when it represents product behavior; otherwise prefer Tailwind's built-in scale. Compact controls use standard shadcn sizing, artwork uses `rounded-lg`, and common icon sizes use `size-4`/`size-5`/`size-6`.
 
-`canvas`, surfaces, borders, typography, controls, and focus indicators use grayscale roles. The grayscale is structural rather than decorative: differences in luminance establish hierarchy, grouping, affordance, and state without introducing a permanent brand accent.
+Normal boundaries use a 1px `--border` or `--input` border. Focus appearance is owned by shadcn primitives and local interactive components rather than a global override. Motion is limited to feedback 100ms, spatial 160ms, and `cubic-bezier(0.2, 0, 0, 1)`. Only `shadow-none` and `shadow-floating` exist; persistent UI has no shadow. Layers are content 0, chrome 10, floating 20, and modal 30.
 
-- `canvas` is the lowest permanent layer.
-- `surface` separates a persistent region from the canvas.
-- `surface-raised` identifies content temporarily placed above the current layer.
-- `surface-hover` and `surface-pressed` acknowledge interaction without moving the control.
-- `border-subtle` separates adjacent dark regions only when proximity and luminance are insufficient.
-- `border-control` makes a necessary control or state boundary legible.
-- `text-primary`, `text-secondary`, and `text-muted` express information priority.
-- `text-disabled` is reserved for unavailable interaction.
-- `focus-ring` is reserved for keyboard focus.
+### Tailwind and layout
 
-Do not replace these semantic roles with arbitrary raw colors.
+Tailwind exposes the standard shadcn utilities such as `bg-background`, `bg-card`, `bg-muted`, `bg-accent`, `text-foreground`, `text-muted-foreground`, `border-border`, `border-input`, and `ring-ring`. Product-specific layout is composed with utility classes in React. Only recurring values that Tailwind cannot express cleanly belong in the `@theme` block in `styles.css`.
 
-Chromatic color is scarce and semantic. It is reserved for states such as error and does not become a permanent accent, artwork-derived tint, reflected light, gradient, glow, or decorative atmosphere.
+Layout uses Tailwind's standard spacing, container widths, and mobile-first breakpoints. Prefer intrinsic layout such as flex wrapping and content-driven sizing before adding a breakpoint. Reusable compositions use container queries when their layout depends on available component width. The product shell owns navigation responsiveness at the standard `md` boundary: mobile sheet below it and persistent sidebar at and above it. The persistent playback region is 88px high. Custom layout values are introduced only when a product requirement cannot be expressed clearly with the standard system.
 
-Artwork is foreground media. It does not leak its palette into persistent controls, text, borders, or surfaces.
+The permanent application chrome is grayscale.
 
-Text contrast follows 4.5:1 for ordinary text and 3:1 for qualifying large text. Icons, control boundaries, and focus indicators maintain at least 3:1 against adjacent colors. Color is never the sole distinction between two meaningful states.
+The near-black canvas is a neutral working surface, not an atmospheric or cinematic effect. Persistent layers separate first through luminance, spacing, and placement; borders are introduced only when those are insufficient.
 
-The product supports one permanent palette: dark. Operating-system light/dark preference does not replace it. Forced-color, contrast, motion, and display-scaling preferences remain independent accessibility concerns.
+Artwork is the primary source of non-semantic color. It may be vivid, muted, photographic, or graphic without changing the surrounding interface. Persistent controls, text, borders, and background surfaces do not inherit artwork color.
+
+Chromatic interface color is reserved for semantic information that genuinely benefits from stronger distinction, especially errors. Color is never the only indication of state.
+
+### Component primitives
+
+Reusable shadcn controls live under `src/renderer/shared/ui/shadcn` (the `components.json` `ui` alias). Keep product-specific UI outside that directory. Use `Button`, `Input`, `Slider`, `Toggle`, `ToggleGroup`, `Tooltip`, and other shadcn primitives for interaction surfaces instead of duplicating their focus, disabled, keyboard, and state styles in page CSS. Product-specific compositions such as the playback dock, album tile, and settings folder list may combine these primitives without becoming generic shadcn containers.
 
 ## Typography
 
-Typography provides much of the interface's character, hierarchy, and rhythm. Repeated roles must therefore remain recognizably identical across features rather than being retuned screen by screen.
+```yaml
+typography:
+  latin: 'Satoshi'
+  japanese: 'Noto Sans JP'
+```
 
-Switzer carries Latin interface text, controls, changing values, ordinary media metadata, status, instructions, filenames, device names, and numbers. Noto Sans JP supplies Japanese glyphs in those same roles.
+Typography is closer to instrumentation than editorial display: compact, aligned, readable, and understated.
 
-Zodiak is intentionally exceptional. It is reserved for a short, stable Latin-script media title on a dedicated identity surface, where a display voice does not compete with controls or changing state. Application headings remain in the interface family.
+Satoshi is the Latin typeface. Noto Sans JP is used for Japanese text. Mixed Japanese and Latin content may use Noto Sans JP as one coherent typographic group.
 
-A Zodiak text group:
+Use Regular weight for most interface text. Hierarchy comes primarily from size, luminance, spacing, alignment, and placement rather than boldness.
 
-- contains one to six Latin-script words;
-- occupies no more than two lines;
-- is a stable media title, noninteractive, and noneditable;
-- contains no filename, device value, status, measurement, or instruction;
-- uses a solid grayscale color without outline, gradient, blur, glow, or shadow;
-- is at least 36px;
-- does not compete with another primary typographic focal point in the same viewport.
+Technical values use tabular numerals where alignment improves scanning: time, sample rate, bit depth, bitrate, counts, durations, and level values.
 
-Japanese, non-Latin, and mixed-script media titles use the interface stack as one coherent typographic group rather than combining Zodiak with fallback glyphs.
+Uppercase is reserved for short technical labels and compact table headings. Ordinary navigation, object names, and section titles remain naturally cased.
 
-Use the documented scale rather than creating arbitrary intermediate sizes. Interface text uses sentence case. Japanese and mixed Japanese–Latin text does not receive Latin-oriented tracking. Time, percentages, measurements, and values that update in place use tabular numerals.
+Do not use monospace merely to make the application look technical. A professional tool earns that character through precision and structure.
 
-Feature composition may control a text block's placement, measure, wrapping, truncation, and overflow. It does not redefine the family, weight, line height, and tracking of a shared semantic role.
+## Layout
 
-Truncation must not make the full value inaccessible; the complete value remains available through an accessible name, description, or appropriate detail surface. Changing text must not unexpectedly move unrelated content or interactive targets.
+The interface behaves as one continuous spatial system rather than a collection of unrelated pages. Workspace views share the same horizontal inset and begin from the same left edge. Media grids fill from left to right and may leave unused space on the right rather than introducing view-specific centering or page widths.
 
-## Layout and negative space
+At desktop sizes it is organized around persistent navigation, a library or media detail workspace, and persistent playback controls. These regions retain their roles across views so repeated use builds spatial memory.
 
-Layout is the primary expression of hierarchy.
+Alignment is structural. Tables, artwork, panes, playback controls, and technical readouts should share alignment lines as though they belong to one piece of equipment. An edge that almost aligns is often worse than one that clearly does not.
 
-Wide compositions use a fluid twelve-column structure with a maximum content width of 1360px, a 24px column gap, and horizontal outer padding of `clamp(24px, 5vw, 80px)`. Additional width beyond the content measure remains empty rather than stretching text, controls, media, or surface padding.
+Visual balance is functional. Adding information to one side should not casually shift the perceived center of important controls or make the screen feel weighted toward an incidental panel.
 
-The page gutter and the content measure are different spatial responsibilities. The outer frame relates content to the viewport; the inner frame defines the maximum readable/compositional measure. Feature-specific grids and topology live inside that shared relationship.
+Additional width may remain unused when stretching content would reduce scanability or weaken relationships.
 
-Spacing follows the documented scale. Related content normally uses 8, 12, 16, 20, 24, or 32px relationships; major sections use 48, 64, 80, or 96px separation. The goal is not uniform spacing but a legible rhythm of tight and generous intervals.
+Responsive layouts rearrange regions rather than proportionally scaling the interface. Secondary metadata yields before primary content becomes cramped or unreadable.
 
-Empty space is intentional. Once required content has been placed, unused regions may remain empty. Do not add copy, badges, cards, symbols, gradients, or decorative objects merely to make the composition look occupied.
+Responsive content must remain inside the region that owns it. Content may reflow or scroll within that region, but it must not expand unrelated shell regions or displace persistent controls.
 
-When one large visual object and one associated text group dominate a wide composition, preserve a meaningful separation between them; where the grid permits it, reserve at least one full column of negative space.
+## Information Density
 
-Group content in this order:
+Density follows the task.
 
-1. proximity and distance;
-2. alignment;
-3. typography;
-4. luminance;
-5. a thin functional border;
-6. a container only when the earlier methods are insufficient.
+A track table should feel closer to a professional file browser than to a streaming-service playlist: compact enough to compare many rows and columns without excessive scrolling, with alignment doing most of the organizational work.
 
-Do not create a rounded surface merely to prove that a group exists.
+An album grid should feel closer to records laid out for browsing than to a dashboard of cards. Artwork can carry visual weight without requiring surrounding panels, badges, or inflated spacing.
 
-No viewport should contain more than two groups competing at the largest visual scale. Secondary information recedes through smaller type, smaller media, lower contrast, or reduced area rather than additional enclosure.
+Metadata, library folder settings, and technical playback status may be dense because comparison and monitoring benefit from compact presentation.
 
-### Responsive behavior
+Do not use large padding as a substitute for hierarchy. Dense information remains readable through grouping, baselines, fixed columns, contrast, and predictable placement.
 
-Responsive design restructures the composition instead of scaling it.
+Do not compress everything simply to look professional either. Density that does not improve reading or operation is only noise.
 
-As width decreases:
+Use the structure that best matches the content: grid, list, table, ledger, strip, or direct spatial composition. Do not normalize unlike content into interchangeable cards.
 
-1. intentional empty columns disappear first;
-2. outer padding contracts toward 24px;
-3. adjacent groups reflow according to their semantic relationship;
-4. display typography may step down to the next documented role;
-5. interaction targets retain their usable dimensions.
+## Surfaces and Shape
 
-Responsive topology may change, but semantic identity, reading order, focus order, navigation direction, and cause-and-effect remain coherent.
+The application uses a small number of meaningful layers:
 
-A child surface that replaces its parent on a narrow layout is still the same child relationship that appears alongside that parent in a wider split layout. The spatial expression may differ, but the meaning does not.
+- the application canvas;
+- persistent application surfaces;
+- temporary dialogs and popovers;
+- temporary raised surfaces;
+- modal or system overlays when truly necessary.
 
-Corrective changes caused purely by window resize or breakpoint crossing may resolve immediately; they do not need to masquerade as user-authored navigation.
+Depth represents actual interaction hierarchy.
 
-Never scale the entire composition with a transform. Body text never drops below 13px.
+Persistent surfaces do not use blur, glass, glow, or decorative shadows. Separation should feel architectural rather than atmospheric.
 
-## Surfaces, depth, and shape
+Borders and rules indicate real structure: a resizable boundary, a table division, a focus state, or another relationship that benefits from a visible edge. Do not outline containers merely because they exist.
 
-Depth exists only to explain real layering.
+Rounded geometry follows function rather than acting as a universal style. Edge-attached application surfaces remain square. Compact controls and temporary surfaces may be rounded. Tool-like controls generally use tighter radii than primary music actions.
 
-There are at most four simultaneous conceptual levels:
+The interface may feel technical, but it should not cosplay physical equipment. Avoid fake screws, rack panels, ornamental LEDs, decorative meters, or other hardware references without a real informational role.
 
-1. `canvas`;
-2. persistent `surface`;
-3. temporary `surface-raised`;
-4. modal or system-owned overlay.
+## Search and Local Controls
 
-Persistent regions use solid backgrounds. Backdrop blur is not a product material.
+Global and local actions should be spatially distinguishable.
 
-Separation comes primarily from space, alignment, and luminance. Borders appear only when a boundary would otherwise become ambiguous, such as focus, dense-list separation, an interactive boundary, selected/current state, or a true overlay/menu/modal boundary.
+The filter occupies a stable location within each library presentation and retains that presentation's query while the user switches views. Controls that modify the current collection or view belong near that content. Their placement should make their scope obvious through proximity and alignment.
 
-Shared decorative shadows are not part of the visual language.
+## Playback
 
-Shape follows role:
+Playback controls form a persistent operational area for the active session.
 
-- viewport-level and edge-attached persistent regions use `none`;
-- compact controls use `control`;
-- temporary raised groups use `surface`;
-- artwork and visual media use `media`;
-- circles use `full` only when the geometry is genuinely circular.
+Its geometry remains stable while the rest of the application changes. Primary transport controls stay visually centered, and surrounding information must not pull their perceived position away from the window's center of gravity.
 
-Primary text actions use the `surface` radius. Pills are reserved for binary selection, compact status, or semantics that are naturally pill-like.
+Timeline, transport, volume, and technical status should read as one coherent instrument rather than several competing clusters.
 
-Do not derive shape from current Apple styling and do not round every element into the same generic visual vocabulary.
+Technical playback information may remain continuously visible. When it does, it belongs in a compact dedicated region so monitoring detail can be dense without disturbing the primary control row.
 
-## Components and interaction states
+Volume is a direct manipulation control and should remain geometrically simple: icon, level, and numeric readout share one clear axis rather than being displaced by unrelated metadata.
 
-Shared controls establish a common interaction grammar. A feature may compose and position them, but the same type of control should not acquire different hover, pressed, focus, selected, or disabled physics merely because it appears on another screen.
+The playback area can carry more information than an ordinary consumer player. Its discipline comes from fixed regions, repeatable alignment, and clear state—not from hiding data.
 
-### Actions
+## Media Details
 
-A related action group contains at most one filled action.
+Album and artist detail views establish the selected media identity before showing related tracks or albums. Back navigation returns to the semantic parent and preserves the relationship between an artist and its albums. Playback session information remains in the persistent playback region.
 
-Filled actions use `action-filled`, `action-filled-hover`, and `action-filled-pressed`, always with `action-filled-foreground`. They remain grayscale and receive no permanent glow.
+## Collections and Objects
 
-Neutral actions remain transparent at rest and use the corresponding hover/pressed surfaces.
+Different content types use different representations because they support different kinds of reading.
 
-Hover and pressed feedback never changes the control's width, height, alignment, hit target, or surrounding layout.
+Albums can be artwork-led. Artists can be primarily textual. Tracks benefit from tabular comparison. Each representation keeps its own filter, sorting, and scroll context.
 
-### Rest, hover, and press
+Consistency comes from shared typography, spacing logic, state behavior, and navigation—not from making every object look the same.
 
-Idle controls do not animate.
+Detail views preserve the relationship between parent and child. Object identity is established before secondary operations and subordinate content.
 
-Hover changes background, border, or foreground luminance. It does not move, rotate, resize, scale, or raise the element.
+Navigation should retain origin and working context whenever practical. Returning should feel like going back to where the user was, not reconstructing a generic version of that place.
 
-Pressed state acknowledges input through the pressed visual treatment. It does not introduce a second physical event such as shrinking or lifting the control.
+## Interaction and State
 
-### Focus
+Controls are visually restrained at rest but unambiguous when interactive.
 
-Keyboard focus uses a 2px `focus-ring` with a 2px offset. It remains visible over hover, selected, current, and pressed states and is never substituted by those states.
+Hover and press affect the object locally without shifting surrounding layout.
 
-### Selected and current
+Selection, playback, keyboard focus, hover, disabled state, loading, and error are different concepts and should not collapse into one generic highlight. Several may coexist on the same object.
 
-Selected and current are semantic states, not stronger hover states.
+Direct manipulation—seeking, volume, scrolling, dragging, resizing—tracks input immediately.
 
-Both use at least two visible differences from rest. One may be color or luminance; the other is expressed through shape, border, icon, text weight, or a stable non-layout-affecting positional marker.
+Pointer, keyboard, and context-menu interaction should refer to the same underlying object and produce consistent state changes.
 
-`Current` identifies the destination or application state being displayed. `Selected` identifies a choice within a collection or control. Keyboard focus identifies only the user's current focus position and never acts as a substitute for either.
+Temporary UI uses established interaction patterns for keyboard navigation, focus management, dismissal, and accessibility.
 
-These treatments preserve the control's outer geometry.
+## Navigation and Motion
 
-### Playing
+The interface behaves as a continuous environment.
 
-Playing identifies the authoritative playback identity and remains semantically distinct from selected and current state.
+Moving from parent to child preserves perceived relationship. Returning reverses that relationship and restores meaningful working context where practical.
 
-A compact monochrome static marker may replace a track number for the playing item. It remains identifiable while paused and under reduced motion. It is not a visualizer and does not consume audio data.
+When the same semantic object appears before and after a transition, it should remain visually traceable rather than disappearing and reappearing as something unrelated.
 
-### Disabled, loading, and error
-
-Disabled controls use `text-disabled`, retain their normal outer dimensions, and are not communicated by opacity alone.
-
-Loading preserves the occupied geometry whenever existing content can remain visible; avoid replacing an otherwise useful screen with a generic centered spinner.
-
-Errors stay local to the affected region and do not unnecessarily resize or move unrelated content.
-
-### Range controls
-
-Range controls use a 4px visible track and a 16px thumb inside a minimum 40px interactive surface. The native range remains the semantic control.
-
-Fill and thumb represent the authoritative value. Direct pointer and keyboard manipulation updates them immediately. Non-direct external value changes may settle using the normal state effect.
-
-Hover, focus, press, and drag may change contrast or ring visibility, but never track thickness, thumb size, hit-target size, or surrounding geometry.
-
-Muted Volume preserves its stored non-zero position while its fill and thumb use the subdued treatment. The icon communicates `silent`, `low`, or `high` as a state of the same control rather than as unrelated glyphs.
-
-## Motion
-
-Motion explains state, relationship, and causality. It is not an ambient layer of personality applied to otherwise static UI.
+Motion explains change; it does not decorate it.
 
 ```yaml
 motion:
-  feedback: 160ms
-  state: 220ms
-  content: 320ms
-  image: 600ms
-  reduced: 120ms
-  easing: cubic-bezier(0.22, 1, 0.36, 1)
+  feedback: 100ms
+  easing: 'cubic-bezier(0.2, 0, 0, 1)'
 ```
 
-These values describe effects motion. Feedback is immediate enough to remain attached to an action. State effects settle quickly. Content takes additional time only when the user benefits from seeing how one state relates to another. Image replacement may take longer because visual media needs less urgent acknowledgement.
+Transitions are short, interruptible, and mechanical.
 
-Nothing bounces, overshoots, lingers after its meaning is understood, or animates merely because it is idle.
+Nothing bounces, overshoots, floats, or settles after direct manipulation. Layout movement may animate, but text, artwork, and controls should not visibly stretch or deform.
 
-Neutral replacement is effects-only. Ordered navigation may use restrained directional movement. Entering a child follows the forward relationship; returning follows its inverse. Responsive versions of the same relationship preserve that meaning.
+Reduced motion preserves hierarchy, state, and directional understanding without depending on animation.
 
-A same semantic object may move continuously between layouts or states when continuity makes identity clearer. Unrelated controls, destinations, or objects do not morph merely because animation is available.
+## Context Menus and Temporary UI
 
-Structural geometry is defined by valid before-and-after layouts. Intermediate motion must not visibly stretch text, icons, controls, or artwork, and it must not be created by time-interpolating width, height, inline/block size, edge positions, margins, padding, gaps, or grid-track dimensions.
+Temporary UI should feel attached to the object or task that invoked it.
 
-Direct manipulation never waits for spatial animation.
+Menus are compact and minimally rounded. Whitespace is preferred over excessive divider lines. Icons appear only where they improve recognition.
 
-Corrective re-anchoring, exact scroll restoration, breakpoint correction, and other discontinuous positioning are instant.
+Temporary controls should not become permanent visual clutter merely because a function exists.
 
-An unanchored modal has no assumed physical origin. Its generic entrance is therefore effects-only. Translation, scaling, or shared spatial continuity is appropriate only when an actual source or directional relationship exists.
+Reversible actions prefer Undo over unnecessary confirmation dialogs. Confirmation is reserved for actions with meaningful irreversible consequences.
 
-The same principle applies to tooltips and other temporary feedback: do not invent movement simply to make them feel animated.
+## Settings and System States
 
-### Reduced motion
+Settings behaves like a technical ledger rather than a stack of cards.
 
-Reduced motion is an intentional alternate experience, not normal motion made faster.
+Related labels, values, controls, paths, and errors align so the eye can compare them quickly. Read-only information looks like information rather than a disabled input.
 
-When reduced motion is active:
+Changes apply immediately when that model is safe and understandable.
 
-- spatial translation, scale, rotation, layout animation, and icon morphing are removed;
-- corrective and programmatic positioning is immediate;
-- opacity transitions are limited to 120ms;
-- focus, selected, current, playing, loading, disabled, and error distinctions remain intact.
+Errors belong near the affected object or control and provide a clear recovery action.
 
-Meaningful feedback remains visible even when spatial movement is absent.
-
-## Scrolling
-
-Scrolling behaves as one coherent physical system.
-
-Wheel movement, programmatic movement, follow behavior, and interruption must not compete for ownership of the same viewport. A feature expresses what should become visible — nearest, centered, restored, or re-anchored — without inventing a new scrolling feel for itself.
-
-Direct scrollbar and touch manipulation remain direct.
-
-User intent supersedes programmatic movement. Automatic following detaches when the user intentionally browses away where that feature requires such behavior, and it does not silently reattach until the corresponding interaction explicitly calls for it.
-
-Exact restoration and corrective re-anchoring are instant. Programmatic smooth scrolling becomes immediate under reduced motion.
-
-Do not combine multiple smooth-scroll authorities for one viewport.
-
-## Icons
-
-Application control icons belong to one consistent geometric language.
-
-Repeated icon size, stroke, alignment, and accessibility behavior are shared rather than redrawn feature by feature.
-
-A control may transition between related icon shapes when both shapes represent states of the same control, such as Play/Pause, volume state, or Repeat/Repeat One. That continuity expresses preserved semantic identity.
-
-Unrelated destinations or commands do not morph simply because they are both icons.
-
-Icon state remains understandable without animation.
-
-## Browser and native interaction surfaces
-
-Browser-native semantics remain intact even when their visual treatment is customized.
-
-Selection uses primary text over the canvas.
-
-Scrollbars use a 12px canvas track with a 3px inset around a `border-control` thumb; hover increases the thumb to `text-secondary`. Forced-colors mode restores system scrollbar treatment.
-
-Native form and range controls retain their semantic behavior. Visual replacement does not remove keyboard operation, accessible names, or platform interaction expectations.
+Empty, loading, error, and content states have clear ownership and do not compete with one another.
 
 ## Accessibility
 
-Accessibility is part of the same coherence expected from every other state.
+Text and controls maintain sufficient contrast against adjacent surfaces.
 
-Interactive targets are at least 40×40px. A single highest-emphasis control in a group may use 48×48px or larger.
+Color and motion are never the only indication of meaningful state.
 
-Content remains usable at Windows display scaling of 100%, 125%, 150%, and 200%. At those scales, text does not clip, controls do not overlap, focus remains visible, and important state does not depend on motion, color, light, or media imagery alone.
+Keyboard navigation and visible focus are supported throughout the interface.
 
-Forced-colors mode uses system colors for text, borders, backgrounds, and focus indicators.
+Logical focus order follows the visible information structure.
 
-Reduced-motion behavior follows the Motion section.
+The application remains usable with reduced motion, forced colors, text enlargement, and Windows display scaling at 100%, 125%, 150%, and 200%.
 
-Decorative SVGs remain outside the accessibility tree.
-
-Changing content does not move keyboard focus unless the user initiates navigation to another view or dialog. If an exiting visual surface remains temporarily mounted after its semantic state has ended, it must already be noninteractive and absent from active accessibility state.
-
-Responsive visual order and keyboard/focus order remain logically compatible.
+Technical density must not depend on unreadably small text. When space becomes insufficient, rearrange or omit secondary information before shrinking the interface indiscriminately.
 
 ## Do's and Don'ts
 
-### Do
+- **Do** make the interface feel like a tool whose positions can be learned by muscle memory.
+- **Do** let dense technical information sit beside large artwork without forcing both into the same rhythm.
+- **Do** allow compact tables and technical readouts to look genuinely compact.
+- **Do** let artwork provide most of the visual color and complexity.
+- **Do** use typography, spacing, alignment, and stable geometry before adding containers or effects.
+- **Do** preserve object identity and spatial direction during navigation.
+- **Don't** turn the library into a dashboard of interchangeable cards.
+- **Don't** hide useful playback or file information merely to manufacture visual minimalism.
+- **Don't** use oversized headings, empty hero space, or exaggerated scale to manufacture importance.
+- **Don't** imitate physical rack hardware with fake knobs, screws, LEDs, meters, or ornamental technical graphics.
+- **Don't** let secondary information disturb the visual center of primary controls.
+- **Don't** use gradients, glow, glass, or decorative shadows as a substitute for structure.
+- **Don't** animate direct manipulation with spring, settling, or delayed response.
 
-- **Do** treat Apple as a reference for durable human-interface thinking, not as a visual template.
-- **Do** let music, artwork, typography, geometry, and negative space carry the composition.
-- **Do** preserve identity, causality, direction, and directness through state and layout changes.
-- **Do** use the same interaction and typographic laws across features.
-- **Do** leave space empty when the task does not require content there.
-- **Do** remove a visual element or effect when its absence does not harm hierarchy, state recognition, operability, feedback, or spatial understanding.
-- **Do** resolve loading, error, disabled, focus, localization, scaling, reduced-motion, and responsive states as part of the primary design.
+## Application chrome
 
-### Don't
+The Windows application uses application-owned visual chrome. The renderer reserves a 40px title surface across the top of the window. It contains the text `Nice Audio Player`, the minimize, maximize/restore, and close controls, and, below 768 CSS px, the mobile navigation trigger. It does not contain an application icon. Empty title-surface space is draggable; interactive controls are outside the drag region. The window uses standard Windows resize borders and system Snap Layout keyboard affordances where available; application-owned controls perform minimize, maximize/restore, and close.
 
-- **Don't** imitate macOS, iOS, Liquid Glass, SF typography, SF Symbols, Apple chrome, or another current Apple surface treatment merely because Apple is the philosophical reference.
-- **Don't** use decoration to compensate for weak information priority, geometry, grouping, typography, state clarity, or interaction.
-- **Don't** fill negative space with cards, copy, badges, gradients, glows, reflected light, propagated artwork color, or ornamental objects.
-- **Don't** turn every group into a rounded container or every state into a new material treatment.
-- **Don't** invent motion without a real state, causal, or spatial relationship, and don't let responsive breakpoints change the meaning of the same interaction.
-- **Don't** create feature-local visual or physical dialects when the product already has a shared rule for that phenomenon.
-- **Don't** use Zodiak for application headings, supporting media metadata, changing data, controls, statuses, measurements, filenames, device values, or instructions.
-- **Don't** animate while the interface is idle or make the user wait for motion before performing the next valid action.
-- **Don't** add feature names, command names, source-code identifiers, issue numbers, or implementation-library names to this document.
+The standard `File / Edit / View / Window` application menu is not displayed. Product commands belong in their owning workspace, Settings, or a future explicit application menu rather than a persistent OS-style menu bar.
+
+At 768 CSS px and above, the navigation sidebar is persistent and cannot be collapsed. Below 768 CSS px, navigation is a sheet with an explicit close control.
+
+## Track activation
+
+A track row represents one playback object. Pointer activation uses the whole available row surface except nested controls. Keyboard and assistive-technology activation remains on a real button in a fixed action/state slot so table semantics stay intact.
+
+The action slot is always geometrically reserved. In the Library track table it precedes the title. In an Album track table it reuses the track-number column. Inactive available tracks reveal Play on row hover or keyboard focus. The active playing track exposes Pause in the slot; the active paused track exposes Resume. Row activation of the active playing track is inert so a broad pointer hit area cannot accidentally pause playback.
+
+Hover, persistent playback state, and keyboard focus remain separate visual states. Changing playback state must not move the title baseline or column geometry.

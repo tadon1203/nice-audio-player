@@ -1,15 +1,25 @@
-# Development Philosophy
+# Development Pがilosophy
 
-- **Do not reimplement the harness.** Use capabilities already provided by the active model and environment. Add only the smallest scaffold needed when a required capability is actually missing.
+## Document responsibility
 
-- **Provide only project-specific knowledge.** Focus repository instructions on this project's requirements, responsibility boundaries, constraints, generated artifacts, contribution workflow, and completion criteria.
+This document is the source of truth for the project's development and documentation principles. It does not define product requirements, system architecture, or operational contribution rules.
 
-- **Treat the repository as the interface.** Important knowledge should be discoverable from clear sources of truth, code, and tests rather than depending on conversation history or prompts.
+## Goals
 
-- **Improve the environment before the prompt.** When an agent struggles, prefer better tests, types, validation, APIs, responsibility boundaries, and repository legibility over adding more instructions.
+すべて認知負荷の減少に回帰する。
 
-- **Make completion observable.** Completion is determined by required tests, checks, and acceptance conditions, not by statements such as “mostly done” or “temporarily complete.”
+## Design Principles
 
-- **Give context a purpose.** Use broad repository context where reasoning and decisions are required, then give implementation agents a self-contained plan without carrying over unnecessary research history or rejected alternatives.
+ファイル構造、コード構造、命名などによって意図を明らかにする。
+場当たり的な修正は避け、長期的に一貫し、拡張が容易であるがオーバーエンジニアリングにならないように設計する。
+明確な実利的理由なしに、既存コードの変更に対して保守的になるか、変更を望むことは禁止されている。
+自然に共通化できる場合のみ、UIコードが重複した場合は共通化を行う。
+プロジェクトの文脈は無視しないが、一般的な慣例や標準的な実装を重視する。
+標準ライブラリや既存ライブラリがすでに提供している機能を自前で再実装することは、明確な実利的理由がない場合禁止される。
 
-- **Architect context delivery.** AI-driven development succeeds on the structures built to supply just the right context—no more, no less. Establish clean modularity, indexable references, and predictable retrieval paths so agents receive exact, relevant inputs without noise.
+## Documentation
+
+ドキュメントは信頼できる単一の情報源。
+木のように、README.mdやAGENTS.mdから分岐させる。
+運用コストを減らすために、詳細を書きすぎない。
+他ドキュメントに重複する内容を書かない。

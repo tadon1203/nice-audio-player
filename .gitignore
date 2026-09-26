@@ -1,37 +1,35 @@
-# Logs
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
-
-node_modules
-dist
-dist-ssr
-*.local
-.pnpm-store/
+# Dependencies and generated data
+node_modules/
+/.pnpm-store/
+/.angular/
+/.agents/
+backend/target/
+/src-tauri/target/
+/src-tauri/gen/schemas/
+build/
+dist/
+out/
 test-results/
 playwright-report/
-blob-report/
+release/
+project_snapshot.zip
 
-# Locally downloaded fonts governed by a non-redistributable license
-/public/fonts/fontshare/*.woff2
+# Local application scaffold and tool output
+/nice-audio-player-scaffold
+/.output/
+/.vercel/
+/.netlify/
+/.wrangler/
 
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-!.vscode/settings.json
-!.vscode/tasks.json
-!.vscode/launch.json
-.idea
+# Fontshare assets installed locally.
+static/fonts/fontshare/*.woff2
+!static/fonts/fontshare/README.md
+
+# OS files
 .DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
+Thumbs.db
 
-/public/fonts/fontshare/*.woff2
-!/public/fonts/fontshare/README.md
+# Environment files
+.env
+.env.*
+!.env.example

@@ -1,58 +1,57 @@
-# CONTRIBUTING.md
+# Contributing
+
+## Document responsibility
+
+This document is the source of truth for engineering conventions, verification, Git, and GitHub workflow. It does not define product behavior, visual design, or system architecture.
+
+## Documentation
+
+Every source document listed in `AGENTS.md` begins with its title and a `## Document responsibility` section. Keep each rule in its owning document and avoid duplication.
+
+## Engineering rules
+
+- Keep each change focused on one logical responsibility.
+- Do not weaken type checking, linting, tests, security, accessibility, or performance constraints to make a change pass.
+- New or changed product-visible behavior includes automated coverage in the same change.
+- Register Tauri commands in `src-tauri/src/bindings.rs` and regenerate `src/shared/ipc/bindings.ts` with `pnpm bindings`; never edit the generated file by hand.
+- Rust remains authoritative for domain and persistent state. Renderer state may cache or mirror backend state but must not replace it.
+- TanStack Router is the navigation authority. TanStack Query owns native read caches. Zustand owns renderer-local interaction state.
+
+## Renderer boundaries
+
+- Renderer code under `src/renderer/**` must not import `node:*` or Tauri Rust implementation modules.
+- Renderer access to native capabilities goes through the typed Tauri adapter in `src/renderer/shared/lib/native.ts`.
+- Tauri commands validate arguments and return typed results; capabilities expose only required native APIs.
+- Direct DOM mutation is prohibited; use React rendering and event handlers.
+- Use semantic HTML and preserve visible keyboard focus, logical focus order, and WCAG AA contrast.
+
+## Design system
+
+- `src/app/renderer/styles.css` owns the shadcn semantic variables, `@theme inline` adapters, font theme value, and global base styles.
+- Product surfaces use shadcn semantic tokens such as `background`, `foreground`, `muted`, `border`, `input`, `ring`, and `destructive`; product code does not use raw palette values for interface surfaces.
+- Use shadcn-generated local primitives under `src/renderer/shared/ui/shadcn` and Lucide icons for reusable interaction surfaces. Keep product-specific components and behavior outside that directory. Keep `components.json` and the shadcn CLI configuration in sync with generated components. Add a new primitive with `pnpm exec shadcn add <component>`, then compose it in the owning renderer slice.
+- Keep shadcn registry output and its generated `use-mobile` hook in upstream formatting; Oxfmt does not rewrite those generated files. Product compositions and non-generated shared code remain subject to repository formatting.
+- Use Tailwind built-in spacing, typography, radius, motion, and z-index utilities before adding a custom `@theme` value. Keep one-component structural values local to that component.
+- Do not use gradients, glass, glow, decorative shadows, or oversized headings as substitutes for hierarchy.
+- Keep controls at least 14px text and preserve the dark, mostly monochrome, artwork-led visual system defined in `DESIGN.md`.
 
 ## Workflow
 
-Use one Issue, one branch, and one pull request for each change.
+- Use one Issue, one branch, and one pull request per change.
+- Branch names use `<type>/<issue-number>-<kebab-case>`.
+- Commit messages use Conventional Commits: `<type>(<scope>): <imperative summary>`.
+- Do not push directly to `main` or force-push without explicit authorization.
 
-New implementation Issues use `.github/ISSUE_TEMPLATE/task.yml`.
+## Local verification
 
-Branch names use `<type>/<issue-number>-<kebab-case>`, where `type` is one of `feat`, `fix`,
-`refactor`, `perf`, `docs`, `test`, `build`, `ci`, `chore`, or `revert`.
+Use the smallest command that covers the change:
 
-The Issue's primary change type determines the branch name, PR title, and squash-merge title. PR and
-squash-merge titles use `<type>: <summary>`. Individual commits use the Conventional Commit type that
-truthfully describes that commit.
+- `pnpm check` — TypeScript, Oxfmt, and Oxlint
+- `pnpm test` — Vitest tests
+- `pnpm build` — production renderer build
+- `pnpm test:e2e` — renderer Playwright and Tauri desktop WebDriver tests
+- `pnpm package` — Tauri Windows installer
+- `pnpm fonts:check` — bundled font integrity check
+- `pnpm validate` — full repository validation, including backend and Tauri checks, tests, E2E, and production build
 
-Completed Issue work is integrated with Squash Merge only.
-
-## Git and GitHub
-
-Use `git` for local repository and Git transport operations. Use the GitHub connector for supported
-GitHub operations such as Issues, pull requests, and reviews.
-
-DO NOT use `gh`. GitHub CLI authentication and permissions can be unreliable inside the Codex
-sandbox because host credentials or required network access may not be available to sandboxed
-processes.
-
-If a required GitHub operation is unavailable through the GitHub connector, report it as blocked.
-DO NOT fall back to `gh`.
-
-Git and GitHub writes require an explicit user request, and authorization is limited to the requested
-operation. DO NOT modify, stage, commit, discard, push, merge, or otherwise rewrite unrelated work.
-
-DO NOT push directly to `main`. DO NOT force-push unless explicitly requested.
-
-## Operations
-
-When asked to `commit`, inspect the current branch and complete diff, then commit only the current
-Issue's changes. Stop if unrelated changes cannot be safely excluded. A commit request does not
-authorize push, branch, PR, Issue, merge, or amend operations.
-
-When asked to `push`, push the existing commits on the current Issue branch and establish its upstream
-when required. Do not implicitly commit uncommitted work.
-
-When asked to `open pr`, require the intended Issue changes to be committed, push the branch when
-required, then create or update the PR for the same branch and Issue. Include
-`Closes #<issue-number>` in the PR body. Do not create a new commit as part of opening the PR.
-
-When asked to `squash merge`, verify that the Issue, branch, PR, working tree, required acceptance
-conditions, and the exact commit to be merged are consistent. Run `pnpm check` before merging and
-stop if it fails or a required Issue item remains unverified. Update only Issue checklist items that
-have actually been verified.
-
-Any source change after the successful pre-merge `pnpm check` invalidates that result and requires
-`pnpm check` to be run again before merge.
-
-After a successful Squash Merge, remove only the merged Issue branch, synchronize local `main` by
-fast-forward only, and finish with a clean working tree. DO NOT reset or otherwise rewrite local
-`main` if it cannot fast-forward.
+Run native tests when backend code changes and E2E tests when startup, IPC, routing, or packaged integration changes.
