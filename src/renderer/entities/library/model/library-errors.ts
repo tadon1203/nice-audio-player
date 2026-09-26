@@ -33,9 +33,9 @@ const unavailableMessages = {
 } as const satisfies Record<LibraryUnavailableReason, string>;
 
 /** The backend reports scan failures as an untyped string; these are the known values. */
-const scanFailureReasons: Readonly<Record<string, string>> = {
-  persistenceFailed: "the library database could not be updated",
-  rootTraversalFailed: "a library folder could not be read",
+const scanFailureMessages: Readonly<Record<string, string>> = {
+  persistenceFailed: "The library database could not be updated.",
+  rootTraversalFailed: "A library folder could not be read.",
 };
 
 export function libraryStatusMessage(status: LibraryStatus): string | null {
@@ -48,7 +48,7 @@ export function libraryCommandErrorMessage(error: unknown): string {
   return messageForCode(commandMessages, nativeErrorCode(error), "The library operation failed.");
 }
 
+/** Explains why a scan failed; the caller already shows that it failed. */
 export function libraryScanFailureMessage(failureCode: string | null): string {
-  const reason = messageForCode(scanFailureReasons, failureCode, "");
-  return reason === "" ? "Scan failed." : `Scan failed: ${reason}.`;
+  return messageForCode(scanFailureMessages, failureCode, "The scan stopped unexpectedly.");
 }
