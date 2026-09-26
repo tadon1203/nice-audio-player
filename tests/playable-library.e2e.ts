@@ -54,7 +54,7 @@ test("plays tracks and operates the persistent seek, transport, volume, and tech
 
   const volume = page.getByRole("slider", { name: "Volume" }).last();
   await expect(volume).toHaveAttribute("aria-valuetext", "72 percent");
-  const volumeBox = await volume.boundingBox();
+  const volumeBox = await page.locator('[data-region="volume-slider"]').boundingBox();
   expect(volumeBox).not.toBeNull();
   await page.mouse.click(
     volumeBox!.x + volumeBox!.width * 0.42,

@@ -130,10 +130,13 @@ test("manages folders and shows scan progress and terminal states", async ({ pag
   await expect(page.getByText("C:/More Music", { exact: true })).toBeVisible();
 
   const include = page.getByRole("checkbox", { name: /Include C:\/Music in library/ }).first();
-  await include.uncheck();
-  await expect(page.getByText("Excluded from library")).toBeVisible();
-  await include.check();
-  await expect(page.getByText("Included in library")).toBeVisible();
+  const musicRow = page.getByRole("listitem").filter({ hasText: /^C:\/Music(?!\/)/ });
+  await include.click();
+  await expect(include).not.toBeChecked();
+  await expect(musicRow.getByText("Excluded from library")).toBeVisible();
+  await include.click();
+  await expect(include).toBeChecked();
+  await expect(musicRow.getByText("Included in library")).toBeVisible();
 
   await page.getByRole("button", { name: "Rescan" }).click();
   await expect(page.getByRole("status")).toContainText("Scanning");

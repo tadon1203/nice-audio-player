@@ -9,7 +9,9 @@ test("shows playback initialization failure instead of remaining loading", async
   const playbackError = dock.getByRole("alert");
   await expect(playbackError).toHaveText("No audio output device is available.");
   await playbackError.focus();
-  await expect(page.getByRole("tooltip")).toHaveText("No audio output device is available.");
+  await expect(page.locator('[data-slot="tooltip-content"]')).toHaveText(
+    "No audio output device is available.",
+  );
   await expect(page.getByRole("button", { name: "Mute", exact: true })).toBeDisabled();
 });
 

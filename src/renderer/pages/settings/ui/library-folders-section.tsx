@@ -281,13 +281,8 @@ export function LibraryFoldersSection() {
           Scan failed{scan.failureCode ? `: ${scan.failureCode}` : ""}.
         </p>
       ) : null}
-      {scan?.state === "cancelled" ? (
-        <p className="mt-4 text-sm text-muted-foreground" role="status">
-          Scan cancelled.
-        </p>
-      ) : null}
       {scan?.state === "completed" ? (
-        <p className="mt-4 flex items-center gap-2 text-sm text-muted-foreground" role="status">
+        <p className="mt-4 flex items-center gap-2 text-sm text-muted-foreground">
           <Check className="size-4" aria-hidden="true" />
           Scan complete: {formatCount(scan.discoveredCount, "discovered")},{" "}
           {formatCount(scan.inspectedCount, "inspected")},{" "}
