@@ -1,20 +1,8 @@
-import { useEffect, useState } from "react";
-import {
-  Album,
-  Copy,
-  LibraryBig,
-  ListMusic,
-  Menu,
-  Minimize,
-  Settings2,
-  Square,
-  X,
-  type LucideIcon,
-} from "lucide-react";
-import { isTauri } from "@tauri-apps/api/core";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { useState } from "react";
+import { Album, LibraryBig, ListMusic, Menu, Settings2, X, type LucideIcon } from "lucide-react";
 import { Link, Outlet, useRouterState } from "@tanstack/react-router";
 import { PlaybackRegion } from "@/renderer/widgets/playback-region";
+import { WindowControls } from "@/renderer/widgets/window-controls";
 import { Button } from "@/renderer/shared/ui/shadcn/button";
 import {
   Sheet,
@@ -115,77 +103,6 @@ export function AppShell() {
       <div className="col-span-full h-full min-h-0 min-w-0">
         <PlaybackRegion />
       </div>
-    </div>
-  );
-}
-
-function WindowControls() {
-  const [maximized, setMaximized] = useState(false);
-
-  useEffect(() => {
-    if (!isTauri()) return;
-
-    const appWindow = getCurrentWindow();
-    let disposed = false;
-    let unlisten: (() => void) | undefined;
-
-    void appWindow.isMaximized().then((value) => {
-      if (!disposed) setMaximized(value);
-    });
-    void appWindow
-      .onResized(() => {
-        void appWindow.isMaximized().then((value) => {
-          if (!disposed) setMaximized(value);
-        });
-      })
-      .then((stopListening) => {
-        if (disposed) stopListening();
-        else unlisten = stopListening;
-      });
-
-    return () => {
-      disposed = true;
-      unlisten?.();
-    };
-  }, []);
-
-  if (!isTauri()) return null;
-
-  const appWindow = getCurrentWindow();
-
-  return (
-    <div className="flex h-10 shrink-0 items-stretch" aria-label="Window controls" role="group">
-      <Button
-        type="button"
-        variant="ghost"
-        className="size-10 rounded-none"
-        aria-label="Minimize window"
-        onClick={() => void appWindow.minimize()}
-      >
-        <Minimize aria-hidden="true" className="size-4" />
-      </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        className="size-10 rounded-none"
-        aria-label={maximized ? "Restore window" : "Maximize window"}
-        onClick={() => void appWindow.toggleMaximize()}
-      >
-        {maximized ? (
-          <Copy aria-hidden="true" className="size-3.5" />
-        ) : (
-          <Square aria-hidden="true" className="size-3.5" />
-        )}
-      </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        className="size-10 rounded-none hover:bg-destructive hover:text-destructive-foreground"
-        aria-label="Close window"
-        onClick={() => void appWindow.close()}
-      >
-        <X aria-hidden="true" className="size-4" />
-      </Button>
     </div>
   );
 }

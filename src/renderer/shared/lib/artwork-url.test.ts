@@ -7,7 +7,7 @@ describe("artworkUrl", () => {
   it("maps canonical artwork identities to the custom protocol", () => {
     expect(
       artworkUrl({ contentHash: hash, mimeType: "jpeg", relativePath: `artwork/ab/${hash}.jpg` }),
-    ).toBe(`nice-artwork://asset/artwork/ab/${hash}.jpg`);
+    ).toBe(`http://nice-artwork.localhost/artwork/ab/${hash}.jpg`);
   });
 
   it("rejects paths that do not match the content identity", () => {
