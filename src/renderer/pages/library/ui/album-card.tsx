@@ -27,7 +27,12 @@ export function AlbumCard({
       />
       <div className="mt-3 min-w-0">
         <h2 className="truncate text-sm font-medium text-foreground">{album.key.title}</h2>
-        <p className="mt-1 truncate text-sm text-muted-foreground">{album.key.albumArtist}</p>
+        <div className="mt-1 flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
+          <p className="min-w-0 flex-1 truncate" title={album.key.albumArtist}>
+            {album.key.albumArtist}
+          </p>
+          <span className="shrink-0 tabular-nums">{album.year ?? "—"}</span>
+        </div>
       </div>
     </Link>
   );

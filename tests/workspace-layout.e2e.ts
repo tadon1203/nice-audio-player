@@ -1,7 +1,7 @@
 import { expect, test, type Locator } from "@playwright/test";
-import { installElectronApi } from "./fixtures/electron-api";
+import { installNativeApi } from "./fixtures/native-api";
 
-test.beforeEach(async ({ page }) => installElectronApi(page));
+test.beforeEach(async ({ page }) => installNativeApi(page));
 
 async function boxOf(locator: Locator) {
   const box = await locator.boundingBox();
@@ -42,9 +42,7 @@ test("keeps workspace views on one shared left edge and fills media grids from t
 
   await page.getByRole("link", { name: "Albums", exact: true }).click();
   await albums.nth(0).click();
-  const backToAlbums = page
-    .getByRole("main")
-    .getByRole("link", { name: "Albums", exact: true });
+  const backToAlbums = page.getByRole("main").getByRole("link", { name: "Albums", exact: true });
   expect(Math.abs((await leftOf(backToAlbums)) - workspaceLeft)).toBeLessThan(2);
 });
 
@@ -52,7 +50,7 @@ test("keeps sort controls in one control row", async ({ page }) => {
   await page.setViewportSize({ width: 1360, height: 900 });
   await page.goto("/library/albums");
 
-  const select = page.getByRole("combobox", { name: "Sort library" });
+  const select = page.getByRole("combobox", { name: "Sort albums" });
   const direction = page.getByRole("button", { name: "Sort descending" });
   const selectBox = await boxOf(select);
   const directionBox = await boxOf(direction);

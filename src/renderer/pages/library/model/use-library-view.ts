@@ -42,6 +42,7 @@ export function useLibraryView(presentation: LibraryPresentation) {
         if (!isAlbumSortKey(sortKey)) return Promise.resolve();
         return navigate({
           to: presentationPath.albums,
+          replace: true,
           search: (previous) => ({
             ...previous,
             albumsSort: sortKey,
@@ -52,6 +53,7 @@ export function useLibraryView(presentation: LibraryPresentation) {
       toggleDirection: () =>
         navigate({
           to: presentationPath.albums,
+          replace: true,
           search: (previous) => ({
             ...previous,
             albumsDirection: flipDirection(search.albumsDirection),
@@ -83,6 +85,7 @@ export function useLibraryView(presentation: LibraryPresentation) {
         if (!isArtistSortKey(sortKey)) return Promise.resolve();
         return navigate({
           to: presentationPath.albumArtists,
+          replace: true,
           search: (previous) => ({
             ...previous,
             artistsSort: sortKey,
@@ -93,6 +96,7 @@ export function useLibraryView(presentation: LibraryPresentation) {
       toggleDirection: () =>
         navigate({
           to: presentationPath.albumArtists,
+          replace: true,
           search: (previous) => ({
             ...previous,
             artistsDirection: flipDirection(search.artistsDirection),
@@ -122,6 +126,7 @@ export function useLibraryView(presentation: LibraryPresentation) {
     setTrackSort: (sortKey: LibraryTrackSortKey, direction: LibrarySortDirection) =>
       navigate({
         to: presentationPath.tracks,
+        replace: true,
         search: (previous) => ({
           ...previous,
           tracksSort: sortKey,

@@ -10,7 +10,7 @@ Implementation structure belongs in `architecture.md`. Visual and interaction de
 
 ## #91 migration scope
 
-The final Angular implementation at commit `0e51ea49ec9f0547dbf10a6f03260dc2ed1b1ab2` defines semantic UI parity and therefore the renderer migration scope for #91. Preserve its views, operations, states, and navigation hierarchy. The responsive navigation is an accepted adaptation: below 768 CSS px, a visible control opens the application navigation; at 768 CSS px and above, navigation remains visible in a persistent sidebar. General product requirements continue to govern domain behavior and constraints; they do not justify adding renderer views or shell decoration beyond this accepted adaptation.
+The final Angular implementation at commit `0e51ea49ec9f0547dbf10a6f03260dc2ed1b1ab2` remains the semantic parity baseline for the renderer migration. Preserve its views, operations, states, and navigation hierarchy unless a later accepted product decision explicitly replaces a shell or interaction detail. The accepted shell uses application-owned chrome: below 768 CSS px, a visible control opens application navigation in a sheet; at 768 CSS px and above, navigation remains visible in a persistent sidebar. The Windows shell uses a frameless Tauri window with accessible application-owned minimize, maximize/restore, and close controls. The standard Windows menu bar is not part of the product surface.
 
 ## Platform
 

@@ -1,4 +1,4 @@
-import { useDeferredValue, useMemo, useRef } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef } from "react";
 import { useElementScrollRestoration } from "@tanstack/react-router";
 import type {
   LibraryAlbumArtistSummary,
@@ -12,7 +12,7 @@ import {
   useLibraryStatus,
 } from "@/renderer/entities/library";
 import { usePlaybackActions, useTrackPlaybackState } from "@/renderer/features/playback-control";
-import { Alert } from "@/renderer/shared/ui/shadcn/alert";
+import { Alert, AlertAction, AlertDescription } from "@/renderer/shared/ui/shadcn/alert";
 import { Button } from "@/renderer/shared/ui/shadcn/button";
 import { Empty, EmptyDescription } from "@/renderer/shared/ui/shadcn/empty";
 import { Spinner } from "@/renderer/shared/ui/shadcn/spinner";
@@ -29,6 +29,8 @@ const presentationMeta = {
     title: "Albums",
     singular: "album",
     plural: "albums",
+    searchLabel: "Search albums",
+    searchPlaceholder: "Search albums…",
     sortOptions: [
       { key: "title", label: "Album title" },
       { key: "artist", label: "Album artist" },
@@ -39,6 +41,8 @@ const presentationMeta = {
     title: "Album Artists",
     singular: "album artist",
     plural: "album artists",
+    searchLabel: "Search album artists",
+    searchPlaceholder: "Search album artists…",
     sortOptions: [
       { key: "artist", label: "Artist" },
       { key: "albumCount", label: "Album count" },
@@ -49,6 +53,8 @@ const presentationMeta = {
     title: "Tracks",
     singular: "track",
     plural: "tracks",
+    searchLabel: "Search tracks",
+    searchPlaceholder: "Search tracks…",
     sortOptions: [],
   },
 } as const;
@@ -58,6 +64,7 @@ export function LibraryPage({ presentation }: { presentation: LibraryPresentatio
   const view = useLibraryView(presentation);
   const deferredFilter = useDeferredValue(view.filter);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const previousViewStateRef = useRef<string | null>(null);
   const scrollRestorationId = `library-${presentation}`;
   const scrollEntry = useElementScrollRestoration({ id: scrollRestorationId });
   const statusQuery = useLibraryStatus();
@@ -75,7 +82,7 @@ export function LibraryPage({ presentation }: { presentation: LibraryPresentatio
       view.presentation === "tracks"
         ? (query.items as readonly LibraryTrackSummary[]).map(toTrackRow)
         : [],
-    [presentation, query.items],
+    [view.presentation, query.items],
   );
   const count = query.totalCount;
   const countLabel = `${count === null ? "—" : count.toLocaleString()} ${
@@ -83,13 +90,33 @@ export function LibraryPage({ presentation }: { presentation: LibraryPresentatio
   }`;
   const initialLoading = statusQuery.isPending || (catalogEnabled && query.isPending);
   const catalogVisible = catalogEnabled && !statusQuery.isError && statusMessage === null;
+  const viewStateKey = `${view.presentation}\u0000${view.filter}\u0000${view.sortKey}\u0000${view.direction}`;
+
+  useEffect(() => {
+    if (previousViewStateRef.current === null) {
+      previousViewStateRef.current = viewStateKey;
+      return;
+    }
+    if (previousViewStateRef.current !== viewStateKey) {
+      previousViewStateRef.current = viewStateKey;
+      scrollContainerRef.current?.scrollTo({ top: 0 });
+    }
+  }, [viewStateKey]);
 
   return (
     <div className="grid h-full min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden">
       <LibraryToolbar
         title={meta.title}
         countLabel={countLabel}
+        searchLabel={meta.searchLabel}
+        searchPlaceholder={meta.searchPlaceholder}
         filter={view.filter}
+        updating={
+          catalogVisible &&
+          !query.isPending &&
+          !query.isFetchingNextPage &&
+          (query.isFetching || query.isPlaceholderData)
+        }
         onFilterChange={(filter) => void view.setFilter(filter)}
         sort={
           view.presentation === "tracks"
@@ -113,7 +140,10 @@ export function LibraryPage({ presentation }: { presentation: LibraryPresentatio
           >
             <div className="pt-6 pb-16">
               {initialLoading ? (
-                <div role="status" className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
+                <div
+                  role="status"
+                  className="flex items-center gap-2 py-8 text-sm text-muted-foreground"
+                >
                   <Spinner className="size-4" />
                   Loading library…
                 </div>
@@ -121,19 +151,41 @@ export function LibraryPage({ presentation }: { presentation: LibraryPresentatio
 
               {statusQuery.isError ? (
                 <Alert variant="destructive" className="my-4" role="alert">
-                  {libraryCommandErrorMessage(statusQuery.error)}
+                  <AlertDescription>
+                    {libraryCommandErrorMessage(statusQuery.error)}
+                  </AlertDescription>
+                  <AlertAction>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void statusQuery.refetch()}
+                    >
+                      Retry
+                    </Button>
+                  </AlertAction>
                 </Alert>
               ) : null}
 
               {!statusQuery.isError && statusMessage ? (
                 <Alert variant="destructive" className="my-4" role="alert">
-                  {statusMessage}
+                  <AlertDescription>{statusMessage}</AlertDescription>
                 </Alert>
               ) : null}
 
               {catalogVisible && query.isError ? (
                 <Alert variant="destructive" className="my-4" role="alert">
-                  {libraryCommandErrorMessage(query.error)}
+                  <AlertDescription>{libraryCommandErrorMessage(query.error)}</AlertDescription>
+                  <AlertAction>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void query.refetch()}
+                    >
+                      Retry
+                    </Button>
+                  </AlertAction>
                 </Alert>
               ) : null}
 

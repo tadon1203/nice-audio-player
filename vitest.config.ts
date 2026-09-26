@@ -30,19 +30,6 @@ export default defineConfig({
           },
         },
         test: {
-          name: "main",
-          environment: "node",
-          include: ["src/main/**/*.test.{ts,tsx}", "src/app/main/**/*.test.{ts,tsx}"],
-        },
-      },
-      {
-        extends: true,
-        resolve: {
-          alias: {
-            "@": resolve(import.meta.dirname, "src"),
-          },
-        },
-        test: {
           name: "shared",
           environment: "node",
           include: ["src/shared/**/*.test.{ts,tsx}", "tests/**/*.test.ts"],

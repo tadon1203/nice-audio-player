@@ -1,28 +1,30 @@
 import { expect, test } from "@playwright/test";
-import { installElectronApi } from "./fixtures/electron-api";
+import { installNativeApi } from "./fixtures/native-api";
 
-test.beforeEach(async ({ page }) => installElectronApi(page));
+test.beforeEach(async ({ page }) => installNativeApi(page));
 
 test("keeps each library filter and sort when switching peers and visiting Settings", async ({
   page,
 }) => {
   await page.goto("/library/albums");
-  const filter = page.getByRole("searchbox", { name: "Filter library" });
+  let filter = page.getByRole("searchbox", { name: "Search albums" });
   await filter.fill("Test album");
   await expect(page.getByText("1 album", { exact: true })).toBeVisible();
   await expect(page).toHaveURL(/\/library\/albums\?/);
-  await page.getByRole("combobox", { name: "Sort library" }).click();
+  await page.getByRole("combobox", { name: "Sort albums" }).click();
   await page.getByRole("option", { name: "Year", exact: true }).click();
   await page.getByRole("button", { name: "Sort descending" }).click();
   await expect.poll(() => new URL(page.url()).searchParams.get("albumsFilter")).toBe("Test album");
 
   await page.getByRole("link", { name: "Album Artists", exact: true }).click();
+  filter = page.getByRole("searchbox", { name: "Search album artists" });
   await filter.fill("Test artist");
-  await page.getByRole("combobox", { name: "Sort library" }).click();
+  await page.getByRole("combobox", { name: "Sort album artists" }).click();
   await page.getByRole("option", { name: "Track count", exact: true }).click();
   await page.getByRole("button", { name: "Sort descending" }).click();
 
   await page.getByRole("link", { name: "Tracks", exact: true }).click();
+  filter = page.getByRole("searchbox", { name: "Search tracks" });
   await filter.fill("Test track");
   await page.getByRole("button", { name: "Sort by Title", exact: true }).click();
   await expect.poll(() => new URL(page.url()).searchParams.get("tracksFilter")).toBe("Test track");
@@ -33,14 +35,16 @@ test("keeps each library filter and sort when switching peers and visiting Setti
     .click();
   await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
   await page.getByRole("link", { name: "Tracks", exact: true }).click();
-  await expect(page.getByRole("searchbox", { name: "Filter library" })).toHaveValue("Test track");
+  await expect(page.getByRole("searchbox", { name: "Search tracks" })).toHaveValue("Test track");
   await page.getByRole("link", { name: "Album Artists", exact: true }).click();
-  await expect(page.getByRole("searchbox", { name: "Filter library" })).toHaveValue("Test artist");
+  await expect(page.getByRole("searchbox", { name: "Search album artists" })).toHaveValue(
+    "Test artist",
+  );
   await page
     .getByRole("navigation", { name: "Application" })
     .getByRole("link", { name: "Albums", exact: true })
     .click();
-  await expect(page.getByRole("searchbox", { name: "Filter library" })).toHaveValue("Test album");
+  await expect(page.getByRole("searchbox", { name: "Search albums" })).toHaveValue("Test album");
 
   const params = new URL(page.url()).searchParams;
   expect(params.get("albumsSort")).toBe("year");
@@ -125,7 +129,7 @@ test("manages folders and shows scan progress and terminal states", async ({ pag
   await page.getByRole("button", { name: "Add folder" }).click();
   await expect(page.getByText("C:/More Music", { exact: true })).toBeVisible();
 
-  const include = page.getByRole("checkbox", { name: "Enabled" }).first();
+  const include = page.getByRole("checkbox", { name: /Include C:\/Music in library/ }).first();
   await include.uncheck();
   await expect(page.getByText("Excluded from library")).toBeVisible();
   await include.check();
@@ -144,12 +148,12 @@ test("manages folders and shows scan progress and terminal states", async ({ pag
   await page.evaluate(() => window.__niceAudioPlayerTest?.setScanState("failed"));
   await expect(page.getByRole("alert")).toContainText("Scan failed: scanFailed");
 
-  await page.getByRole("button", { name: "Remove", exact: true }).nth(1).click();
+  await page.getByRole("button", { name: "Remove C:/More Music from library" }).click();
   const dialog = page.getByRole("alertdialog");
   await expect(dialog).toContainText("C:/More Music");
   await dialog.getByRole("button", { name: "Cancel" }).click();
   await expect(dialog).toBeHidden();
-  await page.getByRole("button", { name: "Remove", exact: true }).nth(1).click();
+  await page.getByRole("button", { name: "Remove C:/More Music from library" }).click();
   await dialog.getByRole("button", { name: "Remove", exact: true }).click();
   await expect(page.getByText("C:/More Music", { exact: true })).toHaveCount(0);
 });
@@ -174,7 +178,10 @@ test("invalidates mounted library queries after terminal scan events and root ch
 
   requestCount = await getCount();
   await page.getByRole("link", { name: "Settings", exact: true }).click();
-  await page.getByRole("checkbox", { name: "Enabled" }).first().uncheck();
+  await page
+    .getByRole("checkbox", { name: /Include C:\/Music in library/ })
+    .first()
+    .uncheck();
   await page.getByRole("link", { name: "Tracks", exact: true }).click();
   await expect.poll(getCount).toBeGreaterThan(requestCount);
   await expect(page.getByText("0 tracks", { exact: true })).toBeVisible();

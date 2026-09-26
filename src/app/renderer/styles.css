@@ -1,6 +1,10 @@
 @import "tailwindcss";
 @source "../../renderer";
 @import "tw-animate-css";
+
+*[data-tauri-drag-region] {
+  app-region: drag;
+}
 @import "shadcn/tailwind.css";
 
 @font-face {
@@ -8,6 +12,14 @@
   src: url("/fonts/fontshare/Satoshi-Variable.woff2") format("woff2");
   font-style: normal;
   font-weight: 300 900;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Noto Sans JP";
+  src: url("/fonts/notosansjp/NotoSansJP-VF.ttf") format("truetype");
+  font-style: normal;
+  font-weight: 100 900;
   font-display: swap;
 }
 
@@ -74,7 +86,7 @@
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.269 0 0);
   --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
+  --accent: oklch(0.225 0 0);
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
   --destructive-foreground: oklch(0.985 0 0);
@@ -90,7 +102,7 @@
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.985 0 0);
   --sidebar-primary-foreground: oklch(0.145 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent: oklch(0.225 0 0);
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 0.08);
   --sidebar-ring: oklch(0.708 0 0);

@@ -35,5 +35,6 @@ export function useArtistDetailsWorkspace(
     loadState,
     error: summary.error ?? albums.error ?? null,
     loadMore: () => (albums.hasNextPage ? albums.fetchNextPage() : Promise.resolve()),
+    reload: () => Promise.all([summary.refetch(), albums.refetch()]),
   };
 }

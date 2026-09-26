@@ -1,21 +1,29 @@
-import { Album, LibraryBig, ListMusic, Settings2, type LucideIcon } from "lucide-react";
+import { useEffect, useState } from "react";
+import {
+  Album,
+  Copy,
+  LibraryBig,
+  ListMusic,
+  Menu,
+  Minimize,
+  Settings2,
+  Square,
+  X,
+  type LucideIcon,
+} from "lucide-react";
+import { isTauri } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Link, Outlet, useRouterState } from "@tanstack/react-router";
 import { PlaybackRegion } from "@/renderer/widgets/playback-region";
+import { Button } from "@/renderer/shared/ui/shadcn/button";
 import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
-  SidebarInset,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarProvider,
-  SidebarTrigger,
-  useSidebar,
-} from "@/renderer/shared/ui/shadcn/sidebar";
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetTitle,
+  SheetTrigger,
+} from "@/renderer/shared/ui/shadcn/sheet";
+import { cn } from "@/renderer/shared/lib/utils";
 
 type NavigationItem = {
   label: string;
@@ -37,74 +45,203 @@ const settingsItem: NavigationItem = {
 
 export function AppShell() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
 
   return (
-    <div className="grid h-full min-h-0 min-w-0 grid-rows-[minmax(0,1fr)_88px] bg-background">
-      <SidebarProvider className="relative h-full w-full overflow-hidden" style={{ minHeight: 0 }}>
-        <Sidebar style={{ position: "absolute", height: "100%" }}>
-          <nav aria-label="Application" className="flex min-h-0 flex-1 flex-col">
-            <SidebarContent className="pt-7 pb-3">
-              <SidebarGroup>
-                <SidebarGroupLabel className="mb-2 text-sm font-normal">
-                  Library
-                </SidebarGroupLabel>
-                <SidebarGroupContent>
-                  <SidebarMenu>
-                    {libraryItems.map((item) => (
-                      <NavigationLink
-                        item={item}
-                        key={item.to}
-                        active={isNavigationActive(pathname, item.to)}
-                      />
-                    ))}
-                  </SidebarMenu>
-                </SidebarGroupContent>
-              </SidebarGroup>
-            </SidebarContent>
-            <SidebarFooter className="pb-5">
-              <SidebarMenu>
-                <NavigationLink
-                  item={settingsItem}
-                  active={isNavigationActive(pathname, settingsItem.to)}
+    <div className="grid h-full min-h-0 min-w-0 grid-cols-[minmax(0,1fr)] grid-rows-[40px_minmax(0,1fr)_88px] bg-background md:grid-cols-[16rem_minmax(0,1fr)]">
+      <header
+        className="col-span-full grid min-w-0 grid-cols-[minmax(0,1fr)_auto] border-b border-border bg-background md:grid-cols-[16rem_minmax(0,1fr)_auto]"
+        data-slot="app-titlebar"
+      >
+        <div className="flex min-w-0 items-center gap-2 border-sidebar-border px-2 md:border-r md:px-4">
+          <Sheet open={mobileNavigationOpen} onOpenChange={setMobileNavigationOpen}>
+            <SheetTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  className="size-9 md:hidden"
+                  aria-label="Open navigation"
                 />
-              </SidebarMenu>
-            </SidebarFooter>
-          </nav>
-        </Sidebar>
+              }
+            >
+              <Menu aria-hidden="true" className="size-4" />
+            </SheetTrigger>
+            <SheetContent
+              side="left"
+              showCloseButton={false}
+              className="w-64 gap-0 border-sidebar-border bg-sidebar p-0 text-sidebar-foreground"
+            >
+              <div className="flex h-10 items-center justify-between border-b border-sidebar-border px-3">
+                <SheetTitle className="text-sm font-medium">Nice Audio Player</SheetTitle>
+                <SheetClose
+                  render={
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      className="size-9"
+                      aria-label="Close navigation"
+                    />
+                  }
+                >
+                  <X aria-hidden="true" className="size-4" />
+                </SheetClose>
+              </div>
+              <Navigation pathname={pathname} onNavigate={() => setMobileNavigationOpen(false)} />
+            </SheetContent>
+          </Sheet>
+          <span
+            className="truncate px-1 text-sm font-medium text-foreground md:px-0"
+            data-tauri-drag-region
+          >
+            Nice Audio Player
+          </span>
+          <div aria-hidden="true" className="min-w-0 flex-1" data-tauri-drag-region />
+        </div>
+        <div aria-hidden="true" className="hidden min-w-0 md:block" data-tauri-drag-region />
+        <WindowControls />
+      </header>
 
-        <SidebarInset className="min-h-0 min-w-0 overflow-hidden">
-          <div className="flex h-12 shrink-0 items-center border-b border-border bg-background px-4 md:hidden">
-            <SidebarTrigger aria-label="Open navigation" />
-          </div>
-          <div className="min-h-0 min-w-0 flex-1 overflow-hidden" data-slot="app-main">
-            <Outlet />
-          </div>
-        </SidebarInset>
-      </SidebarProvider>
+      <aside className="hidden min-h-0 w-64 bg-sidebar text-sidebar-foreground md:flex">
+        <Navigation pathname={pathname} />
+      </aside>
 
-      <PlaybackRegion />
+      <main className="min-h-0 min-w-0 overflow-hidden" data-slot="app-main">
+        <Outlet />
+      </main>
+
+      <div className="col-span-full h-full min-h-0 min-w-0">
+        <PlaybackRegion />
+      </div>
     </div>
   );
 }
 
-function NavigationLink({ item, active }: { item: NavigationItem; active: boolean }) {
-  const Icon = item.icon;
-  const { isMobile, setOpenMobile } = useSidebar();
+function WindowControls() {
+  const [maximized, setMaximized] = useState(false);
+
+  useEffect(() => {
+    if (!isTauri()) return;
+
+    const appWindow = getCurrentWindow();
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+
+    void appWindow.isMaximized().then((value) => {
+      if (!disposed) setMaximized(value);
+    });
+    void appWindow
+      .onResized(() => {
+        void appWindow.isMaximized().then((value) => {
+          if (!disposed) setMaximized(value);
+        });
+      })
+      .then((stopListening) => {
+        if (disposed) stopListening();
+        else unlisten = stopListening;
+      });
+
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, []);
+
+  if (!isTauri()) return null;
+
+  const appWindow = getCurrentWindow();
 
   return (
-    <SidebarMenuItem>
-      <SidebarMenuButton
-        render={<Link to={item.to} activeProps={{ "aria-current": "page" }} />}
-        isActive={active}
-        className="h-10 text-sm text-muted-foreground hover:text-foreground data-active:bg-muted data-active:text-foreground"
-        onClick={() => {
-          if (isMobile) setOpenMobile(false);
-        }}
+    <div className="flex h-10 shrink-0 items-stretch" aria-label="Window controls" role="group">
+      <Button
+        type="button"
+        variant="ghost"
+        className="size-10 rounded-none"
+        aria-label="Minimize window"
+        onClick={() => void appWindow.minimize()}
       >
-        <Icon aria-hidden="true" size={16} strokeWidth={1.8} />
-        <span>{item.label}</span>
-      </SidebarMenuButton>
-    </SidebarMenuItem>
+        <Minimize aria-hidden="true" className="size-4" />
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        className="size-10 rounded-none"
+        aria-label={maximized ? "Restore window" : "Maximize window"}
+        onClick={() => void appWindow.toggleMaximize()}
+      >
+        {maximized ? (
+          <Copy aria-hidden="true" className="size-3.5" />
+        ) : (
+          <Square aria-hidden="true" className="size-3.5" />
+        )}
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        className="size-10 rounded-none hover:bg-destructive hover:text-destructive-foreground"
+        aria-label="Close window"
+        onClick={() => void appWindow.close()}
+      >
+        <X aria-hidden="true" className="size-4" />
+      </Button>
+    </div>
+  );
+}
+
+function Navigation({ pathname, onNavigate }: { pathname: string; onNavigate?: () => void }) {
+  return (
+    <nav
+      aria-label="Application"
+      className="flex min-h-0 flex-1 flex-col px-2 py-5 md:border-r md:border-sidebar-border"
+    >
+      <div className="min-h-0 flex-1">
+        <p className="mb-2 px-2 text-sm text-muted-foreground">Library</p>
+        <div className="space-y-1">
+          {libraryItems.map((item) => (
+            <NavigationLink
+              item={item}
+              key={item.to}
+              active={isNavigationActive(pathname, item.to)}
+              onNavigate={onNavigate}
+            />
+          ))}
+        </div>
+      </div>
+      <NavigationLink
+        item={settingsItem}
+        active={isNavigationActive(pathname, settingsItem.to)}
+        onNavigate={onNavigate}
+      />
+    </nav>
+  );
+}
+
+function NavigationLink({
+  item,
+  active,
+  onNavigate,
+}: {
+  item: NavigationItem;
+  active: boolean;
+  onNavigate?: () => void;
+}) {
+  const Icon = item.icon;
+
+  return (
+    <Link
+      to={item.to}
+      activeProps={{ "aria-current": "page" }}
+      onClick={onNavigate}
+      className={cn(
+        "flex h-10 w-full items-center gap-2 rounded-md px-2 text-sm text-muted-foreground outline-none transition-colors hover:bg-sidebar-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring",
+        active && "bg-muted text-foreground",
+      )}
+    >
+      <Icon aria-hidden="true" size={16} strokeWidth={1.8} />
+      <span className="truncate">{item.label}</span>
+    </Link>
   );
 }
 

@@ -1,6 +1,11 @@
 import { useMemo } from "react";
-import { infiniteQueryOptions, queryOptions, useInfiniteQuery, useQuery } from "@tanstack/react-query";
-import { electronApi } from "@/renderer/shared/lib/electron";
+import {
+  infiniteQueryOptions,
+  queryOptions,
+  useInfiniteQuery,
+  useQuery,
+} from "@tanstack/react-query";
+import { nativeApi } from "@/renderer/shared/lib/native";
 import type {
   LibraryAlbumArtistKey,
   LibraryAlbumArtistPage,
@@ -73,17 +78,17 @@ export const libraryQueryOptions = {
   status: () =>
     queryOptions({
       queryKey: libraryQueryKeys.status,
-      queryFn: () => electronApi().getLibraryStatus(),
+      queryFn: () => nativeApi().getLibraryStatus(),
     }),
   scan: () =>
     queryOptions({
       queryKey: libraryQueryKeys.scan,
-      queryFn: () => electronApi().getLibraryScanState(),
+      queryFn: () => nativeApi().getLibraryScanState(),
     }),
   roots: () =>
     queryOptions({
       queryKey: libraryQueryKeys.roots,
-      queryFn: () => electronApi().listLibraryRoots(),
+      queryFn: () => nativeApi().listLibraryRoots(),
     }),
   catalog: (request: LibraryCatalogRequest, enabled: boolean) =>
     infiniteQueryOptions({
@@ -92,12 +97,16 @@ export const libraryQueryOptions = {
       queryFn: ({ pageParam }) => listCatalogPage(request, pageParam),
       getNextPageParam: (page: CatalogPage) => page.nextCursor ?? undefined,
       enabled,
+      gcTime: Infinity,
     }),
   track: (path: string | null) =>
     queryOptions({
-      queryKey: path ? libraryQueryKeys.track(path) : (["library", "data", "track", "inactive"] as const),
-      queryFn: () => (path ? electronApi().getLibraryTrackForPath(path) : Promise.resolve(null)),
+      queryKey: path
+        ? libraryQueryKeys.track(path)
+        : (["library", "data", "track", "inactive"] as const),
+      queryFn: () => (path ? nativeApi().getLibraryTrackForPath(path) : Promise.resolve(null)),
       enabled: path !== null,
+      gcTime: Infinity,
     }),
 };
 
@@ -114,21 +123,31 @@ export function useLibraryRootsQuery() {
 }
 
 export function useLibraryPresentationQuery(request: LibraryCatalogRequest, enabled = true) {
-  const query = useInfiniteQuery(libraryQueryOptions.catalog(request, enabled));
-  const items = useMemo<CatalogItem[]>(
-    () => query.data?.pages.flatMap((page) => page.items) ?? [],
-    [query.data],
-  );
+  const baseOptions = libraryQueryOptions.catalog(request, enabled);
+  const query = useInfiniteQuery({
+    ...baseOptions,
+    placeholderData: (previousData, previousQuery) => {
+      const previousPresentation = previousQuery?.queryKey[3];
+      return previousPresentation === request.presentation ? previousData : undefined;
+    },
+  });
+  const items = useMemo<CatalogItem[]>(() => {
+    const pages = query.data?.pages;
+    return pages ? pages.flatMap((page) => page.items as CatalogItem[]) : [];
+  }, [query.data]);
 
   return {
     items,
     totalCount: query.data?.pages[0]?.totalCount ?? null,
     isPending: query.isPending,
+    isFetching: query.isFetching,
+    isPlaceholderData: query.isPlaceholderData,
     isError: query.isError,
     error: query.error,
     hasNextPage: query.hasNextPage,
     isFetchingNextPage: query.isFetchingNextPage,
     fetchNextPage: query.fetchNextPage,
+    refetch: query.refetch,
   };
 }
 
@@ -139,9 +158,10 @@ export function useAlbumDetails(key: LibraryAlbumKey | null) {
       : (["library", "data", "album", "detail", "inactive"] as const),
     queryFn: () => {
       if (!key) throw new Error("Album key is required");
-      return electronApi().getLibraryAlbumDetails(key);
+      return nativeApi().getLibraryAlbumDetails(key);
     },
     enabled: key !== null,
+    gcTime: Infinity,
   });
 }
 
@@ -153,15 +173,13 @@ export function useAlbumTracks(key: LibraryAlbumKey | null) {
     initialPageParam: null as string | null,
     queryFn: ({ pageParam }) => {
       if (!key) throw new Error("Album key is required");
-      return electronApi().listLibraryAlbumTracks(key, pageParam);
+      return nativeApi().listLibraryAlbumTracks(key, pageParam);
     },
     getNextPageParam: (page: LibraryAlbumTrackPage) => page.nextCursor ?? undefined,
     enabled: key !== null,
+    gcTime: Infinity,
   });
-  const items = useMemo(
-    () => query.data?.pages.flatMap((page) => page.items) ?? [],
-    [query.data],
-  );
+  const items = useMemo(() => query.data?.pages.flatMap((page) => page.items) ?? [], [query.data]);
 
   return {
     items,
@@ -184,9 +202,10 @@ export function useAlbumArtist(key: LibraryAlbumArtistKey | null) {
       : (["library", "data", "artist", "detail", "inactive"] as const),
     queryFn: () => {
       if (!key) throw new Error("Artist key is required");
-      return electronApi().getLibraryAlbumArtist(key);
+      return nativeApi().getLibraryAlbumArtist(key);
     },
     enabled: key !== null,
+    gcTime: Infinity,
   });
 }
 
@@ -202,15 +221,13 @@ export function useArtistAlbums(
     initialPageParam: null as string | null,
     queryFn: ({ pageParam }) => {
       if (!key) throw new Error("Artist key is required");
-      return electronApi().listLibraryArtistAlbums(key, pageParam, sortKey, direction);
+      return nativeApi().listLibraryArtistAlbums(key, pageParam, sortKey, direction);
     },
     getNextPageParam: (page: LibraryAlbumPage) => page.nextCursor ?? undefined,
     enabled: key !== null,
+    gcTime: Infinity,
   });
-  const items = useMemo(
-    () => query.data?.pages.flatMap((page) => page.items) ?? [],
-    [query.data],
-  );
+  const items = useMemo(() => query.data?.pages.flatMap((page) => page.items) ?? [], [query.data]);
 
   return {
     items,
@@ -222,6 +239,7 @@ export function useArtistAlbums(
     isFetchingNextPage: query.isFetchingNextPage,
     hasNextPage: query.hasNextPage,
     fetchNextPage: query.fetchNextPage,
+    refetch: query.refetch,
   };
 }
 
@@ -233,7 +251,7 @@ function listCatalogPage(
   request: LibraryCatalogRequest,
   cursor: string | null,
 ): Promise<CatalogPage> {
-  const api = electronApi();
+  const api = nativeApi();
   const search = request.filter === "" ? null : request.filter;
   switch (request.presentation) {
     case "albums":

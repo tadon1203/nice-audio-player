@@ -7,7 +7,4 @@ export {
   type PlaybackConnection,
   type TransportCommand,
 } from "./playback-session";
-export {
-  usePlaybackTechnicalStatus,
-  type PlaybackStatusLine,
-} from "./playback-technical-status";
+export { usePlaybackTechnicalStatus, type PlaybackStatusLine } from "./playback-technical-status";

@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { electronApi } from "@/renderer/shared/lib/electron";
+import { nativeApi } from "@/renderer/shared/lib/native";
 import { libraryQueryKeys } from "./queries";
 
 function useInvalidateLibraryData() {
@@ -11,7 +11,7 @@ export function useAddLibraryRoot() {
   const invalidate = useInvalidateLibraryData();
   return useMutation({
     mutationFn: async () => {
-      const api = electronApi();
+      const api = nativeApi();
       const path = await api.selectLibraryDirectory();
       return path === null ? null : api.registerLibraryRoot(path);
     },
@@ -23,7 +23,7 @@ export function useSetLibraryRootEnabled() {
   const invalidate = useInvalidateLibraryData();
   return useMutation({
     mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
-      electronApi().setLibraryRootEnabled(id, enabled),
+      nativeApi().setLibraryRootEnabled(id, enabled),
     onSuccess: invalidate,
   });
 }
@@ -31,7 +31,7 @@ export function useSetLibraryRootEnabled() {
 export function useRemoveLibraryRoot() {
   const invalidate = useInvalidateLibraryData();
   return useMutation({
-    mutationFn: (id: string) => electronApi().removeLibraryRoot(id),
+    mutationFn: (id: string) => nativeApi().removeLibraryRoot(id),
     onSuccess: invalidate,
   });
 }
@@ -39,15 +39,15 @@ export function useRemoveLibraryRoot() {
 export function useStartLibraryScan() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: () => electronApi().startLibraryScan(),
-    onSuccess: (scan) => client.setQueryData(libraryQueryKeys.scan, scan),
+    mutationFn: () => nativeApi().startLibraryScan(),
+    onSuccess: () => client.invalidateQueries({ queryKey: libraryQueryKeys.scan }),
   });
 }
 
 export function useCancelLibraryScan() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: () => electronApi().cancelLibraryScan(),
-    onSuccess: (scan) => client.setQueryData(libraryQueryKeys.scan, scan),
+    mutationFn: () => nativeApi().cancelLibraryScan(),
+    onSuccess: () => client.invalidateQueries({ queryKey: libraryQueryKeys.scan }),
   });
 }

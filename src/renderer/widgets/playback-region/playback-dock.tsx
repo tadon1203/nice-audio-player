@@ -5,12 +5,14 @@ import { formatDuration } from "@/renderer/shared/lib/format-duration";
 import { Artwork } from "@/renderer/shared/ui/artwork";
 import { Button } from "@/renderer/shared/ui/shadcn/button";
 import { Slider } from "@/renderer/shared/ui/shadcn/slider";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/renderer/shared/ui/shadcn/tooltip";
 
 export function PlaybackDock() {
   const playback = usePlaybackSession();
   const active = playback.snapshot?.status === "playing" || playback.snapshot?.status === "paused";
   const playing = playback.snapshot?.status === "playing";
   const [seekPreviewMs, setSeekPreviewMs] = useState<number | null>(null);
+  const [errorTooltipOpen, setErrorTooltipOpen] = useState(false);
   const canSeek = active && playback.durationMs !== null;
   const duration = playback.durationMs ?? 1;
   const seekValue = seekPreviewMs ?? playback.positionMs;
@@ -21,11 +23,14 @@ export function PlaybackDock() {
 
   return (
     <footer
-      className="grid h-full min-h-0 grid-rows-[16px_minmax(0,1fr)] border-t border-border bg-sidebar"
+      className="relative h-full min-h-0 border-t border-border bg-sidebar"
       aria-label="Playback controls"
       data-slot="playback-dock"
     >
-      <div className="flex min-w-0 items-center px-4 lg:px-6" data-region="seek">
+      <div
+        className="absolute inset-x-0 top-0 z-10 flex h-3 min-w-0 items-center"
+        data-region="seek"
+      >
         <PlaybackSlider
           max={duration}
           value={Math.min(seekValue, duration)}
@@ -40,7 +45,10 @@ export function PlaybackDock() {
         />
       </div>
 
-      <div className="grid min-h-0 min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 px-4 py-1 lg:gap-6 lg:px-6">
+      <div
+        className="grid h-full min-h-0 min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 px-4 lg:gap-6 lg:px-6"
+        data-region="playback-main"
+      >
         <div
           className="flex min-w-0 items-center gap-2.5 justify-self-start"
           data-region="playback-identity"
@@ -52,15 +60,34 @@ export function PlaybackDock() {
             className="size-10 shrink-0 rounded-md"
           />
           <div className="min-w-0">
-            <strong className="block truncate text-sm font-medium text-foreground">
+            <strong
+              className="block truncate text-sm font-medium text-foreground"
+              title={playback.title}
+            >
               {playback.title}
             </strong>
             {playback.commandError ? (
-              <span className="mt-0.5 block truncate text-sm text-destructive" role="alert">
-                {playback.commandError}
-              </span>
+              <Tooltip open={errorTooltipOpen} onOpenChange={setErrorTooltipOpen}>
+                <TooltipTrigger
+                  render={
+                    <span
+                      className="mt-0.5 block truncate text-sm text-destructive"
+                      role="alert"
+                      tabIndex={0}
+                    />
+                  }
+                  onFocus={() => setErrorTooltipOpen(true)}
+                  onBlur={() => setErrorTooltipOpen(false)}
+                >
+                  {playback.commandError}
+                </TooltipTrigger>
+                <TooltipContent>{playback.commandError}</TooltipContent>
+              </Tooltip>
             ) : playback.artist ? (
-              <span className="mt-0.5 block truncate text-sm text-muted-foreground">
+              <span
+                className="mt-0.5 block truncate text-sm text-muted-foreground"
+                title={playback.artist}
+              >
                 {playback.artist}
               </span>
             ) : null}
@@ -83,7 +110,7 @@ export function PlaybackDock() {
             <SkipBack aria-hidden="true" />
           </TransportButton>
           <TransportButton
-            label={playing ? "Pause" : "Resume"}
+            label={playing ? "Pause" : active ? "Resume" : "Play"}
             disabled={!active || playback.transportPending !== null}
             onClick={() => void (playing ? playback.pause() : playback.resume())}
             variant="default"
@@ -106,33 +133,33 @@ export function PlaybackDock() {
           </span>
         </div>
 
-        <div
-          className="flex min-w-0 items-center justify-self-end gap-1.5"
-          data-region="volume"
-        >
+        <div className="flex min-w-0 items-center justify-self-end gap-1.5" data-region="volume">
           <Button
             type="button"
             size="icon-sm"
             variant="ghost"
+            className="size-9"
             aria-label={playback.muted ? "Unmute" : "Mute"}
             disabled={playback.mutePending || playback.connection !== "ready"}
             onClick={() => void playback.toggleMute()}
           >
             {playback.muted ? <VolumeX aria-hidden="true" /> : <Volume2 aria-hidden="true" />}
           </Button>
-          <PlaybackSlider
-            max={1}
-            step={0.01}
-            value={playback.volume}
-            label="Volume"
-            valueText={playback.muted ? "Muted" : `${Math.round(playback.volume * 100)} percent`}
-            disabled={playback.connection !== "ready"}
-            onInput={(value) => {
-              playback.setVolume(value);
-              if (playback.muted && !playback.mutePending) void playback.toggleMute();
-            }}
-            className="w-28"
-          />
+          <div className="w-24 shrink-0 sm:w-28" data-region="volume-slider">
+            <PlaybackSlider
+              max={1}
+              step={0.01}
+              value={playback.volume}
+              label="Volume"
+              valueText={playback.muted ? "Muted" : `${Math.round(playback.volume * 100)} percent`}
+              disabled={playback.connection !== "ready"}
+              onInput={(value) => {
+                playback.setVolume(value);
+                if (playback.muted && !playback.mutePending) void playback.toggleMute();
+              }}
+              className="w-full"
+            />
+          </div>
           <span
             className="hidden min-w-20 shrink-0 text-right text-sm tabular-nums text-muted-foreground lg:inline"
             data-region="volume-readout"
@@ -176,8 +203,8 @@ function PlaybackSlider({
       step={step}
       value={[value]}
       disabled={disabled}
-      aria-label={label}
-      aria-valuetext={valueText}
+      getAriaLabel={() => label}
+      getAriaValueText={valueText === undefined ? undefined : () => valueText}
       onValueChange={(next) => onInput?.(readValue(next))}
       onValueCommitted={(next) => onCommit?.(readValue(next))}
     />
@@ -202,6 +229,7 @@ function TransportButton({
       type="button"
       size="icon-sm"
       variant={variant}
+      className="size-9"
       aria-label={label}
       title={label}
       disabled={disabled}

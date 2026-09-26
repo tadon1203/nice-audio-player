@@ -3,7 +3,7 @@ import { PlaybackStatus } from "./playback-status";
 
 export function PlaybackRegion() {
   return (
-    <div className="grid min-h-0 grid-rows-[minmax(0,1fr)_24px]">
+    <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_24px]">
       <PlaybackDock />
       <PlaybackStatus />
     </div>

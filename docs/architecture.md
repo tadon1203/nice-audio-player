@@ -7,21 +7,22 @@ This document defines system structure, ownership, and dependency direction. Pro
 ## System overview
 
 ```text
-React Renderer → sandboxed Preload → Electron Main → NAPI-RS/Rust/SQLite
+React Renderer → Tauri commands/events → Rust backend/SQLite
 ```
 
-Rust owns domain behavior, persistence, filesystem work, and audio playback. Electron Main owns lifecycle, security, protocols, and IPC. React owns view composition only.
+Rust owns domain behavior, persistence, filesystem work, audio playback, and the privileged desktop boundary. Tauri owns the Windows WebView host, command/event transport, capability policy, window lifecycle, and local artwork protocol. React owns view composition only.
 
 ## Source boundaries
 
 ```text
-src/app/{main,preload,renderer}  entry points and composition
-src/main/{features,shared}       privileged Electron implementation
+src/app/renderer                 renderer entry point and composition
 src/renderer/{pages,widgets,features,entities,shared}  FSD renderer slices
-src/shared/ipc                   structured-clone IPC contract
+src/shared/ipc                   validated command and event contract
+src-tauri                        Tauri shell, commands, capabilities, packaging
+backend                          Rust domain services, persistence, and audio
 ```
 
-Main and Renderer never import each other. Both may import `src/shared`; slice consumers use each slice's public `index.ts`. The native addon is imported only by `src/main/shared/native-backend` and is instantiated once in Main.
+Renderer code never imports Rust implementation details. Renderer-to-native access is restricted to named Tauri commands, the dialog plugin, window APIs, and validated events. Rust command handlers call the existing backend services; no N-API addon or parallel domain implementation is used.
 
 ## Renderer state
 
@@ -29,6 +30,6 @@ TanStack Router owns navigation, validated search state, URL history, and scroll
 
 ## IPC and distribution
 
-`src/shared/ipc` defines allow-listed channels, Zod validation, DTOs, invoke maps, and renderer events. Preload exposes only `window.electron`; it exposes neither `ipcRenderer` nor arbitrary invocation. Every Main handler validates sender, arguments, and response.
+`src/shared/ipc` defines command identifiers, Zod request/response validation, DTOs, and event schemas. `src/renderer/shared/lib/native.ts` is the sole frontend adapter: it validates requests and responses and exposes only the typed application API. Tauri capabilities grant the main window only the native permissions required by the application.
 
-electron-vite builds Main (ESM), sandboxed Preload (CJS), and Renderer from one configuration into `out/{main,preload,renderer}`. electron-builder packages the Windows x64 NSIS artifact, keeps the NAPI addon outside ASAR, and does not own development builds.
+Vite builds the React renderer into `dist`; the Tauri CLI builds and packages the Rust host and Windows NSIS installer. Tauri's `nice-artwork` URI handler serves only canonical content-addressed artwork beneath application data. The frameless Tauri window uses the app-owned 40px title surface and Tauri's explicit drag-region support.

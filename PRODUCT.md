@@ -20,7 +20,7 @@ Nice Audio Player provides stable playback and local-library browsing. Users sho
 
 ## Operating Context
 
-The product runs as an Electron desktop application with a React renderer, a narrow Preload bridge, an Electron Main process, and a Rust/NAPI backend. Library data and source audio remain local unless an explicitly accepted external feature is enabled.
+The product runs as a Tauri desktop application with a React renderer and Rust backend. Library data and source audio remain local unless an explicitly accepted external feature is enabled.
 
 ## Capabilities and Constraints
 

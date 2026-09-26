@@ -5,7 +5,7 @@ import type {
   LibraryAlbumKey,
   PlaybackQueue,
   PlaybackState,
-  TElectronAPI,
+  TNativeAPI,
 } from "@/shared/ipc";
 import { useLibraryTrackForPath } from "@/renderer/entities/library";
 import { playbackCommandErrorMessage } from "./playback-errors";
@@ -53,9 +53,9 @@ export function createPlaybackStore(): UseBoundStore<StoreApi<PlaybackStoreState
 }
 
 export function createPlaybackController(store: UseBoundStore<StoreApi<PlaybackStoreState>>) {
-  let api: TElectronAPI | null = null;
+  let api: TNativeAPI | null = null;
   let initializePromise: Promise<void> | null = null;
-  let initializedApi: TElectronAPI | null = null;
+  let initializedApi: TNativeAPI | null = null;
   let requestedVolume: number | null = null;
   let volumeWriteActive = false;
 
@@ -115,7 +115,7 @@ export function createPlaybackController(store: UseBoundStore<StoreApi<PlaybackS
     }
   };
 
-  const initialize = async (nextApi: TElectronAPI) => {
+  const initialize = async (nextApi: TNativeAPI) => {
     if (initializePromise && initializedApi === nextApi) return initializePromise;
     initializedApi = nextApi;
     api = nextApi;
@@ -144,8 +144,7 @@ export function createPlaybackController(store: UseBoundStore<StoreApi<PlaybackS
     acceptEvent,
     acceptPlayback,
     acceptQueue,
-    startLibraryTrack: (id: string) =>
-      runTransport("startTrack", () => api!.startLibraryTrack(id)),
+    startLibraryTrack: (id: string) => runTransport("startTrack", () => api!.startLibraryTrack(id)),
     startLibraryAlbum: (key: LibraryAlbumKey) =>
       runTransport("startAlbum", () => api!.startLibraryAlbum(key)),
     pause: () => runTransport("pause", () => api!.pausePlayback()),

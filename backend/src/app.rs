@@ -10,9 +10,9 @@ pub enum BackendError {
 }
 
 pub struct BackendApp {
-    pub(crate) playback: PlaybackService,
-    pub(crate) activities: ApplicationActivityService,
-    pub(crate) library: LibraryService,
+    pub playback: PlaybackService,
+    pub activities: ApplicationActivityService,
+    pub library: LibraryService,
     _lyrics: LyricsService,
 }
 
@@ -82,7 +82,7 @@ impl BackendApp {
         .map_err(|_| crate::library::service::StartLibraryAlbumTrackError::TaskFailed)?
     }
 
-    pub(crate) fn shutdown(&self) {
+    pub fn shutdown(&self) {
         self.playback.shutdown();
         self.library.shutdown();
     }

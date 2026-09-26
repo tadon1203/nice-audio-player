@@ -13,15 +13,15 @@ Every source document listed in `AGENTS.md` begins with its title and a `## Docu
 - Keep each change focused on one logical responsibility.
 - Do not weaken type checking, linting, tests, security, accessibility, or performance constraints to make a change pass.
 - New or changed product-visible behavior includes automated coverage in the same change.
-- Generated NAPI declarations are changed only through `pnpm bindings:update`; `pnpm bindings:check` detects drift.
+- Keep Tauri commands and the typed IPC contracts in `src/shared/ipc` in sync.
 - Rust remains authoritative for domain and persistent state. Renderer state may cache or mirror backend state but must not replace it.
 - TanStack Router is the navigation authority. TanStack Query owns native read caches. Zustand owns renderer-local interaction state.
 
 ## Renderer boundaries
 
-- Renderer code under `src/renderer/**` must not import `electron`, `node:*`, or `src/main/**`.
-- Renderer access to native capabilities goes through the shared `TElectronAPI` contract and `window.electron`.
-- Main validates IPC senders and Zod-validated arguments before invoking the backend.
+- Renderer code under `src/renderer/**` must not import `node:*` or Tauri Rust implementation modules.
+- Renderer access to native capabilities goes through the typed Tauri adapter in `src/renderer/shared/lib/native.ts`.
+- Tauri commands validate arguments and return typed results; capabilities expose only required native APIs.
 - Direct DOM mutation is prohibited; use React rendering and event handlers.
 - Use semantic HTML and preserve visible keyboard focus, logical focus order, and WCAG AA contrast.
 
@@ -48,11 +48,10 @@ Use the smallest command that covers the change:
 
 - `pnpm check` — TypeScript, Oxfmt, and Oxlint
 - `pnpm test` — Vitest tests
-- `pnpm build` — Renderer, Electron, and native production build
-- `pnpm test:e2e` — Playwright end-to-end tests
-- `pnpm package` — electron-builder package
-- `pnpm bindings:check` — generated native contract drift check
+- `pnpm build` — production renderer build
+- `pnpm test:e2e` — renderer Playwright and Tauri desktop WebDriver tests
+- `pnpm package` — Tauri Windows installer
 - `pnpm fonts:check` — bundled font integrity check
-- `pnpm validate` — full repository validation, including native build, tests, E2E, and production build
+- `pnpm validate` — full repository validation, including backend and Tauri checks, tests, E2E, and production build
 
 Run native tests when backend code changes and E2E tests when startup, IPC, routing, or packaged integration changes.

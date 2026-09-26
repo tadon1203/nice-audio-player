@@ -8,9 +8,9 @@
   },
   "include": [
     "vite*.config.ts",
-    "electron.vite.config.ts",
     "scripts/**/*.mjs",
     "vitest.config.ts",
-    "playwright.config.ts"
+    "playwright.config.ts",
+    "wdio.conf.ts"
   ]
 }

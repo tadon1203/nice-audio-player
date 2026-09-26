@@ -3,20 +3,12 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@/*": [
-        "./src/*"
-      ]
+      "@/*": ["./src/*"]
     }
   },
   "references": [
     {
       "path": "./tsconfig.renderer.json"
-    },
-    {
-      "path": "./tsconfig.main.json"
-    },
-    {
-      "path": "./tsconfig.preload.json"
     },
     {
       "path": "./tsconfig.tools.json"

@@ -4,6 +4,8 @@ node_modules/
 /.angular/
 /.agents/
 backend/target/
+/src-tauri/target/
+/src-tauri/gen/schemas/
 build/
 dist/
 out/

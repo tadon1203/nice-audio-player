@@ -1,6 +1,6 @@
 packages:
   - .
 allowBuilds:
-  electron: true
-  electron-winstaller: true
+  edgedriver: true
   esbuild: true
+  geckodriver: false

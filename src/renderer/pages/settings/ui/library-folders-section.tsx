@@ -58,23 +58,16 @@ export function LibraryFoldersSection() {
   const roots = rootsQuery.data ?? [];
   const scan = scanQuery.data;
   const scanRunning = scan?.state === "running";
-  const error = [
-    rootsQuery.error,
-    scanQuery.error,
-    addRoot.error,
-    setEnabled.error,
-    removeRoot.error,
-    startScan.error,
-    cancelScan.error,
-  ].find(Boolean);
   const scanProgress =
     scan && scan.inspectedCount !== null
       ? `${scan.inspectedCount.toLocaleString()} inspected`
       : null;
+  const scanControlError = startScan.error ?? cancelScan.error ?? scanQuery.error;
 
   const confirmRemove = () => {
     if (!removeTarget) return;
     const target = removeTarget;
+    removeRoot.reset();
     setRemoveTarget(null);
     removeRoot.mutate(target.id);
   };
@@ -90,28 +83,38 @@ export function LibraryFoldersSection() {
             Choose where your music lives.
           </p>
         </div>
-        <Button
-          type="button"
-          onClick={() => addRoot.mutate()}
-          disabled={scanRunning || addRoot.isPending}
-        >
-          {addRoot.isPending ? (
-            <Spinner className="size-4" />
-          ) : (
-            <FolderPlus className="size-4" aria-hidden="true" />
-          )}
-          Add folder
-        </Button>
+        <div className="flex max-w-sm flex-col items-end gap-2">
+          <Button
+            type="button"
+            onClick={() => {
+              addRoot.reset();
+              addRoot.mutate();
+            }}
+            disabled={scanRunning || addRoot.isPending}
+          >
+            {addRoot.isPending ? (
+              <Spinner className="size-4" />
+            ) : (
+              <FolderPlus className="size-4" aria-hidden="true" />
+            )}
+            Add folder
+          </Button>
+          {addRoot.error ? (
+            <p className="text-right text-sm text-destructive" role="alert">
+              {libraryCommandErrorMessage(addRoot.error)}
+            </p>
+          ) : null}
+        </div>
       </div>
 
-      {error ? (
+      {rootsQuery.isError ? (
         <Alert variant="destructive" className="mt-5" role="alert">
           <AlertCircle aria-hidden="true" />
-          <AlertDescription>{libraryCommandErrorMessage(error)}</AlertDescription>
+          <AlertDescription>{libraryCommandErrorMessage(rootsQuery.error)}</AlertDescription>
         </Alert>
       ) : null}
 
-      <div className="mt-6 flex flex-wrap items-center justify-between gap-4">
+      <div className="mt-6 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h3 id="library-folders-heading" className="text-base font-medium text-foreground">
             Library folders
@@ -120,27 +123,45 @@ export function LibraryFoldersSection() {
             Enable a folder to include its audio files in the catalog.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <span role="status" aria-live="polite" className="text-sm text-muted-foreground">
-            {scanLabel(scan?.state)}
-            {scanProgress ? ` · ${scanProgress}` : ""}
-          </span>
-          {scanRunning ? (
-            <Button type="button" variant="outline" onClick={() => cancelScan.mutate()}>
-              <X className="size-4" aria-hidden="true" />
-              Cancel scan
-            </Button>
-          ) : (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => startScan.mutate()}
-              disabled={scanQuery.isPending || roots.length === 0 || startScan.isPending}
-            >
-              <RefreshCw className="size-4" aria-hidden="true" />
-              Rescan
-            </Button>
-          )}
+        <div className="flex max-w-sm flex-col items-end gap-2">
+          <div className="flex items-center gap-2">
+            <span role="status" aria-live="polite" className="text-sm text-muted-foreground">
+              {scanLabel(scan?.state)}
+              {scanProgress ? ` · ${scanProgress}` : ""}
+            </span>
+            {scanRunning ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  cancelScan.reset();
+                  cancelScan.mutate();
+                }}
+                disabled={cancelScan.isPending}
+              >
+                <X className="size-4" aria-hidden="true" />
+                Cancel scan
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  startScan.reset();
+                  startScan.mutate();
+                }}
+                disabled={scanQuery.isPending || roots.length === 0 || startScan.isPending}
+              >
+                <RefreshCw className="size-4" aria-hidden="true" />
+                Rescan
+              </Button>
+            )}
+          </div>
+          {scanControlError ? (
+            <p className="text-right text-sm text-destructive" role="alert">
+              {libraryCommandErrorMessage(scanControlError)}
+            </p>
+          ) : null}
         </div>
       </div>
 
@@ -175,7 +196,10 @@ export function LibraryFoldersSection() {
           Loading library folders…
         </div>
       ) : rootsQuery.isError ? null : roots.length === 0 ? (
-        <div className="mt-5 border-y border-border py-8 text-sm text-muted-foreground" role="status">
+        <div
+          className="mt-5 border-y border-border py-8 text-sm text-muted-foreground"
+          role="status"
+        >
           No library folders yet. Add a folder to start building your library.
         </div>
       ) : (
@@ -187,6 +211,12 @@ export function LibraryFoldersSection() {
             const pending =
               (setEnabled.isPending && setEnabled.variables?.id === root.id) ||
               (removeRoot.isPending && removeRoot.variables === root.id);
+            const rowError =
+              setEnabled.error && setEnabled.variables?.id === root.id
+                ? setEnabled.error
+                : removeRoot.error && removeRoot.variables === root.id
+                  ? removeRoot.error
+                  : null;
             return (
               <Item
                 key={root.id}
@@ -201,30 +231,41 @@ export function LibraryFoldersSection() {
                     {root.enabled ? "Included in library" : "Excluded from library"}
                     {root.lastSuccessfulScanAtMs !== null ? " · Scanned" : " · Not scanned"}
                   </ItemDescription>
+                  {rowError ? (
+                    <p className="mt-1 text-sm text-destructive" role="alert">
+                      {libraryCommandErrorMessage(rowError)}
+                    </p>
+                  ) : null}
                 </ItemContent>
                 <ItemActions className="w-full justify-end gap-3 sm:w-auto">
                   <Field className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Checkbox
                       id={`enabled-${root.id}`}
+                      aria-label={`Include ${root.path} in library`}
                       checked={root.enabled}
                       disabled={scanRunning || pending}
-                      onCheckedChange={(checked) =>
-                        setEnabled.mutate({ id: root.id, enabled: checked === true })
-                      }
+                      onCheckedChange={(checked) => {
+                        setEnabled.reset();
+                        setEnabled.mutate({ id: root.id, enabled: checked === true });
+                      }}
                     />
                     <FieldLabel
                       htmlFor={`enabled-${root.id}`}
                       className="font-normal text-muted-foreground max-sm:sr-only"
                     >
-                      Enabled
+                      Include {root.path} in library
                     </FieldLabel>
                   </Field>
                   <Button
                     type="button"
                     variant="destructive"
                     size="sm"
+                    aria-label={`Remove ${root.path} from library`}
                     disabled={scanRunning || pending}
-                    onClick={() => setRemoveTarget(root)}
+                    onClick={() => {
+                      removeRoot.reset();
+                      setRemoveTarget(root);
+                    }}
                   >
                     Remove
                   </Button>
@@ -237,7 +278,7 @@ export function LibraryFoldersSection() {
 
       {scan?.state === "failed" ? (
         <p className="mt-4 text-sm text-destructive" role="alert">
-          Scan failed.
+          Scan failed{scan.failureCode ? `: ${scan.failureCode}` : ""}.
         </p>
       ) : null}
       {scan?.state === "cancelled" ? (
@@ -250,8 +291,7 @@ export function LibraryFoldersSection() {
           <Check className="size-4" aria-hidden="true" />
           Scan complete: {formatCount(scan.discoveredCount, "discovered")},{" "}
           {formatCount(scan.inspectedCount, "inspected")},{" "}
-          {formatCount(scan.indexedCount, "indexed")},{" "}
-          {formatCount(scan.failedCount, "failed")}.
+          {formatCount(scan.indexedCount, "indexed")}, {formatCount(scan.failedCount, "failed")}.
         </p>
       ) : null}
 

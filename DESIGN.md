@@ -94,7 +94,7 @@ Normal boundaries use a 1px `--border` or `--input` border. Focus appearance is 
 
 Tailwind exposes the standard shadcn utilities such as `bg-background`, `bg-card`, `bg-muted`, `bg-accent`, `text-foreground`, `text-muted-foreground`, `border-border`, `border-input`, and `ring-ring`. Product-specific layout is composed with utility classes in React. Only recurring values that Tailwind cannot express cleanly belong in the `@theme` block in `styles.css`.
 
-Layout uses Tailwind's standard spacing, container widths, and mobile-first breakpoints. Prefer intrinsic layout such as flex wrapping and content-driven sizing before adding a breakpoint. Reusable compositions use container queries when their layout depends on available component width. The shadcn Sidebar owns navigation responsiveness at its standard `md` boundary. The persistent playback region is 88px high. Custom layout values are introduced only when a product requirement cannot be expressed clearly with the standard system.
+Layout uses Tailwind's standard spacing, container widths, and mobile-first breakpoints. Prefer intrinsic layout such as flex wrapping and content-driven sizing before adding a breakpoint. Reusable compositions use container queries when their layout depends on available component width. The product shell owns navigation responsiveness at the standard `md` boundary: mobile sheet below it and persistent sidebar at and above it. The persistent playback region is 88px high. Custom layout values are introduced only when a product requirement cannot be expressed clearly with the standard system.
 
 The permanent application chrome is grayscale.
 
@@ -303,3 +303,19 @@ Technical density must not depend on unreadably small text. When space becomes i
 - **Don't** let secondary information disturb the visual center of primary controls.
 - **Don't** use gradients, glow, glass, or decorative shadows as a substitute for structure.
 - **Don't** animate direct manipulation with spring, settling, or delayed response.
+
+## Application chrome
+
+The Windows application uses application-owned visual chrome. The renderer reserves a 40px title surface across the top of the window. It contains the text `Nice Audio Player`, the minimize, maximize/restore, and close controls, and, below 768 CSS px, the mobile navigation trigger. It does not contain an application icon. Empty title-surface space is draggable; interactive controls are outside the drag region. The window uses standard Windows resize borders and system Snap Layout keyboard affordances where available; application-owned controls perform minimize, maximize/restore, and close.
+
+The standard `File / Edit / View / Window` application menu is not displayed. Product commands belong in their owning workspace, Settings, or a future explicit application menu rather than a persistent OS-style menu bar.
+
+At 768 CSS px and above, the navigation sidebar is persistent and cannot be collapsed. Below 768 CSS px, navigation is a sheet with an explicit close control.
+
+## Track activation
+
+A track row represents one playback object. Pointer activation uses the whole available row surface except nested controls. Keyboard and assistive-technology activation remains on a real button in a fixed action/state slot so table semantics stay intact.
+
+The action slot is always geometrically reserved. In the Library track table it precedes the title. In an Album track table it reuses the track-number column. Inactive available tracks reveal Play on row hover or keyboard focus. The active playing track exposes Pause in the slot; the active paused track exposes Resume. Row activation of the active playing track is inert so a broad pointer hit area cannot accidentally pause playback.
+
+Hover, persistent playback state, and keyboard focus remain separate visual states. Changing playback state must not move the title baseline or column geometry.

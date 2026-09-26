@@ -30,7 +30,7 @@ export function MediaDetailsHeader({
           <p className="mb-2 text-sm font-medium uppercase tracking-widest text-muted-foreground">
             {kind}
           </p>
-          <h1 className="text-3xl font-normal leading-tight tracking-tight text-foreground">
+          <h1 className="text-2xl font-normal leading-tight tracking-tight text-foreground">
             {title}
           </h1>
           {artist ? <p className="mt-2 text-base text-muted-foreground">{artist}</p> : null}

@@ -6,16 +6,25 @@ import type { TrackTableRow } from "./types";
 const helper = createColumnHelper<TrackTableRow>();
 
 export function createAlbumTrackColumns(
+  renderAction: (row: TrackTableRow) => ReactNode,
   renderTitle: (row: TrackTableRow) => ReactNode,
 ): ColumnDef<TrackTableRow, any>[] {
   return [
-    helper.accessor("trackNumber", {
+    helper.display({
+      id: "action",
       header: () => "#",
-      cell: (info) => info.getValue() ?? "—",
+      cell: ({ row }) => renderAction(row.original),
     }),
     helper.accessor("title", {
       header: () => "Title",
       cell: ({ row }) => renderTitle(row.original),
+    }),
+    helper.accessor("artist", {
+      header: () => "Artist",
+      cell: (info) => {
+        const value = info.getValue() ?? "—";
+        return <span title={value}>{value}</span>;
+      },
     }),
     helper.accessor("fileFormat", {
       header: () => "Format",

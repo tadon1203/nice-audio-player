@@ -12,7 +12,12 @@ export function PlaybackStatus() {
       aria-label="Playback signal status"
     >
       {status.map((line) => (
-        <span className="min-w-0 truncate px-6" key={line.label} data-status-line={line.label}>
+        <span
+          className="min-w-0 truncate px-6"
+          key={line.label}
+          data-status-line={line.label}
+          title={`${line.label} ${line.value}`}
+        >
           <span className="text-muted-foreground">{line.label}</span>{" "}
           <span className="ms-2 tabular-nums text-muted-foreground">{line.value}</span>
         </span>

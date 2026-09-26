@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import type { PlaybackQueue, PlaybackState, TElectronAPI } from "@/shared/ipc";
+import type { PlaybackQueue, PlaybackState, TNativeAPI } from "@/shared/ipc";
 import { createPlaybackController, createPlaybackStore } from "./playback-session";
 
-type PlaybackApi = TElectronAPI;
+type PlaybackApi = TNativeAPI;
 
 const stopped = (revision: number, path: string | null): PlaybackState => ({
   status: "stopped",

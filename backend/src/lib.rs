@@ -5,8 +5,6 @@ pub mod library;
 pub mod lyrics;
 pub mod media;
 
-mod napi;
-
 #[cfg(test)]
 #[path = "audio/test_support.rs"]
 pub(crate) mod test_support;

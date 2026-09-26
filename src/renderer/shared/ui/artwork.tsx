@@ -18,10 +18,7 @@ function Artwork({ artwork, alt = "", loading = "lazy", className }: ArtworkProp
   return (
     <span
       data-slot="artwork"
-      className={cn(
-        "block aspect-square overflow-hidden rounded-lg bg-muted",
-        className,
-      )}
+      className={cn("block aspect-square overflow-hidden rounded-lg bg-muted", className)}
     >
       {showImage ? (
         <img

@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { libraryQueryKeys } from "@/renderer/entities/library";
 import { playbackController } from "@/renderer/features/playback-control";
-import { getElectronApiOrNull } from "@/renderer/shared/lib/electron";
+import { getNativeApiOrNull } from "@/renderer/shared/lib/native";
 import { queryClient } from "./providers";
 
 /** Owns the renderer's single subscription to push events from Preload. */
@@ -9,7 +9,7 @@ export function NativeSession() {
   const previousScanState = useRef<string | null>(null);
 
   useEffect(() => {
-    const api = getElectronApiOrNull();
+    const api = getNativeApiOrNull();
     if (api === null) return;
 
     void playbackController.initialize(api);
