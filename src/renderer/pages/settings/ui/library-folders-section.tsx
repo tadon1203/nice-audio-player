@@ -169,10 +169,7 @@ export function LibraryFoldersSection() {
       </div>
 
       {scanRunning ? (
-        <div
-          className="mt-4 rounded-md border border-border bg-muted/20 px-4 py-3 text-sm text-muted-foreground"
-          aria-label="Scan progress"
-        >
+        <div className="mt-4 rounded-md border border-border bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
           <div className="flex flex-wrap gap-x-5 gap-y-1">
             <span>{formatProgress(scan.discoveredCount, "discovered")}</span>
             <span>{formatProgress(scan.inspectedCount, "inspected")}</span>
@@ -235,7 +232,6 @@ export function LibraryFoldersSection() {
                   <Field className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Checkbox
                       id={`enabled-${root.id}`}
-                      aria-label={`Include ${root.path} in library`}
                       checked={root.enabled}
                       disabled={scanRunning || pending}
                       onCheckedChange={(checked) => {
@@ -247,7 +243,7 @@ export function LibraryFoldersSection() {
                       htmlFor={`enabled-${root.id}`}
                       className="font-normal text-muted-foreground max-sm:sr-only"
                     >
-                      Include {root.path} in library
+                      Include<span className="sr-only"> {root.path}</span> in library
                     </FieldLabel>
                   </Field>
                   <Button
@@ -278,7 +274,7 @@ export function LibraryFoldersSection() {
       {scan?.state === "completed" ? (
         <p className="mt-4 flex items-center gap-2 text-sm text-muted-foreground">
           <Check className="size-4" aria-hidden="true" />
-          Scan complete: {formatProgress(scan.discoveredCount, "discovered")},{" "}
+          {formatProgress(scan.discoveredCount, "discovered")},{" "}
           {formatProgress(scan.inspectedCount, "inspected")},{" "}
           {formatProgress(scan.indexedCount, "indexed")},{" "}
           {formatProgress(scan.failedCount, "failed")}.

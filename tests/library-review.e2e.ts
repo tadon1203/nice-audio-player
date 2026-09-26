@@ -130,7 +130,7 @@ test("restores the virtual track container after switching library presentations
 test("manages folders and shows scan progress and terminal states", async ({ page }) => {
   await page.goto("/settings");
   await page.getByRole("button", { name: "Add folder" }).click();
-  await expect(page.getByText("C:/More Music", { exact: true })).toBeVisible();
+  await expect(page.getByTitle("C:/More Music", { exact: true })).toBeVisible();
 
   const include = page.getByRole("checkbox", { name: /Include C:\/Music in library/ }).first();
   const musicRow = page.getByRole("listitem").filter({ hasText: /^C:\/Music(?!\/)/ });
@@ -148,13 +148,9 @@ test("manages folders and shows scan progress and terminal states", async ({ pag
   await expect(page.getByRole("status")).toContainText("Scan cancelled");
 
   await page.evaluate(() => window.__niceAudioPlayerTest?.setScanState("completed"));
-  await expect(
-    page.getByText(/Scan complete: 20 discovered, 20 inspected, 18 indexed, 0 failed/),
-  ).toBeVisible();
+  await expect(page.getByText(/20 discovered, 20 inspected, 18 indexed, 0 failed/)).toBeVisible();
   await page.evaluate(() => window.__niceAudioPlayerTest?.setScanState("failed"));
-  await expect(page.getByRole("alert")).toContainText(
-    "Scan failed: a library folder could not be read.",
-  );
+  await expect(page.getByRole("alert")).toContainText("A library folder could not be read.");
 
   await page.getByRole("button", { name: "Remove C:/More Music from library" }).click();
   const dialog = page.getByRole("alertdialog");
@@ -163,7 +159,7 @@ test("manages folders and shows scan progress and terminal states", async ({ pag
   await expect(dialog).toBeHidden();
   await page.getByRole("button", { name: "Remove C:/More Music from library" }).click();
   await dialog.getByRole("button", { name: "Remove", exact: true }).click();
-  await expect(page.getByText("C:/More Music", { exact: true })).toHaveCount(0);
+  await expect(page.getByTitle("C:/More Music", { exact: true })).toHaveCount(0);
 });
 
 test("invalidates mounted library queries after terminal scan events and root changes", async ({

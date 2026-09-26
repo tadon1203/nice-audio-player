@@ -26,18 +26,10 @@
     {
       "files": [
         "src/renderer/shared/ui/shadcn/button.tsx",
-        "src/renderer/shared/ui/shadcn/button-group.tsx",
-        "src/renderer/shared/ui/shadcn/sidebar.tsx",
-        "src/renderer/shared/ui/shadcn/toggle.tsx"
+        "src/renderer/shared/ui/shadcn/button-group.tsx"
       ],
       "rules": {
         "react/only-export-components": "off"
-      }
-    },
-    {
-      "files": ["src/renderer/shared/hooks/use-mobile.ts"],
-      "rules": {
-        "react/set-state-in-effect": "off"
       }
     },
     {
@@ -56,7 +48,6 @@
     "playwright-report",
     "test-results",
     "release",
-    "src/app/renderer/routeTree.gen.ts",
-    "src/main/shared/native-backend/native-backend.d.ts"
+    "src/app/renderer/routeTree.gen.ts"
   ]
 }
