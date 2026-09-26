@@ -186,10 +186,17 @@ export function createPlaybackController(store: UseBoundStore<StoreApi<PlaybackS
   };
 }
 
+export type ActivePlaybackSnapshot = Extract<PlaybackSnapshot, { status: "playing" | "paused" }>;
+
+/** True while a track is loaded, whether it is playing or paused. */
+export function isActivePlayback(
+  snapshot: PlaybackSnapshot | null | undefined,
+): snapshot is ActivePlaybackSnapshot {
+  return snapshot?.status === "playing" || snapshot?.status === "paused";
+}
+
 function selectDuration(snapshot: PlaybackSnapshot | null) {
-  return snapshot?.status === "playing" || snapshot?.status === "paused"
-    ? snapshot.durationMs
-    : null;
+  return isActivePlayback(snapshot) ? snapshot.durationMs : null;
 }
 
 function selectMuted(snapshot: PlaybackSnapshot | null) {
@@ -210,8 +217,8 @@ type PlaybackSessionState = Pick<
 >;
 
 function selectSession(state: PlaybackSessionState, bridgeAvailable: boolean) {
-  const active = state.snapshot?.status === "playing" || state.snapshot?.status === "paused";
   const snapshot = state.snapshot;
+  const active = isActivePlayback(snapshot);
   return {
     snapshot,
     queue: state.queue,

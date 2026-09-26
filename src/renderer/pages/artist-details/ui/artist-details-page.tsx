@@ -3,11 +3,14 @@ import { Link, useElementScrollRestoration, useNavigate, useSearch } from "@tans
 import { ArrowLeft } from "lucide-react";
 import { useArtistDetailsWorkspace } from "../model/use-artist-details-workspace";
 import {
+  artistAlbumSortOptions,
   libraryCommandErrorMessage,
+  toggleSortDirection,
   type LibraryAlbumArtistKey,
 } from "@/renderer/entities/library";
 import { CollectionSortControl } from "@/renderer/shared/components/collection-sort-control";
 import { WorkspaceContainer } from "@/renderer/shared/layout/workspace-container";
+import { MISSING, formatCount } from "@/renderer/shared/lib/format";
 import { Alert, AlertAction, AlertDescription } from "@/renderer/shared/ui/shadcn/alert";
 import { Artwork } from "@/renderer/shared/ui/artwork";
 import { Button } from "@/renderer/shared/ui/shadcn/button";
@@ -15,11 +18,6 @@ import { Empty, EmptyDescription } from "@/renderer/shared/ui/shadcn/empty";
 import { Spinner } from "@/renderer/shared/ui/shadcn/spinner";
 import { MediaGrid } from "@/renderer/widgets/media-grid";
 import { MediaDetailsHeader } from "@/renderer/widgets/media-details-header";
-
-const sortOptions = [
-  { key: "year", label: "Year" },
-  { key: "title", label: "Title" },
-] as const;
 
 export function ArtistDetailsPage({ artistName }: { artistName: string }) {
   const key = useMemo<LibraryAlbumArtistKey>(() => ({ name: artistName }), [artistName]);
@@ -93,8 +91,8 @@ export function ArtistDetailsPage({ artistName }: { artistName: string }) {
               round
             >
               <p className="mt-4 text-sm tabular-nums text-muted-foreground">
-                {workspace.artist.albumCount ?? 0} albums · {workspace.artist.trackCount ?? 0}{" "}
-                tracks
+                {formatCount(workspace.artist.albumCount, "album")} ·{" "}
+                {formatCount(workspace.artist.trackCount, "track")}
               </p>
             </MediaDetailsHeader>
 
@@ -106,17 +104,13 @@ export function ArtistDetailsPage({ artistName }: { artistName: string }) {
                 <CollectionSortControl
                   selectLabel="Sort artist albums"
                   value={selection.key}
-                  options={sortOptions}
+                  options={artistAlbumSortOptions}
                   direction={selection.direction}
-                  onValueChange={(value) => {
-                    if (value === "year" || value === "title") {
-                      void setSort({ key: value, direction: "ascending" });
-                    }
-                  }}
+                  onValueChange={(value) => void setSort({ key: value, direction: "ascending" })}
                   onToggleDirection={() =>
                     void setSort({
                       key: selection.key,
-                      direction: selection.direction === "ascending" ? "descending" : "ascending",
+                      direction: toggleSortDirection(selection.direction),
                     })
                   }
                 />
@@ -142,7 +136,7 @@ export function ArtistDetailsPage({ artistName }: { artistName: string }) {
                         {album.key.title}
                       </span>
                       <span className="mt-1 block w-full text-sm tabular-nums text-muted-foreground">
-                        {album.year ?? "Unknown year"}
+                        {album.year ?? MISSING}
                       </span>
                     </Link>
                   ))}

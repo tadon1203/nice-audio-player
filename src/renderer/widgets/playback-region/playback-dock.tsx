@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Pause, Play, SkipBack, SkipForward, Volume2, VolumeX } from "lucide-react";
-import { usePlaybackSession } from "@/renderer/features/playback-control";
-import { formatDuration } from "@/renderer/shared/lib/format-duration";
+import { isActivePlayback, usePlaybackSession } from "@/renderer/features/playback-control";
+import { formatDuration } from "@/renderer/shared/lib/format";
 import { Artwork } from "@/renderer/shared/ui/artwork";
 import { Button } from "@/renderer/shared/ui/shadcn/button";
 import { Slider } from "@/renderer/shared/ui/shadcn/slider";
@@ -9,7 +9,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/renderer/shared/ui/sh
 
 export function PlaybackDock() {
   const playback = usePlaybackSession();
-  const active = playback.snapshot?.status === "playing" || playback.snapshot?.status === "paused";
+  const active = isActivePlayback(playback.snapshot);
   const playing = playback.snapshot?.status === "playing";
   const [seekPreviewMs, setSeekPreviewMs] = useState<number | null>(null);
   const [errorTooltipOpen, setErrorTooltipOpen] = useState(false);

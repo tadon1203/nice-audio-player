@@ -1,6 +1,9 @@
 import { Search } from "lucide-react";
 import type { LibrarySortDirection } from "@/renderer/entities/library";
-import { CollectionSortControl } from "@/renderer/shared/components/collection-sort-control";
+import {
+  CollectionSortControl,
+  type SortOption,
+} from "@/renderer/shared/components/collection-sort-control";
 import { WorkspaceContainer } from "@/renderer/shared/layout/workspace-container";
 import {
   InputGroup,
@@ -8,9 +11,7 @@ import {
   InputGroupInput,
 } from "@/renderer/shared/ui/shadcn/input-group";
 
-type SortOption = { readonly key: string; readonly label: string };
-
-export function LibraryToolbar({
+export function LibraryToolbar<Key extends string>({
   title,
   countLabel,
   searchLabel,
@@ -28,10 +29,10 @@ export function LibraryToolbar({
   updating?: boolean;
   onFilterChange: (value: string) => void;
   sort?: {
-    key: string;
+    key: Key;
     direction: LibrarySortDirection;
-    options: readonly SortOption[];
-    onKeyChange: (key: string) => void;
+    options: readonly SortOption<Key>[];
+    onKeyChange: (key: Key) => void;
     onToggleDirection: () => void;
   };
 }) {

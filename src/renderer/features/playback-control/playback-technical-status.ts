@@ -1,21 +1,17 @@
 import { useShallow } from "zustand/react/shallow";
-import { usePlaybackStore } from "./playback-session";
+import { formatSampleRate } from "@/renderer/shared/lib/format";
+import { isActivePlayback, usePlaybackStore } from "./playback-session";
 
 export type PlaybackStatusLine = {
   readonly label: "SOURCE" | "SRC" | "OUTPUT";
   readonly value: string;
 };
 
-const rate = (value: number | null | undefined) =>
-  value === null || value === undefined || !Number.isFinite(value)
-    ? "—"
-    : `${(value / 1000).toFixed(1)} kHz`;
-
 export function usePlaybackTechnicalStatus(): readonly PlaybackStatusLine[] {
   const technical = usePlaybackStore(
     useShallow((state) => {
       const snapshot = state.snapshot;
-      const active = snapshot?.status === "playing" || snapshot?.status === "paused";
+      const active = isActivePlayback(snapshot);
       return {
         active,
         extension: snapshot?.file?.extension ?? null,
@@ -28,8 +24,8 @@ export function usePlaybackTechnicalStatus(): readonly PlaybackStatusLine[] {
     }),
   );
 
-  const sourceRate = technical.active ? rate(technical.sourceSampleRate) : "—";
-  const outputRate = technical.active ? rate(technical.outputSampleRate) : "—";
+  const sourceRate = technical.active ? formatSampleRate(technical.sourceSampleRate) : "—";
+  const outputRate = technical.active ? formatSampleRate(technical.outputSampleRate) : "—";
   const conversion = technical.active
     ? technical.channelConversion === "monoToStereo"
       ? "mono → stereo"

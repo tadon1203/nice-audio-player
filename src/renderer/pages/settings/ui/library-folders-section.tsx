@@ -2,6 +2,7 @@ import { useState } from "react";
 import { AlertCircle, Check, FolderPlus, RefreshCw, X } from "lucide-react";
 import {
   libraryCommandErrorMessage,
+  libraryScanFailureMessage,
   useAddLibraryRoot,
   useCancelLibraryScan,
   useLibraryRootsQuery,
@@ -10,7 +11,9 @@ import {
   useSetLibraryRootEnabled,
   useStartLibraryScan,
   type LibraryRoot,
+  type LibraryScanState,
 } from "@/renderer/entities/library";
+import { formatNumber } from "@/renderer/shared/lib/format";
 import { Alert, AlertDescription } from "@/renderer/shared/ui/shadcn/alert";
 import { Button } from "@/renderer/shared/ui/shadcn/button";
 import { Checkbox } from "@/renderer/shared/ui/shadcn/checkbox";
@@ -27,11 +30,11 @@ import { Progress } from "@/renderer/shared/ui/shadcn/progress";
 import { Spinner } from "@/renderer/shared/ui/shadcn/spinner";
 import { RemoveLibraryRootDialog } from "./remove-library-root-dialog";
 
-function formatCount(value: number | null, noun: string): string {
-  return value === null ? `— ${noun}` : `${value.toLocaleString()} ${noun}`;
+function formatProgress(value: number | null, label: string): string {
+  return `${formatNumber(value)} ${label}`;
 }
 
-function scanLabel(state: string | undefined): string {
+function scanLabel(state: LibraryScanState | undefined): string {
   switch (state) {
     case "running":
       return "Scanning";
@@ -41,7 +44,8 @@ function scanLabel(state: string | undefined): string {
       return "Scan cancelled";
     case "failed":
       return "Scan failed";
-    default:
+    case "idle":
+    case undefined:
       return "Ready to scan";
   }
 }
@@ -171,10 +175,10 @@ export function LibraryFoldersSection() {
           aria-label="Scan progress"
         >
           <div className="flex flex-wrap gap-x-5 gap-y-1">
-            <span>{formatCount(scan.discoveredCount, "discovered")}</span>
-            <span>{formatCount(scan.inspectedCount, "inspected")}</span>
-            <span>{formatCount(scan.indexedCount, "indexed")}</span>
-            <span>{formatCount(scan.failedCount, "failed")}</span>
+            <span>{formatProgress(scan.discoveredCount, "discovered")}</span>
+            <span>{formatProgress(scan.inspectedCount, "inspected")}</span>
+            <span>{formatProgress(scan.indexedCount, "indexed")}</span>
+            <span>{formatProgress(scan.failedCount, "failed")}</span>
           </div>
           <Progress
             className="mt-3"
@@ -278,15 +282,16 @@ export function LibraryFoldersSection() {
 
       {scan?.state === "failed" ? (
         <p className="mt-4 text-sm text-destructive" role="alert">
-          Scan failed{scan.failureCode ? `: ${scan.failureCode}` : ""}.
+          {libraryScanFailureMessage(scan.failureCode)}
         </p>
       ) : null}
       {scan?.state === "completed" ? (
         <p className="mt-4 flex items-center gap-2 text-sm text-muted-foreground">
           <Check className="size-4" aria-hidden="true" />
-          Scan complete: {formatCount(scan.discoveredCount, "discovered")},{" "}
-          {formatCount(scan.inspectedCount, "inspected")},{" "}
-          {formatCount(scan.indexedCount, "indexed")}, {formatCount(scan.failedCount, "failed")}.
+          Scan complete: {formatProgress(scan.discoveredCount, "discovered")},{" "}
+          {formatProgress(scan.inspectedCount, "inspected")},{" "}
+          {formatProgress(scan.indexedCount, "indexed")},{" "}
+          {formatProgress(scan.failedCount, "failed")}.
         </p>
       ) : null}
 

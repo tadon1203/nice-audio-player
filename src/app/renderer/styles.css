@@ -25,6 +25,12 @@
 
 @theme {
   --font-sans: "Satoshi", "Noto Sans JP", "Segoe UI", system-ui, sans-serif;
+  /* Feedback motion is 100ms; spatial motion opts in with `duration-160`. */
+  --default-transition-duration: 100ms;
+  --default-transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+  /* Only `shadow-none` and `shadow-floating` exist; persistent UI has no shadow. */
+  --shadow-*: initial;
+  --shadow-floating: 0 4px 12px oklch(0 0 0 / 0.4);
 }
 
 @theme inline {
@@ -138,6 +144,8 @@
   *::before,
   *::after {
     scroll-behavior: auto !important;
+    animation-duration: 0s !important;
+    animation-delay: 0s !important;
     transition-duration: 0s !important;
   }
 }

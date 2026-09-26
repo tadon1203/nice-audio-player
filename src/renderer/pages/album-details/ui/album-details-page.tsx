@@ -4,7 +4,7 @@ import { ArrowLeft, Play } from "lucide-react";
 import { useAlbumDetailsWorkspace } from "../model/use-album-details-workspace";
 import { libraryCommandErrorMessage } from "@/renderer/entities/library";
 import { usePlaybackActions, useTrackPlaybackState } from "@/renderer/features/playback-control";
-import { formatDuration } from "@/renderer/shared/lib/format-duration";
+import { formatCount, formatDuration } from "@/renderer/shared/lib/format";
 import { WorkspaceContainer } from "@/renderer/shared/layout/workspace-container";
 import { Alert, AlertAction, AlertDescription } from "@/renderer/shared/ui/shadcn/alert";
 import { Button } from "@/renderer/shared/ui/shadcn/button";
@@ -105,7 +105,7 @@ export function AlbumDetailsPage({
               <p className="mt-4 text-sm tabular-nums text-muted-foreground">
                 {[
                   details.date ?? details.summary.year,
-                  details.trackCount !== null ? `${details.trackCount} tracks` : null,
+                  details.trackCount !== null ? formatCount(details.trackCount, "track") : null,
                   details.durationMs !== null ? formatDuration(details.durationMs) : null,
                 ]
                   .filter(Boolean)

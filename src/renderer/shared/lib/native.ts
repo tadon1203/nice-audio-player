@@ -1,6 +1,7 @@
 import { isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
+import { NativeCommandError } from "@/renderer/shared/lib/native-error";
 import { commands } from "@/shared/ipc";
 import type { AppEvent, TNativeAPI } from "@/shared/ipc";
 
@@ -10,16 +11,6 @@ export class NativeBridgeUnavailableError extends Error {
   constructor() {
     super("Native application bridge is unavailable");
     this.name = "NativeBridgeUnavailableError";
-  }
-}
-
-class NativeCommandError extends Error {
-  readonly code: string;
-
-  constructor(code: string, message: string) {
-    super(message);
-    this.code = code;
-    this.name = "NativeCommandError";
   }
 }
 
