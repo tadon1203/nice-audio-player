@@ -275,10 +275,7 @@ export function usePlaybackSession() {
     ...selected,
     currentTrack,
     title:
-      currentTrack?.title ??
-      state.queue?.current?.title ??
-      state.snapshot?.file?.fileName ??
-      "Nothing playing",
+      currentTrack?.title ?? state.queue?.current?.title ?? state.snapshot?.file?.fileName ?? null,
     artist: currentTrack?.artist ?? state.queue?.current?.artist ?? null,
     artwork: currentTrack?.artwork ?? null,
     ...playbackActions,

@@ -36,18 +36,18 @@ export function useRemoveLibraryRoot() {
   });
 }
 
-export function useStartLibraryScan() {
+function useLibraryScanCommand(command: () => Promise<unknown>) {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: () => nativeApi().startLibraryScan(),
+    mutationFn: command,
     onSuccess: () => client.invalidateQueries({ queryKey: libraryQueryKeys.scan }),
   });
 }
 
+export function useStartLibraryScan() {
+  return useLibraryScanCommand(() => nativeApi().startLibraryScan());
+}
+
 export function useCancelLibraryScan() {
-  const client = useQueryClient();
-  return useMutation({
-    mutationFn: () => nativeApi().cancelLibraryScan(),
-    onSuccess: () => client.invalidateQueries({ queryKey: libraryQueryKeys.scan }),
-  });
+  return useLibraryScanCommand(() => nativeApi().cancelLibraryScan());
 }

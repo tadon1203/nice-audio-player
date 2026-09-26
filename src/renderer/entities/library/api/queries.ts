@@ -2,8 +2,11 @@ import { useMemo } from "react";
 import {
   infiniteQueryOptions,
   queryOptions,
+  skipToken,
   useInfiniteQuery,
   useQuery,
+  type InfiniteData,
+  type UseInfiniteQueryResult,
 } from "@tanstack/react-query";
 import { nativeApi } from "@/renderer/shared/lib/native";
 import type {
@@ -13,15 +16,30 @@ import type {
   LibraryAlbumKey,
   LibraryAlbumPage,
   LibraryAlbumSortKey,
+  LibraryAlbumSummary,
   LibraryAlbumTrackPage,
   LibraryArtistAlbumSortKey,
   LibrarySortDirection,
   LibraryTrackPage,
   LibraryTrackSortKey,
+  LibraryTrackSummary,
+  LibraryAlbumArtistSummary,
 } from "@/shared/ipc";
 
 type CatalogPage = LibraryAlbumPage | LibraryAlbumArtistPage | LibraryTrackPage;
-type CatalogItem = CatalogPage["items"][number];
+
+type Page<Item> = {
+  readonly items: readonly Item[];
+  readonly totalCount: number;
+  readonly nextCursor: string | null;
+};
+
+/** The catalog item type for a presentation. */
+export type LibraryCatalogItem<Presentation extends LibraryCatalogRequest["presentation"]> = {
+  albums: LibraryAlbumSummary;
+  albumArtists: LibraryAlbumArtistSummary;
+  tracks: LibraryTrackSummary;
+}[Presentation];
 
 export type LibraryCatalogRequest =
   | {
@@ -43,17 +61,17 @@ export type LibraryCatalogRequest =
       readonly direction: LibrarySortDirection;
     };
 
+const data = ["library", "data"] as const;
+
+/** Everything under `data` is invalidated together when the catalog may have changed. */
 export const libraryQueryKeys = {
-  root: ["library"] as const,
-  data: ["library", "data"] as const,
+  data,
   status: ["library", "status"] as const,
   scan: ["library", "scan"] as const,
-  roots: ["library", "data", "roots"] as const,
-  catalog: ["library", "data", "catalog"] as const,
+  roots: [...data, "roots"] as const,
   presentation: (request: LibraryCatalogRequest) =>
     [
-      "library",
-      "data",
+      ...data,
       "catalog",
       request.presentation,
       request.filter,
@@ -61,17 +79,16 @@ export const libraryQueryKeys = {
       request.direction,
     ] as const,
   album: (key: LibraryAlbumKey) =>
-    ["library", "data", "album", "detail", key.title, key.albumArtist] as const,
+    [...data, "album", "detail", key.title, key.albumArtist] as const,
   albumTracks: (key: LibraryAlbumKey) =>
-    ["library", "data", "album", "tracks", key.title, key.albumArtist] as const,
-  artist: (key: LibraryAlbumArtistKey) =>
-    ["library", "data", "artist", "detail", key.name] as const,
+    [...data, "album", "tracks", key.title, key.albumArtist] as const,
+  artist: (key: LibraryAlbumArtistKey) => [...data, "artist", "detail", key.name] as const,
   artistAlbums: (
     key: LibraryAlbumArtistKey,
     sortKey: LibraryArtistAlbumSortKey,
     direction: LibrarySortDirection,
-  ) => ["library", "data", "artist", "albums", key.name, sortKey, direction] as const,
-  track: (path: string) => ["library", "data", "track", path] as const,
+  ) => [...data, "artist", "albums", key.name, sortKey, direction] as const,
+  track: (path: string | null) => [...data, "track", path] as const,
 };
 
 export const libraryQueryOptions = {
@@ -101,11 +118,8 @@ export const libraryQueryOptions = {
     }),
   track: (path: string | null) =>
     queryOptions({
-      queryKey: path
-        ? libraryQueryKeys.track(path)
-        : (["library", "data", "track", "inactive"] as const),
-      queryFn: () => (path ? nativeApi().getLibraryTrackForPath(path) : Promise.resolve(null)),
-      enabled: path !== null,
+      queryKey: libraryQueryKeys.track(path),
+      queryFn: path === null ? skipToken : () => nativeApi().getLibraryTrackForPath(path),
       gcTime: Infinity,
     }),
 };
@@ -122,23 +136,19 @@ export function useLibraryRootsQuery() {
   return useQuery(libraryQueryOptions.roots());
 }
 
-export function useLibraryPresentationQuery(request: LibraryCatalogRequest, enabled = true) {
-  const baseOptions = libraryQueryOptions.catalog(request, enabled);
-  const query = useInfiniteQuery({
-    ...baseOptions,
-    placeholderData: (previousData, previousQuery) => {
-      const previousPresentation = previousQuery?.queryKey[3];
-      return previousPresentation === request.presentation ? previousData : undefined;
-    },
-  });
-  const items = useMemo<CatalogItem[]>(() => {
-    const pages = query.data?.pages;
-    return pages ? pages.flatMap((page) => page.items as CatalogItem[]) : [];
-  }, [query.data]);
+/** Flattens the loaded pages of an infinite query into one list with paging state. */
+function useFlattenedInfiniteQuery<TPage extends Page<unknown>>(
+  query: UseInfiniteQueryResult<InfiniteData<TPage>, Error>,
+) {
+  const items = useMemo<TPage["items"][number][]>(
+    () => query.data?.pages.flatMap((page) => page.items) ?? [],
+    [query.data],
+  );
 
   return {
     items,
     totalCount: query.data?.pages[0]?.totalCount ?? null,
+    nextCursor: query.data?.pages.at(-1)?.nextCursor ?? null,
     isPending: query.isPending,
     isFetching: query.isFetching,
     isPlaceholderData: query.isPlaceholderData,
@@ -151,96 +161,72 @@ export function useLibraryPresentationQuery(request: LibraryCatalogRequest, enab
   };
 }
 
-export function useAlbumDetails(key: LibraryAlbumKey | null) {
-  return useQuery({
-    queryKey: key
-      ? libraryQueryKeys.album(key)
-      : (["library", "data", "album", "detail", "inactive"] as const),
-    queryFn: () => {
-      if (!key) throw new Error("Album key is required");
-      return nativeApi().getLibraryAlbumDetails(key);
-    },
-    enabled: key !== null,
-    gcTime: Infinity,
-  });
-}
+export type LibraryCollectionQuery<Item> = Omit<
+  ReturnType<typeof useFlattenedInfiniteQuery<Page<Item>>>,
+  never
+>;
 
-export function useAlbumTracks(key: LibraryAlbumKey | null) {
+export function useLibraryPresentationQuery<Request extends LibraryCatalogRequest>(
+  request: Request,
+  enabled = true,
+): LibraryCollectionQuery<LibraryCatalogItem<Request["presentation"]>> {
   const query = useInfiniteQuery({
-    queryKey: key
-      ? libraryQueryKeys.albumTracks(key)
-      : (["library", "data", "album", "tracks", "inactive"] as const),
-    initialPageParam: null as string | null,
-    queryFn: ({ pageParam }) => {
-      if (!key) throw new Error("Album key is required");
-      return nativeApi().listLibraryAlbumTracks(key, pageParam);
+    ...libraryQueryOptions.catalog(request, enabled),
+    placeholderData: (previousData, previousQuery) => {
+      const previousPresentation = previousQuery?.queryKey[3];
+      return previousPresentation === request.presentation ? previousData : undefined;
     },
-    getNextPageParam: (page: LibraryAlbumTrackPage) => page.nextCursor ?? undefined,
-    enabled: key !== null,
-    gcTime: Infinity,
   });
-  const items = useMemo(() => query.data?.pages.flatMap((page) => page.items) ?? [], [query.data]);
-
-  return {
-    items,
-    totalCount: query.data?.pages[0]?.totalCount ?? null,
-    nextCursor: query.data?.pages.at(-1)?.nextCursor ?? null,
-    isPending: query.isPending,
-    isError: query.isError,
-    error: query.error,
-    isFetchingNextPage: query.isFetchingNextPage,
-    hasNextPage: query.hasNextPage,
-    fetchNextPage: query.fetchNextPage,
-    refetch: query.refetch,
-  };
+  // The query function is chosen by `request.presentation`, so its pages hold exactly
+  // that presentation's item type; TypeScript cannot correlate the two through the union.
+  return useFlattenedInfiniteQuery(query) as LibraryCollectionQuery<
+    LibraryCatalogItem<Request["presentation"]>
+  >;
 }
 
-export function useAlbumArtist(key: LibraryAlbumArtistKey | null) {
+export function useAlbumDetails(key: LibraryAlbumKey) {
   return useQuery({
-    queryKey: key
-      ? libraryQueryKeys.artist(key)
-      : (["library", "data", "artist", "detail", "inactive"] as const),
-    queryFn: () => {
-      if (!key) throw new Error("Artist key is required");
-      return nativeApi().getLibraryAlbumArtist(key);
-    },
-    enabled: key !== null,
+    queryKey: libraryQueryKeys.album(key),
+    queryFn: () => nativeApi().getLibraryAlbumDetails(key),
+    gcTime: Infinity,
+  });
+}
+
+export function useAlbumTracks(key: LibraryAlbumKey) {
+  return useFlattenedInfiniteQuery(
+    useInfiniteQuery({
+      queryKey: libraryQueryKeys.albumTracks(key),
+      initialPageParam: null as string | null,
+      queryFn: ({ pageParam }) => nativeApi().listLibraryAlbumTracks(key, pageParam),
+      getNextPageParam: (page: LibraryAlbumTrackPage) => page.nextCursor ?? undefined,
+      gcTime: Infinity,
+    }),
+  );
+}
+
+export function useAlbumArtist(key: LibraryAlbumArtistKey) {
+  return useQuery({
+    queryKey: libraryQueryKeys.artist(key),
+    queryFn: () => nativeApi().getLibraryAlbumArtist(key),
     gcTime: Infinity,
   });
 }
 
 export function useArtistAlbums(
-  key: LibraryAlbumArtistKey | null,
+  key: LibraryAlbumArtistKey,
   sortKey: LibraryArtistAlbumSortKey,
   direction: LibrarySortDirection,
 ) {
-  const query = useInfiniteQuery({
-    queryKey: key
-      ? libraryQueryKeys.artistAlbums(key, sortKey, direction)
-      : (["library", "data", "artist", "albums", "inactive", sortKey, direction] as const),
-    initialPageParam: null as string | null,
-    queryFn: ({ pageParam }) => {
-      if (!key) throw new Error("Artist key is required");
-      return nativeApi().listLibraryArtistAlbums(key, pageParam, sortKey, direction);
-    },
-    getNextPageParam: (page: LibraryAlbumPage) => page.nextCursor ?? undefined,
-    enabled: key !== null,
-    gcTime: Infinity,
-  });
-  const items = useMemo(() => query.data?.pages.flatMap((page) => page.items) ?? [], [query.data]);
-
-  return {
-    items,
-    totalCount: query.data?.pages[0]?.totalCount ?? null,
-    nextCursor: query.data?.pages.at(-1)?.nextCursor ?? null,
-    isPending: query.isPending,
-    isError: query.isError,
-    error: query.error,
-    isFetchingNextPage: query.isFetchingNextPage,
-    hasNextPage: query.hasNextPage,
-    fetchNextPage: query.fetchNextPage,
-    refetch: query.refetch,
-  };
+  return useFlattenedInfiniteQuery(
+    useInfiniteQuery({
+      queryKey: libraryQueryKeys.artistAlbums(key, sortKey, direction),
+      initialPageParam: null as string | null,
+      queryFn: ({ pageParam }) =>
+        nativeApi().listLibraryArtistAlbums(key, pageParam, sortKey, direction),
+      getNextPageParam: (page: LibraryAlbumPage) => page.nextCursor ?? undefined,
+      gcTime: Infinity,
+    }),
+  );
 }
 
 export function useLibraryTrackForPath(path: string | null) {

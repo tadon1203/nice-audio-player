@@ -128,13 +128,22 @@ test("shares one scroll region edge across views and aligns toolbar with content
   await viewport.hover();
   await expect(scrollbar).toHaveCSS("opacity", "1");
 
+  // Routes swap their scroll region during navigation; poll until only the new one remains.
+  const expectViewportEdge = () =>
+    expect
+      .poll(async () => {
+        const box = await viewport.boundingBox().catch(() => null);
+        return box !== null && Math.abs(box.x + box.width - mainRight) < 2;
+      })
+      .toBe(true);
+
   await page.getByRole("link", { name: "Albums", exact: true }).click();
-  expect(Math.abs((await right(viewport)) - mainRight)).toBeLessThan(2);
+  await expectViewportEdge();
   await page
     .getByRole("link", { name: /Open album .* by Test artist/ })
     .first()
     .click();
-  expect(Math.abs((await right(viewport)) - mainRight)).toBeLessThan(2);
+  await expectViewportEdge();
   await page.getByRole("link", { name: "Settings", exact: true }).click();
-  expect(Math.abs((await right(viewport)) - mainRight)).toBeLessThan(2);
+  await expectViewportEdge();
 });

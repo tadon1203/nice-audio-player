@@ -21,6 +21,7 @@ export {
   trackSortKeys,
   trackSortLabels,
 } from "./model/sort";
+export { applyLibraryEvent } from "./api/events";
 export {
   libraryQueryKeys,
   useAlbumArtist,
@@ -32,7 +33,9 @@ export {
   useLibraryScan,
   useLibraryStatus,
   useLibraryTrackForPath,
+  type LibraryCatalogItem,
   type LibraryCatalogRequest,
+  type LibraryCollectionQuery,
 } from "./api/queries";
 export {
   useAddLibraryRoot,

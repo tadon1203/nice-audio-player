@@ -1,138 +1,75 @@
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import {
-  isAlbumArtistSortKey,
-  isAlbumSortKey,
-  toggleSortDirection,
-  type LibraryCatalogRequest,
-  type LibrarySortDirection,
-  type LibraryTrackSortKey,
+import type {
+  LibraryAlbumArtistSortKey,
+  LibraryAlbumSortKey,
+  LibraryCatalogRequest,
+  LibrarySortDirection,
+  LibraryTrackSortKey,
 } from "@/renderer/entities/library";
+import { toggleSortDirection } from "@/renderer/entities/library";
 
 export type LibraryPresentation = "albums" | "albumArtists" | "tracks";
 
-const presentationPath = {
-  albums: "/library/albums",
-  albumArtists: "/library/album-artists",
-  tracks: "/library/tracks",
+type SortKeyOf = {
+  albums: LibraryAlbumSortKey;
+  albumArtists: LibraryAlbumArtistSortKey;
+  tracks: LibraryTrackSortKey;
+};
+
+/** Where each presentation keeps its own filter and sort in the URL search. */
+const presentationSearch = {
+  albums: {
+    path: "/library/albums",
+    filter: "albumsFilter",
+    sort: "albumsSort",
+    direction: "albumsDirection",
+  },
+  albumArtists: {
+    path: "/library/album-artists",
+    filter: "artistsFilter",
+    sort: "artistsSort",
+    direction: "artistsDirection",
+  },
+  tracks: {
+    path: "/library/tracks",
+    filter: "tracksFilter",
+    sort: "tracksSort",
+    direction: "tracksDirection",
+  },
 } as const;
 
-export function useLibraryView(presentation: LibraryPresentation) {
+/** Reads and updates one presentation's filter and sort, independent of its peers. */
+export function useLibraryView<Presentation extends LibraryPresentation>(
+  presentation: Presentation,
+) {
   const search = useSearch({ from: "/library" });
-  const navigate = useNavigate({ from: "/library" });
+  const navigate = useNavigate();
+  const names = presentationSearch[presentation];
+  const filter = search[names.filter];
+  // The search schema is built from the same key sets, so this key belongs to `presentation`.
+  const sortKey = search[names.sort] as SortKeyOf[Presentation];
+  const direction = search[names.direction];
 
-  if (presentation === "albums") {
-    const request: LibraryCatalogRequest = {
-      presentation,
-      filter: search.albumsFilter,
-      sortKey: search.albumsSort,
-      direction: search.albumsDirection,
-    };
-    return {
-      presentation,
-      request,
-      filter: search.albumsFilter,
-      sortKey: search.albumsSort,
-      direction: search.albumsDirection,
-      setFilter: (filter: string) =>
-        navigate({
-          to: presentationPath.albums,
-          replace: true,
-          search: (previous) => ({ ...previous, albumsFilter: filter }),
-        }),
-      setSort: (sortKey: string) => {
-        if (!isAlbumSortKey(sortKey)) return Promise.resolve();
-        return navigate({
-          to: presentationPath.albums,
-          replace: true,
-          search: (previous) => ({
-            ...previous,
-            albumsSort: sortKey,
-            albumsDirection: "ascending" as const,
-          }),
-        });
-      },
-      toggleDirection: () =>
-        navigate({
-          to: presentationPath.albums,
-          replace: true,
-          search: (previous) => ({
-            ...previous,
-            albumsDirection: toggleSortDirection(search.albumsDirection),
-          }),
-        }),
-    } as const;
-  }
+  const update = (values: Record<string, string>) =>
+    navigate({
+      to: names.path,
+      replace: true,
+      search: (previous) => ({ ...previous, ...values }),
+    });
 
-  if (presentation === "albumArtists") {
-    const request: LibraryCatalogRequest = {
-      presentation,
-      filter: search.artistsFilter,
-      sortKey: search.artistsSort,
-      direction: search.artistsDirection,
-    };
-    return {
-      presentation,
-      request,
-      filter: search.artistsFilter,
-      sortKey: search.artistsSort,
-      direction: search.artistsDirection,
-      setFilter: (filter: string) =>
-        navigate({
-          to: presentationPath.albumArtists,
-          replace: true,
-          search: (previous) => ({ ...previous, artistsFilter: filter }),
-        }),
-      setSort: (sortKey: string) => {
-        if (!isAlbumArtistSortKey(sortKey)) return Promise.resolve();
-        return navigate({
-          to: presentationPath.albumArtists,
-          replace: true,
-          search: (previous) => ({
-            ...previous,
-            artistsSort: sortKey,
-            artistsDirection: "ascending" as const,
-          }),
-        });
-      },
-      toggleDirection: () =>
-        navigate({
-          to: presentationPath.albumArtists,
-          replace: true,
-          search: (previous) => ({
-            ...previous,
-            artistsDirection: toggleSortDirection(search.artistsDirection),
-          }),
-        }),
-    } as const;
-  }
-
-  const request: LibraryCatalogRequest = {
-    presentation,
-    filter: search.tracksFilter,
-    sortKey: search.tracksSort,
-    direction: search.tracksDirection,
-  };
   return {
-    presentation,
-    request,
-    filter: search.tracksFilter,
-    sortKey: search.tracksSort,
-    direction: search.tracksDirection,
-    setFilter: (filter: string) =>
-      navigate({
-        to: presentationPath.tracks,
-        replace: true,
-        search: (previous) => ({ ...previous, tracksFilter: filter }),
-      }),
-    setTrackSort: (sortKey: LibraryTrackSortKey, direction: LibrarySortDirection) =>
-      navigate({
-        to: presentationPath.tracks,
-        replace: true,
-        search: (previous) => ({
-          ...previous,
-          tracksSort: sortKey,
-          tracksDirection: direction,
-        }),
-      }),
-  } as const;
+    request: { presentation, filter, sortKey, direction } as Extract<
+      LibraryCatalogRequest,
+      { presentation: Presentation }
+    >,
+    filter,
+    sortKey,
+    direction,
+    /** Identifies the filter and sort so views can reset scroll when it changes. */
+    stateKey: `${filter}\u0000${sortKey}\u0000${direction}`,
+    setFilter: (next: string) => update({ [names.filter]: next }),
+    setSort: (key: SortKeyOf[Presentation], nextDirection: LibrarySortDirection = "ascending") =>
+      update({ [names.sort]: key, [names.direction]: nextDirection }),
+    toggleDirection: () => update({ [names.direction]: toggleSortDirection(direction) }),
+  };
 }
