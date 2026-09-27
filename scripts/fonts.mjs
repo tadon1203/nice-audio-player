@@ -15,6 +15,15 @@ import { spawnSync } from "node:child_process";
 
 const root = resolve(import.meta.dirname, "..");
 
+// On Windows, git-bash's GNU tar (from PATH via /usr/bin) can shadow the
+// bundled bsdtar in System32. GNU tar can't extract .zip archives and
+// misreads "C:\..." paths as a remote host, so extraction must use the
+// System32 bsdtar explicitly instead of whatever "tar" resolves to on PATH.
+const tarExecutable =
+  process.platform === "win32"
+    ? join(process.env.SystemRoot ?? "C:\\Windows", "System32", "tar.exe")
+    : "tar";
+
 const satoshi = {
   path: "static/fonts/fontshare/Satoshi-Variable.woff2",
   licensePath: "static/fonts/fontshare/LICENSE.txt",
@@ -85,7 +94,7 @@ async function downloadSatoshi() {
     const response = await fetch(satoshi.url);
     if (!response.ok) throw new Error(`Fontshare returned HTTP ${response.status}`);
     writeFileSync(archivePath, Buffer.from(await response.arrayBuffer()));
-    const extraction = spawnSync("tar", ["-xf", archivePath, "-C", temporaryDirectory], {
+    const extraction = spawnSync(tarExecutable, ["-xf", archivePath, "-C", temporaryDirectory], {
       stdio: "inherit",
     });
     if (extraction.status !== 0) throw new Error("tar could not extract the Fontshare archive");
