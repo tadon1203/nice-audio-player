@@ -4,9 +4,11 @@ import { Play } from "lucide-react";
 import { useAlbumDetails, useAlbumTracks } from "@/renderer/entities/library";
 import { usePlaybackActions, useTrackPlaybackState } from "@/renderer/features/playback-control";
 import { formatCount, formatDuration } from "@/renderer/shared/lib/format";
+import { cn } from "@/renderer/shared/lib/utils";
 import { BackLink } from "@/renderer/shared/ui/back-link";
 import { SectionTitle } from "@/renderer/shared/ui/headings";
 import { Button } from "@/renderer/shared/ui/shadcn/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/renderer/shared/ui/shadcn/tooltip";
 import { EmptyStatus } from "@/renderer/shared/ui/workspace-status";
 import { MediaDetailsHeader } from "@/renderer/widgets/media-details-header";
 import {
@@ -14,6 +16,7 @@ import {
   useMediaDetailsWorkspace,
 } from "@/renderer/widgets/media-details-layout";
 import { TrackTable } from "@/renderer/widgets/track-table";
+import type { TrackTableRow } from "@/renderer/widgets/track-table";
 
 export function AlbumDetailsPage() {
   const { albumArtist, albumTitle } = useParams({
@@ -49,6 +52,15 @@ export function AlbumDetailsPage() {
             title={albumTitle}
             artist={albumArtist}
             artwork={details.summary.artwork}
+            strip={
+              tracks.length > 0 ? (
+                <AlbumTrackStrip
+                  tracks={tracks}
+                  activeTrackId={playbackState.activeTrackId}
+                  onPlayTrack={playback.startLibraryTrack}
+                />
+              ) : null
+            }
           >
             <p className="mt-4 text-sm tabular-nums text-muted-foreground">
               {[
@@ -92,5 +104,52 @@ export function AlbumDetailsPage() {
         </>
       )}
     </MediaDetailsLayout>
+  );
+}
+
+/** Segments proportional to each track's length; the playing track's segment is brighter. */
+function AlbumTrackStrip({
+  tracks,
+  activeTrackId,
+  onPlayTrack,
+}: {
+  tracks: TrackTableRow[];
+  activeTrackId: string | null;
+  onPlayTrack: (id: string) => void;
+}) {
+  const totalMs = tracks.reduce((sum, track) => sum + (track.durationMs ?? 0), 0);
+  if (totalMs <= 0) return null;
+
+  return (
+    <div
+      className="flex h-1.5 w-full gap-px overflow-hidden rounded-full"
+      role="group"
+      aria-label="Track lengths"
+    >
+      {tracks.map((track) => {
+        const active = track.id === activeTrackId;
+        const playable = track.playable && track.availability === "available";
+        return (
+          <Tooltip key={track.id}>
+            <TooltipTrigger
+              render={
+                <button
+                  type="button"
+                  aria-label={track.title}
+                  disabled={!playable}
+                  onClick={() => onPlayTrack(track.id)}
+                  className={cn(
+                    "h-full min-w-0.5 cursor-pointer outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default",
+                    active ? "bg-foreground" : "bg-muted-foreground/50 hover:bg-muted-foreground",
+                  )}
+                  style={{ flexGrow: track.durationMs ?? 0 }}
+                />
+              }
+            />
+            <TooltipContent>{track.title}</TooltipContent>
+          </Tooltip>
+        );
+      })}
+    </div>
   );
 }

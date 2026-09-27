@@ -216,3 +216,15 @@ pub async fn start_library_album(
 ) -> Result<PlaybackSnapshot, StartLibraryAlbumTrackError> {
     state.backend.start_library_album(album_key).await
 }
+
+#[tauri::command]
+#[specta::specta]
+pub async fn get_artwork_accent(
+    content_hash: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<Option<String>, LibraryCommandError> {
+    let library = state.backend.library.handle();
+    tauri::async_runtime::spawn_blocking(move || library.artwork_accent(content_hash))
+        .await
+        .map_err(|_| LibraryCommandError::TaskFailed)?
+}

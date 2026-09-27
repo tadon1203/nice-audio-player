@@ -22,6 +22,8 @@ pub enum AppEvent {
     ApplicationActivities(Vec<ApplicationActivity>),
     #[serde(rename = "libraryScanStateChanged")]
     LibraryScan(backend::library::models::LibraryScanSnapshot),
+    #[serde(rename = "waveformReady")]
+    WaveformReady { path: String },
 }
 
 impl AppEvent {
@@ -31,6 +33,7 @@ impl AppEvent {
             Self::PlaybackQueue(_) => "playbackQueueStateChanged",
             Self::ApplicationActivities(_) => "applicationActivitiesChanged",
             Self::LibraryScan(_) => "libraryScanStateChanged",
+            Self::WaveformReady { .. } => "waveformReady",
         }
     }
 }
@@ -51,6 +54,13 @@ where
             }
         }
     });
+}
+
+fn emit(app: &tauri::AppHandle, event: AppEvent) {
+    let name = event.name();
+    if app.emit("app:event", event).is_err() {
+        log::error!("ipc.event_emit_failed event_name={name}");
+    }
 }
 
 pub fn forward_events(app: &tauri::AppHandle, backend: &Arc<BackendApp>) {
@@ -76,4 +86,12 @@ pub fn forward_events(app: &tauri::AppHandle, backend: &Arc<BackendApp>) {
     forward(app, backend.activities.take_changed_receiver(), move || {
         AppEvent::ApplicationActivities(b.activities.handle().snapshot())
     });
+    if let Some(receiver) = backend.waveforms.take_ready_receiver() {
+        let app = app.clone();
+        thread::spawn(move || {
+            while let Ok(path) = receiver.recv() {
+                emit(&app, AppEvent::WaveformReady { path });
+            }
+        });
+    }
 }

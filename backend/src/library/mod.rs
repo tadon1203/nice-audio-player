@@ -1,3 +1,4 @@
+pub mod accent;
 pub mod artwork;
 pub(crate) mod catalog;
 pub mod database;

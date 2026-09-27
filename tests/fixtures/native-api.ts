@@ -1,6 +1,7 @@
 import type { Page } from "@playwright/test";
 import type {
   AppEvent,
+  AudioOutputSelection,
   LibraryAlbumArtistSummary,
   LibraryAlbumDetails,
   LibraryAlbumTrackPage,
@@ -8,6 +9,7 @@ import type {
   LibraryScanSnapshot,
   LibraryScanState,
   LibraryTrackSummary,
+  LyricsResolution,
   PlaybackQueueSnapshot,
   PlaybackSnapshot,
   TNativeAPI,
@@ -15,6 +17,12 @@ import type {
 
 type NativeTestState = {
   getRequestCount: (kind: string) => number;
+  /** Replaces what `getTrackLyrics` returns for a track; other tracks answer `notFound`. */
+  setLyrics: (trackId: string, resolution: LyricsResolution | { fail: string }) => void;
+  /** Replaces the color `getArtworkAccent` returns for a content hash. */
+  setArtworkAccent: (contentHash: string, color: string | null) => void;
+  /** Makes `getPlaybackWaveform` return a waveform and emits `waveformReady` for the loaded file. */
+  publishWaveform: () => void;
   setScanState: (state: LibraryScanState) => void;
   startPlaybackTicks: () => void;
   stopPlaybackTicks: () => void;
@@ -45,6 +53,8 @@ export async function installNativeApi(page: Page, options: InstallNativeApiOpti
       lastSuccessfulScanAtMs: null,
     };
     let roots = [root];
+    const lyricsByTrack = new Map<string, LyricsResolution | { fail: string }>();
+    const accentByHash = new Map<string, string | null>();
     const listeners = new Set<(event: AppEvent) => void>();
     const requestCounts: Record<string, number> = {};
     const recordRequest = (kind: string) => {
@@ -66,6 +76,9 @@ export async function installNativeApi(page: Page, options: InstallNativeApiOpti
         albumArtist: "Test artist",
         artwork: null,
         durationMs: 120_000 + index * 1_000,
+        fileFormat: "FLAC",
+        bitDepth: 24,
+        bitrateKbps: null,
         availability: missing ? "missing" : "available",
         playable: !missing,
       };
@@ -116,6 +129,19 @@ export async function installNativeApi(page: Page, options: InstallNativeApiOpti
       fileName: `${track.title}.flac`,
       extension: "flac",
     });
+    const outputDevices = [
+      { id: "speakers", name: "Speakers", isDefault: true },
+      { id: "headphones", name: "Headphones", isDefault: false },
+    ];
+    let outputSelection: AudioOutputSelection = { kind: "systemDefault" };
+    const outputDeviceFor = (selection: AudioOutputSelection) => {
+      const device =
+        selection.kind === "device"
+          ? outputDevices.find((item) => item.id === selection.deviceId)
+          : outputDevices.find((item) => item.isDefault);
+      return { id: device?.id ?? "default", name: device?.name ?? "System default" };
+    };
+    let waveformReady = false;
     let playbackRevision = 50;
     let queueRevision = 1;
     let currentTrack: LibraryTrackSummary | null = null;
@@ -181,8 +207,8 @@ export async function installNativeApi(page: Page, options: InstallNativeApiOpti
         durationMs: track.durationMs,
         volume: playback.volume,
         muted: playback.muted,
-        outputSelection: { kind: "systemDefault" },
-        outputDevice: { id: "default", name: "System default" },
+        outputSelection,
+        outputDevice: outputDeviceFor(outputSelection),
         channelConversion: "none",
         sourceSampleRate: 44_100,
         outputSampleRate: 48_000,
@@ -205,8 +231,8 @@ export async function installNativeApi(page: Page, options: InstallNativeApiOpti
           artist: item.artist,
           durationMs: item.durationMs,
         })),
-        repeatMode: "off",
-        shuffleEnabled: false,
+        repeatMode: queue.repeatMode,
+        shuffleEnabled: queue.shuffleEnabled,
       };
       emit({ event: "playbackQueueStateChanged", payload: queue });
       publishPlayback();
@@ -287,6 +313,16 @@ export async function installNativeApi(page: Page, options: InstallNativeApiOpti
         publishPlayback();
         return playback;
       },
+      getTrackLyrics: async (trackId) => {
+        recordRequest("lyrics");
+        const configured = lyricsByTrack.get(trackId);
+        if (configured !== undefined && "fail" in configured) throw { code: configured.fail };
+        return configured ?? { status: "notFound", trackId };
+      },
+      getArtworkAccent: async (contentHash) => {
+        recordRequest("accent");
+        return accentByHash.get(contentHash) ?? null;
+      },
       selectLibraryDirectory: async () => "C:/More Music",
       getLibraryStatus: async () =>
         options.libraryUnavailable
@@ -312,7 +348,72 @@ export async function installNativeApi(page: Page, options: InstallNativeApiOpti
         roots = roots.filter((item) => item.id !== id);
         return null;
       },
-      listAudioOutputDevices: async () => [],
+      listAudioOutputDevices: async () => outputDevices,
+      setPlaybackRepeatMode: async (mode) => {
+        queueRevision += 1;
+        queue = { ...queue, revision: queueRevision, repeatMode: mode };
+        emit({ event: "playbackQueueStateChanged", payload: queue });
+        return queue;
+      },
+      setPlaybackShuffle: async (enabled) => {
+        queueRevision += 1;
+        queue = { ...queue, revision: queueRevision, shuffleEnabled: enabled };
+        emit({ event: "playbackQueueStateChanged", payload: queue });
+        return queue;
+      },
+      removeQueueItem: async (id) => {
+        queueRevision += 1;
+        queue = {
+          ...queue,
+          revision: queueRevision,
+          upcoming: queue.upcoming.filter((item) => item.id !== id),
+        };
+        emit({ event: "playbackQueueStateChanged", payload: queue });
+        return queue;
+      },
+      moveQueueItem: async (id, direction) => {
+        const index = queue.upcoming.findIndex((item) => item.id === id);
+        const target = direction === "earlier" ? index - 1 : index + 1;
+        if (index >= 0 && target >= 0 && target < queue.upcoming.length) {
+          const upcoming = [...queue.upcoming];
+          const [item] = upcoming.splice(index, 1);
+          upcoming.splice(target, 0, item!);
+          queueRevision += 1;
+          queue = { ...queue, revision: queueRevision, upcoming };
+          emit({ event: "playbackQueueStateChanged", payload: queue });
+        }
+        return queue;
+      },
+      clearQueue: async () => {
+        queueRevision += 1;
+        queue = { ...queue, revision: queueRevision, upcoming: [] };
+        emit({ event: "playbackQueueStateChanged", payload: queue });
+        return queue;
+      },
+      setAudioOutputSelection: async (selection) => {
+        recordRequest("outputSelection");
+        outputSelection = selection;
+        playbackRevision += 1;
+        playback =
+          playback.status === "playing" || playback.status === "paused"
+            ? {
+                ...playback,
+                revision: playbackRevision,
+                outputSelection,
+                outputDevice: outputDeviceFor(selection),
+              }
+            : { ...playback, revision: playbackRevision, outputSelection };
+        publishPlayback();
+        return playback;
+      },
+      getPlaybackWaveform: async (path) => {
+        recordRequest("waveform");
+        if (!waveformReady || playback.file?.path !== path) return null;
+        const peaks = Array.from({ length: 400 }, (_, index) =>
+          Math.round(40 + 200 * Math.abs(Math.sin(index / 9))),
+        );
+        return { path, peaks, rms: peaks.map((peak) => Math.round(peak * 0.6)) };
+      },
       getLibraryScanState: async () => scan,
       startLibraryScan: async () => {
         setScanState("running");
@@ -397,6 +498,14 @@ export async function installNativeApi(page: Page, options: InstallNativeApiOpti
 
     const testState: NativeTestState = {
       getRequestCount: (kind) => requestCounts[kind] ?? 0,
+      setLyrics: (trackId, resolution) => void lyricsByTrack.set(trackId, resolution),
+      setArtworkAccent: (contentHash, color) => void accentByHash.set(contentHash, color),
+      publishWaveform: () => {
+        waveformReady = true;
+        if (playback.file !== null) {
+          emit({ event: "waveformReady", payload: { path: playback.file.path } });
+        }
+      },
       setScanState,
       startPlaybackTicks,
       stopPlaybackTicks,

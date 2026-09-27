@@ -92,41 +92,79 @@ for (const width of [640, 767, 768, 1024, 1360, 1920]) {
     await expect(mute).toBeVisible();
 
     const dockBox = await dock.boundingBox();
-    const statusBox = await page.locator('[data-slot="playback-status"]').boundingBox();
-    const seekTrackBox = await dock
-      .locator('[data-region="seek"] [data-slot="slider-track"]')
-      .boundingBox();
+    const seekBox = await dock.locator('[data-region="seek"]').boundingBox();
     const volumeTrackBox = await dock
       .locator('[data-region="volume-slider"] [data-slot="slider-track"]')
       .boundingBox();
-    const artworkBox = await dock.locator('[data-slot="artwork"]').boundingBox();
+    const sleeveBox = await dock.locator('[data-slot="sleeve"]').boundingBox();
     const transportBox = await dock.locator('[data-region="playback-core"]').boundingBox();
+    const iconRowBox = await dock.locator('[data-region="volume"]').boundingBox();
     const muteBox = await mute.boundingBox();
 
     expect(dockBox).not.toBeNull();
-    expect(statusBox).not.toBeNull();
-    expect(seekTrackBox).not.toBeNull();
+    expect(seekBox).not.toBeNull();
     expect(volumeTrackBox).not.toBeNull();
-    expect(artworkBox).not.toBeNull();
+    expect(sleeveBox).not.toBeNull();
     expect(transportBox).not.toBeNull();
+    expect(iconRowBox).not.toBeNull();
     expect(muteBox).not.toBeNull();
 
-    expect(dockBox!.height).toBeCloseTo(64, 0);
-    expect(statusBox!.height).toBeCloseTo(24, 0);
-    expect(dockBox!.height + statusBox!.height).toBeCloseTo(88, 0);
+    // A 104px dock, plus a thin status bar strip directly below it for the signal path.
+    expect(dockBox!.height).toBeCloseTo(104, 0);
     expect(volumeTrackBox!.width).toBeGreaterThan(80);
-    expect(Math.abs(seekTrackBox!.x - dockBox!.x)).toBeLessThanOrEqual(1);
-    expect(
-      Math.abs(seekTrackBox!.x + seekTrackBox!.width - (dockBox!.x + dockBox!.width)),
-    ).toBeLessThanOrEqual(1);
+    expect(seekBox!.height).toBeCloseTo(6, 0);
+    if (width >= 768) {
+      // The elapsed/remaining labels sit inline beside the bar (not stacked below it), so the
+      // bar itself is inset from both dock edges by roughly a label's width, not edge to edge.
+      expect(seekBox!.x - dockBox!.x).toBeGreaterThan(24);
+      expect(dockBox!.x + dockBox!.width - (seekBox!.x + seekBox!.width)).toBeGreaterThan(24);
+    } else {
+      // Below md the labels are hidden entirely, so the bar alone fills the row, inset only by
+      // the row's own horizontal padding (`px-2`).
+      expect(seekBox!.x - dockBox!.x).toBeGreaterThanOrEqual(4);
+      expect(seekBox!.x - dockBox!.x).toBeLessThanOrEqual(12);
+      expect(
+        Math.abs(dockBox!.x + dockBox!.width - (seekBox!.x + seekBox!.width)),
+      ).toBeLessThanOrEqual(12);
+    }
 
-    const artworkTopGap = artworkBox!.y - dockBox!.y;
-    const artworkBottomGap = dockBox!.y + dockBox!.height - (artworkBox!.y + artworkBox!.height);
-    expect(Math.abs(artworkTopGap - artworkBottomGap)).toBeLessThanOrEqual(1);
+    // The Sleeve is a fixed, inset tile beside the title/artist — never edge-filling, and its
+    // size doesn't change with width. The signal path sits in its own status bar strip below the
+    // dock, fixed to the bottom-right, not inside the dock footer.
+    const signalPath = page.getByRole("group", { name: "Signal path" });
+    expect(sleeveBox!.width).toBeCloseTo(64, 0);
+    expect(sleeveBox!.height).toBeCloseTo(64, 0);
+    expect(sleeveBox!.x).toBeGreaterThan(dockBox!.x);
+    if (width >= 768) {
+      await expect(dock.getByRole("button", { name: "Shuffle" })).toBeVisible();
+      await expect(dock.getByRole("button", { name: /^Repeat/ })).toBeVisible();
+      await expect(signalPath).toBeVisible();
+      const signalPathBox = await signalPath.boundingBox();
+      expect(signalPathBox).not.toBeNull();
+      expect(signalPathBox!.y).toBeGreaterThanOrEqual(dockBox!.y + dockBox!.height);
+      expect(
+        Math.abs(signalPathBox!.x + signalPathBox!.width - (dockBox!.x + dockBox!.width)),
+      ).toBeLessThanOrEqual(24);
+    } else {
+      await expect(dock.getByRole("button", { name: "Shuffle" })).toBeHidden();
+      await expect(dock.getByRole("button", { name: /^Repeat/ })).toBeHidden();
+      await expect(signalPath).toBeHidden();
+    }
 
-    const dockCenter = dockBox!.y + dockBox!.height / 2;
+    // Transport buttons and the lyrics/queue/volume icon row share one baseline (the primary
+    // row); the signal path sits on its own row below the icons, so it must not pull that
+    // shared baseline off-center the way one undivided, independently-centered column did.
     const transportCenter = transportBox!.y + transportBox!.height / 2;
-    expect(Math.abs(dockCenter - transportCenter)).toBeLessThanOrEqual(1);
+    const iconRowCenter = iconRowBox!.y + iconRowBox!.height / 2;
+    expect(Math.abs(transportCenter - iconRowCenter)).toBeLessThanOrEqual(1);
+
+    // The transport grid's two side columns are equal width, so the transport controls land on
+    // the dock's true horizontal center regardless of how wide the identity block or volume
+    // controls are on either side — not just centered in the space left over after the Sleeve.
+    const transportHCenter = transportBox!.x + transportBox!.width / 2;
+    const dockHCenter = dockBox!.x + dockBox!.width / 2;
+    expect(Math.abs(transportHCenter - dockHCenter)).toBeLessThanOrEqual(2);
+
     expect(muteBox!.width).toBeGreaterThanOrEqual(36);
     expect(muteBox!.height).toBeGreaterThanOrEqual(36);
 

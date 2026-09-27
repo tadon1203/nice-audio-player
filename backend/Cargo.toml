@@ -29,6 +29,12 @@ dunce = "=1.0.5"
 blake3 = "=1.8.5"
 notify = "=8.2.0"
 rubato = { version = "4.0.0", default-features = false, features = ["fft_resampler"] }
+image = { version = "=0.25.10", default-features = false, features = ["jpeg", "png"] }
 
 [profile.release]
 strip = true
+
+# Dependencies (symphonia, blake3, rubato) are far too slow unoptimized for whole-file decoding,
+# which waveform analysis does; keep them optimized in dev builds.
+[profile.dev.package."*"]
+opt-level = 3

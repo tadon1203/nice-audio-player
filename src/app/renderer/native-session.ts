@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { applyLibraryEvent } from "@/renderer/entities/library";
-import { playbackController } from "@/renderer/features/playback-control";
+import { applyWaveformEvent, playbackController } from "@/renderer/features/playback-control";
 import { getNativeApiOrNull } from "@/renderer/shared/lib/native";
 import { queryClient } from "./query-client";
 
@@ -14,6 +14,7 @@ export function NativeSession() {
     return api.onEvent((event) => {
       playbackController.acceptEvent(event);
       applyLibraryEvent(queryClient, event);
+      applyWaveformEvent(queryClient, event);
     });
   }, []);
 

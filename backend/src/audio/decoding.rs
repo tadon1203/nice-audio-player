@@ -79,6 +79,13 @@ pub(crate) struct StreamingDecoder {
     finished: bool,
 }
 
+/// Opens a decoder for whole-file analysis; CRC verification is skipped because nothing is played.
+pub(crate) fn open_analysis_decoder(
+    file: &ValidatedAudioFile,
+) -> Result<StreamingDecoder, PcmDecodeError> {
+    open_decoder(file, false)
+}
+
 fn open_verified_decoder(file: &ValidatedAudioFile) -> Result<StreamingDecoder, PcmDecodeError> {
     open_decoder(file, true)
 }

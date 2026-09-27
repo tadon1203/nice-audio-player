@@ -17,6 +17,21 @@ for (const path of ["/library/albums", "/library/tracks", "/settings"] as const)
   });
 }
 
+test("keeps Now Playing accessible", async ({ page }) => {
+  await page.goto("/library/tracks");
+  await page.getByRole("button", { name: "Play Test track" }).click();
+  const dock = page.getByRole("contentinfo", { name: "Playback controls" });
+  await expect(dock.getByRole("button", { name: "Pause", exact: true })).toBeEnabled();
+  await dock.getByRole("button", { name: "Open Now Playing" }).click();
+  await expect(page.getByRole("region", { name: "Now Playing" })).toBeVisible();
+
+  const results = await new AxeBuilder({ page }).analyze();
+  const serious = results.violations.filter(
+    (violation) => violation.impact === "serious" || violation.impact === "critical",
+  );
+  expect(serious).toEqual([]);
+});
+
 test("keeps the mobile navigation sheet accessible", async ({ page }) => {
   await page.setViewportSize({ width: 640, height: 900 });
   await page.goto("/library/albums");

@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
+import { MotionProvider } from "@/renderer/shared/ui/motion";
 import { TooltipProvider } from "@/renderer/shared/ui/shadcn/tooltip";
 import { NativeSession } from "./native-session";
 import { queryClient } from "./query-client";
@@ -15,8 +16,10 @@ createRoot(rootElement).render(
   <StrictMode>
     <TooltipProvider>
       <QueryClientProvider client={queryClient}>
-        <NativeSession />
-        <RouterProvider router={router} />
+        <MotionProvider>
+          <NativeSession />
+          <RouterProvider router={router} />
+        </MotionProvider>
       </QueryClientProvider>
     </TooltipProvider>
   </StrictMode>,

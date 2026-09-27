@@ -22,7 +22,9 @@ Renderer code never imports Rust implementation details. Renderer-to-native acce
 
 ## Renderer state
 
-TanStack Router owns navigation, validated search state, URL history, and scroll restoration. TanStack Query owns native read-model caching and event-driven cache updates. Zustand is restricted to push-driven playback state and never duplicates library data or Rust authority.
+TanStack Router owns navigation, validated search state, URL history, and scroll restoration. TanStack Query owns native read-model caching and event-driven cache updates. Zustand is restricted to push-driven playback state and never duplicates library data or Rust authority. Now Playing is a layer kept in router history state (`nowPlaying`) over the current location, so the library underneath stays mounted and Back closes it.
+
+`motion` is imported only through `src/renderer/shared/ui/motion` (tokens, `MotionProvider`, `useMotionTransition`) and by widgets that own a transition. Blur appears only in `ArtworkLight` and `Acrylic` (`shared/ui`). Lyrics and artwork accent colors are read through `entities/lyrics` and `entities/library` queries, never by calling commands from UI.
 
 ## IPC and distribution
 

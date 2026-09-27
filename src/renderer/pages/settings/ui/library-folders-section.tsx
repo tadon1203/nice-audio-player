@@ -229,7 +229,7 @@ export function LibraryFoldersSection() {
                   ) : null}
                 </ItemContent>
                 <ItemActions className="w-full justify-end gap-3 sm:w-auto">
-                  <Field className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Field orientation="horizontal" className="gap-2 text-sm text-muted-foreground">
                     <Checkbox
                       id={`enabled-${root.id}`}
                       checked={root.enabled}

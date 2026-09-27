@@ -14,6 +14,19 @@ export const commands = {
 	setPlaybackVolume: (volume: number) => __TAURI_INVOKE<PlaybackSnapshot>("set_playback_volume", { volume }),
 	setPlaybackMuted: (muted: boolean) => __TAURI_INVOKE<PlaybackSnapshot>("set_playback_muted", { muted }),
 	listAudioOutputDevices: () => __TAURI_INVOKE<AudioOutputDevice[]>("list_audio_output_devices"),
+	setPlaybackRepeatMode: (mode: PlaybackRepeatMode) => __TAURI_INVOKE<PlaybackQueueSnapshot>("set_playback_repeat_mode", { mode }),
+	setPlaybackShuffle: (enabled: boolean) => __TAURI_INVOKE<PlaybackQueueSnapshot>("set_playback_shuffle", { enabled }),
+	/**  Switches the output device; a loaded track restarts on it at the same position. */
+	setAudioOutputSelection: (selection: AudioOutputSelection) => __TAURI_INVOKE<PlaybackSnapshot>("set_audio_output_selection", { selection }),
+	removeQueueItem: (id: string) => __TAURI_INVOKE<PlaybackQueueSnapshot>("remove_queue_item", { id }),
+	moveQueueItem: (id: string, direction: PlaybackQueueMoveDirection) => __TAURI_INVOKE<PlaybackQueueSnapshot>("move_queue_item", { id, direction }),
+	clearQueue: () => __TAURI_INVOKE<PlaybackQueueSnapshot>("clear_queue"),
+	/**  Waveform of the loaded track, or `None` while it is analyzed; `waveformReady` follows. */
+	getPlaybackWaveform: (path: string) => __TAURI_INVOKE<{
+	path: string,
+	peaks: number[],
+	rms: number[],
+} | null>("get_playback_waveform", { path }),
 	getLibraryStatus: () => __TAURI_INVOKE<LibraryStatus>("get_library_status"),
 	getLibraryScanState: () => __TAURI_INVOKE<LibraryScanSnapshot>("get_library_scan_state"),
 	listLibraryRoots: () => __TAURI_INVOKE<LibraryRoot[]>("list_library_roots"),
@@ -37,15 +50,22 @@ export const commands = {
 	albumArtist: string | null,
 	artwork: ArtworkRef | null,
 	durationMs: number | null,
+	fileFormat: string | null,
+	bitDepth: number | null,
+	bitrateKbps: number | null,
 	availability: LibraryFileAvailability,
 	playable: boolean,
 } | null>("get_library_track_for_path", { path }),
 	startLibraryTrack: (trackId: string) => __TAURI_INVOKE<PlaybackSnapshot>("start_library_track", { trackId }),
 	startLibraryAlbum: (albumKey: LibraryAlbumKey) => __TAURI_INVOKE<PlaybackSnapshot>("start_library_album", { albumKey }),
+	getArtworkAccent: (contentHash: string) => __TAURI_INVOKE<string | null>("get_artwork_accent", { contentHash }),
+	getTrackLyrics: (trackId: string) => __TAURI_INVOKE<LyricsResolution>("get_track_lyrics", { trackId }),
 };
 
 /* Types */
-export type AppEvent = { event: "playbackStateChanged"; payload: PlaybackSnapshot } | { event: "playbackQueueStateChanged"; payload: PlaybackQueueSnapshot } | { event: "applicationActivitiesChanged"; payload: ApplicationActivity[] } | { event: "libraryScanStateChanged"; payload: LibraryScanSnapshot };
+export type AppEvent = { event: "playbackStateChanged"; payload: PlaybackSnapshot } | { event: "playbackQueueStateChanged"; payload: PlaybackQueueSnapshot } | { event: "applicationActivitiesChanged"; payload: ApplicationActivity[] } | { event: "libraryScanStateChanged"; payload: LibraryScanSnapshot } | { event: "waveformReady"; payload: {
+	path: string,
+} };
 
 export type ApplicationActivity = {
 	id: string,
@@ -192,11 +212,35 @@ export type LibraryTrackSummary = {
 	albumArtist: string | null,
 	artwork: ArtworkRef | null,
 	durationMs: number | null,
+	fileFormat: string | null,
+	bitDepth: number | null,
+	bitrateKbps: number | null,
 	availability: LibraryFileAvailability,
 	playable: boolean,
 };
 
 export type LibraryUnavailableReason = "storageUnavailable" | "databaseOpenFailed" | "migrationFailed" | "schemaTooNew" | "databaseCorrupt";
+
+export type LyricsCommandError = { code: "invalidId" } | { code: "trackNotFound" } | { code: "trackUnavailable" } | { code: "libraryUnavailable" } | { code: "persistenceFailed" } | { code: "taskFailed" };
+
+export type LyricsContent = { kind: "plain"; lines: string[] } | { kind: "timed"; lines: LyricsTimedLine[] };
+
+export type LyricsDocument = {
+	source: LyricsSourceKind,
+	language: string | null,
+	content: LyricsContent,
+};
+
+export type LyricsResolution = { status: "resolved"; trackId: string; document: LyricsDocument; notice: LyricsResolutionNotice | null } | { status: "notFound"; trackId: string } | { status: "sourceFailed"; trackId: string };
+
+export type LyricsResolutionNotice = "sidecarFailedUsingEmbedded";
+
+export type LyricsSourceKind = "sidecar" | "embedded";
+
+export type LyricsTimedLine = {
+	startMs: number,
+	text: string,
+};
 
 export type PlaybackChannelConversion = "none" | "monoToStereo" | "stereoToMono";
 
@@ -212,6 +256,8 @@ export type PlaybackQueueItem = {
 	durationMs: number | null,
 };
 
+export type PlaybackQueueMoveDirection = "earlier" | "later";
+
 export type PlaybackQueueSnapshot = {
 	revision: number,
 	current: PlaybackQueueItem | null,
@@ -223,6 +269,12 @@ export type PlaybackQueueSnapshot = {
 export type PlaybackRepeatMode = "off" | "all" | "one";
 
 export type PlaybackSnapshot = { status: "stopped"; revision: number; file: ValidatedAudioFile | null; volume: number; muted: boolean; outputSelection: AudioOutputSelection; canGoPrevious: boolean; canGoNext: boolean } | { status: "playing"; revision: number; file: ValidatedAudioFile; playbackId: string; positionMs: number; durationMs: number | null; volume: number; muted: boolean; outputSelection: AudioOutputSelection; outputDevice: AudioOutputDeviceIdentity; channelConversion: PlaybackChannelConversion; sourceSampleRate: number; outputSampleRate: number; resamplingActive: boolean; canGoPrevious: boolean; canGoNext: boolean } | { status: "paused"; revision: number; file: ValidatedAudioFile; playbackId: string; positionMs: number; durationMs: number | null; volume: number; muted: boolean; outputSelection: AudioOutputSelection; outputDevice: AudioOutputDeviceIdentity; channelConversion: PlaybackChannelConversion; sourceSampleRate: number; outputSampleRate: number; resamplingActive: boolean; canGoPrevious: boolean; canGoNext: boolean } | { status: "failed"; revision: number; file: ValidatedAudioFile | null; playbackId: string | null; error: PlaybackFailureCode; volume: number; muted: boolean; outputSelection: AudioOutputSelection; canGoPrevious: boolean; canGoNext: boolean };
+
+export type PlaybackWaveform = {
+	path: string,
+	peaks: number[],
+	rms: number[],
+};
 
 export type StartLibraryAlbumTrackError = { code: "invalidAlbumKey" } | { code: "invalidTrackId" } | { code: "albumNotFound" } | { code: "trackNotMember" } | { code: "trackUnavailable" } | { code: "trackNotPlayable" } | { code: "noPlayableTracks" } | { code: "sourceUnavailable" } | { code: "libraryUnavailable" } | { code: "persistenceFailed" } | { code: "decodeFailed" } | { code: "noOutputDevice" } | { code: "outputDeviceUnavailable" } | { code: "outputFailed" } | { code: "playbackWorkerUnavailable" } | { code: "taskFailed" };
 

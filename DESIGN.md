@@ -2,9 +2,13 @@
 
 ## Overview
 
-A working desktop music-library tool, not a streaming storefront. Dark, mostly monochrome, precise. Artwork provides the color; the interface communicates through alignment, typography, state clarity, and stable geometry rather than effects. Density follows the task: artwork browsing can breathe, tables, metadata, settings, and playback status are compact and technical.
+A working desktop music-library tool, not a streaming storefront. Dark, precise, and technical. **The record's artwork is the app's only light source**: it colors the playback surface and the headers of the things it belongs to, and nothing else. Everything else communicates through alignment, typography, state clarity, and stable geometry rather than effects.
 
-A screen should answer without explanation: what matters now, what belongs together, what state the system is in, and where an action takes effect.
+Now Playing is not a page. It is the playback dock extended upward: one surface, lit by the current artwork.
+
+A screen should answer without explanation: what matters now, what belongs together, what state the system is in, and where an action takes effect. Density follows the task: artwork browsing can breathe; tables, metadata, settings, and playback status are compact and technical.
+
+The full rationale and rollout order live in [docs/redesign-plan.md](./docs/redesign-plan.md). This file holds the rules.
 
 ## Tokens and styling
 
@@ -12,32 +16,121 @@ A screen should answer without explanation: what matters now, what belongs toget
 
 Adding a value, in order: existing shadcn token → Tailwind built-in or structural arbitrary value → smallest `@theme` addition if it recurs → keep local to the component.
 
-| Token                | Use                                 |
-| -------------------- | ----------------------------------- |
-| `--background`       | workspace canvas                    |
-| `--sidebar`          | sidebar and playback chrome         |
-| `--popover`          | input, select, button, menu         |
-| `--accent`           | hover                               |
-| `--muted`            | selection                           |
-| `--foreground`       | primary text/icon                   |
-| `--muted-foreground` | metadata, supporting text           |
-| `--border`           | dividers, structural rules          |
-| `--input`            | control boundary                    |
-| `--ring`             | keyboard focus only                 |
-| `--destructive`      | errors and destructive actions only |
+| Token                | Use                                               |
+| -------------------- | ------------------------------------------------- |
+| `--background`       | workspace canvas, playback status bar             |
+| `--sidebar`          | sidebar and dock                                  |
+| `--popover`          | input, select, button, menu, acrylic base         |
+| `--accent`           | hover                                             |
+| `--muted`            | selection                                         |
+| `--foreground`       | Ink-1: primary text/icon, the present             |
+| `--muted-foreground` | Ink-2: metadata, supporting text, the future      |
+| `--faint-foreground` | Ink-3: the past (sung lyric lines, queue history) |
+| `--border`           | dividers, structural rules                        |
+| `--input`            | control boundary                                  |
+| `--ring`             | keyboard focus only                               |
+| `--destructive`      | errors and destructive actions only               |
 
-Chrome is grayscale and never inherits artwork color. Chromatic color is reserved for semantic info such as errors, and color is never the only state indicator. Playback state uses glyphs, not a dedicated color.
+Controls are grayscale and never take artwork color. Chromatic color is reserved for semantic info such as errors, and color is never the only state indicator. Playback state uses glyphs, not a dedicated color. The artwork's representative color (from `getArtworkAccent`) may tint backgrounds only, never controls, text, or focus.
 
 - **Type**: Satoshi (Latin), Noto Sans JP (Japanese), fallback `Segoe UI, system-ui, sans-serif` via `font-sans`. Use `text-sm/base/lg/2xl`; never below 14px. Regular weight; hierarchy comes from size, luminance, and spacing. `tabular-nums` for technical values. Uppercase only for short technical labels and table headings. No monospace for style.
-- **Shape**: Tailwind spacing/radius/sizing first. Artwork `rounded-lg`; icons `size-4/5/6`. Edge-attached surfaces are square. 1px `--border`/`--input` borders only where they mark real structure.
-- **Depth**: only `shadow-none` and `shadow-floating`; persistent UI has no shadow. Layers: content 0, chrome 10, floating 20, modal 30. No gradients, glass, glow, or blur.
-- **Motion**: feedback 100ms, spatial 160ms, `cubic-bezier(0.2, 0, 0, 1)`. Short, interruptible, no bounce or overshoot. Direct manipulation tracks input immediately. Reduced motion must preserve hierarchy and state.
+- **Shape**: Tailwind spacing/radius/sizing first. Icons `size-4/5/6`. 1px `--border`/`--input` borders only where they mark real structure. Corner radius says how artwork is placed (see Sleeve).
+- **Depth**: only `shadow-none` and `shadow-floating`; persistent UI has no shadow. Layers are listed under Spatial layers.
+- **Blur**: allowed only as Light and Acrylic (below). Never in the workspace or sidebar, never animated.
 - **Components**: shadcn primitives live in `src/renderer/shared/ui/shadcn`; product UI stays outside. Use them instead of restyling focus, disabled, and keyboard states in page CSS.
-- **No hardware cosplay**: no fake knobs, screws, LEDs, or decorative meters.
+- **No hardware cosplay**: no fake knobs, screws, LEDs, or decorative meters. The waveform is data, not decoration.
+
+## Vocabulary
+
+Every screen is built from five elements instead of new looks.
+
+| Element    | Meaning                                         | Origin                |
+| ---------- | ----------------------------------------------- | --------------------- |
+| **Sleeve** | The music itself; an object that moves          | Left edge of the dock |
+| **Light**  | What the user is focused on right now           | Dock background       |
+| **Strip**  | Time shown horizontally                         | Waveform seek bar     |
+| **Gutter** | Position and order, `tabular-nums`, on the left | Lyrics timestamps     |
+| **Path**   | Notation for technical information              | Dock signal path      |
+
+### Sleeve
+
+- The same artwork never appears in two places at once. The current track is not repeated in the sidebar or title bar.
+- Radius shows placement: attached to an edge (Now Playing, full height) is square; placed in the workspace (tiles, headers, the dock) is `rounded-lg`; a thumbnail inside a row (Queue) is `rounded-sm`. The radius is interpolated while moving.
+- There is exactly one play affordance: the dock's white round play button, reused on tile hover, detail headers, and Queue. Tile hover shows it at the bottom right of the artwork instead of dimming.
+
+### Light
+
+| Place                      | Light source                                                 | Strength |
+| -------------------------- | ------------------------------------------------------------ | -------- |
+| Now Playing                | Current track's artwork                                      | max      |
+| Playback dock              | Current track's artwork, brightest at the left, fading right | strong   |
+| Album details              | That album's artwork (header band only)                      | medium   |
+| Artist details             | A representative album's artwork (header band only)          | medium   |
+| Library, sidebar, Settings | none                                                         | none     |
+
+- Draw Light as a static blurred `<img>` under a veil: `ArtworkLight` in `shared/ui/artwork-light`. The caps in `light-model.ts` (blur, brightness, veil, strength) keep Ink-1 and Ink-2 at AA and Ink-3 at 3:1 (large text) over even pure white artwork; `light-model.test.ts` enforces it. Change them only with the test.
+- Animate only `transform`, `opacity`, and `clip-path`. Never animate the blur radius. Changing artwork crossfades over the `light` token (illumination is not an object).
+- Light can be turned off with the `Artwork backdrop` preference and is hidden under `forced-colors`.
+- Floating UI (menus, Select, Dialog, Sheet, sticky headers) uses **Acrylic** (`acrylic` utility, `Acrylic` component), not Light. It is solid `Canvas` under `forced-colors`.
+- The title bar's left 16rem is `bg-sidebar` so the sidebar reads as one column to the top of the window. While Now Playing is open the title bar is transparent and the Light reaches the top.
+
+### Strip
+
+Time is drawn horizontally: a plain progress line across the top of the dock, the full waveform in Now Playing, a 1px progress line along the bottom of the playing track row, and segments proportional to track length along the bottom of an album header band (the playing segment is brighter; hover names the track; click plays it).
+
+### Gutter
+
+Track number and play slot, lyric timestamps, Queue number and time, and the Settings label column share one width (about 4rem) and one left edge. Content is `tabular-nums` in Ink-2 and becomes Ink-1 on hover. A Gutter is also the button for its row: play for a track, seek for a lyric. The track-table play slot is the reference.
+
+### Path
+
+`FLAC 24/96` is codec, bit depth, kHz. Lossy formats show bitrate: `AAC 256k`. Used by the dock signal path (`source › processing › output`; with no resampling it is just `FLAC 24/96 › Speakers`, so its length says whether playback is bit-perfect), the track table format column, album fact lines (`Mixed` when they differ), and Settings.
+
+## Time state and luminance
+
+Luminance is fixed to past, present, and future.
+
+| State   | Ink   | Used in                                     |
+| ------- | ----- | ------------------------------------------- |
+| Past    | Ink-3 | lyric lines already sung, queue history     |
+| Present | Ink-1 | current lyric line, the playing track       |
+| Future  | Ink-2 | upcoming lyric lines, upcoming queue tracks |
+
+The waveform is the exception: played is Ink-1, unplayed is Ink-2. State changes never change size or weight, so nothing shifts.
+
+## Spatial layers and motion
+
+**One object exists in one place only**: anything that crosses screens moves as a shared element and is never crossfaded as two copies (Light is the one exception). **The deeper the hierarchy, the higher the layer.**
+
+```
+30  Dialog (acrylic, 0.98 → 1 from center)
+20  Menus / Select / tooltips (open from the triggering button)
+15  Queue panel (from the right) / mobile navigation (from the left)
+10  Now Playing (extends upward from the dock)
+ 0  Library ⇄ details (same surface; the Sleeve moves as a shared element)
+```
+
+Motion tokens live in `shared/ui/motion`. Springs are fully damped (`bounce: 0`): no bounce, no overshoot.
+
+| Token        | Setting       | Used for                                         |
+| ------------ | ------------- | ------------------------------------------------ |
+| `feedback`   | 100ms, ease   | hover, press, color                              |
+| `smallMove`  | spring, 0.2s  | tabs, Select, tooltips, lyric line luminance     |
+| `mediumMove` | spring, 0.3s  | Queue panel, Sheet, lyrics scroll, track changes |
+| `largeMove`  | spring, 0.42s | dock ⇄ Now Playing, tile ⇄ details               |
+| `light`      | 400ms, ease   | crossfading Light                                |
+
+1. Direction encodes hierarchy: deeper moves up, back moves down. Next track exits left, previous exits right. Sibling views only crossfade (100ms). Sort and filter do not animate.
+2. Things appear from where they were summoned.
+3. Direct manipulation (seek, volume, manual scroll, header shrink) tracks input 1:1.
+4. Only three things move on their own: track changes, lyrics follow, Light crossfades.
+5. Reduced motion turns every movement into a 100ms crossfade. Hierarchy and state stay intact.
+
+Shared elements use `motion` (`layoutId`), which interrupts and reverses cleanly. Small feedback stays on CSS transitions. The View Transitions API is snapshot-based and not used for main transitions.
 
 ## Layout
 
-- One continuous spatial system: persistent navigation, library/detail workspace, persistent playback region (88px high).
+- One continuous spatial system: persistent navigation, library/detail workspace, and one 104px playback dock. Now Playing covers the workspace and sidebar, from below the title bar to the top of the dock.
 - Workspace views share the same horizontal inset and left edge. Grids fill left to right and may leave space on the right; no per-view centering.
 - Tables, artwork, panes, and readouts share alignment lines.
 - Prefer intrinsic layout (flex wrap, content sizing) before breakpoints; use container queries for width-dependent components. Shell breakpoint is `md` (768px).
@@ -50,31 +143,74 @@ Chrome is grayscale and never inherits artwork color. Chromatic color is reserve
 - No `File / Edit / View / Window` menu bar. Commands live in their workspace or Settings.
 - At 768px and above the sidebar is persistent and not collapsible; below it, navigation is a sheet with an explicit close control.
 
+## WorkspaceHeader
+
+Library, detail, and Settings screens share one header pattern:
+
+```
+[ ← Parent name ]                     (detail screens only)
+Title                                 [ Actions ]
+Fact line (tabular-nums, Ink-2)       [ Sort, etc. ]
+```
+
+- Fact line: library `1,284 albums`; album year, track count, total time, format; Settings the number of folders. Separate items with 1em of space, not middle dots.
+- No uppercase kind labels such as `ALBUM`.
+- Scrolling shrinks the large title into a 40px Acrylic sticky band, tracking the scroll 1:1 (CSS scroll-driven animation).
+
 ## Views
 
-- **Library**: Albums (artwork-led), Album Artists (textual), Tracks (tabular). Each keeps its own filter, sort, and scroll. The filter sits in a stable spot per view and keeps its query when switching views.
-- **Details**: album and artist views establish identity before related content. Back returns to the semantic parent and restores context. The same object stays visually traceable across transitions.
-- **Settings**: a technical ledger, not cards. Labels, values, controls, paths, and errors align. Read-only info doesn't look like a disabled input. Changes apply immediately where safe.
+- **Library**: Albums (artwork-led), Album Artists (textual), Tracks (tabular). Each keeps its own filter, sort, and scroll. The filter sits in a stable spot per view and keeps its query when switching views. The track table's sticky header is Acrylic. The playing album or row shows a static playback glyph, never an animated equalizer.
+- **Details**: album and artist views establish identity before related content, with a medium-Light header band (album: with the track Strip along its bottom edge, and `Play` / `Shuffle`). Back returns to the semantic parent and restores context. The same object stays visually traceable across transitions.
+- **Queue**: a 320px Acrylic panel entering from the right, so it can stay open while browsing. Drag to reorder, `Remove`, `Clear upcoming`.
+- **Settings**: a technical ledger, not cards. Labels, values, controls, paths, and errors align on the Gutter. Read-only info doesn't look like a disabled input. Changes apply immediately where safe. The Playback section shows the signal path stage by stage with each stage's setting, and the `Artwork backdrop` toggle.
 - **States**: empty, loading, error, and content states have clear ownership. Errors appear near the affected object with a recovery action. Prefer Undo over confirmation dialogs; confirm only for meaningful irreversible actions.
 - **Temporary UI** (menus, popovers) is attached to its trigger, compact, minimally rounded, and uses standard keyboard/focus/dismissal patterns. Icons only where they aid recognition.
 
 ## Playback
 
-- A persistent region with stable geometry. Primary transport stays centered; other info must not shift it.
-- Timeline, transport, volume, and technical status read as one instrument. Technical status (format, sample rate, bit depth, bitrate) lives in a compact dedicated region.
+### Dock
+
+One 104px band with stable geometry, plus a thin status bar strip directly below it, visibly a step darker so the two never read as one surface. Primary transport stays centered and nothing shifts it.
+
+- **Two full-width rows.** A plain progress line runs edge to edge across the top — position only, no waveform data; the waveform itself is drawn only in Now Playing, which this line grows into. Below it, the transport grid's two side columns are equal width, so transport sits on the dock's true horizontal center regardless of what the identity block or volume controls weigh on each side.
+- **Sleeve is inset, not edge-filling.** A small `rounded-lg` tile sits at the start of the identity block, beside the title/artist — placed like any other artwork in the workspace, not attached to the dock's edge. Clicking it opens Now Playing; its context menu offers `Go to album` and `Go to artist`. The whole identity block, the transport, and the volume group share one vertical center.
+- **Progress line**: a slim fixed-height track, filled Ink-1 up to the current position over an Ink-2 unplayed remainder. Hover shows a line and a time tooltip; dragging tracks the pointer 1:1. Elapsed and remaining time sit at its ends; clicking toggles remaining time.
+- **Transport**: ⤮ ⏮ ▶ ⏭ ↻, symmetric, centered on the dock. On/off is shown by icon shape and a dot, not color. Repeat-one is `↻¹`.
+- **Right side**: lyrics, queue, volume with a dB readout (wheel adjusts ±1 dB).
+- **Status bar**: a fixed-height strip below the dock, right-aligned, holding the signal path with its output-device menu.
+- **Narrow (<768px)**: only ⏮ ▶ ⏭. Shuffle, repeat, and the status bar move to Now Playing.
 - Volume is icon, level, and numeric readout on one axis.
+
+### Now Playing
+
+A layer over the current location, not a route: the library stays mounted underneath (scroll position included), and Back closes it. It grows upward from the top edge of the dock (`clip-path`) so the Light is continuous with the dock; the boundary line disappears. Entry: the dock Sleeve or title, the lyrics button, `Ctrl+L`. The `⌄` close button sits where the Sleeve was, and the Sleeve returns there on close. Beneath it, the underlying shell is `inert`.
+
+- **Waveform seek bar**: the only place the waveform is drawn. Bars grow upward from a baseline; played Ink-1, unplayed Ink-2, a 1px playhead. Hover shows a line and a time tooltip; dragging tracks the pointer 1:1. Its size never changes. Before data exists it is a 2px baseline line, and the bars grow out of that same line — the same shared element the dock's plain progress line grows from when Now Playing opens. Elapsed and remaining time sit at its ends; clicking toggles remaining time.
+- **Lyrics** (local LRC only): left-aligned with a timestamp Gutter; the Gutter is the seek button, the text is selectable. The current line is Ink-1 by luminance only; size and weight never change. About `text-2xl`, ≤ ~32 characters per line. Plain lyrics have no Gutter, no auto-scroll, and an `Unsynced` label. Position arrives every 250ms, so time is interpolated from the last anchor. Follow mode keeps the current line about a third from the top; wheel, touch, scrollbar, and navigation keys switch to free mode with a `Jump to current line` button, and follow resumes after ~4s idle away from the lyrics, on the button, on track change, or on Gutter seek. The current line gets `aria-current`; there is no per-line `aria-live`.
+- The current lyric line's span is lit on the waveform; hovering a line highlights its span there, and hovering the waveform faintly marks its line.
+- **Lyrics states**: no lyrics → `No lyrics for this track` with `Add a .lrc file with the same name next to the audio file.`; unreadable → `Couldn't read the lyrics file` with the path; sidecar failed → `The .lrc file couldn't be read. Showing embedded lyrics.`
 
 ## Track activation
 
-- A track row is one playback object. Pointer activation uses the whole row except nested controls. Keyboard and assistive tech use a real button in a fixed action/state slot.
+- A track row is one playback object. Pointer activation uses the whole row except nested controls. Keyboard and assistive tech use a real button in a fixed action/state slot (the Gutter).
 - The slot is always reserved: before the title in the Library table, in the track-number column in Album tables. Inactive tracks show Play on hover/focus; the active playing track shows Pause; the active paused track shows Resume.
 - Row activation of the active playing track is inert, so a broad hit area can't accidentally pause.
 - Hover, playback state, selection, and keyboard focus are separate visual states and may coexist. Changing playback state must not move the title baseline or columns.
 
+## Keyboard
+
+| Key                 | Action                |
+| ------------------- | --------------------- |
+| Space               | Play / pause          |
+| `←` / `→`           | Seek                  |
+| `Ctrl+←` / `Ctrl+→` | Previous / next track |
+| `Ctrl+L`            | Lyrics (Now Playing)  |
+| `Ctrl+Q`            | Queue                 |
+
 ## Accessibility
 
-- Sufficient contrast (WCAG AA), visible keyboard focus, logical focus order, keyboard support everywhere.
-- Usable with reduced motion, forced colors, text enlargement, and Windows scaling at 100/125/150/200%.
+- Sufficient contrast (WCAG AA), visible keyboard focus, logical focus order, keyboard support everywhere. Text over Light meets AA (Ink-3 lyrics: 3:1 as large text).
+- Usable with reduced motion, forced colors (Light off, Acrylic solid), text enlargement, and Windows scaling at 100/125/150/200%.
 - When space runs out, rearrange or drop secondary info before shrinking text.
 
 ## Don'ts
@@ -83,3 +219,5 @@ Chrome is grayscale and never inherits artwork color. Chromatic color is reserve
 - Don't hide useful playback/file info just to look minimal.
 - Don't use oversized headings or hero space to manufacture importance.
 - Don't let secondary info disturb the center of primary controls.
+- Don't blur outside Light and Acrylic, and never animate a blur.
+- Don't show the same artwork in two places at once.

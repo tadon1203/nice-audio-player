@@ -69,17 +69,11 @@ test("plays tracks and operates the persistent seek, transport, volume, and tech
   await volume.press("ArrowRight");
   await expect(page.getByRole("button", { name: "Mute", exact: true })).toBeVisible();
 
-  const status = page.getByRole("region", { name: "Playback signal status" });
-  await expect(status).toContainText("SOURCE");
-  await expect(status).toContainText("FLAC · 44.1 kHz");
-  await expect(status).toContainText("SRC");
-  await expect(status).toContainText("resampling");
-  await expect(status).toContainText("OUTPUT");
-  await expect(status).toContainText("System default · direct · 48.0 kHz");
-  await expect(status.locator('[data-status-line="OUTPUT"]')).toHaveAttribute(
-    "title",
-    "OUTPUT System default · direct · 48.0 kHz",
-  );
+  // The signal path lives in the status bar below the dock, not inside it.
+  const path = page.getByRole("group", { name: "Signal path" });
+  await expect(path).toContainText("FLAC 24/44.1");
+  await expect(path).toContainText("48 kHz");
+  await expect(path.getByRole("button", { name: "Output device: Speakers" })).toBeVisible();
 });
 
 test("remains operable while playback position events are streaming", async ({ page }) => {

@@ -102,7 +102,7 @@ export function TrackTable({
             ))}
           </colgroup>
           <TableCaption className="sr-only">{caption}</TableCaption>
-          <TableHeader className="sticky top-0 z-10 bg-background text-left text-muted-foreground">
+          <TableHeader className="acrylic sticky top-0 z-10 text-left text-muted-foreground">
             {table.getHeaderGroups().map((group) => (
               <TableRow key={group.id} className="h-9 border-b border-border">
                 {group.headers.map((header) => {

@@ -27,6 +27,7 @@ export {
   useAlbumArtist,
   useAlbumDetails,
   useAlbumTracks,
+  useArtworkAccent,
   useArtistAlbums,
   useLibraryPresentationQuery,
   useLibraryRootsQuery,

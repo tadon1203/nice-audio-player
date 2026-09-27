@@ -7,5 +7,6 @@ pub mod pcm;
 pub mod pcm_queue;
 pub mod playback;
 pub mod volume;
+pub mod waveform;
 
 // Playback consumes the shared media boundary; it does not own validation or inspection.

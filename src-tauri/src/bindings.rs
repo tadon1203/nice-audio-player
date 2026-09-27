@@ -17,6 +17,13 @@ pub fn builder() -> Builder<tauri::Wry> {
             commands::playback::set_playback_volume,
             commands::playback::set_playback_muted,
             commands::playback::list_audio_output_devices,
+            commands::playback::set_playback_repeat_mode,
+            commands::playback::set_playback_shuffle,
+            commands::playback::set_audio_output_selection,
+            commands::playback::remove_queue_item,
+            commands::playback::move_queue_item,
+            commands::playback::clear_queue,
+            commands::playback::get_playback_waveform,
             commands::library::get_library_status,
             commands::library::get_library_scan_state,
             commands::library::list_library_roots,
@@ -35,6 +42,8 @@ pub fn builder() -> Builder<tauri::Wry> {
             commands::library::get_library_track_for_path,
             commands::library::start_library_track,
             commands::library::start_library_album,
+            commands::library::get_artwork_accent,
+            commands::lyrics::get_track_lyrics,
         ])
         .typ::<AppEvent>()
         .error_handling(ErrorHandlingMode::Throw)

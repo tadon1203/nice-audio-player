@@ -316,7 +316,7 @@ impl LibraryShared {
             .db()?
             .read()
             .map_err(|_| LibraryCommandError::PersistenceFailed)?;
-        c.query_row("SELECT t.id,f.file_name,f.availability,f.inspection_status,m.title,m.artist,m.album,m.album_artist,m.duration_ms,a.content_hash,a.mime_type,a.relative_path,m.artwork_status FROM tracks t JOIN library_files f ON f.id=t.file_id LEFT JOIN track_source_metadata m ON m.track_id=t.id AND m.source_revision=f.source_revision LEFT JOIN artwork_assets a ON a.id=m.artwork_id AND m.artwork_status='stored' WHERE f.root_id=?1 AND f.relative_path=?2", params![parse_id(&root.id)?, relative_path], summary_from_row).optional().map_err(|_|LibraryCommandError::PersistenceFailed)
+        c.query_row("SELECT t.id,f.file_name,f.availability,f.inspection_status,m.title,m.artist,m.album,m.album_artist,m.duration_ms,a.content_hash,a.mime_type,a.relative_path,m.artwork_status,m.file_format,m.bit_depth,m.bitrate_kbps FROM tracks t JOIN library_files f ON f.id=t.file_id LEFT JOIN track_source_metadata m ON m.track_id=t.id AND m.source_revision=f.source_revision LEFT JOIN artwork_assets a ON a.id=m.artwork_id AND m.artwork_status='stored' WHERE f.root_id=?1 AND f.relative_path=?2", params![parse_id(&root.id)?, relative_path], summary_from_row).optional().map_err(|_|LibraryCommandError::PersistenceFailed)
     }
     pub fn playable_entry(
         &self,
@@ -376,6 +376,49 @@ impl LibraryShared {
             source,
             root,
         })
+    }
+    /// Representative color of stored artwork, computed on first request and cached.
+    pub fn artwork_accent(
+        &self,
+        content_hash: String,
+    ) -> Result<Option<String>, LibraryCommandError> {
+        if content_hash.len() != 64 || !content_hash.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return Err(LibraryCommandError::InvalidId);
+        }
+        let db = self.db()?;
+        let row: Option<(i64, String, Option<String>)> = db
+            .read()
+            .map_err(|_| LibraryCommandError::PersistenceFailed)?
+            .query_row(
+                "SELECT id,relative_path,accent FROM artwork_assets WHERE content_hash=?1",
+                params![content_hash],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .optional()
+            .map_err(|_| LibraryCommandError::PersistenceFailed)?;
+        let Some((id, relative_path, accent)) = row else {
+            return Ok(None);
+        };
+        if accent.is_some() {
+            return Ok(accent);
+        }
+        if !artwork::is_canonical_relative_path(&relative_path) {
+            return Ok(None);
+        }
+        let Ok(bytes) = std::fs::read(db.data_dir().join(&relative_path)) else {
+            return Ok(None);
+        };
+        let Some(color) = super::accent::representative_color(&bytes) else {
+            return Ok(None);
+        };
+        db.write()
+            .map_err(|_| LibraryCommandError::PersistenceFailed)?
+            .execute(
+                "UPDATE artwork_assets SET accent=?2 WHERE id=?1",
+                params![id, color],
+            )
+            .map_err(|_| LibraryCommandError::PersistenceFailed)?;
+        Ok(Some(color))
     }
     pub(crate) fn start_scan_targets(
         &self,
@@ -951,6 +994,9 @@ pub(crate) fn summary_from_row(row: &Row<'_>) -> rusqlite::Result<LibraryTrackSu
     let content_hash: Option<String> = row.get(9)?;
     let mime_type: Option<String> = row.get(10)?;
     let relative_path: Option<String> = row.get(11)?;
+    let file_format: Option<String> = row.get(13)?;
+    let bit_depth: Option<i64> = row.get(14)?;
+    let bitrate_kbps: Option<i64> = row.get(15)?;
     let artwork = match (content_hash, mime_type, relative_path) {
         (Some(content_hash), Some(mime_type), Some(relative_path)) => match mime_type.as_str() {
             "image/jpeg" => Some(ArtworkRef {
@@ -976,6 +1022,9 @@ pub(crate) fn summary_from_row(row: &Row<'_>) -> rusqlite::Result<LibraryTrackSu
         album_artist: album_artist.filter(|v| !v.trim().is_empty()),
         artwork,
         duration_ms: duration.map(|v| v as u64),
+        file_format: file_format.filter(|v| !v.trim().is_empty()),
+        bit_depth: bit_depth.map(|v| v as u32),
+        bitrate_kbps: bitrate_kbps.map(|v| v as u64),
         playable: availability == "available" && inspection_status == "indexed",
         availability: if availability == "available" {
             LibraryFileAvailability::Available
@@ -1691,6 +1740,51 @@ mod tests {
                 .track_count,
             1
         );
+    }
+
+    #[test]
+    fn artwork_accent_is_computed_once_then_read_from_the_database() {
+        use image::{codecs::png::PngEncoder, ExtendedColorType, ImageEncoder};
+        let library = test_library();
+        let hash = "d".repeat(64);
+        let relative = format!("artwork/dd/{hash}.png");
+        let data_dir = library.db().expect("database").data_dir().to_path_buf();
+        let mut png = Vec::new();
+        PngEncoder::new(&mut png)
+            .write_image(&[200, 40, 40].repeat(16), 4, 4, ExtendedColorType::Rgb8)
+            .expect("encode artwork");
+        std::fs::create_dir_all(data_dir.join("artwork/dd")).expect("artwork directory");
+        std::fs::write(data_dir.join(&relative), &png).expect("artwork file");
+        library
+            .db()
+            .expect("database")
+            .write()
+            .expect("database lock")
+            .execute(
+                "INSERT INTO artwork_assets(id,content_hash,mime_type,relative_path,byte_length,created_at_ms) VALUES(1,?1,'image/png',?2,1,0)",
+                params![hash, relative],
+            )
+            .expect("artwork row");
+
+        assert_eq!(
+            library.artwork_accent(hash.clone()).expect("accent"),
+            Some("#c82828".to_string())
+        );
+        std::fs::remove_file(data_dir.join(&relative)).expect("remove artwork file");
+        assert_eq!(
+            library.artwork_accent(hash).expect("cached accent"),
+            Some("#c82828".to_string())
+        );
+        assert_eq!(
+            library
+                .artwork_accent("e".repeat(64))
+                .expect("unknown hash"),
+            None
+        );
+        assert!(matches!(
+            library.artwork_accent("nope".into()),
+            Err(LibraryCommandError::InvalidId)
+        ));
     }
 
     #[test]

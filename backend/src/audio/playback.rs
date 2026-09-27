@@ -315,6 +315,14 @@ impl PlaybackSnapshot {
         }
     }
 
+    /// The file loaded for playback, whether playing or paused.
+    pub fn active_file(&self) -> Option<&ValidatedAudioFile> {
+        match self {
+            Self::Playing { file, .. } | Self::Paused { file, .. } => Some(file),
+            Self::Stopped { .. } | Self::Failed { .. } => None,
+        }
+    }
+
     fn with_volume(mut self, volume: VolumeState) -> Self {
         match &mut self {
             Self::Stopped {
@@ -644,6 +652,7 @@ impl PlaybackService {
                     sequence: None,
                     repeat_mode: PlaybackRepeatMode::Off,
                     shuffle: false,
+                    restore_position_ms: None,
                     volume_state,
                     effective_gain: worker_gain,
                     output_selection,
@@ -968,6 +977,8 @@ struct PlaybackWorker {
     sequence: Option<PlaybackSequence>,
     repeat_mode: PlaybackRepeatMode,
     shuffle: bool,
+    /// Position to seek to once a device-switch restart has started playing.
+    restore_position_ms: Option<u64>,
     volume_state: VolumeState,
     effective_gain: AtomicEffectiveGain,
     output_selection: AudioOutputSelection,
@@ -1127,7 +1138,7 @@ impl PlaybackWorker {
                     let _ = reply.send(Ok(self.unmute()));
                 }
                 Ok(PlaybackCommand::SetOutputSelection { selection, reply }) => {
-                    let _ = reply.send(self.set_output_selection(selection));
+                    self.change_output_selection(selection, reply);
                 }
                 Ok(PlaybackCommand::SetRepeatMode { mode, reply }) => {
                     if self.repeat_mode == mode {
@@ -1223,6 +1234,7 @@ impl PlaybackWorker {
         start_paused: bool,
         sequence_index: usize,
     ) {
+        self.restore_position_ms = None;
         self.discard_pending();
         self.discard_pending_source();
         self.discard_pending_seek();
@@ -1840,6 +1852,10 @@ impl PlaybackWorker {
             self.publish(self.playing_snapshot(session_id.to_string(), 0, duration_ms))
         };
         let _ = reply.send(Ok(snapshot));
+        if let Some(position_ms) = self.restore_position_ms.take() {
+            let (restore_reply, _) = std::sync::mpsc::sync_channel(1);
+            self.begin_seek(position_ms, restore_reply);
+        }
     }
 
     fn fail_pending_start(
@@ -1871,6 +1887,7 @@ impl PlaybackWorker {
         }
     }
     fn stop(&mut self) -> PlaybackSnapshot {
+        self.restore_position_ms = None;
         self.discard_pending();
         self.discard_pending_source();
         self.discard_pending_seek();
@@ -1881,6 +1898,57 @@ impl PlaybackWorker {
             return self.current();
         }
         self.publish(self.stopped_snapshot())
+    }
+
+    /// Switches the output device. While a track is loaded, playback restarts on the new device
+    /// at the same position and keeps its paused state and queue.
+    fn change_output_selection(
+        &mut self,
+        selection: AudioOutputSelection,
+        reply: SyncSender<Result<PlaybackSnapshot, PlaybackServiceError>>,
+    ) {
+        let current = self.current();
+        let (position_ms, paused) = match &current {
+            PlaybackSnapshot::Playing { position_ms, .. } => (*position_ms, false),
+            PlaybackSnapshot::Paused { position_ms, .. } => (*position_ms, true),
+            _ => {
+                let _ = reply.send(self.set_output_selection(selection));
+                return;
+            }
+        };
+        let (Some(file), None, None, None) = (
+            self.active
+                .as_ref()
+                .map(|active| active.source_file.clone()),
+            &self.pending,
+            &self.pending_source,
+            &self.pending_seek,
+        ) else {
+            let _ = reply.send(Err(PlaybackServiceError::InvalidPlaybackState));
+            return;
+        };
+        if selection == self.output_selection {
+            let _ = reply.send(Ok(current));
+            return;
+        }
+        if let Err(error) = resolve_output_selection(&selection) {
+            let error = match error {
+                DeviceResolutionError::InvalidDeviceId => PlaybackServiceError::InvalidDeviceId,
+                DeviceResolutionError::DeviceUnavailable
+                | DeviceResolutionError::NoDefaultOutputDevice => {
+                    PlaybackServiceError::OutputDeviceUnavailable
+                }
+            };
+            let _ = reply.send(Err(error));
+            return;
+        }
+        let sequence_index = self
+            .sequence
+            .as_ref()
+            .map_or(0, |sequence| sequence.current_index);
+        self.output_selection = selection;
+        self.begin_start(file, reply, paused, sequence_index);
+        self.restore_position_ms = Some(position_ms);
     }
 
     fn set_output_selection(

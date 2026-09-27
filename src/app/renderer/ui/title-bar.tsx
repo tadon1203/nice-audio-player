@@ -16,7 +16,7 @@ export function TitleBar({ pathname }: { pathname: string }) {
 
   return (
     <header
-      className="col-span-full grid min-w-0 grid-cols-[minmax(0,1fr)_auto] border-b border-border bg-background md:grid-cols-[16rem_minmax(0,1fr)_auto]"
+      className="col-span-full row-start-1 grid min-w-0 grid-cols-[minmax(0,1fr)_auto] border-b border-border bg-background md:grid-cols-[16rem_minmax(0,1fr)_auto]"
       data-slot="app-titlebar"
     >
       <div className="flex min-w-0 items-center gap-2 border-sidebar-border px-2 md:border-r md:px-4">

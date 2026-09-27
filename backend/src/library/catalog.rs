@@ -190,7 +190,7 @@ impl LibraryShared {
             ),
         };
         let mut statement = c
-            .prepare(&format!(r#"SELECT id,file_name,availability,inspection_status,title,artist,album,album_artist,duration_ms,content_hash,mime_type,relative_path,artwork_status FROM (SELECT t.id,f.file_name,f.availability,f.inspection_status,m.title,m.artist,m.album,m.album_artist,m.duration_ms,a.content_hash,a.mime_type,a.relative_path,m.artwork_status,ROW_NUMBER() OVER (ORDER BY {order_sql},t.id ASC) AS cursor_rank
+            .prepare(&format!(r#"SELECT id,file_name,availability,inspection_status,title,artist,album,album_artist,duration_ms,content_hash,mime_type,relative_path,artwork_status,file_format,bit_depth,bitrate_kbps FROM (SELECT t.id,f.file_name,f.availability,f.inspection_status,m.title,m.artist,m.album,m.album_artist,m.duration_ms,a.content_hash,a.mime_type,a.relative_path,m.artwork_status,m.file_format,m.bit_depth,m.bitrate_kbps,ROW_NUMBER() OVER (ORDER BY {order_sql},t.id ASC) AS cursor_rank
                 FROM tracks t
                 JOIN library_files f ON f.id=t.file_id
                 LEFT JOIN track_source_metadata m ON m.track_id=t.id AND m.source_revision=f.source_revision

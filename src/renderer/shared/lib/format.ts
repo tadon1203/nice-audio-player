@@ -31,3 +31,36 @@ export function formatCount(
 ): string {
   return `${formatNumber(value)} ${value === 1 ? singular : plural}`;
 }
+
+export type AudioFormatFacts = {
+  format: string | null | undefined;
+  bitDepth?: number | null;
+  sampleRate?: number | null;
+  bitrateKbps?: number | null;
+};
+
+/** Sample rate in kHz without a unit or trailing zero: `44.1`, `96`. */
+export function formatKilohertz(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return MISSING;
+  return String(Number((value / 1000).toFixed(1)));
+}
+
+/**
+ * Path notation for a stream (see DESIGN.md): `FLAC 24/96` (codec, bit depth, kHz) for lossless
+ * sources, `AAC 256k` (bitrate) for lossy ones. Missing parts are left out, never invented.
+ */
+export function formatAudioPath({
+  format,
+  bitDepth,
+  sampleRate,
+  bitrateKbps,
+}: AudioFormatFacts): string {
+  const codec = format?.trim().toUpperCase() || null;
+  let detail: string | null = null;
+  if (bitDepth != null && bitDepth > 0) {
+    detail = sampleRate == null ? String(bitDepth) : `${bitDepth}/${formatKilohertz(sampleRate)}`;
+  } else if (bitrateKbps != null && bitrateKbps > 0) {
+    detail = `${Math.round(bitrateKbps)}k`;
+  }
+  return [codec, detail].filter((part) => part !== null).join(" ") || MISSING;
+}

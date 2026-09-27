@@ -103,6 +103,9 @@ pub struct LibraryTrackSummary {
     pub album_artist: Option<String>,
     pub artwork: Option<ArtworkRef>,
     pub duration_ms: Option<u64>,
+    pub file_format: Option<String>,
+    pub bit_depth: Option<u32>,
+    pub bitrate_kbps: Option<u64>,
     pub availability: LibraryFileAvailability,
     pub playable: bool,
 }

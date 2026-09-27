@@ -36,7 +36,11 @@ pub enum LyricsResolutionNotice {
 }
 
 #[derive(Debug, Clone, serde::Serialize, specta::Type)]
-#[serde(tag = "status", rename_all = "camelCase")]
+#[serde(
+    tag = "status",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub enum LyricsResolution {
     Resolved {
         track_id: String,

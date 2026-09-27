@@ -10,6 +10,7 @@ import {
 } from "@tanstack/react-query";
 import { nativeApi } from "@/renderer/shared/lib/native";
 import type {
+  ArtworkRef,
   LibraryAlbumArtistKey,
   LibraryAlbumArtistPage,
   LibraryAlbumArtistSortKey,
@@ -89,6 +90,8 @@ export const libraryQueryKeys = {
     direction: LibrarySortDirection,
   ) => [...data, "artist", "albums", key.name, sortKey, direction] as const,
   track: (path: string | null) => [...data, "track", path] as const,
+  /** Content-addressed, so it is never invalidated with the catalog. */
+  accent: (contentHash: string | null) => ["library", "accent", contentHash] as const,
 };
 
 export const libraryQueryOptions = {
@@ -231,6 +234,19 @@ export function useArtistAlbums(
 
 export function useLibraryTrackForPath(path: string | null) {
   return useQuery(libraryQueryOptions.track(path));
+}
+
+/** Representative artwork color as `#rrggbb`, for backgrounds only. */
+export function useArtworkAccent(artwork: ArtworkRef | null | undefined) {
+  const contentHash = artwork?.contentHash ?? null;
+  return (
+    useQuery({
+      queryKey: libraryQueryKeys.accent(contentHash),
+      queryFn: contentHash === null ? skipToken : () => nativeApi().getArtworkAccent(contentHash),
+      staleTime: Infinity,
+      gcTime: Infinity,
+    }).data ?? null
+  );
 }
 
 function listCatalogPage(

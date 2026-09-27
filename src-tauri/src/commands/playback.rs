@@ -1,6 +1,9 @@
 use backend::audio::{
-    devices::{list_output_devices, AudioDeviceListError},
-    playback::{PlaybackQueueSnapshot, PlaybackSnapshot},
+    devices::{list_output_devices, AudioDeviceListError, AudioOutputSelection},
+    playback::{
+        PlaybackQueueMoveDirection, PlaybackQueueSnapshot, PlaybackRepeatMode, PlaybackSnapshot,
+    },
+    waveform::PlaybackWaveform,
 };
 
 use crate::{errors::PlaybackCommandError, AppState};
@@ -127,4 +130,99 @@ pub fn set_playback_muted(
 pub fn list_audio_output_devices(
 ) -> Result<Vec<backend::audio::devices::AudioOutputDevice>, AudioDeviceListError> {
     list_output_devices()
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn set_playback_repeat_mode(
+    mode: PlaybackRepeatMode,
+    state: tauri::State<'_, AppState>,
+) -> Result<PlaybackQueueSnapshot, PlaybackCommandError> {
+    state
+        .backend
+        .playback
+        .handle()
+        .set_repeat_mode(mode)
+        .map_err(PlaybackCommandError::from)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn set_playback_shuffle(
+    enabled: bool,
+    state: tauri::State<'_, AppState>,
+) -> Result<PlaybackQueueSnapshot, PlaybackCommandError> {
+    state
+        .backend
+        .playback
+        .handle()
+        .set_shuffle(enabled)
+        .map_err(PlaybackCommandError::from)
+}
+
+/// Switches the output device; a loaded track restarts on it at the same position.
+#[tauri::command]
+#[specta::specta]
+pub fn set_audio_output_selection(
+    selection: AudioOutputSelection,
+    state: tauri::State<'_, AppState>,
+) -> Result<PlaybackSnapshot, PlaybackCommandError> {
+    state
+        .backend
+        .playback
+        .handle()
+        .set_output_selection(selection)
+        .map_err(PlaybackCommandError::from)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn remove_queue_item(
+    id: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<PlaybackQueueSnapshot, PlaybackCommandError> {
+    state
+        .backend
+        .playback
+        .handle()
+        .remove_queue_item(id)
+        .map_err(PlaybackCommandError::from)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn move_queue_item(
+    id: String,
+    direction: PlaybackQueueMoveDirection,
+    state: tauri::State<'_, AppState>,
+) -> Result<PlaybackQueueSnapshot, PlaybackCommandError> {
+    state
+        .backend
+        .playback
+        .handle()
+        .move_queue_item(id, direction)
+        .map_err(PlaybackCommandError::from)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn clear_queue(
+    state: tauri::State<'_, AppState>,
+) -> Result<PlaybackQueueSnapshot, PlaybackCommandError> {
+    state
+        .backend
+        .playback
+        .handle()
+        .clear_queue()
+        .map_err(PlaybackCommandError::from)
+}
+
+/// Waveform of the loaded track, or `None` while it is analyzed; `waveformReady` follows.
+#[tauri::command]
+#[specta::specta]
+pub fn get_playback_waveform(
+    path: String,
+    state: tauri::State<'_, AppState>,
+) -> Option<PlaybackWaveform> {
+    state.backend.playback_waveform(&path)
 }

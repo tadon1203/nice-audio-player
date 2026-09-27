@@ -505,6 +505,7 @@ fn test_worker(snapshot: PlaybackSnapshot) -> PlaybackWorker {
         sequence: None,
         repeat_mode: PlaybackRepeatMode::Off,
         shuffle: false,
+        restore_position_ms: None,
         volume_state: VolumeState::default(),
         effective_gain: super::super::volume::AtomicEffectiveGain::new(1.0),
         output_selection: AudioOutputSelection::SystemDefault,

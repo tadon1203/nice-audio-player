@@ -2,8 +2,11 @@ import { create, type StoreApi, type UseBoundStore } from "zustand";
 import { useShallow } from "zustand/react/shallow";
 import type {
   AppEvent,
+  AudioOutputSelection,
   LibraryAlbumKey,
+  PlaybackQueueMoveDirection,
   PlaybackQueueSnapshot,
+  PlaybackRepeatMode,
   PlaybackSnapshot,
   TNativeAPI,
 } from "@/shared/ipc";
@@ -17,7 +20,8 @@ export type TransportCommand =
   | "pause"
   | "resume"
   | "previous"
-  | "next";
+  | "next"
+  | "outputSelection";
 
 export type PlaybackStoreState = {
   snapshot: PlaybackSnapshot | null;
@@ -171,6 +175,54 @@ export function createPlaybackController(store: UseBoundStore<StoreApi<PlaybackS
       store.setState({ volumePreview: requestedVolume });
       void flushVolume();
     },
+    setShuffle: async (enabled: boolean) => {
+      if (!api) return;
+      store.setState({ error: null });
+      try {
+        acceptQueue(await api.setPlaybackShuffle(enabled));
+      } catch (error) {
+        setError(error);
+      }
+    },
+    setRepeatMode: async (mode: PlaybackRepeatMode) => {
+      if (!api) return;
+      store.setState({ error: null });
+      try {
+        acceptQueue(await api.setPlaybackRepeatMode(mode));
+      } catch (error) {
+        setError(error);
+      }
+    },
+    removeQueueItem: async (id: string) => {
+      if (!api) return;
+      store.setState({ error: null });
+      try {
+        acceptQueue(await api.removeQueueItem(id));
+      } catch (error) {
+        setError(error);
+      }
+    },
+    moveQueueItem: async (id: string, direction: PlaybackQueueMoveDirection) => {
+      if (!api) return;
+      store.setState({ error: null });
+      try {
+        acceptQueue(await api.moveQueueItem(id, direction));
+      } catch (error) {
+        setError(error);
+      }
+    },
+    clearQueue: async () => {
+      if (!api) return;
+      store.setState({ error: null });
+      try {
+        acceptQueue(await api.clearQueue());
+      } catch (error) {
+        setError(error);
+      }
+    },
+    /** A loaded track restarts on the new device at the same position. */
+    setOutputSelection: (selection: AudioOutputSelection) =>
+      runTransport("outputSelection", () => api!.setAudioOutputSelection(selection)),
     toggleMute: async () => {
       if (!api || store.getState().mutePending) return;
       store.setState({ mutePending: true, error: null });
@@ -232,7 +284,14 @@ function selectSession(state: PlaybackSessionState, bridgeAvailable: boolean) {
     durationMs: active && snapshot && "durationMs" in snapshot ? snapshot.durationMs : null,
     volume: state.volumePreview ?? snapshot?.volume ?? 1,
     muted: snapshot?.muted ?? false,
+    repeatMode: state.queue?.repeatMode ?? ("off" as PlaybackRepeatMode),
+    shuffleEnabled: state.queue?.shuffleEnabled ?? false,
   };
+}
+
+/** Repeat cycles off, all, one; `↻¹` is the last step. */
+export function nextRepeatMode(mode: PlaybackRepeatMode): PlaybackRepeatMode {
+  return mode === "off" ? "all" : mode === "all" ? "one" : "off";
 }
 
 export const usePlaybackStore = createPlaybackStore();
@@ -248,6 +307,12 @@ const playbackActions = {
   seek: playbackController.seek,
   setVolume: playbackController.setVolume,
   toggleMute: playbackController.toggleMute,
+  setShuffle: playbackController.setShuffle,
+  setRepeatMode: playbackController.setRepeatMode,
+  setOutputSelection: playbackController.setOutputSelection,
+  removeQueueItem: playbackController.removeQueueItem,
+  moveQueueItem: playbackController.moveQueueItem,
+  clearQueue: playbackController.clearQueue,
 } as const;
 
 export function usePlaybackActions() {

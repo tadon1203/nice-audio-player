@@ -1,6 +1,7 @@
 import { PageTitle } from "@/renderer/shared/ui/headings";
 import { WorkspaceScroll } from "@/renderer/shared/ui/workspace-scroll";
 import { LibraryFoldersSection } from "./library-folders-section";
+import { PlaybackSection } from "./playback-section";
 
 export function SettingsPage() {
   return (
@@ -13,6 +14,7 @@ export function SettingsPage() {
           </p>
         </div>
         <LibraryFoldersSection />
+        <PlaybackSection />
       </section>
     </WorkspaceScroll>
   );

@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { MISSING, formatCount, formatDuration, formatNumber, formatSampleRate } from "./format";
+import {
+  MISSING,
+  formatAudioPath,
+  formatCount,
+  formatDuration,
+  formatKilohertz,
+  formatNumber,
+  formatSampleRate,
+} from "./format";
 
 describe("formatDuration", () => {
   it("formats null and sub-hour durations", () => {
@@ -38,5 +46,35 @@ describe("formatCount", () => {
   it("supports irregular plurals and unknown counts", () => {
     expect(formatCount(2, "album artist", "album artists")).toBe("2 album artists");
     expect(formatCount(null, "track")).toBe(`${MISSING} tracks`);
+  });
+});
+
+describe("formatAudioPath", () => {
+  it("writes lossless sources as codec, bit depth and kHz", () => {
+    expect(formatAudioPath({ format: "flac", bitDepth: 24, sampleRate: 96_000 })).toBe(
+      "FLAC 24/96",
+    );
+    expect(formatAudioPath({ format: "wav", bitDepth: 16, sampleRate: 44_100 })).toBe(
+      "WAV 16/44.1",
+    );
+  });
+
+  it("writes lossy sources with their bitrate", () => {
+    expect(formatAudioPath({ format: "aac", sampleRate: 44_100, bitrateKbps: 256 })).toBe(
+      "AAC 256k",
+    );
+  });
+
+  it("leaves out what is unknown", () => {
+    expect(formatAudioPath({ format: "mp3" })).toBe("MP3");
+    expect(formatAudioPath({ format: null })).toBe(MISSING);
+  });
+});
+
+describe("formatKilohertz", () => {
+  it("drops the trailing zero", () => {
+    expect(formatKilohertz(48_000)).toBe("48");
+    expect(formatKilohertz(44_100)).toBe("44.1");
+    expect(formatKilohertz(null)).toBe(MISSING);
   });
 });

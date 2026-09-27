@@ -77,14 +77,14 @@ test("keeps transport centered between track identity and volume", async ({ page
   await page.setViewportSize({ width: 1360, height: 900 });
   await page.goto("/library/albums");
 
-  const dock = await boxOf(page.getByRole("contentinfo", { name: "Playback controls" }));
+  const main = await boxOf(page.locator('[data-region="playback-main"]'));
   const identity = await boxOf(page.locator('[data-region="playback-identity"]'));
   const core = await boxOf(page.locator('[data-region="playback-core"]'));
   const volume = await boxOf(page.locator('[data-region="volume"]'));
 
   expect(identity.x).toBeLessThan(core.x);
   expect(volume.x).toBeGreaterThan(core.x);
-  expect(Math.abs(core.x + core.width / 2 - (dock.x + dock.width / 2))).toBeLessThan(2);
+  expect(Math.abs(core.x + core.width / 2 - (main.x + main.width / 2))).toBeLessThan(2);
 });
 
 test("keeps album track number compact while title owns the flexible column", async ({ page }) => {
