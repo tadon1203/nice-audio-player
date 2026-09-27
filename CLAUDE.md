@@ -1,4 +1,4 @@
-# AGENTS.md
+# CLAUDE.md
 
 Personal project. Keep things simple and just get it done.
 
@@ -9,3 +9,7 @@ Personal project. Keep things simple and just get it done.
 - [CONTRIBUTING.md](./CONTRIBUTING.md) — engineering rules
 
 These are guidance, not law. If they conflict, use judgment, pick the sensible option, and mention it briefly. Do not stop to ask.
+
+## Token efficiency
+
+Offload large or exploratory searches (broad `grep`/`glob` sweeps, multi-file investigations) to a Haiku subagent so the raw results stay out of the main context; bring back only the conclusion.
