@@ -10,6 +10,15 @@ pub fn parse(input: &str) -> LrcParse {
     if input.lines().any(line_has_malformed_timestamp) {
         return LrcParse::Malformed;
     }
+    // Some taggers store plain, unsynced lyrics under the same frame LRC uses
+    // (e.g. FLAC `LYRICS`). If nothing even looks like an LRC tag line, don't
+    // hand it to the LRC parser at all — that just fails with an internal
+    // "Eof" parse error and, worse, would otherwise be indistinguishable from
+    // genuinely malformed LRC (see below). Reporting it as `Empty` here lets
+    // the caller fall back to plain-text lyrics.
+    if !input.lines().any(|line| line.trim_start().starts_with('[')) {
+        return LrcParse::Empty;
+    }
     let normalized = normalize_offset_tag(input);
     let lyrics = match lrc_rs::SyncedLyrics::parse(&normalized) {
         Ok(lyrics) => lyrics,
@@ -120,6 +129,14 @@ mod tests {
             panic!("expected plain lyrics")
         };
         assert_eq!(lines, ["First", "Second"]);
+    }
+
+    #[test]
+    fn treats_bracket_free_text_as_not_lrc_instead_of_malformed() {
+        assert!(matches!(
+            parse("Hey, baby (hey)\nOoh, ooh\nOh, yeah"),
+            LrcParse::Empty
+        ));
     }
 
     #[test]
