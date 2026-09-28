@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 import {
-  usePlaybackSession,
+  usePlaybackActions,
+  usePlaybackOutput,
   usePlaybackSignalPath,
+  usePlaybackTransport,
   useAudioOutputDevices,
 } from "@/renderer/features/playback-control";
 import { useArtworkBackdrop } from "@/renderer/shared/lib/artwork-backdrop";
@@ -21,12 +23,13 @@ const DEFAULT_DEVICE = "default";
 
 /** A technical ledger: each signal-path stage on the Gutter, next to its own setting. */
 export function PlaybackSection() {
-  const playback = usePlaybackSession();
+  const { connection } = usePlaybackTransport();
+  const { outputSelection: selection } = usePlaybackOutput();
+  const playback = usePlaybackActions();
   const path = usePlaybackSignalPath();
   const artworkBackdrop = useArtworkBackdrop();
   const [deviceMenuOpen, setDeviceMenuOpen] = useState(false);
   const devices = useAudioOutputDevices(deviceMenuOpen);
-  const selection = playback.snapshot?.outputSelection ?? { kind: "systemDefault" as const };
   const selected = selection.kind === "device" ? selection.deviceId : DEFAULT_DEVICE;
   const outputLabel = path?.output ?? (selection.kind === "device" ? "Output" : "System default");
 
@@ -54,7 +57,7 @@ export function PlaybackSection() {
           <dd className="min-w-0">
             <Menu open={deviceMenuOpen} onOpenChange={setDeviceMenuOpen}>
               <MenuTrigger
-                disabled={playback.connection !== "ready"}
+                disabled={connection !== "ready"}
                 aria-label={`Output device: ${outputLabel}`}
                 className="flex min-w-0 cursor-pointer items-center gap-1 rounded-sm text-foreground outline-none hover:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:opacity-50"
               >

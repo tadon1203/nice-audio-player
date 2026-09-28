@@ -1,27 +1,205 @@
-use super::super::devices::AudioOutputSelection;
-use super::super::output::AudioOutputError;
-use super::super::output::StreamFailureKind;
-use super::super::volume::VolumeState;
-use super::source_loader::SourceLoadWorker;
-use super::{
-    completion_time_reached, duration_ms, duration_to_frames, failed_snapshot, frame_to_millis,
-    millis_to_frame, output_failure_code, pause_action, resume_action, should_finish,
-    should_publish_position, signal_stream_id, source_to_output_frame, start_failure_snapshot,
-    stream_signal_action, OutputSignal, OutputStreamId, PendingSourceLoad, PlaybackControlAction,
-    PlaybackFailureCode, PlaybackQueueSnapshot, PlaybackRepeatMode, PlaybackSequence,
-    PlaybackService, PlaybackServiceError, PlaybackSnapshot, PlaybackWorker, StreamSignalAction,
+use super::item::{PlaybackItem, PlaybackItemSeed};
+use super::preferences::PlaybackPreferences;
+use super::queue::{AdvanceReason, PlaybackQueue, PlaybackRepeatMode};
+use super::service::{PlaybackService, PlaybackServiceError};
+use super::session::{
+    duration_to_frames, frame_to_millis, millis_to_frame, should_publish_position,
+    source_to_output_frame, PendingSourceLoad,
 };
+use super::snapshot::{
+    ActiveSession, PlaybackChannelConversion, PlaybackFailureCode, PlaybackProcessingInfo,
+    PlaybackQueueSnapshot, PlaybackSnapshot, SnapshotBase,
+};
+use super::source_loader::SourceLoadWorker;
+use super::worker::{
+    completion_time_reached, output_failure_code, pause_action, previous_restarts_track,
+    resume_action, should_finish, signal_stream_id, stream_signal_action, FailureScope,
+    PlaybackControlAction, PlaybackWorker, StartFailurePhase, StreamSignalAction, WorkerLinks,
+};
+use crate::audio::devices::AudioOutputSelection;
+use crate::audio::output::{AudioOutputError, OutputSignal, OutputStreamId, StreamFailureKind};
+use crate::audio::volume::{AtomicEffectiveGain, VolumeState};
+use crate::media::validation::ValidatedAudioFile;
 use cpal::StreamInstant;
+use rand::{rngs::StdRng, SeedableRng};
 use std::sync::{mpsc, Arc, RwLock};
+
+fn test_file() -> ValidatedAudioFile {
+    ValidatedAudioFile {
+        path: "C:/test.flac".into(),
+        file_name: "test.flac".into(),
+        extension: "flac".into(),
+    }
+}
+
+fn test_item() -> PlaybackItem {
+    PlaybackItem::from_seed(
+        "queue-item-1".into(),
+        PlaybackItemSeed::from_file(test_file()),
+    )
+}
+
+fn base(volume: VolumeState) -> SnapshotBase {
+    SnapshotBase::new(volume, AudioOutputSelection::SystemDefault)
+}
+
+fn session(
+    playback_id: &str,
+    position_ms: u64,
+    duration_ms: Option<u64>,
+    channel_conversion: PlaybackChannelConversion,
+) -> ActiveSession {
+    ActiveSession {
+        item: test_item(),
+        playback_id: playback_id.into(),
+        position_ms,
+        duration_ms,
+        output_device: crate::audio::devices::AudioOutputDeviceIdentity {
+            id: "test-device".into(),
+            name: "Test device".into(),
+        },
+        channel_conversion,
+        source_sample_rate: 44_100,
+        output_sample_rate: 44_100,
+        resampling_active: false,
+    }
+}
+
+fn stopped(volume: VolumeState) -> PlaybackSnapshot {
+    PlaybackSnapshot::Stopped {
+        base: base(volume),
+        item: None,
+    }
+}
+
+fn playing(
+    volume: VolumeState,
+    playback_id: &str,
+    position_ms: u64,
+    duration_ms: Option<u64>,
+) -> PlaybackSnapshot {
+    PlaybackSnapshot::Playing {
+        base: base(volume),
+        session: session(
+            playback_id,
+            position_ms,
+            duration_ms,
+            PlaybackChannelConversion::None,
+        ),
+    }
+}
+
+fn paused(
+    volume: VolumeState,
+    playback_id: &str,
+    position_ms: u64,
+    duration_ms: Option<u64>,
+) -> PlaybackSnapshot {
+    PlaybackSnapshot::Paused {
+        base: base(volume),
+        session: session(
+            playback_id,
+            position_ms,
+            duration_ms,
+            PlaybackChannelConversion::None,
+        ),
+    }
+}
+
+fn failed(
+    volume: VolumeState,
+    playback_id: Option<String>,
+    error: PlaybackFailureCode,
+) -> PlaybackSnapshot {
+    PlaybackSnapshot::Failed {
+        base: base(volume),
+        item: None,
+        playback_id,
+        error,
+    }
+}
+
+fn failed_snapshot(id: OutputStreamId, error: PlaybackFailureCode) -> PlaybackSnapshot {
+    failed(VolumeState::default(), Some(id.0.to_string()), error)
+}
+
+fn duration_ms(total_frame_count: u64, sample_rate: u32) -> u64 {
+    frame_to_millis(total_frame_count, sample_rate)
+}
+
+fn item_json() -> serde_json::Value {
+    serde_json::json!({
+        "queueItemId": "queue-item-1",
+        "trackId": null,
+        "file": { "path": "C:/test.flac", "fileName": "test.flac", "extension": "flac" },
+        "title": "test.flac",
+        "artist": null,
+        "album": null,
+        "albumArtist": null,
+        "artwork": null,
+        "durationMs": null
+    })
+}
+
+fn base_json() -> serde_json::Value {
+    serde_json::json!({
+        "revision": 0,
+        "volume": 1.0,
+        "muted": false,
+        "outputSelection": { "kind": "systemDefault" },
+        "canGoPrevious": false,
+        "canGoNext": false
+    })
+}
+
+fn session_json() -> serde_json::Value {
+    serde_json::json!({
+        "item": item_json(),
+        "playbackId": "1",
+        "positionMs": 1_000,
+        "durationMs": 60_000,
+        "outputDevice": { "id": "test-device", "name": "Test device" },
+        "channelConversion": "none",
+        "sourceSampleRate": 44_100,
+        "outputSampleRate": 44_100,
+        "resamplingActive": false
+    })
+}
+
+/// Files that do not exist, so loading them fails as an unreadable file.
+fn seeds(count: usize) -> Vec<PlaybackItemSeed> {
+    (0..count)
+        .map(|i| {
+            PlaybackItemSeed::from_file(ValidatedAudioFile {
+                path: format!("C:/missing/track-{i}.flac"),
+                file_name: format!("track-{i}.flac"),
+                extension: "flac".into(),
+            })
+        })
+        .collect()
+}
+
+/// Runs the worker's loading step until the pending start answers.
+fn finish_start(
+    worker: &mut PlaybackWorker,
+    receiver: &mpsc::Receiver<Result<PlaybackSnapshot, PlaybackServiceError>>,
+) -> Option<Result<PlaybackSnapshot, PlaybackServiceError>> {
+    (0..2_000).find_map(|_| {
+        worker.advance_pending_source_load();
+        receiver
+            .recv_timeout(std::time::Duration::from_millis(1))
+            .ok()
+    })
+}
 
 #[test]
 fn processing_info_derives_resampling_from_rates() {
-    let equal = super::PlaybackProcessingInfo {
-        channel_conversion: super::PlaybackChannelConversion::None,
+    let equal = PlaybackProcessingInfo {
+        channel_conversion: PlaybackChannelConversion::None,
         source_sample_rate: 44_100,
         output_sample_rate: 44_100,
     };
-    let different = super::PlaybackProcessingInfo {
+    let different = PlaybackProcessingInfo {
         source_sample_rate: 44_100,
         output_sample_rate: 48_000,
         ..equal
@@ -66,29 +244,27 @@ fn classifies_stream_signals_by_selection_and_failure_kind() {
 
 #[test]
 fn serializes_playing_snapshot_with_camel_case_playback_id() {
-    let snapshot =
-        PlaybackSnapshot::playing(VolumeState::default(), "1".into(), 1_000, Some(60_000));
+    let snapshot = playing(VolumeState::default(), "1", 1_000, Some(60_000));
 
     assert_eq!(
         serde_json::to_value(snapshot).unwrap(),
-        serde_json::json!({ "status": "playing", "revision": 0, "file": { "path": "C:/test.flac", "fileName": "test.flac", "extension": "flac" }, "playbackId": "1", "positionMs": 1_000, "durationMs": 60_000, "volume": 1.0, "muted": false, "outputSelection": { "kind": "systemDefault" }, "outputDevice": { "id": "test-device", "name": "Test device" }, "channelConversion": "none", "sourceSampleRate": 44_100, "outputSampleRate": 44_100, "resamplingActive": false, "canGoPrevious": false, "canGoNext": false })
+        serde_json::json!({ "status": "playing", "base": base_json(), "session": session_json() })
     );
 }
 
 #[test]
 fn serializes_paused_snapshot_with_camel_case_playback_id() {
-    let snapshot =
-        PlaybackSnapshot::paused(VolumeState::default(), "1".into(), 1_000, Some(60_000));
+    let snapshot = paused(VolumeState::default(), "1", 1_000, Some(60_000));
 
     assert_eq!(
         serde_json::to_value(snapshot).unwrap(),
-        serde_json::json!({ "status": "paused", "revision": 0, "file": { "path": "C:/test.flac", "fileName": "test.flac", "extension": "flac" }, "playbackId": "1", "positionMs": 1_000, "durationMs": 60_000, "volume": 1.0, "muted": false, "outputSelection": { "kind": "systemDefault" }, "outputDevice": { "id": "test-device", "name": "Test device" }, "channelConversion": "none", "sourceSampleRate": 44_100, "outputSampleRate": 44_100, "resamplingActive": false, "canGoPrevious": false, "canGoNext": false })
+        serde_json::json!({ "status": "paused", "base": base_json(), "session": session_json() })
     );
 }
 
 #[test]
 fn serializes_missing_playback_id_as_null_in_failed_snapshot() {
-    let snapshot = PlaybackSnapshot::failed(
+    let snapshot = failed(
         VolumeState::default(),
         None,
         PlaybackFailureCode::NoOutputDevice,
@@ -98,33 +274,21 @@ fn serializes_missing_playback_id_as_null_in_failed_snapshot() {
         serde_json::to_value(snapshot).unwrap(),
         serde_json::json!({
             "status": "failed",
+            "base": base_json(),
+            "item": null,
             "playbackId": null,
-            "revision": 0,
-            "file": null,
-            "error": "noOutputDevice",
-            "volume": 1.0,
-            "muted": false,
-            "outputSelection": { "kind": "systemDefault" },
-            "canGoPrevious": false,
-            "canGoNext": false
+            "error": "noOutputDevice"
         })
     );
 }
 
 #[test]
 fn stop_is_stopped_when_called_twice() {
-    let mut worker = test_worker(PlaybackSnapshot::playing(
-        VolumeState::default(),
-        "1".into(),
-        0,
-        Some(60_000),
-    ));
+    let mut worker = test_worker(playing(VolumeState::default(), "1", 0, Some(60_000)));
 
     let first = worker.stop();
-    assert!(matches!(
-        first,
-        PlaybackSnapshot::Stopped { revision: 1, .. }
-    ));
+    assert!(matches!(first, PlaybackSnapshot::Stopped { .. }));
+    assert_eq!(first.revision(), 1);
     assert_eq!(worker.stop(), first);
     assert_eq!(worker.current(), first);
     assert!(worker.active.is_none());
@@ -132,29 +296,31 @@ fn stop_is_stopped_when_called_twice() {
 
 #[test]
 fn stop_from_paused_is_stopped() {
-    let mut worker = test_worker(PlaybackSnapshot::paused(
-        VolumeState::default(),
-        "1".into(),
-        10_000,
-        Some(60_000),
-    ));
+    let mut worker = test_worker(paused(VolumeState::default(), "1", 10_000, Some(60_000)));
 
     let stopped = worker.stop();
-    assert!(matches!(
-        stopped,
-        PlaybackSnapshot::Stopped { revision: 1, .. }
-    ));
+    assert!(matches!(stopped, PlaybackSnapshot::Stopped { .. }));
+    assert_eq!(stopped.revision(), 1);
     assert_eq!(worker.current(), stopped);
 }
 
 #[test]
+fn stop_clears_the_queue() {
+    let mut worker = test_worker(stopped(VolumeState::default()));
+    worker
+        .queue
+        .replace(seeds(3), 1, &mut StdRng::seed_from_u64(1))
+        .unwrap();
+
+    worker.stop();
+
+    assert!(worker.queue.is_empty());
+    assert!(worker.queue_snapshot().current.is_none());
+}
+
+#[test]
 fn volume_commands_update_snapshot_without_rebuilding_playback() {
-    let mut worker = test_worker(PlaybackSnapshot::playing(
-        VolumeState::default(),
-        "1".into(),
-        250,
-        Some(60_000),
-    ));
+    let mut worker = test_worker(playing(VolumeState::default(), "1", 250, Some(60_000)));
 
     let changed = worker.set_volume(0.5).expect("valid volume must succeed");
     assert_eq!(changed_volume(&changed), (0.5, false));
@@ -178,42 +344,37 @@ fn volume_commands_update_snapshot_without_rebuilding_playback() {
 
 #[test]
 fn published_snapshots_are_monotonic_and_idempotent_commands_keep_revision() {
-    let mut worker = test_worker(PlaybackSnapshot::stopped(VolumeState::default()));
+    let mut worker = test_worker(stopped(VolumeState::default()));
 
     let changed = worker.set_volume(0.5).expect("valid volume must succeed");
     let muted = worker.mute();
     let muted_again = worker.mute();
 
-    assert_eq!(snapshot_revision(&changed), 1);
-    assert_eq!(snapshot_revision(&muted), 2);
-    assert_eq!(snapshot_revision(&muted_again), 2);
+    assert_eq!(changed.revision(), 1);
+    assert_eq!(muted.revision(), 2);
+    assert_eq!(muted_again.revision(), 2);
 }
 
 #[test]
-fn stopped_snapshot_retains_the_last_played_file_identity() {
-    let mut worker = test_worker(PlaybackSnapshot::paused(
-        VolumeState::default(),
-        "1".into(),
-        1_000,
-        Some(60_000),
-    ));
-    worker.current_file = Some(super::test_file());
+fn stopped_snapshot_retains_the_last_played_item_identity() {
+    let mut worker = test_worker(paused(VolumeState::default(), "1", 1_000, Some(60_000)));
+    worker.loaded_item = Some(test_item());
 
     let PlaybackSnapshot::Stopped {
-        file: Some(file), ..
+        item: Some(item), ..
     } = worker.stop()
     else {
-        panic!("stop must retain a file identity");
+        panic!("stop must retain an item identity");
     };
-    assert_eq!(file.file_name, "test.flac");
+    assert_eq!(item.file.file_name, "test.flac");
 }
 
 #[test]
 fn volume_state_is_present_in_initial_stopped_snapshot() {
-    let service = PlaybackService::start().expect("worker should start");
+    let service = start_service();
     assert_eq!(
         serde_json::to_value(service.snapshot()).unwrap(),
-        serde_json::json!({"status": "stopped", "revision": 0, "file": null, "volume": 1.0, "muted": false, "outputSelection": { "kind": "systemDefault" }, "canGoPrevious": false, "canGoNext": false})
+        serde_json::json!({"status": "stopped", "base": base_json(), "item": null})
     );
     service.shutdown();
 }
@@ -238,36 +399,6 @@ fn ignores_stream_failure_from_another_stream() {
 }
 
 #[test]
-fn matching_stream_failure_is_failed() {
-    assert_eq!(
-        failed_snapshot(
-            OutputStreamId(1),
-            PlaybackFailureCode::OutputStreamRuntimeFailed
-        ),
-        PlaybackSnapshot::failed(
-            VolumeState::default(),
-            Some("1".into()),
-            PlaybackFailureCode::OutputStreamRuntimeFailed
-        )
-    );
-}
-
-#[test]
-fn matching_completion_timing_failure_is_failed() {
-    assert_eq!(
-        failed_snapshot(
-            OutputStreamId(1),
-            PlaybackFailureCode::CompletionTimingFailed
-        ),
-        PlaybackSnapshot::failed(
-            VolumeState::default(),
-            Some("1".into()),
-            PlaybackFailureCode::CompletionTimingFailed
-        )
-    );
-}
-
-#[test]
 fn stops_when_completion_time_is_reached() {
     assert!(!completion_time_reached(
         StreamInstant::new(10, 0),
@@ -281,9 +412,9 @@ fn stops_when_completion_time_is_reached() {
 
 #[test]
 fn pause_and_resume_actions_are_idempotent_or_invalid_by_snapshot() {
-    let playing = PlaybackSnapshot::playing(VolumeState::default(), "1".into(), 0, Some(60_000));
-    let paused = PlaybackSnapshot::paused(VolumeState::default(), "1".into(), 10_000, Some(60_000));
-    let stopped = PlaybackSnapshot::stopped(VolumeState::default());
+    let playing = playing(VolumeState::default(), "1", 0, Some(60_000));
+    let paused = paused(VolumeState::default(), "1", 10_000, Some(60_000));
+    let stopped = stopped(VolumeState::default());
     let failed = failed_snapshot(
         OutputStreamId(1),
         PlaybackFailureCode::OutputStreamRuntimeFailed,
@@ -301,12 +432,12 @@ fn pause_and_resume_actions_are_idempotent_or_invalid_by_snapshot() {
 
 #[test]
 fn paused_playback_does_not_finish_naturally() {
-    let paused = PlaybackSnapshot::paused(VolumeState::default(), "1".into(), 10_000, Some(60_000));
+    let paused = paused(VolumeState::default(), "1", 10_000, Some(60_000));
     let end = StreamInstant::new(10, 0);
 
     assert!(!should_finish(&paused, Some(end), end));
     assert!(should_finish(
-        &PlaybackSnapshot::playing(VolumeState::default(), "1".into(), 0, Some(60_000)),
+        &playing(VolumeState::default(), "1", 0, Some(60_000)),
         Some(end),
         end
     ));
@@ -341,74 +472,143 @@ fn preserves_frontend_mapping_for_output_configuration_errors() {
 }
 
 #[test]
-fn start_failure_preserves_existing_playback() {
-    assert_eq!(
-        start_failure_snapshot(
-            true,
-            OutputStreamId(2),
-            PlaybackFailureCode::OutputStreamBuildFailed,
-            VolumeState::default(),
-            AudioOutputSelection::SystemDefault,
-            None,
-        ),
-        None
-    );
+fn start_failure_scope_separates_file_problems_from_output_problems() {
+    for phase in [
+        StartFailurePhase::SourceOpen,
+        StartFailurePhase::SourceMetadata,
+        StartFailurePhase::SourceRead,
+        StartFailurePhase::SourceChanged,
+        StartFailurePhase::DecoderOpen,
+        StartFailurePhase::FirstPacketDecode,
+        StartFailurePhase::ProcessorCreate,
+        StartFailurePhase::PrebufferDecode,
+        StartFailurePhase::PrebufferConversion,
+    ] {
+        assert_eq!(phase.scope(), FailureScope::Item, "{phase:?}");
+    }
+    for phase in [
+        StartFailurePhase::SourceWorker,
+        StartFailurePhase::OutputDeviceResolution,
+        StartFailurePhase::OutputPrepare,
+        StartFailurePhase::DecodeWorkerSpawn,
+        StartFailurePhase::StreamStart,
+    ] {
+        assert_eq!(phase.scope(), FailureScope::Output, "{phase:?}");
+    }
 }
 
 #[test]
-fn start_failure_without_playback_is_failed() {
-    assert_eq!(
-        start_failure_snapshot(
-            false,
-            OutputStreamId(1),
-            PlaybackFailureCode::OutputStreamStartFailed,
-            VolumeState::default(),
-            AudioOutputSelection::SystemDefault,
-            None,
-        ),
-        Some(PlaybackSnapshot::failed(
-            VolumeState::default(),
-            Some("1".into()),
-            PlaybackFailureCode::OutputStreamStartFailed
-        ))
-    );
-}
-
-#[test]
-fn navigation_decoder_failure_clears_the_sequence_and_publishes_failed_state() {
-    let mut worker = test_worker(PlaybackSnapshot::playing(
-        VolumeState::default(),
-        "1".into(),
-        0,
-        Some(60_000),
-    ));
-    worker.sequence = PlaybackSequence::new(vec![super::test_file(), super::test_file()]);
+fn a_file_that_cannot_be_read_is_skipped_and_the_queue_survives() {
+    let mut worker = test_worker(stopped(VolumeState::default()));
     let (reply, receiver) = mpsc::sync_channel(1);
 
-    worker.navigate(true, reply);
+    worker.start_queue(seeds(3), 0, reply);
+    let result = finish_start(&mut worker, &receiver);
 
-    let result = (0..100).find_map(|_| {
-        worker.advance_pending_source_load();
-        receiver
-            .recv_timeout(std::time::Duration::from_millis(1))
-            .ok()
-    });
+    // Every file is missing, so the pass ends after trying each one exactly once.
     assert_eq!(result, Some(Err(PlaybackServiceError::Decode)));
-    assert!(worker.sequence.is_none());
+    assert_eq!(worker.queue.len(), 3);
+    assert_eq!(
+        worker.queue_snapshot().current.unwrap().title,
+        "track-2.flac"
+    );
+    let current = worker.current();
+    assert!(matches!(
+        current,
+        PlaybackSnapshot::Failed {
+            error: PlaybackFailureCode::DecodeFailed,
+            ..
+        }
+    ));
+    assert!(current.base().can_go_previous);
+    assert!(!current.base().can_go_next);
+}
+
+#[test]
+fn skipping_failed_files_is_bounded_even_when_the_queue_repeats() {
+    let mut worker = test_worker(stopped(VolumeState::default()));
+    worker.queue.set_repeat(PlaybackRepeatMode::All);
+    let (reply, receiver) = mpsc::sync_channel(1);
+
+    worker.start_queue(seeds(4), 1, reply);
+
+    assert_eq!(
+        finish_start(&mut worker, &receiver),
+        Some(Err(PlaybackServiceError::Decode))
+    );
+    assert_eq!(worker.queue.len(), 4);
+}
+
+#[test]
+fn navigation_over_a_broken_file_reports_the_failure_and_keeps_the_queue() {
+    let mut worker = test_worker(playing(VolumeState::default(), "1", 0, Some(60_000)));
+    worker
+        .queue
+        .replace(seeds(2), 0, &mut StdRng::seed_from_u64(1))
+        .unwrap();
+    let (reply, receiver) = mpsc::sync_channel(1);
+
+    worker.navigate(AdvanceReason::UserNext, reply);
+
+    assert_eq!(
+        finish_start(&mut worker, &receiver),
+        Some(Err(PlaybackServiceError::Decode))
+    );
+    assert_eq!(worker.queue.len(), 2);
     assert!(matches!(
         worker.current(),
         PlaybackSnapshot::Failed {
             error: PlaybackFailureCode::DecodeFailed,
-            can_go_previous: false,
-            can_go_next: false,
             ..
         }
     ));
 }
 
 #[test]
+fn a_superseded_start_is_answered_instead_of_dropped() {
+    let mut worker = test_worker(stopped(VolumeState::default()));
+    let (first, first_receiver) = mpsc::sync_channel(1);
+    let (second, _second_receiver) = mpsc::sync_channel(1);
+
+    worker.start_queue(seeds(1), 0, first);
+    worker.start_queue(seeds(1), 0, second);
+
+    assert_eq!(
+        first_receiver.recv_timeout(std::time::Duration::from_secs(1)),
+        Ok(Err(PlaybackServiceError::Superseded))
+    );
+    worker.discard_pending_source();
+}
+
+#[test]
+fn previous_restarts_a_track_that_has_played_for_a_while() {
+    assert!(!previous_restarts_track(2_999, Some(60_000)));
+    assert!(previous_restarts_track(3_000, Some(60_000)));
+    assert!(!previous_restarts_track(30_000, None));
+}
+
+#[test]
+fn navigation_availability_follows_the_queue_and_the_restart_rule() {
+    let mut worker = test_worker(stopped(VolumeState::default()));
+    worker
+        .queue
+        .replace(seeds(2), 0, &mut StdRng::seed_from_u64(1))
+        .unwrap();
+
+    let early = worker.publish(playing(VolumeState::default(), "1", 500, Some(60_000)));
+    assert!(!early.base().can_go_previous);
+    assert!(early.base().can_go_next);
+
+    let late = worker.publish(playing(VolumeState::default(), "1", 5_000, Some(60_000)));
+    assert!(late.base().can_go_previous, "previous restarts the track");
+
+    let idle = worker.publish(stopped(VolumeState::default()));
+    assert!(!idle.base().can_go_previous && !idle.base().can_go_next);
+}
+
+#[test]
 fn shutdown_joins_worker_thread() {
-    let service = PlaybackService::start().expect("worker should start");
+    let service = start_service();
     service.shutdown();
 
     assert!(service.worker.lock().unwrap().is_none());
@@ -421,7 +621,7 @@ fn runtime_failure_snapshot_has_active_id() {
             OutputStreamId(1),
             PlaybackFailureCode::OutputStreamRuntimeFailed,
         ),
-        PlaybackSnapshot::failed(
+        failed(
             VolumeState::default(),
             Some("1".into()),
             PlaybackFailureCode::OutputStreamRuntimeFailed
@@ -468,14 +668,13 @@ fn position_publication_requires_interval_and_a_changed_position() {
 
 #[test]
 fn output_selection_is_rejected_during_source_loading() {
-    let mut worker = test_worker(PlaybackSnapshot::stopped(VolumeState::default()));
+    let mut worker = test_worker(stopped(VolumeState::default()));
     let (reply, _receiver) = mpsc::sync_channel(1);
     worker.pending_source = Some(PendingSourceLoad {
-        file: super::test_file(),
-        worker: SourceLoadWorker::spawn(super::test_file()).unwrap(),
+        item: test_item(),
+        worker: SourceLoadWorker::spawn(test_file()).unwrap(),
         reply,
         start_paused: false,
-        sequence_index: 0,
     });
 
     assert_eq!(
@@ -486,60 +685,38 @@ fn output_selection_is_rejected_during_source_loading() {
     worker.discard_pending_source();
 }
 
+fn start_service() -> PlaybackService {
+    PlaybackService::start(
+        crate::events::null_event_sink(),
+        PlaybackPreferences::default(),
+        Arc::new(|_| {}),
+    )
+    .expect("worker should start")
+}
+
 fn test_worker(snapshot: PlaybackSnapshot) -> PlaybackWorker {
     let (_, command_receiver) = mpsc::sync_channel(1);
-    let (state_changed_sender, _) = mpsc::sync_channel(1);
     let (output_sender, _output_receiver) = mpsc::sync_channel(1);
+    let queue = PlaybackQueue::new(PlaybackRepeatMode::Off, false);
 
-    PlaybackWorker {
-        active: None,
-        pending: None,
-        pending_source: None,
-        pending_seek: None,
-        next_playback_session_id: 0,
-        next_output_stream_id: 0,
-        next_snapshot_revision: 0,
-        next_queue_revision: 0,
-        next_queue_item_id: 0,
-        current_file: None,
-        sequence: None,
-        repeat_mode: PlaybackRepeatMode::Off,
-        shuffle: false,
-        restore_position_ms: None,
-        volume_state: VolumeState::default(),
-        effective_gain: super::super::volume::AtomicEffectiveGain::new(1.0),
-        output_selection: AudioOutputSelection::SystemDefault,
-        snapshot: Arc::new(RwLock::new(snapshot)),
-        queue_snapshot: Arc::new(RwLock::new(PlaybackQueueSnapshot {
-            revision: 0,
-            current: None,
-            upcoming: Vec::new(),
-            repeat_mode: PlaybackRepeatMode::Off,
-            shuffle_enabled: false,
-        })),
-        command_receiver,
-        state_changed_sender,
-        queue_state_changed_sender: mpsc::sync_channel(1).0,
-        output_sender,
-    }
+    PlaybackWorker::new(
+        WorkerLinks {
+            snapshot: Arc::new(RwLock::new(snapshot)),
+            queue_snapshot: Arc::new(RwLock::new(PlaybackQueueSnapshot::of(0, &queue))),
+            effective_gain: AtomicEffectiveGain::new(1.0),
+            command_receiver,
+            output_sender,
+            events: crate::events::null_event_sink(),
+            observer: Arc::new(|_| {}),
+        },
+        queue,
+        VolumeState::default(),
+        AudioOutputSelection::SystemDefault,
+    )
 }
 
 fn changed_volume(snapshot: &PlaybackSnapshot) -> (f32, bool) {
-    match snapshot {
-        PlaybackSnapshot::Stopped { volume, muted, .. }
-        | PlaybackSnapshot::Playing { volume, muted, .. }
-        | PlaybackSnapshot::Paused { volume, muted, .. }
-        | PlaybackSnapshot::Failed { volume, muted, .. } => (*volume, *muted),
-    }
-}
-
-fn snapshot_revision(snapshot: &PlaybackSnapshot) -> u64 {
-    match snapshot {
-        PlaybackSnapshot::Stopped { revision, .. }
-        | PlaybackSnapshot::Playing { revision, .. }
-        | PlaybackSnapshot::Paused { revision, .. }
-        | PlaybackSnapshot::Failed { revision, .. } => *revision,
-    }
+    (snapshot.base().volume, snapshot.base().muted)
 }
 
 #[test]

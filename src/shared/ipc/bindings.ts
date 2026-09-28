@@ -6,6 +6,11 @@ import { invoke as __TAURI_INVOKE } from "@tauri-apps/api/core";
 export const commands = {
 	getPlaybackState: () => __TAURI_INVOKE<PlaybackSnapshot>("get_playback_state"),
 	getPlaybackQueue: () => __TAURI_INVOKE<PlaybackQueueSnapshot>("get_playback_queue"),
+	/**
+	 *  Replaces the queue with `context` and plays from `start_track_id`, or from the context's
+	 *  first track when it is `None`.
+	 */
+	startPlayback: (context: PlaybackContext, startTrackId: string | null) => __TAURI_INVOKE<PlaybackSnapshot>("start_playback", { context, startTrackId }),
 	pausePlayback: () => __TAURI_INVOKE<PlaybackSnapshot>("pause_playback"),
 	resumePlayback: () => __TAURI_INVOKE<PlaybackSnapshot>("resume_playback"),
 	previousPlayback: () => __TAURI_INVOKE<PlaybackSnapshot>("previous_playback"),
@@ -42,7 +47,7 @@ export const commands = {
 	listLibraryArtistAlbums: (artistKey: LibraryAlbumArtistKey, cursor: string | null, sortKey: LibraryArtistAlbumSortKey, sortDirection: LibrarySortDirection) => __TAURI_INVOKE<LibraryAlbumPage>("list_library_artist_albums", { artistKey, cursor, sortKey, sortDirection }),
 	getLibraryAlbumDetails: (albumKey: LibraryAlbumKey) => __TAURI_INVOKE<LibraryAlbumDetails>("get_library_album_details", { albumKey }),
 	listLibraryAlbumTracks: (albumKey: LibraryAlbumKey, cursor: string | null) => __TAURI_INVOKE<LibraryAlbumTrackPage>("list_library_album_tracks", { albumKey, cursor }),
-	getLibraryTrackForPath: (path: string) => __TAURI_INVOKE<{
+	getLibraryTrack: (trackId: string) => __TAURI_INVOKE<{
 	id: string,
 	title: string,
 	artist: string | null,
@@ -55,17 +60,40 @@ export const commands = {
 	bitrateKbps: number | null,
 	availability: LibraryFileAvailability,
 	playable: boolean,
-} | null>("get_library_track_for_path", { path }),
-	startLibraryTrack: (trackId: string) => __TAURI_INVOKE<PlaybackSnapshot>("start_library_track", { trackId }),
-	startLibraryAlbum: (albumKey: LibraryAlbumKey) => __TAURI_INVOKE<PlaybackSnapshot>("start_library_album", { albumKey }),
+} | null>("get_library_track", { trackId }),
 	getArtworkAccent: (contentHash: string) => __TAURI_INVOKE<string | null>("get_artwork_accent", { contentHash }),
 	getTrackLyrics: (trackId: string) => __TAURI_INVOKE<LyricsResolution>("get_track_lyrics", { trackId }),
+	getSettings: () => __TAURI_INVOKE<Settings>("get_settings"),
+	/**  Applies a partial update and returns the settings as they are afterwards. */
+	updateSettings: (patch: SettingsPatch) => __TAURI_INVOKE<Settings>("update_settings", { patch }),
 };
 
 /* Types */
+/**  A loaded track: identity plus how it reaches the output device. */
+export type ActiveSession = {
+	item: PlaybackItem,
+	playbackId: string,
+	positionMs: number,
+	durationMs: number | null,
+	outputDevice: AudioOutputDeviceIdentity,
+	channelConversion: PlaybackChannelConversion,
+	sourceSampleRate: number,
+	outputSampleRate: number,
+	resamplingActive: boolean,
+};
+
 export type AppEvent = { event: "playbackStateChanged"; payload: PlaybackSnapshot } | { event: "playbackQueueStateChanged"; payload: PlaybackQueueSnapshot } | { event: "applicationActivitiesChanged"; payload: ApplicationActivity[] } | { event: "libraryScanStateChanged"; payload: LibraryScanSnapshot } | { event: "waveformReady"; payload: {
 	path: string,
-} };
+} } | { event: "settingsChanged"; payload: Settings };
+
+export type AppearancePatch = {
+	artworkBackdrop: boolean | null,
+};
+
+export type AppearanceSettings = {
+	/**  Artwork light behind the library and Now Playing. */
+	artworkBackdrop?: boolean,
+};
 
 export type ApplicationActivity = {
 	id: string,
@@ -77,6 +105,7 @@ export type ApplicationActivityKind = "librarySync";
 
 export type ApplicationActivityState = "running" | "attentionRequired";
 
+/**  Stored artwork as the renderer addresses it. Shared by the library catalog and playback items. */
 export type ArtworkMimeType = "jpeg" | "png";
 
 export type ArtworkRef = {
@@ -168,7 +197,7 @@ export type LibraryAlbumTrackSummary = {
 
 export type LibraryArtistAlbumSortKey = "year" | "title";
 
-export type LibraryCommandError = { code: "invalidRoot" } | { code: "rootNotFound" } | { code: "rootNotDirectory" } | { code: "canonicalizationFailed" } | { code: "duplicateRoot" } | { code: "overlappingRoot" } | { code: "scanInProgress" } | { code: "invalidId" } | { code: "albumNotFound" } | { code: "invalidCursor" } | { code: "invalidAlbumKey" } | { code: "invalidAlbumArtistKey" } | { code: "albumArtistNotFound" } | { code: "rootMissing" } | { code: "scanAlreadyRunning" } | { code: "noEnabledRoots" } | { code: "scanNotRunning" } | { code: "libraryUnavailable" } | { code: "persistenceFailed" } | { code: "taskFailed" };
+export type LibraryCommandError = { code: "invalidRoot" } | { code: "rootNotFound" } | { code: "rootNotDirectory" } | { code: "canonicalizationFailed" } | { code: "duplicateRoot" } | { code: "overlappingRoot" } | { code: "scanInProgress" } | { code: "invalidId" } | { code: "trackNotFound" } | { code: "trackUnavailable" } | { code: "albumNotFound" } | { code: "invalidCursor" } | { code: "invalidAlbumKey" } | { code: "invalidAlbumArtistKey" } | { code: "albumArtistNotFound" } | { code: "rootMissing" } | { code: "scanAlreadyRunning" } | { code: "noEnabledRoots" } | { code: "scanNotRunning" } | { code: "libraryUnavailable" } | { code: "persistenceFailed" } | { code: "taskFailed" };
 
 export type LibraryFileAvailability = "available" | "missing";
 
@@ -245,14 +274,53 @@ export type LyricsTimedLine = {
 export type PlaybackChannelConversion = "none" | "monoToStereo" | "stereoToMono";
 
 /**  Structured playback command failure serialized as `{ "code": "<camelCase>" }`. */
-export type PlaybackCommandError = { code: "invalidArgument" } | { code: "playbackWorkerUnavailable" } | { code: "queueItemNotFound" } | { code: "queueBusy" } | { code: "invalidVolume" } | { code: "invalidDeviceId" } | { code: "invalidPlaybackState" } | { code: "durationUnavailable" } | { code: "seekFailed" } | { code: "decodeFailed" } | { code: "noOutputDevice" } | { code: "outputDeviceUnavailable" } | { code: "unsupportedOutputConfiguration" } | { code: "outputStreamBuildFailed" } | { code: "outputStreamStartFailed" } | { code: "outputStreamPauseFailed" } | { code: "outputStreamResumeFailed" } | { code: "outputStreamRuntimeFailed" } | { code: "completionTimingFailed" } | { code: "sampleRateConversionFailed" };
+export type PlaybackCommandError = { code: "invalidArgument" } | { code: "playbackWorkerUnavailable" } | 
+/**  A newer request replaced this one; the caller has nothing to report. */
+{ code: "superseded" } | { code: "queueItemNotFound" } | { code: "queueBusy" } | { code: "invalidVolume" } | { code: "invalidDeviceId" } | { code: "invalidPlaybackState" } | { code: "durationUnavailable" } | { code: "seekFailed" } | { code: "decodeFailed" } | { code: "noOutputDevice" } | { code: "outputDeviceUnavailable" } | { code: "unsupportedOutputConfiguration" } | { code: "outputStreamBuildFailed" } | { code: "outputStreamStartFailed" } | { code: "outputStreamPauseFailed" } | { code: "outputStreamResumeFailed" } | { code: "outputStreamRuntimeFailed" } | { code: "completionTimingFailed" } | { code: "sampleRateConversionFailed" };
+
+export type PlaybackContext = 
+/**  An album in disc and track order. */
+{ kind: "album"; key: LibraryAlbumKey } | 
+/**  The tracks list as currently filtered and sorted. */
+{ kind: "tracks"; search: string | null; sortKey: LibraryTrackSortKey; sortDirection: LibrarySortDirection };
 
 export type PlaybackFailureCode = "noOutputDevice" | "outputDeviceUnavailable" | "unsupportedOutputConfiguration" | "outputStreamBuildFailed" | "outputStreamStartFailed" | "outputStreamPauseFailed" | "outputStreamResumeFailed" | "outputStreamRuntimeFailed" | "completionTimingFailed" | "decodeFailed" | "sampleRateConversionFailed";
 
-export type PlaybackQueueItem = {
-	id: string,
+/**
+ *  One entry of the playback queue and the identity of the loaded track.
+ * 
+ *  Everything a listener-facing feature needs about "what is playing" lives here, so history,
+ *  system media controls, and the UI never have to look the track up again by path.
+ */
+export type PlaybackItem = {
+	queueItemId: string,
+	trackId: string | null,
+	file: ValidatedAudioFile,
 	title: string,
 	artist: string | null,
+	album: string | null,
+	albumArtist: string | null,
+	artwork: ArtworkRef | null,
+	durationMs: number | null,
+};
+
+/**  The playback choices that outlive a session: what the listener set, restored at startup. */
+export type PlaybackPreferences = {
+	volume?: number,
+	muted?: boolean,
+	outputSelection?: AudioOutputSelection,
+	repeatMode?: PlaybackRepeatMode,
+	shuffleEnabled?: boolean,
+};
+
+/**  A queue entry as the queue panel shows it; the file path stays in the backend. */
+export type PlaybackQueueItem = {
+	id: string,
+	trackId: string | null,
+	title: string,
+	artist: string | null,
+	album: string | null,
+	artwork: ArtworkRef | null,
 	durationMs: number | null,
 };
 
@@ -268,7 +336,9 @@ export type PlaybackQueueSnapshot = {
 
 export type PlaybackRepeatMode = "off" | "all" | "one";
 
-export type PlaybackSnapshot = { status: "stopped"; revision: number; file: ValidatedAudioFile | null; volume: number; muted: boolean; outputSelection: AudioOutputSelection; canGoPrevious: boolean; canGoNext: boolean } | { status: "playing"; revision: number; file: ValidatedAudioFile; playbackId: string; positionMs: number; durationMs: number | null; volume: number; muted: boolean; outputSelection: AudioOutputSelection; outputDevice: AudioOutputDeviceIdentity; channelConversion: PlaybackChannelConversion; sourceSampleRate: number; outputSampleRate: number; resamplingActive: boolean; canGoPrevious: boolean; canGoNext: boolean } | { status: "paused"; revision: number; file: ValidatedAudioFile; playbackId: string; positionMs: number; durationMs: number | null; volume: number; muted: boolean; outputSelection: AudioOutputSelection; outputDevice: AudioOutputDeviceIdentity; channelConversion: PlaybackChannelConversion; sourceSampleRate: number; outputSampleRate: number; resamplingActive: boolean; canGoPrevious: boolean; canGoNext: boolean } | { status: "failed"; revision: number; file: ValidatedAudioFile | null; playbackId: string | null; error: PlaybackFailureCode; volume: number; muted: boolean; outputSelection: AudioOutputSelection; canGoPrevious: boolean; canGoNext: boolean };
+export type PlaybackSnapshot = 
+/**  `item` is the last track that played, kept so the UI can still say what it was. */
+{ status: "stopped"; base: SnapshotBase; item: PlaybackItem | null } | { status: "playing"; base: SnapshotBase; session: ActiveSession } | { status: "paused"; base: SnapshotBase; session: ActiveSession } | { status: "failed"; base: SnapshotBase; item: PlaybackItem | null; playbackId: string | null; error: PlaybackFailureCode };
 
 export type PlaybackWaveform = {
 	path: string,
@@ -276,9 +346,32 @@ export type PlaybackWaveform = {
 	rms: number[],
 };
 
-export type StartLibraryAlbumTrackError = { code: "invalidAlbumKey" } | { code: "invalidTrackId" } | { code: "albumNotFound" } | { code: "trackNotMember" } | { code: "trackUnavailable" } | { code: "trackNotPlayable" } | { code: "noPlayableTracks" } | { code: "sourceUnavailable" } | { code: "libraryUnavailable" } | { code: "persistenceFailed" } | { code: "decodeFailed" } | { code: "noOutputDevice" } | { code: "outputDeviceUnavailable" } | { code: "outputFailed" } | { code: "playbackWorkerUnavailable" } | { code: "taskFailed" };
+export type Settings = {
+	playback?: PlaybackPreferences,
+	appearance?: AppearanceSettings,
+};
 
-export type StartLibraryTrackError = { code: "invalidId" } | { code: "trackNotFound" } | { code: "trackUnavailable" } | { code: "trackNotPlayable" } | { code: "libraryUnavailable" } | { code: "persistenceFailed" } | { code: "decodeFailed" } | { code: "noOutputDevice" } | { code: "outputDeviceUnavailable" } | { code: "outputFailed" } | { code: "playbackWorkerUnavailable" } | { code: "taskFailed" };
+/**
+ *  A partial update from the renderer; absent fields stay as they are. Playback preferences are
+ *  not here: the playback worker owns them and records every change itself.
+ */
+export type SettingsPatch = {
+	appearance: AppearancePatch | null,
+};
+
+/**  Fields every transport state carries. */
+export type SnapshotBase = {
+	revision: number,
+	volume: number,
+	muted: boolean,
+	outputSelection: AudioOutputSelection,
+	canGoPrevious: boolean,
+	canGoNext: boolean,
+};
+
+export type StartPlaybackError = { code: "invalidAlbumKey" } | { code: "invalidTrackId" } | { code: "albumNotFound" } | { code: "trackNotMember" } | { code: "trackUnavailable" } | { code: "trackNotPlayable" } | { code: "noPlayableTracks" } | { code: "libraryUnavailable" } | { code: "persistenceFailed" } | { code: "decodeFailed" } | { code: "noOutputDevice" } | { code: "outputDeviceUnavailable" } | { code: "outputFailed" } | { code: "playbackWorkerUnavailable" } | 
+/**  A newer request replaced this one; there is nothing to report. */
+{ code: "superseded" } | { code: "taskFailed" };
 
 export type ValidatedAudioFile = {
 	path: string,

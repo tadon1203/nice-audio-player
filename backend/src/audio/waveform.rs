@@ -8,7 +8,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::{channel, sync_channel, Receiver, Sender, SyncSender};
+use std::sync::mpsc::{channel, Sender};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -18,6 +18,7 @@ use serde::Serialize;
 use super::decoding::{
     open_analysis_decoder, DecodeCancellation, DecodeStep, PcmDecodeError, SeekStep,
 };
+use crate::events::{BackendEvent, SharedEventSink};
 use crate::media::validation::ValidatedAudioFile;
 
 pub const WAVEFORM_BUCKETS: usize = 1000;
@@ -327,24 +328,22 @@ struct Shared {
     directory: PathBuf,
     ready: Mutex<HashMap<String, Arc<Waveform>>>,
     queued: Mutex<HashSet<String>>,
-    ready_sender: SyncSender<String>,
+    events: SharedEventSink,
 }
 
 /// Background waveform analysis. One worker thread processes requests in order.
 pub struct WaveformService {
     shared: Arc<Shared>,
     jobs: Sender<ValidatedAudioFile>,
-    ready_receiver: Mutex<Option<Receiver<String>>>,
 }
 
 impl WaveformService {
-    pub fn start(directory: PathBuf) -> Self {
-        let (ready_sender, ready_receiver) = sync_channel(64);
+    pub fn start(directory: PathBuf, events: SharedEventSink) -> Self {
         let shared = Arc::new(Shared {
             directory,
             ready: Mutex::new(HashMap::new()),
             queued: Mutex::new(HashSet::new()),
-            ready_sender,
+            events,
         });
         let (jobs, job_receiver) = channel::<ValidatedAudioFile>();
         let worker = Arc::clone(&shared);
@@ -360,19 +359,7 @@ impl WaveformService {
                         .remove(&file.path);
                 }
             });
-        Self {
-            shared,
-            jobs,
-            ready_receiver: Mutex::new(Some(ready_receiver)),
-        }
-    }
-
-    /// Yields the path of each file whose waveform became available or was refined.
-    pub fn take_ready_receiver(&self) -> Option<Receiver<String>> {
-        self.ready_receiver
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .take()
+        Self { shared, jobs }
     }
 
     /// Returns the waveform if it is ready; otherwise queues analysis and returns `None`.
@@ -427,7 +414,9 @@ impl Shared {
 
     fn publish(&self, path: &str, waveform: Waveform) {
         self.remember(path, waveform);
-        let _ = self.ready_sender.try_send(path.to_owned());
+        self.events.emit(BackendEvent::WaveformReady {
+            path: path.to_owned(),
+        });
     }
 
     fn remember(&self, path: &str, waveform: Waveform) {
@@ -547,13 +536,19 @@ mod tests {
     fn service_publishes_the_exact_waveform_and_caches_it() {
         let directory = TestDirectory::new();
         let file = wav(&directory, "song.wav", &vec![5_000i16; 16_000]);
-        let service = WaveformService::start(directory.file("cache"));
-        let receiver = service.take_ready_receiver().unwrap();
+        let (recorder, sink) = crate::events::testing::RecordingEventSink::shared();
+        let service = WaveformService::start(directory.file("cache"), sink);
         assert!(service.get_or_queue(&file).is_none());
-        let ready = receiver
-            .recv_timeout(std::time::Duration::from_secs(10))
-            .unwrap();
-        assert_eq!(ready, file.path);
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while recorder.events().is_empty() && Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(10));
+        }
+        assert_eq!(
+            recorder.events().first(),
+            Some(&BackendEvent::WaveformReady {
+                path: file.path.clone()
+            })
+        );
         assert!(service.get_or_queue(&file).is_some());
         let hash = content_hash(Path::new(&file.path)).unwrap();
         assert!(read_cache(&directory.file("cache"), &hash).is_some());

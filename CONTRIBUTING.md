@@ -7,6 +7,9 @@
 - TanStack Router owns navigation, TanStack Query owns native read caches, Zustand owns renderer-local interaction state.
 - Renderer code under `src/renderer/**` reaches native features only through `src/renderer/shared/lib/native.ts`, and never imports `node:*`.
 - Use shadcn primitives (`pnpm exec shadcn add <component>`) and semantic tokens; no raw palette values for UI surfaces.
+- Tauri commands that can wait on the playback worker or do blocking work are `async` and use `spawn_blocking`; a synchronous command runs on the main thread.
+- Backend services report changes by emitting a `BackendEvent` to their `EventSink`, never by owning a channel for the host to drain.
+- High-frequency renderer data (playback position, anything drawn per frame) stays out of broad subscriptions: read it with a narrow hook, a ref, or `store.getState()`.
 - Do not weaken type checking or lint rules just to make a change pass.
 
 ## Workflow

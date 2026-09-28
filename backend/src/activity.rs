@@ -1,10 +1,8 @@
+use crate::events::{BackendEvent, Notifier, SharedEventSink};
 use serde::Serialize;
 use std::{
     collections::BTreeMap,
-    sync::{
-        mpsc::{Receiver, SyncSender},
-        Arc, Mutex,
-    },
+    sync::{Arc, Mutex},
 };
 
 #[derive(Debug, Clone, Serialize, specta::Type, PartialEq, Eq)]
@@ -31,38 +29,25 @@ pub struct ApplicationActivity {
 #[derive(Clone)]
 pub struct ApplicationActivityHandle {
     entries: Arc<Mutex<BTreeMap<String, ApplicationActivity>>>,
-    changed: SyncSender<()>,
+    changed: Notifier,
 }
 
 pub struct ApplicationActivityService {
     handle: ApplicationActivityHandle,
-    receiver: Mutex<Option<Receiver<()>>>,
 }
 
 impl ApplicationActivityService {
-    pub fn new() -> Self {
-        let (changed, receiver) = std::sync::mpsc::sync_channel(1);
+    pub fn new(events: SharedEventSink) -> Self {
         Self {
             handle: ApplicationActivityHandle {
                 entries: Arc::new(Mutex::new(BTreeMap::new())),
-                changed,
+                changed: Notifier::new(events, BackendEvent::ActivitiesChanged),
             },
-            receiver: Mutex::new(Some(receiver)),
         }
     }
 
     pub fn handle(&self) -> ApplicationActivityHandle {
         self.handle.clone()
-    }
-
-    pub fn take_changed_receiver(&self) -> Option<Receiver<()>> {
-        self.receiver.lock().expect("activity receiver lock").take()
-    }
-}
-
-impl Default for ApplicationActivityService {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -87,7 +72,7 @@ impl ApplicationActivityHandle {
             }
         };
         if changed {
-            let _ = self.changed.try_send(());
+            self.changed.notify();
         }
     }
 
@@ -99,7 +84,7 @@ impl ApplicationActivityHandle {
             .remove(id)
             .is_some()
         {
-            let _ = self.changed.try_send(());
+            self.changed.notify();
         }
     }
 }
@@ -118,7 +103,7 @@ mod tests {
 
     #[test]
     fn updates_and_clears_only_the_selected_id() {
-        let service = ApplicationActivityService::new();
+        let service = ApplicationActivityService::new(crate::events::null_event_sink());
         let handle = service.handle();
         handle.set(activity("library-sync", ApplicationActivityState::Running));
         handle.set(activity(
@@ -136,13 +121,12 @@ mod tests {
     }
 
     #[test]
-    fn identical_updates_are_coalesced() {
-        let service = ApplicationActivityService::new();
+    fn identical_updates_are_not_announced_twice() {
+        let (recorder, sink) = crate::events::testing::RecordingEventSink::shared();
+        let service = ApplicationActivityService::new(sink);
         let handle = service.handle();
-        let receiver = service.take_changed_receiver().expect("activity receiver");
         handle.set(activity("library-sync", ApplicationActivityState::Running));
-        receiver.try_recv().expect("first activity change");
         handle.set(activity("library-sync", ApplicationActivityState::Running));
-        assert!(receiver.try_recv().is_err());
+        assert_eq!(recorder.events(), vec![BackendEvent::ActivitiesChanged]);
     }
 }

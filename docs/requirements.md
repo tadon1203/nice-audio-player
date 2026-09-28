@@ -9,15 +9,18 @@ MP3, FLAC, WAV, AAC, M4A. A file counts as supported only if it can actually be 
 ## Playback
 
 - Play, pause, resume, stop, seek, previous, next
+- Playing a track continues through the context it was picked from: an album plays on through the album, a track in the Tracks list plays on through that list as filtered and sorted
+- Previous restarts the track once it has played for 3 seconds, and goes to the previous track before that
 - Volume and mute
-- Queue, repeat, shuffle
+- Queue, repeat, shuffle. Shuffle is a real random order: the current track stays first and a repeated queue is shuffled again on every pass
 - Output device selection
+- Volume, mute, output device, repeat, and shuffle are remembered across restarts
 - Playback state (position, source/output sample rate, resampling) reflects the real audio state
-- Decode and output failures are reported clearly
+- Decode and output failures are reported clearly. A file that cannot be read or decoded is reported and skipped, and the queue survives; an output failure (device, stream) stops playback and keeps the queue
 
 ## Library
 
-- Register local music folders; scan, index, and pick up file changes (with progress and cancel for long scans)
+- Register local music folders; scan, index, and pick up file changes (with progress and cancel for long scans; a cancelled or failed scan never leaves a half-written batch)
 - Missing files are shown as missing, never auto-deleted
 - Browse as Albums, Album Artists, or Tracks; Album Artists drill into their Albums
 - Each view keeps its own filter and scroll position across view switches and Library/Settings round trips
@@ -28,6 +31,11 @@ MP3, FLAC, WAV, AAC, M4A. A file counts as supported only if it can actually be 
   - Album Artists: album artist
   - Tracks: title, track artist, album, album artist
   - `\`, `%`, and `_` are searched literally
+
+## Lyrics
+
+- Local `.lrc` sidecar files and embedded lyrics; sidecars may be UTF-8, UTF-16, or a legacy encoding such as Shift_JIS
+- Lyrics are read again after a library scan finishes
 
 ## Metadata
 

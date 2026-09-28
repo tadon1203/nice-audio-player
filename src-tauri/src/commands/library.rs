@@ -1,10 +1,9 @@
 use backend::{
-    audio::playback::PlaybackSnapshot,
     library::models::{
         LibraryAlbumArtistKey, LibraryAlbumArtistSortKey, LibraryAlbumKey, LibraryAlbumSortKey,
         LibraryArtistAlbumSortKey, LibrarySortDirection, LibraryTrackSortKey,
     },
-    library::service::{LibraryCommandError, StartLibraryAlbumTrackError, StartLibraryTrackError},
+    library::service::LibraryCommandError,
 };
 
 use crate::AppState;
@@ -189,32 +188,14 @@ pub async fn list_library_album_tracks(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn get_library_track_for_path(
-    path: String,
+pub async fn get_library_track(
+    track_id: String,
     state: tauri::State<'_, AppState>,
 ) -> Result<Option<backend::library::models::LibraryTrackSummary>, LibraryCommandError> {
     let library = state.backend.library.handle();
-    tauri::async_runtime::spawn_blocking(move || library.track_for_path(path))
+    tauri::async_runtime::spawn_blocking(move || library.track_by_id(&track_id))
         .await
         .map_err(|_| LibraryCommandError::TaskFailed)?
-}
-
-#[tauri::command]
-#[specta::specta]
-pub async fn start_library_track(
-    track_id: String,
-    state: tauri::State<'_, AppState>,
-) -> Result<PlaybackSnapshot, StartLibraryTrackError> {
-    state.backend.start_library_track(track_id).await
-}
-
-#[tauri::command]
-#[specta::specta]
-pub async fn start_library_album(
-    album_key: LibraryAlbumKey,
-    state: tauri::State<'_, AppState>,
-) -> Result<PlaybackSnapshot, StartLibraryAlbumTrackError> {
-    state.backend.start_library_album(album_key).await
 }
 
 #[tauri::command]

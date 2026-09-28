@@ -18,11 +18,35 @@ src-tauri                        Tauri shell, commands, capabilities, packaging
 backend                          Rust domain services, persistence, and audio
 ```
 
-Renderer code never imports Rust implementation details. Renderer-to-native access is restricted to named Tauri commands, the dialog plugin, window APIs, and validated events. Rust command handlers call the existing backend services; no N-API addon or parallel domain implementation is used.
+Renderer code never imports Rust implementation details. Renderer-to-native access is restricted to named Tauri commands, the dialog plugin, window APIs, and events whose name is checked against the generated contract. Rust command handlers call the existing backend services; no N-API addon or parallel domain implementation is used.
+
+## Backend modules
+
+```text
+backend/src/
+  app/         BackendApp (composition root) and use cases that span domains; app/playback_context.rs
+               resolves a PlaybackContext (album, tracks list) into a queue
+  audio/       playback service and worker thread, output stream, decoding, waveform analysis
+    playback/    queue.rs (pure queue: shuffle, repeat, edits), item.rs (PlaybackItem: what is playing),
+                 snapshot.rs (published state), service.rs (handle and commands), worker.rs (event loop),
+                 session.rs (loaded track and in-flight operations), preferences.rs
+  library/     catalog queries, playback selection (playback.rs), scanner/ (discover, inspect, persist)
+  lyrics/, media/   lyrics resolution; file validation, inspection, tags
+  settings.rs  persistent settings (settings.json)
+  events.rs    BackendEvent and the EventSink services emit to
+```
+
+The playback worker owns the queue and the output stream; everything else talks to it through commands and reads published snapshots. A queue item is a `PlaybackItem` carrying the library `track_id`, so nothing looks a playing track up by path. A file-level failure (unreadable, undecodable) skips to the next queue item; an output failure stops playback and keeps the queue.
+
+Services never know about Tauri or each other: they hold a `SharedEventSink` and emit `BackendEvent`s, which carry no state. `src-tauri/src/events.rs` queues them, collapses bursts, reads the current snapshot, and emits `app:event`. Tauri commands that wait on the playback worker are `async` and run on a blocking thread, never on the main thread.
+
+The library scanner works in batches, one transaction per batch: new or changed files are reconciled, inspected on several threads, and written together.
+
+Settings (`settings.json`) hold volume, mute, output device, repeat, shuffle, and the artwork backdrop. Writes are debounced and atomic; the playback worker records its own preferences, and the renderer changes the rest through `update_settings`.
 
 ## Renderer state
 
-TanStack Router owns navigation, validated search state, URL history, and scroll restoration. TanStack Query owns native read-model caching and event-driven cache updates. Zustand is restricted to push-driven playback state and never duplicates library data or Rust authority. Now Playing is a layer kept in router history state (`nowPlaying`) over the current location, so the library underneath stays mounted and Back closes it.
+TanStack Router owns navigation, validated search state, URL history, and scroll restoration. TanStack Query owns native read-model caching and event-driven cache updates. Zustand is restricted to push-driven playback state and mirrors of backend settings, and never duplicates library data or Rust authority. Playback state is read through one hook per rate of change (`usePlaybackItem`, `usePlaybackTransport`, `usePlaybackOutput`, `usePlaybackQueue`, and `usePlaybackPosition`, the only one that changes several times a second), so a component re-renders only for what it shows; global shortcuts read the store when a key is pressed instead of subscribing. Now Playing is a layer kept in router history state (`nowPlaying`) over the current location, so the library underneath stays mounted and Back closes it.
 
 `motion` is imported only through `src/renderer/shared/ui/motion` (tokens, `MotionProvider`, `useMotionTransition`) and by widgets that own a transition. Blur appears only in `ArtworkLight` and `Acrylic` (`shared/ui`). Lyrics and artwork accent colors are read through `entities/lyrics` and `entities/library` queries, never by calling commands from UI.
 

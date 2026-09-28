@@ -27,6 +27,9 @@ export function AlbumDetailsPage() {
   const workspace = useMediaDetailsWorkspace(useAlbumDetails(key), useAlbumTracks(key));
   const playbackState = useTrackPlaybackState();
   const playback = usePlaybackActions();
+  // Playing a track continues through the rest of its album.
+  const playTrack = (trackId: string) =>
+    void playback.startPlayback({ kind: "album", key }, trackId);
   const scrollRestorationId = `album-${encodeURIComponent(albumArtist)}-${encodeURIComponent(albumTitle)}`;
   useElementScrollRestoration({ id: scrollRestorationId });
 
@@ -57,7 +60,7 @@ export function AlbumDetailsPage() {
                 <AlbumTrackStrip
                   tracks={tracks}
                   activeTrackId={playbackState.activeTrackId}
-                  onPlayTrack={playback.startLibraryTrack}
+                  onPlayTrack={playTrack}
                 />
               ) : null
             }
@@ -75,7 +78,7 @@ export function AlbumDetailsPage() {
               type="button"
               className="mt-6"
               disabled={details.firstPlayableTrackId === null}
-              onClick={() => void playback.startLibraryAlbum(key)}
+              onClick={() => void playback.startPlayback({ kind: "album", key }, null)}
             >
               <Play aria-hidden="true" data-icon="inline-start" />
               Play album
@@ -92,7 +95,7 @@ export function AlbumDetailsPage() {
                   caption="Album tracks"
                   activeTrackId={playbackState.activeTrackId}
                   playbackStatus={playbackState.playbackStatus}
-                  onPlayTrack={playback.startLibraryTrack}
+                  onPlayTrack={playTrack}
                   onPauseActive={playback.pause}
                   onResumeActive={playback.resume}
                 />

@@ -1,15 +1,10 @@
 use super::policy::effective_track_title;
 use super::{
     models::*,
-    service::{
-        summary_from_row, LibraryCommandError, LibraryShared, ResolvedPlaybackEntry,
-        StartLibraryAlbumTrackError,
-    },
+    service::{summary_from_row, LibraryCommandError, LibraryShared},
 };
-use crate::media::validation::validate_audio_file;
 use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
-use std::path::Path;
 
 const PAGE_SIZE: usize = 100;
 const CURSOR_VERSION: u8 = 3;
@@ -33,7 +28,7 @@ struct CatalogCursor {
     anchor: u64,
 }
 
-fn validate_album_key(key: &LibraryAlbumKey) -> Result<(), LibraryCommandError> {
+pub(super) fn validate_album_key(key: &LibraryAlbumKey) -> Result<(), LibraryCommandError> {
     if key.title.trim() != key.title
         || key.album_artist.trim() != key.album_artist
         || key.title.is_empty()
@@ -105,14 +100,18 @@ fn parse_year(value: Option<&str>) -> Option<i32> {
     let year = value.get(..4)?.parse().ok()?;
     (1000..=9999).contains(&year).then_some(year)
 }
-fn literal_like_pattern(value: &str) -> String {
+pub(super) fn literal_like_pattern(value: &str) -> String {
     let escaped = value
         .replace('\\', "\\\\")
         .replace('%', "\\%")
         .replace('_', "\\_");
     format!("%{escaped}%")
 }
-fn artwork(hash: Option<String>, mime: Option<String>, path: Option<String>) -> Option<ArtworkRef> {
+pub(super) fn artwork_ref(
+    hash: Option<String>,
+    mime: Option<String>,
+    path: Option<String>,
+) -> Option<ArtworkRef> {
     match (hash, mime.as_deref(), path) {
         (Some(content_hash), Some("image/jpeg"), Some(relative_path)) => Some(ArtworkRef {
             content_hash,
@@ -128,7 +127,7 @@ fn artwork(hash: Option<String>, mime: Option<String>, path: Option<String>) -> 
     }
 }
 
-const CATALOG_MEMBER_PROJECTION: &str = r#"SELECT t.id, f.root_id, f.relative_path, f.file_name,
+pub(super) const CATALOG_MEMBER_PROJECTION: &str = r#"SELECT t.id, f.root_id, f.relative_path, f.file_name,
   f.availability, f.inspection_status, m.title, m.artist, m.album, m.album_artist,
   m.disc_number, m.track_number, m.artwork_id, m.duration_ms, m.date,
   COALESCE(NULLIF(trim(m.album),''),'Unknown album') AS album_title,
@@ -138,6 +137,44 @@ FROM tracks t
 JOIN library_files f ON f.id=t.file_id
 LEFT JOIN track_source_metadata m ON m.track_id=t.id AND m.source_revision=f.source_revision"#;
 type ArtistSummaryRow = (i64, i64, Option<String>, Option<String>, Option<String>);
+
+const TRACK_TITLE_EXPR: &str = "COALESCE(NULLIF(trim(m.title),''),CASE WHEN f.extension='' THEN f.file_name ELSE substr(f.file_name,1,length(f.file_name)-length(f.extension)-1) END)";
+const TRACK_ARTIST_EXPR: &str = "COALESCE(NULLIF(trim(m.artist),''),'Unknown artist')";
+const TRACK_ALBUM_EXPR: &str = "COALESCE(NULLIF(trim(m.album),''),'Unknown album')";
+
+/// Filter of the tracks list: `?1` is the trimmed search text, `?2` its LIKE pattern. Shared by
+/// the page query, its count, and playback so "play what I see" cannot drift from the list.
+pub(super) fn track_search_predicate() -> String {
+    format!(
+        r#"(?1='' OR {TRACK_TITLE_EXPR} LIKE ?2 ESCAPE '\'
+            OR COALESCE(m.artist,'') LIKE ?2 ESCAPE '\'
+            OR {TRACK_ALBUM_EXPR} LIKE ?2 ESCAPE '\'
+            OR COALESCE(NULLIF(trim(m.album_artist),''),NULLIF(trim(m.artist),''),'Unknown artist') LIKE ?2 ESCAPE '\')"#
+    )
+}
+
+pub(super) fn track_order_sql(
+    sort_key: LibraryTrackSortKey,
+    sort_direction: LibrarySortDirection,
+) -> String {
+    let direction = direction_sql(sort_direction);
+    match sort_key {
+        LibraryTrackSortKey::Title => {
+            format!("{TRACK_TITLE_EXPR} COLLATE NOCASE {direction},{TRACK_TITLE_EXPR} {direction}")
+        }
+        LibraryTrackSortKey::Artist => {
+            format!(
+                "{TRACK_ARTIST_EXPR} COLLATE NOCASE {direction},{TRACK_ARTIST_EXPR} {direction}"
+            )
+        }
+        LibraryTrackSortKey::Album => {
+            format!("{TRACK_ALBUM_EXPR} COLLATE NOCASE {direction},{TRACK_ALBUM_EXPR} {direction}")
+        }
+        LibraryTrackSortKey::Duration => format!(
+            "CASE WHEN m.duration_ms IS NULL THEN 1 ELSE 0 END ASC,m.duration_ms {direction}"
+        ),
+    }
+}
 
 impl LibraryShared {
     pub fn catalog_tracks(
@@ -157,48 +194,28 @@ impl LibraryShared {
             .db()?
             .read()
             .map_err(|_| LibraryCommandError::PersistenceFailed)?;
+        let predicate = track_search_predicate();
         let total_count = c
             .query_row(
-                r#"SELECT COUNT(*)
+                &format!(
+                    r#"SELECT COUNT(*)
                 FROM tracks t
                 JOIN library_files f ON f.id=t.file_id
                 LEFT JOIN track_source_metadata m ON m.track_id=t.id AND m.source_revision=f.source_revision
-                WHERE ?1='' OR COALESCE(NULLIF(trim(m.title),''),CASE WHEN f.extension='' THEN f.file_name ELSE substr(f.file_name,1,length(f.file_name)-length(f.extension)-1) END) LIKE ?2 ESCAPE '\'
-                  OR COALESCE(m.artist,'') LIKE ?2 ESCAPE '\'
-                  OR COALESCE(NULLIF(trim(m.album),''),'Unknown album') LIKE ?2 ESCAPE '\'
-                  OR COALESCE(NULLIF(trim(m.album_artist),''),NULLIF(trim(m.artist),''),'Unknown artist') LIKE ?2 ESCAPE '\'"#,
+                WHERE {predicate}"#
+                ),
                 params![search, pattern],
                 |row| row.get::<_, i64>(0),
             )
             .map_err(|_| LibraryCommandError::PersistenceFailed)? as u64;
-        let title_expr = "COALESCE(NULLIF(trim(m.title),''),CASE WHEN f.extension='' THEN f.file_name ELSE substr(f.file_name,1,length(f.file_name)-length(f.extension)-1) END)";
-        let artist_expr = "COALESCE(NULLIF(trim(m.artist),''),'Unknown artist')";
-        let album_expr = "COALESCE(NULLIF(trim(m.album),''),'Unknown album')";
-        let direction = direction_sql(sort_direction);
-        let order_sql = match sort_key {
-            LibraryTrackSortKey::Title => {
-                format!("{title_expr} COLLATE NOCASE {direction},{title_expr} {direction}")
-            }
-            LibraryTrackSortKey::Artist => {
-                format!("{artist_expr} COLLATE NOCASE {direction},{artist_expr} {direction}")
-            }
-            LibraryTrackSortKey::Album => {
-                format!("{album_expr} COLLATE NOCASE {direction},{album_expr} {direction}")
-            }
-            LibraryTrackSortKey::Duration => format!(
-                "CASE WHEN m.duration_ms IS NULL THEN 1 ELSE 0 END ASC,m.duration_ms {direction}"
-            ),
-        };
+        let order_sql = track_order_sql(sort_key, sort_direction);
         let mut statement = c
             .prepare(&format!(r#"SELECT id,file_name,availability,inspection_status,title,artist,album,album_artist,duration_ms,content_hash,mime_type,relative_path,artwork_status,file_format,bit_depth,bitrate_kbps FROM (SELECT t.id,f.file_name,f.availability,f.inspection_status,m.title,m.artist,m.album,m.album_artist,m.duration_ms,a.content_hash,a.mime_type,a.relative_path,m.artwork_status,m.file_format,m.bit_depth,m.bitrate_kbps,ROW_NUMBER() OVER (ORDER BY {order_sql},t.id ASC) AS cursor_rank
                 FROM tracks t
                 JOIN library_files f ON f.id=t.file_id
                 LEFT JOIN track_source_metadata m ON m.track_id=t.id AND m.source_revision=f.source_revision
                 LEFT JOIN artwork_assets a ON a.id=m.artwork_id AND m.artwork_status='stored'
-                WHERE (?1='' OR {title_expr} LIKE ?2 ESCAPE '\'
-                    OR COALESCE(m.artist,'') LIKE ?2 ESCAPE '\'
-                    OR {album_expr} LIKE ?2 ESCAPE '\'
-                    OR COALESCE(NULLIF(trim(m.album_artist),''),NULLIF(trim(m.artist),''),'Unknown artist') LIKE ?2 ESCAPE '\')
+                WHERE {predicate}
                 ) WHERE cursor_rank>?3 ORDER BY cursor_rank LIMIT 101"#))
             .map_err(|_| LibraryCommandError::PersistenceFailed)?;
         let mut rows = statement
@@ -309,7 +326,7 @@ impl LibraryShared {
                         title: title.clone(),
                         album_artist: artist.clone(),
                     },
-                    artwork: artwork(hash.clone(), mime.clone(), path.clone()),
+                    artwork: artwork_ref(hash.clone(), mime.clone(), path.clone()),
                     year: year.map(|value| value as i32),
                 },
             )
@@ -401,7 +418,7 @@ impl LibraryShared {
             .map(
                 |(name, album_count, track_count, hash, mime, path)| LibraryAlbumArtistSummary {
                     key: LibraryAlbumArtistKey { name: name.clone() },
-                    artwork: artwork(hash.clone(), mime.clone(), path.clone()),
+                    artwork: artwork_ref(hash.clone(), mime.clone(), path.clone()),
                     album_count: *album_count as u64,
                     track_count: *track_count as u64,
                 },
@@ -502,7 +519,7 @@ impl LibraryShared {
                     title: title.clone(),
                     album_artist: artist.name.clone(),
                 },
-                artwork: artwork(hash.clone(), mime.clone(), path.clone()),
+                artwork: artwork_ref(hash.clone(), mime.clone(), path.clone()),
                 year: year.map(|value| value as i32),
             })
             .collect();
@@ -563,7 +580,7 @@ impl LibraryShared {
         };
         Ok(LibraryAlbumArtistSummary {
             key: artist,
-            artwork: artwork(hash, mime, path),
+            artwork: artwork_ref(hash, mime, path),
             album_count: album_count as u64,
             track_count: track_count as u64,
         })
@@ -602,7 +619,7 @@ impl LibraryShared {
         if count == 0 {
             return Err(LibraryCommandError::AlbumNotFound);
         }
-        let cover = artwork(hash, mime, path);
+        let cover = artwork_ref(hash, mime, path);
         Ok(LibraryAlbumDetails {
             summary: LibraryAlbumSummary {
                 key,
@@ -721,101 +738,5 @@ impl LibraryShared {
                 .unwrap_or_default(),
             next_cursor: next,
         })
-    }
-
-    pub fn catalog_playback(
-        &self,
-        key: LibraryAlbumKey,
-        track_id: Option<String>,
-    ) -> Result<(Vec<ResolvedPlaybackEntry>, usize), StartLibraryAlbumTrackError> {
-        validate_album_key(&key).map_err(|_| StartLibraryAlbumTrackError::InvalidAlbumKey)?;
-        let id = track_id
-            .as_deref()
-            .map(|v| {
-                v.parse::<i64>()
-                    .map_err(|_| StartLibraryAlbumTrackError::InvalidTrackId)
-            })
-            .transpose()?;
-        let c = self
-            .db()
-            .map_err(|_| StartLibraryAlbumTrackError::LibraryUnavailable)?
-            .read()
-            .map_err(|_| StartLibraryAlbumTrackError::PersistenceFailed)?;
-        let sql = format!(
-            r#"WITH members AS MATERIALIZED ({}) SELECT m.id,r.path,m.relative_path,m.file_name,m.availability,m.inspection_status,m.title,m.artist,m.duration_ms FROM members m JOIN library_roots r ON r.id=m.root_id WHERE m.album_title=?1 AND m.effective_artist=?2 ORDER BY CASE WHEN m.disc_number IS NULL THEN 1 ELSE 0 END,m.disc_number,CASE WHEN m.track_number IS NULL THEN 1 ELSE 0 END,m.track_number,m.id"#,
-            CATALOG_MEMBER_PROJECTION
-        );
-        let mut s = c
-            .prepare(&sql)
-            .map_err(|_| StartLibraryAlbumTrackError::PersistenceFailed)?;
-        let rows = s
-            .query_map(params![key.title, key.album_artist], |r| {
-                Ok((
-                    r.get::<_, i64>(0)?,
-                    r.get::<_, String>(1)?,
-                    r.get::<_, String>(2)?,
-                    r.get::<_, String>(3)?,
-                    r.get::<_, String>(4)?,
-                    r.get::<_, String>(5)?,
-                    r.get::<_, Option<String>>(6)?,
-                    r.get::<_, Option<String>>(7)?,
-                    r.get::<_, Option<i64>>(8)?,
-                ))
-            })
-            .map_err(|_| StartLibraryAlbumTrackError::PersistenceFailed)?;
-        let candidates = rows
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|_| StartLibraryAlbumTrackError::PersistenceFailed)?;
-        if candidates.is_empty() {
-            return Err(StartLibraryAlbumTrackError::AlbumNotFound);
-        };
-        if let Some(requested) = id {
-            if !candidates.iter().any(|v| v.0 == requested) {
-                return Err(StartLibraryAlbumTrackError::TrackNotMember);
-            }
-        }
-        let mut entries = Vec::new();
-        let mut requested_index = None;
-        let mut playable_index = 0usize;
-        for (
-            track_id,
-            root,
-            relative,
-            file_name,
-            availability,
-            inspection,
-            title,
-            artist,
-            duration,
-        ) in candidates
-        {
-            if availability != "available" || inspection != "indexed" {
-                if id == Some(track_id) {
-                    return Err(if availability != "available" {
-                        StartLibraryAlbumTrackError::TrackUnavailable
-                    } else {
-                        StartLibraryAlbumTrackError::TrackNotPlayable
-                    });
-                }
-                continue;
-            }
-            let file =
-                validate_audio_file(Path::new(&root).join(relative).to_string_lossy().as_ref())
-                    .map_err(|_| StartLibraryAlbumTrackError::SourceUnavailable)?;
-            if id == Some(track_id) {
-                requested_index = Some(playable_index);
-            }
-            entries.push(ResolvedPlaybackEntry {
-                file,
-                title: effective_track_title(title.as_deref(), &file_name),
-                artist,
-                duration_ms: duration.map(|v| v as u64),
-            });
-            playable_index += 1;
-        }
-        if entries.is_empty() {
-            return Err(StartLibraryAlbumTrackError::NoPlayableTracks);
-        };
-        Ok((entries, requested_index.unwrap_or(0)))
     }
 }

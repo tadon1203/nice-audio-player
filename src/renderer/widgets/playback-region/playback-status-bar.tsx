@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 import {
-  usePlaybackSession,
+  usePlaybackActions,
+  usePlaybackOutput,
   usePlaybackSignalPath,
+  usePlaybackTransport,
   useAudioOutputDevices,
 } from "@/renderer/features/playback-control";
 import {
@@ -17,15 +19,15 @@ const DEFAULT_DEVICE = "default";
 
 /** The thin ledger strip below the dock: signal path, fixed bottom-right. */
 export function PlaybackStatusBar() {
-  const playback = usePlaybackSession();
-  const controlsBusy = playback.transportPending !== null;
+  const transport = usePlaybackTransport();
+  const controlsBusy = transport.pending !== null;
 
   return (
     <div
       className="flex h-7 shrink-0 items-center justify-end border-t border-border bg-background px-2 max-md:hidden md:px-4 lg:px-6"
       data-slot="playback-status-bar"
     >
-      <SignalPath disabled={playback.connection !== "ready" || controlsBusy} />
+      <SignalPath disabled={transport.connection !== "ready" || controlsBusy} />
     </div>
   );
 }
@@ -33,10 +35,10 @@ export function PlaybackStatusBar() {
 /** `source › processing › output ▾`. Without resampling it reads `FLAC 24/96 › Speakers`. */
 function SignalPath({ disabled }: { disabled: boolean }) {
   const path = usePlaybackSignalPath();
-  const playback = usePlaybackSession();
+  const { outputSelection: selection } = usePlaybackOutput();
+  const playback = usePlaybackActions();
   const [open, setOpen] = useState(false);
   const devices = useAudioOutputDevices(open);
-  const selection = playback.snapshot?.outputSelection ?? { kind: "systemDefault" as const };
   const selected = selection.kind === "device" ? selection.deviceId : DEFAULT_DEVICE;
   const outputLabel = path?.output ?? (selection.kind === "device" ? "Output" : "System default");
   const steps = path === null ? [] : [path.source, path.processing].filter((step) => step !== null);

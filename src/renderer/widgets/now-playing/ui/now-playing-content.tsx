@@ -1,5 +1,5 @@
 import { m } from "motion/react";
-import { usePlaybackSession } from "@/renderer/features/playback-control";
+import { usePlaybackItem } from "@/renderer/features/playback-control";
 import { Artwork } from "@/renderer/shared/ui/artwork";
 import { ArtworkLight } from "@/renderer/shared/ui/artwork-light";
 import {
@@ -17,12 +17,11 @@ import { LyricsPanel } from "./lyrics-panel";
  * Layout stays fixed regardless of lyrics availability, so switching tracks never reflows it.
  */
 export function NowPlayingContent() {
-  const playback = usePlaybackSession();
-  const isPlaying = playback.snapshot?.status === "playing";
+  const item = usePlaybackItem();
 
   return (
     <div className="relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
-      <ArtworkLight artwork={playback.artwork} strength="max" />
+      <ArtworkLight artwork={item?.artwork ?? null} strength="max" />
       <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden md:flex-row">
         <div className="relative flex min-w-0 shrink-0 flex-col gap-4 p-6 md:w-96">
           <div className="flex items-center gap-4 md:flex-col md:items-start">
@@ -31,8 +30,8 @@ export function NowPlayingContent() {
               className="size-16 shrink-0 overflow-hidden rounded-lg md:size-[22rem]"
             >
               <Artwork
-                artwork={playback.artwork}
-                alt={playback.title === null ? "" : `${playback.title} artwork`}
+                artwork={item?.artwork ?? null}
+                alt={item === null ? "" : `${item.title} artwork`}
                 loading="eager"
                 className="size-full rounded-none"
               />
@@ -42,7 +41,7 @@ export function NowPlayingContent() {
                 layoutId="now-playing-title"
                 className="truncate text-lg font-medium text-foreground"
               >
-                {playback.title ?? "Nothing playing"}
+                {item?.title ?? "Nothing playing"}
               </m.p>
               {/* Ink-1: the playing track is "the present" per DESIGN.md, and Light may be absent. */}
               <m.p
@@ -51,7 +50,7 @@ export function NowPlayingContent() {
                 transition={{ delay: 0.12, duration: 0.18 }}
                 className="truncate text-sm text-foreground"
               >
-                {playback.artist}
+                {item?.artist}
               </m.p>
               <m.p
                 initial={{ opacity: 0 }}
@@ -59,26 +58,19 @@ export function NowPlayingContent() {
                 transition={{ delay: 0.12, duration: 0.18 }}
                 className="truncate text-sm text-foreground"
               >
-                {playback.currentTrack?.album}
+                {item?.album}
               </m.p>
             </div>
           </div>
         </div>
         <m.div
-          key={playback.currentTrack?.id ?? "none"}
+          key={item?.trackId ?? "none"}
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.18, duration: 0.2 }}
           className="min-h-0 min-w-0 flex-1 p-6 pt-0 md:pt-6"
         >
-          <LyricsPanel
-            trackId={playback.currentTrack?.id ?? null}
-            positionMs={playback.positionMs}
-            isPlaying={isPlaying}
-            durationMs={playback.durationMs}
-            onSeek={(value) => void playback.seek(value)}
-            className="h-full"
-          />
+          <LyricsPanel trackId={item?.trackId ?? null} className="h-full" />
         </m.div>
       </div>
       <PlaybackWaveformBand

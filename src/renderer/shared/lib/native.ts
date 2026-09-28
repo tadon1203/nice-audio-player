@@ -42,12 +42,28 @@ function withNativeErrors(source: Commands): Commands {
   return wrapped as Commands;
 }
 
+/**
+ * Every event name the backend can send. Typed against the generated union, so an event added
+ * in Rust is a compile error here until the renderer knows it; payloads are trusted to match
+ * the generated contract.
+ */
+const appEventNames: Readonly<Record<AppEvent["event"], true>> = {
+  playbackStateChanged: true,
+  playbackQueueStateChanged: true,
+  applicationActivitiesChanged: true,
+  libraryScanStateChanged: true,
+  waveformReady: true,
+  settingsChanged: true,
+};
+
 function isAppEvent(payload: unknown): payload is AppEvent {
   return (
     typeof payload === "object" &&
     payload !== null &&
     "event" in payload &&
-    typeof payload.event === "string"
+    typeof payload.event === "string" &&
+    Object.hasOwn(appEventNames, payload.event) &&
+    "payload" in payload
   );
 }
 

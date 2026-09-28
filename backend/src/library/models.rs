@@ -80,19 +80,7 @@ pub struct LibrarySort<K> {
     pub key: K,
     pub direction: LibrarySortDirection,
 }
-#[derive(Debug, Clone, Serialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
-pub enum ArtworkMimeType {
-    Jpeg,
-    Png,
-}
-#[derive(Debug, Clone, Serialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
-pub struct ArtworkRef {
-    pub content_hash: String,
-    pub mime_type: ArtworkMimeType,
-    pub relative_path: String,
-}
+pub use crate::media::artwork::{ArtworkMimeType, ArtworkRef};
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LibraryTrackSummary {
@@ -224,7 +212,7 @@ pub struct LibraryAlbumTrackPage {
     pub total_count: u64,
     pub next_cursor: Option<String>,
 }
-#[derive(Debug, Clone, Serialize, specta::Type)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub enum LibraryScanState {
     Idle,

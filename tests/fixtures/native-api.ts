@@ -10,8 +10,11 @@ import type {
   LibraryScanState,
   LibraryTrackSummary,
   LyricsResolution,
+  PlaybackItem,
+  PlaybackQueueItem,
   PlaybackQueueSnapshot,
   PlaybackSnapshot,
+  Settings,
   TNativeAPI,
 } from "@/shared/ipc";
 
@@ -146,16 +149,45 @@ export async function installNativeApi(page: Page, options: InstallNativeApiOpti
     let queueRevision = 1;
     let currentTrack: LibraryTrackSummary | null = null;
     let currentSequence: LibraryTrackSummary[] = [];
-    let playback: PlaybackSnapshot = {
-      status: "stopped",
-      revision: playbackRevision,
-      file: null,
+    let mock = {
+      status: "stopped" as "stopped" | "playing" | "paused",
+      item: null as PlaybackItem | null,
+      positionMs: 0,
+      durationMs: null as number | null,
       volume: 0.72,
       muted: false,
-      outputSelection: { kind: "systemDefault" },
       canGoPrevious: false,
       canGoNext: false,
     };
+    const snapshotOf = (): PlaybackSnapshot => {
+      const base = {
+        revision: playbackRevision,
+        volume: mock.volume,
+        muted: mock.muted,
+        outputSelection,
+        canGoPrevious: mock.canGoPrevious,
+        canGoNext: mock.canGoNext,
+      };
+      if (mock.status === "stopped" || mock.item === null) {
+        return { status: "stopped", base, item: mock.item };
+      }
+      return {
+        status: mock.status,
+        base,
+        session: {
+          item: mock.item,
+          playbackId: `playback-${mock.item.trackId}`,
+          positionMs: mock.positionMs,
+          durationMs: mock.durationMs,
+          outputDevice: outputDeviceFor(outputSelection),
+          channelConversion: "none",
+          sourceSampleRate: 44_100,
+          outputSampleRate: 48_000,
+          resamplingActive: true,
+        },
+      };
+    };
+    let playback: PlaybackSnapshot = snapshotOf();
     let queue: PlaybackQueueSnapshot = {
       revision: queueRevision,
       current: null,
@@ -165,21 +197,22 @@ export async function installNativeApi(page: Page, options: InstallNativeApiOpti
     };
     const emit = (event: AppEvent) => listeners.forEach((listener) => listener(event));
     const publishPlayback = () => emit({ event: "playbackStateChanged", payload: playback });
+    /** Applies a change to the mock player and publishes it as a new revision. */
+    const commit = (change: Partial<typeof mock>) => {
+      playbackRevision += 1;
+      mock = { ...mock, ...change };
+      playback = snapshotOf();
+      publishPlayback();
+      return playback;
+    };
     let playbackTicker: ReturnType<typeof setInterval> | null = null;
     const startPlaybackTicks = () => {
       if (playbackTicker !== null) return;
       playbackTicker = setInterval(() => {
-        if (playback.status !== "playing") return;
-        playbackRevision += 1;
-        playback = {
-          ...playback,
-          revision: playbackRevision,
-          positionMs: Math.min(
-            playback.positionMs + 250,
-            playback.durationMs ?? playback.positionMs + 250,
-          ),
-        };
-        publishPlayback();
+        if (mock.status !== "playing") return;
+        commit({
+          positionMs: Math.min(mock.positionMs + 250, mock.durationMs ?? mock.positionMs + 250),
+        });
       }, 10);
     };
     const stopPlaybackTicks = () => {
@@ -187,6 +220,15 @@ export async function installNativeApi(page: Page, options: InstallNativeApiOpti
       clearInterval(playbackTicker);
       playbackTicker = null;
     };
+    const queueItemFor = (track: LibraryTrackSummary): PlaybackQueueItem => ({
+      id: track.id,
+      trackId: track.id,
+      title: track.title,
+      artist: track.artist,
+      album: track.album,
+      artwork: track.artwork,
+      durationMs: track.durationMs,
+    });
     const setTrack = (track: LibraryTrackSummary, sequence: LibraryTrackSummary[] = [track]) => {
       currentTrack = track;
       currentSequence = sequence.filter(
@@ -197,47 +239,31 @@ export async function installNativeApi(page: Page, options: InstallNativeApiOpti
         currentSequence.findIndex((item) => item.id === track.id),
       );
       const upcoming = currentSequence.slice(index + 1);
-      playbackRevision += 1;
-      playback = {
-        status: "playing",
-        revision: playbackRevision,
-        file: fileFor(track),
-        playbackId: `playback-${track.id}`,
-        positionMs: 12_000,
-        durationMs: track.durationMs,
-        volume: playback.volume,
-        muted: playback.muted,
-        outputSelection,
-        outputDevice: outputDeviceFor(outputSelection),
-        channelConversion: "none",
-        sourceSampleRate: 44_100,
-        outputSampleRate: 48_000,
-        resamplingActive: true,
-        canGoPrevious: index > 0,
-        canGoNext: index < currentSequence.length - 1,
-      };
       queueRevision += 1;
       queue = {
         revision: queueRevision,
-        current: {
-          id: track.id,
-          title: track.title,
-          artist: track.artist,
-          durationMs: track.durationMs,
-        },
-        upcoming: upcoming.map((item) => ({
-          id: item.id,
-          title: item.title,
-          artist: item.artist,
-          durationMs: item.durationMs,
-        })),
+        current: queueItemFor(track),
+        upcoming: upcoming.map(queueItemFor),
         repeatMode: queue.repeatMode,
         shuffleEnabled: queue.shuffleEnabled,
       };
       emit({ event: "playbackQueueStateChanged", payload: queue });
-      publishPlayback();
-      return playback;
+      const { id: queueItemId, ...identity } = queueItemFor(track);
+      return commit({
+        status: "playing",
+        item: {
+          ...identity,
+          queueItemId,
+          file: fileFor(track),
+          albumArtist: track.albumArtist,
+        },
+        positionMs: 12_000,
+        durationMs: track.durationMs,
+        canGoPrevious: index > 0,
+        canGoNext: index < currentSequence.length - 1,
+      });
     };
+    let settings: Settings = { appearance: { artworkBackdrop: true } };
     const scanRoot = (): LibraryRoot | null => roots.find((item) => item.enabled) ?? null;
     let scan: LibraryScanSnapshot = {
       state: "idle",
@@ -267,22 +293,10 @@ export async function installNativeApi(page: Page, options: InstallNativeApiOpti
         return playback;
       },
       getPlaybackQueue: async () => queue,
-      pausePlayback: async () => {
-        if (playback.status === "playing") {
-          playbackRevision += 1;
-          playback = { ...playback, status: "paused", revision: playbackRevision };
-          publishPlayback();
-        }
-        return playback;
-      },
-      resumePlayback: async () => {
-        if (playback.status === "paused") {
-          playbackRevision += 1;
-          playback = { ...playback, status: "playing", revision: playbackRevision };
-          publishPlayback();
-        }
-        return playback;
-      },
+      pausePlayback: async () =>
+        mock.status === "playing" ? commit({ status: "paused" }) : playback,
+      resumePlayback: async () =>
+        mock.status === "paused" ? commit({ status: "playing" }) : playback,
       previousPlayback: async () => {
         const index = currentSequence.findIndex((track) => track.id === currentTrack?.id);
         const previous = index > 0 ? currentSequence[index - 1] : undefined;
@@ -293,26 +307,10 @@ export async function installNativeApi(page: Page, options: InstallNativeApiOpti
         const next = index >= 0 ? currentSequence[index + 1] : undefined;
         return next ? setTrack(next, currentSequence) : playback;
       },
-      seekPlayback: async (positionMs) => {
-        if (playback.status === "playing" || playback.status === "paused") {
-          playbackRevision += 1;
-          playback = { ...playback, positionMs, revision: playbackRevision };
-          publishPlayback();
-        }
-        return playback;
-      },
-      setPlaybackVolume: async (volume) => {
-        playbackRevision += 1;
-        playback = { ...playback, volume, revision: playbackRevision };
-        publishPlayback();
-        return playback;
-      },
-      setPlaybackMuted: async (muted) => {
-        playbackRevision += 1;
-        playback = { ...playback, muted, revision: playbackRevision };
-        publishPlayback();
-        return playback;
-      },
+      seekPlayback: async (positionMs) =>
+        mock.status === "stopped" ? playback : commit({ positionMs }),
+      setPlaybackVolume: async (volume) => commit({ volume }),
+      setPlaybackMuted: async (muted) => commit({ muted }),
       getTrackLyrics: async (trackId) => {
         recordRequest("lyrics");
         const configured = lyricsByTrack.get(trackId);
@@ -393,22 +391,11 @@ export async function installNativeApi(page: Page, options: InstallNativeApiOpti
       setAudioOutputSelection: async (selection) => {
         recordRequest("outputSelection");
         outputSelection = selection;
-        playbackRevision += 1;
-        playback =
-          playback.status === "playing" || playback.status === "paused"
-            ? {
-                ...playback,
-                revision: playbackRevision,
-                outputSelection,
-                outputDevice: outputDeviceFor(selection),
-              }
-            : { ...playback, revision: playbackRevision, outputSelection };
-        publishPlayback();
-        return playback;
+        return commit({});
       },
       getPlaybackWaveform: async (path) => {
         recordRequest("waveform");
-        if (!waveformReady || playback.file?.path !== path) return null;
+        if (!waveformReady || mock.item?.file.path !== path) return null;
         const peaks = Array.from({ length: 400 }, (_, index) =>
           Math.round(40 + 200 * Math.abs(Math.sin(index / 9))),
         );
@@ -480,15 +467,32 @@ export async function installNativeApi(page: Page, options: InstallNativeApiOpti
         if (options.failAlbumTracks) throw { code: "persistenceFailed" };
         return albumTracks;
       },
-      getLibraryTrackForPath: async (path) =>
-        tracks.find((track) => fileFor(track).path === path) ?? null,
-      startLibraryTrack: async (id) =>
-        setTrack(tracks.find((track) => track.id === id && track.playable)!),
-      startLibraryAlbum: async () => {
-        const sequence = albumTracks.items
-          .map((item) => tracks.find((track) => track.id === item.id))
-          .filter((track): track is LibraryTrackSummary => Boolean(track?.playable));
-        return setTrack(sequence[0]!, sequence);
+      getLibraryTrack: async (id) => tracks.find((track) => track.id === id) ?? null,
+      startPlayback: async (context, startTrackId) => {
+        const sequence =
+          context.kind === "album"
+            ? albumTracks.items
+                .map((item) => tracks.find((track) => track.id === item.id))
+                .filter((track): track is LibraryTrackSummary => Boolean(track?.playable))
+            : tracks.filter((track) => track.playable);
+        const start =
+          startTrackId === null ? sequence[0] : sequence.find((track) => track.id === startTrackId);
+        if (start === undefined) throw { code: "trackNotMember" };
+        return setTrack(start, sequence);
+      },
+      getSettings: async () => settings,
+      updateSettings: async (patch) => {
+        settings = {
+          ...settings,
+          appearance: {
+            ...settings.appearance,
+            ...(patch.appearance?.artworkBackdrop == null
+              ? {}
+              : { artworkBackdrop: patch.appearance.artworkBackdrop }),
+          },
+        };
+        emit({ event: "settingsChanged", payload: settings });
+        return settings;
       },
       onEvent: (listener) => {
         listeners.add(listener);
@@ -502,8 +506,8 @@ export async function installNativeApi(page: Page, options: InstallNativeApiOpti
       setArtworkAccent: (contentHash, color) => void accentByHash.set(contentHash, color),
       publishWaveform: () => {
         waveformReady = true;
-        if (playback.file !== null) {
-          emit({ event: "waveformReady", payload: { path: playback.file.path } });
+        if (mock.item !== null) {
+          emit({ event: "waveformReady", payload: { path: mock.item.file.path } });
         }
       },
       setScanState,

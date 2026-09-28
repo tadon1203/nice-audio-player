@@ -6,27 +6,28 @@ import { cn } from "@/renderer/shared/lib/utils";
 import { Button } from "@/renderer/shared/ui/shadcn/button";
 import { useMotionTransition } from "@/renderer/shared/ui/motion";
 import { useLyricsWaveformLink } from "@/renderer/features/lyrics-waveform-link";
+import {
+  usePlaybackActions,
+  usePlaybackPosition,
+  usePlaybackTransport,
+} from "@/renderer/features/playback-control";
 import { findCurrentLineIndex, lineSpan, useLyricsSync } from "../model/use-lyrics-sync";
 import { useLyricsScroll } from "../model/use-lyrics-scroll";
 
 type LyricsPanelProps = {
   trackId: string | null;
-  positionMs: number;
-  isPlaying: boolean;
-  durationMs: number | null;
-  onSeek: (positionMs: number) => void;
   className?: string;
 };
 
-/** Local LRC lyrics: synced (Gutter, auto-scroll, waveform link) or plain (static, `Unsynced`). */
-export function LyricsPanel({
-  trackId,
-  positionMs,
-  isPlaying,
-  durationMs,
-  onSeek,
-  className,
-}: LyricsPanelProps) {
+/**
+ * Local LRC lyrics: synced (Gutter, auto-scroll, waveform link) or plain (static, `Unsynced`).
+ * It reads the playback position itself, so the panels around it do not re-render with time.
+ */
+export function LyricsPanel({ trackId, className }: LyricsPanelProps) {
+  const { positionMs, durationMs } = usePlaybackPosition();
+  const isPlaying = usePlaybackTransport().status === "playing";
+  const { seek } = usePlaybackActions();
+  const onSeek = (value: number) => void seek(value);
   const { data: resolution } = useTrackLyrics(trackId);
   const timedLines =
     resolution?.status === "resolved" && resolution.document.content.kind === "timed"

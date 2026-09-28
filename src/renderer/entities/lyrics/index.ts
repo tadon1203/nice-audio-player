@@ -1,3 +1,4 @@
+export { applyLyricsEvent } from "./api/events";
 export { lyricsQueryKeys, lyricsQueryOptions, useTrackLyrics } from "./api/queries";
 export type {
   LyricsContent,

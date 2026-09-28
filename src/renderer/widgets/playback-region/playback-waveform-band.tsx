@@ -2,8 +2,10 @@ import { useState } from "react";
 import { m } from "motion/react";
 import { useLyricsWaveformLink } from "@/renderer/features/lyrics-waveform-link";
 import {
-  isActivePlayback,
-  usePlaybackSession,
+  usePlaybackActions,
+  usePlaybackItem,
+  usePlaybackPosition,
+  usePlaybackTransport,
   usePlaybackWaveform,
 } from "@/renderer/features/playback-control";
 import { formatDuration } from "@/renderer/shared/lib/format";
@@ -42,29 +44,29 @@ export function PlaybackWaveformBand({
   seekClassName?: string;
   timeClassName?: string;
 }) {
-  const playback = usePlaybackSession();
+  const item = usePlaybackItem();
+  const { active, seekPending } = usePlaybackTransport();
+  const { positionMs, durationMs } = usePlaybackPosition();
+  const { seek } = usePlaybackActions();
   const lyricsLink = useLyricsWaveformLink();
-  const waveform = usePlaybackWaveform(
-    showWaveform && isActivePlayback(playback.snapshot) ? playback.snapshot.file.path : null,
-  );
-  const active = isActivePlayback(playback.snapshot);
+  const waveform = usePlaybackWaveform(showWaveform && active && item ? item.file.path : null);
   const [seekPreviewMs, setSeekPreviewMs] = useState<number | null>(null);
   const [showRemaining, setShowRemaining] = useState(true);
-  const canSeek = active && playback.durationMs !== null;
-  const seekValue = seekPreviewMs ?? playback.positionMs;
+  const canSeek = active && durationMs !== null;
+  const seekValue = seekPreviewMs ?? positionMs;
 
   const seekBar = (
     <WaveformSeek
-      key={playback.snapshot?.file?.path ?? "none"}
+      key={item?.file.path ?? "none"}
       height={height}
       peaks={showWaveform ? (waveform?.peaks ?? null) : null}
       showPlayhead={showWaveform}
       valueMs={seekValue}
-      durationMs={playback.durationMs}
-      disabled={!canSeek || playback.seekPending}
+      durationMs={durationMs}
+      disabled={!canSeek || seekPending}
       onInput={setSeekPreviewMs}
       onCommit={(value) => {
-        void playback.seek(value).finally(() => setSeekPreviewMs(null));
+        void seek(value).finally(() => setSeekPreviewMs(null));
       }}
       activeSpan={lyricsLink.activeSpan}
       hoveredLineSpan={lyricsLink.hoveredLineSpan}
@@ -73,11 +75,11 @@ export function PlaybackWaveformBand({
     />
   );
   const remainingOrLength =
-    playback.durationMs === null
+    durationMs === null
       ? formatDuration(null)
       : showRemaining
-        ? `−${formatDuration(Math.max(0, playback.durationMs - seekValue))}`
-        : formatDuration(playback.durationMs);
+        ? `−${formatDuration(Math.max(0, durationMs - seekValue))}`
+        : formatDuration(durationMs);
   const remainingButton = (
     <button
       type="button"

@@ -36,6 +36,14 @@ impl Default for VolumeState {
 }
 
 impl VolumeState {
+    /// A saved level; anything outside the valid range falls back to the default.
+    pub(crate) fn restored(volume: f32, muted: bool) -> Self {
+        Self {
+            volume: NormalizedVolume::new(volume).unwrap_or(Self::default().volume),
+            muted,
+        }
+    }
+
     pub(crate) fn volume(self) -> f32 {
         self.volume.value()
     }

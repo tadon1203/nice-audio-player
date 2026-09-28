@@ -3,12 +3,19 @@ export {
   isActivePlayback,
   nextRepeatMode,
   playbackController,
-  usePlaybackActions,
-  usePlaybackSession,
-  useTrackPlaybackState,
+  usePlaybackStore,
   type PlaybackConnection,
   type TransportCommand,
 } from "./playback-session";
+export {
+  useTrackPlaybackState,
+  usePlaybackActions,
+  usePlaybackItem,
+  usePlaybackOutput,
+  usePlaybackPosition,
+  usePlaybackQueue,
+  usePlaybackTransport,
+} from "./use-playback";
 export {
   describeSignalPath,
   usePlaybackSignalPath,

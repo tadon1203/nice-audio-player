@@ -1,19 +1,12 @@
-import type {
-  PlaybackCommandError,
-  StartLibraryAlbumTrackError,
-  StartLibraryTrackError,
-} from "@/shared/ipc";
+import type { PlaybackCommandError, StartPlaybackError } from "@/shared/ipc";
 import { messageForCode, nativeErrorCode } from "@/renderer/shared/lib/native-error";
 
-type PlaybackErrorCode = (
-  | PlaybackCommandError
-  | StartLibraryTrackError
-  | StartLibraryAlbumTrackError
-)["code"];
+type PlaybackErrorCode = (PlaybackCommandError | StartPlaybackError)["code"];
 
 const messages = {
   invalidArgument: "The playback request was invalid.",
   playbackWorkerUnavailable: "The playback engine is unavailable.",
+  superseded: "That request was replaced by a newer one.",
   queueItemNotFound: "That item is no longer in the queue.",
   queueBusy: "The playback queue is busy. Try again.",
   invalidVolume: "That volume level is invalid.",
@@ -33,16 +26,13 @@ const messages = {
   completionTimingFailed: "Playback completion could not be determined.",
   sampleRateConversionFailed: "The audio could not be converted.",
   outputFailed: "The audio output failed.",
-  invalidId: "That track reference is invalid.",
   invalidAlbumKey: "That album reference is invalid.",
   invalidTrackId: "That track reference is invalid.",
-  trackNotFound: "That track could not be found.",
   trackNotMember: "That track is not part of this album.",
   albumNotFound: "That album could not be found.",
   trackUnavailable: "That track is unavailable on disk.",
   trackNotPlayable: "That track cannot be played.",
-  noPlayableTracks: "This album has no playable tracks.",
-  sourceUnavailable: "The audio source is unavailable.",
+  noPlayableTracks: "There are no playable tracks here.",
   libraryUnavailable: "The library is unavailable.",
   persistenceFailed: "The library database could not be read.",
   taskFailed: "The playback request did not finish.",

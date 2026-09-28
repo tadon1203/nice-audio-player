@@ -1,6 +1,6 @@
 import { ChevronDown, ChevronUp, X } from "lucide-react";
 import type { PlaybackQueueItem } from "@/shared/ipc";
-import { usePlaybackSession } from "@/renderer/features/playback-control";
+import { usePlaybackActions, usePlaybackQueue } from "@/renderer/features/playback-control";
 import { formatDuration } from "@/renderer/shared/lib/format";
 import { cn } from "@/renderer/shared/lib/utils";
 import { Button } from "@/renderer/shared/ui/shadcn/button";
@@ -14,8 +14,8 @@ import { useQueuePanel } from "../model/use-queue-panel";
  */
 export function QueuePanel() {
   const { isOpen, close } = useQueuePanel();
-  const playback = usePlaybackSession();
-  const queue = playback.queue;
+  const { queue } = usePlaybackQueue();
+  const playback = usePlaybackActions();
 
   return (
     <Sheet open={isOpen} onOpenChange={(open) => (open ? undefined : close())}>

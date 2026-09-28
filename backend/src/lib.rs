@@ -1,9 +1,11 @@
 pub mod activity;
 pub mod app;
 pub mod audio;
+pub mod events;
 pub mod library;
 pub mod lyrics;
 pub mod media;
+pub mod settings;
 
 #[cfg(test)]
 #[path = "audio/test_support.rs"]

@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      # rust-toolchain.toml pins the toolchain and its components.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            backend
+            src-tauri
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm fonts:ensure
+      # Type check, format, lint, then bindings freshness, rustfmt and clippy.
+      - run: pnpm check
+      - run: pnpm check:native
+      - run: pnpm test

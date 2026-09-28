@@ -1,12 +1,26 @@
-use backend::audio::{
-    devices::{list_output_devices, AudioDeviceListError, AudioOutputSelection},
-    playback::{
-        PlaybackQueueMoveDirection, PlaybackQueueSnapshot, PlaybackRepeatMode, PlaybackSnapshot,
+use backend::{
+    app::playback_context::{PlaybackContext, StartPlaybackError},
+    audio::{
+        devices::{list_output_devices, AudioDeviceListError, AudioOutputSelection},
+        playback::{
+            PlaybackQueueMoveDirection, PlaybackQueueSnapshot, PlaybackRepeatMode,
+            PlaybackServiceError, PlaybackSnapshot,
+        },
+        waveform::PlaybackWaveform,
     },
-    waveform::PlaybackWaveform,
 };
 
 use crate::{errors::PlaybackCommandError, AppState};
+
+/// Playback requests wait on the worker's reply, so they run off the main thread.
+async fn blocking<T: Send + 'static>(
+    task: impl FnOnce() -> Result<T, PlaybackServiceError> + Send + 'static,
+) -> Result<T, PlaybackCommandError> {
+    tauri::async_runtime::spawn_blocking(task)
+        .await
+        .map_err(|_| PlaybackCommandError::PlaybackWorkerUnavailable)?
+        .map_err(PlaybackCommandError::from)
+}
 
 #[tauri::command]
 #[specta::specta]
@@ -20,61 +34,57 @@ pub fn get_playback_queue(state: tauri::State<'_, AppState>) -> PlaybackQueueSna
     state.backend.playback.queue_snapshot()
 }
 
+/// Replaces the queue with `context` and plays from `start_track_id`, or from the context's
+/// first track when it is `None`.
 #[tauri::command]
 #[specta::specta]
-pub fn pause_playback(
+pub async fn start_playback(
+    context: PlaybackContext,
+    start_track_id: Option<String>,
     state: tauri::State<'_, AppState>,
-) -> Result<PlaybackSnapshot, PlaybackCommandError> {
-    state
-        .backend
-        .playback
-        .handle()
-        .pause()
-        .map_err(PlaybackCommandError::from)
+) -> Result<PlaybackSnapshot, StartPlaybackError> {
+    state.backend.start_playback(context, start_track_id).await
 }
 
 #[tauri::command]
 #[specta::specta]
-pub fn resume_playback(
+pub async fn pause_playback(
     state: tauri::State<'_, AppState>,
 ) -> Result<PlaybackSnapshot, PlaybackCommandError> {
-    state
-        .backend
-        .playback
-        .handle()
-        .resume()
-        .map_err(PlaybackCommandError::from)
+    let handle = state.backend.playback.handle();
+    blocking(move || handle.pause()).await
 }
 
 #[tauri::command]
 #[specta::specta]
-pub fn previous_playback(
+pub async fn resume_playback(
     state: tauri::State<'_, AppState>,
 ) -> Result<PlaybackSnapshot, PlaybackCommandError> {
-    state
-        .backend
-        .playback
-        .handle()
-        .previous()
-        .map_err(PlaybackCommandError::from)
+    let handle = state.backend.playback.handle();
+    blocking(move || handle.resume()).await
 }
 
 #[tauri::command]
 #[specta::specta]
-pub fn next_playback(
+pub async fn previous_playback(
     state: tauri::State<'_, AppState>,
 ) -> Result<PlaybackSnapshot, PlaybackCommandError> {
-    state
-        .backend
-        .playback
-        .handle()
-        .next()
-        .map_err(PlaybackCommandError::from)
+    let handle = state.backend.playback.handle();
+    blocking(move || handle.previous()).await
 }
 
 #[tauri::command]
 #[specta::specta]
-pub fn seek_playback(
+pub async fn next_playback(
+    state: tauri::State<'_, AppState>,
+) -> Result<PlaybackSnapshot, PlaybackCommandError> {
+    let handle = state.backend.playback.handle();
+    blocking(move || handle.next()).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn seek_playback(
     position_ms: f64,
     state: tauri::State<'_, AppState>,
 ) -> Result<PlaybackSnapshot, PlaybackCommandError> {
@@ -85,136 +95,108 @@ pub fn seek_playback(
     {
         return Err(PlaybackCommandError::InvalidArgument);
     }
-    state
-        .backend
-        .playback
-        .handle()
-        .seek(position_ms as u64)
-        .map_err(PlaybackCommandError::from)
+    let handle = state.backend.playback.handle();
+    blocking(move || handle.seek(position_ms as u64)).await
 }
 
 #[tauri::command]
 #[specta::specta]
-pub fn set_playback_volume(
+pub async fn set_playback_volume(
     volume: f64,
     state: tauri::State<'_, AppState>,
 ) -> Result<PlaybackSnapshot, PlaybackCommandError> {
     if !volume.is_finite() || !(0.0..=1.0).contains(&volume) {
         return Err(PlaybackCommandError::InvalidVolume);
     }
-    state
-        .backend
-        .playback
-        .handle()
-        .set_volume(volume as f32)
-        .map_err(PlaybackCommandError::from)
+    let handle = state.backend.playback.handle();
+    blocking(move || handle.set_volume(volume as f32)).await
 }
 
 #[tauri::command]
 #[specta::specta]
-pub fn set_playback_muted(
+pub async fn set_playback_muted(
     muted: bool,
     state: tauri::State<'_, AppState>,
 ) -> Result<PlaybackSnapshot, PlaybackCommandError> {
-    let playback = state.backend.playback.handle();
-    if muted {
-        playback.mute()
-    } else {
-        playback.unmute()
-    }
-    .map_err(PlaybackCommandError::from)
+    let handle = state.backend.playback.handle();
+    blocking(move || {
+        if muted {
+            handle.mute()
+        } else {
+            handle.unmute()
+        }
+    })
+    .await
 }
 
 #[tauri::command]
 #[specta::specta]
-pub fn list_audio_output_devices(
+pub async fn list_audio_output_devices(
 ) -> Result<Vec<backend::audio::devices::AudioOutputDevice>, AudioDeviceListError> {
-    list_output_devices()
+    tauri::async_runtime::spawn_blocking(list_output_devices)
+        .await
+        .map_err(|_| AudioDeviceListError::EnumerationFailed)?
 }
 
 #[tauri::command]
 #[specta::specta]
-pub fn set_playback_repeat_mode(
+pub async fn set_playback_repeat_mode(
     mode: PlaybackRepeatMode,
     state: tauri::State<'_, AppState>,
 ) -> Result<PlaybackQueueSnapshot, PlaybackCommandError> {
-    state
-        .backend
-        .playback
-        .handle()
-        .set_repeat_mode(mode)
-        .map_err(PlaybackCommandError::from)
+    let handle = state.backend.playback.handle();
+    blocking(move || handle.set_repeat_mode(mode)).await
 }
 
 #[tauri::command]
 #[specta::specta]
-pub fn set_playback_shuffle(
+pub async fn set_playback_shuffle(
     enabled: bool,
     state: tauri::State<'_, AppState>,
 ) -> Result<PlaybackQueueSnapshot, PlaybackCommandError> {
-    state
-        .backend
-        .playback
-        .handle()
-        .set_shuffle(enabled)
-        .map_err(PlaybackCommandError::from)
+    let handle = state.backend.playback.handle();
+    blocking(move || handle.set_shuffle(enabled)).await
 }
 
 /// Switches the output device; a loaded track restarts on it at the same position.
 #[tauri::command]
 #[specta::specta]
-pub fn set_audio_output_selection(
+pub async fn set_audio_output_selection(
     selection: AudioOutputSelection,
     state: tauri::State<'_, AppState>,
 ) -> Result<PlaybackSnapshot, PlaybackCommandError> {
-    state
-        .backend
-        .playback
-        .handle()
-        .set_output_selection(selection)
-        .map_err(PlaybackCommandError::from)
+    let handle = state.backend.playback.handle();
+    blocking(move || handle.set_output_selection(selection)).await
 }
 
 #[tauri::command]
 #[specta::specta]
-pub fn remove_queue_item(
+pub async fn remove_queue_item(
     id: String,
     state: tauri::State<'_, AppState>,
 ) -> Result<PlaybackQueueSnapshot, PlaybackCommandError> {
-    state
-        .backend
-        .playback
-        .handle()
-        .remove_queue_item(id)
-        .map_err(PlaybackCommandError::from)
+    let handle = state.backend.playback.handle();
+    blocking(move || handle.remove_queue_item(id)).await
 }
 
 #[tauri::command]
 #[specta::specta]
-pub fn move_queue_item(
+pub async fn move_queue_item(
     id: String,
     direction: PlaybackQueueMoveDirection,
     state: tauri::State<'_, AppState>,
 ) -> Result<PlaybackQueueSnapshot, PlaybackCommandError> {
-    state
-        .backend
-        .playback
-        .handle()
-        .move_queue_item(id, direction)
-        .map_err(PlaybackCommandError::from)
+    let handle = state.backend.playback.handle();
+    blocking(move || handle.move_queue_item(id, direction)).await
 }
 
 #[tauri::command]
 #[specta::specta]
-pub fn clear_queue(
+pub async fn clear_queue(
     state: tauri::State<'_, AppState>,
 ) -> Result<PlaybackQueueSnapshot, PlaybackCommandError> {
-    state
-        .backend
-        .playback
-        .handle()
-        .clear_queue()
-        .map_err(PlaybackCommandError::from)
+    let handle = state.backend.playback.handle();
+    blocking(move || handle.clear_queue()).await
 }
 
 /// Waveform of the loaded track, or `None` while it is analyzed; `waveformReady` follows.

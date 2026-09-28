@@ -21,7 +21,7 @@ pub fn read_embedded_lyrics(
         .read()
         .map_err(|_| EmbeddedLyricsError::Read)?;
     let mut saw_lyrics = false;
-    for tag in tagged.tags().iter().chain(tagged.primary_tag()) {
+    for tag in tagged.tags() {
         if let Some(value) = tag.get_string(ItemKey::Lyrics) {
             saw_lyrics = true;
             match lrc::parse(value) {

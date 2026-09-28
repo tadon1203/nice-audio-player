@@ -23,8 +23,9 @@ test("plays tracks and operates the persistent seek, transport, volume, and tech
 
   await inactiveRow.getByText("Test artist", { exact: true }).click();
   await expect(inactiveRow).toHaveAttribute("data-playback-state", "playing");
-  await expect(page.getByRole("button", { name: "Next track" })).toBeDisabled();
-  await expect(page.getByRole("button", { name: "Previous track" })).toBeDisabled();
+  // Playing from the list queues the rest of it, so the track has neighbours on both sides.
+  await expect(page.getByRole("button", { name: "Next track" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Previous track" })).toBeEnabled();
 
   await page.getByRole("button", { name: "Play Test track" }).click();
   await expect(activeRow).toHaveAttribute("data-playback-state", "playing");
@@ -40,7 +41,7 @@ test("plays tracks and operates the persistent seek, transport, volume, and tech
   await expect(resume).toBeEnabled();
   await resume.click();
   await expect(activeRow).toHaveAttribute("data-playback-state", "playing");
-  await expect(page.getByRole("button", { name: "Next track" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Next track" })).toBeEnabled();
   await expect(page.getByRole("button", { name: "Previous track" })).toBeDisabled();
 
   const seek = page.getByRole("slider", { name: "Playback position" }).last();

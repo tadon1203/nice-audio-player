@@ -92,17 +92,31 @@ fn sidecar_path(source: &std::path::Path) -> PathBuf {
     source.with_extension("lrc")
 }
 fn read_text(path: PathBuf) -> Option<String> {
-    let bytes = fs::read(path).ok()?;
-    if bytes.starts_with(&[0xef, 0xbb, 0xbf]) {
-        return String::from_utf8(bytes[3..].to_vec()).ok();
+    decode_text(&fs::read(path).ok()?)
+}
+
+/// Decodes a sidecar file. A byte-order mark or valid UTF-8 is taken at its word; anything else
+/// is a legacy encoding (`.lrc` files for Japanese music are often Shift_JIS), which is detected
+/// from the bytes. Bytes that do not decode cleanly in the detected encoding fail the source.
+fn decode_text(bytes: &[u8]) -> Option<String> {
+    if let Some(rest) = bytes.strip_prefix(&[0xef, 0xbb, 0xbf]) {
+        return String::from_utf8(rest.to_vec()).ok();
     }
-    if bytes.starts_with(&[0xff, 0xfe]) {
-        return decode_utf16(&bytes[2..], true);
+    if let Some(rest) = bytes.strip_prefix(&[0xff, 0xfe]) {
+        return decode_utf16(rest, true);
     }
-    if bytes.starts_with(&[0xfe, 0xff]) {
-        return decode_utf16(&bytes[2..], false);
+    if let Some(rest) = bytes.strip_prefix(&[0xfe, 0xff]) {
+        return decode_utf16(rest, false);
     }
-    String::from_utf8(bytes).ok()
+    if let Ok(text) = std::str::from_utf8(bytes) {
+        return Some(text.to_owned());
+    }
+    let mut detector = chardetng::EncodingDetector::new(chardetng::Iso2022JpDetection::Allow);
+    detector.feed(bytes, true);
+    let encoding = detector.guess(None, chardetng::Utf8Detection::Deny);
+    encoding
+        .decode_without_bom_handling_and_without_replacement(bytes)
+        .map(std::borrow::Cow::into_owned)
 }
 fn decode_utf16(bytes: &[u8], little: bool) -> Option<String> {
     let units = bytes.as_chunks::<2>().0.iter().map(|pair| {
@@ -172,7 +186,7 @@ mod tests {
     }
 
     #[test]
-    fn only_accepts_utf8_or_utf16_sidecars() {
+    fn reads_utf8_utf16_and_legacy_encoded_sidecars() {
         let directory = std::env::temp_dir().join(format!(
             "nice-audio-player-lyrics-{}-{}",
             std::process::id(),
@@ -187,11 +201,22 @@ mod tests {
         let legacy = directory.join("legacy.lrc");
         fs::write(&utf8, b"[00:01]Hello").expect("write UTF-8 sidecar");
         fs::write(&utf16, [0xff, 0xfe, b'H', 0, b'i', 0]).expect("write UTF-16 sidecar");
-        fs::write(&legacy, [0x82, 0xa0]).expect("write legacy sidecar");
+        let (shift_jis, _, _) = encoding_rs::SHIFT_JIS.encode(
+            "[00:01]こんにちは、世界
+[00:05]夜空の向こうへ",
+        );
+        fs::write(&legacy, &shift_jis).expect("write legacy sidecar");
 
         assert_eq!(read_text(utf8), Some("[00:01]Hello".to_string()));
         assert_eq!(read_text(utf16), Some("Hi".to_string()));
-        assert_eq!(read_text(legacy), None);
+        assert_eq!(
+            read_text(legacy),
+            Some(
+                "[00:01]こんにちは、世界
+[00:05]夜空の向こうへ"
+                    .to_string()
+            )
+        );
 
         fs::remove_dir_all(directory).expect("remove test directory");
     }

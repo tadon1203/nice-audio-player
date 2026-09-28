@@ -33,7 +33,7 @@ export {
   useLibraryRootsQuery,
   useLibraryScan,
   useLibraryStatus,
-  useLibraryTrackForPath,
+  useLibraryTrack,
   type LibraryCatalogItem,
   type LibraryCatalogRequest,
   type LibraryCollectionQuery,

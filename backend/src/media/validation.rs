@@ -25,15 +25,26 @@ pub fn is_supported_extension(extension: &str) -> bool {
     SUPPORTED_EXTENSIONS.contains(&extension.to_ascii_lowercase().as_str())
 }
 
+/// Checks that `path` names an existing supported audio file.
 pub fn validate_audio_file(path: &str) -> Result<ValidatedAudioFile, AudioFileValidationError> {
     if path.trim().is_empty() {
         return Err(AudioFileValidationError::EmptyPath);
     }
-    let file_path = Path::new(path);
-    let metadata = std::fs::metadata(file_path).map_err(|_| AudioFileValidationError::NotFound)?;
+    let metadata =
+        std::fs::metadata(Path::new(path)).map_err(|_| AudioFileValidationError::NotFound)?;
     if !metadata.is_file() {
         return Err(AudioFileValidationError::NotAFile);
     }
+    describe_audio_file(path)
+}
+
+/// Names a supported audio file without touching the filesystem. Playback contexts describe
+/// thousands of library files at once; a file that vanished fails when it is loaded instead.
+pub fn describe_audio_file(path: &str) -> Result<ValidatedAudioFile, AudioFileValidationError> {
+    if path.trim().is_empty() {
+        return Err(AudioFileValidationError::EmptyPath);
+    }
+    let file_path = Path::new(path);
     let file_name = file_path
         .file_name()
         .and_then(|name| name.to_str())

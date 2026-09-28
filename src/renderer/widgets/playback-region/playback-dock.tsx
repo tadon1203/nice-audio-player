@@ -18,12 +18,16 @@ import {
   VolumeX,
 } from "lucide-react";
 import {
-  isActivePlayback,
   nextRepeatMode,
-  usePlaybackSession,
+  usePlaybackActions,
+  usePlaybackItem,
+  usePlaybackOutput,
+  usePlaybackQueue,
+  usePlaybackTransport,
   formatVolumeDb,
   stepVolumeDb,
 } from "@/renderer/features/playback-control";
+import type { PlaybackItem } from "@/shared/ipc";
 import { useQueuePanel } from "@/renderer/widgets/queue-panel";
 import { cn } from "@/renderer/shared/lib/utils";
 import { Artwork } from "@/renderer/shared/ui/artwork";
@@ -41,15 +45,20 @@ export function PlaybackDock({
   nowPlayingOpen: boolean;
   onToggleNowPlaying: () => void;
 }) {
-  const playback = usePlaybackSession();
+  // None of these change with playback position, so the dock does not re-render as time passes.
+  const item = usePlaybackItem();
+  const transport = usePlaybackTransport();
+  const output = usePlaybackOutput();
+  const { repeatMode, shuffleEnabled } = usePlaybackQueue();
+  const playback = usePlaybackActions();
   const { toggle: toggleQueue } = useQueuePanel();
-  const active = isActivePlayback(playback.snapshot);
-  const playing = playback.snapshot?.status === "playing";
-  const title = playback.title ?? "Nothing playing";
+  const active = transport.active;
+  const playing = transport.status === "playing";
+  const title = item?.title ?? "Nothing playing";
   const [errorTooltipOpen, setErrorTooltipOpen] = useState(false);
-  const volumeDb = formatVolumeDb(playback.volume, playback.muted);
-  const controlsBusy = playback.transportPending !== null;
-  const trackKey = playback.snapshot?.file?.path ?? "none";
+  const volumeDb = formatVolumeDb(output.volume, output.muted);
+  const controlsBusy = transport.pending !== null;
+  const trackKey = item?.file.path ?? "none";
   const trackChangeTransition = useMotionTransition("mediumMove");
   const nowPlayingTransition = useMotionTransition("largeMove");
   // Next exits to the left, previous exits to the right; anything else (a fresh track from the
@@ -72,7 +81,7 @@ export function PlaybackDock({
       data-slot="playback-dock"
     >
       <ArtworkLight
-        artwork={playback.artwork}
+        artwork={item?.artwork ?? null}
         strength="strong"
         className="mask-[linear-gradient(to_right,black,transparent_85%)]"
       />
@@ -126,7 +135,7 @@ export function PlaybackDock({
             data-region="playback-identity"
           >
             <Sleeve
-              playback={playback}
+              item={item}
               nowPlayingOpen={nowPlayingOpen}
               onToggle={onToggleNowPlaying}
               trackKey={trackKey}
@@ -157,7 +166,7 @@ export function PlaybackDock({
                   >
                     <button
                       type="button"
-                      disabled={playback.title === null}
+                      disabled={item === null}
                       onClick={onToggleNowPlaying}
                       title={title}
                       className="block max-w-full cursor-pointer truncate rounded-sm text-left text-sm font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default"
@@ -170,7 +179,7 @@ export function PlaybackDock({
                 </AnimatePresence>
               )}
 
-              {nowPlayingOpen ? null : playback.commandError ? (
+              {nowPlayingOpen ? null : transport.commandError ? (
                 <Tooltip open={errorTooltipOpen} onOpenChange={setErrorTooltipOpen}>
                   <TooltipTrigger
                     render={
@@ -183,16 +192,13 @@ export function PlaybackDock({
                     onFocus={() => setErrorTooltipOpen(true)}
                     onBlur={() => setErrorTooltipOpen(false)}
                   >
-                    {playback.commandError}
+                    {transport.commandError}
                   </TooltipTrigger>
-                  <TooltipContent>{playback.commandError}</TooltipContent>
+                  <TooltipContent>{transport.commandError}</TooltipContent>
                 </Tooltip>
-              ) : playback.artist ? (
-                <span
-                  className="block truncate text-sm text-muted-foreground"
-                  title={playback.artist}
-                >
-                  {playback.artist}
+              ) : item?.artist ? (
+                <span className="block truncate text-sm text-muted-foreground" title={item.artist}>
+                  {item.artist}
                 </span>
               ) : null}
             </div>
@@ -206,16 +212,16 @@ export function PlaybackDock({
           >
             <ToggleButton
               label="Shuffle"
-              pressed={playback.shuffleEnabled}
-              disabled={playback.connection !== "ready"}
-              onClick={() => void playback.setShuffle(!playback.shuffleEnabled)}
+              pressed={shuffleEnabled}
+              disabled={transport.connection !== "ready"}
+              onClick={() => void playback.setShuffle(!shuffleEnabled)}
               className="max-md:hidden"
             >
               <Shuffle aria-hidden="true" />
             </ToggleButton>
             <TransportButton
               label="Previous track"
-              disabled={!playback.snapshot?.canGoPrevious || controlsBusy}
+              disabled={!transport.canGoPrevious || controlsBusy}
               onClick={goPrevious}
             >
               <SkipBack aria-hidden="true" />
@@ -234,19 +240,19 @@ export function PlaybackDock({
             </TransportButton>
             <TransportButton
               label="Next track"
-              disabled={!playback.snapshot?.canGoNext || controlsBusy}
+              disabled={!transport.canGoNext || controlsBusy}
               onClick={goNext}
             >
               <SkipForward aria-hidden="true" />
             </TransportButton>
             <ToggleButton
-              label={`Repeat: ${playback.repeatMode}`}
-              pressed={playback.repeatMode !== "off"}
-              disabled={playback.connection !== "ready"}
-              onClick={() => void playback.setRepeatMode(nextRepeatMode(playback.repeatMode))}
+              label={`Repeat: ${repeatMode}`}
+              pressed={repeatMode !== "off"}
+              disabled={transport.connection !== "ready"}
+              onClick={() => void playback.setRepeatMode(nextRepeatMode(repeatMode))}
               className="max-md:hidden"
             >
-              {playback.repeatMode === "one" ? (
+              {repeatMode === "one" ? (
                 <Repeat1 aria-hidden="true" />
               ) : (
                 <Repeat aria-hidden="true" />
@@ -285,30 +291,28 @@ export function PlaybackDock({
               type="button"
               size="icon-lg"
               variant="ghost"
-              aria-label={playback.muted ? "Unmute" : "Mute"}
-              disabled={playback.mutePending || playback.connection !== "ready"}
+              aria-label={output.muted ? "Unmute" : "Mute"}
+              disabled={output.mutePending || transport.connection !== "ready"}
               onClick={() => void playback.toggleMute()}
             >
-              {playback.muted ? <VolumeX aria-hidden="true" /> : <Volume2 aria-hidden="true" />}
+              {output.muted ? <VolumeX aria-hidden="true" /> : <Volume2 aria-hidden="true" />}
             </Button>
             <div
               className="w-24 shrink-0 sm:w-28"
               data-region="volume-slider"
               onWheel={(event) => {
-                if (playback.connection !== "ready" || event.deltaY === 0) return;
-                playback.setVolume(stepVolumeDb(playback.volume, event.deltaY < 0 ? 1 : -1));
-                if (playback.muted && !playback.mutePending) void playback.toggleMute();
+                if (transport.connection !== "ready" || event.deltaY === 0) return;
+                playback.setVolume(stepVolumeDb(output.volume, event.deltaY < 0 ? 1 : -1));
+                if (output.muted && !output.mutePending) void playback.toggleMute();
               }}
             >
               <VolumeSlider
-                value={playback.volume}
-                valueText={
-                  playback.muted ? "Muted" : `${Math.round(playback.volume * 100)} percent`
-                }
-                disabled={playback.connection !== "ready"}
+                value={output.volume}
+                valueText={output.muted ? "Muted" : `${Math.round(output.volume * 100)} percent`}
+                disabled={transport.connection !== "ready"}
                 onInput={(value) => {
                   playback.setVolume(value);
-                  if (playback.muted && !playback.mutePending) void playback.toggleMute();
+                  if (output.muted && !output.mutePending) void playback.toggleMute();
                 }}
               />
             </div>
@@ -326,7 +330,7 @@ export function PlaybackDock({
 }
 
 function Sleeve({
-  playback,
+  item,
   nowPlayingOpen,
   onToggle,
   trackKey,
@@ -334,7 +338,7 @@ function Sleeve({
   trackChangeTransition,
   className,
 }: {
-  playback: ReturnType<typeof usePlaybackSession>;
+  item: PlaybackItem | null;
   nowPlayingOpen: boolean;
   onToggle: () => void;
   trackKey: string;
@@ -343,10 +347,9 @@ function Sleeve({
   className?: string;
 }) {
   const navigate = useNavigate();
-  const track = playback.currentTrack;
-  const hasTrack = playback.title !== null;
-  const albumTitle = track?.album?.trim() || "Unknown album";
-  const albumArtist = track?.albumArtist?.trim() || track?.artist?.trim() || "Unknown artist";
+  const hasTrack = item !== null;
+  const albumTitle = item?.album?.trim() || "Unknown album";
+  const albumArtist = item?.albumArtist?.trim() || item?.artist?.trim() || "Unknown artist";
 
   // Now Playing has its own big Sleeve (the shared-element target); the dock doesn't keep a
   // slot here while it's open. That frees the full width for the waveform below (its close
@@ -384,8 +387,8 @@ function Sleeve({
               className="size-full"
             >
               <Artwork
-                artwork={playback.artwork}
-                alt={playback.title === null ? "" : `${playback.title} artwork`}
+                artwork={item?.artwork ?? null}
+                alt={item === null ? "" : `${item.title} artwork`}
                 loading="eager"
                 className="size-full rounded-lg"
               />

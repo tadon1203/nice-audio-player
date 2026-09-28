@@ -1,18 +1,66 @@
 import { describe, expect, it, vi } from "vitest";
-import type { PlaybackQueueSnapshot, PlaybackSnapshot, TNativeAPI } from "@/shared/ipc";
+import type {
+  PlaybackItem,
+  PlaybackQueueItem,
+  PlaybackQueueSnapshot,
+  PlaybackSnapshot,
+  TNativeAPI,
+} from "@/shared/ipc";
 import { createPlaybackController, createPlaybackStore } from "./playback-session";
 
 type PlaybackApi = TNativeAPI;
 
-const stopped = (revision: number, path: string | null): PlaybackSnapshot => ({
-  status: "stopped",
+const base = (revision: number) => ({
   revision,
-  file: path ? { path, fileName: path, extension: "mp3" } : null,
   volume: 0.5,
   muted: false,
-  outputSelection: { kind: "systemDefault" },
+  outputSelection: { kind: "systemDefault" as const },
   canGoPrevious: false,
   canGoNext: false,
+});
+
+const item = (id: string): PlaybackItem => ({
+  queueItemId: `queue-${id}`,
+  trackId: id,
+  file: { path: `C:/Music/${id}.mp3`, fileName: `${id}.mp3`, extension: "mp3" },
+  title: id,
+  artist: null,
+  album: null,
+  albumArtist: null,
+  artwork: null,
+  durationMs: 60_000,
+});
+
+const stopped = (revision: number, id: string | null): PlaybackSnapshot => ({
+  status: "stopped",
+  base: base(revision),
+  item: id ? item(id) : null,
+});
+
+const playing = (revision: number, id: string, positionMs: number): PlaybackSnapshot => ({
+  status: "playing",
+  base: base(revision),
+  session: {
+    item: item(id),
+    playbackId: "1",
+    positionMs,
+    durationMs: 60_000,
+    outputDevice: { id: "speakers", name: "Speakers" },
+    channelConversion: "none",
+    sourceSampleRate: 44_100,
+    outputSampleRate: 44_100,
+    resamplingActive: false,
+  },
+});
+
+const queueItem = (id: string): PlaybackQueueItem => ({
+  id,
+  trackId: id,
+  title: "Current track",
+  artist: "Artist",
+  album: null,
+  artwork: null,
+  durationMs: 120_000,
 });
 
 const queue = (revision: number): PlaybackQueueSnapshot => ({
@@ -41,8 +89,8 @@ describe("playback session ordering", () => {
     controller.acceptPlayback(stopped(1, "a"));
     controller.acceptPlayback(stopped(2, "b"));
 
-    expect(store.getState().snapshot?.revision).toBe(2);
-    expect(store.getState().snapshot?.file?.path).toBe("b");
+    expect(store.getState().snapshot?.base.revision).toBe(2);
+    expect(store.getState().item?.trackId).toBe("b");
     expect(store.getState().playbackRevision).toBe(2);
   });
 
@@ -52,7 +100,7 @@ describe("playback session ordering", () => {
     controller.acceptPlayback(stopped(50, null));
     controller.acceptQueue({
       revision: 2,
-      current: { id: "track-1", title: "Current track", artist: "Artist", durationMs: 120000 },
+      current: queueItem("track-1"),
       upcoming: [],
       repeatMode: "off",
       shuffleEnabled: false,
@@ -71,7 +119,6 @@ describe("playback session ordering", () => {
     await controller.initialize(baseApi());
 
     expect(store.getState().connection).toBe("ready");
-    expect(controller.select().connection).toBe("ready");
   });
 
   it("moves initialization failures to failed instead of leaving loading", async () => {
@@ -86,7 +133,6 @@ describe("playback session ordering", () => {
     await controller.initialize(api);
 
     expect(store.getState().connection).toBe("failed");
-    expect(controller.select().connection).toBe("failed");
     expect(store.getState().error).toBe("No audio output device is available.");
   });
 
@@ -149,5 +195,93 @@ describe("playback session ordering", () => {
     releasePause?.();
     await first;
     expect(store.getState().transportPending).toBeNull();
+  });
+});
+
+describe("playback session derived state", () => {
+  it("keeps the same item object while position ticks arrive", () => {
+    const store = createPlaybackStore();
+    const controller = createPlaybackController(store);
+
+    controller.acceptPlayback(playing(1, "a", 0));
+    const first = store.getState().item;
+    controller.acceptPlayback(playing(2, "a", 250));
+    controller.acceptPlayback(playing(3, "a", 500));
+
+    expect(store.getState().item).toBe(first);
+    expect(store.getState().positionMs).toBe(500);
+    expect(store.getState().durationMs).toBe(60_000);
+  });
+
+  it("replaces the item when another queue item starts", () => {
+    const store = createPlaybackStore();
+    const controller = createPlaybackController(store);
+
+    controller.acceptPlayback(playing(1, "a", 0));
+    const first = store.getState().item;
+    controller.acceptPlayback(playing(2, "b", 0));
+
+    expect(store.getState().item).not.toBe(first);
+    expect(store.getState().item?.trackId).toBe("b");
+  });
+
+  it("keeps naming the last track while stopped and resets the position", () => {
+    const store = createPlaybackStore();
+    const controller = createPlaybackController(store);
+
+    controller.acceptPlayback(playing(1, "a", 4_000));
+    controller.acceptPlayback(stopped(2, "a"));
+
+    expect(store.getState().item?.trackId).toBe("a");
+    expect(store.getState().positionMs).toBe(0);
+    expect(store.getState().durationMs).toBeNull();
+  });
+});
+
+describe("starting playback", () => {
+  it("passes the context and the clicked track to the backend", async () => {
+    const startPlayback = vi.fn(async () => playing(2, "c", 0));
+    const store = createPlaybackStore();
+    const controller = createPlaybackController(store);
+    await controller.initialize(baseApi({ startPlayback }));
+    const context = { kind: "album", key: { title: "Album", albumArtist: "Artist" } } as const;
+
+    await controller.startPlayback(context, "c");
+
+    expect(startPlayback).toHaveBeenCalledWith(context, "c");
+    expect(store.getState().item?.trackId).toBe("c");
+  });
+
+  it("does not report a request that a newer one replaced", async () => {
+    const store = createPlaybackStore();
+    const controller = createPlaybackController(store);
+    await controller.initialize(
+      baseApi({
+        startPlayback: async () => {
+          throw { code: "superseded" };
+        },
+      }),
+    );
+
+    await controller.startPlayback({ kind: "album", key: { title: "A", albumArtist: "B" } }, null);
+
+    expect(store.getState().error).toBeNull();
+    expect(store.getState().transportPending).toBeNull();
+  });
+
+  it("reports a real failure", async () => {
+    const store = createPlaybackStore();
+    const controller = createPlaybackController(store);
+    await controller.initialize(
+      baseApi({
+        startPlayback: async () => {
+          throw { code: "trackUnavailable" };
+        },
+      }),
+    );
+
+    await controller.startPlayback({ kind: "album", key: { title: "A", albumArtist: "B" } }, "1");
+
+    expect(store.getState().error).toBe("That track is unavailable on disk.");
   });
 });

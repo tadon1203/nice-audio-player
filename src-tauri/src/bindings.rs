@@ -9,6 +9,7 @@ pub fn builder() -> Builder<tauri::Wry> {
         .commands(collect_commands![
             commands::playback::get_playback_state,
             commands::playback::get_playback_queue,
+            commands::playback::start_playback,
             commands::playback::pause_playback,
             commands::playback::resume_playback,
             commands::playback::previous_playback,
@@ -39,11 +40,11 @@ pub fn builder() -> Builder<tauri::Wry> {
             commands::library::list_library_artist_albums,
             commands::library::get_library_album_details,
             commands::library::list_library_album_tracks,
-            commands::library::get_library_track_for_path,
-            commands::library::start_library_track,
-            commands::library::start_library_album,
+            commands::library::get_library_track,
             commands::library::get_artwork_accent,
             commands::lyrics::get_track_lyrics,
+            commands::settings::get_settings,
+            commands::settings::update_settings,
         ])
         .typ::<AppEvent>()
         .error_handling(ErrorHandlingMode::Throw)

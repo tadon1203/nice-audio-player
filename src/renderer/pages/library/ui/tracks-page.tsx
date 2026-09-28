@@ -39,7 +39,17 @@ export function TracksPage() {
           sortKey={view.sortKey}
           sortDirection={view.direction}
           onSortChange={(key, direction) => void view.setSort(key, direction)}
-          onPlayTrack={playback.startLibraryTrack}
+          onPlayTrack={(trackId) =>
+            void playback.startPlayback(
+              {
+                kind: "tracks",
+                search: view.filter === "" ? null : view.filter,
+                sortKey: view.sortKey,
+                sortDirection: view.direction,
+              },
+              trackId,
+            )
+          }
           onPauseActive={playback.pause}
           onResumeActive={playback.resume}
         />

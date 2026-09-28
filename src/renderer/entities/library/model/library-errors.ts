@@ -10,6 +10,8 @@ const commandMessages = {
   overlappingRoot: "That folder overlaps an existing library folder.",
   scanInProgress: "Library folders cannot be changed while a scan is running.",
   invalidId: "That item reference is invalid.",
+  trackNotFound: "That track could not be found.",
+  trackUnavailable: "That track is unavailable on disk.",
   albumNotFound: "That album could not be found.",
   invalidCursor: "The list position is no longer valid. Retry to reload it.",
   invalidAlbumKey: "That album reference is invalid.",

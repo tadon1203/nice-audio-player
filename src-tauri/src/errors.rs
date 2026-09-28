@@ -8,6 +8,8 @@ use specta::Type;
 pub enum PlaybackCommandError {
     InvalidArgument,
     PlaybackWorkerUnavailable,
+    /// A newer request replaced this one; the caller has nothing to report.
+    Superseded,
     QueueItemNotFound,
     QueueBusy,
     InvalidVolume,
@@ -32,6 +34,7 @@ impl From<PlaybackServiceError> for PlaybackCommandError {
     fn from(error: PlaybackServiceError) -> Self {
         match error {
             PlaybackServiceError::WorkerUnavailable => Self::PlaybackWorkerUnavailable,
+            PlaybackServiceError::Superseded => Self::Superseded,
             PlaybackServiceError::QueueItemNotFound => Self::QueueItemNotFound,
             PlaybackServiceError::QueueBusy => Self::QueueBusy,
             PlaybackServiceError::InvalidVolume => Self::InvalidVolume,

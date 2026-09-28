@@ -1,31 +1,40 @@
 import { create, type StoreApi, type UseBoundStore } from "zustand";
-import { useShallow } from "zustand/react/shallow";
 import type {
+  ActiveSession,
   AppEvent,
   AudioOutputSelection,
-  LibraryAlbumKey,
+  PlaybackContext,
+  PlaybackItem,
   PlaybackQueueMoveDirection,
   PlaybackQueueSnapshot,
   PlaybackRepeatMode,
   PlaybackSnapshot,
   TNativeAPI,
 } from "@/shared/ipc";
-import { useLibraryTrackForPath } from "@/renderer/entities/library";
+import { nativeErrorCode } from "@/renderer/shared/lib/native-error";
 import { playbackCommandErrorMessage } from "./playback-errors";
 
 export type PlaybackConnection = "loading" | "ready" | "failed";
 export type TransportCommand =
-  | "startTrack"
-  | "startAlbum"
+  | "start"
   | "pause"
   | "resume"
   | "previous"
   | "next"
   | "outputSelection";
 
+/**
+ * Mirrors the backend's playback state. The fields below `snapshot` are derived from it when a
+ * snapshot is accepted, so a component can subscribe to exactly what it shows: a position tick
+ * changes `positionMs` and nothing else, and `item` keeps its identity while the same queue
+ * item plays.
+ */
 export type PlaybackStoreState = {
   snapshot: PlaybackSnapshot | null;
   queue: PlaybackQueueSnapshot | null;
+  item: PlaybackItem | null;
+  positionMs: number;
+  durationMs: number | null;
   playbackRevision: number | null;
   queueRevision: number | null;
   connection: PlaybackConnection;
@@ -40,10 +49,32 @@ export type PlaybackStoreState = {
 const acceptsRevision = (incoming: number | null, current: number | null) =>
   incoming === null ? current === null : current === null || incoming >= current;
 
+export type ActivePlaybackSnapshot = Extract<PlaybackSnapshot, { status: "playing" | "paused" }>;
+
+/** True while a track is loaded, whether it is playing or paused. */
+export function isActivePlayback(
+  snapshot: PlaybackSnapshot | null | undefined,
+): snapshot is ActivePlaybackSnapshot {
+  return snapshot?.status === "playing" || snapshot?.status === "paused";
+}
+
+export function snapshotSession(snapshot: PlaybackSnapshot | null): ActiveSession | null {
+  return isActivePlayback(snapshot) ? snapshot.session : null;
+}
+
+/** The loaded track, or the last one that played while stopped. */
+export function snapshotItem(snapshot: PlaybackSnapshot | null): PlaybackItem | null {
+  if (snapshot === null) return null;
+  return isActivePlayback(snapshot) ? snapshot.session.item : snapshot.item;
+}
+
 export function createPlaybackStore(): UseBoundStore<StoreApi<PlaybackStoreState>> {
   return create<PlaybackStoreState>(() => ({
     snapshot: null,
     queue: null,
+    item: null,
+    positionMs: 0,
+    durationMs: null,
     playbackRevision: null,
     queueRevision: null,
     connection: "loading",
@@ -63,13 +94,26 @@ export function createPlaybackController(store: UseBoundStore<StoreApi<PlaybackS
   let requestedVolume: number | null = null;
   let volumeWriteActive = false;
 
-  const setError = (error: unknown) =>
+  const setError = (error: unknown) => {
+    // A request replaced by a newer one has nothing to report.
+    if (nativeErrorCode(error) === "superseded") return;
     store.setState({ error: error ? playbackCommandErrorMessage(error) : null });
+  };
 
   const acceptPlayback = (snapshot: PlaybackSnapshot) => {
-    const current = store.getState().playbackRevision;
-    if (!acceptsRevision(snapshot.revision, current)) return;
-    store.setState({ snapshot, playbackRevision: snapshot.revision });
+    const state = store.getState();
+    if (!acceptsRevision(snapshot.base.revision, state.playbackRevision)) return;
+    const incoming = snapshotItem(snapshot);
+    const item =
+      incoming !== null && state.item?.queueItemId === incoming.queueItemId ? state.item : incoming;
+    const session = snapshotSession(snapshot);
+    store.setState({
+      snapshot,
+      item,
+      positionMs: session?.positionMs ?? 0,
+      durationMs: session?.durationMs ?? null,
+      playbackRevision: snapshot.base.revision,
+    });
   };
 
   const acceptQueue = (queue: PlaybackQueueSnapshot) => {
@@ -95,6 +139,16 @@ export function createPlaybackController(store: UseBoundStore<StoreApi<PlaybackS
       setError(error);
     } finally {
       store.setState({ transportPending: null });
+    }
+  };
+
+  const runQueueCommand = async (operation: () => Promise<PlaybackQueueSnapshot>) => {
+    if (!api) return;
+    store.setState({ error: null });
+    try {
+      acceptQueue(await operation());
+    } catch (error) {
+      setError(error);
     }
   };
 
@@ -148,9 +202,9 @@ export function createPlaybackController(store: UseBoundStore<StoreApi<PlaybackS
     acceptEvent,
     acceptPlayback,
     acceptQueue,
-    startLibraryTrack: (id: string) => runTransport("startTrack", () => api!.startLibraryTrack(id)),
-    startLibraryAlbum: (key: LibraryAlbumKey) =>
-      runTransport("startAlbum", () => api!.startLibraryAlbum(key)),
+    /** Replaces the queue with `context` and plays from `startTrackId` (its first track if null). */
+    startPlayback: (context: PlaybackContext, startTrackId: string | null) =>
+      runTransport("start", () => api!.startPlayback(context, startTrackId)),
     pause: () => runTransport("pause", () => api!.pausePlayback()),
     resume: () => runTransport("resume", () => api!.resumePlayback()),
     previous: () => runTransport("previous", () => api!.previousPlayback()),
@@ -158,7 +212,7 @@ export function createPlaybackController(store: UseBoundStore<StoreApi<PlaybackS
     seek: async (positionMs: number) => {
       if (!api || store.getState().seekPending) return;
       store.setState({ seekPending: true, error: null });
-      const duration = selectDuration(store.getState().snapshot);
+      const duration = store.getState().durationMs;
       const requested =
         duration === null ? positionMs : Math.min(Math.max(positionMs, 0), duration);
       try {
@@ -175,51 +229,13 @@ export function createPlaybackController(store: UseBoundStore<StoreApi<PlaybackS
       store.setState({ volumePreview: requestedVolume });
       void flushVolume();
     },
-    setShuffle: async (enabled: boolean) => {
-      if (!api) return;
-      store.setState({ error: null });
-      try {
-        acceptQueue(await api.setPlaybackShuffle(enabled));
-      } catch (error) {
-        setError(error);
-      }
-    },
-    setRepeatMode: async (mode: PlaybackRepeatMode) => {
-      if (!api) return;
-      store.setState({ error: null });
-      try {
-        acceptQueue(await api.setPlaybackRepeatMode(mode));
-      } catch (error) {
-        setError(error);
-      }
-    },
-    removeQueueItem: async (id: string) => {
-      if (!api) return;
-      store.setState({ error: null });
-      try {
-        acceptQueue(await api.removeQueueItem(id));
-      } catch (error) {
-        setError(error);
-      }
-    },
-    moveQueueItem: async (id: string, direction: PlaybackQueueMoveDirection) => {
-      if (!api) return;
-      store.setState({ error: null });
-      try {
-        acceptQueue(await api.moveQueueItem(id, direction));
-      } catch (error) {
-        setError(error);
-      }
-    },
-    clearQueue: async () => {
-      if (!api) return;
-      store.setState({ error: null });
-      try {
-        acceptQueue(await api.clearQueue());
-      } catch (error) {
-        setError(error);
-      }
-    },
+    setShuffle: (enabled: boolean) => runQueueCommand(() => api!.setPlaybackShuffle(enabled)),
+    setRepeatMode: (mode: PlaybackRepeatMode) =>
+      runQueueCommand(() => api!.setPlaybackRepeatMode(mode)),
+    removeQueueItem: (id: string) => runQueueCommand(() => api!.removeQueueItem(id)),
+    moveQueueItem: (id: string, direction: PlaybackQueueMoveDirection) =>
+      runQueueCommand(() => api!.moveQueueItem(id, direction)),
+    clearQueue: () => runQueueCommand(() => api!.clearQueue()),
     /** A loaded track restarts on the new device at the same position. */
     setOutputSelection: (selection: AudioOutputSelection) =>
       runTransport("outputSelection", () => api!.setAudioOutputSelection(selection)),
@@ -227,65 +243,14 @@ export function createPlaybackController(store: UseBoundStore<StoreApi<PlaybackS
       if (!api || store.getState().mutePending) return;
       store.setState({ mutePending: true, error: null });
       try {
-        acceptPlayback(await api.setPlaybackMuted(!selectMuted(store.getState().snapshot)));
+        const muted = store.getState().snapshot?.base.muted ?? false;
+        acceptPlayback(await api.setPlaybackMuted(!muted));
       } catch (error) {
         setError(error);
       } finally {
         store.setState({ mutePending: false });
       }
     },
-    select: () => selectSession(store.getState(), api !== null),
-  };
-}
-
-export type ActivePlaybackSnapshot = Extract<PlaybackSnapshot, { status: "playing" | "paused" }>;
-
-/** True while a track is loaded, whether it is playing or paused. */
-export function isActivePlayback(
-  snapshot: PlaybackSnapshot | null | undefined,
-): snapshot is ActivePlaybackSnapshot {
-  return snapshot?.status === "playing" || snapshot?.status === "paused";
-}
-
-function selectDuration(snapshot: PlaybackSnapshot | null) {
-  return isActivePlayback(snapshot) ? snapshot.durationMs : null;
-}
-
-function selectMuted(snapshot: PlaybackSnapshot | null) {
-  return snapshot?.muted ?? false;
-}
-
-type PlaybackSessionState = Pick<
-  PlaybackStoreState,
-  | "snapshot"
-  | "queue"
-  | "connection"
-  | "transportPending"
-  | "seekPending"
-  | "volumePending"
-  | "mutePending"
-  | "volumePreview"
-  | "error"
->;
-
-function selectSession(state: PlaybackSessionState, bridgeAvailable: boolean) {
-  const snapshot = state.snapshot;
-  const active = isActivePlayback(snapshot);
-  return {
-    snapshot,
-    queue: state.queue,
-    connection: bridgeAvailable ? state.connection : ("failed" as PlaybackConnection),
-    transportPending: state.transportPending,
-    seekPending: state.seekPending,
-    volumePending: state.volumePending,
-    mutePending: state.mutePending,
-    commandError: state.error,
-    positionMs: active && snapshot && "positionMs" in snapshot ? snapshot.positionMs : 0,
-    durationMs: active && snapshot && "durationMs" in snapshot ? snapshot.durationMs : null,
-    volume: state.volumePreview ?? snapshot?.volume ?? 1,
-    muted: snapshot?.muted ?? false,
-    repeatMode: state.queue?.repeatMode ?? ("off" as PlaybackRepeatMode),
-    shuffleEnabled: state.queue?.shuffleEnabled ?? false,
   };
 }
 
@@ -296,67 +261,3 @@ export function nextRepeatMode(mode: PlaybackRepeatMode): PlaybackRepeatMode {
 
 export const usePlaybackStore = createPlaybackStore();
 export const playbackController = createPlaybackController(usePlaybackStore);
-
-const playbackActions = {
-  startLibraryTrack: playbackController.startLibraryTrack,
-  startLibraryAlbum: playbackController.startLibraryAlbum,
-  pause: playbackController.pause,
-  resume: playbackController.resume,
-  previous: playbackController.previous,
-  next: playbackController.next,
-  seek: playbackController.seek,
-  setVolume: playbackController.setVolume,
-  toggleMute: playbackController.toggleMute,
-  setShuffle: playbackController.setShuffle,
-  setRepeatMode: playbackController.setRepeatMode,
-  setOutputSelection: playbackController.setOutputSelection,
-  removeQueueItem: playbackController.removeQueueItem,
-  moveQueueItem: playbackController.moveQueueItem,
-  clearQueue: playbackController.clearQueue,
-} as const;
-
-export function usePlaybackActions() {
-  return playbackActions;
-}
-
-export function usePlaybackSession() {
-  const state = usePlaybackStore(
-    useShallow((current) => ({
-      snapshot: current.snapshot,
-      queue: current.queue,
-      connection: current.connection,
-      transportPending: current.transportPending,
-      seekPending: current.seekPending,
-      volumePending: current.volumePending,
-      mutePending: current.mutePending,
-      volumePreview: current.volumePreview,
-      error: current.error,
-    })),
-  );
-  const currentTrack = useLibraryTrackForPath(state.snapshot?.file?.path ?? null).data ?? null;
-  const selected = selectSession(state, true);
-
-  return {
-    ...selected,
-    currentTrack,
-    title:
-      currentTrack?.title ?? state.queue?.current?.title ?? state.snapshot?.file?.fileName ?? null,
-    artist: currentTrack?.artist ?? state.queue?.current?.artist ?? null,
-    artwork: currentTrack?.artwork ?? null,
-    ...playbackActions,
-  };
-}
-
-export function useTrackPlaybackState() {
-  const selection = usePlaybackStore(
-    useShallow((state) => ({
-      path: state.snapshot?.file?.path ?? null,
-      status: state.snapshot?.status ?? "stopped",
-    })),
-  );
-  const currentTrack = useLibraryTrackForPath(selection.path).data ?? null;
-  return {
-    activeTrackId: currentTrack?.id ?? null,
-    playbackStatus: selection.status,
-  };
-}

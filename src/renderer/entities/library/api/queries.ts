@@ -89,7 +89,7 @@ export const libraryQueryKeys = {
     sortKey: LibraryArtistAlbumSortKey,
     direction: LibrarySortDirection,
   ) => [...data, "artist", "albums", key.name, sortKey, direction] as const,
-  track: (path: string | null) => [...data, "track", path] as const,
+  track: (trackId: string | null) => [...data, "track", trackId] as const,
   /** Content-addressed, so it is never invalidated with the catalog. */
   accent: (contentHash: string | null) => ["library", "accent", contentHash] as const,
 };
@@ -119,10 +119,10 @@ export const libraryQueryOptions = {
       enabled,
       gcTime: Infinity,
     }),
-  track: (path: string | null) =>
+  track: (trackId: string | null) =>
     queryOptions({
-      queryKey: libraryQueryKeys.track(path),
-      queryFn: path === null ? skipToken : () => nativeApi().getLibraryTrackForPath(path),
+      queryKey: libraryQueryKeys.track(trackId),
+      queryFn: trackId === null ? skipToken : () => nativeApi().getLibraryTrack(trackId),
       gcTime: Infinity,
     }),
 };
@@ -232,8 +232,8 @@ export function useArtistAlbums(
   );
 }
 
-export function useLibraryTrackForPath(path: string | null) {
-  return useQuery(libraryQueryOptions.track(path));
+export function useLibraryTrack(trackId: string | null) {
+  return useQuery(libraryQueryOptions.track(trackId));
 }
 
 /** Representative artwork color as `#rrggbb`, for backgrounds only. */

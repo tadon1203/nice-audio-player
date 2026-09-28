@@ -1,5 +1,9 @@
 import { useEffect } from "react";
-import { isActivePlayback, usePlaybackSession } from "@/renderer/features/playback-control";
+import {
+  isActivePlayback,
+  playbackController,
+  usePlaybackStore,
+} from "@/renderer/features/playback-control";
 import { nextSeekPosition } from "@/renderer/widgets/playback-region";
 import { useNowPlaying } from "@/renderer/widgets/now-playing";
 import { useQueuePanel } from "@/renderer/widgets/queue-panel";
@@ -22,9 +26,11 @@ function isInteractiveTarget(target: EventTarget | null): boolean {
  * Global playback shortcuts (DESIGN.md's Keyboard table). Mounted once. Skips editable
  * targets and anything the focused element (or `WaveformSeek`'s own local arrow-key seek)
  * already handled via `defaultPrevented`.
+ *
+ * Playback state is read from the store when a key is pressed, never subscribed to: the app
+ * shell mounts this, and a subscription would re-render the whole shell on every position tick.
  */
 export function usePlaybackShortcuts() {
-  const playback = usePlaybackSession();
   const { toggle: toggleNowPlaying } = useNowPlaying();
   const { toggle: toggleQueue } = useQueuePanel();
 
@@ -44,32 +50,35 @@ export function usePlaybackShortcuts() {
         return;
       }
 
+      const { snapshot, positionMs, durationMs } = usePlaybackStore.getState();
+
       if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+        if (!isActivePlayback(snapshot)) return;
         if (event.ctrlKey) {
-          const active = isActivePlayback(playback.snapshot);
-          if (!active) return;
           event.preventDefault();
-          void (event.key === "ArrowLeft" ? playback.previous() : playback.next());
+          void (event.key === "ArrowLeft"
+            ? playbackController.previous()
+            : playbackController.next());
           return;
         }
-        const active = isActivePlayback(playback.snapshot);
-        if (!active) return;
-        const next = nextSeekPosition(event.key, playback.positionMs, playback.durationMs ?? 0);
+        const next = nextSeekPosition(event.key, positionMs, durationMs ?? 0);
         if (next === null) return;
         event.preventDefault();
-        void playback.seek(next);
+        void playbackController.seek(next);
         return;
       }
 
       if (event.key === " " || event.code === "Space") {
         if (isInteractiveTarget(event.target)) return;
-        if (!isActivePlayback(playback.snapshot)) return;
+        if (!isActivePlayback(snapshot)) return;
         event.preventDefault();
-        void (playback.snapshot.status === "playing" ? playback.pause() : playback.resume());
+        void (snapshot.status === "playing"
+          ? playbackController.pause()
+          : playbackController.resume());
       }
     };
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [playback, toggleNowPlaying, toggleQueue]);
+  }, [toggleNowPlaying, toggleQueue]);
 }

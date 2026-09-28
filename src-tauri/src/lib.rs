@@ -28,13 +28,14 @@ pub fn run() {
                 Some(path) => PathBuf::from(path),
                 None => app.path().app_data_dir()?,
             };
-            let backend = tauri::async_runtime::block_on(BackendApp::initialize(data_dir))
+            let (sink, event_receiver) = events::event_channel();
+            let backend = tauri::async_runtime::block_on(BackendApp::initialize(data_dir, sink))
                 .map_err(|_| std::io::Error::other("backend startup failed"))?;
             let backend = Arc::new(backend);
             app.manage(AppState {
                 backend: Arc::clone(&backend),
             });
-            events::forward_events(app.handle(), &backend);
+            events::start_dispatcher(app.handle(), &backend, event_receiver);
             Ok(())
         })
         .invoke_handler(bindings::builder().invoke_handler())

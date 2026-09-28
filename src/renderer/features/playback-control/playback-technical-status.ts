@@ -1,8 +1,9 @@
+import { useMemo } from "react";
 import { useShallow } from "zustand/react/shallow";
 import type { AudioOutputSelection } from "@/shared/ipc";
-import { useLibraryTrackForPath } from "@/renderer/entities/library";
+import { useLibraryTrack } from "@/renderer/entities/library";
 import { formatAudioPath, formatKilohertz } from "@/renderer/shared/lib/format";
-import { isActivePlayback, usePlaybackStore } from "./playback-session";
+import { snapshotSession, usePlaybackStore } from "./playback-session";
 
 /** The dock's signal path: `source › processing › output`. `processing` is null when bit-perfect. */
 export type PlaybackSignalPath = {
@@ -39,22 +40,32 @@ export function describeSignalPath(
 export function usePlaybackSignalPath(): PlaybackSignalPath | null {
   const technical = usePlaybackStore(
     useShallow((state) => {
-      const snapshot = state.snapshot;
-      const active = isActivePlayback(snapshot);
+      const session = snapshotSession(state.snapshot);
+      const selection = state.snapshot?.base.outputSelection ?? null;
       return {
-        active,
-        path: snapshot?.file?.path ?? null,
-        extension: snapshot?.file?.extension ?? null,
-        sourceSampleRate: active ? snapshot.sourceSampleRate : null,
-        outputSampleRate: active ? snapshot.outputSampleRate : null,
-        outputDeviceName: active ? snapshot.outputDevice.name : null,
-        channelConversion: active ? snapshot.channelConversion : null,
-        resamplingActive: active ? snapshot.resamplingActive : false,
-        selection: snapshot?.outputSelection ?? null,
+        active: session !== null,
+        trackId: session?.item.trackId ?? null,
+        extension: session?.item.file.extension ?? null,
+        sourceSampleRate: session?.sourceSampleRate ?? null,
+        outputSampleRate: session?.outputSampleRate ?? null,
+        outputDeviceName: session?.outputDevice.name ?? null,
+        channelConversion: session?.channelConversion ?? null,
+        resamplingActive: session?.resamplingActive ?? false,
+        selectionDeviceId: selection?.kind === "device" ? selection.deviceId : null,
+        hasSelection: selection !== null,
       };
     }),
   );
-  const track = useLibraryTrackForPath(technical.path).data ?? null;
+  const selection = useMemo<AudioOutputSelection | null>(
+    () =>
+      !technical.hasSelection
+        ? null
+        : technical.selectionDeviceId === null
+          ? { kind: "systemDefault" }
+          : { kind: "device", deviceId: technical.selectionDeviceId },
+    [technical.hasSelection, technical.selectionDeviceId],
+  );
+  const track = useLibraryTrack(technical.trackId).data ?? null;
   if (!technical.active) return null;
 
   return describeSignalPath(
@@ -70,6 +81,6 @@ export function usePlaybackSignalPath(): PlaybackSignalPath | null {
       channelConversion: technical.channelConversion,
       outputName: technical.outputDeviceName,
     },
-    technical.selection,
+    selection,
   );
 }
