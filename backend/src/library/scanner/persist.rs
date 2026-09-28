@@ -5,12 +5,13 @@ use std::cell::Cell;
 use rusqlite::{params, Connection, OptionalExtension};
 
 use super::discover::DiscoveredFile;
-use super::inspect::{ArtworkOutcome, ArtworkStatus, InspectedFile};
+use super::inspect::{ArtworkOutcome, InspectedFile};
 use crate::library::service::now;
+use crate::library::status::{ArtworkStatus, Availability, InspectionStatus};
 
 const SELECT_EXISTING_FILE: &str = "
     SELECT f.id, f.source_revision, f.modification_key, f.inspection_status,
-           COALESCE(m.artwork_status, '')
+           m.artwork_status
     FROM library_files f
     LEFT JOIN tracks t ON t.file_id = f.id
     LEFT JOIN track_source_metadata m ON m.track_id = t.id AND m.source_revision = f.source_revision
@@ -18,20 +19,20 @@ const SELECT_EXISTING_FILE: &str = "
 
 const TOUCH_FILE: &str = "
     UPDATE library_files
-    SET seen_generation = ?2, availability = 'available', updated_at_ms = ?3
+    SET seen_generation = ?2, availability = ?4, updated_at_ms = ?3
     WHERE id = ?1";
 
 const REVISE_FILE: &str = "
     UPDATE library_files
     SET byte_length = ?2, modification_key = ?3, source_revision = ?4, seen_generation = ?5,
-        availability = 'available', inspection_status = 'pending', updated_at_ms = ?6
+        availability = ?7, inspection_status = ?8, updated_at_ms = ?6
     WHERE id = ?1";
 
 const INSERT_FILE: &str = "
     INSERT INTO library_files(root_id, relative_path, file_name, extension, byte_length,
                               modification_key, source_revision, seen_generation, availability,
                               inspection_status, updated_at_ms)
-    VALUES (?1, ?2, ?3, ?4, ?5, ?6, 1, ?7, 'available', 'pending', ?8)";
+    VALUES (?1, ?2, ?3, ?4, ?5, ?6, 1, ?7, ?9, ?10, ?8)";
 
 const UPSERT_ARTWORK_ASSET: &str = "
     INSERT INTO artwork_assets(content_hash, mime_type, relative_path, byte_length, created_at_ms)
@@ -137,7 +138,7 @@ impl LibraryWriter {
         generation: i64,
         file: &DiscoveredFile,
     ) -> Persisted<Reconciled> {
-        let existing: Option<(i64, i64, String, String, String)> = self
+        let existing: Option<(i64, i64, String, InspectionStatus, Option<ArtworkStatus>)> = self
             .connection
             .query_row(
                 SELECT_EXISTING_FILE,
@@ -156,7 +157,9 @@ impl LibraryWriter {
         let unchanged = |modification_key: &str| modification_key == file.modification_key;
         match existing {
             Some((id, revision, key, status, artwork_status))
-                if unchanged(&key) && status == "indexed" && artwork_status == "storeFailed" =>
+                if unchanged(&key)
+                    && status == InspectionStatus::Indexed
+                    && artwork_status == Some(ArtworkStatus::StoreFailed) =>
             {
                 self.touch(id, generation)?;
                 Ok(Reconciled {
@@ -165,7 +168,9 @@ impl LibraryWriter {
                     work: Work::RetryArtwork,
                 })
             }
-            Some((id, revision, key, status, _)) if unchanged(&key) && status != "pending" => {
+            Some((id, revision, key, status, _))
+                if unchanged(&key) && status != InspectionStatus::Pending =>
+            {
                 self.touch(id, generation)?;
                 Ok(Reconciled {
                     file_id: id,
@@ -183,7 +188,9 @@ impl LibraryWriter {
                         file.modification_key,
                         next,
                         generation,
-                        now()
+                        now(),
+                        Availability::Available,
+                        InspectionStatus::Pending
                     ],
                 )?;
                 Ok(Reconciled {
@@ -203,7 +210,9 @@ impl LibraryWriter {
                         file.byte_length as i64,
                         file.modification_key,
                         generation,
-                        now()
+                        now(),
+                        Availability::Available,
+                        InspectionStatus::Pending
                     ],
                 )?;
                 Ok(Reconciled {
@@ -216,8 +225,10 @@ impl LibraryWriter {
     }
 
     fn touch(&self, file_id: i64, generation: i64) -> Persisted<()> {
-        self.connection
-            .execute(TOUCH_FILE, params![file_id, generation, now()])?;
+        self.connection.execute(
+            TOUCH_FILE,
+            params![file_id, generation, now(), Availability::Available],
+        )?;
         Ok(())
     }
 
@@ -231,8 +242,8 @@ impl LibraryWriter {
     ) -> Persisted<()> {
         let connection = &self.connection;
         connection.execute(
-            "UPDATE library_files SET inspection_status = 'indexed' WHERE id = ?1",
-            params![reconciled.file_id],
+            "UPDATE library_files SET inspection_status = ?2 WHERE id = ?1",
+            params![reconciled.file_id, InspectionStatus::Indexed],
         )?;
         connection.execute(
             "INSERT OR IGNORE INTO tracks(file_id, created_at_ms) VALUES (?1, ?2)",
@@ -268,8 +279,8 @@ impl LibraryWriter {
                 info.channel_count,
                 inspected.audio.bit_depth,
                 inspected.bitrate_kbps,
-                inspected.tag_status.as_str(),
-                inspected.artwork.status.as_str(),
+                inspected.tag_status,
+                inspected.artwork.status,
                 artwork_id,
                 now()
             ],
@@ -281,9 +292,9 @@ impl LibraryWriter {
     pub fn mark_unsupported(&self, file_id: i64) -> Persisted<()> {
         self.connection.execute(
             "UPDATE library_files
-             SET inspection_status = 'unsupported', inspection_error_code = 'unsupportedFormat'
+             SET inspection_status = ?2, inspection_error_code = 'unsupportedFormat'
              WHERE id = ?1",
-            params![file_id],
+            params![file_id, InspectionStatus::Unsupported],
         )?;
         Ok(())
     }
@@ -307,7 +318,7 @@ impl LibraryWriter {
             params![
                 track_id,
                 reconciled.revision,
-                artwork.status.as_str(),
+                artwork.status,
                 artwork_id,
                 now()
             ],
@@ -336,9 +347,9 @@ impl LibraryWriter {
     /// After a complete pass: files not seen this generation are missing (kept, not deleted).
     pub fn finish_root(&self, root_id: i64, generation: i64) -> Persisted<()> {
         self.connection.execute(
-            "UPDATE library_files SET availability = 'missing'
+            "UPDATE library_files SET availability = ?3
              WHERE root_id = ?1 AND seen_generation < ?2",
-            params![root_id, generation],
+            params![root_id, generation, Availability::Missing],
         )?;
         self.connection.execute(
             "UPDATE library_roots

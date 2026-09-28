@@ -3,7 +3,7 @@ import {
   isActivePlayback,
   playbackController,
   usePlaybackStore,
-} from "@/renderer/features/playback-control";
+} from "@/renderer/entities/playback";
 import { nextSeekPosition } from "@/renderer/widgets/playback-region";
 import { useNowPlaying } from "@/renderer/widgets/now-playing";
 import { useQueuePanel } from "@/renderer/widgets/queue-panel";

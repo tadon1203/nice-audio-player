@@ -2,6 +2,7 @@ use super::policy::effective_track_title;
 use super::{
     models::*,
     service::{summary_from_row, LibraryCommandError, LibraryShared},
+    status::{ArtworkStatus, Availability, InspectionStatus},
 };
 use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
@@ -29,17 +30,13 @@ struct CatalogCursor {
 }
 
 pub(super) fn validate_album_key(key: &LibraryAlbumKey) -> Result<(), LibraryCommandError> {
-    if key.title.trim() != key.title
-        || key.album_artist.trim() != key.album_artist
-        || key.title.is_empty()
-        || key.album_artist.is_empty()
-    {
+    if key.title.trim() != key.title || key.album_artist.trim() != key.album_artist {
         return Err(LibraryCommandError::InvalidAlbumKey);
     }
     Ok(())
 }
 fn artist_key(key: &LibraryAlbumArtistKey) -> Result<(), LibraryCommandError> {
-    if key.name.trim() != key.name || key.name.is_empty() {
+    if key.name.trim() != key.name {
         return Err(LibraryCommandError::InvalidAlbumArtistKey);
     }
     Ok(())
@@ -130,8 +127,8 @@ pub(super) fn artwork_ref(
 pub(super) const CATALOG_MEMBER_PROJECTION: &str = r#"SELECT t.id, f.root_id, f.relative_path, f.file_name,
   f.availability, f.inspection_status, m.title, m.artist, m.album, m.album_artist,
   m.disc_number, m.track_number, m.artwork_id, m.duration_ms, m.date,
-  COALESCE(NULLIF(trim(m.album),''),'Unknown album') AS album_title,
-  COALESCE(NULLIF(trim(m.album_artist),''),NULLIF(trim(m.artist),''),'Unknown artist') AS effective_artist,
+  COALESCE(trim(m.album),'') AS album_title,
+  COALESCE(NULLIF(trim(m.album_artist),''),NULLIF(trim(m.artist),''),'') AS effective_artist,
   m.file_format, m.bit_depth, m.sample_rate
 FROM tracks t
 JOIN library_files f ON f.id=t.file_id
@@ -139,8 +136,12 @@ LEFT JOIN track_source_metadata m ON m.track_id=t.id AND m.source_revision=f.sou
 type ArtistSummaryRow = (i64, i64, Option<String>, Option<String>, Option<String>);
 
 const TRACK_TITLE_EXPR: &str = "COALESCE(NULLIF(trim(m.title),''),CASE WHEN f.extension='' THEN f.file_name ELSE substr(f.file_name,1,length(f.file_name)-length(f.extension)-1) END)";
-const TRACK_ARTIST_EXPR: &str = "COALESCE(NULLIF(trim(m.artist),''),'Unknown artist')";
-const TRACK_ALBUM_EXPR: &str = "COALESCE(NULLIF(trim(m.album),''),'Unknown album')";
+// Unknown album / artist is the empty string; the renderer decides how to show it, and every
+// order below puts it last.
+const TRACK_ARTIST_EXPR: &str = "COALESCE(trim(m.artist),'')";
+const TRACK_ALBUM_EXPR: &str = "COALESCE(trim(m.album),'')";
+const TRACK_ALBUM_ARTIST_EXPR: &str =
+    "COALESCE(NULLIF(trim(m.album_artist),''),NULLIF(trim(m.artist),''),'')";
 
 /// Filter of the tracks list: `?1` is the trimmed search text, `?2` its LIKE pattern. Shared by
 /// the page query, its count, and playback so "play what I see" cannot drift from the list.
@@ -149,7 +150,7 @@ pub(super) fn track_search_predicate() -> String {
         r#"(?1='' OR {TRACK_TITLE_EXPR} LIKE ?2 ESCAPE '\'
             OR COALESCE(m.artist,'') LIKE ?2 ESCAPE '\'
             OR {TRACK_ALBUM_EXPR} LIKE ?2 ESCAPE '\'
-            OR COALESCE(NULLIF(trim(m.album_artist),''),NULLIF(trim(m.artist),''),'Unknown artist') LIKE ?2 ESCAPE '\')"#
+            OR {TRACK_ALBUM_ARTIST_EXPR} LIKE ?2 ESCAPE '\')"#
     )
 }
 
@@ -164,11 +165,11 @@ pub(super) fn track_order_sql(
         }
         LibraryTrackSortKey::Artist => {
             format!(
-                "{TRACK_ARTIST_EXPR} COLLATE NOCASE {direction},{TRACK_ARTIST_EXPR} {direction}"
+                "({TRACK_ARTIST_EXPR}='') ASC,{TRACK_ARTIST_EXPR} COLLATE NOCASE {direction},{TRACK_ARTIST_EXPR} {direction}"
             )
         }
         LibraryTrackSortKey::Album => {
-            format!("{TRACK_ALBUM_EXPR} COLLATE NOCASE {direction},{TRACK_ALBUM_EXPR} {direction}")
+            format!("({TRACK_ALBUM_EXPR}='') ASC,{TRACK_ALBUM_EXPR} COLLATE NOCASE {direction},{TRACK_ALBUM_EXPR} {direction}")
         }
         LibraryTrackSortKey::Duration => format!(
             "CASE WHEN m.duration_ms IS NULL THEN 1 ELSE 0 END ASC,m.duration_ms {direction}"
@@ -214,9 +215,9 @@ impl LibraryShared {
                 FROM tracks t
                 JOIN library_files f ON f.id=t.file_id
                 LEFT JOIN track_source_metadata m ON m.track_id=t.id AND m.source_revision=f.source_revision
-                LEFT JOIN artwork_assets a ON a.id=m.artwork_id AND m.artwork_status='stored'
+                LEFT JOIN artwork_assets a ON a.id=m.artwork_id AND m.artwork_status='{stored}'
                 WHERE {predicate}
-                ) WHERE cursor_rank>?3 ORDER BY cursor_rank LIMIT 101"#))
+                ) WHERE cursor_rank>?3 ORDER BY cursor_rank LIMIT 101"#, stored = ArtworkStatus::Stored))
             .map_err(|_| LibraryCommandError::PersistenceFailed)?;
         let mut rows = statement
             .query(params![search, pattern, anchor as i64])
@@ -279,9 +280,9 @@ impl LibraryShared {
             .map_err(|_| LibraryCommandError::PersistenceFailed)? as u64;
         let direction = direction_sql(sort_direction);
         let order_sql = match sort_key {
-            LibraryAlbumSortKey::Title => format!("album_title COLLATE NOCASE {direction},album_title {direction},effective_artist COLLATE NOCASE {direction},effective_artist {direction}"),
-            LibraryAlbumSortKey::Artist => format!("effective_artist COLLATE NOCASE {direction},effective_artist {direction},album_title COLLATE NOCASE {direction},album_title {direction}"),
-            LibraryAlbumSortKey::Year => format!("CASE WHEN album_year IS NULL THEN 1 ELSE 0 END ASC,album_year {direction},album_title COLLATE NOCASE {direction},album_title {direction},effective_artist COLLATE NOCASE {direction},effective_artist {direction}"),
+            LibraryAlbumSortKey::Title => format!("(album_title='') ASC,album_title COLLATE NOCASE {direction},album_title {direction},effective_artist COLLATE NOCASE {direction},effective_artist {direction}"),
+            LibraryAlbumSortKey::Artist => format!("(effective_artist='') ASC,effective_artist COLLATE NOCASE {direction},effective_artist {direction},album_title COLLATE NOCASE {direction},album_title {direction}"),
+            LibraryAlbumSortKey::Year => format!("CASE WHEN album_year IS NULL THEN 1 ELSE 0 END ASC,(album_title='') ASC,album_year {direction},album_title COLLATE NOCASE {direction},album_title {direction},effective_artist COLLATE NOCASE {direction},effective_artist {direction}"),
         };
         let sql = format!(
             r#"WITH members AS MATERIALIZED ({}), groups AS (SELECT album_title,effective_artist,MIN(CASE WHEN trim(date) GLOB '[0-9][0-9][0-9][0-9]*' THEN CAST(substr(trim(date),1,4) AS INTEGER) END) AS album_year FROM members WHERE (?1='' OR album_title LIKE ?2 ESCAPE '\' OR effective_artist LIKE ?2 ESCAPE '\') GROUP BY album_title,effective_artist), ranked AS (SELECT g.album_title,g.effective_artist,g.album_year,a.content_hash,a.mime_type,a.relative_path,ROW_NUMBER() OVER (PARTITION BY g.album_title,g.effective_artist ORDER BY CASE WHEN a.id IS NULL THEN 1 ELSE 0 END,CASE WHEN m.disc_number IS NULL THEN 1 ELSE 0 END,m.disc_number,CASE WHEN m.track_number IS NULL THEN 1 ELSE 0 END,m.track_number,m.id) rank FROM groups g JOIN members m ON m.album_title=g.album_title AND m.effective_artist=g.effective_artist LEFT JOIN artwork_assets a ON a.id=m.artwork_id AND a.mime_type IN ('image/jpeg','image/png')) SELECT album_title,effective_artist,album_year,content_hash,mime_type,relative_path FROM (SELECT album_title,effective_artist,album_year,content_hash,mime_type,relative_path,ROW_NUMBER() OVER (ORDER BY {order_sql}) AS cursor_rank FROM ranked WHERE rank=1) WHERE cursor_rank>?3 ORDER BY cursor_rank LIMIT 101"#,
@@ -369,17 +370,17 @@ impl LibraryShared {
         let direction = direction_sql(sort_direction);
         let order_sql = match sort_key {
             LibraryAlbumArtistSortKey::Artist => {
-                format!("artist_name COLLATE NOCASE {direction},artist_name {direction}")
+                format!("(artist_name='') ASC,artist_name COLLATE NOCASE {direction},artist_name {direction}")
             }
             LibraryAlbumArtistSortKey::AlbumCount => {
-                format!("album_count {direction},artist_name COLLATE NOCASE ASC,artist_name ASC")
+                format!("album_count {direction},(artist_name='') ASC,artist_name COLLATE NOCASE ASC,artist_name ASC")
             }
             LibraryAlbumArtistSortKey::TrackCount => {
-                format!("track_count {direction},artist_name COLLATE NOCASE ASC,artist_name ASC")
+                format!("track_count {direction},(artist_name='') ASC,artist_name COLLATE NOCASE ASC,artist_name ASC")
             }
         };
         let sql = format!(
-            r#"WITH members AS MATERIALIZED ({}), groups AS (SELECT effective_artist AS artist_name,COUNT(DISTINCT album_title) album_count,COUNT(*) track_count FROM members WHERE (?1='' OR effective_artist LIKE ?2 ESCAPE '\') GROUP BY effective_artist), first_albums AS (SELECT effective_artist AS artist_name,album_title FROM (SELECT effective_artist,album_title,ROW_NUMBER() OVER(PARTITION BY effective_artist ORDER BY album_title COLLATE NOCASE,album_title) rank FROM members) WHERE rank=1), ranked AS (SELECT g.artist_name,g.album_count,g.track_count,a.content_hash,a.mime_type,a.relative_path,ROW_NUMBER() OVER(PARTITION BY g.artist_name ORDER BY CASE WHEN a.id IS NULL THEN 1 ELSE 0 END,CASE WHEN m.disc_number IS NULL THEN 1 ELSE 0 END,m.disc_number,CASE WHEN m.track_number IS NULL THEN 1 ELSE 0 END,m.track_number,m.id) rank FROM groups g JOIN first_albums fa ON fa.artist_name=g.artist_name JOIN members m ON m.effective_artist=fa.artist_name AND m.album_title=fa.album_title LEFT JOIN artwork_assets a ON a.id=m.artwork_id AND a.mime_type IN ('image/jpeg','image/png')) SELECT artist_name,album_count,track_count,content_hash,mime_type,relative_path FROM (SELECT artist_name,album_count,track_count,content_hash,mime_type,relative_path,ROW_NUMBER() OVER (ORDER BY {order_sql}) AS cursor_rank FROM ranked WHERE rank=1) WHERE cursor_rank>?3 ORDER BY cursor_rank LIMIT 101"#,
+            r#"WITH members AS MATERIALIZED ({}), groups AS (SELECT effective_artist AS artist_name,COUNT(DISTINCT album_title) album_count,COUNT(*) track_count FROM members WHERE (?1='' OR effective_artist LIKE ?2 ESCAPE '\') GROUP BY effective_artist), first_albums AS (SELECT effective_artist AS artist_name,album_title FROM (SELECT effective_artist,album_title,ROW_NUMBER() OVER(PARTITION BY effective_artist ORDER BY (album_title='') ASC,album_title COLLATE NOCASE,album_title) rank FROM members) WHERE rank=1), ranked AS (SELECT g.artist_name,g.album_count,g.track_count,a.content_hash,a.mime_type,a.relative_path,ROW_NUMBER() OVER(PARTITION BY g.artist_name ORDER BY CASE WHEN a.id IS NULL THEN 1 ELSE 0 END,CASE WHEN m.disc_number IS NULL THEN 1 ELSE 0 END,m.disc_number,CASE WHEN m.track_number IS NULL THEN 1 ELSE 0 END,m.track_number,m.id) rank FROM groups g JOIN first_albums fa ON fa.artist_name=g.artist_name JOIN members m ON m.effective_artist=fa.artist_name AND m.album_title=fa.album_title LEFT JOIN artwork_assets a ON a.id=m.artwork_id AND a.mime_type IN ('image/jpeg','image/png')) SELECT artist_name,album_count,track_count,content_hash,mime_type,relative_path FROM (SELECT artist_name,album_count,track_count,content_hash,mime_type,relative_path,ROW_NUMBER() OVER (ORDER BY {order_sql}) AS cursor_rank FROM ranked WHERE rank=1) WHERE cursor_rank>?3 ORDER BY cursor_rank LIMIT 101"#,
             CATALOG_MEMBER_PROJECTION
         );
         let mut stmt = c
@@ -475,8 +476,8 @@ impl LibraryShared {
             .map_err(|_| LibraryCommandError::PersistenceFailed)? as u64;
         let direction = direction_sql(sort_direction);
         let order_sql = match sort_key {
-            LibraryArtistAlbumSortKey::Title => format!("album_title COLLATE NOCASE {direction},album_title {direction}"),
-            LibraryArtistAlbumSortKey::Year => format!("CASE WHEN album_year IS NULL THEN 1 ELSE 0 END ASC,album_year {direction},album_title COLLATE NOCASE {direction},album_title {direction}"),
+            LibraryArtistAlbumSortKey::Title => format!("(album_title='') ASC,album_title COLLATE NOCASE {direction},album_title {direction}"),
+            LibraryArtistAlbumSortKey::Year => format!("CASE WHEN album_year IS NULL THEN 1 ELSE 0 END ASC,(album_title='') ASC,album_year {direction},album_title COLLATE NOCASE {direction},album_title {direction}"),
         };
         let sql = format!(
             r#"WITH members AS MATERIALIZED ({}), albums AS (SELECT album_title,MIN(CASE WHEN trim(date) GLOB '[0-9][0-9][0-9][0-9]*' THEN CAST(substr(trim(date),1,4) AS INTEGER) END) AS album_year FROM members WHERE effective_artist=?1 GROUP BY album_title), ranked AS (SELECT g.album_title,g.album_year,a.content_hash,a.mime_type,a.relative_path,ROW_NUMBER() OVER(PARTITION BY g.album_title ORDER BY CASE WHEN a.id IS NULL THEN 1 ELSE 0 END,CASE WHEN m.disc_number IS NULL THEN 1 ELSE 0 END,m.disc_number,CASE WHEN m.track_number IS NULL THEN 1 ELSE 0 END,m.track_number,m.id) rank FROM albums g JOIN members m ON m.album_title=g.album_title AND m.effective_artist=?1 LEFT JOIN artwork_assets a ON a.id=m.artwork_id AND a.mime_type IN ('image/jpeg','image/png')) SELECT album_title,album_year,content_hash,mime_type,relative_path FROM (SELECT album_title,album_year,content_hash,mime_type,relative_path,ROW_NUMBER() OVER (ORDER BY {order_sql}) AS cursor_rank FROM ranked WHERE rank=1) WHERE cursor_rank>?2 ORDER BY cursor_rank LIMIT 101"#,
@@ -547,7 +548,7 @@ impl LibraryShared {
                 ), canonical_album AS (
                   SELECT album_title FROM artist_members
                   GROUP BY album_title
-                  ORDER BY album_title COLLATE NOCASE, album_title
+                  ORDER BY (album_title='') ASC, album_title COLLATE NOCASE, album_title
                   LIMIT 1
                 ), ranked_artwork AS (
                   SELECT a.content_hash,a.mime_type,a.relative_path,
@@ -596,8 +597,10 @@ impl LibraryShared {
             .read()
             .map_err(|_| LibraryCommandError::PersistenceFailed)?;
         let sql = format!(
-            r#"WITH members AS MATERIALIZED ({}), album_members AS (SELECT * FROM members WHERE album_title=?1 AND effective_artist=?2), ordered AS (SELECT * FROM album_members ORDER BY CASE WHEN disc_number IS NULL THEN 1 ELSE 0 END,disc_number,CASE WHEN track_number IS NULL THEN 1 ELSE 0 END,track_number,id), ranked_artwork AS (SELECT a.content_hash,a.mime_type,a.relative_path,ROW_NUMBER() OVER (ORDER BY CASE WHEN a.id IS NULL THEN 1 ELSE 0 END,CASE WHEN m.disc_number IS NULL THEN 1 ELSE 0 END,m.disc_number,CASE WHEN m.track_number IS NULL THEN 1 ELSE 0 END,m.track_number,m.id) rank FROM ordered m LEFT JOIN artwork_assets a ON a.id=m.artwork_id AND a.mime_type IN ('image/jpeg','image/png')) SELECT COUNT(*),CASE WHEN COUNT(duration_ms)=COUNT(*) THEN SUM(duration_ms) ELSE NULL END,(SELECT date FROM ordered WHERE date IS NOT NULL AND trim(date)<>'' LIMIT 1),(SELECT CAST(id AS TEXT) FROM ordered WHERE availability='available' AND inspection_status='indexed' LIMIT 1),(SELECT content_hash FROM ranked_artwork WHERE rank=1),(SELECT mime_type FROM ranked_artwork WHERE rank=1),(SELECT relative_path FROM ranked_artwork WHERE rank=1) FROM album_members"#,
-            CATALOG_MEMBER_PROJECTION
+            r#"WITH members AS MATERIALIZED ({}), album_members AS (SELECT * FROM members WHERE album_title=?1 AND effective_artist=?2), ordered AS (SELECT * FROM album_members ORDER BY CASE WHEN disc_number IS NULL THEN 1 ELSE 0 END,disc_number,CASE WHEN track_number IS NULL THEN 1 ELSE 0 END,track_number,id), ranked_artwork AS (SELECT a.content_hash,a.mime_type,a.relative_path,ROW_NUMBER() OVER (ORDER BY CASE WHEN a.id IS NULL THEN 1 ELSE 0 END,CASE WHEN m.disc_number IS NULL THEN 1 ELSE 0 END,m.disc_number,CASE WHEN m.track_number IS NULL THEN 1 ELSE 0 END,m.track_number,m.id) rank FROM ordered m LEFT JOIN artwork_assets a ON a.id=m.artwork_id AND a.mime_type IN ('image/jpeg','image/png')) SELECT COUNT(*),CASE WHEN COUNT(duration_ms)=COUNT(*) THEN SUM(duration_ms) ELSE NULL END,(SELECT date FROM ordered WHERE date IS NOT NULL AND trim(date)<>'' LIMIT 1),(SELECT CAST(id AS TEXT) FROM ordered WHERE availability='{}' AND inspection_status='{}' LIMIT 1),(SELECT content_hash FROM ranked_artwork WHERE rank=1),(SELECT mime_type FROM ranked_artwork WHERE rank=1),(SELECT relative_path FROM ranked_artwork WHERE rank=1) FROM album_members"#,
+            CATALOG_MEMBER_PROJECTION,
+            Availability::Available,
+            InspectionStatus::Indexed
         );
         let row: Option<AlbumDetailsRow> = c
             .query_row(&sql, params![key.title, key.album_artist], |r| {
@@ -674,8 +677,8 @@ impl LibraryShared {
                     r.get::<_, Option<i64>>(7)?,
                     r.get::<_, Option<i64>>(8)?,
                     r.get::<_, Option<i64>>(9)?,
-                    r.get::<_, String>(10)?,
-                    r.get::<_, String>(11)?,
+                    r.get::<_, Availability>(10)?,
+                    r.get::<_, InspectionStatus>(11)?,
                 ))
             })
             .map_err(|_| LibraryCommandError::PersistenceFailed)?;
@@ -706,12 +709,9 @@ impl LibraryShared {
                             bit_depth: bit_depth.map(|v| v as u32),
                             sample_rate: sample_rate.map(|v| v as u32),
                             duration_ms: duration.map(|v| v as u64),
-                            availability: if availability == "available" {
-                                LibraryFileAvailability::Available
-                            } else {
-                                LibraryFileAvailability::Missing
-                            },
-                            playable: availability == "available" && inspection == "indexed",
+                            availability,
+                            playable: availability == Availability::Available
+                                && inspection == InspectionStatus::Indexed,
                         }
                     },
                 )

@@ -21,6 +21,14 @@ export {
   trackSortKeys,
   trackSortLabels,
 } from "./model/sort";
+export {
+  albumTitleLabel,
+  artistNameLabel,
+  fromNameSegment,
+  toNameSegment,
+  UNKNOWN_ALBUM,
+  UNKNOWN_ARTIST,
+} from "./model/unknown-name";
 export { applyLibraryEvent } from "./api/events";
 export {
   libraryQueryKeys,

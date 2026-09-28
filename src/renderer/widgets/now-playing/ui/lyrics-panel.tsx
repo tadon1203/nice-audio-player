@@ -10,7 +10,7 @@ import {
   usePlaybackActions,
   usePlaybackPosition,
   usePlaybackTransport,
-} from "@/renderer/features/playback-control";
+} from "@/renderer/entities/playback";
 import { findCurrentLineIndex, lineSpan, useLyricsSync } from "../model/use-lyrics-sync";
 import { useLyricsScroll } from "../model/use-lyrics-scroll";
 

@@ -1,5 +1,5 @@
 import { m } from "motion/react";
-import { usePlaybackItem } from "@/renderer/features/playback-control";
+import { usePlaybackItem } from "@/renderer/entities/playback";
 import { Artwork } from "@/renderer/shared/ui/artwork";
 import { ArtworkLight } from "@/renderer/shared/ui/artwork-light";
 import {

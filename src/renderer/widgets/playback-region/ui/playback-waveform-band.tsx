@@ -7,7 +7,7 @@ import {
   usePlaybackPosition,
   usePlaybackTransport,
   usePlaybackWaveform,
-} from "@/renderer/features/playback-control";
+} from "@/renderer/entities/playback";
 import { formatDuration } from "@/renderer/shared/lib/format";
 import { cn } from "@/renderer/shared/lib/utils";
 import { WaveformSeek } from "./waveform-seek";

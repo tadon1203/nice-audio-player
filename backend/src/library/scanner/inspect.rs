@@ -9,6 +9,7 @@ use std::sync::{
 
 use super::discover::DiscoveredFile;
 use crate::library::artwork::{self, StoredArtwork};
+use crate::library::status::{ArtworkStatus, TagStatus};
 use crate::media::{
     inspection::{inspect_audio_file_internal, InspectedAudioFile},
     metadata::{read_source_metadata, ArtworkRead, SourceMetadata},
@@ -16,44 +17,6 @@ use crate::media::{
 };
 
 const MAX_INSPECTION_THREADS: usize = 4;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum TagStatus {
-    Loaded,
-    Absent,
-    Failed,
-}
-
-impl TagStatus {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Loaded => "loaded",
-            Self::Absent => "absent",
-            Self::Failed => "failed",
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum ArtworkStatus {
-    NotPresent,
-    Unavailable,
-    Invalid,
-    Stored,
-    StoreFailed,
-}
-
-impl ArtworkStatus {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::NotPresent => "notPresent",
-            Self::Unavailable => "unavailable",
-            Self::Invalid => "invalid",
-            Self::Stored => "stored",
-            Self::StoreFailed => "storeFailed",
-        }
-    }
-}
 
 /// Embedded artwork after it was read and, when there was some, written to the artwork store.
 #[derive(Debug, Clone)]

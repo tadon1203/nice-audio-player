@@ -10,6 +10,9 @@
 - Tauri commands that can wait on the playback worker or do blocking work are `async` and use `spawn_blocking`; a synchronous command runs on the main thread.
 - Backend services report changes by emitting a `BackendEvent` to their `EventSink`, never by owning a channel for the host to drain.
 - High-frequency renderer data (playback position, anything drawn per frame) stays out of broad subscriptions: read it with a narrow hook, a ref, or `store.getState()`.
+- Library columns that hold a state (availability, inspection, artwork status) map to Rust enums in `library/status.rs`; the migration's CHECK lists the same names. Foreign keys cascade, so deleting a parent needs no hand-written child deletes.
+- The backend never returns display strings: an unnamed album or artist is `""`, sorted last, and the renderer labels it (`entities/library/model/unknown-name.ts`).
+- Once a renderer slice has more than three files, group them in `model/`, `api/`, `lib/` or `ui/` segments.
 - Do not weaken type checking or lint rules just to make a change pass.
 
 ## Workflow

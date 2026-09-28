@@ -1,6 +1,7 @@
 use super::artwork;
 use super::policy::effective_track_title;
 use super::runtime::LibraryRuntime;
+use super::status::{ArtworkStatus, Availability, InspectionStatus};
 use super::{database::Database, models::*};
 use crate::activity::ApplicationActivityHandle;
 use crate::events::{BackendEvent, Notifier, SharedEventSink};
@@ -247,14 +248,7 @@ impl LibraryShared {
         if exists.is_none() {
             return Err(LibraryCommandError::RootMissing);
         }
-        tx.execute("DELETE FROM track_source_metadata WHERE track_id IN (SELECT t.id FROM tracks t JOIN library_files f ON f.id=t.file_id WHERE f.root_id=?1)", params![id]).map_err(|_| LibraryCommandError::PersistenceFailed)?;
-        tx.execute(
-            "DELETE FROM tracks WHERE file_id IN (SELECT id FROM library_files WHERE root_id=?1)",
-            params![id],
-        )
-        .map_err(|_| LibraryCommandError::PersistenceFailed)?;
-        tx.execute("DELETE FROM library_files WHERE root_id=?1", params![id])
-            .map_err(|_| LibraryCommandError::PersistenceFailed)?;
+        // Files, tracks and their metadata go with the root (ON DELETE CASCADE).
         tx.execute("DELETE FROM library_roots WHERE id=?1", params![id])
             .map_err(|_| LibraryCommandError::PersistenceFailed)?;
         tx.commit()
@@ -270,7 +264,7 @@ impl LibraryShared {
             .db()?
             .read()
             .map_err(|_| LibraryCommandError::PersistenceFailed)?;
-        c.query_row("SELECT t.id,f.file_name,f.availability,f.inspection_status,m.title,m.artist,m.album,m.album_artist,m.duration_ms,a.content_hash,a.mime_type,a.relative_path,m.artwork_status,m.file_format,m.bit_depth,m.bitrate_kbps FROM tracks t JOIN library_files f ON f.id=t.file_id LEFT JOIN track_source_metadata m ON m.track_id=t.id AND m.source_revision=f.source_revision LEFT JOIN artwork_assets a ON a.id=m.artwork_id AND m.artwork_status='stored' WHERE t.id=?1", params![id], summary_from_row)
+        c.query_row("SELECT t.id,f.file_name,f.availability,f.inspection_status,m.title,m.artist,m.album,m.album_artist,m.duration_ms,a.content_hash,a.mime_type,a.relative_path,m.artwork_status,m.file_format,m.bit_depth,m.bitrate_kbps FROM tracks t JOIN library_files f ON f.id=t.file_id LEFT JOIN track_source_metadata m ON m.track_id=t.id AND m.source_revision=f.source_revision LEFT JOIN artwork_assets a ON a.id=m.artwork_id AND m.artwork_status=?2 WHERE t.id=?1", params![id, ArtworkStatus::Stored], summary_from_row)
             .optional()
             .map_err(|_| LibraryCommandError::PersistenceFailed)
     }
@@ -280,11 +274,11 @@ impl LibraryShared {
             .db()?
             .read()
             .map_err(|_| LibraryCommandError::PersistenceFailed)?;
-        let row: Option<(String, String, String)> = c.query_row("SELECT r.path,f.relative_path,f.availability FROM tracks t JOIN library_files f ON f.id=t.file_id JOIN library_roots r ON r.id=f.root_id WHERE t.id=?1", params![numeric_id], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?))).optional().map_err(|_| LibraryCommandError::PersistenceFailed)?;
+        let row: Option<(String, String, Availability)> = c.query_row("SELECT r.path,f.relative_path,f.availability FROM tracks t JOIN library_files f ON f.id=t.file_id JOIN library_roots r ON r.id=f.root_id WHERE t.id=?1", params![numeric_id], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?))).optional().map_err(|_| LibraryCommandError::PersistenceFailed)?;
         let Some((root, relative, availability)) = row else {
             return Err(LibraryCommandError::TrackNotFound);
         };
-        if availability != "available" {
+        if availability != Availability::Available {
             return Err(LibraryCommandError::TrackUnavailable);
         }
         let root = dunce::canonicalize(root).map_err(|_| LibraryCommandError::TrackUnavailable)?;
@@ -515,8 +509,8 @@ fn idle() -> LibraryScanSnapshot {
 pub(crate) fn summary_from_row(row: &Row<'_>) -> rusqlite::Result<LibraryTrackSummary> {
     let id: i64 = row.get(0)?;
     let file: String = row.get(1)?;
-    let availability: String = row.get(2)?;
-    let inspection_status: String = row.get(3)?;
+    let availability: Availability = row.get(2)?;
+    let inspection_status: InspectionStatus = row.get(3)?;
     let title: Option<String> = row.get(4)?;
     let artist: Option<String> = row.get(5)?;
     let album: Option<String> = row.get(6)?;
@@ -556,12 +550,9 @@ pub(crate) fn summary_from_row(row: &Row<'_>) -> rusqlite::Result<LibraryTrackSu
         file_format: file_format.filter(|v| !v.trim().is_empty()),
         bit_depth: bit_depth.map(|v| v as u32),
         bitrate_kbps: bitrate_kbps.map(|v| v as u64),
-        playable: availability == "available" && inspection_status == "indexed",
-        availability: if availability == "available" {
-            LibraryFileAvailability::Available
-        } else {
-            LibraryFileAvailability::Missing
-        },
+        playable: availability == Availability::Available
+            && inspection_status == InspectionStatus::Indexed,
+        availability,
     })
 }
 fn scanning(state: &Arc<Mutex<LibraryScanSnapshot>>) -> bool {
@@ -1473,7 +1464,7 @@ mod tests {
             )
             .expect("track");
             tx.execute(
-                "INSERT INTO track_source_metadata(track_id,source_revision,title,artist,album,album_artist,track_number,disc_number,tag_status,artwork_status,updated_at_ms) VALUES(?1,1,?2,'Artist',?3,'Artist',1,1,'loaded','missing',0)",
+                "INSERT INTO track_source_metadata(track_id,source_revision,title,artist,album,album_artist,track_number,disc_number,tag_status,artwork_status,updated_at_ms) VALUES(?1,1,?2,'Artist',?3,'Artist',1,1,'loaded','notPresent',0)",
                 params![id, format!("Track {id}"), format!("Album {id}")],
             )
             .expect("metadata");
@@ -1533,7 +1524,7 @@ mod tests {
             )
             .expect("dense track");
             tx.execute(
-                "INSERT INTO track_source_metadata(track_id,source_revision,title,artist,album,album_artist,track_number,disc_number,tag_status,artwork_status,updated_at_ms) VALUES(?1,1,'Dense track','Dense artist',?2,'Dense artist',1,1,'loaded','missing',0)",
+                "INSERT INTO track_source_metadata(track_id,source_revision,title,artist,album,album_artist,track_number,disc_number,tag_status,artwork_status,updated_at_ms) VALUES(?1,1,'Dense track','Dense artist',?2,'Dense artist',1,1,'loaded','notPresent',0)",
                 params![id, format!("Dense Album {}", id % 20)],
             )
             .expect("dense metadata");

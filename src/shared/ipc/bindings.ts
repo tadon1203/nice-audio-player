@@ -271,7 +271,7 @@ export type LyricsTimedLine = {
 	text: string,
 };
 
-export type PlaybackChannelConversion = "none" | "monoToStereo" | "stereoToMono";
+export type PlaybackChannelConversion = "none" | "monoToStereo" | "stereoToMono" | "downmix";
 
 /**  Structured playback command failure serialized as `{ "code": "<camelCase>" }`. */
 export type PlaybackCommandError = { code: "invalidArgument" } | { code: "playbackWorkerUnavailable" } | 

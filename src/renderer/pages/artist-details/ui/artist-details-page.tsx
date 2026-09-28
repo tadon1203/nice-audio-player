@@ -8,6 +8,8 @@ import {
 import {
   AlbumTile,
   artistAlbumSortOptions,
+  artistNameLabel,
+  fromNameSegment,
   toggleSortDirection,
   useAlbumArtist,
   useArtistAlbums,
@@ -29,7 +31,8 @@ import {
 } from "@/renderer/widgets/media-details-layout";
 
 export function ArtistDetailsPage() {
-  const { artistName } = useParams({ from: "/library/album-artists/$artistName" });
+  const params = useParams({ from: "/library/album-artists/$artistName" });
+  const artistName = fromNameSegment(params.artistName);
   const key = useMemo<LibraryAlbumArtistKey>(() => ({ name: artistName }), [artistName]);
   const search = useSearch({ from: "/library" });
   const navigate = useNavigate({ from: "/library" });
@@ -66,7 +69,12 @@ export function ArtistDetailsPage() {
     >
       {({ summary: artist, items: albums }) => (
         <>
-          <MediaDetailsHeader kind="Artist" title={artistName} artwork={artist.artwork} round>
+          <MediaDetailsHeader
+            kind="Artist"
+            title={artistNameLabel(artistName)}
+            artwork={artist.artwork}
+            round
+          >
             <p className="mt-4 text-sm tabular-nums text-muted-foreground">
               {formatCount(artist.albumCount, "album")} · {formatCount(artist.trackCount, "track")}
             </p>

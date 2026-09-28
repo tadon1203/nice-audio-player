@@ -12,4 +12,5 @@ pub(crate) mod runtime;
 mod scan_tests;
 pub(crate) mod scanner;
 pub mod service;
+pub mod status;
 pub(crate) mod watcher;

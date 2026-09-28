@@ -17,7 +17,7 @@ type SignalFacts = {
   sourceLabel: string;
   resamplingActive: boolean;
   outputSampleRate: number | null;
-  channelConversion: "none" | "monoToStereo" | "stereoToMono" | null;
+  channelConversion: "none" | "monoToStereo" | "stereoToMono" | "downmix" | null;
   outputName: string | null;
 };
 
@@ -29,6 +29,7 @@ export function describeSignalPath(
   if (facts.resamplingActive) steps.push(`${formatKilohertz(facts.outputSampleRate)} kHz`);
   if (facts.channelConversion === "monoToStereo") steps.push("mono to stereo");
   if (facts.channelConversion === "stereoToMono") steps.push("stereo to mono");
+  if (facts.channelConversion === "downmix") steps.push("surround downmix");
   return {
     source: facts.sourceLabel,
     processing: steps.length > 0 ? steps.join(", ") : null,

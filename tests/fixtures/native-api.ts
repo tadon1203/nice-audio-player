@@ -27,6 +27,11 @@ type NativeTestState = {
   /** Makes `getPlaybackWaveform` return a waveform and emits `waveformReady` for the loaded file. */
   publishWaveform: () => void;
   setScanState: (state: LibraryScanState) => void;
+  /**
+   * Replaces commands of the mock (run it with `page.evaluate`); every command the app can call
+   * already has a default, so a test only names the ones it wants to behave differently.
+   */
+  overrideApi: (overrides: Partial<TNativeAPI>) => void;
   startPlaybackTicks: () => void;
   stopPlaybackTicks: () => void;
 };
@@ -47,474 +52,480 @@ declare global {
 }
 
 export async function installNativeApi(page: Page, options: InstallNativeApiOptions = {}) {
-  await page.addInitScript((options) => {
-    const root: LibraryRoot = {
-      id: "root-1",
-      path: "C:/Music",
-      enabled: true,
-      scanGeneration: 0,
-      lastSuccessfulScanAtMs: null,
-    };
-    let roots = [root];
-    const lyricsByTrack = new Map<string, LyricsResolution | { fail: string }>();
-    const accentByHash = new Map<string, string | null>();
-    const listeners = new Set<(event: AppEvent) => void>();
-    const requestCounts: Record<string, number> = {};
-    const recordRequest = (kind: string) => {
-      requestCounts[kind] = (requestCounts[kind] ?? 0) + 1;
-    };
+  await page.addInitScript(createNativeMock, options);
+}
 
-    const tracks: LibraryTrackSummary[] = Array.from({ length: 140 }, (_, index) => {
-      const missing = index === 4;
-      return {
-        id: missing ? "track-missing" : `track-${index + 1}`,
-        title:
-          index === 0
-            ? "Test track"
-            : missing
-              ? "Missing track"
-              : `Track ${String(index + 1).padStart(3, "0")}`,
-        artist: "Test artist",
-        album: "Test album",
-        albumArtist: "Test artist",
-        artwork: null,
-        durationMs: 120_000 + index * 1_000,
-        fileFormat: "FLAC",
-        bitDepth: 24,
-        bitrateKbps: null,
-        availability: missing ? "missing" : "available",
-        playable: !missing,
-      };
-    });
-    const albumSummary = {
-      key: { title: "Test album", albumArtist: "Test artist" },
-      artwork: null,
-      year: 2020,
-    } as const;
-    const secondaryAlbum = {
-      key: { title: "Second album", albumArtist: "Test artist" },
-      artwork: null,
-      year: 2024,
-    } as const;
-    const artist: LibraryAlbumArtistSummary = {
-      key: { name: "Test artist" },
-      artwork: null,
-      albumCount: 2,
-      trackCount: tracks.length,
-    };
-    const albumDetails: LibraryAlbumDetails = {
-      summary: albumSummary,
-      date: "2020",
-      trackCount: 3,
-      durationMs: 421_000,
-      firstPlayableTrackId: tracks[0]?.id ?? null,
-    };
-    const albumTracks: LibraryAlbumTrackPage = {
-      items: [tracks[0]!, tracks[1]!, tracks[4]!].map((track, index) => ({
-        id: track.id,
-        title: track.title,
-        artist: track.artist,
-        trackNumber: index + 1,
-        discNumber: null,
-        fileFormat: "FLAC",
-        bitDepth: 24,
-        sampleRate: 96_000,
-        durationMs: track.durationMs,
-        availability: track.availability,
-        playable: track.playable,
-      })),
-      totalCount: 3,
-      nextCursor: null,
-    };
+/**
+ * The whole mock backend. It runs in the page, so it only uses what it defines itself (imports
+ * above are types). `api` is typed `TNativeAPI`: a command added to the app without a default
+ * here fails the typecheck.
+ */
+function createNativeMock(options: InstallNativeApiOptions) {
+  const root: LibraryRoot = {
+    id: "root-1",
+    path: "C:/Music",
+    enabled: true,
+    scanGeneration: 0,
+    lastSuccessfulScanAtMs: null,
+  };
+  let roots = [root];
+  const lyricsByTrack = new Map<string, LyricsResolution | { fail: string }>();
+  const accentByHash = new Map<string, string | null>();
+  const listeners = new Set<(event: AppEvent) => void>();
+  const requestCounts: Record<string, number> = {};
+  const recordRequest = (kind: string) => {
+    requestCounts[kind] = (requestCounts[kind] ?? 0) + 1;
+  };
 
-    const fileFor = (track: LibraryTrackSummary) => ({
-      path: `C:/Music/${track.id}.flac`,
-      fileName: `${track.title}.flac`,
-      extension: "flac",
-    });
-    const outputDevices = [
-      { id: "speakers", name: "Speakers", isDefault: true },
-      { id: "headphones", name: "Headphones", isDefault: false },
-    ];
-    let outputSelection: AudioOutputSelection = { kind: "systemDefault" };
-    const outputDeviceFor = (selection: AudioOutputSelection) => {
-      const device =
-        selection.kind === "device"
-          ? outputDevices.find((item) => item.id === selection.deviceId)
-          : outputDevices.find((item) => item.isDefault);
-      return { id: device?.id ?? "default", name: device?.name ?? "System default" };
+  const tracks: LibraryTrackSummary[] = Array.from({ length: 140 }, (_, index) => {
+    const missing = index === 4;
+    return {
+      id: missing ? "track-missing" : `track-${index + 1}`,
+      title:
+        index === 0
+          ? "Test track"
+          : missing
+            ? "Missing track"
+            : `Track ${String(index + 1).padStart(3, "0")}`,
+      artist: "Test artist",
+      album: "Test album",
+      albumArtist: "Test artist",
+      artwork: null,
+      durationMs: 120_000 + index * 1_000,
+      fileFormat: "FLAC",
+      bitDepth: 24,
+      bitrateKbps: null,
+      availability: missing ? "missing" : "available",
+      playable: !missing,
     };
-    let waveformReady = false;
-    let playbackRevision = 50;
-    let queueRevision = 1;
-    let currentTrack: LibraryTrackSummary | null = null;
-    let currentSequence: LibraryTrackSummary[] = [];
-    let mock = {
-      status: "stopped" as "stopped" | "playing" | "paused",
-      item: null as PlaybackItem | null,
-      positionMs: 0,
-      durationMs: null as number | null,
-      volume: 0.72,
-      muted: false,
-      canGoPrevious: false,
-      canGoNext: false,
-    };
-    const snapshotOf = (): PlaybackSnapshot => {
-      const base = {
-        revision: playbackRevision,
-        volume: mock.volume,
-        muted: mock.muted,
-        outputSelection,
-        canGoPrevious: mock.canGoPrevious,
-        canGoNext: mock.canGoNext,
-      };
-      if (mock.status === "stopped" || mock.item === null) {
-        return { status: "stopped", base, item: mock.item };
-      }
-      return {
-        status: mock.status,
-        base,
-        session: {
-          item: mock.item,
-          playbackId: `playback-${mock.item.trackId}`,
-          positionMs: mock.positionMs,
-          durationMs: mock.durationMs,
-          outputDevice: outputDeviceFor(outputSelection),
-          channelConversion: "none",
-          sourceSampleRate: 44_100,
-          outputSampleRate: 48_000,
-          resamplingActive: true,
-        },
-      };
-    };
-    let playback: PlaybackSnapshot = snapshotOf();
-    let queue: PlaybackQueueSnapshot = {
-      revision: queueRevision,
-      current: null,
-      upcoming: [],
-      repeatMode: "off",
-      shuffleEnabled: false,
-    };
-    const emit = (event: AppEvent) => listeners.forEach((listener) => listener(event));
-    const publishPlayback = () => emit({ event: "playbackStateChanged", payload: playback });
-    /** Applies a change to the mock player and publishes it as a new revision. */
-    const commit = (change: Partial<typeof mock>) => {
-      playbackRevision += 1;
-      mock = { ...mock, ...change };
-      playback = snapshotOf();
-      publishPlayback();
-      return playback;
-    };
-    let playbackTicker: ReturnType<typeof setInterval> | null = null;
-    const startPlaybackTicks = () => {
-      if (playbackTicker !== null) return;
-      playbackTicker = setInterval(() => {
-        if (mock.status !== "playing") return;
-        commit({
-          positionMs: Math.min(mock.positionMs + 250, mock.durationMs ?? mock.positionMs + 250),
-        });
-      }, 10);
-    };
-    const stopPlaybackTicks = () => {
-      if (playbackTicker === null) return;
-      clearInterval(playbackTicker);
-      playbackTicker = null;
-    };
-    const queueItemFor = (track: LibraryTrackSummary): PlaybackQueueItem => ({
+  });
+  const albumSummary = {
+    key: { title: "Test album", albumArtist: "Test artist" },
+    artwork: null,
+    year: 2020,
+  } as const;
+  const secondaryAlbum = {
+    key: { title: "Second album", albumArtist: "Test artist" },
+    artwork: null,
+    year: 2024,
+  } as const;
+  const artist: LibraryAlbumArtistSummary = {
+    key: { name: "Test artist" },
+    artwork: null,
+    albumCount: 2,
+    trackCount: tracks.length,
+  };
+  const albumDetails: LibraryAlbumDetails = {
+    summary: albumSummary,
+    date: "2020",
+    trackCount: 3,
+    durationMs: 421_000,
+    firstPlayableTrackId: tracks[0]?.id ?? null,
+  };
+  const albumTracks: LibraryAlbumTrackPage = {
+    items: [tracks[0]!, tracks[1]!, tracks[4]!].map((track, index) => ({
       id: track.id,
-      trackId: track.id,
       title: track.title,
       artist: track.artist,
-      album: track.album,
-      artwork: track.artwork,
+      trackNumber: index + 1,
+      discNumber: null,
+      fileFormat: "FLAC",
+      bitDepth: 24,
+      sampleRate: 96_000,
       durationMs: track.durationMs,
+      availability: track.availability,
+      playable: track.playable,
+    })),
+    totalCount: 3,
+    nextCursor: null,
+  };
+
+  const fileFor = (track: LibraryTrackSummary) => ({
+    path: `C:/Music/${track.id}.flac`,
+    fileName: `${track.title}.flac`,
+    extension: "flac",
+  });
+  const outputDevices = [
+    { id: "speakers", name: "Speakers", isDefault: true },
+    { id: "headphones", name: "Headphones", isDefault: false },
+  ];
+  let outputSelection: AudioOutputSelection = { kind: "systemDefault" };
+  const outputDeviceFor = (selection: AudioOutputSelection) => {
+    const device =
+      selection.kind === "device"
+        ? outputDevices.find((item) => item.id === selection.deviceId)
+        : outputDevices.find((item) => item.isDefault);
+    return { id: device?.id ?? "default", name: device?.name ?? "System default" };
+  };
+  let waveformReady = false;
+  let playbackRevision = 50;
+  let queueRevision = 1;
+  let currentTrack: LibraryTrackSummary | null = null;
+  let currentSequence: LibraryTrackSummary[] = [];
+  let mock = {
+    status: "stopped" as "stopped" | "playing" | "paused",
+    item: null as PlaybackItem | null,
+    positionMs: 0,
+    durationMs: null as number | null,
+    volume: 0.72,
+    muted: false,
+    canGoPrevious: false,
+    canGoNext: false,
+  };
+  const snapshotOf = (): PlaybackSnapshot => {
+    const base = {
+      revision: playbackRevision,
+      volume: mock.volume,
+      muted: mock.muted,
+      outputSelection,
+      canGoPrevious: mock.canGoPrevious,
+      canGoNext: mock.canGoNext,
+    };
+    if (mock.status === "stopped" || mock.item === null) {
+      return { status: "stopped", base, item: mock.item };
+    }
+    return {
+      status: mock.status,
+      base,
+      session: {
+        item: mock.item,
+        playbackId: `playback-${mock.item.trackId}`,
+        positionMs: mock.positionMs,
+        durationMs: mock.durationMs,
+        outputDevice: outputDeviceFor(outputSelection),
+        channelConversion: "none",
+        sourceSampleRate: 44_100,
+        outputSampleRate: 48_000,
+        resamplingActive: true,
+      },
+    };
+  };
+  let playback: PlaybackSnapshot = snapshotOf();
+  let queue: PlaybackQueueSnapshot = {
+    revision: queueRevision,
+    current: null,
+    upcoming: [],
+    repeatMode: "off",
+    shuffleEnabled: false,
+  };
+  const emit = (event: AppEvent) => listeners.forEach((listener) => listener(event));
+  const publishPlayback = () => emit({ event: "playbackStateChanged", payload: playback });
+  /** Applies a change to the mock player and publishes it as a new revision. */
+  const commit = (change: Partial<typeof mock>) => {
+    playbackRevision += 1;
+    mock = { ...mock, ...change };
+    playback = snapshotOf();
+    publishPlayback();
+    return playback;
+  };
+  let playbackTicker: ReturnType<typeof setInterval> | null = null;
+  const startPlaybackTicks = () => {
+    if (playbackTicker !== null) return;
+    playbackTicker = setInterval(() => {
+      if (mock.status !== "playing") return;
+      commit({
+        positionMs: Math.min(mock.positionMs + 250, mock.durationMs ?? mock.positionMs + 250),
+      });
+    }, 10);
+  };
+  const stopPlaybackTicks = () => {
+    if (playbackTicker === null) return;
+    clearInterval(playbackTicker);
+    playbackTicker = null;
+  };
+  const queueItemFor = (track: LibraryTrackSummary): PlaybackQueueItem => ({
+    id: track.id,
+    trackId: track.id,
+    title: track.title,
+    artist: track.artist,
+    album: track.album,
+    artwork: track.artwork,
+    durationMs: track.durationMs,
+  });
+  const setTrack = (track: LibraryTrackSummary, sequence: LibraryTrackSummary[] = [track]) => {
+    currentTrack = track;
+    currentSequence = sequence.filter((item) => item.playable && item.availability === "available");
+    const index = Math.max(
+      0,
+      currentSequence.findIndex((item) => item.id === track.id),
+    );
+    const upcoming = currentSequence.slice(index + 1);
+    queueRevision += 1;
+    queue = {
+      revision: queueRevision,
+      current: queueItemFor(track),
+      upcoming: upcoming.map(queueItemFor),
+      repeatMode: queue.repeatMode,
+      shuffleEnabled: queue.shuffleEnabled,
+    };
+    emit({ event: "playbackQueueStateChanged", payload: queue });
+    const { id: queueItemId, ...identity } = queueItemFor(track);
+    return commit({
+      status: "playing",
+      item: {
+        ...identity,
+        queueItemId,
+        file: fileFor(track),
+        albumArtist: track.albumArtist,
+      },
+      positionMs: 12_000,
+      durationMs: track.durationMs,
+      canGoPrevious: index > 0,
+      canGoNext: index < currentSequence.length - 1,
     });
-    const setTrack = (track: LibraryTrackSummary, sequence: LibraryTrackSummary[] = [track]) => {
-      currentTrack = track;
-      currentSequence = sequence.filter(
-        (item) => item.playable && item.availability === "available",
-      );
-      const index = Math.max(
-        0,
-        currentSequence.findIndex((item) => item.id === track.id),
-      );
-      const upcoming = currentSequence.slice(index + 1);
+  };
+  let settings: Settings = { appearance: { artworkBackdrop: true } };
+  const scanRoot = (): LibraryRoot | null => roots.find((item) => item.enabled) ?? null;
+  let scan: LibraryScanSnapshot = {
+    state: "idle",
+    currentRoot: null,
+    discoveredCount: 0,
+    inspectedCount: 0,
+    indexedCount: 0,
+    failedCount: 0,
+    failureCode: null,
+  };
+  const setScanState = (state: LibraryScanState) => {
+    scan = {
+      state,
+      currentRoot: state === "running" ? scanRoot() : null,
+      discoveredCount: state === "idle" ? 0 : 20,
+      inspectedCount: state === "idle" ? 0 : state === "running" ? 8 : 20,
+      indexedCount: state === "idle" ? 0 : state === "running" ? 6 : 18,
+      failedCount: state === "idle" ? 0 : state === "failed" ? 2 : 0,
+      failureCode: state === "failed" ? "rootTraversalFailed" : null,
+    };
+    emit({ event: "libraryScanStateChanged", payload: scan });
+  };
+
+  const api: TNativeAPI = {
+    getPlaybackState: async () => {
+      if (options.failPlaybackInitialization) throw { code: "noOutputDevice" };
+      return playback;
+    },
+    getPlaybackQueue: async () => queue,
+    pausePlayback: async () =>
+      mock.status === "playing" ? commit({ status: "paused" }) : playback,
+    resumePlayback: async () =>
+      mock.status === "paused" ? commit({ status: "playing" }) : playback,
+    previousPlayback: async () => {
+      const index = currentSequence.findIndex((track) => track.id === currentTrack?.id);
+      const previous = index > 0 ? currentSequence[index - 1] : undefined;
+      return previous ? setTrack(previous, currentSequence) : playback;
+    },
+    nextPlayback: async () => {
+      const index = currentSequence.findIndex((track) => track.id === currentTrack?.id);
+      const next = index >= 0 ? currentSequence[index + 1] : undefined;
+      return next ? setTrack(next, currentSequence) : playback;
+    },
+    seekPlayback: async (positionMs) =>
+      mock.status === "stopped" ? playback : commit({ positionMs }),
+    setPlaybackVolume: async (volume) => commit({ volume }),
+    setPlaybackMuted: async (muted) => commit({ muted }),
+    getTrackLyrics: async (trackId) => {
+      recordRequest("lyrics");
+      const configured = lyricsByTrack.get(trackId);
+      if (configured !== undefined && "fail" in configured) throw { code: configured.fail };
+      return configured ?? { status: "notFound", trackId };
+    },
+    getArtworkAccent: async (contentHash) => {
+      recordRequest("accent");
+      return accentByHash.get(contentHash) ?? null;
+    },
+    selectLibraryDirectory: async () => "C:/More Music",
+    getLibraryStatus: async () =>
+      options.libraryUnavailable
+        ? { status: "unavailable" as const, reason: "databaseCorrupt" as const }
+        : { status: "ready" as const },
+    listLibraryRoots: async () => roots,
+    registerLibraryRoot: async (path) => {
+      const registered: LibraryRoot = {
+        id: `root-${roots.length + 1}`,
+        path,
+        enabled: true,
+        scanGeneration: 0,
+        lastSuccessfulScanAtMs: null,
+      };
+      roots = [...roots, registered];
+      return registered;
+    },
+    setLibraryRootEnabled: async (id, enabled) => {
+      roots = roots.map((item) => (item.id === id ? { ...item, enabled } : item));
+      return roots.find((item) => item.id === id)!;
+    },
+    removeLibraryRoot: async (id) => {
+      roots = roots.filter((item) => item.id !== id);
+      return null;
+    },
+    listAudioOutputDevices: async () => outputDevices,
+    setPlaybackRepeatMode: async (mode) => {
+      queueRevision += 1;
+      queue = { ...queue, revision: queueRevision, repeatMode: mode };
+      emit({ event: "playbackQueueStateChanged", payload: queue });
+      return queue;
+    },
+    setPlaybackShuffle: async (enabled) => {
+      queueRevision += 1;
+      queue = { ...queue, revision: queueRevision, shuffleEnabled: enabled };
+      emit({ event: "playbackQueueStateChanged", payload: queue });
+      return queue;
+    },
+    removeQueueItem: async (id) => {
       queueRevision += 1;
       queue = {
+        ...queue,
         revision: queueRevision,
-        current: queueItemFor(track),
-        upcoming: upcoming.map(queueItemFor),
-        repeatMode: queue.repeatMode,
-        shuffleEnabled: queue.shuffleEnabled,
+        upcoming: queue.upcoming.filter((item) => item.id !== id),
       };
       emit({ event: "playbackQueueStateChanged", payload: queue });
-      const { id: queueItemId, ...identity } = queueItemFor(track);
-      return commit({
-        status: "playing",
-        item: {
-          ...identity,
-          queueItemId,
-          file: fileFor(track),
-          albumArtist: track.albumArtist,
-        },
-        positionMs: 12_000,
-        durationMs: track.durationMs,
-        canGoPrevious: index > 0,
-        canGoNext: index < currentSequence.length - 1,
-      });
-    };
-    let settings: Settings = { appearance: { artworkBackdrop: true } };
-    const scanRoot = (): LibraryRoot | null => roots.find((item) => item.enabled) ?? null;
-    let scan: LibraryScanSnapshot = {
-      state: "idle",
-      currentRoot: null,
-      discoveredCount: 0,
-      inspectedCount: 0,
-      indexedCount: 0,
-      failedCount: 0,
-      failureCode: null,
-    };
-    const setScanState = (state: LibraryScanState) => {
-      scan = {
-        state,
-        currentRoot: state === "running" ? scanRoot() : null,
-        discoveredCount: state === "idle" ? 0 : 20,
-        inspectedCount: state === "idle" ? 0 : state === "running" ? 8 : 20,
-        indexedCount: state === "idle" ? 0 : state === "running" ? 6 : 18,
-        failedCount: state === "idle" ? 0 : state === "failed" ? 2 : 0,
-        failureCode: state === "failed" ? "rootTraversalFailed" : null,
+      return queue;
+    },
+    moveQueueItem: async (id, direction) => {
+      const index = queue.upcoming.findIndex((item) => item.id === id);
+      const target = direction === "earlier" ? index - 1 : index + 1;
+      if (index >= 0 && target >= 0 && target < queue.upcoming.length) {
+        const upcoming = [...queue.upcoming];
+        const [item] = upcoming.splice(index, 1);
+        upcoming.splice(target, 0, item!);
+        queueRevision += 1;
+        queue = { ...queue, revision: queueRevision, upcoming };
+        emit({ event: "playbackQueueStateChanged", payload: queue });
+      }
+      return queue;
+    },
+    clearQueue: async () => {
+      queueRevision += 1;
+      queue = { ...queue, revision: queueRevision, upcoming: [] };
+      emit({ event: "playbackQueueStateChanged", payload: queue });
+      return queue;
+    },
+    setAudioOutputSelection: async (selection) => {
+      recordRequest("outputSelection");
+      outputSelection = selection;
+      return commit({});
+    },
+    getPlaybackWaveform: async (path) => {
+      recordRequest("waveform");
+      if (!waveformReady || mock.item?.file.path !== path) return null;
+      const peaks = Array.from({ length: 400 }, (_, index) =>
+        Math.round(40 + 200 * Math.abs(Math.sin(index / 9))),
+      );
+      return { path, peaks, rms: peaks.map((peak) => Math.round(peak * 0.6)) };
+    },
+    getLibraryScanState: async () => scan,
+    startLibraryScan: async () => {
+      setScanState("running");
+      return null;
+    },
+    cancelLibraryScan: async () => {
+      setScanState("cancelled");
+      return null;
+    },
+    listLibraryTracks: async (cursor, search) => {
+      recordRequest("tracks");
+      const query = search?.toLocaleLowerCase() ?? "";
+      const filtered = roots.some((item) => item.enabled)
+        ? tracks.filter((track) =>
+            [track.title, track.artist, track.album, track.albumArtist]
+              .filter(Boolean)
+              .some((value) => value!.toLocaleLowerCase().includes(query)),
+          )
+        : [];
+      const start = cursor === null ? 0 : Number(cursor);
+      const items = filtered.slice(start, start + 40);
+      const next = start + items.length;
+      return {
+        items,
+        totalCount: filtered.length,
+        nextCursor: next < filtered.length ? String(next) : null,
       };
-      emit({ event: "libraryScanStateChanged", payload: scan });
-    };
-
-    const api: TNativeAPI = {
-      getPlaybackState: async () => {
-        if (options.failPlaybackInitialization) throw { code: "noOutputDevice" };
-        return playback;
-      },
-      getPlaybackQueue: async () => queue,
-      pausePlayback: async () =>
-        mock.status === "playing" ? commit({ status: "paused" }) : playback,
-      resumePlayback: async () =>
-        mock.status === "paused" ? commit({ status: "playing" }) : playback,
-      previousPlayback: async () => {
-        const index = currentSequence.findIndex((track) => track.id === currentTrack?.id);
-        const previous = index > 0 ? currentSequence[index - 1] : undefined;
-        return previous ? setTrack(previous, currentSequence) : playback;
-      },
-      nextPlayback: async () => {
-        const index = currentSequence.findIndex((track) => track.id === currentTrack?.id);
-        const next = index >= 0 ? currentSequence[index + 1] : undefined;
-        return next ? setTrack(next, currentSequence) : playback;
-      },
-      seekPlayback: async (positionMs) =>
-        mock.status === "stopped" ? playback : commit({ positionMs }),
-      setPlaybackVolume: async (volume) => commit({ volume }),
-      setPlaybackMuted: async (muted) => commit({ muted }),
-      getTrackLyrics: async (trackId) => {
-        recordRequest("lyrics");
-        const configured = lyricsByTrack.get(trackId);
-        if (configured !== undefined && "fail" in configured) throw { code: configured.fail };
-        return configured ?? { status: "notFound", trackId };
-      },
-      getArtworkAccent: async (contentHash) => {
-        recordRequest("accent");
-        return accentByHash.get(contentHash) ?? null;
-      },
-      selectLibraryDirectory: async () => "C:/More Music",
-      getLibraryStatus: async () =>
-        options.libraryUnavailable
-          ? { status: "unavailable" as const, reason: "databaseCorrupt" as const }
-          : { status: "ready" as const },
-      listLibraryRoots: async () => roots,
-      registerLibraryRoot: async (path) => {
-        const registered: LibraryRoot = {
-          id: `root-${roots.length + 1}`,
-          path,
-          enabled: true,
-          scanGeneration: 0,
-          lastSuccessfulScanAtMs: null,
-        };
-        roots = [...roots, registered];
-        return registered;
-      },
-      setLibraryRootEnabled: async (id, enabled) => {
-        roots = roots.map((item) => (item.id === id ? { ...item, enabled } : item));
-        return roots.find((item) => item.id === id)!;
-      },
-      removeLibraryRoot: async (id) => {
-        roots = roots.filter((item) => item.id !== id);
-        return null;
-      },
-      listAudioOutputDevices: async () => outputDevices,
-      setPlaybackRepeatMode: async (mode) => {
-        queueRevision += 1;
-        queue = { ...queue, revision: queueRevision, repeatMode: mode };
-        emit({ event: "playbackQueueStateChanged", payload: queue });
-        return queue;
-      },
-      setPlaybackShuffle: async (enabled) => {
-        queueRevision += 1;
-        queue = { ...queue, revision: queueRevision, shuffleEnabled: enabled };
-        emit({ event: "playbackQueueStateChanged", payload: queue });
-        return queue;
-      },
-      removeQueueItem: async (id) => {
-        queueRevision += 1;
-        queue = {
-          ...queue,
-          revision: queueRevision,
-          upcoming: queue.upcoming.filter((item) => item.id !== id),
-        };
-        emit({ event: "playbackQueueStateChanged", payload: queue });
-        return queue;
-      },
-      moveQueueItem: async (id, direction) => {
-        const index = queue.upcoming.findIndex((item) => item.id === id);
-        const target = direction === "earlier" ? index - 1 : index + 1;
-        if (index >= 0 && target >= 0 && target < queue.upcoming.length) {
-          const upcoming = [...queue.upcoming];
-          const [item] = upcoming.splice(index, 1);
-          upcoming.splice(target, 0, item!);
-          queueRevision += 1;
-          queue = { ...queue, revision: queueRevision, upcoming };
-          emit({ event: "playbackQueueStateChanged", payload: queue });
-        }
-        return queue;
-      },
-      clearQueue: async () => {
-        queueRevision += 1;
-        queue = { ...queue, revision: queueRevision, upcoming: [] };
-        emit({ event: "playbackQueueStateChanged", payload: queue });
-        return queue;
-      },
-      setAudioOutputSelection: async (selection) => {
-        recordRequest("outputSelection");
-        outputSelection = selection;
-        return commit({});
-      },
-      getPlaybackWaveform: async (path) => {
-        recordRequest("waveform");
-        if (!waveformReady || mock.item?.file.path !== path) return null;
-        const peaks = Array.from({ length: 400 }, (_, index) =>
-          Math.round(40 + 200 * Math.abs(Math.sin(index / 9))),
-        );
-        return { path, peaks, rms: peaks.map((peak) => Math.round(peak * 0.6)) };
-      },
-      getLibraryScanState: async () => scan,
-      startLibraryScan: async () => {
-        setScanState("running");
-        return null;
-      },
-      cancelLibraryScan: async () => {
-        setScanState("cancelled");
-        return null;
-      },
-      listLibraryTracks: async (cursor, search) => {
-        recordRequest("tracks");
-        const query = search?.toLocaleLowerCase() ?? "";
-        const filtered = roots.some((item) => item.enabled)
-          ? tracks.filter((track) =>
-              [track.title, track.artist, track.album, track.albumArtist]
-                .filter(Boolean)
-                .some((value) => value!.toLocaleLowerCase().includes(query)),
-            )
+    },
+    listLibraryAlbums: async (_cursor, search) => {
+      recordRequest("albums");
+      const all = roots.some((item) => item.enabled) ? [albumSummary, secondaryAlbum] : [];
+      const query = search?.toLocaleLowerCase() ?? "";
+      const items = all.filter((album) =>
+        `${album.key.title} ${album.key.albumArtist}`.toLocaleLowerCase().includes(query),
+      );
+      return { items, totalCount: items.length, nextCursor: null };
+    },
+    listLibraryAlbumArtists: async (_cursor, search) => {
+      recordRequest("artists");
+      const query = search?.toLocaleLowerCase() ?? "";
+      const items =
+        roots.some((item) => item.enabled) && artist.key.name.toLocaleLowerCase().includes(query)
+          ? [artist]
           : [];
-        const start = cursor === null ? 0 : Number(cursor);
-        const items = filtered.slice(start, start + 40);
-        const next = start + items.length;
-        return {
-          items,
-          totalCount: filtered.length,
-          nextCursor: next < filtered.length ? String(next) : null,
-        };
-      },
-      listLibraryAlbums: async (_cursor, search) => {
-        recordRequest("albums");
-        const all = roots.some((item) => item.enabled) ? [albumSummary, secondaryAlbum] : [];
-        const query = search?.toLocaleLowerCase() ?? "";
-        const items = all.filter((album) =>
-          `${album.key.title} ${album.key.albumArtist}`.toLocaleLowerCase().includes(query),
-        );
-        return { items, totalCount: items.length, nextCursor: null };
-      },
-      listLibraryAlbumArtists: async (_cursor, search) => {
-        recordRequest("artists");
-        const query = search?.toLocaleLowerCase() ?? "";
-        const items =
-          roots.some((item) => item.enabled) && artist.key.name.toLocaleLowerCase().includes(query)
-            ? [artist]
-            : [];
-        return { items, totalCount: items.length, nextCursor: null };
-      },
-      getLibraryAlbumArtist: async (_key) => {
-        if (options.failArtistDetails) throw { code: "persistenceFailed" };
-        return artist;
-      },
-      listLibraryArtistAlbums: async (key) => {
-        recordRequest("artistAlbums");
-        if (options.failArtistAlbums) throw { code: "persistenceFailed" };
-        const items = key.name === artist.key.name ? [albumSummary, secondaryAlbum] : [];
-        return { items, totalCount: items.length, nextCursor: null };
-      },
-      getLibraryAlbumDetails: async (key) => {
-        if (options.failAlbumDetails) throw { code: "persistenceFailed" };
-        return key.title === albumSummary.key.title
-          ? albumDetails
-          : { ...albumDetails, summary: secondaryAlbum };
-      },
-      listLibraryAlbumTracks: async (_key, _cursor) => {
-        if (options.failAlbumTracks) throw { code: "persistenceFailed" };
-        return albumTracks;
-      },
-      getLibraryTrack: async (id) => tracks.find((track) => track.id === id) ?? null,
-      startPlayback: async (context, startTrackId) => {
-        const sequence =
-          context.kind === "album"
-            ? albumTracks.items
-                .map((item) => tracks.find((track) => track.id === item.id))
-                .filter((track): track is LibraryTrackSummary => Boolean(track?.playable))
-            : tracks.filter((track) => track.playable);
-        const start =
-          startTrackId === null ? sequence[0] : sequence.find((track) => track.id === startTrackId);
-        if (start === undefined) throw { code: "trackNotMember" };
-        return setTrack(start, sequence);
-      },
-      getSettings: async () => settings,
-      updateSettings: async (patch) => {
-        settings = {
-          ...settings,
-          appearance: {
-            ...settings.appearance,
-            ...(patch.appearance?.artworkBackdrop == null
-              ? {}
-              : { artworkBackdrop: patch.appearance.artworkBackdrop }),
-          },
-        };
-        emit({ event: "settingsChanged", payload: settings });
-        return settings;
-      },
-      onEvent: (listener) => {
-        listeners.add(listener);
-        return () => listeners.delete(listener);
-      },
-    };
+      return { items, totalCount: items.length, nextCursor: null };
+    },
+    getLibraryAlbumArtist: async (_key) => {
+      if (options.failArtistDetails) throw { code: "persistenceFailed" };
+      return artist;
+    },
+    listLibraryArtistAlbums: async (key) => {
+      recordRequest("artistAlbums");
+      if (options.failArtistAlbums) throw { code: "persistenceFailed" };
+      const items = key.name === artist.key.name ? [albumSummary, secondaryAlbum] : [];
+      return { items, totalCount: items.length, nextCursor: null };
+    },
+    getLibraryAlbumDetails: async (key) => {
+      if (options.failAlbumDetails) throw { code: "persistenceFailed" };
+      return key.title === albumSummary.key.title
+        ? albumDetails
+        : { ...albumDetails, summary: secondaryAlbum };
+    },
+    listLibraryAlbumTracks: async (_key, _cursor) => {
+      if (options.failAlbumTracks) throw { code: "persistenceFailed" };
+      return albumTracks;
+    },
+    getLibraryTrack: async (id) => tracks.find((track) => track.id === id) ?? null,
+    startPlayback: async (context, startTrackId) => {
+      const sequence =
+        context.kind === "album"
+          ? albumTracks.items
+              .map((item) => tracks.find((track) => track.id === item.id))
+              .filter((track): track is LibraryTrackSummary => Boolean(track?.playable))
+          : tracks.filter((track) => track.playable);
+      const start =
+        startTrackId === null ? sequence[0] : sequence.find((track) => track.id === startTrackId);
+      if (start === undefined) throw { code: "trackNotMember" };
+      return setTrack(start, sequence);
+    },
+    getSettings: async () => settings,
+    updateSettings: async (patch) => {
+      settings = {
+        ...settings,
+        appearance: {
+          ...settings.appearance,
+          ...(patch.appearance?.artworkBackdrop == null
+            ? {}
+            : { artworkBackdrop: patch.appearance.artworkBackdrop }),
+        },
+      };
+      emit({ event: "settingsChanged", payload: settings });
+      return settings;
+    },
+    onEvent: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
 
-    const testState: NativeTestState = {
-      getRequestCount: (kind) => requestCounts[kind] ?? 0,
-      setLyrics: (trackId, resolution) => void lyricsByTrack.set(trackId, resolution),
-      setArtworkAccent: (contentHash, color) => void accentByHash.set(contentHash, color),
-      publishWaveform: () => {
-        waveformReady = true;
-        if (mock.item !== null) {
-          emit({ event: "waveformReady", payload: { path: mock.item.file.path } });
-        }
-      },
-      setScanState,
-      startPlaybackTicks,
-      stopPlaybackTicks,
-    };
-    Object.defineProperty(window, "__niceAudioPlayerTest", { value: testState });
-    Object.defineProperty(window, "__TAURI_TEST_API__", { value: api });
-  }, options);
+  const testState: NativeTestState = {
+    getRequestCount: (kind) => requestCounts[kind] ?? 0,
+    setLyrics: (trackId, resolution) => void lyricsByTrack.set(trackId, resolution),
+    setArtworkAccent: (contentHash, color) => void accentByHash.set(contentHash, color),
+    publishWaveform: () => {
+      waveformReady = true;
+      if (mock.item !== null) {
+        emit({ event: "waveformReady", payload: { path: mock.item.file.path } });
+      }
+    },
+    setScanState,
+    overrideApi: (overrides) => void Object.assign(api, overrides),
+    startPlaybackTicks,
+    stopPlaybackTicks,
+  };
+  Object.defineProperty(window, "__niceAudioPlayerTest", { value: testState });
+  Object.defineProperty(window, "__TAURI_TEST_API__", { value: api });
 }

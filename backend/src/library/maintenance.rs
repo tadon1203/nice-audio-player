@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-use super::{artwork, database::Database};
+use super::{artwork, database::Database, status::ArtworkStatus};
 use rusqlite::params;
 use std::{collections::HashSet, fs, path::Path};
 
@@ -51,7 +51,7 @@ pub(crate) fn collect_source_artwork(database: &Database) -> Result<Vec<i64>, ()
             for id in ids.flatten() {
                 retry_roots.insert(id);
             }
-            tx.execute("UPDATE track_source_metadata SET artwork_id=NULL,artwork_status='storeFailed' WHERE artwork_id=?1", params![asset_id]).map_err(|_| ())?;
+            tx.execute("UPDATE track_source_metadata SET artwork_id=NULL,artwork_status=?2 WHERE artwork_id=?1", params![asset_id, ArtworkStatus::StoreFailed]).map_err(|_| ())?;
         }
         tx.execute("DELETE FROM artwork_assets WHERE id NOT IN (SELECT DISTINCT artwork_id FROM track_source_metadata WHERE artwork_id IS NOT NULL)", []).map_err(|_| ())?;
         let mut statement = tx

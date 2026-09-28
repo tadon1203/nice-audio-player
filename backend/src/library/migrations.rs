@@ -1,9 +1,6 @@
 use rusqlite::Connection;
-pub const CURRENT_SCHEMA_VERSION: i32 = 2;
-const MIGRATIONS: [&str; 2] = [
-    include_str!("migrations/0001_library.sql"),
-    include_str!("migrations/0002_artwork_accent.sql"),
-];
+pub const CURRENT_SCHEMA_VERSION: i32 = 1;
+const MIGRATIONS: [&str; 1] = [include_str!("migrations/0001_library.sql")];
 #[derive(Debug)]
 pub enum MigrationError {
     SchemaTooNew,

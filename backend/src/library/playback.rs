@@ -5,6 +5,7 @@ use super::catalog::{artwork_ref, track_order_sql, track_search_predicate};
 use super::models::*;
 use super::policy::effective_track_title;
 use super::service::{parse_id, LibraryShared};
+use super::status::{ArtworkStatus, Availability, InspectionStatus};
 use crate::media::validation::{describe_audio_file, validate_audio_file, ValidatedAudioFile};
 use rusqlite::{params, Row};
 use std::path::Path;
@@ -62,15 +63,15 @@ struct PlaybackRow {
 pub(super) const PLAYBACK_COLUMNS: &str = "t.id, r.path, f.relative_path, f.file_name, f.availability, f.inspection_status, m.title, m.artist, m.album, m.album_artist, m.duration_ms, a.content_hash, a.mime_type, a.relative_path";
 
 fn playback_row(row: &Row<'_>) -> rusqlite::Result<PlaybackRow> {
-    let availability: String = row.get(4)?;
-    let inspection: String = row.get(5)?;
+    let availability: Availability = row.get(4)?;
+    let inspection: InspectionStatus = row.get(5)?;
     Ok(PlaybackRow {
         track_id: row.get(0)?,
         root_path: row.get(1)?,
         relative_path: row.get(2)?,
         file_name: row.get(3)?,
-        available: availability == "available",
-        indexed: inspection == "indexed",
+        available: availability == Availability::Available,
+        indexed: inspection == InspectionStatus::Indexed,
         title: row.get(6)?,
         artist: row.get(7)?,
         album: row.get(8)?,
@@ -173,12 +174,13 @@ impl LibraryShared {
             JOIN library_files f ON f.id=t.file_id
             JOIN library_roots r ON r.id=f.root_id
             LEFT JOIN track_source_metadata m ON m.track_id=t.id AND m.source_revision=f.source_revision
-            LEFT JOIN artwork_assets a ON a.id=m.artwork_id AND m.artwork_status='stored'
+            LEFT JOIN artwork_assets a ON a.id=m.artwork_id AND m.artwork_status='{stored}'
             WHERE mem.album_title=?1 AND mem.effective_artist=?2
             ORDER BY CASE WHEN mem.disc_number IS NULL THEN 1 ELSE 0 END, mem.disc_number,
                      CASE WHEN mem.track_number IS NULL THEN 1 ELSE 0 END, mem.track_number, mem.id"#,
             members = super::catalog::CATALOG_MEMBER_PROJECTION,
             columns = PLAYBACK_COLUMNS,
+            stored = ArtworkStatus::Stored,
         );
         let rows = collect_rows(&connection, &sql, params![key.title, key.album_artist])?;
         if rows.is_empty() {
@@ -209,10 +211,11 @@ impl LibraryShared {
             JOIN library_files f ON f.id=t.file_id
             JOIN library_roots r ON r.id=f.root_id
             LEFT JOIN track_source_metadata m ON m.track_id=t.id AND m.source_revision=f.source_revision
-            LEFT JOIN artwork_assets a ON a.id=m.artwork_id AND m.artwork_status='stored'
+            LEFT JOIN artwork_assets a ON a.id=m.artwork_id AND m.artwork_status='{stored}'
             WHERE {predicate}
             ORDER BY {order},t.id ASC"#,
             columns = PLAYBACK_COLUMNS,
+            stored = ArtworkStatus::Stored,
             predicate = track_search_predicate(),
             order = track_order_sql(sort_key, sort_direction),
         );

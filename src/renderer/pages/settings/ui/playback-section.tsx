@@ -6,7 +6,7 @@ import {
   usePlaybackSignalPath,
   usePlaybackTransport,
   useAudioOutputDevices,
-} from "@/renderer/features/playback-control";
+} from "@/renderer/entities/playback";
 import { useArtworkBackdrop } from "@/renderer/shared/lib/artwork-backdrop";
 import { SectionTitle } from "@/renderer/shared/ui/headings";
 import {

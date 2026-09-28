@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { applyLibraryEvent } from "@/renderer/entities/library";
 import { applyLyricsEvent } from "@/renderer/entities/lyrics";
 import { loadSettings, mirrorSettingsEvent } from "@/renderer/entities/settings";
-import { applyWaveformEvent, playbackController } from "@/renderer/features/playback-control";
+import { applyWaveformEvent, playbackController } from "@/renderer/entities/playback";
 import { getNativeApiOrNull } from "@/renderer/shared/lib/native";
 import { queryClient } from "./query-client";
 

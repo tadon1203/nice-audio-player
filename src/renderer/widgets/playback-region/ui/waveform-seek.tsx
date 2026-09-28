@@ -9,7 +9,7 @@ import {
   nextSeekPosition,
   positionFromOffset,
   resampleBars,
-} from "./model/waveform-model";
+} from "../model/waveform-model";
 
 const BASELINE = 2;
 

@@ -26,13 +26,13 @@ pub struct LibraryRoot {
     pub scan_generation: u64,
     pub last_successful_scan_at_ms: Option<u64>,
 }
-#[derive(Debug, Clone, Serialize, specta::Type)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub enum LibraryFileAvailability {
     Available,
     Missing,
 }
-#[derive(Debug, Clone, Serialize, specta::Type)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub enum LibraryInspectionStatus {
     Pending,

@@ -1,4 +1,4 @@
-import { usePlaybackActions, useTrackPlaybackState } from "@/renderer/features/playback-control";
+import { usePlaybackActions, useTrackPlaybackState } from "@/renderer/entities/playback";
 import { TrackTable } from "@/renderer/widgets/track-table";
 import { useLibraryCatalog } from "../model/use-library-catalog";
 import { useLibraryView } from "../model/use-library-view";

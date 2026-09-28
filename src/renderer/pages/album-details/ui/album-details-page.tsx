@@ -1,8 +1,15 @@
 import { useMemo } from "react";
 import { useElementScrollRestoration, useLocation, useParams } from "@tanstack/react-router";
 import { Play } from "lucide-react";
-import { useAlbumDetails, useAlbumTracks } from "@/renderer/entities/library";
-import { usePlaybackActions, useTrackPlaybackState } from "@/renderer/features/playback-control";
+import {
+  albumTitleLabel,
+  artistNameLabel,
+  fromNameSegment,
+  toNameSegment,
+  useAlbumDetails,
+  useAlbumTracks,
+} from "@/renderer/entities/library";
+import { usePlaybackActions, useTrackPlaybackState } from "@/renderer/entities/playback";
 import { formatCount, formatDuration } from "@/renderer/shared/lib/format";
 import { cn } from "@/renderer/shared/lib/utils";
 import { BackLink } from "@/renderer/shared/ui/back-link";
@@ -19,9 +26,9 @@ import { TrackTable } from "@/renderer/widgets/track-table";
 import type { TrackTableRow } from "@/renderer/widgets/track-table";
 
 export function AlbumDetailsPage() {
-  const { albumArtist, albumTitle } = useParams({
-    from: "/library/albums/$albumArtist/$albumTitle",
-  });
+  const params = useParams({ from: "/library/albums/$albumArtist/$albumTitle" });
+  const albumArtist = fromNameSegment(params.albumArtist);
+  const albumTitle = fromNameSegment(params.albumTitle);
   const key = useMemo(() => ({ albumArtist, title: albumTitle }), [albumArtist, albumTitle]);
   const parentArtist = useLocation().state.parentArtist;
   const workspace = useMediaDetailsWorkspace(useAlbumDetails(key), useAlbumTracks(key));
@@ -37,9 +44,12 @@ export function AlbumDetailsPage() {
     <MediaDetailsLayout
       scrollRestorationId={scrollRestorationId}
       back={
-        parentArtist ? (
-          <BackLink to="/library/album-artists/$artistName" params={{ artistName: parentArtist }}>
-            {parentArtist}
+        parentArtist !== undefined ? (
+          <BackLink
+            to="/library/album-artists/$artistName"
+            params={{ artistName: toNameSegment(parentArtist) }}
+          >
+            {artistNameLabel(parentArtist)}
           </BackLink>
         ) : (
           <BackLink to="/library/albums">Albums</BackLink>
@@ -52,8 +62,8 @@ export function AlbumDetailsPage() {
         <>
           <MediaDetailsHeader
             kind="Album"
-            title={albumTitle}
-            artist={albumArtist}
+            title={albumTitleLabel(albumTitle)}
+            artist={artistNameLabel(albumArtist)}
             artwork={details.summary.artwork}
             strip={
               tracks.length > 0 ? (

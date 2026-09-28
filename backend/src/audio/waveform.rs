@@ -324,9 +324,24 @@ fn write_cache(directory: &Path, hash: &str, waveform: &Waveform) -> std::io::Re
     std::fs::rename(temporary, path)
 }
 
+/// Size and modification time: a file replaced at the same path must not show the old waveform.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct FileStamp {
+    length: u64,
+    modified: Option<std::time::SystemTime>,
+}
+
+fn file_stamp(path: &str) -> Option<FileStamp> {
+    let metadata = std::fs::metadata(path).ok()?;
+    Some(FileStamp {
+        length: metadata.len(),
+        modified: metadata.modified().ok(),
+    })
+}
+
 struct Shared {
     directory: PathBuf,
-    ready: Mutex<HashMap<String, Arc<Waveform>>>,
+    ready: Mutex<HashMap<String, (FileStamp, Arc<Waveform>)>>,
     queued: Mutex<HashSet<String>>,
     events: SharedEventSink,
 }
@@ -364,14 +379,17 @@ impl WaveformService {
 
     /// Returns the waveform if it is ready; otherwise queues analysis and returns `None`.
     pub fn get_or_queue(&self, file: &ValidatedAudioFile) -> Option<Arc<Waveform>> {
-        if let Some(waveform) = self
+        let stamp = file_stamp(&file.path)?;
+        if let Some((remembered, waveform)) = self
             .shared
             .ready
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .get(&file.path)
         {
-            return Some(Arc::clone(waveform));
+            if *remembered == stamp {
+                return Some(Arc::clone(waveform));
+            }
         }
         let newly_queued = self
             .shared
@@ -390,16 +408,19 @@ impl Shared {
     /// Publishes a quick approximation first when the file is long and not cached, then the exact
     /// waveform, which is also written to the cache.
     fn process(&self, file: &ValidatedAudioFile) {
+        let Some(stamp) = file_stamp(&file.path) else {
+            return;
+        };
         let Ok(hash) = content_hash(Path::new(&file.path)) else {
             return;
         };
         if let Some(cached) = read_cache(&self.directory, &hash) {
-            self.publish(&file.path, cached);
+            self.publish(&file.path, stamp, cached);
             return;
         }
         let cancellation = DecodeCancellation::default();
         if let Ok(sampled) = sample(file, &cancellation, SAMPLE_BUDGET) {
-            self.publish(&file.path, sampled);
+            self.publish(&file.path, stamp, sampled);
         }
         let threads =
             thread::available_parallelism().map_or(1, |cores| (cores.get() / 2).clamp(1, 6));
@@ -409,22 +430,22 @@ impl Shared {
         if write_cache(&self.directory, &hash, &waveform).is_err() {
             log::warn!("waveform.cache_write_failed");
         }
-        self.publish(&file.path, waveform);
+        self.publish(&file.path, stamp, waveform);
     }
 
-    fn publish(&self, path: &str, waveform: Waveform) {
-        self.remember(path, waveform);
+    fn publish(&self, path: &str, stamp: FileStamp, waveform: Waveform) {
+        self.remember(path, stamp, waveform);
         self.events.emit(BackendEvent::WaveformReady {
             path: path.to_owned(),
         });
     }
 
-    fn remember(&self, path: &str, waveform: Waveform) {
+    fn remember(&self, path: &str, stamp: FileStamp, waveform: Waveform) {
         let mut ready = self.ready.lock().unwrap_or_else(PoisonError::into_inner);
         if ready.len() >= MEMORY_ENTRIES && !ready.contains_key(path) {
             ready.clear();
         }
-        ready.insert(path.to_owned(), Arc::new(waveform));
+        ready.insert(path.to_owned(), (stamp, Arc::new(waveform)));
     }
 }
 
@@ -552,5 +573,22 @@ mod tests {
         assert!(service.get_or_queue(&file).is_some());
         let hash = content_hash(Path::new(&file.path)).unwrap();
         assert!(read_cache(&directory.file("cache"), &hash).is_some());
+    }
+
+    #[test]
+    fn a_file_replaced_at_the_same_path_is_analyzed_again() {
+        let directory = TestDirectory::new();
+        let file = wav(&directory, "song.wav", &vec![5_000i16; 16_000]);
+        let (recorder, sink) = crate::events::testing::RecordingEventSink::shared();
+        let service = WaveformService::start(directory.file("cache"), sink);
+        assert!(service.get_or_queue(&file).is_none());
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while recorder.events().is_empty() && Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(10));
+        }
+        assert!(service.get_or_queue(&file).is_some());
+
+        write_pcm_i16_wav(Path::new(&file.path), 8_000, 1, &vec![9_000i16; 24_000]);
+        assert!(service.get_or_queue(&file).is_none());
     }
 }

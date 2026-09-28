@@ -27,4 +27,9 @@ describe("describeSignalPath", () => {
     });
     expect(path.processing).toBe("48 kHz, mono to stereo");
   });
+
+  it("names a surround downmix", () => {
+    const path = describeSignalPath({ ...direct, channelConversion: "downmix" });
+    expect(path.processing).toBe("surround downmix");
+  });
 });

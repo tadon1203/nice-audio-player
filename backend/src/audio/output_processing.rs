@@ -18,6 +18,8 @@ pub(crate) enum ChannelConversion {
     None,
     MonoToStereo,
     StereoToMono,
+    /// Surround (3, 4, 5, 6 or 8 channels) folded to stereo or mono.
+    Downmix,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -42,6 +44,9 @@ impl OutputProcessingPlan {
             (source, output) if source == output => ChannelConversion::None,
             (1, 2) => ChannelConversion::MonoToStereo,
             (2, 1) => ChannelConversion::StereoToMono,
+            (source, 1 | 2) if surround_weights(usize::from(source)).is_some() => {
+                ChannelConversion::Downmix
+            }
             _ => return Err(OutputProcessingError::UnsupportedChannelConversion),
         };
         Ok(Self {
@@ -288,11 +293,56 @@ pub(crate) struct OutputPcmProcessor {
     finished: bool,
 }
 
+/// Per-channel weights into the left and right output, for the standard WAVE channel orders
+/// (FL FR [FC] [LFE] [BL BR] [SL SR]). Centre and surrounds enter at -3 dB, the LFE is dropped,
+/// and each side is scaled so full-scale input in every channel cannot exceed full scale.
+fn surround_weights(channels: usize) -> Option<(&'static [f32], &'static [f32])> {
+    const C: f32 = std::f32::consts::FRAC_1_SQRT_2;
+    const fn scaled<const N: usize>(weights: [f32; N], sum: f32) -> [f32; N] {
+        let mut out = weights;
+        let mut i = 0;
+        while i < N {
+            out[i] /= sum;
+            i += 1;
+        }
+        out
+    }
+    const L3: [f32; 3] = scaled([1.0, 0.0, C], 1.0 + C);
+    const R3: [f32; 3] = scaled([0.0, 1.0, C], 1.0 + C);
+    const L4: [f32; 4] = scaled([1.0, 0.0, C, 0.0], 1.0 + C);
+    const R4: [f32; 4] = scaled([0.0, 1.0, 0.0, C], 1.0 + C);
+    const L5: [f32; 5] = scaled([1.0, 0.0, C, C, 0.0], 1.0 + 2.0 * C);
+    const R5: [f32; 5] = scaled([0.0, 1.0, C, 0.0, C], 1.0 + 2.0 * C);
+    const L6: [f32; 6] = scaled([1.0, 0.0, C, 0.0, C, 0.0], 1.0 + 2.0 * C);
+    const R6: [f32; 6] = scaled([0.0, 1.0, C, 0.0, 0.0, C], 1.0 + 2.0 * C);
+    const L8: [f32; 8] = scaled([1.0, 0.0, C, 0.0, C, 0.0, C, 0.0], 1.0 + 3.0 * C);
+    const R8: [f32; 8] = scaled([0.0, 1.0, C, 0.0, 0.0, C, 0.0, C], 1.0 + 3.0 * C);
+    match channels {
+        3 => Some((&L3, &R3)),
+        4 => Some((&L4, &R4)),
+        5 => Some((&L5, &R5)),
+        6 => Some((&L6, &R6)),
+        8 => Some((&L8, &R8)),
+        _ => None,
+    }
+}
+
 fn convert_channels_into(frame: &[f32], output: &mut [f32]) {
     match (frame.len(), output.len()) {
         (channels, target) if channels == target => output.copy_from_slice(frame),
         (1, 2) => output.copy_from_slice(&[frame[0], frame[0]]),
         (2, 1) => output[0] = (frame[0] + frame[1]) * 0.5,
+        (channels, target @ (1 | 2)) => {
+            let (left, right) = surround_weights(channels)
+                .expect("channel conversion was validated by OutputProcessingPlan::new");
+            let fold = |weights: &[f32]| frame.iter().zip(weights).map(|(s, w)| s * w).sum::<f32>();
+            let (left, right) = (fold(left), fold(right));
+            if target == 2 {
+                output.copy_from_slice(&[left, right]);
+            } else {
+                output[0] = (left + right) * 0.5;
+            }
+        }
         _ => unreachable!("channel conversion was validated by OutputProcessingPlan::new"),
     }
 }
@@ -341,6 +391,45 @@ mod tests {
         let mut processor = OutputPcmProcessor::new(mono).unwrap();
         processor.convert(&[0.25, -0.5], &mut output).unwrap();
         assert_eq!(output, [0.25, 0.25, -0.5, -0.5]);
+    }
+
+    #[test]
+    fn surround_is_folded_to_stereo_and_mono_without_clipping() {
+        let mut output = Vec::new();
+
+        let five_one = plan(44_100, 6, 44_100, 2);
+        assert_eq!(five_one.channel_conversion(), ChannelConversion::Downmix);
+        let mut processor = OutputPcmProcessor::new(five_one).unwrap();
+        // Only the front-left channel: it reaches the left output alone.
+        processor
+            .convert(&[1.0, 0.0, 0.0, 0.0, 0.0, 0.0], &mut output)
+            .unwrap();
+        assert!(output[0] > 0.4 && output[1] == 0.0);
+        // The LFE is dropped.
+        processor
+            .convert(&[0.0, 0.0, 0.0, 1.0, 0.0, 0.0], &mut output)
+            .unwrap();
+        assert_eq!(output, [0.0, 0.0]);
+        // Every channel at full scale stays within full scale.
+        processor.convert(&[1.0; 6], &mut output).unwrap();
+        assert!(output.iter().all(|sample| *sample <= 1.0));
+
+        let mut mono = OutputPcmProcessor::new(plan(44_100, 8, 44_100, 1)).unwrap();
+        mono.convert(&[1.0; 8], &mut output).unwrap();
+        assert_eq!(output.len(), 1);
+        assert!(output[0] > 0.0 && output[0] <= 1.0);
+
+        assert!(OutputProcessingPlan::new(
+            PcmSpec::new(
+                SampleRate::new(44_100).unwrap(),
+                ChannelCount::new(7).unwrap()
+            ),
+            PcmSpec::new(
+                SampleRate::new(44_100).unwrap(),
+                ChannelCount::new(2).unwrap()
+            ),
+        )
+        .is_err());
     }
 
     #[test]

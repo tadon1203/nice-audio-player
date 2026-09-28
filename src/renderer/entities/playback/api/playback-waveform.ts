@@ -8,14 +8,15 @@ const waveformKeys = {
 
 /**
  * The backend answers `null` while it analyzes a file, then emits `waveformReady`; the event
- * refetches the same query. A waveform never changes for a path, so it never goes stale.
+ * refetches the same query. Nothing is kept once the track is no longer loaded: a file can be
+ * replaced at the same path, and the backend decides whether its remembered waveform still fits.
  */
 function waveformOptions(path: string | null) {
   return queryOptions({
     queryKey: waveformKeys.file(path),
     queryFn: path === null ? skipToken : () => nativeApi().getPlaybackWaveform(path),
     staleTime: Infinity,
-    gcTime: 60_000,
+    gcTime: 0,
   });
 }
 
