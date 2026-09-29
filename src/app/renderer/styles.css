@@ -26,7 +26,8 @@
   --font-sans: "Satoshi", "Noto Sans JP", "Segoe UI", system-ui, sans-serif;
   /*
    * Motion values that CSS uses. The JS side (`shared/ui/motion/tokens.ts`) owns springs and
-   * reads none of these, but its `feedback` duration must equal `--duration-feedback`. Feedback (hover, press, colour) is 100ms; overlays and sheets take 160ms.
+   * reads none of these, but its `feedback` duration must equal `--duration-feedback`
+   * (`tokens-css.test.ts` checks it). Feedback (hover, press, colour) is 100ms; overlays and sheets take 160ms.
    */
   --duration-feedback: 100ms;
   --duration-overlay: 160ms;
