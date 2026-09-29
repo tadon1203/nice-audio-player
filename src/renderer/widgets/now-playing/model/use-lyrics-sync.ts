@@ -37,6 +37,26 @@ export function lineSpan(
   return { startMs: line.startMs, endMs: next?.startMs ?? durationMs ?? line.startMs };
 }
 
+/** Time a line takes to fill: at least this long, however short the line is. */
+const MIN_FILL_MS = 2_000;
+/** Extra fill time per character, so long lines are not swept faster than they can be read. */
+const FILL_MS_PER_CHAR = 150;
+
+/**
+ * How long the lit fill takes to cross a line. A line lasts until the next one starts, but a
+ * line followed by a long instrumental gap should not crawl through it, so the fill is capped
+ * by a reading-speed estimate and then waits, fully lit.
+ */
+export function lineFillMs(spanMs: number, text: string): number {
+  return Math.min(Math.max(0, spanMs), MIN_FILL_MS + text.length * FILL_MS_PER_CHAR);
+}
+
+/** How much of a line is lit (0-1) at `positionMs`, filling over `fillMs` from `startMs`. */
+export function lineProgress(positionMs: number, startMs: number, fillMs: number): number {
+  if (fillMs <= 0) return positionMs >= startMs ? 1 : 0;
+  return Math.min(1, Math.max(0, (positionMs - startMs) / fillMs));
+}
+
 /**
  * Tracks the current lyric line index from a `{positionMs, performance.now()}` anchor,
  * interpolating while playing and freezing while paused. Recomputes on every new position

@@ -120,6 +120,9 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 0.08);
   --sidebar-ring: oklch(0.708 0 0);
+  /* Set from the playing artwork by `ArtworkAccent`; only the played waveform and the lit lyric
+     line use it. Without artwork (or with the backdrop off) it is plain ink. */
+  --artwork-accent: var(--foreground);
 }
 
 /* Floating UI surface (menus, dialogs, sheets, sticky headers). Light is not used there. */

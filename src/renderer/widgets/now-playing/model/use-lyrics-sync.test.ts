@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { LyricsTimedLine } from "@/shared/ipc";
-import { findCurrentLineIndex, lineSpan } from "./use-lyrics-sync";
+import { findCurrentLineIndex, lineFillMs, lineProgress, lineSpan } from "./use-lyrics-sync";
 
 const lines: LyricsTimedLine[] = [
   { startMs: 0, text: "First line" },
@@ -44,5 +44,33 @@ describe("lineSpan", () => {
   it("returns null for an out-of-range index", () => {
     expect(lineSpan(lines, -1, null)).toBeNull();
     expect(lineSpan(lines, 3, null)).toBeNull();
+  });
+});
+
+describe("lineProgress", () => {
+  it("is unlit before the line, lit after it, and linear in between", () => {
+    expect(lineProgress(4_000, 5_000, 2_000)).toBe(0);
+    expect(lineProgress(6_000, 5_000, 2_000)).toBe(0.5);
+    expect(lineProgress(9_000, 5_000, 2_000)).toBe(1);
+  });
+
+  it("lights a line with no length at once", () => {
+    expect(lineProgress(4_999, 5_000, 0)).toBe(0);
+    expect(lineProgress(5_000, 5_000, 0)).toBe(1);
+  });
+});
+
+describe("lineFillMs", () => {
+  it("fills over the whole line when it is short enough to read at that pace", () => {
+    expect(lineFillMs(2_500, "Hi")).toBe(2_300);
+    expect(lineFillMs(2_100, "Hello there")).toBe(2_100);
+  });
+
+  it("does not crawl through a long gap after the line", () => {
+    expect(lineFillMs(30_000, "Hello")).toBe(2_750);
+  });
+
+  it("is zero for a line with no length", () => {
+    expect(lineFillMs(0, "x")).toBe(0);
   });
 });

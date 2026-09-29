@@ -14,3 +14,27 @@ export const LIGHT = {
 } as const;
 
 export type LightStrength = keyof typeof LIGHT.strength;
+
+/** OKLCH lightness of the page background and of the three inks (see `styles.css`). */
+export const INK = { background: 0.145, one: 0.985, two: 0.708, three: 0.6 } as const;
+
+/** Neutral OKLCH grays have relative luminance Y = L^3. */
+export const grayLuminance = (oklchLightness: number) => oklchLightness ** 3;
+
+const toSrgb = (y: number) => (y <= 0.0031308 ? 12.92 * y : 1.055 * y ** (1 / 2.4) - 0.055);
+const fromSrgb = (c: number) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+
+/** WCAG contrast ratio between two relative luminances. */
+export const contrastRatio = (a: number, b: number) =>
+  (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+
+/** Luminance of the brightest possible Light (pure white artwork) after the veil. */
+export function worstCaseSurfaceLuminance(): number {
+  const base = toSrgb(grayLuminance(INK.background));
+  // Pure white artwork after `brightness()`. CSS blends in gamma-encoded sRGB: the artwork
+  // over the base at `strength`, then the veil over that.
+  const artwork = Math.min(1, LIGHT.brightness);
+  const withArtwork = base * (1 - LIGHT.strength.max) + artwork * LIGHT.strength.max;
+  const surface = withArtwork * (1 - LIGHT.veilOpacity) + base * LIGHT.veilOpacity;
+  return fromSrgb(surface);
+}

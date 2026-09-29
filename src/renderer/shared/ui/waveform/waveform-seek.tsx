@@ -30,6 +30,8 @@ type WaveformSeekProps = {
   onHoverPositionChange?: (positionMs: number | null) => void;
   /** Bars grow from left to right when the waveform arrives, instead of all at once. */
   sweepBars?: boolean;
+  /** Colour class for the played part; the unplayed part is always dimmed ink. */
+  playedClassName?: string;
   className?: string;
 };
 
@@ -53,6 +55,7 @@ export function WaveformSeek({
   hoveredLineSpan = null,
   onHoverPositionChange,
   sweepBars = false,
+  playedClassName = "text-foreground",
   className,
 }: WaveformSeekProps) {
   const ref = useRef<HTMLDivElement>(null);
@@ -146,7 +149,11 @@ export function WaveformSeek({
       <div aria-hidden="true" className="absolute inset-0 text-foreground/35">
         <WaveformBars bars={bars} height={height} grown={grown} sweep={sweepBars} />
       </div>
-      <m.div aria-hidden="true" className="absolute inset-0 text-foreground" style={{ clipPath }}>
+      <m.div
+        aria-hidden="true"
+        className={cn("absolute inset-0", playedClassName)}
+        style={{ clipPath }}
+      >
         <WaveformBars bars={bars} height={height} grown={grown} sweep={sweepBars} />
       </m.div>
       {activeSpan !== null ? (

@@ -4,6 +4,7 @@ import { useNowPlaying } from "@/renderer/features/now-playing-transition";
 import { NowPlayingContent, NowPlayingLayer } from "@/renderer/widgets/now-playing";
 import { PlaybackRegion } from "@/renderer/widgets/playback-region";
 import { QueuePanel } from "@/renderer/widgets/queue-panel";
+import { ArtworkAccent } from "./artwork-accent";
 import { Navigation } from "./navigation";
 import { TitleBar } from "./title-bar";
 import { usePlaybackShortcuts } from "./use-playback-shortcuts";
@@ -15,6 +16,7 @@ export function AppShell() {
 
   return (
     <LyricsWaveformLinkProvider>
+      <ArtworkAccent />
       <div className="grid h-full min-h-0 min-w-0 grid-cols-[minmax(0,1fr)] grid-rows-[40px_minmax(0,1fr)_auto] bg-background md:grid-cols-[16rem_minmax(0,1fr)]">
         <TitleBar pathname={pathname} />
 

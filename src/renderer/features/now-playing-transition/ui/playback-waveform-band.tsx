@@ -63,6 +63,7 @@ export function PlaybackWaveformBand({
       durationMs={durationMs}
       playing={status === "playing"}
       sweepBars={showWaveform}
+      playedClassName={showWaveform ? "text-(--artwork-accent)" : undefined}
       disabled={!canSeek || seekPending}
       onInput={setSeekPreviewMs}
       onCommit={(value) => {
