@@ -54,7 +54,7 @@ export function DockTransport() {
         onClick={() => void (playing ? playback.pause() : playback.resume())}
         variant="default"
         spring
-        className="rounded-full disabled:bg-secondary disabled:text-muted-foreground disabled:opacity-100"
+        className="relative rounded-full disabled:bg-secondary disabled:text-muted-foreground disabled:opacity-100"
       >
         <PlayPauseIcon playing={playing} />
         {active ? <PlayProgressRing playing={playing} /> : null}

@@ -64,10 +64,10 @@ export function TrackAction({ row }: { row: TrackTableRow }) {
         <div
           className={cn(
             "flex flex-col transition-transform duration-160 ease-out",
-            action.persistent && "-translate-y-full",
+            action.persistent && "-translate-y-9",
             available &&
               !action.persistent &&
-              "group-hover/track:-translate-y-full group-focus-within/track:-translate-y-full",
+              "group-hover/track:-translate-y-9 group-focus-within/track:-translate-y-9",
           )}
         >
           <span

@@ -1,18 +1,31 @@
-/** Pixels per bar (bar plus gap). Bars are merged by peak so the drawing never gets denser. */
+/** Pixels per bar (bar plus gap). Buckets are merged so the drawing never gets denser. */
 export const BAR_PITCH_PX = 3;
 export const SEEK_KEY_STEP_MS = 5_000;
 
-/** Reduces peak buckets to `count` bars, keeping the loudest bucket in each span. */
-export function resampleBars(peaks: readonly number[], count: number): number[] {
-  if (peaks.length === 0 || count <= 0) return [];
-  const bars = Math.min(count, peaks.length);
+/**
+ * Reduces the backend's RMS buckets (0-255) to `count` bars. A span's level is the root of the
+ * mean of its squares, never a max or a plain mean, so merging keeps the true average energy.
+ */
+export function resampleBars(rms: readonly number[], count: number): number[] {
+  if (rms.length === 0 || count <= 0) return [];
+  const bars = Math.min(count, rms.length);
   return Array.from({ length: bars }, (_, bar) => {
-    const start = Math.floor((bar * peaks.length) / bars);
-    const end = Math.max(start + 1, Math.floor(((bar + 1) * peaks.length) / bars));
-    let peak = 0;
-    for (let index = start; index < end; index += 1) peak = Math.max(peak, peaks[index] ?? 0);
-    return peak;
+    const start = Math.floor((bar * rms.length) / bars);
+    const end = Math.max(start + 1, Math.floor(((bar + 1) * rms.length) / bars));
+    let squares = 0;
+    for (let index = start; index < end; index += 1) squares += (rms[index] ?? 0) ** 2;
+    return Math.sqrt(squares / (end - start));
   });
+}
+
+/** The quietest level the bars distinguish from silence, in dBFS. */
+export const WAVEFORM_FLOOR_DB = -36;
+
+/** Maps a 0-255 level to 0-1 on a dB scale from [`WAVEFORM_FLOOR_DB`] to full scale. */
+export function levelToUnit(level: number): number {
+  if (level <= 0) return 0;
+  const db = 20 * Math.log10(Math.min(255, level) / 255);
+  return Math.max(0, 1 + db / -WAVEFORM_FLOOR_DB);
 }
 
 /** How far from the pointer (px) the bars are magnified while dragging, and the most they widen. */

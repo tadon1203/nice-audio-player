@@ -1,5 +1,5 @@
 import { cn } from "@/renderer/shared/lib/utils";
-import { fisheyeScale } from "./waveform-model";
+import { fisheyeScale, levelToUnit } from "./waveform-model";
 
 /** Height of the flat line the bars grow out of, in px. */
 export const WAVEFORM_BASELINE = 2;
@@ -8,7 +8,7 @@ export const WAVEFORM_BASELINE = 2;
 const SWEEP_MS = 320;
 
 type WaveformBarsProps = {
-  /** Resampled bar peaks, 0-255. Empty while the backend analyzes the file. */
+  /** Resampled RMS levels, 0-255. Empty while the backend analyzes the file. */
   bars: readonly number[];
   height: number;
   /** False draws every bar flat on the baseline; flipping it to true grows them. */
@@ -23,7 +23,8 @@ type WaveformBarsProps = {
 };
 
 /**
- * The drawing only: a baseline, and bars growing upward from it. Colour comes from the caller
+ * The drawing only: a baseline, and bars growing upward from it, each an RMS level on a dB scale.
+ * Colour comes from the caller
  * (`currentColor`), so one instance serves the played and the unplayed layer.
  */
 export function WaveformBars({
@@ -52,13 +53,13 @@ export function WaveformBars({
           data-slot="waveform-bars"
         >
           <g fill="currentColor">
-            {bars.map((peak, index) => {
+            {bars.map((level, index) => {
               // Only bars near the pointer get a scale, so hundreds of bars are not restyled.
               const scaleX =
                 fisheye === null
                   ? 1
                   : fisheyeScale(((index + 0.5) / bars.length) * fisheye.width - fisheye.x);
-              const barHeight = Math.max(WAVEFORM_BASELINE, (peak / 255) * (height - 2));
+              const barHeight = Math.max(WAVEFORM_BASELINE, levelToUnit(level) * (height - 2));
               return (
                 <rect
                   key={index}

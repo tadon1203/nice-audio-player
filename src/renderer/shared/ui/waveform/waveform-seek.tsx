@@ -11,8 +11,8 @@ import { barCountForWidth, resampleBars } from "./waveform-model";
 type WaveformSeekProps = {
   /** Bar height in px. The dock uses a slim meter; Now Playing grows the same object larger. */
   height: number;
-  /** Peak buckets 0-255, or null while the backend analyzes the file. */
-  peaks: readonly number[] | null;
+  /** RMS buckets 0-255, or null while the backend analyzes the file. */
+  rms: readonly number[] | null;
   /** The playhead tick and hover guideline. Off for the dock's plain bar, where the fill edge
    * already marks the position and a second line would be redundant. */
   showPlayhead?: boolean;
@@ -46,7 +46,7 @@ type WaveformSeekProps = {
  */
 export function WaveformSeek({
   height,
-  peaks,
+  rms,
   showPlayhead = true,
   valueMs,
   durationMs,
@@ -109,7 +109,7 @@ export function WaveformSeek({
   const fisheye =
     pointer.dragging && pointer.hoverX !== null && !lineOnly ? { x: pointer.hoverX, width } : null;
 
-  const hasPeaks = peaks !== null && peaks.length > 0;
+  const hasPeaks = rms !== null && rms.length > 0;
   // The bars mount flat on the baseline and grow one frame later, so the growth can transition.
   // A refined waveform for the same track swaps the bars in place without growing again; the
   // caller keys this component by track, so a new track starts flat.
@@ -120,8 +120,8 @@ export function WaveformSeek({
   }, [hasPeaks]);
 
   const bars = useMemo(
-    () => (peaks === null ? [] : resampleBars(peaks, barCountForWidth(width))),
-    [peaks, width],
+    () => (rms === null ? [] : resampleBars(rms, barCountForWidth(width))),
+    [rms, width],
   );
 
   const spanStyle = (span: { startMs: number; endMs: number }) =>

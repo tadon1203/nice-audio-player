@@ -412,6 +412,7 @@ impl Shared {
             return;
         };
         let Ok(hash) = content_hash(Path::new(&file.path)) else {
+            log::warn!("waveform.hash_failed");
             return;
         };
         if let Some(cached) = read_cache(&self.directory, &hash) {
@@ -424,8 +425,12 @@ impl Shared {
         }
         let threads =
             thread::available_parallelism().map_or(1, |cores| (cores.get() / 2).clamp(1, 6));
-        let Ok(waveform) = analyze(file, &cancellation, threads) else {
-            return;
+        let waveform = match analyze(file, &cancellation, threads) {
+            Ok(waveform) => waveform,
+            Err(error) => {
+                log::warn!("waveform.analysis_failed error={error:?}");
+                return;
+            }
         };
         if write_cache(&self.directory, &hash, &waveform).is_err() {
             log::warn!("waveform.cache_write_failed");

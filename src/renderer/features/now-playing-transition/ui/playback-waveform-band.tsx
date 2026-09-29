@@ -83,7 +83,7 @@ export function PlaybackWaveformBand({
     <WaveformSeek
       key={item?.file.path ?? "none"}
       height={height}
-      peaks={showWaveform ? (waveform?.peaks ?? null) : null}
+      rms={showWaveform ? (waveform?.rms ?? null) : null}
       showPlayhead={showWaveform}
       valueMs={seekValue}
       durationMs={durationMs}

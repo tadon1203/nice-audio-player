@@ -4,19 +4,31 @@ import {
   FISHEYE_MAX_SCALE,
   FISHEYE_RADIUS_PX,
   fisheyeScale,
+  levelToUnit,
   nextSeekPosition,
   positionFromOffset,
   resampleBars,
 } from "./waveform-model";
 
 describe("resampleBars", () => {
-  it("keeps the loudest bucket of each merged span", () => {
-    expect(resampleBars([10, 200, 30, 40, 50, 60], 3)).toEqual([200, 40, 60]);
+  it("merges a span by the root of the mean of its squares", () => {
+    const bars = resampleBars([6, 8, 0, 0], 2);
+    expect(bars[0]).toBeCloseTo(Math.sqrt((36 + 64) / 2));
+    expect(bars[1]).toBe(0);
   });
 
   it("never invents bars beyond the data", () => {
-    expect(resampleBars([1, 2, 3], 10)).toEqual([1, 2, 3]);
+    expect(resampleBars([1, 2, 3], 10)).toHaveLength(3);
     expect(resampleBars([], 10)).toEqual([]);
+  });
+});
+
+describe("levelToUnit", () => {
+  it("maps full scale to 1, silence and the floor to 0", () => {
+    expect(levelToUnit(255)).toBe(1);
+    expect(levelToUnit(0)).toBe(0);
+    expect(levelToUnit(1)).toBe(0);
+    expect(levelToUnit(128)).toBeCloseTo(1 - 6.02 / 36, 2);
   });
 });
 

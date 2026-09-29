@@ -25,7 +25,11 @@ export function MediaDetailsHeader({
 }) {
   return (
     <div className="@container relative -mx-6 mt-8 px-6 pt-6 pb-6 lg:-mx-10 lg:px-10">
-      <ArtworkLight artwork={artwork} strength="medium" />
+      <ArtworkLight
+        artwork={artwork}
+        strength="medium"
+        className="-top-8 -bottom-16 mask-[radial-gradient(ellipse_85%_68%_at_9rem_32%,black_15%,transparent)]"
+      />
       <header className="relative grid grid-cols-1 items-start gap-8 @md:grid-cols-[minmax(0,14rem)_minmax(0,1fr)] @md:items-end">
         <SharedArtwork
           layoutId={artworkLayoutId}
