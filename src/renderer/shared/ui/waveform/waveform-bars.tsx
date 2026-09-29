@@ -14,17 +14,23 @@ type WaveformBarsProps = {
   grown: boolean;
   /** Grow left to right instead of all at once. */
   sweep: boolean;
+  /** Draw the baseline on the box's centre line instead of its bottom edge, for a bar that
+   * never grows bars, so text beside it can share that centre line. */
+  centered?: boolean;
 };
 
 /**
  * The drawing only: a baseline, and bars growing upward from it. Colour comes from the caller
  * (`currentColor`), so one instance serves the played and the unplayed layer.
  */
-export function WaveformBars({ bars, height, grown, sweep }: WaveformBarsProps) {
+export function WaveformBars({ bars, height, grown, sweep, centered = false }: WaveformBarsProps) {
   return (
     <>
       <div
-        className="absolute inset-x-0 bottom-0 bg-current"
+        className={cn(
+          "absolute inset-x-0 bg-current",
+          centered ? "top-1/2 -translate-y-1/2" : "bottom-0",
+        )}
         style={{ height: WAVEFORM_BASELINE }}
         data-slot="waveform-baseline"
       />

@@ -30,6 +30,8 @@ type WaveformSeekProps = {
   onHoverPositionChange?: (positionMs: number | null) => void;
   /** Bars grow from left to right when the waveform arrives, instead of all at once. */
   sweepBars?: boolean;
+  /** A plain progress line with no bars (the dock): centred in its box. */
+  lineOnly?: boolean;
   /** Colour class for the played part; the unplayed part is always dimmed ink. */
   playedClassName?: string;
   className?: string;
@@ -55,6 +57,7 @@ export function WaveformSeek({
   hoveredLineSpan = null,
   onHoverPositionChange,
   sweepBars = false,
+  lineOnly = false,
   playedClassName = "text-foreground",
   className,
 }: WaveformSeekProps) {
@@ -147,14 +150,26 @@ export function WaveformSeek({
       {...pointer.handlers}
     >
       <div aria-hidden="true" className="absolute inset-0 text-foreground/35">
-        <WaveformBars bars={bars} height={height} grown={grown} sweep={sweepBars} />
+        <WaveformBars
+          bars={bars}
+          height={height}
+          grown={grown}
+          sweep={sweepBars}
+          centered={lineOnly}
+        />
       </div>
       <m.div
         aria-hidden="true"
         className={cn("absolute inset-0", playedClassName)}
         style={{ clipPath }}
       >
-        <WaveformBars bars={bars} height={height} grown={grown} sweep={sweepBars} />
+        <WaveformBars
+          bars={bars}
+          height={height}
+          grown={grown}
+          sweep={sweepBars}
+          centered={lineOnly}
+        />
       </m.div>
       {activeSpan !== null ? (
         <div

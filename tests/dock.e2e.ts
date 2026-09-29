@@ -309,3 +309,14 @@ test("still opens and closes Now Playing under reduced motion and forced colors"
   await dock.getByRole("button", { name: "Close Now Playing" }).click();
   await expect(layer).toHaveCount(0);
 });
+
+test("the progress line and the elapsed time share one centre line", async ({ page }) => {
+  const dock = await playFirstTrack(page);
+  const seek = dock.getByRole("slider", { name: "Playback position" });
+  const line = (await seek.locator('[data-slot="waveform-baseline"]').first().boundingBox())!;
+  const elapsed = (await dock.getByLabel("Elapsed time").boundingBox())!;
+  const remaining = (await dock.getByRole("button", { name: "Time remaining" }).boundingBox())!;
+  const centre = (box: { y: number; height: number }) => box.y + box.height / 2;
+  expect(Math.abs(centre(line) - centre(elapsed))).toBeLessThanOrEqual(0.5);
+  expect(Math.abs(centre(line) - centre(remaining))).toBeLessThanOrEqual(0.5);
+});
