@@ -110,7 +110,7 @@ for (const width of [640, 767, 768, 1024, 1360, 1920]) {
     expect(iconRowBox).not.toBeNull();
     expect(muteBox).not.toBeNull();
 
-    // A 104px dock, plus a thin status bar strip directly below it for the signal path.
+    // A single 104px dock; the signal path hangs inside it under the volume controls.
     expect(dockBox!.height).toBeCloseTo(104, 0);
     expect(volumeTrackBox!.width).toBeGreaterThan(80);
     expect(seekBox!.height).toBeCloseTo(6, 0);
@@ -130,8 +130,8 @@ for (const width of [640, 767, 768, 1024, 1360, 1920]) {
     }
 
     // The Sleeve is a fixed, inset tile beside the title/artist — never edge-filling, and its
-    // size doesn't change with width. The signal path sits in its own status bar strip below the
-    // dock, fixed to the bottom-right, not inside the dock footer.
+    // size doesn't change with width. The signal path sits inside the dock, right-aligned under
+    // the volume row.
     const signalPath = page.getByRole("group", { name: "Signal path" });
     expect(sleeveBox!.width).toBeCloseTo(64, 0);
     expect(sleeveBox!.height).toBeCloseTo(64, 0);
@@ -142,7 +142,9 @@ for (const width of [640, 767, 768, 1024, 1360, 1920]) {
       await expect(signalPath).toBeVisible();
       const signalPathBox = await signalPath.boundingBox();
       expect(signalPathBox).not.toBeNull();
-      expect(signalPathBox!.y).toBeGreaterThanOrEqual(dockBox!.y + dockBox!.height);
+      expect(signalPathBox!.y + signalPathBox!.height).toBeLessThanOrEqual(
+        dockBox!.y + dockBox!.height,
+      );
       expect(
         Math.abs(signalPathBox!.x + signalPathBox!.width - (dockBox!.x + dockBox!.width)),
       ).toBeLessThanOrEqual(24);

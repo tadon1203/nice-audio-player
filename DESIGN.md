@@ -18,7 +18,7 @@ Adding a value, in order: existing shadcn token → Tailwind built-in or structu
 
 | Token                | Use                                               |
 | -------------------- | ------------------------------------------------- |
-| `--background`       | workspace canvas, playback status bar             |
+| `--background`       | workspace canvas                                  |
 | `--sidebar`          | sidebar and dock                                  |
 | `--popover`          | input, select, button, menu, acrylic base         |
 | `--accent`           | hover                                             |
@@ -170,15 +170,15 @@ Fact line (tabular-nums, Ink-2)       [ Sort, etc. ]
 
 ### Dock
 
-One 104px band with stable geometry, plus a thin status bar strip directly below it, visibly a step darker so the two never read as one surface. Primary transport stays centered and nothing shifts it.
+One 104px band with stable geometry. Primary transport stays centered and nothing shifts it.
 
 - **Two full-width rows.** A plain progress line runs edge to edge across the top — position only, no waveform data; the waveform itself is drawn only in Now Playing. Below it, the transport grid's two side columns are equal width, so transport sits on the dock's true horizontal center regardless of what the identity block or volume controls weigh on each side.
 - **Sleeve is inset, not edge-filling.** A small `rounded-lg` tile sits at the start of the identity block, beside the title/artist — placed like any other artwork in the workspace, not attached to the dock's edge. Clicking it opens Now Playing; its context menu offers `Go to album` and `Go to artist`. The whole identity block, the transport, and the volume group share one vertical center.
 - **Progress line**: a slim fixed-height track, filled Ink-1 up to the current position over an Ink-2 unplayed remainder. Hover shows a line and a time tooltip; dragging tracks the pointer 1:1. Elapsed and remaining time sit at its ends; clicking toggles remaining time.
 - **Transport**: ⤮ ⏮ ▶ ⏭ ↻, symmetric, centered on the dock. On/off is shown by icon shape and a dot, not color. Repeat-one is `↻¹`.
 - **Right side**: lyrics, queue, volume with a dB readout (wheel adjusts ±1 dB).
-- **Status bar**: a fixed-height strip below the dock, right-aligned, holding the signal path with its output-device menu.
-- **Narrow (<768px)**: only ⏮ ▶ ⏭. Shuffle, repeat, and the status bar move to Now Playing.
+- **Signal path**: right-aligned under the volume row, holding the output-device menu. It hangs out of flow, so the row stays on the transport's centre line.
+- **Narrow (<768px)**: only ⏮ ▶ ⏭. Shuffle, repeat, and the signal path are hidden.
 - Volume is icon, level, and numeric readout on one axis.
 
 ### Now Playing

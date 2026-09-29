@@ -9,9 +9,14 @@ import {
 import { useNowPlaying } from "@/renderer/features/now-playing-transition";
 import { useQueuePanel } from "@/renderer/widgets/queue-panel";
 import { Button } from "@/renderer/shared/ui/shadcn/button";
+import { DockSignalPath } from "./dock-signal-path";
 import { Slider } from "@/renderer/shared/ui/shadcn/slider";
 
-/** Lyrics and queue toggles, mute, the volume slider (also driven by the wheel) and its readout. */
+/**
+ * Lyrics and queue toggles, mute, the volume slider (also driven by the wheel) and its readout.
+ * The signal path hangs below this row, out of flow, so it never pulls the row off the
+ * transport's centre line.
+ */
 export function DockVolume() {
   const { toggle: onToggleNowPlaying } = useNowPlaying();
   const transport = usePlaybackTransport();
@@ -27,7 +32,7 @@ export function DockVolume() {
 
   return (
     <div
-      className="col-start-3 flex min-w-0 items-center justify-self-end gap-1.5"
+      className="relative col-start-3 flex min-w-0 items-center justify-self-end gap-1.5"
       data-region="volume"
     >
       <Button
@@ -84,6 +89,7 @@ export function DockVolume() {
       >
         {formatVolumeDb(output.volume, output.muted)}
       </span>
+      <DockSignalPath className="absolute top-full right-0 mt-0.5 max-md:hidden" />
     </div>
   );
 }

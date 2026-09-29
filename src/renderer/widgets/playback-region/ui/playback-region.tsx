@@ -4,7 +4,6 @@ import {
   useNowPlayingTransitions,
 } from "@/renderer/features/now-playing-transition";
 import { PlaybackDock } from "./playback-dock";
-import { PlaybackStatusBar } from "./playback-status-bar";
 
 /** Dock box height in px: waveform slot + transport row + gaps (h-26), and without the slot (h-22). */
 const DOCK_HEIGHT_PX = 104;
@@ -35,7 +34,6 @@ export function PlaybackRegion() {
       >
         <PlaybackDock />
       </m.div>
-      <PlaybackStatusBar />
     </div>
   );
 }

@@ -71,7 +71,6 @@ test("plays tracks and operates the persistent seek, transport, volume, and tech
   await volume.press("ArrowRight");
   await expect(page.getByRole("button", { name: "Mute", exact: true })).toBeVisible();
 
-  // The signal path lives in the status bar below the dock, not inside it.
   const path = page.getByRole("group", { name: "Signal path" });
   await expect(path).toContainText("FLAC 24/44.1");
   await expect(path).toContainText("48 kHz");

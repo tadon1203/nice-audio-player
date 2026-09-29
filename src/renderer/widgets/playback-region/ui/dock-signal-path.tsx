@@ -7,6 +7,7 @@ import {
   usePlaybackTransport,
   useAudioOutputDevices,
 } from "@/renderer/entities/playback";
+import { cn } from "@/renderer/shared/lib/utils";
 import {
   Menu,
   MenuContent,
@@ -17,23 +18,13 @@ import {
 
 const DEFAULT_DEVICE = "default";
 
-/** The thin ledger strip below the dock: signal path, fixed bottom-right. */
-export function PlaybackStatusBar() {
+/**
+ * `source › processing › output ▾`, with the output-device menu on the last step.
+ * Without resampling it reads `FLAC 24/96 › Speakers`.
+ */
+export function DockSignalPath({ className }: { className?: string }) {
   const transport = usePlaybackTransport();
-  const controlsBusy = transport.pending !== null;
-
-  return (
-    <div
-      className="flex h-7 shrink-0 items-center justify-end border-t border-border bg-background px-2 max-md:hidden md:px-4 lg:px-6"
-      data-slot="playback-status-bar"
-    >
-      <SignalPath disabled={transport.connection !== "ready" || controlsBusy} />
-    </div>
-  );
-}
-
-/** `source › processing › output ▾`. Without resampling it reads `FLAC 24/96 › Speakers`. */
-function SignalPath({ disabled }: { disabled: boolean }) {
+  const disabled = transport.connection !== "ready" || transport.pending !== null;
   const path = usePlaybackSignalPath();
   const { outputSelection: selection } = usePlaybackOutput();
   const playback = usePlaybackActions();
@@ -45,7 +36,10 @@ function SignalPath({ disabled }: { disabled: boolean }) {
 
   return (
     <div
-      className="flex h-5 max-w-full min-w-0 items-center gap-1.5 text-sm text-muted-foreground"
+      className={cn(
+        "flex h-5 max-w-full min-w-0 items-center gap-1.5 text-sm text-muted-foreground",
+        className,
+      )}
       role="group"
       aria-label="Signal path"
       data-region="signal-path"

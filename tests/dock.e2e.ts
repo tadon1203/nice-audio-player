@@ -106,7 +106,6 @@ test("marks shuffle and repeat by shape and dot, not color", async ({ page }) =>
 
 test("switches the output device from the signal path", async ({ page }) => {
   const dock = await playFirstTrack(page);
-  // The signal path lives in the status bar below the dock, not inside it.
   const path = page.getByRole("group", { name: "Signal path" });
   await expect(path).toContainText("FLAC 24/44.1");
   await path.getByRole("button", { name: "Output device: Speakers" }).click();
