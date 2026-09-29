@@ -1,10 +1,10 @@
-import { AnimatePresence, m, useReducedMotion } from "motion/react";
+import { AnimatePresence, m, useReducedMotion, useTransform, type MotionValue } from "motion/react";
 import { artworkUrl } from "@/renderer/shared/lib/artwork-url";
 import { useArtworkBackdrop } from "@/renderer/shared/lib/artwork-backdrop";
 import { cn } from "@/renderer/shared/lib/utils";
 import { useMotionTransition } from "@/renderer/shared/ui/motion";
 import type { ArtworkRef } from "@/shared/ipc";
-import { LIGHT, type LightStrength } from "./light-model";
+import { breathingOpacity, breathingScale, LIGHT, type LightStrength } from "./light-model";
 
 type ArtworkLightProps = {
   artwork: ArtworkRef | null | undefined;
@@ -14,6 +14,11 @@ type ArtworkLightProps = {
    * left (`wipe-previous`) with the track direction, while the old one stays put until covered.
    */
   enter?: LightEnter;
+  /**
+   * Loudness 0-1 for a Light that breathes with the music. It only dims from its strength,
+   * never brightens past it, and swells a few percent. Omit it for a still Light.
+   */
+  level?: MotionValue<number>;
   className?: string;
 };
 
@@ -31,13 +36,23 @@ const HIDDEN_CLIP = {
  * nothing without artwork or when the `Artwork backdrop` preference is off, and is hidden
  * under `forced-colors` by CSS. Changing artwork crossfades (light is not an object).
  */
-export function ArtworkLight({ artwork, strength, enter = "fade", className }: ArtworkLightProps) {
+export function ArtworkLight({
+  artwork,
+  strength,
+  enter = "fade",
+  level,
+  className,
+}: ArtworkLightProps) {
   const enabled = useArtworkBackdrop((state) => state.enabled);
   const transition = useMotionTransition("light");
   const wipeTransition = useMotionTransition("mediumMove");
   const reduced = useReducedMotion() === true;
   const wipe = !reduced && enter !== "fade" ? enter : null;
   const url = artworkUrl(artwork);
+  const breathe = useTransform(() =>
+    level === undefined ? 1 : breathingOpacity(strength, level.get()) / LIGHT.strength[strength],
+  );
+  const swell = useTransform(() => (level === undefined ? 1 : breathingScale(level.get())));
   if (!enabled || url === null) return null;
 
   return (
@@ -50,24 +65,26 @@ export function ArtworkLight({ artwork, strength, enter = "fade", className }: A
         className,
       )}
     >
-      <AnimatePresence initial={false}>
-        <m.img
-          key={url}
-          src={url}
-          alt=""
-          initial={wipe ? { clipPath: HIDDEN_CLIP[wipe] } : { opacity: 0 }}
-          animate={
-            wipe
-              ? { clipPath: "inset(0 0 0 0)", opacity: LIGHT.strength[strength] }
-              : { opacity: LIGHT.strength[strength] }
-          }
-          // The old image only goes once the new one has covered it.
-          exit={wipe ? { opacity: 0, transition: { duration: 0, delay: 0.3 } } : { opacity: 0 }}
-          transition={wipe ? wipeTransition : transition}
-          className="absolute inset-0 size-full scale-125 object-cover"
-          style={{ filter: `blur(${LIGHT.blurPx}px) brightness(${LIGHT.brightness})` }}
-        />
-      </AnimatePresence>
+      <m.div className="absolute inset-0" style={{ opacity: breathe, scale: swell }}>
+        <AnimatePresence initial={false}>
+          <m.img
+            key={url}
+            src={url}
+            alt=""
+            initial={wipe ? { clipPath: HIDDEN_CLIP[wipe] } : { opacity: 0 }}
+            animate={
+              wipe
+                ? { clipPath: "inset(0 0 0 0)", opacity: LIGHT.strength[strength] }
+                : { opacity: LIGHT.strength[strength] }
+            }
+            // The old image only goes once the new one has covered it.
+            exit={wipe ? { opacity: 0, transition: { duration: 0, delay: 0.3 } } : { opacity: 0 }}
+            transition={wipe ? wipeTransition : transition}
+            className="absolute inset-0 size-full scale-125 object-cover"
+            style={{ filter: `blur(${LIGHT.blurPx}px) brightness(${LIGHT.brightness})` }}
+          />
+        </AnimatePresence>
+      </m.div>
       <div className="absolute inset-0 bg-background" style={{ opacity: LIGHT.veilOpacity }} />
     </div>
   );

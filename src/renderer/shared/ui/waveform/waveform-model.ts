@@ -15,6 +15,17 @@ export function resampleBars(peaks: readonly number[], count: number): number[] 
   });
 }
 
+/** How far from the pointer (px) the bars are magnified while dragging, and the most they widen. */
+export const FISHEYE_RADIUS_PX = 48;
+export const FISHEYE_MAX_SCALE = 2.2;
+
+/** Horizontal scale of a bar `distancePx` from the pointer: the peak at the pointer, 1 outside the radius. */
+export function fisheyeScale(distancePx: number): number {
+  const d = Math.abs(distancePx);
+  if (d >= FISHEYE_RADIUS_PX) return 1;
+  return 1 + (FISHEYE_MAX_SCALE - 1) * (1 - d / FISHEYE_RADIUS_PX);
+}
+
 export function barCountForWidth(widthPx: number): number {
   return Math.max(1, Math.floor(widthPx / BAR_PITCH_PX));
 }

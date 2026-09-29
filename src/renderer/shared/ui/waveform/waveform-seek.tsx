@@ -3,6 +3,7 @@ import { m, useTransform } from "motion/react";
 import { cn } from "@/renderer/shared/lib/utils";
 import { formatDuration } from "@/renderer/shared/lib/format";
 import { useInterpolatedPosition } from "@/renderer/shared/ui/motion";
+import { RollingNumber } from "@/renderer/shared/ui/rolling-number";
 import { WaveformBars } from "./waveform-bars";
 import { usePointerSeek } from "./use-pointer-seek";
 import { barCountForWidth, resampleBars } from "./waveform-model";
@@ -104,6 +105,10 @@ export function WaveformSeek({
     return () => observer.disconnect();
   }, []);
 
+  // While dragging, the bars around the pointer widen (a magnifier for fine seeking).
+  const fisheye =
+    pointer.dragging && pointer.hoverX !== null && !lineOnly ? { x: pointer.hoverX, width } : null;
+
   const hasPeaks = peaks !== null && peaks.length > 0;
   // The bars mount flat on the baseline and grow one frame later, so the growth can transition.
   // A refined waveform for the same track swaps the bars in place without growing again; the
@@ -156,6 +161,7 @@ export function WaveformSeek({
           grown={grown}
           sweep={sweepBars}
           centered={lineOnly}
+          fisheye={fisheye}
         />
       </div>
       <m.div
@@ -169,6 +175,7 @@ export function WaveformSeek({
           grown={grown}
           sweep={sweepBars}
           centered={lineOnly}
+          fisheye={fisheye}
         />
       </m.div>
       {activeSpan !== null ? (
@@ -210,7 +217,11 @@ export function WaveformSeek({
             className="pointer-events-none absolute bottom-full z-20 mb-1 -translate-x-1/2 rounded-sm bg-popover px-1.5 py-0.5 text-xs tabular-nums text-popover-foreground shadow-floating"
             style={{ left: Math.min(width - 20, Math.max(20, pointer.hoverX)) }}
           >
-            {formatDuration(pointer.hoverMs)}
+            {pointer.dragging ? (
+              formatDuration(pointer.hoverMs)
+            ) : (
+              <RollingNumber value={formatDuration(pointer.hoverMs)} />
+            )}
           </span>
         </>
       ) : null}

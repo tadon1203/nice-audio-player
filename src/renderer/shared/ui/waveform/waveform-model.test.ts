@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   barCountForWidth,
+  FISHEYE_MAX_SCALE,
+  FISHEYE_RADIUS_PX,
+  fisheyeScale,
   nextSeekPosition,
   positionFromOffset,
   resampleBars,
@@ -39,5 +42,18 @@ describe("barCountForWidth", () => {
   it("fits at least one bar", () => {
     expect(barCountForWidth(0)).toBe(1);
     expect(barCountForWidth(300)).toBe(100);
+  });
+});
+
+describe("fisheyeScale", () => {
+  it("is widest at the pointer and gone at the edge of the radius", () => {
+    expect(fisheyeScale(0)).toBeCloseTo(FISHEYE_MAX_SCALE);
+    expect(fisheyeScale(FISHEYE_RADIUS_PX)).toBe(1);
+    expect(fisheyeScale(-200)).toBe(1);
+  });
+
+  it("falls off evenly on both sides", () => {
+    expect(fisheyeScale(-20)).toBeCloseTo(fisheyeScale(20));
+    expect(fisheyeScale(10)).toBeGreaterThan(fisheyeScale(30));
   });
 });

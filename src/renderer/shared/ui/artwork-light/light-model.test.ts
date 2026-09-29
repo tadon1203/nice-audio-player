@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { labelInk, readableAccent } from "./artwork-accent";
-import { contrastRatio, grayLuminance, INK, worstCaseSurfaceLuminance } from "./light-model";
+import {
+  breathingOpacity,
+  contrastRatio,
+  grayLuminance,
+  INK,
+  LIGHT,
+  worstCaseSurfaceLuminance,
+  type LightStrength,
+} from "./light-model";
 
 const luminance = grayLuminance;
 const contrast = contrastRatio;
@@ -66,5 +74,23 @@ describe("labelInk", () => {
   it("falls back to white without a usable color", () => {
     expect(labelInk(null)).toBe("#ffffff");
     expect(labelInk("nope")).toBe("#ffffff");
+  });
+});
+
+describe("breathing light", () => {
+  it.each(Object.keys(LIGHT.strength) as LightStrength[])(
+    "never gets brighter than the %s strength, so the contrast caps still hold",
+    (strength) => {
+      for (const level of [-1, 0, 0.5, 1, 4]) {
+        expect(breathingOpacity(strength, level)).toBeLessThanOrEqual(LIGHT.strength[strength]);
+      }
+      expect(breathingOpacity(strength, 1)).toBeCloseTo(LIGHT.strength[strength]);
+      expect(breathingOpacity(strength, 0)).toBeCloseTo(LIGHT.strength[strength] * 0.85);
+    },
+  );
+
+  it("keeps text readable over the faint light used behind library tiles", () => {
+    // Faint is dimmer than max, so the max worst case (tested above) bounds it.
+    expect(LIGHT.strength.faint).toBeLessThan(LIGHT.strength.max);
   });
 });

@@ -25,7 +25,7 @@ import { useScrollTopOnChange } from "@/renderer/shared/lib/use-scroll-top-on-ch
 import { BackLink } from "@/renderer/shared/ui/back-link";
 import { CollectionSortControl } from "@/renderer/shared/ui/collection-sort-control";
 import { SectionTitle } from "@/renderer/shared/ui/headings";
-import { MediaGrid } from "@/renderer/shared/ui/media-grid";
+import { MediaGrid, MediaGridItem, useSortFlip } from "@/renderer/shared/ui/media-grid";
 import { EmptyStatus } from "@/renderer/shared/ui/workspace-status";
 import { MediaDetailsHeader } from "@/renderer/widgets/media-details-header";
 import {
@@ -51,6 +51,7 @@ export function ArtistDetailsPage() {
     useArtistAlbums(key, sortKey, direction),
   );
 
+  const flip = useSortFlip(`${sortKey}:${direction}`);
   useScrollTopOnChange(viewport, `${sortKey}\u0000${direction}`);
 
   const setSort = (nextKey: LibraryArtistAlbumSortKey, nextDirection: LibrarySortDirection) =>
@@ -112,9 +113,12 @@ export function ArtistDetailsPage() {
             {albums.length > 0 ? (
               <MediaGrid>
                 {albums.map((album) => (
-                  <li key={`${album.key.albumArtist}\u0000${album.key.title}`}>
+                  <MediaGridItem
+                    key={`${album.key.albumArtist}\u0000${album.key.title}`}
+                    flip={flip}
+                  >
                     <AlbumTile album={album} showArtist={false} parentArtist={artistName} />
-                  </li>
+                  </MediaGridItem>
                 ))}
               </MediaGrid>
             ) : (

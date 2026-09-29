@@ -20,9 +20,9 @@ import {
 import { cn } from "@/renderer/shared/lib/utils";
 import { KineticText } from "@/renderer/shared/ui/kinetic-text";
 import { Artwork } from "@/renderer/shared/ui/artwork";
-import { ArtworkLight } from "@/renderer/shared/ui/artwork-light";
 import { motionTokens } from "@/renderer/shared/ui/motion";
 import { LyricsPanel } from "./lyrics-panel";
+import { NowPlayingLight } from "./now-playing-light";
 import { RecordDisc } from "./record-disc/record-disc";
 
 /**
@@ -47,11 +47,7 @@ export function NowPlayingContent() {
 
   return (
     <div className="relative flex h-full min-h-0 min-w-0 flex-col">
-      <ArtworkLight
-        artwork={item?.artwork ?? null}
-        strength="max"
-        enter={navigation === "previous" ? "wipe-previous" : "wipe-next"}
-      />
+      <NowPlayingLight />
       <div
         className={cn(
           "relative flex min-h-0 min-w-0 flex-1 flex-col",

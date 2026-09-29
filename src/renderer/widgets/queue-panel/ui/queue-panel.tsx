@@ -1,4 +1,4 @@
-import type { ComponentProps, CSSProperties } from "react";
+import { useEffect, useState, type ComponentProps, type CSSProperties } from "react";
 import { m } from "motion/react";
 import { ChevronDown, ChevronUp, GripVertical, X } from "lucide-react";
 import type { PlaybackQueueItem } from "@/shared/ipc";
@@ -12,6 +12,9 @@ import { useMotionTransition } from "@/renderer/shared/ui/motion";
 import { useQueueDrag } from "../model/use-queue-drag";
 import { useQueuePanel } from "../model/use-queue-panel";
 
+const CASCADE_STEP_S = 0.015;
+const CASCADE_WINDOW_MS = 1_000;
+
 /**
  * A 320px Acrylic panel from the right (DESIGN.md, Queue). Upcoming tracks reorder by dragging
  * their handle to any position (`moveQueueItem` takes the target index), or one step at a time
@@ -19,12 +22,26 @@ import { useQueuePanel } from "../model/use-queue-panel";
  */
 export function QueuePanel() {
   const { isOpen, close } = useQueuePanel();
-  const { queue } = usePlaybackQueue();
+  const { queue, shuffleEnabled } = usePlaybackQueue();
   const playback = usePlaybackActions();
   const { listRef, drag, handlersFor } = useQueueDrag(
     (id, to) => void playback.moveQueueItem(id, to),
   );
   const rowTransition = useMotionTransition("mediumMove");
+
+  // Right after shuffle is switched with the panel open, rows settle top to bottom instead of
+  // all at once. The new order arrives a moment later, so the flag stays up for a second.
+  const [shuffleSeen, setShuffleSeen] = useState(shuffleEnabled);
+  const [cascading, setCascading] = useState(false);
+  if (shuffleSeen !== shuffleEnabled) {
+    setShuffleSeen(shuffleEnabled);
+    setCascading(isOpen);
+  }
+  useEffect(() => {
+    if (!cascading) return;
+    const timer = setTimeout(() => setCascading(false), CASCADE_WINDOW_MS);
+    return () => clearTimeout(timer);
+  }, [cascading]);
 
   return (
     // Not modal: the library stays visible and usable beside the queue, so there is no backdrop
@@ -60,7 +77,11 @@ export function QueuePanel() {
                     rotate: drag?.id === item.id ? 1 : 0,
                     scale: drag?.id === item.id ? 1.02 : 1,
                   }}
-                  transition={rowTransition}
+                  transition={
+                    cascading
+                      ? { ...rowTransition, delay: Math.min(index, 12) * CASCADE_STEP_S }
+                      : rowTransition
+                  }
                   className={cn(
                     "relative",
                     drag?.id === item.id && "z-10 rounded-lg bg-popover shadow-floating",

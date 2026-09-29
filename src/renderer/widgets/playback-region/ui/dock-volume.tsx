@@ -12,6 +12,7 @@ import { useNowPlaying } from "@/renderer/features/now-playing-transition";
 import { useQueuePanel } from "@/renderer/widgets/queue-panel";
 import { Button } from "@/renderer/shared/ui/shadcn/button";
 import { DockSignalPath } from "./dock-signal-path";
+import { NextTrackPreview } from "./next-track-preview";
 import { RollingNumber } from "@/renderer/shared/ui/rolling-number";
 import { Slider } from "@/renderer/shared/ui/shadcn/slider";
 
@@ -51,6 +52,8 @@ export function DockVolume() {
       className="relative col-start-3 flex min-w-0 items-center justify-self-end gap-1.5"
       data-region="volume"
     >
+      {/* Out of flow, in the gap before the group, so it never moves anything. */}
+      <NextTrackPreview className="absolute top-1/2 right-full mr-4 -translate-y-1/2 max-lg:hidden" />
       <Button
         type="button"
         size="icon-lg"
