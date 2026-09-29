@@ -1,0 +1,114 @@
+import { expect, test, type Page } from "@playwright/test";
+import { installNativeApi } from "./fixtures/native-api";
+
+// Real timing: the rest of the suite runs with reduced motion (see playwright.config.ts).
+// These tests check invariants sampled every frame, never screenshots of the motion.
+test.use({ reducedMotion: "no-preference" });
+
+test.beforeEach(async ({ page }) => {
+  await installNativeApi(page);
+  await page.setViewportSize({ width: 1360, height: 900 });
+});
+
+async function playAlbum(page: Page) {
+  await page.goto("/library/albums");
+  await page.getByRole("link", { name: "Open album Test album by Test artist" }).click();
+  await page.getByRole("button", { name: "Play album" }).click();
+  const dock = page.getByRole("contentinfo", { name: "Playback controls" });
+  await expect(dock.getByRole("button", { name: "Pause", exact: true })).toBeEnabled();
+  return dock;
+}
+
+/** Runs `action`, sampling `measure` on every animation frame until `ms` after it. */
+async function sampleFrames<T>(
+  page: Page,
+  measure: () => T,
+  action: () => Promise<void>,
+  ms = 900,
+): Promise<T[]> {
+  await page.evaluate(
+    ([source]) => {
+      const fn = new Function(`return (${source})`)() as () => unknown;
+      const samples: unknown[] = [];
+      let running = true;
+      const loop = () => {
+        if (!running) return;
+        samples.push(fn());
+        requestAnimationFrame(loop);
+      };
+      requestAnimationFrame(loop);
+      (window as unknown as Record<string, unknown>).__frames = {
+        stop: () => {
+          running = false;
+          return samples;
+        },
+      };
+    },
+    [measure.toString()] as const,
+  );
+  await action();
+  await page.waitForTimeout(ms);
+  return page.evaluate(() =>
+    (window as unknown as { __frames: { stop: () => unknown[] } }).__frames.stop(),
+  ) as Promise<T[]>;
+}
+
+test("the dock's bottom edge and transport never move while Now Playing opens and closes", async ({
+  page,
+}) => {
+  const dock = await playAlbum(page);
+  const measure = () => {
+    const footer = document.querySelector('[data-slot="playback-dock"]')!.getBoundingClientRect();
+    const core = document.querySelector('[data-region="playback-core"]')!.getBoundingClientRect();
+    return { bottom: footer.bottom, core: core.top };
+  };
+
+  for (const label of ["Open Now Playing", "Close Now Playing"]) {
+    const frames = await sampleFrames(page, measure, () =>
+      dock.getByRole("button", { name: label }).click(),
+    );
+    expect(frames.length).toBeGreaterThan(10);
+    for (const frame of frames) {
+      expect(frame.bottom).toBeCloseTo(frames[0]!.bottom, 0);
+      expect(frame.core).toBeCloseTo(frames[0]!.core, 0);
+    }
+  }
+});
+
+test("the transport buttons keep their size while the dock changes height", async ({ page }) => {
+  const dock = await playAlbum(page);
+  const measure = () => {
+    const button = document.querySelector('button[aria-label="Next track"]')!;
+    const rect = button.getBoundingClientRect();
+    const scale = getComputedStyle(
+      button.closest('[data-slot="playback-dock"]')!.parentElement!,
+    ).transform;
+    return { height: rect.height, scale };
+  };
+  const frames = await sampleFrames(page, measure, () =>
+    dock.getByRole("button", { name: "Open Now Playing" }).click(),
+  );
+  for (const frame of frames) {
+    expect(frame.height).toBeCloseTo(frames[0]!.height, 1);
+    expect(frame.scale).toBe("none");
+  }
+});
+
+test("changing track never leaves the dock without a visible title", async ({ page }) => {
+  const dock = await playAlbum(page);
+  const measure = () => {
+    const titles = [
+      ...document.querySelectorAll<HTMLElement>('[data-region="playback-identity"] button[title]'),
+    ];
+    return Math.max(
+      0,
+      ...titles.map((title) => Number(getComputedStyle(title.parentElement!).opacity)),
+    );
+  };
+  const frames = await sampleFrames(page, measure, () =>
+    dock.getByRole("button", { name: "Next track" }).click(),
+  );
+  await expect(dock.getByText("Track 002", { exact: true }).first()).toBeVisible();
+  // Skip the first frame, sampled before the click reached the page.
+  for (const opacity of frames.slice(1)) expect(opacity).toBeGreaterThan(0.1);
+});

@@ -9,8 +9,8 @@ import {
 import { cn } from "@/renderer/shared/lib/utils";
 import { Button } from "@/renderer/shared/ui/shadcn/button";
 
-/** Shuffle, previous, play/pause, next, repeat. `onDirection` tells the dock which way to slide. */
-export function DockTransport({ onDirection }: { onDirection: (direction: 1 | -1) => void }) {
+/** Shuffle, previous, play/pause, next, repeat. */
+export function DockTransport() {
   const transport = usePlaybackTransport();
   const { repeatMode, shuffleEnabled } = usePlaybackQueue();
   const playback = usePlaybackActions();
@@ -38,7 +38,6 @@ export function DockTransport({ onDirection }: { onDirection: (direction: 1 | -1
         label="Previous track"
         disabled={!transport.canGoPrevious || controlsBusy}
         onClick={() => {
-          onDirection(-1);
           void playback.previous();
         }}
       >
@@ -60,7 +59,6 @@ export function DockTransport({ onDirection }: { onDirection: (direction: 1 | -1
         label="Next track"
         disabled={!transport.canGoNext || controlsBusy}
         onClick={() => {
-          onDirection(1);
           void playback.next();
         }}
       >

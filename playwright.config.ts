@@ -22,6 +22,8 @@ export default defineConfig({
         ...devices["Desktop Chrome"],
         baseURL: "http://127.0.0.1:5173",
         trace: "retain-on-failure",
+        // Tests read geometry and state, not motion; `motion.e2e.ts` turns this back off.
+        reducedMotion: "reduce",
         screenshot: "only-on-failure",
       },
     },

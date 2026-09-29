@@ -285,3 +285,42 @@ describe("starting playback", () => {
     expect(store.getState().error).toBe("That track is unavailable on disk.");
   });
 });
+
+describe("last navigation", () => {
+  it("records previous only for the item change it caused", async () => {
+    const store = createPlaybackStore();
+    const controller = createPlaybackController(store);
+    await controller.initialize(
+      baseApi({
+        getPlaybackState: async () => playing(1, "b", 0),
+        previousPlayback: async () => playing(2, "a", 0),
+      }),
+    );
+
+    expect(store.getState().lastNavigation).toBe("next");
+    await controller.previous();
+    expect(store.getState().item?.trackId).toBe("a");
+    expect(store.getState().lastNavigation).toBe("previous");
+
+    // A change nobody asked for (auto-advance) goes forward again.
+    controller.acceptPlayback(playing(3, "c", 0));
+    expect(store.getState().lastNavigation).toBe("next");
+  });
+
+  it("does not let a failed Previous colour the next automatic change", async () => {
+    const store = createPlaybackStore();
+    const controller = createPlaybackController(store);
+    await controller.initialize(
+      baseApi({
+        getPlaybackState: async () => playing(1, "b", 0),
+        previousPlayback: async () => {
+          throw { code: "trackUnavailable" };
+        },
+      }),
+    );
+
+    await controller.previous();
+    controller.acceptPlayback(playing(2, "c", 0));
+    expect(store.getState().lastNavigation).toBe("next");
+  });
+});

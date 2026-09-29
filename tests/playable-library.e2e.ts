@@ -32,7 +32,8 @@ test("plays tracks and operates the persistent seek, transport, volume, and tech
 
   const dock = page.getByRole("contentinfo", { name: "Playback controls" });
   await expect(dock.getByText("Test track", { exact: true })).toBeVisible();
-  await expect(dock.getByText("Test artist", { exact: true })).toBeVisible();
+  // Old and new identity briefly coexist while a track change crossfades.
+  await expect(dock.getByText("Test artist", { exact: true }).first()).toBeVisible();
   const pause = page.getByRole("button", { name: "Pause", exact: true });
   await expect(pause).toBeEnabled();
   await pause.click();

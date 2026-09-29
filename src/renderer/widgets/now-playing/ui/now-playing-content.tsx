@@ -1,33 +1,60 @@
+import { useRef } from "react";
 import { m } from "motion/react";
 import { usePlaybackItem } from "@/renderer/entities/playback";
-import { Artwork } from "@/renderer/shared/ui/artwork";
-import { ArtworkLight } from "@/renderer/shared/ui/artwork-light";
+import { useTrackLyrics } from "@/renderer/entities/lyrics";
 import {
+  NOW_PLAYING_SLEEVE_ID,
   NOW_PLAYING_WAVEFORM_HEIGHT,
   PlaybackWaveformBand,
-} from "@/renderer/widgets/playback-region";
+  SLEEVE_RADIUS_PX,
+  useNowPlayingTransitions,
+} from "@/renderer/features/now-playing-transition";
+import { cn } from "@/renderer/shared/lib/utils";
+import { Artwork } from "@/renderer/shared/ui/artwork";
+import { ArtworkLight } from "@/renderer/shared/ui/artwork-light";
 import { LyricsPanel } from "./lyrics-panel";
 
 /**
- * Now Playing's content: the Sleeve and title continue their shared-element motion from the
- * dock (matching `layoutId`s in `playback-dock.tsx`), artist/album settle in around them, and
- * the lyrics panel takes the rest of the space. The waveform is the same object as the dock's,
- * grown into a hero band along the bottom edge (the dock hides its own copy while this is open
- * — see `PlaybackWaveformBand`), so it reads as one strip that grew, not a second instrument.
- * Layout stays fixed regardless of lyrics availability, so switching tracks never reflows it.
+ * Now Playing's content: the Sleeve continues its shared-element motion from the dock (the
+ * same `layoutId`); the text is not shared — it fades in behind the Sleeve, since stretching
+ * type between two sizes only distorts it. With lyrics the Sleeve and info sit left of the
+ * lyrics panel; without them the same content is centred and large. The waveform grows along
+ * the bottom edge when its data arrives.
  */
 export function NowPlayingContent() {
   const item = usePlaybackItem();
+  const transitions = useNowPlayingTransitions();
+  const { data: resolution } = useTrackLyrics(item?.trackId ?? null);
+  // While lyrics are loading keep the layout the previous track had, so it does not flip twice.
+  const showLyricsRef = useRef(true);
+  if (resolution !== undefined) showLyricsRef.current = resolution.status === "resolved";
+  const showLyrics = showLyricsRef.current;
 
   return (
-    <div className="relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
+    <div className="relative flex h-full min-h-0 min-w-0 flex-col">
       <ArtworkLight artwork={item?.artwork ?? null} strength="max" />
-      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden md:flex-row">
-        <div className="relative flex min-w-0 shrink-0 flex-col gap-4 p-6 md:w-96">
-          <div className="flex items-center gap-4 md:flex-col md:items-start">
+      <div
+        className={cn(
+          "relative flex min-h-0 min-w-0 flex-1 flex-col",
+          showLyrics ? "md:flex-row" : "items-center justify-center",
+        )}
+      >
+        <div
+          className={cn(
+            "relative flex min-w-0 shrink-0 flex-col gap-4 p-6",
+            showLyrics ? "md:w-96" : "items-center text-center md:max-w-2xl",
+          )}
+        >
+          <div
+            className={cn(
+              "flex items-center gap-4 md:flex-col",
+              showLyrics ? "md:items-start" : "md:items-center",
+            )}
+          >
             <m.div
-              layoutId="now-playing-sleeve"
-              className="size-16 shrink-0 overflow-hidden rounded-lg md:size-[22rem]"
+              layoutId={NOW_PLAYING_SLEEVE_ID}
+              className="size-16 shrink-0 overflow-hidden md:size-[22rem]"
+              style={{ borderRadius: SLEEVE_RADIUS_PX }}
             >
               <Artwork
                 artwork={item?.artwork ?? null}
@@ -36,42 +63,37 @@ export function NowPlayingContent() {
                 className="size-full rounded-none"
               />
             </m.div>
-            <div className="min-w-0">
-              <m.p
-                layoutId="now-playing-title"
-                className="truncate text-lg font-medium text-foreground"
-              >
+            <m.div
+              key={item?.queueItemId ?? "none"}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1, transition: transitions.content }}
+              className="min-w-0"
+            >
+              <p className="line-clamp-3 text-2xl font-semibold text-foreground md:text-4xl">
                 {item?.title ?? "Nothing playing"}
-              </m.p>
+              </p>
               {/* Ink-1: the playing track is "the present" per DESIGN.md, and Light may be absent. */}
-              <m.p
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.12, duration: 0.18 }}
-                className="truncate text-sm text-foreground"
-              >
-                {item?.artist}
-              </m.p>
-              <m.p
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.12, duration: 0.18 }}
-                className="truncate text-sm text-foreground"
-              >
-                {item?.album}
-              </m.p>
-            </div>
+              <p className="mt-2 truncate text-base text-foreground">{item?.artist}</p>
+              <p className="truncate text-sm text-foreground">{item?.album}</p>
+            </m.div>
           </div>
+          {showLyrics ? null : (
+            <LyricsPanel
+              trackId={item?.trackId ?? null}
+              className="h-auto items-center text-center"
+            />
+          )}
         </div>
-        <m.div
-          key={item?.trackId ?? "none"}
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.18, duration: 0.2 }}
-          className="min-h-0 min-w-0 flex-1 p-6 pt-0 md:pt-6"
-        >
-          <LyricsPanel trackId={item?.trackId ?? null} className="h-full" />
-        </m.div>
+        {showLyrics ? (
+          <m.div
+            key={item?.trackId ?? "none"}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1, transition: transitions.content }}
+            className="min-h-0 min-w-0 flex-1 p-6 pt-0 md:pt-6"
+          >
+            <LyricsPanel trackId={item?.trackId ?? null} className="h-full" />
+          </m.div>
+        ) : null}
       </div>
       <PlaybackWaveformBand
         height={NOW_PLAYING_WAVEFORM_HEIGHT}

@@ -6,12 +6,14 @@ import {
   usePlaybackOutput,
   usePlaybackTransport,
 } from "@/renderer/entities/playback";
+import { useNowPlaying } from "@/renderer/features/now-playing-transition";
 import { useQueuePanel } from "@/renderer/widgets/queue-panel";
 import { Button } from "@/renderer/shared/ui/shadcn/button";
 import { Slider } from "@/renderer/shared/ui/shadcn/slider";
 
 /** Lyrics and queue toggles, mute, the volume slider (also driven by the wheel) and its readout. */
-export function DockVolume({ onToggleNowPlaying }: { onToggleNowPlaying: () => void }) {
+export function DockVolume() {
+  const { toggle: onToggleNowPlaying } = useNowPlaying();
   const transport = usePlaybackTransport();
   const output = usePlaybackOutput();
   const playback = usePlaybackActions();

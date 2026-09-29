@@ -36,6 +36,11 @@ export function usePlaybackItem() {
   return usePlaybackStore((state) => state.item);
 }
 
+/** Which way the last track change went, for sliding the identity in the same direction. */
+export function usePlaybackNavigation() {
+  return usePlaybackStore((state) => state.lastNavigation);
+}
+
 /** Elapsed and total time of the loaded track. Updates about four times a second. */
 export function usePlaybackPosition() {
   return usePlaybackStore(

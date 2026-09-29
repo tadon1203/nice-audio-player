@@ -1,6 +1,7 @@
 import { Outlet, useRouterState } from "@tanstack/react-router";
 import { LyricsWaveformLinkProvider } from "@/renderer/features/lyrics-waveform-link";
-import { NowPlayingContent, NowPlayingLayer, useNowPlaying } from "@/renderer/widgets/now-playing";
+import { useNowPlaying } from "@/renderer/features/now-playing-transition";
+import { NowPlayingContent, NowPlayingLayer } from "@/renderer/widgets/now-playing";
 import { PlaybackRegion } from "@/renderer/widgets/playback-region";
 import { QueuePanel } from "@/renderer/widgets/queue-panel";
 import { Navigation } from "./navigation";
@@ -9,7 +10,7 @@ import { usePlaybackShortcuts } from "./use-playback-shortcuts";
 
 export function AppShell() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
-  const { isOpen: nowPlayingOpen, toggle: toggleNowPlaying } = useNowPlaying();
+  const { isOpen: nowPlayingOpen } = useNowPlaying();
   usePlaybackShortcuts();
 
   return (
@@ -37,7 +38,7 @@ export function AppShell() {
         </NowPlayingLayer>
 
         <div className="col-span-full row-start-3 min-h-0 min-w-0">
-          <PlaybackRegion nowPlayingOpen={nowPlayingOpen} onToggleNowPlaying={toggleNowPlaying} />
+          <PlaybackRegion />
         </div>
 
         <QueuePanel />

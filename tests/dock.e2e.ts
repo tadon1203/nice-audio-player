@@ -18,9 +18,6 @@ test("shows a plain progress line in the dock, never the waveform bars", async (
   const dock = await playFirstTrack(page);
   const seek = dock.getByRole("slider", { name: "Playback position" });
   await expect(seek).toHaveAttribute("data-ready", "false");
-  // Let the track-change slide-in (mediumMove, ~0.3s spring) settle before the first
-  // measurement, so it isn't compared mid-animation against a later one.
-  await page.waitForTimeout(500);
   const before = await dock.boundingBox();
   const seekBefore = await seek.boundingBox();
   await expect(seek.locator('[data-slot="waveform-baseline"]').first()).toBeVisible();
@@ -145,28 +142,35 @@ test("opens Now Playing from the Sleeve and offers album and artist navigation",
   await expect(page).toHaveURL(/\/library\/albums\/Test%20artist\/Test%20album/);
 });
 
-test("Now Playing covers the workspace without moving the sidebar or the dock", async ({
+test("Now Playing covers the workspace without moving the sidebar or the dock's bottom", async ({
   page,
 }) => {
   const dock = await playFirstTrack(page);
-  const shell = async () => ({
-    dock: (await dock.boundingBox())!,
-    sidebar: (await page.locator("aside").boundingBox())!,
-    main: (await page.getByRole("main").boundingBox())!,
-  });
+  const shell = async () => {
+    const dockBox = (await dock.boundingBox())!;
+    const sidebar = (await page.locator("aside").boundingBox())!;
+    return {
+      dockBottom: dockBox.y + dockBox.height,
+      sidebar: { x: sidebar.x, y: sidebar.y, width: sidebar.width },
+    };
+  };
   const before = await shell();
+  const dockTop = (await dock.boundingBox())!.y;
 
   await dock.getByRole("button", { name: "Open Now Playing" }).click();
   const layer = page.getByRole("region", { name: "Now Playing" });
   await expect(layer).toBeVisible();
   await expect.poll(async () => (await layer.boundingBox())!.height).toBeGreaterThan(400);
 
+  // The dock gives up its waveform slot (16px) from the top; its bottom edge and the sidebar
+  // stay put, and the layer sits between the title bar and the dock.
+  await expect.poll(async () => (await dock.boundingBox())!.height).toBeCloseTo(88, 0);
+  expect(await shell()).toEqual(before);
+  const dockAfter = (await dock.boundingBox())!;
+  expect(dockAfter.y).toBeCloseTo(dockTop + 16, 0);
   const layerBox = (await layer.boundingBox())!;
-  const during = await shell();
-  // Sidebar, workspace and dock stay in their own cells; the layer sits above them.
-  expect(during).toEqual(before);
   expect(layerBox.y).toBeCloseTo(40, 0);
-  expect(layerBox.y + layerBox.height).toBeCloseTo(before.dock.y, 0);
+  expect(layerBox.y + layerBox.height).toBeCloseTo(dockAfter.y, 0);
   expect(layerBox.x).toBeCloseTo(0, 0);
   expect(layerBox.width).toBeCloseTo(1360, 0);
 });
@@ -178,7 +182,6 @@ test("keeps the transport and volume groups in place when Now Playing opens", as
   const before = { core: (await core.boundingBox())!, volume: (await volume.boundingBox())! };
 
   await dock.getByRole("button", { name: "Open Now Playing" }).click();
-  await page.waitForTimeout(500);
   const after = { core: (await core.boundingBox())!, volume: (await volume.boundingBox())! };
 
   expect(after.core.y).toBeCloseTo(before.core.y, 0);

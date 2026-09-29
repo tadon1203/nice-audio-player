@@ -14,6 +14,7 @@ import type {
 import { nativeErrorCode } from "@/renderer/shared/lib/native-error";
 import { playbackCommandErrorMessage } from "./playback-errors";
 
+export type PlaybackNavigation = "next" | "previous";
 export type PlaybackConnection = "loading" | "ready" | "failed";
 export type TransportCommand =
   | "start"
@@ -36,6 +37,8 @@ export type PlaybackStoreState = {
   positionMs: number;
   durationMs: number | null;
   playbackRevision: number | null;
+  /** How the current item was reached: Next/Previous, or anything else (counts as "next"). */
+  lastNavigation: PlaybackNavigation;
   queueRevision: number | null;
   connection: PlaybackConnection;
   transportPending: TransportCommand | null;
@@ -76,6 +79,7 @@ export function createPlaybackStore(): UseBoundStore<StoreApi<PlaybackStoreState
     positionMs: 0,
     durationMs: null,
     playbackRevision: null,
+    lastNavigation: "next",
     queueRevision: null,
     connection: "loading",
     transportPending: null,
@@ -93,6 +97,9 @@ export function createPlaybackController(store: UseBoundStore<StoreApi<PlaybackS
   let initializedApi: TNativeAPI | null = null;
   let requestedVolume: number | null = null;
   let volumeWriteActive = false;
+  // Set when Next/Previous is pressed and consumed by the snapshot that changes the item, so
+  // the direction and the new item reach subscribers in the same update.
+  let pendingNavigation: PlaybackNavigation | null = null;
 
   const setError = (error: unknown) => {
     // A request replaced by a newer one has nothing to report.
@@ -107,9 +114,13 @@ export function createPlaybackController(store: UseBoundStore<StoreApi<PlaybackS
     const item =
       incoming !== null && state.item?.queueItemId === incoming.queueItemId ? state.item : incoming;
     const session = snapshotSession(snapshot);
+    const itemChanged = item?.queueItemId !== state.item?.queueItemId;
+    const lastNavigation = itemChanged ? (pendingNavigation ?? "next") : state.lastNavigation;
+    if (itemChanged) pendingNavigation = null;
     store.setState({
       snapshot,
       item,
+      lastNavigation,
       positionMs: session?.positionMs ?? 0,
       durationMs: session?.durationMs ?? null,
       playbackRevision: snapshot.base.revision,
@@ -138,6 +149,7 @@ export function createPlaybackController(store: UseBoundStore<StoreApi<PlaybackS
     } catch (error) {
       setError(error);
     } finally {
+      pendingNavigation = null;
       store.setState({ transportPending: null });
     }
   };
@@ -207,8 +219,14 @@ export function createPlaybackController(store: UseBoundStore<StoreApi<PlaybackS
       runTransport("start", () => api!.startPlayback(context, startTrackId)),
     pause: () => runTransport("pause", () => api!.pausePlayback()),
     resume: () => runTransport("resume", () => api!.resumePlayback()),
-    previous: () => runTransport("previous", () => api!.previousPlayback()),
-    next: () => runTransport("next", () => api!.nextPlayback()),
+    previous: () => {
+      pendingNavigation = "previous";
+      return runTransport("previous", () => api!.previousPlayback());
+    },
+    next: () => {
+      pendingNavigation = "next";
+      return runTransport("next", () => api!.nextPlayback());
+    },
     seek: async (positionMs: number) => {
       if (!api || store.getState().seekPending) return;
       store.setState({ seekPending: true, error: null });

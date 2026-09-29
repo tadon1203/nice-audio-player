@@ -4,8 +4,8 @@ import {
   playbackController,
   usePlaybackStore,
 } from "@/renderer/entities/playback";
-import { nextSeekPosition } from "@/renderer/widgets/playback-region";
-import { useNowPlaying } from "@/renderer/widgets/now-playing";
+import { useNowPlaying } from "@/renderer/features/now-playing-transition";
+import { nextSeekPosition } from "@/renderer/shared/ui/waveform";
 import { useQueuePanel } from "@/renderer/widgets/queue-panel";
 
 const INTERACTIVE_TAGS = new Set(["BUTTON", "A", "INPUT", "TEXTAREA", "SELECT"]);

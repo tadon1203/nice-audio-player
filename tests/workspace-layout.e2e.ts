@@ -1,6 +1,9 @@
 import { expect, test, type Locator } from "@playwright/test";
 import { installNativeApi } from "./fixtures/native-api";
 
+// The scrollbar fade is motion-dependent, so this file opts out of the suite-wide reduced motion.
+test.use({ reducedMotion: "no-preference" });
+
 test.beforeEach(async ({ page }) => installNativeApi(page));
 
 async function boxOf(locator: Locator) {

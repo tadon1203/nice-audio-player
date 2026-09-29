@@ -5,12 +5,14 @@ export {
   playbackController,
   usePlaybackStore,
   type PlaybackConnection,
+  type PlaybackNavigation,
   type TransportCommand,
 } from "./model/playback-session";
 export {
   useTrackPlaybackState,
   usePlaybackActions,
   usePlaybackItem,
+  usePlaybackNavigation,
   usePlaybackOutput,
   usePlaybackPosition,
   usePlaybackQueue,

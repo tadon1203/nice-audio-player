@@ -1,32 +1,24 @@
-import { useRef } from "react";
 import { m } from "motion/react";
 import { usePlaybackItem } from "@/renderer/entities/playback";
-import { cn } from "@/renderer/shared/lib/utils";
 import { ArtworkLight } from "@/renderer/shared/ui/artwork-light";
-import { useMotionTransition } from "@/renderer/shared/ui/motion";
 import { DockIdentity } from "./dock-identity";
 import { DockTransport } from "./dock-transport";
 import { DockVolume } from "./dock-volume";
-import { DOCK_SEEK_HEIGHT, PlaybackWaveformBand } from "./playback-waveform-band";
+import {
+  DOCK_SEEK_HEIGHT,
+  PlaybackWaveformBand,
+  useNowPlaying,
+  useNowPlayingTransitions,
+} from "@/renderer/features/now-playing-transition";
 
 /** Layout intent (two full-width rows, centered transport) is in DESIGN.md, "Dock". */
-export function PlaybackDock({
-  nowPlayingOpen,
-  onToggleNowPlaying,
-}: {
-  nowPlayingOpen: boolean;
-  onToggleNowPlaying: () => void;
-}) {
+export function PlaybackDock() {
   // Nothing read here changes with playback position, so the dock does not re-render as time
   // passes.
   const item = usePlaybackItem();
   const trackKey = item?.file.path ?? "none";
-  const trackChangeTransition = useMotionTransition("mediumMove");
-  const nowPlayingTransition = useMotionTransition("largeMove");
-  // Next exits to the left, previous exits to the right; anything else (a fresh track from the
-  // library, auto-advance) defaults to "forward". Read at render time by the identity block,
-  // which re-renders when the new snapshot for `trackKey` arrives.
-  const directionRef = useRef<1 | -1>(1);
+  const { isOpen: nowPlayingOpen } = useNowPlaying();
+  const transitions = useNowPlayingTransitions();
 
   return (
     <footer
@@ -44,9 +36,13 @@ export function PlaybackDock({
       <div className="relative flex h-full min-h-0 min-w-0 flex-col justify-end pb-3">
         {/* While Now Playing is open the waveform lives up there, so this slot animates shut. */}
         <m.div
-          layout
-          transition={nowPlayingTransition}
-          className={cn("shrink-0 overflow-hidden", nowPlayingOpen ? "h-0" : "mb-3 h-3")}
+          initial={false}
+          animate={{
+            height: nowPlayingOpen ? 0 : 12,
+            marginBottom: nowPlayingOpen ? 0 : 12,
+          }}
+          transition={nowPlayingOpen ? transitions.open : transitions.close}
+          className="shrink-0 overflow-hidden"
         >
           {nowPlayingOpen ? null : (
             <PlaybackWaveformBand
@@ -63,20 +59,9 @@ export function PlaybackDock({
           className="grid min-h-16 min-w-0 shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-x-3 px-2 md:px-4 lg:gap-x-6 lg:px-6"
           data-region="playback-main"
         >
-          <DockIdentity
-            item={item}
-            nowPlayingOpen={nowPlayingOpen}
-            onToggleNowPlaying={onToggleNowPlaying}
-            trackKey={trackKey}
-            direction={directionRef.current}
-            trackChangeTransition={trackChangeTransition}
-          />
-          <DockTransport
-            onDirection={(direction) => {
-              directionRef.current = direction;
-            }}
-          />
-          <DockVolume onToggleNowPlaying={onToggleNowPlaying} />
+          <DockIdentity item={item} trackKey={trackKey} />
+          <DockTransport />
+          <DockVolume />
         </div>
       </div>
     </footer>

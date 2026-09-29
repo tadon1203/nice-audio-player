@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { m } from "motion/react";
 import { useLyricsWaveformLink } from "@/renderer/features/lyrics-waveform-link";
 import {
   usePlaybackActions,
@@ -10,7 +9,7 @@ import {
 } from "@/renderer/entities/playback";
 import { formatDuration } from "@/renderer/shared/lib/format";
 import { cn } from "@/renderer/shared/lib/utils";
-import { WaveformSeek } from "./waveform-seek";
+import { WaveformSeek } from "@/renderer/shared/ui/waveform";
 
 /** The dock's slim progress line — no waveform data, just position. */
 export const DOCK_SEEK_HEIGHT = 6;
@@ -18,12 +17,11 @@ export const DOCK_SEEK_HEIGHT = 6;
 export const NOW_PLAYING_WAVEFORM_HEIGHT = 96;
 
 /**
- * The seek bar and its elapsed/remaining labels: one object shared by the dock (a plain
- * progress line, `showWaveform={false}`) and Now Playing (the waveform hero, `showWaveform`
- * defaulted true). `layoutId` morphs the same element between the two — the dock's flat line
- * grows into the full waveform as Now Playing opens — instead of two independent bars existing
- * at once; only one of the two callers is ever mounted, since the dock hides its band while Now
- * Playing is open (see `Sleeve` for the same pattern).
+ * The seek bar and its elapsed/remaining labels, used by both the dock (a plain progress line,
+ * `showWaveform={false}`) and Now Playing (the waveform hero, `showWaveform` defaulted true).
+ * They are two separate bars, never morphed into each other: Now Playing's bars grow out of
+ * its baseline once the waveform arrives. Only one is mounted at a time, since the dock hides
+ * its band while Now Playing is open.
  *
  * `timeLayout="inline"` puts the labels beside the bar instead of on their own row below it,
  * so the whole band is only as tall as one line of text — the dock's shape; `"stacked"` (Now
@@ -45,7 +43,7 @@ export function PlaybackWaveformBand({
   timeClassName?: string;
 }) {
   const item = usePlaybackItem();
-  const { active, seekPending } = usePlaybackTransport();
+  const { active, seekPending, status } = usePlaybackTransport();
   const { positionMs, durationMs } = usePlaybackPosition();
   const { seek } = usePlaybackActions();
   const lyricsLink = useLyricsWaveformLink();
@@ -63,6 +61,8 @@ export function PlaybackWaveformBand({
       showPlayhead={showWaveform}
       valueMs={seekValue}
       durationMs={durationMs}
+      playing={status === "playing"}
+      sweepBars={showWaveform}
       disabled={!canSeek || seekPending}
       onInput={setSeekPreviewMs}
       onCommit={(value) => {
@@ -95,8 +95,7 @@ export function PlaybackWaveformBand({
 
   if (timeLayout === "inline") {
     return (
-      <m.div
-        layoutId="now-playing-waveform"
+      <div
         className={cn(
           "flex items-center gap-2 text-xs leading-none text-muted-foreground tabular-nums",
           className,
@@ -107,12 +106,12 @@ export function PlaybackWaveformBand({
         </span>
         {seekBar}
         <span className={cn("shrink-0", timeClassName)}>{remainingButton}</span>
-      </m.div>
+      </div>
     );
   }
 
   return (
-    <m.div layoutId="now-playing-waveform" className={cn("flex flex-col gap-1", className)}>
+    <div className={cn("flex flex-col gap-1", className)}>
       {seekBar}
       <div
         className={cn(
@@ -124,6 +123,6 @@ export function PlaybackWaveformBand({
         <span aria-label="Elapsed time">{formatDuration(seekValue)}</span>
         {remainingButton}
       </div>
-    </m.div>
+    </div>
   );
 }
