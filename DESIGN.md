@@ -38,7 +38,7 @@ Controls are grayscale and never take artwork color. Chromatic color is reserved
 - **Depth**: only `shadow-none` and `shadow-floating`; persistent UI has no shadow. Layers are listed under Spatial layers.
 - **Blur**: allowed only as Light and Acrylic (below). Never in the workspace or sidebar, never animated.
 - **Components**: shadcn primitives live in `src/renderer/shared/ui/shadcn`; product UI stays outside. Use them instead of restyling focus, disabled, and keyboard states in page CSS.
-- **No hardware cosplay**: no fake knobs, screws, LEDs, or decorative meters. The waveform is data, not decoration.
+- **No hardware cosplay**: no fake knobs, screws, LEDs, or decorative meters. The waveform is data, not decoration. Mechanical motion is allowed only when it draws real data changing: rolling digits, and signal-path steps that flip when (and only when) their value changes.
 
 ## Vocabulary
 
@@ -110,20 +110,23 @@ The waveform is the exception: played is Ink-1, unplayed is Ink-2. State changes
  0  Library ⇄ details (same surface; the Sleeve moves as a shared element)
 ```
 
-Motion tokens live in `shared/ui/motion`. Springs are fully damped (`bounce: 0`): no bounce, no overshoot.
+Motion tokens live in `shared/ui/motion`. Springs are fully damped (`bounce: 0`): no bounce, no overshoot. The one exception is `press`, the play button's press.
 
-| Token        | Setting       | Used for                                         |
-| ------------ | ------------- | ------------------------------------------------ |
-| `feedback`   | 100ms, ease   | hover, press, color                              |
-| `smallMove`  | spring, 0.2s  | tabs, Select, tooltips, lyric line luminance     |
-| `mediumMove` | spring, 0.3s  | Queue panel, Sheet, lyrics scroll, track changes |
-| `largeMove`  | spring, 0.42s | dock ⇄ Now Playing, tile ⇄ details               |
-| `light`      | 400ms, ease   | crossfading Light                                |
+| Token        | Setting                       | Used for                                         |
+| ------------ | ----------------------------- | ------------------------------------------------ |
+| `feedback`   | 100ms, ease                   | hover, press, color                              |
+| `smallMove`  | spring, 0.2s                  | tabs, Select, tooltips, lyric line luminance     |
+| `mediumMove` | spring, 0.3s                  | Queue panel, Sheet, lyrics scroll, track changes |
+| `largeMove`  | spring, 0.42s                 | dock ⇄ Now Playing, tile ⇄ details               |
+| `roll`       | spring, 0.35s                 | rolling digits (`RollingNumber`)                 |
+| `spin`       | spring, 0.6s                  | digits or a disc turning several times (a seek)  |
+| `press`      | spring, 0.15s, `bounce: 0.25` | the play button's press (the only overshoot)     |
+| `light`      | 400ms, ease                   | crossfading Light                                |
 
 1. Direction encodes hierarchy: deeper moves up, back moves down. Next track exits left, previous exits right. Sibling views only crossfade (100ms). Sort and filter do not animate.
 2. Things appear from where they were summoned.
 3. Direct manipulation (seek, volume, manual scroll, header shrink) tracks input 1:1.
-4. Only these move on their own: track changes, lyrics follow and fill, the playhead, Light crossfades.
+4. Only these move on their own: track changes, lyrics follow and fill, the playhead, Light crossfades, and numbers that tick (rolling digits; dragging a control shows them 1:1 instead).
 5. Reduced motion turns every movement into a 100ms crossfade. Hierarchy and state stay intact.
 
 Shared elements use `motion` (`layoutId`), which interrupts and reverses cleanly. Small feedback stays on CSS transitions. The View Transitions API is snapshot-based and not used for main transitions.
@@ -186,7 +189,7 @@ One 104px band with stable geometry. Primary transport stays centered and nothin
 A layer over the current location, not a route: the library stays mounted underneath (scroll position included), and Back closes it. The dock's own surface lifts first (its waveform slot closes, so its top edge rises 16px), then the Now Playing surface lifts and fades in over it, the Sleeve lands from the dock unclipped, and the text and waveform follow. Closing plays the same motion in about 70% of the time. Nothing on the layer clips its children (only the Light clips itself), and the title is faded in rather than shared, since stretching type between sizes distorts it. Entry: the dock Sleeve or title, the lyrics button, `Ctrl+L`. The `⌄` close button sits where the Sleeve was, and the Sleeve returns there on close. Beneath it, the underlying shell is `inert`.
 
 - **Waveform seek bar**: the only place the waveform is drawn. Bars grow upward from a baseline; played Ink-1, unplayed Ink-2, a 1px playhead. Hover shows a line and a time tooltip; dragging tracks the pointer 1:1. Its size never changes. Before data exists it is a 2px baseline line, and the bars grow out of that same line from left to right when the data arrives. The dock's progress line is a separate, simpler bar. Played and unplayed differ clearly (unplayed is about 35% ink), and the fill and playhead advance every frame from the last reported position; only a seek or track change springs. Elapsed and remaining time sit at its ends; clicking toggles remaining time.
-- **Lyrics** (local LRC only): left-aligned with a timestamp Gutter; the Gutter is the seek button, the text is selectable. The current line starts unlit (Ink-2) and is filled left to right in the artwork color as it is sung, over the time it takes to read it (capped, so a long instrumental gap does not crawl); size and weight never change. Without lyrics, the Sleeve and info are centered and large. About `text-2xl`, ≤ ~32 characters per line. Plain lyrics have no Gutter, no auto-scroll, and an `Unsynced` label. Position arrives every 250ms, so time is interpolated from the last anchor. Follow mode keeps the current line about a third from the top; wheel, touch, scrollbar, and navigation keys switch to free mode with a `Jump to current line` button, and follow resumes after ~4s idle away from the lyrics, on the button, on track change, or on Gutter seek. The current line gets `aria-current`; there is no per-line `aria-live`.
+- **Lyrics** (local LRC only): left-aligned with a timestamp Gutter; the Gutter is the seek button, the text is selectable. The current line starts unlit (Ink-2) and is filled left to right in the artwork color as it is sung, over the time it takes to read it (capped, so a long instrumental gap does not crawl); size and weight never change. The fill goes one character at a time, so a wrapped line lights its upper row before its lower one; each character lifts 2px as it lights and settles back (skipped under reduced motion and on lines over 100 characters). Without lyrics, the Sleeve and info are centered and large. About `text-2xl`, ≤ ~32 characters per line. Plain lyrics have no Gutter, no auto-scroll, and an `Unsynced` label. Position arrives every 250ms, so time is interpolated from the last anchor. Follow mode keeps the current line about a third from the top; wheel, touch, scrollbar, and navigation keys switch to free mode with a `Jump to current line` button, and follow resumes after ~4s idle away from the lyrics, on the button, on track change, or on Gutter seek. The current line gets `aria-current`; there is no per-line `aria-live`.
 - The current lyric line's span is lit on the waveform; hovering a line highlights its span there, and hovering the waveform faintly marks its line.
 - **Lyrics states**: no lyrics → `No lyrics for this track` with `Add a .lrc file with the same name next to the audio file.`; unreadable → `Couldn't read the lyrics file` with the path; sidecar failed → `The .lrc file couldn't be read. Showing embedded lyrics.`
 

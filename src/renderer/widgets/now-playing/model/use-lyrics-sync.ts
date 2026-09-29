@@ -57,6 +57,26 @@ export function lineProgress(positionMs: number, startMs: number, fillMs: number
   return Math.min(1, Math.max(0, (positionMs - startMs) / fillMs));
 }
 
+/** Past this many characters a line only fades in; the per-character lift is skipped. */
+export const MAX_LIFT_CHARS = 100;
+/** How far a character rises when it lights, in px, and how long it takes to settle back. */
+const LIFT_PX = 2;
+const LIFT_SETTLE_MS = 200;
+
+/** How lit character `index` of `count` is (0-1) when the whole line is `progress` lit: each takes its own slice, in order. */
+export function charOpacity(progress: number, index: number, count: number): number {
+  return Math.min(1, Math.max(0, progress * count - index));
+}
+
+/** The upward offset in px (negative is up) of a character: it jumps as it lights, then settles over 200ms. */
+export function charLift(progress: number, index: number, count: number, fillMs: number): number {
+  const since = progress * count - index;
+  if (since <= 0 || fillMs <= 0) return 0;
+  const elapsedMs = (since / count) * fillMs;
+  if (elapsedMs >= LIFT_SETTLE_MS) return 0;
+  return -LIFT_PX * (1 - elapsedMs / LIFT_SETTLE_MS);
+}
+
 /**
  * Tracks the current lyric line index from a `{positionMs, performance.now()}` anchor,
  * interpolating while playing and freezing while paused. Recomputes on every new position

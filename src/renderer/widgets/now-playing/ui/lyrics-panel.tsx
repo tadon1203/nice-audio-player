@@ -1,7 +1,8 @@
 import { useEffect } from "react";
-import { AnimatePresence, m, useTransform, type MotionValue } from "motion/react";
+import { AnimatePresence, m, useReducedMotion, useTransform, type MotionValue } from "motion/react";
 import { useTrackLyrics } from "@/renderer/entities/lyrics";
 import { formatDuration } from "@/renderer/shared/lib/format";
+import { graphemes } from "@/renderer/shared/lib/graphemes";
 import { cn } from "@/renderer/shared/lib/utils";
 import { Button } from "@/renderer/shared/ui/shadcn/button";
 import { useInterpolatedPosition, useMotionTransition } from "@/renderer/shared/ui/motion";
@@ -12,6 +13,9 @@ import {
   usePlaybackTransport,
 } from "@/renderer/entities/playback";
 import {
+  MAX_LIFT_CHARS,
+  charLift,
+  charOpacity,
   findCurrentLineIndex,
   lineFillMs,
   lineProgress,
@@ -180,8 +184,9 @@ export function LyricsPanel({ trackId, className }: LyricsPanelProps) {
 }
 
 /**
- * The lit copy of the current line: same text in the artwork's colour, revealed from left to
- * right as the line is sung. It sits exactly over the base text, so wrapping matches.
+ * The lit copy of the current line: the same text in the artwork's colour, one span per
+ * character, lit in order as the line is sung. It sits exactly over the base text, so a wrapped
+ * line fills its upper row before its lower one. Under reduced motion the lift is skipped.
  */
 function LineFill({
   text,
@@ -194,9 +199,10 @@ function LineFill({
   fillMs: number;
   position: MotionValue<number>;
 }) {
-  const clipPath = useTransform(
-    () => `inset(0 ${(1 - lineProgress(position.get(), startMs, fillMs)) * 100}% 0 0)`,
-  );
+  const reduced = useReducedMotion() === true;
+  const chars = graphemes(text.length > 0 ? text : " ");
+  const lift = !reduced && chars.length <= MAX_LIFT_CHARS;
+  const progress = useTransform(() => lineProgress(position.get(), startMs, fillMs));
   return (
     <m.span
       aria-hidden="true"
@@ -205,9 +211,43 @@ function LineFill({
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       className="pointer-events-none absolute inset-0 text-(--artwork-accent)"
-      style={{ clipPath }}
     >
-      {text.length > 0 ? text : " "}
+      {chars.map((char, index) => (
+        <FillChar
+          key={index}
+          char={char}
+          index={index}
+          count={chars.length}
+          fillMs={fillMs}
+          progress={progress}
+          lift={lift}
+        />
+      ))}
+    </m.span>
+  );
+}
+
+function FillChar({
+  char,
+  index,
+  count,
+  fillMs,
+  progress,
+  lift,
+}: {
+  char: string;
+  index: number;
+  count: number;
+  fillMs: number;
+  progress: MotionValue<number>;
+  lift: boolean;
+}) {
+  const opacity = useTransform(progress, (p) => charOpacity(p, index, count));
+  // `top` on a relatively positioned inline span moves it without changing the line's wrapping.
+  const top = useTransform(progress, (p) => (lift ? charLift(p, index, count, fillMs) : 0));
+  return (
+    <m.span className="relative" style={{ opacity, top }}>
+      {char}
     </m.span>
   );
 }
