@@ -17,6 +17,7 @@ import {
   MenuTrigger,
 } from "@/renderer/shared/ui/menu";
 import { Field, FieldLabel } from "@/renderer/shared/ui/shadcn/field";
+import { FlapText } from "@/renderer/shared/ui/rolling-number";
 import { Switch } from "@/renderer/shared/ui/shadcn/switch";
 
 const DEFAULT_DEVICE = "default";
@@ -49,7 +50,9 @@ export function PlaybackSection() {
         {rows.map((row) => (
           <div key={row.label} className="flex items-center gap-6 py-3">
             <dt className="w-16 shrink-0 text-muted-foreground">{row.label}</dt>
-            <dd className="min-w-0 truncate tabular-nums text-foreground">{row.value}</dd>
+            <dd className="min-w-0 truncate tabular-nums text-foreground">
+              <FlapText value={row.value} />
+            </dd>
           </div>
         ))}
         <div className="flex items-center gap-6 py-3">

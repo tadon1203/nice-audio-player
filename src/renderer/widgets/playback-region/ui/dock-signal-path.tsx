@@ -8,6 +8,7 @@ import {
   useAudioOutputDevices,
 } from "@/renderer/entities/playback";
 import { cn } from "@/renderer/shared/lib/utils";
+import { FlapText } from "@/renderer/shared/ui/rolling-number";
 import {
   Menu,
   MenuContent,
@@ -46,7 +47,7 @@ export function DockSignalPath({ className }: { className?: string }) {
     >
       {steps.map((step, index) => (
         <span key={index} className="flex shrink-0 items-center gap-1.5 tabular-nums">
-          {step}
+          <FlapText value={step} />
           <span aria-hidden="true">›</span>
         </span>
       ))}

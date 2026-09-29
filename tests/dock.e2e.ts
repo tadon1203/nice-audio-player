@@ -116,7 +116,8 @@ test("switches the output device from the signal path", async ({ page }) => {
 
 test("adjusts volume by one decibel per wheel step", async ({ page }) => {
   const dock = await playFirstTrack(page);
-  const readout = dock.locator('[data-region="volume-readout"]');
+  // The rolling digits are aria-hidden columns; the value is the screen-reader text.
+  const readout = dock.locator('[data-region="volume-readout"] .sr-only');
   await expect(readout).toHaveText("−2.9 dB");
   const slider = dock.locator('[data-region="volume-slider"]');
   const box = (await slider.boundingBox())!;

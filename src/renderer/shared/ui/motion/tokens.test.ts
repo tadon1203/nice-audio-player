@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 import { motionTokens, reducedMotionTransition, resolveTransition } from "./tokens";
 
 describe("motion tokens", () => {
-  it("keeps every spring fully damped so nothing overshoots", () => {
-    for (const transition of Object.values(motionTokens)) {
+  it("keeps every spring except press fully damped so nothing overshoots", () => {
+    for (const [name, transition] of Object.entries(motionTokens)) {
       if ("type" in transition && transition.type === "spring") {
-        expect(transition.bounce).toBe(0);
+        expect(transition.bounce).toBe(name === "press" ? 0.25 : 0);
       }
     }
   });

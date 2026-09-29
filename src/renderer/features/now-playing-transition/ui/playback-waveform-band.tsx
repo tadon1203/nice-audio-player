@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLyricsWaveformLink } from "@/renderer/features/lyrics-waveform-link";
 import {
   usePlaybackActions,
@@ -9,12 +9,33 @@ import {
 } from "@/renderer/entities/playback";
 import { formatDuration } from "@/renderer/shared/lib/format";
 import { cn } from "@/renderer/shared/lib/utils";
+import { RollingNumber, spinTurns } from "@/renderer/shared/ui/rolling-number";
+import { isSeekJump } from "@/renderer/shared/ui/motion";
 import { WaveformSeek } from "@/renderer/shared/ui/waveform";
 
 /** The dock's slim progress line — no waveform data, just position. */
 export const DOCK_SEEK_HEIGHT = 6;
 /** Now Playing's hero band — the only place the waveform itself is drawn. */
 export const NOW_PLAYING_WAVEFORM_HEIGHT = 96;
+
+/**
+ * How many extra turns the time digits make for this render: a position that jumped away from
+ * where the clock would have put it (a seek) spins with the distance; ordinary ticks and
+ * dragging do not.
+ */
+function useJumpSpin(valueMs: number, playing: boolean, dragging: boolean): number {
+  const last = useRef({ valueMs, atMs: performance.now(), dragging });
+  const now = performance.now();
+  const expected = last.current.valueMs + (playing ? now - last.current.atMs : 0);
+  const spin =
+    !dragging && !last.current.dragging && isSeekJump(expected, valueMs)
+      ? spinTurns(valueMs - expected)
+      : 0;
+  useEffect(() => {
+    last.current = { valueMs, atMs: performance.now(), dragging };
+  }, [valueMs, dragging]);
+  return spin;
+}
 
 /**
  * The seek bar and its elapsed/remaining labels, used by both the dock (a plain progress line,
@@ -52,6 +73,11 @@ export function PlaybackWaveformBand({
   const [showRemaining, setShowRemaining] = useState(true);
   const canSeek = active && durationMs !== null;
   const seekValue = seekPreviewMs ?? positionMs;
+  const dragging = seekPreviewMs !== null;
+  const spin = useJumpSpin(seekValue, status === "playing", dragging);
+  // Dragging tracks the pointer 1:1; otherwise the digits roll, and a new track does not spin back.
+  const rolling = (text: string) =>
+    dragging ? text : <RollingNumber key={item?.file.path ?? "none"} value={text} spin={spin} />;
 
   const seekBar = (
     <WaveformSeek
@@ -91,7 +117,7 @@ export function PlaybackWaveformBand({
       className="shrink-0 cursor-pointer rounded-sm px-1 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
       onClick={() => setShowRemaining((current) => !current)}
     >
-      {remainingOrLength}
+      {rolling(remainingOrLength)}
     </button>
   );
 
@@ -104,7 +130,7 @@ export function PlaybackWaveformBand({
         )}
       >
         <span className={cn("shrink-0", timeClassName)} aria-label="Elapsed time">
-          {formatDuration(seekValue)}
+          {rolling(formatDuration(seekValue))}
         </span>
         {seekBar}
         <span className={cn("shrink-0", timeClassName)}>{remainingButton}</span>
@@ -122,7 +148,7 @@ export function PlaybackWaveformBand({
         )}
         data-region="playback-times"
       >
-        <span aria-label="Elapsed time">{formatDuration(seekValue)}</span>
+        <span aria-label="Elapsed time">{rolling(formatDuration(seekValue))}</span>
         {remainingButton}
       </div>
     </div>

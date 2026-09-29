@@ -26,42 +26,60 @@ export function TrackAction({ row }: { row: TrackTableRow }) {
   const Icon = action.icon;
   const disabled = !available || action.run === undefined;
 
+  const button = (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon-lg"
+      className={cn(
+        layout === "album"
+          ? "focus-visible:ring-0"
+          : cn(
+              "absolute transition-opacity",
+              !action.persistent &&
+                "opacity-0 group-hover/track:opacity-100 group-focus-within/track:opacity-100",
+              disabled && !action.persistent && "pointer-events-none opacity-0",
+            ),
+      )}
+      aria-label={action.label}
+      title={action.label}
+      disabled={disabled}
+      onClick={(event) => {
+        event.stopPropagation();
+        action.run?.();
+      }}
+    >
+      <Icon aria-hidden="true" />
+    </Button>
+  );
+
+  if (layout !== "album") {
+    return <div className="relative flex h-9 w-full items-center justify-center">{button}</div>;
+  }
+
+  // The number and the button are two stacked cells in a one-cell window; hover slides the
+  // number up and the button in. The ring sits on the window so the clip doesn't cut it.
   return (
-    <div className="relative flex h-9 w-full items-center justify-center">
-      {layout === "album" ? (
-        <span
-          aria-hidden="true"
+    <div className="flex h-9 w-full items-center justify-center">
+      <div className="size-9 overflow-clip rounded-md has-focus-visible:ring-2 has-focus-visible:ring-ring">
+        <div
           className={cn(
-            "text-sm text-muted-foreground transition-opacity",
+            "flex flex-col transition-transform duration-160 ease-out",
+            action.persistent && "-translate-y-full",
             available &&
               !action.persistent &&
-              "group-hover/track:opacity-0 group-focus-within/track:opacity-0",
-            action.persistent && "opacity-0",
+              "group-hover/track:-translate-y-full group-focus-within/track:-translate-y-full",
           )}
         >
-          {row.trackNumber ?? MISSING}
-        </span>
-      ) : null}
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-lg"
-        className={cn(
-          "absolute transition-opacity",
-          !action.persistent &&
-            "opacity-0 group-hover/track:opacity-100 group-focus-within/track:opacity-100",
-          disabled && !action.persistent && "pointer-events-none opacity-0",
-        )}
-        aria-label={action.label}
-        title={action.label}
-        disabled={disabled}
-        onClick={(event) => {
-          event.stopPropagation();
-          action.run?.();
-        }}
-      >
-        <Icon aria-hidden="true" />
-      </Button>
+          <span
+            aria-hidden="true"
+            className="flex size-9 items-center justify-center text-sm text-muted-foreground"
+          >
+            {row.trackNumber ?? MISSING}
+          </span>
+          {button}
+        </div>
+      </div>
     </div>
   );
 }

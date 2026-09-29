@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { List, Music2, Volume2, VolumeX } from "lucide-react";
 import {
   formatVolumeDb,
@@ -10,6 +11,7 @@ import { useNowPlaying } from "@/renderer/features/now-playing-transition";
 import { useQueuePanel } from "@/renderer/widgets/queue-panel";
 import { Button } from "@/renderer/shared/ui/shadcn/button";
 import { DockSignalPath } from "./dock-signal-path";
+import { RollingNumber } from "@/renderer/shared/ui/rolling-number";
 import { Slider } from "@/renderer/shared/ui/shadcn/slider";
 
 /**
@@ -24,6 +26,18 @@ export function DockVolume() {
   const playback = usePlaybackActions();
   const { toggle: toggleQueue } = useQueuePanel();
   const ready = transport.connection === "ready";
+  // Dragging the slider tracks the pointer 1:1; only the wheel and mute roll the readout.
+  const [dragging, setDragging] = useState(false);
+  useEffect(() => {
+    if (!dragging) return;
+    const end = () => setDragging(false);
+    window.addEventListener("pointerup", end);
+    window.addEventListener("pointercancel", end);
+    return () => {
+      window.removeEventListener("pointerup", end);
+      window.removeEventListener("pointercancel", end);
+    };
+  }, [dragging]);
   // Changing the volume while muted unmutes, so the change is audible.
   const setVolume = (value: number) => {
     playback.setVolume(value);
@@ -71,6 +85,7 @@ export function DockVolume() {
       <div
         className="w-24 shrink-0 sm:w-28"
         data-region="volume-slider"
+        onPointerDown={() => setDragging(true)}
         onWheel={(event) => {
           if (!ready || event.deltaY === 0) return;
           setVolume(stepVolumeDb(output.volume, event.deltaY < 0 ? 1 : -1));
@@ -87,7 +102,11 @@ export function DockVolume() {
         className="hidden min-w-16 shrink-0 text-right text-sm tabular-nums text-muted-foreground lg:inline"
         data-region="volume-readout"
       >
-        {formatVolumeDb(output.volume, output.muted)}
+        {dragging ? (
+          formatVolumeDb(output.volume, output.muted)
+        ) : (
+          <RollingNumber value={formatVolumeDb(output.volume, output.muted)} />
+        )}
       </span>
       <DockSignalPath className="absolute top-full right-0 mt-0.5 max-md:hidden" />
     </div>
