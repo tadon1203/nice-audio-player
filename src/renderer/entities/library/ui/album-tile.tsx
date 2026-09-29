@@ -2,7 +2,8 @@ import { Link } from "@tanstack/react-router";
 import type { LibraryAlbumSummary } from "@/shared/ipc";
 import { MISSING } from "@/renderer/shared/lib/format";
 import { cn } from "@/renderer/shared/lib/utils";
-import { Artwork } from "@/renderer/shared/ui/artwork";
+import { SharedArtwork } from "@/renderer/shared/ui/shared-artwork";
+import { albumArtworkLayoutId } from "../model/artwork-layout-id";
 import { albumTitleLabel, artistNameLabel, toNameSegment } from "../model/unknown-name";
 
 /** An artwork-led album entry. Titles are not headings: tiles belong to a list. */
@@ -28,17 +29,18 @@ export function AlbumTile({
         albumArtist: toNameSegment(album.key.albumArtist),
         albumTitle: toNameSegment(album.key.title),
       }}
-      state={parentArtist === undefined ? undefined : { parentArtist }}
+      state={{ artwork: album.artwork, ...(parentArtist === undefined ? {} : { parentArtist }) }}
       aria-label={showArtist ? `Open album ${title} by ${artist}` : `Open album ${title}`}
       className={cn(
         "group block min-w-0 rounded-lg outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
         className,
       )}
     >
-      <Artwork
+      <SharedArtwork
+        layoutId={albumArtworkLayoutId(album.key)}
         artwork={album.artwork}
         alt={`${title} artwork`}
-        className="w-full transition-transform group-hover:scale-[1.02]"
+        imageClassName="transition-transform group-hover:scale-[1.04]"
       />
       <div className="mt-3 min-w-0">
         <p className="truncate text-sm font-medium text-foreground" title={title}>

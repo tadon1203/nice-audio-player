@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import type { ArtworkRef } from "@/shared/ipc";
-import { cn } from "@/renderer/shared/lib/utils";
-import { Artwork } from "@/renderer/shared/ui/artwork";
+import { SharedArtwork } from "@/renderer/shared/ui/shared-artwork";
 import { ArtworkLight } from "@/renderer/shared/ui/artwork-light";
 import { PageTitle } from "@/renderer/shared/ui/headings";
 
@@ -9,6 +8,7 @@ export function MediaDetailsHeader({
   title,
   artist,
   artwork,
+  artworkLayoutId,
   round = false,
   children,
   strip,
@@ -16,6 +16,8 @@ export function MediaDetailsHeader({
   title: string;
   artist?: string;
   artwork: ArtworkRef | null;
+  /** The id of the library tile this artwork came from, so it moves in from there. */
+  artworkLayoutId: string;
   round?: boolean;
   children?: ReactNode;
   /** The track-structure Strip along the header band's bottom edge (album details only). */
@@ -25,10 +27,12 @@ export function MediaDetailsHeader({
     <div className="@container relative -mx-6 mt-8 px-6 pt-6 pb-6 lg:-mx-10 lg:px-10">
       <ArtworkLight artwork={artwork} strength="medium" />
       <header className="relative grid grid-cols-1 items-start gap-8 @md:grid-cols-[minmax(0,14rem)_minmax(0,1fr)] @md:items-end">
-        <Artwork
+        <SharedArtwork
+          layoutId={artworkLayoutId}
           artwork={artwork}
           alt={`${title} artwork`}
-          className={cn("w-full max-w-56", round && "rounded-full")}
+          round={round}
+          className="w-full max-w-56"
           loading="eager"
         />
         <div className="min-w-0">

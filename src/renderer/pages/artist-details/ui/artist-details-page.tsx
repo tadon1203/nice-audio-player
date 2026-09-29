@@ -3,11 +3,13 @@ import { FactLine } from "@/renderer/shared/ui/fact-line";
 import {
   useElementScrollRestoration,
   useNavigate,
+  useLocation,
   useParams,
   useSearch,
 } from "@tanstack/react-router";
 import {
   AlbumTile,
+  artistArtworkLayoutId,
   artistAlbumSortOptions,
   artistNameLabel,
   fromNameSegment,
@@ -38,6 +40,8 @@ export function ArtistDetailsPage() {
   const search = useSearch({ from: "/library" });
   const navigate = useNavigate({ from: "/library" });
   const [viewport, setViewport] = useState<HTMLDivElement | null>(null);
+  const openedArtwork = useLocation().state.artwork;
+  const artworkLayoutId = artistArtworkLayoutId(artistName);
   const scrollRestorationId = `artist-${encodeURIComponent(artistName)}`;
   useElementScrollRestoration({ id: scrollRestorationId });
   const sortKey = search.artistAlbumsSort;
@@ -66,11 +70,24 @@ export function ArtistDetailsPage() {
       viewportRef={setViewport}
       back={<BackLink to="/library/album-artists">Album Artists</BackLink>}
       loadingLabel="Reading artist…"
+      loadingHeader={
+        <MediaDetailsHeader
+          title={artistNameLabel(artistName)}
+          artwork={openedArtwork ?? null}
+          artworkLayoutId={artworkLayoutId}
+          round
+        />
+      }
       workspace={workspace}
     >
       {({ summary: artist, items: albums }) => (
         <>
-          <MediaDetailsHeader title={artistNameLabel(artistName)} artwork={artist.artwork} round>
+          <MediaDetailsHeader
+            title={artistNameLabel(artistName)}
+            artwork={artist.artwork}
+            artworkLayoutId={artworkLayoutId}
+            round
+          >
             <FactLine
               facts={[
                 formatCount(artist.albumCount, "album"),

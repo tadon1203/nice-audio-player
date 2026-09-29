@@ -3,6 +3,7 @@ import { FactLine } from "@/renderer/shared/ui/fact-line";
 import { useElementScrollRestoration, useLocation, useParams } from "@tanstack/react-router";
 import { Play } from "lucide-react";
 import {
+  albumArtworkLayoutId,
   albumTitleLabel,
   artistNameLabel,
   fromNameSegment,
@@ -31,7 +32,8 @@ export function AlbumDetailsPage() {
   const albumArtist = fromNameSegment(params.albumArtist);
   const albumTitle = fromNameSegment(params.albumTitle);
   const key = useMemo(() => ({ albumArtist, title: albumTitle }), [albumArtist, albumTitle]);
-  const parentArtist = useLocation().state.parentArtist;
+  const { parentArtist, artwork: openedArtwork } = useLocation().state;
+  const artworkLayoutId = albumArtworkLayoutId(key);
   const workspace = useMediaDetailsWorkspace(useAlbumDetails(key), useAlbumTracks(key));
   const playbackState = useTrackPlaybackState();
   const playback = usePlaybackActions();
@@ -57,6 +59,14 @@ export function AlbumDetailsPage() {
         )
       }
       loadingLabel="Reading album…"
+      loadingHeader={
+        <MediaDetailsHeader
+          title={albumTitleLabel(albumTitle)}
+          artist={artistNameLabel(albumArtist)}
+          artwork={openedArtwork ?? null}
+          artworkLayoutId={artworkLayoutId}
+        />
+      }
       workspace={workspace}
     >
       {({ summary: details, items: tracks }) => (
@@ -65,6 +75,7 @@ export function AlbumDetailsPage() {
             title={albumTitleLabel(albumTitle)}
             artist={artistNameLabel(albumArtist)}
             artwork={details.summary.artwork}
+            artworkLayoutId={artworkLayoutId}
             strip={
               tracks.length > 0 ? (
                 <AlbumTrackStrip

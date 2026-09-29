@@ -135,3 +135,25 @@ test("the progress fill advances every frame between position reports", async ({
   // Steps between reports would show as a handful of values; a frame-by-frame fill shows many.
   expect(new Set(insets).size).toBeGreaterThan(10);
 });
+
+test("an album's artwork moves from its tile to the details header", async ({ page }) => {
+  await page.goto("/library/albums");
+  const tile = page.getByRole("link", { name: "Open album Test album by Test artist" });
+  const tileBox = (await tile.locator('[data-slot="artwork"]').boundingBox())!;
+  const measure = () => {
+    const artwork = document.querySelector('main [data-slot="artwork"]');
+    const rect = artwork?.parentElement?.getBoundingClientRect();
+    return rect ? { x: rect.x, y: rect.y } : null;
+  };
+  const frames = (await sampleFrames(page, measure, () => tile.click(), 1200)).filter(
+    (frame) => frame !== null,
+  );
+  const first = frames[0]!;
+  // It starts where the tile was and travels (many distinct positions), rather than appearing
+  // at the destination.
+  expect(Math.abs(first.x - tileBox.x)).toBeLessThan(30);
+  expect(Math.abs(first.y - tileBox.y)).toBeLessThan(30);
+  expect(
+    new Set(frames.map((frame) => `${Math.round(frame.x)},${Math.round(frame.y)}`)).size,
+  ).toBeGreaterThan(3);
+});

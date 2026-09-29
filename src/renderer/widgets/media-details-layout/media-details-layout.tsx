@@ -13,6 +13,7 @@ export function MediaDetailsLayout<Summary, Item>({
   viewportRef,
   back,
   loadingLabel,
+  loadingHeader,
   workspace,
   children,
 }: {
@@ -20,6 +21,8 @@ export function MediaDetailsLayout<Summary, Item>({
   viewportRef?: Ref<HTMLDivElement>;
   back: ReactNode;
   loadingLabel: string;
+  /** What is already known from the route while data loads, so the page is not empty. */
+  loadingHeader?: ReactNode;
   workspace: MediaDetailsWorkspace<Summary, Item>;
   children: (workspace: ReadyMediaDetailsWorkspace<Summary, Item>) => ReactNode;
 }) {
@@ -31,7 +34,10 @@ export function MediaDetailsLayout<Summary, Item>({
     >
       {back}
       {workspace.status === "loading" ? (
-        <LoadingStatus>{loadingLabel}</LoadingStatus>
+        <>
+          {loadingHeader}
+          <LoadingStatus>{loadingLabel}</LoadingStatus>
+        </>
       ) : workspace.status === "error" ? (
         <ErrorAlert
           message={libraryCommandErrorMessage(workspace.error)}

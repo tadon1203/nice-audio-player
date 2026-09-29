@@ -3,7 +3,8 @@ import { FactLine } from "@/renderer/shared/ui/fact-line";
 import type { LibraryAlbumArtistSummary } from "@/shared/ipc";
 import { formatCount } from "@/renderer/shared/lib/format";
 import { cn } from "@/renderer/shared/lib/utils";
-import { Artwork } from "@/renderer/shared/ui/artwork";
+import { SharedArtwork } from "@/renderer/shared/ui/shared-artwork";
+import { artistArtworkLayoutId } from "../model/artwork-layout-id";
 import { artistNameLabel, toNameSegment } from "../model/unknown-name";
 
 export function ArtistTile({
@@ -18,16 +19,19 @@ export function ArtistTile({
     <Link
       to="/library/album-artists/$artistName"
       params={{ artistName: toNameSegment(artist.key.name) }}
+      state={{ artwork: artist.artwork }}
       aria-label={`Browse albums by ${name}`}
       className={cn(
         "group block min-w-0 rounded-lg text-center outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
         className,
       )}
     >
-      <Artwork
+      <SharedArtwork
+        layoutId={artistArtworkLayoutId(artist.key.name)}
         artwork={artist.artwork}
         alt={`${name} artwork`}
-        className="mx-auto w-full rounded-full transition-transform group-hover:scale-[1.02]"
+        round
+        imageClassName="transition-transform group-hover:scale-[1.04]"
       />
       <p className="mt-3 truncate text-sm font-medium text-foreground" title={name}>
         {name}
