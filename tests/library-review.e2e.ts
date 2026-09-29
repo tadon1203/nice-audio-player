@@ -1,6 +1,10 @@
 import { expect, test } from "@playwright/test";
 import { installNativeApi } from "./fixtures/native-api";
 
+// Under the suite-wide reduced motion the Settings checkbox click in the last test is flaky
+// (about 1 run in 8 leaves the checkbox unchanged), so this file runs with real motion.
+test.use({ reducedMotion: "no-preference" });
+
 test.beforeEach(async ({ page }) => installNativeApi(page));
 
 test("keeps each library filter and sort when switching peers and visiting Settings", async ({

@@ -40,40 +40,41 @@ export function LibraryToolbar<Key extends string>({
   return (
     <header className="pt-8">
       <WorkspaceContainer>
-        <div className="flex min-w-0 flex-wrap items-center justify-between gap-6">
-          <PageTitle>{title}</PageTitle>
-          <InputGroup className="h-9 w-full sm:w-52">
-            <InputGroupInput
-              aria-label={searchLabel}
-              value={filter}
-              onChange={(event) => onFilterChange(event.target.value)}
-              placeholder={searchPlaceholder}
-              type="search"
-            />
-            <InputGroupAddon align="inline-start" aria-hidden="true">
-              <Search className="size-4 text-muted-foreground" />
-            </InputGroupAddon>
-          </InputGroup>
-        </div>
-        <div className="mt-6 flex min-w-0 flex-wrap items-end justify-between gap-x-8 gap-y-3 text-sm text-muted-foreground">
-          <div className="flex h-8 items-center gap-2">
-            <span className="tabular-nums">{countLabel}</span>
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-8 gap-y-3">
+          {/* Title and count share one baseline; search and sort share one row. */}
+          <div className="flex min-w-0 items-baseline gap-4">
+            <PageTitle>{title}</PageTitle>
+            <span className="text-sm tabular-nums text-muted-foreground">{countLabel}</span>
             {updating ? (
-              <span role="status" aria-live="polite" className="text-muted-foreground">
+              <span role="status" aria-live="polite" className="text-sm text-muted-foreground">
                 Updating…
               </span>
             ) : null}
           </div>
-          {sort ? (
-            <CollectionSortControl
-              selectLabel={`Sort ${title.toLocaleLowerCase()}`}
-              value={sort.key}
-              options={sort.options}
-              direction={sort.direction}
-              onValueChange={sort.onKeyChange}
-              onToggleDirection={sort.onToggleDirection}
-            />
-          ) : null}
+          <div className="flex min-w-0 flex-wrap items-center gap-3">
+            {sort ? (
+              <CollectionSortControl
+                selectLabel={`Sort ${title.toLocaleLowerCase()}`}
+                value={sort.key}
+                options={sort.options}
+                direction={sort.direction}
+                onValueChange={sort.onKeyChange}
+                onToggleDirection={sort.onToggleDirection}
+              />
+            ) : null}
+            <InputGroup className="h-9 w-full sm:w-52">
+              <InputGroupInput
+                aria-label={searchLabel}
+                value={filter}
+                onChange={(event) => onFilterChange(event.target.value)}
+                placeholder={searchPlaceholder}
+                type="search"
+              />
+              <InputGroupAddon align="inline-start" aria-hidden="true">
+                <Search className="size-4 text-muted-foreground" />
+              </InputGroupAddon>
+            </InputGroup>
+          </div>
         </div>
       </WorkspaceContainer>
     </header>

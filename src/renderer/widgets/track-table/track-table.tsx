@@ -171,7 +171,7 @@ export function TrackTable({
                   data-availability={original.availability}
                   style={{ height: TRACK_ROW_HEIGHT }}
                   className={cn(
-                    "group/track border-b border-border/70 text-foreground outline-none transition-colors hover:bg-accent/40 focus-within:ring-2 focus-within:ring-inset focus-within:ring-ring",
+                    "group/track border-b border-border/70 text-foreground outline-none transition-colors hover:bg-accent/40 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-inset has-[:focus-visible]:ring-ring",
                     rowActionAvailable && "cursor-pointer",
                   )}
                   onClick={(event) => {

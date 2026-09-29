@@ -33,7 +33,7 @@ function MenuContent({
         <MenuPrimitive.Popup
           data-slot="menu-content"
           className={cn(
-            "acrylic min-w-44 origin-(--transform-origin) rounded-lg p-1 text-sm text-popover-foreground shadow-floating ring-1 ring-foreground/10 outline-none",
+            "motion-overlay acrylic min-w-44 origin-(--transform-origin) rounded-lg p-1 text-sm text-popover-foreground shadow-floating ring-1 ring-foreground/10 outline-none",
             className,
           )}
           {...props}

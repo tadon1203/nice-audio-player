@@ -6,7 +6,7 @@ import type { Transition } from "motion/react";
  * duration. Never animate a blur radius: animate `transform`, `opacity`, `clip-path`.
  */
 export const motionTokens = {
-  /** Hover, press, color changes. */
+  /** Hover, press, color changes. Must equal `--duration-feedback` in styles.css. */
   feedback: { duration: 0.1, ease: "easeOut" },
   /** Tabs, Select, tooltips, lyric line luminance. */
   smallMove: { type: "spring", visualDuration: 0.2, bounce: 0 },

@@ -38,7 +38,7 @@ export function AlbumTile({
       <Artwork
         artwork={album.artwork}
         alt={`${title} artwork`}
-        className="w-full transition-opacity group-hover:opacity-80"
+        className="w-full transition-transform group-hover:scale-[1.02]"
       />
       <div className="mt-3 min-w-0">
         <p className="truncate text-sm font-medium text-foreground" title={title}>

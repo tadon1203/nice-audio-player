@@ -57,12 +57,6 @@ export function TitleBar({ pathname }: { pathname: string }) {
             <Navigation pathname={pathname} onNavigate={() => setMobileNavigationOpen(false)} />
           </SheetContent>
         </Sheet>
-        <span
-          className="truncate px-1 text-sm font-medium text-foreground md:px-0"
-          data-tauri-drag-region
-        >
-          Nice Audio Player
-        </span>
         <div aria-hidden="true" className="min-w-0 flex-1" data-tauri-drag-region />
       </div>
       <div aria-hidden="true" className="hidden min-w-0 md:block" data-tauri-drag-region />

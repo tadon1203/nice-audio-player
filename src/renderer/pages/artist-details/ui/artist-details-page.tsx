@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { FactLine } from "@/renderer/shared/ui/fact-line";
 import {
   useElementScrollRestoration,
   useNavigate,
@@ -69,15 +70,13 @@ export function ArtistDetailsPage() {
     >
       {({ summary: artist, items: albums }) => (
         <>
-          <MediaDetailsHeader
-            kind="Artist"
-            title={artistNameLabel(artistName)}
-            artwork={artist.artwork}
-            round
-          >
-            <p className="mt-4 text-sm tabular-nums text-muted-foreground">
-              {formatCount(artist.albumCount, "album")} · {formatCount(artist.trackCount, "track")}
-            </p>
+          <MediaDetailsHeader title={artistNameLabel(artistName)} artwork={artist.artwork} round>
+            <FactLine
+              facts={[
+                formatCount(artist.albumCount, "album"),
+                formatCount(artist.trackCount, "track"),
+              ]}
+            />
           </MediaDetailsHeader>
 
           <section className="mt-10" aria-labelledby="artist-albums-title">

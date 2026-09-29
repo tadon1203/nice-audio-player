@@ -1,6 +1,5 @@
 @import "tailwindcss";
 @source "../../renderer";
-@import "tw-animate-css";
 
 *[data-tauri-drag-region] {
   app-region: drag;
@@ -25,9 +24,15 @@
 
 @theme {
   --font-sans: "Satoshi", "Noto Sans JP", "Segoe UI", system-ui, sans-serif;
-  /* Feedback motion is 100ms; spatial motion opts in with `duration-160`. */
-  --default-transition-duration: 100ms;
-  --default-transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+  /*
+   * Motion values that CSS uses. The JS side (`shared/ui/motion/tokens.ts`) owns springs and
+   * reads none of these, but its `feedback` duration must equal `--duration-feedback`. Feedback (hover, press, colour) is 100ms; overlays and sheets take 160ms.
+   */
+  --duration-feedback: 100ms;
+  --duration-overlay: 160ms;
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --default-transition-duration: var(--duration-feedback);
+  --default-transition-timing-function: var(--ease-out);
   /* Only `shadow-none` and `shadow-floating` exist; persistent UI has no shadow. */
   --shadow-*: initial;
   --shadow-floating: 0 4px 12px oklch(0 0 0 / 0.4);
@@ -124,6 +129,34 @@
   -webkit-backdrop-filter: blur(20px) saturate(1.4);
 }
 
+/*
+ * Enter/exit for floating surfaces (tooltip, select, menu, dialog). Base UI sets
+ * `data-starting-style` / `data-ending-style` around mount and unmount, so a plain transition
+ * is enough: they fade and grow from 97% (`scale`, which does not fight `translate`).
+ */
+@utility motion-overlay {
+  transition-property: opacity, scale;
+  transition-duration: var(--duration-overlay);
+  transition-timing-function: var(--ease-out);
+
+  &[data-starting-style],
+  &[data-ending-style] {
+    opacity: 0;
+    scale: 0.97;
+  }
+}
+
+@utility motion-overlay-fade {
+  transition-property: opacity;
+  transition-duration: var(--duration-overlay);
+  transition-timing-function: var(--ease-out);
+
+  &[data-starting-style],
+  &[data-ending-style] {
+    opacity: 0;
+  }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -156,7 +189,8 @@
     scroll-behavior: auto !important;
     animation-duration: 0s !important;
     animation-delay: 0s !important;
-    transition-duration: 0s !important;
+    /* Same short crossfade the JS tokens fall back to (`reducedMotionTransition`). */
+    transition-duration: var(--duration-feedback) !important;
   }
 }
 

@@ -1,6 +1,9 @@
+import { useId } from "react";
+import { LayoutGroup, m } from "motion/react";
 import { Album, LibraryBig, ListMusic, Settings2, type LucideIcon } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { cn } from "@/renderer/shared/lib/utils";
+import { useMotionTransition } from "@/renderer/shared/ui/motion";
 import { buttonVariants } from "@/renderer/shared/ui/shadcn/button";
 
 type NavigationItem = {
@@ -28,30 +31,36 @@ export function Navigation({
   pathname: string;
   onNavigate?: () => void;
 }) {
+  // The selection pill slides between items. Scoped per instance: the desktop sidebar and the
+  // mobile sheet can both be mounted.
+  const groupId = useId();
+
   return (
-    <nav
-      aria-label="Application"
-      className="flex min-h-0 flex-1 flex-col px-2 py-5 md:border-r md:border-sidebar-border"
-    >
-      <div className="min-h-0 flex-1">
-        <p className="mb-2 px-2 text-sm text-muted-foreground">Library</p>
-        <div className="space-y-1">
-          {libraryItems.map((item) => (
-            <NavigationLink
-              item={item}
-              key={item.to}
-              active={isNavigationActive(pathname, item.to)}
-              onNavigate={onNavigate}
-            />
-          ))}
+    <LayoutGroup id={groupId}>
+      <nav
+        aria-label="Application"
+        className="flex min-h-0 flex-1 flex-col px-2 py-5 md:border-r md:border-sidebar-border"
+      >
+        <div className="min-h-0 flex-1">
+          <p className="mb-2 px-2 text-sm text-muted-foreground">Library</p>
+          <div className="space-y-1">
+            {libraryItems.map((item) => (
+              <NavigationLink
+                item={item}
+                key={item.to}
+                active={isNavigationActive(pathname, item.to)}
+                onNavigate={onNavigate}
+              />
+            ))}
+          </div>
         </div>
-      </div>
-      <NavigationLink
-        item={settingsItem}
-        active={isNavigationActive(pathname, settingsItem.to)}
-        onNavigate={onNavigate}
-      />
-    </nav>
+        <NavigationLink
+          item={settingsItem}
+          active={isNavigationActive(pathname, settingsItem.to)}
+          onNavigate={onNavigate}
+        />
+      </nav>
+    </LayoutGroup>
   );
 }
 
@@ -65,6 +74,7 @@ function NavigationLink({
   onNavigate?: () => void;
 }) {
   const Icon = item.icon;
+  const transition = useMotionTransition("smallMove");
 
   return (
     <Link
@@ -73,12 +83,21 @@ function NavigationLink({
       onClick={onNavigate}
       className={cn(
         buttonVariants({ variant: "ghost", size: "lg" }),
-        "h-10 w-full justify-start gap-2 px-2 text-muted-foreground hover:bg-sidebar-accent",
-        active && "bg-muted text-foreground hover:bg-muted",
+        "relative h-10 w-full justify-start gap-2 px-2 text-muted-foreground hover:bg-sidebar-accent",
+        active && "text-foreground",
       )}
     >
-      <Icon aria-hidden="true" />
-      <span className="truncate">{item.label}</span>
+      {active ? (
+        <m.span
+          layoutId="navigation-selection"
+          aria-hidden="true"
+          transition={transition}
+          className="absolute inset-0 bg-muted"
+          style={{ borderRadius: 6 }}
+        />
+      ) : null}
+      <Icon aria-hidden="true" className="relative" />
+      <span className="relative truncate">{item.label}</span>
     </Link>
   );
 }

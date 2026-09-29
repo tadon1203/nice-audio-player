@@ -35,7 +35,8 @@ test("keeps search and navigation interaction states visually distinct", async (
     locator.evaluate((element) => getComputedStyle(element).backgroundColor);
 
   const restBackground = await background(albumArtists);
-  const selectedBackground = await background(albums);
+  // The selection is a pill behind the link's content (it slides between items).
+  const selectedBackground = await background(albums.locator(':scope > span[aria-hidden="true"]'));
   expect(selectedBackground).not.toBe(restBackground);
 
   await albumArtists.hover();

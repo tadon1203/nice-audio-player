@@ -130,7 +130,7 @@ export function LibraryFoldersSection() {
           <div className="flex items-center gap-2">
             <span role="status" aria-live="polite" className="text-sm text-muted-foreground">
               {scanLabel(scan?.state)}
-              {scanProgress ? ` · ${scanProgress}` : ""}
+              {scanProgress ? <span className="ml-3">{scanProgress}</span> : null}
             </span>
             {scanRunning ? (
               <Button
@@ -220,7 +220,9 @@ export function LibraryFoldersSection() {
                   </ItemTitle>
                   <ItemDescription className="mt-1 whitespace-normal">
                     {root.enabled ? "Included in library" : "Excluded from library"}
-                    {root.lastSuccessfulScanAtMs !== null ? " · Scanned" : " · Not scanned"}
+                    <span className="ml-3">
+                      {root.lastSuccessfulScanAtMs !== null ? "Scanned" : "Not scanned"}
+                    </span>
                   </ItemDescription>
                   {rowError ? (
                     <p className="mt-1 text-sm text-destructive" role="alert">
@@ -243,13 +245,14 @@ export function LibraryFoldersSection() {
                       htmlFor={`enabled-${root.id}`}
                       className="font-normal text-muted-foreground max-sm:sr-only"
                     >
-                      Include<span className="sr-only"> {root.path}</span> in library
+                      Include <span className="sr-only">{root.path} </span>in library
                     </FieldLabel>
                   </Field>
                   <Button
                     type="button"
-                    variant="destructive"
+                    variant="ghost"
                     size="sm"
+                    className="text-muted-foreground hover:text-destructive"
                     aria-label={`Remove ${root.path} from library`}
                     disabled={scanRunning || pending}
                     onClick={() => {

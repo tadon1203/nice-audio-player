@@ -3,6 +3,7 @@ import type { PlaybackQueueItem } from "@/shared/ipc";
 import { usePlaybackActions, usePlaybackQueue } from "@/renderer/entities/playback";
 import { formatDuration } from "@/renderer/shared/lib/format";
 import { cn } from "@/renderer/shared/lib/utils";
+import { Artwork } from "@/renderer/shared/ui/artwork";
 import { Button } from "@/renderer/shared/ui/shadcn/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/renderer/shared/ui/shadcn/sheet";
 import { useQueuePanel } from "../model/use-queue-panel";
@@ -18,8 +19,15 @@ export function QueuePanel() {
   const playback = usePlaybackActions();
 
   return (
-    <Sheet open={isOpen} onOpenChange={(open) => (open ? undefined : close())}>
-      <SheetContent side="right" className="w-80 gap-0 p-0" aria-label="Queue">
+    // Not modal: the library stays visible and usable beside the queue, so there is no backdrop
+    // and a click elsewhere does not close it (Escape and the queue button do).
+    <Sheet
+      open={isOpen}
+      modal={false}
+      disablePointerDismissal
+      onOpenChange={(open) => (open ? undefined : close())}
+    >
+      <SheetContent side="right" overlay={false} className="w-80 gap-0 p-0" aria-label="Queue">
         <SheetHeader className="border-b border-border pb-4">
           <SheetTitle>Queue</SheetTitle>
         </SheetHeader>
@@ -88,6 +96,7 @@ function QueueRow({
       data-tone={tone}
       aria-current={tone === "current" ? "true" : undefined}
     >
+      <Artwork artwork={item.artwork} className="size-10 shrink-0 rounded-md" />
       <div className="min-w-0 flex-1">
         <p
           className={cn(

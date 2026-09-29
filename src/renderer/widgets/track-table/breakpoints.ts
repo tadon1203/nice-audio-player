@@ -16,4 +16,4 @@ export const trackTableBreakpoints = {
 export type TrackTableBreakpoint = keyof typeof trackTableBreakpoints;
 
 /** Estimated and actual row height; rows are set to this explicitly for virtualization. */
-export const TRACK_ROW_HEIGHT = 44;
+export const TRACK_ROW_HEIGHT = 40;

@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { FactLine } from "@/renderer/shared/ui/fact-line";
 import { useElementScrollRestoration, useLocation, useParams } from "@tanstack/react-router";
 import { Play } from "lucide-react";
 import {
@@ -61,7 +62,6 @@ export function AlbumDetailsPage() {
       {({ summary: details, items: tracks }) => (
         <>
           <MediaDetailsHeader
-            kind="Album"
             title={albumTitleLabel(albumTitle)}
             artist={artistNameLabel(albumArtist)}
             artwork={details.summary.artwork}
@@ -75,15 +75,14 @@ export function AlbumDetailsPage() {
               ) : null
             }
           >
-            <p className="mt-4 text-sm tabular-nums text-muted-foreground">
-              {[
+            <FactLine
+              facts={[
                 details.date ?? details.summary.year,
                 details.trackCount !== null ? formatCount(details.trackCount, "track") : null,
                 details.durationMs !== null ? formatDuration(details.durationMs) : null,
-              ]
-                .filter(Boolean)
-                .join(" · ") || "Album details unavailable"}
-            </p>
+              ]}
+              fallback="Album details unavailable"
+            />
             <Button
               type="button"
               className="mt-6"
@@ -96,7 +95,9 @@ export function AlbumDetailsPage() {
           </MediaDetailsHeader>
 
           <section className="mt-10" aria-labelledby="album-track-list-title">
-            <SectionTitle id="album-track-list-title">Tracks</SectionTitle>
+            <SectionTitle id="album-track-list-title" className="sr-only">
+              Tracks
+            </SectionTitle>
             {tracks.length > 0 ? (
               <div className="mt-4">
                 <TrackTable
@@ -134,11 +135,7 @@ function AlbumTrackStrip({
   if (totalMs <= 0) return null;
 
   return (
-    <div
-      className="flex h-1.5 w-full gap-px overflow-hidden rounded-full"
-      role="group"
-      aria-label="Track lengths"
-    >
+    <div className="flex h-1 w-full gap-0.5" role="group" aria-label="Track lengths">
       {tracks.map((track) => {
         const active = track.id === activeTrackId;
         const playable = track.playable && track.availability === "available";
@@ -152,8 +149,8 @@ function AlbumTrackStrip({
                   disabled={!playable}
                   onClick={() => onPlayTrack(track.id)}
                   className={cn(
-                    "h-full min-w-0.5 cursor-pointer outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default",
-                    active ? "bg-foreground" : "bg-muted-foreground/50 hover:bg-muted-foreground",
+                    "h-full min-w-0.5 cursor-pointer rounded-full outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default",
+                    active ? "bg-foreground" : "bg-foreground/25 hover:bg-foreground/60",
                   )}
                   style={{ flexGrow: track.durationMs ?? 0 }}
                 />

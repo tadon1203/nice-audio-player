@@ -1,6 +1,6 @@
 import { createColumnHelper, type ColumnDef, type RowData } from "@tanstack/react-table";
 import type { LibraryTrackSortKey } from "@/renderer/entities/library";
-import { MISSING, formatDuration, formatSampleRate } from "@/renderer/shared/lib/format";
+import { MISSING, formatDuration, formatKilohertz } from "@/renderer/shared/lib/format";
 import type { TrackTableBreakpoint } from "./breakpoints";
 import { TrackAction, TrackText, TrackTitle } from "./track-cells";
 import type { TrackTableRow } from "./types";
@@ -82,7 +82,10 @@ export const albumTrackColumns: ColumnDef<TrackTableRow>[] = [
     cell: ({ row }) => {
       const { sampleRate, bitDepth } = row.original;
       if (!sampleRate) return MISSING;
-      return `${formatSampleRate(sampleRate)}${bitDepth ? ` · ${bitDepth}-bit` : ""}`;
+      // Same notation as the signal path (`FLAC 24/96`) without the codec, which has its own column.
+      return bitDepth
+        ? `${bitDepth}/${formatKilohertz(sampleRate)}`
+        : `${formatKilohertz(sampleRate)} kHz`;
     },
     meta: { width: "w-36", hideBelow: "narrow" },
   }),

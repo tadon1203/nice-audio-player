@@ -6,7 +6,6 @@ import { ArtworkLight } from "@/renderer/shared/ui/artwork-light";
 import { PageTitle } from "@/renderer/shared/ui/headings";
 
 export function MediaDetailsHeader({
-  kind,
   title,
   artist,
   artwork,
@@ -14,7 +13,6 @@ export function MediaDetailsHeader({
   children,
   strip,
 }: {
-  kind: string;
   title: string;
   artist?: string;
   artwork: ArtworkRef | null;
@@ -34,9 +32,6 @@ export function MediaDetailsHeader({
           loading="eager"
         />
         <div className="min-w-0">
-          <p className="mb-2 text-sm font-medium uppercase tracking-widest text-muted-foreground">
-            {kind}
-          </p>
           <PageTitle>{title}</PageTitle>
           {artist ? <p className="mt-2 text-base text-muted-foreground">{artist}</p> : null}
           {children}

@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router";
+import { FactLine } from "@/renderer/shared/ui/fact-line";
 import type { LibraryAlbumArtistSummary } from "@/shared/ipc";
 import { formatCount } from "@/renderer/shared/lib/format";
 import { cn } from "@/renderer/shared/lib/utils";
@@ -26,14 +27,15 @@ export function ArtistTile({
       <Artwork
         artwork={artist.artwork}
         alt={`${name} artwork`}
-        className="mx-auto w-full rounded-full transition-opacity group-hover:opacity-80"
+        className="mx-auto w-full rounded-full transition-transform group-hover:scale-[1.02]"
       />
       <p className="mt-3 truncate text-sm font-medium text-foreground" title={name}>
         {name}
       </p>
-      <p className="mt-1 text-sm tabular-nums text-muted-foreground">
-        {formatCount(artist.albumCount, "album")} · {formatCount(artist.trackCount, "track")}
-      </p>
+      <FactLine
+        className="mt-1"
+        facts={[formatCount(artist.albumCount, "album"), formatCount(artist.trackCount, "track")]}
+      />
     </Link>
   );
 }

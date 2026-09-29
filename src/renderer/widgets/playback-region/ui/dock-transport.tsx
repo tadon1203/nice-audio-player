@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { AnimatePresence, m } from "motion/react";
 import { Pause, Play, Repeat, Repeat1, Shuffle, SkipBack, SkipForward } from "lucide-react";
 import {
   nextRepeatMode,
@@ -7,6 +8,7 @@ import {
   usePlaybackTransport,
 } from "@/renderer/entities/playback";
 import { cn } from "@/renderer/shared/lib/utils";
+import { useMotionTransition } from "@/renderer/shared/ui/motion";
 import { Button } from "@/renderer/shared/ui/shadcn/button";
 
 /** Shuffle, previous, play/pause, next, repeat. */
@@ -48,12 +50,9 @@ export function DockTransport() {
         disabled={!active || controlsBusy}
         onClick={() => void (playing ? playback.pause() : playback.resume())}
         variant="default"
+        className="rounded-full disabled:bg-secondary disabled:text-muted-foreground disabled:opacity-100"
       >
-        {playing ? (
-          <Pause aria-hidden="true" fill="currentColor" />
-        ) : (
-          <Play aria-hidden="true" fill="currentColor" />
-        )}
+        <PlayPauseIcon playing={playing} />
       </TransportButton>
       <TransportButton
         label="Next track"
@@ -118,18 +117,40 @@ function ToggleButton({
   );
 }
 
+/** The two glyphs swap with a quick scale-and-fade instead of flipping. */
+function PlayPauseIcon({ playing }: { playing: boolean }) {
+  const transition = useMotionTransition("feedback");
+  const Icon = playing ? Pause : Play;
+  return (
+    <AnimatePresence mode="popLayout" initial={false}>
+      <m.span
+        key={playing ? "pause" : "play"}
+        initial={{ scale: 0.6, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.6, opacity: 0 }}
+        transition={transition}
+        className="flex"
+      >
+        <Icon aria-hidden="true" fill="currentColor" />
+      </m.span>
+    </AnimatePresence>
+  );
+}
+
 function TransportButton({
   label,
   children,
   disabled,
   onClick,
   variant = "ghost",
+  className,
 }: {
   label: string;
   children: ReactNode;
   disabled?: boolean;
   onClick: () => void;
   variant?: "default" | "ghost";
+  className?: string;
 }) {
   return (
     <Button
@@ -140,6 +161,7 @@ function TransportButton({
       title={label}
       disabled={disabled}
       onClick={onClick}
+      className={className}
     >
       {children}
     </Button>
