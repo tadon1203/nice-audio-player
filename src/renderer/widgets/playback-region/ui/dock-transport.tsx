@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
-import { AnimatePresence, m } from "motion/react";
-import { Pause, Play, Repeat, Repeat1, Shuffle, SkipBack, SkipForward } from "lucide-react";
+import { m } from "motion/react";
+import { Repeat, Repeat1, Shuffle, SkipBack, SkipForward } from "lucide-react";
 import {
   nextRepeatMode,
   usePlaybackActions,
@@ -9,6 +9,7 @@ import {
 } from "@/renderer/entities/playback";
 import { cn } from "@/renderer/shared/lib/utils";
 import { useMotionTransition } from "@/renderer/shared/ui/motion";
+import { PlayPauseIcon } from "@/renderer/shared/ui/play-pause-icon";
 import { Button } from "@/renderer/shared/ui/shadcn/button";
 
 /** Shuffle, previous, play/pause, next, repeat. */
@@ -50,6 +51,7 @@ export function DockTransport() {
         disabled={!active || controlsBusy}
         onClick={() => void (playing ? playback.pause() : playback.resume())}
         variant="default"
+        spring
         className="rounded-full disabled:bg-secondary disabled:text-muted-foreground disabled:opacity-100"
       >
         <PlayPauseIcon playing={playing} />
@@ -117,32 +119,13 @@ function ToggleButton({
   );
 }
 
-/** The two glyphs swap with a quick scale-and-fade instead of flipping. */
-function PlayPauseIcon({ playing }: { playing: boolean }) {
-  const transition = useMotionTransition("feedback");
-  const Icon = playing ? Pause : Play;
-  return (
-    <AnimatePresence mode="popLayout" initial={false}>
-      <m.span
-        key={playing ? "pause" : "play"}
-        initial={{ scale: 0.6, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.6, opacity: 0 }}
-        transition={transition}
-        className="flex"
-      >
-        <Icon aria-hidden="true" fill="currentColor" />
-      </m.span>
-    </AnimatePresence>
-  );
-}
-
 function TransportButton({
   label,
   children,
   disabled,
   onClick,
   variant = "ghost",
+  spring = false,
   className,
 }: {
   label: string;
@@ -150,10 +133,18 @@ function TransportButton({
   disabled?: boolean;
   onClick: () => void;
   variant?: "default" | "ghost";
+  /** The play button's press: a spring that overshoots slightly (the `press` token). */
+  spring?: boolean;
   className?: string;
 }) {
+  const press = useMotionTransition("press");
   return (
     <Button
+      {...(spring
+        ? {
+            render: <m.button whileTap={{ scale: 0.94 }} transition={press} />,
+          }
+        : {})}
       type="button"
       size="icon-lg"
       variant={variant}
@@ -161,7 +152,7 @@ function TransportButton({
       title={label}
       disabled={disabled}
       onClick={onClick}
-      className={className}
+      className={cn(spring && "transition-colors active:scale-100", className)}
     >
       {children}
     </Button>

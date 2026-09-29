@@ -56,7 +56,7 @@ Every screen is built from five elements instead of new looks.
 
 - The same artwork never appears in two places at once. The current track is not repeated in the sidebar or title bar.
 - Radius shows placement: attached to an edge (Now Playing, full height) is square; placed in the workspace (tiles, headers, the dock) is `rounded-lg`; a thumbnail inside a row (Queue) is `rounded-sm`. The radius is interpolated while moving.
-- There is exactly one play affordance: the dock's white round play button, reused on tile hover, detail headers, and Queue. Tile hover shows it at the bottom right of the artwork instead of dimming.
+- There is exactly one play affordance: the dock's white round play button, reused on tile hover, detail headers, and Queue. Tile hover shows it at the bottom right of the artwork instead of dimming. Its glyph is one shared `PlayPauseIcon` that morphs between play and pause; the dock's play button alone springs on press (`press`).
 
 ### Light
 
@@ -76,7 +76,7 @@ Every screen is built from five elements instead of new looks.
 
 ### Strip
 
-Time is drawn horizontally: a plain progress line across the top of the dock, the full waveform in Now Playing, a 1px progress line along the bottom of the playing track row, and segments proportional to track length along the bottom of an album header band (the playing segment is brighter; hover names the track; click plays it).
+Time is drawn horizontally: a plain progress line across the top of the dock, the full waveform in Now Playing, a 1px progress line along the bottom of the playing track row, and segments proportional to track length along the bottom of an album header band (they grow in left to right; for the playing album, past tracks are brighter and the playing segment fills as it plays; hover names the track; click plays it).
 
 ### Gutter
 

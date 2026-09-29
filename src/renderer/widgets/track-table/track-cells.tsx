@@ -1,4 +1,4 @@
-import { Pause, Play } from "lucide-react";
+import { PlayPauseIcon } from "@/renderer/shared/ui/play-pause-icon";
 import { MISSING } from "@/renderer/shared/lib/format";
 import { cn } from "@/renderer/shared/lib/utils";
 import { Button } from "@/renderer/shared/ui/shadcn/button";
@@ -14,16 +14,15 @@ export function TrackAction({ row }: { row: TrackTableRow }) {
   const available = row.playable && row.availability === "available";
   const action =
     active && playbackStatus === "playing"
-      ? { label: `Pause ${row.title}`, run: onPauseActive, icon: Pause, persistent: true }
+      ? { label: `Pause ${row.title}`, run: onPauseActive, showsPause: true, persistent: true }
       : active && playbackStatus === "paused"
-        ? { label: `Resume ${row.title}`, run: onResumeActive, icon: Play, persistent: true }
+        ? { label: `Resume ${row.title}`, run: onResumeActive, showsPause: false, persistent: true }
         : {
             label: `Play ${row.title}`,
             run: () => onPlayTrack(row.id),
-            icon: Play,
+            showsPause: false,
             persistent: false,
           };
-  const Icon = action.icon;
   const disabled = !available || action.run === undefined;
 
   const button = (
@@ -49,7 +48,7 @@ export function TrackAction({ row }: { row: TrackTableRow }) {
         action.run?.();
       }}
     >
-      <Icon aria-hidden="true" />
+      <PlayPauseIcon playing={action.showsPause} />
     </Button>
   );
 
