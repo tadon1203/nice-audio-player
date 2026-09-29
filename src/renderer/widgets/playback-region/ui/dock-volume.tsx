@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { m, useAnimationControls } from "motion/react";
 import { List, Music2, Volume2, VolumeX } from "lucide-react";
 import {
   formatVolumeDb,
@@ -28,6 +29,7 @@ export function DockVolume() {
   const ready = transport.connection === "ready";
   // Dragging the slider tracks the pointer 1:1; only the wheel and mute roll the readout.
   const [dragging, setDragging] = useState(false);
+  const nudge = useAnimationControls();
   useEffect(() => {
     if (!dragging) return;
     const end = () => setDragging(false);
@@ -88,6 +90,13 @@ export function DockVolume() {
         onPointerDown={() => setDragging(true)}
         onWheel={(event) => {
           if (!ready || event.deltaY === 0) return;
+          // Pushing past either end of the range nudges the readout instead of doing nothing.
+          const atCeiling = event.deltaY < 0 && output.volume >= 1 && !output.muted;
+          const atFloor = event.deltaY > 0 && (output.volume <= 0 || output.muted);
+          if (atCeiling || atFloor) {
+            void nudge.start({ x: [0, atCeiling ? 2 : -2, 0], transition: { duration: 0.12 } });
+            return;
+          }
           setVolume(stepVolumeDb(output.volume, event.deltaY < 0 ? 1 : -1));
         }}
       >
@@ -102,11 +111,13 @@ export function DockVolume() {
         className="hidden min-w-16 shrink-0 text-right text-sm tabular-nums text-muted-foreground lg:inline"
         data-region="volume-readout"
       >
-        {dragging ? (
-          formatVolumeDb(output.volume, output.muted)
-        ) : (
-          <RollingNumber value={formatVolumeDb(output.volume, output.muted)} />
-        )}
+        <m.span animate={nudge} className="inline-block">
+          {dragging ? (
+            formatVolumeDb(output.volume, output.muted)
+          ) : (
+            <RollingNumber value={formatVolumeDb(output.volume, output.muted)} />
+          )}
+        </m.span>
       </span>
       <DockSignalPath className="absolute top-full right-0 mt-0.5 max-md:hidden" />
     </div>

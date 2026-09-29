@@ -42,19 +42,26 @@ function DigitColumn({
   const shown = useRef(digit);
   const transform = useTransform(position, (v) => `translateY(${-v}lh)`);
 
+  // Only a new digit starts a roll. The other props are read when it starts, so a re-render
+  // with a different direction or spin cannot cut a running roll short.
+  const latest = useRef({ direction, spin, delay, roll });
+  latest.current = { direction, spin, delay, roll };
+  const running = useRef<ReturnType<typeof animate> | null>(null);
+
   useEffect(() => {
     if (shown.current === digit) return;
     shown.current = digit;
+    running.current?.stop();
+    const { direction, spin, delay, roll } = latest.current;
     // Every lap looks the same, so re-centre (keeping any fraction) to always have room to roll.
-    const current = HOME + (position.get() % 10);
-    position.jump(current);
-    const controls = animate(position, rollTarget(current, digit, direction, spin), {
+    position.jump(HOME + (position.get() % 10));
+    running.current = animate(position, rollTarget(position.get(), digit, direction, spin), {
       ...roll,
       delay,
       onComplete: () => position.jump(HOME + digit),
     });
-    return () => controls.stop();
-  }, [digit, direction, spin, delay, roll, position]);
+  }, [digit, position]);
+  useEffect(() => () => running.current?.stop(), []);
 
   return (
     <span className="inline-block overflow-clip">

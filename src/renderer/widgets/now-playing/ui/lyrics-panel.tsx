@@ -109,17 +109,24 @@ export function LyricsPanel({ trackId, className }: LyricsPanelProps) {
         role="log"
         aria-label="Lyrics"
         tabIndex={0}
-        className="min-h-0 flex-1 overflow-y-auto outline-none"
+        className="min-h-0 flex-1 overflow-y-auto mask-[linear-gradient(to_bottom,transparent,black_12%,black_75%,transparent)] outline-none forced-colors:mask-none"
         {...scroll.containerHandlers}
       >
         {lines.map((line, index) => {
           const isCurrent = index === currentIndex;
           const isPast = index < currentIndex;
           return (
-            <div
+            <m.div
               key={index}
               ref={scroll.registerLine(index)}
               aria-current={isCurrent ? "true" : undefined}
+              // Lines shrink a little the further they are from the current one (a transform, so
+              // nothing reflows).
+              animate={{
+                scale: 1 - Math.min(Math.abs(index - Math.max(currentIndex, 0)), 4) * 0.01,
+              }}
+              transition={lineTransition}
+              style={{ transformOrigin: "left center" }}
               className={cn(
                 "flex items-baseline gap-4 rounded-sm py-1",
                 index === hoveredIndex && "bg-accent/60",
@@ -164,7 +171,7 @@ export function LyricsPanel({ trackId, className }: LyricsPanelProps) {
                   ) : null}
                 </AnimatePresence>
               </span>
-            </div>
+            </m.div>
           );
         })}
       </div>

@@ -86,8 +86,12 @@ export function AlbumDetailsPage() {
             <FactLine
               facts={[
                 details.date ?? details.summary.year,
-                details.trackCount !== null ? formatCount(details.trackCount, "track") : null,
-                details.durationMs !== null ? formatDuration(details.durationMs) : null,
+                details.trackCount !== null
+                  ? { text: formatCount(details.trackCount, "track"), countUp: true as const }
+                  : null,
+                details.durationMs !== null
+                  ? { text: formatDuration(details.durationMs), countUp: true as const }
+                  : null,
               ]}
               fallback="Album details unavailable"
             />

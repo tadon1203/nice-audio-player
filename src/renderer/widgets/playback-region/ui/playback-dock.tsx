@@ -1,5 +1,5 @@
 import { m } from "motion/react";
-import { usePlaybackItem } from "@/renderer/entities/playback";
+import { usePlaybackItem, usePlaybackNavigation } from "@/renderer/entities/playback";
 import { ArtworkLight } from "@/renderer/shared/ui/artwork-light";
 import { DockIdentity } from "./dock-identity";
 import { DockTransport } from "./dock-transport";
@@ -16,6 +16,7 @@ export function PlaybackDock() {
   // Nothing read here changes with playback position, so the dock does not re-render as time
   // passes.
   const item = usePlaybackItem();
+  const navigation = usePlaybackNavigation();
   const trackKey = item?.file.path ?? "none";
   const { isOpen: nowPlayingOpen } = useNowPlaying();
   const transitions = useNowPlayingTransitions();
@@ -29,6 +30,7 @@ export function PlaybackDock() {
       <ArtworkLight
         artwork={item?.artwork ?? null}
         strength="strong"
+        enter={navigation === "previous" ? "wipe-previous" : "wipe-next"}
         className="mask-[linear-gradient(to_right,black,transparent_85%)]"
       />
       {/* A real vertical stack, not an overlay: each row consumes its own height, and the

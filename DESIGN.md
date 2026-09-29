@@ -69,14 +69,14 @@ Every screen is built from five elements instead of new looks.
 | Library, sidebar, Settings | none                                                         | none     |
 
 - Draw Light as a static blurred `<img>` under a veil: `ArtworkLight` in `shared/ui/artwork-light`. The caps in `light-model.ts` (blur, brightness, veil, strength) keep Ink-1 and Ink-2 at AA and Ink-3 at 3:1 (large text) over even pure white artwork; `light-model.test.ts` enforces it. Change them only with the test.
-- Animate only `transform`, `opacity`, and `clip-path`. Never animate the blur radius. Changing artwork crossfades over the `light` token (illumination is not an object).
+- Animate only `transform`, `opacity`, and `clip-path`. Never animate the blur radius. Changing artwork crossfades over the `light` token (illumination is not an object). The two exceptions are the dock and Now Playing, where the new image is wiped in over the old one from the side the track came from (`mediumMove`), so the light travels with the Sleeve.
 - Light can be turned off with the `Artwork backdrop` preference and is hidden under `forced-colors`.
 - Floating UI (menus, Select, Dialog, Sheet, sticky headers) uses **Acrylic** (`acrylic` utility, `Acrylic` component), not Light. It is solid `Canvas` under `forced-colors`.
 - The title bar's left 16rem is `bg-sidebar` so the sidebar reads as one column to the top of the window. While Now Playing is open the title bar is transparent and the Light reaches the top.
 
 ### Strip
 
-Time is drawn horizontally: a plain progress line across the top of the dock, the full waveform in Now Playing, a 1px progress line along the bottom of the playing track row, and segments proportional to track length along the bottom of an album header band (they grow in left to right; for the playing album, past tracks are brighter and the playing segment fills as it plays; hover names the track; click plays it).
+Time is drawn horizontally (the dock's play button wears a thin ring in the artwork color that fills clockwise as the track plays, the same Strip bent into a circle): a plain progress line across the top of the dock, the full waveform in Now Playing, a 1px progress line along the bottom of the playing track row, and segments proportional to track length along the bottom of an album header band (they grow in left to right; for the playing album, past tracks are brighter and the playing segment fills as it plays; hover names the track; click plays it).
 
 ### Gutter
 
@@ -96,7 +96,7 @@ Luminance is fixed to past, present, and future.
 | Present | Ink-1 | current lyric line, the playing track       |
 | Future  | Ink-2 | upcoming lyric lines, upcoming queue tracks |
 
-The waveform is the exception: played is Ink-1, unplayed is Ink-2. State changes never change size or weight, so nothing shifts.
+The waveform is the exception: played is Ink-1, unplayed is Ink-2. State changes never change size or weight, so nothing shifts. Transforms that do not move layout are fine: lyric lines shrink by up to 4% with their distance from the current line, and the lyrics list fades at its top and bottom edges.
 
 ## Spatial layers and motion
 
@@ -123,7 +123,7 @@ Motion tokens live in `shared/ui/motion`. Springs are fully damped (`bounce: 0`)
 | `press`      | spring, 0.15s, `bounce: 0.25` | the play button's press (the only overshoot)     |
 | `light`      | 400ms, ease                   | crossfading Light                                |
 
-1. Direction encodes hierarchy: deeper moves up, back moves down. Next track exits left, previous exits right. Sibling views only crossfade (100ms). Sort and filter do not animate.
+1. Direction encodes hierarchy: deeper moves up, back moves down. Next track exits left, previous exits right. Sibling views only crossfade (100ms). Sort and filter do not animate; the only exception is the library count, which rolls as the filter changes.
 2. Things appear from where they were summoned.
 3. Direct manipulation (seek, volume, manual scroll, header shrink) tracks input 1:1.
 4. Only these move on their own: track changes, lyrics follow and fill, the playhead, Light crossfades, and numbers that tick (rolling digits; dragging a control shows them 1:1 instead).
@@ -156,7 +156,7 @@ Title                                 [ Actions ]
 Fact line (tabular-nums, Ink-2)       [ Sort, etc. ]
 ```
 
-- Fact line: library `1,284 albums`; album year, track count, total time, format; Settings the number of folders. Separate items with 1em of space, not middle dots.
+- Fact line: library `1,284 albums`; album year, track count, total time, format (on first showing, the track count and time count up from zero once the artwork has landed); Settings the number of folders. Separate items with 1em of space, not middle dots.
 - No uppercase kind labels such as `ALBUM`.
 - Scrolling shrinks the large title into a 40px Acrylic sticky band, tracking the scroll 1:1 (CSS scroll-driven animation).
 
@@ -164,7 +164,7 @@ Fact line (tabular-nums, Ink-2)       [ Sort, etc. ]
 
 - **Library**: Albums (artwork-led), Album Artists (textual), Tracks (tabular). Each keeps its own filter, sort, and scroll. The filter sits in a stable spot per view and keeps its query when switching views. The track table's sticky header is Acrylic. The playing album or row shows a static playback glyph, never an animated equalizer.
 - **Details**: album and artist views establish identity before related content, with a medium-Light header band (album: with the track Strip along its bottom edge, and `Play` / `Shuffle`). Back returns to the semantic parent and restores context. The same object stays visually traceable across transitions.
-- **Queue**: a 320px Acrylic panel entering from the right, so it can stay open while browsing. Drag to reorder, `Remove`, `Clear upcoming`.
+- **Queue**: a 320px Acrylic panel entering from the right, so it can stay open while browsing. Drag to reorder (the dragged row lifts with a small tilt and shadow, and rows below the drop line make room), `Remove`, `Clear upcoming`.
 - **Settings**: a technical ledger, not cards. Labels, values, controls, paths, and errors align on the Gutter. Read-only info doesn't look like a disabled input. Changes apply immediately where safe. The Playback section shows the signal path stage by stage with each stage's setting, and the `Artwork backdrop` toggle.
 - **States**: empty, loading, error, and content states have clear ownership. Errors appear near the affected object with a recovery action. Prefer Undo over confirmation dialogs; confirm only for meaningful irreversible actions.
 - **Temporary UI** (menus, popovers) is attached to its trigger, compact, minimally rounded, and uses standard keyboard/focus/dismissal patterns. Icons only where they aid recognition.
@@ -178,15 +178,15 @@ One 104px band with stable geometry. Primary transport stays centered and nothin
 - **Two full-width rows.** A plain progress line runs edge to edge across the top — position only, no waveform data; the waveform itself is drawn only in Now Playing. Below it, the transport grid's two side columns are equal width, so transport sits on the dock's true horizontal center regardless of what the identity block or volume controls weigh on each side.
 - **Sleeve is inset, not edge-filling.** A small `rounded-lg` tile sits at the start of the identity block, beside the title/artist — placed like any other artwork in the workspace, not attached to the dock's edge. Clicking it opens Now Playing; its context menu offers `Go to album` and `Go to artist`. The whole identity block, the transport, and the volume group share one vertical center.
 - **Progress line**: a slim fixed-height track, filled Ink-1 up to the current position over an Ink-2 unplayed remainder. Hover shows a line and a time tooltip; dragging tracks the pointer 1:1. Elapsed and remaining time sit at its ends; clicking toggles remaining time.
-- **Transport**: ⤮ ⏮ ▶ ⏭ ↻, symmetric, centered on the dock. On/off is shown by icon shape and a dot, not color. Repeat-one is `↻¹`.
-- **Right side**: lyrics, queue, volume with a dB readout (wheel adjusts ±1 dB).
+- **Transport**: ⤮ ⏮ ▶ ⏭ ↻, symmetric, centered on the dock. On/off is shown by icon shape and a dot, not color. Repeat-one is `↻¹` (the icon turns once per mode change and the `¹` drops in).
+- **Right side**: lyrics, queue, volume with a dB readout (wheel adjusts ±1 dB; the readout nudges when the wheel pushes past 0 dB or silence).
 - **Signal path**: right-aligned under the volume row, holding the output-device menu. It hangs out of flow, so the row stays on the transport's centre line.
 - **Narrow (<768px)**: only ⏮ ▶ ⏭. Shuffle, repeat, and the signal path are hidden.
 - Volume is icon, level, and numeric readout on one axis.
 
 ### Now Playing
 
-A layer over the current location, not a route: the library stays mounted underneath (scroll position included), and Back closes it. The dock's own surface lifts first (its waveform slot closes, so its top edge rises 16px), then the Now Playing surface lifts and fades in over it, the Sleeve lands from the dock unclipped, and the text and waveform follow. Closing plays the same motion in about 70% of the time. Nothing on the layer clips its children (only the Light clips itself), and the title is faded in rather than shared, since stretching type between sizes distorts it. Entry: the dock Sleeve or title, the lyrics button, `Ctrl+L`. The `⌄` close button sits where the Sleeve was, and the Sleeve returns there on close. Beneath it, the underlying shell is `inert`.
+A layer over the current location, not a route: the library stays mounted underneath (scroll position included), and Back closes it. The dock's own surface lifts first (its waveform slot closes, so its top edge rises 16px), then the Now Playing surface lifts and fades in over it, the Sleeve lands from the dock unclipped, and the text and waveform follow. Closing plays the same motion in about 70% of the time. Nothing on the layer clips its children (only the Light clips itself), and the title is faded in rather than shared, since stretching type between sizes distorts it. On a track change (not on first open) the title's characters slide in from the track's direction. Entry: the dock Sleeve or title, the lyrics button, `Ctrl+L`. The `⌄` close button sits where the Sleeve was, and the Sleeve returns there on close. Beneath it, the underlying shell is `inert`.
 
 - **Waveform seek bar**: the only place the waveform is drawn. Bars grow upward from a baseline; played Ink-1, unplayed Ink-2, a 1px playhead. Hover shows a line and a time tooltip; dragging tracks the pointer 1:1. Its size never changes. Before data exists it is a 2px baseline line, and the bars grow out of that same line from left to right when the data arrives. The dock's progress line is a separate, simpler bar. Played and unplayed differ clearly (unplayed is about 35% ink), and the fill and playhead advance every frame from the last reported position; only a seek or track change springs. Elapsed and remaining time sit at its ends; clicking toggles remaining time.
 - **Lyrics** (local LRC only): left-aligned with a timestamp Gutter; the Gutter is the seek button, the text is selectable. The current line starts unlit (Ink-2) and is filled left to right in the artwork color as it is sung, over the time it takes to read it (capped, so a long instrumental gap does not crawl); size and weight never change. The fill goes one character at a time, so a wrapped line lights its upper row before its lower one; each character lifts 2px as it lights and settles back (skipped under reduced motion and on lines over 100 characters). Without lyrics, the Sleeve and info are centered and large. About `text-2xl`, ≤ ~32 characters per line. Plain lyrics have no Gutter, no auto-scroll, and an `Unsynced` label. Position arrives every 250ms, so time is interpolated from the last anchor. Follow mode keeps the current line about a third from the top; wheel, touch, scrollbar, and navigation keys switch to free mode with a `Jump to current line` button, and follow resumes after ~4s idle away from the lyrics, on the button, on track change, or on Gutter seek. The current line gets `aria-current`; there is no per-line `aria-live`.

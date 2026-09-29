@@ -1,6 +1,6 @@
 import { useRef } from "react";
 import { m } from "motion/react";
-import { usePlaybackItem } from "@/renderer/entities/playback";
+import { usePlaybackItem, usePlaybackNavigation } from "@/renderer/entities/playback";
 import { useTrackLyrics } from "@/renderer/entities/lyrics";
 import {
   NOW_PLAYING_SLEEVE_ID,
@@ -10,6 +10,7 @@ import {
   useNowPlayingTransitions,
 } from "@/renderer/features/now-playing-transition";
 import { cn } from "@/renderer/shared/lib/utils";
+import { KineticText } from "@/renderer/shared/ui/kinetic-text";
 import { Artwork } from "@/renderer/shared/ui/artwork";
 import { ArtworkLight } from "@/renderer/shared/ui/artwork-light";
 import { LyricsPanel } from "./lyrics-panel";
@@ -24,6 +25,10 @@ import { LyricsPanel } from "./lyrics-panel";
 export function NowPlayingContent() {
   const item = usePlaybackItem();
   const transitions = useNowPlayingTransitions();
+  const navigation = usePlaybackNavigation();
+  // The title slides in per character on track changes, but not when Now Playing first opens.
+  const openedOn = useRef(item?.queueItemId);
+  const changedSinceOpen = item?.queueItemId !== openedOn.current;
   const { data: resolution } = useTrackLyrics(item?.trackId ?? null);
   // While lyrics are loading keep the layout the previous track had, so it does not flip twice.
   const showLyricsRef = useRef(true);
@@ -32,7 +37,11 @@ export function NowPlayingContent() {
 
   return (
     <div className="relative flex h-full min-h-0 min-w-0 flex-col">
-      <ArtworkLight artwork={item?.artwork ?? null} strength="max" />
+      <ArtworkLight
+        artwork={item?.artwork ?? null}
+        strength="max"
+        enter={navigation === "previous" ? "wipe-previous" : "wipe-next"}
+      />
       <div
         className={cn(
           "relative flex min-h-0 min-w-0 flex-1 flex-col",
@@ -70,7 +79,11 @@ export function NowPlayingContent() {
               className="min-w-0"
             >
               <p className="line-clamp-3 text-2xl font-semibold text-foreground md:text-4xl">
-                {item?.title ?? "Nothing playing"}
+                {item !== null && changedSinceOpen ? (
+                  <KineticText text={item.title} direction={navigation === "previous" ? -1 : 1} />
+                ) : (
+                  (item?.title ?? "Nothing playing")
+                )}
               </p>
               {/* Ink-1: the playing track is "the present" per DESIGN.md, and Light may be absent. */}
               <p className="mt-2 truncate text-base text-foreground">{item?.artist}</p>

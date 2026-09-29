@@ -1,4 +1,4 @@
-import type { ComponentProps } from "react";
+import type { ComponentProps, CSSProperties } from "react";
 import { m } from "motion/react";
 import { ChevronDown, ChevronUp, GripVertical, X } from "lucide-react";
 import type { PlaybackQueueItem } from "@/shared/ipc";
@@ -51,8 +51,21 @@ export function QueuePanel() {
                 <m.li
                   key={item.id}
                   layout="position"
+                  animate={{
+                    // The dragged row lifts; rows at and after the drop slot make room.
+                    y:
+                      drag !== null && drag.id !== item.id && index >= drag.slot
+                        ? drag.rowHeight
+                        : 0,
+                    rotate: drag?.id === item.id ? 1 : 0,
+                    scale: drag?.id === item.id ? 1.02 : 1,
+                  }}
                   transition={rowTransition}
-                  className="relative"
+                  className={cn(
+                    "relative",
+                    drag?.id === item.id && "z-10 rounded-lg bg-popover shadow-floating",
+                  )}
+                  style={{ "--drop-shift": `${drag?.rowHeight ?? 0}px` } as CSSProperties}
                   data-dragging={drag?.id === item.id ? "true" : undefined}
                   data-drop={dropMarker(drag?.slot ?? null, index, queue.upcoming.length)}
                 >

@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import type { PointerEvent } from "react";
 import { dropSlot, slotToIndex } from "./queue-drag";
 
-type Drag = { id: string; from: number; slot: number };
+type Drag = { id: string; from: number; slot: number; rowHeight: number };
 
 /**
  * Pointer-driven reordering for the upcoming list. Dragging only chooses an insertion slot
@@ -17,7 +17,8 @@ export function useQueueDrag(onMove: (id: string, to: number) => void) {
     onPointerDown: (event: PointerEvent<HTMLElement>) => {
       if (event.button !== 0) return;
       event.currentTarget.setPointerCapture(event.pointerId);
-      setDrag({ id, from, slot: from });
+      const rowHeight = listRef.current?.children[from]?.getBoundingClientRect().height ?? 0;
+      setDrag({ id, from, slot: from, rowHeight });
     },
     onPointerMove: (event: PointerEvent<HTMLElement>) => {
       if (drag === null || drag.id !== id) return;

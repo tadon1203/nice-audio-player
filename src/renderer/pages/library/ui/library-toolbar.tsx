@@ -4,6 +4,7 @@ import {
   CollectionSortControl,
   type SortOption,
 } from "@/renderer/shared/ui/collection-sort-control";
+import { RollingNumber } from "@/renderer/shared/ui/rolling-number";
 import { PageTitle } from "@/renderer/shared/ui/headings";
 import { WorkspaceContainer } from "@/renderer/shared/ui/workspace-container";
 import {
@@ -44,7 +45,7 @@ export function LibraryToolbar<Key extends string>({
           {/* Title and count share one baseline; search and sort share one row. */}
           <div className="flex min-w-0 items-baseline gap-4">
             <PageTitle>{title}</PageTitle>
-            <span className="text-sm tabular-nums text-muted-foreground">{countLabel}</span>
+            <CountLabel label={countLabel} />
             {updating ? (
               <span role="status" aria-live="polite" className="text-sm text-muted-foreground">
                 Updating…
@@ -78,5 +79,22 @@ export function LibraryToolbar<Key extends string>({
         </div>
       </WorkspaceContainer>
     </header>
+  );
+}
+
+/** `1,284 albums`: the number rolls like a slot machine, the unit stays put. */
+function CountLabel({ label }: { label: string }) {
+  const match = /^([\d,.]+)(\s.*)?$/.exec(label);
+  return (
+    <span className="text-sm tabular-nums text-muted-foreground">
+      {match ? (
+        <>
+          <RollingNumber value={match[1]!} settle="right-last" spin={1} />
+          {match[2]}
+        </>
+      ) : (
+        label
+      )}
+    </span>
   );
 }

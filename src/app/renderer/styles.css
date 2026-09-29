@@ -172,16 +172,13 @@
   pointer-events: none;
 }
 
+/* The row is shifted down by `--drop-shift` to open a gap; the line marks the gap's top edge. */
 [data-drop="before"]::before {
-  top: 0;
+  top: calc(-1 * var(--drop-shift, 0px));
 }
 
 [data-drop="after"]::after {
   bottom: 0;
-}
-
-[data-dragging="true"] {
-  opacity: 0.5;
 }
 
 @layer base {
