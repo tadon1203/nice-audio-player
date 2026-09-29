@@ -1,3 +1,4 @@
+import { RollingNumber } from "@/renderer/shared/ui/rolling-number";
 import { useState } from "react";
 import { Check, FolderPlus, RefreshCw, X } from "lucide-react";
 import {
@@ -33,6 +34,15 @@ import { RemoveLibraryRootDialog } from "./remove-library-root-dialog";
 
 function formatProgress(value: number | null, label: string): string {
   return `${formatNumber(value)} ${label}`;
+}
+
+/** A running scan's counter: the number rolls as files are found, inspected and indexed. */
+function ScanCount({ value, label }: { value: number; label: string }) {
+  return (
+    <span className="tabular-nums">
+      <RollingNumber value={formatNumber(value)} /> {label}
+    </span>
+  );
 }
 
 function scanLabel(state: LibraryScanState | undefined): string {
@@ -171,10 +181,10 @@ export function LibraryFoldersSection() {
       {scanRunning ? (
         <div className="mt-4 rounded-md border border-border bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
           <div className="flex flex-wrap gap-x-5 gap-y-1">
-            <span>{formatProgress(scan.discoveredCount, "discovered")}</span>
-            <span>{formatProgress(scan.inspectedCount, "inspected")}</span>
-            <span>{formatProgress(scan.indexedCount, "indexed")}</span>
-            <span>{formatProgress(scan.failedCount, "failed")}</span>
+            <ScanCount value={scan.discoveredCount} label="discovered" />
+            <ScanCount value={scan.inspectedCount} label="inspected" />
+            <ScanCount value={scan.indexedCount} label="indexed" />
+            <ScanCount value={scan.failedCount} label="failed" />
           </div>
           <Progress
             className="mt-3"
