@@ -190,8 +190,6 @@
   *::before,
   *::after {
     scroll-behavior: auto !important;
-    animation-duration: 0s !important;
-    animation-delay: 0s !important;
     /* Same short crossfade the JS tokens fall back to (`reducedMotionTransition`). */
     transition-duration: var(--duration-feedback) !important;
   }

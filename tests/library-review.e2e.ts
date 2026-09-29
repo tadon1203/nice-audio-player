@@ -1,10 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { installNativeApi } from "./fixtures/native-api";
 
-// Under the suite-wide reduced motion the Settings checkbox click in the last test is flaky
-// (about 1 run in 8 leaves the checkbox unchanged), so this file runs with real motion.
-test.use({ reducedMotion: "no-preference" });
-
 test.beforeEach(async ({ page }) => installNativeApi(page));
 
 test("keeps each library filter and sort when switching peers and visiting Settings", async ({
@@ -186,10 +182,11 @@ test("invalidates mounted library queries after terminal scan events and root ch
 
   requestCount = await getCount();
   await page.getByRole("link", { name: "Settings", exact: true }).click();
-  await page
-    .getByRole("checkbox", { name: /Include C:\/Music in library/ })
-    .first()
-    .uncheck();
+  // The checkbox is controlled by the saved setting, so it flips after the round trip; assert on
+  // that instead of `uncheck()`, which expects the state to change synchronously.
+  const includeRoot = page.getByRole("checkbox", { name: /Include C:\/Music in library/ }).first();
+  await includeRoot.click();
+  await expect(includeRoot).not.toBeChecked();
   await page.getByRole("link", { name: "Tracks", exact: true }).click();
   await expect.poll(getCount).toBeGreaterThan(requestCount);
   await expect(page.getByText("0 tracks", { exact: true })).toBeVisible();
