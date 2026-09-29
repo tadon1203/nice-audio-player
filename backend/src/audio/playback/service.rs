@@ -9,7 +9,7 @@ use std::thread::{self, JoinHandle};
 
 use super::item::PlaybackItemSeed;
 use super::preferences::{PlaybackPreferences, PreferencesObserver};
-use super::queue::{PlaybackQueue, PlaybackQueueMoveDirection, PlaybackRepeatMode};
+use super::queue::{PlaybackQueue, PlaybackRepeatMode};
 use super::snapshot::{PlaybackFailureCode, PlaybackQueueSnapshot, PlaybackSnapshot, SnapshotBase};
 use super::worker::{PlaybackWorker, WorkerLinks};
 use crate::audio::devices::AudioOutputSelection;
@@ -96,7 +96,8 @@ pub(super) enum PlaybackCommand {
     },
     MoveQueueItem {
         id: String,
-        direction: PlaybackQueueMoveDirection,
+        /// Position in the upcoming list, 0 being next up.
+        to: usize,
         reply: Reply<PlaybackQueueSnapshot>,
     },
     ClearQueue {
@@ -319,13 +320,9 @@ impl PlaybackServiceHandle {
     pub fn move_queue_item(
         &self,
         id: String,
-        direction: PlaybackQueueMoveDirection,
+        to: usize,
     ) -> Result<PlaybackQueueSnapshot, PlaybackServiceError> {
-        self.request(|reply| PlaybackCommand::MoveQueueItem {
-            id,
-            direction,
-            reply,
-        })
+        self.request(|reply| PlaybackCommand::MoveQueueItem { id, to, reply })
     }
 
     pub fn clear_queue(&self) -> Result<PlaybackQueueSnapshot, PlaybackServiceError> {

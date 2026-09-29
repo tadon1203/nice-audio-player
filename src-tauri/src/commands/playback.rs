@@ -3,8 +3,7 @@ use backend::{
     audio::{
         devices::{list_output_devices, AudioDeviceListError, AudioOutputSelection},
         playback::{
-            PlaybackQueueMoveDirection, PlaybackQueueSnapshot, PlaybackRepeatMode,
-            PlaybackServiceError, PlaybackSnapshot,
+            PlaybackQueueSnapshot, PlaybackRepeatMode, PlaybackServiceError, PlaybackSnapshot,
         },
         waveform::PlaybackWaveform,
     },
@@ -183,11 +182,11 @@ pub async fn remove_queue_item(
 #[specta::specta]
 pub async fn move_queue_item(
     id: String,
-    direction: PlaybackQueueMoveDirection,
+    to: usize,
     state: tauri::State<'_, AppState>,
 ) -> Result<PlaybackQueueSnapshot, PlaybackCommandError> {
     let handle = state.backend.playback.handle();
-    blocking(move || handle.move_queue_item(id, direction)).await
+    blocking(move || handle.move_queue_item(id, to)).await
 }
 
 #[tauri::command]

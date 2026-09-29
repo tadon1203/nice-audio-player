@@ -5,7 +5,6 @@ import type {
   AudioOutputSelection,
   PlaybackContext,
   PlaybackItem,
-  PlaybackQueueMoveDirection,
   PlaybackQueueSnapshot,
   PlaybackRepeatMode,
   PlaybackSnapshot,
@@ -251,8 +250,8 @@ export function createPlaybackController(store: UseBoundStore<StoreApi<PlaybackS
     setRepeatMode: (mode: PlaybackRepeatMode) =>
       runQueueCommand(() => api!.setPlaybackRepeatMode(mode)),
     removeQueueItem: (id: string) => runQueueCommand(() => api!.removeQueueItem(id)),
-    moveQueueItem: (id: string, direction: PlaybackQueueMoveDirection) =>
-      runQueueCommand(() => api!.moveQueueItem(id, direction)),
+    /** Moves an upcoming item to `to`, an index into the upcoming list (0 is next up). */
+    moveQueueItem: (id: string, to: number) => runQueueCommand(() => api!.moveQueueItem(id, to)),
     clearQueue: () => runQueueCommand(() => api!.clearQueue()),
     /** A loaded track restarts on the new device at the same position. */
     setOutputSelection: (selection: AudioOutputSelection) =>

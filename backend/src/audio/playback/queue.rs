@@ -16,13 +16,6 @@ pub enum PlaybackRepeatMode {
     One,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, specta::Type, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum PlaybackQueueMoveDirection {
-    Earlier,
-    Later,
-}
-
 /// Why the queue is asked for another item; repeat-one only applies to a natural finish.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum AdvanceReason {
@@ -152,23 +145,21 @@ impl PlaybackQueue {
         Ok(())
     }
 
-    /// Swaps an upcoming item with its neighbour. Returns whether the order changed; the current
-    /// item never moves and nothing swaps into or before it.
-    pub fn move_upcoming(
-        &mut self,
-        id: &str,
-        direction: PlaybackQueueMoveDirection,
-    ) -> Result<bool, QueueError> {
+    /// Moves an upcoming item to `to`, an index into the upcoming list (0 is next up); an index
+    /// past the end means the end. Returns whether the order changed. The current item never
+    /// moves and nothing is placed before it.
+    pub fn move_upcoming(&mut self, id: &str, to: usize) -> Result<bool, QueueError> {
         let index = self.upcoming_index(id)?;
-        let target = match direction {
-            PlaybackQueueMoveDirection::Earlier => index.checked_sub(1),
-            PlaybackQueueMoveDirection::Later => index.checked_add(1),
-        };
-        let Some(target) = target.filter(|target| *target > self.current && *target < self.len())
-        else {
+        let target = self
+            .current
+            .saturating_add(1)
+            .saturating_add(to)
+            .min(self.len() - 1);
+        if target == index {
             return Ok(false);
-        };
-        self.entries.swap(index, target);
+        }
+        let item = self.entries.remove(index);
+        self.entries.insert(target, item);
         self.sync_manual_order();
         Ok(true)
     }
@@ -500,32 +491,51 @@ mod tests {
     }
 
     #[test]
-    fn move_never_swaps_with_or_before_the_current_item() {
-        // The current item is not the first entry, so an unchecked swap would displace it.
+    fn move_never_displaces_or_precedes_the_current_item() {
+        // The current item is not the first entry, so an unchecked move would displace it.
         let mut queue = queue_of(5, 2, PlaybackRepeatMode::Off, false);
         let first_upcoming = queue.upcoming()[0].queue_item_id.clone();
         let current = queue.current().unwrap().queue_item_id.clone();
 
-        assert_eq!(
-            queue.move_upcoming(&first_upcoming, PlaybackQueueMoveDirection::Earlier),
-            Ok(false)
-        );
+        assert_eq!(queue.move_upcoming(&first_upcoming, 0), Ok(false));
         assert_eq!(queue.current().unwrap().queue_item_id, current);
         assert_eq!(
-            queue.move_upcoming(&current, PlaybackQueueMoveDirection::Later),
+            queue.move_upcoming(&current, 0),
             Err(QueueError::ItemNotUpcoming)
         );
 
-        assert_eq!(
-            queue.move_upcoming(&first_upcoming, PlaybackQueueMoveDirection::Later),
-            Ok(true)
-        );
+        assert_eq!(queue.move_upcoming(&first_upcoming, 1), Ok(true));
         assert_eq!(queue.upcoming()[1].queue_item_id, first_upcoming);
-        let last = queue.upcoming()[1].queue_item_id.clone();
+        assert_eq!(queue.current().unwrap().queue_item_id, current);
+    }
+
+    #[test]
+    fn move_places_an_item_at_the_requested_upcoming_position() {
+        let mut queue = queue_of(6, 1, PlaybackRepeatMode::Off, false);
+        let ids: Vec<String> = queue
+            .upcoming()
+            .iter()
+            .map(|item| item.queue_item_id.clone())
+            .collect();
+
+        // Forward over several items, then back to the front.
+        assert_eq!(queue.move_upcoming(&ids[0], 3), Ok(true));
+        let order: Vec<_> = queue
+            .upcoming()
+            .iter()
+            .map(|i| i.queue_item_id.clone())
+            .collect();
         assert_eq!(
-            queue.move_upcoming(&last, PlaybackQueueMoveDirection::Later),
-            Ok(false)
+            order,
+            [&ids[1], &ids[2], &ids[3], &ids[0]].map(String::clone)
         );
+        assert_eq!(queue.move_upcoming(&ids[0], 0), Ok(true));
+        assert_eq!(queue.upcoming()[0].queue_item_id, ids[0]);
+
+        // Past the end clamps to the end; an unchanged position reports no change.
+        assert_eq!(queue.move_upcoming(&ids[0], 99), Ok(true));
+        assert_eq!(queue.upcoming().last().unwrap().queue_item_id, ids[0]);
+        assert_eq!(queue.move_upcoming(&ids[0], 99), Ok(false));
     }
 
     #[test]
@@ -597,7 +607,7 @@ mod tests {
                     }
                     6 => {
                         if let Some(id) = queue.upcoming().last().map(|i| i.queue_item_id.clone()) {
-                            let _ = queue.move_upcoming(&id, PlaybackQueueMoveDirection::Earlier);
+                            let _ = queue.move_upcoming(&id, 0);
                         }
                     }
                     7 => {

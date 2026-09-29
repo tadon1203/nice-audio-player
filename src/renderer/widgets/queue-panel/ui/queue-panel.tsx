@@ -1,4 +1,6 @@
-import { ChevronDown, ChevronUp, X } from "lucide-react";
+import type { ComponentProps } from "react";
+import { m } from "motion/react";
+import { ChevronDown, ChevronUp, GripVertical, X } from "lucide-react";
 import type { PlaybackQueueItem } from "@/shared/ipc";
 import { usePlaybackActions, usePlaybackQueue } from "@/renderer/entities/playback";
 import { formatDuration } from "@/renderer/shared/lib/format";
@@ -6,17 +8,23 @@ import { cn } from "@/renderer/shared/lib/utils";
 import { Artwork } from "@/renderer/shared/ui/artwork";
 import { Button } from "@/renderer/shared/ui/shadcn/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/renderer/shared/ui/shadcn/sheet";
+import { useMotionTransition } from "@/renderer/shared/ui/motion";
+import { useQueueDrag } from "../model/use-queue-drag";
 import { useQueuePanel } from "../model/use-queue-panel";
 
 /**
- * A 320px Acrylic panel from the right (DESIGN.md, Queue). Reordering moves an item one slot
- * at a time (`moveQueueItem`) rather than free drag: the backend queue only exposes earlier/
- * later moves, and that is enough for a personal-project queue of a few dozen tracks.
+ * A 320px Acrylic panel from the right (DESIGN.md, Queue). Upcoming tracks reorder by dragging
+ * their handle to any position (`moveQueueItem` takes the target index), or one step at a time
+ * with the buttons.
  */
 export function QueuePanel() {
   const { isOpen, close } = useQueuePanel();
   const { queue } = usePlaybackQueue();
   const playback = usePlaybackActions();
+  const { listRef, drag, handlersFor } = useQueueDrag(
+    (id, to) => void playback.moveQueueItem(id, to),
+  );
+  const rowTransition = useMotionTransition("mediumMove");
 
   return (
     // Not modal: the library stays visible and usable beside the queue, so there is no backdrop
@@ -38,19 +46,27 @@ export function QueuePanel() {
             <p className="px-4 py-6 text-sm text-muted-foreground">Nothing playing.</p>
           )}
           {queue && queue.upcoming.length > 0 ? (
-            <ul>
+            <ul ref={listRef}>
               {queue.upcoming.map((item, index) => (
-                <li key={item.id}>
+                <m.li
+                  key={item.id}
+                  layout="position"
+                  transition={rowTransition}
+                  className="relative"
+                  data-dragging={drag?.id === item.id ? "true" : undefined}
+                  data-drop={dropMarker(drag?.slot ?? null, index, queue.upcoming.length)}
+                >
                   <QueueRow
                     item={item}
                     tone="upcoming"
-                    onMoveEarlier={() => void playback.moveQueueItem(item.id, "earlier")}
-                    onMoveLater={() => void playback.moveQueueItem(item.id, "later")}
+                    dragHandlers={handlersFor(item.id, index)}
+                    onMoveEarlier={() => void playback.moveQueueItem(item.id, index - 1)}
+                    onMoveLater={() => void playback.moveQueueItem(item.id, index + 1)}
                     canMoveEarlier={index > 0}
                     canMoveLater={index < queue.upcoming.length - 1}
                     onRemove={() => void playback.removeQueueItem(item.id)}
                   />
-                </li>
+                </m.li>
               ))}
             </ul>
           ) : null}
@@ -73,6 +89,14 @@ export function QueuePanel() {
   );
 }
 
+/** Which edge of row `index` shows the drop line for insertion `slot`, if any. */
+function dropMarker(slot: number | null, index: number, count: number) {
+  if (slot === null) return undefined;
+  if (slot === index) return "before";
+  if (slot === count && index === count - 1) return "after";
+  return undefined;
+}
+
 function QueueRow({
   item,
   tone,
@@ -81,6 +105,7 @@ function QueueRow({
   canMoveEarlier,
   canMoveLater,
   onRemove,
+  dragHandlers,
 }: {
   item: PlaybackQueueItem;
   tone: "current" | "upcoming";
@@ -89,6 +114,7 @@ function QueueRow({
   canMoveEarlier?: boolean;
   canMoveLater?: boolean;
   onRemove?: () => void;
+  dragHandlers?: ComponentProps<"button">;
 }) {
   return (
     <div
@@ -96,6 +122,17 @@ function QueueRow({
       data-tone={tone}
       aria-current={tone === "current" ? "true" : undefined}
     >
+      {dragHandlers ? (
+        <button
+          type="button"
+          aria-label={`Drag ${item.title} to reorder`}
+          data-slot="queue-drag-handle"
+          className="-ml-2 shrink-0 cursor-grab touch-none rounded-sm p-1 text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing"
+          {...dragHandlers}
+        >
+          <GripVertical aria-hidden="true" className="size-4" />
+        </button>
+      ) : null}
       <Artwork artwork={item.artwork} className="size-10 shrink-0 rounded-md" />
       <div className="min-w-0 flex-1">
         <p

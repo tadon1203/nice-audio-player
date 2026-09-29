@@ -24,7 +24,7 @@ export const commands = {
 	/**  Switches the output device; a loaded track restarts on it at the same position. */
 	setAudioOutputSelection: (selection: AudioOutputSelection) => __TAURI_INVOKE<PlaybackSnapshot>("set_audio_output_selection", { selection }),
 	removeQueueItem: (id: string) => __TAURI_INVOKE<PlaybackQueueSnapshot>("remove_queue_item", { id }),
-	moveQueueItem: (id: string, direction: PlaybackQueueMoveDirection) => __TAURI_INVOKE<PlaybackQueueSnapshot>("move_queue_item", { id, direction }),
+	moveQueueItem: (id: string, to: number) => __TAURI_INVOKE<PlaybackQueueSnapshot>("move_queue_item", { id, to }),
 	clearQueue: () => __TAURI_INVOKE<PlaybackQueueSnapshot>("clear_queue"),
 	/**  Waveform of the loaded track, or `None` while it is analyzed; `waveformReady` follows. */
 	getPlaybackWaveform: (path: string) => __TAURI_INVOKE<{
@@ -323,8 +323,6 @@ export type PlaybackQueueItem = {
 	artwork: ArtworkRef | null,
 	durationMs: number | null,
 };
-
-export type PlaybackQueueMoveDirection = "earlier" | "later";
 
 export type PlaybackQueueSnapshot = {
 	revision: number,

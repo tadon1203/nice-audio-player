@@ -13,7 +13,7 @@ mod worker;
 
 pub use item::{PlaybackItem, PlaybackItemSeed};
 pub use preferences::{PlaybackPreferences, PreferencesObserver};
-pub use queue::{PlaybackQueueMoveDirection, PlaybackRepeatMode};
+pub use queue::PlaybackRepeatMode;
 pub use service::{
     PlaybackService, PlaybackServiceError, PlaybackServiceHandle, PlaybackServiceStartError,
 };

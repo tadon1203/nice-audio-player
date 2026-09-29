@@ -219,12 +219,8 @@ impl PlaybackWorker {
                     let result = self.edit_queue(|queue| queue.remove_upcoming(&id).map(|()| true));
                     let _ = reply.send(result.map(|changed| self.queue_changed(changed)));
                 }
-                Ok(PlaybackCommand::MoveQueueItem {
-                    id,
-                    direction,
-                    reply,
-                }) => {
-                    let result = self.edit_queue(|queue| queue.move_upcoming(&id, direction));
+                Ok(PlaybackCommand::MoveQueueItem { id, to, reply }) => {
+                    let result = self.edit_queue(|queue| queue.move_upcoming(&id, to));
                     let _ = reply.send(result.map(|changed| self.queue_changed(changed)));
                 }
                 Ok(PlaybackCommand::ClearQueue { reply }) => {

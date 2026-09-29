@@ -380,10 +380,10 @@ function createNativeMock(options: InstallNativeApiOptions) {
       emit({ event: "playbackQueueStateChanged", payload: queue });
       return queue;
     },
-    moveQueueItem: async (id, direction) => {
+    moveQueueItem: async (id, to) => {
       const index = queue.upcoming.findIndex((item) => item.id === id);
-      const target = direction === "earlier" ? index - 1 : index + 1;
-      if (index >= 0 && target >= 0 && target < queue.upcoming.length) {
+      const target = Math.min(Math.max(to, 0), queue.upcoming.length - 1);
+      if (index >= 0 && target !== index) {
         const upcoming = [...queue.upcoming];
         const [item] = upcoming.splice(index, 1);
         upcoming.splice(target, 0, item!);

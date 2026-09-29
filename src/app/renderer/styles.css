@@ -160,6 +160,29 @@
   }
 }
 
+/* The queue's drop line while a row is dragged (`data-drop` is set on the row it borders). */
+[data-drop="before"]::before,
+[data-drop="after"]::after {
+  content: "";
+  position: absolute;
+  inset-inline: 1rem;
+  height: 2px;
+  background: var(--foreground);
+  pointer-events: none;
+}
+
+[data-drop="before"]::before {
+  top: 0;
+}
+
+[data-drop="after"]::after {
+  bottom: 0;
+}
+
+[data-dragging="true"] {
+  opacity: 0.5;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
