@@ -36,17 +36,20 @@ export function KineticText({
           const content = parts.map((char) => {
             const i = index++;
             return /^\s+$/.test(char) ? (
-              char
+              <span
+                key={i}
+                data-glyph={char}
+                className="whitespace-pre before:content-[attr(data-glyph)]"
+              />
             ) : (
               <m.span
                 key={i}
-                className="inline-block"
+                data-glyph={char}
+                className="inline-block before:content-[attr(data-glyph)]"
                 initial={{ opacity: 0, x: 8 * direction }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ ...transition, delay: i * step }}
-              >
-                {char}
-              </m.span>
+              />
             );
           });
           return parts.length <= UNBREAKABLE_MAX && !/^\s+$/.test(word) ? (

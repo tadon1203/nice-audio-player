@@ -35,3 +35,11 @@ export function readableAccent(hex: string | null | undefined): string | null {
   }
   return "#ffffff";
 }
+
+/** Black or white, whichever reads better on a flat `hex` fill (the record label's ink). */
+export function labelInk(hex: string | null | undefined): "#000000" | "#ffffff" {
+  const rgb = hex == null ? null : parseHex(hex);
+  if (rgb === null) return "#ffffff";
+  const y = luminanceOf(rgb);
+  return contrastRatio(y, 0) >= contrastRatio(y, 1) ? "#000000" : "#ffffff";
+}

@@ -16,15 +16,14 @@ export function FlapText({ value, className }: { value: string; className?: stri
         <AnimatePresence initial={false} mode="popLayout">
           <m.span
             key={value}
-            className="inline-block"
+            data-glyph={value}
+            className="inline-block whitespace-pre before:content-[attr(data-glyph)]"
             initial={reduced ? { opacity: 0 } : { rotateX: -90, opacity: 0 }}
             animate={reduced ? { opacity: 1 } : { rotateX: 0, opacity: 1 }}
             exit={reduced ? { opacity: 0 } : { rotateX: 90, opacity: 0 }}
             transition={reduced ? motionTokens.feedback : transition}
             style={{ transformOrigin: "50% 50%" }}
-          >
-            {value}
-          </m.span>
+          ></m.span>
         </AnimatePresence>
       </span>
     </span>

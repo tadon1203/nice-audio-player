@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readableAccent } from "./artwork-accent";
+import { labelInk, readableAccent } from "./artwork-accent";
 import { contrastRatio, grayLuminance, INK, worstCaseSurfaceLuminance } from "./light-model";
 
 const luminance = grayLuminance;
@@ -54,5 +54,17 @@ describe("readable accent", () => {
   it("rejects anything that is not #rrggbb", () => {
     expect(readableAccent("red")).toBeNull();
     expect(readableAccent(null)).toBeNull();
+  });
+});
+
+describe("labelInk", () => {
+  it("picks black on light labels and white on dark ones", () => {
+    expect(labelInk("#ffd54f")).toBe("#000000");
+    expect(labelInk("#1a237e")).toBe("#ffffff");
+  });
+
+  it("falls back to white without a usable color", () => {
+    expect(labelInk(null)).toBe("#ffffff");
+    expect(labelInk("nope")).toBe("#ffffff");
   });
 });

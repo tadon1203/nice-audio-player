@@ -19,6 +19,8 @@ import {
   type RollDirection,
 } from "./rolling-model";
 
+/** Glyphs are drawn as CSS content, so the only text in the DOM is the real value (`sr-only`). */
+const GLYPH = "before:content-[attr(data-glyph)]";
 const ROWS = Array.from({ length: COLUMN_LAPS * 10 }, (_, i) => i % 10);
 const HOME = COLUMN_HOME_LAP * 10;
 
@@ -64,10 +66,10 @@ function DigitColumn({
   useEffect(() => () => running.current?.stop(), []);
 
   return (
-    <span className="inline-block overflow-clip">
+    <span className="inline-block h-[1lh] overflow-clip">
       <m.span className="flex flex-col will-change-transform" style={{ transform }}>
         {ROWS.map((row, i) => (
-          <span key={i}>{row}</span>
+          <span key={i} data-glyph={row} className={GLYPH} />
         ))}
       </m.span>
     </span>
@@ -77,16 +79,15 @@ function DigitColumn({
 /** Reduced motion: no rolling, the changed digit crossfades. */
 function FadeDigit({ digit }: { digit: number }) {
   return (
-    <span className="inline-block overflow-clip">
+    <span className="inline-block h-[1lh] overflow-clip">
       <m.span
         key={digit}
-        className="block"
+        data-glyph={digit}
+        className={cn("block", GLYPH)}
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={motionTokens.feedback}
-      >
-        {digit}
-      </m.span>
+      ></m.span>
     </span>
   );
 }
@@ -139,7 +140,7 @@ export function RollingNumber({
                 transition={motionTokens.feedback}
               >
                 {!isDigit(c) ? (
-                  c
+                  <span data-glyph={c} className={cn("whitespace-pre", GLYPH)} />
                 ) : reduced ? (
                   <FadeDigit digit={Number(c)} />
                 ) : (

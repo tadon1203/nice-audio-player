@@ -96,7 +96,7 @@ test("marks shuffle and repeat by shape and dot, not color", async ({ page }) =>
   );
   await dock.getByRole("button", { name: "Repeat: all" }).click();
   const repeatOne = dock.getByRole("button", { name: "Repeat: one" });
-  await expect(repeatOne.locator("svg.lucide-repeat-1")).toBeVisible();
+  await expect(repeatOne.getByText("¹")).toBeVisible();
   await repeatOne.click();
   await expect(dock.getByRole("button", { name: "Repeat: off" })).toHaveAttribute(
     "aria-pressed",

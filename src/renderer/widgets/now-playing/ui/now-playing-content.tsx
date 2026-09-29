@@ -1,5 +1,13 @@
-import { useRef } from "react";
-import { m } from "motion/react";
+import { useEffect, useRef } from "react";
+import {
+  animate,
+  m,
+  useIsPresent,
+  useMotionValue,
+  useReducedMotion,
+  useTransform,
+} from "motion/react";
+import { useAlbumTracks } from "@/renderer/entities/library";
 import { usePlaybackItem, usePlaybackNavigation } from "@/renderer/entities/playback";
 import { useTrackLyrics } from "@/renderer/entities/lyrics";
 import {
@@ -13,7 +21,9 @@ import { cn } from "@/renderer/shared/lib/utils";
 import { KineticText } from "@/renderer/shared/ui/kinetic-text";
 import { Artwork } from "@/renderer/shared/ui/artwork";
 import { ArtworkLight } from "@/renderer/shared/ui/artwork-light";
+import { motionTokens } from "@/renderer/shared/ui/motion";
 import { LyricsPanel } from "./lyrics-panel";
+import { RecordDisc } from "./record-disc/record-disc";
 
 /**
  * Now Playing's content: the Sleeve continues its shared-element motion from the dock (the
@@ -51,7 +61,7 @@ export function NowPlayingContent() {
         <div
           className={cn(
             "relative flex min-w-0 shrink-0 flex-col gap-4 p-6",
-            showLyrics ? "md:w-96" : "items-center text-center md:max-w-2xl",
+            showLyrics ? "md:w-[28rem]" : "items-center text-center md:max-w-2xl",
           )}
         >
           <div
@@ -60,18 +70,27 @@ export function NowPlayingContent() {
               showLyrics ? "md:items-start" : "md:items-center",
             )}
           >
-            <m.div
-              layoutId={NOW_PLAYING_SLEEVE_ID}
-              className="size-16 shrink-0 overflow-hidden md:size-[22rem]"
-              style={{ borderRadius: SLEEVE_RADIUS_PX }}
+            {/* The disc waits behind the Sleeve, the same size, and rolls out of its right side. */}
+            <div
+              className={cn(
+                "relative size-16 shrink-0",
+                showLyrics ? "md:size-72" : "md:size-[22rem]",
+              )}
             >
-              <Artwork
-                artwork={item?.artwork ?? null}
-                alt={item === null ? "" : `${item.title} artwork`}
-                loading="eager"
-                className="size-full rounded-none"
-              />
-            </m.div>
+              <DiscSlot showLyrics={showLyrics} />
+              <m.div
+                layoutId={NOW_PLAYING_SLEEVE_ID}
+                className="relative z-10 size-full overflow-hidden"
+                style={{ borderRadius: SLEEVE_RADIUS_PX }}
+              >
+                <Artwork
+                  artwork={item?.artwork ?? null}
+                  alt={item === null ? "" : `${item.title} artwork`}
+                  loading="eager"
+                  className="size-full rounded-none"
+                />
+              </m.div>
+            </div>
             <m.div
               key={item?.queueItemId ?? "none"}
               initial={{ opacity: 0 }}
@@ -114,5 +133,53 @@ export function NowPlayingContent() {
         timeClassName="text-sm"
       />
     </div>
+  );
+}
+
+/** How far the disc slides out from behind the Sleeve, as a share of its own width. */
+const DISC_OUT = { lyrics: 45, centred: 50 } as const;
+
+/**
+ * The record disc, rolling out from behind the Sleeve once the Sleeve has landed and back in
+ * as Now Playing closes (a little quicker). Its turning while it rolls is the distance over
+ * its radius, so it looks like it rolls rather than slides. Under reduced motion it stays out
+ * and only fades. Not shown below `md`.
+ */
+function DiscSlot({ showLyrics }: { showLyrics: boolean }) {
+  const item = usePlaybackItem();
+  const present = useIsPresent();
+  const reduced = useReducedMotion() === true;
+  const out = showLyrics ? DISC_OUT.lyrics : DISC_OUT.centred;
+  const slide = useMotionValue(0);
+  useEffect(() => {
+    const controls = animate(
+      slide,
+      present ? 1 : 0,
+      reduced
+        ? motionTokens.feedback
+        : present
+          ? { ...motionTokens.mediumMove, delay: motionTokens.largeMove.visualDuration }
+          : {
+              ...motionTokens.mediumMove,
+              visualDuration: motionTokens.mediumMove.visualDuration * 0.7,
+            },
+    );
+    return () => controls.stop();
+  }, [present, reduced, slide]);
+  const x = useTransform(slide, (v) => `${(reduced ? 1 : v) * out}%`);
+  // Rolled distance / radius, in degrees: (share of the diameter) * 2 radians.
+  const roll = useTransform(slide, (v) => ((v * out) / 100) * 2 * (180 / Math.PI));
+
+  // The track number is looked up in the album's track list (the playing item has none).
+  const tracks = useAlbumTracks({
+    title: item?.album ?? "",
+    albumArtist: item?.albumArtist ?? item?.artist ?? "",
+  });
+  const trackNumber = tracks.items.find((t) => t.id === item?.trackId)?.trackNumber ?? null;
+
+  return (
+    <m.div className="absolute inset-0 max-md:hidden" style={{ x, opacity: reduced ? slide : 1 }}>
+      <RecordDisc trackNumber={trackNumber} roll={roll} className="size-full" />
+    </m.div>
   );
 }

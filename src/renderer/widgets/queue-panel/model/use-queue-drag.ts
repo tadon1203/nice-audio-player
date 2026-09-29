@@ -23,9 +23,13 @@ export function useQueueDrag(onMove: (id: string, to: number) => void) {
     onPointerMove: (event: PointerEvent<HTMLElement>) => {
       if (drag === null || drag.id !== id) return;
       const rows = Array.from(listRef.current?.children ?? []);
+      // Rows at and after the slot are shifted down to make room. Measure them where they
+      // rest (`offsetTop` ignores transforms), or the shift would move the slot under the pointer.
+      const list = listRef.current;
+      const listTop = list?.getBoundingClientRect().top ?? 0;
       const midpoints = rows.map((row) => {
-        const box = row.getBoundingClientRect();
-        return box.top + box.height / 2;
+        const rest = (row as HTMLElement).offsetTop - (list?.offsetTop ?? 0);
+        return listTop + rest + (row as HTMLElement).offsetHeight / 2;
       });
       setDrag({ ...drag, slot: dropSlot(midpoints, event.clientY) });
     },
