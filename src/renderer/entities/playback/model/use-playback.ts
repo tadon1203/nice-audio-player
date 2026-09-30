@@ -1,12 +1,17 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useSyncExternalStore } from "react";
+import type { MotionValue } from "motion/react";
 import { useShallow } from "zustand/react/shallow";
 import type { AudioOutputSelection, PlaybackRepeatMode } from "@/shared/ipc";
+import type { ClockJump } from "../lib/playback-clock-model";
+import { playbackClock } from "./playback-clock";
 import { isActivePlayback, playbackController, usePlaybackStore } from "./playback-session";
 
 /*
  * Playback state is read through several small hooks, one per rate of change, so a component
- * re-renders only for what it shows. `usePlaybackPosition` is the only one that changes many
- * times a second; give it to the few components that draw a position and to no one else.
+ * re-renders only for what it shows. `usePlaybackPosition` changes about four times a second:
+ * it is for components that print a time. Anything that draws the position (a fill, a ring,
+ * lyric progress) reads `usePlaybackClock` instead, which advances every frame and re-renders
+ * nothing.
  */
 
 const playbackActions = {
@@ -24,6 +29,8 @@ const playbackActions = {
   removeQueueItem: playbackController.removeQueueItem,
   moveQueueItem: playbackController.moveQueueItem,
   clearQueue: playbackController.clearQueue,
+  playQueueItem: playbackController.playQueueItem,
+  enqueueTrack: playbackController.enqueueTrack,
 } as const;
 
 /** Stable; never causes a re-render. */
@@ -41,11 +48,16 @@ export function usePlaybackNavigation() {
   return usePlaybackStore((state) => state.lastNavigation);
 }
 
-/** Elapsed and total time of the loaded track. Updates about four times a second. */
+/** Elapsed and total time of the loaded track, for printing. Updates about four times a second. */
 export function usePlaybackPosition() {
   return usePlaybackStore(
     useShallow((state) => ({ positionMs: state.positionMs, durationMs: state.durationMs })),
   );
+}
+
+/** Length of the loaded track (null when unknown). Changes only with the track. */
+export function usePlaybackDuration() {
+  return usePlaybackStore((state) => state.durationMs);
 }
 
 /** What the transport controls need: state, availability, and in-flight commands. */
@@ -108,4 +120,23 @@ export function useTrackPlaybackState() {
       playbackStatus: state.snapshot?.status ?? ("stopped" as const),
     })),
   );
+}
+
+/**
+ * The playback position in milliseconds as a motion value that moves every frame while the
+ * track plays. Bind it to styles (`useTransform`); do not read it into state. The frame loop
+ * runs only while some component holds this hook (with `active`, the default).
+ */
+export function usePlaybackClock(active = true): MotionValue<number> {
+  useEffect(() => (active ? playbackClock.retain() : undefined), [active]);
+  return playbackClock.position;
+}
+
+/**
+ * The latest jump of the position (a seek that completed, a new track), or null before any.
+ * It changes exactly when one happens, so a component can react to the jump in the same render
+ * that shows the new position.
+ */
+export function usePlaybackJump(): ClockJump | null {
+  return useSyncExternalStore(playbackClock.onJump, playbackClock.lastJump);
 }

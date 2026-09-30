@@ -358,6 +358,7 @@ impl LibraryShared {
         *self.state.lock().expect("scan state lock") = LibraryScanSnapshot {
             state: LibraryScanState::Running,
             current_root: None,
+            expected_count: 0,
             discovered_count: 0,
             inspected_count: 0,
             indexed_count: 0,
@@ -499,6 +500,7 @@ fn idle() -> LibraryScanSnapshot {
     LibraryScanSnapshot {
         state: LibraryScanState::Idle,
         current_root: None,
+        expected_count: 0,
         discovered_count: 0,
         inspected_count: 0,
         indexed_count: 0,
@@ -929,6 +931,21 @@ mod tests {
             )
             .expect("playable title fixture");
         assert_eq!(selection.tracks[selection.start_index].title, "1");
+        let track = &selection.tracks[selection.start_index];
+        assert_eq!(
+            track.album_key,
+            Some(LibraryAlbumKey {
+                title: "Album".into(),
+                album_artist: "Artist".into(),
+            })
+        );
+        assert_eq!(track.album_track_count, Some(1));
+        let single = library.playback_for_track("1").expect("single track");
+        assert_eq!(single.album_track_count, Some(1));
+        let restored = library
+            .playback_for_track_ids(&["1".to_owned(), "999".to_owned()], Some("1"))
+            .expect("listed tracks");
+        assert_eq!(restored.tracks.len(), 1, "unknown ids are left out");
     }
 
     #[test]

@@ -1,4 +1,5 @@
 import type { ReactNode, Ref } from "react";
+import { m } from "motion/react";
 import { cn } from "@/renderer/shared/lib/utils";
 import { ScrollArea } from "@/renderer/shared/ui/shadcn/scroll-area";
 import { WorkspaceContainer } from "./workspace-container";
@@ -25,7 +26,12 @@ export function WorkspaceScroll({
     <ScrollArea
       className={cn("h-full min-h-0 min-w-0", className)}
       viewportRef={viewportRef}
-      viewportProps={{ "data-scroll-restoration-id": scrollRestorationId }}
+      // `layoutScroll`: layout animations (a sort sliding tiles, a tile opening into its page)
+      // measure positions in the page, and must know how far this region is scrolled.
+      viewportProps={{
+        "data-scroll-restoration-id": scrollRestorationId,
+        render: <m.div layoutScroll />,
+      }}
     >
       <WorkspaceContainer className={contentClassName}>{children}</WorkspaceContainer>
     </ScrollArea>

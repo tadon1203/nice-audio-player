@@ -6,8 +6,11 @@ export type TrackTableRow = Pick<
   "id" | "title" | "artist" | "durationMs" | "availability" | "playable"
 > &
   Partial<
-    Pick<LibraryTrackSummary, "album"> &
-      Pick<LibraryAlbumTrackSummary, "trackNumber" | "fileFormat" | "bitDepth" | "sampleRate">
+    Pick<LibraryTrackSummary, "album" | "albumArtist"> &
+      Pick<
+        LibraryAlbumTrackSummary,
+        "trackNumber" | "discNumber" | "fileFormat" | "bitDepth" | "sampleRate"
+      >
   >;
 
 export type TrackTableLayout = "library" | "album";

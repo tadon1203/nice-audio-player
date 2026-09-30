@@ -53,6 +53,7 @@ fn session(
         item: test_item(),
         playback_id: playback_id.into(),
         position_ms,
+        seek_revision: 0,
         duration_ms,
         output_device: crate::audio::devices::AudioOutputDeviceIdentity {
             id: "test-device".into(),
@@ -131,6 +132,11 @@ fn item_json() -> serde_json::Value {
     serde_json::json!({
         "queueItemId": "queue-item-1",
         "trackId": null,
+        "trackNumber": null,
+        "discNumber": null,
+        "year": null,
+        "albumKey": null,
+        "albumTrackCount": null,
         "file": { "path": "C:/test.flac", "fileName": "test.flac", "extension": "flac" },
         "title": "test.flac",
         "artist": null,
@@ -157,6 +163,7 @@ fn session_json() -> serde_json::Value {
         "item": item_json(),
         "playbackId": "1",
         "positionMs": 1_000,
+        "seekRevision": 0,
         "durationMs": 60_000,
         "outputDevice": { "id": "test-device", "name": "Test device" },
         "channelConversion": "none",

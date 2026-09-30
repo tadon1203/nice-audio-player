@@ -1,14 +1,19 @@
-import { useMemo, type MouseEvent } from "react";
+import { Fragment, useEffect, useMemo, useState, type MouseEvent } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { flexRender, getCoreRowModel, useReactTable, type ColumnMeta } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { ArrowDown, ArrowUp } from "lucide-react";
 import {
   toggleSortDirection,
+  toNameSegment,
   trackSortLabels,
   type LibrarySortDirection,
   type LibraryTrackSortKey,
 } from "@/renderer/entities/library";
+import { usePlaybackActions } from "@/renderer/entities/playback";
 import { cn } from "@/renderer/shared/lib/utils";
+import { nativeApi } from "@/renderer/shared/lib/native";
+import { ContextMenu, ContextMenuTrigger, MenuContent, MenuItem } from "@/renderer/shared/ui/menu";
 import { Button } from "@/renderer/shared/ui/shadcn/button";
 import {
   Table,
@@ -21,6 +26,7 @@ import {
 } from "@/renderer/shared/ui/shadcn/table";
 import { TRACK_ROW_HEIGHT, trackTableBreakpoints } from "./breakpoints";
 import { albumTrackColumns, libraryTrackColumns } from "./track-columns";
+import { TrackPropertiesSheet } from "./track-properties-sheet";
 import { TrackTableContext, type TrackTableController } from "./track-table-context";
 import type { TrackPlaybackStatus, TrackTableLayout, TrackTableRow } from "./types";
 
@@ -38,6 +44,8 @@ type TrackTableProps = {
    */
   scrollElement?: HTMLElement | null;
   initialOffset?: number;
+  /** Told the index of the first row in view, for the scroll index label. */
+  onTopIndexChange?: (index: number) => void;
   onSortChange?: (key: LibraryTrackSortKey, direction: LibrarySortDirection) => void;
   onPlayTrack: (id: string) => void;
   onPauseActive?: () => void;
@@ -54,11 +62,15 @@ export function TrackTable({
   sortDirection = "ascending",
   scrollElement,
   initialOffset,
+  onTopIndexChange,
   onSortChange,
   onPlayTrack,
   onPauseActive,
   onResumeActive,
 }: TrackTableProps) {
+  const { enqueueTrack } = usePlaybackActions();
+  const navigate = useNavigate();
+  const [propertiesFor, setPropertiesFor] = useState<string | null>(null);
   const controller = useMemo<TrackTableController>(
     () => ({
       layout,
@@ -85,12 +97,19 @@ export function TrackTable({
     initialOffset,
   });
   const virtualRows = virtualized ? virtualizer.getVirtualItems() : [];
+  const topIndex = virtualizer.range?.startIndex ?? 0;
+  useEffect(() => {
+    if (virtualized) onTopIndexChange?.(topIndex);
+  }, [virtualized, topIndex, onTopIndexChange]);
   const visibleRows = virtualized ? virtualRows.map((item) => allRows[item.index]!) : allRows;
   const topSpacer = virtualized ? (virtualRows[0]?.start ?? 0) : 0;
   const bottomSpacer = virtualized
     ? virtualizer.getTotalSize() - (virtualRows.at(-1)?.end ?? 0)
     : 0;
   const columnCount = table.getVisibleLeafColumns().length;
+  // An album on several discs is split by a "Disc n" row. Only in the plain (unvirtualized)
+  // album layout, where every row has the same height.
+  const multiDisc = !virtualized && layout === "album" && rows.some((r) => (r.discNumber ?? 1) > 1);
 
   return (
     <TrackTableContext value={controller}>
@@ -160,46 +179,124 @@ export function TrackTable({
                 original.playable &&
                 original.availability === "available" &&
                 (!active || playbackStatus !== "playing");
+              const queueable = original.playable && original.availability === "available";
+              const previousDisc = allRows[row.index - 1]?.original.discNumber;
+              const discHeader =
+                multiDisc && original.discNumber != null && original.discNumber !== previousDisc;
               return (
-                <TableRow
-                  key={row.id}
-                  data-playback-state={
-                    active && (playbackStatus === "playing" || playbackStatus === "paused")
-                      ? playbackStatus
-                      : undefined
-                  }
-                  data-availability={original.availability}
-                  style={{ height: TRACK_ROW_HEIGHT }}
-                  className={cn(
-                    "group/track border-b border-border/70 text-foreground outline-none transition-colors hover:bg-accent/40 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-inset has-[:focus-visible]:ring-ring",
-                    rowActionAvailable && "cursor-pointer",
-                  )}
-                  onClick={(event) => {
-                    if (isInteractiveTarget(event)) return;
-                    activateRow(original, active, playbackStatus, onPlayTrack, onResumeActive);
-                  }}
-                >
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell
-                      key={cell.id}
-                      data-column-id={cell.column.id}
-                      className={cn(
-                        "truncate px-3 last:text-right tabular-nums",
-                        columnClassName(cell.column.columnDef.meta),
-                      )}
+                <Fragment key={row.id}>
+                  {discHeader ? (
+                    <TableRow className="border-b border-border/70">
+                      <TableCell
+                        colSpan={columnCount}
+                        className="px-3 pt-6 pb-2 text-sm text-muted-foreground"
+                      >
+                        Disc {original.discNumber}
+                      </TableCell>
+                    </TableRow>
+                  ) : null}
+                  <ContextMenu>
+                    <ContextMenuTrigger
+                      render={
+                        <TableRow
+                          data-playback-state={
+                            active && (playbackStatus === "playing" || playbackStatus === "paused")
+                              ? playbackStatus
+                              : undefined
+                          }
+                          data-availability={original.availability}
+                          style={{ height: TRACK_ROW_HEIGHT }}
+                          className={cn(
+                            "group/track border-b border-border/70 text-foreground outline-none transition-colors hover:bg-accent/40 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-inset has-[:focus-visible]:ring-ring",
+                            rowActionAvailable && "cursor-pointer",
+                          )}
+                          onClick={(event) => {
+                            if (isInteractiveTarget(event)) return;
+                            activateRow(
+                              original,
+                              active,
+                              playbackStatus,
+                              onPlayTrack,
+                              onResumeActive,
+                            );
+                          }}
+                        />
+                      }
                     >
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </TableCell>
-                  ))}
-                </TableRow>
+                      {row.getVisibleCells().map((cell) => (
+                        <TableCell
+                          key={cell.id}
+                          data-column-id={cell.column.id}
+                          className={cn(
+                            "truncate px-3 last:text-right tabular-nums",
+                            columnClassName(cell.column.columnDef.meta),
+                          )}
+                        >
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </TableCell>
+                      ))}
+                    </ContextMenuTrigger>
+                    <MenuContent side="bottom" align="start" className="min-w-44">
+                      {queueable ? (
+                        <>
+                          <MenuItem onClick={() => void enqueueTrack(original.id, true)}>
+                            Play next
+                          </MenuItem>
+                          <MenuItem onClick={() => void enqueueTrack(original.id, false)}>
+                            Add to queue
+                          </MenuItem>
+                        </>
+                      ) : null}
+                      {layout === "library" && original.album ? (
+                        <MenuItem
+                          onClick={() =>
+                            void navigate({
+                              to: "/library/albums/$albumArtist/$albumTitle",
+                              params: {
+                                albumArtist: toNameSegment(albumArtistOf(original)),
+                                albumTitle: toNameSegment(original.album!.trim()),
+                              },
+                            })
+                          }
+                        >
+                          Go to album
+                        </MenuItem>
+                      ) : null}
+                      {layout === "library" && albumArtistOf(original) !== "" ? (
+                        <MenuItem
+                          onClick={() =>
+                            void navigate({
+                              to: "/library/album-artists/$artistName",
+                              params: { artistName: toNameSegment(albumArtistOf(original)) },
+                            })
+                          }
+                        >
+                          Go to artist
+                        </MenuItem>
+                      ) : null}
+                      {original.availability === "available" ? (
+                        <MenuItem onClick={() => void nativeApi().revealLibraryTrack(original.id)}>
+                          Show in Explorer
+                        </MenuItem>
+                      ) : null}
+                      <MenuItem onClick={() => setPropertiesFor(original.id)}>Properties</MenuItem>
+                    </MenuContent>
+                  </ContextMenu>
+                </Fragment>
               );
             })}
             {bottomSpacer > 0 ? <SpacerRow height={bottomSpacer} columns={columnCount} /> : null}
           </TableBody>
         </Table>
+        <TrackPropertiesSheet trackId={propertiesFor} onClose={() => setPropertiesFor(null)} />
       </div>
     </TrackTableContext>
   );
+}
+
+/** The artist the library groups the track under: album artist, else artist. */
+function albumArtistOf(row: TrackTableRow) {
+  return row.albumArtist?.trim() || row.artist?.trim() || "";
 }
 
 /** Width (for `<col>` only) and breakpoint visibility from one column definition. */

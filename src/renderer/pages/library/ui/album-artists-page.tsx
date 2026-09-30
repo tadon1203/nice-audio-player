@@ -1,5 +1,5 @@
 import { ArtistTile, albumArtistSortOptions } from "@/renderer/entities/library";
-import { MediaGrid, MediaGridItem, useSortFlip } from "@/renderer/shared/ui/media-grid";
+import { VirtualMediaGrid } from "@/renderer/shared/ui/media-grid";
 import { useLibraryCatalog } from "../model/use-library-catalog";
 import { useLibraryView } from "../model/use-library-view";
 import { sortIndexLetter } from "@/renderer/shared/lib/sort-index";
@@ -16,7 +16,6 @@ const meta = {
 export function AlbumArtistsPage() {
   const view = useLibraryView("albumArtists");
   const catalog = useLibraryCatalog(view.request);
-  const flip = useSortFlip(`${view.sortKey}:${view.direction}`);
 
   return (
     <LibraryWorkspace
@@ -37,14 +36,17 @@ export function AlbumArtistsPage() {
         view.sortKey === "artist" ? (artist) => sortIndexLetter(artist.key.name) : undefined
       }
     >
-      {(artists) => (
-        <MediaGrid artworkAt={(index) => artists[index]?.artwork}>
-          {artists.map((artist, index) => (
-            <MediaGridItem key={artist.key.name} index={index} flip={flip}>
-              <ArtistTile artist={artist} />
-            </MediaGridItem>
-          ))}
-        </MediaGrid>
+      {(artists, scroll) => (
+        <VirtualMediaGrid
+          items={artists}
+          scrollElement={scroll.viewport}
+          initialOffset={scroll.initialOffset}
+          itemKey={(artist) => artist.key.name}
+          artworkAt={(index) => artists[index]?.artwork}
+          sortSignature={`${view.sortKey}:${view.direction}`}
+          onTopIndexChange={scroll.onTopIndexChange}
+          renderItem={(artist) => <ArtistTile artist={artist} />}
+        />
       )}
     </LibraryWorkspace>
   );

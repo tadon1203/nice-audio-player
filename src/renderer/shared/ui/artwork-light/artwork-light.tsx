@@ -4,7 +4,7 @@ import { useArtworkBackdrop } from "@/renderer/shared/lib/artwork-backdrop";
 import { cn } from "@/renderer/shared/lib/utils";
 import { useMotionTransition } from "@/renderer/shared/ui/motion";
 import type { ArtworkRef } from "@/shared/ipc";
-import { breathingOpacity, breathingScale, LIGHT, type LightStrength } from "./light-model";
+import { breathingOpacity, LIGHT, type LightStrength } from "./light-model";
 
 type ArtworkLightProps = {
   artwork: ArtworkRef | null | undefined;
@@ -16,7 +16,8 @@ type ArtworkLightProps = {
   enter?: LightEnter;
   /**
    * Loudness 0-1 for a Light that breathes with the music. It only dims from its strength,
-   * never brightens past it, and swells a few percent. Omit it for a still Light.
+   * never brightens past it. Only its opacity moves (a scaled blurred image is re-rasterised
+   * on every frame). Omit it for a still Light.
    */
   level?: MotionValue<number>;
   className?: string;
@@ -52,7 +53,6 @@ export function ArtworkLight({
   const breathe = useTransform(() =>
     level === undefined ? 1 : breathingOpacity(strength, level.get()) / LIGHT.strength[strength],
   );
-  const swell = useTransform(() => (level === undefined ? 1 : breathingScale(level.get())));
   if (!enabled || url === null) return null;
 
   return (
@@ -65,7 +65,7 @@ export function ArtworkLight({
         className,
       )}
     >
-      <m.div className="absolute inset-0" style={{ opacity: breathe, scale: swell }}>
+      <m.div className="absolute inset-0" style={{ opacity: breathe }}>
         <AnimatePresence initial={false}>
           <m.img
             key={url}

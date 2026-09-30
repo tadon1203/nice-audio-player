@@ -1,130 +1,104 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useState } from "react";
+import { Link } from "@tanstack/react-router";
+import { m } from "motion/react";
+import { toNameSegment } from "@/renderer/entities/library";
 import {
-  animate,
-  m,
-  useIsPresent,
-  useMotionValue,
-  useReducedMotion,
-  useTransform,
-} from "motion/react";
-import { useAlbumTracks } from "@/renderer/entities/library";
-import { usePlaybackItem, usePlaybackNavigation } from "@/renderer/entities/playback";
+  usePlaybackItem,
+  usePlaybackNavigation,
+  usePlaybackQueue,
+  usePlaybackSignalPath,
+} from "@/renderer/entities/playback";
 import { useTrackLyrics } from "@/renderer/entities/lyrics";
 import {
   NOW_PLAYING_SLEEVE_ID,
-  NOW_PLAYING_WAVEFORM_HEIGHT,
   PlaybackWaveformBand,
   SLEEVE_RADIUS_PX,
   useNowPlayingTransitions,
 } from "@/renderer/features/now-playing-transition";
+import type { PlaybackItem } from "@/shared/ipc";
 import { cn } from "@/renderer/shared/lib/utils";
-import { KineticText } from "@/renderer/shared/ui/kinetic-text";
 import { Artwork } from "@/renderer/shared/ui/artwork";
-import { motionTokens } from "@/renderer/shared/ui/motion";
+import { FactLine } from "@/renderer/shared/ui/fact-line";
+import { KineticText } from "@/renderer/shared/ui/kinetic-text";
 import { LyricsPanel } from "./lyrics-panel";
 import { NowPlayingLight } from "./now-playing-light";
-import { RecordDisc } from "./record-disc/record-disc";
 
 /**
- * Now Playing's content: the Sleeve continues its shared-element motion from the dock (the
- * same `layoutId`); the text is not shared — it fades in behind the Sleeve, since stretching
- * type between two sizes only distorts it. With lyrics the Sleeve and info sit left of the
- * lyrics panel; without them the same content is centred and large. The waveform grows along
- * the bottom edge when its data arrives.
+ * The Sleeve's size follows the shape of the window instead of a fixed rem: with lyrics it is
+ * the column width or what is left of the height after the info block, whichever is smaller;
+ * without them it takes up to 60% of the height. Container units resolve against the layer.
+ */
+const SLEEVE_SIZE_WITH_LYRICS =
+  "max(10rem, min(calc(100cqh - 25rem), calc(clamp(18rem, 34cqw, 28rem) - 3rem)))";
+const SLEEVE_SIZE_ALONE = "max(10rem, min(60cqh, 40cqw, 32rem))";
+
+/** The waveform band's height for the room the layer has: it gives way to the content. */
+function waveformHeightFor(layerHeightPx: number): number {
+  if (layerHeightPx >= 640) return 96;
+  if (layerHeightPx >= 480) return 72;
+  return 56;
+}
+
+function useLayerHeight() {
+  const [element, setElement] = useState<HTMLElement | null>(null);
+  const [height, setHeight] = useState(720);
+  useEffect(() => {
+    if (element === null) return;
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry) setHeight(entry.contentRect.height);
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [element]);
+  return { ref: setElement, height };
+}
+
+/**
+ * Now Playing's content. The Sleeve continues its shared-element motion from the dock (the same
+ * `layoutId`); the text is not shared, it fades in behind the Sleeve, since stretching type
+ * between two sizes only distorts it. Three kinds of thing: to look at (the Sleeve), to read
+ * (the lyrics), to operate (the waveform), with the info beside them. With lyrics the Sleeve
+ * and info sit left of the panel; without them they sit side by side, centred, as the subject.
+ * Below `md` everything stacks. The waveform grows along the bottom edge when its data arrives.
  */
 export function NowPlayingContent() {
   const item = usePlaybackItem();
-  const transitions = useNowPlayingTransitions();
-  const navigation = usePlaybackNavigation();
-  // The title slides in per character on track changes, but not when Now Playing first opens.
-  const openedOn = useRef(item?.queueItemId);
-  const changedSinceOpen = item?.queueItemId !== openedOn.current;
+  const { ref, height } = useLayerHeight();
   const { data: resolution } = useTrackLyrics(item?.trackId ?? null);
   // While lyrics are loading keep the layout the previous track had, so it does not flip twice.
-  const showLyricsRef = useRef(true);
-  if (resolution !== undefined) showLyricsRef.current = resolution.status === "resolved";
-  const showLyrics = showLyricsRef.current;
+  // (They are also fetched ahead of time, so this is rarely visible.)
+  const [showLyrics, setShowLyrics] = useState(true);
+  if (resolution !== undefined && (resolution.status === "resolved") !== showLyrics) {
+    setShowLyrics(resolution.status === "resolved");
+  }
 
   return (
-    <div className="relative flex h-full min-h-0 min-w-0 flex-col">
+    <div ref={ref} className="relative flex h-full min-h-0 min-w-0 flex-col [container-type:size]">
       <NowPlayingLight />
-      <div
-        className={cn(
-          "relative flex min-h-0 min-w-0 flex-1 flex-col",
-          showLyrics ? "md:flex-row" : "items-center justify-center",
-        )}
-      >
-        <div
-          className={cn(
-            "relative flex min-w-0 shrink-0 flex-col gap-4 p-6",
-            showLyrics ? "md:w-[28rem]" : "items-center text-center md:max-w-2xl",
-          )}
-        >
-          <div
-            className={cn(
-              "flex items-center gap-4 md:flex-col",
-              showLyrics ? "md:items-start" : "md:items-center",
-            )}
-          >
-            {/* The disc waits behind the Sleeve, the same size, and rolls out of its right side. */}
-            <div
-              className={cn(
-                "relative size-16 shrink-0",
-                showLyrics ? "md:size-72" : "md:size-[22rem]",
-              )}
-            >
-              <DiscSlot showLyrics={showLyrics} />
-              <m.div
-                layoutId={NOW_PLAYING_SLEEVE_ID}
-                className="relative z-10 size-full overflow-hidden"
-                style={{ borderRadius: SLEEVE_RADIUS_PX }}
-              >
-                <Artwork
-                  artwork={item?.artwork ?? null}
-                  alt={item === null ? "" : `${item.title} artwork`}
-                  loading="eager"
-                  className="size-full rounded-none"
-                />
-              </m.div>
-            </div>
-            <m.div
-              key={item?.queueItemId ?? "none"}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1, transition: transitions.content }}
-              className="min-w-0"
-            >
-              <p className="line-clamp-3 text-2xl font-semibold text-foreground md:text-4xl">
-                {item !== null && changedSinceOpen ? (
-                  <KineticText text={item.title} direction={navigation === "previous" ? -1 : 1} />
-                ) : (
-                  (item?.title ?? "Nothing playing")
-                )}
-              </p>
-              {/* Ink-1: the playing track is "the present" per DESIGN.md, and Light may be absent. */}
-              <p className="mt-2 truncate text-base text-foreground">{item?.artist}</p>
-              <p className="truncate text-sm text-foreground">{item?.album}</p>
-            </m.div>
+      {showLyrics ? (
+        <div className="relative flex min-h-0 min-w-0 flex-1 flex-col md:grid md:grid-cols-[minmax(16rem,clamp(18rem,34cqw,28rem))_minmax(0,1fr)]">
+          <div className="flex min-h-0 min-w-0 flex-col gap-4 p-6 md:justify-between md:pr-2">
+            <Identity item={item} sleeveSize={SLEEVE_SIZE_WITH_LYRICS} />
+            <UpNext className="max-md:hidden [@container(max-height:640px)]:hidden" />
           </div>
-          {showLyrics ? null : (
-            <LyricsPanel
-              trackId={item?.trackId ?? null}
-              className="h-auto items-center text-center"
-            />
-          )}
+          <LyricsColumn trackId={item?.trackId ?? null} />
         </div>
-        {showLyrics ? (
-          <m.div
-            key={item?.trackId ?? "none"}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1, transition: transitions.content }}
-            className="min-h-0 min-w-0 flex-1 p-6 pt-0 md:pt-6"
-          >
-            <LyricsPanel trackId={item?.trackId ?? null} className="h-full" />
-          </m.div>
-        ) : null}
-      </div>
+      ) : (
+        <div className="relative flex min-h-0 min-w-0 flex-1 items-center justify-center p-6 md:gap-10">
+          <div className="flex min-w-0 max-w-full flex-col gap-4 md:max-w-4xl md:flex-row md:items-center md:gap-10">
+            <Identity
+              item={item}
+              sleeveSize={SLEEVE_SIZE_ALONE}
+              alone
+              lyricsHint={<LyricsHint item={item} status={resolution?.status ?? null} />}
+            />
+          </div>
+          <UpNext className="absolute right-6 bottom-4 max-md:hidden [@container(max-height:640px)]:hidden" />
+        </div>
+      )}
       <PlaybackWaveformBand
-        height={NOW_PLAYING_WAVEFORM_HEIGHT}
+        height={waveformHeightFor(height)}
+        timeLayout="inline"
         className="relative shrink-0 border-t border-border/50 px-6 py-4"
         timeClassName="text-sm"
       />
@@ -132,50 +106,205 @@ export function NowPlayingContent() {
   );
 }
 
-/** How far the disc slides out from behind the Sleeve, as a share of its own width. */
-const DISC_OUT = { lyrics: 45, centred: 50 } as const;
+function LyricsColumn({ trackId }: { trackId: string | null }) {
+  const transitions = useNowPlayingTransitions();
+  return (
+    <m.div
+      key={trackId ?? "none"}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1, transition: transitions.content }}
+      className="min-h-0 min-w-0 flex-1 p-6 pt-0 md:pt-6"
+    >
+      {/* Lines stay short (about 32 characters) however wide the window is. */}
+      <LyricsPanel trackId={trackId} className="h-full max-w-[32ch] min-w-[min(100%,24rem)]" />
+    </m.div>
+  );
+}
 
-/**
- * The record disc, rolling out from behind the Sleeve once the Sleeve has landed and back in
- * as Now Playing closes (a little quicker). Its turning while it rolls is the distance over
- * its radius, so it looks like it rolls rather than slides. Under reduced motion it stays out
- * and only fades. Not shown below `md`.
- */
-function DiscSlot({ showLyrics }: { showLyrics: boolean }) {
-  const item = usePlaybackItem();
-  const present = useIsPresent();
-  const reduced = useReducedMotion() === true;
-  const out = showLyrics ? DISC_OUT.lyrics : DISC_OUT.centred;
-  const slide = useMotionValue(0);
-  useEffect(() => {
-    const controls = animate(
-      slide,
-      present ? 1 : 0,
-      reduced
-        ? motionTokens.feedback
-        : present
-          ? { ...motionTokens.mediumMove, delay: motionTokens.largeMove.visualDuration }
-          : {
-              ...motionTokens.mediumMove,
-              visualDuration: motionTokens.mediumMove.visualDuration * 0.7,
-            },
-    );
-    return () => controls.stop();
-  }, [present, reduced, slide]);
-  const x = useTransform(slide, (v) => `${(reduced ? 1 : v) * out}%`);
-  // Rolled distance / radius, in degrees: (share of the diameter) * 2 radians.
-  const roll = useTransform(slide, (v) => ((v * out) / 100) * 2 * (180 / Math.PI));
-
-  // The track number is looked up in the album's track list (the playing item has none).
-  const tracks = useAlbumTracks({
-    title: item?.album ?? "",
-    albumArtist: item?.albumArtist ?? item?.artist ?? "",
-  });
-  const trackNumber = tracks.items.find((t) => t.id === item?.trackId)?.trackNumber ?? null;
+/** The Sleeve with the title, artist, album and facts. `alone` is the lyric-less, larger form. */
+function Identity({
+  item,
+  sleeveSize,
+  alone = false,
+  lyricsHint,
+}: {
+  item: PlaybackItem | null;
+  sleeveSize: string;
+  alone?: boolean;
+  lyricsHint?: React.ReactNode;
+}) {
+  const transitions = useNowPlayingTransitions();
+  const navigation = usePlaybackNavigation();
+  // The title slides in per character on track changes, but not when Now Playing first opens.
+  const [openedOn] = useState(item?.queueItemId);
+  const changedSinceOpen = item?.queueItemId !== openedOn;
 
   return (
-    <m.div className="absolute inset-0 max-md:hidden" style={{ x, opacity: reduced ? slide : 1 }}>
-      <RecordDisc trackNumber={trackNumber} roll={roll} className="size-full" />
-    </m.div>
+    <div
+      className={cn(
+        "flex min-w-0 gap-4 max-md:items-center",
+        alone ? "md:flex-row md:items-center md:gap-10" : "md:flex-col",
+      )}
+    >
+      <div
+        className="relative size-16 shrink-0 md:size-(--np-sleeve)"
+        style={{ "--np-sleeve": sleeveSize } as React.CSSProperties}
+      >
+        <m.div
+          layoutId={NOW_PLAYING_SLEEVE_ID}
+          className="relative size-full overflow-hidden"
+          style={{ borderRadius: SLEEVE_RADIUS_PX }}
+        >
+          <Artwork
+            artwork={item?.artwork ?? null}
+            alt={item === null ? "" : `${item.title} artwork`}
+            loading="eager"
+            className="size-full rounded-none"
+          />
+        </m.div>
+      </div>
+      <m.div
+        key={item?.queueItemId ?? "none"}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1, transition: transitions.content }}
+        className="flex min-w-0 flex-col gap-1"
+      >
+        <p
+          className={cn(
+            "font-semibold text-foreground",
+            alone ? "line-clamp-3 text-2xl md:text-4xl" : "line-clamp-2 text-2xl md:text-3xl",
+          )}
+        >
+          {item !== null && changedSinceOpen ? (
+            <KineticText
+              key={item.queueItemId}
+              text={item.title}
+              direction={navigation === "previous" ? -1 : 1}
+            />
+          ) : (
+            (item?.title ?? "Nothing playing")
+          )}
+        </p>
+        {/* Ink-1: the playing track is "the present" per DESIGN.md, and Light may be absent. */}
+        <TrackLinks item={item} />
+        <Facts item={item} />
+        {lyricsHint}
+      </m.div>
+    </div>
+  );
+}
+
+const linkClass =
+  "rounded-sm outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring";
+
+/** Artist and album, each a link to its page (following one closes Now Playing). */
+function TrackLinks({ item }: { item: PlaybackItem | null }) {
+  if (item === null) return null;
+  const album = item.album?.trim() ?? "";
+  const artist = item.artist?.trim() ?? "";
+  // The catalog's own key, so the link cannot drift from how the library groups albums.
+  const albumArtist = item.albumKey?.albumArtist || item.albumArtist?.trim() || artist;
+  return (
+    <>
+      {artist !== "" ? (
+        <p className="truncate text-base text-foreground">
+          {albumArtist !== "" ? (
+            <Link
+              to="/library/album-artists/$artistName"
+              params={{ artistName: toNameSegment(albumArtist) }}
+              className={linkClass}
+            >
+              {artist}
+            </Link>
+          ) : (
+            artist
+          )}
+        </p>
+      ) : null}
+      {album !== "" ? (
+        <p className="truncate text-sm text-foreground">
+          {item.albumKey !== null ? (
+            <Link
+              to="/library/albums/$albumArtist/$albumTitle"
+              params={{
+                albumArtist: toNameSegment(item.albumKey.albumArtist),
+                albumTitle: toNameSegment(item.albumKey.title),
+              }}
+              className={linkClass}
+            >
+              {album}
+            </Link>
+          ) : (
+            album
+          )}
+        </p>
+      ) : null}
+    </>
+  );
+}
+
+/** `2019  Disc 2  Track 4  FLAC 24/96`: what the library knows, and what is really decoded. */
+function Facts({ item }: { item: PlaybackItem | null }) {
+  const path = usePlaybackSignalPath();
+  if (item === null) return null;
+  return (
+    <FactLine
+      facts={[
+        item.year,
+        item.discNumber !== null && item.discNumber > 1 ? `Disc ${item.discNumber}` : null,
+        item.trackNumber !== null
+          ? item.albumTrackCount !== null && item.albumTrackCount >= item.trackNumber
+            ? `Track ${item.trackNumber} of ${item.albumTrackCount}`
+            : `Track ${item.trackNumber}`
+          : null,
+        path?.source,
+      ]}
+      className="mt-1"
+    />
+  );
+}
+
+/** Why there are no lyrics, in one line beside the track rather than over the whole screen. */
+function LyricsHint({
+  item,
+  status,
+}: {
+  item: PlaybackItem | null;
+  status: "notFound" | "sourceFailed" | "resolved" | null;
+}) {
+  if (item === null || status === null || status === "resolved") return null;
+  if (status === "notFound") {
+    return <p className="mt-3 text-sm text-muted-foreground">No lyrics for this track</p>;
+  }
+  const expected = item.file.path.replace(/\.[^.\\/]+$/, ".lrc");
+  return (
+    <p className="mt-3 min-w-0 text-sm text-muted-foreground">
+      Couldn&apos;t read the lyrics file.{" "}
+      <button
+        type="button"
+        title={`${expected} (click to copy)`}
+        onClick={() => void navigator.clipboard?.writeText(expected).catch(() => undefined)}
+        className={cn("block max-w-full cursor-pointer truncate text-left", linkClass)}
+      >
+        {expected}
+      </button>
+    </p>
+  );
+}
+
+/** The next track, at the bottom of the column, close to the time axis it will follow. */
+function UpNext({ className }: { className?: string }) {
+  const { queue } = usePlaybackQueue();
+  const next = queue?.upcoming[0];
+  if (next === undefined) return null;
+  return (
+    <div className={cn("flex min-w-0 items-center gap-3 text-sm", className)}>
+      <span className="shrink-0 text-muted-foreground">Up next</span>
+      <Artwork artwork={next.artwork} className="size-8 shrink-0 rounded-sm" />
+      <span className="min-w-0 truncate text-foreground">
+        {next.title}
+        {next.artist ? <span className="text-muted-foreground"> — {next.artist}</span> : null}
+      </span>
+    </div>
   );
 }

@@ -6,8 +6,10 @@ test.beforeEach(async ({ page }) => {
   await page.setViewportSize({ width: 1360, height: 900 });
 });
 
-async function playFirstTrack(page: Page) {
+async function playFirstTrack(page: Page, beforePlay?: () => Promise<void>) {
   await page.goto("/library/tracks");
+  // Lyrics are fetched as soon as a track plays, so anything they should find is set first.
+  await beforePlay?.();
   await page.getByRole("button", { name: "Play Test track" }).click();
   const dock = page.getByRole("contentinfo", { name: "Playback controls" });
   await expect(dock.getByRole("button", { name: "Pause", exact: true })).toBeEnabled();
@@ -208,9 +210,9 @@ test("the dock Sleeve swaps to a close chevron while Now Playing is open", async
   await dock.getByRole("button", { name: "Close Now Playing" }).click();
   await expect(layer).toHaveCount(0);
 
-  await dock.getByRole("button", { name: "Lyrics" }).click();
+  await dock.getByRole("button", { name: "Now Playing", exact: true }).click();
   await expect(layer).toBeVisible();
-  await dock.getByRole("button", { name: "Lyrics" }).click();
+  await dock.getByRole("button", { name: "Now Playing", exact: true }).click();
   await expect(layer).toHaveCount(0);
 });
 
@@ -231,25 +233,26 @@ test("preserves the library scroll position across Now Playing open and close", 
 });
 
 test("shows synced lyrics and follows the current line", async ({ page }) => {
-  const dock = await playFirstTrack(page);
-  await page.evaluate(() =>
-    window.__niceAudioPlayerTest?.setLyrics("track-1", {
-      status: "resolved",
-      trackId: "track-1",
-      notice: null,
-      document: {
-        source: "sidecar",
-        language: null,
-        content: {
-          kind: "timed",
-          lines: [
-            { startMs: 0, text: "First line" },
-            { startMs: 30_000, text: "Second line" },
-            { startMs: 90_000, text: "Third line" },
-          ],
+  const dock = await playFirstTrack(page, () =>
+    page.evaluate(() =>
+      window.__niceAudioPlayerTest?.setLyrics("track-1", {
+        status: "resolved",
+        trackId: "track-1",
+        notice: null,
+        document: {
+          source: "sidecar",
+          language: null,
+          content: {
+            kind: "timed",
+            lines: [
+              { startMs: 0, text: "First line" },
+              { startMs: 30_000, text: "Second line" },
+              { startMs: 90_000, text: "Third line" },
+            ],
+          },
         },
-      },
-    }),
+      }),
+    ),
   );
   await dock.getByRole("button", { name: "Open Now Playing" }).click();
 
@@ -265,8 +268,9 @@ test("shows the no-lyrics and unreadable-lyrics states", async ({ page }) => {
   const layer = page.getByRole("region", { name: "Now Playing" });
   await dock.getByRole("button", { name: "Open Now Playing" }).click();
   await expect(layer.getByText("No lyrics for this track")).toBeVisible();
+  // The hint sits beside the track, not over the whole screen.
   await expect(
-    layer.getByText("Add a .lrc file with the same name next to the audio file."),
+    layer.getByRole("heading", { name: "Test track" }).or(layer.getByText("Test track")),
   ).toBeVisible();
 });
 

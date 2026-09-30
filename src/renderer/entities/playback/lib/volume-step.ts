@@ -25,3 +25,18 @@ export function stepVolumeDb(volume: number, direction: 1 | -1): number {
   const next = Math.round(db) - 1;
   return next < FLOOR_DB ? 0 : 10 ** (next / 20);
 }
+
+/** The volume slider spans this many dB below 0 dB; its left end is silence. */
+export const VOLUME_SLIDER_MAX = -FLOOR_DB;
+
+/** Slider position (whole dB above the floor, 0 = silence) for a linear volume. */
+export function volumeToSlider(volume: number): number {
+  if (volume <= 0) return 0;
+  return Math.min(VOLUME_SLIDER_MAX, Math.max(0, Math.round(volumeToDb(volume) - FLOOR_DB)));
+}
+
+/** Linear volume for a slider position, so dragging moves in decibels like the wheel does. */
+export function sliderToVolume(position: number): number {
+  if (position <= 0) return 0;
+  return 10 ** ((Math.min(position, VOLUME_SLIDER_MAX) + FLOOR_DB) / 20);
+}

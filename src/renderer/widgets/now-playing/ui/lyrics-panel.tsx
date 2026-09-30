@@ -1,16 +1,20 @@
-import { useEffect } from "react";
-import { AnimatePresence, m, useReducedMotion, useTransform, type MotionValue } from "motion/react";
+import { memo, useCallback, useEffect } from "react";
+import { AnimatePresence, m, useTransform, type MotionValue } from "motion/react";
 import { useTrackLyrics } from "@/renderer/entities/lyrics";
+import type { LyricsTimedLine } from "@/shared/ipc";
 import { formatDuration } from "@/renderer/shared/lib/format";
 import { graphemes } from "@/renderer/shared/lib/graphemes";
 import { cn } from "@/renderer/shared/lib/utils";
 import { Button } from "@/renderer/shared/ui/shadcn/button";
-import { useInterpolatedPosition, useMotionTransition } from "@/renderer/shared/ui/motion";
-import { useLyricsWaveformLink } from "@/renderer/features/lyrics-waveform-link";
+import { useMotionBudget, useMotionTransition } from "@/renderer/shared/ui/motion";
+import {
+  lyricsWaveformLink,
+  useLyricsWaveformLink,
+} from "@/renderer/features/lyrics-waveform-link";
 import {
   usePlaybackActions,
-  usePlaybackPosition,
-  usePlaybackTransport,
+  usePlaybackClock,
+  usePlaybackDuration,
 } from "@/renderer/entities/playback";
 import {
   MAX_LIFT_CHARS,
@@ -31,33 +35,35 @@ type LyricsPanelProps = {
 
 /**
  * Local LRC lyrics: synced (Gutter, auto-scroll, waveform link) or plain (static, `Unsynced`).
- * It reads the playback position itself, so the panels around it do not re-render with time.
+ * It re-renders only when the current line changes: the lit fill of each line follows the
+ * playback clock through styles.
  */
 export function LyricsPanel({ trackId, className }: LyricsPanelProps) {
-  const { positionMs, durationMs } = usePlaybackPosition();
-  const isPlaying = usePlaybackTransport().status === "playing";
+  const durationMs = usePlaybackDuration();
+  const position = usePlaybackClock();
   const { seek } = usePlaybackActions();
-  const onSeek = (value: number) => void seek(value);
+  const onSeek = useCallback((value: number) => void seek(value), [seek]);
   const { data: resolution } = useTrackLyrics(trackId);
   const timedLines =
     resolution?.status === "resolved" && resolution.document.content.kind === "timed"
       ? resolution.document.content.lines
       : null;
-  const currentIndex = useLyricsSync(timedLines, positionMs, isPlaying);
+  const currentIndex = useLyricsSync(timedLines);
   const scroll = useLyricsScroll(currentIndex);
-  const position = useInterpolatedPosition({ positionMs, durationMs, playing: isPlaying });
-  const link = useLyricsWaveformLink();
-  const { setActiveSpan } = link;
-  const lineTransition = useMotionTransition("smallMove");
+  const hoveredIndex = useLyricsWaveformLink((state) =>
+    state.hoveredWaveformMs === null || timedLines === null
+      ? -1
+      : findCurrentLineIndex(timedLines, state.hoveredWaveformMs),
+  );
 
   useEffect(() => {
-    setActiveSpan(
+    lyricsWaveformLink.setActiveSpan(
       timedLines !== null && currentIndex >= 0
         ? lineSpan(timedLines, currentIndex, durationMs)
         : null,
     );
-    return () => setActiveSpan(null);
-  }, [timedLines, currentIndex, durationMs, setActiveSpan]);
+    return () => lyricsWaveformLink.setActiveSpan(null);
+  }, [timedLines, currentIndex, durationMs]);
 
   if (resolution === undefined) return null;
 
@@ -98,9 +104,6 @@ export function LyricsPanel({ trackId, className }: LyricsPanelProps) {
   }
 
   const lines = resolution.document.content.lines;
-  const hoveredIndex =
-    link.hoveredWaveformMs === null ? -1 : findCurrentLineIndex(lines, link.hoveredWaveformMs);
-
   return (
     <div className={cn("relative flex h-full min-h-0 flex-col", className)}>
       <PanelHeader notice={notice} unsynced={false} />
@@ -112,68 +115,22 @@ export function LyricsPanel({ trackId, className }: LyricsPanelProps) {
         className="min-h-0 flex-1 overflow-y-auto mask-[linear-gradient(to_bottom,transparent,black_12%,black_75%,transparent)] outline-none forced-colors:mask-none"
         {...scroll.containerHandlers}
       >
-        {lines.map((line, index) => {
-          const isCurrent = index === currentIndex;
-          const isPast = index < currentIndex;
-          return (
-            <m.div
-              key={index}
-              ref={scroll.registerLine(index)}
-              aria-current={isCurrent ? "true" : undefined}
-              // Lines shrink a little the further they are from the current one (a transform, so
-              // nothing reflows).
-              animate={{
-                scale: 1 - Math.min(Math.abs(index - Math.max(currentIndex, 0)), 4) * 0.01,
-              }}
-              transition={lineTransition}
-              style={{ transformOrigin: "left center" }}
-              className={cn(
-                "flex items-baseline gap-4 rounded-sm py-1",
-                index === hoveredIndex && "bg-accent/60",
-              )}
-            >
-              <button
-                type="button"
-                data-slot="lyrics-gutter"
-                aria-label={`Seek to ${formatDuration(line.startMs)}`}
-                onClick={() => {
-                  onSeek(line.startMs);
-                  scroll.resetToFollow();
-                }}
-                onPointerEnter={() => link.setHoveredLineSpan(lineSpan(lines, index, durationMs))}
-                onPointerLeave={() => link.setHoveredLineSpan(null)}
-                className="w-16 shrink-0 cursor-pointer text-right text-sm tabular-nums text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                {formatDuration(line.startMs)}
-              </button>
-              <span className="relative text-2xl leading-relaxed">
-                {/* The current line starts unlit (Ink-2) and the fill below lights it. */}
-                <m.span
-                  animate={{
-                    color: isPast ? "var(--faint-foreground)" : "var(--muted-foreground)",
-                  }}
-                  transition={lineTransition}
-                >
-                  {line.text.length > 0 ? line.text : " "}
-                </m.span>
-                <AnimatePresence>
-                  {isCurrent ? (
-                    <LineFill
-                      key="fill"
-                      text={line.text}
-                      startMs={line.startMs}
-                      fillMs={lineFillMs(
-                        (lineSpan(lines, index, durationMs)?.endMs ?? line.startMs) - line.startMs,
-                        line.text,
-                      )}
-                      position={position}
-                    />
-                  ) : null}
-                </AnimatePresence>
-              </span>
-            </m.div>
-          );
-        })}
+        {lines.map((_line, index) => (
+          <LyricsLine
+            key={index}
+            lines={lines}
+            index={index}
+            durationMs={durationMs}
+            isCurrent={index === currentIndex}
+            isPast={index < currentIndex}
+            isHovered={index === hoveredIndex}
+            distance={Math.min(Math.abs(index - Math.max(currentIndex, 0)), 4)}
+            position={position}
+            registerLine={scroll.registerLine}
+            onSeek={onSeek}
+            onSeeked={scroll.resetToFollow}
+          />
+        ))}
       </div>
       {scroll.mode === "free" ? (
         <Button
@@ -190,10 +147,99 @@ export function LyricsPanel({ trackId, className }: LyricsPanelProps) {
   );
 }
 
+type LyricsLineProps = {
+  lines: readonly LyricsTimedLine[];
+  index: number;
+  durationMs: number | null;
+  isCurrent: boolean;
+  isPast: boolean;
+  isHovered: boolean;
+  /** Lines away from the current one, capped: how much the line shrinks. */
+  distance: number;
+  position: MotionValue<number>;
+  registerLine: (index: number, element: HTMLElement | null) => void;
+  onSeek: (positionMs: number) => void;
+  onSeeked: () => void;
+};
+
+/** One lyric line. Memoised: the panel re-renders with the position, a line only when its own state changes. */
+const LyricsLine = memo(function LyricsLine({
+  lines,
+  index,
+  durationMs,
+  isCurrent,
+  isPast,
+  isHovered,
+  distance,
+  position,
+  registerLine,
+  onSeek,
+  onSeeked,
+}: LyricsLineProps) {
+  const lineTransition = useMotionTransition("smallMove");
+  const line = lines[index]!;
+  const ref = useCallback(
+    (element: HTMLElement | null) => registerLine(index, element),
+    [registerLine, index],
+  );
+  return (
+    <m.div
+      ref={ref}
+      aria-current={isCurrent ? "true" : undefined}
+      // Lines shrink a little the further they are from the current one (a transform, so
+      // nothing reflows).
+      animate={{ scale: 1 - distance * 0.01 }}
+      transition={lineTransition}
+      style={{ transformOrigin: "left center" }}
+      className={cn("flex items-baseline gap-4 rounded-sm py-1", isHovered && "bg-accent/60")}
+    >
+      <button
+        type="button"
+        data-slot="lyrics-gutter"
+        aria-label={`Seek to ${formatDuration(line.startMs)}`}
+        onClick={() => {
+          onSeek(line.startMs);
+          onSeeked();
+        }}
+        onPointerEnter={() =>
+          lyricsWaveformLink.setHoveredLineSpan(lineSpan(lines, index, durationMs))
+        }
+        onPointerLeave={() => lyricsWaveformLink.setHoveredLineSpan(null)}
+        className="w-16 shrink-0 cursor-pointer text-right text-sm tabular-nums text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        {formatDuration(line.startMs)}
+      </button>
+      <span className="relative text-2xl leading-relaxed">
+        {/* The current line starts unlit (Ink-2) and the fill below lights it. */}
+        <m.span
+          animate={{ color: isPast ? "var(--faint-foreground)" : "var(--muted-foreground)" }}
+          transition={lineTransition}
+        >
+          {line.text.length > 0 ? line.text : " "}
+        </m.span>
+        <AnimatePresence>
+          {isCurrent ? (
+            <LineFill
+              key="fill"
+              text={line.text}
+              startMs={line.startMs}
+              fillMs={lineFillMs(
+                (lineSpan(lines, index, durationMs)?.endMs ?? line.startMs) - line.startMs,
+                line.text,
+              )}
+              position={position}
+            />
+          ) : null}
+        </AnimatePresence>
+      </span>
+    </m.div>
+  );
+});
+
 /**
  * The lit copy of the current line: the same text in the artwork's colour, one span per
  * character, lit in order as the line is sung. It sits exactly over the base text, so a wrapped
- * line fills its upper row before its lower one. Under reduced motion the lift is skipped.
+ * line fills its upper row before its lower one. Under calm or reduced motion the lift is skipped.
  */
 function LineFill({
   text,
@@ -206,9 +252,8 @@ function LineFill({
   fillMs: number;
   position: MotionValue<number>;
 }) {
-  const reduced = useReducedMotion() === true;
   const chars = graphemes(text.length > 0 ? text : " ");
-  const lift = !reduced && chars.length <= MAX_LIFT_CHARS;
+  const lift = useMotionBudget() === "full" && chars.length <= MAX_LIFT_CHARS;
   const progress = useTransform(() => lineProgress(position.get(), startMs, fillMs));
   return (
     <m.span

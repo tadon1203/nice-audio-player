@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type { LyricsTimedLine } from "@/shared/ipc";
+import { playbackClock } from "@/renderer/entities/playback";
 
 /**
  * Finds the index of the current line: the last line whose `startMs` is at or before
@@ -78,47 +79,37 @@ export function charLift(progress: number, index: number, count: number, fillMs:
 }
 
 /**
- * Tracks the current lyric line index from a `{positionMs, performance.now()}` anchor,
- * interpolating while playing and freezing while paused. Recomputes on every new position
- * snapshot (covers seeks and track changes) and otherwise advances via a single `setTimeout`
- * armed for the next line's start time, rather than polling every frame.
+ * Tracks the current lyric line index from the playback clock. It re-reads the clock whenever
+ * a report reaches it (covers seeks, track changes, pauses) and otherwise advances with a
+ * single `setTimeout` armed for the next line's start, so the component re-renders only when
+ * the line changes, never with the position.
  */
-export function useLyricsSync(
-  lines: readonly LyricsTimedLine[] | null,
-  positionMs: number,
-  isPlaying: boolean,
-): number {
+export function useLyricsSync(lines: readonly LyricsTimedLine[] | null): number {
   const [currentIndex, setCurrentIndex] = useState(-1);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (timerRef.current !== null) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
     if (lines === null || lines.length === 0) {
       setCurrentIndex(-1);
       return;
     }
-
-    const anchor = { positionMs, perfNow: performance.now() };
-    const tick = () => {
-      const estimated = isPlaying
-        ? anchor.positionMs + (performance.now() - anchor.perfNow)
-        : anchor.positionMs;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const arm = () => {
+      clearTimeout(timer);
+      const estimated = playbackClock.estimate();
       const index = findCurrentLineIndex(lines, estimated);
       setCurrentIndex(index);
-      if (!isPlaying) return;
+      if (!playbackClock.playing()) return;
       const next = lines[index + 1];
       if (next === undefined) return;
-      timerRef.current = setTimeout(tick, Math.max(0, next.startMs - estimated));
+      timer = setTimeout(arm, Math.max(0, next.startMs - estimated));
     };
-    tick();
-
+    arm();
+    const stopListening = playbackClock.onReport(arm);
     return () => {
-      if (timerRef.current !== null) clearTimeout(timerRef.current);
+      clearTimeout(timer);
+      stopListening();
     };
-  }, [lines, positionMs, isPlaying]);
+  }, [lines]);
 
   return currentIndex;
 }

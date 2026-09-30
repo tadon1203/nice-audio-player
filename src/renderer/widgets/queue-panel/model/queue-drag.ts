@@ -13,3 +13,13 @@ export function dropSlot(midpoints: readonly number[], pointerY: number): number
 export function slotToIndex(slot: number, from: number): number {
   return slot > from ? slot - 1 : slot;
 }
+
+/**
+ * `dropSlot` for rows of one fixed height, without needing every row's midpoint: `offsetY` is
+ * the pointer's distance below the top of the first row, and `count` the number of rows. Rows
+ * that are not mounted (a virtualized list) still count.
+ */
+export function dropSlotForFixedRows(offsetY: number, rowHeight: number, count: number): number {
+  if (rowHeight <= 0) return 0;
+  return Math.min(count, Math.max(0, Math.ceil(offsetY / rowHeight - 0.5)));
+}

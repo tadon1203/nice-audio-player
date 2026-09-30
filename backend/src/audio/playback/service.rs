@@ -10,7 +10,9 @@ use std::thread::{self, JoinHandle};
 use super::item::PlaybackItemSeed;
 use super::preferences::{PlaybackPreferences, PreferencesObserver};
 use super::queue::{PlaybackQueue, PlaybackRepeatMode};
-use super::snapshot::{PlaybackFailureCode, PlaybackQueueSnapshot, PlaybackSnapshot, SnapshotBase};
+use super::snapshot::{
+    PlaybackFailureCode, PlaybackQueueSnapshot, PlaybackQueueWindow, PlaybackSnapshot, SnapshotBase,
+};
 use super::worker::{PlaybackWorker, WorkerLinks};
 use crate::audio::devices::AudioOutputSelection;
 use crate::audio::output::OutputSignal;
@@ -101,6 +103,17 @@ pub(super) enum PlaybackCommand {
         reply: Reply<PlaybackQueueSnapshot>,
     },
     ClearQueue {
+        reply: Reply<PlaybackQueueSnapshot>,
+    },
+    /// Makes an upcoming item current and plays it.
+    PlayQueueItem {
+        id: String,
+        reply: Reply<PlaybackSnapshot>,
+    },
+    Enqueue {
+        items: Vec<PlaybackItemSeed>,
+        /// Right after the current item rather than at the end.
+        next: bool,
         reply: Reply<PlaybackQueueSnapshot>,
     },
     Output(OutputSignal),
@@ -232,6 +245,14 @@ impl PlaybackServiceHandle {
             .clone()
     }
 
+    /// Upcoming items from `offset`; a window of the queue the snapshot only starts.
+    pub fn queue_window(&self, offset: usize, limit: usize) -> PlaybackQueueWindow {
+        self.queue_snapshot
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .window(offset, limit)
+    }
+
     /// Replaces the queue with `items` and starts the one at `start_index`.
     pub fn start(
         &self,
@@ -323,6 +344,24 @@ impl PlaybackServiceHandle {
         to: usize,
     ) -> Result<PlaybackQueueSnapshot, PlaybackServiceError> {
         self.request(|reply| PlaybackCommand::MoveQueueItem { id, to, reply })
+    }
+
+    pub fn play_queue_item(&self, id: String) -> Result<PlaybackSnapshot, PlaybackServiceError> {
+        self.request(|reply| PlaybackCommand::PlayQueueItem { id, reply })
+    }
+
+    /// Adds `items` after the current item (`next`) or at the end. With nothing queued they
+    /// start playing instead.
+    pub fn enqueue(
+        &self,
+        items: Vec<PlaybackItemSeed>,
+        next: bool,
+    ) -> Result<PlaybackQueueSnapshot, PlaybackServiceError> {
+        if self.queue_snapshot().current.is_none() {
+            self.start(items, 0)?;
+            return Ok(self.queue_snapshot());
+        }
+        self.request(|reply| PlaybackCommand::Enqueue { items, next, reply })
     }
 
     pub fn clear_queue(&self) -> Result<PlaybackQueueSnapshot, PlaybackServiceError> {

@@ -11,7 +11,11 @@ import {
   useNowPlayingTransitions,
 } from "@/renderer/features/now-playing-transition";
 
-/** Layout intent (two full-width rows, centered transport) is in DESIGN.md, "Dock". */
+/**
+ * Two full-width rows: a plain progress line across the top, then identity, transport and volume.
+ * The transport grid's side columns are equal, so the transport sits on the dock's true centre
+ * whatever the two sides hold.
+ */
 export function PlaybackDock() {
   // Nothing read here changes with playback position, so the dock does not re-render as time
   // passes.

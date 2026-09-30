@@ -102,8 +102,9 @@ function Sleeve({ item, trackKey }: { item: PlaybackItem | null; trackKey: strin
   const { isOpen: nowPlayingOpen, toggle } = useNowPlaying();
   const { direction, transition } = useSlide();
   const hasTrack = item !== null;
-  const albumTitle = item?.album?.trim() ?? "";
-  const albumArtist = item?.albumArtist?.trim() || item?.artist?.trim() || "";
+  const albumKey = item?.albumKey ?? null;
+  const artistName =
+    albumKey?.albumArtist || item?.albumArtist?.trim() || item?.artist?.trim() || "";
 
   // Now Playing has its own big Sleeve (the shared-element target). While it is open this slot
   // holds the close affordance instead, so the dock's layout does not shift.
@@ -169,29 +170,33 @@ function Sleeve({ item, trackKey }: { item: PlaybackItem | null; trackKey: strin
       </ContextMenuTrigger>
       {hasTrack ? (
         <MenuContent side="right" align="start" className="min-w-40">
-          <MenuItem
-            onClick={() =>
-              void navigate({
-                to: "/library/albums/$albumArtist/$albumTitle",
-                params: {
-                  albumArtist: toNameSegment(albumArtist),
-                  albumTitle: toNameSegment(albumTitle),
-                },
-              })
-            }
-          >
-            Go to album
-          </MenuItem>
-          <MenuItem
-            onClick={() =>
-              void navigate({
-                to: "/library/album-artists/$artistName",
-                params: { artistName: toNameSegment(albumArtist) },
-              })
-            }
-          >
-            Go to artist
-          </MenuItem>
+          {albumKey !== null ? (
+            <MenuItem
+              onClick={() =>
+                void navigate({
+                  to: "/library/albums/$albumArtist/$albumTitle",
+                  params: {
+                    albumArtist: toNameSegment(albumKey.albumArtist),
+                    albumTitle: toNameSegment(albumKey.title),
+                  },
+                })
+              }
+            >
+              Go to album
+            </MenuItem>
+          ) : null}
+          {artistName !== "" ? (
+            <MenuItem
+              onClick={() =>
+                void navigate({
+                  to: "/library/album-artists/$artistName",
+                  params: { artistName: toNameSegment(artistName) },
+                })
+              }
+            >
+              Go to artist
+            </MenuItem>
+          ) : null}
         </MenuContent>
       ) : null}
     </ContextMenu>

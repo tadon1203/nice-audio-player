@@ -28,12 +28,15 @@ const WRITE_DEBOUNCE: Duration = Duration::from_millis(400);
 pub struct AppearanceSettings {
     /// Artwork light behind the library and Now Playing.
     pub artwork_backdrop: bool,
+    /// Only what marks the position moves by itself: nothing breathes or lifts on its own.
+    pub calm_motion: bool,
 }
 
 impl Default for AppearanceSettings {
     fn default() -> Self {
         Self {
             artwork_backdrop: true,
+            calm_motion: false,
         }
     }
 }
@@ -57,6 +60,7 @@ pub struct SettingsPatch {
 #[serde(rename_all = "camelCase")]
 pub struct AppearancePatch {
     pub artwork_backdrop: Option<bool>,
+    pub calm_motion: Option<bool>,
 }
 
 impl Settings {
@@ -69,6 +73,9 @@ impl Settings {
         if let Some(appearance) = &patch.appearance {
             if let Some(value) = appearance.artwork_backdrop {
                 self.appearance.artwork_backdrop = value;
+            }
+            if let Some(value) = appearance.calm_motion {
+                self.appearance.calm_motion = value;
             }
         }
     }
@@ -241,6 +248,7 @@ mod tests {
         service.update(&SettingsPatch {
             appearance: Some(AppearancePatch {
                 artwork_backdrop: Some(false),
+                calm_motion: Some(true),
             }),
         });
         service.record_playback(PlaybackPreferences {
@@ -256,6 +264,7 @@ mod tests {
 
         let restored = SettingsService::load(path, null_event_sink()).get();
         assert!(!restored.appearance.artwork_backdrop);
+        assert!(restored.appearance.calm_motion);
         assert_eq!(restored.playback.volume, 0.4);
         assert!(restored.playback.muted && restored.playback.shuffle_enabled);
         assert_eq!(restored.playback.repeat_mode, PlaybackRepeatMode::All);
@@ -279,6 +288,7 @@ mod tests {
         assert_eq!(settings.playback.volume, 0.25);
         assert!(!settings.playback.muted);
         assert!(settings.appearance.artwork_backdrop);
+        assert!(!settings.appearance.calm_motion);
     }
 
     #[test]
@@ -314,6 +324,7 @@ mod tests {
         let patch = SettingsPatch {
             appearance: Some(AppearancePatch {
                 artwork_backdrop: Some(false),
+                calm_motion: None,
             }),
         };
         service.update(&patch);

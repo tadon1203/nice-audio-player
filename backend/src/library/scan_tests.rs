@@ -44,6 +44,7 @@ fn run_scan(fixture: &Fixture, cancelled: bool) -> LibraryScanSnapshot {
     let state = Arc::new(Mutex::new(LibraryScanSnapshot {
         state: LibraryScanState::Running,
         current_root: None,
+        expected_count: 0,
         discovered_count: 0,
         inspected_count: 0,
         indexed_count: 0,
@@ -136,11 +137,19 @@ fn files_in_subfolders_keep_their_relative_path() {
 fn a_second_scan_does_not_inspect_unchanged_files() {
     let fixture = fixture();
     write_tone(&fixture.music.join("a.wav"), 8_000);
-    run_scan(&fixture, false);
+    let first = run_scan(&fixture, false);
+    assert_eq!(
+        first.expected_count, 0,
+        "a first scan has no history to expect from"
+    );
 
     let second = run_scan(&fixture, false);
 
     assert_eq!(second.state, LibraryScanState::Completed);
+    assert_eq!(
+        second.expected_count, 1,
+        "a rescan expects what was found before"
+    );
     assert_eq!((second.discovered_count, second.inspected_count), (1, 0));
     assert_eq!(files(&fixture)[0].3, 1, "the revision stays");
     assert_eq!(count(&fixture, "SELECT COUNT(*) FROM tracks"), 1);

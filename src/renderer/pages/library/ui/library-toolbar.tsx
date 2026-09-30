@@ -66,6 +66,7 @@ export function LibraryToolbar<Key extends string>({
             <InputGroup className="h-9 w-full sm:w-52">
               <InputGroupInput
                 aria-label={searchLabel}
+                data-library-filter=""
                 value={filter}
                 onChange={(event) => onFilterChange(event.target.value)}
                 placeholder={searchPlaceholder}

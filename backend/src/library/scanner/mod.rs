@@ -52,6 +52,7 @@ pub(crate) fn run(
     cancel: Arc<AtomicBool>,
     notify: Notifier,
 ) {
+    state.lock().expect("scan state lock").expected_count = expected_files(&database, &roots);
     let mut progress = Progress::new(&state, &notify);
     let mut traversal_failed = false;
     for root in roots {
@@ -85,6 +86,27 @@ pub(crate) fn run(
     } else {
         finish(&state, LibraryScanState::Completed, None, &notify)
     }
+}
+
+/// How many files earlier scans left in `roots`: a rescan should find about as many again.
+fn expected_files(database: &Database, roots: &[LibraryRoot]) -> u64 {
+    let Ok(connection) = database.read() else {
+        return 0;
+    };
+    roots
+        .iter()
+        .filter_map(|root| parse_id(&root.id).ok())
+        .filter_map(|id| {
+            connection
+                .query_row(
+                    "SELECT COUNT(*) FROM library_files WHERE root_id=?1 AND availability='available'",
+                    [id],
+                    |row| row.get::<_, i64>(0),
+                )
+                .ok()
+        })
+        .map(|count| u64::try_from(count).unwrap_or(0))
+        .sum()
 }
 
 /// Scans one root. `Ok(false)` means the walk broke partway, so nothing is marked missing.

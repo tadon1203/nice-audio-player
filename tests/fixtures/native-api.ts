@@ -43,6 +43,10 @@ type InstallNativeApiOptions = {
   failArtistDetails?: boolean;
   failArtistAlbums?: boolean;
   libraryUnavailable?: boolean;
+  /** Albums to list in addition to the two named ones (a long library). */
+  extraAlbums?: number;
+  /** Tracks in the library (default 140). */
+  trackCount?: number;
 };
 
 declare global {
@@ -77,28 +81,31 @@ function createNativeMock(options: InstallNativeApiOptions) {
     requestCounts[kind] = (requestCounts[kind] ?? 0) + 1;
   };
 
-  const tracks: LibraryTrackSummary[] = Array.from({ length: 140 }, (_, index) => {
-    const missing = index === 4;
-    return {
-      id: missing ? "track-missing" : `track-${index + 1}`,
-      title:
-        index === 0
-          ? "Test track"
-          : missing
-            ? "Missing track"
-            : `Track ${String(index + 1).padStart(3, "0")}`,
-      artist: "Test artist",
-      album: "Test album",
-      albumArtist: "Test artist",
-      artwork: null,
-      durationMs: 120_000 + index * 1_000,
-      fileFormat: "FLAC",
-      bitDepth: 24,
-      bitrateKbps: null,
-      availability: missing ? "missing" : "available",
-      playable: !missing,
-    };
-  });
+  const tracks: LibraryTrackSummary[] = Array.from(
+    { length: options.trackCount ?? 140 },
+    (_, index) => {
+      const missing = index === 4;
+      return {
+        id: missing ? "track-missing" : `track-${index + 1}`,
+        title:
+          index === 0
+            ? "Test track"
+            : missing
+              ? "Missing track"
+              : `Track ${String(index + 1).padStart(3, "0")}`,
+        artist: "Test artist",
+        album: "Test album",
+        albumArtist: "Test artist",
+        artwork: null,
+        durationMs: 120_000 + index * 1_000,
+        fileFormat: "FLAC",
+        bitDepth: 24,
+        bitrateKbps: null,
+        availability: missing ? "missing" : "available",
+        playable: !missing,
+      };
+    },
+  );
   const albumSummary = {
     key: { title: "Test album", albumArtist: "Test artist" },
     artwork: null,
@@ -166,6 +173,7 @@ function createNativeMock(options: InstallNativeApiOptions) {
     status: "stopped" as "stopped" | "playing" | "paused",
     item: null as PlaybackItem | null,
     positionMs: 0,
+    seekRevision: 0,
     durationMs: null as number | null,
     volume: 0.72,
     muted: false,
@@ -191,6 +199,7 @@ function createNativeMock(options: InstallNativeApiOptions) {
         item: mock.item,
         playbackId: `playback-${mock.item.trackId}`,
         positionMs: mock.positionMs,
+        seekRevision: mock.seekRevision,
         durationMs: mock.durationMs,
         outputDevice: outputDeviceFor(outputSelection),
         channelConversion: "none",
@@ -201,12 +210,24 @@ function createNativeMock(options: InstallNativeApiOptions) {
     };
   };
   let playback: PlaybackSnapshot = snapshotOf();
-  let queue: PlaybackQueueSnapshot = {
+  // Kept whole here; `wire` cuts it down to what the real backend puts in a snapshot.
+  let queue: Omit<PlaybackQueueSnapshot, "history" | "historyCount" | "upcomingCount"> = {
     revision: queueRevision,
     current: null,
     upcoming: [],
     repeatMode: "off",
     shuffleEnabled: false,
+  };
+  const wire = (whole: typeof queue): PlaybackQueueSnapshot => {
+    const index = currentSequence.findIndex((track) => track.id === whole.current?.id);
+    const played = index > 0 ? currentSequence.slice(0, index).map(queueItemFor) : [];
+    return {
+      ...whole,
+      history: played.slice(-50),
+      historyCount: played.length,
+      upcoming: whole.upcoming.slice(0, 200),
+      upcomingCount: whole.upcoming.length,
+    };
   };
   const emit = (event: AppEvent) => listeners.forEach((listener) => listener(event));
   const publishPlayback = () => emit({ event: "playbackStateChanged", payload: playback });
@@ -258,7 +279,7 @@ function createNativeMock(options: InstallNativeApiOptions) {
       repeatMode: queue.repeatMode,
       shuffleEnabled: queue.shuffleEnabled,
     };
-    emit({ event: "playbackQueueStateChanged", payload: queue });
+    emit({ event: "playbackQueueStateChanged", payload: wire(queue) });
     const { id: queueItemId, ...identity } = queueItemFor(track);
     return commit({
       status: "playing",
@@ -267,6 +288,13 @@ function createNativeMock(options: InstallNativeApiOptions) {
         queueItemId,
         file: fileFor(track),
         albumArtist: track.albumArtist,
+        trackNumber: Number(track.id.replace(/\D/g, "")) % 12 || null,
+        discNumber: null,
+        year: 2019,
+        albumKey: track.album
+          ? { title: track.album, albumArtist: track.albumArtist ?? track.artist ?? "" }
+          : null,
+        albumTrackCount: null,
       },
       positionMs: 12_000,
       durationMs: track.durationMs,
@@ -279,6 +307,7 @@ function createNativeMock(options: InstallNativeApiOptions) {
   let scan: LibraryScanSnapshot = {
     state: "idle",
     currentRoot: null,
+    expectedCount: 0,
     discoveredCount: 0,
     inspectedCount: 0,
     indexedCount: 0,
@@ -289,6 +318,7 @@ function createNativeMock(options: InstallNativeApiOptions) {
     scan = {
       state,
       currentRoot: state === "running" ? scanRoot() : null,
+      expectedCount: state === "idle" ? 0 : 40,
       discoveredCount: state === "idle" ? 0 : 20,
       inspectedCount: state === "idle" ? 0 : state === "running" ? 8 : 20,
       indexedCount: state === "idle" ? 0 : state === "running" ? 6 : 18,
@@ -303,7 +333,12 @@ function createNativeMock(options: InstallNativeApiOptions) {
       if (options.failPlaybackInitialization) throw { code: "noOutputDevice" };
       return playback;
     },
-    getPlaybackQueue: async () => queue,
+    getPlaybackQueue: async () => wire(queue),
+    getPlaybackQueueWindow: async (offset, limit) => ({
+      revision: queue.revision,
+      offset,
+      items: queue.upcoming.slice(offset, offset + Math.min(limit, 200)),
+    }),
     pausePlayback: async () =>
       mock.status === "playing" ? commit({ status: "paused" }) : playback,
     resumePlayback: async () =>
@@ -319,7 +354,9 @@ function createNativeMock(options: InstallNativeApiOptions) {
       return next ? setTrack(next, currentSequence) : playback;
     },
     seekPlayback: async (positionMs) =>
-      mock.status === "stopped" ? playback : commit({ positionMs }),
+      mock.status === "stopped"
+        ? playback
+        : commit({ positionMs, seekRevision: mock.seekRevision + 1 }),
     setPlaybackVolume: async (volume) => commit({ volume }),
     setPlaybackMuted: async (muted) => commit({ muted }),
     getTrackLyrics: async (trackId) => {
@@ -361,14 +398,14 @@ function createNativeMock(options: InstallNativeApiOptions) {
     setPlaybackRepeatMode: async (mode) => {
       queueRevision += 1;
       queue = { ...queue, revision: queueRevision, repeatMode: mode };
-      emit({ event: "playbackQueueStateChanged", payload: queue });
-      return queue;
+      emit({ event: "playbackQueueStateChanged", payload: wire(queue) });
+      return wire(queue);
     },
     setPlaybackShuffle: async (enabled) => {
       queueRevision += 1;
       queue = { ...queue, revision: queueRevision, shuffleEnabled: enabled };
-      emit({ event: "playbackQueueStateChanged", payload: queue });
-      return queue;
+      emit({ event: "playbackQueueStateChanged", payload: wire(queue) });
+      return wire(queue);
     },
     removeQueueItem: async (id) => {
       queueRevision += 1;
@@ -377,8 +414,8 @@ function createNativeMock(options: InstallNativeApiOptions) {
         revision: queueRevision,
         upcoming: queue.upcoming.filter((item) => item.id !== id),
       };
-      emit({ event: "playbackQueueStateChanged", payload: queue });
-      return queue;
+      emit({ event: "playbackQueueStateChanged", payload: wire(queue) });
+      return wire(queue);
     },
     moveQueueItem: async (id, to) => {
       const index = queue.upcoming.findIndex((item) => item.id === id);
@@ -389,15 +426,40 @@ function createNativeMock(options: InstallNativeApiOptions) {
         upcoming.splice(target, 0, item!);
         queueRevision += 1;
         queue = { ...queue, revision: queueRevision, upcoming };
-        emit({ event: "playbackQueueStateChanged", payload: queue });
+        emit({ event: "playbackQueueStateChanged", payload: wire(queue) });
       }
-      return queue;
+      return wire(queue);
+    },
+    playQueueItem: async (id) => {
+      const item = wire(queue)
+        .history.concat(queue.upcoming)
+        .find((entry) => entry.id === id);
+      const track = tracks.find((entry) => entry.id === item?.trackId);
+      if (track === undefined) throw { code: "queueItemNotFound" };
+      return setTrack(track, currentSequence);
+    },
+    enqueueTrack: async (trackId, next) => {
+      const track = tracks.find((entry) => entry.id === trackId);
+      if (track === undefined) throw { code: "invalidTrackId" };
+      if (queue.current === null) {
+        setTrack(track);
+        return wire(queue);
+      }
+      queueRevision += 1;
+      const entry = { ...queueItemFor(track), id: `${track.id}-queued-${queueRevision}` };
+      queue = {
+        ...queue,
+        revision: queueRevision,
+        upcoming: next ? [entry, ...queue.upcoming] : [...queue.upcoming, entry],
+      };
+      emit({ event: "playbackQueueStateChanged", payload: wire(queue) });
+      return wire(queue);
     },
     clearQueue: async () => {
       queueRevision += 1;
       queue = { ...queue, revision: queueRevision, upcoming: [] };
-      emit({ event: "playbackQueueStateChanged", payload: queue });
-      return queue;
+      emit({ event: "playbackQueueStateChanged", payload: wire(queue) });
+      return wire(queue);
     },
     setAudioOutputSelection: async (selection) => {
       recordRequest("outputSelection");
@@ -442,7 +504,17 @@ function createNativeMock(options: InstallNativeApiOptions) {
     },
     listLibraryAlbums: async (_cursor, search) => {
       recordRequest("albums");
-      const all = roots.some((item) => item.enabled) ? [albumSummary, secondaryAlbum] : [];
+      const extra = Array.from({ length: options.extraAlbums ?? 0 }, (_, index) => ({
+        key: {
+          title: `Extra album ${String(index).padStart(4, "0")}`,
+          albumArtist: "Extra artist",
+        },
+        artwork: null,
+        year: 2000 + (index % 20),
+      }));
+      const all = roots.some((item) => item.enabled)
+        ? [albumSummary, secondaryAlbum, ...extra]
+        : [];
       const query = search?.toLocaleLowerCase() ?? "";
       const items = all.filter((album) =>
         `${album.key.title} ${album.key.albumArtist}`.toLocaleLowerCase().includes(query),
@@ -479,13 +551,45 @@ function createNativeMock(options: InstallNativeApiOptions) {
       return albumTracks;
     },
     getLibraryTrack: async (id) => tracks.find((track) => track.id === id) ?? null,
+    getLibraryTrackProperties: async (id) => {
+      const track = tracks.find((entry) => entry.id === id);
+      if (track === undefined) return null;
+      return {
+        id,
+        path: `C:/Music/${track.title}.flac`,
+        fileName: `${track.title}.flac`,
+        title: track.title,
+        artist: track.artist,
+        album: track.album,
+        albumArtist: track.albumArtist,
+        trackNumber: 3,
+        trackTotal: 11,
+        discNumber: null,
+        discTotal: null,
+        genre: "Electronic",
+        date: "2019-05-03",
+        durationMs: track.durationMs,
+        fileFormat: track.fileFormat,
+        codec: "flac",
+        sampleRate: 96_000,
+        channelCount: 2,
+        bitDepth: track.bitDepth,
+        bitrateKbps: track.bitrateKbps,
+      };
+    },
+    revealLibraryTrack: async (id) => {
+      recordRequest(`reveal:${id}`);
+      return null;
+    },
     startPlayback: async (context, startTrackId) => {
       const sequence =
         context.kind === "album"
           ? albumTracks.items
               .map((item) => tracks.find((track) => track.id === item.id))
               .filter((track): track is LibraryTrackSummary => Boolean(track?.playable))
-          : tracks.filter((track) => track.playable);
+          : context.kind === "trackIds"
+            ? context.trackIds.flatMap((id) => tracks.filter((track) => track.id === id))
+            : tracks.filter((track) => track.playable);
       const start =
         startTrackId === null ? sequence[0] : sequence.find((track) => track.id === startTrackId);
       if (start === undefined) throw { code: "trackNotMember" };
@@ -500,6 +604,9 @@ function createNativeMock(options: InstallNativeApiOptions) {
           ...(patch.appearance?.artworkBackdrop == null
             ? {}
             : { artworkBackdrop: patch.appearance.artworkBackdrop }),
+          ...(patch.appearance?.calmMotion == null
+            ? {}
+            : { calmMotion: patch.appearance.calmMotion }),
         },
       };
       emit({ event: "settingsChanged", payload: settings });

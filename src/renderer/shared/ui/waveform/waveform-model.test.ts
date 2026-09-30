@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   barCountForWidth,
-  FISHEYE_MAX_SCALE,
-  FISHEYE_RADIUS_PX,
-  fisheyeScale,
+  SCRUB_FREE_PX,
+  SCRUB_MIN_GAIN,
+  scrubGain,
+  scrubPosition,
   levelToUnit,
   nextSeekPosition,
   positionFromOffset,
@@ -57,15 +58,27 @@ describe("barCountForWidth", () => {
   });
 });
 
-describe("fisheyeScale", () => {
-  it("is widest at the pointer and gone at the edge of the radius", () => {
-    expect(fisheyeScale(0)).toBeCloseTo(FISHEYE_MAX_SCALE);
-    expect(fisheyeScale(FISHEYE_RADIUS_PX)).toBe(1);
-    expect(fisheyeScale(-200)).toBe(1);
+describe("scrubbing", () => {
+  it("follows the pointer 1:1 on the bar and near it", () => {
+    expect(scrubGain(0, false)).toBe(1);
+    expect(scrubGain(SCRUB_FREE_PX, false)).toBe(1);
+    expect(scrubGain(-SCRUB_FREE_PX, false)).toBe(1);
   });
 
-  it("falls off evenly on both sides", () => {
-    expect(fisheyeScale(-20)).toBeCloseTo(fisheyeScale(20));
-    expect(fisheyeScale(10)).toBeGreaterThan(fisheyeScale(30));
+  it("slows down further from the bar, symmetrically, down to a floor", () => {
+    expect(scrubGain(SCRUB_FREE_PX + 48, false)).toBeCloseTo(0.5);
+    expect(scrubGain(-(SCRUB_FREE_PX + 96), false)).toBeCloseTo(0.25);
+    expect(scrubGain(10_000, false)).toBe(SCRUB_MIN_GAIN);
+  });
+
+  it("slows a further tenfold with Shift", () => {
+    expect(scrubGain(0, true)).toBeCloseTo(0.1);
+  });
+
+  it("moves the position by the gained share of the track and clamps", () => {
+    expect(scrubPosition(10_000, 100, 1, 1000, 200_000)).toBe(30_000);
+    expect(scrubPosition(10_000, 100, 0.5, 1000, 200_000)).toBe(20_000);
+    expect(scrubPosition(10_000, -500, 1, 1000, 200_000)).toBe(0);
+    expect(scrubPosition(190_000, 500, 1, 1000, 200_000)).toBe(200_000);
   });
 });

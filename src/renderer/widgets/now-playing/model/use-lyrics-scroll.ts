@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { KeyboardEvent, PointerEvent } from "react";
 import { animate, useReducedMotion } from "motion/react";
 import { useMotionTransition } from "@/renderer/shared/ui/motion";
@@ -24,17 +24,18 @@ export function useLyricsScroll(currentIndex: number) {
   const reducedMotion = useReducedMotion() === true;
   const transition = useMotionTransition("mediumMove");
 
-  const registerLine = (index: number) => (element: HTMLElement | null) => {
+  const registerLine = useCallback((index: number, element: HTMLElement | null) => {
     if (element === null) lineRefs.current.delete(index);
     else lineRefs.current.set(index, element);
-  };
+  }, []);
 
   const markUserScroll = () => {
     lastInteractionAt.current = Date.now();
     setMode("free");
   };
 
-  const jumpToCurrent = () => setMode("follow");
+  const resetToFollow = useCallback(() => setMode("follow"), []);
+  const jumpToCurrent = resetToFollow;
 
   useEffect(() => {
     if (mode !== "free") return;
@@ -77,7 +78,7 @@ export function useLyricsScroll(currentIndex: number) {
     containerRef,
     registerLine,
     jumpToCurrent,
-    resetToFollow: () => setMode("follow"),
+    resetToFollow,
     containerHandlers: {
       onWheel: markUserScroll,
       onTouchStart: markUserScroll,

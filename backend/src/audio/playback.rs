@@ -19,7 +19,7 @@ pub use service::{
 };
 pub use snapshot::{
     ActiveSession, PlaybackChannelConversion, PlaybackFailureCode, PlaybackQueueItem,
-    PlaybackQueueSnapshot, PlaybackSnapshot, SnapshotBase,
+    PlaybackQueueSnapshot, PlaybackQueueWindow, PlaybackSnapshot, SnapshotBase,
 };
 
 #[cfg(test)]

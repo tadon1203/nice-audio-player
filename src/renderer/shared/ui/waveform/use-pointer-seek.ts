@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { KeyboardEvent, PointerEvent, RefObject } from "react";
-import { nextSeekPosition, positionFromOffset } from "./waveform-model";
+import { nextSeekPosition, positionFromOffset, scrubGain, scrubPosition } from "./waveform-model";
 
 type PointerSeekOptions = {
   ref: RefObject<HTMLDivElement | null>;
@@ -15,8 +15,11 @@ type PointerSeekOptions = {
 };
 
 /**
- * Pointer and keyboard interaction for the seek bar: press/drag to seek, hover to preview a
- * time. `onInput` follows the pointer while dragging; `onCommit` fires once on release.
+ * Pointer and keyboard interaction for the seek bar: press to jump, drag to scrub, hover to
+ * preview a time. Dragging moves the position by the pointer's horizontal travel; the further
+ * the pointer is from the bar vertically (or with Shift held) the slower it moves, so long
+ * tracks can be set finely (`scrubGain`). `onInput` follows the drag; `onCommit` fires once on
+ * release.
  */
 export function usePointerSeek({
   ref,
@@ -30,6 +33,9 @@ export function usePointerSeek({
 }: PointerSeekOptions) {
   const [hoverX, setHoverX] = useState<number | null>(null);
   const [dragging, setDragging] = useState(false);
+  // The scrubbed position and where the pointer was when it was last folded into it.
+  const scrub = useRef({ positionMs: 0, lastX: 0 });
+  const [scrubMs, setScrubMs] = useState<number | null>(null);
 
   // Measured live, not from the caller's `width` state: that only drives bar resampling and can
   // lag a frame behind the element's actual box (e.g. while a layout animation is still
@@ -37,29 +43,58 @@ export function usePointerSeek({
   const liveWidth = () => ref.current?.getBoundingClientRect().width ?? width;
   const offsetOf = (event: PointerEvent<HTMLDivElement>) =>
     event.clientX - (ref.current?.getBoundingClientRect().left ?? 0);
-  const positionOf = (event: PointerEvent<HTMLDivElement>) =>
-    positionFromOffset(offsetOf(event), liveWidth(), durationMs);
+
+  /** Folds the pointer's travel since the last event into the scrubbed position. */
+  const scrubTo = (event: PointerEvent<HTMLDivElement>) => {
+    const rect = ref.current?.getBoundingClientRect();
+    const distance = rect ? Math.max(rect.top - event.clientY, event.clientY - rect.bottom, 0) : 0;
+    const gain = scrubGain(distance, event.shiftKey);
+    scrub.current = {
+      positionMs: scrubPosition(
+        scrub.current.positionMs,
+        event.clientX - scrub.current.lastX,
+        gain,
+        liveWidth(),
+        durationMs,
+      ),
+      lastX: event.clientX,
+    };
+    setScrubMs(scrub.current.positionMs);
+    return scrub.current.positionMs;
+  };
 
   const handlers = {
     onPointerDown: (event: PointerEvent<HTMLDivElement>) => {
       if (!seekable || event.button !== 0) return;
       event.currentTarget.setPointerCapture(event.pointerId);
       setDragging(true);
-      onInput(positionOf(event));
+      // Pressing jumps to the pointer; only the drag after it is scaled.
+      const positionMs = positionFromOffset(offsetOf(event), liveWidth(), durationMs);
+      scrub.current = { positionMs, lastX: event.clientX };
+      setScrubMs(positionMs);
+      onInput(positionMs);
     },
     onPointerMove: (event: PointerEvent<HTMLDivElement>) => {
       const currentWidth = liveWidth();
       const nextHoverX = Math.min(currentWidth, Math.max(0, offsetOf(event)));
+      if (dragging) {
+        onInput(scrubTo(event));
+        return;
+      }
       setHoverX(nextHoverX);
       onHoverPositionChange?.(positionFromOffset(nextHoverX, currentWidth, durationMs));
-      if (dragging) onInput(positionOf(event));
     },
     onPointerUp: (event: PointerEvent<HTMLDivElement>) => {
       if (!dragging) return;
+      const positionMs = scrubTo(event);
       setDragging(false);
-      onCommit(positionOf(event));
+      setScrubMs(null);
+      onCommit(positionMs);
     },
-    onPointerCancel: () => setDragging(false),
+    onPointerCancel: () => {
+      setDragging(false);
+      setScrubMs(null);
+    },
     onPointerLeave: () => {
       setHoverX(null);
       onHoverPositionChange?.(null);
@@ -74,6 +109,14 @@ export function usePointerSeek({
     },
   };
 
-  const hoverMs = hoverX === null ? null : positionFromOffset(hoverX, liveWidth(), durationMs);
-  return { dragging, hoverX, hoverMs, handlers };
+  // While dragging, the marker shows where the scrub really is, not where the pointer is.
+  const shownX =
+    dragging && scrubMs !== null && durationMs > 0 ? (scrubMs / durationMs) * liveWidth() : hoverX;
+  const hoverMs =
+    dragging && scrubMs !== null
+      ? scrubMs
+      : hoverX === null
+        ? null
+        : positionFromOffset(hoverX, liveWidth(), durationMs);
+  return { dragging, hoverX: shownX, hoverMs, handlers };
 }

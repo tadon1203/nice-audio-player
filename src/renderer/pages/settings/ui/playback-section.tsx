@@ -8,6 +8,7 @@ import {
   useAudioOutputDevices,
 } from "@/renderer/entities/playback";
 import { useArtworkBackdrop } from "@/renderer/shared/lib/artwork-backdrop";
+import { useCalmMotion } from "@/renderer/shared/lib/calm-motion";
 import { SectionTitle } from "@/renderer/shared/ui/headings";
 import {
   Menu,
@@ -29,6 +30,7 @@ export function PlaybackSection() {
   const playback = usePlaybackActions();
   const path = usePlaybackSignalPath();
   const artworkBackdrop = useArtworkBackdrop();
+  const calmMotion = useCalmMotion();
   const [deviceMenuOpen, setDeviceMenuOpen] = useState(false);
   const devices = useAudioOutputDevices(deviceMenuOpen);
   const selected = selection.kind === "device" ? selection.deviceId : DEFAULT_DEVICE;
@@ -105,6 +107,25 @@ export function PlaybackSection() {
           id="artwork-backdrop"
           checked={artworkBackdrop.enabled}
           onCheckedChange={(checked) => artworkBackdrop.setEnabled(checked)}
+          className="shrink-0"
+        />
+      </Field>
+
+      <Field
+        orientation="horizontal"
+        className="items-center justify-between gap-6 border-b border-border py-3 text-sm"
+      >
+        <FieldLabel htmlFor="calm-motion" className="flex-col items-start gap-0.5">
+          <span className="font-normal text-foreground">Calm motion</span>
+          <span className="max-w-prose text-sm leading-5 font-normal text-muted-foreground">
+            Only what marks the current position moves on its own: the Light stops breathing and
+            lyric characters stop lifting.
+          </span>
+        </FieldLabel>
+        <Switch
+          id="calm-motion"
+          checked={calmMotion.enabled}
+          onCheckedChange={(checked) => calmMotion.setEnabled(checked)}
           className="shrink-0"
         />
       </Field>

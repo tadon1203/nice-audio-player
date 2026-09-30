@@ -28,15 +28,38 @@ export function levelToUnit(level: number): number {
   return Math.max(0, 1 + db / -WAVEFORM_FLOOR_DB);
 }
 
-/** How far from the pointer (px) the bars are magnified while dragging, and the most they widen. */
-export const FISHEYE_RADIUS_PX = 48;
-export const FISHEYE_MAX_SCALE = 2.2;
+/** Vertical distance (px) from the bar within which a drag still moves the position 1:1. */
+export const SCRUB_FREE_PX = 24;
+/** Each further this many px of distance halves the drag's speed. */
+export const SCRUB_HALVING_PX = 48;
+/** The slowest a drag gets, however far the pointer is from the bar. */
+export const SCRUB_MIN_GAIN = 1 / 32;
+/** Holding Shift while dragging moves at this fraction of the speed. */
+export const SCRUB_SHIFT_GAIN = 0.1;
 
-/** Horizontal scale of a bar `distancePx` from the pointer: the peak at the pointer, 1 outside the radius. */
-export function fisheyeScale(distancePx: number): number {
-  const d = Math.abs(distancePx);
-  if (d >= FISHEYE_RADIUS_PX) return 1;
-  return 1 + (FISHEYE_MAX_SCALE - 1) * (1 - d / FISHEYE_RADIUS_PX);
+/**
+ * How much of the pointer's horizontal travel becomes playback travel while dragging. Right on
+ * the bar it is 1 (the position follows the pointer); moving the pointer away from the bar
+ * slows it, so a long track can be positioned finely by dragging low, and Shift slows it 10x.
+ * This is the real resolution of the drag, not a picture of it.
+ */
+export function scrubGain(distanceFromBarPx: number, fine: boolean): number {
+  const beyond = Math.max(0, Math.abs(distanceFromBarPx) - SCRUB_FREE_PX);
+  const gain = Math.max(SCRUB_MIN_GAIN, 0.5 ** (beyond / SCRUB_HALVING_PX));
+  return fine ? gain * SCRUB_SHIFT_GAIN : gain;
+}
+
+/** The position after moving `dxPx` from an anchor, at the given gain, clamped to the track. */
+export function scrubPosition(
+  anchorMs: number,
+  dxPx: number,
+  gain: number,
+  widthPx: number,
+  durationMs: number,
+): number {
+  if (widthPx <= 0 || durationMs <= 0) return 0;
+  const moved = (dxPx / widthPx) * durationMs * gain;
+  return Math.round(Math.min(durationMs, Math.max(0, anchorMs + moved)));
 }
 
 export function barCountForWidth(widthPx: number): number {

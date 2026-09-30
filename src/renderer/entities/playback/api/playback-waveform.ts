@@ -14,8 +14,8 @@ const waveformKeys = {
  * refetches the same query. Nothing is kept once the track is no longer loaded: a file can be
  * replaced at the same path, and the backend decides whether its remembered waveform still fits.
  *
- * `null` is cached forever (`staleTime`), so an answer that never gets its event — a missed push,
- * an analysis that failed, a snapshot that briefly disagreed with the renderer — would leave the
+ * `null` is cached forever (`staleTime`), so an answer that never gets its event (a missed push,
+ * an analysis that failed, a snapshot that briefly disagreed with the renderer) would leave the
  * bars blank for the whole track. Asking again is cheap (the backend dedupes queued work), so a
  * `null` is re-asked for a while.
  */

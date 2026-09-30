@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { usePlaybackActions } from "@/renderer/entities/playback";
 import { FactLine } from "@/renderer/shared/ui/fact-line";
 import {
   useElementScrollRestoration,
@@ -52,6 +53,7 @@ export function ArtistDetailsPage() {
   );
 
   const flip = useSortFlip(`${sortKey}:${direction}`);
+  const playback = usePlaybackActions();
   useScrollTopOnChange(viewport, `${sortKey}\u0000${direction}`);
 
   const setSort = (nextKey: LibraryArtistAlbumSortKey, nextDirection: LibrarySortDirection) =>
@@ -117,7 +119,14 @@ export function ArtistDetailsPage() {
                     key={`${album.key.albumArtist}\u0000${album.key.title}`}
                     flip={flip}
                   >
-                    <AlbumTile album={album} showArtist={false} parentArtist={artistName} />
+                    <AlbumTile
+                      album={album}
+                      showArtist={false}
+                      parentArtist={artistName}
+                      onPlay={(played) =>
+                        void playback.startPlayback({ kind: "album", key: played.key }, null)
+                      }
+                    />
                   </MediaGridItem>
                 ))}
               </MediaGrid>

@@ -1,5 +1,6 @@
+import { memo } from "react";
 import { cn } from "@/renderer/shared/lib/utils";
-import { fisheyeScale, levelToUnit } from "./waveform-model";
+import { levelToUnit } from "./waveform-model";
 
 /** Height of the flat line the bars grow out of, in px. */
 export const WAVEFORM_BASELINE = 2;
@@ -18,22 +19,20 @@ type WaveformBarsProps = {
   /** Draw the baseline on the box's centre line instead of its bottom edge, for a bar that
    * never grows bars, so text beside it can share that centre line. */
   centered?: boolean;
-  /** While dragging: the pointer's x in px and the bar's width in px, to magnify the bars around it. */
-  fisheye?: { x: number; width: number } | null;
 };
 
 /**
  * The drawing only: a baseline, and bars growing upward from it, each an RMS level on a dB scale.
  * Colour comes from the caller
- * (`currentColor`), so one instance serves the played and the unplayed layer.
+ * (`currentColor`), so one instance serves the played and the unplayed layer. Memoised: the
+ * seek bar re-renders with each position report, the bars only when they change.
  */
-export function WaveformBars({
+export const WaveformBars = memo(function WaveformBars({
   bars,
   height,
   grown,
   sweep,
   centered = false,
-  fisheye = null,
 }: WaveformBarsProps) {
   return (
     <>
@@ -54,11 +53,6 @@ export function WaveformBars({
         >
           <g fill="currentColor">
             {bars.map((level, index) => {
-              // Only bars near the pointer get a scale, so hundreds of bars are not restyled.
-              const scaleX =
-                fisheye === null
-                  ? 1
-                  : fisheyeScale(((index + 0.5) / bars.length) * fisheye.width - fisheye.x);
               const barHeight = Math.max(WAVEFORM_BASELINE, levelToUnit(level) * (height - 2));
               return (
                 <rect
@@ -71,9 +65,7 @@ export function WaveformBars({
                   style={{
                     transformBox: "fill-box",
                     transformOrigin: "50% 100%",
-                    transform: `scaleY(${grown ? 1 : WAVEFORM_BASELINE / barHeight})${scaleX === 1 ? "" : ` scaleX(${scaleX})`}`,
-                    // The magnifier follows the pointer 1:1, without the growth easing.
-                    transition: fisheye === null ? undefined : "none",
+                    transform: `scaleY(${grown ? 1 : WAVEFORM_BASELINE / barHeight})`,
                     transitionDelay: sweep ? `${(index / bars.length) * SWEEP_MS}ms` : undefined,
                   }}
                 />
@@ -84,4 +76,4 @@ export function WaveformBars({
       ) : null}
     </>
   );
-}
+});

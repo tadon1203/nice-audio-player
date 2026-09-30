@@ -111,6 +111,8 @@ pub(super) struct PlaybackWorker {
     next_output_stream_id: u64,
     next_snapshot_revision: u64,
     next_queue_revision: u64,
+    /// Completed seeks; published with the session so the UI can tell a seek from a tick.
+    seek_revision: u64,
     /// The last track that reached the output, kept so a stopped player can still name it.
     pub loaded_item: Option<PlaybackItem>,
     pub queue: PlaybackQueue,
@@ -146,6 +148,7 @@ impl PlaybackWorker {
             next_output_stream_id: 0,
             next_snapshot_revision: 0,
             next_queue_revision: 0,
+            seek_revision: 0,
             loaded_item: None,
             queue,
             rng: StdRng::from_rng(&mut rand::rng()),
@@ -221,6 +224,19 @@ impl PlaybackWorker {
                 }
                 Ok(PlaybackCommand::MoveQueueItem { id, to, reply }) => {
                     let result = self.edit_queue(|queue| queue.move_upcoming(&id, to));
+                    let _ = reply.send(result.map(|changed| self.queue_changed(changed)));
+                }
+                Ok(PlaybackCommand::PlayQueueItem { id, reply }) => {
+                    self.skipped_in_a_row = 0;
+                    match self.queue.jump_to(&id) {
+                        Ok(()) => self.start_current(reply, false),
+                        Err(_) => {
+                            let _ = reply.send(Err(PlaybackServiceError::QueueItemNotFound));
+                        }
+                    }
+                }
+                Ok(PlaybackCommand::Enqueue { items, next, reply }) => {
+                    let result = self.edit_queue(|queue| queue.enqueue(items, next).map(|()| true));
                     let _ = reply.send(result.map(|changed| self.queue_changed(changed)));
                 }
                 Ok(PlaybackCommand::ClearQueue { reply }) => {
@@ -806,6 +822,7 @@ impl PlaybackWorker {
             last_position_publish: Instant::now(),
             decoder_worker: pending.decode_pipeline.into_worker(),
         });
+        self.seek_revision = self.seek_revision.saturating_add(1);
         let snapshot = if was_playing {
             self.playing_snapshot(
                 pending.session_id.to_string(),
@@ -1164,6 +1181,7 @@ impl PlaybackWorker {
             item: active.item.clone(),
             playback_id,
             position_ms,
+            seek_revision: self.seek_revision,
             duration_ms,
             output_device: AudioOutputDeviceIdentity {
                 id: active.output_config.device_id.clone(),

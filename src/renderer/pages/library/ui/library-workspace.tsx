@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { useElementScrollRestoration } from "@tanstack/react-router";
+import { useEffect, useState, type ReactNode } from "react";
+import { Link, useElementScrollRestoration } from "@tanstack/react-router";
 import { libraryCommandErrorMessage } from "@/renderer/entities/library";
 import { formatCount } from "@/renderer/shared/lib/format";
 import { useScrollTopOnChange } from "@/renderer/shared/lib/use-scroll-top-on-change";
@@ -9,7 +9,7 @@ import { WorkspaceScroll } from "@/renderer/shared/ui/workspace-scroll";
 import {
   EmptyStatus,
   ErrorAlert,
-  LoadMoreButton,
+  LoadMoreSentinel,
   LoadingStatus,
 } from "@/renderer/shared/ui/workspace-status";
 import type { LibrarySortDirection } from "@/shared/ipc";
@@ -28,6 +28,8 @@ export type LibraryScroll = {
   /** `null` until the scroll region has mounted. */
   viewport: HTMLDivElement | null;
   initialOffset: number | undefined;
+  /** The list reports the index of its first visible item here (for the scroll index). */
+  onTopIndexChange: (index: number) => void;
 };
 
 /**
@@ -62,7 +64,7 @@ export function LibraryWorkspace<Item, Key extends string>({
   catalog: LibraryCatalogState<Item>;
   /**
    * The index key of an item (a letter or a year) for the big label shown while scrolling.
-   * Needs items rendered as `MediaGridItem`s with their `index`.
+   * The list must report its first visible item through `scroll.onTopIndexChange`.
    */
   indexFor?: (item: Item) => string;
   children: (items: Item[], scroll: LibraryScroll) => ReactNode;
@@ -72,8 +74,10 @@ export function LibraryWorkspace<Item, Key extends string>({
   const scrollEntry = useElementScrollRestoration({ id: scrollRestorationId });
   useScrollTopOnChange(viewport, stateKey);
   const { statusQuery, statusMessage, query, viewState } = catalog;
+  const [topIndex, setTopIndex] = useState(0);
   const scrollIndex = useScrollIndex(
     viewport,
+    topIndex,
     indexFor === undefined
       ? null
       : (i) => {
@@ -122,17 +126,30 @@ export function LibraryWorkspace<Item, Key extends string>({
 
           {viewState === "empty" ? (
             <EmptyStatus>
-              {filter === "" ? `No ${meta.plural} in your library.` : `No results for “${filter}”.`}
+              {filter === "" ? (
+                <>
+                  No {meta.plural} in your library.{" "}
+                  <Link to="/settings" className="text-foreground underline underline-offset-4">
+                    Add a music folder
+                  </Link>
+                </>
+              ) : (
+                `No results for “${filter}”.`
+              )}
             </EmptyStatus>
           ) : null}
 
           {viewState === "content" ? (
             <>
-              {children(query.items, { viewport, initialOffset: scrollEntry?.scrollY })}
+              {children(query.items, {
+                viewport,
+                initialOffset: scrollEntry?.scrollY,
+                onTopIndexChange: setTopIndex,
+              })}
               {query.hasNextPage ? (
-                <LoadMoreButton
+                <LoadMoreSentinel
                   pending={query.isFetchingNextPage}
-                  onClick={() => void query.fetchNextPage()}
+                  onLoadMore={() => void query.fetchNextPage()}
                 />
               ) : null}
             </>
@@ -147,57 +164,32 @@ export function LibraryWorkspace<Item, Key extends string>({
 const INDEX_HOLD_MS = 800;
 
 /**
- * Follows a scroll region and reports the index label of the first item near its top
- * (found from the `data-index` of the list item under a point), and whether it is being
- * scrolled. Sampled once per frame.
+ * The scroll index label for the item at `topIndex` (reported by the list itself, so nothing
+ * is read back from the DOM), and whether the region is being scrolled: it shows while
+ * scrolling and for a moment after.
  */
 function useScrollIndex(
   viewport: HTMLElement | null,
+  topIndex: number,
   labelAt: ((index: number) => string | null) | null,
 ) {
-  const [state, setState] = useState<{ label: string | null; visible: boolean }>({
-    label: null,
-    visible: false,
-  });
-
-  // Read through a ref so a new closure each render does not restart the listener (and its timer).
-  const latest = useRef(labelAt);
-  latest.current = labelAt;
+  const [visible, setVisible] = useState(false);
   const enabled = labelAt !== null;
 
   useEffect(() => {
     if (viewport === null || !enabled) return;
-    let frame = 0;
     let hold: ReturnType<typeof setTimeout> | undefined;
-    const sample = () => {
-      frame = 0;
-      const box = viewport.getBoundingClientRect();
-      let label: string | null = null;
-      for (const offset of [16, 48, 96, 160]) {
-        const hit = document.elementFromPoint(box.left + 64, box.top + offset);
-        const index = hit?.closest<HTMLElement>("li[data-index]")?.dataset.index;
-        if (index !== undefined) {
-          label = latest.current?.(Number(index)) ?? null;
-          break;
-        }
-      }
-      setState((current) => ({ label: label ?? current.label, visible: true }));
-      clearTimeout(hold);
-      hold = setTimeout(
-        () => setState((current) => ({ ...current, visible: false })),
-        INDEX_HOLD_MS,
-      );
-    };
     const onScroll = () => {
-      if (frame === 0) frame = requestAnimationFrame(sample);
+      setVisible(true);
+      clearTimeout(hold);
+      hold = setTimeout(() => setVisible(false), INDEX_HOLD_MS);
     };
     viewport.addEventListener("scroll", onScroll, { passive: true });
     return () => {
       viewport.removeEventListener("scroll", onScroll);
-      cancelAnimationFrame(frame);
       clearTimeout(hold);
     };
   }, [viewport, enabled]);
 
-  return state;
+  return { label: labelAt?.(topIndex) ?? null, visible };
 }

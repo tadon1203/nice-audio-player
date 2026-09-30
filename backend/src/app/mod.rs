@@ -5,7 +5,7 @@ pub mod playback_context;
 use crate::{
     activity::ApplicationActivityService,
     audio::{
-        playback::{PlaybackService, PlaybackSnapshot},
+        playback::{PlaybackQueueSnapshot, PlaybackService, PlaybackSnapshot},
         waveform::{PlaybackWaveform, WaveformService},
     },
     events::SharedEventSink,
@@ -105,6 +105,22 @@ impl BackendApp {
             let (items, start_index) =
                 playback_context::resolve(&library, &context, start_track_id.as_deref())?;
             Ok(playback.start(items, start_index)?)
+        })
+        .await
+        .map_err(|_| StartPlaybackError::TaskFailed)?
+    }
+
+    /// Adds a library track to the queue: right after the current one (`next`) or at the end.
+    pub async fn enqueue_track(
+        &self,
+        track_id: String,
+        next: bool,
+    ) -> Result<PlaybackQueueSnapshot, StartPlaybackError> {
+        let library = self.library.handle();
+        let playback = self.playback.handle();
+        tokio::task::spawn_blocking(move || {
+            let item = playback_context::resolve_track(&library, &track_id)?;
+            Ok(playback.enqueue(vec![item], next)?)
         })
         .await
         .map_err(|_| StartPlaybackError::TaskFailed)?

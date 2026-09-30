@@ -55,7 +55,7 @@ test("plays tracks and operates the persistent seek, transport, volume, and tech
     .toBeGreaterThan(beforeSeek);
 
   const volume = page.getByRole("slider", { name: "Volume" }).last();
-  await expect(volume).toHaveAttribute("aria-valuetext", "72 percent");
+  await expect(volume).toHaveAttribute("aria-valuetext", /^−\d+(\.\d)? dB$/);
   const volumeBox = await page.locator('[data-region="volume-slider"]').boundingBox();
   expect(volumeBox).not.toBeNull();
   await page.mouse.click(
@@ -64,7 +64,8 @@ test("plays tracks and operates the persistent seek, transport, volume, and tech
   );
   await expect
     .poll(async () => Number(await volume.getAttribute("aria-valuenow")))
-    .toBeCloseTo(0.42, 1);
+    // The slider runs in whole decibels from silence (0) to 0 dB (60).
+    .toBeCloseTo(25, 0);
   await page.getByRole("button", { name: "Mute", exact: true }).click();
   await expect(page.getByRole("button", { name: "Unmute", exact: true })).toBeVisible();
   await volume.focus();

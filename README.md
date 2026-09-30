@@ -5,7 +5,7 @@ A local-first Windows desktop music player focused on reliable playback and a ca
 ## Documentation
 
 - [Requirements](./docs/requirements.md) — accepted product behavior
-- [Design](./DESIGN.md) — visual and interaction system
+- [Design](./DESIGN.md) — UI principles
 - [Architecture](./docs/architecture.md) — Tauri and Rust boundaries and ownership
 - [Development Philosophy](./PHILOSOPHY.md) — development principles
 - [Contributing](./CONTRIBUTING.md) — engineering rules

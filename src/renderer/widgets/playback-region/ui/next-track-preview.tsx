@@ -3,6 +3,7 @@ import {
   usePlaybackItem,
   usePlaybackPosition,
   usePlaybackQueue,
+  usePlaybackTransport,
 } from "@/renderer/entities/playback";
 import { cn } from "@/renderer/shared/lib/utils";
 import { Artwork } from "@/renderer/shared/ui/artwork";
@@ -21,11 +22,13 @@ export function NextTrackPreview({ className }: { className?: string }) {
   const item = usePlaybackItem();
   const { queue, repeatMode } = usePlaybackQueue();
   const { positionMs, durationMs } = usePlaybackPosition();
+  const playing = usePlaybackTransport().status === "playing";
   const transition = useMotionTransition("smallMove");
   const next = queue?.upcoming[0] ?? null;
   const remaining = durationMs === null ? Infinity : durationMs - positionMs;
   const show =
     next !== null &&
+    playing &&
     repeatMode !== "one" &&
     remaining > 0 &&
     remaining <= PREVIEW_MS &&

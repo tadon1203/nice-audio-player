@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { m, useTransform } from "motion/react";
+import { m, useMotionValue, useTransform, type MotionValue } from "motion/react";
 import { cn } from "@/renderer/shared/lib/utils";
 import { formatDuration } from "@/renderer/shared/lib/format";
-import { useInterpolatedPosition } from "@/renderer/shared/ui/motion";
 import { RollingNumber } from "@/renderer/shared/ui/rolling-number";
 import { WaveformBars } from "./waveform-bars";
 import { usePointerSeek } from "./use-pointer-seek";
@@ -16,10 +15,14 @@ type WaveformSeekProps = {
   /** The playhead tick and hover guideline. Off for the dock's plain bar, where the fill edge
    * already marks the position and a second line would be redundant. */
   showPlayhead?: boolean;
+  /** The position to print and to announce, in ms. Changes a few times a second. */
   valueMs: number;
   durationMs: number | null;
-  /** Whether the position is advancing; the fill and playhead run on the clock while it is. */
-  playing: boolean;
+  /**
+   * The position to draw, in ms: a motion value that moves every frame while playing (the
+   * playback clock), so the fill and playhead advance without this component re-rendering.
+   */
+  position: MotionValue<number>;
   disabled: boolean;
   onInput: (positionMs: number) => void;
   onCommit: (positionMs: number) => void;
@@ -50,7 +53,7 @@ export function WaveformSeek({
   showPlayhead = true,
   valueMs,
   durationMs,
-  playing,
+  position: clock,
   disabled,
   onInput,
   onCommit,
@@ -78,19 +81,15 @@ export function WaveformSeek({
     onHoverPositionChange,
   });
 
-  // Fill and playhead follow a per-frame estimate of the position, bound to styles so the
-  // component does not re-render every frame. While dragging they track the pointer 1:1.
-  const position = useInterpolatedPosition({
-    positionMs: valueMs,
-    durationMs,
-    playing,
-    immediate: pointer.dragging,
+  // Fill and playhead follow `clock`, bound to styles so this does not re-render every frame.
+  // While dragging they follow the pointer instead (`valueMs` is then the preview position).
+  const preview = useMotionValue(valueMs);
+  useEffect(() => preview.set(valueMs), [preview, valueMs]);
+  const dragging = pointer.dragging;
+  const progress = useTransform(() => {
+    const position = dragging ? preview.get() : clock.get();
+    return duration > 0 ? Math.min(1, Math.max(0, position / duration)) : 0;
   });
-  const durationRef = useRef(duration);
-  durationRef.current = duration;
-  const progress = useTransform(() =>
-    durationRef.current > 0 ? Math.min(1, Math.max(0, position.get() / durationRef.current)) : 0,
-  );
   const clipPath = useTransform(() => `inset(0 ${(1 - progress.get()) * 100}% 0 0)`);
   const playheadLeft = useTransform(() => `${progress.get() * 100}%`);
 
@@ -104,10 +103,6 @@ export function WaveformSeek({
     setWidth(element.getBoundingClientRect().width);
     return () => observer.disconnect();
   }, []);
-
-  // While dragging, the bars around the pointer widen (a magnifier for fine seeking).
-  const fisheye =
-    pointer.dragging && pointer.hoverX !== null && !lineOnly ? { x: pointer.hoverX, width } : null;
 
   const hasPeaks = rms !== null && rms.length > 0;
   // The bars mount flat on the baseline and grow one frame later, so the growth can transition.
@@ -161,7 +156,6 @@ export function WaveformSeek({
           grown={grown}
           sweep={sweepBars}
           centered={lineOnly}
-          fisheye={fisheye}
         />
       </div>
       <m.div
@@ -175,7 +169,6 @@ export function WaveformSeek({
           grown={grown}
           sweep={sweepBars}
           centered={lineOnly}
-          fisheye={fisheye}
         />
       </m.div>
       {activeSpan !== null ? (

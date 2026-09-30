@@ -98,11 +98,16 @@ test("sorts tracks, disables missing files, and loads more rows", async ({ page 
     "descending",
   );
 
-  await page.getByRole("button", { name: "Load more" }).click();
-  await page.locator('[data-slot="scroll-area-viewport"]').evaluate((element) => {
-    element.scrollTop = element.scrollHeight;
-  });
-  await expect(table.getByRole("row", { name: /Track 080/ })).toBeVisible();
+  // Reaching the end of the list loads the next page by itself.
+  const viewport = page.locator('[data-slot="scroll-area-viewport"]');
+  await expect
+    .poll(async () => {
+      await viewport.evaluate((element) => {
+        element.scrollTop = element.scrollHeight;
+      });
+      return table.getByRole("row", { name: /Track 080/ }).count();
+    })
+    .toBe(1);
 });
 
 test("restores the virtual track container after switching library presentations", async ({
@@ -110,8 +115,6 @@ test("restores the virtual track container after switching library presentations
 }) => {
   await page.setViewportSize({ width: 1360, height: 900 });
   await page.goto("/library/tracks");
-  await page.getByRole("button", { name: "Load more" }).click();
-  await page.getByRole("button", { name: "Load more" }).click();
   const scrollRegion = page.locator('[data-scroll-restoration-id="library-tracks"]');
   await scrollRegion.evaluate((element) => {
     element.scrollTop = 1_600;

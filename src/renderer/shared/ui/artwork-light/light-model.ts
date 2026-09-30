@@ -25,11 +25,6 @@ export function breathingOpacity(strength: LightStrength, level: number): number
   return LIGHT.strength[strength] * (0.85 + 0.15 * clamp01(level));
 }
 
-/** The extra scale a breathing Light swells by (on top of its own), 1 at silence. */
-export function breathingScale(level: number): number {
-  return 1 + 0.03 * clamp01(level);
-}
-
 /** OKLCH lightness of the page background and of the three inks (see `styles.css`). */
 export const INK = { background: 0.145, one: 0.985, two: 0.708, three: 0.6 } as const;
 

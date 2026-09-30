@@ -1,7 +1,7 @@
 import { m, useTransform } from "motion/react";
-import { usePlaybackPosition, usePlaybackTransport } from "@/renderer/entities/playback";
+import { usePlaybackClock, usePlaybackDuration } from "@/renderer/entities/playback";
 import { cn } from "@/renderer/shared/lib/utils";
-import { useInterpolatedPosition, useMotionTransition } from "@/renderer/shared/ui/motion";
+import { useMotionTransition } from "@/renderer/shared/ui/motion";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/renderer/shared/ui/shadcn/tooltip";
 import { segmentFill, segmentStarts, segmentStates } from "./album-strip-model";
 
@@ -51,9 +51,11 @@ export function AlbumStrip({
                   type="button"
                   aria-label={track.title}
                   aria-current={state === "current" ? "true" : undefined}
+                  // Pointer-only: the track table below is the keyboard path to the same tracks.
+                  tabIndex={-1}
                   disabled={!playable}
                   onClick={() => onPlayTrack(track.id)}
-                  className="group/segment relative h-full min-w-0.5 cursor-pointer overflow-clip rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default"
+                  className="group/segment relative h-full min-w-0.5 cursor-pointer rounded-full outline-none before:absolute before:inset-x-0 before:-inset-y-3 before:content-[''] disabled:cursor-default"
                   style={{ flexGrow: track.durationMs ?? 0 }}
                 />
               }
@@ -61,7 +63,7 @@ export function AlbumStrip({
               <m.span
                 aria-hidden="true"
                 className={cn(
-                  "absolute inset-0 origin-left rounded-full transition-colors",
+                  "absolute inset-0 origin-left overflow-clip rounded-full transition-colors",
                   state === "past" ? PAST : IDLE,
                   state === "future" && "group-hover/segment:bg-foreground/60",
                 )}
@@ -81,10 +83,8 @@ export function AlbumStrip({
 
 /** The only part that reads the position, so the strip and page do not re-render with time. */
 function SegmentFill({ durationMs: rowDurationMs }: { durationMs: number | null }) {
-  const { positionMs, durationMs } = usePlaybackPosition();
-  const playing = usePlaybackTransport().status === "playing";
-  const total = durationMs ?? rowDurationMs;
-  const position = useInterpolatedPosition({ positionMs, durationMs: total, playing });
+  const total = usePlaybackDuration() ?? rowDurationMs;
+  const position = usePlaybackClock();
   const scaleX = useTransform(position, (p) => segmentFill(p, total));
   return (
     <m.span

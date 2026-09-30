@@ -90,6 +90,7 @@ export const libraryQueryKeys = {
     direction: LibrarySortDirection,
   ) => [...data, "artist", "albums", key.name, sortKey, direction] as const,
   track: (trackId: string | null) => [...data, "track", trackId] as const,
+  trackProperties: (trackId: string | null) => [...data, "track", "properties", trackId] as const,
   /** Content-addressed, so it is never invalidated with the catalog. */
   accent: (contentHash: string | null) => ["library", "accent", contentHash] as const,
 };
@@ -117,13 +118,17 @@ export const libraryQueryOptions = {
       queryFn: ({ pageParam }) => listCatalogPage(request, pageParam),
       getNextPageParam: (page: CatalogPage) => page.nextCursor ?? undefined,
       enabled,
-      gcTime: Infinity,
     }),
   track: (trackId: string | null) =>
     queryOptions({
       queryKey: libraryQueryKeys.track(trackId),
       queryFn: trackId === null ? skipToken : () => nativeApi().getLibraryTrack(trackId),
       gcTime: Infinity,
+    }),
+  trackProperties: (trackId: string | null) =>
+    queryOptions({
+      queryKey: libraryQueryKeys.trackProperties(trackId),
+      queryFn: trackId === null ? skipToken : () => nativeApi().getLibraryTrackProperties(trackId),
     }),
 };
 
@@ -234,6 +239,11 @@ export function useArtistAlbums(
 
 export function useLibraryTrack(trackId: string | null) {
   return useQuery(libraryQueryOptions.track(trackId));
+}
+
+/** Tags, audio format and file location of a track, read when the Properties view opens. */
+export function useLibraryTrackProperties(trackId: string | null) {
+  return useQuery(libraryQueryOptions.trackProperties(trackId));
 }
 
 /** Representative artwork color as `#rrggbb`, for backgrounds only. */

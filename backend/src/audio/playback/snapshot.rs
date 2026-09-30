@@ -6,6 +6,7 @@ use crate::audio::devices::{AudioOutputDeviceIdentity, AudioOutputSelection};
 use crate::audio::output_processing::{ChannelConversion, OutputProcessingPlan};
 use crate::audio::volume::VolumeState;
 use crate::media::artwork::ArtworkRef;
+use std::sync::Arc;
 
 /// Fields every transport state carries.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, specta::Type)]
@@ -39,6 +40,9 @@ pub struct ActiveSession {
     pub item: PlaybackItem,
     pub playback_id: String,
     pub position_ms: u64,
+    /// Counts the seeks the player has completed. A change means the position jumped on
+    /// purpose, so a display can react to the jump instead of guessing it from the numbers.
+    pub seek_revision: u64,
     pub duration_ms: Option<u64>,
     pub output_device: AudioOutputDeviceIdentity,
     pub channel_conversion: PlaybackChannelConversion,
@@ -203,28 +207,87 @@ impl From<&PlaybackItem> for PlaybackQueueItem {
     }
 }
 
+/// How many upcoming items a snapshot carries; the rest are read a window at a time.
+pub const UPCOMING_IN_SNAPSHOT: usize = 200;
+/// How many already played items a snapshot carries (the most recent ones).
+pub const HISTORY_IN_SNAPSHOT: usize = 50;
+/// The most items one window read returns.
+pub const MAX_QUEUE_WINDOW: usize = 200;
+
+/// The whole queue in display form, kept on the backend so a snapshot can stay small.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct QueueLists {
+    upcoming: Vec<PlaybackQueueItem>,
+}
+
+/// The queue as the renderer mirrors it: the current item, the last few played, the first
+/// upcoming ones, and how many there are in all. Longer queues are read with `window`, so a
+/// library-sized queue never crosses the IPC boundary in one piece.
 #[derive(Debug, Clone, serde::Serialize, specta::Type, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct PlaybackQueueSnapshot {
     pub revision: u64,
     pub current: Option<PlaybackQueueItem>,
+    /// The most recently played items, oldest first.
+    pub history: Vec<PlaybackQueueItem>,
+    pub history_count: u32,
     pub upcoming: Vec<PlaybackQueueItem>,
+    pub upcoming_count: u32,
     pub repeat_mode: PlaybackRepeatMode,
     pub shuffle_enabled: bool,
+    #[serde(skip)]
+    #[specta(skip)]
+    lists: Arc<QueueLists>,
+}
+
+/// A slice of the upcoming list, tagged with the queue revision it was cut from.
+#[derive(Debug, Clone, serde::Serialize, specta::Type, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaybackQueueWindow {
+    pub revision: u64,
+    pub offset: u32,
+    pub items: Vec<PlaybackQueueItem>,
 }
 
 impl PlaybackQueueSnapshot {
     pub fn of(revision: u64, queue: &PlaybackQueue) -> Self {
+        let upcoming: Vec<PlaybackQueueItem> = queue
+            .upcoming()
+            .iter()
+            .map(PlaybackQueueItem::from)
+            .collect();
+        let history = queue.history();
         Self {
             revision,
             current: queue.current().map(PlaybackQueueItem::from),
-            upcoming: queue
-                .upcoming()
+            history: history[history.len().saturating_sub(HISTORY_IN_SNAPSHOT)..]
                 .iter()
                 .map(PlaybackQueueItem::from)
                 .collect(),
+            history_count: u32::try_from(history.len()).unwrap_or(u32::MAX),
+            upcoming: upcoming
+                .iter()
+                .take(UPCOMING_IN_SNAPSHOT)
+                .cloned()
+                .collect(),
+            upcoming_count: u32::try_from(upcoming.len()).unwrap_or(u32::MAX),
             repeat_mode: queue.repeat(),
             shuffle_enabled: queue.shuffle(),
+            lists: Arc::new(QueueLists { upcoming }),
+        }
+    }
+
+    /// Upcoming items from `offset`, at most `limit` (and never more than `MAX_QUEUE_WINDOW`).
+    pub fn window(&self, offset: usize, limit: usize) -> PlaybackQueueWindow {
+        let all = &self.lists.upcoming;
+        let start = offset.min(all.len());
+        let end = start
+            .saturating_add(limit.min(MAX_QUEUE_WINDOW))
+            .min(all.len());
+        PlaybackQueueWindow {
+            revision: self.revision,
+            offset: u32::try_from(start).unwrap_or(u32::MAX),
+            items: all[start..end].to_vec(),
         }
     }
 }

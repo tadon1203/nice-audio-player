@@ -8,6 +8,7 @@ pub fn builder() -> Builder<tauri::Wry> {
     Builder::<tauri::Wry>::new()
         .commands(collect_commands![
             commands::playback::get_playback_state,
+            commands::playback::get_playback_queue_window,
             commands::playback::get_playback_queue,
             commands::playback::start_playback,
             commands::playback::pause_playback,
@@ -23,6 +24,8 @@ pub fn builder() -> Builder<tauri::Wry> {
             commands::playback::set_audio_output_selection,
             commands::playback::remove_queue_item,
             commands::playback::move_queue_item,
+            commands::playback::play_queue_item,
+            commands::playback::enqueue_track,
             commands::playback::clear_queue,
             commands::playback::get_playback_waveform,
             commands::library::get_library_status,
@@ -41,6 +44,8 @@ pub fn builder() -> Builder<tauri::Wry> {
             commands::library::get_library_album_details,
             commands::library::list_library_album_tracks,
             commands::library::get_library_track,
+            commands::library::get_library_track_properties,
+            commands::library::reveal_library_track,
             commands::library::get_artwork_accent,
             commands::lyrics::get_track_lyrics,
             commands::settings::get_settings,

@@ -21,6 +21,8 @@ use crate::library::{
 pub enum PlaybackContext {
     /// An album in disc and track order.
     Album { key: LibraryAlbumKey },
+    /// Exactly these library tracks in this order: how a replaced queue is put back.
+    TrackIds { track_ids: Vec<String> },
     /// The tracks list as currently filtered and sorted.
     Tracks {
         search: Option<String>,
@@ -102,6 +104,9 @@ pub fn resolve(
         start_index,
     } = match context {
         PlaybackContext::Album { key } => library.playback_for_album(key, start_track_id),
+        PlaybackContext::TrackIds { track_ids } => {
+            library.playback_for_track_ids(track_ids, start_track_id)
+        }
         PlaybackContext::Tracks {
             search,
             sort_key,
@@ -116,6 +121,14 @@ pub fn resolve(
     Ok((tracks.into_iter().map(seed).collect(), start_index))
 }
 
+/// Reads one library track as a queue item. Blocking: call it off the async runtime.
+pub fn resolve_track(
+    library: &LibraryServiceHandle,
+    track_id: &str,
+) -> Result<PlaybackItemSeed, StartPlaybackError> {
+    Ok(seed(library.playback_for_track(track_id)?))
+}
+
 fn seed(track: PlayableTrack) -> PlaybackItemSeed {
     PlaybackItemSeed {
         track_id: Some(track.track_id),
@@ -126,5 +139,10 @@ fn seed(track: PlayableTrack) -> PlaybackItemSeed {
         album_artist: track.album_artist,
         artwork: track.artwork,
         duration_ms: track.duration_ms,
+        track_number: track.track_number,
+        disc_number: track.disc_number,
+        year: track.year,
+        album_key: track.album_key,
+        album_track_count: track.album_track_count,
     }
 }

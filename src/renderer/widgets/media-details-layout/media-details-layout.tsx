@@ -1,7 +1,7 @@
 import type { ReactNode, Ref } from "react";
 import { libraryCommandErrorMessage } from "@/renderer/entities/library";
 import { WorkspaceScroll } from "@/renderer/shared/ui/workspace-scroll";
-import { ErrorAlert, LoadMoreButton, LoadingStatus } from "@/renderer/shared/ui/workspace-status";
+import { ErrorAlert, LoadMoreSentinel, LoadingStatus } from "@/renderer/shared/ui/workspace-status";
 import type {
   MediaDetailsWorkspace,
   ReadyMediaDetailsWorkspace,
@@ -47,7 +47,7 @@ export function MediaDetailsLayout<Summary, Item>({
         <>
           {children(workspace)}
           {workspace.hasMore ? (
-            <LoadMoreButton pending={workspace.loadingMore} onClick={workspace.loadMore} />
+            <LoadMoreSentinel pending={workspace.loadingMore} onLoadMore={workspace.loadMore} />
           ) : null}
         </>
       )}

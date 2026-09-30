@@ -3,7 +3,8 @@ use backend::{
     audio::{
         devices::{list_output_devices, AudioDeviceListError, AudioOutputSelection},
         playback::{
-            PlaybackQueueSnapshot, PlaybackRepeatMode, PlaybackServiceError, PlaybackSnapshot,
+            PlaybackQueueSnapshot, PlaybackQueueWindow, PlaybackRepeatMode, PlaybackServiceError,
+            PlaybackSnapshot,
         },
         waveform::PlaybackWaveform,
     },
@@ -31,6 +32,22 @@ pub fn get_playback_state(state: tauri::State<'_, AppState>) -> PlaybackSnapshot
 #[specta::specta]
 pub fn get_playback_queue(state: tauri::State<'_, AppState>) -> PlaybackQueueSnapshot {
     state.backend.playback.queue_snapshot()
+}
+
+/// Upcoming queue items from `offset` (at most `limit`), for the parts of a long queue the
+/// snapshot does not carry.
+#[tauri::command]
+#[specta::specta]
+pub fn get_playback_queue_window(
+    offset: u32,
+    limit: u32,
+    state: tauri::State<'_, AppState>,
+) -> PlaybackQueueWindow {
+    state
+        .backend
+        .playback
+        .handle()
+        .queue_window(offset as usize, limit as usize)
 }
 
 /// Replaces the queue with `context` and plays from `start_track_id`, or from the context's
@@ -187,6 +204,29 @@ pub async fn move_queue_item(
 ) -> Result<PlaybackQueueSnapshot, PlaybackCommandError> {
     let handle = state.backend.playback.handle();
     blocking(move || handle.move_queue_item(id, to)).await
+}
+
+/// Makes an upcoming queue item current and plays it.
+#[tauri::command]
+#[specta::specta]
+pub async fn play_queue_item(
+    id: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<PlaybackSnapshot, PlaybackCommandError> {
+    let handle = state.backend.playback.handle();
+    blocking(move || handle.play_queue_item(id)).await
+}
+
+/// Adds a library track to the queue: right after the current one (`next`) or at the end.
+/// With nothing queued it starts playing.
+#[tauri::command]
+#[specta::specta]
+pub async fn enqueue_track(
+    track_id: String,
+    next: bool,
+    state: tauri::State<'_, AppState>,
+) -> Result<PlaybackQueueSnapshot, StartPlaybackError> {
+    state.backend.enqueue_track(track_id, next).await
 }
 
 #[tauri::command]

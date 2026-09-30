@@ -200,6 +200,50 @@ pub async fn get_library_track(
 
 #[tauri::command]
 #[specta::specta]
+pub async fn get_library_track_properties(
+    track_id: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<Option<backend::library::models::LibraryTrackProperties>, LibraryCommandError> {
+    let library = state.backend.library.handle();
+    tauri::async_runtime::spawn_blocking(move || library.track_properties(&track_id))
+        .await
+        .map_err(|_| LibraryCommandError::TaskFailed)?
+}
+
+/// Shows the track's file in Explorer, selected.
+#[tauri::command]
+#[specta::specta]
+pub async fn reveal_library_track(
+    track_id: String,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), LibraryCommandError> {
+    let library = state.backend.library.handle();
+    tauri::async_runtime::spawn_blocking(move || {
+        let path = library.track_file_path(&track_id)?;
+        reveal_in_file_manager(&path)
+    })
+    .await
+    .map_err(|_| LibraryCommandError::TaskFailed)?
+}
+
+#[cfg(windows)]
+fn reveal_in_file_manager(path: &str) -> Result<(), LibraryCommandError> {
+    use std::os::windows::process::CommandExt;
+    // Explorer parses its own command line: `/select,` and the quoted path go through verbatim.
+    std::process::Command::new("explorer.exe")
+        .raw_arg(format!("/select,\"{}\"", path.replace('/', "\\")))
+        .spawn()
+        .map(|_| ())
+        .map_err(|_| LibraryCommandError::TaskFailed)
+}
+
+#[cfg(not(windows))]
+fn reveal_in_file_manager(_path: &str) -> Result<(), LibraryCommandError> {
+    Err(LibraryCommandError::TaskFailed)
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn get_artwork_accent(
     content_hash: String,
     state: tauri::State<'_, AppState>,

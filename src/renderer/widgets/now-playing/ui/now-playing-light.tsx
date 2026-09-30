@@ -1,29 +1,30 @@
-import { useReducedMotion } from "motion/react";
 import {
   usePlaybackItem,
+  usePlaybackClock,
+  usePlaybackDuration,
   usePlaybackNavigation,
-  usePlaybackPosition,
   usePlaybackTransport,
   usePlaybackWaveform,
 } from "@/renderer/entities/playback";
 import { useLoudnessLevel } from "@/renderer/features/now-playing-transition";
 import { ArtworkLight } from "@/renderer/shared/ui/artwork-light";
-import { useInterpolatedPosition } from "@/renderer/shared/ui/motion";
+import { useMotionBudget } from "@/renderer/shared/ui/motion";
 
 /**
  * Now Playing's Light, which breathes with the track's loudness (never brighter than its
- * strength). It reads the position itself, so the rest of the layer does not re-render with
- * time. The breathing is off under reduced motion.
+ * strength). It follows the playback clock through motion values, so nothing re-renders with
+ * time. The breathing is off under calm or reduced motion, and then nothing here runs per frame.
  */
 export function NowPlayingLight() {
   const item = usePlaybackItem();
   const navigation = usePlaybackNavigation();
-  const { positionMs, durationMs } = usePlaybackPosition();
+  const durationMs = usePlaybackDuration();
   const playing = usePlaybackTransport().status === "playing";
-  const reduced = useReducedMotion() === true;
-  const peaks = usePlaybackWaveform(item?.file.path ?? null)?.peaks ?? null;
-  const position = useInterpolatedPosition({ positionMs, durationMs, playing });
-  const level = useLoudnessLevel(peaks, position, durationMs, playing);
+  // The Light breathes by itself, so only the full budget allows it.
+  const reduced = useMotionBudget() !== "full";
+  const rms = usePlaybackWaveform(item?.file.path ?? null)?.rms ?? null;
+  const position = usePlaybackClock(!reduced);
+  const level = useLoudnessLevel(rms, position, durationMs, playing, !reduced);
 
   return (
     <ArtworkLight

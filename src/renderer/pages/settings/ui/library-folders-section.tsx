@@ -32,6 +32,21 @@ import { Spinner } from "@/renderer/shared/ui/shadcn/spinner";
 import { EmptyStatus, ErrorAlert, LoadingStatus } from "@/renderer/shared/ui/workspace-status";
 import { RemoveLibraryRootDialog } from "./remove-library-root-dialog";
 
+/**
+ * How far a scan is, 0-100, when it can be known: a rescan finds about as many files as the
+ * last scan left. A first scan has nothing to compare with, so its bar just runs (`null`).
+ */
+function scanShare(scan: {
+  expectedCount: number;
+  discoveredCount: number;
+  inspectedCount: number;
+}): number | null {
+  if (scan.expectedCount > 0) {
+    return Math.min(99, Math.round((scan.discoveredCount / scan.expectedCount) * 100));
+  }
+  return scan.inspectedCount === 0 ? 0 : null;
+}
+
 function formatProgress(value: number | null, label: string): string {
   return `${formatNumber(value)} ${label}`;
 }
@@ -140,7 +155,12 @@ export function LibraryFoldersSection() {
           <div className="flex items-center gap-2">
             <span role="status" aria-live="polite" className="text-sm text-muted-foreground">
               {scanLabel(scan?.state)}
-              {scanProgress ? <span className="ml-3">{scanProgress}</span> : null}
+              {/* Counts change constantly; the live region announces state changes only. */}
+              {scanProgress ? (
+                <span aria-hidden="true" className="ml-3">
+                  {scanProgress}
+                </span>
+              ) : null}
             </span>
             {scanRunning ? (
               <Button
@@ -186,11 +206,7 @@ export function LibraryFoldersSection() {
             <ScanCount value={scan.indexedCount} label="indexed" />
             <ScanCount value={scan.failedCount} label="failed" />
           </div>
-          <Progress
-            className="mt-3"
-            value={scan.inspectedCount === 0 ? 0 : null}
-            aria-label="Scan progress"
-          />
+          <Progress className="mt-3" value={scanShare(scan)} aria-label="Scan progress" />
           {scan.currentRoot ? (
             <p className="mt-2 truncate text-sm">Current folder: {scan.currentRoot.path}</p>
           ) : null}

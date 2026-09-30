@@ -1,10 +1,10 @@
 import { Outlet, useRouterState } from "@tanstack/react-router";
-import { LyricsWaveformLinkProvider } from "@/renderer/features/lyrics-waveform-link";
 import { useNowPlaying } from "@/renderer/features/now-playing-transition";
 import { NowPlayingContent, NowPlayingLayer } from "@/renderer/widgets/now-playing";
 import { PlaybackRegion } from "@/renderer/widgets/playback-region";
 import { QueuePanel } from "@/renderer/widgets/queue-panel";
 import { ArtworkAccent } from "./artwork-accent";
+import { LyricsPrefetch } from "./lyrics-prefetch";
 import { Navigation } from "./navigation";
 import { TitleBar } from "./title-bar";
 import { usePlaybackShortcuts } from "./use-playback-shortcuts";
@@ -15,8 +15,9 @@ export function AppShell() {
   usePlaybackShortcuts();
 
   return (
-    <LyricsWaveformLinkProvider>
+    <>
       <ArtworkAccent />
+      <LyricsPrefetch />
       <div className="grid h-full min-h-0 min-w-0 grid-cols-[minmax(0,1fr)] grid-rows-[40px_minmax(0,1fr)_auto] bg-background md:grid-cols-[16rem_minmax(0,1fr)]">
         <TitleBar pathname={pathname} />
 
@@ -45,6 +46,6 @@ export function AppShell() {
 
         <QueuePanel />
       </div>
-    </LyricsWaveformLinkProvider>
+    </>
   );
 }

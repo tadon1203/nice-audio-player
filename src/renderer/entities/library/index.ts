@@ -43,6 +43,7 @@ export {
   useLibraryScan,
   useLibraryStatus,
   useLibraryTrack,
+  useLibraryTrackProperties,
   type LibraryCatalogItem,
   type LibraryCatalogRequest,
   type LibraryCollectionQuery,

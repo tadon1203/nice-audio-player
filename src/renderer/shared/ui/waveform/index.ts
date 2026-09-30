@@ -1,2 +1,2 @@
 export { WaveformSeek } from "./waveform-seek";
-export { nextSeekPosition } from "./waveform-model";
+export { levelToUnit, nextSeekPosition } from "./waveform-model";

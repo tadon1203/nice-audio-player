@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dropSlot, slotToIndex } from "./queue-drag";
+import { dropSlot, dropSlotForFixedRows, slotToIndex } from "./queue-drag";
 
 describe("dropSlot", () => {
   const midpoints = [10, 30, 50];
@@ -30,5 +30,15 @@ describe("slotToIndex", () => {
   it("returns the same index for the slots on either side of the item", () => {
     expect(slotToIndex(1, 1)).toBe(1);
     expect(slotToIndex(2, 1)).toBe(1);
+  });
+});
+
+describe("dropSlotForFixedRows", () => {
+  it("agrees with dropSlot over the same rows", () => {
+    const height = 20;
+    const midpoints = [0, 1, 2, 3].map((i) => (i + 0.5) * height);
+    for (const y of [-5, 0, 9, 11, 29, 31, 55, 70, 79, 200]) {
+      expect(dropSlotForFixedRows(y, height, 4)).toBe(dropSlot(midpoints, y));
+    }
   });
 });

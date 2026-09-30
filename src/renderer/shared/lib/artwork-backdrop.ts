@@ -15,7 +15,7 @@ export const useArtworkBackdrop = create<ArtworkBackdropState>((set) => ({
   setEnabled: (enabled) => {
     set({ enabled });
     void getNativeApiOrNull()
-      ?.updateSettings({ appearance: { artworkBackdrop: enabled } })
+      ?.updateSettings({ appearance: { artworkBackdrop: enabled, calmMotion: null } })
       .catch(() => undefined);
   },
 }));

@@ -3,7 +3,10 @@ import { m, useAnimationControls } from "motion/react";
 import { List, Music2, Volume2, VolumeX } from "lucide-react";
 import {
   formatVolumeDb,
+  sliderToVolume,
   stepVolumeDb,
+  VOLUME_SLIDER_MAX,
+  volumeToSlider,
   usePlaybackActions,
   usePlaybackOutput,
   usePlaybackTransport,
@@ -22,11 +25,11 @@ import { Slider } from "@/renderer/shared/ui/shadcn/slider";
  * transport's centre line.
  */
 export function DockVolume() {
-  const { toggle: onToggleNowPlaying } = useNowPlaying();
+  const { isOpen: nowPlayingOpen, toggle: onToggleNowPlaying } = useNowPlaying();
   const transport = usePlaybackTransport();
   const output = usePlaybackOutput();
   const playback = usePlaybackActions();
-  const { toggle: toggleQueue } = useQueuePanel();
+  const { isOpen: queueOpen, toggle: toggleQueue } = useQueuePanel();
   const ready = transport.connection === "ready";
   // Dragging the slider tracks the pointer 1:1; only the wheel and mute roll the readout.
   const [dragging, setDragging] = useState(false);
@@ -58,8 +61,9 @@ export function DockVolume() {
         type="button"
         size="icon-lg"
         variant="ghost"
-        aria-label="Lyrics"
-        title="Lyrics"
+        aria-label="Now Playing"
+        title="Now Playing"
+        aria-pressed={nowPlayingOpen}
         disabled={!transport.active}
         onClick={onToggleNowPlaying}
         className="max-md:hidden"
@@ -72,6 +76,7 @@ export function DockVolume() {
         variant="ghost"
         aria-label="Queue"
         title="Queue"
+        aria-pressed={queueOpen}
         onClick={toggleQueue}
         className="max-md:hidden"
       >
@@ -105,7 +110,7 @@ export function DockVolume() {
       >
         <VolumeSlider
           value={output.volume}
-          valueText={output.muted ? "Muted" : `${Math.round(output.volume * 100)} percent`}
+          valueText={output.muted ? "Muted" : formatVolumeDb(output.volume, false)}
           disabled={!ready}
           onInput={setVolume}
         />
@@ -142,13 +147,16 @@ function VolumeSlider({
     <Slider
       className="w-full"
       min={0}
-      max={1}
-      step={0.01}
-      value={[value]}
+      max={VOLUME_SLIDER_MAX}
+      step={1}
+      value={[volumeToSlider(value)]}
       disabled={disabled}
       getAriaLabel={() => "Volume"}
       getAriaValueText={() => valueText}
-      onValueChange={(next) => onInput(typeof next === "number" ? next : (next[0] ?? value))}
+      onValueChange={(next) => {
+        const position = typeof next === "number" ? next : next[0];
+        if (position !== undefined) onInput(sliderToVolume(position));
+      }}
     />
   );
 }

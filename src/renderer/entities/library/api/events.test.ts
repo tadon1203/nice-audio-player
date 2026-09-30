@@ -8,6 +8,7 @@ function scanEvent(state: LibraryScanState): AppEvent {
   const payload: LibraryScanSnapshot = {
     state,
     currentRoot: null,
+    expectedCount: 0,
     discoveredCount: 0,
     inspectedCount: 0,
     indexedCount: 0,

@@ -29,6 +29,11 @@ const item = (id: string): PlaybackItem => ({
   albumArtist: null,
   artwork: null,
   durationMs: 60_000,
+  trackNumber: null,
+  discNumber: null,
+  year: null,
+  albumKey: null,
+  albumTrackCount: null,
 });
 
 const stopped = (revision: number, id: string | null): PlaybackSnapshot => ({
@@ -44,6 +49,7 @@ const playing = (revision: number, id: string, positionMs: number): PlaybackSnap
     item: item(id),
     playbackId: "1",
     positionMs,
+    seekRevision: 0,
     durationMs: 60_000,
     outputDevice: { id: "speakers", name: "Speakers" },
     channelConversion: "none",
@@ -66,7 +72,10 @@ const queueItem = (id: string): PlaybackQueueItem => ({
 const queue = (revision: number): PlaybackQueueSnapshot => ({
   revision,
   current: null,
+  history: [],
+  historyCount: 0,
   upcoming: [],
+  upcomingCount: 0,
   repeatMode: "off",
   shuffleEnabled: false,
 });
@@ -101,7 +110,10 @@ describe("playback session ordering", () => {
     controller.acceptQueue({
       revision: 2,
       current: queueItem("track-1"),
+      history: [],
+      historyCount: 0,
       upcoming: [],
+      upcomingCount: 0,
       repeatMode: "off",
       shuffleEnabled: false,
     });

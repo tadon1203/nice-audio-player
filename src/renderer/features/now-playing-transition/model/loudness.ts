@@ -1,17 +1,21 @@
-/** The loudness (0-1) at `positionMs`, from the waveform's peaks (0-255). 0 when unknown. */
+import { energyAt, trackEnergy } from "@/renderer/entities/playback";
+
+/**
+ * The loudness (0-1) at `positionMs`, from the waveform's RMS buckets (0-255), on the track
+ * energy scale the waveform bars share (see `trackEnergy`). 0 when unknown.
+ */
 export function levelAt(
-  peaks: readonly number[] | null,
+  rms: readonly number[] | null,
   positionMs: number,
   durationMs: number | null,
 ): number {
-  if (peaks === null || peaks.length === 0 || durationMs === null || durationMs <= 0) return 0;
-  const share = Math.min(1, Math.max(0, positionMs / durationMs));
-  const index = Math.min(peaks.length - 1, Math.floor(share * peaks.length));
-  return (peaks[index] ?? 0) / 255;
+  if (durationMs === null || durationMs <= 0) return 0;
+  return energyAt(trackEnergy(rms), positionMs / durationMs);
 }
 
-export const ATTACK_MS = 80;
-export const RELEASE_MS = 400;
+/** Slow on purpose: the Light follows the passage (a chorus brightening it), not each beat. */
+export const ATTACK_MS = 700;
+export const RELEASE_MS = 1_800;
 
 /** One step of a one-pole low-pass: quick to rise (attack), slow to fall (release). */
 export function smoothLevel(current: number, target: number, dtMs: number): number {

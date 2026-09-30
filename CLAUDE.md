@@ -3,7 +3,7 @@
 Personal project. Keep things simple and just get it done.
 
 - [docs/requirements.md](./docs/requirements.md) — product behavior
-- [DESIGN.md](./DESIGN.md) — visual rules
+- [DESIGN.md](./DESIGN.md) — UI principles (no implementation details)
 - [docs/architecture.md](./docs/architecture.md) — structure and boundaries
 - [PHILOSOPHY.md](./PHILOSOPHY.md) — principles
 - [CONTRIBUTING.md](./CONTRIBUTING.md) — engineering rules

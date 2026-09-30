@@ -1,8 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import { useLyricsWaveformLink } from "@/renderer/features/lyrics-waveform-link";
+import {
+  lyricsWaveformLink,
+  useLyricsWaveformLink,
+} from "@/renderer/features/lyrics-waveform-link";
 import {
   usePlaybackActions,
+  usePlaybackClock,
   usePlaybackItem,
+  usePlaybackJump,
   usePlaybackPosition,
   usePlaybackTransport,
   usePlaybackWaveform,
@@ -10,7 +15,6 @@ import {
 import { formatDuration } from "@/renderer/shared/lib/format";
 import { cn } from "@/renderer/shared/lib/utils";
 import { RollingNumber, spinTurns } from "@/renderer/shared/ui/rolling-number";
-import { isSeekJump } from "@/renderer/shared/ui/motion";
 import { WaveformSeek } from "@/renderer/shared/ui/waveform";
 
 /** The dock's slim progress line — no waveform data, just position. */
@@ -19,22 +23,20 @@ export const DOCK_SEEK_HEIGHT = 6;
 export const NOW_PLAYING_WAVEFORM_HEIGHT = 96;
 
 /**
- * How many extra turns the time digits make for this render: a position that jumped away from
- * where the clock would have put it (a seek) spins with the distance; ordinary ticks and
- * dragging do not.
+ * How many extra turns the time digits make for this render: a seek that just completed spins
+ * them with its distance. Ordinary ticks, a new track and dragging (the digits follow the
+ * pointer) do not.
  */
-function useJumpSpin(valueMs: number, playing: boolean, dragging: boolean): number {
-  const last = useRef({ valueMs, atMs: performance.now(), dragging });
-  const now = performance.now();
-  const expected = last.current.valueMs + (playing ? now - last.current.atMs : 0);
-  const spin =
-    !dragging && !last.current.dragging && isSeekJump(expected, valueMs)
-      ? spinTurns(valueMs - expected)
-      : 0;
+function useJumpSpin(dragging: boolean): number {
+  const jump = usePlaybackJump();
+  // A jump is spun for once, in the render that first sees it (a seek that finished before
+  // this mounted is not ours).
+  const handled = useRef(jump?.id ?? 0);
+  const fresh = jump !== null && jump.id !== handled.current;
   useEffect(() => {
-    last.current = { valueMs, atMs: performance.now(), dragging };
-  }, [valueMs, dragging]);
-  return spin;
+    handled.current = jump?.id ?? 0;
+  }, [jump]);
+  return fresh && jump.kind === "seek" && !dragging ? spinTurns(jump.toMs - jump.fromMs) : 0;
 }
 
 /**
@@ -64,20 +66,33 @@ export function PlaybackWaveformBand({
   timeClassName?: string;
 }) {
   const item = usePlaybackItem();
-  const { active, seekPending, status } = usePlaybackTransport();
+  const { active, seekPending } = usePlaybackTransport();
   const { positionMs, durationMs } = usePlaybackPosition();
   const { seek } = usePlaybackActions();
-  const lyricsLink = useLyricsWaveformLink();
+  const clock = usePlaybackClock();
+  const activeSpan = useLyricsWaveformLink((state) => state.activeSpan);
+  const hoveredLineSpan = useLyricsWaveformLink((state) => state.hoveredLineSpan);
   const waveform = usePlaybackWaveform(showWaveform && active && item ? item.file.path : null);
   const [seekPreviewMs, setSeekPreviewMs] = useState<number | null>(null);
   const [showRemaining, setShowRemaining] = useState(true);
   const canSeek = active && durationMs !== null;
   const seekValue = seekPreviewMs ?? positionMs;
   const dragging = seekPreviewMs !== null;
-  const spin = useJumpSpin(seekValue, status === "playing", dragging);
-  // Dragging tracks the pointer 1:1; otherwise the digits roll, and a new track does not spin back.
+  const spin = useJumpSpin(dragging);
+  // Dragging tracks the pointer 1:1. Otherwise the digits roll only for a jump (a seek); the
+  // ordinary tick of a second is a plain rewrite, so the time does not add a second thing that
+  // moves all the time. A new track does not spin back.
   const rolling = (text: string) =>
-    dragging ? text : <RollingNumber key={item?.file.path ?? "none"} value={text} spin={spin} />;
+    dragging ? (
+      text
+    ) : (
+      <RollingNumber
+        key={item?.file.path ?? "none"}
+        value={text}
+        spin={spin}
+        instant={spin === 0}
+      />
+    );
 
   const seekBar = (
     <WaveformSeek
@@ -87,7 +102,7 @@ export function PlaybackWaveformBand({
       showPlayhead={showWaveform}
       valueMs={seekValue}
       durationMs={durationMs}
-      playing={status === "playing"}
+      position={clock}
       sweepBars={showWaveform}
       lineOnly={!showWaveform}
       playedClassName={showWaveform ? "text-(--artwork-accent)" : undefined}
@@ -96,9 +111,9 @@ export function PlaybackWaveformBand({
       onCommit={(value) => {
         void seek(value).finally(() => setSeekPreviewMs(null));
       }}
-      activeSpan={lyricsLink.activeSpan}
-      hoveredLineSpan={lyricsLink.hoveredLineSpan}
-      onHoverPositionChange={lyricsLink.setHoveredWaveformMs}
+      activeSpan={activeSpan}
+      hoveredLineSpan={hoveredLineSpan}
+      onHoverPositionChange={lyricsWaveformLink.setHoveredWaveformMs}
       className={cn(timeLayout === "inline" && "flex-1", seekClassName)}
     />
   );

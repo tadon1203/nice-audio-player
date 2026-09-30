@@ -4,13 +4,14 @@ import { AnimatePresence, m, useTransform } from "motion/react";
 import { Repeat, Shuffle, SkipBack, SkipForward } from "lucide-react";
 import {
   nextRepeatMode,
-  usePlaybackPosition,
+  usePlaybackClock,
+  usePlaybackDuration,
   usePlaybackActions,
   usePlaybackQueue,
   usePlaybackTransport,
 } from "@/renderer/entities/playback";
 import { cn } from "@/renderer/shared/lib/utils";
-import { useInterpolatedPosition, useMotionTransition } from "@/renderer/shared/ui/motion";
+import { useMotionTransition } from "@/renderer/shared/ui/motion";
 import { PlayPauseIcon } from "@/renderer/shared/ui/play-pause-icon";
 import { Button } from "@/renderer/shared/ui/shadcn/button";
 
@@ -57,7 +58,7 @@ export function DockTransport() {
         className="relative rounded-full disabled:bg-secondary disabled:text-muted-foreground disabled:opacity-100"
       >
         <PlayPauseIcon playing={playing} />
-        {active ? <PlayProgressRing playing={playing} /> : null}
+        {active ? <PlayProgressRing /> : null}
       </TransportButton>
       <TransportButton
         label="Next track"
@@ -155,9 +156,9 @@ function ToggleButton({
  * colour. It is a time Strip bent into a circle, not a control's state. It is the only part of
  * the transport that reads the position each frame, so the dock does not re-render with time.
  */
-function PlayProgressRing({ playing }: { playing: boolean }) {
-  const { positionMs, durationMs } = usePlaybackPosition();
-  const position = useInterpolatedPosition({ positionMs, durationMs, playing });
+function PlayProgressRing() {
+  const durationMs = usePlaybackDuration();
+  const position = usePlaybackClock();
   const dashOffset = useTransform(position, (p) =>
     durationMs !== null && durationMs > 0 ? 1 - Math.min(1, Math.max(0, p / durationMs)) : 1,
   );

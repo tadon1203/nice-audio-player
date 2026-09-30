@@ -33,11 +33,13 @@ function DigitColumn({
   direction,
   spin,
   delay,
+  instant,
 }: {
   digit: number;
   direction: RollDirection;
   spin: number;
   delay: number;
+  instant: boolean;
 }) {
   const roll = useMotionTransition(spin > 0 ? "spin" : "roll");
   const position = useMotionValue(HOME + digit);
@@ -46,15 +48,19 @@ function DigitColumn({
 
   // Only a new digit starts a roll. The other props are read when it starts, so a re-render
   // with a different direction or spin cannot cut a running roll short.
-  const latest = useRef({ direction, spin, delay, roll });
-  latest.current = { direction, spin, delay, roll };
+  const latest = useRef({ direction, spin, delay, roll, instant });
+  latest.current = { direction, spin, delay, roll, instant };
   const running = useRef<ReturnType<typeof animate> | null>(null);
 
   useEffect(() => {
     if (shown.current === digit) return;
     shown.current = digit;
     running.current?.stop();
-    const { direction, spin, delay, roll } = latest.current;
+    const { direction, spin, delay, roll, instant } = latest.current;
+    if (instant) {
+      position.jump(HOME + digit);
+      return;
+    }
     // Every lap looks the same, so re-centre (keeping any fraction) to always have room to roll.
     position.jump(HOME + (position.get() % 10));
     running.current = animate(position, rollTarget(position.get(), digit, direction, spin), {
@@ -105,6 +111,7 @@ export function RollingNumber({
   direction = "auto",
   spin = 0,
   settle = "together",
+  instant = false,
   className,
 }: {
   value: string;
@@ -112,6 +119,9 @@ export function RollingNumber({
   /** Extra laps every changed digit turns (a seek, a count that jumps). */
   spin?: number;
   settle?: Settle;
+  /** Digits change without rolling: for a value that ticks on its own, where only a jump
+   * (a seek) is worth showing. */
+  instant?: boolean;
   className?: string;
 }) {
   const reduced = useReducedMotion() === true;
@@ -149,6 +159,7 @@ export function RollingNumber({
                     direction={resolved}
                     spin={spin}
                     delay={settleDelay(place, settle)}
+                    instant={instant}
                   />
                 )}
               </m.span>

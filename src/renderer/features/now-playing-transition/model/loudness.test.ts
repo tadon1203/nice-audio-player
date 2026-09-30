@@ -2,17 +2,17 @@ import { describe, expect, it } from "vitest";
 import { ATTACK_MS, levelAt, RELEASE_MS, smoothLevel } from "./loudness";
 
 describe("levelAt", () => {
-  const peaks = [0, 51, 102, 255];
+  const rms = [0, 51, 102, 255];
 
-  it("reads the peak under the position", () => {
-    expect(levelAt(peaks, 0, 4000)).toBe(0);
-    expect(levelAt(peaks, 1500, 4000)).toBeCloseTo(0.2);
-    expect(levelAt(peaks, 4000, 4000)).toBe(1);
+  it("reads the level under the position on the waveform's dB scale", () => {
+    expect(levelAt(rms, 0, 4000)).toBe(0);
+    expect(levelAt(rms, 1500, 4000)).toBeCloseTo(1 - 13.98 / 36, 2);
+    expect(levelAt(rms, 4000, 4000)).toBe(1);
   });
 
   it("is 0 without a waveform or a duration", () => {
     expect(levelAt(null, 100, 4000)).toBe(0);
-    expect(levelAt(peaks, 100, null)).toBe(0);
+    expect(levelAt(rms, 100, null)).toBe(0);
     expect(levelAt([], 100, 4000)).toBe(0);
   });
 });

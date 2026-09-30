@@ -75,6 +75,11 @@ impl PlaybackQueue {
         self.entries.get(self.current)
     }
 
+    /// What was played before the current item, oldest first.
+    pub fn history(&self) -> &[PlaybackItem] {
+        self.entries.get(..self.current).unwrap_or_default()
+    }
+
     pub fn upcoming(&self) -> &[PlaybackItem] {
         self.entries.get(self.current + 1..).unwrap_or_default()
     }
@@ -162,6 +167,48 @@ impl PlaybackQueue {
         self.entries.insert(target, item);
         self.sync_manual_order();
         Ok(true)
+    }
+
+    /// Makes an upcoming item current, skipping over the ones before it (they count as played,
+    /// so Previous walks back through them).
+    pub fn jump_to_upcoming(&mut self, id: &str) -> Result<(), QueueError> {
+        self.current = self.upcoming_index(id)?;
+        Ok(())
+    }
+
+    /// Makes any other item current, played or upcoming: the listener picked it from the queue.
+    pub fn jump_to(&mut self, id: &str) -> Result<(), QueueError> {
+        let index = self
+            .entries
+            .iter()
+            .position(|item| item.queue_item_id == id)
+            .filter(|index| *index != self.current)
+            .ok_or(QueueError::ItemNotUpcoming)?;
+        self.current = index;
+        Ok(())
+    }
+
+    /// Adds items right after the current one (`next`) or at the end. The current item stays
+    /// current. An empty queue has nothing to add to, so it is an error: start one instead.
+    pub fn enqueue(&mut self, seeds: Vec<PlaybackItemSeed>, next: bool) -> Result<(), QueueError> {
+        if self.entries.is_empty() {
+            return Err(QueueError::InvalidStart);
+        }
+        let items: Vec<PlaybackItem> = seeds
+            .into_iter()
+            .map(|seed| {
+                self.next_item_id = self.next_item_id.saturating_add(1);
+                PlaybackItem::from_seed(format!("queue-item-{}", self.next_item_id), seed)
+            })
+            .collect();
+        let at = if next {
+            self.current + 1
+        } else {
+            self.entries.len()
+        };
+        self.entries.splice(at..at, items);
+        self.sync_manual_order();
+        Ok(())
     }
 
     fn upcoming_index(&self, id: &str) -> Result<usize, QueueError> {
@@ -633,5 +680,72 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn jumping_to_an_upcoming_item_makes_it_current() {
+        let mut queue = queue_of(4, 0, PlaybackRepeatMode::Off, false);
+        let id = queue.upcoming()[1].queue_item_id.clone();
+        queue.jump_to_upcoming(&id).expect("upcoming");
+        assert_eq!(queue.current().map(|i| i.title.as_str()), Some("t2.flac"));
+        assert_eq!(queue.upcoming().len(), 1);
+        assert_eq!(
+            queue.jump_to_upcoming(&id),
+            Err(QueueError::ItemNotUpcoming)
+        );
+    }
+
+    #[test]
+    fn jumping_back_to_a_played_item_makes_it_current() {
+        let mut queue = queue_of(4, 2, PlaybackRepeatMode::Off, false);
+        let id = queue.history()[0].queue_item_id.clone();
+        queue.jump_to(&id).expect("played");
+        assert_eq!(queue.current().map(|i| i.title.as_str()), Some("t0.flac"));
+        assert_eq!(queue.upcoming().len(), 3);
+        assert_eq!(queue.jump_to(&id), Err(QueueError::ItemNotUpcoming));
+        assert_eq!(queue.jump_to("nope"), Err(QueueError::ItemNotUpcoming));
+    }
+
+    #[test]
+    fn a_long_queue_snapshot_carries_a_prefix_and_serves_the_rest_in_windows() {
+        use crate::audio::playback::snapshot::{PlaybackQueueSnapshot, UPCOMING_IN_SNAPSHOT};
+        let total = UPCOMING_IN_SNAPSHOT + 150;
+        let queue = queue_of(total + 61, 60, PlaybackRepeatMode::Off, false);
+        let snapshot = PlaybackQueueSnapshot::of(7, &queue);
+        assert_eq!(snapshot.history.len(), 50);
+        assert_eq!(snapshot.history_count, 60);
+        assert_eq!(
+            snapshot.history.last().map(|i| i.title.as_str()),
+            Some("t59.flac")
+        );
+        assert_eq!(snapshot.upcoming.len(), UPCOMING_IN_SNAPSHOT);
+        assert_eq!(snapshot.upcoming_count as usize, total);
+        let window = snapshot.window(UPCOMING_IN_SNAPSHOT, 500);
+        assert_eq!(window.revision, 7);
+        assert_eq!(window.offset as usize, UPCOMING_IN_SNAPSHOT);
+        assert_eq!(window.items.len(), 150);
+        assert_eq!(window.items[0].title, "t261.flac");
+        assert!(snapshot.window(total + 10, 5).items.is_empty());
+    }
+
+    #[test]
+    fn enqueue_adds_after_current_or_at_the_end() {
+        let mut queue = queue_of(3, 0, PlaybackRepeatMode::Off, false);
+        queue.enqueue(vec![seed("last")], false).expect("enqueue");
+        queue.enqueue(vec![seed("next")], true).expect("enqueue");
+        assert_eq!(
+            titles(&queue),
+            ["t0.flac", "next.flac", "t1.flac", "t2.flac", "last.flac"]
+        );
+        assert_eq!(queue.current().map(|i| i.title.as_str()), Some("t0.flac"));
+    }
+
+    #[test]
+    fn enqueue_needs_a_queue() {
+        let mut queue = PlaybackQueue::new(PlaybackRepeatMode::Off, false);
+        assert_eq!(
+            queue.enqueue(vec![seed("a")], true),
+            Err(QueueError::InvalidStart)
+        );
     }
 }

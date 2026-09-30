@@ -7,6 +7,7 @@ pub mod migrations;
 pub mod models;
 pub mod playback;
 pub(crate) mod policy;
+pub(crate) mod properties;
 pub(crate) mod runtime;
 #[cfg(test)]
 mod scan_tests;

@@ -5,6 +5,11 @@ import { invoke as __TAURI_INVOKE } from "@tauri-apps/api/core";
 /** Commands */
 export const commands = {
 	getPlaybackState: () => __TAURI_INVOKE<PlaybackSnapshot>("get_playback_state"),
+	/**
+	 *  Upcoming queue items from `offset` (at most `limit`), for the parts of a long queue the
+	 *  snapshot does not carry.
+	 */
+	getPlaybackQueueWindow: (offset: number, limit: number) => __TAURI_INVOKE<PlaybackQueueWindow>("get_playback_queue_window", { offset, limit }),
 	getPlaybackQueue: () => __TAURI_INVOKE<PlaybackQueueSnapshot>("get_playback_queue"),
 	/**
 	 *  Replaces the queue with `context` and plays from `start_track_id`, or from the context's
@@ -25,6 +30,13 @@ export const commands = {
 	setAudioOutputSelection: (selection: AudioOutputSelection) => __TAURI_INVOKE<PlaybackSnapshot>("set_audio_output_selection", { selection }),
 	removeQueueItem: (id: string) => __TAURI_INVOKE<PlaybackQueueSnapshot>("remove_queue_item", { id }),
 	moveQueueItem: (id: string, to: number) => __TAURI_INVOKE<PlaybackQueueSnapshot>("move_queue_item", { id, to }),
+	/**  Makes an upcoming queue item current and plays it. */
+	playQueueItem: (id: string) => __TAURI_INVOKE<PlaybackSnapshot>("play_queue_item", { id }),
+	/**
+	 *  Adds a library track to the queue: right after the current one (`next`) or at the end.
+	 *  With nothing queued it starts playing.
+	 */
+	enqueueTrack: (trackId: string, next: boolean) => __TAURI_INVOKE<PlaybackQueueSnapshot>("enqueue_track", { trackId, next }),
 	clearQueue: () => __TAURI_INVOKE<PlaybackQueueSnapshot>("clear_queue"),
 	/**  Waveform of the loaded track, or `None` while it is analyzed; `waveformReady` follows. */
 	getPlaybackWaveform: (path: string) => __TAURI_INVOKE<{
@@ -61,6 +73,30 @@ export const commands = {
 	availability: LibraryFileAvailability,
 	playable: boolean,
 } | null>("get_library_track", { trackId }),
+	getLibraryTrackProperties: (trackId: string) => __TAURI_INVOKE<{
+	id: string,
+	path: string,
+	fileName: string,
+	title: string | null,
+	artist: string | null,
+	album: string | null,
+	albumArtist: string | null,
+	trackNumber: number | null,
+	trackTotal: number | null,
+	discNumber: number | null,
+	discTotal: number | null,
+	genre: string | null,
+	date: string | null,
+	durationMs: number | null,
+	fileFormat: string | null,
+	codec: string | null,
+	sampleRate: number | null,
+	channelCount: number | null,
+	bitDepth: number | null,
+	bitrateKbps: number | null,
+} | null>("get_library_track_properties", { trackId }),
+	/**  Shows the track's file in Explorer, selected. */
+	revealLibraryTrack: (trackId: string) => __TAURI_INVOKE<null>("reveal_library_track", { trackId }),
 	getArtworkAccent: (contentHash: string) => __TAURI_INVOKE<string | null>("get_artwork_accent", { contentHash }),
 	getTrackLyrics: (trackId: string) => __TAURI_INVOKE<LyricsResolution>("get_track_lyrics", { trackId }),
 	getSettings: () => __TAURI_INVOKE<Settings>("get_settings"),
@@ -74,6 +110,11 @@ export type ActiveSession = {
 	item: PlaybackItem,
 	playbackId: string,
 	positionMs: number,
+	/**
+	 *  Counts the seeks the player has completed. A change means the position jumped on
+	 *  purpose, so a display can react to the jump instead of guessing it from the numbers.
+	 */
+	seekRevision: number,
 	durationMs: number | null,
 	outputDevice: AudioOutputDeviceIdentity,
 	channelConversion: PlaybackChannelConversion,
@@ -88,11 +129,14 @@ export type AppEvent = { event: "playbackStateChanged"; payload: PlaybackSnapsho
 
 export type AppearancePatch = {
 	artworkBackdrop: boolean | null,
+	calmMotion: boolean | null,
 };
 
 export type AppearanceSettings = {
 	/**  Artwork light behind the library and Now Playing. */
 	artworkBackdrop?: boolean,
+	/**  Only what marks the position moves by itself: nothing breathes or lifts on its own. */
+	calmMotion?: boolean,
 };
 
 export type ApplicationActivity = {
@@ -212,6 +256,11 @@ export type LibraryRoot = {
 export type LibraryScanSnapshot = {
 	state: LibraryScanState,
 	currentRoot: LibraryRoot | null,
+	/**
+	 *  How many files the previous scans left in the scanned folders: what a rescan can expect
+	 *  to find, so its progress can be shown as a share. 0 when there is no such history.
+	 */
+	expectedCount: number,
 	discoveredCount: number,
 	inspectedCount: number,
 	indexedCount: number,
@@ -229,6 +278,30 @@ export type LibraryTrackPage = {
 	items: LibraryTrackSummary[],
 	totalCount: number,
 	nextCursor: string | null,
+};
+
+/**  The tags, audio format and location of one track, as the Properties view lists them. */
+export type LibraryTrackProperties = {
+	id: string,
+	path: string,
+	fileName: string,
+	title: string | null,
+	artist: string | null,
+	album: string | null,
+	albumArtist: string | null,
+	trackNumber: number | null,
+	trackTotal: number | null,
+	discNumber: number | null,
+	discTotal: number | null,
+	genre: string | null,
+	date: string | null,
+	durationMs: number | null,
+	fileFormat: string | null,
+	codec: string | null,
+	sampleRate: number | null,
+	channelCount: number | null,
+	bitDepth: number | null,
+	bitrateKbps: number | null,
 };
 
 export type LibraryTrackSortKey = "title" | "artist" | "album" | "duration";
@@ -281,6 +354,8 @@ export type PlaybackCommandError = { code: "invalidArgument" } | { code: "playba
 export type PlaybackContext = 
 /**  An album in disc and track order. */
 { kind: "album"; key: LibraryAlbumKey } | 
+/**  Exactly these library tracks in this order: how a replaced queue is put back. */
+{ kind: "trackIds"; trackIds: string[] } | 
 /**  The tracks list as currently filtered and sorted. */
 { kind: "tracks"; search: string | null; sortKey: LibraryTrackSortKey; sortDirection: LibrarySortDirection };
 
@@ -302,6 +377,14 @@ export type PlaybackItem = {
 	albumArtist: string | null,
 	artwork: ArtworkRef | null,
 	durationMs: number | null,
+	/**  From the library's metadata; `None` for a file outside it. */
+	trackNumber: number | null,
+	discNumber: number | null,
+	year: number | null,
+	/**  The catalog key of the album, for links; `None` when the file has no album. */
+	albumKey: LibraryAlbumKey | null,
+	/**  Tracks the library holds for the album. */
+	albumTrackCount: number | null,
 };
 
 /**  The playback choices that outlive a session: what the listener set, restored at startup. */
@@ -324,12 +407,28 @@ export type PlaybackQueueItem = {
 	durationMs: number | null,
 };
 
+/**
+ *  The queue as the renderer mirrors it: the current item, the last few played, the first
+ *  upcoming ones, and how many there are in all. Longer queues are read with `window`, so a
+ *  library-sized queue never crosses the IPC boundary in one piece.
+ */
 export type PlaybackQueueSnapshot = {
 	revision: number,
 	current: PlaybackQueueItem | null,
+	/**  The most recently played items, oldest first. */
+	history: PlaybackQueueItem[],
+	historyCount: number,
 	upcoming: PlaybackQueueItem[],
+	upcomingCount: number,
 	repeatMode: PlaybackRepeatMode,
 	shuffleEnabled: boolean,
+};
+
+/**  A slice of the upcoming list, tagged with the queue revision it was cut from. */
+export type PlaybackQueueWindow = {
+	revision: number,
+	offset: number,
+	items: PlaybackQueueItem[],
 };
 
 export type PlaybackRepeatMode = "off" | "all" | "one";

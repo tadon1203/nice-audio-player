@@ -1,3 +1,4 @@
+use crate::library::models::LibraryAlbumKey;
 use crate::media::{artwork::ArtworkRef, validation::ValidatedAudioFile};
 
 /// What a caller supplies to play something. The queue assigns the queue item id.
@@ -13,6 +14,11 @@ pub struct PlaybackItemSeed {
     pub album_artist: Option<String>,
     pub artwork: Option<ArtworkRef>,
     pub duration_ms: Option<u64>,
+    pub track_number: Option<u32>,
+    pub disc_number: Option<u32>,
+    pub year: Option<i32>,
+    pub album_key: Option<LibraryAlbumKey>,
+    pub album_track_count: Option<u32>,
 }
 
 impl PlaybackItemSeed {
@@ -27,6 +33,11 @@ impl PlaybackItemSeed {
             album_artist: None,
             artwork: None,
             duration_ms: None,
+            track_number: None,
+            disc_number: None,
+            year: None,
+            album_key: None,
+            album_track_count: None,
         }
     }
 }
@@ -47,6 +58,14 @@ pub struct PlaybackItem {
     pub album_artist: Option<String>,
     pub artwork: Option<ArtworkRef>,
     pub duration_ms: Option<u64>,
+    /// From the library's metadata; `None` for a file outside it.
+    pub track_number: Option<u32>,
+    pub disc_number: Option<u32>,
+    pub year: Option<i32>,
+    /// The catalog key of the album, for links; `None` when the file has no album.
+    pub album_key: Option<LibraryAlbumKey>,
+    /// Tracks the library holds for the album.
+    pub album_track_count: Option<u32>,
 }
 
 impl PlaybackItem {
@@ -61,6 +80,11 @@ impl PlaybackItem {
             album_artist: seed.album_artist,
             artwork: seed.artwork,
             duration_ms: seed.duration_ms,
+            track_number: seed.track_number,
+            disc_number: seed.disc_number,
+            year: seed.year,
+            album_key: seed.album_key,
+            album_track_count: seed.album_track_count,
         }
     }
 }

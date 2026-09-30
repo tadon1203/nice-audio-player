@@ -18,6 +18,24 @@ MP3, FLAC, WAV, AAC, M4A. A file counts as supported only if it can actually be 
 - Playback state (position, source/output sample rate, resampling) reflects the real audio state
 - Decode and output failures are reported clearly. A file that cannot be read or decoded is reported and skipped, and the queue survives; an output failure (device, stream) stops playback and keeps the queue
 
+## Keyboard
+
+| Key                 | Action                                                                         |
+| ------------------- | ------------------------------------------------------------------------------ |
+| Space               | Play / pause                                                                   |
+| `←` / `→`           | Seek                                                                           |
+| `Ctrl+←` / `Ctrl+→` | Previous / next track                                                          |
+| `Ctrl+↑` / `Ctrl+↓` | Volume ±1 dB                                                                   |
+| `Ctrl+L`            | Now Playing                                                                    |
+| `Ctrl+Q`            | Queue                                                                          |
+| `Esc`               | Close Now Playing                                                              |
+| `/` or `Ctrl+F`     | Filter the library                                                             |
+| `Ctrl+S`            | Shuffle on / off                                                               |
+| `Ctrl+R`            | Repeat: off, all, one                                                          |
+| Arrow keys          | Move between tiles when focus is in an album or artist grid (they do not seek) |
+
+Dragging the seek bar slows down the further the pointer is from the bar (or with `Shift`), for fine positioning. A track row's context menu offers Play next, Add to queue, Go to album, Go to artist, Show in Explorer, and Properties (tags, audio format, and file location); a queue row plays on click, and the tracks already played sit above the current one, faintest, and play again on click. Starting playback from a list replaces the queue.
+
 ## Library
 
 - Register local music folders; scan, index, and pick up file changes (with progress and cancel for long scans; a cancelled or failed scan never leaves a half-written batch)

@@ -1,4 +1,5 @@
 import { usePlaybackActions, useTrackPlaybackState } from "@/renderer/entities/playback";
+import { sortIndexLetter } from "@/renderer/shared/lib/sort-index";
 import { TrackTable } from "@/renderer/widgets/track-table";
 import { useLibraryCatalog } from "../model/use-library-catalog";
 import { useLibraryView } from "../model/use-library-view";
@@ -26,6 +27,18 @@ export function TracksPage() {
       onFilterChange={(filter) => void view.setFilter(filter)}
       stateKey={view.stateKey}
       catalog={catalog}
+      indexFor={
+        view.sortKey === "duration"
+          ? undefined
+          : (track) =>
+              sortIndexLetter(
+                (view.sortKey === "artist"
+                  ? track.artist
+                  : view.sortKey === "album"
+                    ? track.album
+                    : track.title) ?? "",
+              )
+      }
     >
       {(tracks, scroll) => (
         <TrackTable
@@ -34,6 +47,7 @@ export function TracksPage() {
           caption="Library tracks"
           scrollElement={scroll.viewport}
           initialOffset={scroll.initialOffset}
+          onTopIndexChange={scroll.onTopIndexChange}
           activeTrackId={playbackState.activeTrackId}
           playbackStatus={playbackState.playbackStatus}
           sortKey={view.sortKey}

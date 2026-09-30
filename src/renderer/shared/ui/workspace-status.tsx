@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { AlertCircle } from "lucide-react";
 import { Alert, AlertAction, AlertDescription } from "@/renderer/shared/ui/shadcn/alert";
 import { Button } from "@/renderer/shared/ui/shadcn/button";
@@ -43,16 +43,50 @@ export function ErrorAlert({ message, onRetry }: { message: string; onRetry?: ()
   );
 }
 
-/** Requests the next page of a paginated collection. */
-export function LoadMoreButton({ pending, onClick }: { pending: boolean; onClick: () => void }) {
+/** How far ahead of the end of the list the next page is requested. */
+const PREFETCH_MARGIN_PX = 800;
+
+/**
+ * Requests the next page of a paginated collection as the end of the list nears the visible
+ * area, so a long collection scrolls as one list. Place it right after the items.
+ */
+export function LoadMoreSentinel({
+  pending,
+  onLoadMore,
+}: {
+  pending: boolean;
+  onLoadMore: () => void;
+}) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const latest = useRef(onLoadMore);
+  latest.current = onLoadMore;
+
+  // Observing again after each page makes the observer report the sentinel afresh, so a page
+  // that did not push it out of range is followed by the next one.
+  useEffect(() => {
+    const element = ref.current;
+    if (element === null || pending) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) latest.current();
+      },
+      {
+        root: element.closest("[data-scroll-restoration-id]"),
+        rootMargin: `0px 0px ${PREFETCH_MARGIN_PX}px 0px`,
+      },
+    );
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [pending]);
+
   return (
-    <div className="flex justify-center py-8">
-      <Button type="button" variant="outline" disabled={pending} onClick={onClick}>
-        {pending ? (
-          <Spinner data-icon="inline-start" aria-hidden="true" role="presentation" />
-        ) : null}
-        {pending ? "Loading more…" : "Load more"}
-      </Button>
+    <div ref={ref} className="flex min-h-16 justify-center py-8">
+      {pending ? (
+        <span role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Spinner aria-hidden="true" role="presentation" />
+          Loading more…
+        </span>
+      ) : null}
     </div>
   );
 }

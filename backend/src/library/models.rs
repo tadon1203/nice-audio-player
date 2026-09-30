@@ -134,6 +134,31 @@ pub struct LibraryTrackDetails {
     pub inspection_error: Option<String>,
     pub metadata: Option<LibraryTrackSourceMetadata>,
 }
+/// The tags, audio format and location of one track, as the Properties view lists them.
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryTrackProperties {
+    pub id: String,
+    pub path: String,
+    pub file_name: String,
+    pub title: Option<String>,
+    pub artist: Option<String>,
+    pub album: Option<String>,
+    pub album_artist: Option<String>,
+    pub track_number: Option<u32>,
+    pub track_total: Option<u32>,
+    pub disc_number: Option<u32>,
+    pub disc_total: Option<u32>,
+    pub genre: Option<String>,
+    pub date: Option<String>,
+    pub duration_ms: Option<u64>,
+    pub file_format: Option<String>,
+    pub codec: Option<String>,
+    pub sample_rate: Option<u32>,
+    pub channel_count: Option<u32>,
+    pub bit_depth: Option<u32>,
+    pub bitrate_kbps: Option<u32>,
+}
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LibraryTrackPage {
@@ -141,7 +166,7 @@ pub struct LibraryTrackPage {
     pub total_count: u64,
     pub next_cursor: Option<String>,
 }
-#[derive(Debug, Clone, Serialize, specta::Type, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LibraryAlbumKey {
     pub title: String,
@@ -226,6 +251,9 @@ pub enum LibraryScanState {
 pub struct LibraryScanSnapshot {
     pub state: LibraryScanState,
     pub current_root: Option<LibraryRoot>,
+    /// How many files the previous scans left in the scanned folders: what a rescan can expect
+    /// to find, so its progress can be shown as a share. 0 when there is no such history.
+    pub expected_count: u64,
     pub discovered_count: u64,
     pub inspected_count: u64,
     pub indexed_count: u64,

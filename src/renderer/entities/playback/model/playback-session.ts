@@ -140,13 +140,15 @@ export function createPlaybackController(store: UseBoundStore<StoreApi<PlaybackS
   const runTransport = async (
     command: TransportCommand,
     operation: () => Promise<PlaybackSnapshot>,
-  ) => {
-    if (!api || store.getState().transportPending !== null) return;
+  ): Promise<boolean> => {
+    if (!api || store.getState().transportPending !== null) return false;
     store.setState({ transportPending: command, error: null });
     try {
       acceptPlayback(await operation());
+      return true;
     } catch (error) {
       setError(error);
+      return false;
     } finally {
       pendingNavigation = null;
       store.setState({ transportPending: null });
@@ -162,6 +164,8 @@ export function createPlaybackController(store: UseBoundStore<StoreApi<PlaybackS
       setError(error);
     }
   };
+
+  let requestedSeek: number | null = null;
 
   const flushVolume = async () => {
     if (!api || volumeWriteActive) return;
@@ -208,6 +212,30 @@ export function createPlaybackController(store: UseBoundStore<StoreApi<PlaybackS
     return initializePromise;
   };
 
+  /**
+   * Seeks. Requests made while one is in flight coalesce: only the latest is sent once the
+   * first returns, so holding an arrow key keeps moving instead of dropping most presses.
+   */
+  const seek = async (positionMs: number) => {
+    if (!api) return;
+    const duration = store.getState().durationMs;
+    requestedSeek = duration === null ? positionMs : Math.min(Math.max(positionMs, 0), duration);
+    if (store.getState().seekPending) return;
+    store.setState({ seekPending: true, error: null });
+    try {
+      while (requestedSeek !== null) {
+        const value = requestedSeek;
+        requestedSeek = null;
+        acceptPlayback(await api.seekPlayback(value));
+      }
+    } catch (error) {
+      requestedSeek = null;
+      setError(error);
+    } finally {
+      store.setState({ seekPending: false });
+    }
+  };
+
   return {
     initialize,
     acceptEvent,
@@ -215,7 +243,9 @@ export function createPlaybackController(store: UseBoundStore<StoreApi<PlaybackS
     acceptQueue,
     /** Replaces the queue with `context` and plays from `startTrackId` (its first track if null). */
     startPlayback: (context: PlaybackContext, startTrackId: string | null) =>
-      runTransport("start", () => api!.startPlayback(context, startTrackId)),
+      runTransport("start", () => api!.startPlayback(context, startTrackId)).then(() => undefined),
+    /** A slice of the upcoming list beyond what the queue snapshot carries. */
+    fetchQueueWindow: (offset: number, limit: number) => api!.getPlaybackQueueWindow(offset, limit),
     pause: () => runTransport("pause", () => api!.pausePlayback()),
     resume: () => runTransport("resume", () => api!.resumePlayback()),
     previous: () => {
@@ -226,20 +256,9 @@ export function createPlaybackController(store: UseBoundStore<StoreApi<PlaybackS
       pendingNavigation = "next";
       return runTransport("next", () => api!.nextPlayback());
     },
-    seek: async (positionMs: number) => {
-      if (!api || store.getState().seekPending) return;
-      store.setState({ seekPending: true, error: null });
-      const duration = store.getState().durationMs;
-      const requested =
-        duration === null ? positionMs : Math.min(Math.max(positionMs, 0), duration);
-      try {
-        acceptPlayback(await api.seekPlayback(requested));
-      } catch (error) {
-        setError(error);
-      } finally {
-        store.setState({ seekPending: false });
-      }
-    },
+    seek,
+    /** The seek waiting for the one in flight, if any: where repeated key presses continue from. */
+    pendingSeekMs: () => requestedSeek,
     setVolume: (value: number) => {
       if (!api) return;
       requestedVolume = Math.max(0, Math.min(1, value));
@@ -253,6 +272,11 @@ export function createPlaybackController(store: UseBoundStore<StoreApi<PlaybackS
     /** Moves an upcoming item to `to`, an index into the upcoming list (0 is next up). */
     moveQueueItem: (id: string, to: number) => runQueueCommand(() => api!.moveQueueItem(id, to)),
     clearQueue: () => runQueueCommand(() => api!.clearQueue()),
+    /** Jumps to an upcoming item and plays it. */
+    playQueueItem: (id: string) => runTransport("start", () => api!.playQueueItem(id)),
+    /** Adds a library track right after the current one (`next`) or at the end. */
+    enqueueTrack: (trackId: string, next: boolean) =>
+      runQueueCommand(() => api!.enqueueTrack(trackId, next)),
     /** A loaded track restarts on the new device at the same position. */
     setOutputSelection: (selection: AudioOutputSelection) =>
       runTransport("outputSelection", () => api!.setAudioOutputSelection(selection)),

@@ -1,7 +1,7 @@
 import type { Transition } from "motion/react";
 
 /**
- * Motion tokens (see DESIGN.md, "Motion"). Everything that moves uses a fully damped
+ * Motion tokens (DESIGN.md, principle 7). Everything that moves uses a fully damped
  * spring (`bounce: 0`, except `press`); only hover/press feedback and the Light crossfade use a fixed
  * duration. Never animate a blur radius: animate `transform`, `opacity`, `clip-path`.
  */
@@ -16,7 +16,7 @@ export const motionTokens = {
   largeMove: { type: "spring", visualDuration: 0.42, bounce: 0 },
   /** Rolling digits (`RollingNumber`). */
   roll: { type: "spring", visualDuration: 0.35, bounce: 0 },
-  /** Digits or a disc that turn several times: a seek, a count changing a lot. */
+  /** Digits that turn several times: a seek, a count changing a lot. */
   spin: { type: "spring", visualDuration: 0.6, bounce: 0 },
   /** The play button's press. The only spring allowed to overshoot. */
   press: { type: "spring", visualDuration: 0.15, bounce: 0.25 },
