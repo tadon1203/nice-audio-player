@@ -268,3 +268,4 @@ Phase 0 の最初、Svelte のコードを書く前に入れる。以降の移�
 - **D16** 共有要素 (S8) は方式 A を試作する。方式 B は A が作れなかったときの最後の手段 ([ADR 0004](./adr/0004-shared-element-transition-by-crossfade.md))。
 - **D17** CSP の実機確認 (`tauri build` した実行ファイルの起動) は最初のチケットにする。
 - (検索で確認した範囲) CSP: Tauri はバンドル内のローカルスクリプトをハッシュ化して CSP に追記すると文書化されている。実機での確認は未了。仮想化: `@tanstack/svelte-virtual` は peerDependencies が Svelte 5 に対応済みだが、Svelte 5 で空表示になる報告 (#866) があり現状は未確認。`virtua` の Svelte 版は `VList` のみ (グリッドなし)。共有要素の方式、仮想化ライブラリ、CSP の実機確認は Phase 0 のスパイクとして未了。
+- **チケット 01 の結果 (CSP スパイク、実機確認済み)** `tauri build --no-bundle` した実行ファイルで確認。CSP は変更不要 (`script-src 'self'` のまま、`kit.csp` も不要): コンソールに CSP 違反なし、シェルは起動して IPC 経由の状態も表示 (`connection: ready`)。存在しないルート `/albums` の直接読み込みと再読み込みはフォールバック `index.html` で SvelteKit の 404 ページまで到達 (Tauri のログで確認)。`nice-artwork` の実アートワーク (1200x1200 JPEG) は読み込めた。
