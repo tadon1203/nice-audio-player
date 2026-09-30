@@ -141,7 +141,7 @@ test("reaching the end of a long list loads the next page without a button", asy
   await page.goto("/library/tracks");
   await expect(page.getByRole("button", { name: "Load more" })).toHaveCount(0);
   const table = page.getByRole("table", { name: "Library tracks" });
-  const viewport = page.locator('[data-scroll-restoration-id="library-tracks"]');
+  const viewport = page.locator('main [data-slot="scroll-area-viewport"]');
   await expect
     .poll(async () => {
       await viewport.evaluate((element) => {

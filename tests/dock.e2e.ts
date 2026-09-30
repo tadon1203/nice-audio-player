@@ -220,7 +220,7 @@ test("preserves the library scroll position across Now Playing open and close", 
   page,
 }) => {
   const dock = await playFirstTrack(page);
-  const list = page.locator('[data-scroll-restoration-id="library-tracks"]');
+  const list = page.locator('main [data-slot="scroll-area-viewport"]');
   await list.evaluate((element) => element.scrollTo(0, 400));
   const before = await list.evaluate((element) => element.scrollTop);
   expect(before).toBeGreaterThan(0);

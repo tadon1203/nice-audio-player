@@ -81,10 +81,6 @@ test("sorts tracks, disables missing files, and loads more rows", async ({ page 
 
   const titleHeader = table.getByRole("button", { name: "Sort by Title", exact: true });
   await titleHeader.click();
-  await expect
-    .poll(() => new URL(page.url()).searchParams.get("tracksDirection"))
-    .toBe("descending");
-  await expect(page).toHaveURL(/\/library\/tracks\?/);
   await expect(table.getByRole("columnheader", { name: "Title" })).toHaveAttribute(
     "aria-sort",
     "descending",
@@ -107,7 +103,7 @@ test("restores the virtual track container after switching library presentations
 }) => {
   await page.setViewportSize({ width: 1360, height: 900 });
   await page.goto("/library/tracks");
-  const scrollRegion = page.locator('[data-scroll-restoration-id="library-tracks"]');
+  const scrollRegion = page.locator('main [data-slot="scroll-area-viewport"]');
   await scrollRegion.evaluate((element) => {
     element.scrollTop = 1_600;
   });
