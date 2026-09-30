@@ -4,3 +4,5 @@ allowBuilds:
   edgedriver: true
   esbuild: true
   geckodriver: false
+minimumReleaseAgeExclude:
+  - "@lucide/svelte@1.49.0"

@@ -94,7 +94,7 @@
                 "message": "Layering: `utils` must not import from `native`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["@tauri-apps/*"],
+                "group": ["@tauri-apps/**"],
                 "message": "Only `lib/native` may import `@tauri-apps/*`."
               }
             ]
@@ -138,7 +138,7 @@
                 "message": "Layering: `ui` must not import from `settings`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["@tauri-apps/*"],
+                "group": ["@tauri-apps/**"],
                 "message": "Only `lib/native` may import `@tauri-apps/*`."
               }
             ]
@@ -178,7 +178,7 @@
                 "message": "Layering: `playback` must not import from `settings`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["@tauri-apps/*"],
+                "group": ["@tauri-apps/**"],
                 "message": "Only `lib/native` may import `@tauri-apps/*`."
               }
             ]
@@ -218,7 +218,7 @@
                 "message": "Layering: `library` must not import from `settings`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["@tauri-apps/*"],
+                "group": ["@tauri-apps/**"],
                 "message": "Only `lib/native` may import `@tauri-apps/*`."
               }
             ]
@@ -258,7 +258,7 @@
                 "message": "Layering: `lyrics` must not import from `settings`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["@tauri-apps/*"],
+                "group": ["@tauri-apps/**"],
                 "message": "Only `lib/native` may import `@tauri-apps/*`."
               }
             ]
@@ -298,7 +298,7 @@
                 "message": "Layering: `settings` must not import from `lyrics`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["@tauri-apps/*"],
+                "group": ["@tauri-apps/**"],
                 "message": "Only `lib/native` may import `@tauri-apps/*`."
               }
             ]
@@ -322,7 +322,7 @@
                 "message": "Layering: `shell` must not import from `components`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["@tauri-apps/*"],
+                "group": ["@tauri-apps/**"],
                 "message": "Only `lib/native` may import `@tauri-apps/*`."
               }
             ]
@@ -342,7 +342,7 @@
                 "message": "Layering: `components` must not import from `routes`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["@tauri-apps/*"],
+                "group": ["@tauri-apps/**"],
                 "message": "Only `lib/native` may import `@tauri-apps/*`."
               }
             ]
@@ -358,7 +358,7 @@
           {
             "patterns": [
               {
-                "group": ["@tauri-apps/*"],
+                "group": ["@tauri-apps/**"],
                 "message": "Only `lib/native` may import `@tauri-apps/*`."
               }
             ]
