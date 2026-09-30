@@ -14,7 +14,7 @@ test("a long album list keeps only the tiles near the view mounted", async ({ pa
   expect(mounted).toBeGreaterThan(0);
   expect(mounted).toBeLessThan(120);
 
-  const viewport = page.locator('[data-scroll-restoration-id="library-albums"]');
+  const viewport = page.locator('main [data-slot="scroll-area-viewport"]');
   await viewport.evaluate((element) => {
     element.scrollTop = element.scrollHeight / 2;
   });
@@ -24,6 +24,40 @@ test("a long album list keeps only the tiles near the view mounted", async ({ pa
     .toBeGreaterThan(300);
   expect(await tiles.count()).toBeLessThan(120);
   await expect(tiles.first().getByRole("link")).toBeVisible();
+});
+
+test("Albums keeps its scroll position across a view switch", async ({ page }) => {
+  await page.goto("/library/albums");
+  const tiles = page.locator("main li[data-index]");
+  await expect(tiles.first()).toBeVisible();
+  const viewport = page.locator('main [data-slot="scroll-area-viewport"]');
+  await viewport.evaluate((element) => {
+    element.scrollTop = 5_000;
+  });
+  await expect.poll(() => viewport.evaluate((element) => element.scrollTop)).toBe(5_000);
+
+  await page.getByRole("link", { name: "Album Artists", exact: true }).click();
+  await page.getByRole("link", { name: "Albums", exact: true }).click();
+  await expect(tiles.first()).toBeVisible();
+  await expect
+    .poll(() =>
+      page.locator('main [data-slot="scroll-area-viewport"]').evaluate((e) => e.scrollTop),
+    )
+    .toBe(5_000);
+});
+
+test("arrow keys move between album tiles", async ({ page }) => {
+  await page.goto("/library/albums");
+  const tiles = page.locator("main li[data-index]");
+  await expect(tiles.first()).toBeVisible();
+  await tiles.first().getByRole("link").focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(tiles.nth(1).getByRole("link")).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(page.locator("main li[data-index] a:focus")).toHaveCount(1);
+  await expect
+    .poll(() => page.evaluate(() => Number(document.activeElement?.closest("li")?.dataset.index)))
+    .toBeGreaterThan(1);
 });
 
 test("a long queue mounts only the rows near the view", async ({ page }) => {

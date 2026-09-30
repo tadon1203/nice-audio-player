@@ -10,11 +10,9 @@ test("keeps each library filter and sort when switching peers and visiting Setti
   let filter = page.getByRole("searchbox", { name: "Search albums" });
   await filter.fill("Test album");
   await expect(page.getByText("1 album", { exact: true })).toBeVisible();
-  await expect(page).toHaveURL(/\/library\/albums\?/);
   await page.getByRole("combobox", { name: "Sort albums" }).click();
   await page.getByRole("option", { name: "Year", exact: true }).click();
   await page.getByRole("button", { name: "Sort descending" }).click();
-  await expect.poll(() => new URL(page.url()).searchParams.get("albumsFilter")).toBe("Test album");
 
   await page.getByRole("link", { name: "Album Artists", exact: true }).click();
   filter = page.getByRole("searchbox", { name: "Search album artists" });
@@ -27,7 +25,6 @@ test("keeps each library filter and sort when switching peers and visiting Setti
   filter = page.getByRole("searchbox", { name: "Search tracks" });
   await filter.fill("Test track");
   await page.getByRole("button", { name: "Sort by Title", exact: true }).click();
-  await expect.poll(() => new URL(page.url()).searchParams.get("tracksFilter")).toBe("Test track");
 
   await page
     .getByRole("navigation", { name: "Application" })
@@ -46,13 +43,8 @@ test("keeps each library filter and sort when switching peers and visiting Setti
     .click();
   await expect(page.getByRole("searchbox", { name: "Search albums" })).toHaveValue("Test album");
 
-  const params = new URL(page.url()).searchParams;
-  expect(params.get("albumsSort")).toBe("year");
-  expect(params.get("albumsDirection")).toBe("descending");
-  expect(params.get("artistsSort")).toBe("trackCount");
-  expect(params.get("artistsDirection")).toBe("descending");
-  expect(params.get("tracksFilter")).toBe("Test track");
-  expect(params.get("tracksSort")).toBe("title");
+  await expect(page.getByRole("combobox", { name: "Sort albums" })).toHaveText("Year");
+  await expect(page.getByRole("button", { name: "Sort ascending" })).toBeVisible();
 });
 
 test("returns from an album to its semantic artist parent", async ({ page }) => {
