@@ -27,7 +27,11 @@ Non-trivial feature:
 
 Offload large or exploratory searches (broad `grep`/`glob` sweeps, multi-file investigations) to a Haiku subagent so the raw results stay out of the main context; bring back only the conclusion.
 
-`.svelte` / `.svelte.ts` の作成・編集は `svelte-file-editor` サブエージェントに任せ、完了前に `svelte-autofixer` で問題がなくなるまで直す。
+Delegate creating and editing `.svelte` / `.svelte.ts` files to the `svelte-file-editor` subagent, and fix until `svelte-autofixer` reports no issues before finishing.
+
+## Language
+
+Documents that stay in the repo (docs, ADRs, specs, tickets, `CONTEXT.md`) are written in English. The temporary `docs/svelte-migration-plan.md` stays in Japanese until it is deleted.
 
 ## Agent skills
 

@@ -260,4 +260,11 @@ Phase 0 の最初、Svelte のコードを書く前に入れる。以降の移�
 - **D8** フォーマッタ: `.ts` などは oxfmt、`.svelte` だけ prettier + prettier-plugin-svelte (oxfmt は `.svelte` を対象にしない)。oxlint は `.svelte` の `<script>` を lint でき、import 方向と `@tauri-apps/**` の制限も効く (パターンは `*` ではなく `**`)。
 - **D9** `motion` はバニラ版のみ。コミュニティ製の Svelte ラッパー (`@humanspeak/svelte-motion` など) は使わない。共有要素が方式 A で作れなかったときだけ再検討する。
 - **D10** `lib/native` は `native` (解決済みアダプタまたは null) と `requireNative()` と `nativeWindow` を公開する。`artwork-url` は utils ではなく `lib/native` に置く。
+- **D11** 残りの作業 (Phase 3 以降) は層ごとではなく、画面 / E2E 単位の縦切りチケットにする。必要な基礎部品は、それを使うチケットの中で作る。チケットの完了条件は「対象の E2E ファイル + `pnpm check` + `svelte-autofixer` の指摘ゼロ」。`pnpm validate` 全体は Phase 6 でだけ回す。
+- **D12** E2E が React 固有の DOM 構造に依存していた場合に限り、テストを直してよい。役割・ラベル・`data-slot` / `data-region` / `data-tone` の契約は変えない。直したらチケットに理由を 1 行書く。
+- **D13** 移行中、`main` のレンダラー (React) は凍結する。Rust 側の変更は可。
+- **D14** スパイクが失敗したら、§9 の「駄目だった場合」の代替案を再協議せずに採用し、理由だけを ADR に書く。
+- **D15** 仮想化: まず `@tanstack/svelte-virtual` を 50,000 件のグリッドとテーブルで時間を区切って試す。駄目ならテーブルと一覧だけ `virtua`。グリッドの代替は、そのとき決める。
+- **D16** 共有要素 (S8) は方式 A を試作する。方式 B は A が作れなかったときの最後の手段 ([ADR 0004](./adr/0004-shared-element-transition-by-crossfade.md))。
+- **D17** CSP の実機確認 (`tauri build` した実行ファイルの起動) は最初のチケットにする。
 - (検索で確認した範囲) CSP: Tauri はバンドル内のローカルスクリプトをハッシュ化して CSP に追記すると文書化されている。実機での確認は未了。仮想化: `@tanstack/svelte-virtual` は peerDependencies が Svelte 5 に対応済みだが、Svelte 5 で空表示になる報告 (#866) があり現状は未確認。`virtua` の Svelte 版は `VList` のみ (グリッドなし)。共有要素の方式、仮想化ライブラリ、CSP の実機確認は Phase 0 のスパイクとして未了。
