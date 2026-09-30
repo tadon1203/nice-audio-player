@@ -8,7 +8,7 @@
     "dev": "tauri dev",
     "preview": "vite preview",
     "build": "pnpm fonts:ensure && vite build",
-    "typecheck": "tsc -b --pretty false",
+    "typecheck": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --output human && tsc -b tsconfig.tools.json tests/tsconfig.json --pretty false",
     "lint": "oxlint --type-aware src tests vite.config.ts playwright.config.ts wdio.conf.ts",
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
@@ -27,7 +27,9 @@
     "fonts:ensure": "node scripts/fonts.mjs ensure",
     "fonts:download": "node scripts/fonts.mjs download",
     "package": "pnpm fonts:check && tauri build",
-    "validate": "pnpm fonts:ensure && pnpm check && pnpm check:native && pnpm test && pnpm test:e2e && pnpm build"
+    "validate": "pnpm fonts:ensure && pnpm check && pnpm check:native && pnpm test && pnpm test:e2e && pnpm build",
+    "prepare": "svelte-kit sync || echo \"\"",
+    "svelte:autofix": "node scripts/svelte-autofix.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
@@ -49,6 +51,9 @@
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
     "@playwright/test": "^1.60.0",
+    "@sveltejs/adapter-static": "^3.0.10",
+    "@sveltejs/kit": "^2.70.3",
+    "@sveltejs/vite-plugin-svelte": "^7.3.1",
     "@tailwindcss/vite": "^4.1.18",
     "@tanstack/router-plugin": "^1.168.40",
     "@tauri-apps/cli": "^2.0.0",
@@ -68,6 +73,8 @@
     "oxlint-tsgolint": "^7.0.2001",
     "playwright": "^1.60.0",
     "shadcn": "^4.0.0",
+    "svelte": "^5.57.1",
+    "svelte-check": "^4.7.6",
     "tailwindcss": "^4.1.18",
     "typescript": "~6.0.2",
     "vite": "^8.3.0",

@@ -13,3 +13,5 @@ These are guidance, not law. If they conflict, use judgment, pick the sensible o
 ## Token efficiency
 
 Offload large or exploratory searches (broad `grep`/`glob` sweeps, multi-file investigations) to a Haiku subagent so the raw results stay out of the main context; bring back only the conclusion.
+
+`.svelte` / `.svelte.ts` の作成・編集は `svelte-file-editor` サブエージェントに任せ、完了前に `svelte-autofixer` で問題がなくなるまで直す。

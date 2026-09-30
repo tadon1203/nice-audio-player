@@ -1,39 +1,26 @@
+import { sveltekit } from "@sveltejs/kit/vite";
 import { defineConfig } from "vitest/config";
-import { resolve } from "node:path";
 
 export default defineConfig({
-  resolve: {
-    alias: {
-      "@": resolve(import.meta.dirname, "src"),
-    },
-  },
+  plugins: [sveltekit()],
+  resolve: { conditions: ["browser"] },
   test: {
     projects: [
       {
         extends: true,
-        resolve: {
-          alias: {
-            "@": resolve(import.meta.dirname, "src"),
-          },
-        },
         test: {
           name: "renderer",
           environment: "jsdom",
-          include: ["src/**/*.test.{ts,tsx}"],
-          exclude: ["src/shared/ipc/**"],
+          include: ["src/**/*.test.ts"],
+          exclude: ["src/lib/native/**"],
         },
       },
       {
         extends: true,
-        resolve: {
-          alias: {
-            "@": resolve(import.meta.dirname, "src"),
-          },
-        },
         test: {
           name: "shared",
           environment: "node",
-          include: ["src/shared/ipc/**/*.test.{ts,tsx}", "tests/**/*.test.ts"],
+          include: ["src/lib/native/**/*.test.ts", "tests/**/*.test.ts"],
         },
       },
     ],

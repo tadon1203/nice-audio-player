@@ -4,10 +4,10 @@
   "version": "0.0.1",
   "identifier": "com.niceaudioplayer.app",
   "build": {
-    "beforeDevCommand": "pnpm exec vite --host 127.0.0.1 --port 1420 --strictPort",
+    "beforeDevCommand": "pnpm exec vite dev --host 127.0.0.1 --port 1420 --strictPort",
     "devUrl": "http://127.0.0.1:1420",
     "beforeBuildCommand": "pnpm build",
-    "frontendDist": "../dist"
+    "frontendDist": "../build"
   },
   "app": {
     "windows": [

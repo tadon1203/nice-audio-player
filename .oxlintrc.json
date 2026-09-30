@@ -1,42 +1,49 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": [
-      "warn",
-      {
-        "allowConstantExport": true
-      }
-    ]
-  },
+  "plugins": ["typescript", "oxc"],
   "overrides": [
     {
-      "files": ["src/shared/**"],
+      "files": ["src/lib/native/**"],
       "rules": {
         "no-restricted-imports": [
           "error",
           {
             "patterns": [
               {
-                "group": ["@/entities", "@/entities/**"],
-                "message": "FSD: `shared` must not import from `entities` (upper layer)."
+                "group": ["**/routes/**"],
+                "message": "Layering: `native` must not import from `routes`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["@/features", "@/features/**"],
-                "message": "FSD: `shared` must not import from `features` (upper layer)."
+                "group": ["$lib/components", "$lib/components/**"],
+                "message": "Layering: `native` must not import from `components`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["@/widgets", "@/widgets/**"],
-                "message": "FSD: `shared` must not import from `widgets` (upper layer)."
+                "group": ["$lib/shell", "$lib/shell/**"],
+                "message": "Layering: `native` must not import from `shell`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["@/pages", "@/pages/**"],
-                "message": "FSD: `shared` must not import from `pages` (upper layer)."
+                "group": ["$lib/playback", "$lib/playback/**"],
+                "message": "Layering: `native` must not import from `playback`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["@/app", "@/app/**"],
-                "message": "FSD: `shared` must not import from `app` (upper layer)."
+                "group": ["$lib/library", "$lib/library/**"],
+                "message": "Layering: `native` must not import from `library`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
+              },
+              {
+                "group": ["$lib/lyrics", "$lib/lyrics/**"],
+                "message": "Layering: `native` must not import from `lyrics`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
+              },
+              {
+                "group": ["$lib/settings", "$lib/settings/**"],
+                "message": "Layering: `native` must not import from `settings`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
+              },
+              {
+                "group": ["$lib/ui", "$lib/ui/**"],
+                "message": "Layering: `native` must not import from `ui`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
+              },
+              {
+                "group": ["$lib/utils", "$lib/utils/**"],
+                "message": "Layering: `native` must not import from `utils`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               }
             ]
           }
@@ -44,27 +51,51 @@
       }
     },
     {
-      "files": ["src/entities/**"],
+      "files": ["src/lib/utils/**"],
       "rules": {
         "no-restricted-imports": [
           "error",
           {
             "patterns": [
               {
-                "group": ["@/features", "@/features/**"],
-                "message": "FSD: `entities` must not import from `features` (upper layer)."
+                "group": ["**/routes/**"],
+                "message": "Layering: `utils` must not import from `routes`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["@/widgets", "@/widgets/**"],
-                "message": "FSD: `entities` must not import from `widgets` (upper layer)."
+                "group": ["$lib/components", "$lib/components/**"],
+                "message": "Layering: `utils` must not import from `components`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["@/pages", "@/pages/**"],
-                "message": "FSD: `entities` must not import from `pages` (upper layer)."
+                "group": ["$lib/shell", "$lib/shell/**"],
+                "message": "Layering: `utils` must not import from `shell`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["@/app", "@/app/**"],
-                "message": "FSD: `entities` must not import from `app` (upper layer)."
+                "group": ["$lib/playback", "$lib/playback/**"],
+                "message": "Layering: `utils` must not import from `playback`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
+              },
+              {
+                "group": ["$lib/library", "$lib/library/**"],
+                "message": "Layering: `utils` must not import from `library`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
+              },
+              {
+                "group": ["$lib/lyrics", "$lib/lyrics/**"],
+                "message": "Layering: `utils` must not import from `lyrics`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
+              },
+              {
+                "group": ["$lib/settings", "$lib/settings/**"],
+                "message": "Layering: `utils` must not import from `settings`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
+              },
+              {
+                "group": ["$lib/ui", "$lib/ui/**"],
+                "message": "Layering: `utils` must not import from `ui`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
+              },
+              {
+                "group": ["$lib/native", "$lib/native/**"],
+                "message": "Layering: `utils` must not import from `native`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
+              },
+              {
+                "group": ["@tauri-apps/*"],
+                "message": "Only `lib/native` may import `@tauri-apps/*`."
               }
             ]
           }
@@ -72,23 +103,43 @@
       }
     },
     {
-      "files": ["src/features/**"],
+      "files": ["src/lib/ui/**"],
       "rules": {
         "no-restricted-imports": [
           "error",
           {
             "patterns": [
               {
-                "group": ["@/widgets", "@/widgets/**"],
-                "message": "FSD: `features` must not import from `widgets` (upper layer)."
+                "group": ["**/routes/**"],
+                "message": "Layering: `ui` must not import from `routes`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["@/pages", "@/pages/**"],
-                "message": "FSD: `features` must not import from `pages` (upper layer)."
+                "group": ["$lib/components", "$lib/components/**"],
+                "message": "Layering: `ui` must not import from `components`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["@/app", "@/app/**"],
-                "message": "FSD: `features` must not import from `app` (upper layer)."
+                "group": ["$lib/shell", "$lib/shell/**"],
+                "message": "Layering: `ui` must not import from `shell`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
+              },
+              {
+                "group": ["$lib/playback", "$lib/playback/**"],
+                "message": "Layering: `ui` must not import from `playback`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
+              },
+              {
+                "group": ["$lib/library", "$lib/library/**"],
+                "message": "Layering: `ui` must not import from `library`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
+              },
+              {
+                "group": ["$lib/lyrics", "$lib/lyrics/**"],
+                "message": "Layering: `ui` must not import from `lyrics`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
+              },
+              {
+                "group": ["$lib/settings", "$lib/settings/**"],
+                "message": "Layering: `ui` must not import from `settings`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
+              },
+              {
+                "group": ["@tauri-apps/*"],
+                "message": "Only `lib/native` may import `@tauri-apps/*`."
               }
             ]
           }
@@ -96,19 +147,39 @@
       }
     },
     {
-      "files": ["src/widgets/**"],
+      "files": ["src/lib/playback/**"],
       "rules": {
         "no-restricted-imports": [
           "error",
           {
             "patterns": [
               {
-                "group": ["@/pages", "@/pages/**"],
-                "message": "FSD: `widgets` must not import from `pages` (upper layer)."
+                "group": ["**/routes/**"],
+                "message": "Layering: `playback` must not import from `routes`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["@/app", "@/app/**"],
-                "message": "FSD: `widgets` must not import from `app` (upper layer)."
+                "group": ["$lib/components", "$lib/components/**"],
+                "message": "Layering: `playback` must not import from `components`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
+              },
+              {
+                "group": ["$lib/shell", "$lib/shell/**"],
+                "message": "Layering: `playback` must not import from `shell`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
+              },
+              {
+                "group": ["$lib/library", "$lib/library/**"],
+                "message": "Layering: `playback` must not import from `library`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
+              },
+              {
+                "group": ["$lib/lyrics", "$lib/lyrics/**"],
+                "message": "Layering: `playback` must not import from `lyrics`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
+              },
+              {
+                "group": ["$lib/settings", "$lib/settings/**"],
+                "message": "Layering: `playback` must not import from `settings`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
+              },
+              {
+                "group": ["@tauri-apps/*"],
+                "message": "Only `lib/native` may import `@tauri-apps/*`."
               }
             ]
           }
@@ -116,15 +187,39 @@
       }
     },
     {
-      "files": ["src/pages/**"],
+      "files": ["src/lib/library/**"],
       "rules": {
         "no-restricted-imports": [
           "error",
           {
             "patterns": [
               {
-                "group": ["@/app", "@/app/**"],
-                "message": "FSD: `pages` must not import from `app` (upper layer)."
+                "group": ["**/routes/**"],
+                "message": "Layering: `library` must not import from `routes`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
+              },
+              {
+                "group": ["$lib/components", "$lib/components/**"],
+                "message": "Layering: `library` must not import from `components`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
+              },
+              {
+                "group": ["$lib/shell", "$lib/shell/**"],
+                "message": "Layering: `library` must not import from `shell`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
+              },
+              {
+                "group": ["$lib/playback", "$lib/playback/**"],
+                "message": "Layering: `library` must not import from `playback`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
+              },
+              {
+                "group": ["$lib/lyrics", "$lib/lyrics/**"],
+                "message": "Layering: `library` must not import from `lyrics`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
+              },
+              {
+                "group": ["$lib/settings", "$lib/settings/**"],
+                "message": "Layering: `library` must not import from `settings`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
+              },
+              {
+                "group": ["@tauri-apps/*"],
+                "message": "Only `lib/native` may import `@tauri-apps/*`."
               }
             ]
           }
@@ -132,39 +227,144 @@
       }
     },
     {
-      "files": ["src/app/routes/**/*.tsx"],
+      "files": ["src/lib/lyrics/**"],
       "rules": {
-        "react/only-export-components": [
-          "warn",
+        "no-restricted-imports": [
+          "error",
           {
-            "allowConstantExport": true,
-            "allowExportNames": ["Route"]
+            "patterns": [
+              {
+                "group": ["**/routes/**"],
+                "message": "Layering: `lyrics` must not import from `routes`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
+              },
+              {
+                "group": ["$lib/components", "$lib/components/**"],
+                "message": "Layering: `lyrics` must not import from `components`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
+              },
+              {
+                "group": ["$lib/shell", "$lib/shell/**"],
+                "message": "Layering: `lyrics` must not import from `shell`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
+              },
+              {
+                "group": ["$lib/playback", "$lib/playback/**"],
+                "message": "Layering: `lyrics` must not import from `playback`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
+              },
+              {
+                "group": ["$lib/library", "$lib/library/**"],
+                "message": "Layering: `lyrics` must not import from `library`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
+              },
+              {
+                "group": ["$lib/settings", "$lib/settings/**"],
+                "message": "Layering: `lyrics` must not import from `settings`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
+              },
+              {
+                "group": ["@tauri-apps/*"],
+                "message": "Only `lib/native` may import `@tauri-apps/*`."
+              }
+            ]
           }
         ]
       }
     },
     {
-      "files": ["src/shared/ui/shadcn/button.tsx", "src/shared/ui/shadcn/button-group.tsx"],
+      "files": ["src/lib/settings/**"],
       "rules": {
-        "react/only-export-components": "off"
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["**/routes/**"],
+                "message": "Layering: `settings` must not import from `routes`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
+              },
+              {
+                "group": ["$lib/components", "$lib/components/**"],
+                "message": "Layering: `settings` must not import from `components`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
+              },
+              {
+                "group": ["$lib/shell", "$lib/shell/**"],
+                "message": "Layering: `settings` must not import from `shell`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
+              },
+              {
+                "group": ["$lib/playback", "$lib/playback/**"],
+                "message": "Layering: `settings` must not import from `playback`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
+              },
+              {
+                "group": ["$lib/library", "$lib/library/**"],
+                "message": "Layering: `settings` must not import from `library`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
+              },
+              {
+                "group": ["$lib/lyrics", "$lib/lyrics/**"],
+                "message": "Layering: `settings` must not import from `lyrics`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
+              },
+              {
+                "group": ["@tauri-apps/*"],
+                "message": "Only `lib/native` may import `@tauri-apps/*`."
+              }
+            ]
+          }
+        ]
       }
     },
     {
-      "files": ["src/widgets/track-table/track-table.tsx"],
+      "files": ["src/lib/shell/**"],
       "rules": {
-        "react/incompatible-library": "off"
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["**/routes/**"],
+                "message": "Layering: `shell` must not import from `routes`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
+              },
+              {
+                "group": ["$lib/components", "$lib/components/**"],
+                "message": "Layering: `shell` must not import from `components`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
+              },
+              {
+                "group": ["@tauri-apps/*"],
+                "message": "Only `lib/native` may import `@tauri-apps/*`."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/lib/components/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["**/routes/**"],
+                "message": "Layering: `components` must not import from `routes`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
+              },
+              {
+                "group": ["@tauri-apps/*"],
+                "message": "Only `lib/native` may import `@tauri-apps/*`."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/routes/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["@tauri-apps/*"],
+                "message": "Only `lib/native` may import `@tauri-apps/*`."
+              }
+            ]
+          }
+        ]
       }
     }
-  ],
-  "ignorePatterns": [
-    "dist",
-    "src/shared/ipc/bindings.ts",
-    "out",
-    "build",
-    "node_modules",
-    "playwright-report",
-    "test-results",
-    "release",
-    "src/app/routeTree.gen.ts"
   ]
 }

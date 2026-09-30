@@ -37,3 +37,4 @@ Thumbs.db
 !.env.example
 # Playwright CLI output (may contain credentials)
 .playwright-cli/
+.svelte-kit/

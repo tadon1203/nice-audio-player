@@ -1,20 +1,28 @@
 {
-  "files": [],
+  "extends": "./.svelte-kit/tsconfig.json",
   "compilerOptions": {
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["./src/*"]
-    }
+    "allowJs": true,
+    "checkJs": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "sourceMap": true,
+    "strict": true,
+    "moduleResolution": "bundler",
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true
   },
-  "references": [
-    {
-      "path": "./tsconfig.renderer.json"
-    },
-    {
-      "path": "./tsconfig.tools.json"
-    },
-    {
-      "path": "./tests/tsconfig.json"
-    }
+  // Path aliases live in svelte.config.js (`$lib` is built in).
+  // `include` is copied from the generated config minus `tests/` (checked by tests/tsconfig.json).
+  "include": [
+    ".svelte-kit/ambient.d.ts",
+    ".svelte-kit/env.d.ts",
+    ".svelte-kit/non-ambient.d.ts",
+    ".svelte-kit/types/**/$types.d.ts",
+    "vite.config.ts",
+    "src/**/*.ts",
+    "src/**/*.svelte"
   ]
 }

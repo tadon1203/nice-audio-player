@@ -1,29 +1,17 @@
-import react from "@vitejs/plugin-react";
+import { sveltekit } from "@sveltejs/kit/vite";
 import tailwindcss from "@tailwindcss/vite";
-import { tanstackRouter } from "@tanstack/router-plugin/vite";
-import { resolve } from "node:path";
 import { defineConfig } from "vite";
 
-const root = import.meta.dirname;
+const host = process.env.TAURI_DEV_HOST;
 
 export default defineConfig({
-  plugins: [
-    tanstackRouter({
-      routesDirectory: resolve(root, "src/app/routes"),
-      generatedRouteTree: resolve(root, "src/app/routeTree.gen.ts"),
-      autoCodeSplitting: true,
-    }),
-    react(),
-    tailwindcss(),
-  ],
-  resolve: { alias: { "@": resolve(root, "src") } },
-  root: resolve(root, "src/app"),
-  publicDir: resolve(root, "static"),
-  server: { host: "127.0.0.1", port: 1420, strictPort: true },
+  plugins: [tailwindcss(), sveltekit()],
   clearScreen: false,
-  build: {
-    outDir: resolve(root, "dist"),
-    emptyOutDir: true,
-    rollupOptions: { input: resolve(root, "src/app/index.html") },
+  server: {
+    host: host || "127.0.0.1",
+    port: 1420,
+    strictPort: true,
+    hmr: host ? { protocol: "ws", host, port: 1421 } : undefined,
+    watch: { ignored: ["**/src-tauri/**", "**/backend/**"] },
   },
 });
