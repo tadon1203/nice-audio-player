@@ -1,4 +1,8 @@
 {
+  "enabledPlugins": {
+    "svelte@svelte": true,
+    "mattpocock-skills@claude-plugins-official": true
+  },
   "extraKnownMarketplaces": {
     "svelte": {
       "source": {
@@ -6,8 +10,5 @@
         "repo": "sveltejs/ai-tools"
       }
     }
-  },
-  "enabledPlugins": {
-    "svelte@svelte": true
   }
 }
