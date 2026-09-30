@@ -1,7 +1,13 @@
 <script lang="ts" generics="Item">
-  import type { Snippet } from "svelte";
+  import { untrack, type Snippet } from "svelte";
+  import { prefersReducedMotion } from "svelte/motion";
   import { get } from "svelte/store";
+  import type { TransitionConfig } from "svelte/transition";
   import { createVirtualizer } from "@tanstack/svelte-virtual";
+  import type { ArtworkRef } from "$lib/native";
+  import RovingLight, { type RovingTarget } from "$lib/ui/artwork-light/roving-light.svelte";
+  import { motionFor } from "$lib/ui/motion/svelte-motion";
+  import { createSortMotion } from "./sort-motion.svelte";
   import {
     columnCount,
     keyTarget,
@@ -15,6 +21,8 @@
     scrollElement,
     initialOffset = 0,
     itemKey,
+    artworkAt,
+    sortSignature,
     ontopindexchange,
     tile,
   }: {
@@ -23,6 +31,13 @@
     scrollElement: HTMLElement | null;
     initialOffset?: number;
     itemKey: (item: Item) => string;
+    /**
+     * The artwork of the item at `index`. With it, hovering or focusing a tile lets a faint
+     * Light from that artwork fall behind the grid.
+     */
+    artworkAt?: (index: number) => ArtworkRef | null | undefined;
+    /** Changes when the sort does: tiles then slide (or fade) to their new places. */
+    sortSignature: string;
     /** Told the index of the first tile in view, for the scroll index label. */
     ontopindexchange?: (index: number) => void;
     tile: Snippet<[Item, number]>;
@@ -48,6 +63,106 @@
   let list = $state<HTMLElement | null>(null);
   let width = $state(0);
   let scrollMargin = $state(0);
+
+  const sortMotion = createSortMotion(
+    () => sortSignature,
+    () => scrollElement,
+  );
+  // Under reduced motion a slide is a fade.
+  const tileMotion = $derived(
+    sortMotion.current === "slide" && prefersReducedMotion.current ? "fade" : sortMotion.current,
+  );
+
+  // The slide is a FLIP done by hand, only around a sort: Svelte's `animate:` measures every
+  // tile on every update, which slowed the scroll restore down enough to break it.
+  // `before` is where each tile was when the sort changed. The sorted items arrive later (from the
+  // catalog), so the slide plays once tiles have actually moved, while the sort window is open.
+  let before = new Map<string, DOMRect>();
+  let watchedSignature = untrack(() => sortSignature);
+  $effect.pre(() => {
+    const signature = sortSignature;
+    if (signature === watchedSignature) return;
+    watchedSignature = signature;
+    // Still the old DOM: where each mounted tile is now.
+    before = new Map();
+    list?.querySelectorAll<HTMLElement>("li[data-key]").forEach((element) => {
+      before.set(element.dataset.key ?? "", element.getBoundingClientRect());
+    });
+    deactivateLight();
+  });
+
+  $effect(() => {
+    void visible;
+    if (tileMotion !== "slide") {
+      before = new Map();
+      return;
+    }
+    if (before.size === 0 || list === null) return;
+    const { duration, easing } = motionFor("mediumMove", false);
+    const steps = 24;
+    let moved = false;
+    list.querySelectorAll<HTMLElement>("li[data-key]").forEach((element) => {
+      const old = before.get(element.dataset.key ?? "");
+      if (old === undefined) return;
+      const now = element.getBoundingClientRect();
+      const dx = old.left - now.left;
+      const dy = old.top - now.top;
+      if (dx === 0 && dy === 0) return;
+      moved = true;
+      const keyframes = Array.from({ length: steps + 1 }, (_, i) => {
+        const left = 1 - easing(i / steps);
+        return { transform: `translate(${dx * left}px, ${dy * left}px)` };
+      });
+      element.animate(keyframes, { duration });
+    });
+    if (moved) before = new Map();
+  });
+
+  function fadeIn(_node: Element): TransitionConfig {
+    if (tileMotion !== "fade") return { duration: 0 };
+    const { duration, easing } = motionFor("mediumMove", prefersReducedMotion.current);
+    return { duration, easing, css: (t) => `opacity: ${t}` };
+  }
+
+  // The Light that follows the tile under the pointer or focus. Tiles report themselves (their
+  // index and element), so nothing here reads the markup back out of the DOM.
+  let target = $state<RovingTarget | null>(null);
+  let targetTile: HTMLElement | null = null;
+
+  function follow(index: number, tile: HTMLElement) {
+    if (wrap === null || artworkAt === undefined) return;
+    targetTile = tile;
+    const box = tile.getBoundingClientRect();
+    const origin = wrap.getBoundingClientRect();
+    target = {
+      artwork: artworkAt(index) ?? null,
+      x: box.left - origin.left + box.width / 2,
+      y: box.top - origin.top + box.height / 2,
+      active: true,
+    };
+  }
+
+  function deactivateLight() {
+    if (target !== null) target = { ...target, active: false };
+    targetTile = null;
+  }
+
+  // Focus still in the grid, or the pointer still over it, keeps the Light on.
+  function pointerLeft() {
+    if (!wrap?.matches(":focus-within")) deactivateLight();
+  }
+
+  function focusLeft(event: FocusEvent) {
+    const to = event.relatedTarget;
+    if (to instanceof Node && wrap?.contains(to)) return;
+    if (!wrap?.matches(":hover")) deactivateLight();
+  }
+
+  // A tile that is unmounted (filter, sort, scrolling away) no longer holds the Light.
+  $effect(() => {
+    void visible;
+    if (targetTile !== null && !targetTile.isConnected) deactivateLight();
+  });
 
   const columns = $derived(columnCount(width, metrics));
   const rowCount = $derived(Math.ceil(items.length / columns));
@@ -173,10 +288,17 @@
   the DOM. Rows are padding and mounted tiles; the browser must not "anchor" the scroll position
   to a tile that is about to be replaced.
 -->
+<!-- The wrapper only watches the pointer and focus leaving, for the Light; it is not interactive. -->
+<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   bind:this={wrap}
   class="relative [overflow-anchor:none] [overflow-clip-margin:0.5rem] overflow-clip"
+  onpointerleave={pointerLeft}
+  onfocusout={focusLeft}
 >
+  {#if artworkAt !== undefined && target !== null}
+    <RovingLight {target} />
+  {/if}
   <!-- Keys bubble up from the tiles, which hold the focus; the list itself is not interactive. -->
   <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
   <ul
@@ -193,7 +315,16 @@
   >
     {#each visible as item, offset (itemKey(item))}
       {@const index = first + offset}
-      <li data-index={index} onfocusin={() => (focusedIndex = index)}>
+      <li
+        data-index={index}
+        data-key={itemKey(item)}
+        in:fadeIn
+        onpointerenter={(event) => follow(index, event.currentTarget)}
+        onfocusin={(event) => {
+          focusedIndex = index;
+          follow(index, event.currentTarget);
+        }}
+      >
         {@render tile(item, index)}
       </li>
     {/each}

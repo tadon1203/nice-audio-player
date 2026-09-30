@@ -46,6 +46,8 @@
       scrollElement={scroll.viewport}
       initialOffset={scroll.initialOffset}
       itemKey={(album) => `${album.key.albumArtist}\u0000${album.key.title}`}
+      artworkAt={(index) => albums[index]?.artwork}
+      sortSignature="{view.sortKey}:{view.direction}"
       ontopindexchange={scroll.ontopindexchange}
     >
       {#snippet tile(album)}

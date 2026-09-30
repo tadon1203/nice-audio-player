@@ -4,8 +4,11 @@
   import ListMusic from "@lucide/svelte/icons/list-music";
   import Settings2 from "@lucide/svelte/icons/settings-2";
   import type { Component } from "svelte";
+  import { prefersReducedMotion } from "svelte/motion";
+  import { crossfade, fade } from "svelte/transition";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
+  import { motionFor } from "$lib/ui/motion/svelte-motion";
   import { cn } from "$lib/utils/cn.js";
   import { buttonVariants } from "$lib/ui/shadcn/button/index.js";
 
@@ -28,6 +31,16 @@
     const pathname = page.url.pathname;
     return to === "/settings" ? pathname === to : pathname === to || pathname.startsWith(`${to}/`);
   }
+
+  // The selection pill slides between items: it leaves one link and arrives at the next.
+  // `crossfade` is created per Navigation, because the sidebar and the mobile sheet can both be
+  // mounted and must not trade pills.
+  const [send, receive] = crossfade({
+    duration: () => motionFor("smallMove", prefersReducedMotion.current).duration,
+    easing: (t) => motionFor("smallMove", prefersReducedMotion.current).easing(t),
+    fallback: (node) =>
+      fade(node, { duration: motionFor("feedback", prefersReducedMotion.current).duration }),
+  });
 </script>
 
 {#snippet link(item: NavigationItem)}
@@ -43,7 +56,12 @@
     )}
   >
     {#if active}
-      <span aria-hidden="true" class="absolute inset-0 rounded-md bg-muted"></span>
+      <span
+        aria-hidden="true"
+        class="absolute inset-0 rounded-md bg-muted"
+        in:receive={{ key: "navigation-selection" }}
+        out:send={{ key: "navigation-selection" }}
+      ></span>
     {/if}
     <item.icon aria-hidden="true" class="relative" />
     <span class="relative truncate">{item.label}</span>

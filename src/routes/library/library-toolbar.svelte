@@ -3,6 +3,7 @@
   import type { LibrarySortDirection } from "$lib/native";
   import CollectionSortControl from "$lib/ui/collection-sort-control.svelte";
   import PageTitle from "$lib/ui/page-title.svelte";
+  import RollingNumber from "$lib/ui/rolling-number/rolling-number.svelte";
   import {
     InputGroup,
     InputGroupAddon,
@@ -36,6 +37,9 @@
       ontoggledirection: () => void;
     };
   } = $props();
+
+  // `1,284 albums`: the number rolls like a slot machine, the unit stays put.
+  const countMatch = $derived(/^([\d,.]+)(\s.*)?$/.exec(countLabel));
 </script>
 
 <header class="pt-8">
@@ -44,7 +48,13 @@
       <!-- Title and count share one baseline; search and sort share one row. -->
       <div class="flex min-w-0 items-baseline gap-4">
         <PageTitle>{title}</PageTitle>
-        <span class="text-sm tabular-nums text-muted-foreground">{countLabel}</span>
+        <span class="text-sm tabular-nums text-muted-foreground">
+          {#if countMatch}
+            <RollingNumber value={countMatch[1]!} settle="right-last" spin={1} />{countMatch[2]}
+          {:else}
+            {countLabel}
+          {/if}
+        </span>
         {#if updating}
           <span role="status" aria-live="polite" class="text-sm text-muted-foreground">
             Updating…

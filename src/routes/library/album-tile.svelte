@@ -1,8 +1,8 @@
 <script lang="ts">
-  import Play from "@lucide/svelte/icons/play";
   import type { LibraryAlbumSummary } from "$lib/native";
   import { albumTitleLabel, artistNameLabel, toNameSegment } from "$lib/library/unknown-name";
   import Artwork from "$lib/ui/artwork.svelte";
+  import PlayPauseIcon from "$lib/ui/play-pause-icon.svelte";
   import { Button } from "$lib/ui/shadcn/button/index.js";
   import { MISSING } from "$lib/utils/format";
 
@@ -50,7 +50,7 @@
         aria-label="Play {title}"
         onclick={() => onplay(album)}
       >
-        <Play aria-hidden="true" />
+        <PlayPauseIcon playing={false} />
       </Button>
     </div>
   {/if}
