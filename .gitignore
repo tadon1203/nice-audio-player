@@ -38,3 +38,6 @@ Thumbs.db
 # Playwright CLI output (may contain credentials)
 .playwright-cli/
 .svelte-kit/
+
+# Skill working notes (specs and tickets)
+/.scratch/

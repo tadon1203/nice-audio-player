@@ -178,7 +178,7 @@ Phase 0 の最初、Svelte のコードを書く前に入れる。以降の移�
    - skills: `svelte-code-writer`, `svelte-core-bestpractices`
    - サブエージェント: `svelte-file-editor` (`.svelte` / `.svelte.ts` の作成・編集・レビュー専用)
    - 手動で入れる場合: `/plugin marketplace add sveltejs/ai-tools` → `/plugin install svelte`
-2. `sv add ai-tools` が `AGENTS.md` などに指示文を書き出した場合、その内容は `CLAUDE.md` から参照する形にまとめる (PHILOSOPHY.md: ドキュメントは木構造、重複させない)。`CLAUDE.md` に 1 行足す: 「`.svelte` / `.svelte.ts` の作成・編集は `svelte-file-editor` サブエージェントに任せ、完了前に `svelte-autofixer` で問題がなくなるまで直す」。これは既存の「大きな探索はサブエージェントへ」とも合う。
+2. `sv add ai-tools` が `AGENTS.md` などに指示文を書き出した場合、その内容は `CLAUDE.md` から参照する形にまとめる (CONTRIBUTING.md の Principles: ドキュメントは木構造、重複させない)。`CLAUDE.md` に 1 行足す: 「`.svelte` / `.svelte.ts` の作成・編集は `svelte-file-editor` サブエージェントに任せ、完了前に `svelte-autofixer` で問題がなくなるまで直す」。これは既存の「大きな探索はサブエージェントへ」とも合う。
 3. `scripts/svelte-autofix.mjs` を追加する: 変更された `.svelte` / `.svelte.ts` に `npx @sveltejs/mcp svelte-autofixer <path>` を順に実行し、`issues` が 1 件でもあれば失敗する (`suggestions` は表示のみ)。`pnpm svelte:autofix` として CONTRIBUTING の「Verification」に追加。CI には入れない (ネットワークと実行時間のため。必要になったら再検討)。
 4. 確認: 新しいセッションで MCP サーバーとサブエージェントが見えること (`/mcp`, `/agents`)。
 

@@ -24,13 +24,7 @@ A tool for a personal music library, not a storefront. Dark, precise, and quiet.
 
 ## Vocabulary
 
-Screens are built from five elements rather than new looks.
-
-- **Sleeve**: the music as an object, its artwork. Its corner radius says how it is placed: square when attached to an edge, rounded when placed in the workspace, smaller inside a row.
-- **Light**: the artwork, blurred, lighting a surface. Its strength follows the user's focus: strongest in Now Playing, then the dock, then the header of a detail page, faint in the library, absent in navigation and Settings. Floating UI (menus, dialogs, panels) uses Acrylic, not Light. Blur appears only in Light and Acrylic and is never animated.
-- **Strip**: time drawn horizontally.
-- **Gutter**: position and order on the left, in tabular figures. It is also the button of its row.
-- **Path**: technical notation for audio, such as `FLAC 24/96 › Speakers`. Its length alone says whether playback is bit-perfect.
+Screens are built from five elements (Sleeve, Light, Strip, Gutter, Path) rather than new looks. Their definitions are in [CONTEXT.md](./CONTEXT.md).
 
 ## Space
 

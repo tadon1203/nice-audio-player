@@ -1,5 +1,16 @@
 # Contributing
 
+## Principles
+
+- Everything comes back to reducing cognitive load. Make intent clear through file structure, code structure, and naming.
+- No ad-hoc fixes. Design for long-term consistency and easy extension, without over-engineering.
+- No resistance to changing existing code, and no appetite for changing it, without a clear practical reason.
+- Share UI code only when it shares naturally.
+- Respect the project's context, but prefer common conventions and standard implementations.
+- Do not reimplement what the standard library or an existing library already provides, without a clear practical reason.
+- Prefer deep modules: a small interface over a lot of behavior (`/codebase-design`).
+- Documentation is the single source of truth, branching like a tree from README.md and CLAUDE.md. Do not over-detail, and do not duplicate content across documents.
+
 ## Rules that matter
 
 - Register Tauri commands in `src-tauri/src/bindings.rs` and regenerate `src/shared/ipc/bindings.ts` with `pnpm bindings`; never edit the generated file by hand.
@@ -19,7 +30,8 @@
 
 - Commit directly to `main`. Use a branch or PR only for big or risky changes.
 - Commit messages: short and descriptive. Conventional Commits are optional.
-- Tests are welcome for fragile logic but not required for every change.
+- Tests are welcome for fragile logic but not required for every change. Use `/tdd` for fragile logic.
+- The feature flow (`/grill-with-docs` → `/to-spec` → `/to-tickets` → `/implement`) is in [CLAUDE.md](./CLAUDE.md).
 
 ## Verification
 
