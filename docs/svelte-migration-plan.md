@@ -234,7 +234,7 @@ Phase 0 の最初、Svelte のコードを書く前に入れる。以降の移�
 ### Phase 7: 片付けとドキュメント
 
 - `src-react/`、React 関連の依存と設定 (`@vitejs/plugin-react`, `@tanstack/router-plugin`, `routeTree.gen.ts`, `history-state.d.ts`, `tsconfig.app/renderer.json`, `.oxlintrc.json` の react プラグイン) を削除。
-- ドキュメント更新: `CONTRIBUTING.md` (Router / Query / Zustand の規則、`src/shared/lib/native.ts` のパス、shadcn のコマンド、「3 ファイル超でセグメント分け」規則は §2 の構成に合わせて書き直す)、`DESIGN.md` の「Where the details live」のパス、`README.md`、`CLAUDE.md` (§7)。
+- ドキュメント更新: `DESIGN.md` の「Where the details live」のパス、`README.md`、`CLAUDE.md` (§7)。
 - このファイルを削除。`main` にマージ。
 
 ## 9. 未確認事項 (Phase 0 で確かめる)
