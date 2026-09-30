@@ -6,7 +6,6 @@ Personal project. Keep things simple and just get it done.
 - [docs/adr/](./docs/adr/) — decisions and their reasons
 - [docs/requirements.md](./docs/requirements.md) — product behavior
 - [DESIGN.md](./DESIGN.md) — UI principles (no implementation details)
-- [docs/architecture.md](./docs/architecture.md) — structure and boundaries
 - [CONTRIBUTING.md](./CONTRIBUTING.md) — engineering rules and principles
 
 ## Workflow
