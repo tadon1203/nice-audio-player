@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { installNativeApi } from "./fixtures/native-api";
+import { workspaceViewport } from "./fixtures/locators";
 
 test.beforeEach(async ({ page }) => {
   await installNativeApi(page);
@@ -141,7 +142,7 @@ test("reaching the end of a long list loads the next page without a button", asy
   await page.goto("/library/tracks");
   await expect(page.getByRole("button", { name: "Load more" })).toHaveCount(0);
   const table = page.getByRole("table", { name: "Library tracks" });
-  const viewport = page.locator('main [data-slot="scroll-area-viewport"]');
+  const viewport = workspaceViewport(page);
   await expect
     .poll(async () => {
       await viewport.evaluate((element) => {

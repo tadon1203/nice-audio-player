@@ -5,6 +5,7 @@ import {
   formatCount,
   formatDuration,
   formatKilohertz,
+  formatOfTotal,
   formatNumber,
   formatSampleRate,
 } from "./format";
@@ -76,5 +77,13 @@ describe("formatKilohertz", () => {
     expect(formatKilohertz(48_000)).toBe("48");
     expect(formatKilohertz(44_100)).toBe("44.1");
     expect(formatKilohertz(null)).toBe(MISSING);
+  });
+});
+
+describe("formatOfTotal", () => {
+  it("formats a number with an optional total", () => {
+    expect(formatOfTotal(null, 12)).toBeNull();
+    expect(formatOfTotal(3, null)).toBe("3");
+    expect(formatOfTotal(3, 12)).toBe("3 of 12");
   });
 });

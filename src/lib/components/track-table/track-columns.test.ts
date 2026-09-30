@@ -2,10 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   albumArtistOf,
   columnText,
+  type TextColumn,
   libraryTrackColumns,
-  ofTotal,
-  rowClickIntent,
-  trackRowAction,
+  trackRowState,
   trackTableBreakpoints,
   type TrackTableRow,
 } from "./track-columns";
@@ -43,9 +42,9 @@ describe("track columns", () => {
   });
 
   it("show the missing marker for unknown values", () => {
-    const album = libraryTrackColumns.find((column) => column.id === "album")!;
+    const album = libraryTrackColumns.find((column) => column.id === "album") as TextColumn;
     expect(columnText(album, { ...row, album: null })).toBe("—");
-    const time = libraryTrackColumns.find((column) => column.id === "durationMs")!;
+    const time = libraryTrackColumns.find((column) => column.id === "durationMs") as TextColumn;
     expect(columnText(time, row)).toBe("1:05");
   });
 });
@@ -58,28 +57,31 @@ describe("track rows", () => {
   });
 
   it("offer Pause or Resume only for the active track", () => {
-    expect(trackRowAction(row, "t1", "playing")).toMatchObject({ kind: "pause", persistent: true });
-    expect(trackRowAction(row, "t1", "paused")).toMatchObject({ kind: "resume", persistent: true });
-    expect(trackRowAction(row, "t2", "playing")).toMatchObject({ kind: "play", persistent: false });
-    expect(trackRowAction(row, "t1", "stopped")).toMatchObject({
-      kind: "play",
-      label: "Play Song",
-    });
+    const action = (id: string | null, status: Parameters<typeof trackRowState>[2]) =>
+      trackRowState(row, id, status).action;
+    expect(action("t1", "playing")).toMatchObject({ kind: "pause", persistent: true });
+    expect(action("t1", "paused")).toMatchObject({ kind: "resume", persistent: true });
+    expect(action("t2", "playing")).toMatchObject({ kind: "play", persistent: false });
+    expect(action("t1", "stopped")).toMatchObject({ kind: "play", label: "Play Song" });
   });
 
   it("decide what a row click does", () => {
-    expect(rowClickIntent(row, null, "stopped")).toBe("play");
-    expect(rowClickIntent(row, "t1", "playing")).toBeNull();
-    expect(rowClickIntent(row, "t1", "paused")).toBe("resume");
-    expect(rowClickIntent({ ...row, availability: "missing" }, null, "stopped")).toBeNull();
-    expect(rowClickIntent({ ...row, playable: false }, null, "stopped")).toBeNull();
+    const intent = (
+      r: TrackTableRow,
+      id: string | null,
+      status: "stopped" | "playing" | "paused",
+    ) => trackRowState(r, id, status).clickIntent;
+    expect(intent(row, null, "stopped")).toBe("play");
+    expect(intent(row, "t1", "playing")).toBeNull();
+    expect(intent(row, "t1", "paused")).toBe("resume");
+    expect(intent({ ...row, availability: "missing" }, null, "stopped")).toBeNull();
+    expect(intent({ ...row, playable: false }, null, "stopped")).toBeNull();
   });
-});
 
-describe("ofTotal", () => {
-  it("formats number with an optional total", () => {
-    expect(ofTotal(null, 12)).toBeNull();
-    expect(ofTotal(3, null)).toBe("3");
-    expect(ofTotal(3, 12)).toBe("3 of 12");
+  it("report the playback state only for the active track", () => {
+    expect(trackRowState(row, "t1", "playing").playbackState).toBe("playing");
+    expect(trackRowState(row, "t1", "paused").playbackState).toBe("paused");
+    expect(trackRowState(row, "t1", "stopped").playbackState).toBeUndefined();
+    expect(trackRowState(row, "t2", "playing").playbackState).toBeUndefined();
   });
 });

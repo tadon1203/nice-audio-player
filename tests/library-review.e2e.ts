@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { installNativeApi } from "./fixtures/native-api";
+import { workspaceViewport } from "./fixtures/locators";
 
 test.beforeEach(async ({ page }) => installNativeApi(page));
 
@@ -87,7 +88,7 @@ test("sorts tracks, disables missing files, and loads more rows", async ({ page 
   );
 
   // Reaching the end of the list loads the next page by itself.
-  const viewport = page.locator('[data-slot="scroll-area-viewport"]');
+  const viewport = workspaceViewport(page);
   await expect
     .poll(async () => {
       await viewport.evaluate((element) => {
@@ -103,7 +104,7 @@ test("restores the virtual track container after switching library presentations
 }) => {
   await page.setViewportSize({ width: 1360, height: 900 });
   await page.goto("/library/tracks");
-  const scrollRegion = page.locator('main [data-slot="scroll-area-viewport"]');
+  const scrollRegion = workspaceViewport(page);
   await scrollRegion.evaluate((element) => {
     element.scrollTop = 1_600;
   });

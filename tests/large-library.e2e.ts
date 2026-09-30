@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { installNativeApi } from "./fixtures/native-api";
+import { workspaceViewport } from "./fixtures/locators";
 
 test.beforeEach(async ({ page }) => {
   await installNativeApi(page, { extraAlbums: 2_000 });
@@ -14,7 +15,7 @@ test("a long album list keeps only the tiles near the view mounted", async ({ pa
   expect(mounted).toBeGreaterThan(0);
   expect(mounted).toBeLessThan(120);
 
-  const viewport = page.locator('main [data-slot="scroll-area-viewport"]');
+  const viewport = workspaceViewport(page);
   await viewport.evaluate((element) => {
     element.scrollTop = element.scrollHeight / 2;
   });
@@ -30,7 +31,7 @@ test("Albums keeps its scroll position across a view switch", async ({ page }) =
   await page.goto("/library/albums");
   const tiles = page.locator("main li[data-index]");
   await expect(tiles.first()).toBeVisible();
-  const viewport = page.locator('main [data-slot="scroll-area-viewport"]');
+  const viewport = workspaceViewport(page);
   await viewport.evaluate((element) => {
     element.scrollTop = 5_000;
   });
@@ -39,11 +40,7 @@ test("Albums keeps its scroll position across a view switch", async ({ page }) =
   await page.getByRole("link", { name: "Album Artists", exact: true }).click();
   await page.getByRole("link", { name: "Albums", exact: true }).click();
   await expect(tiles.first()).toBeVisible();
-  await expect
-    .poll(() =>
-      page.locator('main [data-slot="scroll-area-viewport"]').evaluate((e) => e.scrollTop),
-    )
-    .toBe(5_000);
+  await expect.poll(() => workspaceViewport(page).evaluate((e) => e.scrollTop)).toBe(5_000);
 });
 
 test("arrow keys move between album tiles", async ({ page }) => {

@@ -10,14 +10,22 @@
     SheetHeader,
     SheetTitle,
   } from "$lib/ui/shadcn/sheet";
-  import { formatAudioPath, formatDuration, formatSampleRate, MISSING } from "$lib/utils/format";
-  import { ofTotal } from "./track-columns";
+  import {
+    formatAudioPath,
+    formatDuration,
+    formatOfTotal,
+    formatSampleRate,
+    MISSING,
+  } from "$lib/utils/format";
 
   /** Everything the library knows about one track: tags, audio format, and where the file is. */
   let { trackId, onclose }: { trackId: string | null; onclose: () => void } = $props();
 
   const query = createQuery(() => libraryQueryOptions.trackProperties(trackId));
   const properties = $derived(query.data);
+
+  const orNull = <T,>(value: T | null, format: (value: T) => string) =>
+    value === null ? null : format(value);
 </script>
 
 {#snippet row(label: string, value: string | number | null | undefined)}
@@ -51,14 +59,11 @@
           {@render row("Artist", properties.artist)}
           {@render row("Album", properties.album)}
           {@render row("Album artist", properties.albumArtist)}
-          {@render row("Track", ofTotal(properties.trackNumber, properties.trackTotal))}
-          {@render row("Disc", ofTotal(properties.discNumber, properties.discTotal))}
+          {@render row("Track", formatOfTotal(properties.trackNumber, properties.trackTotal))}
+          {@render row("Disc", formatOfTotal(properties.discNumber, properties.discTotal))}
           {@render row("Genre", properties.genre)}
           {@render row("Date", properties.date)}
-          {@render row(
-            "Duration",
-            properties.durationMs === null ? null : formatDuration(properties.durationMs),
-          )}
+          {@render row("Duration", orNull(properties.durationMs, formatDuration))}
           {@render row(
             "Format",
             formatAudioPath({
@@ -69,18 +74,15 @@
             }),
           )}
           {@render row("Codec", properties.codec)}
-          {@render row(
-            "Sample rate",
-            properties.sampleRate === null ? null : formatSampleRate(properties.sampleRate),
-          )}
+          {@render row("Sample rate", orNull(properties.sampleRate, formatSampleRate))}
           {@render row("Channels", properties.channelCount)}
           {@render row(
             "Bit depth",
-            properties.bitDepth === null ? null : `${properties.bitDepth}-bit`,
+            orNull(properties.bitDepth, (bits) => `${bits}-bit`),
           )}
           {@render row(
             "Bit rate",
-            properties.bitrateKbps === null ? null : `${properties.bitrateKbps} kbps`,
+            orNull(properties.bitrateKbps, (kbps) => `${kbps} kbps`),
           )}
           <dt class="text-muted-foreground">File</dt>
           <dd class="min-w-0 tabular-nums">

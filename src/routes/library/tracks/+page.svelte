@@ -2,8 +2,8 @@
   import TrackTable from "$lib/components/track-table/track-table.svelte";
   import { createLibraryCatalog } from "$lib/library/catalog.svelte";
   import { getPlayback } from "$lib/playback/context";
+  import { trackIndexKey, trackListContext } from "$lib/library/track-list";
   import { libraryViews } from "$lib/shell/library-views.svelte";
-  import { sortIndexLetter } from "$lib/utils/sort-index";
   import LibraryWorkspace from "../library-workspace.svelte";
 
   const meta = {
@@ -26,16 +26,7 @@
   onfilterchange={view.setFilter}
   stateKey={view.stateKey}
   {catalog}
-  indexFor={view.sortKey === "duration"
-    ? undefined
-    : (track) =>
-        sortIndexLetter(
-          (view.sortKey === "artist"
-            ? track.artist
-            : view.sortKey === "album"
-              ? track.album
-              : track.title) ?? "",
-        )}
+  indexFor={(track) => trackIndexKey(track, view.sortKey)}
 >
   {#snippet content(tracks, scroll)}
     <TrackTable
@@ -44,23 +35,10 @@
       scrollElement={scroll.viewport}
       initialOffset={scroll.initialOffset}
       ontopindexchange={scroll.ontopindexchange}
-      activeTrackId={playback.activeTrackId}
-      playbackStatus={playback.status}
       sortKey={view.sortKey}
       sortDirection={view.direction}
       onsortchange={(key, direction) => view.setSort(key, direction)}
-      onplaytrack={(id) =>
-        void playback.startPlayback(
-          {
-            kind: "tracks",
-            search: view.filter === "" ? null : view.filter,
-            sortKey: view.sortKey,
-            sortDirection: view.direction,
-          },
-          id,
-        )}
-      onpauseactive={() => void playback.pause()}
-      onresumeactive={() => void playback.resume()}
+      onplaytrack={(id) => void playback.startPlayback(trackListContext(view), id)}
     />
   {/snippet}
 </LibraryWorkspace>

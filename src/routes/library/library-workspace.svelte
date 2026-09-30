@@ -83,7 +83,7 @@
      * The index key of an item (a letter or a year) for the big label shown while scrolling.
      * The list must report its first visible item through `scroll.ontopindexchange`.
      */
-    indexFor?: (item: Item) => string;
+    indexFor?: (item: Item) => string | null;
     content: Snippet<[readonly Item[], LibraryScroll]>;
   } = $props();
 

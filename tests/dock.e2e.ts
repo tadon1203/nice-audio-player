@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { installNativeApi } from "./fixtures/native-api";
+import { workspaceViewport } from "./fixtures/locators";
 
 test.beforeEach(async ({ page }) => {
   await installNativeApi(page);
@@ -220,7 +221,7 @@ test("preserves the library scroll position across Now Playing open and close", 
   page,
 }) => {
   const dock = await playFirstTrack(page);
-  const list = page.locator('main [data-slot="scroll-area-viewport"]');
+  const list = workspaceViewport(page);
   await list.evaluate((element) => element.scrollTo(0, 400));
   const before = await list.evaluate((element) => element.scrollTop);
   expect(before).toBeGreaterThan(0);

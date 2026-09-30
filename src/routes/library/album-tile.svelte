@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { LibraryAlbumSummary } from "$lib/native";
-  import { albumTitleLabel, artistNameLabel, toNameSegment } from "$lib/library/unknown-name";
+  import { albumHref } from "$lib/library/routes";
+  import { albumTitleLabel, artistNameLabel } from "$lib/library/unknown-name";
   import Artwork from "$lib/ui/artwork.svelte";
   import PlayPauseIcon from "$lib/ui/play-pause-icon.svelte";
   import { Button } from "$lib/ui/shadcn/button/index.js";
@@ -19,10 +20,7 @@
 
   const title = $derived(albumTitleLabel(album.key.title));
   const artist = $derived(artistNameLabel(album.key.albumArtist));
-  // A plain string, not resolve(): the album detail route lands in ticket 08.
-  const href = $derived(
-    `/library/albums/${encodeURIComponent(toNameSegment(album.key.albumArtist))}/${encodeURIComponent(toNameSegment(album.key.title))}`,
-  );
+  const href = $derived(albumHref(album.key.albumArtist, album.key.title));
 </script>
 
 <!-- An artwork-led album entry. Titles are not headings: tiles belong to a list. -->

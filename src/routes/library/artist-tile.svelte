@@ -1,16 +1,14 @@
 <script lang="ts">
   import type { LibraryAlbumArtistSummary } from "$lib/native";
-  import { artistNameLabel, toNameSegment } from "$lib/library/unknown-name";
+  import { albumArtistHref } from "$lib/library/routes";
+  import { artistNameLabel } from "$lib/library/unknown-name";
   import Artwork from "$lib/ui/artwork.svelte";
   import { formatCount } from "$lib/utils/format";
 
   let { artist }: { artist: LibraryAlbumArtistSummary } = $props();
 
   const name = $derived(artistNameLabel(artist.key.name));
-  // A plain string, not resolve(): the segment is built from a runtime name.
-  const href = $derived(
-    `/library/album-artists/${encodeURIComponent(toNameSegment(artist.key.name))}`,
-  );
+  const href = $derived(albumArtistHref(artist.key.name));
 </script>
 
 <!-- An artwork-led album artist entry. -->

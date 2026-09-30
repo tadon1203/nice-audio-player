@@ -64,3 +64,9 @@ export function formatAudioPath({
   }
   return [codec, detail].filter((part) => part !== null).join(" ") || MISSING;
 }
+
+/** `n of total`, `n` alone when the total is unknown, `null` when there is no number. */
+export function formatOfTotal(number: number | null, total: number | null): string | null {
+  if (number === null) return null;
+  return total === null ? String(number) : `${number} of ${total}`;
+}
