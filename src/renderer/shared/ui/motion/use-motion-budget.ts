@@ -4,8 +4,7 @@ import { useCalmMotion } from "@/renderer/shared/lib/calm-motion";
 /**
  * How much may move by itself (DESIGN.md, the attention budget).
  *
- * - `full`: the position marker plus the small idle motion (the Light breathing, a lit lyric
- *   character lifting as it lights).
+ * - `full`: the position marker plus the small idle motion (the Light breathing).
  * - `calm`: only what marks the current position moves on its own; everything else moves only
  *   when something changes.
  * - `reduced`: the system asks for less motion; every movement is a crossfade.

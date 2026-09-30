@@ -57,6 +57,7 @@ export function PlaybackWaveformBand({
   className,
   seekClassName,
   timeClassName,
+  trailing,
 }: {
   height: number;
   showWaveform?: boolean;
@@ -64,6 +65,8 @@ export function PlaybackWaveformBand({
   className?: string;
   seekClassName?: string;
   timeClassName?: string;
+  /** Placed after the remaining time (inline layout only): Now Playing's next track. */
+  trailing?: React.ReactNode;
 }) {
   const item = usePlaybackItem();
   const { active, seekPending } = usePlaybackTransport();
@@ -149,6 +152,7 @@ export function PlaybackWaveformBand({
         </span>
         {seekBar}
         <span className={cn("shrink-0", timeClassName)}>{remainingButton}</span>
+        {trailing}
       </div>
     );
   }

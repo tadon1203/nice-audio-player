@@ -267,11 +267,9 @@ test("shows the no-lyrics and unreadable-lyrics states", async ({ page }) => {
   const dock = await playFirstTrack(page);
   const layer = page.getByRole("region", { name: "Now Playing" });
   await dock.getByRole("button", { name: "Open Now Playing" }).click();
-  await expect(layer.getByText("No lyrics for this track")).toBeVisible();
+  await expect(layer.getByText("No lyrics", { exact: true })).toBeVisible();
   // The hint sits beside the track, not over the whole screen.
-  await expect(
-    layer.getByRole("heading", { name: "Test track" }).or(layer.getByText("Test track")),
-  ).toBeVisible();
+  await expect(layer.getByText("Test track", { exact: true }).first()).toBeVisible();
 });
 
 test("toggles play/pause and changes tracks with the keyboard", async ({ page }) => {

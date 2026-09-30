@@ -1,13 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { LyricsTimedLine } from "@/shared/ipc";
-import {
-  charLift,
-  charOpacity,
-  findCurrentLineIndex,
-  lineFillMs,
-  lineProgress,
-  lineSpan,
-} from "./use-lyrics-sync";
+import { findCurrentLineIndex, lineSpan, withIntro } from "./use-lyrics-sync";
 
 const lines: LyricsTimedLine[] = [
   { startMs: 0, text: "First line" },
@@ -54,57 +47,22 @@ describe("lineSpan", () => {
   });
 });
 
-describe("lineProgress", () => {
-  it("is unlit before the line, lit after it, and linear in between", () => {
-    expect(lineProgress(4_000, 5_000, 2_000)).toBe(0);
-    expect(lineProgress(6_000, 5_000, 2_000)).toBe(0.5);
-    expect(lineProgress(9_000, 5_000, 2_000)).toBe(1);
+describe("withIntro", () => {
+  it("adds an empty line at 0ms when the first line starts at 3s or later", () => {
+    const late: LyricsTimedLine[] = [{ startMs: 3_000, text: "Late" }];
+    expect(withIntro(late)).toEqual([
+      { startMs: 0, text: "" },
+      { startMs: 3_000, text: "Late" },
+    ]);
   });
 
-  it("lights a line with no length at once", () => {
-    expect(lineProgress(4_999, 5_000, 0)).toBe(0);
-    expect(lineProgress(5_000, 5_000, 0)).toBe(1);
-  });
-});
-
-describe("lineFillMs", () => {
-  it("fills over the whole line when it is short enough to read at that pace", () => {
-    expect(lineFillMs(2_500, "Hi")).toBe(2_300);
-    expect(lineFillMs(2_100, "Hello there")).toBe(2_100);
+  it("keeps the lines when the first one starts before 3s", () => {
+    const early: LyricsTimedLine[] = [{ startMs: 2_999, text: "Early" }];
+    expect(withIntro(early)).toBe(early);
   });
 
-  it("does not crawl through a long gap after the line", () => {
-    expect(lineFillMs(30_000, "Hello")).toBe(2_750);
-  });
-
-  it("is zero for a line with no length", () => {
-    expect(lineFillMs(0, "x")).toBe(0);
-  });
-});
-
-describe("charOpacity", () => {
-  it("lights characters in order, so a wrapped line fills top to bottom", () => {
-    const opacities = [0, 1, 2, 3].map((i) => charOpacity(0.5, i, 4));
-    expect(opacities).toEqual([1, 1, 0, 0]);
-  });
-
-  it("fades the character being sung", () => {
-    expect(charOpacity(0.375, 1, 4)).toBeCloseTo(0.5);
-  });
-
-  it("is fully lit at the end and dark at the start", () => {
-    expect(charOpacity(0, 0, 4)).toBe(0);
-    expect(charOpacity(1, 3, 4)).toBe(1);
-  });
-});
-
-describe("charLift", () => {
-  it("does nothing before a character lights", () => {
-    expect(charLift(0.1, 3, 4, 4_000)).toBe(0);
-  });
-
-  it("rises as it lights and settles within 200ms", () => {
-    expect(charLift(0.2501, 1, 4, 4_000)).toBeLessThan(-1.9);
-    expect(charLift(0.31, 1, 4, 4_000)).toBe(0);
+  it("keeps an empty list", () => {
+    const none: LyricsTimedLine[] = [];
+    expect(withIntro(none)).toBe(none);
   });
 });

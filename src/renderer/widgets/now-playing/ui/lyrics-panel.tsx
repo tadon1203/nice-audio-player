@@ -1,12 +1,12 @@
-import { memo, useCallback, useEffect } from "react";
-import { AnimatePresence, m, useTransform, type MotionValue } from "motion/react";
+import { memo, useCallback, useEffect, useMemo } from "react";
+import { ArrowDown, ArrowUp, Play } from "lucide-react";
+import { m, useTransform, type MotionValue } from "motion/react";
 import { useTrackLyrics } from "@/renderer/entities/lyrics";
 import type { LyricsTimedLine } from "@/shared/ipc";
 import { formatDuration } from "@/renderer/shared/lib/format";
-import { graphemes } from "@/renderer/shared/lib/graphemes";
 import { cn } from "@/renderer/shared/lib/utils";
 import { Button } from "@/renderer/shared/ui/shadcn/button";
-import { useMotionBudget, useMotionTransition } from "@/renderer/shared/ui/motion";
+import { useMotionTransition } from "@/renderer/shared/ui/motion";
 import {
   lyricsWaveformLink,
   useLyricsWaveformLink,
@@ -16,17 +16,11 @@ import {
   usePlaybackClock,
   usePlaybackDuration,
 } from "@/renderer/entities/playback";
-import {
-  MAX_LIFT_CHARS,
-  charLift,
-  charOpacity,
-  findCurrentLineIndex,
-  lineFillMs,
-  lineProgress,
-  lineSpan,
-  useLyricsSync,
-} from "../model/use-lyrics-sync";
+import { opacityAtDistance } from "../model/distance-opacity";
+import { useAnchorPadding } from "../model/use-anchor-padding";
+import { findCurrentLineIndex, lineSpan, useLyricsSync, withIntro } from "../model/use-lyrics-sync";
 import { useLyricsScroll } from "../model/use-lyrics-scroll";
+import { ReadingBand } from "./reading-band";
 
 type LyricsPanelProps = {
   trackId: string | null;
@@ -34,9 +28,11 @@ type LyricsPanelProps = {
 };
 
 /**
- * Local LRC lyrics: synced (Gutter, auto-scroll, waveform link) or plain (static, `Unsynced`).
- * It re-renders only when the current line changes: the lit fill of each line follows the
- * playback clock through styles.
+ * Local LRC lyrics: synced (Gutter, auto-scroll, waveform link) or plain (static). Now Playing
+ * shows it only once the lyrics are resolved; why there are none is said in its Facts line. The
+ * current line sits 40% from the top, on the reading band, and a long intro shows as a gap bar.
+ * It re-renders only when the current line changes: only the gap bar of an instrumental line
+ * follows the playback clock, through styles.
  */
 export function LyricsPanel({ trackId, className }: LyricsPanelProps) {
   const durationMs = usePlaybackDuration();
@@ -44,12 +40,26 @@ export function LyricsPanel({ trackId, className }: LyricsPanelProps) {
   const { seek } = usePlaybackActions();
   const onSeek = useCallback((value: number) => void seek(value), [seek]);
   const { data: resolution } = useTrackLyrics(trackId);
-  const timedLines =
+  const rawLines =
     resolution?.status === "resolved" && resolution.document.content.kind === "timed"
       ? resolution.document.content.lines
       : null;
+  const timedLines = useMemo(() => (rawLines === null ? null : withIntro(rawLines)), [rawLines]);
   const currentIndex = useLyricsSync(timedLines);
   const scroll = useLyricsScroll(currentIndex);
+  const anchor = useAnchorPadding();
+  const scrollContainerRef = scroll.containerRef;
+  const measureContainer = anchor.ref;
+  const setContainer = useCallback(
+    (element: HTMLDivElement | null) => {
+      scrollContainerRef.current = element;
+      return measureContainer(element);
+    },
+    [scrollContainerRef, measureContainer],
+  );
+  const { realign } = scroll;
+  const anchorHeight = anchor.height;
+  useEffect(() => realign(), [realign, anchorHeight]);
   const hoveredIndex = useLyricsWaveformLink((state) =>
     state.hoveredWaveformMs === null || timedLines === null
       ? -1
@@ -65,37 +75,15 @@ export function LyricsPanel({ trackId, className }: LyricsPanelProps) {
     return () => lyricsWaveformLink.setActiveSpan(null);
   }, [timedLines, currentIndex, durationMs]);
 
-  if (resolution === undefined) return null;
-
-  if (resolution.status === "notFound") {
-    return (
-      <LyricsMessage
-        className={className}
-        title="No lyrics for this track"
-        detail="Add a .lrc file with the same name next to the audio file."
-      />
-    );
-  }
-
-  if (resolution.status === "sourceFailed") {
-    return (
-      <LyricsMessage className={className} title="Couldn't read the lyrics file" detail={null} />
-    );
-  }
-
-  const notice =
-    resolution.notice === "sidecarFailedUsingEmbedded"
-      ? "The .lrc file couldn't be read. Showing embedded lyrics."
-      : null;
+  if (resolution?.status !== "resolved") return null;
 
   if (resolution.document.content.kind === "plain") {
     return (
       <div className={cn("flex h-full min-h-0 flex-col", className)}>
-        <PanelHeader notice={notice} unsynced />
         <div className="min-h-0 flex-1 overflow-y-auto px-1">
           {resolution.document.content.lines.map((line, index) => (
-            <p key={index} className="text-2xl leading-relaxed text-foreground">
-              {line.length > 0 ? line : " "}
+            <p key={index} className={cn(LYRICS_TEXT, "text-foreground")}>
+              {line.length > 0 ? line : " "}
             </p>
           ))}
         </div>
@@ -103,18 +91,25 @@ export function LyricsPanel({ trackId, className }: LyricsPanelProps) {
     );
   }
 
-  const lines = resolution.document.content.lines;
+  const lines = timedLines ?? [];
   return (
     <div className={cn("relative flex h-full min-h-0 flex-col", className)}>
-      <PanelHeader notice={notice} unsynced={false} />
+      <ReadingBand />
       <div
-        ref={scroll.containerRef}
+        ref={setContainer}
+        data-mode={scroll.mode}
         role="log"
         aria-label="Lyrics"
         tabIndex={0}
-        className="min-h-0 flex-1 overflow-y-auto mask-[linear-gradient(to_bottom,transparent,black_12%,black_75%,transparent)] outline-none forced-colors:mask-none"
+        style={anchor.style}
+        className="relative min-h-0 flex-1 overflow-y-auto mask-[linear-gradient(to_bottom,transparent,black_15%,black_80%,transparent)] outline-none [scrollbar-width:none] forced-colors:mask-none [&::-webkit-scrollbar]:hidden"
         {...scroll.containerHandlers}
       >
+        <div
+          aria-hidden="true"
+          className="transition-none"
+          style={{ height: "var(--anchor-top)" }}
+        />
         {lines.map((_line, index) => (
           <LyricsLine
             key={index}
@@ -128,18 +123,24 @@ export function LyricsPanel({ trackId, className }: LyricsPanelProps) {
             position={position}
             registerLine={scroll.registerLine}
             onSeek={onSeek}
-            onSeeked={scroll.resetToFollow}
           />
         ))}
+        <div
+          aria-hidden="true"
+          className="transition-none"
+          style={{ height: "var(--anchor-bottom)" }}
+        />
       </div>
-      {scroll.mode === "free" ? (
+      {scroll.mode === "free" && scroll.offscreen !== null ? (
         <Button
           type="button"
           variant="secondary"
           size="sm"
-          className="absolute right-2 bottom-2"
+          // Aligned with the lyric text: after the Gutter (w-16) and its gap (gap-4).
+          className={cn("absolute left-20", scroll.offscreen === "above" ? "top-2" : "bottom-2")}
           onClick={scroll.jumpToCurrent}
         >
+          {scroll.offscreen === "above" ? <ArrowUp aria-hidden /> : <ArrowDown aria-hidden />}
           Jump to current line
         </Button>
       ) : null}
@@ -154,13 +155,18 @@ type LyricsLineProps = {
   isCurrent: boolean;
   isPast: boolean;
   isHovered: boolean;
-  /** Lines away from the current one, capped: how much the line shrinks. */
+  /** Lines away from the current one, capped: how much dimmer the line is. */
   distance: number;
   position: MotionValue<number>;
   registerLine: (index: number, element: HTMLElement | null) => void;
   onSeek: (positionMs: number) => void;
-  onSeeked: () => void;
 };
+
+/** The Gutter shows the time on hover, on focus and while free-scrolling. */
+const SHOW_TIME =
+  "opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 group-data-[mode=free]:opacity-100";
+const HIDE_ON_TIME =
+  "group-focus-within:opacity-0 group-hover:opacity-0 group-data-[mode=free]:opacity-0";
 
 /** One lyric line. Memoised: the panel re-renders with the position, a line only when its own state changes. */
 const LyricsLine = memo(function LyricsLine({
@@ -174,10 +180,10 @@ const LyricsLine = memo(function LyricsLine({
   position,
   registerLine,
   onSeek,
-  onSeeked,
 }: LyricsLineProps) {
   const lineTransition = useMotionTransition("smallMove");
   const line = lines[index]!;
+  const isInterval = line.text.trim() === "";
   const ref = useCallback(
     (element: HTMLElement | null) => registerLine(index, element),
     [registerLine, index],
@@ -186,142 +192,94 @@ const LyricsLine = memo(function LyricsLine({
     <m.div
       ref={ref}
       aria-current={isCurrent ? "true" : undefined}
-      // Lines shrink a little the further they are from the current one (a transform, so
-      // nothing reflows).
-      animate={{ scale: 1 - distance * 0.01 }}
+      animate={{ opacity: opacityAtDistance(distance) }}
       transition={lineTransition}
-      style={{ transformOrigin: "left center" }}
-      className={cn("flex items-baseline gap-4 rounded-sm py-1", isHovered && "bg-accent/60")}
+      className={cn("group flex items-baseline gap-4 rounded-sm py-2", isHovered && "bg-accent/60")}
     >
       <button
         type="button"
         data-slot="lyrics-gutter"
         aria-label={`Seek to ${formatDuration(line.startMs)}`}
-        onClick={() => {
-          onSeek(line.startMs);
-          onSeeked();
-        }}
+        onClick={() => onSeek(line.startMs)}
         onPointerEnter={() =>
           lyricsWaveformLink.setHoveredLineSpan(lineSpan(lines, index, durationMs))
         }
         onPointerLeave={() => lyricsWaveformLink.setHoveredLineSpan(null)}
-        className="w-16 shrink-0 cursor-pointer text-right text-sm tabular-nums text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+        className="relative w-16 shrink-0 cursor-pointer text-right text-sm tabular-nums text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
       >
-        {formatDuration(line.startMs)}
+        <span className={SHOW_TIME}>{formatDuration(line.startMs)}</span>
+        {/* The present is marked with ▶ in the artwork's colour until the time takes its place. */}
+        {isCurrent ? (
+          <Play
+            aria-hidden
+            className={cn(
+              "absolute top-1/2 right-0 size-3.5 -translate-y-1/2 fill-(--artwork-accent) text-(--artwork-accent)",
+              HIDE_ON_TIME,
+            )}
+          />
+        ) : null}
       </button>
-      <span className="relative text-2xl leading-relaxed">
-        {/* The current line starts unlit (Ink-2) and the fill below lights it. */}
-        <m.span
-          animate={{ color: isPast ? "var(--faint-foreground)" : "var(--muted-foreground)" }}
-          transition={lineTransition}
-        >
-          {line.text.length > 0 ? line.text : " "}
-        </m.span>
-        <AnimatePresence>
-          {isCurrent ? (
-            <LineFill
-              key="fill"
-              text={line.text}
-              startMs={line.startMs}
-              fillMs={lineFillMs(
-                (lineSpan(lines, index, durationMs)?.endMs ?? line.startMs) - line.startMs,
-                line.text,
-              )}
-              position={position}
-            />
-          ) : null}
-        </AnimatePresence>
-      </span>
+      {isInterval ? (
+        <IntervalLine
+          startMs={line.startMs}
+          endMs={lineSpan(lines, index, durationMs)?.endMs ?? null}
+          isCurrent={isCurrent}
+          position={position}
+        />
+      ) : (
+        <span className={cn("relative", LYRICS_TEXT)}>
+          {/* Past is faintest, the present brightest, the future between; the current line is lit in the artwork's colour. */}
+          <m.span
+            animate={{
+              color: isCurrent
+                ? "var(--artwork-accent)"
+                : isPast
+                  ? "var(--faint-foreground)"
+                  : "var(--muted-foreground)",
+            }}
+            transition={lineTransition}
+          >
+            {line.text}
+          </m.span>
+        </span>
+      )}
     </m.div>
   );
 });
 
+/** The lyric type, sized by the width of the lyrics column (`cqi`), so the text fills it. */
+const LYRICS_TEXT = "text-[clamp(1.5rem,5.5cqi,3rem)] leading-snug text-pretty";
+
 /**
- * The lit copy of the current line: the same text in the artwork's colour, one span per
- * character, lit in order as the line is sung. It sits exactly over the base text, so a wrapped
- * line fills its upper row before its lower one. Under calm or reduced motion the lift is skipped.
+ * An instrumental gap: a thin bar that fills over the gap's real span while it is the current
+ * line, so the wait shows how far it has got instead of an empty row.
  */
-function LineFill({
-  text,
+export function IntervalLine({
   startMs,
-  fillMs,
+  endMs,
+  isCurrent,
   position,
 }: {
-  text: string;
   startMs: number;
-  fillMs: number;
+  endMs: number | null;
+  isCurrent: boolean;
   position: MotionValue<number>;
 }) {
-  const chars = graphemes(text.length > 0 ? text : " ");
-  const lift = useMotionBudget() === "full" && chars.length <= MAX_LIFT_CHARS;
-  const progress = useTransform(() => lineProgress(position.get(), startMs, fillMs));
+  const scaleX = useTransform(() =>
+    isCurrent && endMs !== null && endMs > startMs
+      ? Math.min(1, Math.max(0, (position.get() - startMs) / (endMs - startMs)))
+      : 0,
+  );
+  const label =
+    endMs !== null ? `Instrumental, ${formatDuration(endMs - startMs)}` : "Instrumental";
   return (
-    <m.span
-      aria-hidden="true"
-      data-slot="lyrics-fill"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="pointer-events-none absolute inset-0 text-(--artwork-accent)"
+    <span
+      role="img"
+      aria-label={label}
+      data-slot="lyrics-interval"
+      className="my-3 block h-0.5 w-24 overflow-hidden rounded-full bg-faint-foreground/40"
     >
-      {chars.map((char, index) => (
-        <FillChar
-          key={index}
-          char={char}
-          index={index}
-          count={chars.length}
-          fillMs={fillMs}
-          progress={progress}
-          lift={lift}
-        />
-      ))}
-    </m.span>
-  );
-}
-
-function FillChar({
-  char,
-  index,
-  count,
-  fillMs,
-  progress,
-  lift,
-}: {
-  char: string;
-  index: number;
-  count: number;
-  fillMs: number;
-  progress: MotionValue<number>;
-  lift: boolean;
-}) {
-  const opacity = useTransform(progress, (p) => charOpacity(p, index, count));
-  // `top` on a relatively positioned inline span moves it without changing the line's wrapping.
-  const top = useTransform(progress, (p) => (lift ? charLift(p, index, count, fillMs) : 0));
-  return (
-    <m.span className="relative" style={{ opacity, top }}>
-      {char}
-    </m.span>
-  );
-}
-
-function PanelHeader({ notice, unsynced }: { notice: string | null; unsynced: boolean }) {
-  if (!unsynced && notice === null) return null;
-  return <p className="pb-2 text-sm text-muted-foreground">{unsynced ? "Unsynced" : notice}</p>;
-}
-
-function LyricsMessage({
-  title,
-  detail,
-  className,
-}: {
-  title: string;
-  detail: string | null;
-  className?: string;
-}) {
-  return (
-    <div className={cn("flex h-full flex-col items-start justify-center gap-1", className)}>
-      <p className="text-sm text-foreground">{title}</p>
-      {detail !== null ? <p className="text-sm text-muted-foreground">{detail}</p> : null}
-    </div>
+      <m.span className="block size-full origin-left bg-(--artwork-accent)" style={{ scaleX }} />
+    </span>
   );
 }

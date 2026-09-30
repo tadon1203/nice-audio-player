@@ -1,23 +1,21 @@
-import { useEffect, useState } from "react";
-import { m } from "motion/react";
-import { graphemes } from "@/renderer/shared/lib/graphemes";
+import { animate, m, useMotionValue, useReducedMotion, useTransform } from "motion/react";
+import { useEffect } from "react";
 import { cn } from "@/renderer/shared/lib/utils";
 import { useMotionTransition } from "./motion";
 
-const STEP_S = 0.012;
-const TOTAL_S = 0.24;
-/** The overlay is dropped this long after its last character starts, once the spring has settled. */
-const SETTLE_MS = 500;
+/** How far the soft edge of the wipe reaches behind its front, in percent of the text width. */
+const EDGE_PERCENT = 20;
+/** The wipe front travels this far so the soft edge clears the end of the text. */
+const REVEAL_END_PERCENT = 100 + EDGE_PERCENT;
 
 /**
- * Text whose characters slide in one after another, from the side the track came from
- * (`direction` 1 = from the right). The stagger is 12ms a character, capped at 240ms in total.
- * Shown only for track changes, never on first display; key it by what it shows so a new value
- * plays again.
+ * Text that wipes in from left to right while it slides 8px from the side the track came from
+ * (`direction` 1 = from the right). Shown only for track changes, never on first display; key it
+ * by what it shows so a new value plays again.
  *
- * The real text is always in the flow, so it wraps, kerns, and can be selected like any other
- * text; it is only transparent while the animated copy (an `aria-hidden` overlay of inline
- * spans, which wrap the same way) plays. The overlay is removed afterwards.
+ * Only the real text is drawn, so wrapping, kerning and line breaks are the same from the first
+ * frame to the last: the animation is a mask and a transform, and never changes the layout.
+ * Under reduced motion it is a plain crossfade.
  */
 export function KineticText({
   text,
@@ -28,36 +26,33 @@ export function KineticText({
   direction: 1 | -1;
   className?: string;
 }) {
-  const transition = useMotionTransition("smallMove");
-  const [playing, setPlaying] = useState(true);
-  const chars = graphemes(text);
-  const step = Math.min(STEP_S, TOTAL_S / Math.max(1, chars.length));
+  const transition = useMotionTransition("mediumMove");
+  const reducedMotion = useReducedMotion() === true;
+  const reveal = useMotionValue(0);
+  const maskImage = useTransform(
+    reveal,
+    (value) =>
+      `linear-gradient(to right, black calc(${value}% - ${EDGE_PERCENT}%), transparent ${value}%)`,
+  );
 
   useEffect(() => {
-    const timer = setTimeout(() => setPlaying(false), TOTAL_S * 1000 + SETTLE_MS);
-    return () => clearTimeout(timer);
+    if (reducedMotion) return;
+    const controls = animate(reveal, REVEAL_END_PERCENT, transition);
+    return () => controls.stop();
+    // The transition object is stable per token; the wipe plays once per mount.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
-    <span className={cn("relative", className)}>
-      <span className={playing ? "text-transparent selection:text-transparent" : undefined}>
-        {text}
-      </span>
-      {playing ? (
-        <span aria-hidden="true" className="pointer-events-none absolute inset-0 select-none">
-          {chars.map((char, index) => (
-            <m.span
-              key={index}
-              className="relative"
-              initial={{ opacity: 0, left: 8 * direction }}
-              animate={{ opacity: 1, left: 0 }}
-              transition={{ ...transition, delay: index * step }}
-            >
-              {char}
-            </m.span>
-          ))}
-        </span>
-      ) : null}
-    </span>
+    <m.span
+      className={cn("block", className)}
+      initial={reducedMotion ? { opacity: 0 } : { x: 8 * direction }}
+      animate={reducedMotion ? { opacity: 1 } : { x: 0 }}
+      transition={transition}
+      // The wipe ends past the text, so once it is done the mask clips nothing.
+      style={reducedMotion ? undefined : { maskImage, WebkitMaskImage: maskImage }}
+    >
+      {text}
+    </m.span>
   );
 }
