@@ -1,5 +1,6 @@
 import { isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open } from "@tauri-apps/plugin-dialog";
 import { commands } from "./bindings";
 import type { AppEvent } from "./bindings";
@@ -90,17 +91,63 @@ const tauriApi: TNativeAPI = {
   },
 };
 
+/** The window chrome the renderer draws itself (the window has no native decorations). */
+export type NativeWindow = {
+  minimize: () => Promise<void>;
+  toggleMaximize: () => Promise<void>;
+  close: () => Promise<void>;
+  isMaximized: () => Promise<boolean>;
+  /** Calls `listener` with the current state now and whenever it changes. */
+  onMaximizedChange: (listener: (maximized: boolean) => void) => () => void;
+};
+
+const tauriWindow: NativeWindow = {
+  minimize: () => getCurrentWindow().minimize(),
+  toggleMaximize: () => getCurrentWindow().toggleMaximize(),
+  close: () => getCurrentWindow().close(),
+  isMaximized: () => getCurrentWindow().isMaximized(),
+  onMaximizedChange: (listener) => {
+    const appWindow = getCurrentWindow();
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    const sync = () =>
+      void appWindow.isMaximized().then((value) => {
+        if (!disposed) listener(value);
+      });
+    sync();
+    void appWindow.onResized(sync).then((stopListening) => {
+      if (disposed) stopListening();
+      else unlisten = stopListening;
+    });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  },
+};
+
 type TestWindow = Window & { __TAURI_TEST_API__?: TNativeAPI };
 
-export function nativeApi(): TNativeAPI {
-  const api = getNativeApiOrNull();
-  if (api === null) throw new NativeBridgeUnavailableError();
-  return api;
-}
-
-export function getNativeApiOrNull(): TNativeAPI | null {
+function resolveNative(): TNativeAPI | null {
   if (typeof window === "undefined") return null;
+  // E2E tests install their own API before the app loads (`tests/fixtures/native-api.ts`).
   const testApi = (window as TestWindow).__TAURI_TEST_API__;
   if (testApi !== undefined) return testApi;
   return isTauri() ? tauriApi : null;
+}
+
+/**
+ * The one way into the backend, resolved once when the renderer loads: the adapter when the
+ * native bridge exists, `null` otherwise (a plain browser). The shell shows the "no bridge"
+ * state in one place; code that only runs after that (queries, commands) uses `requireNative`.
+ */
+export const native: TNativeAPI | null = resolveNative();
+
+/** Window controls; `null` unless running inside the desktop app. */
+export const nativeWindow: NativeWindow | null =
+  typeof window !== "undefined" && isTauri() ? tauriWindow : null;
+
+export function requireNative(): TNativeAPI {
+  if (native === null) throw new NativeBridgeUnavailableError();
+  return native;
 }

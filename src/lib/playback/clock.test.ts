@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { ActiveSession, PlaybackItem, PlaybackSnapshot } from "@/shared/ipc";
-import { createPlaybackClock } from "./playback-clock";
-import { createPlaybackStore } from "./playback-session";
+import type { ActiveSession, PlaybackItem, PlaybackSnapshot } from "$lib/native";
+import { createPlaybackClock } from "./clock";
+import { clockReportOf } from "./snapshot";
 
 const item = (id: string): PlaybackItem => ({
   queueItemId: id,
@@ -54,11 +54,10 @@ const snapshot = (
 
 /** A clock on a hand-turned frame loop, so a test decides when time passes. */
 function setup() {
-  const store = createPlaybackStore();
   let now = 0;
   let pending: (() => void) | null = null;
   let frameRequests = 0;
-  const clock = createPlaybackClock(store, {
+  const clock = createPlaybackClock({
     now: () => now,
     requestFrame: (callback) => {
       frameRequests += 1;
@@ -70,7 +69,7 @@ function setup() {
     },
     reducedMotion: () => true,
   });
-  const report = (next: PlaybackSnapshot) => store.setState({ snapshot: next });
+  const report = (next: PlaybackSnapshot) => clock.accept(clockReportOf(next));
   const advance = (ms: number) => {
     now += ms;
     const callback = pending;

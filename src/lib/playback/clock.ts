@@ -1,6 +1,6 @@
-import { animate, motionValue, type AnimationPlaybackControls } from "motion/react";
-import type { StoreApi, UseBoundStore } from "zustand";
-import { resolveTransition } from "@/shared/ui/motion";
+import { animate } from "motion";
+import { toMotionOptions } from "$lib/ui/motion/motion-options";
+import { resolveTransition } from "$lib/ui/motion/tokens";
 import {
   estimateClock,
   initialClockState,
@@ -8,21 +8,7 @@ import {
   type ClockJump,
   type ClockReport,
   type ClockState,
-} from "../lib/playback-clock-model";
-import { snapshotSession, usePlaybackStore, type PlaybackStoreState } from "./playback-session";
-
-/** Reads what the clock needs from the mirrored playback state. */
-export function clockReportOf(state: PlaybackStoreState): ClockReport | null {
-  const session = snapshotSession(state.snapshot);
-  if (session === null) return null;
-  return {
-    itemId: session.item.queueItemId,
-    positionMs: session.positionMs,
-    durationMs: session.durationMs,
-    playing: state.snapshot?.status === "playing",
-    seekRevision: session.seekRevision,
-  };
-}
+} from "./playback-clock-model";
 
 type ClockEnvironment = {
   now: () => number;
@@ -38,25 +24,43 @@ const browserEnvironment: ClockEnvironment = {
   reducedMotion: () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
 };
 
+/** A number that tells subscribers when it changes, without any framework. */
+export type ClockPosition = {
+  get: () => number;
+  subscribe: (listener: (ms: number) => void) => () => void;
+};
+
 /**
  * The one clock for the playback position. Everything that draws time smoothly (the progress
- * fill and ring, lyric lines, the Light) reads `position`, a motion value that one animation
- * frame loop advances, and nothing re-renders with it. The loop runs only while someone has
- * `retain`ed the clock and the track is playing. Jumps are announced from facts the backend
- * reported (see `reduceClock`), once, to everyone.
+ * fill and ring, lyric lines, the Light) subscribes to `position`, which one animation frame loop
+ * advances; nothing re-renders with it. The loop runs only while someone has `retain`ed the clock
+ * and the track is playing. Jumps are announced from facts the backend reported (see
+ * `reduceClock`), once, to everyone.
+ *
+ * The clock knows nothing about stores or components: whoever mirrors playback state feeds it
+ * with `accept(report)` whenever a snapshot is accepted.
  */
-export function createPlaybackClock(
-  store: UseBoundStore<StoreApi<PlaybackStoreState>>,
-  environment: ClockEnvironment = browserEnvironment,
-) {
+export function createPlaybackClock(environment: ClockEnvironment = browserEnvironment) {
+  let current = 0;
+  const positionListeners = new Set<(ms: number) => void>();
+  const setPosition = (ms: number) => {
+    current = ms;
+    positionListeners.forEach((listener) => listener(ms));
+  };
   /** The position as drawn: eased across a seek, exact otherwise. */
-  const position = motionValue(0);
+  const position: ClockPosition = {
+    get: () => current,
+    subscribe: (listener) => {
+      positionListeners.add(listener);
+      return () => void positionListeners.delete(listener);
+    },
+  };
+
   let state: ClockState = initialClockState;
   let retained = 0;
   let frame = 0;
-  let spring: AnimationPlaybackControls | null = null;
+  let glide: { stop: () => void } | null = null;
   let lastJump: ClockJump | null = null;
-  let lastSnapshot: PlaybackStoreState["snapshot"] = null;
   const jumpListeners = new Set<(jump: ClockJump) => void>();
   const reportListeners = new Set<() => void>();
 
@@ -66,36 +70,35 @@ export function createPlaybackClock(
   };
   const step = () => {
     frame = 0;
-    position.set(estimateClock(state, environment.now()));
+    setPosition(estimateClock(state, environment.now()));
     schedule();
   };
   function schedule() {
-    if (frame !== 0 || retained === 0 || spring !== null) return;
+    if (frame !== 0 || retained === 0 || glide !== null) return;
     if (state.report?.playing === true) frame = environment.requestFrame(step);
   }
 
   const settle = () => {
     stopFrames();
-    if (spring === null) position.set(estimateClock(state, environment.now()));
+    if (glide === null) setPosition(estimateClock(state, environment.now()));
     schedule();
   };
 
   const onJump = (jump: ClockJump) => {
     lastJump = jump;
-    spring?.stop();
-    spring = null;
+    glide?.stop();
+    glide = null;
     if (jump.kind === "seek" && retained > 0) {
       // Ease across a seek: the fill glides to the new place instead of snapping.
       stopFrames();
-      const controls = animate(
-        position,
-        jump.toMs,
-        resolveTransition("smallMove", environment.reducedMotion()),
-      );
-      spring = controls;
+      const controls = animate(current, jump.toMs, {
+        ...toMotionOptions(resolveTransition("smallMove", environment.reducedMotion())),
+        onUpdate: setPosition,
+      });
+      glide = controls;
       void controls.then(() => {
-        if (spring !== controls) return;
-        spring = null;
+        if (glide !== controls) return;
+        glide = null;
         // Playback carried on under the glide: pick the clock up where it is now.
         settle();
       });
@@ -103,21 +106,16 @@ export function createPlaybackClock(
     jumpListeners.forEach((listener) => listener(jump));
   };
 
-  const accept = (next: PlaybackStoreState) => {
-    if (next.snapshot === lastSnapshot) return;
-    lastSnapshot = next.snapshot;
-    const result = reduceClock(state, clockReportOf(next), environment.now());
-    state = result.state;
-    if (result.jump !== null) onJump(result.jump);
-    if (spring === null) settle();
-    reportListeners.forEach((listener) => listener());
-  };
-  store.subscribe(accept);
-  accept(store.getState());
-
   return {
-    /** Milliseconds, advanced every frame while retained and playing. */
     position,
+    /** Feeds the clock what the latest playback snapshot says about time. */
+    accept: (report: ClockReport | null) => {
+      const result = reduceClock(state, report, environment.now());
+      state = result.state;
+      if (result.jump !== null) onJump(result.jump);
+      if (glide === null) settle();
+      reportListeners.forEach((listener) => listener());
+    },
     /** Where playback is now, exactly (not eased): for logic, not for drawing. */
     estimate: () => estimateClock(state, environment.now()),
     playing: () => state.report?.playing === true,
@@ -146,5 +144,3 @@ export function createPlaybackClock(
 }
 
 export type PlaybackClock = ReturnType<typeof createPlaybackClock>;
-
-export const playbackClock = createPlaybackClock(usePlaybackStore);

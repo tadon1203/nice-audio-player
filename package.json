@@ -37,6 +37,7 @@
     "@tanstack/react-router": "^1.167.3",
     "@tanstack/react-table": "^8.21.3",
     "@tanstack/react-virtual": "^3.13.18",
+    "@tanstack/svelte-query": "^6.3.0",
     "@tauri-apps/api": "^2.0.0",
     "@tauri-apps/plugin-dialog": "^2.0.0",
     "class-variance-authority": "^0.7.1",
