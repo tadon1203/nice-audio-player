@@ -13,5 +13,5 @@
       "@wdio/globals/types"
     ]
   },
-  "include": ["./**/*.ts"]
+  "include": ["./**/*.ts", "../src/lib/native/**/*.ts"]
 }

@@ -1,5 +1,5 @@
-import type { AudioOutputSelection } from "@/shared/ipc";
-import { formatKilohertz } from "@/shared/lib/format";
+import type { AudioOutputSelection } from "$lib/native";
+import { formatKilohertz } from "$lib/utils/format";
 
 /** The dock's signal path: `source › processing › output`. `processing` is null when bit-perfect. */
 export type PlaybackSignalPath = {

@@ -1,4 +1,4 @@
-import { energyAt, trackEnergy } from "@/entities/playback";
+import { energyAt, trackEnergy } from "$lib/playback/track-energy";
 
 /**
  * The loudness (0-1) at `positionMs`, from the waveform's RMS buckets (0-255), on the track

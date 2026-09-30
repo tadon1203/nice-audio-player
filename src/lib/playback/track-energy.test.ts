@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { levelToUnit } from "@/shared/ui/waveform";
+import { levelToUnit } from "$lib/ui/waveform/waveform-model";
 import { energyAt, trackEnergy } from "./track-energy";
 
 describe("trackEnergy", () => {

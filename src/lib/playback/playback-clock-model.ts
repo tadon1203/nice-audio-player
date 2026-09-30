@@ -1,4 +1,4 @@
-import { estimatePosition, type PositionAnchor } from "@/shared/ui/motion";
+import { estimatePosition, type PositionAnchor } from "$lib/ui/motion/interpolate-position";
 
 /** What a playback snapshot says about time: everything the clock needs, and nothing else. */
 export type ClockReport = {

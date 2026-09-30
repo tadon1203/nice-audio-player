@@ -1,9 +1,10 @@
 import { isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
-import { NativeCommandError } from "@/shared/lib/native-error";
-import { commands } from "@/shared/ipc";
-import type { AppEvent, TNativeAPI } from "@/shared/ipc";
+import { commands } from "./bindings";
+import type { AppEvent } from "./bindings";
+import type { TNativeAPI } from "./native-api";
+import { NativeCommandError } from "./native-error";
 
 export class NativeBridgeUnavailableError extends Error {
   readonly code = "nativeBridgeUnavailable";

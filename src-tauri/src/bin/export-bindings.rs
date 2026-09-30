@@ -1,11 +1,11 @@
-//! Writes or verifies `src/shared/ipc/bindings.ts`.
+//! Writes or verifies `src/lib/native/bindings.ts`.
 //!
 //! `export-bindings` regenerates the file; `export-bindings --check` fails when it is stale.
 
 use std::{fs, path::Path, process::ExitCode};
 
 fn main() -> ExitCode {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../src/shared/ipc/bindings.ts");
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../src/lib/native/bindings.ts");
     let generated = match nice_audio_player_lib::render_typescript_bindings() {
         Ok(generated) => generated.replace("\r\n", "\n"),
         Err(error) => {
@@ -21,7 +21,7 @@ fn main() -> ExitCode {
         if current == generated {
             return ExitCode::SUCCESS;
         }
-        eprintln!("src/shared/ipc/bindings.ts is stale; run `pnpm bindings`");
+        eprintln!("src/lib/native/bindings.ts is stale; run `pnpm bindings`");
         return ExitCode::FAILURE;
     }
 

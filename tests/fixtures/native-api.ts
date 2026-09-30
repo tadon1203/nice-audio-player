@@ -16,7 +16,7 @@ import type {
   PlaybackSnapshot,
   Settings,
   TNativeAPI,
-} from "@/shared/ipc";
+} from "$lib/native";
 
 type NativeTestState = {
   getRequestCount: (kind: string) => number;

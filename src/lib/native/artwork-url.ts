@@ -1,4 +1,4 @@
-import type { ArtworkRef } from "@/shared/ipc";
+import type { ArtworkRef } from "./bindings";
 
 /** WebView2 serves the Tauri `nice-artwork` scheme from this HTTP origin on Windows. */
 const ARTWORK_ORIGIN = "http://nice-artwork.localhost";

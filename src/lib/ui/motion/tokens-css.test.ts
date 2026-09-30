@@ -6,7 +6,7 @@ import { motionTokens } from "./tokens";
 
 // CSS owns hover/press/overlay timing (`--duration-*`), JS owns springs. The one value both
 // sides use is the feedback duration, so it must be the same number in both places.
-const css = readFileSync(new URL("../../../app/styles.css", import.meta.url), "utf8");
+const css = readFileSync(new URL("../../../app.css", import.meta.url), "utf8");
 
 describe("motion tokens and styles.css", () => {
   it("agree on the feedback duration", () => {

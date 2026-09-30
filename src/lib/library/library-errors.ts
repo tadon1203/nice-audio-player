@@ -1,5 +1,5 @@
-import type { LibraryCommandError, LibraryStatus, LibraryUnavailableReason } from "@/shared/ipc";
-import { messageForCode, nativeErrorCode } from "@/shared/lib/native-error";
+import type { LibraryCommandError, LibraryStatus, LibraryUnavailableReason } from "$lib/native";
+import { messageForCode, nativeErrorCode } from "$lib/native";
 
 const commandMessages = {
   invalidRoot: "That folder reference is invalid.",

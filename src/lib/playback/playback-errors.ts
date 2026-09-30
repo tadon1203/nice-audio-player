@@ -1,5 +1,5 @@
-import type { PlaybackCommandError, StartPlaybackError } from "@/shared/ipc";
-import { messageForCode, nativeErrorCode } from "@/shared/lib/native-error";
+import type { PlaybackCommandError, StartPlaybackError } from "$lib/native";
+import { messageForCode, nativeErrorCode } from "$lib/native";
 
 type PlaybackErrorCode = (PlaybackCommandError | StartPlaybackError)["code"];
 
