@@ -23,6 +23,8 @@ Non-trivial feature:
 - `/to-spec` and `/to-tickets` write to `.scratch/<feature>/` (gitignored working notes). Anything worth keeping moves to `CONTEXT.md`, an ADR, or `requirements.md`.
 - `/implement` runs `/tdd`, then `/code-review`, then commits. For a feature small enough to hold in one head, skip the spec and tickets and go from `/grill-with-docs` straight to `/implement`.
 
+`/clear` after each step above finishes (grill, spec, tickets, each ticket), once decisions are written to docs and work is committed. Not mid-grill or mid-implement.
+
 ## Token efficiency
 
 Offload large or exploratory searches (broad `grep`/`glob` sweeps, multi-file investigations) to a Haiku subagent so the raw results stay out of the main context; bring back only the conclusion.
