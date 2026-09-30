@@ -1,6 +1,6 @@
 # Now Playing 改善 実装計画 (第 2 版)
 
-対象: `src/renderer/widgets/now-playing/`、`src/renderer/shared/ui/kinetic-text.tsx`、`src/renderer/features/now-playing-transition/ui/playback-waveform-band.tsx`
+対象: `src/widgets/now-playing/`、`src/shared/ui/kinetic-text.tsx`、`src/features/now-playing-transition/ui/playback-waveform-band.tsx`
 
 前提: 作業ツリーにある第 1 版の実装 (1 つの骨格、アルバム曲目列、間奏バー、追従位置 40%) の上に行う。第 1 版は git 履歴 (`586dfa7` 時点のこのファイル) を参照。
 
@@ -101,7 +101,7 @@
 
 ## Step 2 — タイトルアニメーション (P2, D7)
 
-`src/renderer/shared/ui/kinetic-text.tsx` を書き直す。API (`text`, `direction`, `className`) は変えない。利用箇所は `now-playing-content.tsx` のみ。
+`src/shared/ui/kinetic-text.tsx` を書き直す。API (`text`, `direction`, `className`) は変えない。利用箇所は `now-playing-content.tsx` のみ。
 
 - 描画は `<m.span className="block">{text}</m.span>` の **1 つだけ**。`aria-hidden` のオーバーレイ、`graphemes`、`playing` の state、`setTimeout` は削除する。
 - アニメーション:

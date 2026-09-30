@@ -23,4 +23,4 @@ pnpm package
 
 The renderer is React + TypeScript built by Vite. Tauri 2 hosts the Windows WebView and packages the desktop application; Rust owns playback, library, persistence, and native work directly, without an Electron process or N-API addon.
 
-The renderer follows Feature-Sliced Design. Generated shadcn/ui Base UI primitives live under `src/renderer/shared/ui/shadcn`, use semantic tokens from `src/app/renderer/styles.css`, and are configured by `components.json`. Add primitives with `pnpm exec shadcn add <component>` and keep product-specific compositions in their renderer slices.
+The renderer follows Feature-Sliced Design. Generated shadcn/ui Base UI primitives live under `src/shared/ui/shadcn`, use semantic tokens from `src/app/styles.css`, and are configured by `components.json`. Add primitives with `pnpm exec shadcn add <component>` and keep product-specific compositions in their renderer slices.

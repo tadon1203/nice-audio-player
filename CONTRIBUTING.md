@@ -5,7 +5,7 @@
 - Register Tauri commands in `src-tauri/src/bindings.rs` and regenerate `src/shared/ipc/bindings.ts` with `pnpm bindings`; never edit the generated file by hand.
 - Rust owns domain and persistent state. Renderer state only caches or mirrors it.
 - TanStack Router owns navigation, TanStack Query owns native read caches, Zustand owns renderer-local interaction state.
-- Renderer code under `src/renderer/**` reaches native features only through `src/renderer/shared/lib/native.ts`, and never imports `node:*`.
+- Frontend code under `src/**` reaches native features only through `src/shared/lib/native.ts`, and never imports `node:*`.
 - Use shadcn primitives (`pnpm exec shadcn add <component>`) and semantic tokens; no raw palette values for UI surfaces.
 - Tauri commands that can wait on the playback worker or do blocking work are `async` and use `spawn_blocking`; a synchronous command runs on the main thread.
 - Backend services report changes by emitting a `BackendEvent` to their `EventSink`, never by owning a channel for the host to drain.

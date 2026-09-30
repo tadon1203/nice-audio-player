@@ -9,21 +9,21 @@ const root = import.meta.dirname;
 export default defineConfig({
   plugins: [
     tanstackRouter({
-      routesDirectory: resolve(root, "src/app/renderer/routes"),
-      generatedRouteTree: resolve(root, "src/app/renderer/routeTree.gen.ts"),
+      routesDirectory: resolve(root, "src/app/routes"),
+      generatedRouteTree: resolve(root, "src/app/routeTree.gen.ts"),
       autoCodeSplitting: true,
     }),
     react(),
     tailwindcss(),
   ],
   resolve: { alias: { "@": resolve(root, "src") } },
-  root: resolve(root, "src/app/renderer"),
+  root: resolve(root, "src/app"),
   publicDir: resolve(root, "static"),
   server: { host: "127.0.0.1", port: 1420, strictPort: true },
   clearScreen: false,
   build: {
     outDir: resolve(root, "dist"),
     emptyOutDir: true,
-    rollupOptions: { input: resolve(root, "src/app/renderer/index.html") },
+    rollupOptions: { input: resolve(root, "src/app/index.html") },
   },
 });

@@ -19,7 +19,8 @@ export default defineConfig({
         test: {
           name: "renderer",
           environment: "jsdom",
-          include: ["src/app/renderer/**/*.test.{ts,tsx}", "src/renderer/**/*.test.{ts,tsx}"],
+          include: ["src/**/*.test.{ts,tsx}"],
+          exclude: ["src/shared/ipc/**"],
         },
       },
       {
@@ -32,7 +33,7 @@ export default defineConfig({
         test: {
           name: "shared",
           environment: "node",
-          include: ["src/shared/**/*.test.{ts,tsx}", "tests/**/*.test.ts"],
+          include: ["src/shared/ipc/**/*.test.{ts,tsx}", "tests/**/*.test.ts"],
         },
       },
     ],

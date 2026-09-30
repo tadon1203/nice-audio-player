@@ -1,0 +1,73 @@
+import { usePlaybackActions, useTrackPlaybackState } from "@/entities/playback";
+import { sortIndexLetter } from "@/shared/lib/sort-index";
+import { TrackTable } from "@/widgets/track-table";
+import { useLibraryCatalog } from "../model/use-library-catalog";
+import { useLibraryView } from "../model/use-library-view";
+import { LibraryWorkspace } from "./library-workspace";
+
+const meta = {
+  title: "Tracks",
+  singular: "track",
+  plural: "tracks",
+  searchLabel: "Search tracks",
+  searchPlaceholder: "Search tracks…",
+};
+
+export function TracksPage() {
+  const view = useLibraryView("tracks");
+  const catalog = useLibraryCatalog(view.request);
+  const playbackState = useTrackPlaybackState();
+  const playback = usePlaybackActions();
+
+  return (
+    <LibraryWorkspace
+      meta={meta}
+      scrollRestorationId="library-tracks"
+      filter={view.filter}
+      onFilterChange={(filter) => void view.setFilter(filter)}
+      stateKey={view.stateKey}
+      catalog={catalog}
+      indexFor={
+        view.sortKey === "duration"
+          ? undefined
+          : (track) =>
+              sortIndexLetter(
+                (view.sortKey === "artist"
+                  ? track.artist
+                  : view.sortKey === "album"
+                    ? track.album
+                    : track.title) ?? "",
+              )
+      }
+    >
+      {(tracks, scroll) => (
+        <TrackTable
+          rows={tracks}
+          layout="library"
+          caption="Library tracks"
+          scrollElement={scroll.viewport}
+          initialOffset={scroll.initialOffset}
+          onTopIndexChange={scroll.onTopIndexChange}
+          activeTrackId={playbackState.activeTrackId}
+          playbackStatus={playbackState.playbackStatus}
+          sortKey={view.sortKey}
+          sortDirection={view.direction}
+          onSortChange={(key, direction) => void view.setSort(key, direction)}
+          onPlayTrack={(trackId) =>
+            void playback.startPlayback(
+              {
+                kind: "tracks",
+                search: view.filter === "" ? null : view.filter,
+                sortKey: view.sortKey,
+                sortDirection: view.direction,
+              },
+              trackId,
+            )
+          }
+          onPauseActive={playback.pause}
+          onResumeActive={playback.resume}
+        />
+      )}
+    </LibraryWorkspace>
+  );
+}

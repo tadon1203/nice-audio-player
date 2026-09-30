@@ -45,9 +45,9 @@ One sans family: Satoshi for Latin, Noto Sans JP for Japanese, then the system U
 
 ## Where the details live
 
-- Color tokens: `src/app/renderer/styles.css` (semantic tokens only).
-- Motion tokens: `src/renderer/shared/ui/motion/tokens.ts`.
-- Light's readability caps: `src/renderer/shared/ui/artwork-light/light-model.ts`, enforced by its test.
+- Color tokens: `src/app/styles.css` (semantic tokens only).
+- Motion tokens: `src/shared/ui/motion/tokens.ts`.
+- Light's readability caps: `src/shared/ui/artwork-light/light-model.ts`, enforced by its test.
 - Component behavior: the comment and tests of the component.
 
 ## Amending

@@ -12,7 +12,127 @@
   },
   "overrides": [
     {
-      "files": ["src/app/renderer/routes/**/*.tsx"],
+      "files": ["src/shared/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["@/entities", "@/entities/**"],
+                "message": "FSD: `shared` must not import from `entities` (upper layer)."
+              },
+              {
+                "group": ["@/features", "@/features/**"],
+                "message": "FSD: `shared` must not import from `features` (upper layer)."
+              },
+              {
+                "group": ["@/widgets", "@/widgets/**"],
+                "message": "FSD: `shared` must not import from `widgets` (upper layer)."
+              },
+              {
+                "group": ["@/pages", "@/pages/**"],
+                "message": "FSD: `shared` must not import from `pages` (upper layer)."
+              },
+              {
+                "group": ["@/app", "@/app/**"],
+                "message": "FSD: `shared` must not import from `app` (upper layer)."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/entities/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["@/features", "@/features/**"],
+                "message": "FSD: `entities` must not import from `features` (upper layer)."
+              },
+              {
+                "group": ["@/widgets", "@/widgets/**"],
+                "message": "FSD: `entities` must not import from `widgets` (upper layer)."
+              },
+              {
+                "group": ["@/pages", "@/pages/**"],
+                "message": "FSD: `entities` must not import from `pages` (upper layer)."
+              },
+              {
+                "group": ["@/app", "@/app/**"],
+                "message": "FSD: `entities` must not import from `app` (upper layer)."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/features/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["@/widgets", "@/widgets/**"],
+                "message": "FSD: `features` must not import from `widgets` (upper layer)."
+              },
+              {
+                "group": ["@/pages", "@/pages/**"],
+                "message": "FSD: `features` must not import from `pages` (upper layer)."
+              },
+              {
+                "group": ["@/app", "@/app/**"],
+                "message": "FSD: `features` must not import from `app` (upper layer)."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/widgets/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["@/pages", "@/pages/**"],
+                "message": "FSD: `widgets` must not import from `pages` (upper layer)."
+              },
+              {
+                "group": ["@/app", "@/app/**"],
+                "message": "FSD: `widgets` must not import from `app` (upper layer)."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/pages/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["@/app", "@/app/**"],
+                "message": "FSD: `pages` must not import from `app` (upper layer)."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/app/routes/**/*.tsx"],
       "rules": {
         "react/only-export-components": [
           "warn",
@@ -24,16 +144,13 @@
       }
     },
     {
-      "files": [
-        "src/renderer/shared/ui/shadcn/button.tsx",
-        "src/renderer/shared/ui/shadcn/button-group.tsx"
-      ],
+      "files": ["src/shared/ui/shadcn/button.tsx", "src/shared/ui/shadcn/button-group.tsx"],
       "rules": {
         "react/only-export-components": "off"
       }
     },
     {
-      "files": ["src/renderer/widgets/track-table/track-table.tsx"],
+      "files": ["src/widgets/track-table/track-table.tsx"],
       "rules": {
         "react/incompatible-library": "off"
       }
@@ -48,6 +165,6 @@
     "playwright-report",
     "test-results",
     "release",
-    "src/app/renderer/routeTree.gen.ts"
+    "src/app/routeTree.gen.ts"
   ]
 }
