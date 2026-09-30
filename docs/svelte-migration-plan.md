@@ -257,4 +257,7 @@ Phase 0 の最初、Svelte のコードを書く前に入れる。以降の移�
 - **D5** `motion` はバニラ版をスプリング計算と命令的アニメーションにだけ使う。コンポーネントの出入りは Svelte の transition。
 - **D6** E2E を仕様とし、テストよりマークアップを合わせる。
 - **D7** Svelte のコードを書く前に AI tools を入れ、`svelte-autofixer` を通したものだけをコミットする。
-- (Phase 0 の結果をここに追記: 共有要素の方式、仮想化ライブラリ、フォーマッタ、CSP の扱い)
+- **D8** フォーマッタ: `.ts` などは oxfmt、`.svelte` だけ prettier + prettier-plugin-svelte (oxfmt は `.svelte` を対象にしない)。oxlint は `.svelte` の `<script>` を lint でき、import 方向と `@tauri-apps/**` の制限も効く (パターンは `*` ではなく `**`)。
+- **D9** `motion` はバニラ版のみ。コミュニティ製の Svelte ラッパー (`@humanspeak/svelte-motion` など) は使わない。共有要素が方式 A で作れなかったときだけ再検討する。
+- **D10** `lib/native` は `native` (解決済みアダプタまたは null) と `requireNative()` と `nativeWindow` を公開する。`artwork-url` は utils ではなく `lib/native` に置く。
+- (検索で確認した範囲) CSP: Tauri はバンドル内のローカルスクリプトをハッシュ化して CSP に追記すると文書化されている。実機での確認は未了。仮想化: `@tanstack/svelte-virtual` は peerDependencies が Svelte 5 に対応済みだが、Svelte 5 で空表示になる報告 (#866) があり現状は未確認。`virtua` の Svelte 版は `VList` のみ (グリッドなし)。共有要素の方式、仮想化ライブラリ、CSP の実機確認は Phase 0 のスパイクとして未了。
