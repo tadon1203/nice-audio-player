@@ -23,7 +23,7 @@
 <ScrollAreaPrimitive.Root
 	bind:ref
 	data-slot="scroll-area"
-	class={cn("relative", className)}
+	class={cn("group/scroll-area relative", className)}
 	{...restProps}
 >
 	<ScrollAreaPrimitive.Viewport
