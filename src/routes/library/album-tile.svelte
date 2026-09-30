@@ -9,7 +9,13 @@
   let {
     album,
     onplay,
-  }: { album: LibraryAlbumSummary; onplay?: (album: LibraryAlbumSummary) => void } = $props();
+    showArtist = true,
+  }: {
+    album: LibraryAlbumSummary;
+    onplay?: (album: LibraryAlbumSummary) => void;
+    /** False where the artist is already the context (an artist's own albums). */
+    showArtist?: boolean;
+  } = $props();
 
   const title = $derived(albumTitleLabel(album.key.title));
   const artist = $derived(artistNameLabel(album.key.albumArtist));
@@ -24,7 +30,7 @@
   <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
   <a
     {href}
-    aria-label="Open album {title} by {artist}"
+    aria-label={showArtist ? `Open album ${title} by ${artist}` : `Open album ${title}`}
     class="group block min-w-0 rounded-lg outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
   >
     <Artwork
@@ -35,7 +41,11 @@
     <div class="mt-3 min-w-0">
       <p class="truncate text-sm font-medium text-foreground" {title}>{title}</p>
       <div class="mt-1 flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
-        <span class="min-w-0 flex-1 truncate" title={artist}>{artist}</span>
+        {#if showArtist}
+          <span class="min-w-0 flex-1 truncate" title={artist}>{artist}</span>
+        {:else}
+          <span class="min-w-0 flex-1"></span>
+        {/if}
         <span class="shrink-0 tabular-nums">{album.year ?? MISSING}</span>
       </div>
     </div>
