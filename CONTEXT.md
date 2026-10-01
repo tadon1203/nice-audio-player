@@ -12,6 +12,7 @@ The language of Nice Audio Player. Use these terms in code, docs, and tickets; d
 ## Playback
 
 - **Playback context**: where a track was picked from (an album, or the Tracks list as filtered and sorted). Playback continues through it and becomes the queue.
+- **Playback**: one queue item being played, identified by its playback id. A seek or an output device switch keeps the same Playback; starting an item again makes a new one.
 - **Queue**: the ordered items to play. Starting playback from a list replaces it.
 - **PlaybackItem**: a queue entry, carrying the library `track_id`. Nothing looks a playing track up by path.
 - **Playback clock**: the single animation-frame clock that everything drawing the playing position reads.

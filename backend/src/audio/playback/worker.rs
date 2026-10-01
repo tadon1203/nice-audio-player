@@ -8,7 +8,9 @@ use std::sync::{mpsc::Receiver, Arc, RwLock};
 use std::time::{Duration, Instant};
 
 use super::decode_worker::{DecodeTaskInput, DecodeWorker};
-use super::input::{Inbox, PlaybackId, PlaybackIds, WorkerEvent, WorkerInput};
+use super::input::{
+    Inbox, PlaybackId, PlaybackIds, SourceLoadId, SourceLoadIds, WorkerEvent, WorkerInput,
+};
 use super::item::{PlaybackItem, PlaybackItemSeed};
 use super::preferences::{PlaybackPreferences, PreferencesObserver};
 use super::queue::{AdvanceReason, PlaybackQueue, QueueError};
@@ -136,6 +138,7 @@ pub(super) struct WorkerLinks {
 pub(super) struct PlaybackWorker {
     transport: Transport,
     ids: PlaybackIds,
+    source_load_ids: SourceLoadIds,
     next_stream_id: u64,
     revision: u64,
     next_queue_revision: u64,
@@ -169,6 +172,7 @@ impl PlaybackWorker {
         Self {
             transport: Transport::Idle,
             ids: PlaybackIds::default(),
+            source_load_ids: SourceLoadIds::default(),
             next_stream_id: 0,
             revision: 0,
             next_queue_revision: 0,
@@ -377,6 +381,23 @@ impl PlaybackWorker {
         self.start_current(Some(reply), false);
     }
 
+    /// A start of `item` as a new playback.
+    fn new_start(
+        &mut self,
+        item: PlaybackItem,
+        responder: Option<Reply<PlaybackSnapshot>>,
+        start_paused: bool,
+    ) -> StartRequest {
+        StartRequest {
+            id: self.ids.next(),
+            item,
+            responder,
+            start_paused,
+            resume_at_ms: None,
+            selection: None,
+        }
+    }
+
     /// Starts whatever the queue points at, after telling listeners where the queue stands.
     fn start_current(&mut self, responder: Option<Reply<PlaybackSnapshot>>, start_paused: bool) {
         let Some(item) = self.queue.current().cloned() else {
@@ -384,13 +405,8 @@ impl PlaybackWorker {
             return;
         };
         self.publish_queue();
-        self.begin_start(StartRequest {
-            item,
-            responder,
-            start_paused,
-            resume_at_ms: None,
-            selection: None,
-        });
+        let request = self.new_start(item, responder, start_paused);
+        self.begin_start(request);
     }
 
     fn begin_start(&mut self, request: StartRequest) {
@@ -402,18 +418,16 @@ impl PlaybackWorker {
         if was_visible {
             self.publish_state();
         }
-        let id = self.ids.next();
-        match SourceLoad::spawn(request.item.file.clone(), id, self.inbox.clone()) {
+        let load_id = self.source_load_ids.next();
+        match SourceLoad::spawn(request.item.file.clone(), load_id, self.inbox.clone()) {
             Ok(load) => {
                 self.transport = Transport::Loading(Loading {
-                    id,
                     request,
                     stage: LoadStage::Source(load),
                 });
             }
             Err(()) => self.fail_start(
                 request,
-                Some(id),
                 StartFailure {
                     code: PlaybackFailureCode::DecodeFailed,
                     phase: StartFailurePhase::SourceWorker,
@@ -425,13 +439,13 @@ impl PlaybackWorker {
 
     fn source_loaded(
         &mut self,
-        id: PlaybackId,
+        id: SourceLoadId,
         result: Result<CompressedAudioSource, CompressedSourceError>,
     ) {
         let is_current_load = matches!(
             &self.transport,
             Transport::Loading(loading)
-                if loading.id == id && matches!(loading.stage, LoadStage::Source(_))
+                if matches!(&loading.stage, LoadStage::Source(load) if load.id() == id)
         );
         if !is_current_load {
             return;
@@ -445,7 +459,7 @@ impl PlaybackWorker {
         }
         let request = loading.request;
         match result {
-            Ok(source) => self.begin_prebuffering(id, request, source),
+            Ok(source) => self.begin_prebuffering(request, source),
             Err(CompressedSourceError::Cancelled) => {
                 respond(request.responder, Err(PlaybackServiceError::Superseded));
             }
@@ -457,18 +471,13 @@ impl PlaybackWorker {
                     CompressedSourceError::SourceChanged => StartFailurePhase::SourceChanged,
                     CompressedSourceError::Cancelled => unreachable!(),
                 };
-                self.fail_start(request, Some(id), StartFailure::item(phase));
+                self.fail_start(request, StartFailure::item(phase));
             }
         }
     }
 
     /// Opens the decoder, prepares the output and starts the decode thread that fills it.
-    fn begin_prebuffering(
-        &mut self,
-        id: PlaybackId,
-        request: StartRequest,
-        source: CompressedAudioSource,
-    ) {
+    fn begin_prebuffering(&mut self, request: StartRequest, source: CompressedAudioSource) {
         let selection = request
             .selection
             .clone()
@@ -476,7 +485,6 @@ impl PlaybackWorker {
         match self.open_start_pipeline(&request.item, &source, selection) {
             Ok((pipeline, duration_ms)) => {
                 self.transport = Transport::Loading(Loading {
-                    id,
                     request,
                     stage: LoadStage::Prebuffering(Prebuffering {
                         source,
@@ -485,7 +493,7 @@ impl PlaybackWorker {
                     }),
                 });
             }
-            Err(failure) => self.fail_start(request, Some(id), failure),
+            Err(failure) => self.fail_start(request, failure),
         }
     }
 
@@ -552,7 +560,7 @@ impl PlaybackWorker {
         else {
             return;
         };
-        let Loading { id, request, stage } = loading;
+        let Loading { request, stage } = loading;
         let LoadStage::Prebuffering(prebuffering) = stage else {
             return;
         };
@@ -567,13 +575,13 @@ impl PlaybackWorker {
                 pipeline.cancel();
                 self.fail_start(
                     request,
-                    Some(id),
                     StartFailure::output(StartFailurePhase::StreamStart, code),
                 );
                 return;
             }
         }
         let StartRequest {
+            id,
             item,
             responder,
             start_paused,
@@ -605,7 +613,8 @@ impl PlaybackWorker {
 
     /// Reports a failed start and, when only this file is at fault, moves on to the next one.
     /// Listeners see the failure first, so a skipped file is never silent.
-    fn fail_start(&mut self, request: StartRequest, id: Option<PlaybackId>, failure: StartFailure) {
+    fn fail_start(&mut self, request: StartRequest, failure: StartFailure) {
+        let id = Some(request.id);
         error!(
             "playback.start_failed code={:?} phase={:?} playback_id={:?}",
             failure.code, failure.phase, id
@@ -618,13 +627,8 @@ impl PlaybackWorker {
         let responder = request.responder;
         if failure.phase.scope() == FailureScope::Item && request.selection.is_none() {
             if let Some(item) = self.next_after_item_failure() {
-                self.begin_start(StartRequest {
-                    item,
-                    responder,
-                    start_paused: false,
-                    resume_at_ms: None,
-                    selection: None,
-                });
+                let request = self.new_start(item, responder, false);
+                self.begin_start(request);
                 return;
             }
         }
@@ -974,6 +978,7 @@ impl PlaybackWorker {
             return;
         }
         let request = StartRequest {
+            id: loaded.id,
             item: loaded.item.clone(),
             responder: Some(reply),
             start_paused: loaded.paused,
@@ -1075,7 +1080,6 @@ impl PlaybackWorker {
                 };
                 self.fail_start(
                     loading.request,
-                    Some(loading.id),
                     StartFailure {
                         code,
                         phase,
@@ -1144,13 +1148,8 @@ impl PlaybackWorker {
         self.publish_state();
         if scope == FailureScope::Item {
             if let Some(item) = self.next_after_item_failure() {
-                self.begin_start(StartRequest {
-                    item,
-                    responder: None,
-                    start_paused: false,
-                    resume_at_ms: None,
-                    selection: None,
-                });
+                let request = self.new_start(item, None, false);
+                self.begin_start(request);
             }
         }
     }
@@ -1203,13 +1202,8 @@ impl PlaybackWorker {
             Some(item) => {
                 self.skipped_in_a_row = 0;
                 self.publish_queue();
-                self.begin_start(StartRequest {
-                    item,
-                    responder,
-                    start_paused,
-                    resume_at_ms: None,
-                    selection: None,
-                });
+                let request = self.new_start(item, responder, start_paused);
+                self.begin_start(request);
             }
             None => {
                 self.discard_transport();

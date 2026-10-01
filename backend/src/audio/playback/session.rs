@@ -31,6 +31,8 @@ pub(super) enum Transport {
 
 /// Everything a start carries: what to play, who is waiting for the answer, and how to begin.
 pub(super) struct StartRequest {
+    /// The playback this start belongs to. A device switch restarts the same playback.
+    pub id: PlaybackId,
     pub item: PlaybackItem,
     /// `None` for starts the worker begins on its own (skipping on, the next track, a device switch).
     pub responder: Option<Reply<PlaybackSnapshot>>,
@@ -43,7 +45,6 @@ pub(super) struct StartRequest {
 }
 
 pub(super) struct Loading {
-    pub id: PlaybackId,
     pub request: StartRequest,
     pub stage: LoadStage,
 }

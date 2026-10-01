@@ -21,7 +21,8 @@ impl fmt::Display for PlaybackId {
     }
 }
 
-/// The session counter.
+/// Counts the playbacks. A playback is one queue item being played; a seek or an output device
+/// switch keeps it.
 #[derive(Debug, Default)]
 pub(super) struct PlaybackIds(u64);
 
@@ -32,9 +33,23 @@ impl PlaybackIds {
     }
 }
 
+/// Identifies one source load, so a late result from a superseded load is told apart.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub(super) struct SourceLoadId(u64);
+
+#[derive(Debug, Default)]
+pub(super) struct SourceLoadIds(u64);
+
+impl SourceLoadIds {
+    pub(super) fn next(&mut self) -> SourceLoadId {
+        self.0 = self.0.wrapping_add(1);
+        SourceLoadId(self.0)
+    }
+}
+
 pub(super) enum WorkerEvent {
     SourceLoaded {
-        id: PlaybackId,
+        id: SourceLoadId,
         result: Result<CompressedAudioSource, CompressedSourceError>,
     },
     PrebufferReady {

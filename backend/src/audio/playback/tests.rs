@@ -912,6 +912,24 @@ fn resuming_while_a_paused_start_loads_plays_it() {
 }
 
 #[test]
+fn a_device_switch_keeps_the_playback_id() {
+    let mut harness = Harness::new();
+    let tracks = vec![harness.track("a", 3)];
+    let started = harness.start(tracks, 0).unwrap();
+
+    let switched = harness
+        .select_output(AudioOutputSelection::Device {
+            device_id: "fake-other".into(),
+        })
+        .unwrap();
+
+    assert_eq!(
+        session(&switched).playback_id,
+        session(&started).playback_id
+    );
+}
+
+#[test]
 fn a_failed_device_switch_keeps_the_saved_selection_and_the_queue() {
     let mut harness = Harness::new();
     let tracks = vec![harness.track("a", 3), harness.track("b", 3)];

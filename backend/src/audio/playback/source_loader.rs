@@ -5,21 +5,26 @@ use std::thread::{self, JoinHandle};
 
 use log::error;
 
-use super::input::{Inbox, PlaybackId, WorkerEvent};
+use super::input::{Inbox, SourceLoadId, WorkerEvent};
 use crate::audio::cancellation::Cancellation;
 use crate::audio::compressed_source::{prepare_compressed_source, CompressedSourceError};
 use crate::media::validation::ValidatedAudioFile;
 
 pub(crate) struct SourceLoad {
+    id: SourceLoadId,
     cancellation: Cancellation,
     join_handle: JoinHandle<()>,
 }
 
 impl SourceLoad {
+    pub(crate) fn id(&self) -> SourceLoadId {
+        self.id
+    }
+
     /// Starts loading `file`; the result arrives as `WorkerEvent::SourceLoaded` for `id`.
     pub(crate) fn spawn(
         file: ValidatedAudioFile,
-        id: PlaybackId,
+        id: SourceLoadId,
         inbox: Inbox,
     ) -> Result<Self, ()> {
         let cancellation = Cancellation::default();
@@ -38,6 +43,7 @@ impl SourceLoad {
             })
             .map_err(|_| ())?;
         Ok(Self {
+            id,
             cancellation,
             join_handle,
         })
