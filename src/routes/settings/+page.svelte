@@ -1,9 +1,16 @@
 <script lang="ts">
-  import PageTitle from "$lib/ui/page-title.svelte";
+  import SettingsScreen from "$lib/components/settings/settings-screen.svelte";
+  import { captureScroll, restoreScroll } from "$lib/shell/scroll-memory";
   import WorkspaceScroll from "$lib/ui/workspace-scroll.svelte";
+
+  let viewport = $state<HTMLElement | null>(null);
+
+  export const snapshot = {
+    capture: () => captureScroll(viewport),
+    restore: (offset: number) => restoreScroll(viewport, offset),
+  };
 </script>
 
-<!-- Placeholder: replaced by the real screen in a later change. -->
-<WorkspaceScroll>
-  <PageTitle class="py-6">Settings</PageTitle>
+<WorkspaceScroll bind:viewportRef={viewport} contentClass="min-h-full pt-8 pb-16">
+  <SettingsScreen />
 </WorkspaceScroll>
