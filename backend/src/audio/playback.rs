@@ -4,6 +4,7 @@
 mod decode_worker;
 mod input;
 mod item;
+mod pipeline;
 mod preferences;
 mod queue;
 mod service;

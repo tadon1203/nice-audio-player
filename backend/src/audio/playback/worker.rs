@@ -7,17 +7,19 @@
 use std::sync::{mpsc::Receiver, Arc, RwLock};
 use std::time::{Duration, Instant};
 
-use super::decode_worker::{DecodeTaskInput, DecodeWorker};
 use super::input::{
     Inbox, PlaybackId, PlaybackIds, SourceLoadId, SourceLoadIds, WorkerEvent, WorkerInput,
 };
 use super::item::{PlaybackItem, PlaybackItemSeed};
+use super::pipeline::{
+    open_pipeline, OpenedPipeline, OutputChoice, PipelineError, PipelineRequest, StartPoint,
+};
 use super::preferences::{PlaybackPreferences, PreferencesObserver};
 use super::queue::{AdvanceReason, PlaybackQueue, QueueError};
 use super::service::{respond, PlaybackCommand, PlaybackServiceError, Reply};
 use super::session::{
-    should_publish_position, LoadStage, Loaded, Loading, Pipeline, Position, Prebuffering,
-    SeekInFlight, StartRequest, Transport,
+    should_publish_position, LoadStage, Loaded, Loading, Position, Prebuffering, SeekInFlight,
+    StartRequest, Transport,
 };
 use super::snapshot::{
     ActiveSession, PlaybackFailureCode, PlaybackProcessingInfo, PlaybackQueueSnapshot,
@@ -25,14 +27,12 @@ use super::snapshot::{
 };
 use super::source_loader::SourceLoad;
 use crate::audio::compressed_source::{CompressedAudioSource, CompressedSourceError};
-use crate::audio::decoding::{DecodeStep, PcmDecodeError, SeekStep};
 use crate::audio::devices::{
     AudioOutputDeviceIdentity, AudioOutputSelection, DeviceResolutionError,
 };
 use crate::audio::output::{
-    AudioOutputError, OutputBackend, OutputLinks, OutputStreamId, OutputTarget, StreamFailureKind,
+    AudioOutputError, OutputBackend, OutputLinks, OutputStreamId, StreamFailureKind,
 };
-use crate::audio::output_processing::OutputPcmProcessor;
 use crate::audio::timebase::{millis_to_frame, rescale_frame};
 use crate::audio::volume::{AtomicEffectiveGain, VolumeState};
 use crate::events::{BackendEvent, SharedEventSink};
@@ -482,76 +482,25 @@ impl PlaybackWorker {
             .selection
             .clone()
             .unwrap_or_else(|| self.output_selection.clone());
-        match self.open_start_pipeline(&request.item, &source, selection) {
-            Ok((pipeline, duration_ms)) => {
+        let opened = self.open_pipeline(
+            &source,
+            &request.item.file.extension,
+            OutputChoice::Select(selection),
+            StartPoint::Beginning,
+        );
+        match opened {
+            Ok(opened) => {
                 self.transport = Transport::Loading(Loading {
                     request,
                     stage: LoadStage::Prebuffering(Prebuffering {
                         source,
-                        pipeline,
-                        duration_ms,
+                        pipeline: opened.pipeline,
+                        duration_ms: opened.duration_ms,
                     }),
                 });
             }
-            Err(failure) => self.fail_start(request, failure),
+            Err(error) => self.fail_start(request, start_failure(error)),
         }
-    }
-
-    fn open_start_pipeline(
-        &mut self,
-        item: &PlaybackItem,
-        source: &CompressedAudioSource,
-        selection: AudioOutputSelection,
-    ) -> Result<(Pipeline, Option<u64>), StartFailure> {
-        let mut decoder = source
-            .open_decoder(&item.file.extension)
-            .map_err(|_| StartFailure::item(StartFailurePhase::DecoderOpen))?;
-        let spec = decoder.spec();
-        let duration_ms = decoder.duration_ms();
-        let mut first_packet = Vec::new();
-        match decoder.decode_next(&mut first_packet) {
-            Err(_) | Ok(DecodeStep::EndOfStream) => {
-                return Err(StartFailure::item(StartFailurePhase::FirstPacketDecode));
-            }
-            Ok(DecodeStep::Samples) => {}
-        }
-        let stream_id = self.next_stream_id();
-        let prepared = self
-            .backend
-            .prepare(
-                OutputTarget::Selection { selection, spec },
-                self.output_links(stream_id),
-            )
-            .map_err(|error| {
-                StartFailure::output(StartFailurePhase::OutputPrepare, output_failure_code(error))
-            })?;
-        let processor = OutputPcmProcessor::new(prepared.config.processing_plan).map_err(|_| {
-            StartFailure::output(
-                StartFailurePhase::ProcessorCreate,
-                PlaybackFailureCode::SampleRateConversionFailed,
-            )
-        })?;
-        let decode = DecodeWorker::spawn(
-            DecodeTaskInput {
-                decoder,
-                first_packet,
-                producer: prepared.producer,
-                processor,
-                output_sample_rate: prepared.config.processing_plan.output().sample_rate().get(),
-                discard_output_samples: 0,
-            },
-            self.inbox.clone(),
-            stream_id,
-        );
-        Ok((
-            Pipeline {
-                stream_id,
-                stream: prepared.stream,
-                config: prepared.config,
-                decode,
-            },
-            duration_ms,
-        ))
     }
 
     /// The prebuffer is ready: start the output (unless starting paused) and answer the caller.
@@ -692,95 +641,37 @@ impl PlaybackWorker {
         let source = loaded.source.clone();
         let extension = loaded.item.file.extension.clone();
         let config = loaded.pipeline.config.clone();
-        match self.open_seek_pipeline(&source, &extension, &config, target_ms, duration_ms) {
-            Ok(mut seek) => {
-                seek.responder = responder;
+        let opened = self.open_pipeline(
+            &source,
+            &extension,
+            OutputChoice::Reuse(config),
+            StartPoint::Seek { target_ms },
+        );
+        match opened {
+            Ok(opened) => {
+                let rate = opened.pipeline.sample_rate();
+                let source_rate = opened
+                    .pipeline
+                    .config
+                    .processing_plan
+                    .source()
+                    .sample_rate()
+                    .get();
+                let output_base_frame = rescale_frame(opened.start_source_frame, rate, source_rate);
+                let total_output_frames = millis_to_frame(duration_ms, rate);
+                let seek = SeekInFlight {
+                    pipeline: opened.pipeline,
+                    output_base_frame: output_base_frame.min(total_output_frames),
+                    remaining_frames: total_output_frames.saturating_sub(output_base_frame),
+                    duration_ms,
+                    responder,
+                };
                 if let Transport::Loaded(loaded) = &mut self.transport {
                     loaded.seek = Some(seek);
                 }
             }
-            Err(error) => respond(responder, Err(error)),
+            Err(error) => respond(responder, Err(seek_error(error))),
         }
-    }
-
-    fn open_seek_pipeline(
-        &mut self,
-        source: &CompressedAudioSource,
-        extension: &str,
-        config: &crate::audio::output::PreparedOutputConfig,
-        target_ms: u64,
-        duration_ms: u64,
-    ) -> Result<SeekInFlight, PlaybackServiceError> {
-        let source_spec = config.processing_plan.source();
-        let target_source_frame = millis_to_frame(target_ms, source_spec.sample_rate().get());
-        let processor = OutputPcmProcessor::new(config.processing_plan).map_err(|_| {
-            PlaybackServiceError::Output(PlaybackFailureCode::SampleRateConversionFailed)
-        })?;
-        let preroll_frames = processor.seek_preroll_frames(target_source_frame);
-        let mut decoder = source
-            .open_decoder(extension)
-            .map_err(|_| PlaybackServiceError::Decode)?;
-        if decoder.spec() != source_spec {
-            return Err(PlaybackServiceError::Decode);
-        }
-        let seek = match decoder.seek_to_frame_with_preroll(target_source_frame, preroll_frames) {
-            Ok(SeekStep::Samples(seek)) => seek,
-            Ok(SeekStep::EndOfStream) => return Err(PlaybackServiceError::Decode),
-            Err(PcmDecodeError::SeekFailed) => return Err(PlaybackServiceError::Seek),
-            Err(_) => return Err(PlaybackServiceError::Decode),
-        };
-        if seek.first_packet.is_empty() {
-            return Err(PlaybackServiceError::Decode);
-        }
-
-        let stream_id = self.next_stream_id();
-        let prepared = self
-            .backend
-            .prepare(
-                OutputTarget::Config(config.clone()),
-                self.output_links(stream_id),
-            )
-            .map_err(|error| PlaybackServiceError::Output(output_failure_code(error)))?;
-        let sample_rate = prepared.config.processing_plan.output().sample_rate().get();
-        let discard_output_frames = rescale_frame(
-            seek.confirmed_source_frame
-                .saturating_sub(seek.preroll_source_frame),
-            sample_rate,
-            source_spec.sample_rate().get(),
-        ) as usize;
-        let discard_output_samples = discard_output_frames.saturating_mul(usize::from(
-            config.processing_plan.output().channel_count().get(),
-        ));
-        let decode = DecodeWorker::spawn(
-            DecodeTaskInput {
-                decoder,
-                first_packet: seek.first_packet,
-                producer: prepared.producer,
-                processor,
-                output_sample_rate: sample_rate,
-                discard_output_samples,
-            },
-            self.inbox.clone(),
-            stream_id,
-        );
-        let output_base_frame = rescale_frame(
-            seek.confirmed_source_frame,
-            sample_rate,
-            source_spec.sample_rate().get(),
-        );
-        let total_output_frames = millis_to_frame(duration_ms, sample_rate);
-        Ok(SeekInFlight {
-            pipeline: Pipeline {
-                stream_id,
-                stream: prepared.stream,
-                config: prepared.config,
-                decode,
-            },
-            output_base_frame: output_base_frame.min(total_output_frames),
-            remaining_frames: total_output_frames.saturating_sub(output_base_frame),
-            duration_ms,
-            responder: None,
-        })
     }
 
     /// The seek's prebuffer is ready: switch the output over to it.
@@ -1241,6 +1132,29 @@ impl PlaybackWorker {
 
     // ---- publishing ----
 
+    fn open_pipeline(
+        &mut self,
+        source: &CompressedAudioSource,
+        extension: &str,
+        output: OutputChoice,
+        from: StartPoint,
+    ) -> Result<OpenedPipeline, PipelineError> {
+        let stream_id = self.next_stream_id();
+        let links = self.output_links(stream_id);
+        open_pipeline(
+            self.backend.as_ref(),
+            &self.inbox,
+            PipelineRequest {
+                source,
+                extension,
+                output,
+                from,
+                stream_id,
+                links,
+            },
+        )
+    }
+
     fn next_stream_id(&mut self) -> OutputStreamId {
         self.next_stream_id = self.next_stream_id.wrapping_add(1);
         OutputStreamId(self.next_stream_id)
@@ -1363,6 +1277,39 @@ impl PlaybackWorker {
 }
 
 /// Whether "previous" should restart the current track rather than leave it.
+fn start_failure(error: PipelineError) -> StartFailure {
+    match error {
+        PipelineError::DecoderOpen => StartFailure::item(StartFailurePhase::DecoderOpen),
+        PipelineError::OutputPrepare(error) => {
+            StartFailure::output(StartFailurePhase::OutputPrepare, output_failure_code(error))
+        }
+        PipelineError::ProcessorCreate => StartFailure::output(
+            StartFailurePhase::ProcessorCreate,
+            PlaybackFailureCode::SampleRateConversionFailed,
+        ),
+        // A start reads from the beginning of a file it opened itself, so only a seek meets a
+        // changed format or a failed seek.
+        PipelineError::FirstPacketDecode
+        | PipelineError::SpecChanged
+        | PipelineError::SeekFailed => StartFailure::item(StartFailurePhase::FirstPacketDecode),
+    }
+}
+
+fn seek_error(error: PipelineError) -> PlaybackServiceError {
+    match error {
+        PipelineError::SeekFailed => PlaybackServiceError::Seek,
+        PipelineError::OutputPrepare(error) => {
+            PlaybackServiceError::Output(output_failure_code(error))
+        }
+        PipelineError::ProcessorCreate => {
+            PlaybackServiceError::Output(PlaybackFailureCode::SampleRateConversionFailed)
+        }
+        PipelineError::DecoderOpen
+        | PipelineError::SpecChanged
+        | PipelineError::FirstPacketDecode => PlaybackServiceError::Decode,
+    }
+}
+
 pub(super) fn previous_restarts_track(position_ms: u64, duration_ms: Option<u64>) -> bool {
     duration_ms.is_some() && position_ms >= PREVIOUS_RESTART_THRESHOLD_MS
 }
