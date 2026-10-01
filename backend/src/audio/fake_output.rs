@@ -20,6 +20,7 @@ struct StreamState {
     now: StreamInstant,
     events: OutputEvents,
     fail_start: Option<AudioOutputError>,
+    fail_pause: Option<AudioOutputError>,
     /// Keeps the queue alive like the real callback would.
     _consumer: PcmConsumer,
 }
@@ -95,6 +96,14 @@ impl FakeOutput {
     /// The next stream's `start` fails.
     pub(crate) fn fail_next_start(&self, error: AudioOutputError) {
         self.shared().fail_next_start = Some(error);
+    }
+
+    /// The newest stream's next `pause` fails.
+    pub(crate) fn fail_next_pause(&self, error: AudioOutputError) {
+        self.latest()
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .fail_pause = Some(error);
     }
 
     /// The newest stream hands its last frames to the device, due at the stream's current time.
@@ -184,6 +193,7 @@ impl OutputBackend for FakeOutput {
             now: StreamInstant::new(1, 0),
             events: links.events,
             fail_start: start_error,
+            fail_pause: None,
             _consumer: consumer,
         }));
         self.shared().streams.push(Arc::clone(&state));
@@ -220,7 +230,11 @@ impl OutputStream for FakeStream {
     }
 
     fn pause(&self) -> Result<(), AudioOutputError> {
-        self.state().running = false;
+        let mut state = self.state();
+        if let Some(error) = state.fail_pause.take() {
+            return Err(error);
+        }
+        state.running = false;
         Ok(())
     }
 

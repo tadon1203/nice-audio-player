@@ -389,6 +389,7 @@ impl PlaybackWorker {
             responder,
             start_paused,
             resume_at_ms: None,
+            selection: None,
         });
     }
 
@@ -411,7 +412,7 @@ impl PlaybackWorker {
                 });
             }
             Err(()) => self.fail_start(
-                request.responder,
+                request,
                 Some(id),
                 StartFailure {
                     code: PlaybackFailureCode::DecodeFailed,
@@ -456,7 +457,7 @@ impl PlaybackWorker {
                     CompressedSourceError::SourceChanged => StartFailurePhase::SourceChanged,
                     CompressedSourceError::Cancelled => unreachable!(),
                 };
-                self.fail_start(request.responder, Some(id), StartFailure::item(phase));
+                self.fail_start(request, Some(id), StartFailure::item(phase));
             }
         }
     }
@@ -468,7 +469,11 @@ impl PlaybackWorker {
         request: StartRequest,
         source: CompressedAudioSource,
     ) {
-        match self.open_start_pipeline(&request.item, &source) {
+        let selection = request
+            .selection
+            .clone()
+            .unwrap_or_else(|| self.output_selection.clone());
+        match self.open_start_pipeline(&request.item, &source, selection) {
             Ok((pipeline, duration_ms)) => {
                 self.transport = Transport::Loading(Loading {
                     id,
@@ -480,7 +485,7 @@ impl PlaybackWorker {
                     }),
                 });
             }
-            Err(failure) => self.fail_start(request.responder, Some(id), failure),
+            Err(failure) => self.fail_start(request, Some(id), failure),
         }
     }
 
@@ -488,6 +493,7 @@ impl PlaybackWorker {
         &mut self,
         item: &PlaybackItem,
         source: &CompressedAudioSource,
+        selection: AudioOutputSelection,
     ) -> Result<(Pipeline, Option<u64>), StartFailure> {
         let mut decoder = source
             .open_decoder(&item.file.extension)
@@ -505,10 +511,7 @@ impl PlaybackWorker {
         let prepared = self
             .backend
             .prepare(
-                OutputTarget::Selection {
-                    selection: self.output_selection.clone(),
-                    spec,
-                },
+                OutputTarget::Selection { selection, spec },
                 self.output_links(stream_id),
             )
             .map_err(|error| {
@@ -563,7 +566,7 @@ impl PlaybackWorker {
                 let code = output_failure_code(error);
                 pipeline.cancel();
                 self.fail_start(
-                    request.responder,
+                    request,
                     Some(id),
                     StartFailure::output(StartFailurePhase::StreamStart, code),
                 );
@@ -575,7 +578,12 @@ impl PlaybackWorker {
             responder,
             start_paused,
             resume_at_ms,
+            selection,
         } = request;
+        if let Some(selection) = selection {
+            self.output_selection = selection;
+            self.preferences_changed();
+        }
         self.last_item = Some(item.clone());
         self.skipped_in_a_row = 0;
         self.transport = Transport::Loaded(Loaded {
@@ -597,12 +605,7 @@ impl PlaybackWorker {
 
     /// Reports a failed start and, when only this file is at fault, moves on to the next one.
     /// Listeners see the failure first, so a skipped file is never silent.
-    fn fail_start(
-        &mut self,
-        responder: Option<Reply<PlaybackSnapshot>>,
-        id: Option<PlaybackId>,
-        failure: StartFailure,
-    ) {
+    fn fail_start(&mut self, request: StartRequest, id: Option<PlaybackId>, failure: StartFailure) {
         error!(
             "playback.start_failed code={:?} phase={:?} playback_id={:?}",
             failure.code, failure.phase, id
@@ -612,13 +615,15 @@ impl PlaybackWorker {
             code: failure.code,
         };
         self.publish_state();
-        if failure.phase.scope() == FailureScope::Item {
+        let responder = request.responder;
+        if failure.phase.scope() == FailureScope::Item && request.selection.is_none() {
             if let Some(item) = self.next_after_item_failure() {
                 self.begin_start(StartRequest {
                     item,
                     responder,
                     start_paused: false,
                     resume_at_ms: None,
+                    selection: None,
                 });
                 return;
             }
@@ -676,8 +681,8 @@ impl PlaybackWorker {
         };
         let target_ms = requested_position_ms.min(duration_ms);
         if target_ms == duration_ms {
-            let snapshot = self.stop();
-            respond(responder, Ok(snapshot));
+            let paused = loaded.paused;
+            self.advance_after_track(responder, paused);
             return;
         }
         let source = loaded.source.clone();
@@ -786,10 +791,8 @@ impl PlaybackWorker {
         if was_playing {
             if let Err(error) = loaded.pipeline.stream.pause() {
                 seek.pipeline.cancel();
-                respond(
-                    seek.responder,
-                    Err(PlaybackServiceError::Output(output_failure_code(error))),
-                );
+                let failure = self.control_failure(error);
+                respond(seek.responder, Err(failure));
                 return;
             }
             if let Err(error) = seek.pipeline.stream.start() {
@@ -894,6 +897,10 @@ impl PlaybackWorker {
     }
 
     fn pause(&mut self) -> Result<PlaybackSnapshot, PlaybackServiceError> {
+        if let Transport::Loading(loading) = &mut self.transport {
+            loading.request.start_paused = true;
+            return Ok(self.render());
+        }
         let Transport::Loaded(loaded) = &mut self.transport else {
             return Err(PlaybackServiceError::InvalidPlaybackState);
         };
@@ -911,6 +918,10 @@ impl PlaybackWorker {
     }
 
     fn resume(&mut self) -> Result<PlaybackSnapshot, PlaybackServiceError> {
+        if let Transport::Loading(loading) = &mut self.transport {
+            loading.request.start_paused = false;
+            return Ok(self.render());
+        }
         let Transport::Loaded(loaded) = &mut self.transport else {
             return Err(PlaybackServiceError::InvalidPlaybackState);
         };
@@ -967,9 +978,8 @@ impl PlaybackWorker {
             responder: Some(reply),
             start_paused: loaded.paused,
             resume_at_ms: Some(loaded.position_ms()),
+            selection: Some(selection),
         };
-        self.output_selection = selection;
-        self.preferences_changed();
         self.begin_start(request);
     }
 
@@ -1064,7 +1074,7 @@ impl PlaybackWorker {
                     StartFailurePhase::PrebufferConversion
                 };
                 self.fail_start(
-                    loading.request.responder,
+                    loading.request,
                     Some(loading.id),
                     StartFailure {
                         code,
@@ -1139,6 +1149,7 @@ impl PlaybackWorker {
                     responder: None,
                     start_paused: false,
                     resume_at_ms: None,
+                    selection: None,
                 });
             }
         }
@@ -1174,6 +1185,16 @@ impl PlaybackWorker {
         if !is_due {
             return;
         }
+        self.advance_after_track(None, false);
+    }
+
+    /// The track is over, because it played out or a seek went past its end: play the next one
+    /// or stop.
+    fn advance_after_track(
+        &mut self,
+        responder: Option<Reply<PlaybackSnapshot>>,
+        start_paused: bool,
+    ) {
         match self
             .queue
             .advance(AdvanceReason::Natural, &mut self.rng)
@@ -1184,16 +1205,18 @@ impl PlaybackWorker {
                 self.publish_queue();
                 self.begin_start(StartRequest {
                     item,
-                    responder: None,
-                    start_paused: false,
+                    responder,
+                    start_paused,
                     resume_at_ms: None,
+                    selection: None,
                 });
             }
             None => {
                 self.discard_transport();
                 self.queue.clear();
                 self.publish_queue();
-                self.publish_state();
+                let snapshot = self.publish_state();
+                respond(responder, Ok(snapshot));
             }
         }
     }

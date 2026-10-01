@@ -9,6 +9,7 @@ use super::service::Reply;
 use super::snapshot::{PlaybackFailureCode, PlaybackSnapshot};
 use super::source_loader::SourceLoad;
 use crate::audio::compressed_source::CompressedAudioSource;
+use crate::audio::devices::AudioOutputSelection;
 use crate::audio::output::{OutputStream, OutputStreamId, PreparedOutputConfig};
 use cpal::StreamInstant;
 
@@ -35,6 +36,9 @@ pub(super) struct StartRequest {
     pub start_paused: bool,
     /// Where to seek to once playing, after a device switch restarted the track.
     pub resume_at_ms: Option<u64>,
+    /// A device switch: the selection to commit once the restart is playing. Until then the
+    /// current selection stands, and a failure does not skip to another track.
+    pub selection: Option<AudioOutputSelection>,
 }
 
 pub(super) struct Loading {

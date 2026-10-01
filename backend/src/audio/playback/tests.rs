@@ -847,6 +847,103 @@ fn seeking_to_the_end_stops() {
 }
 
 #[test]
+fn seeking_past_the_end_plays_the_next_track_like_a_natural_finish() {
+    let mut harness = Harness::new();
+    let tracks = vec![harness.track("a", 1), harness.track("b", 1)];
+    harness.start(tracks, 0).unwrap();
+
+    let snapshot = harness.seek(5_000).unwrap();
+
+    assert!(is_playing(&snapshot, "b"));
+    assert_eq!(harness.queue_snapshot().current.unwrap().title, "b");
+}
+
+#[test]
+fn a_failed_pause_during_a_seek_fails_the_player() {
+    let mut harness = Harness::new();
+    let tracks = vec![harness.track("a", 3)];
+    harness.start(tracks, 0).unwrap();
+    harness
+        .output
+        .fail_next_pause(AudioOutputError::StreamPauseFailed);
+
+    let result = harness.seek(1_000);
+
+    assert_eq!(
+        result,
+        Err(PlaybackServiceError::Output(
+            PlaybackFailureCode::OutputStreamPauseFailed
+        ))
+    );
+    assert!(matches!(
+        harness.snapshot(),
+        PlaybackSnapshot::Failed {
+            error: PlaybackFailureCode::OutputStreamPauseFailed,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn pausing_while_a_track_loads_starts_it_paused() {
+    let mut harness = Harness::new();
+    let tracks = vec![harness.track("a", 1)];
+    let start = harness.send(|reply| PlaybackCommand::Start {
+        items: tracks,
+        start_index: 0,
+        reply,
+    });
+
+    harness.pause().unwrap();
+    let loaded = harness.wait_for(&start).unwrap();
+
+    assert!(matches!(loaded, PlaybackSnapshot::Paused { .. }));
+    assert!(!harness.output.is_running());
+}
+
+#[test]
+fn resuming_while_a_paused_start_loads_plays_it() {
+    let mut harness = Harness::new();
+    let tracks = vec![harness.track("a", 1), harness.track("b", 1)];
+    harness.start(tracks, 0).unwrap();
+    harness.pause().unwrap();
+    let start = harness.send(|reply| PlaybackCommand::Next { reply });
+
+    harness.resume().unwrap();
+
+    assert!(is_playing(&harness.wait_for(&start).unwrap(), "b"));
+}
+
+#[test]
+fn a_failed_device_switch_keeps_the_saved_selection_and_the_queue() {
+    let mut harness = Harness::new();
+    let tracks = vec![harness.track("a", 3), harness.track("b", 3)];
+    harness.start(tracks, 0).unwrap();
+    harness
+        .output
+        .fail_next_prepare(AudioOutputError::DeviceUnavailable);
+
+    let result = harness.select_output(AudioOutputSelection::Device {
+        device_id: "fake-other".into(),
+    });
+
+    assert_eq!(
+        result,
+        Err(PlaybackServiceError::Output(
+            PlaybackFailureCode::OutputDeviceUnavailable
+        ))
+    );
+    let snapshot = harness.snapshot();
+    assert!(matches!(snapshot, PlaybackSnapshot::Failed { .. }));
+    assert_eq!(
+        snapshot.base().output_selection,
+        AudioOutputSelection::SystemDefault
+    );
+    assert!(harness.preferences.lock().unwrap().is_empty());
+    assert_eq!(harness.queue_titles(), ["a", "b"]);
+}
+
+#[test]
 fn previous_restarts_a_track_that_has_played_for_a_while() {
     let mut harness = Harness::new();
     let tracks = vec![harness.track("a", 5), harness.track("b", 5)];
@@ -1012,6 +1109,7 @@ fn switching_the_output_while_paused_resumes_the_position_on_the_new_device() {
     assert_eq!(session(&snapshot).output_device.name, "Other fake speakers");
     let position = session(&snapshot).position_ms;
     assert!((950..=1_050).contains(&position), "position {position}");
+    assert_eq!(harness.preferences.lock().unwrap().len(), 1);
     assert_eq!(
         harness.output.prepared_selections().last(),
         Some(&AudioOutputSelection::Device {
