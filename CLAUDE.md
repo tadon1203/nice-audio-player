@@ -44,7 +44,7 @@ Local markdown files under `.scratch/<feature>/`. See `docs/agents/issue-tracker
 
 ### Triage labels
 
-Default five labels, recorded as a `Status:` line in each ticket. See `docs/agents/triage-labels.md`.
+Two labels (`ready-for-agent`, `done`), recorded as a `Status:` line in each ticket. See `docs/agents/triage-labels.md`.
 
 ### Domain docs
 
