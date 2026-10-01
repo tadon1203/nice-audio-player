@@ -1,6 +1,6 @@
 use std::sync::atomic::{AtomicU8, Ordering};
-use std::sync::mpsc::{self, Receiver, SyncSender};
-use std::sync::Arc;
+use std::sync::mpsc::SyncSender;
+use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
 use cpal::traits::{DeviceTrait, StreamTrait};
@@ -95,6 +95,24 @@ pub(crate) struct PositionUpdate {
     pub(crate) playback_time: StreamInstant,
 }
 
+/// Latest-value cell between the output callback and the worker: the callback overwrites it and
+/// the worker takes the newest report. The callback never blocks; if the worker holds the lock at
+/// that instant the next callback overwrites it anyway.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct LatestPosition(Arc<Mutex<Option<PositionUpdate>>>);
+
+impl LatestPosition {
+    pub(crate) fn publish(&self, update: PositionUpdate) {
+        if let Ok(mut cell) = self.0.try_lock() {
+            *cell = Some(update);
+        }
+    }
+
+    pub(crate) fn take(&self) -> Option<PositionUpdate> {
+        self.0.lock().unwrap_or_else(PoisonError::into_inner).take()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AudioOutputError {
     ConfigurationQueryFailed,
@@ -162,7 +180,7 @@ fn map_stream_start_error(error: cpal::Error) -> AudioOutputError {
 
 pub(crate) struct PreparedOutputStream {
     stream: cpal::Stream,
-    position_receiver: Receiver<PositionUpdate>,
+    latest_position: LatestPosition,
     latest_position_update: Option<PositionUpdate>,
     last_played_frame_position: u64,
 }
@@ -195,7 +213,7 @@ impl PreparedOutputStream {
         sample_rate: u32,
         max_frame_count: Option<u64>,
     ) -> u64 {
-        while let Ok(update) = self.position_receiver.try_recv() {
+        if let Some(update) = self.latest_position.take() {
             self.latest_position_update = Some(update);
         }
 
@@ -215,7 +233,7 @@ impl PreparedOutputStream {
     }
 
     pub(crate) fn clear_timing_anchor(&mut self) {
-        while self.position_receiver.try_recv().is_ok() {}
+        self.latest_position.take();
         self.latest_position_update = None;
     }
 }
@@ -233,7 +251,7 @@ fn build_stream_for_config(
     capacity_sender: SyncSender<()>,
     signal_sender: SyncSender<OutputSignal>,
 ) -> Result<PreparedOutputStream, AudioOutputError> {
-    let (position_sender, position_receiver) = mpsc::sync_channel(1);
+    let latest_position = LatestPosition::default();
     let stream = match sample_format {
         SampleFormat::F32 => build_stream::<f32>(
             &device,
@@ -246,7 +264,7 @@ fn build_stream_for_config(
             producer_state,
             capacity_sender,
             signal_sender.clone(),
-            position_sender.clone(),
+            latest_position.clone(),
         )?,
         SampleFormat::F64 => build_stream::<f64>(
             &device,
@@ -259,7 +277,7 @@ fn build_stream_for_config(
             producer_state,
             capacity_sender,
             signal_sender.clone(),
-            position_sender.clone(),
+            latest_position.clone(),
         )?,
         SampleFormat::I8 => build_stream::<i8>(
             &device,
@@ -272,7 +290,7 @@ fn build_stream_for_config(
             producer_state,
             capacity_sender,
             signal_sender.clone(),
-            position_sender.clone(),
+            latest_position.clone(),
         )?,
         SampleFormat::I16 => build_stream::<i16>(
             &device,
@@ -285,7 +303,7 @@ fn build_stream_for_config(
             producer_state,
             capacity_sender,
             signal_sender.clone(),
-            position_sender.clone(),
+            latest_position.clone(),
         )?,
         SampleFormat::I24 => build_stream::<cpal::I24>(
             &device,
@@ -298,7 +316,7 @@ fn build_stream_for_config(
             producer_state,
             capacity_sender,
             signal_sender.clone(),
-            position_sender.clone(),
+            latest_position.clone(),
         )?,
         SampleFormat::I32 => build_stream::<i32>(
             &device,
@@ -311,7 +329,7 @@ fn build_stream_for_config(
             producer_state,
             capacity_sender,
             signal_sender.clone(),
-            position_sender.clone(),
+            latest_position.clone(),
         )?,
         SampleFormat::I64 => build_stream::<i64>(
             &device,
@@ -324,7 +342,7 @@ fn build_stream_for_config(
             producer_state,
             capacity_sender,
             signal_sender.clone(),
-            position_sender.clone(),
+            latest_position.clone(),
         )?,
         SampleFormat::U8 => build_stream::<u8>(
             &device,
@@ -337,7 +355,7 @@ fn build_stream_for_config(
             producer_state,
             capacity_sender,
             signal_sender.clone(),
-            position_sender.clone(),
+            latest_position.clone(),
         )?,
         SampleFormat::U16 => build_stream::<u16>(
             &device,
@@ -350,7 +368,7 @@ fn build_stream_for_config(
             producer_state,
             capacity_sender,
             signal_sender.clone(),
-            position_sender.clone(),
+            latest_position.clone(),
         )?,
         SampleFormat::U24 => build_stream::<cpal::U24>(
             &device,
@@ -363,7 +381,7 @@ fn build_stream_for_config(
             producer_state,
             capacity_sender,
             signal_sender.clone(),
-            position_sender.clone(),
+            latest_position.clone(),
         )?,
         SampleFormat::U32 => build_stream::<u32>(
             &device,
@@ -376,7 +394,7 @@ fn build_stream_for_config(
             producer_state,
             capacity_sender,
             signal_sender.clone(),
-            position_sender.clone(),
+            latest_position.clone(),
         )?,
         SampleFormat::U64 => build_stream::<u64>(
             &device,
@@ -389,14 +407,14 @@ fn build_stream_for_config(
             producer_state,
             capacity_sender,
             signal_sender.clone(),
-            position_sender.clone(),
+            latest_position.clone(),
         )?,
         _ => return Err(AudioOutputError::UnsupportedConfiguration),
     };
 
     Ok(PreparedOutputStream {
         stream,
-        position_receiver,
+        latest_position,
         latest_position_update: None,
         last_played_frame_position: 0,
     })
@@ -698,7 +716,7 @@ fn build_stream<T>(
     producer_state: Arc<AtomicProducerState>,
     capacity_sender: SyncSender<()>,
     signal_sender: SyncSender<OutputSignal>,
-    position_sender: SyncSender<PositionUpdate>,
+    latest_position: LatestPosition,
 ) -> Result<cpal::Stream, AudioOutputError>
 where
     T: cpal::SizedSample + FromSample<f32>,
@@ -734,7 +752,7 @@ where
                         sample_rate,
                     );
                 }
-                let _ = position_sender.try_send(PositionUpdate {
+                latest_position.publish(PositionUpdate {
                     start_frame,
                     end_frame,
                     playback_time: info.timestamp().playback,
@@ -834,7 +852,7 @@ mod tests {
         calculate_end_time, classify_fallback_build, classify_native_attempt,
         classify_stream_error_kind, format_supported_output_configs, played_frame_position,
         sample_format_rank, select_output_config, write_output_samples, write_queue_samples,
-        AudioOutputError, NativeAttemptDecision, PositionUpdate, StreamFailureKind,
+        AudioOutputError, LatestPosition, NativeAttemptDecision, PositionUpdate, StreamFailureKind,
     };
     use cpal::{
         Sample, SampleFormat, StreamInstant, SupportedBufferSize, SupportedStreamConfigRange,
@@ -1057,6 +1075,20 @@ mod tests {
             end.checked_duration_since(start),
             Some(Duration::from_secs_f64(1.0 / 48_000.0))
         );
+    }
+
+    #[test]
+    fn latest_position_keeps_the_newest_report() {
+        let cell = LatestPosition::default();
+        for start_frame in [0, 480, 960] {
+            cell.publish(PositionUpdate {
+                start_frame,
+                end_frame: start_frame + 480,
+                playback_time: StreamInstant::new(10, 0),
+            });
+        }
+        assert_eq!(cell.take().map(|update| update.start_frame), Some(960));
+        assert!(cell.take().is_none());
     }
 
     #[test]

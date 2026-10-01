@@ -4,12 +4,11 @@
 //! A long file that is not cached yet is shown in two steps: a quick sampled approximation, then
 //! the exact waveform, decoded in parallel segments and written to the cache.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::{channel, Sender};
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -339,17 +338,64 @@ fn file_stamp(path: &str) -> Option<FileStamp> {
     })
 }
 
+/// The single slot of waveform work: the job in flight and at most one newer request behind it.
+#[derive(Default)]
+struct Jobs {
+    running: Option<(String, DecodeCancellation)>,
+    pending: Option<ValidatedAudioFile>,
+    closed: bool,
+}
+
 struct Shared {
     directory: PathBuf,
     ready: Mutex<HashMap<String, (FileStamp, Arc<Waveform>)>>,
-    queued: Mutex<HashSet<String>>,
+    jobs: Mutex<Jobs>,
+    wake: Condvar,
     events: SharedEventSink,
 }
 
-/// Background waveform analysis. One worker thread processes requests in order.
+impl Shared {
+    fn jobs(&self) -> MutexGuard<'_, Jobs> {
+        self.jobs.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// Latest request wins: the job in flight is cancelled and an older queued request is dropped.
+    fn request(&self, file: &ValidatedAudioFile) {
+        let mut jobs = self.jobs();
+        match &jobs.running {
+            Some((path, cancellation)) if *path == file.path && !cancellation.is_cancelled() => {
+                jobs.pending = None;
+            }
+            running => {
+                if let Some((_, cancellation)) = running {
+                    cancellation.cancel();
+                }
+                jobs.pending = Some(file.clone());
+            }
+        }
+        self.wake.notify_one();
+    }
+
+    /// Blocks until there is a request, and returns it with the cancellation for its job.
+    fn next_job(&self) -> Option<(ValidatedAudioFile, DecodeCancellation)> {
+        let mut jobs = self.jobs();
+        loop {
+            if jobs.closed {
+                return None;
+            }
+            if let Some(file) = jobs.pending.take() {
+                let cancellation = DecodeCancellation::default();
+                jobs.running = Some((file.path.clone(), cancellation.clone()));
+                return Some((file, cancellation));
+            }
+            jobs = self.wake.wait(jobs).unwrap_or_else(PoisonError::into_inner);
+        }
+    }
+}
+
+/// Background waveform analysis. One worker thread; only the latest request is worth finishing.
 pub struct WaveformService {
     shared: Arc<Shared>,
-    jobs: Sender<ValidatedAudioFile>,
 }
 
 impl WaveformService {
@@ -357,27 +403,23 @@ impl WaveformService {
         let shared = Arc::new(Shared {
             directory,
             ready: Mutex::new(HashMap::new()),
-            queued: Mutex::new(HashSet::new()),
+            jobs: Mutex::new(Jobs::default()),
+            wake: Condvar::new(),
             events,
         });
-        let (jobs, job_receiver) = channel::<ValidatedAudioFile>();
         let worker = Arc::clone(&shared);
         let _ = thread::Builder::new()
             .name("waveform-analysis".into())
             .spawn(move || {
-                while let Ok(file) = job_receiver.recv() {
-                    worker.process(&file);
-                    worker
-                        .queued
-                        .lock()
-                        .unwrap_or_else(PoisonError::into_inner)
-                        .remove(&file.path);
+                while let Some((file, cancellation)) = worker.next_job() {
+                    worker.process(&file, &cancellation);
+                    worker.jobs().running = None;
                 }
             });
-        Self { shared, jobs }
+        Self { shared }
     }
 
-    /// Returns the waveform if it is ready; otherwise queues analysis and returns `None`.
+    /// Returns the waveform if it is ready; otherwise requests analysis and returns `None`.
     pub fn get_or_queue(&self, file: &ValidatedAudioFile) -> Option<Arc<Waveform>> {
         let stamp = file_stamp(&file.path)?;
         if let Some((remembered, waveform)) = self
@@ -391,23 +433,27 @@ impl WaveformService {
                 return Some(Arc::clone(waveform));
             }
         }
-        let newly_queued = self
-            .shared
-            .queued
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .insert(file.path.clone());
-        if newly_queued {
-            let _ = self.jobs.send(file.clone());
-        }
+        self.shared.request(file);
         None
+    }
+}
+
+impl Drop for WaveformService {
+    fn drop(&mut self) {
+        let mut jobs = self.shared.jobs();
+        jobs.closed = true;
+        if let Some((_, cancellation)) = &jobs.running {
+            cancellation.cancel();
+        }
+        drop(jobs);
+        self.shared.wake.notify_one();
     }
 }
 
 impl Shared {
     /// Publishes a quick approximation first when the file is long and not cached, then the exact
     /// waveform, which is also written to the cache.
-    fn process(&self, file: &ValidatedAudioFile) {
+    fn process(&self, file: &ValidatedAudioFile, cancellation: &DecodeCancellation) {
         let Some(stamp) = file_stamp(&file.path) else {
             return;
         };
@@ -419,14 +465,14 @@ impl Shared {
             self.publish(&file.path, stamp, cached);
             return;
         }
-        let cancellation = DecodeCancellation::default();
-        if let Ok(sampled) = sample(file, &cancellation, SAMPLE_BUDGET) {
+        if let Ok(sampled) = sample(file, cancellation, SAMPLE_BUDGET) {
             self.publish(&file.path, stamp, sampled);
         }
         let threads =
             thread::available_parallelism().map_or(1, |cores| (cores.get() / 2).clamp(1, 6));
-        let waveform = match analyze(file, &cancellation, threads) {
+        let waveform = match analyze(file, cancellation, threads) {
             Ok(waveform) => waveform,
+            Err(PcmDecodeError::Cancelled) => return,
             Err(error) => {
                 log::warn!("waveform.analysis_failed error={error:?}");
                 return;
@@ -578,6 +624,48 @@ mod tests {
         assert!(service.get_or_queue(&file).is_some());
         let hash = content_hash(Path::new(&file.path)).unwrap();
         assert!(read_cache(&directory.file("cache"), &hash).is_some());
+    }
+
+    fn idle_shared(directory: &TestDirectory) -> Shared {
+        let (_, sink) = crate::events::testing::RecordingEventSink::shared();
+        Shared {
+            directory: directory.file("cache"),
+            ready: Mutex::new(HashMap::new()),
+            jobs: Mutex::new(Jobs::default()),
+            wake: Condvar::new(),
+            events: sink,
+        }
+    }
+
+    #[test]
+    fn skipping_through_tracks_leaves_only_the_latest_request() {
+        let directory = TestDirectory::new();
+        let files: Vec<_> = (0..5)
+            .map(|index| wav(&directory, &format!("{index}.wav"), &[100, 200, 300, 400]))
+            .collect();
+        let shared = idle_shared(&directory);
+        for file in &files {
+            shared.request(file);
+        }
+        let (latest, _) = shared.next_job().unwrap();
+        assert_eq!(latest.path, files[4].path);
+        assert!(shared.jobs().pending.is_none());
+    }
+
+    #[test]
+    fn a_new_request_cancels_the_job_in_flight() {
+        let directory = TestDirectory::new();
+        let first = wav(&directory, "a.wav", &[100, 200, 300, 400]);
+        let second = wav(&directory, "b.wav", &[100, 200, 300, 400]);
+        let shared = idle_shared(&directory);
+        shared.request(&first);
+        let (_, in_flight) = shared.next_job().unwrap();
+        shared.request(&first);
+        assert!(!in_flight.is_cancelled());
+        shared.request(&second);
+        assert!(in_flight.is_cancelled());
+        let (next, _) = shared.next_job().unwrap();
+        assert_eq!(next.path, second.path);
     }
 
     #[test]
