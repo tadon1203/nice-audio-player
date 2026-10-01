@@ -4,11 +4,11 @@ Question: "I want to make as much motion as possible a spring (basically no over
 
 Context: [ADR 0005](../adr/0005-springs-for-all-motion-with-three-exceptions.md) went all-spring with the `motion` package; [ADR 0006](../adr/0006-three-durations-and-one-spring-for-interruptible-motion.md) backed out because of a spring-to-CSS conversion layer, the `motion` dependency, and a `visualDuration`/`bounce` vocabulary Svelte does not share. Today: three durations (`feedback` 100ms, `move` 300ms, `large` 420ms) with one ease-out (`cubicOut` / `cubic-bezier(0.33, 1, 0.68, 1)`), plus `settle`, a Svelte `Spring` for the Now Playing timeline and lyrics scroll (`src/lib/ui/motion/tokens.ts`).
 
-Numbers marked *(computed)* come from a throwaway Node script evaluating the formulas below and simulating Svelte's integrator line for line; they are not from a source.
+Numbers marked _(computed)_ come from a throwaway Node script evaluating the formulas below and simulating Svelte's integrator line for line; they are not from a source.
 
 ## TL;DR
 
-- A critically damped spring (bounce 0) from rest has a closed form, so **no library is needed**: one ~25-line pure function can turn a *perceptual duration* into (a) a JS easing `(t) => number` for Svelte transitions, `Tween`, `tweenNumber` and WAAPI, and (b) a CSS `linear()` string for CSS transitions. Both come from one formula, so they cannot disagree.
+- A critically damped spring (bounce 0) from rest has a closed form, so **no library is needed**: one ~25-line pure function can turn a _perceptual duration_ into (a) a JS easing `(t) => number` for Svelte transitions, `Tween`, `tweenNumber` and WAAPI, and (b) a CSS `linear()` string for CSS transitions. Both come from one formula, so they cannot disagree.
 - Fixed-duration spring easings get the spring's **shape** (soft start, long smooth tail). They **do not carry velocity** when interrupted. Only a real spring simulation (Svelte `Spring`, or a small analytic spring) does that. Keep that for the few values that are retargeted while moving (as ADR 0006 already does).
 - Svelte's `Spring` is **refresh-rate dependent**. At 60Hz `settle` is roughly Apple's 0.4s `.smooth`. At 144Hz it becomes overdamped (ζ ≈ 1.55) and its tail is slower (open Svelte issue [#10717](https://github.com/sveltejs/svelte/issues/10717)). A ~40-line analytic spring fixes this and uses the same perceptual-duration vocabulary.
 - Recommended: supersede ADR 0006 with one curve (a critically damped spring) and three perceptual durations. Keep reduced motion as a crossfade and progress motion linear. This avoids all three costs ADR 0006 rejected: no dependency, one tiny pure generator instead of a conversion layer, and the only vocabulary is "duration" (bounce is always 0, so it is not a parameter).
@@ -56,8 +56,8 @@ None of the mechanisms handles reduced motion by itself. The existing seam (`res
 
 ### Duration and bounce → physics (Apple)
 
-- Apple's `Spring(duration:bounce:)` docs: `duration` "defines the pace of the spring. This is approximately equal to the settling duration, but for springs with very large bounce values, will be the duration of the period of oscillation". `bounce` 0 is "a critically damped spring" ([developer.apple.com, Spring.init(duration:bounce:)](https://developer.apple.com/documentation/swiftui/spring/init(duration:bounce:))).
-- `.smooth` is "a smooth spring … with no bounce" ([Animation.smooth](https://developer.apple.com/documentation/swiftui/animation/smooth)). `.snappy` has "a small amount of bounce" ([Animation.snappy](https://developer.apple.com/documentation/swiftui/animation/snappy)). `smooth(duration:extraBounce:)` defaults to duration 0.5 ([docs](https://developer.apple.com/documentation/swiftui/animation/smooth(duration:extrabounce:))).
+- Apple's `Spring(duration:bounce:)` docs: `duration` "defines the pace of the spring. This is approximately equal to the settling duration, but for springs with very large bounce values, will be the duration of the period of oscillation". `bounce` 0 is "a critically damped spring" ([developer.apple.com, Spring.init(duration:bounce:)](<https://developer.apple.com/documentation/swiftui/spring/init(duration:bounce:)>)).
+- `.smooth` is "a smooth spring … with no bounce" ([Animation.smooth](https://developer.apple.com/documentation/swiftui/animation/smooth)). `.snappy` has "a small amount of bounce" ([Animation.snappy](https://developer.apple.com/documentation/swiftui/animation/snappy)). `smooth(duration:extraBounce:)` defaults to duration 0.5 ([docs](<https://developer.apple.com/documentation/swiftui/animation/smooth(duration:extrabounce:)>)).
 - WWDC23 "Animate with springs" gives the conversion: `mass = 1`, `stiffness = (2π / duration)²`, `damping = (1 − bounce) · 4π / duration` for bounce ≥ 0. The talk also says a spring from rest "need[s] to preserve a velocity of 0 at the beginning" and that the perceptual duration is chosen to be predictable, unlike the settling duration ([WWDC23 session 10158, transcript and code at 19:26](https://developer.apple.com/videos/play/wwdc2023/10158/)).
 - With bounce 0, damping = 2√stiffness, so ζ = 1 and ω = 2π / duration.
 - For reference only: Motion's `visualDuration` uses `ω = 2π / (visualDuration · 1.2)`. So Motion's "0.4" is Apple's 0.48 ([motion-dom `spring.ts`](https://github.com/motiondivision/motion/blob/main/packages/motion-dom/src/animation/generators/spring.ts)). This is one reason the ADR 0005 numbers do not transfer one-to-one.
@@ -79,29 +79,29 @@ v(t) = (v₀ − ω·(v₀ + ω·x₀)·t)·e^(−ωt)
 
 ### Settle threshold → total (CSS/WAAPI) duration
 
-Solve `(1 + u)e^(−u) = ε` with `u = ωT`, so `T = u / ω = d · u / 2π` *(computed)*:
+Solve `(1 + u)e^(−u) = ε` with `u = ωT`, so `T = u / ω = d · u / 2π` _(computed)_:
 
-| residual ε | u | T / perceptual d | d = 100ms | d = 300ms | d = 420ms |
-| --- | --- | --- | --- | --- | --- |
-| 1% | 6.64 | 1.06 | 106ms | 317ms | 444ms |
-| 0.5% | 7.43 | 1.18 | 118ms | 355ms | 497ms |
-| 0.1% | 9.23 | 1.47 | 147ms | 441ms | 617ms |
+| residual ε | u    | T / perceptual d | d = 100ms | d = 300ms | d = 420ms |
+| ---------- | ---- | ---------------- | --------- | --------- | --------- |
+| 1%         | 6.64 | 1.06             | 106ms     | 317ms     | 444ms     |
+| 0.5%       | 7.43 | 1.18             | 118ms     | 355ms     | 497ms     |
+| 0.1%       | 9.23 | 1.47             | 147ms     | 441ms     | 617ms     |
 
 Apple's "duration ≈ settling duration" corresponds to about a 1% residual.
 
-Recommendation: cut at ε = 0.5% and **renormalise** (divide by `x(T)`), so the curve ends exactly at 1 with no last-frame jump. The leftover end velocity is 0.033 of the average speed *(computed)*. On a 400px move over ~470ms that is about 30px/s, which is not visible.
+Recommendation: cut at ε = 0.5% and **renormalise** (divide by `x(T)`), so the curve ends exactly at 1 with no last-frame jump. The leftover end velocity is 0.033 of the average speed _(computed)_. On a 400px move over ~470ms that is about 30px/s, which is not visible.
 
 ### How many `linear()` points
 
-Maximum error of the renormalised ε = 0.5% curve, evenly spaced points, no percentages *(computed)*:
+Maximum error of the renormalised ε = 0.5% curve, evenly spaced points, no percentages _(computed)_:
 
 | points | max error | on a 400px move | string length |
-| --- | --- | --- | --- |
-| 25 | 0.88% | 3.5px | ~200 chars |
-| 33 | 0.53% | 2.1px | ~250 chars |
-| 41 | 0.36% | 1.4px | ~320 chars |
+| ------ | --------- | --------------- | ------------- |
+| 25     | 0.88%     | 3.5px           | ~200 chars    |
+| 33     | 0.53%     | 2.1px           | ~250 chars    |
+| 41     | 0.36%     | 1.4px           | ~320 chars    |
 
-Adaptive spacing with percentages reaches 0.2% error with 17 points (~230 chars) *(computed)*. Most of the error is in the first ~10%, where curvature is highest. For opacity and colour, 25 even points are more than enough. **41 even points** is the simple choice for everything: no percentages, and the length does not matter for a custom property set once.
+Adaptive spacing with percentages reaches 0.2% error with 17 points (~230 chars) _(computed)_. Most of the error is in the first ~10%, where curvature is highest. For opacity and colour, 25 even points are more than enough. **41 even points** is the simple choice for everything: no percentages, and the length does not matter for a custom property set once.
 
 For comparison, Svelte's own keyframe sampling is one point per 16.7ms, so 26 points for 420ms. That is what `cubicOut` gets today.
 
@@ -109,20 +109,20 @@ For comparison, Svelte's own keyframe sampling is one point per 16.7ms, so 26 po
 
 - At exactly 60Hz (`dt = 1`), the per-tick update is `v ← v + k·δ − c·v`, `x ← x + v`. That is a continuous spring with `k = ω_f²` and `c = 2ζ·ω_f`, where `ω_f = ω / 60` is in radians per frame.
 - For d = 0.4s: `ω_f = 2π / 0.4 / 60 = 0.2618`, so `k = 0.06854` and `c = 0.5236`. **ADR 0006's 0.0685 / 0.5236 is the correct continuous mapping.**
-- The discrete integrator is less accurate than that. At 60Hz the simulated `settle` reaches 99% at **483ms**, while the continuous 0.4s spring does so at 423ms. 50% comes at 100ms vs 107ms *(computed)*. That is close enough to call it ".smooth 0.4s".
+- The discrete integrator is less accurate than that. At 60Hz the simulated `settle` reaches 99% at **483ms**, while the continuous 0.4s spring does so at 423ms. 50% comes at 100ms vs 107ms _(computed)_. That is close enough to call it ".smooth 0.4s".
 - **Refresh-rate dependence (correction to the ADR):**
   - `acceleration` is added to velocity once per tick, not scaled by `dt`. At refresh rate `f` the effective spring is `k' = k / h` and `c' = c / h`, with `h = 60 / f`, so ζ' = ζ / √h.
   - Simulated: 120Hz gives ζ ≈ 1.41 and t99 ≈ 542ms. 144Hz gives ζ ≈ 1.55 and t99 ≈ 549ms. 240Hz gives ζ = 2.0 and t99 ≈ 567ms. There is never overshoot.
   - The start (t50 ≈ 90ms) stays similar, but the tail gets longer and flatter on high-refresh displays.
   - Upstream: [sveltejs/svelte#10717](https://github.com/sveltejs/svelte/issues/10717) ("`spring` performs differently on displays with different refresh rates"), open, milestone 5.x.
-- `precision` is absolute. A 100px move with `precision: 0.01` (the default, which `settle` uses) keeps ticking until about **950ms** at 60Hz and about 1090ms at 144Hz *(computed)*, because it waits for a 0.01px residual.
+- `precision` is absolute. A 100px move with `precision: 0.01` (the default, which `settle` uses) keeps ticking until about **950ms** at 60Hz and about 1090ms at 144Hz _(computed)_, because it waits for a 0.01px residual.
 - `now-playing-motion.ts`'s exit scaling (stiffness / s², damping / s) is correct in continuous terms. It keeps ζ = 1 at 60Hz.
 
 ## 3. Is a fixed-duration critically damped spring visibly different from today's ease-out?
 
-- **Initial velocity is zero, not non-zero.** A spring from rest starts at velocity 0 (x'(0) = 0, per Apple above), while `cubicOut` starts at 3× the average speed. The spring's acceleration is large (ω²), so by 5% of the run its slope is already ~1.9 *(computed)*. The "win" is not a faster start. It is a soft start plus a long, smooth exponential tail.
-- Same total length, spring (ε = 0.5%) vs `cubicOut`: maximum difference 10% of the distance, near the start. 50% is reached at 22.5% vs 20.6% of the run *(computed)*.
-- Best time-fit: the critically damped spring closest to `cubicOut` 100/300/420ms has a perceptual duration of about **74/220/308ms** (settling at ε = 0.5% in 88/260/364ms). The maximum difference is then 7.5% of the distance *(computed)*.
+- **Initial velocity is zero, not non-zero.** A spring from rest starts at velocity 0 (x'(0) = 0, per Apple above), while `cubicOut` starts at 3× the average speed. The spring's acceleration is large (ω²), so by 5% of the run its slope is already ~1.9 _(computed)_. The "win" is not a faster start. It is a soft start plus a long, smooth exponential tail.
+- Same total length, spring (ε = 0.5%) vs `cubicOut`: maximum difference 10% of the distance, near the start. 50% is reached at 22.5% vs 20.6% of the run _(computed)_.
+- Best time-fit: the critically damped spring closest to `cubicOut` 100/300/420ms has a perceptual duration of about **74/220/308ms** (settling at ε = 0.5% in 88/260/364ms). The maximum difference is then 7.5% of the distance _(computed)_.
   - On a 100ms colour change: indistinguishable.
   - On a 400px, 420ms move: a ~30px difference at some instant, seen as "more physical", with a slightly later start and a gentler landing.
   - So the change is subtle but real for `move`/`large`, and cosmetic for `feedback`.
@@ -232,11 +232,11 @@ Write **ADR 0007, superseding 0006**. Amending is not enough, because the curve 
 
 Of 0006's rejected costs:
 
-| ADR 0006 cost | Status under this design |
-| --- | --- |
-| `motion` dependency | Avoided. A closed form with no library. |
-| Spring-to-CSS conversion layer | Shrinks to one pure function. It is computed once, not per token, because the shape is fixed. Today's `tokens.test` / `css-motion.test` style tests can assert that JS and CSS agree. |
-| `visualDuration`/`bounce` vocabulary | Avoided. The only parameter is `duration` (Svelte's word). Bounce is a design rule, not a parameter. With option B, `stiffness`/`damping` go too. |
+| ADR 0006 cost                        | Status under this design                                                                                                                                                              |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `motion` dependency                  | Avoided. A closed form with no library.                                                                                                                                               |
+| Spring-to-CSS conversion layer       | Shrinks to one pure function. It is computed once, not per token, because the shape is fixed. Today's `tokens.test` / `css-motion.test` style tests can assert that JS and CSS agree. |
+| `visualDuration`/`bounce` vocabulary | Avoided. The only parameter is `duration` (Svelte's word). Bounce is a design rule, not a parameter. With option B, `stiffness`/`damping` go too.                                     |
 
 Also update DESIGN.md principle 7 ("three durations … with one ease-out curve" becomes "… one spring curve, no overshoot") and the tokens doc comment.
 
@@ -247,7 +247,7 @@ Also update DESIGN.md principle 7 ("three durations … with one ease-out curve"
 - **Total length exceeds the perceptual length** (×1.18 at ε = 0.5%):
   - Outros remove the element only after the full settling `duration`, which delays DOM removal and `onoutroend`.
   - `content-fade.ts`'s `CONTENT_DELAY_MS` and other hand-tuned delays are tied to today's lengths.
-  - E2E: `playwright.config.ts` runs everything with reduced motion except `tests/motion.e2e.ts`, which samples for 900ms. The current `settle` already needs ~950ms for a 100px move at 60Hz *(computed)*, so that window is already marginal. `now-playing-layout.e2e.ts` waits 650ms.
+  - E2E: `playwright.config.ts` runs everything with reduced motion except `tests/motion.e2e.ts`, which samples for 900ms. The current `settle` already needs ~950ms for a 100px move at 60Hz _(computed)_, so that window is already marginal. `now-playing-layout.e2e.ts` waits 650ms.
   - Keep `large`'s settling length under ~400ms, or base waits on `getAnimations()` / `finished` rather than fixed sleeps.
 - **Interruption is still a velocity reset** for everything except the true springs (§3). If a CSS-only state reverses often (hover in and out), the spring curve feels softer than `cubicOut` but is not velocity-matched.
 - **Performance:**
