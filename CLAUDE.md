@@ -28,6 +28,8 @@ Non-trivial feature:
 
 Offload large or exploratory searches (broad `grep`/`glob` sweeps, multi-file investigations) to a Haiku subagent so the raw results stay out of the main context; bring back only the conclusion.
 
+Code search: use `LSP` (references, definition, hover) for symbols with ambiguous names, rename/delete impact, and types. Use `Grep` for strings, config keys, comments, and unique names.
+
 Delegate creating and editing `.svelte` / `.svelte.ts` files to the `svelte-file-editor` subagent, and fix until `svelte-autofixer` reports no issues before finishing.
 
 ## Language
