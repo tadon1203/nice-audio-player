@@ -1,6 +1,6 @@
 # 0006: Three durations, one easing, and one spring for interruptible motion
 
-Supersedes [0005](./0005-springs-for-all-motion-with-three-exceptions.md).
+Superseded by [0007](./0007-one-spring-curve-generated-in-house.md). Supersedes [0005](./0005-springs-for-all-motion-with-three-exceptions.md).
 
 Motion is built from what Svelte and CSS already provide, with no animation library. There are three durations, each with the same ease-out curve: `feedback` (100ms: hover, press, colour changes), `move` (300ms: icons, digits, lyric lines, the queue, overlays) and `large` (420ms: Dock <-> Now Playing, album tile <-> details, the Sleeve, the Light). Reduced motion replaces every movement with a 100ms crossfade, and progress motion (the playing position, scan progress) runs at constant speed, as before.
 
