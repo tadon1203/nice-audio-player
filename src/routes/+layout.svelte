@@ -4,6 +4,9 @@
   import { QueryClientProvider } from "@tanstack/svelte-query";
   import ArtworkAccent from "$lib/components/dock/artwork-accent.svelte";
   import PlaybackRegion from "$lib/components/dock/playback-region.svelte";
+  import LyricsPrefetch from "$lib/components/now-playing/lyrics-prefetch.svelte";
+  import NowPlayingContent from "$lib/components/now-playing/now-playing-content.svelte";
+  import NowPlayingLayer from "$lib/components/now-playing/now-playing-layer.svelte";
   import QueuePanel from "$lib/components/queue-panel/queue-panel.svelte";
   import { native } from "$lib/native";
   import { setPlayback } from "$lib/playback/context";
@@ -11,6 +14,7 @@
   import { setSettings } from "$lib/settings/context";
   import { createSettings } from "$lib/settings/settings.svelte";
   import { createMotionBudget, setMotionBudget } from "$lib/shell/motion-budget.svelte";
+  import { nowPlaying } from "$lib/shell/now-playing.svelte";
   import { handlePlaybackShortcut } from "$lib/shell/playback-shortcuts";
   import { queryClient } from "$lib/shell/query-client";
   import { startNativeSession } from "$lib/shell/session";
@@ -51,18 +55,27 @@
       >
         <TitleBar />
         <aside
-          class="row-start-2 hidden min-h-0 min-w-0 flex-col bg-sidebar text-sidebar-foreground md:flex"
+          inert={nowPlaying.isOpen}
+          class="col-start-1 row-start-2 hidden min-h-0 min-w-0 flex-col bg-sidebar text-sidebar-foreground md:flex"
         >
           <Navigation />
         </aside>
-        <main class="row-start-2 min-h-0 min-w-0 md:col-start-2" data-slot="app-main">
+        <main
+          inert={nowPlaying.isOpen}
+          class="col-start-1 row-start-2 min-h-0 min-w-0 md:col-start-2"
+          data-slot="app-main"
+        >
           {@render children()}
         </main>
+        <NowPlayingLayer>
+          <NowPlayingContent />
+        </NowPlayingLayer>
         <div class="col-span-full row-start-3 min-h-0 min-w-0" data-slot="dock-region">
           <PlaybackRegion />
         </div>
         <QueuePanel />
         <ArtworkAccent />
+        <LyricsPrefetch />
       </div>
     </TooltipProvider>
   </QueryClientProvider>

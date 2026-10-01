@@ -14,7 +14,12 @@ import { motionFor } from "./svelte-motion";
 export const sharedKey = {
   album: (key: LibraryAlbumKey) => `album\u0000${key.albumArtist}\u0000${key.title}`,
   artist: (name: string) => `artist\u0000${name}`,
+  /** The Sleeve between the dock and Now Playing. */
+  sleeve: "now-playing-sleeve",
 };
+
+/** The Sleeve's corner radius at both ends, so the flight between them keeps its corners. */
+export const SLEEVE_RADIUS = "6px";
 
 /** A place on screen: viewport position and size in px, and the corner radius at that size. */
 export type Box = { x: number; y: number; width: number; height: number; radius: number };
@@ -83,6 +88,20 @@ function isInView(box: Box): boolean {
   );
 }
 
+/** The translation currently applied by the element's ancestors' transforms. */
+function ancestorTranslation(node: Element): { dx: number; dy: number } {
+  let dx = 0;
+  let dy = 0;
+  for (let parent = node.parentElement; parent !== null; parent = parent.parentElement) {
+    const { transform } = getComputedStyle(parent);
+    if (transform === "none") continue;
+    const matrix = new DOMMatrix(transform);
+    dx += matrix.m41;
+    dy += matrix.m42;
+  }
+  return { dx, dy };
+}
+
 type Flight = { box: () => Box; cancel: () => void };
 
 const departures = new Map<string, { box: Box; at: number }>();
@@ -110,7 +129,11 @@ function arrive(key: string, node: HTMLElement) {
     return;
   }
 
-  const to = boxOf(node);
+  // Where the element will rest: a layer still lifting into place (Now Playing) is offset by
+  // its transform right now, which the flight must not land on.
+  const { dx, dy } = ancestorTranslation(node);
+  const measured = boxOf(node);
+  const to = { ...measured, x: measured.x - dx, y: measured.y - dy };
   if (!isInView(departure.box) || !isInView(to)) return;
   // Already there (the loading header handing over to the loaded one): nothing to fly.
   if (Math.abs(departure.box.x - to.x) < 1 && Math.abs(departure.box.y - to.y) < 1) return;
@@ -171,6 +194,8 @@ function arrive(key: string, node: HTMLElement) {
  */
 export function sharedElement(key: string): Attachment<HTMLElement> {
   return (node) => {
+    // A node hidden by an earlier departure (it stayed connected) shows again.
+    node.style.visibility = "";
     arrive(key, node);
     // By the time this runs on destroy the element is already out of the document and has no
     // box, so keep the last one seen: refreshed before whatever starts a navigation.
@@ -182,6 +207,10 @@ export function sharedElement(key: string): Attachment<HTMLElement> {
     for (const type of events) window.addEventListener(type, refresh, { capture: true });
     return () => {
       for (const type of events) window.removeEventListener(type, refresh, { capture: true });
+      // An element kept on screen while its layer fades out would be a second copy of the
+      // Sleeve next to the one flying to the other end.
+      refresh();
+      if (node.isConnected) node.style.visibility = "hidden";
       leave(key, lastBox);
     };
   };

@@ -8,6 +8,7 @@
   import Artwork from "$lib/ui/artwork.svelte";
   import ContextMenuContent from "$lib/ui/context-menu/context-menu-content.svelte";
   import ContextMenuItem from "$lib/ui/context-menu/context-menu-item.svelte";
+  import { SLEEVE_RADIUS, sharedElement, sharedKey } from "$lib/ui/motion/shared-element";
   import { getMotionBudget } from "$lib/shell/motion-budget.svelte";
   import { slideTransition } from "$lib/ui/motion/svelte-slide";
   import { Button } from "$lib/ui/shadcn/button";
@@ -82,20 +83,29 @@
             data-slot="sleeve"
             class="grid aspect-square size-16 shrink-0 cursor-pointer overflow-hidden rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default"
           >
-            {#key trackKey}
-              <span
-                class="size-full [grid-area:1/1]"
-                in:slide={{ entering: true }}
-                out:slide={{ entering: false }}
-              >
-                <Artwork
-                  artwork={item?.artwork ?? null}
-                  alt={item === null ? "" : `${item.title} artwork`}
-                  loading="eager"
-                  class="size-full rounded-lg"
-                />
-              </span>
-            {/key}
+            <!-- The shared element: this Sleeve flies to Now Playing on open and back on close.
+            The radius is set inline (not by class) so the flight's scale does not stretch the
+            corners. -->
+            <span
+              {@attach sharedElement(sharedKey.sleeve)}
+              class="grid size-full overflow-hidden"
+              style:border-radius={SLEEVE_RADIUS}
+            >
+              {#key trackKey}
+                <span
+                  class="size-full [grid-area:1/1]"
+                  in:slide={{ entering: true }}
+                  out:slide={{ entering: false }}
+                >
+                  <Artwork
+                    artwork={item?.artwork ?? null}
+                    alt={item === null ? "" : `${item.title} artwork`}
+                    loading="eager"
+                    class="size-full rounded-lg"
+                  />
+                </span>
+              {/key}
+            </span>
           </button>
         {/snippet}
       </ContextMenuPrimitive.Trigger>

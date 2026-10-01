@@ -8,7 +8,9 @@
   import DockIdentity from "./dock-identity.svelte";
   import DockTransport from "./dock-transport.svelte";
   import DockVolume from "./dock-volume.svelte";
-  import PlaybackWaveformBand, { DOCK_SEEK_HEIGHT } from "./playback-waveform-band.svelte";
+  import PlaybackWaveformBand, {
+    DOCK_SEEK_HEIGHT,
+  } from "$lib/components/waveform-band/playback-waveform-band.svelte";
 
   /**
    * Two full-width rows: a plain progress line across the top, then identity, transport and

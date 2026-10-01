@@ -24,12 +24,12 @@ const upcomingTitles = (page: Page) =>
 test("Escape closes Now Playing, and Ctrl+L does nothing without a track", async ({ page }) => {
   await page.goto("/library/tracks");
   const layer = page.getByRole("region", { name: "Now Playing" });
-  await page.locator("body").click();
+  await page.locator("body").click({ position: { x: 1, y: 1 } });
   await page.keyboard.press("Control+l");
   await expect(layer).toHaveCount(0);
 
   await playFirstTrack(page);
-  await page.locator("body").click();
+  await page.locator("body").click({ position: { x: 1, y: 1 } });
   await page.keyboard.press("Control+l");
   await expect(layer).toBeVisible();
   await page.keyboard.press("Escape");
