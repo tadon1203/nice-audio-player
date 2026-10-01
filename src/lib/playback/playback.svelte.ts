@@ -220,11 +220,13 @@ export class Playback {
   }
 
   previous() {
+    if (this.transportPending !== null) return Promise.resolve(false);
     this.#pendingNavigation = "previous";
     return this.#runTransport("previous", () => this.#api.previousPlayback());
   }
 
   next() {
+    if (this.transportPending !== null) return Promise.resolve(false);
     this.#pendingNavigation = "next";
     return this.#runTransport("next", () => this.#api.nextPlayback());
   }

@@ -12,7 +12,6 @@
   const playback = getPlayback();
   const transport = $derived(playback.transport);
   const playing = $derived(transport.status === "playing");
-  const controlsBusy = $derived(transport.pending !== null);
   const ready = $derived(transport.connection === "ready");
   const playLabel = $derived(playing ? "Pause" : transport.active ? "Resume" : "Play");
 </script>
@@ -37,7 +36,7 @@
     variant="ghost"
     aria-label="Previous track"
     title="Previous track"
-    disabled={!transport.canGoPrevious || controlsBusy}
+    disabled={!transport.canGoPrevious}
     onclick={() => void playback.previous()}
   >
     <SkipBack aria-hidden="true" />
@@ -47,7 +46,7 @@
     variant="default"
     aria-label={playLabel}
     title={playLabel}
-    disabled={!transport.active || controlsBusy}
+    disabled={!transport.active}
     onclick={() => void (playing ? playback.pause() : playback.resume())}
     class="relative rounded-full transition-[background-color,color,transform] duration-(--motion-press-duration) ease-(--motion-press-easing) active:translate-y-0 active:scale-[0.94] disabled:bg-secondary disabled:text-muted-foreground disabled:opacity-100"
   >
@@ -61,7 +60,7 @@
     variant="ghost"
     aria-label="Next track"
     title="Next track"
-    disabled={!transport.canGoNext || controlsBusy}
+    disabled={!transport.canGoNext}
     onclick={() => void playback.next()}
   >
     <SkipForward aria-hidden="true" />

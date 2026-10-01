@@ -371,6 +371,29 @@ describe("last navigation", () => {
     expect(playback.lastNavigation).toBe("next");
   });
 
+  it("does not let a refused Previous recolour the Next in flight", async () => {
+    let finishNext: (() => void) | undefined;
+    const playback = createPlayback(
+      baseApi({
+        getPlaybackState: async () => playing(1, "a", 0),
+        nextPlayback: async () => {
+          await new Promise<void>((resolve) => {
+            finishNext = resolve;
+          });
+          return playing(2, "b", 0);
+        },
+      }),
+    );
+    await playback.initialize();
+
+    const next = playback.next();
+    await playback.previous();
+    finishNext?.();
+    await next;
+    expect(playback.item?.trackId).toBe("b");
+    expect(playback.lastNavigation).toBe("next");
+  });
+
   it("does not let a failed Previous colour the next automatic change", async () => {
     const playback = createPlayback(
       baseApi({
