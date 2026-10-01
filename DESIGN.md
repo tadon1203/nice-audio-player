@@ -39,9 +39,9 @@ One sans family: Satoshi for Latin, Noto Sans JP for Japanese, then the system U
 
 ## Where the details live
 
-- Color tokens: `src/app/styles.css` (semantic tokens only).
+- Color tokens: `src/app.css` (semantic tokens only).
 - Motion tokens: `src/lib/ui/motion/tokens.ts`.
-- Light's readability caps: `src/shared/ui/artwork-light/light-model.ts`, enforced by its test.
+- Light's readability caps: `src/lib/ui/artwork-light/light-model.ts`, enforced by its test.
 - Component behavior: the comment and tests of the component.
 
 ## Amending

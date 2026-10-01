@@ -1,6 +1,5 @@
 @import "tailwindcss";
 @source ".";
-@source not "../src-react";
 
 *[data-tauri-drag-region] {
   app-region: drag;

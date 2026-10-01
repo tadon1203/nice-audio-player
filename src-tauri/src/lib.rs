@@ -1,4 +1,4 @@
-use std::{path::PathBuf, sync::Arc};
+use std::sync::Arc;
 
 use backend::app::BackendApp;
 use tauri::Manager;
@@ -24,10 +24,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_log::Builder::new().build())
         .setup(|app| {
-            let data_dir = match std::env::var_os("NICE_AUDIO_PLAYER_TEST_DATA_DIR") {
-                Some(path) => PathBuf::from(path),
-                None => app.path().app_data_dir()?,
-            };
+            let data_dir = app.path().app_data_dir()?;
             let (sink, event_receiver) = events::event_channel();
             let backend = tauri::async_runtime::block_on(BackendApp::initialize(data_dir, sink))
                 .map_err(|_| std::io::Error::other("backend startup failed"))?;

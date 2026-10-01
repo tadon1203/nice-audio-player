@@ -6,7 +6,7 @@
 </script>
 
 <script lang="ts">
-  import { Play } from "@lucide/svelte";
+  import Play from "@lucide/svelte/icons/play";
   import { getPlayback } from "$lib/playback/context";
   import { queuePanel } from "$lib/shell/queue-panel.svelte";
   import Artwork from "$lib/ui/artwork.svelte";

@@ -6,11 +6,5 @@
     "module": "esnext",
     "types": ["node"]
   },
-  "include": [
-    "vite*.config.ts",
-    "scripts/**/*.mjs",
-    "vitest.config.ts",
-    "playwright.config.ts",
-    "wdio.conf.ts"
-  ]
+  "include": ["vite*.config.ts", "scripts/**/*.mjs", "vitest.config.ts", "playwright.config.ts"]
 }

@@ -17,6 +17,7 @@
 - Library columns that hold a state (availability, inspection, artwork status) map to Rust enums in `library/status.rs`; the migration's CHECK lists the same names. Foreign keys cascade, so deleting a parent needs no hand-written child deletes.
 - The backend never returns display strings: an unnamed album or artist is `""`, sorted last, and the renderer labels it.
 - Use semantic tokens for UI surfaces; no raw palette values.
+- Import icons one by one (`@lucide/svelte/icons/x`), never from the `@lucide/svelte` barrel: in `vite dev` the barrel transforms every icon module and slows page loads and E2E runs.
 - Do not weaken type checking or lint rules just to make a change pass.
 
 ## Workflow
@@ -28,5 +29,5 @@
 
 - Usually: `pnpm check` (and `pnpm test` if logic changed).
 - Backend changes: `pnpm check:native` and `pnpm test:native`.
-- Startup, IPC, or routing changes: `pnpm test:e2e`.
+- Startup, IPC, or routing changes: `pnpm test:e2e` (browser only; the Tauri window, its capabilities, and the titlebar controls are checked by hand with `pnpm dev`).
 - Before a release: `pnpm validate`, then `pnpm package`.

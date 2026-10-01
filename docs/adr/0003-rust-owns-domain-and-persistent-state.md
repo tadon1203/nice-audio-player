@@ -9,5 +9,3 @@ Rust owns domain behavior, persistence, filesystem work, audio playback, and the
 - Settings writes are debounced and atomic.
 - The `nice-artwork` protocol serves only canonical content-addressed artwork beneath application data.
 - Tauri capabilities grant the main window only the native permissions the app needs.
-
-This is why the React to Svelte migration changes no Rust behavior (see [0001](./0001-sveltekit-spa-for-the-renderer.md)).

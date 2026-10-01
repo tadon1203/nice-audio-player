@@ -3,6 +3,7 @@ import { defineConfig, devices } from "@playwright/test";
 export default defineConfig({
   testDir: "./tests",
   outputDir: "test-results/playwright",
+  globalSetup: "./tests/global-setup.ts",
   fullyParallel: true,
   reporter: "list",
   snapshotPathTemplate:
@@ -17,7 +18,6 @@ export default defineConfig({
     {
       name: "renderer",
       testMatch: "**/*.e2e.{ts,js}",
-      testIgnore: "**/tauri/**",
       use: {
         ...devices["Desktop Chrome"],
         baseURL: "http://127.0.0.1:5173",

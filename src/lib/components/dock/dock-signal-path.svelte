@@ -1,6 +1,6 @@
 <script lang="ts">
   import { DropdownMenu as MenuPrimitive } from "bits-ui";
-  import { ChevronDown } from "@lucide/svelte";
+  import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import { createPlaybackSignalPath } from "$lib/components/signal-path/signal-path.svelte";
   import { getPlayback } from "$lib/playback/context";
   import { createAudioOutputDevices } from "$lib/playback/output-devices.svelte";

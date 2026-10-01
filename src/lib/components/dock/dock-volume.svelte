@@ -1,5 +1,8 @@
 <script lang="ts">
-  import { List, Music2, Volume2, VolumeX } from "@lucide/svelte";
+  import List from "@lucide/svelte/icons/list";
+  import Music2 from "@lucide/svelte/icons/music-2";
+  import Volume2 from "@lucide/svelte/icons/volume-2";
+  import VolumeX from "@lucide/svelte/icons/volume-x";
   import { getPlayback } from "$lib/playback/context";
   import {
     formatVolumeDb,

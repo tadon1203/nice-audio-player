@@ -1,6 +1,6 @@
 <script lang="ts">
   import { ContextMenu as ContextMenuPrimitive } from "bits-ui";
-  import { ChevronDown } from "@lucide/svelte";
+  import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import { goto } from "$app/navigation";
   import { albumArtistHref, albumHref } from "$lib/library/routes";
   import { getPlayback } from "$lib/playback/context";

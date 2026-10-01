@@ -1,5 +1,7 @@
 <script lang="ts">
-  import { Shuffle, SkipBack, SkipForward } from "@lucide/svelte";
+  import Shuffle from "@lucide/svelte/icons/shuffle";
+  import SkipBack from "@lucide/svelte/icons/skip-back";
+  import SkipForward from "@lucide/svelte/icons/skip-forward";
   import { getPlayback } from "$lib/playback/context";
   import { nextRepeatMode } from "$lib/playback/snapshot";
   import PlayPauseIcon from "$lib/ui/play-pause-icon.svelte";

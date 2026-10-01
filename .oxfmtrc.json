@@ -16,7 +16,6 @@
     "playwright-report/**",
     "project_snapshot.zip",
     "src/lib/native/bindings.ts",
-    "src-react/**",
     ".svelte-kit/**",
     "release/**",
     "src/lib/ui/shadcn/**"

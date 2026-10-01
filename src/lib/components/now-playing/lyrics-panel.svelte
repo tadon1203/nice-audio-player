@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { ArrowDown, ArrowUp } from "@lucide/svelte";
+  import ArrowDown from "@lucide/svelte/icons/arrow-down";
+  import ArrowUp from "@lucide/svelte/icons/arrow-up";
   import { createTrackLyrics } from "$lib/lyrics/lyrics.svelte";
   import { getPlayback } from "$lib/playback/context";
   import { lyricsWaveformLink } from "$lib/shell/lyrics-waveform-link.svelte";

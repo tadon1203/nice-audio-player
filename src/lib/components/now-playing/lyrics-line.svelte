@@ -10,7 +10,7 @@
 </script>
 
 <script lang="ts">
-  import { Play } from "@lucide/svelte";
+  import Play from "@lucide/svelte/icons/play";
   import type { Attachment } from "svelte/attachments";
   import type { LyricsTimedLine } from "$lib/native";
   import { getPlayback } from "$lib/playback/context";

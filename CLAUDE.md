@@ -32,7 +32,7 @@ Delegate creating and editing `.svelte` / `.svelte.ts` files to the `svelte-file
 
 ## Language
 
-Documents that stay in the repo (docs, ADRs, specs, tickets, `CONTEXT.md`) are written in English. The temporary `docs/svelte-migration-plan.md` stays in Japanese until it is deleted.
+Documents that stay in the repo (docs, ADRs, specs, tickets, `CONTEXT.md`) are written in English.
 
 ## Agent skills
 

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { untrack } from "svelte";
-  import { Repeat } from "@lucide/svelte";
+  import Repeat from "@lucide/svelte/icons/repeat";
   import { fade } from "svelte/transition";
   import { Tween } from "svelte/motion";
   import type { PlaybackRepeatMode } from "$lib/native";

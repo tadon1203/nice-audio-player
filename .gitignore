@@ -15,7 +15,6 @@ release/
 project_snapshot.zip
 
 # Local application scaffold and tool output
-/.tanstack/
 /logs/
 /nice-audio-player-scaffold
 /.output/
