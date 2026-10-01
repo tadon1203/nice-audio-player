@@ -120,6 +120,13 @@ export type ActiveSession = {
 	durationMs: number | null,
 	outputDevice: AudioOutputDeviceIdentity,
 	channelConversion: PlaybackChannelConversion,
+	/**
+	 *  The loaded file's format (its extension when the library has none), bit depth and
+	 *  average bitrate: the start of the signal path.
+	 */
+	sourceFormat: string,
+	sourceBitDepth: number | null,
+	sourceBitrateKbps: number | null,
 	sourceSampleRate: number,
 	outputSampleRate: number,
 	resamplingActive: boolean,

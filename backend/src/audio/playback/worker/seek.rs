@@ -25,33 +25,43 @@ impl PlaybackWorker {
         }
         let source = loaded.source.clone();
         let extension = loaded.item.file.extension.clone();
-        let config = loaded.pipeline.config.clone();
+        let config = loaded.output.config.clone();
         let opened = self.open_pipeline(
             &source,
             &extension,
             PipelineKind::Seek { config, target_ms },
         );
         match opened {
-            Ok(opened) => {
-                let rate = opened.pipeline.sample_rate();
-                let output_base_frame = opened.start_output_frame;
+            Ok(OpenedPipeline {
+                pipeline,
+                output: OpenedOutput::Queue(queue),
+                start_output_frame,
+                ..
+            }) => {
+                let Transport::Loaded(loaded) = &mut self.transport else {
+                    pipeline.cancel();
+                    return;
+                };
+                let rate = loaded.output.sample_rate();
+                let output_base_frame = start_output_frame;
                 let total_output_frames = millis_to_frame(duration_ms, rate);
-                let seek = SeekInFlight {
-                    pipeline: opened.pipeline,
+                loaded.seek = Some(SeekInFlight {
+                    pipeline,
+                    queue,
                     output_base_frame: output_base_frame.min(total_output_frames),
                     remaining_frames: total_output_frames.saturating_sub(output_base_frame),
                     duration_ms,
                     responder,
-                };
-                if let Transport::Loaded(loaded) = &mut self.transport {
-                    loaded.seek = Some(seek);
-                }
+                });
+            }
+            Ok(OpenedPipeline { pipeline, .. }) => {
+                unreachable!("a seek reuses the stream: {:?}", pipeline.id)
             }
             Err(error) => respond(responder, Err(seek_error(error))),
         }
     }
 
-    /// The seek's prebuffer is ready: switch the output over to it.
+    /// The seek's prebuffer is ready: the stream switches over to its queue.
     pub(super) fn finish_seek(&mut self) {
         let Transport::Loaded(loaded) = &mut self.transport else {
             return;
@@ -59,39 +69,12 @@ impl PlaybackWorker {
         let Some(seek) = loaded.seek.take() else {
             return;
         };
-        let was_playing = !loaded.paused;
-        if was_playing {
-            if let Err(error) = loaded.pipeline.stream.pause() {
-                seek.pipeline.cancel();
-                let failure = self.control_failure(error);
-                respond(seek.responder, Err(failure));
-                return;
-            }
-            if let Err(error) = seek.pipeline.stream.start() {
-                seek.pipeline.cancel();
-                let rollback_failed = loaded.pipeline.stream.start().is_err();
-                if !rollback_failed {
-                    loaded.pipeline.stream.clear_timing_anchor();
-                }
-                let id = loaded.id;
-                if rollback_failed {
-                    self.drop_loaded(PlaybackServiceError::Superseded);
-                    self.transport = Transport::Failed {
-                        id: Some(id),
-                        code: PlaybackFailureCode::OutputStreamResumeFailed,
-                    };
-                    self.publish_state();
-                }
-                respond(
-                    seek.responder,
-                    Err(PlaybackServiceError::Output(output_failure_code(error))),
-                );
-                return;
-            }
-        }
-        let old = std::mem::replace(&mut loaded.pipeline, seek.pipeline);
-        old.cancel();
-        loaded.position.sample_rate = loaded.pipeline.sample_rate();
+        loaded
+            .output
+            .stream
+            .switch_queue(seek.queue, seek.pipeline.id);
+        std::mem::replace(&mut loaded.pipeline, seek.pipeline).cancel();
+        loaded.position.sample_rate = loaded.output.sample_rate();
         loaded.position.duration_ms = Some(seek.duration_ms);
         loaded.position.frame = seek.output_base_frame;
         loaded.position.base_frame = seek.output_base_frame;

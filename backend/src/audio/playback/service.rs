@@ -342,16 +342,12 @@ impl PlaybackServiceHandle {
     }
 
     /// Adds `items` after the current item (`next`) or at the end. With nothing queued they
-    /// start playing instead.
+    /// start playing instead; the worker decides, so the check cannot race a stop.
     pub fn enqueue(
         &self,
         items: Vec<PlaybackItemSeed>,
         next: bool,
     ) -> Result<PlaybackQueueSnapshot, PlaybackServiceError> {
-        if self.queue_snapshot().current.is_none() {
-            self.start(items, 0)?;
-            return Ok(self.queue_snapshot());
-        }
         self.request(|reply| PlaybackCommand::Enqueue { items, next, reply })
     }
 

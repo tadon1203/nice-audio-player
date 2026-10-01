@@ -46,6 +46,11 @@ pub struct ActiveSession {
     pub duration_ms: Option<u64>,
     pub output_device: AudioOutputDeviceIdentity,
     pub channel_conversion: PlaybackChannelConversion,
+    /// The loaded file's format (its extension when the library has none), bit depth and
+    /// average bitrate: the start of the signal path.
+    pub source_format: String,
+    pub source_bit_depth: Option<u32>,
+    pub source_bitrate_kbps: Option<u32>,
     pub source_sample_rate: u32,
     pub output_sample_rate: u32,
     pub resampling_active: bool,
@@ -177,20 +182,6 @@ pub struct PlaybackQueueItem {
     pub duration_ms: Option<u64>,
 }
 
-impl From<&PlaybackItem> for PlaybackQueueItem {
-    fn from(item: &PlaybackItem) -> Self {
-        Self {
-            id: item.queue_item_id.clone(),
-            track_id: item.track_id.clone(),
-            title: item.title.clone(),
-            artist: item.artist.clone(),
-            album: item.album.clone(),
-            artwork: item.artwork.clone(),
-            duration_ms: item.duration_ms,
-        }
-    }
-}
-
 /// How many upcoming items a snapshot carries; the rest are read a window at a time.
 pub const UPCOMING_IN_SNAPSHOT: usize = 200;
 /// How many already played items a snapshot carries (the most recent ones).
@@ -201,7 +192,8 @@ pub const MAX_QUEUE_WINDOW: usize = 200;
 /// The whole queue in display form, kept on the backend so a snapshot can stay small.
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct QueueLists {
-    upcoming: Vec<PlaybackQueueItem>,
+    /// Shared with the items themselves, so a snapshot copies no item.
+    upcoming: Vec<Arc<PlaybackQueueItem>>,
 }
 
 /// The queue as the renderer mirrors it: the current item, the last few played, the first
@@ -235,24 +227,24 @@ pub struct PlaybackQueueWindow {
 
 impl PlaybackQueueSnapshot {
     pub fn of(revision: u64, queue: &PlaybackQueue) -> Self {
-        let upcoming: Vec<PlaybackQueueItem> = queue
+        let upcoming: Vec<Arc<PlaybackQueueItem>> = queue
             .upcoming()
             .iter()
-            .map(PlaybackQueueItem::from)
+            .map(|item| Arc::clone(&item.queue_view))
             .collect();
         let history = queue.history();
         Self {
             revision,
-            current: queue.current().map(PlaybackQueueItem::from),
+            current: queue.current().map(|item| (*item.queue_view).clone()),
             history: history[history.len().saturating_sub(HISTORY_IN_SNAPSHOT)..]
                 .iter()
-                .map(PlaybackQueueItem::from)
+                .map(|item| (*item.queue_view).clone())
                 .collect(),
             history_count: u32::try_from(history.len()).unwrap_or(u32::MAX),
             upcoming: upcoming
                 .iter()
                 .take(UPCOMING_IN_SNAPSHOT)
-                .cloned()
+                .map(|item| (**item).clone())
                 .collect(),
             upcoming_count: u32::try_from(upcoming.len()).unwrap_or(u32::MAX),
             repeat_mode: queue.repeat(),
@@ -271,7 +263,10 @@ impl PlaybackQueueSnapshot {
         PlaybackQueueWindow {
             revision: self.revision,
             offset: u32::try_from(start).unwrap_or(u32::MAX),
-            items: all[start..end].to_vec(),
+            items: all[start..end]
+                .iter()
+                .map(|item| (**item).clone())
+                .collect(),
         }
     }
 }

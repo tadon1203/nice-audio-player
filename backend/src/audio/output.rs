@@ -1,9 +1,12 @@
 //! The output device behind a seam.
 //!
 //! Playback talks to an `OutputBackend` (resolve a device, prepare a stream) and to the
-//! `OutputStream` it returns (start, pause, position). `CpalBackend` is the real adapter; a fake
-//! adapter lives in `fake_output` for tests. The cpal callback body is `CallbackState::fill`, a
-//! plain function over its state, tested directly.
+//! `OutputStream` it returns (start, pause, position, switch queue). `CpalBackend` is the real
+//! adapter; a fake adapter lives in `fake_output` for tests. The cpal callback body is
+//! `CallbackState::fill`, a plain function over its state, tested directly.
+//!
+//! A session opens one stream. A seek builds a new queue and hands it to the running callback
+//! through a lock-free single-slot handoff; the callback switches to it at its next run.
 
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
@@ -13,23 +16,30 @@ use cpal::{FromSample, Sample, SampleFormat, StreamConfig, StreamInstant, Suppor
 use log::{error, info, warn};
 
 use super::devices::{
-    resolve_output_device_id, resolve_output_selection, AudioOutputDeviceIdentity,
-    AudioOutputSelection, DeviceResolutionError, ResolvedAudioOutputDevice,
+    resolve_output_selection, AudioOutputDeviceIdentity, AudioOutputSelection,
+    DeviceResolutionError, ResolvedAudioOutputDevice,
 };
 use super::output_processing::{OutputProcessingError, OutputProcessingPlan};
 use super::pcm::{ChannelCount, PcmSpec, SampleRate};
 use super::pcm_queue::{bounded_pcm_queue, PcmConsumer, PcmProducer};
 use super::volume::{process_sample, AtomicEffectiveGain};
 
+/// Identifies one output stream, which lives as long as a session.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct OutputStreamId(pub(crate) u64);
+
+/// Identifies one pipeline: the decode thread and the queue it fills. A stream plays one
+/// pipeline at a time; a seek replaces the pipeline and keeps the stream.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub(crate) struct PipelineId(pub(crate) u64);
 
 /// What a running stream reports on its own.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub(crate) enum OutputEvent {
-    /// Every queued frame has been handed to the device; the stream clock reaching `end_time`
-    /// means they were heard.
+    /// Every frame of `pipeline` has been handed to the device; the stream clock reaching
+    /// `end_time` means they were heard.
     FinalFrames {
+        pipeline: PipelineId,
         end_time: StreamInstant,
     },
     Failed(StreamFailureKind),
@@ -64,6 +74,8 @@ pub(crate) struct OutputLinks {
 
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct PositionUpdate {
+    /// The pipeline the frames came from; frames count from its first.
+    pub(crate) pipeline: PipelineId,
     pub(crate) start_frame: u64,
     pub(crate) end_frame: u64,
     pub(crate) playback_time: StreamInstant,
@@ -111,20 +123,10 @@ impl From<DeviceResolutionError> for AudioOutputError {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub(crate) enum OutputPath {
-    Native,
-    Fallback,
-}
-
 #[derive(Clone)]
 pub(crate) struct PreparedOutputConfig {
     pub(crate) device_id: String,
     pub(crate) device_name: String,
-    pub(crate) stream_config: StreamConfig,
-    pub(crate) sample_format: SampleFormat,
-    #[allow(dead_code)]
-    pub(crate) path: OutputPath,
     pub(crate) processing_plan: OutputProcessingPlan,
 }
 
@@ -135,16 +137,15 @@ pub(crate) struct PreparedOutput {
     pub(crate) config: PreparedOutputConfig,
 }
 
-/// What to prepare a stream for.
-pub(crate) enum OutputTarget {
-    /// A new session: pick the device from the selection and a configuration for `spec`.
-    Selection {
-        selection: AudioOutputSelection,
-        spec: PcmSpec,
-    },
-    /// The same device and configuration as an earlier stream.
-    Config(PreparedOutputConfig),
+/// The queue a callback plays from and the pipeline that fills it.
+pub(crate) struct Generation {
+    consumer: PcmConsumer,
+    pipeline: PipelineId,
 }
+
+/// The single slot a stream hands its next queue to the callback through.
+type QueueHandoff = triple_buffer::Input<Option<Generation>>;
+type QueueSlot = triple_buffer::Output<Option<Generation>>;
 
 pub(crate) trait OutputBackend: Send {
     /// Checks that a selection names a usable device and says which one it is.
@@ -153,9 +154,13 @@ pub(crate) trait OutputBackend: Send {
         selection: &AudioOutputSelection,
     ) -> Result<AudioOutputDeviceIdentity, DeviceResolutionError>;
 
+    /// Opens a stream on the device `selection` names, configured for audio of `spec`. The stream
+    /// plays `first` from the returned producer's queue once started.
     fn prepare(
         &self,
-        target: OutputTarget,
+        selection: &AudioOutputSelection,
+        spec: PcmSpec,
+        first: PipelineId,
         links: OutputLinks,
     ) -> Result<PreparedOutput, AudioOutputError>;
 }
@@ -165,10 +170,14 @@ pub(crate) trait OutputStream {
     fn pause(&self) -> Result<(), AudioOutputError>;
     /// The stream clock; a `FinalFrames` event is due once it reaches the event's end time.
     fn now(&self) -> StreamInstant;
-    /// Frames heard so far, from the newest position report. Never moves backwards.
+    /// Frames of the current pipeline heard so far, from the newest position report. Never moves
+    /// backwards within a pipeline.
     fn played_frame_position(&mut self, sample_rate: u32, max_frame_count: Option<u64>) -> u64;
     /// Forgets the newest report, so the position holds until the callback reports again.
     fn clear_timing_anchor(&mut self);
+    /// Hands the callback the queue of the next pipeline. It switches at its next run and counts
+    /// frames from zero again; a handoff it has not taken yet is replaced.
+    fn switch_queue(&mut self, consumer: PcmConsumer, pipeline: PipelineId);
 }
 
 pub(crate) struct CpalBackend;
@@ -183,17 +192,12 @@ impl OutputBackend for CpalBackend {
 
     fn prepare(
         &self,
-        target: OutputTarget,
+        selection: &AudioOutputSelection,
+        spec: PcmSpec,
+        first: PipelineId,
         links: OutputLinks,
     ) -> Result<PreparedOutput, AudioOutputError> {
-        match target {
-            OutputTarget::Selection { selection, spec } => {
-                prepare_for_spec(resolve_output_selection(&selection)?, spec, links)
-            }
-            OutputTarget::Config(config) => {
-                prepare_with_config(resolve_output_device_id(&config.device_id)?, &config, links)
-            }
-        }
+        prepare_for_spec(resolve_output_selection(selection)?, spec, first, links)
     }
 }
 
@@ -230,6 +234,9 @@ fn map_stream_start_error(error: cpal::Error) -> AudioOutputError {
 struct CpalStream {
     stream: cpal::Stream,
     latest_position: LatestPosition,
+    handoff: QueueHandoff,
+    /// The pipeline whose reports count; reports of an earlier one are stale.
+    pipeline: PipelineId,
     latest_position_update: Option<PositionUpdate>,
     last_played_frame_position: u64,
 }
@@ -252,7 +259,9 @@ impl OutputStream for CpalStream {
 
     fn played_frame_position(&mut self, sample_rate: u32, max_frame_count: Option<u64>) -> u64 {
         if let Some(update) = self.latest_position.take() {
-            self.latest_position_update = Some(update);
+            if update.pipeline == self.pipeline {
+                self.latest_position_update = Some(update);
+            }
         }
 
         let position =
@@ -273,6 +282,13 @@ impl OutputStream for CpalStream {
     fn clear_timing_anchor(&mut self) {
         self.latest_position.take();
         self.latest_position_update = None;
+    }
+
+    fn switch_queue(&mut self, consumer: PcmConsumer, pipeline: PipelineId) {
+        self.handoff.write(Some(Generation { consumer, pipeline }));
+        self.pipeline = pipeline;
+        self.clear_timing_anchor();
+        self.last_played_frame_position = 0;
     }
 }
 
@@ -339,11 +355,17 @@ fn build_stream_for_config(
     config: StreamConfig,
     sample_format: SampleFormat,
     consumer: PcmConsumer,
+    first: PipelineId,
     links: OutputLinks,
 ) -> Result<CpalStream, AudioOutputError> {
     let latest_position = LatestPosition::default();
+    let (handoff, slot) = triple_buffer::TripleBuffer::default().split();
     let state = CallbackState::new(
-        consumer,
+        Generation {
+            consumer,
+            pipeline: first,
+        },
+        slot,
         usize::from(config.channels),
         config.sample_rate,
         links,
@@ -355,6 +377,8 @@ fn build_stream_for_config(
     Ok(CpalStream {
         stream,
         latest_position,
+        handoff,
+        pipeline: first,
         latest_position_update: None,
         last_played_frame_position: 0,
     })
@@ -363,6 +387,7 @@ fn build_stream_for_config(
 fn prepare_for_spec(
     resolved_device: ResolvedAudioOutputDevice,
     spec: PcmSpec,
+    first: PipelineId,
     links: OutputLinks,
 ) -> Result<PreparedOutput, AudioOutputError> {
     let device_identity = resolved_device.identity;
@@ -394,6 +419,7 @@ fn prepare_for_spec(
             stream_config,
             sample_format,
             consumer,
+            first,
             links.clone(),
         );
         result.map(|stream| PreparedOutput {
@@ -402,9 +428,6 @@ fn prepare_for_spec(
             config: PreparedOutputConfig {
                 device_id: device_id.clone(),
                 device_name: device_name.clone(),
-                stream_config,
-                sample_format,
-                path: OutputPath::Native,
                 processing_plan: plan,
             },
         })
@@ -455,6 +478,7 @@ fn prepare_for_spec(
         config,
         fallback.sample_format(),
         consumer,
+        first,
         links,
     ))?;
     info!("audio.output.configured path=fallback source_rate={} source_channels={} output_rate={} output_channels={} conversion={:?} sample_format={:?}",
@@ -465,35 +489,8 @@ fn prepare_for_spec(
         config: PreparedOutputConfig {
             device_id,
             device_name,
-            stream_config: config,
-            sample_format: fallback.sample_format(),
-            path: OutputPath::Fallback,
             processing_plan: plan,
         },
-    })
-}
-
-fn prepare_with_config(
-    resolved_device: ResolvedAudioOutputDevice,
-    config: &PreparedOutputConfig,
-    links: OutputLinks,
-) -> Result<PreparedOutput, AudioOutputError> {
-    let device = resolved_device.device;
-    if resolved_device.identity.id != config.device_id {
-        return Err(AudioOutputError::StreamBuildFailed);
-    }
-    let (producer, consumer) = make_queue(config.processing_plan.output())?;
-    let stream = classify_fallback_build(build_stream_for_config(
-        &device,
-        config.stream_config,
-        config.sample_format,
-        consumer,
-        links,
-    ))?;
-    Ok(PreparedOutput {
-        stream: Box::new(stream),
-        producer,
-        config: config.clone(),
     })
 }
 
@@ -511,24 +508,6 @@ pub(crate) fn make_queue(spec: PcmSpec) -> Result<(PcmProducer, PcmConsumer), Au
             .ok_or(AudioOutputError::UnsupportedConfiguration)?,
     )
     .map_err(|_| AudioOutputError::UnsupportedConfiguration)
-}
-
-#[cfg_attr(not(test), allow(dead_code))]
-fn format_supported_output_configs(ranges: &[cpal::SupportedStreamConfigRange]) -> String {
-    ranges
-        .iter()
-        .map(|range| {
-            format!(
-                "channels={}, sample_rate={}..={}, sample_format={:?}, buffer_size={:?}",
-                range.channels(),
-                range.min_sample_rate(),
-                range.max_sample_rate(),
-                range.sample_format(),
-                range.buffer_size(),
-            )
-        })
-        .collect::<Vec<_>>()
-        .join("; ")
 }
 
 fn select_output_config(
@@ -585,6 +564,9 @@ const FILL_CHUNK_SAMPLES: usize = 512;
 /// Everything the output callback keeps between calls.
 pub(crate) struct CallbackState {
     consumer: PcmConsumer,
+    /// The pipeline `consumer` belongs to.
+    pipeline: PipelineId,
+    handoff: QueueSlot,
     channel_count: usize,
     sample_rate: u32,
     links: OutputLinks,
@@ -596,14 +578,17 @@ pub(crate) struct CallbackState {
 
 impl CallbackState {
     pub(crate) fn new(
-        consumer: PcmConsumer,
+        first: Generation,
+        handoff: QueueSlot,
         channel_count: usize,
         sample_rate: u32,
         links: OutputLinks,
         latest_position: LatestPosition,
     ) -> Self {
         Self {
-            consumer,
+            consumer: first.consumer,
+            pipeline: first.pipeline,
+            handoff,
             channel_count,
             sample_rate,
             links,
@@ -614,13 +599,14 @@ impl CallbackState {
         }
     }
 
-    /// The output callback: fills `output` from the queue with the gain applied, pads an
-    /// underrun with silence, reports the position, and reports completion once the producer
-    /// has finished and the queue is drained.
+    /// The output callback: switches to a queue handed off since the last run, fills `output`
+    /// from the queue with the gain applied, pads an underrun with silence, reports the position,
+    /// and reports completion once the producer has finished and the queue is drained.
     pub(crate) fn fill<T>(&mut self, output: &mut [T], playback_time: StreamInstant)
     where
         T: Sample + FromSample<f32>,
     {
+        self.take_handoff();
         let start_frame = self.position_frame;
         let gain = self.links.gain.load();
         let consumed_samples = self.write_queue_samples(output, gain);
@@ -635,11 +621,30 @@ impl CallbackState {
             );
         }
         self.latest_position.publish(PositionUpdate {
+            pipeline: self.pipeline,
             start_frame,
             end_frame: self.position_frame,
             playback_time,
         });
         self.report_completion();
+    }
+
+    /// Switches to the queue the stream handed off, if any. The queue it leaves goes back into
+    /// the slot, so the stream's thread frees it rather than this one.
+    fn take_handoff(&mut self) {
+        if !self.handoff.update() {
+            return;
+        }
+        let Some(next) = self.handoff.output_buffer_mut().take() else {
+            return;
+        };
+        *self.handoff.output_buffer_mut() = Some(Generation {
+            consumer: std::mem::replace(&mut self.consumer, next.consumer),
+            pipeline: std::mem::replace(&mut self.pipeline, next.pipeline),
+        });
+        self.position_frame = 0;
+        self.last_end_time = None;
+        self.completion = Completion::Pending;
     }
 
     fn write_queue_samples<T>(&mut self, output: &mut [T], gain: f32) -> usize
@@ -666,7 +671,10 @@ impl CallbackState {
         match self.last_end_time {
             Some(end_time) => {
                 self.completion = Completion::Reported;
-                (self.links.events)(OutputEvent::FinalFrames { end_time });
+                (self.links.events)(OutputEvent::FinalFrames {
+                    pipeline: self.pipeline,
+                    end_time,
+                });
             }
             None => {
                 self.completion = Completion::TimingFailed;
@@ -762,9 +770,10 @@ fn calculate_end_time(
 mod tests {
     use super::{
         calculate_end_time, classify_fallback_build, classify_native_attempt,
-        classify_stream_error_kind, format_supported_output_configs, played_frame_position,
-        sample_format_rank, select_output_config, AudioOutputError, CallbackState, LatestPosition,
-        NativeAttemptDecision, OutputEvent, OutputLinks, PositionUpdate, StreamFailureKind,
+        classify_stream_error_kind, played_frame_position, sample_format_rank,
+        select_output_config, AudioOutputError, CallbackState, Generation, LatestPosition,
+        NativeAttemptDecision, OutputEvent, OutputLinks, PipelineId, PositionUpdate,
+        StreamFailureKind,
     };
     use crate::audio::pcm::ChannelCount;
     use crate::audio::pcm_queue::{bounded_pcm_queue, PcmProducer};
@@ -864,24 +873,6 @@ mod tests {
     }
 
     #[test]
-    fn formats_supported_output_configs_for_diagnostics() {
-        let ranges = vec![SupportedStreamConfigRange::new(
-            2,
-            44_100,
-            96_000,
-            SupportedBufferSize::Unknown,
-            SampleFormat::F32,
-        )];
-
-        let formatted = format_supported_output_configs(&ranges);
-
-        assert!(formatted.contains("channels=2"));
-        assert!(formatted.contains("sample_rate=44100..=96000"));
-        assert!(formatted.contains("sample_format=F32"));
-        assert!(formatted.contains("buffer_size=Unknown"));
-    }
-
-    #[test]
     fn ranks_all_supported_sample_formats_deterministically() {
         let formats = [
             SampleFormat::F32,
@@ -926,6 +917,7 @@ mod tests {
         let cell = LatestPosition::default();
         for start_frame in [0, 480, 960] {
             cell.publish(PositionUpdate {
+                pipeline: PipelineId(1),
                 start_frame,
                 end_frame: start_frame + 480,
                 playback_time: StreamInstant::new(10, 0),
@@ -939,6 +931,7 @@ mod tests {
     fn calculates_played_frames_from_stream_clock_elapsed_time() {
         let position = played_frame_position(
             PositionUpdate {
+                pipeline: PipelineId(1),
                 start_frame: 100,
                 end_frame: 300,
                 playback_time: StreamInstant::new(10, 0),
@@ -955,6 +948,7 @@ mod tests {
     #[test]
     fn clamps_and_keeps_played_position_monotonic() {
         let update = PositionUpdate {
+            pipeline: PipelineId(1),
             start_frame: 900,
             end_frame: 1_000,
             playback_time: StreamInstant::new(10, 0),
@@ -974,6 +968,7 @@ mod tests {
     fn stops_at_callback_end_when_stream_clock_runs_past_callback_length() {
         let position = played_frame_position(
             PositionUpdate {
+                pipeline: PipelineId(1),
                 start_frame: 100,
                 end_frame: 150,
                 playback_time: StreamInstant::new(10, 0),
@@ -991,6 +986,7 @@ mod tests {
     fn stops_at_track_end_even_when_callback_end_is_later() {
         let position = played_frame_position(
             PositionUpdate {
+                pipeline: PipelineId(1),
                 start_frame: 900,
                 end_frame: 1_100,
                 playback_time: StreamInstant::new(10, 0),
@@ -1007,6 +1003,7 @@ mod tests {
     #[test]
     fn does_not_move_backwards_when_stream_clock_is_before_playback_timestamp() {
         let update = PositionUpdate {
+            pipeline: PipelineId(1),
             start_frame: 100,
             end_frame: 300,
             playback_time: StreamInstant::new(20, 0),
@@ -1025,6 +1022,7 @@ mod tests {
         producer: PcmProducer,
         position: LatestPosition,
         events: Arc<Mutex<Vec<OutputEvent>>>,
+        handoff: triple_buffer::Input<Option<Generation>>,
     }
 
     fn callback(channels: usize, capacity_frames: usize, gain: f32) -> Callback {
@@ -1033,8 +1031,13 @@ mod tests {
         let events = Arc::new(Mutex::new(Vec::new()));
         let sink = Arc::clone(&events);
         let position = LatestPosition::default();
+        let (handoff, slot) = triple_buffer::TripleBuffer::default().split();
         let state = CallbackState::new(
-            consumer,
+            Generation {
+                consumer,
+                pipeline: PipelineId(1),
+            },
+            slot,
             channels,
             100,
             OutputLinks {
@@ -1048,6 +1051,7 @@ mod tests {
             producer,
             position,
             events,
+            handoff,
         }
     }
 
@@ -1118,6 +1122,7 @@ mod tests {
         assert_eq!(
             events,
             [OutputEvent::FinalFrames {
+                pipeline: PipelineId(1),
                 end_time: calculate_end_time(at(11), 1, 1, 100).unwrap()
             }],
             "completion is timed from the callback that submitted the last frames"
@@ -1148,6 +1153,72 @@ mod tests {
             [OutputEvent::Failed(
                 StreamFailureKind::CompletionTimingFailed
             )]
+        );
+    }
+
+    fn handoff_queue(callback: &mut Callback, pipeline: u64, samples: &[f32]) -> PcmProducer {
+        let (mut producer, consumer) = bounded_pcm_queue(8, ChannelCount::new(1).unwrap()).unwrap();
+        producer.push_samples(samples);
+        callback.handoff.write(Some(Generation {
+            consumer,
+            pipeline: PipelineId(pipeline),
+        }));
+        producer
+    }
+
+    #[test]
+    fn fill_switches_to_a_handed_off_queue_and_counts_frames_from_zero_again() {
+        let mut callback = callback(1, 8, 1.0);
+        callback.producer.push_samples(&[0.1; 4]);
+        let mut output = [0.0_f32; 2];
+        callback.state.fill(&mut output, at(10));
+        assert_eq!(output, [0.1, 0.1]);
+
+        let _next = handoff_queue(&mut callback, 2, &[0.5, 0.6, 0.7]);
+        callback.state.fill(&mut output, at(11));
+
+        assert_eq!(
+            output,
+            [0.5, 0.6],
+            "the new queue plays, the old one is left"
+        );
+        let update = callback.position.take().expect("a position was reported");
+        assert_eq!(update.pipeline, PipelineId(2));
+        assert_eq!((update.start_frame, update.end_frame), (0, 2));
+    }
+
+    #[test]
+    fn fill_plays_only_the_newest_of_several_handoffs() {
+        let mut callback = callback(1, 8, 1.0);
+        let _skipped = handoff_queue(&mut callback, 2, &[0.2; 2]);
+        let _newest = handoff_queue(&mut callback, 3, &[0.3; 2]);
+        let mut output = [0.0_f32; 2];
+
+        callback.state.fill(&mut output, at(10));
+
+        assert_eq!(output, [0.3, 0.3]);
+        assert_eq!(
+            callback.position.take().map(|update| update.pipeline),
+            Some(PipelineId(3))
+        );
+    }
+
+    #[test]
+    fn fill_reports_completion_for_the_pipeline_it_is_playing() {
+        let mut callback = callback(1, 8, 1.0);
+        let next = handoff_queue(&mut callback, 2, &[0.5; 2]);
+        next.finish();
+        let mut output = [0.0_f32; 3];
+
+        callback.state.fill(&mut output, at(10));
+        callback.state.fill(&mut output, at(11));
+
+        assert_eq!(
+            callback.events.lock().unwrap().clone(),
+            [OutputEvent::FinalFrames {
+                pipeline: PipelineId(2),
+                end_time: calculate_end_time(at(10), 2, 1, 100).unwrap()
+            }]
         );
     }
 }

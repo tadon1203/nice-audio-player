@@ -4,13 +4,15 @@ use super::*;
 
 impl PlaybackWorker {
     /// A decode thread stopped on its own: the file (or its conversion) cannot be played.
-    pub(super) fn decode_stopped(&mut self, stream: OutputStreamId, code: PlaybackFailureCode) {
-        let failure_error = match code {
-            PlaybackFailureCode::DecodeFailed => PlaybackServiceError::Decode,
-            _ => PlaybackServiceError::Output(code.clone()),
+    pub(super) fn decode_stopped(&mut self, pipeline: PipelineId, code: PlaybackFailureCode) {
+        let phase = if code == PlaybackFailureCode::DecodeFailed {
+            StartFailurePhase::PrebufferDecode
+        } else {
+            StartFailurePhase::PrebufferConversion
         };
-        match self.owner_of(stream) {
-            StreamOwner::Start => {
+        let failure_error = StartFailure::new(phase, code.clone()).service_error();
+        match self.owner_of(pipeline) {
+            PipelineOwner::Start => {
                 let Transport::Loading(loading) =
                     std::mem::replace(&mut self.transport, Transport::Idle)
                 else {
@@ -19,22 +21,10 @@ impl PlaybackWorker {
                 if let LoadStage::Prebuffering(prebuffering) = loading.stage {
                     prebuffering.pipeline.cancel();
                 }
-                let phase = if code == PlaybackFailureCode::DecodeFailed {
-                    StartFailurePhase::PrebufferDecode
-                } else {
-                    StartFailurePhase::PrebufferConversion
-                };
-                self.fail_start(
-                    loading.request,
-                    StartFailure {
-                        code,
-                        phase,
-                        error: failure_error,
-                    },
-                );
+                self.fail_start(loading.request, StartFailure::new(phase, code));
             }
-            StreamOwner::Active => self.fail_active(code, FailureScope::Item, failure_error),
-            StreamOwner::Seek => {
+            PipelineOwner::Active => self.fail_active(code, FailureScope::Item, failure_error),
+            PipelineOwner::Seek => {
                 if let Transport::Loaded(loaded) = &mut self.transport {
                     if let Some(seek) = loaded.seek.take() {
                         seek.pipeline.cancel();
@@ -42,12 +32,16 @@ impl PlaybackWorker {
                     }
                 }
             }
-            StreamOwner::Gone => {}
+            PipelineOwner::Gone => {}
         }
     }
 
     pub(super) fn stream_failed(&mut self, stream: OutputStreamId, kind: StreamFailureKind) {
-        if self.owner_of(stream) != StreamOwner::Active {
+        let is_current = matches!(
+            &self.transport,
+            Transport::Loaded(loaded) if loaded.output.id == stream
+        );
+        if !is_current {
             return;
         }
         match stream_signal_action(&self.output_selection, kind) {
@@ -107,8 +101,8 @@ impl PlaybackWorker {
         let Transport::Loaded(loaded) = &mut self.transport else {
             return false;
         };
-        loaded.pipeline.config.device_id = identity.id;
-        loaded.pipeline.config.device_name = identity.name;
+        loaded.output.config.device_id = identity.id;
+        loaded.output.config.device_name = identity.name;
         self.publish_state();
         true
     }

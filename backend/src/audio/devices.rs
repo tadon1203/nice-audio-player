@@ -118,14 +118,6 @@ pub(crate) fn resolve_output_selection(
     Ok(ResolvedAudioOutputDevice { device, identity })
 }
 
-pub(crate) fn resolve_output_device_id(
-    device_id: &str,
-) -> Result<ResolvedAudioOutputDevice, DeviceResolutionError> {
-    resolve_output_selection(&AudioOutputSelection::Device {
-        device_id: device_id.to_owned(),
-    })
-}
-
 fn device_identity(device: &cpal::Device) -> Result<AudioOutputDeviceIdentity, cpal::Error> {
     Ok(AudioOutputDeviceIdentity {
         id: device.id()?.to_string(),

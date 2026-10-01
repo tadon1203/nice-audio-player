@@ -12,7 +12,7 @@ use super::input::{
 };
 use super::item::{PlaybackItem, PlaybackItemSeed};
 use super::pipeline::{
-    open_pipeline, OpenedPipeline, PipelineError, PipelineKind, PipelineRequest,
+    open_pipeline, OpenedOutput, OpenedPipeline, PipelineError, PipelineKind, PipelineRequest,
 };
 use super::preferences::{PlaybackPreferences, PreferencesObserver};
 use super::queue::{AdvanceReason, PlaybackQueue, QueueError};
@@ -31,7 +31,7 @@ use crate::audio::devices::{
     AudioOutputDeviceIdentity, AudioOutputSelection, DeviceResolutionError,
 };
 use crate::audio::output::{
-    AudioOutputError, OutputBackend, OutputLinks, OutputStreamId, StreamFailureKind,
+    AudioOutputError, OutputBackend, OutputLinks, OutputStreamId, PipelineId, StreamFailureKind,
 };
 use crate::audio::timebase::millis_to_frame;
 use crate::audio::volume::{AtomicEffectiveGain, VolumeState};
@@ -94,41 +94,42 @@ impl StartFailurePhase {
     }
 }
 
+/// A start that failed: the phase it failed in and the code listeners see. What the caller is
+/// told follows from the two.
 struct StartFailure {
-    code: PlaybackFailureCode,
     phase: StartFailurePhase,
-    error: PlaybackServiceError,
+    code: PlaybackFailureCode,
 }
 
 impl StartFailure {
     /// The file could not be decoded.
     fn item(phase: StartFailurePhase) -> Self {
-        Self {
-            code: PlaybackFailureCode::DecodeFailed,
-            phase,
-            error: PlaybackServiceError::Decode,
-        }
+        Self::new(phase, PlaybackFailureCode::DecodeFailed)
     }
 
-    fn output(phase: StartFailurePhase, code: PlaybackFailureCode) -> Self {
-        Self {
-            error: PlaybackServiceError::Output(code.clone()),
-            code,
-            phase,
+    fn new(phase: StartFailurePhase, code: PlaybackFailureCode) -> Self {
+        Self { phase, code }
+    }
+
+    fn service_error(&self) -> PlaybackServiceError {
+        match (self.phase, &self.code) {
+            (StartFailurePhase::SourceWorker, _) => PlaybackServiceError::WorkerUnavailable,
+            (_, PlaybackFailureCode::DecodeFailed) => PlaybackServiceError::Decode,
+            (_, code) => PlaybackServiceError::Output(code.clone()),
         }
     }
 }
 
-/// Which part of the transport a stream belongs to.
+/// Which part of the transport a pipeline belongs to.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-enum StreamOwner {
-    /// The stream of a start that is prebuffering.
+enum PipelineOwner {
+    /// The pipeline of a start that is prebuffering.
     Start,
-    /// The stream that is playing.
+    /// The pipeline that is playing.
     Active,
-    /// The stream of a seek that is prebuffering.
+    /// The pipeline of a seek that is prebuffering.
     Seek,
-    /// A stream the worker has already let go of.
+    /// A pipeline the worker has already let go of.
     Gone,
 }
 
@@ -148,6 +149,7 @@ pub(super) struct PlaybackWorker {
     ids: PlaybackIds,
     source_load_ids: SourceLoadIds,
     next_stream_id: u64,
+    next_pipeline_id: u64,
     revision: u64,
     next_queue_revision: u64,
     /// Completed seeks; published with the session so the UI can tell a seek from a tick.
@@ -182,6 +184,7 @@ impl PlaybackWorker {
             ids: PlaybackIds::default(),
             source_load_ids: SourceLoadIds::default(),
             next_stream_id: 0,
+            next_pipeline_id: 0,
             revision: 0,
             next_queue_revision: 0,
             seek_revision: 0,
@@ -309,6 +312,10 @@ impl PlaybackWorker {
                 }
             }
             PlaybackCommand::Enqueue { items, next, reply } => {
+                if self.queue.current().is_none() {
+                    self.start_enqueued(items, reply);
+                    return;
+                }
                 let result = self.edit_queue(|queue| queue.enqueue(items, next).map(|()| true));
                 let _ = reply.send(result.map(|changed| self.queue_changed(changed)));
             }
@@ -322,25 +329,25 @@ impl PlaybackWorker {
     fn handle_event(&mut self, event: WorkerEvent) {
         match event {
             WorkerEvent::SourceLoaded { id, result } => self.source_loaded(id, result),
-            WorkerEvent::PrebufferReady { stream } => match self.owner_of(stream) {
-                StreamOwner::Start => self.finish_start(),
-                StreamOwner::Seek => self.finish_seek(),
-                StreamOwner::Active | StreamOwner::Gone => {}
+            WorkerEvent::PrebufferReady { pipeline } => match self.owner_of(pipeline) {
+                PipelineOwner::Start => self.finish_start(),
+                PipelineOwner::Seek => self.finish_seek(),
+                PipelineOwner::Active | PipelineOwner::Gone => {}
             },
-            WorkerEvent::DecodeFailed { stream } => {
-                error!("playback.decode_failed stream_id={}", stream.0);
-                self.decode_stopped(stream, PlaybackFailureCode::DecodeFailed);
+            WorkerEvent::DecodeFailed { pipeline } => {
+                error!("playback.decode_failed pipeline_id={}", pipeline.0);
+                self.decode_stopped(pipeline, PlaybackFailureCode::DecodeFailed);
             }
-            WorkerEvent::ConversionFailed { stream } => {
+            WorkerEvent::ConversionFailed { pipeline } => {
                 error!(
-                    "playback.sample_rate_conversion_failed stream_id={}",
-                    stream.0
+                    "playback.sample_rate_conversion_failed pipeline_id={}",
+                    pipeline.0
                 );
-                self.decode_stopped(stream, PlaybackFailureCode::SampleRateConversionFailed);
+                self.decode_stopped(pipeline, PlaybackFailureCode::SampleRateConversionFailed);
             }
-            WorkerEvent::FinalFrames { stream, end_time } => {
+            WorkerEvent::FinalFrames { pipeline, end_time } => {
                 if let Transport::Loaded(loaded) = &mut self.transport {
-                    if loaded.pipeline.stream_id == stream {
+                    if loaded.pipeline.id == pipeline {
                         loaded.completion_time = Some(end_time);
                     }
                 }
@@ -349,22 +356,22 @@ impl PlaybackWorker {
         }
     }
 
-    fn owner_of(&self, stream: OutputStreamId) -> StreamOwner {
+    fn owner_of(&self, pipeline: PipelineId) -> PipelineOwner {
         match &self.transport {
             Transport::Loading(Loading {
                 stage: LoadStage::Prebuffering(prebuffering),
                 ..
-            }) if prebuffering.pipeline.stream_id == stream => StreamOwner::Start,
-            Transport::Loaded(loaded) if loaded.pipeline.stream_id == stream => StreamOwner::Active,
+            }) if prebuffering.pipeline.id == pipeline => PipelineOwner::Start,
+            Transport::Loaded(loaded) if loaded.pipeline.id == pipeline => PipelineOwner::Active,
             Transport::Loaded(loaded)
                 if loaded
                     .seek
                     .as_ref()
-                    .is_some_and(|seek| seek.pipeline.stream_id == stream) =>
+                    .is_some_and(|seek| seek.pipeline.id == pipeline) =>
             {
-                StreamOwner::Seek
+                PipelineOwner::Seek
             }
-            _ => StreamOwner::Gone,
+            _ => PipelineOwner::Gone,
         }
     }
 
@@ -379,8 +386,7 @@ impl PlaybackWorker {
         extension: &str,
         kind: PipelineKind,
     ) -> Result<OpenedPipeline, PipelineError> {
-        let stream_id = self.next_stream_id();
-        let links = self.output_links(stream_id);
+        self.next_pipeline_id = self.next_pipeline_id.wrapping_add(1);
         open_pipeline(
             self.backend.as_ref(),
             &self.inbox,
@@ -388,15 +394,20 @@ impl PlaybackWorker {
                 source,
                 extension,
                 kind,
-                stream_id,
-                links,
+                pipeline_id: PipelineId(self.next_pipeline_id),
             },
         )
     }
 
-    fn next_stream_id(&mut self) -> OutputStreamId {
+    /// A start's kind of pipeline: a new stream on the device `selection` names.
+    fn start_kind(&mut self, selection: AudioOutputSelection) -> PipelineKind {
         self.next_stream_id = self.next_stream_id.wrapping_add(1);
-        OutputStreamId(self.next_stream_id)
+        let stream_id = OutputStreamId(self.next_stream_id);
+        PipelineKind::Start {
+            selection,
+            stream_id,
+            links: self.output_links(stream_id),
+        }
     }
 
     fn output_links(&self, stream: OutputStreamId) -> OutputLinks {

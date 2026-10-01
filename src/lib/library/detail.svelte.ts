@@ -38,10 +38,6 @@ export function createArtistAlbums(
   );
 }
 
-export function createLibraryTrack(trackId: () => string | null) {
-  return createQuery(() => libraryQueryOptions.track(trackId()));
-}
-
 /** Tags, audio format and file location of a track, read when the Properties view opens. */
 export function createLibraryTrackProperties(trackId: () => string | null) {
   return createQuery(() => libraryQueryOptions.trackProperties(trackId()));

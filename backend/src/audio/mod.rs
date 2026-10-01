@@ -1,16 +1,16 @@
-pub mod cancellation;
+pub(crate) mod cancellation;
 mod compressed_source;
-pub mod decoding;
+pub(crate) mod decoding;
 pub mod devices;
 #[cfg(test)]
 pub(crate) mod fake_output;
-pub mod output;
-pub mod output_processing;
-pub mod pcm;
-pub mod pcm_queue;
+pub(crate) mod output;
+pub(crate) mod output_processing;
+pub(crate) mod pcm;
+pub(crate) mod pcm_queue;
 pub mod playback;
-pub mod timebase;
-pub mod volume;
+pub(crate) mod timebase;
+pub(crate) mod volume;
 pub mod waveform;
 
 // Playback consumes the shared media boundary; it does not own validation or inspection.

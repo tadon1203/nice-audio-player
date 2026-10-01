@@ -3,7 +3,7 @@
 //! test decides when a tick happens and when an event is delivered.
 
 use super::input::{Inbox, WorkerEvent, WorkerInput};
-use super::item::{PlaybackItem, PlaybackItemSeed};
+use super::item::{PlaybackItem, PlaybackItemSeed, SourceFacts};
 use super::preferences::PlaybackPreferences;
 use super::queue::{PlaybackQueue, PlaybackRepeatMode};
 use super::service::{PlaybackCommand, PlaybackService, PlaybackServiceError, Reply};
@@ -18,7 +18,7 @@ use super::worker::{
 };
 use crate::audio::devices::AudioOutputSelection;
 use crate::audio::fake_output::FakeOutput;
-use crate::audio::output::{AudioOutputError, OutputStreamId, StreamFailureKind};
+use crate::audio::output::{AudioOutputError, OutputStreamId, PipelineId, StreamFailureKind};
 use crate::audio::volume::{AtomicEffectiveGain, VolumeState};
 use crate::media::validation::ValidatedAudioFile;
 use crate::test_support::{write_pcm_i16_wav, TestDirectory};
@@ -320,6 +320,27 @@ fn navigating_while_paused_starts_the_next_track_paused() {
         matches!(&snapshot, PlaybackSnapshot::Paused { session, .. } if session.item.title == "b")
     );
     assert!(!harness.output.is_running());
+}
+
+#[test]
+fn volume_and_next_are_answered_while_a_start_loads() {
+    let mut harness = Harness::new();
+    let tracks = vec![harness.track("a", 1), harness.track("b", 1)];
+    let start = harness.send(|reply| PlaybackCommand::Start {
+        items: tracks,
+        start_index: 0,
+        reply,
+    });
+
+    let volume = harness.call(|reply| PlaybackCommand::SetVolume {
+        volume: 0.25,
+        reply,
+    });
+    let next = harness.next();
+
+    assert_eq!(volume.unwrap().base().volume, 0.25);
+    assert!(is_playing(&next.unwrap(), "b"));
+    assert_eq!(start.try_recv(), Ok(Err(PlaybackServiceError::Superseded)));
 }
 
 #[test]
@@ -631,7 +652,7 @@ fn events_from_a_stream_the_worker_let_go_of_are_ignored() {
     let playing = harness.start(tracks, 0).unwrap();
 
     harness.event(WorkerEvent::FinalFrames {
-        stream: OutputStreamId(99),
+        pipeline: PipelineId(99),
         end_time: StreamInstant::new(0, 0),
     });
     harness.event(WorkerEvent::StreamFailed {
@@ -639,7 +660,7 @@ fn events_from_a_stream_the_worker_let_go_of_are_ignored() {
         kind: StreamFailureKind::RuntimeFailed,
     });
     harness.event(WorkerEvent::DecodeFailed {
-        stream: OutputStreamId(99),
+        pipeline: PipelineId(99),
     });
     harness.tick();
 
@@ -709,7 +730,7 @@ fn a_decode_failure_while_playing_moves_on_to_the_next_track() {
     harness.start(tracks, 0).unwrap();
 
     harness.event(WorkerEvent::DecodeFailed {
-        stream: OutputStreamId(1),
+        pipeline: PipelineId(1),
     });
     harness.pump_until(|harness| is_playing(&harness.snapshot(), "b"));
 }
@@ -721,7 +742,7 @@ fn a_decode_failure_on_the_last_track_leaves_a_failed_player() {
     harness.start(tracks, 0).unwrap();
 
     harness.event(WorkerEvent::DecodeFailed {
-        stream: OutputStreamId(1),
+        pipeline: PipelineId(1),
     });
 
     assert!(matches!(
@@ -740,7 +761,7 @@ fn a_conversion_failure_while_playing_is_reported_with_its_own_code() {
     harness.start(tracks, 0).unwrap();
 
     harness.event(WorkerEvent::ConversionFailed {
-        stream: OutputStreamId(1),
+        pipeline: PipelineId(1),
     });
 
     assert!(matches!(
@@ -750,6 +771,31 @@ fn a_conversion_failure_while_playing_is_reported_with_its_own_code() {
             ..
         }
     ));
+}
+
+#[test]
+fn the_session_carries_the_source_format_of_the_loaded_track() {
+    let mut harness = Harness::new();
+    let mut known = harness.track("known", 1);
+    known.source = SourceFacts {
+        format: Some("FLAC".into()),
+        bit_depth: Some(24),
+        bitrate_kbps: Some(1_411),
+    };
+    let unknown = harness.track("unknown", 1);
+
+    let snapshot = harness.start(vec![known, unknown], 0).unwrap();
+    assert_eq!(session(&snapshot).source_format, "FLAC");
+    assert_eq!(session(&snapshot).source_bit_depth, Some(24));
+    assert_eq!(session(&snapshot).source_bitrate_kbps, Some(1_411));
+
+    let snapshot = harness.next().unwrap();
+    assert_eq!(
+        session(&snapshot).source_format,
+        "wav",
+        "a file the library does not know is named by its extension"
+    );
+    assert_eq!(session(&snapshot).source_bit_depth, None);
 }
 
 // ---- seeking ----
@@ -856,7 +902,77 @@ fn seeking_past_the_end_plays_the_next_track_like_a_natural_finish() {
 }
 
 #[test]
-fn a_failed_pause_during_a_seek_fails_the_player() {
+fn seeks_reuse_the_one_output_stream_of_the_session() {
+    let mut harness = Harness::new();
+    let tracks = vec![harness.track("a", 3)];
+    harness.start(tracks, 0).unwrap();
+
+    harness.seek(1_000).unwrap();
+    harness.seek(2_000).unwrap();
+
+    assert_eq!(harness.output.streams_opened(), 1);
+    assert_eq!(harness.output.queue_switches(), 2);
+    assert!(harness.output.is_running(), "a seek never stops the output");
+}
+
+#[test]
+fn a_seek_while_paused_hands_over_the_queue_without_starting_the_output() {
+    let mut harness = Harness::new();
+    let tracks = vec![harness.track("a", 3)];
+    harness.start(tracks, 0).unwrap();
+    harness.pause().unwrap();
+
+    harness.seek(1_000).unwrap();
+
+    assert_eq!(harness.output.streams_opened(), 1);
+    assert_eq!(harness.output.queue_switches(), 1);
+    assert!(!harness.output.is_running());
+}
+
+#[test]
+fn the_position_after_a_seek_counts_from_the_target_on_the_same_stream() {
+    let mut harness = Harness::new();
+    let tracks = vec![harness.track("a", 3)];
+    harness.start(tracks, 0).unwrap();
+    harness.seek(1_000).unwrap();
+
+    // The speakers got 0.5 s into the new queue.
+    harness.output.set_played_frames(u64::from(SAMPLE_RATE) / 2);
+    std::thread::sleep(Duration::from_millis(260));
+    harness.tick();
+
+    let position = session(&harness.snapshot()).position_ms;
+    assert!((1_450..=1_550).contains(&position), "position {position}");
+}
+
+#[test]
+fn a_seek_whose_decode_fails_keeps_the_session_and_its_stream() {
+    let mut harness = Harness::new();
+    let tracks = vec![harness.track("a", 3)];
+    let started = harness.start(tracks, 0).unwrap();
+
+    let seek = harness.send(|reply| PlaybackCommand::Seek {
+        position_ms: 1_000,
+        reply,
+    });
+    // The seek's pipeline is the second one the worker opened.
+    harness.event(WorkerEvent::DecodeFailed {
+        pipeline: PipelineId(2),
+    });
+
+    assert_eq!(seek.try_recv(), Ok(Err(PlaybackServiceError::Decode)));
+    let snapshot = harness.snapshot();
+    assert!(matches!(snapshot, PlaybackSnapshot::Playing { .. }));
+    assert_eq!(
+        session(&snapshot).playback_id,
+        session(&started).playback_id
+    );
+    assert_eq!(harness.output.streams_opened(), 1);
+    assert_eq!(harness.output.queue_switches(), 0);
+}
+
+#[test]
+fn a_failed_pause_fails_the_player() {
     let mut harness = Harness::new();
     let tracks = vec![harness.track("a", 3)];
     harness.start(tracks, 0).unwrap();
@@ -864,7 +980,7 @@ fn a_failed_pause_during_a_seek_fails_the_player() {
         .output
         .fail_next_pause(AudioOutputError::StreamPauseFailed);
 
-    let result = harness.seek(1_000);
+    let result = harness.pause();
 
     assert_eq!(
         result,
@@ -1044,6 +1160,37 @@ fn queue_edits_are_rejected_while_a_start_loads() {
 
     assert_eq!(result, Err(PlaybackServiceError::QueueBusy));
     harness.wait_for(&start).unwrap();
+}
+
+#[test]
+fn enqueueing_on_an_empty_queue_starts_playback_inside_the_worker() {
+    let mut harness = Harness::new();
+    let items = vec![harness.track("a", 1), harness.track("b", 1)];
+
+    let queue = harness
+        .call(|reply| PlaybackCommand::Enqueue {
+            items,
+            next: false,
+            reply,
+        })
+        .unwrap();
+
+    assert_eq!(queue.current.map(|item| item.title), Some("a".into()));
+    assert_eq!(queue.upcoming_count, 1);
+    harness.pump_until(|harness| is_playing(&harness.snapshot(), "a"));
+}
+
+#[test]
+fn enqueueing_nothing_on_an_empty_queue_is_refused() {
+    let mut harness = Harness::new();
+
+    let result = harness.call(|reply| PlaybackCommand::Enqueue {
+        items: Vec::new(),
+        next: false,
+        reply,
+    });
+
+    assert_eq!(result, Err(PlaybackServiceError::InvalidPlaybackState));
 }
 
 // ---- output selection ----
@@ -1370,6 +1517,9 @@ fn wire_session() -> ActiveSession {
             name: "Test device".into(),
         },
         channel_conversion: PlaybackChannelConversion::None,
+        source_format: "FLAC".into(),
+        source_bit_depth: Some(24),
+        source_bitrate_kbps: None,
         source_sample_rate: 44_100,
         output_sample_rate: 44_100,
         resampling_active: false,
@@ -1415,6 +1565,9 @@ fn session_json() -> serde_json::Value {
         "durationMs": 60_000,
         "outputDevice": { "id": "test-device", "name": "Test device" },
         "channelConversion": "none",
+        "sourceFormat": "FLAC",
+        "sourceBitDepth": 24,
+        "sourceBitrateKbps": null,
         "sourceSampleRate": 44_100,
         "outputSampleRate": 44_100,
         "resamplingActive": false

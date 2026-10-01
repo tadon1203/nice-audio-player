@@ -13,7 +13,7 @@ mod snapshot;
 mod source_loader;
 mod worker;
 
-pub use item::{PlaybackItem, PlaybackItemSeed};
+pub use item::{PlaybackItem, PlaybackItemSeed, SourceFacts};
 pub use preferences::{PlaybackPreferences, PreferencesObserver};
 pub use queue::PlaybackRepeatMode;
 pub use service::{

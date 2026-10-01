@@ -41,7 +41,7 @@ impl PlaybackWorker {
     }
 
     pub(super) fn render_session(&self, loaded: &Loaded) -> ActiveSession {
-        let config = &loaded.pipeline.config;
+        let config = &loaded.output.config;
         let processing = PlaybackProcessingInfo::from_plan(config.processing_plan);
         ActiveSession {
             item: loaded.item.clone(),
@@ -54,6 +54,14 @@ impl PlaybackWorker {
                 name: config.device_name.clone(),
             },
             channel_conversion: processing.channel_conversion,
+            source_format: loaded
+                .item
+                .source
+                .format
+                .clone()
+                .unwrap_or_else(|| loaded.item.file.extension.clone()),
+            source_bit_depth: loaded.item.source.bit_depth,
+            source_bitrate_kbps: loaded.item.source.bitrate_kbps,
             source_sample_rate: processing.source_sample_rate,
             output_sample_rate: processing.output_sample_rate,
             resampling_active: processing.resampling_active(),

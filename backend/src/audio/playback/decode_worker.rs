@@ -7,7 +7,7 @@ use std::thread::{self, JoinHandle};
 use super::input::{Inbox, WorkerEvent};
 use crate::audio::cancellation::Cancellation;
 use crate::audio::decoding::{DecodeStep, StreamingDecoder};
-use crate::audio::output::OutputStreamId;
+use crate::audio::output::PipelineId;
 use crate::audio::output_processing::{OutputPcmProcessor, OutputProcessingError};
 use crate::audio::pcm_queue::{PcmProducer, PcmWaker};
 
@@ -47,7 +47,7 @@ struct DecodeTask {
     discard_output_samples: usize,
     cancellation: Cancellation,
     inbox: Inbox,
-    stream: OutputStreamId,
+    pipeline: PipelineId,
     prebuffer_frames: usize,
     prebuffer_sent: bool,
 }
@@ -56,11 +56,11 @@ pub(crate) struct DecodeWorker {
     cancellation: Cancellation,
     join_handle: JoinHandle<()>,
     waker: PcmWaker,
-    stream: OutputStreamId,
+    pipeline: PipelineId,
 }
 
 impl DecodeWorker {
-    pub(super) fn spawn(input: DecodeTaskInput, inbox: Inbox, stream: OutputStreamId) -> Self {
+    pub(super) fn spawn(input: DecodeTaskInput, inbox: Inbox, pipeline: PipelineId) -> Self {
         let cancellation = Cancellation::default();
         let waker = input.producer.waker();
         let decoder = input.decoder;
@@ -72,7 +72,7 @@ impl DecodeWorker {
             discard_output_samples: input.discard_output_samples,
             cancellation: cancellation.clone(),
             inbox,
-            stream,
+            pipeline,
             prebuffer_frames: prebuffer_frames(input.output_sample_rate),
             prebuffer_sent: false,
         };
@@ -80,7 +80,7 @@ impl DecodeWorker {
             cancellation,
             join_handle: thread::spawn(move || task.run(decoder)),
             waker,
-            stream,
+            pipeline,
         }
     }
 
@@ -89,8 +89,8 @@ impl DecodeWorker {
         self.waker.wake();
         if self.join_handle.join().is_err() {
             error!(
-                "playback.decode_worker_panicked stream_id={}",
-                self.stream.0
+                "playback.decode_worker_panicked pipeline_id={}",
+                self.pipeline.0
             );
         }
     }
@@ -110,11 +110,11 @@ impl DecodeTask {
         match self.decode_to_end(decoder) {
             Ok(()) => self.producer.finish(),
             Err(Stop::Cancelled) => {}
-            Err(Stop::Decode) => self.report_failure(WorkerEvent::DecodeFailed {
-                stream: self.stream,
+            Err(Stop::Decode) => self.inbox.event(WorkerEvent::DecodeFailed {
+                pipeline: self.pipeline,
             }),
-            Err(Stop::Conversion) => self.report_failure(WorkerEvent::ConversionFailed {
-                stream: self.stream,
+            Err(Stop::Conversion) => self.inbox.event(WorkerEvent::ConversionFailed {
+                pipeline: self.pipeline,
             }),
         }
     }
@@ -131,12 +131,11 @@ impl DecodeTask {
             match decoder.decode_next(&mut packet) {
                 Ok(DecodeStep::Samples) => self.process(&packet)?,
                 Ok(DecodeStep::EndOfStream) => {
-                    let finalization = decoder.finalize();
                     self.converter.flush(&mut self.converted)?;
                     self.write_converted()?;
                     // A file shorter than the prebuffer is as ready as it will get.
-                    self.notify_prebuffer(true);
-                    return finalization.map_err(|_| Stop::Decode);
+                    notify_prebuffer(&self.inbox, self.pipeline, &mut self.prebuffer_sent, true);
+                    return Ok(());
                 }
                 Err(_) => return Err(Stop::Decode),
             }
@@ -152,30 +151,22 @@ impl DecodeTask {
         discard_output_prefix(&mut self.converted, &mut self.discard_output_samples);
         let cancellation = &self.cancellation;
         let inbox = &self.inbox;
-        let (stream, frames) = (self.stream, self.prebuffer_frames);
+        let (pipeline, frames) = (self.pipeline, self.prebuffer_frames);
         let sent = &mut self.prebuffer_sent;
         self.producer
             .write_all(
                 &self.converted,
                 || cancellation.is_cancelled(),
-                |queued| notify_prebuffer(inbox, stream, sent, queued >= frames),
+                |queued| notify_prebuffer(inbox, pipeline, sent, queued >= frames),
             )
             .map_err(|_| Stop::Cancelled)
     }
-
-    fn notify_prebuffer(&mut self, ready: bool) {
-        notify_prebuffer(&self.inbox, self.stream, &mut self.prebuffer_sent, ready);
-    }
-
-    fn report_failure(&self, event: WorkerEvent) {
-        self.inbox.event(event);
-    }
 }
 
-fn notify_prebuffer(inbox: &Inbox, stream: OutputStreamId, sent: &mut bool, ready: bool) {
+fn notify_prebuffer(inbox: &Inbox, pipeline: PipelineId, sent: &mut bool, ready: bool) {
     if ready && !*sent {
         *sent = true;
-        inbox.event(WorkerEvent::PrebufferReady { stream });
+        inbox.event(WorkerEvent::PrebufferReady { pipeline });
     }
 }
 
@@ -194,7 +185,7 @@ mod tests {
     use super::{prebuffer_frames, DecodeTaskInput, DecodeWorker, Stop};
     use crate::audio::cancellation::Cancellation;
     use crate::audio::compressed_source::prepare_compressed_source;
-    use crate::audio::output::OutputStreamId;
+    use crate::audio::output::PipelineId;
     use crate::audio::output_processing::{
         OutputPcmProcessor, OutputProcessingError, OutputProcessingPlan,
     };
@@ -243,7 +234,7 @@ mod tests {
                 discard_output_samples: 0,
             },
             inbox,
-            OutputStreamId(7),
+            PipelineId(7),
         );
         (worker, consumer, events)
     }
@@ -269,7 +260,7 @@ mod tests {
         assert!(matches!(
             next_event(&events),
             WorkerEvent::PrebufferReady {
-                stream: OutputStreamId(7)
+                pipeline: PipelineId(7)
             }
         ));
         assert!(consumer.available_frames(1) >= prebuffer_frames(44_100));

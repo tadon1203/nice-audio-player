@@ -22,6 +22,22 @@ impl PlaybackWorker {
         self.start_current(Some(reply), false);
     }
 
+    /// Items enqueued with nothing current: they start playing, and the caller gets the queue
+    /// as it stands without waiting for the track to load.
+    pub(super) fn start_enqueued(
+        &mut self,
+        items: Vec<PlaybackItemSeed>,
+        reply: Reply<PlaybackQueueSnapshot>,
+    ) {
+        if self.queue.replace(items, 0, &mut self.rng).is_err() {
+            let _ = reply.send(Err(PlaybackServiceError::InvalidPlaybackState));
+            return;
+        }
+        self.skipped_in_a_row = 0;
+        self.start_current(None, false);
+        let _ = reply.send(Ok(self.queue_snapshot()));
+    }
+
     /// A start of `item` as a new playback.
     pub(super) fn new_start(
         &mut self,
@@ -71,14 +87,9 @@ impl PlaybackWorker {
                     stage: LoadStage::Source(load),
                 });
             }
-            Err(()) => self.fail_start(
-                request,
-                StartFailure {
-                    code: PlaybackFailureCode::DecodeFailed,
-                    phase: StartFailurePhase::SourceWorker,
-                    error: PlaybackServiceError::WorkerUnavailable,
-                },
-            ),
+            Err(()) => {
+                self.fail_start(request, StartFailure::item(StartFailurePhase::SourceWorker))
+            }
         }
     }
 
@@ -105,16 +116,16 @@ impl PlaybackWorker {
         let request = loading.request;
         match result {
             Ok(source) => self.begin_prebuffering(request, source),
-            Err(CompressedSourceError::Cancelled) => {
-                respond(request.responder, Err(PlaybackServiceError::Superseded));
-            }
             Err(error) => {
                 let phase = match error {
+                    CompressedSourceError::Cancelled => {
+                        respond(request.responder, Err(PlaybackServiceError::Superseded));
+                        return;
+                    }
                     CompressedSourceError::OpenFailed => StartFailurePhase::SourceOpen,
                     CompressedSourceError::MetadataFailed => StartFailurePhase::SourceMetadata,
                     CompressedSourceError::ReadFailed => StartFailurePhase::SourceRead,
                     CompressedSourceError::SourceChanged => StartFailurePhase::SourceChanged,
-                    CompressedSourceError::Cancelled => unreachable!(),
                 };
                 self.fail_start(request, StartFailure::item(phase));
             }
@@ -131,21 +142,27 @@ impl PlaybackWorker {
             .selection
             .clone()
             .unwrap_or_else(|| self.output_selection.clone());
-        let opened = self.open_pipeline(
-            &source,
-            &request.item.file.extension,
-            PipelineKind::Start(selection),
-        );
+        let kind = self.start_kind(selection);
+        let opened = self.open_pipeline(&source, &request.item.file.extension, kind);
         match opened {
-            Ok(opened) => {
+            Ok(OpenedPipeline {
+                pipeline,
+                output: OpenedOutput::Stream(output),
+                duration_ms,
+                ..
+            }) => {
                 self.transport = Transport::Loading(Loading {
                     request,
                     stage: LoadStage::Prebuffering(Prebuffering {
                         source,
-                        pipeline: opened.pipeline,
-                        duration_ms: opened.duration_ms,
+                        output,
+                        pipeline,
+                        duration_ms,
                     }),
                 });
+            }
+            Ok(OpenedPipeline { pipeline, .. }) => {
+                unreachable!("a start opens a stream: {:?}", pipeline.id)
             }
             Err(error) => self.fail_start(request, start_failure(error)),
         }
@@ -163,16 +180,17 @@ impl PlaybackWorker {
         };
         let Prebuffering {
             source,
+            output,
             pipeline,
             duration_ms,
         } = prebuffering;
         if !request.start_paused {
-            if let Err(error) = pipeline.stream.start() {
+            if let Err(error) = output.stream.start() {
                 let code = output_failure_code(error);
                 pipeline.cancel();
                 self.fail_start(
                     request,
-                    StartFailure::output(StartFailurePhase::StreamStart, code),
+                    StartFailure::new(StartFailurePhase::StreamStart, code),
                 );
                 return;
             }
@@ -195,7 +213,8 @@ impl PlaybackWorker {
             id,
             item,
             source,
-            position: Position::from_start(pipeline.sample_rate(), duration_ms),
+            position: Position::from_start(output.sample_rate(), duration_ms),
+            output,
             pipeline,
             completion_time: None,
             paused: start_paused,
@@ -216,6 +235,7 @@ impl PlaybackWorker {
             "playback.start_failed code={:?} phase={:?} playback_id={:?}",
             failure.code, failure.phase, id
         );
+        let error = failure.service_error();
         self.transport = Transport::Failed {
             id,
             code: failure.code,
@@ -229,7 +249,7 @@ impl PlaybackWorker {
                 return;
             }
         }
-        respond(responder, Err(failure.error));
+        respond(responder, Err(error));
     }
 
     /// The item to try after the current one could not be played, if there is one to try.
@@ -269,9 +289,9 @@ fn start_failure(error: PipelineError) -> StartFailure {
     match error {
         PipelineError::DecoderOpen => StartFailure::item(StartFailurePhase::DecoderOpen),
         PipelineError::OutputPrepare(error) => {
-            StartFailure::output(StartFailurePhase::OutputPrepare, output_failure_code(error))
+            StartFailure::new(StartFailurePhase::OutputPrepare, output_failure_code(error))
         }
-        PipelineError::ProcessorCreate => StartFailure::output(
+        PipelineError::ProcessorCreate => StartFailure::new(
             StartFailurePhase::ProcessorCreate,
             PlaybackFailureCode::SampleRateConversionFailed,
         ),

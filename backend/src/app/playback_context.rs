@@ -5,7 +5,9 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::audio::playback::{PlaybackFailureCode, PlaybackItemSeed, PlaybackServiceError};
+use crate::audio::playback::{
+    PlaybackFailureCode, PlaybackItemSeed, PlaybackServiceError, SourceFacts,
+};
 use crate::library::{
     models::{LibraryAlbumKey, LibrarySortDirection, LibraryTrackSortKey},
     store::{LibraryStore, PlayableTrack, PlaybackSelection, PlaybackSourceError},
@@ -142,5 +144,10 @@ fn seed(track: PlayableTrack) -> PlaybackItemSeed {
         year: track.year,
         album_key: track.album_key,
         album_track_count: track.album_track_count,
+        source: SourceFacts {
+            format: track.file_format,
+            bit_depth: track.bit_depth,
+            bitrate_kbps: track.bitrate_kbps,
+        },
     }
 }

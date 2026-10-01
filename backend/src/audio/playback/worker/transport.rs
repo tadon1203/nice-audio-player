@@ -68,11 +68,11 @@ impl PlaybackWorker {
         if loaded.paused {
             return Ok(self.render());
         }
-        if let Err(error) = loaded.pipeline.stream.pause() {
+        if let Err(error) = loaded.output.stream.pause() {
             return Err(self.control_failure(error));
         }
         let position = loaded.sample_position();
-        loaded.pipeline.stream.clear_timing_anchor();
+        loaded.output.stream.clear_timing_anchor();
         loaded.position.frame = position;
         loaded.paused = true;
         Ok(self.publish_state())
@@ -89,7 +89,7 @@ impl PlaybackWorker {
         if !loaded.paused {
             return Ok(self.render());
         }
-        if let Err(error) = loaded.pipeline.stream.start() {
+        if let Err(error) = loaded.output.stream.start() {
             let error = match error {
                 AudioOutputError::StreamStartFailed => AudioOutputError::StreamResumeFailed,
                 other => other,

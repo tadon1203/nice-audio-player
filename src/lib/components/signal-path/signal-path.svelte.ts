@@ -1,4 +1,3 @@
-import { createLibraryTrack } from "$lib/library/detail.svelte";
 import { formatAudioPath } from "$lib/utils/format";
 import { getPlayback } from "$lib/playback/context";
 import {
@@ -14,18 +13,16 @@ import { snapshotSession } from "$lib/playback/snapshot";
 export function createPlaybackSignalPath() {
   const playback = getPlayback();
   const session = $derived(snapshotSession(playback.snapshot));
-  const track = createLibraryTrack(() => session?.item.trackId ?? null);
 
   const current = $derived.by<PlaybackSignalPath | null>(() => {
     if (session === null) return null;
-    const detail = track.data ?? null;
     return describeSignalPath(
       {
         sourceLabel: formatAudioPath({
-          format: detail?.fileFormat ?? session.item.file.extension,
-          bitDepth: detail?.bitDepth,
+          format: session.sourceFormat,
+          bitDepth: session.sourceBitDepth,
           sampleRate: session.sourceSampleRate,
-          bitrateKbps: detail?.bitrateKbps,
+          bitrateKbps: session.sourceBitrateKbps,
         }),
         resamplingActive: session.resamplingActive,
         outputSampleRate: session.outputSampleRate,

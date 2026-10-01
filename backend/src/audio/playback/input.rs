@@ -9,7 +9,9 @@ use cpal::StreamInstant;
 
 use super::service::PlaybackCommand;
 use crate::audio::compressed_source::{CompressedAudioSource, CompressedSourceError};
-use crate::audio::output::{OutputEvent, OutputEvents, OutputStreamId, StreamFailureKind};
+use crate::audio::output::{
+    OutputEvent, OutputEvents, OutputStreamId, PipelineId, StreamFailureKind,
+};
 
 /// Identifies one playback session. Only `PlaybackIds::next` makes one.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -53,16 +55,16 @@ pub(super) enum WorkerEvent {
         result: Result<CompressedAudioSource, CompressedSourceError>,
     },
     PrebufferReady {
-        stream: OutputStreamId,
+        pipeline: PipelineId,
     },
     DecodeFailed {
-        stream: OutputStreamId,
+        pipeline: PipelineId,
     },
     ConversionFailed {
-        stream: OutputStreamId,
+        pipeline: PipelineId,
     },
     FinalFrames {
-        stream: OutputStreamId,
+        pipeline: PipelineId,
         end_time: StreamInstant,
     },
     StreamFailed {
@@ -101,8 +103,8 @@ impl Inbox {
         let inbox = self.clone();
         Arc::new(move |event| {
             inbox.event(match event {
-                OutputEvent::FinalFrames { end_time } => {
-                    WorkerEvent::FinalFrames { stream, end_time }
+                OutputEvent::FinalFrames { pipeline, end_time } => {
+                    WorkerEvent::FinalFrames { pipeline, end_time }
                 }
                 OutputEvent::Failed(kind) => WorkerEvent::StreamFailed { stream, kind },
             });

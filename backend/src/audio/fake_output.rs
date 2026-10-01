@@ -3,15 +3,15 @@
 
 use std::sync::{Arc, Mutex, PoisonError};
 
-use cpal::{BufferSize, SampleFormat, StreamConfig, StreamInstant};
+use cpal::StreamInstant;
 
 use super::devices::{AudioOutputDeviceIdentity, AudioOutputSelection, DeviceResolutionError};
 use super::output::{
     make_queue, AudioOutputError, OutputBackend, OutputEvent, OutputEvents, OutputLinks,
-    OutputPath, OutputStream, OutputTarget, PreparedOutput, PreparedOutputConfig,
-    StreamFailureKind,
+    OutputStream, PipelineId, PreparedOutput, PreparedOutputConfig, StreamFailureKind,
 };
 use super::output_processing::OutputProcessingPlan;
+use super::pcm::PcmSpec;
 use super::pcm_queue::PcmConsumer;
 
 struct StreamState {
@@ -21,6 +21,10 @@ struct StreamState {
     events: OutputEvents,
     fail_start: Option<AudioOutputError>,
     fail_pause: Option<AudioOutputError>,
+    /// The pipeline the stream plays.
+    pipeline: PipelineId,
+    /// How many times a seek handed the stream a new queue.
+    queue_switches: usize,
     /// Keeps the queue alive like the real callback would.
     _consumer: PcmConsumer,
 }
@@ -68,6 +72,19 @@ impl FakeOutput {
         )
     }
 
+    /// How many streams were opened. A session opens one, however often it seeks.
+    pub(crate) fn streams_opened(&self) -> usize {
+        self.shared().streams.len()
+    }
+
+    /// How many times the newest stream was handed a new queue.
+    pub(crate) fn queue_switches(&self) -> usize {
+        self.latest()
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .queue_switches
+    }
+
     /// The selections new sessions were prepared for, in order.
     pub(crate) fn prepared_selections(&self) -> Vec<AudioOutputSelection> {
         self.shared().selections.clone()
@@ -109,11 +126,14 @@ impl FakeOutput {
     /// The newest stream hands its last frames to the device, due at the stream's current time.
     pub(crate) fn finish_playback(&self) {
         let stream = self.latest();
-        let (events, now) = {
+        let (events, now, pipeline) = {
             let state = stream.lock().unwrap_or_else(PoisonError::into_inner);
-            (Arc::clone(&state.events), state.now)
+            (Arc::clone(&state.events), state.now, state.pipeline)
         };
-        events(OutputEvent::FinalFrames { end_time: now });
+        events(OutputEvent::FinalFrames {
+            pipeline,
+            end_time: now,
+        });
     }
 
     pub(crate) fn fail_stream(&self, kind: StreamFailureKind) {
@@ -154,36 +174,22 @@ impl OutputBackend for FakeOutput {
 
     fn prepare(
         &self,
-        target: OutputTarget,
+        selection: &AudioOutputSelection,
+        spec: PcmSpec,
+        first: PipelineId,
         links: OutputLinks,
     ) -> Result<PreparedOutput, AudioOutputError> {
         if let Some(error) = self.shared().fail_prepare.take() {
             return Err(error);
         }
-        let (config, spec) = match target {
-            OutputTarget::Selection { selection, spec } => {
-                let device = self.resolve(&selection)?;
-                self.shared().selections.push(selection);
-                let plan = OutputProcessingPlan::new(spec, spec)
-                    .map_err(|_| AudioOutputError::UnsupportedConfiguration)?;
-                let config = PreparedOutputConfig {
-                    device_id: device.id,
-                    device_name: device.name,
-                    stream_config: StreamConfig {
-                        channels: spec.channel_count().get(),
-                        sample_rate: spec.sample_rate().get(),
-                        buffer_size: BufferSize::Default,
-                    },
-                    sample_format: SampleFormat::F32,
-                    path: OutputPath::Native,
-                    processing_plan: plan,
-                };
-                (config, spec)
-            }
-            OutputTarget::Config(config) => {
-                let spec = config.processing_plan.output();
-                (config, spec)
-            }
+        let device = self.resolve(selection)?;
+        self.shared().selections.push(selection.clone());
+        let plan = OutputProcessingPlan::new(spec, spec)
+            .map_err(|_| AudioOutputError::UnsupportedConfiguration)?;
+        let config = PreparedOutputConfig {
+            device_id: device.id,
+            device_name: device.name,
+            processing_plan: plan,
         };
         let (producer, consumer) = make_queue(spec)?;
         let start_error = self.shared().fail_next_start.take();
@@ -194,6 +200,8 @@ impl OutputBackend for FakeOutput {
             events: links.events,
             fail_start: start_error,
             fail_pause: None,
+            pipeline: first,
+            queue_switches: 0,
             _consumer: consumer,
         }));
         self.shared().streams.push(Arc::clone(&state));
@@ -250,4 +258,13 @@ impl OutputStream for FakeStream {
     }
 
     fn clear_timing_anchor(&mut self) {}
+
+    fn switch_queue(&mut self, consumer: PcmConsumer, pipeline: PipelineId) {
+        self.last_position = 0;
+        let mut state = self.state();
+        state._consumer = consumer;
+        state.pipeline = pipeline;
+        state.played_frames = 0;
+        state.queue_switches += 1;
+    }
 }

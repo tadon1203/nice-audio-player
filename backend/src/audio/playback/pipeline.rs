@@ -1,25 +1,34 @@
-//! Opens a pipeline: a decoder positioned in a file, an output stream, and the decode thread
-//! between them. A start and a seek share the opening and the hand-off to the decode thread.
+//! Opens a pipeline: a decoder positioned in a file, the queue it fills, and the decode thread
+//! between them. A start and a seek share the opening and the hand-off to the decode thread; they
+//! differ in where the queue plays: a start opens the session's output stream, a seek hands its
+//! queue to the stream already playing.
 
 use super::decode_worker::{DecodeTaskInput, DecodeWorker};
 use super::input::Inbox;
-use super::session::Pipeline;
+use super::session::{Output, Pipeline};
 use crate::audio::compressed_source::CompressedAudioSource;
 use crate::audio::decoding::{DecodeStep, PcmDecodeError, SeekStep, StreamingDecoder};
 use crate::audio::devices::AudioOutputSelection;
 use crate::audio::output::{
-    AudioOutputError, OutputBackend, OutputLinks, OutputStreamId, OutputTarget, PreparedOutput,
+    make_queue, AudioOutputError, OutputBackend, OutputLinks, OutputStreamId, PipelineId,
     PreparedOutputConfig,
 };
-use crate::audio::output_processing::OutputPcmProcessor;
+use crate::audio::output_processing::{OutputPcmProcessor, OutputProcessingPlan};
+use crate::audio::pcm_queue::{PcmConsumer, PcmProducer};
 use crate::audio::timebase::{millis_to_frame, rescale_frame};
 
 /// What the pipeline is for. The two differ in where the decoder starts reading, and so in what
 /// they know up front: a seek reuses the playing output and its processing plan.
 pub(super) enum PipelineKind {
-    /// From the beginning of the file, on the device a selection names.
-    Start(AudioOutputSelection),
-    /// From `target_ms`, on the same device and configuration as the stream already playing.
+    /// From the beginning of the file, on a new stream on the device a selection names.
+    Start {
+        selection: AudioOutputSelection,
+        stream_id: OutputStreamId,
+        /// What the new stream reports through.
+        links: OutputLinks,
+    },
+    /// From `target_ms`, for the stream already playing, which keeps its device and
+    /// configuration.
     Seek {
         config: PreparedOutputConfig,
         target_ms: u64,
@@ -30,12 +39,20 @@ pub(super) struct PipelineRequest<'a> {
     pub source: &'a CompressedAudioSource,
     pub extension: &'a str,
     pub kind: PipelineKind,
-    pub stream_id: OutputStreamId,
-    pub links: OutputLinks,
+    pub pipeline_id: PipelineId,
+}
+
+/// Where the pipeline's queue plays.
+pub(super) enum OpenedOutput {
+    /// A new stream, not started yet.
+    Stream(Output),
+    /// The queue for the stream already playing; hand it over when the prebuffer is ready.
+    Queue(PcmConsumer),
 }
 
 pub(super) struct OpenedPipeline {
     pub pipeline: Pipeline,
+    pub output: OpenedOutput,
     /// The duration the decoder reports, if it knows one.
     pub duration_ms: Option<u64>,
     /// The output frame the first decoded sample belongs to.
@@ -52,7 +69,7 @@ pub(super) enum PipelineError {
     ProcessorCreate,
 }
 
-/// The decoder and its first samples, ready to feed an output.
+/// The decoder and its first samples, ready to feed a queue.
 struct Positioned {
     decoder: StreamingDecoder,
     duration_ms: Option<u64>,
@@ -62,13 +79,25 @@ struct Positioned {
     start_output_frame: u64,
 }
 
+/// The queue the decode thread fills, where it plays, and how its samples are processed.
+struct Queue {
+    output: OpenedOutput,
+    producer: PcmProducer,
+    processor: OutputPcmProcessor,
+    plan: OutputProcessingPlan,
+}
+
 pub(super) fn open_pipeline(
     backend: &dyn OutputBackend,
     inbox: &Inbox,
     request: PipelineRequest<'_>,
 ) -> Result<OpenedPipeline, PipelineError> {
-    let (positioned, prepared, processor) = match request.kind {
-        PipelineKind::Start(selection) => {
+    let (positioned, queue) = match request.kind {
+        PipelineKind::Start {
+            selection,
+            stream_id,
+            links,
+        } => {
             let mut decoder = request
                 .source
                 .open_decoder(request.extension)
@@ -82,10 +111,11 @@ pub(super) fn open_pipeline(
                 }
             }
             let prepared = backend
-                .prepare(OutputTarget::Selection { selection, spec }, request.links)
+                .prepare(&selection, spec, request.pipeline_id, links)
                 .map_err(PipelineError::OutputPrepare)?;
-            let processor = OutputPcmProcessor::new(prepared.config.processing_plan)
-                .map_err(|_| PipelineError::ProcessorCreate)?;
+            let plan = prepared.config.processing_plan;
+            let processor =
+                OutputPcmProcessor::new(plan).map_err(|_| PipelineError::ProcessorCreate)?;
             let positioned = Positioned {
                 duration_ms: decoder.duration_ms(),
                 decoder,
@@ -93,7 +123,17 @@ pub(super) fn open_pipeline(
                 discard_output_frames: 0,
                 start_output_frame: 0,
             };
-            (positioned, prepared, processor)
+            let queue = Queue {
+                output: OpenedOutput::Stream(Output {
+                    id: stream_id,
+                    stream: prepared.stream,
+                    config: prepared.config,
+                }),
+                producer: prepared.producer,
+                processor,
+                plan,
+            };
+            (positioned, queue)
         }
         PipelineKind::Seek { config, target_ms } => {
             let plan = config.processing_plan;
@@ -116,9 +156,8 @@ pub(super) fn open_pipeline(
                 Err(PcmDecodeError::SeekFailed) => return Err(PipelineError::SeekFailed),
                 Ok(_) | Err(_) => return Err(PipelineError::FirstPacketDecode),
             };
-            let prepared = backend
-                .prepare(OutputTarget::Config(config), request.links)
-                .map_err(PipelineError::OutputPrepare)?;
+            let (producer, consumer) =
+                make_queue(plan.output()).map_err(PipelineError::OutputPrepare)?;
             let positioned = Positioned {
                 duration_ms: decoder.duration_ms(),
                 decoder,
@@ -135,48 +174,45 @@ pub(super) fn open_pipeline(
                     source_rate,
                 ),
             };
-            (positioned, prepared, processor)
+            let queue = Queue {
+                output: OpenedOutput::Queue(consumer),
+                producer,
+                processor,
+                plan,
+            };
+            (positioned, queue)
         }
     };
-    Ok(spawn_decode(
-        inbox,
-        request.stream_id,
-        positioned,
-        prepared,
-        processor,
-    ))
+    Ok(spawn_decode(inbox, request.pipeline_id, positioned, queue))
 }
 
 fn spawn_decode(
     inbox: &Inbox,
-    stream_id: OutputStreamId,
+    pipeline_id: PipelineId,
     positioned: Positioned,
-    prepared: PreparedOutput,
-    processor: OutputPcmProcessor,
+    queue: Queue,
 ) -> OpenedPipeline {
-    let plan = prepared.config.processing_plan;
     let discard_output_samples = usize::try_from(positioned.discard_output_frames)
         .unwrap_or(usize::MAX)
-        .saturating_mul(usize::from(plan.output().channel_count().get()));
+        .saturating_mul(usize::from(queue.plan.output().channel_count().get()));
     let decode = DecodeWorker::spawn(
         DecodeTaskInput {
             decoder: positioned.decoder,
             first_packet: positioned.first_packet,
-            producer: prepared.producer,
-            processor,
-            output_sample_rate: plan.output().sample_rate().get(),
+            producer: queue.producer,
+            processor: queue.processor,
+            output_sample_rate: queue.plan.output().sample_rate().get(),
             discard_output_samples,
         },
         inbox.clone(),
-        stream_id,
+        pipeline_id,
     );
     OpenedPipeline {
         pipeline: Pipeline {
-            stream_id,
-            stream: prepared.stream,
-            config: prepared.config,
+            id: pipeline_id,
             decode,
         },
+        output: queue.output,
         duration_ms: positioned.duration_ms,
         start_output_frame: positioned.start_output_frame,
     }

@@ -2370,6 +2370,7 @@ dependencies = [
  "specta",
  "symphonia",
  "tokio",
+ "triple_buffer",
  "walkdir",
 ]
 
@@ -4944,6 +4945,15 @@ dependencies = [
  "serde",
  "thiserror 2.0.20",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "triple_buffer"
+version = "9.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e875ab7068a75b74f419da453927e05527c36f0001b3c7aad3ce443640683487"
+dependencies = [
+ "crossbeam-utils",
 ]
 
 [[package]]

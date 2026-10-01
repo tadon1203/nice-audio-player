@@ -15,7 +15,7 @@ impl PlaybackWorker {
             Transport::Loaded(loaded) if !loaded.paused
                 && loaded
                     .completion_time
-                    .is_some_and(|end| loaded.pipeline.stream.now() >= end)
+                    .is_some_and(|end| loaded.output.stream.now() >= end)
         );
         if !is_due {
             return;

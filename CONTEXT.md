@@ -15,6 +15,8 @@ The language of Nice Audio Player. Use these terms in code, docs, and tickets; d
 - **Playback**: one queue item being played, identified by its playback id. A seek or an output device switch keeps the same Playback; starting an item again makes a new one.
 - **Queue**: the ordered items to play. Starting playback from a list replaces it.
 - **PlaybackItem**: a queue entry, carrying the library `track_id`. Nothing looks a playing track up by path.
+- **Output stream**: the one device stream a session opens. It lives until the track ends, stops or the device changes; seeks do not replace it.
+- **Pipeline**: a decode thread and the queue it fills for the output stream. A seek builds a new one and hands its queue to the running stream.
 - **Playback clock**: the single animation-frame clock that everything drawing the playing position reads.
 - **Now Playing**: the dock extended upward, a layer over the current location. Not a page; Back closes it.
 - **Dock**: the persistent playback bar at the bottom of the workspace.

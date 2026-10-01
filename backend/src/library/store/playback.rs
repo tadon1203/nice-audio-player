@@ -35,6 +35,9 @@ pub struct PlayableTrack {
     pub album_key: Option<LibraryAlbumKey>,
     /// How many tracks the library holds for that album.
     pub album_track_count: Option<u32>,
+    pub file_format: Option<String>,
+    pub bit_depth: Option<u32>,
+    pub bitrate_kbps: Option<u32>,
 }
 
 /// Every playable track of a selection, in playing order, and where to start.
@@ -87,6 +90,9 @@ struct PlaybackRow {
     track_number: Option<i64>,
     disc_number: Option<i64>,
     year: Option<i32>,
+    file_format: Option<String>,
+    bit_depth: Option<u32>,
+    bitrate_kbps: Option<u32>,
 }
 
 impl PlaybackRow {
@@ -106,7 +112,7 @@ type AlbumCounts = HashMap<LibraryAlbumKey, u32>;
 
 /// The columns every playback query returns, in the order `playback_row` reads them, and what they
 /// are selected from.
-const PLAYBACK_COLUMNS: &str = "t.id, r.path, f.relative_path, f.availability, f.inspection_status, m.title_key, m.artist_key, m.album_key, m.album_artist, m.album_artist_key, m.duration_ms, a.content_hash, a.mime_type, a.relative_path, m.track_number, m.disc_number, m.year";
+const PLAYBACK_COLUMNS: &str = "t.id, r.path, f.relative_path, f.availability, f.inspection_status, m.title_key, m.artist_key, m.album_key, m.album_artist, m.album_artist_key, m.duration_ms, a.content_hash, a.mime_type, a.relative_path, m.track_number, m.disc_number, m.year, m.file_format, m.bit_depth, m.bitrate_kbps";
 const PLAYBACK_FROM: &str = "FROM track_source_metadata m JOIN tracks t ON t.id = m.track_id JOIN library_files f ON f.id = t.file_id JOIN library_roots r ON r.id = f.root_id LEFT JOIN artwork_assets a ON a.id = m.artwork_id";
 
 fn playback_row(row: &Row<'_>) -> rusqlite::Result<PlaybackRow> {
@@ -128,6 +134,13 @@ fn playback_row(row: &Row<'_>) -> rusqlite::Result<PlaybackRow> {
         track_number: row.get(14)?,
         disc_number: row.get(15)?,
         year: row.get(16)?,
+        file_format: non_blank(row.get(17)?),
+        bit_depth: row
+            .get::<_, Option<i64>>(18)?
+            .and_then(|value| u32::try_from(value).ok()),
+        bitrate_kbps: row
+            .get::<_, Option<i64>>(19)?
+            .and_then(|value| u32::try_from(value).ok()),
     })
 }
 
@@ -195,6 +208,9 @@ fn select_playable(
             year: row.year,
             album_key,
             album_track_count,
+            file_format: row.file_format,
+            bit_depth: row.bit_depth,
+            bitrate_kbps: row.bitrate_kbps,
         });
     }
     if tracks.is_empty() {

@@ -28,6 +28,7 @@ rubato = { version = "4.0.0", default-features = false, features = ["fft_resampl
 image = { version = "=0.25.10", default-features = false, features = ["jpeg", "png"] }
 encoding_rs = "0.8.42"
 chardetng = "1.0.0"
+triple_buffer = "9.0.0"
 
 [profile.release]
 strip = true

@@ -108,7 +108,7 @@ impl CompressedAudioSource {
                 byte_len: *byte_len,
             }),
         };
-        super::decoding::open_decoder_from_source(reader, extension, false)
+        super::decoding::open_decoder_from_source(reader, extension)
     }
 }
 

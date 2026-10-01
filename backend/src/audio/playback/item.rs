@@ -1,5 +1,17 @@
+use std::sync::Arc;
+
+use super::snapshot::PlaybackQueueItem;
 use crate::library::models::LibraryAlbumKey;
 use crate::{library::artwork::ArtworkRef, media::validation::ValidatedAudioFile};
+
+/// What the library knows about the audio file itself, shown as the start of the signal path.
+/// Anything it does not know stays `None`; the session falls back to the file's extension.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SourceFacts {
+    pub format: Option<String>,
+    pub bit_depth: Option<u32>,
+    pub bitrate_kbps: Option<u32>,
+}
 
 /// What a caller supplies to play something. The queue assigns the queue item id.
 ///
@@ -19,6 +31,7 @@ pub struct PlaybackItemSeed {
     pub year: Option<i32>,
     pub album_key: Option<LibraryAlbumKey>,
     pub album_track_count: Option<u32>,
+    pub source: SourceFacts,
 }
 
 impl PlaybackItemSeed {
@@ -38,6 +51,7 @@ impl PlaybackItemSeed {
             year: None,
             album_key: None,
             album_track_count: None,
+            source: SourceFacts::default(),
         }
     }
 }
@@ -66,10 +80,27 @@ pub struct PlaybackItem {
     pub album_key: Option<LibraryAlbumKey>,
     /// Tracks the library holds for the album.
     pub album_track_count: Option<u32>,
+    /// Kept for the session's signal path; the item itself stays free of file facts.
+    #[serde(skip)]
+    #[specta(skip)]
+    pub(super) source: SourceFacts,
+    /// How the queue panel shows this item, built once and shared by every snapshot.
+    #[serde(skip)]
+    #[specta(skip)]
+    pub(super) queue_view: Arc<PlaybackQueueItem>,
 }
 
 impl PlaybackItem {
     pub(super) fn from_seed(queue_item_id: String, seed: PlaybackItemSeed) -> Self {
+        let queue_view = Arc::new(PlaybackQueueItem {
+            id: queue_item_id.clone(),
+            track_id: seed.track_id.clone(),
+            title: seed.title.clone(),
+            artist: seed.artist.clone(),
+            album: seed.album.clone(),
+            artwork: seed.artwork.clone(),
+            duration_ms: seed.duration_ms,
+        });
         Self {
             queue_item_id,
             track_id: seed.track_id,
@@ -85,6 +116,8 @@ impl PlaybackItem {
             year: seed.year,
             album_key: seed.album_key,
             album_track_count: seed.album_track_count,
+            source: seed.source,
+            queue_view,
         }
     }
 }

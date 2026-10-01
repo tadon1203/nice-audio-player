@@ -10,7 +10,8 @@ use super::snapshot::{PlaybackFailureCode, PlaybackSnapshot};
 use super::source_loader::SourceLoad;
 use crate::audio::compressed_source::CompressedAudioSource;
 use crate::audio::devices::AudioOutputSelection;
-use crate::audio::output::{OutputStream, OutputStreamId, PreparedOutputConfig};
+use crate::audio::output::{OutputStream, OutputStreamId, PipelineId, PreparedOutputConfig};
+use crate::audio::pcm_queue::PcmConsumer;
 use crate::audio::timebase::{frame_to_millis, millis_to_frame};
 use cpal::StreamInstant;
 
@@ -58,23 +59,31 @@ pub(super) enum LoadStage {
 
 pub(super) struct Prebuffering {
     pub source: CompressedAudioSource,
+    pub output: Output,
     pub pipeline: Pipeline,
     pub duration_ms: Option<u64>,
 }
 
-/// An output stream and the decode thread feeding it.
-pub(super) struct Pipeline {
-    pub stream_id: OutputStreamId,
+/// The output stream of a session. It outlives the pipelines that play through it.
+pub(super) struct Output {
+    pub id: OutputStreamId,
     pub stream: Box<dyn OutputStream>,
     pub config: PreparedOutputConfig,
+}
+
+impl Output {
+    pub fn sample_rate(&self) -> u32 {
+        self.config.processing_plan.output().sample_rate().get()
+    }
+}
+
+/// The decode thread of one stretch of a track, and the queue it fills for the stream.
+pub(super) struct Pipeline {
+    pub id: PipelineId,
     pub decode: DecodeWorker,
 }
 
 impl Pipeline {
-    pub fn sample_rate(&self) -> u32 {
-        self.config.processing_plan.output().sample_rate().get()
-    }
-
     pub fn cancel(self) {
         self.decode.cancel_and_join();
     }
@@ -85,6 +94,7 @@ pub(super) struct Loaded {
     pub id: PlaybackId,
     pub item: PlaybackItem,
     pub source: CompressedAudioSource,
+    pub output: Output,
     pub pipeline: Pipeline,
     pub position: Position,
     pub completion_time: Option<StreamInstant>,
@@ -104,7 +114,7 @@ impl Loaded {
             .position
             .duration_ms
             .map(|duration| millis_to_frame(duration, rate));
-        let relative = self.pipeline.stream.played_frame_position(rate, max_frames);
+        let relative = self.output.stream.played_frame_position(rate, max_frames);
         self.position.absolute(relative)
     }
 }
@@ -114,7 +124,7 @@ pub(super) struct Position {
     pub sample_rate: u32,
     pub duration_ms: Option<u64>,
     pub frame: u64,
-    /// The frame the current stream started from; a seek starts a new stream mid-track.
+    /// The frame the current pipeline started from; a seek starts a new one mid-track.
     pub base_frame: u64,
     pub remaining_frames: Option<u64>,
     pub last_publish: Instant,
@@ -141,9 +151,11 @@ impl Position {
     }
 }
 
-/// A seek whose new pipeline is still prebuffering; the old one plays until it is ready.
+/// A seek whose new pipeline is still prebuffering; the old one plays until it is ready, and
+/// then the stream switches to the new queue.
 pub(super) struct SeekInFlight {
     pub pipeline: Pipeline,
+    pub queue: PcmConsumer,
     pub output_base_frame: u64,
     pub remaining_frames: u64,
     pub duration_ms: u64,
