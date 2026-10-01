@@ -1,8 +1,9 @@
 //! Library scanning: discover files, inspect the new or changed ones, persist the results.
 //!
-//! The work goes in batches. Each batch is reconciled with the database (one transaction),
-//! its new files are inspected in parallel, and the results are written in the same
-//! transaction, so a failure or an abort never leaves a half-written batch.
+//! The work goes in batches. A batch is planned against the database read-only, its new files are
+//! inspected in parallel with no transaction open, and the results are written in one short
+//! transaction, so a failure or an abort never leaves a half-written batch and the write lock is
+//! never held while files are read.
 
 mod discover;
 mod inspect;
@@ -18,18 +19,20 @@ use std::time::{Duration, Instant};
 use log::{error, info};
 
 use super::database::Database;
-use super::models::{LibraryRoot, LibraryScanSnapshot, LibraryScanState};
-use super::service::parse_id;
+use super::error::parse_id;
+use super::models::{LibraryRoot, LibraryScanSnapshot, LibraryScanState, ScanFailure};
 use crate::events::Notifier;
 use discover::{discover, DiscoveredFile, Discovery};
 use inspect::{inspect_all, read_artwork};
-use persist::{LibraryWriter, PersistError, Reconciled, Work};
+use persist::{plan, LibraryWriter, Outcome, PersistError, Plan};
 
-/// Files reconciled and inspected per transaction.
-const BATCH_SIZE: usize = 100;
+/// Files inspected per transaction.
+const INSPECTIONS_PER_BATCH: usize = 100;
+/// Files planned per transaction, however few of them need inspecting.
+const FILES_PER_BATCH: usize = 1_000;
 const PROGRESS_SIGNAL_INTERVAL: Duration = Duration::from_millis(200);
 
-type SharedScanState = Arc<Mutex<LibraryScanSnapshot>>;
+pub(crate) type SharedScanState = Arc<Mutex<LibraryScanSnapshot>>;
 
 /// Why a scan stopped before finishing.
 enum Stop {
@@ -43,15 +46,15 @@ impl From<PersistError> for Stop {
     }
 }
 
-/// Scans `roots` in order, publishing progress through `state` and `notify`. Returns when the
-/// scan completed, failed, or was cancelled; the final state is in `state`.
+/// Scans `roots` in order, publishing progress through `state` and `notify`. Returns how the scan
+/// ended, which is also in `state`.
 pub(crate) fn run(
     database: Database,
     roots: Vec<LibraryRoot>,
     state: SharedScanState,
     cancel: Arc<AtomicBool>,
     notify: Notifier,
-) {
+) -> LibraryScanState {
     state.lock().expect("scan state lock").expected_count = expected_files(&database, &roots);
     let mut progress = Progress::new(&state, &notify);
     let mut traversal_failed = false;
@@ -70,7 +73,7 @@ pub(crate) fn run(
                 return finish(
                     &state,
                     LibraryScanState::Failed,
-                    Some("persistenceFailed".into()),
+                    Some(ScanFailure::PersistenceFailed),
                     &notify,
                 )
             }
@@ -80,7 +83,7 @@ pub(crate) fn run(
         finish(
             &state,
             LibraryScanState::Failed,
-            Some("rootTraversalFailed".into()),
+            Some(ScanFailure::RootTraversalFailed),
             &notify,
         )
     } else {
@@ -117,17 +120,17 @@ fn scan_root(
     progress: &mut Progress<'_>,
 ) -> Result<bool, Stop> {
     let root_id = parse_id(&root.id).map_err(|_| Stop::Persistence)?;
-    let writer = LibraryWriter::new(database.write().map_err(|_| Stop::Persistence)?);
+    let reader = database.read().map_err(PersistError::from)?;
+    let mut writer = LibraryWriter::new(database.write().map_err(PersistError::from)?);
     let generation = writer.begin_scan(root_id)?;
     let mut walk = discover(&root.path);
     let mut complete = true;
     loop {
-        writer.begin_batch()?;
-        let mut new_files: Vec<(DiscoveredFile, Reconciled)> = Vec::new();
+        let mut planned: Vec<Plan> = Vec::new();
+        let mut to_inspect = 0;
         let mut exhausted = false;
-        while new_files.len() < BATCH_SIZE {
+        while to_inspect < INSPECTIONS_PER_BATCH && planned.len() < FILES_PER_BATCH {
             if cancel.load(Ordering::Acquire) {
-                writer.commit_batch()?;
                 return Err(Stop::Cancelled);
             }
             match walk.next() {
@@ -148,20 +151,17 @@ fn scan_root(
                 }
                 Some(Discovery::Found(file)) => {
                     progress.discovered();
-                    let reconciled = writer.reconcile(root_id, generation, &file)?;
-                    match reconciled.work {
-                        Work::Nothing => {}
-                        Work::RetryArtwork => {
-                            let artwork = read_artwork(&file.path, database.data_dir());
-                            writer.apply_artwork(&reconciled, &artwork)?;
-                        }
-                        Work::Inspect => new_files.push((file, reconciled)),
-                    }
+                    let plan = plan(&reader, root_id, file)?;
+                    to_inspect += usize::from(matches!(plan, Plan::Inspect { .. }));
+                    planned.push(plan);
                 }
             }
         }
-        store_batch(&writer, database.data_dir(), new_files, cancel, progress)?;
-        writer.commit_batch()?;
+        let outcomes = read_batch(planned, database.data_dir(), cancel, progress);
+        writer.write_batch(root_id, generation, &outcomes.outcomes)?;
+        if outcomes.cancelled {
+            return Err(Stop::Cancelled);
+        }
         if exhausted {
             break;
         }
@@ -174,56 +174,78 @@ fn scan_root(
     Ok(complete)
 }
 
-/// Inspects a batch's new files in parallel and writes the results.
-fn store_batch(
-    writer: &LibraryWriter,
+struct ReadBatch {
+    outcomes: Vec<Outcome>,
+    /// The scan was cancelled before every file was reached; the ones it did reach are kept.
+    cancelled: bool,
+}
+
+/// Inspects a batch's new files in parallel, with no transaction open. A file the cancelled scan
+/// never reached is left out, so the next scan redoes it.
+fn read_batch(
+    planned: Vec<Plan>,
     data_dir: &Path,
-    new_files: Vec<(DiscoveredFile, Reconciled)>,
     cancel: &AtomicBool,
     progress: &mut Progress<'_>,
-) -> Result<(), Stop> {
-    if new_files.is_empty() {
-        return Ok(());
-    }
-    let files: Vec<DiscoveredFile> = new_files.iter().map(|(file, _)| file.clone()).collect();
-    let results = inspect_all(&files, data_dir, cancel);
+) -> ReadBatch {
+    let to_inspect: Vec<DiscoveredFile> = planned
+        .iter()
+        .filter_map(|plan| match plan {
+            Plan::Inspect { file, .. } => Some(file.clone()),
+            _ => None,
+        })
+        .collect();
+    let mut inspections = inspect_all(&to_inspect, data_dir, cancel).into_iter();
+    let mut outcomes = Vec::with_capacity(planned.len());
     let mut cancelled = false;
-    for ((file, reconciled), result) in new_files.iter().zip(results) {
-        // A file the cancelled scan never reached stays `pending`, so the next scan redoes it.
-        let Some(result) = result else {
-            cancelled = true;
-            continue;
-        };
-        progress.inspected();
-        match result {
-            Ok(inspected) => {
-                writer.store_inspected(file, reconciled, &inspected)?;
-                progress.indexed();
-            }
-            Err(_) => {
-                writer.mark_unsupported(reconciled.file_id)?;
-                progress.failed();
+    for plan in planned {
+        match plan {
+            Plan::Touch { file_id } => outcomes.push(Outcome::Touch { file_id }),
+            Plan::RetryArtwork {
+                file_id,
+                revision,
+                file,
+            } => outcomes.push(Outcome::RetryArtwork {
+                file_id,
+                revision,
+                artwork: read_artwork(&file.path, data_dir),
+            }),
+            Plan::Inspect { known, file } => {
+                let Some(result) = inspections.next().flatten() else {
+                    cancelled = true;
+                    continue;
+                };
+                progress.inspected();
+                if result.is_ok() {
+                    progress.indexed();
+                } else {
+                    progress.failed();
+                }
+                outcomes.push(Outcome::Inspected {
+                    known,
+                    file,
+                    result: Box::new(result),
+                });
             }
         }
     }
-    if cancelled {
-        writer.commit_batch()?;
-        return Err(Stop::Cancelled);
+    ReadBatch {
+        outcomes,
+        cancelled,
     }
-    Ok(())
 }
 
 fn finish(
     state: &SharedScanState,
     outcome: LibraryScanState,
-    failure_code: Option<String>,
+    failure: Option<ScanFailure>,
     notify: &Notifier,
-) {
+) -> LibraryScanState {
     let snapshot = {
         let mut scan = state.lock().expect("scan state lock");
         scan.state = outcome;
         scan.current_root = None;
-        scan.failure_code = failure_code;
+        scan.failure_code = failure;
         scan.clone()
     };
     let counts = format!(
@@ -243,6 +265,7 @@ fn finish(
         LibraryScanState::Idle | LibraryScanState::Running => {}
     }
     notify.notify();
+    outcome
 }
 
 /// Counts what the scan has done and tells listeners, at most a few times a second.

@@ -3,7 +3,6 @@ import { messageForCode, nativeErrorCode } from "$lib/native";
 
 const commandMessages = {
   invalidRoot: "That folder reference is invalid.",
-  rootNotFound: "That library folder could not be found.",
   rootNotDirectory: "The selected path is not a folder.",
   canonicalizationFailed: "The selected folder could not be resolved.",
   duplicateRoot: "That folder is already in the library.",
@@ -27,7 +26,6 @@ const commandMessages = {
 } as const satisfies Record<LibraryCommandError["code"], string>;
 
 const unavailableMessages = {
-  storageUnavailable: "The library storage is unavailable.",
   databaseOpenFailed: "The library storage is unavailable.",
   migrationFailed: "The library database could not be upgraded.",
   schemaTooNew: "This library database was created by a newer version.",

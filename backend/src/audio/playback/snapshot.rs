@@ -5,7 +5,7 @@ use super::queue::{PlaybackQueue, PlaybackRepeatMode};
 use crate::audio::devices::{AudioOutputDeviceIdentity, AudioOutputSelection};
 use crate::audio::output_processing::{ChannelConversion, OutputProcessingPlan};
 use crate::audio::volume::VolumeState;
-use crate::media::artwork::ArtworkRef;
+use crate::library::artwork::ArtworkRef;
 use std::sync::Arc;
 
 /// Fields every transport state carries.

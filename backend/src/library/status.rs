@@ -2,11 +2,8 @@
 //! state is a compile error instead of a row that silently matches nothing; the migration's
 //! CHECK constraints list the same names.
 
-use rusqlite::{
-    types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef},
-    Result as SqlResult,
-};
-
+/// Makes an enum a text column: `as_str`, `Display`, `ToSql` and `FromSql` from one table of
+/// names.
 macro_rules! sql_text_enum {
     ($name:ident { $($variant:ident => $text:literal),+ $(,)? }) => {
         impl $name {
@@ -19,36 +16,43 @@ macro_rules! sql_text_enum {
                 f.write_str(self.as_str())
             }
         }
-        impl ToSql for $name {
-            fn to_sql(&self) -> SqlResult<ToSqlOutput<'_>> {
+        impl rusqlite::ToSql for $name {
+            fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
                 Ok(self.as_str().into())
             }
         }
-        impl FromSql for $name {
-            fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        impl rusqlite::types::FromSql for $name {
+            fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
                 match value.as_str()? {
                     $($text => Ok(Self::$variant),)+
-                    _ => Err(FromSqlError::InvalidType),
+                    _ => Err(rusqlite::types::FromSqlError::InvalidType),
                 }
             }
         }
     };
 }
+pub(crate) use sql_text_enum;
 
-pub use super::models::{
-    LibraryFileAvailability as Availability, LibraryInspectionStatus as InspectionStatus,
-};
+pub use super::models::LibraryFileAvailability as Availability;
 
 sql_text_enum!(Availability {
     Available => "available",
     Missing => "missing",
 });
 
+/// Where a file stands: `Pending` until it has been inspected, `Unsupported` when it cannot be
+/// decoded.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InspectionStatus {
+    Pending,
+    Indexed,
+    Unsupported,
+}
+
 sql_text_enum!(InspectionStatus {
     Pending => "pending",
     Indexed => "indexed",
     Unsupported => "unsupported",
-    Failed => "failed",
 });
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -1,8 +1,5 @@
-use super::validation::{AudioFileValidationError, ValidatedAudioFile};
-use serde::Serialize;
-use std::fs::File;
+use std::{fs::File, path::Path};
 use symphonia::core::codecs::audio::{well_known::*, AudioCodecId, AudioDecoderOptions};
-use symphonia::core::errors::Error as SymphoniaError;
 use symphonia::core::formats::probe::Hint;
 use symphonia::core::formats::{FormatOptions, Track, TrackType};
 use symphonia::core::io::{MediaSourceStream, MediaSourceStreamOptions};
@@ -10,16 +7,14 @@ use symphonia::core::meta::MetadataOptions;
 use symphonia::core::units::Timestamp;
 use symphonia::default::{get_codecs, get_probe};
 
-#[derive(Debug, Clone, Serialize, specta::Type, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AudioFileInfo {
     pub codec: AudioCodec,
     pub sample_rate: u32,
     pub channel_count: u16,
     pub duration_ms: Option<u64>,
 }
-#[derive(Debug, Clone, Serialize, specta::Type, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AudioCodec {
     Aac,
     Adpcm,
@@ -32,38 +27,22 @@ pub enum AudioCodec {
     Vorbis,
     Other,
 }
-#[derive(Debug, Clone, Serialize, specta::Type, PartialEq, Eq)]
-#[serde(tag = "code", rename_all = "camelCase")]
-pub enum AudioFileInspectionError {
-    ValidationFailed { error: AudioFileValidationError },
-    FileOpenFailed,
-    UnsupportedFormat,
-    MissingAudioTrack,
-    MissingCodecParameters,
-    UnsupportedCodec,
-    MissingSampleRate,
-    MissingChannelCount,
-    InvalidChannelCount,
-    CorruptedFile,
-}
+/// The file cannot be decoded. Nothing downstream tells why, so there is one error.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Undecodable;
+
 #[derive(Debug, Clone)]
 pub struct InspectedAudioFile {
     pub info: AudioFileInfo,
     pub bit_depth: Option<u32>,
 }
 
-pub fn inspect_audio_file(
-    file: &ValidatedAudioFile,
-) -> Result<AudioFileInfo, AudioFileInspectionError> {
-    Ok(inspect_audio_file_internal(file)?.info)
-}
-pub fn inspect_audio_file_internal(
-    file: &ValidatedAudioFile,
-) -> Result<InspectedAudioFile, AudioFileInspectionError> {
-    let source = File::open(&file.path).map_err(|_| AudioFileInspectionError::FileOpenFailed)?;
+/// What the decoder reports about the audio file at `path` (`extension` is its format hint).
+pub fn inspect_audio_file(path: &Path, extension: &str) -> Result<InspectedAudioFile, Undecodable> {
+    let source = File::open(path).map_err(|_| Undecodable)?;
     let stream = MediaSourceStream::new(Box::new(source), MediaSourceStreamOptions::default());
     let mut hint = Hint::new();
-    hint.with_extension(&file.extension);
+    hint.with_extension(extension);
     let format = get_probe()
         .probe(
             &hint,
@@ -71,32 +50,29 @@ pub fn inspect_audio_file_internal(
             FormatOptions::default(),
             MetadataOptions::default(),
         )
-        .map_err(map_probe_error)?;
-    let track = format
-        .default_track(TrackType::Audio)
-        .ok_or(AudioFileInspectionError::MissingAudioTrack)?;
+        .map_err(|_| Undecodable)?;
+    let track = format.default_track(TrackType::Audio).ok_or(Undecodable)?;
     let params = track
         .codec_params
         .as_ref()
-        .ok_or(AudioFileInspectionError::MissingCodecParameters)?
+        .ok_or(Undecodable)?
         .audio()
-        .ok_or(AudioFileInspectionError::MissingCodecParameters)?;
+        .ok_or(Undecodable)?;
     let codec = codec_from_id(params.codec);
     get_codecs()
         .make_audio_decoder(params, &AudioDecoderOptions::default())
-        .map_err(map_decoder_error)?;
+        .map_err(|_| Undecodable)?;
     let sample_rate = params
         .sample_rate
         .filter(|rate| *rate > 0)
-        .ok_or(AudioFileInspectionError::MissingSampleRate)?;
+        .ok_or(Undecodable)?;
     let count = params
         .channels
         .as_ref()
         .map(|channels| channels.count())
         .filter(|count| *count > 0)
-        .ok_or(AudioFileInspectionError::MissingChannelCount)?;
-    let channel_count =
-        u16::try_from(count).map_err(|_| AudioFileInspectionError::InvalidChannelCount)?;
+        .ok_or(Undecodable)?;
+    let channel_count = u16::try_from(count).map_err(|_| Undecodable)?;
     Ok(InspectedAudioFile {
         info: AudioFileInfo {
             codec,
@@ -106,18 +82,6 @@ pub fn inspect_audio_file_internal(
         },
         bit_depth: params.bits_per_sample,
     })
-}
-fn map_probe_error(error: SymphoniaError) -> AudioFileInspectionError {
-    match error {
-        SymphoniaError::Unsupported(_) => AudioFileInspectionError::UnsupportedFormat,
-        _ => AudioFileInspectionError::CorruptedFile,
-    }
-}
-fn map_decoder_error(error: SymphoniaError) -> AudioFileInspectionError {
-    match error {
-        SymphoniaError::Unsupported(_) => AudioFileInspectionError::UnsupportedCodec,
-        _ => AudioFileInspectionError::CorruptedFile,
-    }
 }
 fn duration_ms(track: &Track) -> Option<u64> {
     let timestamp = Timestamp::try_from(track.duration?.get()).ok()?;

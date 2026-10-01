@@ -9,8 +9,12 @@ use crate::{
         waveform::{PlaybackWaveform, WaveformService},
     },
     events::SharedEventSink,
-    library::service::{LibraryCommandError, LibraryService},
-    lyrics::{LyricsCommandError, LyricsResolution, LyricsService},
+    library::{
+        error::StoreError,
+        models::{LibraryScanSnapshot, LibraryStatus, LibraryUnavailableReason},
+        Library,
+    },
+    lyrics::{model::LyricsTrackContext, LyricsCommandError, LyricsResolution, LyricsService},
     settings::SettingsService,
 };
 use playback_context::{PlaybackContext, StartPlaybackError};
@@ -24,7 +28,8 @@ pub enum BackendError {
 pub struct BackendApp {
     pub playback: PlaybackService,
     pub activities: ApplicationActivityService,
-    pub library: LibraryService,
+    /// The Library, or why it is unavailable.
+    pub library: Result<Library, LibraryUnavailableReason>,
     pub waveforms: WaveformService,
     pub settings: Arc<SettingsService>,
     lyrics: LyricsService,
@@ -40,8 +45,7 @@ impl BackendApp {
         let activities = ApplicationActivityService::new(events.clone());
         let activity = activities.handle();
         let waveforms = WaveformService::start(data_dir.join("waveforms"), events.clone());
-        let library =
-            LibraryService::initialize_with_activity(data_dir, Some(activity), events.clone());
+        let library = Library::open(data_dir, Some(activity), events.clone());
         let remember = Arc::clone(&settings);
         let playback = PlaybackService::start(
             events,
@@ -57,6 +61,21 @@ impl BackendApp {
             settings,
             lyrics: LyricsService,
         })
+    }
+
+    pub fn library_status(&self) -> LibraryStatus {
+        match &self.library {
+            Ok(_) => LibraryStatus::Ready,
+            Err(reason) => LibraryStatus::Unavailable {
+                reason: reason.clone(),
+            },
+        }
+    }
+
+    pub fn library_scan_state(&self) -> LibraryScanSnapshot {
+        self.library
+            .as_ref()
+            .map_or_else(|_| LibraryScanSnapshot::idle(), Library::scan_state)
     }
 
     /// Waveform of the file that is loaded right now; `None` while it is still being analyzed.
@@ -79,13 +98,25 @@ impl BackendApp {
         &self,
         track_id: String,
     ) -> Result<LyricsResolution, LyricsCommandError> {
-        let library = self.library.handle();
+        let library = self
+            .library
+            .as_ref()
+            .map_err(|_| LyricsCommandError::LibraryUnavailable)?
+            .clone();
         let lyrics = self.lyrics;
         tokio::task::spawn_blocking(move || {
-            let context = library
-                .lyrics_context(track_id)
-                .map_err(map_lyrics_context_error)?;
-            Ok(lyrics.resolve(context))
+            // The Library says where the file is; lyrics reads what is beside and inside it.
+            let file = library
+                .store()
+                .track_location(&track_id)
+                .map_err(map_lyrics_context_error)?
+                .existing()
+                .map_err(|_| LyricsCommandError::TrackUnavailable)?;
+            Ok(lyrics.resolve(LyricsTrackContext {
+                track_id,
+                source: file.path,
+                root: file.root,
+            }))
         })
         .await
         .map_err(|_| LyricsCommandError::TaskFailed)?
@@ -99,11 +130,15 @@ impl BackendApp {
         context: PlaybackContext,
         start_track_id: Option<String>,
     ) -> Result<PlaybackSnapshot, StartPlaybackError> {
-        let library = self.library.handle();
+        let library = self
+            .library
+            .as_ref()
+            .map_err(|_| StartPlaybackError::LibraryUnavailable)?
+            .clone();
         let playback = self.playback.handle();
         tokio::task::spawn_blocking(move || {
             let (items, start_index) =
-                playback_context::resolve(&library, &context, start_track_id.as_deref())?;
+                playback_context::resolve(library.store(), &context, start_track_id.as_deref())?;
             Ok(playback.start(items, start_index)?)
         })
         .await
@@ -116,10 +151,14 @@ impl BackendApp {
         track_id: String,
         next: bool,
     ) -> Result<PlaybackQueueSnapshot, StartPlaybackError> {
-        let library = self.library.handle();
+        let library = self
+            .library
+            .as_ref()
+            .map_err(|_| StartPlaybackError::LibraryUnavailable)?
+            .clone();
         let playback = self.playback.handle();
         tokio::task::spawn_blocking(move || {
-            let item = playback_context::resolve_track(&library, &track_id)?;
+            let item = playback_context::resolve_track(library.store(), &track_id)?;
             Ok(playback.enqueue(vec![item], next)?)
         })
         .await
@@ -128,17 +167,18 @@ impl BackendApp {
 
     pub fn shutdown(&self) {
         self.playback.shutdown();
-        self.library.shutdown();
+        if let Ok(library) = &self.library {
+            library.shutdown();
+        }
         self.settings.shutdown();
     }
 }
 
-fn map_lyrics_context_error(error: LibraryCommandError) -> LyricsCommandError {
+fn map_lyrics_context_error(error: StoreError) -> LyricsCommandError {
     match error {
-        LibraryCommandError::InvalidId => LyricsCommandError::InvalidId,
-        LibraryCommandError::TrackNotFound => LyricsCommandError::TrackNotFound,
-        LibraryCommandError::TrackUnavailable => LyricsCommandError::TrackUnavailable,
-        LibraryCommandError::LibraryUnavailable => LyricsCommandError::LibraryUnavailable,
+        StoreError::InvalidId => LyricsCommandError::InvalidId,
+        StoreError::TrackNotFound => LyricsCommandError::TrackNotFound,
+        StoreError::TrackUnavailable => LyricsCommandError::TrackUnavailable,
         _ => LyricsCommandError::PersistenceFailed,
     }
 }

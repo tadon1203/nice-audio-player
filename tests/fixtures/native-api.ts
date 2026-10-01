@@ -98,6 +98,7 @@ function createNativeMock(options: InstallNativeApiOptions) {
         artist: "Test artist",
         album: "Test album",
         albumArtist: "Test artist",
+        albumKey: { title: "Test album", albumArtist: "Test artist" },
         artwork: options.artwork
           ? {
               contentHash: "ab".repeat(32),

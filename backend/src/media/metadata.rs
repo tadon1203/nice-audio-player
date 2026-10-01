@@ -1,4 +1,5 @@
 //! Metadata is deliberately best-effort: it can never change Symphonia playability.
+use crate::library::artwork::ArtworkMimeType;
 use lofty::{
     config::ParseOptions,
     file::TaggedFileExt,
@@ -29,7 +30,7 @@ pub enum ArtworkRead {
     Invalid,
     Selected {
         bytes: Vec<u8>,
-        mime_type: &'static str,
+        mime_type: ArtworkMimeType,
     },
 }
 #[derive(Debug, Clone, Copy)]
@@ -70,14 +71,14 @@ fn select_artwork(file: &lofty::file::TaggedFile, primary: &lofty::tag::Tag) -> 
         }
     }
     let has_pictures = !pictures.is_empty();
-    let valid = |picture: &&&lofty::picture::Picture| -> Option<(Vec<u8>, &'static str)> {
+    let valid = |picture: &&&lofty::picture::Picture| -> Option<(Vec<u8>, ArtworkMimeType)> {
         let bytes = picture.data();
         if bytes.starts_with(&[0xFF, 0xD8, 0xFF]) && PictureInformation::from_jpeg(bytes).is_ok() {
-            Some((bytes.to_vec(), "image/jpeg"))
+            Some((bytes.to_vec(), ArtworkMimeType::Jpeg))
         } else if bytes.starts_with(b"\x89PNG\r\n\x1a\n")
             && PictureInformation::from_png(bytes).is_ok()
         {
-            Some((bytes.to_vec(), "image/png"))
+            Some((bytes.to_vec(), ArtworkMimeType::Png))
         } else {
             None
         }

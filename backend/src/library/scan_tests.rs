@@ -1,8 +1,8 @@
 //! End-to-end scans of real (tiny) audio files against a real database.
 
 use super::database::Database;
-use super::models::{LibraryScanSnapshot, LibraryScanState};
-use super::service::LibraryShared;
+use super::models::{LibraryScanSnapshot, LibraryScanState, ScanFailure};
+use super::roots;
 use crate::events::{null_event_sink, BackendEvent, Notifier};
 use crate::test_support::{write_pcm_i16_wav, TestDirectory};
 use std::path::{Path, PathBuf};
@@ -12,7 +12,7 @@ use std::sync::{Arc, Mutex};
 struct Fixture {
     _directory: TestDirectory,
     music: PathBuf,
-    library: LibraryShared,
+    database: Database,
 }
 
 fn notifier() -> Notifier {
@@ -24,14 +24,12 @@ fn fixture() -> Fixture {
     let music = directory.file("music");
     std::fs::create_dir_all(&music).unwrap();
     let data = directory.file("data");
-    let library = LibraryShared::initialize(data, notifier());
-    library
-        .register_root(music.to_string_lossy().into_owned())
-        .expect("register root");
+    let database = Database::initialize(&data).expect("database");
+    roots::register(&database, &music.to_string_lossy()).expect("register root");
     Fixture {
         _directory: directory,
         music,
-        library,
+        database,
     }
 }
 
@@ -40,7 +38,7 @@ fn write_tone(path: &Path, samples: usize) {
 }
 
 fn run_scan(fixture: &Fixture, cancelled: bool) -> LibraryScanSnapshot {
-    let roots = fixture.library.roots().expect("roots");
+    let roots = roots::list(&fixture.database.read().unwrap()).expect("roots");
     let state = Arc::new(Mutex::new(LibraryScanSnapshot {
         state: LibraryScanState::Running,
         current_root: None,
@@ -51,9 +49,8 @@ fn run_scan(fixture: &Fixture, cancelled: bool) -> LibraryScanSnapshot {
         failed_count: 0,
         failure_code: None,
     }));
-    let database: Database = fixture.library.db().expect("database").clone();
     super::scanner::run(
-        database,
+        fixture.database.clone(),
         roots,
         Arc::clone(&state),
         Arc::new(AtomicBool::new(cancelled)),
@@ -64,7 +61,7 @@ fn run_scan(fixture: &Fixture, cancelled: bool) -> LibraryScanSnapshot {
 }
 
 fn files(fixture: &Fixture) -> Vec<(String, String, String, i64)> {
-    let c = fixture.library.db().unwrap().read().unwrap();
+    let c = fixture.database.read().unwrap();
     let mut statement = c
         .prepare("SELECT relative_path,availability,inspection_status,source_revision FROM library_files ORDER BY relative_path")
         .unwrap();
@@ -79,7 +76,7 @@ fn files(fixture: &Fixture) -> Vec<(String, String, String, i64)> {
 }
 
 fn count(fixture: &Fixture, sql: &str) -> i64 {
-    let c = fixture.library.db().unwrap().read().unwrap();
+    let c = fixture.database.read().unwrap();
     c.query_row(sql, [], |row| row.get(0)).unwrap()
 }
 
@@ -275,10 +272,61 @@ fn an_unreadable_root_fails_the_scan_but_keeps_other_roots_files_available() {
     let scan = run_scan(&fixture, false);
 
     assert_eq!(scan.state, LibraryScanState::Failed);
-    assert_eq!(scan.failure_code.as_deref(), Some("rootTraversalFailed"));
+    assert_eq!(scan.failure_code, Some(ScanFailure::RootTraversalFailed));
     assert_eq!(
         files(&fixture)[0].1,
         "available",
         "an unreadable root is not a deleted library"
+    );
+}
+
+#[test]
+fn a_scan_files_each_track_under_keys_derived_from_its_tags_and_file_name() {
+    let fixture = fixture();
+    write_tone(&fixture.music.join("untagged song.wav"), 800);
+
+    run_scan(&fixture, false);
+
+    let keys: (String, String, String, String, Option<i32>) = fixture
+        .database
+        .read()
+        .unwrap()
+        .query_row(
+            "SELECT title_key, artist_key, album_key, album_artist_key, year FROM track_source_metadata",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
+        )
+        .unwrap();
+    assert_eq!(
+        keys,
+        (
+            "untagged song".into(),
+            String::new(),
+            String::new(),
+            String::new(),
+            None
+        ),
+        "no tags: titled by the file, filed under no album and no artist"
+    );
+}
+
+#[test]
+fn a_file_that_stops_being_decodable_keeps_its_track_without_its_old_tags() {
+    let fixture = fixture();
+    let path = fixture.music.join("a.wav");
+    write_tone(&path, 8_000);
+    run_scan(&fixture, false);
+
+    std::thread::sleep(std::time::Duration::from_millis(30));
+    std::fs::write(&path, b"not audio any more").unwrap();
+    let scan = run_scan(&fixture, false);
+
+    assert_eq!(scan.state, LibraryScanState::Completed);
+    assert_eq!(files(&fixture)[0].2, "unsupported");
+    assert_eq!(count(&fixture, "SELECT COUNT(*) FROM tracks"), 1);
+    assert_eq!(
+        count(&fixture, "SELECT COUNT(*) FROM track_source_metadata WHERE duration_ms IS NULL AND source_revision = 2"),
+        1,
+        "the tags of the earlier revision are cleared"
     );
 }

@@ -1,38 +1,52 @@
-use backend::{
-    library::models::{
-        LibraryAlbumArtistKey, LibraryAlbumArtistSortKey, LibraryAlbumKey, LibraryAlbumSortKey,
-        LibraryArtistAlbumSortKey, LibrarySortDirection, LibraryTrackSortKey,
+use backend::library::{
+    error::LibraryCommandError,
+    models::{
+        LibraryAlbumArtistKey, LibraryAlbumArtistPage, LibraryAlbumArtistSortKey,
+        LibraryAlbumArtistSummary, LibraryAlbumDetails, LibraryAlbumKey, LibraryAlbumPage,
+        LibraryAlbumSortKey, LibraryAlbumTrackPage, LibraryArtistAlbumSortKey, LibraryRoot,
+        LibraryScanSnapshot, LibrarySortDirection, LibraryStatus, LibraryTrackPage,
+        LibraryTrackProperties, LibraryTrackSortKey, LibraryTrackSummary,
     },
-    library::service::LibraryCommandError,
+    Library,
 };
 
 use crate::AppState;
 
-#[tauri::command]
-#[specta::specta]
-pub fn get_library_status(
-    state: tauri::State<'_, AppState>,
-) -> backend::library::models::LibraryStatus {
-    state.backend.library.status()
+/// Runs `work` on a blocking thread with the Library. Nothing here may run on the main thread:
+/// every command touches the database or waits for the Library's sync actor.
+async fn blocking<T: Send + 'static>(
+    state: &tauri::State<'_, AppState>,
+    work: impl FnOnce(Library) -> Result<T, LibraryCommandError> + Send + 'static,
+) -> Result<T, LibraryCommandError> {
+    let library = state
+        .backend
+        .library
+        .as_ref()
+        .map_err(|_| LibraryCommandError::LibraryUnavailable)?
+        .clone();
+    tauri::async_runtime::spawn_blocking(move || work(library))
+        .await
+        .map_err(|_| LibraryCommandError::TaskFailed)?
 }
 
 #[tauri::command]
 #[specta::specta]
-pub fn get_library_scan_state(
-    state: tauri::State<'_, AppState>,
-) -> backend::library::models::LibraryScanSnapshot {
-    state.backend.library.handle().scan_state()
+pub fn get_library_status(state: tauri::State<'_, AppState>) -> LibraryStatus {
+    state.backend.library_status()
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn get_library_scan_state(state: tauri::State<'_, AppState>) -> LibraryScanSnapshot {
+    state.backend.library_scan_state()
 }
 
 #[tauri::command]
 #[specta::specta]
 pub async fn list_library_roots(
     state: tauri::State<'_, AppState>,
-) -> Result<Vec<backend::library::models::LibraryRoot>, LibraryCommandError> {
-    let library = state.backend.library.handle();
-    tauri::async_runtime::spawn_blocking(move || library.roots())
-        .await
-        .map_err(|_| LibraryCommandError::TaskFailed)?
+) -> Result<Vec<LibraryRoot>, LibraryCommandError> {
+    blocking(&state, |library| library.roots()).await
 }
 
 #[tauri::command]
@@ -40,11 +54,8 @@ pub async fn list_library_roots(
 pub async fn register_library_root(
     path: String,
     state: tauri::State<'_, AppState>,
-) -> Result<backend::library::models::LibraryRoot, LibraryCommandError> {
-    let library = state.backend.library.handle();
-    tauri::async_runtime::spawn_blocking(move || library.register_root(path))
-        .await
-        .map_err(|_| LibraryCommandError::TaskFailed)?
+) -> Result<LibraryRoot, LibraryCommandError> {
+    blocking(&state, move |library| library.register_root(path)).await
 }
 
 #[tauri::command]
@@ -53,32 +64,33 @@ pub async fn set_library_root_enabled(
     id: String,
     enabled: bool,
     state: tauri::State<'_, AppState>,
-) -> Result<backend::library::models::LibraryRoot, LibraryCommandError> {
-    let library = state.backend.library.handle();
-    tauri::async_runtime::spawn_blocking(move || library.set_root_enabled(id, enabled))
-        .await
-        .map_err(|_| LibraryCommandError::TaskFailed)?
+) -> Result<LibraryRoot, LibraryCommandError> {
+    blocking(&state, move |library| library.set_root_enabled(id, enabled)).await
 }
 
 #[tauri::command]
 #[specta::specta]
-pub fn remove_library_root(
+pub async fn remove_library_root(
     id: String,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), LibraryCommandError> {
-    state.backend.library.handle().remove_root(id)
+    blocking(&state, move |library| library.remove_root(id)).await
 }
 
 #[tauri::command]
 #[specta::specta]
-pub fn start_library_scan(state: tauri::State<'_, AppState>) -> Result<(), LibraryCommandError> {
-    state.backend.library.handle().start_scan()
+pub async fn start_library_scan(
+    state: tauri::State<'_, AppState>,
+) -> Result<(), LibraryCommandError> {
+    blocking(&state, |library| library.start_scan()).await
 }
 
 #[tauri::command]
 #[specta::specta]
-pub fn cancel_library_scan(state: tauri::State<'_, AppState>) -> Result<(), LibraryCommandError> {
-    state.backend.library.handle().cancel_scan()
+pub async fn cancel_library_scan(
+    state: tauri::State<'_, AppState>,
+) -> Result<(), LibraryCommandError> {
+    blocking(&state, |library| library.cancel_scan()).await
 }
 
 #[tauri::command]
@@ -89,13 +101,16 @@ pub async fn list_library_tracks(
     sort_key: LibraryTrackSortKey,
     sort_direction: LibrarySortDirection,
     state: tauri::State<'_, AppState>,
-) -> Result<backend::library::models::LibraryTrackPage, LibraryCommandError> {
-    let library = state.backend.library.handle();
-    tauri::async_runtime::spawn_blocking(move || {
-        library.catalog_tracks(cursor, search, sort_key, sort_direction)
+) -> Result<LibraryTrackPage, LibraryCommandError> {
+    blocking(&state, move |library| {
+        Ok(library.store().catalog_tracks(
+            cursor.as_deref(),
+            search.as_deref(),
+            sort_key,
+            sort_direction,
+        )?)
     })
     .await
-    .map_err(|_| LibraryCommandError::TaskFailed)?
 }
 
 #[tauri::command]
@@ -106,13 +121,16 @@ pub async fn list_library_albums(
     sort_key: LibraryAlbumSortKey,
     sort_direction: LibrarySortDirection,
     state: tauri::State<'_, AppState>,
-) -> Result<backend::library::models::LibraryAlbumPage, LibraryCommandError> {
-    let library = state.backend.library.handle();
-    tauri::async_runtime::spawn_blocking(move || {
-        library.catalog_albums(cursor, search, sort_key, sort_direction)
+) -> Result<LibraryAlbumPage, LibraryCommandError> {
+    blocking(&state, move |library| {
+        Ok(library.store().catalog_albums(
+            cursor.as_deref(),
+            search.as_deref(),
+            sort_key,
+            sort_direction,
+        )?)
     })
     .await
-    .map_err(|_| LibraryCommandError::TaskFailed)?
 }
 
 #[tauri::command]
@@ -123,13 +141,16 @@ pub async fn list_library_album_artists(
     sort_key: LibraryAlbumArtistSortKey,
     sort_direction: LibrarySortDirection,
     state: tauri::State<'_, AppState>,
-) -> Result<backend::library::models::LibraryAlbumArtistPage, LibraryCommandError> {
-    let library = state.backend.library.handle();
-    tauri::async_runtime::spawn_blocking(move || {
-        library.catalog_album_artists(cursor, search, sort_key, sort_direction)
+) -> Result<LibraryAlbumArtistPage, LibraryCommandError> {
+    blocking(&state, move |library| {
+        Ok(library.store().catalog_album_artists(
+            cursor.as_deref(),
+            search.as_deref(),
+            sort_key,
+            sort_direction,
+        )?)
     })
     .await
-    .map_err(|_| LibraryCommandError::TaskFailed)?
 }
 
 #[tauri::command]
@@ -137,11 +158,11 @@ pub async fn list_library_album_artists(
 pub async fn get_library_album_artist(
     artist_key: LibraryAlbumArtistKey,
     state: tauri::State<'_, AppState>,
-) -> Result<backend::library::models::LibraryAlbumArtistSummary, LibraryCommandError> {
-    let library = state.backend.library.handle();
-    tauri::async_runtime::spawn_blocking(move || library.catalog_artist(artist_key))
-        .await
-        .map_err(|_| LibraryCommandError::TaskFailed)?
+) -> Result<LibraryAlbumArtistSummary, LibraryCommandError> {
+    blocking(&state, move |library| {
+        Ok(library.store().catalog_artist(artist_key)?)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -152,13 +173,16 @@ pub async fn list_library_artist_albums(
     sort_key: LibraryArtistAlbumSortKey,
     sort_direction: LibrarySortDirection,
     state: tauri::State<'_, AppState>,
-) -> Result<backend::library::models::LibraryAlbumPage, LibraryCommandError> {
-    let library = state.backend.library.handle();
-    tauri::async_runtime::spawn_blocking(move || {
-        library.catalog_artist_albums(artist_key, cursor, sort_key, sort_direction)
+) -> Result<LibraryAlbumPage, LibraryCommandError> {
+    blocking(&state, move |library| {
+        Ok(library.store().catalog_artist_albums(
+            artist_key,
+            cursor.as_deref(),
+            sort_key,
+            sort_direction,
+        )?)
     })
     .await
-    .map_err(|_| LibraryCommandError::TaskFailed)?
 }
 
 #[tauri::command]
@@ -166,11 +190,11 @@ pub async fn list_library_artist_albums(
 pub async fn get_library_album_details(
     album_key: LibraryAlbumKey,
     state: tauri::State<'_, AppState>,
-) -> Result<backend::library::models::LibraryAlbumDetails, LibraryCommandError> {
-    let library = state.backend.library.handle();
-    tauri::async_runtime::spawn_blocking(move || library.catalog_album_details(album_key))
-        .await
-        .map_err(|_| LibraryCommandError::TaskFailed)?
+) -> Result<LibraryAlbumDetails, LibraryCommandError> {
+    blocking(&state, move |library| {
+        Ok(library.store().catalog_album_details(album_key)?)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -179,11 +203,13 @@ pub async fn list_library_album_tracks(
     album_key: LibraryAlbumKey,
     cursor: Option<String>,
     state: tauri::State<'_, AppState>,
-) -> Result<backend::library::models::LibraryAlbumTrackPage, LibraryCommandError> {
-    let library = state.backend.library.handle();
-    tauri::async_runtime::spawn_blocking(move || library.catalog_album_tracks(album_key, cursor))
-        .await
-        .map_err(|_| LibraryCommandError::TaskFailed)?
+) -> Result<LibraryAlbumTrackPage, LibraryCommandError> {
+    blocking(&state, move |library| {
+        Ok(library
+            .store()
+            .catalog_album_tracks(album_key, cursor.as_deref())?)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -191,11 +217,11 @@ pub async fn list_library_album_tracks(
 pub async fn get_library_track(
     track_id: String,
     state: tauri::State<'_, AppState>,
-) -> Result<Option<backend::library::models::LibraryTrackSummary>, LibraryCommandError> {
-    let library = state.backend.library.handle();
-    tauri::async_runtime::spawn_blocking(move || library.track_by_id(&track_id))
-        .await
-        .map_err(|_| LibraryCommandError::TaskFailed)?
+) -> Result<Option<LibraryTrackSummary>, LibraryCommandError> {
+    blocking(&state, move |library| {
+        Ok(library.store().track_by_id(&track_id)?)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -203,11 +229,11 @@ pub async fn get_library_track(
 pub async fn get_library_track_properties(
     track_id: String,
     state: tauri::State<'_, AppState>,
-) -> Result<Option<backend::library::models::LibraryTrackProperties>, LibraryCommandError> {
-    let library = state.backend.library.handle();
-    tauri::async_runtime::spawn_blocking(move || library.track_properties(&track_id))
-        .await
-        .map_err(|_| LibraryCommandError::TaskFailed)?
+) -> Result<Option<LibraryTrackProperties>, LibraryCommandError> {
+    blocking(&state, move |library| {
+        Ok(library.store().track_properties(&track_id)?)
+    })
+    .await
 }
 
 /// Shows the track's file in Explorer, selected.
@@ -217,13 +243,11 @@ pub async fn reveal_library_track(
     track_id: String,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), LibraryCommandError> {
-    let library = state.backend.library.handle();
-    tauri::async_runtime::spawn_blocking(move || {
-        let path = library.track_file_path(&track_id)?;
-        reveal_in_file_manager(&path)
+    blocking(&state, move |library| {
+        let file = library.store().track_location(&track_id)?.existing()?;
+        reveal_in_file_manager(&file.path.to_string_lossy())
     })
     .await
-    .map_err(|_| LibraryCommandError::TaskFailed)?
 }
 
 #[cfg(windows)]
@@ -248,8 +272,5 @@ pub async fn get_artwork_accent(
     content_hash: String,
     state: tauri::State<'_, AppState>,
 ) -> Result<Option<String>, LibraryCommandError> {
-    let library = state.backend.library.handle();
-    tauri::async_runtime::spawn_blocking(move || library.artwork_accent(content_hash))
-        .await
-        .map_err(|_| LibraryCommandError::TaskFailed)?
+    blocking(&state, move |library| library.artwork_accent(&content_hash)).await
 }

@@ -1,11 +1,8 @@
-#![allow(dead_code)] // Public IPC models are introduced ahead of the library browser UI.
-use crate::media::inspection::AudioCodec;
 use serde::Deserialize;
 use serde::Serialize;
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub enum LibraryUnavailableReason {
-    StorageUnavailable,
     DatabaseOpenFailed,
     MigrationFailed,
     SchemaTooNew,
@@ -31,14 +28,6 @@ pub struct LibraryRoot {
 pub enum LibraryFileAvailability {
     Available,
     Missing,
-}
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
-pub enum LibraryInspectionStatus {
-    Pending,
-    Indexed,
-    Unsupported,
-    Failed,
 }
 #[derive(Debug, Clone, Copy, Serialize, specta::Type, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -74,13 +63,7 @@ pub enum LibraryTrackSortKey {
     Album,
     Duration,
 }
-#[derive(Debug, Clone, Copy, Serialize, specta::Type, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct LibrarySort<K> {
-    pub key: K,
-    pub direction: LibrarySortDirection,
-}
-pub use crate::media::artwork::{ArtworkMimeType, ArtworkRef};
+pub use super::artwork::ArtworkRef;
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LibraryTrackSummary {
@@ -89,6 +72,8 @@ pub struct LibraryTrackSummary {
     pub artist: Option<String>,
     pub album: Option<String>,
     pub album_artist: Option<String>,
+    /// The key the catalog files the track's album under, `None` for a track with no album tag.
+    pub album_key: Option<LibraryAlbumKey>,
     pub artwork: Option<ArtworkRef>,
     pub duration_ms: Option<u64>,
     pub file_format: Option<String>,
@@ -96,43 +81,6 @@ pub struct LibraryTrackSummary {
     pub bitrate_kbps: Option<u64>,
     pub availability: LibraryFileAvailability,
     pub playable: bool,
-}
-#[derive(Debug, Clone, Serialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
-pub struct LibraryTrackSourceMetadata {
-    pub title: Option<String>,
-    pub artist: Option<String>,
-    pub album: Option<String>,
-    pub album_artist: Option<String>,
-    pub track_number: Option<u32>,
-    pub track_total: Option<u32>,
-    pub disc_number: Option<u32>,
-    pub disc_total: Option<u32>,
-    pub genre: Option<String>,
-    pub date: Option<String>,
-    pub duration_ms: Option<u64>,
-    pub file_format: String,
-    pub codec: AudioCodec,
-    pub sample_rate: u32,
-    pub channel_count: u16,
-    pub bit_depth: Option<u32>,
-    pub bitrate_kbps: Option<u64>,
-    pub tag_status: String,
-    pub artwork: Option<ArtworkRef>,
-}
-#[derive(Debug, Clone, Serialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
-pub struct LibraryTrackDetails {
-    pub summary: LibraryTrackSummary,
-    pub root_id: String,
-    pub root_path: String,
-    pub relative_path: String,
-    pub file_name: String,
-    pub extension: String,
-    pub source_revision: u64,
-    pub inspection_status: LibraryInspectionStatus,
-    pub inspection_error: Option<String>,
-    pub metadata: Option<LibraryTrackSourceMetadata>,
 }
 /// The tags, audio format and location of one track, as the Properties view lists them.
 #[derive(Debug, Clone, Serialize, specta::Type)]
@@ -166,7 +114,7 @@ pub struct LibraryTrackPage {
     pub total_count: u64,
     pub next_cursor: Option<String>,
 }
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, specta::Type, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LibraryAlbumKey {
     pub title: String,
@@ -246,6 +194,29 @@ pub enum LibraryScanState {
     Cancelled,
     Failed,
 }
+impl LibraryScanSnapshot {
+    pub fn idle() -> Self {
+        Self {
+            state: LibraryScanState::Idle,
+            current_root: None,
+            expected_count: 0,
+            discovered_count: 0,
+            inspected_count: 0,
+            indexed_count: 0,
+            failed_count: 0,
+            failure_code: None,
+        }
+    }
+}
+
+/// Why a scan stopped without finishing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum ScanFailure {
+    PersistenceFailed,
+    RootTraversalFailed,
+}
+
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LibraryScanSnapshot {
@@ -258,5 +229,5 @@ pub struct LibraryScanSnapshot {
     pub inspected_count: u64,
     pub indexed_count: u64,
     pub failed_count: u64,
-    pub failure_code: Option<String>,
+    pub failure_code: Option<ScanFailure>,
 }

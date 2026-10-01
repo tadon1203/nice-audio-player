@@ -8,8 +8,7 @@ use serde::{Deserialize, Serialize};
 use crate::audio::playback::{PlaybackFailureCode, PlaybackItemSeed, PlaybackServiceError};
 use crate::library::{
     models::{LibraryAlbumKey, LibrarySortDirection, LibraryTrackSortKey},
-    playback::{PlayableTrack, PlaybackSelection, PlaybackSourceError},
-    service::LibraryServiceHandle,
+    store::{LibraryStore, PlayableTrack, PlaybackSelection, PlaybackSourceError},
 };
 
 #[derive(Debug, Clone, Deserialize, specta::Type)]
@@ -63,7 +62,6 @@ impl From<PlaybackSourceError> for StartPlaybackError {
             PlaybackSourceError::TrackUnavailable => Self::TrackUnavailable,
             PlaybackSourceError::TrackNotPlayable => Self::TrackNotPlayable,
             PlaybackSourceError::NoPlayableTracks => Self::NoPlayableTracks,
-            PlaybackSourceError::LibraryUnavailable => Self::LibraryUnavailable,
             PlaybackSourceError::PersistenceFailed => Self::PersistenceFailed,
         }
     }
@@ -95,7 +93,7 @@ impl From<PlaybackServiceError> for StartPlaybackError {
 
 /// Reads the context's tracks from the library. Blocking: call it off the async runtime.
 pub fn resolve(
-    library: &LibraryServiceHandle,
+    library: &LibraryStore,
     context: &PlaybackContext,
     start_track_id: Option<&str>,
 ) -> Result<(Vec<PlaybackItemSeed>, usize), StartPlaybackError> {
@@ -123,7 +121,7 @@ pub fn resolve(
 
 /// Reads one library track as a queue item. Blocking: call it off the async runtime.
 pub fn resolve_track(
-    library: &LibraryServiceHandle,
+    library: &LibraryStore,
     track_id: &str,
 ) -> Result<PlaybackItemSeed, StartPlaybackError> {
     Ok(seed(library.playback_for_track(track_id)?))

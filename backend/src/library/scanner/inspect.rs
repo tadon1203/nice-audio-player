@@ -11,9 +11,8 @@ use super::discover::DiscoveredFile;
 use crate::library::artwork::{self, StoredArtwork};
 use crate::library::status::{ArtworkStatus, TagStatus};
 use crate::media::{
-    inspection::{inspect_audio_file_internal, InspectedAudioFile},
+    inspection::{inspect_audio_file, InspectedAudioFile, Undecodable},
     metadata::{read_source_metadata, ArtworkRead, SourceMetadata},
-    validation::ValidatedAudioFile,
 };
 
 const MAX_INSPECTION_THREADS: usize = 4;
@@ -29,7 +28,7 @@ impl ArtworkOutcome {
     fn from_read(read: &ArtworkRead, data_dir: &Path) -> Self {
         let stored = match read {
             ArtworkRead::Selected { bytes, mime_type } => {
-                artwork::materialize(data_dir, bytes, mime_type).ok()
+                artwork::materialize(data_dir, bytes, *mime_type).ok()
             }
             _ => None,
         };
@@ -63,19 +62,12 @@ pub(super) struct InspectedFile {
     pub bitrate_kbps: Option<i64>,
 }
 
-/// The file cannot be decoded, so it is kept in the library but is not playable.
-pub(super) struct Undecodable;
-
+/// Reads a file. One that cannot be decoded is kept in the library but is not playable.
 pub(super) fn inspect(
     file: &DiscoveredFile,
     data_dir: &Path,
 ) -> Result<InspectedFile, Undecodable> {
-    let input = ValidatedAudioFile {
-        path: file.path.to_string_lossy().into_owned(),
-        file_name: file.file_name.clone(),
-        extension: file.extension.clone(),
-    };
-    let audio = inspect_audio_file_internal(&input).map_err(|_| Undecodable)?;
+    let audio = inspect_audio_file(&file.path, &file.extension)?;
     let (tag_status, tags, artwork_read) = match read_source_metadata(&file.path) {
         Ok(Some(tags)) => {
             let artwork = tags.artwork.clone();

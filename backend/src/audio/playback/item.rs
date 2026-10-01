@@ -1,5 +1,5 @@
 use crate::library::models::LibraryAlbumKey;
-use crate::media::{artwork::ArtworkRef, validation::ValidatedAudioFile};
+use crate::{library::artwork::ArtworkRef, media::validation::ValidatedAudioFile};
 
 /// What a caller supplies to play something. The queue assigns the queue item id.
 ///

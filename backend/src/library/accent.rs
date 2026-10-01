@@ -1,7 +1,48 @@
+use super::{artwork::ArtworkPath, database::Database, error::StoreError};
 use image::{imageops::FilterType, ImageReader};
+use rusqlite::{params, OptionalExtension};
 use std::io::Cursor;
 
 const SAMPLE_EDGE: u32 = 32;
+
+/// The accent color of stored artwork, computed on first request and cached in its row. Writes
+/// only the one cached value, in its own short transaction.
+pub fn artwork_accent(
+    database: &Database,
+    content_hash: &str,
+) -> Result<Option<String>, StoreError> {
+    if content_hash.len() != 64 || !content_hash.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err(StoreError::InvalidId);
+    }
+    let row: Option<(i64, String, Option<String>)> = database
+        .read()?
+        .query_row(
+            "SELECT id, relative_path, accent FROM artwork_assets WHERE content_hash = ?1",
+            params![content_hash],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .optional()?;
+    let Some((id, relative_path, accent)) = row else {
+        return Ok(None);
+    };
+    if accent.is_some() {
+        return Ok(accent);
+    }
+    if ArtworkPath::parse(&relative_path).is_none() {
+        return Ok(None);
+    }
+    let Ok(bytes) = std::fs::read(database.data_dir().join(&relative_path)) else {
+        return Ok(None);
+    };
+    let Some(color) = representative_color(&bytes) else {
+        return Ok(None);
+    };
+    database.write()?.execute(
+        "UPDATE artwork_assets SET accent = ?2 WHERE id = ?1",
+        params![id, color],
+    )?;
+    Ok(Some(color))
+}
 
 /// Picks a representative color for artwork as `#rrggbb`. The UI uses it for
 /// backgrounds only, so it favors saturated pixels over the plain average and
@@ -85,5 +126,43 @@ mod tests {
     #[test]
     fn rejects_bytes_that_are_not_an_image() {
         assert_eq!(representative_color(b"not an image"), None);
+    }
+
+    #[test]
+    fn an_accent_is_computed_once_then_read_from_the_database() {
+        let directory = crate::test_support::TestDirectory::new();
+        let database = Database::initialize(&directory.file("data")).expect("database");
+        let hash = "d".repeat(64);
+        let relative = format!("artwork/dd/{hash}.png");
+        std::fs::create_dir_all(database.data_dir().join("artwork/dd")).unwrap();
+        std::fs::write(
+            database.data_dir().join(&relative),
+            png(4, 4, |_, _| [200, 40, 40]),
+        )
+        .unwrap();
+        database
+            .write()
+            .unwrap()
+            .execute(
+                "INSERT INTO artwork_assets(id,content_hash,mime_type,relative_path,byte_length) VALUES(1,?1,'image/png',?2,1)",
+                params![hash, relative],
+            )
+            .unwrap();
+
+        assert_eq!(
+            artwork_accent(&database, &hash).unwrap().as_deref(),
+            Some("#c82828")
+        );
+        std::fs::remove_file(database.data_dir().join(&relative)).unwrap();
+        assert_eq!(
+            artwork_accent(&database, &hash).unwrap().as_deref(),
+            Some("#c82828"),
+            "cached in the database"
+        );
+        assert_eq!(artwork_accent(&database, &"e".repeat(64)).unwrap(), None);
+        assert_eq!(
+            artwork_accent(&database, "nope").err(),
+            Some(StoreError::InvalidId)
+        );
     }
 }

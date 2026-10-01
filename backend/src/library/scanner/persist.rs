@@ -1,13 +1,14 @@
-//! Phase three: write what was found to the database, in batches so each batch is one commit.
+//! The scanner's database work. Planning a batch only reads. Writing it is one short transaction
+//! that holds the write lock for the writes alone, never while files are being read.
 
-use std::cell::Cell;
-
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{params, Connection, OptionalExtension, Transaction, TransactionBehavior};
 
 use super::discover::DiscoveredFile;
 use super::inspect::{ArtworkOutcome, InspectedFile};
-use crate::library::service::now;
-use crate::library::status::{ArtworkStatus, Availability, InspectionStatus};
+use crate::library::database::DatabaseError;
+use crate::library::keys::TrackKeys;
+use crate::library::status::{ArtworkStatus, Availability, InspectionStatus, TagStatus};
+use crate::media::inspection::Undecodable;
 
 const SELECT_EXISTING_FILE: &str = "
     SELECT f.id, f.source_revision, f.modification_key, f.inspection_status,
@@ -18,25 +19,22 @@ const SELECT_EXISTING_FILE: &str = "
     WHERE f.root_id = ?1 AND f.relative_path = ?2";
 
 const TOUCH_FILE: &str = "
-    UPDATE library_files
-    SET seen_generation = ?2, availability = ?4, updated_at_ms = ?3
-    WHERE id = ?1";
+    UPDATE library_files SET seen_generation = ?2, availability = ?3 WHERE id = ?1";
 
 const REVISE_FILE: &str = "
     UPDATE library_files
-    SET byte_length = ?2, modification_key = ?3, source_revision = ?4, seen_generation = ?5,
-        availability = ?7, inspection_status = ?8, updated_at_ms = ?6
+    SET modification_key = ?2, source_revision = ?3, seen_generation = ?4, availability = ?5,
+        inspection_status = ?6
     WHERE id = ?1";
 
 const INSERT_FILE: &str = "
-    INSERT INTO library_files(root_id, relative_path, file_name, extension, byte_length,
-                              modification_key, source_revision, seen_generation, availability,
-                              inspection_status, updated_at_ms)
-    VALUES (?1, ?2, ?3, ?4, ?5, ?6, 1, ?7, ?9, ?10, ?8)";
+    INSERT INTO library_files(root_id, relative_path, file_name, extension, modification_key,
+                              source_revision, seen_generation, availability, inspection_status)
+    VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6, ?7, ?8)";
 
 const UPSERT_ARTWORK_ASSET: &str = "
-    INSERT INTO artwork_assets(content_hash, mime_type, relative_path, byte_length, created_at_ms)
-    VALUES (?1, ?2, ?3, ?4, ?5)
+    INSERT INTO artwork_assets(content_hash, mime_type, relative_path, byte_length)
+    VALUES (?1, ?2, ?3, ?4)
     ON CONFLICT(content_hash) DO UPDATE SET content_hash = excluded.content_hash
     RETURNING id";
 
@@ -45,9 +43,9 @@ const UPSERT_SOURCE_METADATA: &str = "
         track_id, source_revision, title, artist, album, album_artist, track_number, track_total,
         disc_number, disc_total, genre, date, duration_ms, file_format, codec, sample_rate,
         channel_count, bit_depth, bitrate_kbps, tag_status, artwork_status, artwork_id,
-        updated_at_ms)
+        title_key, artist_key, album_key, album_artist_key, year)
     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19,
-            ?20, ?21, ?22, ?23)
+            ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27)
     ON CONFLICT(track_id) DO UPDATE SET
         source_revision = excluded.source_revision, title = excluded.title,
         artist = excluded.artist, album = excluded.album, album_artist = excluded.album_artist,
@@ -58,290 +56,153 @@ const UPSERT_SOURCE_METADATA: &str = "
         sample_rate = excluded.sample_rate, channel_count = excluded.channel_count,
         bit_depth = excluded.bit_depth, bitrate_kbps = excluded.bitrate_kbps,
         tag_status = excluded.tag_status, artwork_status = excluded.artwork_status,
-        artwork_id = excluded.artwork_id, updated_at_ms = excluded.updated_at_ms";
+        artwork_id = excluded.artwork_id, title_key = excluded.title_key,
+        artist_key = excluded.artist_key, album_key = excluded.album_key,
+        album_artist_key = excluded.album_artist_key, year = excluded.year";
 
-/// Any database failure. The scan stops on it; the details stay out of the IPC surface.
+/// Any database failure. The scan stops on it; the cause is logged where it is built and stays
+/// out of the IPC surface.
 #[derive(Debug)]
 pub(super) struct PersistError;
 
 impl From<rusqlite::Error> for PersistError {
-    fn from(_: rusqlite::Error) -> Self {
+    fn from(cause: rusqlite::Error) -> Self {
+        log::error!("library.scan.persist_failed cause={cause}");
+        Self
+    }
+}
+
+impl From<DatabaseError> for PersistError {
+    fn from(cause: DatabaseError) -> Self {
+        log::error!("library.scan.persist_failed cause={cause:?}");
         Self
     }
 }
 
 type Persisted<T> = Result<T, PersistError>;
 
-/// What a discovered file needs after it is reconciled with the database.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum Work {
-    Nothing,
+/// What a discovered file needs, decided from what the database already holds.
+#[derive(Debug)]
+pub(super) enum Plan {
+    /// Unchanged: only record that it was seen.
+    Touch { file_id: i64 },
     /// Unchanged, but its artwork could not be stored last time.
-    RetryArtwork,
-    /// New or changed.
-    Inspect,
+    RetryArtwork {
+        file_id: i64,
+        revision: i64,
+        file: DiscoveredFile,
+    },
+    /// New (`known` is `None`) or changed (`known` is its id and next revision).
+    Inspect {
+        known: Option<(i64, i64)>,
+        file: DiscoveredFile,
+    },
 }
 
-#[derive(Debug, Clone, Copy)]
-pub(super) struct Reconciled {
-    pub file_id: i64,
-    pub revision: i64,
-    pub work: Work,
+/// Compares a discovered file with the database. Read-only.
+pub(super) fn plan(reader: &Connection, root_id: i64, file: DiscoveredFile) -> Persisted<Plan> {
+    let existing: Option<(i64, i64, String, InspectionStatus, Option<ArtworkStatus>)> = reader
+        .prepare_cached(SELECT_EXISTING_FILE)?
+        .query_row(params![root_id, file.relative], |row| {
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+            ))
+        })
+        .optional()?;
+    Ok(match existing {
+        Some((
+            file_id,
+            revision,
+            key,
+            InspectionStatus::Indexed,
+            Some(ArtworkStatus::StoreFailed),
+        )) if key == file.modification_key => Plan::RetryArtwork {
+            file_id,
+            revision,
+            file,
+        },
+        Some((file_id, _, key, status, _))
+            if key == file.modification_key && status != InspectionStatus::Pending =>
+        {
+            Plan::Touch { file_id }
+        }
+        Some((file_id, revision, ..)) => Plan::Inspect {
+            known: Some((file_id, revision + 1)),
+            file,
+        },
+        None => Plan::Inspect { known: None, file },
+    })
+}
+
+/// A planned file with what was read for it.
+pub(super) enum Outcome {
+    Touch {
+        file_id: i64,
+    },
+    RetryArtwork {
+        file_id: i64,
+        revision: i64,
+        artwork: ArtworkOutcome,
+    },
+    Inspected {
+        known: Option<(i64, i64)>,
+        file: DiscoveredFile,
+        result: Box<Result<InspectedFile, Undecodable>>,
+    },
 }
 
 pub(super) struct LibraryWriter {
     connection: Connection,
-    in_batch: Cell<bool>,
 }
 
 impl LibraryWriter {
     pub fn new(connection: Connection) -> Self {
-        Self {
-            connection,
-            in_batch: Cell::new(false),
-        }
+        Self { connection }
     }
 
     /// Starts a new pass over a root and returns its generation number.
     pub fn begin_scan(&self, root_id: i64) -> Persisted<i64> {
         Ok(self.connection.query_row(
-            "UPDATE library_roots
-             SET scan_generation = scan_generation + 1, last_scan_started_at_ms = ?2,
-                 updated_at_ms = ?2
+            "UPDATE library_roots SET scan_generation = scan_generation + 1
              WHERE id = ?1 RETURNING scan_generation",
-            params![root_id, now()],
+            params![root_id],
             |row| row.get(0),
         )?)
     }
 
-    /// Opens a transaction. Everything until `commit_batch` is one commit; if the writer is
-    /// dropped first (a failure), it is rolled back.
-    pub fn begin_batch(&self) -> Persisted<()> {
-        if !self.in_batch.get() {
-            self.connection.execute_batch("BEGIN IMMEDIATE")?;
-            self.in_batch.set(true);
-        }
-        Ok(())
-    }
-
-    pub fn commit_batch(&self) -> Persisted<()> {
-        if self.in_batch.replace(false) {
-            self.connection.execute_batch("COMMIT")?;
-        }
-        Ok(())
-    }
-
-    /// Records that `file` was seen in this generation and decides what it still needs.
-    pub fn reconcile(
-        &self,
+    /// Writes a batch in one transaction, so a failure never leaves half of it behind.
+    pub fn write_batch(
+        &mut self,
         root_id: i64,
         generation: i64,
-        file: &DiscoveredFile,
-    ) -> Persisted<Reconciled> {
-        let existing: Option<(i64, i64, String, InspectionStatus, Option<ArtworkStatus>)> = self
+        outcomes: &[Outcome],
+    ) -> Persisted<()> {
+        let transaction = self
             .connection
-            .query_row(
-                SELECT_EXISTING_FILE,
-                params![root_id, file.relative],
-                |row| {
-                    Ok((
-                        row.get(0)?,
-                        row.get(1)?,
-                        row.get(2)?,
-                        row.get(3)?,
-                        row.get(4)?,
-                    ))
-                },
-            )
-            .optional()?;
-        let unchanged = |modification_key: &str| modification_key == file.modification_key;
-        match existing {
-            Some((id, revision, key, status, artwork_status))
-                if unchanged(&key)
-                    && status == InspectionStatus::Indexed
-                    && artwork_status == Some(ArtworkStatus::StoreFailed) =>
-            {
-                self.touch(id, generation)?;
-                Ok(Reconciled {
-                    file_id: id,
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        for outcome in outcomes {
+            match outcome {
+                Outcome::Touch { file_id } => touch(&transaction, *file_id, generation)?,
+                Outcome::RetryArtwork {
+                    file_id,
                     revision,
-                    work: Work::RetryArtwork,
-                })
-            }
-            Some((id, revision, key, status, _))
-                if unchanged(&key) && status != InspectionStatus::Pending =>
-            {
-                self.touch(id, generation)?;
-                Ok(Reconciled {
-                    file_id: id,
-                    revision,
-                    work: Work::Nothing,
-                })
-            }
-            Some((id, revision, ..)) => {
-                let next = revision + 1;
-                self.connection.execute(
-                    REVISE_FILE,
-                    params![
-                        id,
-                        file.byte_length as i64,
-                        file.modification_key,
-                        next,
-                        generation,
-                        now(),
-                        Availability::Available,
-                        InspectionStatus::Pending
-                    ],
-                )?;
-                Ok(Reconciled {
-                    file_id: id,
-                    revision: next,
-                    work: Work::Inspect,
-                })
-            }
-            None => {
-                self.connection.execute(
-                    INSERT_FILE,
-                    params![
-                        root_id,
-                        file.relative,
-                        file.file_name,
-                        file.extension,
-                        file.byte_length as i64,
-                        file.modification_key,
-                        generation,
-                        now(),
-                        Availability::Available,
-                        InspectionStatus::Pending
-                    ],
-                )?;
-                Ok(Reconciled {
-                    file_id: self.connection.last_insert_rowid(),
-                    revision: 1,
-                    work: Work::Inspect,
-                })
+                    artwork,
+                } => {
+                    touch(&transaction, *file_id, generation)?;
+                    apply_artwork(&transaction, *file_id, *revision, artwork)?;
+                }
+                Outcome::Inspected {
+                    known,
+                    file,
+                    result,
+                } => store_file(&transaction, root_id, generation, *known, file, result)?,
             }
         }
-    }
-
-    fn touch(&self, file_id: i64, generation: i64) -> Persisted<()> {
-        self.connection.execute(
-            TOUCH_FILE,
-            params![file_id, generation, now(), Availability::Available],
-        )?;
-        Ok(())
-    }
-
-    /// Stores an inspected file: it becomes playable and its track keeps its identity across
-    /// revisions.
-    pub fn store_inspected(
-        &self,
-        file: &DiscoveredFile,
-        reconciled: &Reconciled,
-        inspected: &InspectedFile,
-    ) -> Persisted<()> {
-        let connection = &self.connection;
-        connection.execute(
-            "UPDATE library_files SET inspection_status = ?2 WHERE id = ?1",
-            params![reconciled.file_id, InspectionStatus::Indexed],
-        )?;
-        connection.execute(
-            "INSERT OR IGNORE INTO tracks(file_id, created_at_ms) VALUES (?1, ?2)",
-            params![reconciled.file_id, now()],
-        )?;
-        let track_id: i64 = connection.query_row(
-            "SELECT id FROM tracks WHERE file_id = ?1",
-            params![reconciled.file_id],
-            |row| row.get(0),
-        )?;
-        let artwork_id = self.store_artwork_asset(&inspected.artwork)?;
-        let tags = &inspected.tags;
-        let info = &inspected.audio.info;
-        connection.execute(
-            UPSERT_SOURCE_METADATA,
-            params![
-                track_id,
-                reconciled.revision,
-                tags.title,
-                tags.artist,
-                tags.album,
-                tags.album_artist,
-                tags.track_number.map(i64::from),
-                tags.track_total.map(i64::from),
-                tags.disc_number.map(i64::from),
-                tags.disc_total.map(i64::from),
-                tags.genre,
-                tags.date,
-                info.duration_ms.map(|value| value as i64),
-                file.extension,
-                format!("{:?}", info.codec),
-                info.sample_rate,
-                info.channel_count,
-                inspected.audio.bit_depth,
-                inspected.bitrate_kbps,
-                inspected.tag_status,
-                inspected.artwork.status,
-                artwork_id,
-                now()
-            ],
-        )?;
-        Ok(())
-    }
-
-    /// The file could not be decoded: it stays listed, unplayable.
-    pub fn mark_unsupported(&self, file_id: i64) -> Persisted<()> {
-        self.connection.execute(
-            "UPDATE library_files
-             SET inspection_status = ?2, inspection_error_code = 'unsupportedFormat'
-             WHERE id = ?1",
-            params![file_id, InspectionStatus::Unsupported],
-        )?;
-        Ok(())
-    }
-
-    /// Applies artwork to a file that is otherwise up to date.
-    pub fn apply_artwork(
-        &self,
-        reconciled: &Reconciled,
-        artwork: &ArtworkOutcome,
-    ) -> Persisted<()> {
-        let track_id: i64 = self.connection.query_row(
-            "SELECT id FROM tracks WHERE file_id = ?1",
-            params![reconciled.file_id],
-            |row| row.get(0),
-        )?;
-        let artwork_id = self.store_artwork_asset(artwork)?;
-        self.connection.execute(
-            "UPDATE track_source_metadata
-             SET artwork_status = ?3, artwork_id = ?4, updated_at_ms = ?5
-             WHERE track_id = ?1 AND source_revision = ?2",
-            params![
-                track_id,
-                reconciled.revision,
-                artwork.status,
-                artwork_id,
-                now()
-            ],
-        )?;
-        Ok(())
-    }
-
-    /// The database id of the stored artwork, if there is any. Identical images share one row.
-    fn store_artwork_asset(&self, artwork: &ArtworkOutcome) -> Persisted<Option<i64>> {
-        match (&artwork.status, &artwork.stored) {
-            (ArtworkStatus::Stored, Some(asset)) => Ok(Some(self.connection.query_row(
-                UPSERT_ARTWORK_ASSET,
-                params![
-                    asset.hash,
-                    asset.mime_type,
-                    asset.relative_path,
-                    asset.byte_length as i64,
-                    now()
-                ],
-                |row| row.get(0),
-            )?)),
-            _ => Ok(None),
-        }
+        Ok(transaction.commit()?)
     }
 
     /// After a complete pass: files not seen this generation are missing (kept, not deleted).
@@ -352,11 +213,200 @@ impl LibraryWriter {
             params![root_id, generation, Availability::Missing],
         )?;
         self.connection.execute(
-            "UPDATE library_roots
-             SET last_successful_scan_at_ms = ?2, last_scan_error_code = NULL
-             WHERE id = ?1",
-            params![root_id, now()],
+            "UPDATE library_roots SET last_successful_scan_at_ms = ?2 WHERE id = ?1",
+            params![root_id, crate::library::now_ms()],
         )?;
         Ok(())
+    }
+}
+
+fn touch(transaction: &Transaction, file_id: i64, generation: i64) -> Persisted<()> {
+    transaction.prepare_cached(TOUCH_FILE)?.execute(params![
+        file_id,
+        generation,
+        Availability::Available
+    ])?;
+    Ok(())
+}
+
+/// Stores a file that was read: it becomes playable (or, when it cannot be decoded, stays listed
+/// as unsupported), and its track keeps its identity across revisions.
+fn store_file(
+    transaction: &Transaction,
+    root_id: i64,
+    generation: i64,
+    known: Option<(i64, i64)>,
+    file: &DiscoveredFile,
+    result: &Result<InspectedFile, Undecodable>,
+) -> Persisted<()> {
+    let status = match result {
+        Ok(_) => InspectionStatus::Indexed,
+        Err(Undecodable) => InspectionStatus::Unsupported,
+    };
+    let (file_id, revision) = match known {
+        Some((file_id, revision)) => {
+            transaction.execute(
+                REVISE_FILE,
+                params![
+                    file_id,
+                    file.modification_key,
+                    revision,
+                    generation,
+                    Availability::Available,
+                    status
+                ],
+            )?;
+            (file_id, revision)
+        }
+        None => {
+            transaction.execute(
+                INSERT_FILE,
+                params![
+                    root_id,
+                    file.relative,
+                    file.file_name,
+                    file.extension,
+                    file.modification_key,
+                    generation,
+                    Availability::Available,
+                    status
+                ],
+            )?;
+            (transaction.last_insert_rowid(), 1)
+        }
+    };
+    match result {
+        Ok(inspected) => store_inspected(transaction, file_id, revision, file, inspected),
+        Err(Undecodable) => clear_metadata(transaction, file_id, revision, file),
+    }
+}
+
+fn store_inspected(
+    transaction: &Transaction,
+    file_id: i64,
+    revision: i64,
+    file: &DiscoveredFile,
+    inspected: &InspectedFile,
+) -> Persisted<()> {
+    transaction.execute(
+        "INSERT OR IGNORE INTO tracks(file_id) VALUES (?1)",
+        params![file_id],
+    )?;
+    let track_id: i64 = transaction.query_row(
+        "SELECT id FROM tracks WHERE file_id = ?1",
+        params![file_id],
+        |row| row.get(0),
+    )?;
+    let artwork_id = store_artwork_asset(transaction, &inspected.artwork)?;
+    let tags = &inspected.tags;
+    let info = &inspected.audio.info;
+    let keys = TrackKeys::new(
+        tags.title.as_deref(),
+        tags.artist.as_deref(),
+        tags.album.as_deref(),
+        tags.album_artist.as_deref(),
+        tags.date.as_deref(),
+        &file.file_name,
+    );
+    transaction.execute(
+        UPSERT_SOURCE_METADATA,
+        params![
+            track_id,
+            revision,
+            tags.title,
+            tags.artist,
+            tags.album,
+            tags.album_artist,
+            tags.track_number.map(i64::from),
+            tags.track_total.map(i64::from),
+            tags.disc_number.map(i64::from),
+            tags.disc_total.map(i64::from),
+            tags.genre,
+            tags.date,
+            info.duration_ms.map(|value| value as i64),
+            file.extension,
+            format!("{:?}", info.codec),
+            info.sample_rate,
+            info.channel_count,
+            inspected.audio.bit_depth,
+            inspected.bitrate_kbps,
+            inspected.tag_status,
+            inspected.artwork.status,
+            artwork_id,
+            keys.title,
+            keys.artist,
+            keys.album,
+            keys.album_artist,
+            keys.year
+        ],
+    )?;
+    Ok(())
+}
+
+/// A file that was indexed and can no longer be decoded keeps its track, with the tags of its
+/// earlier revision cleared so they are not shown for the file it is now.
+fn clear_metadata(
+    transaction: &Transaction,
+    file_id: i64,
+    revision: i64,
+    file: &DiscoveredFile,
+) -> Persisted<()> {
+    transaction.execute(
+        "UPDATE track_source_metadata
+         SET source_revision = ?2, title = NULL, artist = NULL, album = NULL, album_artist = NULL,
+             track_number = NULL, track_total = NULL, disc_number = NULL, disc_total = NULL,
+             genre = NULL, date = NULL, duration_ms = NULL, file_format = NULL, codec = NULL,
+             sample_rate = NULL, channel_count = NULL, bit_depth = NULL, bitrate_kbps = NULL,
+             tag_status = ?3, artwork_status = ?4, artwork_id = NULL,
+             title_key = ?5, artist_key = '', album_key = '', album_artist_key = '', year = NULL
+         WHERE track_id = (SELECT id FROM tracks WHERE file_id = ?1)",
+        params![
+            file_id,
+            revision,
+            TagStatus::Absent,
+            ArtworkStatus::NotPresent,
+            TrackKeys::new(None, None, None, None, None, &file.file_name).title
+        ],
+    )?;
+    Ok(())
+}
+
+fn apply_artwork(
+    transaction: &Transaction,
+    file_id: i64,
+    revision: i64,
+    artwork: &ArtworkOutcome,
+) -> Persisted<()> {
+    let track_id: i64 = transaction.query_row(
+        "SELECT id FROM tracks WHERE file_id = ?1",
+        params![file_id],
+        |row| row.get(0),
+    )?;
+    let artwork_id = store_artwork_asset(transaction, artwork)?;
+    transaction.execute(
+        "UPDATE track_source_metadata SET artwork_status = ?3, artwork_id = ?4
+         WHERE track_id = ?1 AND source_revision = ?2",
+        params![track_id, revision, artwork.status, artwork_id],
+    )?;
+    Ok(())
+}
+
+/// The database id of the stored artwork, if there is any. Identical images share one row.
+fn store_artwork_asset(
+    transaction: &Transaction,
+    artwork: &ArtworkOutcome,
+) -> Persisted<Option<i64>> {
+    match (&artwork.status, &artwork.stored) {
+        (ArtworkStatus::Stored, Some(asset)) => Ok(Some(transaction.query_row(
+            UPSERT_ARTWORK_ASSET,
+            params![
+                asset.hash,
+                asset.mime_type,
+                asset.relative_path,
+                asset.byte_length as i64
+            ],
+            |row| row.get(0),
+        )?)),
+        _ => Ok(None),
     }
 }

@@ -65,6 +65,8 @@ export const commands = {
 	artist: string | null,
 	album: string | null,
 	albumArtist: string | null,
+	/**  The key the catalog files the track's album under, `None` for a track with no album tag. */
+	albumKey: LibraryAlbumKey | null,
 	artwork: ArtworkRef | null,
 	durationMs: number | null,
 	fileFormat: string | null,
@@ -149,9 +151,9 @@ export type ApplicationActivityKind = "librarySync";
 
 export type ApplicationActivityState = "running" | "attentionRequired";
 
-/**  Stored artwork as the renderer addresses it. Shared by the library catalog and playback items. */
 export type ArtworkMimeType = "jpeg" | "png";
 
+/**  Stored artwork as the renderer addresses it. Shared by the library catalog and playback items. */
 export type ArtworkRef = {
 	contentHash: string,
 	mimeType: ArtworkMimeType,
@@ -241,7 +243,7 @@ export type LibraryAlbumTrackSummary = {
 
 export type LibraryArtistAlbumSortKey = "year" | "title";
 
-export type LibraryCommandError = { code: "invalidRoot" } | { code: "rootNotFound" } | { code: "rootNotDirectory" } | { code: "canonicalizationFailed" } | { code: "duplicateRoot" } | { code: "overlappingRoot" } | { code: "scanInProgress" } | { code: "invalidId" } | { code: "trackNotFound" } | { code: "trackUnavailable" } | { code: "albumNotFound" } | { code: "invalidCursor" } | { code: "invalidAlbumKey" } | { code: "invalidAlbumArtistKey" } | { code: "albumArtistNotFound" } | { code: "rootMissing" } | { code: "scanAlreadyRunning" } | { code: "noEnabledRoots" } | { code: "scanNotRunning" } | { code: "libraryUnavailable" } | { code: "persistenceFailed" } | { code: "taskFailed" };
+export type LibraryCommandError = { code: "invalidRoot" } | { code: "rootNotDirectory" } | { code: "canonicalizationFailed" } | { code: "duplicateRoot" } | { code: "overlappingRoot" } | { code: "scanInProgress" } | { code: "invalidId" } | { code: "trackNotFound" } | { code: "trackUnavailable" } | { code: "albumNotFound" } | { code: "invalidCursor" } | { code: "invalidAlbumKey" } | { code: "invalidAlbumArtistKey" } | { code: "albumArtistNotFound" } | { code: "rootMissing" } | { code: "scanAlreadyRunning" } | { code: "noEnabledRoots" } | { code: "scanNotRunning" } | { code: "libraryUnavailable" } | { code: "persistenceFailed" } | { code: "taskFailed" };
 
 export type LibraryFileAvailability = "available" | "missing";
 
@@ -265,7 +267,7 @@ export type LibraryScanSnapshot = {
 	inspectedCount: number,
 	indexedCount: number,
 	failedCount: number,
-	failureCode: string | null,
+	failureCode: ScanFailure | null,
 };
 
 export type LibraryScanState = "idle" | "running" | "completed" | "cancelled" | "failed";
@@ -312,6 +314,8 @@ export type LibraryTrackSummary = {
 	artist: string | null,
 	album: string | null,
 	albumArtist: string | null,
+	/**  The key the catalog files the track's album under, `None` for a track with no album tag. */
+	albumKey: LibraryAlbumKey | null,
 	artwork: ArtworkRef | null,
 	durationMs: number | null,
 	fileFormat: string | null,
@@ -321,7 +325,7 @@ export type LibraryTrackSummary = {
 	playable: boolean,
 };
 
-export type LibraryUnavailableReason = "storageUnavailable" | "databaseOpenFailed" | "migrationFailed" | "schemaTooNew" | "databaseCorrupt";
+export type LibraryUnavailableReason = "databaseOpenFailed" | "migrationFailed" | "schemaTooNew" | "databaseCorrupt";
 
 export type LyricsCommandError = { code: "invalidId" } | { code: "trackNotFound" } | { code: "trackUnavailable" } | { code: "libraryUnavailable" } | { code: "persistenceFailed" } | { code: "taskFailed" };
 
@@ -442,6 +446,9 @@ export type PlaybackWaveform = {
 	peaks: number[],
 	rms: number[],
 };
+
+/**  Why a scan stopped without finishing. */
+export type ScanFailure = "persistenceFailed" | "rootTraversalFailed";
 
 export type Settings = {
 	playback?: PlaybackPreferences,

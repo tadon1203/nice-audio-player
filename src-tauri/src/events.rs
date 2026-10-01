@@ -100,7 +100,7 @@ impl PendingEvents {
             events.push(AppEvent::PlaybackQueue(backend.playback.queue_snapshot()));
         }
         if self.library_scan {
-            events.push(AppEvent::LibraryScan(backend.library.handle().scan_state()));
+            events.push(AppEvent::LibraryScan(backend.library_scan_state()));
         }
         if self.activities {
             events.push(AppEvent::ApplicationActivities(
