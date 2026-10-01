@@ -1,131 +1,1287 @@
+//! The worker is driven through the commands and events it receives, with a fake output device.
+//! `Harness` plays the part of the worker thread: it hands the worker one input at a time, so a
+//! test decides when a tick happens and when an event is delivered.
+
+use super::input::{Inbox, WorkerEvent, WorkerInput};
 use super::item::{PlaybackItem, PlaybackItemSeed};
 use super::preferences::PlaybackPreferences;
-use super::queue::{AdvanceReason, PlaybackQueue, PlaybackRepeatMode};
-use super::service::{PlaybackService, PlaybackServiceError};
+use super::queue::{PlaybackQueue, PlaybackRepeatMode};
+use super::service::{PlaybackCommand, PlaybackService, PlaybackServiceError, Reply};
 use super::session::{
     duration_to_frames, frame_to_millis, millis_to_frame, should_publish_position,
-    source_to_output_frame, PendingSourceLoad,
+    source_to_output_frame,
 };
 use super::snapshot::{
     ActiveSession, PlaybackChannelConversion, PlaybackFailureCode, PlaybackProcessingInfo,
     PlaybackQueueSnapshot, PlaybackSnapshot, SnapshotBase,
 };
-use super::source_loader::SourceLoadWorker;
 use super::worker::{
-    completion_time_reached, output_failure_code, pause_action, previous_restarts_track,
-    resume_action, should_finish, signal_stream_id, stream_signal_action, FailureScope,
-    PlaybackControlAction, PlaybackWorker, StartFailurePhase, StreamSignalAction, WorkerLinks,
+    output_failure_code, previous_restarts_track, stream_signal_action, FailureScope,
+    PlaybackWorker, StartFailurePhase, StreamSignalAction, WorkerLinks,
 };
 use crate::audio::devices::AudioOutputSelection;
-use crate::audio::output::{AudioOutputError, OutputSignal, OutputStreamId, StreamFailureKind};
+use crate::audio::fake_output::FakeOutput;
+use crate::audio::output::{AudioOutputError, OutputStreamId, StreamFailureKind};
 use crate::audio::volume::{AtomicEffectiveGain, VolumeState};
 use crate::media::validation::ValidatedAudioFile;
+use crate::test_support::{write_pcm_i16_wav, TestDirectory};
 use cpal::StreamInstant;
-use rand::{rngs::StdRng, SeedableRng};
-use std::sync::{mpsc, Arc, RwLock};
+use std::sync::mpsc::Receiver;
+use std::sync::{Arc, Mutex, RwLock};
+use std::time::{Duration, Instant};
 
-fn test_file() -> ValidatedAudioFile {
-    ValidatedAudioFile {
-        path: "C:/test.flac".into(),
-        file_name: "test.flac".into(),
-        extension: "flac".into(),
+const SAMPLE_RATE: u32 = 44_100;
+
+// ---- the harness ----
+
+type Answer<T> = Result<T, PlaybackServiceError>;
+
+struct Harness {
+    worker: PlaybackWorker,
+    inputs: Receiver<WorkerInput>,
+    snapshot: Arc<RwLock<PlaybackSnapshot>>,
+    queue_snapshot: Arc<RwLock<PlaybackQueueSnapshot>>,
+    gain: AtomicEffectiveGain,
+    output: FakeOutput,
+    preferences: Arc<Mutex<Vec<PlaybackPreferences>>>,
+    files: TestDirectory,
+}
+
+impl Harness {
+    fn new() -> Self {
+        let (inbox, inputs) = Inbox::channel();
+        let queue = PlaybackQueue::new(PlaybackRepeatMode::Off, false);
+        let volume = VolumeState::default();
+        let snapshot = Arc::new(RwLock::new(PlaybackSnapshot::Stopped {
+            base: SnapshotBase::new(volume, AudioOutputSelection::SystemDefault),
+            item: None,
+        }));
+        let queue_snapshot = Arc::new(RwLock::new(PlaybackQueueSnapshot::of(0, &queue)));
+        let gain = AtomicEffectiveGain::new(1.0);
+        let output = FakeOutput::new();
+        let preferences = Arc::new(Mutex::new(Vec::new()));
+        let observed = Arc::clone(&preferences);
+        let worker = PlaybackWorker::new(
+            WorkerLinks {
+                snapshot: Arc::clone(&snapshot),
+                queue_snapshot: Arc::clone(&queue_snapshot),
+                effective_gain: gain.clone(),
+                inbox,
+                events: crate::events::null_event_sink(),
+                observer: Arc::new(move |preferences| observed.lock().unwrap().push(preferences)),
+                backend: Box::new(output.clone()),
+            },
+            queue,
+            volume,
+            AudioOutputSelection::SystemDefault,
+        );
+        Self {
+            worker,
+            inputs,
+            snapshot,
+            queue_snapshot,
+            gain,
+            output,
+            preferences,
+            files: TestDirectory::new(),
+        }
+    }
+
+    /// A real WAV of `seconds` of silence, which the decode thread reads as any other file.
+    fn track(&self, name: &str, seconds: usize) -> PlaybackItemSeed {
+        let path = self.files.file(&format!("{name}.wav"));
+        write_pcm_i16_wav(
+            &path,
+            SAMPLE_RATE,
+            1,
+            &vec![0; SAMPLE_RATE as usize * seconds],
+        );
+        PlaybackItemSeed {
+            title: name.into(),
+            ..PlaybackItemSeed::from_file(ValidatedAudioFile {
+                path: path.to_string_lossy().into_owned(),
+                file_name: format!("{name}.wav"),
+                extension: "wav".into(),
+            })
+        }
+    }
+
+    fn snapshot(&self) -> PlaybackSnapshot {
+        self.snapshot.read().unwrap().clone()
+    }
+
+    fn queue_snapshot(&self) -> PlaybackQueueSnapshot {
+        self.queue_snapshot.read().unwrap().clone()
+    }
+
+    /// Sends a command without waiting for the answer.
+    fn send<T>(&mut self, make: impl FnOnce(Reply<T>) -> PlaybackCommand) -> Receiver<Answer<T>> {
+        let (reply, answer) = std::sync::mpsc::sync_channel(1);
+        self.worker.handle(WorkerInput::Command(make(reply)));
+        answer
+    }
+
+    /// Hands the worker what arrives until `answer` has the reply.
+    fn wait_for<T>(&mut self, answer: &Receiver<Answer<T>>) -> Answer<T> {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            if let Ok(result) = answer.try_recv() {
+                return result;
+            }
+            self.deliver_next(deadline);
+        }
+    }
+
+    fn call<T>(&mut self, make: impl FnOnce(Reply<T>) -> PlaybackCommand) -> Answer<T> {
+        let answer = self.send(make);
+        self.wait_for(&answer)
+    }
+
+    fn deliver_next(&mut self, deadline: Instant) {
+        let wait = deadline.saturating_duration_since(Instant::now());
+        match self.inputs.recv_timeout(wait) {
+            Ok(input) => {
+                self.worker.handle(input);
+            }
+            Err(_) => panic!("the worker was left waiting for an input that never came"),
+        }
+    }
+
+    fn pump_until(&mut self, done: impl Fn(&Self) -> bool) {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !done(self) {
+            self.deliver_next(deadline);
+        }
+    }
+
+    /// Hands the worker what has already arrived.
+    fn deliver_pending(&mut self) {
+        while let Ok(input) = self.inputs.try_recv() {
+            self.worker.handle(input);
+        }
+    }
+
+    fn event(&mut self, event: WorkerEvent) {
+        self.worker.handle(WorkerInput::Event(event));
+    }
+
+    fn tick(&mut self) {
+        self.worker.tick();
+    }
+
+    fn start(
+        &mut self,
+        items: Vec<PlaybackItemSeed>,
+        start_index: usize,
+    ) -> Answer<PlaybackSnapshot> {
+        self.call(|reply| PlaybackCommand::Start {
+            items,
+            start_index,
+            reply,
+        })
+    }
+
+    fn pause(&mut self) -> Answer<PlaybackSnapshot> {
+        self.call(|reply| PlaybackCommand::Pause { reply })
+    }
+
+    fn resume(&mut self) -> Answer<PlaybackSnapshot> {
+        self.call(|reply| PlaybackCommand::Resume { reply })
+    }
+
+    fn next(&mut self) -> Answer<PlaybackSnapshot> {
+        self.call(|reply| PlaybackCommand::Next { reply })
+    }
+
+    fn stop(&mut self) -> Answer<PlaybackSnapshot> {
+        self.call(|reply| PlaybackCommand::Stop { reply })
+    }
+
+    fn seek(&mut self, position_ms: u64) -> Answer<PlaybackSnapshot> {
+        self.call(|reply| PlaybackCommand::Seek { position_ms, reply })
+    }
+
+    fn select_output(&mut self, selection: AudioOutputSelection) -> Answer<PlaybackSnapshot> {
+        self.call(|reply| PlaybackCommand::SetOutputSelection { selection, reply })
+    }
+
+    /// The titles of the current item and then the upcoming ones.
+    fn queue_titles(&self) -> Vec<String> {
+        let queue = self.queue_snapshot();
+        queue
+            .current
+            .into_iter()
+            .chain(queue.upcoming)
+            .map(|item| item.title)
+            .collect()
     }
 }
+
+impl Drop for Harness {
+    fn drop(&mut self) {
+        self.worker.shutdown();
+    }
+}
+
+/// Files that do not exist, so loading them fails as an unreadable file.
+fn missing(count: usize) -> Vec<PlaybackItemSeed> {
+    (0..count)
+        .map(|i| {
+            PlaybackItemSeed::from_file(ValidatedAudioFile {
+                path: format!("C:/missing/track-{i}.flac"),
+                file_name: format!("track-{i}.flac"),
+                extension: "flac".into(),
+            })
+        })
+        .collect()
+}
+
+fn session(snapshot: &PlaybackSnapshot) -> &ActiveSession {
+    snapshot.session().expect("a track is loaded")
+}
+
+fn is_playing(snapshot: &PlaybackSnapshot, title: &str) -> bool {
+    matches!(snapshot, PlaybackSnapshot::Playing { session, .. } if session.item.title == title)
+}
+
+// ---- starting ----
+
+#[test]
+fn a_start_plays_as_soon_as_the_prebuffer_is_ready() {
+    let mut harness = Harness::new();
+    let tracks = vec![harness.track("a", 1)];
+
+    let snapshot = harness.start(tracks, 0).unwrap();
+
+    assert!(is_playing(&snapshot, "a"));
+    assert_eq!(session(&snapshot).playback_id, "1");
+    assert_eq!(session(&snapshot).duration_ms, Some(1_000));
+    assert_eq!(session(&snapshot).output_device.name, "Fake speakers");
+    assert!(harness.output.is_running());
+    assert_eq!(harness.snapshot(), snapshot);
+}
+
+#[test]
+fn the_worker_ticks_only_while_a_track_is_playing() {
+    let mut harness = Harness::new();
+    assert!(!harness.worker.wants_ticks(), "idle");
+
+    let tracks = vec![harness.track("a", 1)];
+    harness.start(tracks, 0).unwrap();
+    assert!(harness.worker.wants_ticks(), "playing");
+
+    harness.pause().unwrap();
+    assert!(!harness.worker.wants_ticks(), "paused");
+
+    harness.resume().unwrap();
+    harness.stop().unwrap();
+    assert!(!harness.worker.wants_ticks(), "stopped");
+
+    harness.start(missing(1), 0).unwrap_err();
+    assert!(!harness.worker.wants_ticks(), "failed");
+}
+
+#[test]
+fn a_start_through_a_service_thread_needs_no_poll() {
+    let output = FakeOutput::new();
+    let service = PlaybackService::start_with_backend(
+        crate::events::null_event_sink(),
+        PlaybackPreferences::default(),
+        Arc::new(|_| {}),
+        Box::new(output.clone()),
+    )
+    .expect("worker should start");
+    let directory = TestDirectory::new();
+    let path = directory.file("a.wav");
+    write_pcm_i16_wav(&path, SAMPLE_RATE, 1, &vec![0; SAMPLE_RATE as usize]);
+
+    // The worker sleeps in a blocking receive while idle; only an event can wake it for this.
+    let snapshot = service
+        .handle()
+        .play_file(ValidatedAudioFile {
+            path: path.to_string_lossy().into_owned(),
+            file_name: "a.wav".into(),
+            extension: "wav".into(),
+        })
+        .unwrap();
+
+    assert!(matches!(snapshot, PlaybackSnapshot::Playing { .. }));
+    assert!(output.is_running());
+    service.shutdown();
+}
+
+#[test]
+fn navigating_while_paused_starts_the_next_track_paused() {
+    let mut harness = Harness::new();
+    let tracks = vec![harness.track("a", 1), harness.track("b", 1)];
+    harness.start(tracks, 0).unwrap();
+    harness.pause().unwrap();
+
+    let snapshot = harness.next().unwrap();
+
+    assert!(
+        matches!(&snapshot, PlaybackSnapshot::Paused { session, .. } if session.item.title == "b")
+    );
+    assert!(!harness.output.is_running());
+}
+
+#[test]
+fn a_superseded_start_is_answered_instead_of_dropped() {
+    let mut harness = Harness::new();
+    let first_tracks = vec![harness.track("a", 1)];
+    let second_tracks = vec![harness.track("b", 1)];
+
+    let first = harness.send(|reply| PlaybackCommand::Start {
+        items: first_tracks,
+        start_index: 0,
+        reply,
+    });
+    let second = harness.send(|reply| PlaybackCommand::Start {
+        items: second_tracks,
+        start_index: 0,
+        reply,
+    });
+
+    assert_eq!(first.try_recv(), Ok(Err(PlaybackServiceError::Superseded)));
+    assert!(is_playing(&harness.wait_for(&second).unwrap(), "b"));
+}
+
+#[test]
+fn stopping_while_loading_answers_the_waiting_start() {
+    let mut harness = Harness::new();
+    let tracks = vec![harness.track("a", 1)];
+    let start = harness.send(|reply| PlaybackCommand::Start {
+        items: tracks,
+        start_index: 0,
+        reply,
+    });
+
+    harness.stop().unwrap();
+
+    assert_eq!(start.try_recv(), Ok(Err(PlaybackServiceError::Superseded)));
+    assert!(matches!(
+        harness.snapshot(),
+        PlaybackSnapshot::Stopped { .. }
+    ));
+}
+
+// ---- failures while starting ----
+
+#[test]
+fn a_file_that_cannot_be_read_is_skipped_to_the_next_one() {
+    let mut harness = Harness::new();
+    let mut tracks = missing(1);
+    tracks.push(harness.track("b", 1));
+    tracks.extend(missing(1));
+
+    let snapshot = harness.start(tracks, 0).unwrap();
+
+    assert!(is_playing(&snapshot, "b"));
+    assert_eq!(harness.queue_snapshot().current.unwrap().title, "b");
+}
+
+#[test]
+fn when_every_file_fails_each_is_tried_once_and_the_queue_survives() {
+    let mut harness = Harness::new();
+
+    let result = harness.start(missing(3), 0);
+
+    assert_eq!(result, Err(PlaybackServiceError::Decode));
+    assert_eq!(harness.queue_snapshot().upcoming_count, 0);
+    assert_eq!(harness.queue_snapshot().history_count, 2);
+    assert_eq!(
+        harness.queue_snapshot().current.unwrap().title,
+        "track-2.flac"
+    );
+    let current = harness.snapshot();
+    assert!(matches!(
+        current,
+        PlaybackSnapshot::Failed {
+            error: PlaybackFailureCode::DecodeFailed,
+            ..
+        }
+    ));
+    assert!(current.base().can_go_previous);
+    assert!(!current.base().can_go_next);
+}
+
+#[test]
+fn skipping_failed_files_is_bounded_even_when_the_queue_repeats() {
+    let mut harness = Harness::new();
+    harness
+        .call(|reply| PlaybackCommand::SetRepeatMode {
+            mode: PlaybackRepeatMode::All,
+            reply,
+        })
+        .unwrap();
+
+    let result = harness.start(missing(4), 1);
+
+    assert_eq!(result, Err(PlaybackServiceError::Decode));
+    let queue = harness.queue_snapshot();
+    assert_eq!(queue.history_count + 1 + queue.upcoming_count, 4);
+}
+
+#[test]
+fn navigating_onto_a_broken_file_reports_the_failure_and_keeps_the_queue() {
+    let mut harness = Harness::new();
+    let mut tracks = vec![harness.track("a", 1)];
+    tracks.extend(missing(1));
+    harness.start(tracks, 0).unwrap();
+
+    let result = harness.next();
+
+    assert_eq!(result, Err(PlaybackServiceError::Decode));
+    let queue = harness.queue_snapshot();
+    assert_eq!(queue.history_count + 1 + queue.upcoming_count, 2);
+    assert!(matches!(
+        harness.snapshot(),
+        PlaybackSnapshot::Failed {
+            error: PlaybackFailureCode::DecodeFailed,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn an_output_that_cannot_be_prepared_fails_without_skipping() {
+    let mut harness = Harness::new();
+    let tracks = vec![harness.track("a", 1), harness.track("b", 1)];
+    harness
+        .output
+        .fail_next_prepare(AudioOutputError::UnsupportedConfiguration);
+
+    let result = harness.start(tracks, 0);
+
+    assert_eq!(
+        result,
+        Err(PlaybackServiceError::Output(
+            PlaybackFailureCode::UnsupportedOutputConfiguration
+        ))
+    );
+    assert_eq!(harness.queue_titles(), ["a", "b"]);
+    assert!(matches!(
+        harness.snapshot(),
+        PlaybackSnapshot::Failed {
+            error: PlaybackFailureCode::UnsupportedOutputConfiguration,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn a_missing_output_device_is_reported_as_such() {
+    let mut harness = Harness::new();
+    let tracks = vec![harness.track("a", 1)];
+    harness
+        .output
+        .fail_next_prepare(AudioOutputError::NoOutputDevice);
+
+    assert_eq!(
+        harness.start(tracks, 0),
+        Err(PlaybackServiceError::Output(
+            PlaybackFailureCode::NoOutputDevice
+        ))
+    );
+}
+
+#[test]
+fn a_stream_that_will_not_start_fails_the_start_without_skipping() {
+    let mut harness = Harness::new();
+    let tracks = vec![harness.track("a", 1), harness.track("b", 1)];
+    harness
+        .output
+        .fail_next_start(AudioOutputError::StreamStartFailed);
+
+    let result = harness.start(tracks, 0);
+
+    assert_eq!(
+        result,
+        Err(PlaybackServiceError::Output(
+            PlaybackFailureCode::OutputStreamStartFailed
+        ))
+    );
+    assert_eq!(harness.queue_titles(), ["a", "b"]);
+}
+
+// ---- pause, resume, position ----
+
+#[test]
+fn pause_reads_the_newest_position_and_resume_continues() {
+    let mut harness = Harness::new();
+    let tracks = vec![harness.track("a", 2)];
+    harness.start(tracks, 0).unwrap();
+    harness.output.set_played_frames(22_050);
+
+    let paused = harness.pause().unwrap();
+
+    assert!(matches!(paused, PlaybackSnapshot::Paused { .. }));
+    assert_eq!(session(&paused).position_ms, 500);
+    assert!(!harness.output.is_running());
+
+    let resumed = harness.resume().unwrap();
+    assert!(matches!(resumed, PlaybackSnapshot::Playing { .. }));
+    assert_eq!(session(&resumed).position_ms, 500);
+    assert!(harness.output.is_running());
+}
+
+#[test]
+fn pausing_a_paused_track_changes_nothing() {
+    let mut harness = Harness::new();
+    let tracks = vec![harness.track("a", 1)];
+    harness.start(tracks, 0).unwrap();
+
+    let paused = harness.pause().unwrap();
+
+    assert_eq!(harness.pause().unwrap(), paused);
+}
+
+#[test]
+fn pause_and_resume_need_a_loaded_track() {
+    let mut harness = Harness::new();
+
+    assert_eq!(
+        harness.pause(),
+        Err(PlaybackServiceError::InvalidPlaybackState)
+    );
+    assert_eq!(
+        harness.resume(),
+        Err(PlaybackServiceError::InvalidPlaybackState)
+    );
+}
+
+#[test]
+fn a_tick_publishes_the_position_the_speakers_reached() {
+    let mut harness = Harness::new();
+    let tracks = vec![harness.track("a", 2)];
+    harness.start(tracks, 0).unwrap();
+    harness.output.set_played_frames(44_100);
+
+    std::thread::sleep(Duration::from_millis(260));
+    harness.tick();
+
+    assert_eq!(session(&harness.snapshot()).position_ms, 1_000);
+}
+
+#[test]
+fn a_tick_inside_the_publish_interval_publishes_nothing() {
+    let mut harness = Harness::new();
+    let tracks = vec![harness.track("a", 2)];
+    let started = harness.start(tracks, 0).unwrap();
+    harness.output.set_played_frames(44_100);
+
+    harness.tick();
+
+    assert_eq!(harness.snapshot(), started);
+}
+
+// ---- the end of a track ----
+
+#[test]
+fn a_finished_track_moves_on_to_the_next_one() {
+    let mut harness = Harness::new();
+    let tracks = vec![harness.track("a", 1), harness.track("b", 1)];
+    harness.start(tracks, 0).unwrap();
+
+    harness.output.finish_playback();
+    harness.deliver_pending();
+    harness.tick();
+    harness.pump_until(|harness| is_playing(&harness.snapshot(), "b"));
+
+    assert_eq!(harness.queue_snapshot().current.unwrap().title, "b");
+}
+
+#[test]
+fn the_last_track_finishing_stops_and_clears_the_queue() {
+    let mut harness = Harness::new();
+    let tracks = vec![harness.track("a", 1)];
+    harness.start(tracks, 0).unwrap();
+
+    harness.output.finish_playback();
+    harness.deliver_pending();
+    harness.tick();
+
+    let PlaybackSnapshot::Stopped { item, .. } = harness.snapshot() else {
+        panic!("the player must stop");
+    };
+    assert_eq!(item.unwrap().title, "a");
+    assert!(harness.queue_snapshot().current.is_none());
+}
+
+#[test]
+fn a_paused_track_does_not_finish_naturally() {
+    let mut harness = Harness::new();
+    let tracks = vec![harness.track("a", 1), harness.track("b", 1)];
+    harness.start(tracks, 0).unwrap();
+    harness.output.finish_playback();
+    harness.deliver_pending();
+    harness.pause().unwrap();
+
+    harness.tick();
+
+    assert!(matches!(
+        harness.snapshot(),
+        PlaybackSnapshot::Paused { .. }
+    ));
+}
+
+// ---- events from threads that are gone ----
+
+#[test]
+fn events_from_a_stream_the_worker_let_go_of_are_ignored() {
+    let mut harness = Harness::new();
+    let tracks = vec![harness.track("a", 1)];
+    let playing = harness.start(tracks, 0).unwrap();
+
+    harness.event(WorkerEvent::FinalFrames {
+        stream: OutputStreamId(99),
+        end_time: StreamInstant::new(0, 0),
+    });
+    harness.event(WorkerEvent::StreamFailed {
+        stream: OutputStreamId(99),
+        kind: StreamFailureKind::RuntimeFailed,
+    });
+    harness.event(WorkerEvent::DecodeFailed {
+        stream: OutputStreamId(99),
+    });
+    harness.tick();
+
+    assert_eq!(harness.snapshot(), playing);
+}
+
+// ---- failures while playing ----
+
+#[test]
+fn a_stream_failure_stops_with_the_queue_intact() {
+    let mut harness = Harness::new();
+    let tracks = vec![harness.track("a", 1), harness.track("b", 1)];
+    harness.start(tracks, 0).unwrap();
+
+    harness.output.fail_stream(StreamFailureKind::RuntimeFailed);
+    harness.deliver_pending();
+
+    assert!(matches!(
+        harness.snapshot(),
+        PlaybackSnapshot::Failed {
+            error: PlaybackFailureCode::OutputStreamRuntimeFailed,
+            ..
+        }
+    ));
+    assert_eq!(harness.queue_titles(), ["a", "b"]);
+}
+
+#[test]
+fn a_device_change_on_the_system_default_keeps_playing() {
+    let mut harness = Harness::new();
+    let tracks = vec![harness.track("a", 1)];
+    harness.start(tracks, 0).unwrap();
+
+    harness.output.fail_stream(StreamFailureKind::DeviceChanged);
+    harness.deliver_pending();
+
+    assert!(matches!(
+        harness.snapshot(),
+        PlaybackSnapshot::Playing { .. }
+    ));
+}
+
+#[test]
+fn a_device_change_on_a_chosen_device_keeps_playing() {
+    let mut harness = Harness::new();
+    harness
+        .select_output(AudioOutputSelection::Device {
+            device_id: "fake-other".into(),
+        })
+        .unwrap();
+    let tracks = vec![harness.track("a", 1)];
+    harness.start(tracks, 0).unwrap();
+
+    harness.output.fail_stream(StreamFailureKind::DeviceChanged);
+    harness.deliver_pending();
+
+    assert!(matches!(
+        harness.snapshot(),
+        PlaybackSnapshot::Playing { .. }
+    ));
+}
+
+#[test]
+fn a_decode_failure_while_playing_moves_on_to_the_next_track() {
+    let mut harness = Harness::new();
+    let tracks = vec![harness.track("a", 1), harness.track("b", 1)];
+    harness.start(tracks, 0).unwrap();
+
+    harness.event(WorkerEvent::DecodeFailed {
+        stream: OutputStreamId(1),
+    });
+    harness.pump_until(|harness| is_playing(&harness.snapshot(), "b"));
+}
+
+#[test]
+fn a_decode_failure_on_the_last_track_leaves_a_failed_player() {
+    let mut harness = Harness::new();
+    let tracks = vec![harness.track("a", 1)];
+    harness.start(tracks, 0).unwrap();
+
+    harness.event(WorkerEvent::DecodeFailed {
+        stream: OutputStreamId(1),
+    });
+
+    assert!(matches!(
+        harness.snapshot(),
+        PlaybackSnapshot::Failed {
+            error: PlaybackFailureCode::DecodeFailed,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn a_conversion_failure_while_playing_is_reported_with_its_own_code() {
+    let mut harness = Harness::new();
+    let tracks = vec![harness.track("a", 1)];
+    harness.start(tracks, 0).unwrap();
+
+    harness.event(WorkerEvent::ConversionFailed {
+        stream: OutputStreamId(1),
+    });
+
+    assert!(matches!(
+        harness.snapshot(),
+        PlaybackSnapshot::Failed {
+            error: PlaybackFailureCode::SampleRateConversionFailed,
+            ..
+        }
+    ));
+}
+
+// ---- seeking ----
+
+#[test]
+fn a_seek_moves_the_position_and_keeps_the_session() {
+    let mut harness = Harness::new();
+    let tracks = vec![harness.track("a", 3)];
+    let started = harness.start(tracks, 0).unwrap();
+
+    let seeked = harness.seek(1_500).unwrap();
+
+    assert!(matches!(seeked, PlaybackSnapshot::Playing { .. }));
+    let position = session(&seeked).position_ms;
+    assert!((1_450..=1_550).contains(&position), "position {position}");
+    assert_eq!(session(&seeked).seek_revision, 1);
+    assert_eq!(session(&seeked).playback_id, session(&started).playback_id);
+    assert!(harness.output.is_running());
+}
+
+#[test]
+fn a_seek_while_paused_stays_paused() {
+    let mut harness = Harness::new();
+    let tracks = vec![harness.track("a", 3)];
+    harness.start(tracks, 0).unwrap();
+    harness.pause().unwrap();
+
+    let seeked = harness.seek(1_000).unwrap();
+
+    assert!(matches!(seeked, PlaybackSnapshot::Paused { .. }));
+    assert!(!harness.output.is_running());
+}
+
+#[test]
+fn a_newer_seek_supersedes_one_still_prebuffering() {
+    let mut harness = Harness::new();
+    let tracks = vec![harness.track("a", 3)];
+    harness.start(tracks, 0).unwrap();
+
+    let first = harness.send(|reply| PlaybackCommand::Seek {
+        position_ms: 500,
+        reply,
+    });
+    let second = harness.send(|reply| PlaybackCommand::Seek {
+        position_ms: 2_000,
+        reply,
+    });
+
+    assert_eq!(first.try_recv(), Ok(Err(PlaybackServiceError::Superseded)));
+    let position = session(&harness.wait_for(&second).unwrap()).position_ms;
+    assert!((1_950..=2_050).contains(&position), "position {position}");
+}
+
+#[test]
+fn other_commands_are_answered_while_a_seek_prebuffers() {
+    let mut harness = Harness::new();
+    let tracks = vec![harness.track("a", 3)];
+    harness.start(tracks, 0).unwrap();
+
+    let seek = harness.send(|reply| PlaybackCommand::Seek {
+        position_ms: 1_000,
+        reply,
+    });
+    let volume = harness.call(|reply| PlaybackCommand::SetVolume {
+        volume: 0.25,
+        reply,
+    });
+
+    assert_eq!(volume.unwrap().base().volume, 0.25);
+    harness.wait_for(&seek).unwrap();
+}
+
+#[test]
+fn seeking_needs_a_loaded_track() {
+    let mut harness = Harness::new();
+
+    assert_eq!(
+        harness.seek(1_000),
+        Err(PlaybackServiceError::InvalidPlaybackState)
+    );
+}
+
+#[test]
+fn seeking_to_the_end_stops() {
+    let mut harness = Harness::new();
+    let tracks = vec![harness.track("a", 1)];
+    harness.start(tracks, 0).unwrap();
+
+    let snapshot = harness.seek(5_000).unwrap();
+
+    assert!(matches!(snapshot, PlaybackSnapshot::Stopped { .. }));
+}
+
+#[test]
+fn previous_restarts_a_track_that_has_played_for_a_while() {
+    let mut harness = Harness::new();
+    let tracks = vec![harness.track("a", 5), harness.track("b", 5)];
+    harness.start(tracks, 1).unwrap();
+    harness.output.set_played_frames(4 * u64::from(SAMPLE_RATE));
+    harness.pause().unwrap();
+
+    let restarted = harness
+        .call(|reply| PlaybackCommand::Previous { reply })
+        .unwrap();
+
+    assert!(
+        matches!(&restarted, PlaybackSnapshot::Paused { session, .. } if session.item.title == "b")
+    );
+    assert!(session(&restarted).position_ms < 100);
+}
+
+#[test]
+fn navigation_availability_follows_the_queue_and_the_restart_rule() {
+    let mut harness = Harness::new();
+    let tracks = vec![harness.track("a", 5), harness.track("b", 5)];
+    let early = harness.start(tracks, 0).unwrap();
+    assert!(!early.base().can_go_previous);
+    assert!(early.base().can_go_next);
+
+    harness.output.set_played_frames(4 * u64::from(SAMPLE_RATE));
+    let late = harness.pause().unwrap();
+    assert!(late.base().can_go_previous, "previous restarts the track");
+
+    let stopped = harness.stop().unwrap();
+    assert!(!stopped.base().can_go_previous && !stopped.base().can_go_next);
+}
+
+// ---- stop ----
+
+#[test]
+fn stop_is_stopped_when_called_twice() {
+    let mut harness = Harness::new();
+    let tracks = vec![harness.track("a", 1)];
+    harness.start(tracks, 0).unwrap();
+
+    let first = harness.stop().unwrap();
+    let again = harness.stop().unwrap();
+
+    assert!(matches!(first, PlaybackSnapshot::Stopped { .. }));
+    assert_eq!(again, first);
+    assert_eq!(harness.snapshot(), first);
+}
+
+#[test]
+fn stop_clears_the_queue_and_keeps_naming_the_last_item() {
+    let mut harness = Harness::new();
+    let tracks = vec![harness.track("a", 1), harness.track("b", 1)];
+    harness.start(tracks, 0).unwrap();
+
+    let PlaybackSnapshot::Stopped { item, .. } = harness.stop().unwrap() else {
+        panic!("stop must stop");
+    };
+
+    assert_eq!(item.unwrap().title, "a");
+    assert!(harness.queue_snapshot().current.is_none());
+    assert_eq!(harness.queue_snapshot().upcoming_count, 0);
+}
+
+// ---- queue edits ----
+
+#[test]
+fn queue_edits_are_rejected_while_a_start_loads() {
+    let mut harness = Harness::new();
+    let tracks = vec![harness.track("a", 1)];
+    let extra = vec![harness.track("b", 1)];
+    let start = harness.send(|reply| PlaybackCommand::Start {
+        items: tracks,
+        start_index: 0,
+        reply,
+    });
+
+    let result = harness.call(|reply| PlaybackCommand::Enqueue {
+        items: extra,
+        next: false,
+        reply,
+    });
+
+    assert_eq!(result, Err(PlaybackServiceError::QueueBusy));
+    harness.wait_for(&start).unwrap();
+}
+
+// ---- output selection ----
+
+#[test]
+fn the_output_can_be_chosen_while_stopped() {
+    let mut harness = Harness::new();
+    let selection = AudioOutputSelection::Device {
+        device_id: "fake-other".into(),
+    };
+
+    let snapshot = harness.select_output(selection.clone()).unwrap();
+
+    assert_eq!(snapshot.base().output_selection, selection);
+    assert_eq!(harness.preferences.lock().unwrap().len(), 1);
+    assert_eq!(harness.select_output(selection).unwrap(), snapshot);
+    assert_eq!(harness.preferences.lock().unwrap().len(), 1, "no change");
+}
+
+#[test]
+fn an_unusable_output_is_rejected() {
+    let mut harness = Harness::new();
+
+    assert_eq!(
+        harness.select_output(AudioOutputSelection::Device {
+            device_id: String::new()
+        }),
+        Err(PlaybackServiceError::InvalidDeviceId)
+    );
+    assert_eq!(
+        harness.select_output(AudioOutputSelection::Device {
+            device_id: "unplugged".into()
+        }),
+        Err(PlaybackServiceError::OutputDeviceUnavailable)
+    );
+}
+
+#[test]
+fn the_output_cannot_be_chosen_while_a_start_loads() {
+    let mut harness = Harness::new();
+    let tracks = vec![harness.track("a", 1)];
+    let start = harness.send(|reply| PlaybackCommand::Start {
+        items: tracks,
+        start_index: 0,
+        reply,
+    });
+
+    assert_eq!(
+        harness.select_output(AudioOutputSelection::SystemDefault),
+        Err(PlaybackServiceError::InvalidPlaybackState)
+    );
+    harness.wait_for(&start).unwrap();
+}
+
+#[test]
+fn switching_the_output_while_paused_resumes_the_position_on_the_new_device() {
+    let mut harness = Harness::new();
+    let tracks = vec![harness.track("a", 3)];
+    harness.start(tracks, 0).unwrap();
+    harness.output.set_played_frames(u64::from(SAMPLE_RATE));
+    harness.pause().unwrap();
+
+    let restarted = harness
+        .select_output(AudioOutputSelection::Device {
+            device_id: "fake-other".into(),
+        })
+        .unwrap();
+    harness.pump_until(|harness| {
+        harness
+            .snapshot()
+            .session()
+            .is_some_and(|session| session.seek_revision == 1)
+    });
+
+    assert!(matches!(restarted, PlaybackSnapshot::Paused { .. }));
+    let snapshot = harness.snapshot();
+    assert!(matches!(snapshot, PlaybackSnapshot::Paused { .. }));
+    assert_eq!(session(&snapshot).output_device.name, "Other fake speakers");
+    let position = session(&snapshot).position_ms;
+    assert!((950..=1_050).contains(&position), "position {position}");
+    assert_eq!(
+        harness.output.prepared_selections().last(),
+        Some(&AudioOutputSelection::Device {
+            device_id: "fake-other".into()
+        })
+    );
+}
+
+// ---- volume ----
+
+#[test]
+fn volume_commands_update_the_snapshot_and_the_gain() {
+    let mut harness = Harness::new();
+    let tracks = vec![harness.track("a", 1)];
+    harness.start(tracks, 0).unwrap();
+
+    let changed = harness
+        .call(|reply| PlaybackCommand::SetVolume { volume: 0.5, reply })
+        .unwrap();
+    assert_eq!((changed.base().volume, changed.base().muted), (0.5, false));
+    assert_eq!(harness.gain.load(), 0.5);
+
+    let before_invalid = harness.snapshot();
+    assert_eq!(
+        harness.call(|reply| PlaybackCommand::SetVolume {
+            volume: f32::NAN,
+            reply
+        }),
+        Err(PlaybackServiceError::InvalidVolume)
+    );
+    assert_eq!(harness.snapshot(), before_invalid);
+
+    let muted = harness
+        .call(|reply| PlaybackCommand::Mute { reply })
+        .unwrap();
+    assert_eq!((muted.base().volume, muted.base().muted), (0.5, true));
+    assert_eq!(harness.gain.load(), 0.0);
+    let unmuted = harness
+        .call(|reply| PlaybackCommand::Unmute { reply })
+        .unwrap();
+    assert_eq!((unmuted.base().volume, unmuted.base().muted), (0.5, false));
+    assert_eq!(harness.gain.load(), 0.5);
+}
+
+#[test]
+fn published_revisions_grow_and_commands_that_change_nothing_keep_theirs() {
+    let mut harness = Harness::new();
+
+    let changed = harness
+        .call(|reply| PlaybackCommand::SetVolume { volume: 0.5, reply })
+        .unwrap();
+    let muted = harness
+        .call(|reply| PlaybackCommand::Mute { reply })
+        .unwrap();
+    let muted_again = harness
+        .call(|reply| PlaybackCommand::Mute { reply })
+        .unwrap();
+
+    assert_eq!(changed.revision(), 1);
+    assert_eq!(muted.revision(), 2);
+    assert_eq!(muted_again.revision(), 2);
+}
+
+// ---- the service ----
+
+fn start_service() -> PlaybackService {
+    PlaybackService::start_with_backend(
+        crate::events::null_event_sink(),
+        PlaybackPreferences::default(),
+        Arc::new(|_| {}),
+        Box::new(FakeOutput::new()),
+    )
+    .expect("worker should start")
+}
+
+#[test]
+fn the_initial_snapshot_is_stopped_with_the_saved_volume() {
+    let service = start_service();
+
+    assert_eq!(
+        serde_json::to_value(service.snapshot()).unwrap(),
+        serde_json::json!({"status": "stopped", "base": base_json(), "item": null})
+    );
+    service.shutdown();
+}
+
+#[test]
+fn shutdown_joins_the_worker_thread() {
+    let service = start_service();
+    service.shutdown();
+
+    assert!(service.worker.lock().unwrap().is_none());
+}
+
+#[test]
+fn commands_after_shutdown_report_an_unavailable_worker() {
+    let service = start_service();
+    let handle = service.handle();
+    service.shutdown();
+
+    assert_eq!(handle.pause(), Err(PlaybackServiceError::WorkerUnavailable));
+}
+
+// ---- pure rules ----
+
+#[test]
+fn processing_info_derives_resampling_from_rates() {
+    let equal = PlaybackProcessingInfo {
+        channel_conversion: PlaybackChannelConversion::None,
+        source_sample_rate: 44_100,
+        output_sample_rate: 44_100,
+    };
+    let different = PlaybackProcessingInfo {
+        source_sample_rate: 44_100,
+        output_sample_rate: 48_000,
+        ..equal
+    };
+    assert!(!equal.resampling_active());
+    assert!(different.resampling_active());
+}
+
+#[test]
+fn classifies_stream_failures_by_selection_and_kind() {
+    let device = AudioOutputSelection::Device {
+        device_id: "device".into(),
+    };
+    let default = AudioOutputSelection::SystemDefault;
+    assert_eq!(
+        stream_signal_action(&default, StreamFailureKind::DeviceChanged),
+        StreamSignalAction::RefreshDefaultDevice
+    );
+    assert_eq!(
+        stream_signal_action(&device, StreamFailureKind::DeviceChanged),
+        StreamSignalAction::PreservePlayback
+    );
+    assert_eq!(
+        stream_signal_action(&default, StreamFailureKind::DeviceUnavailable),
+        StreamSignalAction::Fail(PlaybackFailureCode::OutputDeviceUnavailable)
+    );
+    assert_eq!(
+        stream_signal_action(&default, StreamFailureKind::RuntimeFailed),
+        StreamSignalAction::Fail(PlaybackFailureCode::OutputStreamRuntimeFailed)
+    );
+    assert_eq!(
+        stream_signal_action(&default, StreamFailureKind::CompletionTimingFailed),
+        StreamSignalAction::Fail(PlaybackFailureCode::CompletionTimingFailed)
+    );
+}
+
+#[test]
+fn maps_output_errors_to_failure_codes() {
+    use AudioOutputError as E;
+    use PlaybackFailureCode as C;
+    for (error, code) in [
+        (E::NoOutputDevice, C::NoOutputDevice),
+        (E::DeviceUnavailable, C::OutputDeviceUnavailable),
+        (
+            E::UnsupportedConfiguration,
+            C::UnsupportedOutputConfiguration,
+        ),
+        (
+            E::StreamConfigurationUnsupported,
+            C::UnsupportedOutputConfiguration,
+        ),
+        (
+            E::ConfigurationQueryFailed,
+            C::UnsupportedOutputConfiguration,
+        ),
+        (E::StreamBuildFailed, C::OutputStreamBuildFailed),
+        (E::StreamStartFailed, C::OutputStreamStartFailed),
+        (E::StreamPauseFailed, C::OutputStreamPauseFailed),
+        (E::StreamResumeFailed, C::OutputStreamResumeFailed),
+    ] {
+        assert_eq!(output_failure_code(error.clone()), code, "{error:?}");
+    }
+}
+
+#[test]
+fn start_failure_scope_separates_file_problems_from_output_problems() {
+    for phase in [
+        StartFailurePhase::SourceOpen,
+        StartFailurePhase::SourceMetadata,
+        StartFailurePhase::SourceRead,
+        StartFailurePhase::SourceChanged,
+        StartFailurePhase::DecoderOpen,
+        StartFailurePhase::FirstPacketDecode,
+        StartFailurePhase::ProcessorCreate,
+        StartFailurePhase::PrebufferDecode,
+        StartFailurePhase::PrebufferConversion,
+    ] {
+        assert_eq!(phase.scope(), FailureScope::Item, "{phase:?}");
+    }
+    for phase in [
+        StartFailurePhase::SourceWorker,
+        StartFailurePhase::OutputPrepare,
+        StartFailurePhase::StreamStart,
+    ] {
+        assert_eq!(phase.scope(), FailureScope::Output, "{phase:?}");
+    }
+}
+
+#[test]
+fn previous_restarts_after_three_seconds_of_a_track_with_a_duration() {
+    assert!(!previous_restarts_track(2_999, Some(60_000)));
+    assert!(previous_restarts_track(3_000, Some(60_000)));
+    assert!(!previous_restarts_track(30_000, None));
+}
+
+#[test]
+fn position_publication_requires_interval_and_a_changed_position() {
+    assert!(!should_publish_position(Duration::from_millis(249), true));
+    assert!(!should_publish_position(Duration::from_millis(250), false));
+    assert!(should_publish_position(Duration::from_millis(250), true));
+    assert!(should_publish_position(Duration::from_millis(500), true));
+}
+
+#[test]
+fn converts_frames_and_calculates_duration_in_milliseconds() {
+    assert_eq!(frame_to_millis(22_050, 44_100), 500);
+    assert_eq!(frame_to_millis(132_300, 44_100), 3_000);
+    assert_eq!(frame_to_millis(96_000, 96_000), 1_000);
+}
+
+#[test]
+fn seek_position_helpers_use_floor_alignment_and_output_rate() {
+    assert_eq!(millis_to_frame(999, 44_100), 44_055);
+    assert_eq!(frame_to_millis(44_055, 44_100), 998);
+    assert_eq!(source_to_output_frame(44_100, 48_000, 44_100), 48_000);
+    assert_eq!(duration_to_frames(2_001, 48_000), 96_048);
+}
+
+#[test]
+fn seek_position_helpers_saturate_large_values() {
+    assert_eq!(millis_to_frame(u64::MAX, u32::MAX), u64::MAX);
+    assert_eq!(source_to_output_frame(u64::MAX, u32::MAX, 1), u64::MAX);
+}
+
+// ---- the wire format ----
 
 fn test_item() -> PlaybackItem {
     PlaybackItem::from_seed(
         "queue-item-1".into(),
-        PlaybackItemSeed::from_file(test_file()),
+        PlaybackItemSeed::from_file(ValidatedAudioFile {
+            path: "C:/test.flac".into(),
+            file_name: "test.flac".into(),
+            extension: "flac".into(),
+        }),
     )
 }
 
-fn base(volume: VolumeState) -> SnapshotBase {
-    SnapshotBase::new(volume, AudioOutputSelection::SystemDefault)
+fn base() -> SnapshotBase {
+    SnapshotBase::new(VolumeState::default(), AudioOutputSelection::SystemDefault)
 }
 
-fn session(
-    playback_id: &str,
-    position_ms: u64,
-    duration_ms: Option<u64>,
-    channel_conversion: PlaybackChannelConversion,
-) -> ActiveSession {
+fn wire_session() -> ActiveSession {
     ActiveSession {
         item: test_item(),
-        playback_id: playback_id.into(),
-        position_ms,
+        playback_id: "1".into(),
+        position_ms: 1_000,
         seek_revision: 0,
-        duration_ms,
+        duration_ms: Some(60_000),
         output_device: crate::audio::devices::AudioOutputDeviceIdentity {
             id: "test-device".into(),
             name: "Test device".into(),
         },
-        channel_conversion,
+        channel_conversion: PlaybackChannelConversion::None,
         source_sample_rate: 44_100,
         output_sample_rate: 44_100,
         resampling_active: false,
     }
-}
-
-fn stopped(volume: VolumeState) -> PlaybackSnapshot {
-    PlaybackSnapshot::Stopped {
-        base: base(volume),
-        item: None,
-    }
-}
-
-fn playing(
-    volume: VolumeState,
-    playback_id: &str,
-    position_ms: u64,
-    duration_ms: Option<u64>,
-) -> PlaybackSnapshot {
-    PlaybackSnapshot::Playing {
-        base: base(volume),
-        session: session(
-            playback_id,
-            position_ms,
-            duration_ms,
-            PlaybackChannelConversion::None,
-        ),
-    }
-}
-
-fn paused(
-    volume: VolumeState,
-    playback_id: &str,
-    position_ms: u64,
-    duration_ms: Option<u64>,
-) -> PlaybackSnapshot {
-    PlaybackSnapshot::Paused {
-        base: base(volume),
-        session: session(
-            playback_id,
-            position_ms,
-            duration_ms,
-            PlaybackChannelConversion::None,
-        ),
-    }
-}
-
-fn failed(
-    volume: VolumeState,
-    playback_id: Option<String>,
-    error: PlaybackFailureCode,
-) -> PlaybackSnapshot {
-    PlaybackSnapshot::Failed {
-        base: base(volume),
-        item: None,
-        playback_id,
-        error,
-    }
-}
-
-fn failed_snapshot(id: OutputStreamId, error: PlaybackFailureCode) -> PlaybackSnapshot {
-    failed(VolumeState::default(), Some(id.0.to_string()), error)
-}
-
-fn duration_ms(total_frame_count: u64, sample_rate: u32) -> u64 {
-    frame_to_millis(total_frame_count, sample_rate)
 }
 
 fn item_json() -> serde_json::Value {
@@ -173,109 +1329,35 @@ fn session_json() -> serde_json::Value {
     })
 }
 
-/// Files that do not exist, so loading them fails as an unreadable file.
-fn seeds(count: usize) -> Vec<PlaybackItemSeed> {
-    (0..count)
-        .map(|i| {
-            PlaybackItemSeed::from_file(ValidatedAudioFile {
-                path: format!("C:/missing/track-{i}.flac"),
-                file_name: format!("track-{i}.flac"),
-                extension: "flac".into(),
-            })
-        })
-        .collect()
-}
-
-/// Runs the worker's loading step until the pending start answers.
-fn finish_start(
-    worker: &mut PlaybackWorker,
-    receiver: &mpsc::Receiver<Result<PlaybackSnapshot, PlaybackServiceError>>,
-) -> Option<Result<PlaybackSnapshot, PlaybackServiceError>> {
-    (0..2_000).find_map(|_| {
-        worker.advance_pending_source_load();
-        receiver
-            .recv_timeout(std::time::Duration::from_millis(1))
-            .ok()
-    })
-}
-
 #[test]
-fn processing_info_derives_resampling_from_rates() {
-    let equal = PlaybackProcessingInfo {
-        channel_conversion: PlaybackChannelConversion::None,
-        source_sample_rate: 44_100,
-        output_sample_rate: 44_100,
+fn serializes_playing_and_paused_snapshots_with_a_camel_case_playback_id() {
+    let playing = PlaybackSnapshot::Playing {
+        base: base(),
+        session: wire_session(),
     };
-    let different = PlaybackProcessingInfo {
-        source_sample_rate: 44_100,
-        output_sample_rate: 48_000,
-        ..equal
+    let paused = PlaybackSnapshot::Paused {
+        base: base(),
+        session: wire_session(),
     };
-    assert!(!equal.resampling_active());
-    assert!(different.resampling_active());
-}
-
-#[test]
-fn classifies_stream_signals_by_selection_and_failure_kind() {
-    assert_eq!(
-        stream_signal_action(
-            &AudioOutputSelection::SystemDefault,
-            StreamFailureKind::DeviceChanged
-        ),
-        StreamSignalAction::RefreshDefaultDevice
-    );
-    assert_eq!(
-        stream_signal_action(
-            &AudioOutputSelection::Device {
-                device_id: "device".into()
-            },
-            StreamFailureKind::DeviceChanged
-        ),
-        StreamSignalAction::PreservePlayback
-    );
-    assert_eq!(
-        stream_signal_action(
-            &AudioOutputSelection::SystemDefault,
-            StreamFailureKind::DeviceUnavailable
-        ),
-        StreamSignalAction::Fail(PlaybackFailureCode::OutputDeviceUnavailable)
-    );
-    assert_eq!(
-        stream_signal_action(
-            &AudioOutputSelection::SystemDefault,
-            StreamFailureKind::RuntimeFailed
-        ),
-        StreamSignalAction::Fail(PlaybackFailureCode::OutputStreamRuntimeFailed)
-    );
-}
-
-#[test]
-fn serializes_playing_snapshot_with_camel_case_playback_id() {
-    let snapshot = playing(VolumeState::default(), "1", 1_000, Some(60_000));
 
     assert_eq!(
-        serde_json::to_value(snapshot).unwrap(),
+        serde_json::to_value(playing).unwrap(),
         serde_json::json!({ "status": "playing", "base": base_json(), "session": session_json() })
     );
-}
-
-#[test]
-fn serializes_paused_snapshot_with_camel_case_playback_id() {
-    let snapshot = paused(VolumeState::default(), "1", 1_000, Some(60_000));
-
     assert_eq!(
-        serde_json::to_value(snapshot).unwrap(),
+        serde_json::to_value(paused).unwrap(),
         serde_json::json!({ "status": "paused", "base": base_json(), "session": session_json() })
     );
 }
 
 #[test]
-fn serializes_missing_playback_id_as_null_in_failed_snapshot() {
-    let snapshot = failed(
-        VolumeState::default(),
-        None,
-        PlaybackFailureCode::NoOutputDevice,
-    );
+fn serializes_a_missing_playback_id_as_null_in_a_failed_snapshot() {
+    let snapshot = PlaybackSnapshot::Failed {
+        base: base(),
+        item: None,
+        playback_id: None,
+        error: PlaybackFailureCode::NoOutputDevice,
+    };
 
     assert_eq!(
         serde_json::to_value(snapshot).unwrap(),
@@ -287,455 +1369,4 @@ fn serializes_missing_playback_id_as_null_in_failed_snapshot() {
             "error": "noOutputDevice"
         })
     );
-}
-
-#[test]
-fn stop_is_stopped_when_called_twice() {
-    let mut worker = test_worker(playing(VolumeState::default(), "1", 0, Some(60_000)));
-
-    let first = worker.stop();
-    assert!(matches!(first, PlaybackSnapshot::Stopped { .. }));
-    assert_eq!(first.revision(), 1);
-    assert_eq!(worker.stop(), first);
-    assert_eq!(worker.current(), first);
-    assert!(worker.active.is_none());
-}
-
-#[test]
-fn stop_from_paused_is_stopped() {
-    let mut worker = test_worker(paused(VolumeState::default(), "1", 10_000, Some(60_000)));
-
-    let stopped = worker.stop();
-    assert!(matches!(stopped, PlaybackSnapshot::Stopped { .. }));
-    assert_eq!(stopped.revision(), 1);
-    assert_eq!(worker.current(), stopped);
-}
-
-#[test]
-fn stop_clears_the_queue() {
-    let mut worker = test_worker(stopped(VolumeState::default()));
-    worker
-        .queue
-        .replace(seeds(3), 1, &mut StdRng::seed_from_u64(1))
-        .unwrap();
-
-    worker.stop();
-
-    assert!(worker.queue.is_empty());
-    assert!(worker.queue_snapshot().current.is_none());
-}
-
-#[test]
-fn volume_commands_update_snapshot_without_rebuilding_playback() {
-    let mut worker = test_worker(playing(VolumeState::default(), "1", 250, Some(60_000)));
-
-    let changed = worker.set_volume(0.5).expect("valid volume must succeed");
-    assert_eq!(changed_volume(&changed), (0.5, false));
-    assert_eq!(worker.effective_gain.load(), 0.5);
-
-    let before_invalid = worker.current();
-    assert_eq!(
-        worker.set_volume(f32::NAN),
-        Err(PlaybackServiceError::InvalidVolume)
-    );
-    assert_eq!(worker.current(), before_invalid);
-    assert_eq!(worker.effective_gain.load(), 0.5);
-
-    let muted = worker.mute();
-    assert_eq!(changed_volume(&muted), (0.5, true));
-    assert_eq!(worker.effective_gain.load(), 0.0);
-    assert_eq!(changed_volume(&worker.mute()), (0.5, true));
-    assert_eq!(changed_volume(&worker.unmute()), (0.5, false));
-    assert_eq!(worker.effective_gain.load(), 0.5);
-}
-
-#[test]
-fn published_snapshots_are_monotonic_and_idempotent_commands_keep_revision() {
-    let mut worker = test_worker(stopped(VolumeState::default()));
-
-    let changed = worker.set_volume(0.5).expect("valid volume must succeed");
-    let muted = worker.mute();
-    let muted_again = worker.mute();
-
-    assert_eq!(changed.revision(), 1);
-    assert_eq!(muted.revision(), 2);
-    assert_eq!(muted_again.revision(), 2);
-}
-
-#[test]
-fn stopped_snapshot_retains_the_last_played_item_identity() {
-    let mut worker = test_worker(paused(VolumeState::default(), "1", 1_000, Some(60_000)));
-    worker.loaded_item = Some(test_item());
-
-    let PlaybackSnapshot::Stopped {
-        item: Some(item), ..
-    } = worker.stop()
-    else {
-        panic!("stop must retain an item identity");
-    };
-    assert_eq!(item.file.file_name, "test.flac");
-}
-
-#[test]
-fn volume_state_is_present_in_initial_stopped_snapshot() {
-    let service = start_service();
-    assert_eq!(
-        serde_json::to_value(service.snapshot()).unwrap(),
-        serde_json::json!({"status": "stopped", "base": base_json(), "item": null})
-    );
-    service.shutdown();
-}
-
-#[test]
-fn ignores_final_frames_from_another_stream() {
-    let signal = OutputSignal::FinalFramesSubmitted {
-        stream_id: OutputStreamId(2),
-        end_time: StreamInstant::new(10, 0),
-    };
-
-    assert_ne!(signal_stream_id(&signal), OutputStreamId(1));
-}
-
-#[test]
-fn ignores_stream_failure_from_another_stream() {
-    let signal = OutputSignal::StreamFailed {
-        stream_id: OutputStreamId(2),
-        kind: StreamFailureKind::RuntimeFailed,
-    };
-    assert_ne!(signal_stream_id(&signal), OutputStreamId(1));
-}
-
-#[test]
-fn stops_when_completion_time_is_reached() {
-    assert!(!completion_time_reached(
-        StreamInstant::new(10, 0),
-        StreamInstant::new(9, 999_999_999)
-    ));
-    assert!(completion_time_reached(
-        StreamInstant::new(10, 0),
-        StreamInstant::new(10, 0)
-    ));
-}
-
-#[test]
-fn pause_and_resume_actions_are_idempotent_or_invalid_by_snapshot() {
-    let playing = playing(VolumeState::default(), "1", 0, Some(60_000));
-    let paused = paused(VolumeState::default(), "1", 10_000, Some(60_000));
-    let stopped = stopped(VolumeState::default());
-    let failed = failed_snapshot(
-        OutputStreamId(1),
-        PlaybackFailureCode::OutputStreamRuntimeFailed,
-    );
-
-    assert_eq!(pause_action(&playing), PlaybackControlAction::Change);
-    assert_eq!(pause_action(&paused), PlaybackControlAction::Idempotent);
-    assert_eq!(pause_action(&stopped), PlaybackControlAction::Invalid);
-    assert_eq!(pause_action(&failed), PlaybackControlAction::Invalid);
-    assert_eq!(resume_action(&paused), PlaybackControlAction::Change);
-    assert_eq!(resume_action(&playing), PlaybackControlAction::Idempotent);
-    assert_eq!(resume_action(&stopped), PlaybackControlAction::Invalid);
-    assert_eq!(resume_action(&failed), PlaybackControlAction::Invalid);
-}
-
-#[test]
-fn paused_playback_does_not_finish_naturally() {
-    let paused = paused(VolumeState::default(), "1", 10_000, Some(60_000));
-    let end = StreamInstant::new(10, 0);
-
-    assert!(!should_finish(&paused, Some(end), end));
-    assert!(should_finish(
-        &playing(VolumeState::default(), "1", 0, Some(60_000)),
-        Some(end),
-        end
-    ));
-}
-
-#[test]
-fn maps_pause_and_resume_output_failures() {
-    assert_eq!(
-        output_failure_code(AudioOutputError::StreamPauseFailed),
-        PlaybackFailureCode::OutputStreamPauseFailed
-    );
-    assert_eq!(
-        output_failure_code(AudioOutputError::StreamResumeFailed),
-        PlaybackFailureCode::OutputStreamResumeFailed
-    );
-}
-
-#[test]
-fn preserves_frontend_mapping_for_output_configuration_errors() {
-    assert_eq!(
-        output_failure_code(AudioOutputError::UnsupportedConfiguration),
-        PlaybackFailureCode::UnsupportedOutputConfiguration
-    );
-    assert_eq!(
-        output_failure_code(AudioOutputError::StreamConfigurationUnsupported),
-        PlaybackFailureCode::UnsupportedOutputConfiguration
-    );
-    assert_eq!(
-        output_failure_code(AudioOutputError::StreamBuildFailed),
-        PlaybackFailureCode::OutputStreamBuildFailed
-    );
-}
-
-#[test]
-fn start_failure_scope_separates_file_problems_from_output_problems() {
-    for phase in [
-        StartFailurePhase::SourceOpen,
-        StartFailurePhase::SourceMetadata,
-        StartFailurePhase::SourceRead,
-        StartFailurePhase::SourceChanged,
-        StartFailurePhase::DecoderOpen,
-        StartFailurePhase::FirstPacketDecode,
-        StartFailurePhase::ProcessorCreate,
-        StartFailurePhase::PrebufferDecode,
-        StartFailurePhase::PrebufferConversion,
-    ] {
-        assert_eq!(phase.scope(), FailureScope::Item, "{phase:?}");
-    }
-    for phase in [
-        StartFailurePhase::SourceWorker,
-        StartFailurePhase::OutputDeviceResolution,
-        StartFailurePhase::OutputPrepare,
-        StartFailurePhase::DecodeWorkerSpawn,
-        StartFailurePhase::StreamStart,
-    ] {
-        assert_eq!(phase.scope(), FailureScope::Output, "{phase:?}");
-    }
-}
-
-#[test]
-fn a_file_that_cannot_be_read_is_skipped_and_the_queue_survives() {
-    let mut worker = test_worker(stopped(VolumeState::default()));
-    let (reply, receiver) = mpsc::sync_channel(1);
-
-    worker.start_queue(seeds(3), 0, reply);
-    let result = finish_start(&mut worker, &receiver);
-
-    // Every file is missing, so the pass ends after trying each one exactly once.
-    assert_eq!(result, Some(Err(PlaybackServiceError::Decode)));
-    assert_eq!(worker.queue.len(), 3);
-    assert_eq!(
-        worker.queue_snapshot().current.unwrap().title,
-        "track-2.flac"
-    );
-    let current = worker.current();
-    assert!(matches!(
-        current,
-        PlaybackSnapshot::Failed {
-            error: PlaybackFailureCode::DecodeFailed,
-            ..
-        }
-    ));
-    assert!(current.base().can_go_previous);
-    assert!(!current.base().can_go_next);
-}
-
-#[test]
-fn skipping_failed_files_is_bounded_even_when_the_queue_repeats() {
-    let mut worker = test_worker(stopped(VolumeState::default()));
-    worker.queue.set_repeat(PlaybackRepeatMode::All);
-    let (reply, receiver) = mpsc::sync_channel(1);
-
-    worker.start_queue(seeds(4), 1, reply);
-
-    assert_eq!(
-        finish_start(&mut worker, &receiver),
-        Some(Err(PlaybackServiceError::Decode))
-    );
-    assert_eq!(worker.queue.len(), 4);
-}
-
-#[test]
-fn navigation_over_a_broken_file_reports_the_failure_and_keeps_the_queue() {
-    let mut worker = test_worker(playing(VolumeState::default(), "1", 0, Some(60_000)));
-    worker
-        .queue
-        .replace(seeds(2), 0, &mut StdRng::seed_from_u64(1))
-        .unwrap();
-    let (reply, receiver) = mpsc::sync_channel(1);
-
-    worker.navigate(AdvanceReason::UserNext, reply);
-
-    assert_eq!(
-        finish_start(&mut worker, &receiver),
-        Some(Err(PlaybackServiceError::Decode))
-    );
-    assert_eq!(worker.queue.len(), 2);
-    assert!(matches!(
-        worker.current(),
-        PlaybackSnapshot::Failed {
-            error: PlaybackFailureCode::DecodeFailed,
-            ..
-        }
-    ));
-}
-
-#[test]
-fn a_superseded_start_is_answered_instead_of_dropped() {
-    let mut worker = test_worker(stopped(VolumeState::default()));
-    let (first, first_receiver) = mpsc::sync_channel(1);
-    let (second, _second_receiver) = mpsc::sync_channel(1);
-
-    worker.start_queue(seeds(1), 0, first);
-    worker.start_queue(seeds(1), 0, second);
-
-    assert_eq!(
-        first_receiver.recv_timeout(std::time::Duration::from_secs(1)),
-        Ok(Err(PlaybackServiceError::Superseded))
-    );
-    worker.discard_pending_source();
-}
-
-#[test]
-fn previous_restarts_a_track_that_has_played_for_a_while() {
-    assert!(!previous_restarts_track(2_999, Some(60_000)));
-    assert!(previous_restarts_track(3_000, Some(60_000)));
-    assert!(!previous_restarts_track(30_000, None));
-}
-
-#[test]
-fn navigation_availability_follows_the_queue_and_the_restart_rule() {
-    let mut worker = test_worker(stopped(VolumeState::default()));
-    worker
-        .queue
-        .replace(seeds(2), 0, &mut StdRng::seed_from_u64(1))
-        .unwrap();
-
-    let early = worker.publish(playing(VolumeState::default(), "1", 500, Some(60_000)));
-    assert!(!early.base().can_go_previous);
-    assert!(early.base().can_go_next);
-
-    let late = worker.publish(playing(VolumeState::default(), "1", 5_000, Some(60_000)));
-    assert!(late.base().can_go_previous, "previous restarts the track");
-
-    let idle = worker.publish(stopped(VolumeState::default()));
-    assert!(!idle.base().can_go_previous && !idle.base().can_go_next);
-}
-
-#[test]
-fn shutdown_joins_worker_thread() {
-    let service = start_service();
-    service.shutdown();
-
-    assert!(service.worker.lock().unwrap().is_none());
-}
-
-#[test]
-fn runtime_failure_snapshot_has_active_id() {
-    assert_eq!(
-        failed_snapshot(
-            OutputStreamId(1),
-            PlaybackFailureCode::OutputStreamRuntimeFailed,
-        ),
-        failed(
-            VolumeState::default(),
-            Some("1".into()),
-            PlaybackFailureCode::OutputStreamRuntimeFailed
-        )
-    );
-}
-
-#[test]
-fn completion_signal_id_is_read_from_each_signal_variant() {
-    assert_eq!(
-        signal_stream_id(&OutputSignal::CompletionTimingFailed {
-            stream_id: OutputStreamId(3),
-        }),
-        OutputStreamId(3)
-    );
-}
-
-#[test]
-fn converts_frames_and_calculates_duration_in_milliseconds() {
-    assert_eq!(frame_to_millis(22_050, 44_100), 500);
-    assert_eq!(duration_ms(132_300, 44_100), 3_000);
-    assert_eq!(frame_to_millis(96_000, 96_000), 1_000);
-}
-
-#[test]
-fn position_publication_requires_interval_and_a_changed_position() {
-    assert!(!should_publish_position(
-        std::time::Duration::from_millis(249),
-        true
-    ));
-    assert!(!should_publish_position(
-        std::time::Duration::from_millis(250),
-        false
-    ));
-    assert!(should_publish_position(
-        std::time::Duration::from_millis(250),
-        true
-    ));
-    assert!(should_publish_position(
-        std::time::Duration::from_millis(500),
-        true
-    ));
-}
-
-#[test]
-fn output_selection_is_rejected_during_source_loading() {
-    let mut worker = test_worker(stopped(VolumeState::default()));
-    let (reply, _receiver) = mpsc::sync_channel(1);
-    worker.pending_source = Some(PendingSourceLoad {
-        item: test_item(),
-        worker: SourceLoadWorker::spawn(test_file()).unwrap(),
-        reply,
-        start_paused: false,
-    });
-
-    assert_eq!(
-        worker.set_output_selection(AudioOutputSelection::SystemDefault),
-        Err(PlaybackServiceError::InvalidPlaybackState)
-    );
-    assert_eq!(worker.output_selection, AudioOutputSelection::SystemDefault);
-    worker.discard_pending_source();
-}
-
-fn start_service() -> PlaybackService {
-    PlaybackService::start(
-        crate::events::null_event_sink(),
-        PlaybackPreferences::default(),
-        Arc::new(|_| {}),
-    )
-    .expect("worker should start")
-}
-
-fn test_worker(snapshot: PlaybackSnapshot) -> PlaybackWorker {
-    let (_, command_receiver) = mpsc::sync_channel(1);
-    let (output_sender, _output_receiver) = mpsc::sync_channel(1);
-    let queue = PlaybackQueue::new(PlaybackRepeatMode::Off, false);
-
-    PlaybackWorker::new(
-        WorkerLinks {
-            snapshot: Arc::new(RwLock::new(snapshot)),
-            queue_snapshot: Arc::new(RwLock::new(PlaybackQueueSnapshot::of(0, &queue))),
-            effective_gain: AtomicEffectiveGain::new(1.0),
-            command_receiver,
-            output_sender,
-            events: crate::events::null_event_sink(),
-            observer: Arc::new(|_| {}),
-        },
-        queue,
-        VolumeState::default(),
-        AudioOutputSelection::SystemDefault,
-    )
-}
-
-fn changed_volume(snapshot: &PlaybackSnapshot) -> (f32, bool) {
-    (snapshot.base().volume, snapshot.base().muted)
-}
-
-#[test]
-fn seek_position_helpers_use_floor_alignment_and_output_rate() {
-    assert_eq!(millis_to_frame(999, 44_100), 44_055);
-    assert_eq!(frame_to_millis(44_055, 44_100), 998);
-    assert_eq!(source_to_output_frame(44_100, 48_000, 44_100), 48_000);
-    assert_eq!(duration_to_frames(2_001, 48_000), 96_048);
-}
-
-#[test]
-fn seek_position_helpers_saturate_large_values() {
-    assert_eq!(millis_to_frame(u64::MAX, u32::MAX), u64::MAX);
-    assert_eq!(source_to_output_frame(u64::MAX, u32::MAX, 1), u64::MAX);
 }

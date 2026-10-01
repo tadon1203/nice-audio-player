@@ -2,6 +2,7 @@
 //! application talks to it through `PlaybackService` and reads published snapshots.
 
 mod decode_worker;
+mod input;
 mod item;
 mod preferences;
 mod queue;

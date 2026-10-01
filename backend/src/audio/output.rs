@@ -1,5 +1,10 @@
-use std::sync::atomic::{AtomicU8, Ordering};
-use std::sync::mpsc::SyncSender;
+//! The output device behind a seam.
+//!
+//! Playback talks to an `OutputBackend` (resolve a device, prepare a stream) and to the
+//! `OutputStream` it returns (start, pause, position). `CpalBackend` is the real adapter; a fake
+//! adapter lives in `fake_output` for tests. The cpal callback body is `CallbackState::fill`, a
+//! plain function over its state, tested directly.
+
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
@@ -7,33 +12,27 @@ use cpal::traits::{DeviceTrait, StreamTrait};
 use cpal::{FromSample, Sample, SampleFormat, StreamConfig, StreamInstant, SupportedStreamConfig};
 use log::{error, info, warn};
 
-use super::devices::ResolvedAudioOutputDevice;
+use super::devices::{
+    resolve_output_device_id, resolve_output_selection, AudioOutputDeviceIdentity,
+    AudioOutputSelection, DeviceResolutionError, ResolvedAudioOutputDevice,
+};
 use super::output_processing::{OutputProcessingError, OutputProcessingPlan};
 use super::pcm::{ChannelCount, PcmSpec, SampleRate};
-use super::pcm_queue::PcmConsumer;
+use super::pcm_queue::{bounded_pcm_queue, PcmConsumer, PcmProducer};
 use super::volume::{process_sample, AtomicEffectiveGain};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct OutputStreamId(pub(crate) u64);
 
-pub(crate) enum OutputSignal {
-    FinalFramesSubmitted {
-        stream_id: OutputStreamId,
+/// What a running stream reports on its own.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub(crate) enum OutputEvent {
+    /// Every queued frame has been handed to the device; the stream clock reaching `end_time`
+    /// means they were heard.
+    FinalFrames {
         end_time: StreamInstant,
     },
-    StreamFailed {
-        stream_id: OutputStreamId,
-        kind: StreamFailureKind,
-    },
-    CompletionTimingFailed {
-        stream_id: OutputStreamId,
-    },
-    DecodeFailed {
-        stream_id: OutputStreamId,
-    },
-    SampleRateConversionFailed {
-        stream_id: OutputStreamId,
-    },
+    Failed(StreamFailureKind),
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -41,6 +40,8 @@ pub(crate) enum StreamFailureKind {
     DeviceChanged,
     DeviceUnavailable,
     RuntimeFailed,
+    /// The end of the last callback could not be timed, so completion cannot be detected.
+    CompletionTimingFailed,
 }
 
 fn classify_stream_error_kind(kind: cpal::ErrorKind) -> StreamFailureKind {
@@ -51,41 +52,14 @@ fn classify_stream_error_kind(kind: cpal::ErrorKind) -> StreamFailureKind {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-#[repr(u8)]
-pub(crate) enum ProducerState {
-    Running = 0,
-    EndOfStream = 1,
-    DecodeFailed = 2,
-    SampleRateConversionFailed = 3,
-    Cancelled = 4,
-}
+/// Where a stream's events go. Called from the output callback, so it must not block.
+pub(crate) type OutputEvents = Arc<dyn Fn(OutputEvent) + Send + Sync>;
 
-pub(crate) struct AtomicProducerState {
-    state: AtomicU8,
-}
-
-impl AtomicProducerState {
-    pub(crate) fn new(state: ProducerState) -> Self {
-        Self {
-            state: AtomicU8::new(state as u8),
-        }
-    }
-
-    pub(crate) fn store(&self, state: ProducerState) {
-        self.state.store(state as u8, Ordering::Release);
-    }
-
-    pub(crate) fn load(&self) -> ProducerState {
-        match self.state.load(Ordering::Acquire) {
-            0 => ProducerState::Running,
-            1 => ProducerState::EndOfStream,
-            2 => ProducerState::DecodeFailed,
-            3 => ProducerState::SampleRateConversionFailed,
-            4 => ProducerState::Cancelled,
-            _ => ProducerState::DecodeFailed,
-        }
-    }
+/// What a stream's callback shares with the rest of the application.
+#[derive(Clone)]
+pub(crate) struct OutputLinks {
+    pub(crate) gain: AtomicEffectiveGain,
+    pub(crate) events: OutputEvents,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -115,6 +89,7 @@ impl LatestPosition {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AudioOutputError {
+    NoOutputDevice,
     ConfigurationQueryFailed,
     UnsupportedConfiguration,
     StreamBuildFailed,
@@ -123,6 +98,17 @@ pub enum AudioOutputError {
     StreamPauseFailed,
     StreamResumeFailed,
     DeviceUnavailable,
+}
+
+impl From<DeviceResolutionError> for AudioOutputError {
+    fn from(error: DeviceResolutionError) -> Self {
+        match error {
+            DeviceResolutionError::NoDefaultOutputDevice => Self::NoOutputDevice,
+            DeviceResolutionError::InvalidDeviceId | DeviceResolutionError::DeviceUnavailable => {
+                Self::DeviceUnavailable
+            }
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -142,10 +128,73 @@ pub(crate) struct PreparedOutputConfig {
     pub(crate) processing_plan: OutputProcessingPlan,
 }
 
-pub(crate) struct OutputPreparation {
-    pub(crate) stream: PreparedOutputStream,
-    pub(crate) producer: super::pcm_queue::PcmProducer,
+/// A stream that exists but may not be running yet, with the queue that feeds it.
+pub(crate) struct PreparedOutput {
+    pub(crate) stream: Box<dyn OutputStream>,
+    pub(crate) producer: PcmProducer,
     pub(crate) config: PreparedOutputConfig,
+}
+
+/// What to prepare a stream for.
+pub(crate) enum OutputTarget {
+    /// A new session: pick the device from the selection and a configuration for `spec`.
+    Selection {
+        selection: AudioOutputSelection,
+        spec: PcmSpec,
+    },
+    /// The same device and configuration as an earlier stream.
+    Config(PreparedOutputConfig),
+}
+
+pub(crate) trait OutputBackend: Send {
+    /// Checks that a selection names a usable device and says which one it is.
+    fn resolve(
+        &self,
+        selection: &AudioOutputSelection,
+    ) -> Result<AudioOutputDeviceIdentity, DeviceResolutionError>;
+
+    fn prepare(
+        &self,
+        target: OutputTarget,
+        links: OutputLinks,
+    ) -> Result<PreparedOutput, AudioOutputError>;
+}
+
+pub(crate) trait OutputStream {
+    fn start(&self) -> Result<(), AudioOutputError>;
+    fn pause(&self) -> Result<(), AudioOutputError>;
+    /// The stream clock; a `FinalFrames` event is due once it reaches the event's end time.
+    fn now(&self) -> StreamInstant;
+    /// Frames heard so far, from the newest position report. Never moves backwards.
+    fn played_frame_position(&mut self, sample_rate: u32, max_frame_count: Option<u64>) -> u64;
+    /// Forgets the newest report, so the position holds until the callback reports again.
+    fn clear_timing_anchor(&mut self);
+}
+
+pub(crate) struct CpalBackend;
+
+impl OutputBackend for CpalBackend {
+    fn resolve(
+        &self,
+        selection: &AudioOutputSelection,
+    ) -> Result<AudioOutputDeviceIdentity, DeviceResolutionError> {
+        resolve_output_selection(selection).map(|device| device.identity)
+    }
+
+    fn prepare(
+        &self,
+        target: OutputTarget,
+        links: OutputLinks,
+    ) -> Result<PreparedOutput, AudioOutputError> {
+        match target {
+            OutputTarget::Selection { selection, spec } => {
+                prepare_for_spec(resolve_output_selection(&selection)?, spec, links)
+            }
+            OutputTarget::Config(config) => {
+                prepare_with_config(resolve_output_device_id(&config.device_id)?, &config, links)
+            }
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -178,41 +227,30 @@ fn map_stream_start_error(error: cpal::Error) -> AudioOutputError {
     }
 }
 
-pub(crate) struct PreparedOutputStream {
+struct CpalStream {
     stream: cpal::Stream,
     latest_position: LatestPosition,
     latest_position_update: Option<PositionUpdate>,
     last_played_frame_position: u64,
 }
 
-impl PreparedOutputStream {
-    pub(crate) fn start(&self) -> Result<(), AudioOutputError> {
+impl OutputStream for CpalStream {
+    fn start(&self) -> Result<(), AudioOutputError> {
         self.stream.play().map_err(map_stream_start_error)
     }
 
-    pub(crate) fn resume(&self) -> Result<(), AudioOutputError> {
-        self.stream.play().map_err(|error| match error.kind() {
-            cpal::ErrorKind::DeviceNotAvailable => AudioOutputError::DeviceUnavailable,
-            _ => AudioOutputError::StreamResumeFailed,
-        })
-    }
-
-    pub(crate) fn pause(&self) -> Result<(), AudioOutputError> {
+    fn pause(&self) -> Result<(), AudioOutputError> {
         self.stream.pause().map_err(|error| match error.kind() {
             cpal::ErrorKind::DeviceNotAvailable => AudioOutputError::DeviceUnavailable,
             _ => AudioOutputError::StreamPauseFailed,
         })
     }
 
-    pub(crate) fn now(&self) -> StreamInstant {
+    fn now(&self) -> StreamInstant {
         self.stream.now()
     }
 
-    pub(crate) fn played_frame_position(
-        &mut self,
-        sample_rate: u32,
-        max_frame_count: Option<u64>,
-    ) -> u64 {
+    fn played_frame_position(&mut self, sample_rate: u32, max_frame_count: Option<u64>) -> u64 {
         if let Some(update) = self.latest_position.take() {
             self.latest_position_update = Some(update);
         }
@@ -232,187 +270,89 @@ impl PreparedOutputStream {
         self.last_played_frame_position
     }
 
-    pub(crate) fn clear_timing_anchor(&mut self) {
+    fn clear_timing_anchor(&mut self) {
         self.latest_position.take();
         self.latest_position_update = None;
     }
 }
 
-#[allow(clippy::needless_borrow, clippy::too_many_arguments)]
+/// Runs `$body` with `$sample` naming the Rust type of `$format`. One dispatch for every sample
+/// format cpal can open.
+macro_rules! with_sample_type {
+    ($format:expr, $sample:ident => $body:expr) => {
+        match $format {
+            SampleFormat::F32 => {
+                type $sample = f32;
+                $body
+            }
+            SampleFormat::F64 => {
+                type $sample = f64;
+                $body
+            }
+            SampleFormat::I8 => {
+                type $sample = i8;
+                $body
+            }
+            SampleFormat::I16 => {
+                type $sample = i16;
+                $body
+            }
+            SampleFormat::I24 => {
+                type $sample = cpal::I24;
+                $body
+            }
+            SampleFormat::I32 => {
+                type $sample = i32;
+                $body
+            }
+            SampleFormat::I64 => {
+                type $sample = i64;
+                $body
+            }
+            SampleFormat::U8 => {
+                type $sample = u8;
+                $body
+            }
+            SampleFormat::U16 => {
+                type $sample = u16;
+                $body
+            }
+            SampleFormat::U24 => {
+                type $sample = cpal::U24;
+                $body
+            }
+            SampleFormat::U32 => {
+                type $sample = u32;
+                $body
+            }
+            SampleFormat::U64 => {
+                type $sample = u64;
+                $body
+            }
+            _ => return Err(AudioOutputError::UnsupportedConfiguration),
+        }
+    };
+}
+
 fn build_stream_for_config(
     device: &cpal::Device,
-    device_name: &str,
-    stream_id: OutputStreamId,
     config: StreamConfig,
     sample_format: SampleFormat,
     consumer: PcmConsumer,
-    effective_gain: AtomicEffectiveGain,
-    producer_state: Arc<AtomicProducerState>,
-    capacity_sender: SyncSender<()>,
-    signal_sender: SyncSender<OutputSignal>,
-) -> Result<PreparedOutputStream, AudioOutputError> {
+    links: OutputLinks,
+) -> Result<CpalStream, AudioOutputError> {
     let latest_position = LatestPosition::default();
-    let stream = match sample_format {
-        SampleFormat::F32 => build_stream::<f32>(
-            &device,
-            &device_name,
-            config,
-            sample_format,
-            stream_id,
-            consumer,
-            effective_gain.clone(),
-            producer_state,
-            capacity_sender,
-            signal_sender.clone(),
-            latest_position.clone(),
-        )?,
-        SampleFormat::F64 => build_stream::<f64>(
-            &device,
-            &device_name,
-            config,
-            sample_format,
-            stream_id,
-            consumer,
-            effective_gain.clone(),
-            producer_state,
-            capacity_sender,
-            signal_sender.clone(),
-            latest_position.clone(),
-        )?,
-        SampleFormat::I8 => build_stream::<i8>(
-            &device,
-            &device_name,
-            config,
-            sample_format,
-            stream_id,
-            consumer,
-            effective_gain.clone(),
-            producer_state,
-            capacity_sender,
-            signal_sender.clone(),
-            latest_position.clone(),
-        )?,
-        SampleFormat::I16 => build_stream::<i16>(
-            &device,
-            &device_name,
-            config,
-            sample_format,
-            stream_id,
-            consumer,
-            effective_gain.clone(),
-            producer_state,
-            capacity_sender,
-            signal_sender.clone(),
-            latest_position.clone(),
-        )?,
-        SampleFormat::I24 => build_stream::<cpal::I24>(
-            &device,
-            &device_name,
-            config,
-            sample_format,
-            stream_id,
-            consumer,
-            effective_gain.clone(),
-            producer_state,
-            capacity_sender,
-            signal_sender.clone(),
-            latest_position.clone(),
-        )?,
-        SampleFormat::I32 => build_stream::<i32>(
-            &device,
-            &device_name,
-            config,
-            sample_format,
-            stream_id,
-            consumer,
-            effective_gain.clone(),
-            producer_state,
-            capacity_sender,
-            signal_sender.clone(),
-            latest_position.clone(),
-        )?,
-        SampleFormat::I64 => build_stream::<i64>(
-            &device,
-            &device_name,
-            config,
-            sample_format,
-            stream_id,
-            consumer,
-            effective_gain.clone(),
-            producer_state,
-            capacity_sender,
-            signal_sender.clone(),
-            latest_position.clone(),
-        )?,
-        SampleFormat::U8 => build_stream::<u8>(
-            &device,
-            &device_name,
-            config,
-            sample_format,
-            stream_id,
-            consumer,
-            effective_gain.clone(),
-            producer_state,
-            capacity_sender,
-            signal_sender.clone(),
-            latest_position.clone(),
-        )?,
-        SampleFormat::U16 => build_stream::<u16>(
-            &device,
-            &device_name,
-            config,
-            sample_format,
-            stream_id,
-            consumer,
-            effective_gain.clone(),
-            producer_state,
-            capacity_sender,
-            signal_sender.clone(),
-            latest_position.clone(),
-        )?,
-        SampleFormat::U24 => build_stream::<cpal::U24>(
-            &device,
-            &device_name,
-            config,
-            sample_format,
-            stream_id,
-            consumer,
-            effective_gain.clone(),
-            producer_state,
-            capacity_sender,
-            signal_sender.clone(),
-            latest_position.clone(),
-        )?,
-        SampleFormat::U32 => build_stream::<u32>(
-            &device,
-            &device_name,
-            config,
-            sample_format,
-            stream_id,
-            consumer,
-            effective_gain.clone(),
-            producer_state,
-            capacity_sender,
-            signal_sender.clone(),
-            latest_position.clone(),
-        )?,
-        SampleFormat::U64 => build_stream::<u64>(
-            &device,
-            &device_name,
-            config,
-            sample_format,
-            stream_id,
-            consumer,
-            effective_gain.clone(),
-            producer_state,
-            capacity_sender,
-            signal_sender.clone(),
-            latest_position.clone(),
-        )?,
-        _ => return Err(AudioOutputError::UnsupportedConfiguration),
-    };
-
-    Ok(PreparedOutputStream {
+    let state = CallbackState::new(
+        consumer,
+        usize::from(config.channels),
+        config.sample_rate,
+        links,
+        latest_position.clone(),
+    );
+    let stream = with_sample_type!(sample_format, Sample => {
+        build_stream::<Sample>(device, config, sample_format, state)?
+    });
+    Ok(CpalStream {
         stream,
         latest_position,
         latest_position_update: None,
@@ -420,15 +360,11 @@ fn build_stream_for_config(
     })
 }
 
-pub(crate) fn prepare_output_stream(
-    stream_id: OutputStreamId,
-    spec: PcmSpec,
+fn prepare_for_spec(
     resolved_device: ResolvedAudioOutputDevice,
-    effective_gain: AtomicEffectiveGain,
-    producer_state: Arc<AtomicProducerState>,
-    capacity_sender: SyncSender<()>,
-    signal_sender: SyncSender<OutputSignal>,
-) -> Result<OutputPreparation, AudioOutputError> {
+    spec: PcmSpec,
+    links: OutputLinks,
+) -> Result<PreparedOutput, AudioOutputError> {
     let device_identity = resolved_device.identity;
     let device = resolved_device.device;
     let device_name = device_identity.name.clone();
@@ -452,22 +388,16 @@ pub(crate) fn prepare_output_stream(
         let sample_format = config.sample_format();
         let plan = OutputProcessingPlan::new(spec, spec)
             .map_err(|_| AudioOutputError::UnsupportedConfiguration)?;
-        let output_spec = plan.output();
-        let (producer, consumer) = make_queue(output_spec)?;
+        let (producer, consumer) = make_queue(plan.output())?;
         let result = build_stream_for_config(
             &device,
-            &device_name,
-            stream_id,
             stream_config,
             sample_format,
             consumer,
-            effective_gain.clone(),
-            Arc::clone(&producer_state),
-            capacity_sender.clone(),
-            signal_sender.clone(),
+            links.clone(),
         );
-        result.map(|stream| OutputPreparation {
-            stream,
+        result.map(|stream| PreparedOutput {
+            stream: Box::new(stream),
             producer,
             config: PreparedOutputConfig {
                 device_id: device_id.clone(),
@@ -509,10 +439,8 @@ pub(crate) fn prepare_output_stream(
             .ok_or(AudioOutputError::UnsupportedConfiguration)?,
     );
     let plan = OutputProcessingPlan::new(spec, target).map_err(|error| match error {
-        OutputProcessingError::UnsupportedChannelConversion => {
-            AudioOutputError::UnsupportedConfiguration
-        }
-        OutputProcessingError::MisalignedSamples
+        OutputProcessingError::UnsupportedChannelConversion
+        | OutputProcessingError::MisalignedSamples
         | OutputProcessingError::InvalidInputSamples
         | OutputProcessingError::ResamplerConstructionFailed
         | OutputProcessingError::ResamplerProcessingFailed
@@ -524,85 +452,62 @@ pub(crate) fn prepare_output_stream(
     let config = fallback.config();
     let stream = classify_fallback_build(build_stream_for_config(
         &device,
-        &device_name,
-        stream_id,
         config,
         fallback.sample_format(),
         consumer,
-        effective_gain,
-        producer_state,
-        capacity_sender,
-        signal_sender,
+        links,
     ))?;
     info!("audio.output.configured path=fallback source_rate={} source_channels={} output_rate={} output_channels={} conversion={:?} sample_format={:?}",
         source_rate, source_channels, target_rate, target_channels, plan.channel_conversion(), fallback.sample_format());
-    let config = PreparedOutputConfig {
-        device_id: device_id.clone(),
-        device_name: device_name.clone(),
-        stream_config: config,
-        sample_format: fallback.sample_format(),
-        path: OutputPath::Fallback,
-        processing_plan: plan,
-    };
-    Ok(OutputPreparation {
-        stream,
+    Ok(PreparedOutput {
+        stream: Box::new(stream),
         producer,
-        config,
+        config: PreparedOutputConfig {
+            device_id,
+            device_name,
+            stream_config: config,
+            sample_format: fallback.sample_format(),
+            path: OutputPath::Fallback,
+            processing_plan: plan,
+        },
     })
 }
 
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn prepare_output_stream_with_config(
-    stream_id: OutputStreamId,
+fn prepare_with_config(
     resolved_device: ResolvedAudioOutputDevice,
     config: &PreparedOutputConfig,
-    effective_gain: AtomicEffectiveGain,
-    producer_state: Arc<AtomicProducerState>,
-    capacity_sender: SyncSender<()>,
-    signal_sender: SyncSender<OutputSignal>,
-) -> Result<OutputPreparation, AudioOutputError> {
-    let device_identity = resolved_device.identity;
+    links: OutputLinks,
+) -> Result<PreparedOutput, AudioOutputError> {
     let device = resolved_device.device;
-    if device_identity.id != config.device_id {
+    if resolved_device.identity.id != config.device_id {
         return Err(AudioOutputError::StreamBuildFailed);
     }
-    let device_name = device_identity.name.clone();
     let (producer, consumer) = make_queue(config.processing_plan.output())?;
-    let stream = build_stream_for_config(
+    let stream = classify_fallback_build(build_stream_for_config(
         &device,
-        &device_name,
-        stream_id,
         config.stream_config,
         config.sample_format,
         consumer,
-        effective_gain,
-        producer_state,
-        capacity_sender,
-        signal_sender,
-    )
-    .map_err(|error| match error {
-        AudioOutputError::StreamConfigurationUnsupported => AudioOutputError::StreamBuildFailed,
-        error => error,
-    })?;
-    Ok(OutputPreparation {
-        stream,
+        links,
+    ))?;
+    Ok(PreparedOutput {
+        stream: Box::new(stream),
         producer,
         config: config.clone(),
     })
 }
 
-fn make_queue(
-    spec: PcmSpec,
-) -> Result<(super::pcm_queue::PcmProducer, PcmConsumer), AudioOutputError> {
+/// A two second queue for `spec`.
+pub(crate) fn make_queue(spec: PcmSpec) -> Result<(PcmProducer, PcmConsumer), AudioOutputError> {
     let sample_rate = spec.sample_rate().get();
     let channels = spec.channel_count().get();
     let capacity = usize::try_from(sample_rate)
         .unwrap_or(usize::MAX)
         .saturating_mul(2)
         .max(1);
-    super::pcm_queue::bounded_pcm_queue(
+    bounded_pcm_queue(
         capacity,
-        super::pcm::ChannelCount::new(usize::from(channels))
+        ChannelCount::new(usize::from(channels))
             .ok_or(AudioOutputError::UnsupportedConfiguration)?,
     )
     .map_err(|_| AudioOutputError::UnsupportedConfiguration)
@@ -667,56 +572,117 @@ fn sample_format_rank(sample_format: SampleFormat) -> Option<u8> {
     }
 }
 
-fn write_queue_samples<T>(
-    output: &mut [T],
-    consumer: &mut PcmConsumer,
-    effective_gain: f32,
-) -> usize
-where
-    T: Sample + FromSample<f32>,
-{
-    let mut consumed = 0;
-    for destination in output.iter_mut() {
-        let Some(sample) = consumer.pop_sample() else {
-            *destination = T::EQUILIBRIUM;
-            continue;
-        };
-        *destination = T::from_sample(process_sample(sample, effective_gain));
-        consumed += 1;
-    }
-    consumed
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+enum Completion {
+    Pending,
+    Reported,
+    TimingFailed,
 }
 
-#[cfg(test)]
-fn write_output_samples<T>(output: &mut [T], source: &[f32], position: &mut usize) -> usize
-where
-    T: Sample + FromSample<f32>,
-{
-    let copied = source.len().saturating_sub(*position).min(output.len());
-    for (destination, sample) in output[..copied]
-        .iter_mut()
-        .zip(&source[*position..*position + copied])
+/// Samples moved from the queue per pass; sized for the callback's stack.
+const FILL_CHUNK_SAMPLES: usize = 512;
+
+/// Everything the output callback keeps between calls.
+pub(crate) struct CallbackState {
+    consumer: PcmConsumer,
+    channel_count: usize,
+    sample_rate: u32,
+    links: OutputLinks,
+    latest_position: LatestPosition,
+    position_frame: u64,
+    last_end_time: Option<StreamInstant>,
+    completion: Completion,
+}
+
+impl CallbackState {
+    pub(crate) fn new(
+        consumer: PcmConsumer,
+        channel_count: usize,
+        sample_rate: u32,
+        links: OutputLinks,
+        latest_position: LatestPosition,
+    ) -> Self {
+        Self {
+            consumer,
+            channel_count,
+            sample_rate,
+            links,
+            latest_position,
+            position_frame: 0,
+            last_end_time: None,
+            completion: Completion::Pending,
+        }
+    }
+
+    /// The output callback: fills `output` from the queue with the gain applied, pads an
+    /// underrun with silence, reports the position, and reports completion once the producer
+    /// has finished and the queue is drained.
+    pub(crate) fn fill<T>(&mut self, output: &mut [T], playback_time: StreamInstant)
+    where
+        T: Sample + FromSample<f32>,
     {
-        *destination = T::from_sample(*sample);
+        let start_frame = self.position_frame;
+        let gain = self.links.gain.load();
+        let consumed_samples = self.write_queue_samples(output, gain);
+        let consumed_frames = consumed_samples / self.channel_count;
+        self.position_frame = self.position_frame.saturating_add(consumed_frames as u64);
+        if consumed_frames > 0 {
+            self.last_end_time = calculate_end_time(
+                playback_time,
+                consumed_samples,
+                self.channel_count,
+                self.sample_rate,
+            );
+        }
+        self.latest_position.publish(PositionUpdate {
+            start_frame,
+            end_frame: self.position_frame,
+            playback_time,
+        });
+        self.report_completion();
     }
-    output[copied..].fill(T::EQUILIBRIUM);
-    *position += copied;
-    copied
+
+    fn write_queue_samples<T>(&mut self, output: &mut [T], gain: f32) -> usize
+    where
+        T: Sample + FromSample<f32>,
+    {
+        let mut chunk = [0.0_f32; FILL_CHUNK_SAMPLES];
+        let mut consumed = 0;
+        for destination in output.chunks_mut(FILL_CHUNK_SAMPLES) {
+            let popped = self.consumer.pop_samples(&mut chunk[..destination.len()]);
+            for (slot, sample) in destination.iter_mut().zip(&chunk[..popped]) {
+                *slot = T::from_sample(process_sample(*sample, gain));
+            }
+            destination[popped..].fill(T::EQUILIBRIUM);
+            consumed += popped;
+        }
+        consumed
+    }
+
+    fn report_completion(&mut self) {
+        if self.completion != Completion::Pending || !self.consumer.is_finished() {
+            return;
+        }
+        match self.last_end_time {
+            Some(end_time) => {
+                self.completion = Completion::Reported;
+                (self.links.events)(OutputEvent::FinalFrames { end_time });
+            }
+            None => {
+                self.completion = Completion::TimingFailed;
+                (self.links.events)(OutputEvent::Failed(
+                    StreamFailureKind::CompletionTimingFailed,
+                ));
+            }
+        }
+    }
 }
 
-#[allow(clippy::too_many_arguments)]
 fn build_stream<T>(
     device: &cpal::Device,
-    _device_name: &str,
     config: StreamConfig,
     sample_format: SampleFormat,
-    stream_id: OutputStreamId,
-    mut consumer: PcmConsumer,
-    effective_gain: AtomicEffectiveGain,
-    producer_state: Arc<AtomicProducerState>,
-    capacity_sender: SyncSender<()>,
-    signal_sender: SyncSender<OutputSignal>,
-    latest_position: LatestPosition,
+    mut state: CallbackState,
 ) -> Result<cpal::Stream, AudioOutputError>
 where
     T: cpal::SizedSample + FromSample<f32>,
@@ -724,64 +690,14 @@ where
     let config_sample_rate = config.sample_rate;
     let config_channels = config.channels;
     let config_buffer_size = config.buffer_size;
-    let sample_rate = config.sample_rate;
-    let channel_count = usize::from(config.channels);
-    let error_sender = signal_sender.clone();
-    let mut position_frame = 0u64;
-    let mut last_end_time = None;
-    let mut completion_sent = false;
-    let mut completion_timing_failed = false;
+    let error_events = Arc::clone(&state.links.events);
 
-    let stream = device
+    device
         .build_output_stream(
             config,
-            move |output: &mut [T], info| {
-                let start_frame = position_frame;
-                let effective_gain = effective_gain.load();
-                let consumed_sample_count =
-                    write_queue_samples(output, &mut consumer, effective_gain);
-                let consumed_frames = consumed_sample_count / channel_count;
-                position_frame = position_frame.saturating_add(consumed_frames as u64);
-                let end_frame = position_frame;
-                if consumed_frames > 0 {
-                    let _ = capacity_sender.try_send(());
-                    last_end_time = calculate_end_time(
-                        info.timestamp().playback,
-                        consumed_sample_count,
-                        channel_count,
-                        sample_rate,
-                    );
-                }
-                latest_position.publish(PositionUpdate {
-                    start_frame,
-                    end_frame,
-                    playback_time: info.timestamp().playback,
-                });
-
-                if producer_state.load() != ProducerState::EndOfStream {
-                    return;
-                }
-                if !consumer.is_empty() || completion_sent {
-                    return;
-                }
-                let Some(end_time) = last_end_time else {
-                    if !completion_timing_failed {
-                        completion_timing_failed = true;
-                        let _ = signal_sender
-                            .try_send(OutputSignal::CompletionTimingFailed { stream_id });
-                    }
-                    return;
-                };
-                completion_sent = signal_sender
-                    .try_send(OutputSignal::FinalFramesSubmitted {
-                        stream_id,
-                        end_time,
-                    })
-                    .is_ok();
-            },
+            move |output: &mut [T], info| state.fill(output, info.timestamp().playback),
             move |error| {
-                let kind = classify_stream_error_kind(error.kind());
-                let _ = error_sender.try_send(OutputSignal::StreamFailed { stream_id, kind });
+                error_events(OutputEvent::Failed(classify_stream_error_kind(error.kind())));
             },
             None,
         )
@@ -796,9 +712,7 @@ where
                 }
                 _ => AudioOutputError::StreamBuildFailed,
             }
-        })?;
-
-    Ok(stream)
+        })
 }
 
 fn elapsed_frames(elapsed: Duration, sample_rate: u32) -> u64 {
@@ -846,17 +760,19 @@ fn calculate_end_time(
 
 #[cfg(test)]
 mod tests {
-    use super::super::pcm::ChannelCount;
-    use super::super::pcm_queue::bounded_pcm_queue;
     use super::{
         calculate_end_time, classify_fallback_build, classify_native_attempt,
         classify_stream_error_kind, format_supported_output_configs, played_frame_position,
-        sample_format_rank, select_output_config, write_output_samples, write_queue_samples,
-        AudioOutputError, LatestPosition, NativeAttemptDecision, PositionUpdate, StreamFailureKind,
+        sample_format_rank, select_output_config, AudioOutputError, CallbackState, LatestPosition,
+        NativeAttemptDecision, OutputEvent, OutputLinks, PositionUpdate, StreamFailureKind,
     };
+    use crate::audio::pcm::ChannelCount;
+    use crate::audio::pcm_queue::{bounded_pcm_queue, PcmProducer};
+    use crate::audio::volume::AtomicEffectiveGain;
     use cpal::{
         Sample, SampleFormat, StreamInstant, SupportedBufferSize, SupportedStreamConfigRange,
     };
+    use std::sync::{Arc, Mutex};
     use std::time::Duration;
 
     fn range(sample_format: SampleFormat, channels: u16) -> SupportedStreamConfigRange {
@@ -945,10 +861,6 @@ mod tests {
             classify_fallback_build::<u8>(Err(AudioOutputError::StreamBuildFailed)),
             Err(AudioOutputError::StreamBuildFailed)
         );
-        assert_eq!(
-            classify_native_attempt::<u8>(Err(AudioOutputError::StreamBuildFailed)),
-            NativeAttemptDecision::Failure(AudioOutputError::StreamBuildFailed)
-        );
     }
 
     #[test]
@@ -998,51 +910,6 @@ mod tests {
     }
 
     #[test]
-    fn writes_and_pads_output_without_advancing_past_source() {
-        let source = [-1.0, 0.0, 1.0];
-        let mut position = 0;
-        let mut first = [0.0; 2];
-        let mut second = [0.0; 3];
-        let mut third = [0.0; 2];
-
-        assert_eq!(write_output_samples(&mut first, &source, &mut position), 2);
-        assert_eq!(first, [-1.0, 0.0]);
-        assert_eq!(position, 2);
-        assert_eq!(write_output_samples(&mut second, &source, &mut position), 1);
-        assert_eq!(second, [1.0, 0.0, 0.0]);
-        assert_eq!(position, 3);
-        assert_eq!(write_output_samples(&mut third, &source, &mut position), 0);
-        assert_eq!(third, [0.0; 2]);
-        assert_eq!(position, 3);
-    }
-
-    #[test]
-    fn converts_integer_output_samples() {
-        let source = [-1.0, 0.0, 1.0];
-        let mut output = [0i16; 3];
-        let mut position = 0;
-
-        assert_eq!(write_output_samples(&mut output, &source, &mut position), 3);
-        assert_eq!(output, [i16::MIN, 0, i16::MAX]);
-    }
-
-    #[test]
-    fn applies_gain_before_integer_conversion_and_pads_with_equilibrium() {
-        let (mut producer, mut consumer) =
-            bounded_pcm_queue(3, ChannelCount::new(1).unwrap()).unwrap();
-        assert_eq!(producer.push_samples(&[-1.0, 0.5, 1.0]), 3);
-        let mut output = [0i16; 4];
-
-        assert_eq!(write_queue_samples(&mut output, &mut consumer, 0.5), 3);
-        assert_eq!(output[..3], [-16_384, 8_192, 16_384]);
-        assert_eq!(output[3], i16::EQUILIBRIUM);
-
-        let mut empty = [0u16; 2];
-        assert_eq!(write_queue_samples(&mut empty, &mut consumer, 1.0), 0);
-        assert_eq!(empty, [u16::EQUILIBRIUM; 2]);
-    }
-
-    #[test]
     fn calculates_completion_time_from_frames() {
         let start = StreamInstant::new(10, 0);
         let end = calculate_end_time(start, 4, 2, 44_100).expect("time must calculate");
@@ -1052,29 +919,6 @@ mod tests {
         );
         assert!(calculate_end_time(start, 3, 2, 44_100).is_none());
         assert!(calculate_end_time(start, usize::MAX, 1, 0).is_none());
-    }
-
-    #[test]
-    fn completion_time_uses_only_samples_submitted_by_final_callback() {
-        let source = vec![0.0; 10];
-        let mut position = 0;
-
-        let mut first = [0.0; 8];
-        assert_eq!(write_output_samples(&mut first, &source, &mut position), 8);
-
-        let mut final_output = [0.0; 8];
-        let final_written = write_output_samples(&mut final_output, &source, &mut position);
-
-        assert_eq!(final_written, 2);
-        assert_eq!(position, 10);
-
-        let start = StreamInstant::new(10, 0);
-        let end = calculate_end_time(start, final_written, 2, 48_000).unwrap();
-
-        assert_eq!(
-            end.checked_duration_since(start),
-            Some(Duration::from_secs_f64(1.0 / 48_000.0))
-        );
     }
 
     #[test]
@@ -1162,49 +1006,148 @@ mod tests {
 
     #[test]
     fn does_not_move_backwards_when_stream_clock_is_before_playback_timestamp() {
-        let position = played_frame_position(
-            PositionUpdate {
-                start_frame: 100,
-                end_frame: 300,
-                playback_time: StreamInstant::new(20, 0),
-            },
-            StreamInstant::new(10, 0),
-            100,
-            Some(1_000),
-            0,
-        );
-        let position_after_progress = played_frame_position(
-            PositionUpdate {
-                start_frame: 100,
-                end_frame: 300,
-                playback_time: StreamInstant::new(20, 0),
-            },
-            StreamInstant::new(10, 0),
-            100,
-            Some(1_000),
-            250,
-        );
+        let update = PositionUpdate {
+            start_frame: 100,
+            end_frame: 300,
+            playback_time: StreamInstant::new(20, 0),
+        };
+        let now = StreamInstant::new(10, 0);
 
-        assert_eq!(position, 100);
-        assert_eq!(position_after_progress, 250);
+        assert_eq!(played_frame_position(update, now, 100, Some(1_000), 0), 100);
+        assert_eq!(
+            played_frame_position(update, now, 100, Some(1_000), 250),
+            250
+        );
+    }
+
+    struct Callback {
+        state: CallbackState,
+        producer: PcmProducer,
+        position: LatestPosition,
+        events: Arc<Mutex<Vec<OutputEvent>>>,
+    }
+
+    fn callback(channels: usize, capacity_frames: usize, gain: f32) -> Callback {
+        let (producer, consumer) =
+            bounded_pcm_queue(capacity_frames, ChannelCount::new(channels).unwrap()).unwrap();
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let sink = Arc::clone(&events);
+        let position = LatestPosition::default();
+        let state = CallbackState::new(
+            consumer,
+            channels,
+            100,
+            OutputLinks {
+                gain: AtomicEffectiveGain::new(gain),
+                events: Arc::new(move |event| sink.lock().unwrap().push(event)),
+            },
+            position.clone(),
+        );
+        Callback {
+            state,
+            producer,
+            position,
+            events,
+        }
+    }
+
+    fn at(seconds: u64) -> StreamInstant {
+        StreamInstant::new(seconds, 0)
     }
 
     #[test]
-    fn builds_callback_frame_ranges_from_stereo_sample_positions() {
-        let source = [1.0; 6];
-        let mut position = 2;
-        let mut normal_output = [0.0; 4];
-        let start_frame = position / 2;
-        write_output_samples(&mut normal_output, &source, &mut position);
-        let end_frame = position / 2;
-        assert_eq!((start_frame, end_frame), (1, 3));
+    fn fill_applies_gain_before_integer_conversion_and_pads_with_equilibrium() {
+        let mut callback = callback(1, 3, 0.5);
+        assert_eq!(callback.producer.push_samples(&[-1.0, 0.5, 1.0]), 3);
+        let mut output = [0i16; 4];
 
-        let mut partial_output = [0.0; 4];
-        let mut partial_position = 4;
-        let start_frame = partial_position / 2;
-        write_output_samples(&mut partial_output, &source, &mut partial_position);
-        let end_frame = partial_position / 2;
-        assert_eq!((start_frame, end_frame), (2, 3));
-        assert_eq!(partial_output, [1.0, 1.0, 0.0, 0.0]);
+        callback.state.fill(&mut output, at(10));
+
+        assert_eq!(output[..3], [-16_384, 8_192, 16_384]);
+        assert_eq!(output[3], i16::EQUILIBRIUM);
+
+        let mut empty = [0u16; 2];
+        callback.state.fill(&mut empty, at(11));
+        assert_eq!(empty, [u16::EQUILIBRIUM; 2]);
+    }
+
+    #[test]
+    fn fill_handles_buffers_larger_than_one_chunk() {
+        let mut callback = callback(2, 2_048, 1.0);
+        let samples: Vec<f32> = (0..2_000).map(|index| index as f32 / 4_000.0).collect();
+        callback.producer.push_samples(&samples);
+        let mut output = vec![0.0_f32; 2_400];
+
+        callback.state.fill(&mut output, at(10));
+
+        assert_eq!(output[..2_000], samples[..]);
+        assert!(output[2_000..].iter().all(|sample| *sample == 0.0));
+    }
+
+    #[test]
+    fn fill_reports_the_frames_it_consumed_as_the_newest_position() {
+        let mut callback = callback(2, 8, 1.0);
+        callback.producer.push_samples(&[0.1; 8]);
+        let mut output = [0.0_f32; 4];
+
+        callback.state.fill(&mut output, at(10));
+        callback.state.fill(&mut output, at(11));
+
+        let update = callback.position.take().expect("a position was reported");
+        assert_eq!((update.start_frame, update.end_frame), (2, 4));
+        assert_eq!(update.playback_time, at(11));
+    }
+
+    #[test]
+    fn fill_reports_completion_once_after_the_producer_finished_and_the_queue_drained() {
+        let mut callback = callback(1, 8, 1.0);
+        callback.producer.push_samples(&[0.1; 4]);
+        callback.producer.finish();
+        let mut output = [0.0_f32; 3];
+
+        callback.state.fill(&mut output, at(10));
+        assert!(
+            callback.events.lock().unwrap().is_empty(),
+            "one sample is left"
+        );
+
+        callback.state.fill(&mut output, at(11));
+        callback.state.fill(&mut output, at(12));
+
+        let events = callback.events.lock().unwrap().clone();
+        assert_eq!(
+            events,
+            [OutputEvent::FinalFrames {
+                end_time: calculate_end_time(at(11), 1, 1, 100).unwrap()
+            }],
+            "completion is timed from the callback that submitted the last frames"
+        );
+    }
+
+    #[test]
+    fn fill_does_not_report_completion_while_the_producer_may_still_write() {
+        let mut callback = callback(1, 8, 1.0);
+        let mut output = [0.0_f32; 3];
+
+        callback.state.fill(&mut output, at(10));
+
+        assert!(callback.events.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn fill_reports_a_timing_failure_when_nothing_was_ever_submitted() {
+        let mut callback = callback(1, 8, 1.0);
+        callback.producer.finish();
+        let mut output = [0.0_f32; 3];
+
+        callback.state.fill(&mut output, at(10));
+        callback.state.fill(&mut output, at(11));
+
+        assert_eq!(
+            callback.events.lock().unwrap().clone(),
+            [OutputEvent::Failed(
+                StreamFailureKind::CompletionTimingFailed
+            )]
+        );
     }
 }

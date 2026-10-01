@@ -7,6 +7,7 @@ use std::sync::{
 };
 use std::thread::{self, JoinHandle};
 
+use super::input::{Inbox, WorkerInput};
 use super::item::PlaybackItemSeed;
 use super::preferences::{PlaybackPreferences, PreferencesObserver};
 use super::queue::{PlaybackQueue, PlaybackRepeatMode};
@@ -15,7 +16,7 @@ use super::snapshot::{
 };
 use super::worker::{PlaybackWorker, WorkerLinks};
 use crate::audio::devices::AudioOutputSelection;
-use crate::audio::output::OutputSignal;
+use crate::audio::output::{CpalBackend, OutputBackend};
 use crate::audio::volume::{AtomicEffectiveGain, VolumeState};
 use crate::events::SharedEventSink;
 use crate::media::validation::ValidatedAudioFile;
@@ -44,6 +45,13 @@ pub enum PlaybackServiceStartError {
 }
 
 pub(super) type Reply<T> = SyncSender<Result<T, PlaybackServiceError>>;
+
+/// Answers a request, if anyone is waiting for the answer.
+pub(super) fn respond<T>(reply: Option<Reply<T>>, result: Result<T, PlaybackServiceError>) {
+    if let Some(reply) = reply {
+        let _ = reply.send(result);
+    }
+}
 
 pub(super) enum PlaybackCommand {
     Start {
@@ -116,13 +124,11 @@ pub(super) enum PlaybackCommand {
         next: bool,
         reply: Reply<PlaybackQueueSnapshot>,
     },
-    Output(OutputSignal),
-    Shutdown,
 }
 
 #[derive(Clone)]
 pub struct PlaybackServiceHandle {
-    command_sender: SyncSender<PlaybackCommand>,
+    inbox: Inbox,
     snapshot: Arc<RwLock<PlaybackSnapshot>>,
     queue_snapshot: Arc<RwLock<PlaybackQueueSnapshot>>,
 }
@@ -130,7 +136,6 @@ pub struct PlaybackServiceHandle {
 pub struct PlaybackService {
     handle: PlaybackServiceHandle,
     pub(super) worker: Mutex<Option<JoinHandle<()>>>,
-    signal_bridge: Mutex<Option<JoinHandle<()>>>,
 }
 
 impl PlaybackService {
@@ -141,9 +146,17 @@ impl PlaybackService {
         preferences: PlaybackPreferences,
         observer: PreferencesObserver,
     ) -> Result<Self, PlaybackServiceStartError> {
+        Self::start_with_backend(events, preferences, observer, Box::new(CpalBackend))
+    }
+
+    pub(super) fn start_with_backend(
+        events: SharedEventSink,
+        preferences: PlaybackPreferences,
+        observer: PreferencesObserver,
+        backend: Box<dyn OutputBackend>,
+    ) -> Result<Self, PlaybackServiceStartError> {
         let preferences = preferences.sanitized();
-        let (command_sender, command_receiver) = mpsc::sync_channel(4);
-        let (output_sender, output_receiver) = mpsc::sync_channel(4);
+        let (inbox, inputs) = Inbox::channel();
         let volume_state = VolumeState::restored(preferences.volume, preferences.muted);
         let effective_gain = AtomicEffectiveGain::new(volume_state.effective_gain());
         let output_selection = preferences.output_selection;
@@ -157,39 +170,24 @@ impl PlaybackService {
             snapshot: Arc::clone(&state),
             queue_snapshot: Arc::clone(&queue_state),
             effective_gain,
-            command_receiver,
-            output_sender,
+            inbox: inbox.clone(),
             events,
             observer,
+            backend,
         };
-        let signal_bridge_sender = command_sender.clone();
-        let signal_bridge = thread::Builder::new()
-            .name("audio-playback-signal-bridge".into())
-            .spawn(move || {
-                while let Ok(signal) = output_receiver.recv() {
-                    if signal_bridge_sender
-                        .send(PlaybackCommand::Output(signal))
-                        .is_err()
-                    {
-                        break;
-                    }
-                }
-            })
-            .map_err(|_| PlaybackServiceStartError::WorkerStartFailed)?;
         let worker = thread::Builder::new()
             .name("audio-playback".into())
             .spawn(move || {
-                PlaybackWorker::new(links, queue, volume_state, output_selection).run();
+                PlaybackWorker::new(links, queue, volume_state, output_selection).run(inputs);
             })
             .map_err(|_| PlaybackServiceStartError::WorkerStartFailed)?;
         Ok(Self {
             handle: PlaybackServiceHandle {
-                command_sender,
+                inbox,
                 snapshot: state,
                 queue_snapshot: queue_state,
             },
             worker: Mutex::new(Some(worker)),
-            signal_bridge: Mutex::new(Some(signal_bridge)),
         })
     }
 
@@ -206,18 +204,11 @@ impl PlaybackService {
     }
 
     pub fn shutdown(&self) {
-        let _ = self.handle.command_sender.send(PlaybackCommand::Shutdown);
+        self.handle.inbox.send(WorkerInput::Shutdown);
         if let Ok(mut worker) = self.worker.lock() {
             if let Some(worker) = worker.take() {
                 if worker.join().is_err() {
                     error!("playback.worker_panicked");
-                }
-            }
-        }
-        if let Ok(mut bridge) = self.signal_bridge.lock() {
-            if let Some(bridge) = bridge.take() {
-                if bridge.join().is_err() {
-                    error!("playback.signal_bridge_panicked");
                 }
             }
         }
@@ -375,9 +366,9 @@ impl PlaybackServiceHandle {
         make: impl FnOnce(Reply<T>) -> PlaybackCommand,
     ) -> Result<T, PlaybackServiceError> {
         let (reply_sender, reply_receiver) = mpsc::sync_channel(1);
-        self.command_sender
-            .send(make(reply_sender))
-            .map_err(|_| PlaybackServiceError::WorkerUnavailable)?;
+        if !self.inbox.send(WorkerInput::Command(make(reply_sender))) {
+            return Err(PlaybackServiceError::WorkerUnavailable);
+        }
         reply_receiver
             .recv()
             .map_err(|_| PlaybackServiceError::WorkerUnavailable)?

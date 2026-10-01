@@ -1,72 +1,56 @@
-use std::sync::mpsc::{self, Receiver, TryRecvError};
+//! Loads a track's compressed source off the worker thread and reports it as an event.
+
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::thread::{self, JoinHandle};
 
 use log::error;
 
-use super::super::compressed_source::{
-    prepare_compressed_source, CompressedAudioSource, CompressedSourceError, SourceLoadCancellation,
+use super::input::{Inbox, PlaybackId, WorkerEvent};
+use crate::audio::compressed_source::{
+    prepare_compressed_source, CompressedSourceError, SourceLoadCancellation,
 };
 use crate::media::validation::ValidatedAudioFile;
 
-pub(crate) struct SourceLoadWorker {
+pub(crate) struct SourceLoad {
     cancellation: SourceLoadCancellation,
-    receiver: Receiver<Result<CompressedAudioSource, CompressedSourceError>>,
-    join_handle: Option<JoinHandle<()>>,
+    join_handle: JoinHandle<()>,
 }
 
-impl SourceLoadWorker {
-    pub(crate) fn spawn(file: ValidatedAudioFile) -> Result<Self, ()> {
+impl SourceLoad {
+    /// Starts loading `file`; the result arrives as `WorkerEvent::SourceLoaded` for `id`.
+    pub(crate) fn spawn(
+        file: ValidatedAudioFile,
+        id: PlaybackId,
+        inbox: Inbox,
+    ) -> Result<Self, ()> {
         let cancellation = SourceLoadCancellation::default();
-        let (sender, receiver) = mpsc::sync_channel(1);
         let worker_cancellation = cancellation.clone();
         let join_handle = thread::Builder::new()
             .name("audio-source-load".into())
             .spawn(move || {
-                let result = prepare_compressed_source(&file, &worker_cancellation);
-                let _ = sender.send(result);
+                let result = catch_unwind(AssertUnwindSafe(|| {
+                    prepare_compressed_source(&file, &worker_cancellation)
+                }))
+                .unwrap_or_else(|_| {
+                    error!("playback.source_loader_panicked");
+                    Err(CompressedSourceError::ReadFailed)
+                });
+                inbox.event(WorkerEvent::SourceLoaded { id, result });
             })
             .map_err(|_| ())?;
         Ok(Self {
             cancellation,
-            receiver,
-            join_handle: Some(join_handle),
+            join_handle,
         })
     }
 
-    pub(crate) fn try_complete(
-        &mut self,
-    ) -> Result<Option<Result<CompressedAudioSource, CompressedSourceError>>, ()> {
-        match self.receiver.try_recv() {
-            Ok(result) => {
-                self.join_finished()?;
-                Ok(Some(result))
-            }
-            Err(TryRecvError::Empty) => Ok(None),
-            Err(TryRecvError::Disconnected) => {
-                self.join_finished()?;
-                error!("playback.source_loader_panicked");
-                Err(())
-            }
-        }
+    /// Waits for a load that has already reported.
+    pub(crate) fn join(self) {
+        let _ = self.join_handle.join();
     }
 
-    pub(crate) fn cancel_and_join(mut self) {
+    pub(crate) fn cancel_and_join(self) {
         self.cancellation.cancel();
-        if let Some(handle) = self.join_handle.take() {
-            if handle.join().is_err() {
-                error!("playback.source_loader_panicked");
-            }
-        }
-    }
-
-    fn join_finished(&mut self) -> Result<(), ()> {
-        let Some(handle) = self.join_handle.take() else {
-            return Ok(());
-        };
-        if handle.join().is_err() {
-            error!("playback.source_loader_panicked");
-            return Err(());
-        }
-        Ok(())
+        self.join();
     }
 }

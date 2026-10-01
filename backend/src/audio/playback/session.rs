@@ -1,107 +1,147 @@
-//! The stream-side state of playback: the loaded track and the operations still in flight.
+//! The worker's transport state: what is loading, what is loaded, and the operations in flight.
 
 use std::time::{Duration, Instant};
 
-use super::decode_worker::{DecodePipeline, DecodeWorker};
+use super::decode_worker::DecodeWorker;
+use super::input::PlaybackId;
 use super::item::PlaybackItem;
 use super::service::Reply;
-use super::snapshot::PlaybackSnapshot;
-use super::source_loader::SourceLoadWorker;
+use super::snapshot::{PlaybackFailureCode, PlaybackSnapshot};
+use super::source_loader::SourceLoad;
 use crate::audio::compressed_source::CompressedAudioSource;
-use crate::audio::output::{OutputStreamId, PreparedOutputConfig, PreparedOutputStream};
+use crate::audio::output::{OutputStream, OutputStreamId, PreparedOutputConfig};
 use cpal::StreamInstant;
 
 pub(super) const POSITION_UPDATE_INTERVAL: Duration = Duration::from_millis(250);
 
-pub(super) struct ActivePlayback {
-    pub session_id: u64,
-    pub id: OutputStreamId,
-    pub item: PlaybackItem,
-    pub source: CompressedAudioSource,
-    pub output_config: PreparedOutputConfig,
-    pub stream: PreparedOutputStream,
-    pub completion_time: Option<StreamInstant>,
-    pub sample_rate: u32,
-    pub duration_ms: Option<u64>,
-    pub position_frame: u64,
-    pub position_base_frame: u64,
-    pub remaining_frames: Option<u64>,
-    pub last_position_publish: Instant,
-    pub decoder_worker: DecodeWorker,
+/// The one state the worker is in. The published snapshot is rendered from it and never read back.
+#[allow(clippy::large_enum_variant)] // one value lives on the worker; boxing buys nothing
+pub(super) enum Transport {
+    /// Nothing is loaded or loading.
+    Idle,
+    Loading(Loading),
+    Loaded(Loaded),
+    Failed {
+        id: Option<PlaybackId>,
+        code: PlaybackFailureCode,
+    },
 }
 
-pub(super) struct PendingPlayback {
-    pub session_id: u64,
+/// Everything a start carries: what to play, who is waiting for the answer, and how to begin.
+pub(super) struct StartRequest {
     pub item: PlaybackItem,
-    pub source: CompressedAudioSource,
-    pub output_config: PreparedOutputConfig,
-    pub id: OutputStreamId,
-    pub stream: PreparedOutputStream,
-    pub decode_pipeline: DecodePipeline,
-    pub sample_rate: u32,
-    pub duration_ms: Option<u64>,
-    pub reply: Reply<PlaybackSnapshot>,
+    /// `None` for starts the worker begins on its own (skipping on, the next track, a device switch).
+    pub responder: Option<Reply<PlaybackSnapshot>>,
     pub start_paused: bool,
+    /// Where to seek to once playing, after a device switch restarted the track.
+    pub resume_at_ms: Option<u64>,
 }
 
-impl PendingPlayback {
-    pub fn into_active(self) -> (ActivePlayback, Reply<PlaybackSnapshot>, bool) {
-        let Self {
-            session_id,
-            item,
-            source,
-            output_config,
-            id,
-            stream,
-            decode_pipeline,
+pub(super) struct Loading {
+    pub id: PlaybackId,
+    pub request: StartRequest,
+    pub stage: LoadStage,
+}
+
+pub(super) enum LoadStage {
+    /// Reading and checking the file.
+    Source(SourceLoad),
+    /// Decoding the first moments into the output queue.
+    Prebuffering(Prebuffering),
+}
+
+pub(super) struct Prebuffering {
+    pub source: CompressedAudioSource,
+    pub pipeline: Pipeline,
+    pub duration_ms: Option<u64>,
+}
+
+/// An output stream and the decode thread feeding it.
+pub(super) struct Pipeline {
+    pub stream_id: OutputStreamId,
+    pub stream: Box<dyn OutputStream>,
+    pub config: PreparedOutputConfig,
+    pub decode: DecodeWorker,
+}
+
+impl Pipeline {
+    pub fn sample_rate(&self) -> u32 {
+        self.config.processing_plan.output().sample_rate().get()
+    }
+
+    pub fn cancel(self) {
+        self.decode.cancel_and_join();
+    }
+}
+
+/// A track that reached the output.
+pub(super) struct Loaded {
+    pub id: PlaybackId,
+    pub item: PlaybackItem,
+    pub source: CompressedAudioSource,
+    pub pipeline: Pipeline,
+    pub position: Position,
+    pub completion_time: Option<StreamInstant>,
+    pub paused: bool,
+    pub seek: Option<SeekInFlight>,
+}
+
+impl Loaded {
+    pub fn position_ms(&self) -> u64 {
+        frame_to_millis(self.position.frame, self.position.sample_rate)
+    }
+
+    /// Reads the newest position report from the output into the position.
+    pub fn sample_position(&mut self) -> u64 {
+        let rate = self.position.sample_rate;
+        let max_frames = self
+            .position
+            .duration_ms
+            .map(|duration| duration_to_frames(duration, rate));
+        let relative = self.pipeline.stream.played_frame_position(rate, max_frames);
+        self.position.absolute(relative)
+    }
+}
+
+/// Where playback is, in output frames.
+pub(super) struct Position {
+    pub sample_rate: u32,
+    pub duration_ms: Option<u64>,
+    pub frame: u64,
+    /// The frame the current stream started from; a seek starts a new stream mid-track.
+    pub base_frame: u64,
+    pub remaining_frames: Option<u64>,
+    pub last_publish: Instant,
+}
+
+impl Position {
+    pub fn from_start(sample_rate: u32, duration_ms: Option<u64>) -> Self {
+        Self {
             sample_rate,
             duration_ms,
-            reply,
-            start_paused,
-        } = self;
-        (
-            ActivePlayback {
-                session_id,
-                id,
-                item,
-                source,
-                output_config,
-                stream,
-                completion_time: None,
-                sample_rate,
-                duration_ms,
-                position_frame: 0,
-                position_base_frame: 0,
-                remaining_frames: duration_ms
-                    .map(|duration| duration_to_frames(duration, sample_rate)),
-                last_position_publish: Instant::now(),
-                decoder_worker: decode_pipeline.into_worker(),
-            },
-            reply,
-            start_paused,
+            frame: 0,
+            base_frame: 0,
+            remaining_frames: duration_ms.map(|duration| duration_to_frames(duration, sample_rate)),
+            last_publish: Instant::now(),
+        }
+    }
+
+    /// The frame `relative_frame` into the current stream, never past the end of the track.
+    pub fn absolute(&self, relative_frame: u64) -> u64 {
+        self.base_frame.saturating_add(relative_frame).min(
+            self.base_frame
+                .saturating_add(self.remaining_frames.unwrap_or(u64::MAX)),
         )
     }
 }
 
-pub(super) struct PendingSeek {
-    pub session_id: u64,
-    pub id: OutputStreamId,
-    pub confirmed_position_ms: u64,
+/// A seek whose new pipeline is still prebuffering; the old one plays until it is ready.
+pub(super) struct SeekInFlight {
+    pub pipeline: Pipeline,
     pub output_base_frame: u64,
     pub remaining_frames: u64,
-    pub stream: PreparedOutputStream,
-    pub output_config: PreparedOutputConfig,
-    pub decode_pipeline: DecodePipeline,
-    pub sample_rate: u32,
     pub duration_ms: u64,
-    pub reply: Reply<PlaybackSnapshot>,
-}
-
-pub(super) struct PendingSourceLoad {
-    pub item: PlaybackItem,
-    pub worker: SourceLoadWorker,
-    pub reply: Reply<PlaybackSnapshot>,
-    pub start_paused: bool,
+    pub responder: Option<Reply<PlaybackSnapshot>>,
 }
 
 pub(super) fn frame_to_millis(frame_position: u64, sample_rate: u32) -> u64 {
@@ -118,17 +158,6 @@ pub(super) fn millis_to_frame(position_ms: u64, sample_rate: u32) -> u64 {
         .checked_div(1_000)
         .unwrap_or(0)
         .min(u128::from(u64::MAX)) as u64
-}
-
-pub(super) fn absolute_position(active: &ActivePlayback, relative_frame: u64) -> u64 {
-    active
-        .position_base_frame
-        .saturating_add(relative_frame)
-        .min(
-            active
-                .position_base_frame
-                .saturating_add(active.remaining_frames.unwrap_or(u64::MAX)),
-        )
 }
 
 pub(super) fn source_to_output_frame(source_frame: u64, output_rate: u32, source_rate: u32) -> u64 {

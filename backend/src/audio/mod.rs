@@ -1,6 +1,8 @@
 mod compressed_source;
 pub mod decoding;
 pub mod devices;
+#[cfg(test)]
+pub(crate) mod fake_output;
 pub mod output;
 pub mod output_processing;
 pub mod pcm;

@@ -1,23 +1,14 @@
+//! The decode thread of one pipeline: decodes, converts and feeds the PCM queue, and tells the
+//! worker when the prebuffer is ready or decoding failed. End of stream is declared on the queue.
+
 use log::error;
-use std::sync::{
-    mpsc::{self, Receiver, SyncSender},
-    Arc,
-};
 use std::thread::{self, JoinHandle};
 
-use super::super::decoding::{DecodeCancellation, DecodeStep, StreamingDecoder};
-use super::super::output::{AtomicProducerState, OutputSignal, OutputStreamId, ProducerState};
-use super::super::output_processing::{OutputPcmProcessor, OutputProcessingError};
-use super::super::pcm_queue::PcmProducer;
-
-pub(crate) struct DecodeWorkerSetup {
-    producer_state: Arc<AtomicProducerState>,
-    capacity_sender: SyncSender<()>,
-    capacity_receiver: Receiver<()>,
-    prebuffer_sender: SyncSender<()>,
-    prebuffer_receiver: Receiver<()>,
-    cancellation: DecodeCancellation,
-}
+use super::input::{Inbox, WorkerEvent};
+use crate::audio::decoding::{DecodeCancellation, DecodeStep, StreamingDecoder};
+use crate::audio::output::OutputStreamId;
+use crate::audio::output_processing::{OutputPcmProcessor, OutputProcessingError};
+use crate::audio::pcm_queue::{PcmProducer, PcmWaker};
 
 pub(crate) struct DecodeTaskInput {
     pub(crate) decoder: StreamingDecoder,
@@ -25,117 +16,80 @@ pub(crate) struct DecodeTaskInput {
     pub(crate) producer: PcmProducer,
     pub(crate) processor: OutputPcmProcessor,
     pub(crate) output_sample_rate: u32,
-    pub(crate) signal_sender: SyncSender<OutputSignal>,
-    pub(crate) stream_id: OutputStreamId,
     pub(crate) discard_output_samples: usize,
 }
 
+/// Why a decode task ended without reaching the end of the stream.
+#[derive(Debug, PartialEq, Eq)]
+enum Stop {
+    Cancelled,
+    Decode,
+    Conversion,
+}
+
+impl From<OutputProcessingError> for Stop {
+    fn from(error: OutputProcessingError) -> Self {
+        match error {
+            OutputProcessingError::ResamplerProcessingFailed
+            | OutputProcessingError::InvalidResamplerOutput
+            | OutputProcessingError::ResamplerConstructionFailed => Self::Conversion,
+            _ => Self::Decode,
+        }
+    }
+}
+
 struct DecodeTask {
-    decoder: StreamingDecoder,
     producer: PcmProducer,
     first_packet: Vec<f32>,
     converter: OutputPcmProcessor,
+    converted: Vec<f32>,
     discard_output_samples: usize,
     cancellation: DecodeCancellation,
-    producer_state: Arc<AtomicProducerState>,
-    signal_sender: SyncSender<OutputSignal>,
-    stream_id: OutputStreamId,
-    capacity_receiver: Receiver<()>,
-    prebuffer_sender: SyncSender<()>,
+    inbox: Inbox,
+    stream: OutputStreamId,
     prebuffer_frames: usize,
-}
-
-impl DecodeWorkerSetup {
-    pub(crate) fn new() -> Self {
-        let (capacity_sender, capacity_receiver) = mpsc::sync_channel(1);
-        let (prebuffer_sender, prebuffer_receiver) = mpsc::sync_channel(1);
-        Self {
-            producer_state: Arc::new(AtomicProducerState::new(ProducerState::Running)),
-            capacity_sender,
-            capacity_receiver,
-            prebuffer_sender,
-            prebuffer_receiver,
-            cancellation: DecodeCancellation::default(),
-        }
-    }
-
-    pub(crate) fn producer_state(&self) -> Arc<AtomicProducerState> {
-        Arc::clone(&self.producer_state)
-    }
-    pub(crate) fn capacity_sender(&self) -> SyncSender<()> {
-        self.capacity_sender.clone()
-    }
-
-    pub(crate) fn spawn(
-        self,
-        input: DecodeTaskInput,
-    ) -> Result<DecodePipeline, OutputProcessingError> {
-        let prebuffer_frames = prebuffer_frames(input.output_sample_rate);
-        let stream_id = input.stream_id;
-        let task = DecodeTask {
-            decoder: input.decoder,
-            producer: input.producer,
-            first_packet: input.first_packet,
-            converter: input.processor,
-            discard_output_samples: input.discard_output_samples,
-            cancellation: self.cancellation.clone(),
-            producer_state: Arc::clone(&self.producer_state),
-            signal_sender: input.signal_sender,
-            stream_id,
-            capacity_receiver: self.capacity_receiver,
-            prebuffer_sender: self.prebuffer_sender,
-            prebuffer_frames,
-        };
-        let join_handle = thread::spawn(move || task.run());
-        Ok(DecodePipeline {
-            worker: DecodeWorker {
-                cancellation: self.cancellation,
-                join_handle,
-                wake_sender: self.capacity_sender,
-                stream_id,
-            },
-            producer_state: self.producer_state,
-            prebuffer_receiver: self.prebuffer_receiver,
-        })
-    }
-}
-
-pub(crate) struct DecodePipeline {
-    worker: DecodeWorker,
-    producer_state: Arc<AtomicProducerState>,
-    prebuffer_receiver: Receiver<()>,
-}
-
-impl DecodePipeline {
-    pub(crate) fn producer_state(&self) -> ProducerState {
-        self.producer_state.load()
-    }
-    pub(crate) fn prebuffer_ready(&self) -> bool {
-        self.prebuffer_receiver.try_recv().is_ok()
-    }
-    pub(crate) fn cancel_and_join(self) {
-        self.worker.cancel_and_join();
-    }
-    pub(crate) fn into_worker(self) -> DecodeWorker {
-        self.worker
-    }
+    prebuffer_sent: bool,
 }
 
 pub(crate) struct DecodeWorker {
     cancellation: DecodeCancellation,
     join_handle: JoinHandle<()>,
-    wake_sender: SyncSender<()>,
-    stream_id: OutputStreamId,
+    waker: PcmWaker,
+    stream: OutputStreamId,
 }
 
 impl DecodeWorker {
+    pub(super) fn spawn(input: DecodeTaskInput, inbox: Inbox, stream: OutputStreamId) -> Self {
+        let cancellation = DecodeCancellation::default();
+        let waker = input.producer.waker();
+        let decoder = input.decoder;
+        let task = DecodeTask {
+            producer: input.producer,
+            first_packet: input.first_packet,
+            converter: input.processor,
+            converted: Vec::new(),
+            discard_output_samples: input.discard_output_samples,
+            cancellation: cancellation.clone(),
+            inbox,
+            stream,
+            prebuffer_frames: prebuffer_frames(input.output_sample_rate),
+            prebuffer_sent: false,
+        };
+        Self {
+            cancellation,
+            join_handle: thread::spawn(move || task.run(decoder)),
+            waker,
+            stream,
+        }
+    }
+
     pub(crate) fn cancel_and_join(self) {
         self.cancellation.cancel();
-        let _ = self.wake_sender.try_send(());
+        self.waker.wake();
         if self.join_handle.join().is_err() {
             error!(
                 "playback.decode_worker_panicked stream_id={}",
-                self.stream_id.0
+                self.stream.0
             );
         }
     }
@@ -151,166 +105,77 @@ fn prebuffer_frames(sample_rate: u32) -> usize {
 }
 
 impl DecodeTask {
-    fn run(self) {
-        let Self {
-            mut decoder,
-            mut producer,
-            first_packet,
-            mut converter,
-            mut discard_output_samples,
-            cancellation,
-            producer_state,
-            signal_sender,
-            stream_id,
-            capacity_receiver,
-            prebuffer_sender,
-            prebuffer_frames,
-        } = self;
-        let mut converted = Vec::new();
+    fn run(mut self, decoder: StreamingDecoder) {
+        match self.decode_to_end(decoder) {
+            Ok(()) => self.producer.finish(),
+            Err(Stop::Cancelled) => {}
+            Err(Stop::Decode) => self.report_failure(WorkerEvent::DecodeFailed {
+                stream: self.stream,
+            }),
+            Err(Stop::Conversion) => self.report_failure(WorkerEvent::ConversionFailed {
+                stream: self.stream,
+            }),
+        }
+    }
+
+    fn decode_to_end(&mut self, mut decoder: StreamingDecoder) -> Result<(), Stop> {
+        let first_packet = std::mem::take(&mut self.first_packet);
+        self.process(&first_packet)?;
         let mut packet = Vec::new();
-        let mut prebuffer_sent = false;
-        if let Err(error) = converter.convert(&first_packet, &mut converted) {
-            signal_failure(
-                error,
-                stream_id,
-                &producer_state,
-                &signal_sender,
-                &prebuffer_sender,
-            );
-            return;
-        }
-        discard_output_prefix(&mut converted, &mut discard_output_samples);
-        if write_packet_fully(
-            &mut producer,
-            &converted,
-            &cancellation,
-            &capacity_receiver,
-            prebuffer_frames,
-            &mut prebuffer_sent,
-            &prebuffer_sender,
-        )
-        .is_cancelled()
-        {
-            producer_state.store(ProducerState::Cancelled);
-            return;
-        }
-        notify_prebuffer_if_ready(
-            &producer,
-            prebuffer_frames,
-            &mut prebuffer_sent,
-            &prebuffer_sender,
-        );
         loop {
-            if cancellation.is_cancelled() {
-                producer_state.store(ProducerState::Cancelled);
-                return;
+            if self.cancellation.is_cancelled() {
+                return Err(Stop::Cancelled);
             }
             packet.clear();
             match decoder.decode_next(&mut packet) {
-                Ok(DecodeStep::Samples) => {
-                    if let Err(error) = converter.convert(&packet, &mut converted) {
-                        signal_failure(
-                            error,
-                            stream_id,
-                            &producer_state,
-                            &signal_sender,
-                            &prebuffer_sender,
-                        );
-                        return;
-                    }
-                    discard_output_prefix(&mut converted, &mut discard_output_samples);
-                    if write_packet_fully(
-                        &mut producer,
-                        &converted,
-                        &cancellation,
-                        &capacity_receiver,
-                        prebuffer_frames,
-                        &mut prebuffer_sent,
-                        &prebuffer_sender,
-                    )
-                    .is_cancelled()
-                    {
-                        producer_state.store(ProducerState::Cancelled);
-                        return;
-                    }
-                    notify_prebuffer_if_ready(
-                        &producer,
-                        prebuffer_frames,
-                        &mut prebuffer_sent,
-                        &prebuffer_sender,
-                    );
-                }
+                Ok(DecodeStep::Samples) => self.process(&packet)?,
                 Ok(DecodeStep::EndOfStream) => {
                     let finalization = decoder.finalize();
-                    if let Err(error) = converter.flush(&mut converted) {
-                        signal_failure(
-                            error,
-                            stream_id,
-                            &producer_state,
-                            &signal_sender,
-                            &prebuffer_sender,
-                        );
-                        return;
-                    }
-                    discard_output_prefix(&mut converted, &mut discard_output_samples);
-                    if write_packet_fully(
-                        &mut producer,
-                        &converted,
-                        &cancellation,
-                        &capacity_receiver,
-                        prebuffer_frames,
-                        &mut prebuffer_sent,
-                        &prebuffer_sender,
-                    )
-                    .is_cancelled()
-                    {
-                        producer_state.store(ProducerState::Cancelled);
-                        return;
-                    }
-                    let _ = prebuffer_sender.try_send(());
-                    match finalization {
-                        Ok(()) => producer_state.store(ProducerState::EndOfStream),
-                        Err(_) => {
-                            producer_state.store(ProducerState::DecodeFailed);
-                            let _ =
-                                signal_sender.try_send(OutputSignal::DecodeFailed { stream_id });
-                        }
-                    }
-                    return;
+                    self.converter.flush(&mut self.converted)?;
+                    self.write_converted()?;
+                    // A file shorter than the prebuffer is as ready as it will get.
+                    self.notify_prebuffer(true);
+                    return finalization.map_err(|_| Stop::Decode);
                 }
-                Err(_) => {
-                    producer_state.store(ProducerState::DecodeFailed);
-                    let _ = signal_sender.try_send(OutputSignal::DecodeFailed { stream_id });
-                    let _ = prebuffer_sender.try_send(());
-                    return;
-                }
+                Err(_) => return Err(Stop::Decode),
             }
         }
     }
+
+    fn process(&mut self, packet: &[f32]) -> Result<(), Stop> {
+        self.converter.convert(packet, &mut self.converted)?;
+        self.write_converted()
+    }
+
+    fn write_converted(&mut self) -> Result<(), Stop> {
+        discard_output_prefix(&mut self.converted, &mut self.discard_output_samples);
+        let cancellation = &self.cancellation;
+        let inbox = &self.inbox;
+        let (stream, frames) = (self.stream, self.prebuffer_frames);
+        let sent = &mut self.prebuffer_sent;
+        self.producer
+            .write_all(
+                &self.converted,
+                || cancellation.is_cancelled(),
+                |queued| notify_prebuffer(inbox, stream, sent, queued >= frames),
+            )
+            .map_err(|_| Stop::Cancelled)
+    }
+
+    fn notify_prebuffer(&mut self, ready: bool) {
+        notify_prebuffer(&self.inbox, self.stream, &mut self.prebuffer_sent, ready);
+    }
+
+    fn report_failure(&self, event: WorkerEvent) {
+        self.inbox.event(event);
+    }
 }
 
-fn signal_failure(
-    error: OutputProcessingError,
-    stream_id: OutputStreamId,
-    state: &Arc<AtomicProducerState>,
-    signals: &SyncSender<OutputSignal>,
-    prebuffer: &SyncSender<()>,
-) {
-    let (producer_state, signal) = match error {
-        OutputProcessingError::ResamplerProcessingFailed
-        | OutputProcessingError::InvalidResamplerOutput
-        | OutputProcessingError::ResamplerConstructionFailed => (
-            ProducerState::SampleRateConversionFailed,
-            OutputSignal::SampleRateConversionFailed { stream_id },
-        ),
-        _ => (
-            ProducerState::DecodeFailed,
-            OutputSignal::DecodeFailed { stream_id },
-        ),
-    };
-    state.store(producer_state);
-    let _ = signals.try_send(signal);
-    let _ = prebuffer.try_send(());
+fn notify_prebuffer(inbox: &Inbox, stream: OutputStreamId, sent: &mut bool, ready: bool) {
+    if ready && !*sent {
+        *sent = true;
+        inbox.event(WorkerEvent::PrebufferReady { stream });
+    }
 }
 
 fn discard_output_prefix(samples: &mut Vec<f32>, remaining_samples: &mut usize) {
@@ -323,62 +188,19 @@ fn discard_output_prefix(samples: &mut Vec<f32>, remaining_samples: &mut usize) 
     *remaining_samples -= discarded;
 }
 
-enum QueueWriteResult {
-    Completed,
-    Cancelled,
-}
-impl QueueWriteResult {
-    fn is_cancelled(&self) -> bool {
-        matches!(self, Self::Cancelled)
-    }
-}
-
-fn write_packet_fully(
-    producer: &mut PcmProducer,
-    samples: &[f32],
-    cancellation: &DecodeCancellation,
-    capacity_receiver: &Receiver<()>,
-    prebuffer_frames: usize,
-    prebuffer_sent: &mut bool,
-    prebuffer_sender: &SyncSender<()>,
-) -> QueueWriteResult {
-    let mut offset = 0;
-    while offset < samples.len() {
-        if cancellation.is_cancelled() {
-            return QueueWriteResult::Cancelled;
-        }
-        let pushed = producer.push_samples(&samples[offset..]);
-        offset += pushed;
-        notify_prebuffer_if_ready(producer, prebuffer_frames, prebuffer_sent, prebuffer_sender);
-        if pushed == 0 && capacity_receiver.recv().is_err() {
-            return QueueWriteResult::Cancelled;
-        }
-    }
-    QueueWriteResult::Completed
-}
-
-fn notify_prebuffer_if_ready(
-    producer: &PcmProducer,
-    prebuffer_frames: usize,
-    prebuffer_sent: &mut bool,
-    prebuffer_sender: &SyncSender<()>,
-) {
-    if !*prebuffer_sent && producer.available_frames() >= prebuffer_frames {
-        *prebuffer_sent = true;
-        let _ = prebuffer_sender.try_send(());
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{prebuffer_frames, signal_failure, DecodeTaskInput, DecodeWorkerSetup};
+    use super::{prebuffer_frames, DecodeTaskInput, DecodeWorker, Stop};
     use crate::audio::compressed_source::{prepare_compressed_source, SourceLoadCancellation};
-    use crate::audio::output::{OutputSignal, OutputStreamId, ProducerState};
-    use crate::audio::output_processing::{OutputPcmProcessor, OutputProcessingError};
-    use crate::audio::pcm_queue::bounded_pcm_queue;
+    use crate::audio::output::OutputStreamId;
+    use crate::audio::output_processing::{
+        OutputPcmProcessor, OutputProcessingError, OutputProcessingPlan,
+    };
+    use crate::audio::pcm_queue::{bounded_pcm_queue, PcmConsumer};
+    use crate::audio::playback::input::{Inbox, WorkerEvent, WorkerInput};
     use crate::media::validation::ValidatedAudioFile;
     use crate::test_support::{write_pcm_i16_wav, TestDirectory};
-    use std::sync::{mpsc, Arc};
+    use std::sync::mpsc::Receiver;
     use std::time::{Duration, Instant};
 
     fn wav_file(directory: &TestDirectory, sample_count: usize) -> ValidatedAudioFile {
@@ -391,58 +213,44 @@ mod tests {
         }
     }
 
-    fn wait_until(mut ready: impl FnMut() -> bool) {
-        let deadline = Instant::now() + Duration::from_secs(2);
-        let mut completed = false;
-        while Instant::now() < deadline {
-            if ready() {
-                completed = true;
-                break;
-            }
-            std::thread::yield_now();
-        }
-        assert!(completed, "decode worker did not reach the expected state");
-    }
-
     fn start_pipeline(
         file: &ValidatedAudioFile,
         capacity_frames: usize,
-    ) -> (
-        super::DecodePipeline,
-        Arc<crate::audio::output::AtomicProducerState>,
-        crate::audio::pcm_queue::PcmConsumer,
-    ) {
-        let decoder = prepare_compressed_source(file, &SourceLoadCancellation::default())
+    ) -> (DecodeWorker, PcmConsumer, Receiver<WorkerInput>) {
+        let mut decoder = prepare_compressed_source(file, &SourceLoadCancellation::default())
             .unwrap()
             .open_decoder(&file.extension)
             .unwrap();
         let spec = decoder.spec();
         let mut first_packet = Vec::new();
-        assert!(decoder.duration_ms().is_some());
-        let mut decoder = decoder;
         assert!(matches!(
             decoder.decode_next(&mut first_packet),
             Ok(crate::audio::decoding::DecodeStep::Samples)
         ));
-        let plan = crate::audio::output_processing::OutputProcessingPlan::new(spec, spec).unwrap();
+        let plan = OutputProcessingPlan::new(spec, spec).unwrap();
         let (producer, consumer) =
             bounded_pcm_queue(capacity_frames, spec.channel_count()).unwrap();
-        let (signals, _signals_receiver) = mpsc::sync_channel(4);
-        let setup = DecodeWorkerSetup::new();
-        let state = setup.producer_state();
-        let pipeline = setup
-            .spawn(DecodeTaskInput {
+        let (inbox, events) = Inbox::channel();
+        let worker = DecodeWorker::spawn(
+            DecodeTaskInput {
                 decoder,
                 first_packet,
                 producer,
                 processor: OutputPcmProcessor::new(plan).unwrap(),
                 output_sample_rate: spec.sample_rate().get(),
-                signal_sender: signals,
-                stream_id: OutputStreamId(1),
                 discard_output_samples: 0,
-            })
-            .unwrap();
-        (pipeline, state, consumer)
+            },
+            inbox,
+            OutputStreamId(7),
+        );
+        (worker, consumer, events)
+    }
+
+    fn next_event(events: &Receiver<WorkerInput>) -> WorkerEvent {
+        match events.recv_timeout(Duration::from_secs(2)) {
+            Ok(WorkerInput::Event(event)) => event,
+            _ => panic!("the decode worker sent no event"),
+        }
     }
 
     #[test]
@@ -451,83 +259,83 @@ mod tests {
     }
 
     #[test]
-    fn normal_prebuffer_completion_reports_ready_with_decoded_samples() {
+    fn reports_the_prebuffer_once_it_holds_a_quarter_second() {
         let directory = TestDirectory::new();
         let file = wav_file(&directory, 20_000);
-        let (pipeline, state, consumer) = start_pipeline(&file, 12_000);
-        wait_until(|| pipeline.prebuffer_ready());
-        assert!(consumer.available_frames() >= prebuffer_frames(44_100));
+        let (worker, consumer, events) = start_pipeline(&file, 12_000);
+
         assert!(matches!(
-            state.load(),
-            ProducerState::Running | ProducerState::EndOfStream
+            next_event(&events),
+            WorkerEvent::PrebufferReady {
+                stream: OutputStreamId(7)
+            }
         ));
-        pipeline.cancel_and_join();
+        assert!(consumer.available_frames(1) >= prebuffer_frames(44_100));
+        worker.cancel_and_join();
     }
 
     #[test]
-    fn short_file_releases_prebuffer_wait_at_end_of_stream() {
+    fn a_short_file_is_ready_at_its_end_and_the_queue_reports_finished() {
         let directory = TestDirectory::new();
         let file = wav_file(&directory, 1_000);
-        let (pipeline, state, _consumer) = start_pipeline(&file, 2_000);
-        wait_until(|| {
-            matches!(state.load(), ProducerState::EndOfStream) && pipeline.prebuffer_ready()
-        });
-        pipeline.cancel_and_join();
+        let (worker, mut consumer, events) = start_pipeline(&file, 2_000);
+
+        assert!(matches!(
+            next_event(&events),
+            WorkerEvent::PrebufferReady { .. }
+        ));
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while consumer.available_frames(1) < 1_000 && Instant::now() < deadline {
+            std::thread::yield_now();
+        }
+        let mut out = [0.0; 2_000];
+        assert!(!consumer.is_finished(), "samples are still queued");
+        assert_eq!(consumer.pop_samples(&mut out), 1_000);
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while !consumer.is_finished() && Instant::now() < deadline {
+            std::thread::yield_now();
+        }
+        assert!(consumer.is_finished());
+        worker.cancel_and_join();
     }
 
     #[test]
-    fn cancellation_while_waiting_for_capacity_marks_worker_cancelled() {
+    fn cancellation_releases_a_producer_waiting_for_capacity() {
         let directory = TestDirectory::new();
         let file = wav_file(&directory, 20_000);
-        let (pipeline, state, consumer) = start_pipeline(&file, 8);
-        wait_until(|| consumer.available_frames() == 8 && state.load() == ProducerState::Running);
-        pipeline.cancel_and_join();
-        assert_eq!(state.load(), ProducerState::Cancelled);
+        let (worker, consumer, events) = start_pipeline(&file, 8);
+
+        // Prebuffering a quarter second is impossible in an 8 frame queue; the producer waits.
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while consumer.available_frames(1) < 8 && Instant::now() < deadline {
+            std::thread::yield_now();
+        }
+        assert_eq!(consumer.available_frames(1), 8);
+        worker.cancel_and_join();
+
+        assert!(
+            events.try_recv().is_err(),
+            "a cancelled worker reports nothing"
+        );
     }
 
     #[test]
-    fn classifies_resampler_failures_with_the_original_stream_id() {
-        let state = Arc::new(crate::audio::output::AtomicProducerState::new(
-            ProducerState::Running,
-        ));
-        let (signals, receiver) = mpsc::sync_channel(1);
-        let (prebuffer, _) = mpsc::sync_channel(1);
-        signal_failure(
-            OutputProcessingError::InvalidResamplerOutput,
-            OutputStreamId(9),
-            &state,
-            &signals,
-            &prebuffer,
+    fn classifies_resampler_failures_as_conversion_failures() {
+        assert_eq!(
+            Stop::from(OutputProcessingError::InvalidResamplerOutput),
+            Stop::Conversion
         );
-        assert_eq!(state.load(), ProducerState::SampleRateConversionFailed);
-        assert!(matches!(
-            receiver.try_recv(),
-            Ok(OutputSignal::SampleRateConversionFailed {
-                stream_id: OutputStreamId(9)
-            })
-        ));
+        assert_eq!(
+            Stop::from(OutputProcessingError::ResamplerProcessingFailed),
+            Stop::Conversion
+        );
     }
 
     #[test]
-    fn classifies_non_resampler_failures_as_decode_failures() {
-        let state = Arc::new(crate::audio::output::AtomicProducerState::new(
-            ProducerState::Running,
-        ));
-        let (signals, receiver) = mpsc::sync_channel(1);
-        let (prebuffer, _) = mpsc::sync_channel(1);
-        signal_failure(
-            OutputProcessingError::InvalidInputSamples,
-            OutputStreamId(4),
-            &state,
-            &signals,
-            &prebuffer,
+    fn classifies_other_processing_failures_as_decode_failures() {
+        assert_eq!(
+            Stop::from(OutputProcessingError::InvalidInputSamples),
+            Stop::Decode
         );
-        assert_eq!(state.load(), ProducerState::DecodeFailed);
-        assert!(matches!(
-            receiver.try_recv(),
-            Ok(OutputSignal::DecodeFailed {
-                stream_id: OutputStreamId(4)
-            })
-        ));
     }
 }

@@ -89,15 +89,6 @@ impl PlaybackSnapshot {
         }
     }
 
-    pub(super) fn base_mut(&mut self) -> &mut SnapshotBase {
-        match self {
-            Self::Stopped { base, .. }
-            | Self::Playing { base, .. }
-            | Self::Paused { base, .. }
-            | Self::Failed { base, .. } => base,
-        }
-    }
-
     pub fn revision(&self) -> u64 {
         self.base().revision
     }
@@ -113,13 +104,6 @@ impl PlaybackSnapshot {
     /// The item loaded for playback, whether playing or paused.
     pub fn active_item(&self) -> Option<&PlaybackItem> {
         self.session().map(|session| &session.item)
-    }
-
-    pub(super) fn with_volume(mut self, volume: VolumeState) -> Self {
-        let base = self.base_mut();
-        base.volume = volume.volume();
-        base.muted = volume.muted();
-        self
     }
 }
 

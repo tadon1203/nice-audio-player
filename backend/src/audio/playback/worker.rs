@@ -1,44 +1,43 @@
-//! The playback worker thread: owns the queue, the loaded track, and every in-flight operation.
+//! The playback worker thread: owns the queue, the transport state and every in-flight operation.
+//!
+//! The worker sleeps until something arrives on its one input channel: a command from a caller or
+//! an event from a decode, source-load or output thread. It ticks only while a track is playing,
+//! to publish the position and notice the end of the track.
 
-use std::sync::{
-    mpsc::{self, Receiver, SyncSender},
-    Arc, RwLock,
-};
-use std::time::Instant;
+use std::sync::{mpsc::Receiver, Arc, RwLock};
+use std::time::{Duration, Instant};
 
-use super::decode_worker::{DecodeTaskInput, DecodeWorkerSetup};
+use super::decode_worker::{DecodeTaskInput, DecodeWorker};
+use super::input::{Inbox, PlaybackId, PlaybackIds, WorkerEvent, WorkerInput};
 use super::item::{PlaybackItem, PlaybackItemSeed};
 use super::preferences::{PlaybackPreferences, PreferencesObserver};
 use super::queue::{AdvanceReason, PlaybackQueue, QueueError};
-use super::service::{PlaybackCommand, PlaybackServiceError, Reply};
+use super::service::{respond, PlaybackCommand, PlaybackServiceError, Reply};
 use super::session::{
-    absolute_position, duration_to_frames, frame_to_millis, millis_to_frame,
-    should_publish_position, source_to_output_frame, ActivePlayback, PendingPlayback, PendingSeek,
-    PendingSourceLoad,
+    duration_to_frames, millis_to_frame, should_publish_position, source_to_output_frame,
+    LoadStage, Loaded, Loading, Pipeline, Position, Prebuffering, SeekInFlight, StartRequest,
+    Transport,
 };
 use super::snapshot::{
     ActiveSession, PlaybackFailureCode, PlaybackProcessingInfo, PlaybackQueueSnapshot,
     PlaybackSnapshot, SnapshotBase,
 };
-use super::source_loader::SourceLoadWorker;
+use super::source_loader::SourceLoad;
 use crate::audio::compressed_source::{CompressedAudioSource, CompressedSourceError};
 use crate::audio::decoding::{DecodeStep, PcmDecodeError, SeekStep};
 use crate::audio::devices::{
-    resolve_output_device_id, resolve_output_selection, AudioOutputDeviceIdentity,
-    AudioOutputSelection, DeviceResolutionError,
+    AudioOutputDeviceIdentity, AudioOutputSelection, DeviceResolutionError,
 };
 use crate::audio::output::{
-    prepare_output_stream, prepare_output_stream_with_config, AudioOutputError, OutputSignal,
-    OutputStreamId, ProducerState,
+    AudioOutputError, OutputBackend, OutputLinks, OutputStreamId, OutputTarget, StreamFailureKind,
 };
 use crate::audio::output_processing::OutputPcmProcessor;
 use crate::audio::volume::{AtomicEffectiveGain, VolumeState};
 use crate::events::{BackendEvent, SharedEventSink};
-use cpal::StreamInstant;
 use log::{error, info};
 use rand::{rngs::StdRng, SeedableRng};
 
-const WORKER_TICK_INTERVAL: std::time::Duration = std::time::Duration::from_millis(50);
+const TICK_INTERVAL: Duration = Duration::from_millis(50);
 
 /// "Previous" restarts the track instead of leaving it once it has played this long.
 const PREVIOUS_RESTART_THRESHOLD_MS: u64 = 3_000;
@@ -52,10 +51,8 @@ pub(super) enum StartFailurePhase {
     SourceWorker,
     DecoderOpen,
     FirstPacketDecode,
-    OutputDeviceResolution,
     OutputPrepare,
     ProcessorCreate,
-    DecodeWorkerSpawn,
     PrebufferDecode,
     PrebufferConversion,
     StreamStart,
@@ -82,13 +79,47 @@ impl StartFailurePhase {
             | Self::ProcessorCreate
             | Self::PrebufferDecode
             | Self::PrebufferConversion => FailureScope::Item,
-            Self::SourceWorker
-            | Self::OutputDeviceResolution
-            | Self::OutputPrepare
-            | Self::DecodeWorkerSpawn
-            | Self::StreamStart => FailureScope::Output,
+            Self::SourceWorker | Self::OutputPrepare | Self::StreamStart => FailureScope::Output,
         }
     }
+}
+
+struct StartFailure {
+    code: PlaybackFailureCode,
+    phase: StartFailurePhase,
+    error: PlaybackServiceError,
+}
+
+impl StartFailure {
+    /// The file could not be decoded.
+    fn item(phase: StartFailurePhase) -> Self {
+        Self {
+            code: PlaybackFailureCode::DecodeFailed,
+            phase,
+            error: PlaybackServiceError::Decode,
+        }
+    }
+
+    fn output(phase: StartFailurePhase, code: PlaybackFailureCode) -> Self {
+        Self {
+            error: PlaybackServiceError::Output(code.clone()),
+            code,
+            phase,
+        }
+    }
+}
+
+/// Which part of the transport a stream belongs to.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+enum StreamOwner {
+    /// The stream of a start that is prebuffering.
+    Start,
+    /// The stream that is playing.
+    Active,
+    /// The stream of a seek that is prebuffering.
+    Seek,
+    /// A stream the worker has already let go of.
+    Gone,
 }
 
 /// The channels and shared state the service hands to the worker thread.
@@ -96,40 +127,36 @@ pub(super) struct WorkerLinks {
     pub snapshot: Arc<RwLock<PlaybackSnapshot>>,
     pub queue_snapshot: Arc<RwLock<PlaybackQueueSnapshot>>,
     pub effective_gain: AtomicEffectiveGain,
-    pub command_receiver: Receiver<PlaybackCommand>,
-    pub output_sender: SyncSender<OutputSignal>,
+    pub inbox: Inbox,
     pub events: SharedEventSink,
     pub observer: PreferencesObserver,
+    pub backend: Box<dyn OutputBackend>,
 }
 
 pub(super) struct PlaybackWorker {
-    pub active: Option<ActivePlayback>,
-    pub pending: Option<PendingPlayback>,
-    pub pending_source: Option<PendingSourceLoad>,
-    pub pending_seek: Option<PendingSeek>,
-    next_playback_session_id: u64,
-    next_output_stream_id: u64,
-    next_snapshot_revision: u64,
+    transport: Transport,
+    ids: PlaybackIds,
+    next_stream_id: u64,
+    revision: u64,
     next_queue_revision: u64,
     /// Completed seeks; published with the session so the UI can tell a seek from a tick.
     seek_revision: u64,
     /// The last track that reached the output, kept so a stopped player can still name it.
-    pub loaded_item: Option<PlaybackItem>,
-    pub queue: PlaybackQueue,
+    last_item: Option<PlaybackItem>,
+    queue: PlaybackQueue,
     rng: StdRng,
     /// Files skipped in a row after failing; bounds the skipping to one pass over the queue.
     skipped_in_a_row: usize,
-    /// Position to seek to once a device-switch restart has started playing.
-    restore_position_ms: Option<u64>,
-    pub volume_state: VolumeState,
-    pub effective_gain: AtomicEffectiveGain,
-    pub output_selection: AudioOutputSelection,
+    volume_state: VolumeState,
+    effective_gain: AtomicEffectiveGain,
+    output_selection: AudioOutputSelection,
+    last_tick: Instant,
     snapshot: Arc<RwLock<PlaybackSnapshot>>,
     queue_snapshot: Arc<RwLock<PlaybackQueueSnapshot>>,
-    command_receiver: Receiver<PlaybackCommand>,
-    output_sender: SyncSender<OutputSignal>,
+    inbox: Inbox,
     events: SharedEventSink,
     observer: PreferencesObserver,
+    backend: Box<dyn OutputBackend>,
 }
 
 impl PlaybackWorker {
@@ -140,128 +167,199 @@ impl PlaybackWorker {
         output_selection: AudioOutputSelection,
     ) -> Self {
         Self {
-            active: None,
-            pending: None,
-            pending_source: None,
-            pending_seek: None,
-            next_playback_session_id: 0,
-            next_output_stream_id: 0,
-            next_snapshot_revision: 0,
+            transport: Transport::Idle,
+            ids: PlaybackIds::default(),
+            next_stream_id: 0,
+            revision: 0,
             next_queue_revision: 0,
             seek_revision: 0,
-            loaded_item: None,
+            last_item: None,
             queue,
             rng: StdRng::from_rng(&mut rand::rng()),
             skipped_in_a_row: 0,
-            restore_position_ms: None,
             volume_state,
             effective_gain: links.effective_gain,
             output_selection,
+            last_tick: Instant::now(),
             snapshot: links.snapshot,
             queue_snapshot: links.queue_snapshot,
-            command_receiver: links.command_receiver,
-            output_sender: links.output_sender,
+            inbox: links.inbox,
             events: links.events,
             observer: links.observer,
+            backend: links.backend,
         }
     }
 
-    pub(super) fn run(mut self) {
+    pub(super) fn run(mut self, inputs: Receiver<WorkerInput>) {
         loop {
-            match self.command_receiver.recv_timeout(WORKER_TICK_INTERVAL) {
-                Ok(PlaybackCommand::Start {
-                    items,
-                    start_index,
-                    reply,
-                }) => self.start_queue(items, start_index, reply),
-                Ok(PlaybackCommand::Previous { reply }) => {
-                    self.navigate(AdvanceReason::UserPrevious, reply);
-                }
-                Ok(PlaybackCommand::Next { reply }) => {
-                    self.navigate(AdvanceReason::UserNext, reply);
-                }
-                Ok(PlaybackCommand::Stop { reply }) => {
-                    let _ = reply.send(Ok(self.stop()));
-                }
-                Ok(PlaybackCommand::Pause { reply }) => {
-                    let _ = reply.send(self.pause());
-                }
-                Ok(PlaybackCommand::Resume { reply }) => {
-                    let _ = reply.send(self.resume());
-                }
-                Ok(PlaybackCommand::Seek { position_ms, reply }) => {
-                    self.begin_seek(position_ms, reply);
-                }
-                Ok(PlaybackCommand::SetVolume { volume, reply }) => {
-                    let _ = reply.send(self.set_volume(volume));
-                }
-                Ok(PlaybackCommand::Mute { reply }) => {
-                    let _ = reply.send(Ok(self.mute()));
-                }
-                Ok(PlaybackCommand::Unmute { reply }) => {
-                    let _ = reply.send(Ok(self.unmute()));
-                }
-                Ok(PlaybackCommand::SetOutputSelection { selection, reply }) => {
-                    self.change_output_selection(selection, reply);
-                }
-                Ok(PlaybackCommand::SetRepeatMode { mode, reply }) => {
-                    let changed = self.queue.set_repeat(mode);
-                    if changed {
-                        self.preferences_changed();
+            let input = if self.wants_ticks() {
+                match inputs.recv_timeout(TICK_INTERVAL) {
+                    Ok(input) => Some(input),
+                    Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                        self.tick();
+                        continue;
                     }
-                    let _ = reply.send(Ok(self.queue_changed(changed)));
+                    Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
                 }
-                Ok(PlaybackCommand::SetShuffle { enabled, reply }) => {
-                    let changed = self.queue.set_shuffle(enabled, &mut self.rng);
-                    if changed {
-                        self.preferences_changed();
-                    }
-                    let _ = reply.send(Ok(self.queue_changed(changed)));
-                }
-                Ok(PlaybackCommand::RemoveQueueItem { id, reply }) => {
-                    let result = self.edit_queue(|queue| queue.remove_upcoming(&id).map(|()| true));
-                    let _ = reply.send(result.map(|changed| self.queue_changed(changed)));
-                }
-                Ok(PlaybackCommand::MoveQueueItem { id, to, reply }) => {
-                    let result = self.edit_queue(|queue| queue.move_upcoming(&id, to));
-                    let _ = reply.send(result.map(|changed| self.queue_changed(changed)));
-                }
-                Ok(PlaybackCommand::PlayQueueItem { id, reply }) => {
-                    self.skipped_in_a_row = 0;
-                    match self.queue.jump_to(&id) {
-                        Ok(()) => self.start_current(reply, false),
-                        Err(_) => {
-                            let _ = reply.send(Err(PlaybackServiceError::QueueItemNotFound));
-                        }
-                    }
-                }
-                Ok(PlaybackCommand::Enqueue { items, next, reply }) => {
-                    let result = self.edit_queue(|queue| queue.enqueue(items, next).map(|()| true));
-                    let _ = reply.send(result.map(|changed| self.queue_changed(changed)));
-                }
-                Ok(PlaybackCommand::ClearQueue { reply }) => {
-                    let changed = self.queue.clear_upcoming();
-                    let _ = reply.send(Ok(self.queue_changed(changed)));
-                }
-                Ok(PlaybackCommand::Output(signal)) => self.handle_signal(signal),
-                Ok(PlaybackCommand::Shutdown) | Err(mpsc::RecvTimeoutError::Disconnected) => break,
-                Err(mpsc::RecvTimeoutError::Timeout) => {}
+            } else {
+                inputs.recv().ok()
+            };
+            let Some(input) = input else { break };
+            if !self.handle(input) {
+                break;
             }
-            self.advance_pending_source_load();
-            self.advance_pending_playback();
-            self.advance_pending_seek();
-            self.finish_if_due();
-            self.update_playback_position();
+            if self.wants_ticks() && self.last_tick.elapsed() >= TICK_INTERVAL {
+                self.tick();
+            }
         }
-        self.discard_pending();
-        self.discard_pending_source();
-        self.discard_pending_seek();
-        self.discard_active();
-        self.publish(self.stopped_snapshot());
+        self.shutdown();
     }
+
+    /// Whether the worker has anything to do between inputs: only a playing track does.
+    pub(super) fn wants_ticks(&self) -> bool {
+        matches!(&self.transport, Transport::Loaded(loaded) if !loaded.paused)
+    }
+
+    /// Takes one input. Returns whether the worker should keep running.
+    pub(super) fn handle(&mut self, input: WorkerInput) -> bool {
+        match input {
+            WorkerInput::Command(command) => self.handle_command(command),
+            WorkerInput::Event(event) => self.handle_event(event),
+            WorkerInput::Shutdown => return false,
+        }
+        true
+    }
+
+    fn handle_command(&mut self, command: PlaybackCommand) {
+        match command {
+            PlaybackCommand::Start {
+                items,
+                start_index,
+                reply,
+            } => self.start_queue(items, start_index, reply),
+            PlaybackCommand::Previous { reply } => {
+                self.navigate(AdvanceReason::UserPrevious, reply)
+            }
+            PlaybackCommand::Next { reply } => self.navigate(AdvanceReason::UserNext, reply),
+            PlaybackCommand::Stop { reply } => {
+                let _ = reply.send(Ok(self.stop()));
+            }
+            PlaybackCommand::Pause { reply } => {
+                let _ = reply.send(self.pause());
+            }
+            PlaybackCommand::Resume { reply } => {
+                let _ = reply.send(self.resume());
+            }
+            PlaybackCommand::Seek { position_ms, reply } => {
+                self.begin_seek(position_ms, Some(reply));
+            }
+            PlaybackCommand::SetVolume { volume, reply } => {
+                let _ = reply.send(self.set_volume(volume));
+            }
+            PlaybackCommand::Mute { reply } => {
+                let _ = reply.send(Ok(self.mute()));
+            }
+            PlaybackCommand::Unmute { reply } => {
+                let _ = reply.send(Ok(self.unmute()));
+            }
+            PlaybackCommand::SetOutputSelection { selection, reply } => {
+                self.change_output_selection(selection, reply);
+            }
+            PlaybackCommand::SetRepeatMode { mode, reply } => {
+                let changed = self.queue.set_repeat(mode);
+                if changed {
+                    self.preferences_changed();
+                }
+                let _ = reply.send(Ok(self.queue_changed(changed)));
+            }
+            PlaybackCommand::SetShuffle { enabled, reply } => {
+                let changed = self.queue.set_shuffle(enabled, &mut self.rng);
+                if changed {
+                    self.preferences_changed();
+                }
+                let _ = reply.send(Ok(self.queue_changed(changed)));
+            }
+            PlaybackCommand::RemoveQueueItem { id, reply } => {
+                let result = self.edit_queue(|queue| queue.remove_upcoming(&id).map(|()| true));
+                let _ = reply.send(result.map(|changed| self.queue_changed(changed)));
+            }
+            PlaybackCommand::MoveQueueItem { id, to, reply } => {
+                let result = self.edit_queue(|queue| queue.move_upcoming(&id, to));
+                let _ = reply.send(result.map(|changed| self.queue_changed(changed)));
+            }
+            PlaybackCommand::PlayQueueItem { id, reply } => {
+                self.skipped_in_a_row = 0;
+                match self.queue.jump_to(&id) {
+                    Ok(()) => self.start_current(Some(reply), false),
+                    Err(_) => {
+                        let _ = reply.send(Err(PlaybackServiceError::QueueItemNotFound));
+                    }
+                }
+            }
+            PlaybackCommand::Enqueue { items, next, reply } => {
+                let result = self.edit_queue(|queue| queue.enqueue(items, next).map(|()| true));
+                let _ = reply.send(result.map(|changed| self.queue_changed(changed)));
+            }
+            PlaybackCommand::ClearQueue { reply } => {
+                let changed = self.queue.clear_upcoming();
+                let _ = reply.send(Ok(self.queue_changed(changed)));
+            }
+        }
+    }
+
+    fn handle_event(&mut self, event: WorkerEvent) {
+        match event {
+            WorkerEvent::SourceLoaded { id, result } => self.source_loaded(id, result),
+            WorkerEvent::PrebufferReady { stream } => match self.owner_of(stream) {
+                StreamOwner::Start => self.finish_start(),
+                StreamOwner::Seek => self.finish_seek(),
+                StreamOwner::Active | StreamOwner::Gone => {}
+            },
+            WorkerEvent::DecodeFailed { stream } => {
+                error!("playback.decode_failed stream_id={}", stream.0);
+                self.decode_stopped(stream, PlaybackFailureCode::DecodeFailed);
+            }
+            WorkerEvent::ConversionFailed { stream } => {
+                error!(
+                    "playback.sample_rate_conversion_failed stream_id={}",
+                    stream.0
+                );
+                self.decode_stopped(stream, PlaybackFailureCode::SampleRateConversionFailed);
+            }
+            WorkerEvent::FinalFrames { stream, end_time } => {
+                if let Transport::Loaded(loaded) = &mut self.transport {
+                    if loaded.pipeline.stream_id == stream {
+                        loaded.completion_time = Some(end_time);
+                    }
+                }
+            }
+            WorkerEvent::StreamFailed { stream, kind } => self.stream_failed(stream, kind),
+        }
+    }
+
+    fn owner_of(&self, stream: OutputStreamId) -> StreamOwner {
+        match &self.transport {
+            Transport::Loading(Loading {
+                stage: LoadStage::Prebuffering(prebuffering),
+                ..
+            }) if prebuffering.pipeline.stream_id == stream => StreamOwner::Start,
+            Transport::Loaded(loaded) if loaded.pipeline.stream_id == stream => StreamOwner::Active,
+            Transport::Loaded(loaded)
+                if loaded
+                    .seek
+                    .as_ref()
+                    .is_some_and(|seek| seek.pipeline.stream_id == stream) =>
+            {
+                StreamOwner::Seek
+            }
+            _ => StreamOwner::Gone,
+        }
+    }
+
+    // ---- starting ----
 
     /// Replaces the queue and starts its `start_index` item.
-    pub(super) fn start_queue(
+    fn start_queue(
         &mut self,
         items: Vec<PlaybackItemSeed>,
         start_index: usize,
@@ -276,81 +374,79 @@ impl PlaybackWorker {
             return;
         }
         self.skipped_in_a_row = 0;
-        self.start_current(reply, false);
+        self.start_current(Some(reply), false);
     }
 
     /// Starts whatever the queue points at, after telling listeners where the queue stands.
-    fn start_current(&mut self, reply: Reply<PlaybackSnapshot>, start_paused: bool) {
+    fn start_current(&mut self, responder: Option<Reply<PlaybackSnapshot>>, start_paused: bool) {
         let Some(item) = self.queue.current().cloned() else {
-            let _ = reply.send(Err(PlaybackServiceError::InvalidPlaybackState));
+            respond(responder, Err(PlaybackServiceError::InvalidPlaybackState));
             return;
         };
         self.publish_queue();
-        self.begin_start(item, reply, start_paused);
-    }
-
-    fn begin_start(
-        &mut self,
-        item: PlaybackItem,
-        reply: Reply<PlaybackSnapshot>,
-        start_paused: bool,
-    ) {
-        self.restore_position_ms = None;
-        self.discard_pending();
-        self.discard_pending_source();
-        self.discard_pending_seek();
-        self.discard_active();
-        if !matches!(self.current(), PlaybackSnapshot::Stopped { .. }) {
-            self.publish(self.stopped_snapshot());
-        }
-        let worker = match SourceLoadWorker::spawn(item.file.clone()) {
-            Ok(worker) => worker,
-            Err(()) => {
-                self.fail_start(
-                    reply,
-                    None,
-                    PlaybackFailureCode::DecodeFailed,
-                    StartFailurePhase::SourceWorker,
-                    PlaybackServiceError::WorkerUnavailable,
-                );
-                return;
-            }
-        };
-        self.pending_source = Some(PendingSourceLoad {
+        self.begin_start(StartRequest {
             item,
-            worker,
-            reply,
+            responder,
             start_paused,
+            resume_at_ms: None,
         });
     }
 
-    pub(super) fn advance_pending_source_load(&mut self) {
-        let Some(pending) = self.pending_source.as_mut() else {
-            return;
-        };
-        let completion = match pending.worker.try_complete() {
-            Ok(completion) => completion,
-            Err(()) => {
-                let pending = self.pending_source.take().expect("pending source exists");
-                self.fail_start(
-                    pending.reply,
-                    None,
-                    PlaybackFailureCode::DecodeFailed,
-                    StartFailurePhase::SourceWorker,
-                    PlaybackServiceError::WorkerUnavailable,
-                );
-                return;
+    fn begin_start(&mut self, request: StartRequest) {
+        let was_visible = matches!(
+            self.transport,
+            Transport::Loaded(_) | Transport::Failed { .. }
+        );
+        self.discard_transport();
+        if was_visible {
+            self.publish_state();
+        }
+        let id = self.ids.next();
+        match SourceLoad::spawn(request.item.file.clone(), id, self.inbox.clone()) {
+            Ok(load) => {
+                self.transport = Transport::Loading(Loading {
+                    id,
+                    request,
+                    stage: LoadStage::Source(load),
+                });
             }
-        };
-        let Some(result) = completion else {
+            Err(()) => self.fail_start(
+                request.responder,
+                Some(id),
+                StartFailure {
+                    code: PlaybackFailureCode::DecodeFailed,
+                    phase: StartFailurePhase::SourceWorker,
+                    error: PlaybackServiceError::WorkerUnavailable,
+                },
+            ),
+        }
+    }
+
+    fn source_loaded(
+        &mut self,
+        id: PlaybackId,
+        result: Result<CompressedAudioSource, CompressedSourceError>,
+    ) {
+        let is_current_load = matches!(
+            &self.transport,
+            Transport::Loading(loading)
+                if loading.id == id && matches!(loading.stage, LoadStage::Source(_))
+        );
+        if !is_current_load {
+            return;
+        }
+        let Transport::Loading(loading) = std::mem::replace(&mut self.transport, Transport::Idle)
+        else {
             return;
         };
-        let pending = self.pending_source.take().expect("pending source exists");
-        let source = match result {
-            Ok(source) => source,
+        if let LoadStage::Source(load) = loading.stage {
+            load.join();
+        }
+        let request = loading.request;
+        match result {
+            Ok(source) => self.begin_prebuffering(id, request, source),
             Err(CompressedSourceError::Cancelled) => {
-                let _ = pending.reply.send(Err(PlaybackServiceError::Superseded));
-                return;
+                respond(request.responder, Err(PlaybackServiceError::Superseded));
             }
             Err(error) => {
                 let phase = match error {
@@ -360,181 +456,174 @@ impl PlaybackWorker {
                     CompressedSourceError::SourceChanged => StartFailurePhase::SourceChanged,
                     CompressedSourceError::Cancelled => unreachable!(),
                 };
-                self.fail_start(
-                    pending.reply,
-                    None,
-                    PlaybackFailureCode::DecodeFailed,
-                    phase,
-                    PlaybackServiceError::Decode,
-                );
-                return;
+                self.fail_start(request.responder, Some(id), StartFailure::item(phase));
             }
-        };
-        self.begin_playback_from_source(pending.item, source, pending.reply, pending.start_paused);
+        }
     }
 
-    fn begin_playback_from_source(
+    /// Opens the decoder, prepares the output and starts the decode thread that fills it.
+    fn begin_prebuffering(
         &mut self,
-        item: PlaybackItem,
+        id: PlaybackId,
+        request: StartRequest,
         source: CompressedAudioSource,
-        reply: Reply<PlaybackSnapshot>,
-        start_paused: bool,
     ) {
-        let mut decoder = match source.open_decoder(&item.file.extension) {
-            Ok(decoder) => decoder,
-            Err(_) => {
-                self.fail_start(
-                    reply,
-                    None,
-                    PlaybackFailureCode::DecodeFailed,
-                    StartFailurePhase::DecoderOpen,
-                    PlaybackServiceError::Decode,
-                );
-                return;
+        match self.open_start_pipeline(&request.item, &source) {
+            Ok((pipeline, duration_ms)) => {
+                self.transport = Transport::Loading(Loading {
+                    id,
+                    request,
+                    stage: LoadStage::Prebuffering(Prebuffering {
+                        source,
+                        pipeline,
+                        duration_ms,
+                    }),
+                });
             }
-        };
+            Err(failure) => self.fail_start(request.responder, Some(id), failure),
+        }
+    }
+
+    fn open_start_pipeline(
+        &mut self,
+        item: &PlaybackItem,
+        source: &CompressedAudioSource,
+    ) -> Result<(Pipeline, Option<u64>), StartFailure> {
+        let mut decoder = source
+            .open_decoder(&item.file.extension)
+            .map_err(|_| StartFailure::item(StartFailurePhase::DecoderOpen))?;
         let spec = decoder.spec();
         let duration_ms = decoder.duration_ms();
         let mut first_packet = Vec::new();
         match decoder.decode_next(&mut first_packet) {
             Err(_) | Ok(DecodeStep::EndOfStream) => {
-                self.fail_start(
-                    reply,
-                    None,
-                    PlaybackFailureCode::DecodeFailed,
-                    StartFailurePhase::FirstPacketDecode,
-                    PlaybackServiceError::Decode,
-                );
-                return;
+                return Err(StartFailure::item(StartFailurePhase::FirstPacketDecode));
             }
             Ok(DecodeStep::Samples) => {}
         }
-        let decode_setup = DecodeWorkerSetup::new();
-        self.next_playback_session_id = self.next_playback_session_id.wrapping_add(1);
-        self.next_output_stream_id = self.next_output_stream_id.wrapping_add(1);
-        let session_id = self.next_playback_session_id;
-        let id = OutputStreamId(self.next_output_stream_id);
-        let resolved_device = match resolve_output_selection(&self.output_selection) {
-            Ok(device) => device,
-            Err(error) => {
-                let code = device_resolution_failure_code(error);
-                self.fail_start(
-                    reply,
-                    Some(id.0.to_string()),
-                    code.clone(),
-                    StartFailurePhase::OutputDeviceResolution,
-                    PlaybackServiceError::Output(code),
-                );
-                return;
-            }
-        };
-        let preparation = match prepare_output_stream(
-            id,
-            spec,
-            resolved_device,
-            self.effective_gain.clone(),
-            decode_setup.producer_state(),
-            decode_setup.capacity_sender(),
-            self.output_sender.clone(),
-        ) {
-            Ok(preparation) => preparation,
-            Err(error) => {
-                let code = output_failure_code(error);
-                self.fail_start(
-                    reply,
-                    Some(id.0.to_string()),
-                    code.clone(),
-                    StartFailurePhase::OutputPrepare,
-                    PlaybackServiceError::Output(code),
-                );
-                return;
-            }
-        };
-        let decode_pipeline = match decode_setup.spawn(DecodeTaskInput {
-            decoder,
-            first_packet,
-            producer: preparation.producer,
-            processor: match OutputPcmProcessor::new(preparation.config.processing_plan) {
-                Ok(processor) => processor,
-                Err(_) => {
-                    let error = PlaybackFailureCode::SampleRateConversionFailed;
-                    self.fail_start(
-                        reply,
-                        Some(id.0.to_string()),
-                        error.clone(),
-                        StartFailurePhase::ProcessorCreate,
-                        PlaybackServiceError::Output(error),
-                    );
-                    return;
-                }
+        let stream_id = self.next_stream_id();
+        let prepared = self
+            .backend
+            .prepare(
+                OutputTarget::Selection {
+                    selection: self.output_selection.clone(),
+                    spec,
+                },
+                self.output_links(stream_id),
+            )
+            .map_err(|error| {
+                StartFailure::output(StartFailurePhase::OutputPrepare, output_failure_code(error))
+            })?;
+        let processor = OutputPcmProcessor::new(prepared.config.processing_plan).map_err(|_| {
+            StartFailure::output(
+                StartFailurePhase::ProcessorCreate,
+                PlaybackFailureCode::SampleRateConversionFailed,
+            )
+        })?;
+        let decode = DecodeWorker::spawn(
+            DecodeTaskInput {
+                decoder,
+                first_packet,
+                producer: prepared.producer,
+                processor,
+                output_sample_rate: prepared.config.processing_plan.output().sample_rate().get(),
+                discard_output_samples: 0,
             },
-            output_sample_rate: preparation
-                .config
-                .processing_plan
-                .output()
-                .sample_rate()
-                .get(),
-            signal_sender: self.output_sender.clone(),
-            stream_id: id,
-            discard_output_samples: 0,
-        }) {
-            Ok(pipeline) => pipeline,
-            Err(_) => {
-                let error = PlaybackFailureCode::SampleRateConversionFailed;
+            self.inbox.clone(),
+            stream_id,
+        );
+        Ok((
+            Pipeline {
+                stream_id,
+                stream: prepared.stream,
+                config: prepared.config,
+                decode,
+            },
+            duration_ms,
+        ))
+    }
+
+    /// The prebuffer is ready: start the output (unless starting paused) and answer the caller.
+    fn finish_start(&mut self) {
+        let Transport::Loading(loading) = std::mem::replace(&mut self.transport, Transport::Idle)
+        else {
+            return;
+        };
+        let Loading { id, request, stage } = loading;
+        let LoadStage::Prebuffering(prebuffering) = stage else {
+            return;
+        };
+        let Prebuffering {
+            source,
+            pipeline,
+            duration_ms,
+        } = prebuffering;
+        if !request.start_paused {
+            if let Err(error) = pipeline.stream.start() {
+                let code = output_failure_code(error);
+                pipeline.cancel();
                 self.fail_start(
-                    reply,
-                    Some(id.0.to_string()),
-                    error.clone(),
-                    StartFailurePhase::DecodeWorkerSpawn,
-                    PlaybackServiceError::Output(error),
+                    request.responder,
+                    Some(id),
+                    StartFailure::output(StartFailurePhase::StreamStart, code),
                 );
                 return;
             }
-        };
-        let sample_rate = preparation
-            .config
-            .processing_plan
-            .output()
-            .sample_rate()
-            .get();
-        let stream = preparation.stream;
-        self.pending = Some(PendingPlayback {
-            session_id,
+        }
+        let StartRequest {
+            item,
+            responder,
+            start_paused,
+            resume_at_ms,
+        } = request;
+        self.last_item = Some(item.clone());
+        self.skipped_in_a_row = 0;
+        self.transport = Transport::Loaded(Loaded {
+            id,
             item,
             source,
-            output_config: preparation.config.clone(),
-            id,
-            stream,
-            decode_pipeline,
-            sample_rate,
-            duration_ms,
-            reply,
-            start_paused,
+            position: Position::from_start(pipeline.sample_rate(), duration_ms),
+            pipeline,
+            completion_time: None,
+            paused: start_paused,
+            seek: None,
         });
+        let snapshot = self.publish_state();
+        respond(responder, Ok(snapshot));
+        if let Some(position_ms) = resume_at_ms {
+            self.begin_seek(position_ms, None);
+        }
     }
 
     /// Reports a failed start and, when only this file is at fault, moves on to the next one.
     /// Listeners see the failure first, so a skipped file is never silent.
     fn fail_start(
         &mut self,
-        reply: Reply<PlaybackSnapshot>,
-        playback_id: Option<String>,
-        code: PlaybackFailureCode,
-        phase: StartFailurePhase,
-        error: PlaybackServiceError,
+        responder: Option<Reply<PlaybackSnapshot>>,
+        id: Option<PlaybackId>,
+        failure: StartFailure,
     ) {
         error!(
             "playback.start_failed code={:?} phase={:?} playback_id={:?}",
-            code, phase, playback_id
+            failure.code, failure.phase, id
         );
-        self.publish(self.failed_snapshot(playback_id, code));
-        if phase.scope() == FailureScope::Item {
+        self.transport = Transport::Failed {
+            id,
+            code: failure.code,
+        };
+        self.publish_state();
+        if failure.phase.scope() == FailureScope::Item {
             if let Some(item) = self.next_after_item_failure() {
-                self.begin_start(item, reply, false);
+                self.begin_start(StartRequest {
+                    item,
+                    responder,
+                    start_paused: false,
+                    resume_at_ms: None,
+                });
                 return;
             }
         }
-        let _ = reply.send(Err(error));
+        respond(responder, Err(failure.error));
     }
 
     /// The item to try after the current one could not be played, if there is one to try.
@@ -551,133 +640,99 @@ impl PlaybackWorker {
         Some(item)
     }
 
-    pub(super) fn navigate(&mut self, reason: AdvanceReason, reply: Reply<PlaybackSnapshot>) {
-        let current = self.current();
+    fn navigate(&mut self, reason: AdvanceReason, reply: Reply<PlaybackSnapshot>) {
         if reason == AdvanceReason::UserPrevious {
-            if let Some(session) = current.session() {
-                if previous_restarts_track(session.position_ms, session.duration_ms) {
-                    self.begin_seek(0, reply);
+            if let Transport::Loaded(loaded) = &self.transport {
+                if previous_restarts_track(loaded.position_ms(), loaded.position.duration_ms) {
+                    self.begin_seek(0, Some(reply));
                     return;
                 }
             }
         }
-        let paused = matches!(current, PlaybackSnapshot::Paused { .. });
+        let paused = matches!(&self.transport, Transport::Loaded(loaded) if loaded.paused);
         self.skipped_in_a_row = 0;
         if self.queue.advance(reason, &mut self.rng).is_none() {
-            let _ = reply.send(Ok(current));
+            let _ = reply.send(Ok(self.render()));
             return;
         }
-        self.start_current(reply, paused);
+        self.start_current(Some(reply), paused);
     }
 
-    fn begin_seek(&mut self, requested_position_ms: u64, reply: Reply<PlaybackSnapshot>) {
-        if self.pending_seek.is_some() {
-            self.discard_pending_seek();
-        }
-        let current = self.current();
-        if !matches!(
-            current,
-            PlaybackSnapshot::Playing { .. } | PlaybackSnapshot::Paused { .. }
-        ) {
-            let _ = reply.send(Err(PlaybackServiceError::InvalidPlaybackState));
-            return;
-        }
-        let Some(active) = self.active.as_ref() else {
-            let _ = reply.send(Err(PlaybackServiceError::InvalidPlaybackState));
+    // ---- seeking ----
+
+    fn begin_seek(
+        &mut self,
+        requested_position_ms: u64,
+        responder: Option<Reply<PlaybackSnapshot>>,
+    ) {
+        self.cancel_seek(PlaybackServiceError::Superseded);
+        let Transport::Loaded(loaded) = &self.transport else {
+            respond(responder, Err(PlaybackServiceError::InvalidPlaybackState));
             return;
         };
-        let Some(duration_ms) = active.duration_ms else {
-            let _ = reply.send(Err(PlaybackServiceError::DurationUnavailable));
+        let Some(duration_ms) = loaded.position.duration_ms else {
+            respond(responder, Err(PlaybackServiceError::DurationUnavailable));
             return;
         };
         let target_ms = requested_position_ms.min(duration_ms);
         if target_ms == duration_ms {
-            let _ = reply.send(Ok(self.stop()));
+            let snapshot = self.stop();
+            respond(responder, Ok(snapshot));
             return;
         }
-        let session_id = active.session_id;
-        let source_file = active.item.file.clone();
-        let source = active.source.clone();
-        let source_spec = active.output_config.processing_plan.source();
+        let source = loaded.source.clone();
+        let extension = loaded.item.file.extension.clone();
+        let config = loaded.pipeline.config.clone();
+        match self.open_seek_pipeline(&source, &extension, &config, target_ms, duration_ms) {
+            Ok(mut seek) => {
+                seek.responder = responder;
+                if let Transport::Loaded(loaded) = &mut self.transport {
+                    loaded.seek = Some(seek);
+                }
+            }
+            Err(error) => respond(responder, Err(error)),
+        }
+    }
+
+    fn open_seek_pipeline(
+        &mut self,
+        source: &CompressedAudioSource,
+        extension: &str,
+        config: &crate::audio::output::PreparedOutputConfig,
+        target_ms: u64,
+        duration_ms: u64,
+    ) -> Result<SeekInFlight, PlaybackServiceError> {
+        let source_spec = config.processing_plan.source();
         let target_source_frame = millis_to_frame(target_ms, source_spec.sample_rate().get());
-        let processing_plan = active.output_config.processing_plan;
-        let processor = match OutputPcmProcessor::new(processing_plan) {
-            Ok(processor) => processor,
-            Err(_) => {
-                let _ = reply.send(Err(PlaybackServiceError::Output(
-                    PlaybackFailureCode::SampleRateConversionFailed,
-                )));
-                return;
-            }
-        };
+        let processor = OutputPcmProcessor::new(config.processing_plan).map_err(|_| {
+            PlaybackServiceError::Output(PlaybackFailureCode::SampleRateConversionFailed)
+        })?;
         let preroll_frames = processor.seek_preroll_frames(target_source_frame);
-        let mut decoder = match source.open_decoder(&source_file.extension) {
-            Ok(decoder) => decoder,
-            Err(_) => {
-                let _ = reply.send(Err(PlaybackServiceError::Decode));
-                return;
-            }
-        };
+        let mut decoder = source
+            .open_decoder(extension)
+            .map_err(|_| PlaybackServiceError::Decode)?;
         if decoder.spec() != source_spec {
-            let _ = reply.send(Err(PlaybackServiceError::Decode));
-            return;
+            return Err(PlaybackServiceError::Decode);
         }
         let seek = match decoder.seek_to_frame_with_preroll(target_source_frame, preroll_frames) {
             Ok(SeekStep::Samples(seek)) => seek,
-            Ok(SeekStep::EndOfStream) => {
-                let _ = reply.send(Err(PlaybackServiceError::Decode));
-                return;
-            }
-            Err(PcmDecodeError::SeekFailed) => {
-                let _ = reply.send(Err(PlaybackServiceError::Seek));
-                return;
-            }
-            Err(_) => {
-                let _ = reply.send(Err(PlaybackServiceError::Decode));
-                return;
-            }
+            Ok(SeekStep::EndOfStream) => return Err(PlaybackServiceError::Decode),
+            Err(PcmDecodeError::SeekFailed) => return Err(PlaybackServiceError::Seek),
+            Err(_) => return Err(PlaybackServiceError::Decode),
         };
         if seek.first_packet.is_empty() {
-            let _ = reply.send(Err(PlaybackServiceError::Decode));
-            return;
+            return Err(PlaybackServiceError::Decode);
         }
 
-        self.next_output_stream_id = self.next_output_stream_id.wrapping_add(1);
-        let id = OutputStreamId(self.next_output_stream_id);
-        let decode_setup = DecodeWorkerSetup::new();
-        let output_config = active.output_config.clone();
-        let resolved_device = match resolve_output_device_id(&output_config.device_id) {
-            Ok(device) => device,
-            Err(error) => {
-                let _ = reply.send(Err(PlaybackServiceError::Output(
-                    device_resolution_failure_code(error),
-                )));
-                return;
-            }
-        };
-        let preparation = match prepare_output_stream_with_config(
-            id,
-            resolved_device,
-            &output_config,
-            self.effective_gain.clone(),
-            decode_setup.producer_state(),
-            decode_setup.capacity_sender(),
-            self.output_sender.clone(),
-        ) {
-            Ok(preparation) => preparation,
-            Err(error) => {
-                let _ = reply.send(Err(PlaybackServiceError::Output(output_failure_code(
-                    error,
-                ))));
-                return;
-            }
-        };
-        let sample_rate = preparation
-            .config
-            .processing_plan
-            .output()
-            .sample_rate()
-            .get();
+        let stream_id = self.next_stream_id();
+        let prepared = self
+            .backend
+            .prepare(
+                OutputTarget::Config(config.clone()),
+                self.output_links(stream_id),
+            )
+            .map_err(|error| PlaybackServiceError::Output(output_failure_code(error)))?;
+        let sample_rate = prepared.config.processing_plan.output().sample_rate().get();
         let discard_output_frames = source_to_output_frame(
             seek.confirmed_source_frame
                 .saturating_sub(seek.preroll_source_frame),
@@ -685,270 +740,203 @@ impl PlaybackWorker {
             source_spec.sample_rate().get(),
         ) as usize;
         let discard_output_samples = discard_output_frames.saturating_mul(usize::from(
-            output_config.processing_plan.output().channel_count().get(),
+            config.processing_plan.output().channel_count().get(),
         ));
-        let decode_pipeline = match decode_setup.spawn(DecodeTaskInput {
-            decoder,
-            first_packet: seek.first_packet,
-            producer: preparation.producer,
-            processor,
-            output_sample_rate: output_config.processing_plan.output().sample_rate().get(),
-            signal_sender: self.output_sender.clone(),
-            stream_id: id,
-            discard_output_samples,
-        }) {
-            Ok(pipeline) => pipeline,
-            Err(_) => {
-                let _ = reply.send(Err(PlaybackServiceError::Output(
-                    PlaybackFailureCode::SampleRateConversionFailed,
-                )));
-                return;
-            }
-        };
+        let decode = DecodeWorker::spawn(
+            DecodeTaskInput {
+                decoder,
+                first_packet: seek.first_packet,
+                producer: prepared.producer,
+                processor,
+                output_sample_rate: sample_rate,
+                discard_output_samples,
+            },
+            self.inbox.clone(),
+            stream_id,
+        );
         let output_base_frame = source_to_output_frame(
             seek.confirmed_source_frame,
             sample_rate,
             source_spec.sample_rate().get(),
         );
         let total_output_frames = duration_to_frames(duration_ms, sample_rate);
-        self.pending_seek = Some(PendingSeek {
-            session_id,
-            id,
-            confirmed_position_ms: seek.confirmed_position_ms,
+        Ok(SeekInFlight {
+            pipeline: Pipeline {
+                stream_id,
+                stream: prepared.stream,
+                config: prepared.config,
+                decode,
+            },
             output_base_frame: output_base_frame.min(total_output_frames),
             remaining_frames: total_output_frames.saturating_sub(output_base_frame),
-            stream: preparation.stream,
-            output_config: preparation.config,
-            decode_pipeline,
-            sample_rate,
             duration_ms,
-            reply,
-        });
+            responder: None,
+        })
     }
 
-    fn advance_pending_seek(&mut self) {
-        let Some(pending) = self.pending_seek.as_ref() else {
+    /// The seek's prebuffer is ready: switch the output over to it.
+    fn finish_seek(&mut self) {
+        let Transport::Loaded(loaded) = &mut self.transport else {
             return;
         };
-        let ready = pending.decode_pipeline.prebuffer_ready();
-        let state = pending.decode_pipeline.producer_state();
-        if !ready && state == ProducerState::Running {
-            return;
-        }
-        let pending = self.pending_seek.take().expect("pending seek exists");
-        if state == ProducerState::DecodeFailed {
-            pending.decode_pipeline.cancel_and_join();
-            let _ = pending.reply.send(Err(PlaybackServiceError::Decode));
-            return;
-        }
-        if state == ProducerState::SampleRateConversionFailed {
-            pending.decode_pipeline.cancel_and_join();
-            let _ = pending.reply.send(Err(PlaybackServiceError::Output(
-                PlaybackFailureCode::SampleRateConversionFailed,
-            )));
-            return;
-        }
-        let Some(active) = self.active.as_ref() else {
-            pending.decode_pipeline.cancel_and_join();
-            let _ = pending
-                .reply
-                .send(Err(PlaybackServiceError::InvalidPlaybackState));
+        let Some(seek) = loaded.seek.take() else {
             return;
         };
-        if active.session_id != pending.session_id {
-            pending.decode_pipeline.cancel_and_join();
-            let _ = pending
-                .reply
-                .send(Err(PlaybackServiceError::InvalidPlaybackState));
-            return;
-        }
-        let was_playing = matches!(self.current(), PlaybackSnapshot::Playing { .. });
+        let was_playing = !loaded.paused;
         if was_playing {
-            if let Some(active) = self.active.as_mut() {
-                if let Err(error) = active.stream.pause() {
-                    pending.decode_pipeline.cancel_and_join();
-                    let _ =
-                        pending
-                            .reply
-                            .send(Err(PlaybackServiceError::Output(output_failure_code(
-                                error,
-                            ))));
-                    return;
-                }
-            }
-            if let Err(error) = pending.stream.start() {
-                pending.decode_pipeline.cancel_and_join();
-                let rollback_failed = self.active.as_mut().is_none_or(|active| {
-                    let failed = active.stream.resume().is_err();
-                    if !failed {
-                        active.stream.clear_timing_anchor();
-                    }
-                    failed
-                });
-                if rollback_failed {
-                    let playback_id = self
-                        .active
-                        .as_ref()
-                        .map(|active| active.session_id.to_string());
-                    self.discard_active();
-                    self.publish(self.failed_snapshot(
-                        playback_id,
-                        PlaybackFailureCode::OutputStreamResumeFailed,
-                    ));
-                }
-                let _ = pending
-                    .reply
-                    .send(Err(PlaybackServiceError::Output(output_failure_code(
-                        error,
-                    ))));
+            if let Err(error) = loaded.pipeline.stream.pause() {
+                seek.pipeline.cancel();
+                respond(
+                    seek.responder,
+                    Err(PlaybackServiceError::Output(output_failure_code(error))),
+                );
                 return;
             }
-        }
-        let old = self.active.take().expect("active playback exists");
-        old.decoder_worker.cancel_and_join();
-        self.active = Some(ActivePlayback {
-            session_id: pending.session_id,
-            id: pending.id,
-            item: old.item,
-            source: old.source,
-            output_config: pending.output_config,
-            stream: pending.stream,
-            completion_time: None,
-            sample_rate: pending.sample_rate,
-            duration_ms: Some(pending.duration_ms),
-            position_frame: pending.output_base_frame,
-            position_base_frame: pending.output_base_frame,
-            remaining_frames: Some(pending.remaining_frames),
-            last_position_publish: Instant::now(),
-            decoder_worker: pending.decode_pipeline.into_worker(),
-        });
-        self.seek_revision = self.seek_revision.saturating_add(1);
-        let snapshot = if was_playing {
-            self.playing_snapshot(
-                pending.session_id.to_string(),
-                pending.confirmed_position_ms,
-                Some(pending.duration_ms),
-            )
-        } else {
-            self.paused_snapshot(
-                pending.session_id.to_string(),
-                pending.confirmed_position_ms,
-                Some(pending.duration_ms),
-            )
-        };
-        let snapshot = self.publish(snapshot);
-        let _ = pending.reply.send(Ok(snapshot));
-    }
-
-    fn discard_pending_seek(&mut self) {
-        self.cancel_pending_seek_with(PlaybackServiceError::Superseded);
-    }
-
-    fn cancel_pending_seek_with(&mut self, error: PlaybackServiceError) {
-        if let Some(pending) = self.pending_seek.take() {
-            pending.decode_pipeline.cancel_and_join();
-            let _ = pending.reply.send(Err(error));
-        }
-    }
-
-    fn advance_pending_playback(&mut self) {
-        let Some(pending) = self.pending.as_ref() else {
-            return;
-        };
-        let ready = pending.decode_pipeline.prebuffer_ready();
-        let state = pending.decode_pipeline.producer_state();
-        if !ready && state == ProducerState::Running {
-            return;
-        }
-
-        let pending = self.pending.take().expect("pending playback exists");
-        if state == ProducerState::DecodeFailed {
-            self.fail_pending_start(
-                pending,
-                PlaybackFailureCode::DecodeFailed,
-                StartFailurePhase::PrebufferDecode,
-                PlaybackServiceError::Decode,
-            );
-            return;
-        }
-        if state == ProducerState::SampleRateConversionFailed {
-            let code = PlaybackFailureCode::SampleRateConversionFailed;
-            self.fail_pending_start(
-                pending,
-                code.clone(),
-                StartFailurePhase::PrebufferConversion,
-                PlaybackServiceError::Output(code),
-            );
-            return;
-        }
-        if !pending.start_paused {
-            if let Err(error) = pending.stream.start() {
-                let code = output_failure_code(error);
-                self.fail_pending_start(
-                    pending,
-                    code.clone(),
-                    StartFailurePhase::StreamStart,
-                    PlaybackServiceError::Output(code),
+            if let Err(error) = seek.pipeline.stream.start() {
+                seek.pipeline.cancel();
+                let rollback_failed = loaded.pipeline.stream.start().is_err();
+                if !rollback_failed {
+                    loaded.pipeline.stream.clear_timing_anchor();
+                }
+                let id = loaded.id;
+                if rollback_failed {
+                    self.drop_loaded(PlaybackServiceError::Superseded);
+                    self.transport = Transport::Failed {
+                        id: Some(id),
+                        code: PlaybackFailureCode::OutputStreamResumeFailed,
+                    };
+                    self.publish_state();
+                }
+                respond(
+                    seek.responder,
+                    Err(PlaybackServiceError::Output(output_failure_code(error))),
                 );
                 return;
             }
         }
-        let (active, reply, start_paused) = pending.into_active();
-        let session_id = active.session_id;
-        let duration_ms = active.duration_ms;
-        self.loaded_item = Some(active.item.clone());
-        self.active = Some(active);
-        self.skipped_in_a_row = 0;
-        let snapshot = if start_paused {
-            self.publish(self.paused_snapshot(session_id.to_string(), 0, duration_ms))
-        } else {
-            self.publish(self.playing_snapshot(session_id.to_string(), 0, duration_ms))
+        let old = std::mem::replace(&mut loaded.pipeline, seek.pipeline);
+        old.cancel();
+        loaded.position.sample_rate = loaded.pipeline.sample_rate();
+        loaded.position.duration_ms = Some(seek.duration_ms);
+        loaded.position.frame = seek.output_base_frame;
+        loaded.position.base_frame = seek.output_base_frame;
+        loaded.position.remaining_frames = Some(seek.remaining_frames);
+        loaded.position.last_publish = Instant::now();
+        loaded.completion_time = None;
+        self.seek_revision = self.seek_revision.saturating_add(1);
+        let snapshot = self.publish_state();
+        respond(seek.responder, Ok(snapshot));
+    }
+
+    fn cancel_seek(&mut self, error: PlaybackServiceError) {
+        if let Transport::Loaded(loaded) = &mut self.transport {
+            if let Some(seek) = loaded.seek.take() {
+                seek.pipeline.cancel();
+                respond(seek.responder, Err(error));
+            }
+        }
+    }
+
+    // ---- transport commands ----
+
+    /// Lets go of whatever is loading or loaded, answering whoever waits for it.
+    fn discard_transport(&mut self) {
+        match std::mem::replace(&mut self.transport, Transport::Idle) {
+            Transport::Idle | Transport::Failed { .. } => {}
+            Transport::Loading(loading) => {
+                match loading.stage {
+                    LoadStage::Source(load) => load.cancel_and_join(),
+                    LoadStage::Prebuffering(prebuffering) => prebuffering.pipeline.cancel(),
+                }
+                respond(
+                    loading.request.responder,
+                    Err(PlaybackServiceError::Superseded),
+                );
+            }
+            Transport::Loaded(mut loaded) => {
+                if let Some(seek) = loaded.seek.take() {
+                    seek.pipeline.cancel();
+                    respond(seek.responder, Err(PlaybackServiceError::Superseded));
+                }
+                loaded.pipeline.cancel();
+            }
+        }
+    }
+
+    /// Lets go of the loaded track and returns its identity. A seek in flight is answered with
+    /// `seek_error`.
+    fn drop_loaded(&mut self, seek_error: PlaybackServiceError) -> Option<PlaybackId> {
+        let Transport::Loaded(mut loaded) = std::mem::replace(&mut self.transport, Transport::Idle)
+        else {
+            return None;
         };
-        let _ = reply.send(Ok(snapshot));
-        if let Some(position_ms) = self.restore_position_ms.take() {
-            let (restore_reply, _) = mpsc::sync_channel(1);
-            self.begin_seek(position_ms, restore_reply);
+        if let Some(seek) = loaded.seek.take() {
+            seek.pipeline.cancel();
+            respond(seek.responder, Err(seek_error));
         }
+        let id = loaded.id;
+        loaded.pipeline.cancel();
+        Some(id)
     }
 
-    fn fail_pending_start(
-        &mut self,
-        pending: PendingPlayback,
-        code: PlaybackFailureCode,
-        phase: StartFailurePhase,
-        error: PlaybackServiceError,
-    ) {
-        let playback_id = Some(pending.id.0.to_string());
-        pending.decode_pipeline.cancel_and_join();
-        self.fail_start(pending.reply, playback_id, code, phase, error);
-    }
-
-    pub(super) fn discard_pending(&mut self) {
-        if let Some(pending) = self.pending.take() {
-            pending.decode_pipeline.cancel_and_join();
-            let _ = pending.reply.send(Err(PlaybackServiceError::Superseded));
-        }
-    }
-
-    pub(super) fn discard_pending_source(&mut self) {
-        if let Some(pending) = self.pending_source.take() {
-            pending.worker.cancel_and_join();
-            let _ = pending.reply.send(Err(PlaybackServiceError::Superseded));
-        }
-    }
-
-    pub(super) fn stop(&mut self) -> PlaybackSnapshot {
-        self.restore_position_ms = None;
-        self.discard_pending();
-        self.discard_pending_source();
-        self.discard_pending_seek();
-        self.discard_active();
+    fn stop(&mut self) -> PlaybackSnapshot {
+        let was_visible = matches!(
+            self.transport,
+            Transport::Loaded(_) | Transport::Failed { .. }
+        );
+        self.discard_transport();
         self.queue.clear();
         self.publish_queue();
-        if matches!(self.current(), PlaybackSnapshot::Stopped { .. }) {
-            return self.current();
+        if was_visible {
+            return self.publish_state();
         }
-        self.publish(self.stopped_snapshot())
+        self.render()
+    }
+
+    fn pause(&mut self) -> Result<PlaybackSnapshot, PlaybackServiceError> {
+        let Transport::Loaded(loaded) = &mut self.transport else {
+            return Err(PlaybackServiceError::InvalidPlaybackState);
+        };
+        if loaded.paused {
+            return Ok(self.render());
+        }
+        if let Err(error) = loaded.pipeline.stream.pause() {
+            return Err(self.control_failure(error));
+        }
+        let position = loaded.sample_position();
+        loaded.pipeline.stream.clear_timing_anchor();
+        loaded.position.frame = position;
+        loaded.paused = true;
+        Ok(self.publish_state())
+    }
+
+    fn resume(&mut self) -> Result<PlaybackSnapshot, PlaybackServiceError> {
+        let Transport::Loaded(loaded) = &mut self.transport else {
+            return Err(PlaybackServiceError::InvalidPlaybackState);
+        };
+        if !loaded.paused {
+            return Ok(self.render());
+        }
+        if let Err(error) = loaded.pipeline.stream.start() {
+            let error = match error {
+                AudioOutputError::StreamStartFailed => AudioOutputError::StreamResumeFailed,
+                other => other,
+            };
+            return Err(self.control_failure(error));
+        }
+        loaded.paused = false;
+        Ok(self.publish_state())
+    }
+
+    fn control_failure(&mut self, error: AudioOutputError) -> PlaybackServiceError {
+        let id = self.drop_loaded(PlaybackServiceError::Superseded);
+        let code = output_failure_code(error);
+        self.transport = Transport::Failed {
+            id,
+            code: code.clone(),
+        };
+        self.publish_state();
+        PlaybackServiceError::Output(code)
     }
 
     /// Switches the output device. While a track is loaded, playback restarts on the new device
@@ -958,183 +946,84 @@ impl PlaybackWorker {
         selection: AudioOutputSelection,
         reply: Reply<PlaybackSnapshot>,
     ) {
-        let current = self.current();
-        let (position_ms, paused) = match &current {
-            PlaybackSnapshot::Playing { session, .. } => (session.position_ms, false),
-            PlaybackSnapshot::Paused { session, .. } => (session.position_ms, true),
-            _ => {
-                let _ = reply.send(self.set_output_selection(selection));
-                return;
-            }
+        let Transport::Loaded(loaded) = &self.transport else {
+            let _ = reply.send(self.set_output_selection(selection));
+            return;
         };
-        let (Some(item), None, None, None) = (
-            self.active.as_ref().map(|active| active.item.clone()),
-            &self.pending,
-            &self.pending_source,
-            &self.pending_seek,
-        ) else {
+        if loaded.seek.is_some() {
             let _ = reply.send(Err(PlaybackServiceError::InvalidPlaybackState));
             return;
-        };
+        }
         if selection == self.output_selection {
-            let _ = reply.send(Ok(current));
+            let _ = reply.send(Ok(self.render()));
             return;
         }
-        if let Err(error) = resolve_output_selection(&selection) {
-            let error = match error {
-                DeviceResolutionError::InvalidDeviceId => PlaybackServiceError::InvalidDeviceId,
-                DeviceResolutionError::DeviceUnavailable
-                | DeviceResolutionError::NoDefaultOutputDevice => {
-                    PlaybackServiceError::OutputDeviceUnavailable
-                }
-            };
-            let _ = reply.send(Err(error));
+        if let Err(error) = self.backend.resolve(&selection) {
+            let _ = reply.send(Err(resolution_error(error)));
             return;
         }
+        let request = StartRequest {
+            item: loaded.item.clone(),
+            responder: Some(reply),
+            start_paused: loaded.paused,
+            resume_at_ms: Some(loaded.position_ms()),
+        };
         self.output_selection = selection;
         self.preferences_changed();
-        self.begin_start(item, reply, paused);
-        self.restore_position_ms = Some(position_ms);
+        self.begin_start(request);
     }
 
-    pub(super) fn set_output_selection(
+    fn set_output_selection(
         &mut self,
         selection: AudioOutputSelection,
     ) -> Result<PlaybackSnapshot, PlaybackServiceError> {
-        if self.active.is_some()
-            || self.pending.is_some()
-            || self.pending_source.is_some()
-            || self.pending_seek.is_some()
-        {
+        if matches!(self.transport, Transport::Loading(_)) {
             return Err(PlaybackServiceError::InvalidPlaybackState);
         }
         if let AudioOutputSelection::Device { .. } = &selection {
-            resolve_output_selection(&selection).map_err(|error| match error {
-                DeviceResolutionError::InvalidDeviceId => PlaybackServiceError::InvalidDeviceId,
-                DeviceResolutionError::DeviceUnavailable => {
-                    PlaybackServiceError::OutputDeviceUnavailable
-                }
-                DeviceResolutionError::NoDefaultOutputDevice => {
-                    PlaybackServiceError::OutputDeviceUnavailable
-                }
-            })?;
+            self.backend.resolve(&selection).map_err(resolution_error)?;
         }
         let unchanged = self.output_selection == selection;
         self.output_selection = selection;
         if !unchanged {
             self.preferences_changed();
         }
-        if matches!(self.current(), PlaybackSnapshot::Failed { .. }) {
-            let snapshot = self.stopped_snapshot();
-            return Ok(self.publish(snapshot));
+        if matches!(self.transport, Transport::Failed { .. }) {
+            self.transport = Transport::Idle;
+            return Ok(self.publish_state());
         }
         if unchanged {
-            return Ok(self.current());
+            return Ok(self.render());
         }
-        Ok(self.publish(self.stopped_snapshot()))
+        Ok(self.publish_state())
     }
-    pub(super) fn set_volume(
-        &mut self,
-        volume: f32,
-    ) -> Result<PlaybackSnapshot, PlaybackServiceError> {
+
+    fn set_volume(&mut self, volume: f32) -> Result<PlaybackSnapshot, PlaybackServiceError> {
         let changed = self
             .volume_state
             .set_volume(volume)
             .ok_or(PlaybackServiceError::InvalidVolume)?;
+        Ok(self.volume_changed(changed))
+    }
+
+    fn mute(&mut self) -> PlaybackSnapshot {
+        let changed = self.volume_state.mute();
+        self.volume_changed(changed)
+    }
+
+    fn unmute(&mut self) -> PlaybackSnapshot {
+        let changed = self.volume_state.unmute();
+        self.volume_changed(changed)
+    }
+
+    fn volume_changed(&mut self, changed: bool) -> PlaybackSnapshot {
         if !changed {
-            return Ok(self.current());
+            return self.render();
         }
         self.effective_gain
             .store(self.volume_state.effective_gain());
         self.preferences_changed();
-        let snapshot = self.current().with_volume(self.volume_state);
-        Ok(self.publish(snapshot))
-    }
-
-    pub(super) fn mute(&mut self) -> PlaybackSnapshot {
-        if !self.volume_state.mute() {
-            return self.current();
-        }
-        self.effective_gain
-            .store(self.volume_state.effective_gain());
-        self.preferences_changed();
-        let snapshot = self.current().with_volume(self.volume_state);
-        self.publish(snapshot)
-    }
-
-    pub(super) fn unmute(&mut self) -> PlaybackSnapshot {
-        if !self.volume_state.unmute() {
-            return self.current();
-        }
-        self.effective_gain
-            .store(self.volume_state.effective_gain());
-        self.preferences_changed();
-        let snapshot = self.current().with_volume(self.volume_state);
-        self.publish(snapshot)
-    }
-    fn pause(&mut self) -> Result<PlaybackSnapshot, PlaybackServiceError> {
-        match pause_action(&self.current()) {
-            PlaybackControlAction::Idempotent => Ok(self.current()),
-            PlaybackControlAction::Invalid => Err(PlaybackServiceError::InvalidPlaybackState),
-            PlaybackControlAction::Change => {
-                let Some(active) = self.active.as_mut() else {
-                    return Err(PlaybackServiceError::InvalidPlaybackState);
-                };
-                let id = active.id;
-                if let Err(error) = active.stream.pause() {
-                    return Err(self.control_failure(id, error));
-                }
-                let relative_frame = active.stream.played_frame_position(
-                    active.sample_rate,
-                    active.duration_ms.map(|ms| {
-                        ((u128::from(ms) * u128::from(active.sample_rate)) / 1_000) as u64
-                    }),
-                );
-                active.stream.clear_timing_anchor();
-                let position_frame = absolute_position(active, relative_frame);
-                active.position_frame = position_frame;
-                let playback_id = active.session_id.to_string();
-                let position_ms = frame_to_millis(position_frame, active.sample_rate);
-                let duration_ms = active.duration_ms;
-                let snapshot = self.paused_snapshot(playback_id, position_ms, duration_ms);
-                Ok(self.publish(snapshot))
-            }
-        }
-    }
-    fn resume(&mut self) -> Result<PlaybackSnapshot, PlaybackServiceError> {
-        match resume_action(&self.current()) {
-            PlaybackControlAction::Idempotent => Ok(self.current()),
-            PlaybackControlAction::Invalid => Err(PlaybackServiceError::InvalidPlaybackState),
-            PlaybackControlAction::Change => {
-                let Some(active) = self.active.as_mut() else {
-                    return Err(PlaybackServiceError::InvalidPlaybackState);
-                };
-                let id = active.id;
-                if let Err(error) = active.stream.resume() {
-                    return Err(self.control_failure(id, error));
-                }
-                let position_ms = frame_to_millis(active.position_frame, active.sample_rate);
-                let playback_id = active.session_id.to_string();
-                let duration_ms = active.duration_ms;
-                let snapshot = self.playing_snapshot(playback_id, position_ms, duration_ms);
-                Ok(self.publish(snapshot))
-            }
-        }
-    }
-    fn control_failure(
-        &mut self,
-        id: OutputStreamId,
-        error: AudioOutputError,
-    ) -> PlaybackServiceError {
-        let playback_id = self
-            .active
-            .as_ref()
-            .map(|active| active.session_id.to_string())
-            .or_else(|| Some(id.0.to_string()));
-        self.discard_active();
-        let code = output_failure_code(error);
-        self.publish(self.failed_snapshot(playback_id, code.clone()));
-        PlaybackServiceError::Output(code)
+        self.publish_state()
     }
 
     fn preferences(&self) -> PlaybackPreferences {
@@ -1151,41 +1040,251 @@ impl PlaybackWorker {
         (self.observer)(self.preferences());
     }
 
-    pub(super) fn current(&self) -> PlaybackSnapshot {
-        read_snapshot(&self.snapshot)
-    }
+    // ---- failures and the end of the track ----
 
-    fn base(&self) -> SnapshotBase {
-        SnapshotBase::new(self.volume_state, self.output_selection.clone())
-    }
-
-    fn stopped_snapshot(&self) -> PlaybackSnapshot {
-        PlaybackSnapshot::Stopped {
-            base: self.base(),
-            item: self.loaded_item.clone(),
+    /// A decode thread stopped on its own: the file (or its conversion) cannot be played.
+    fn decode_stopped(&mut self, stream: OutputStreamId, code: PlaybackFailureCode) {
+        let failure_error = match code {
+            PlaybackFailureCode::DecodeFailed => PlaybackServiceError::Decode,
+            _ => PlaybackServiceError::Output(code.clone()),
+        };
+        match self.owner_of(stream) {
+            StreamOwner::Start => {
+                let Transport::Loading(loading) =
+                    std::mem::replace(&mut self.transport, Transport::Idle)
+                else {
+                    return;
+                };
+                if let LoadStage::Prebuffering(prebuffering) = loading.stage {
+                    prebuffering.pipeline.cancel();
+                }
+                let phase = if code == PlaybackFailureCode::DecodeFailed {
+                    StartFailurePhase::PrebufferDecode
+                } else {
+                    StartFailurePhase::PrebufferConversion
+                };
+                self.fail_start(
+                    loading.request.responder,
+                    Some(loading.id),
+                    StartFailure {
+                        code,
+                        phase,
+                        error: failure_error,
+                    },
+                );
+            }
+            StreamOwner::Active => self.fail_active(code, FailureScope::Item, failure_error),
+            StreamOwner::Seek => {
+                if let Transport::Loaded(loaded) = &mut self.transport {
+                    if let Some(seek) = loaded.seek.take() {
+                        seek.pipeline.cancel();
+                        respond(seek.responder, Err(failure_error));
+                    }
+                }
+            }
+            StreamOwner::Gone => {}
         }
     }
 
-    fn active_session(
-        &self,
-        playback_id: String,
-        position_ms: u64,
-        duration_ms: Option<u64>,
-    ) -> ActiveSession {
-        let active = self
-            .active
-            .as_ref()
-            .expect("snapshot requires active playback");
-        let processing = PlaybackProcessingInfo::from_plan(active.output_config.processing_plan);
+    fn stream_failed(&mut self, stream: OutputStreamId, kind: StreamFailureKind) {
+        if self.owner_of(stream) != StreamOwner::Active {
+            return;
+        }
+        match stream_signal_action(&self.output_selection, kind) {
+            StreamSignalAction::RefreshDefaultDevice => {
+                info!("playback.stream_interrupted stream_id={}", stream.0);
+                self.cancel_seek(PlaybackServiceError::Output(
+                    PlaybackFailureCode::OutputDeviceUnavailable,
+                ));
+                if self.refresh_default_device() {
+                    info!("playback.output_recovered stream_id={}", stream.0);
+                } else {
+                    self.fail_output(PlaybackFailureCode::OutputDeviceUnavailable);
+                }
+            }
+            StreamSignalAction::PreservePlayback => {}
+            StreamSignalAction::Fail(code) => {
+                error!(
+                    "playback.stream_failed stream_id={} code={:?}",
+                    stream.0, code
+                );
+                self.fail_output(code);
+            }
+        }
+    }
+
+    fn fail_output(&mut self, code: PlaybackFailureCode) {
+        self.fail_active(
+            code.clone(),
+            FailureScope::Output,
+            PlaybackServiceError::Output(code),
+        );
+    }
+
+    /// Fails the loaded track. An `Item` failure moves on to the next one; an `Output` failure
+    /// stops with the queue intact so the listener can retry after fixing the device.
+    fn fail_active(
+        &mut self,
+        code: PlaybackFailureCode,
+        scope: FailureScope,
+        seek_error: PlaybackServiceError,
+    ) {
+        let id = self.drop_loaded(seek_error);
+        self.transport = Transport::Failed { id, code };
+        self.publish_state();
+        if scope == FailureScope::Item {
+            if let Some(item) = self.next_after_item_failure() {
+                self.begin_start(StartRequest {
+                    item,
+                    responder: None,
+                    start_paused: false,
+                    resume_at_ms: None,
+                });
+            }
+        }
+    }
+
+    fn refresh_default_device(&mut self) -> bool {
+        let Ok(identity) = self.backend.resolve(&AudioOutputSelection::SystemDefault) else {
+            return false;
+        };
+        let Transport::Loaded(loaded) = &mut self.transport else {
+            return false;
+        };
+        loaded.pipeline.config.device_id = identity.id;
+        loaded.pipeline.config.device_name = identity.name;
+        self.publish_state();
+        true
+    }
+
+    pub(super) fn tick(&mut self) {
+        self.last_tick = Instant::now();
+        self.finish_if_due();
+        self.update_position();
+    }
+
+    fn finish_if_due(&mut self) {
+        let is_due = matches!(
+            &self.transport,
+            Transport::Loaded(loaded) if !loaded.paused
+                && loaded
+                    .completion_time
+                    .is_some_and(|end| loaded.pipeline.stream.now() >= end)
+        );
+        if !is_due {
+            return;
+        }
+        match self
+            .queue
+            .advance(AdvanceReason::Natural, &mut self.rng)
+            .cloned()
+        {
+            Some(item) => {
+                self.skipped_in_a_row = 0;
+                self.publish_queue();
+                self.begin_start(StartRequest {
+                    item,
+                    responder: None,
+                    start_paused: false,
+                    resume_at_ms: None,
+                });
+            }
+            None => {
+                self.discard_transport();
+                self.queue.clear();
+                self.publish_queue();
+                self.publish_state();
+            }
+        }
+    }
+
+    fn update_position(&mut self) {
+        let Transport::Loaded(loaded) = &mut self.transport else {
+            return;
+        };
+        if loaded.paused {
+            return;
+        }
+        let frame = loaded.sample_position();
+        if !should_publish_position(
+            loaded.position.last_publish.elapsed(),
+            frame != loaded.position.frame,
+        ) {
+            return;
+        }
+        loaded.position.frame = frame;
+        loaded.position.last_publish = Instant::now();
+        self.publish_state();
+    }
+
+    pub(super) fn shutdown(&mut self) {
+        self.discard_transport();
+        self.publish_state();
+    }
+
+    // ---- publishing ----
+
+    fn next_stream_id(&mut self) -> OutputStreamId {
+        self.next_stream_id = self.next_stream_id.wrapping_add(1);
+        OutputStreamId(self.next_stream_id)
+    }
+
+    fn output_links(&self, stream: OutputStreamId) -> OutputLinks {
+        OutputLinks {
+            gain: self.effective_gain.clone(),
+            events: self.inbox.output_events(stream),
+        }
+    }
+
+    /// What listeners see, drawn from the transport, the queue and the volume.
+    fn render(&self) -> PlaybackSnapshot {
+        let mut base = SnapshotBase::new(self.volume_state, self.output_selection.clone());
+        base.revision = self.revision;
+        match &self.transport {
+            Transport::Idle | Transport::Loading(_) => PlaybackSnapshot::Stopped {
+                base,
+                item: self.last_item.clone(),
+            },
+            Transport::Loaded(loaded) => {
+                base.can_go_previous = self.queue.can_go_previous()
+                    || previous_restarts_track(loaded.position_ms(), loaded.position.duration_ms);
+                base.can_go_next = self.queue.can_go_next();
+                let session = self.render_session(loaded);
+                if loaded.paused {
+                    PlaybackSnapshot::Paused { base, session }
+                } else {
+                    PlaybackSnapshot::Playing { base, session }
+                }
+            }
+            Transport::Failed { id, code } => {
+                base.can_go_previous = self.queue.can_go_previous();
+                base.can_go_next = self.queue.can_go_next();
+                PlaybackSnapshot::Failed {
+                    base,
+                    item: self
+                        .queue
+                        .current()
+                        .cloned()
+                        .or_else(|| self.last_item.clone()),
+                    playback_id: id.map(|id| id.to_string()),
+                    error: code.clone(),
+                }
+            }
+        }
+    }
+
+    fn render_session(&self, loaded: &Loaded) -> ActiveSession {
+        let config = &loaded.pipeline.config;
+        let processing = PlaybackProcessingInfo::from_plan(config.processing_plan);
         ActiveSession {
-            item: active.item.clone(),
-            playback_id,
-            position_ms,
+            item: loaded.item.clone(),
+            playback_id: loaded.id.to_string(),
+            position_ms: loaded.position_ms(),
             seek_revision: self.seek_revision,
-            duration_ms,
+            duration_ms: loaded.position.duration_ms,
             output_device: AudioOutputDeviceIdentity {
-                id: active.output_config.device_id.clone(),
-                name: active.output_config.device_name.clone(),
+                id: config.device_id.clone(),
+                name: config.device_name.clone(),
             },
             channel_conversion: processing.channel_conversion,
             source_sample_rate: processing.source_sample_rate,
@@ -1194,77 +1293,10 @@ impl PlaybackWorker {
         }
     }
 
-    fn playing_snapshot(
-        &self,
-        playback_id: String,
-        position_ms: u64,
-        duration_ms: Option<u64>,
-    ) -> PlaybackSnapshot {
-        PlaybackSnapshot::Playing {
-            base: self.base(),
-            session: self.active_session(playback_id, position_ms, duration_ms),
-        }
-    }
-
-    fn paused_snapshot(
-        &self,
-        playback_id: String,
-        position_ms: u64,
-        duration_ms: Option<u64>,
-    ) -> PlaybackSnapshot {
-        PlaybackSnapshot::Paused {
-            base: self.base(),
-            session: self.active_session(playback_id, position_ms, duration_ms),
-        }
-    }
-
-    /// The failed item is the one the queue points at, else the last one that played.
-    fn failed_snapshot(
-        &self,
-        playback_id: Option<String>,
-        error: PlaybackFailureCode,
-    ) -> PlaybackSnapshot {
-        PlaybackSnapshot::Failed {
-            base: self.base(),
-            item: self
-                .queue
-                .current()
-                .cloned()
-                .or_else(|| self.loaded_item.clone()),
-            playback_id,
-            error,
-        }
-    }
-
-    fn discard_active(&mut self) {
-        if let Some(active) = self.active.take() {
-            active.decoder_worker.cancel_and_join();
-        }
-    }
-
-    /// Navigation availability depends on the queue, so it is stamped on at publish time.
-    fn navigation_for(&self, snapshot: &PlaybackSnapshot) -> (bool, bool) {
-        match snapshot {
-            PlaybackSnapshot::Playing { session, .. }
-            | PlaybackSnapshot::Paused { session, .. } => (
-                self.queue.can_go_previous()
-                    || previous_restarts_track(session.position_ms, session.duration_ms),
-                self.queue.can_go_next(),
-            ),
-            PlaybackSnapshot::Failed { .. } => {
-                (self.queue.can_go_previous(), self.queue.can_go_next())
-            }
-            PlaybackSnapshot::Stopped { .. } => (false, false),
-        }
-    }
-
-    pub(super) fn publish(&mut self, mut snapshot: PlaybackSnapshot) -> PlaybackSnapshot {
-        let (previous, next) = self.navigation_for(&snapshot);
-        self.next_snapshot_revision = self.next_snapshot_revision.saturating_add(1);
-        let base = snapshot.base_mut();
-        base.can_go_previous = previous;
-        base.can_go_next = next;
-        base.revision = self.next_snapshot_revision;
+    /// Renders the transport as a new revision and tells listeners.
+    fn publish_state(&mut self) -> PlaybackSnapshot {
+        self.revision = self.revision.saturating_add(1);
+        let snapshot = self.render();
         *self
             .snapshot
             .write()
@@ -1284,7 +1316,7 @@ impl PlaybackWorker {
         snapshot
     }
 
-    pub(super) fn queue_snapshot(&self) -> PlaybackQueueSnapshot {
+    fn queue_snapshot(&self) -> PlaybackQueueSnapshot {
         self.queue_snapshot
             .read()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -1298,7 +1330,7 @@ impl PlaybackWorker {
             return self.queue_snapshot();
         }
         let snapshot = self.publish_queue();
-        self.publish(self.current());
+        self.publish_state();
         snapshot
     }
 
@@ -1306,214 +1338,16 @@ impl PlaybackWorker {
         &mut self,
         edit: impl FnOnce(&mut PlaybackQueue) -> Result<bool, QueueError>,
     ) -> Result<bool, PlaybackServiceError> {
-        if self.pending.is_some() || self.pending_source.is_some() {
+        if matches!(self.transport, Transport::Loading(_)) {
             return Err(PlaybackServiceError::QueueBusy);
         }
         edit(&mut self.queue).map_err(|_| PlaybackServiceError::QueueItemNotFound)
-    }
-
-    fn refresh_active_snapshot(&self) -> Option<PlaybackSnapshot> {
-        let active = self.active.as_ref()?;
-        let playback_id = active.session_id.to_string();
-        let position_ms = frame_to_millis(active.position_frame, active.sample_rate);
-        match self.current() {
-            PlaybackSnapshot::Playing { .. } => {
-                Some(self.playing_snapshot(playback_id, position_ms, active.duration_ms))
-            }
-            PlaybackSnapshot::Paused { .. } => {
-                Some(self.paused_snapshot(playback_id, position_ms, active.duration_ms))
-            }
-            PlaybackSnapshot::Stopped { .. } | PlaybackSnapshot::Failed { .. } => None,
-        }
-    }
-
-    /// Fails the loaded track. An `Item` failure moves on to the next one; an `Output` failure
-    /// stops with the queue intact so the listener can retry after fixing the device.
-    fn fail_active(
-        &mut self,
-        code: PlaybackFailureCode,
-        scope: FailureScope,
-        pending_seek_error: PlaybackServiceError,
-    ) {
-        let playback_id = self
-            .active
-            .as_ref()
-            .map(|active| active.session_id.to_string());
-        self.cancel_pending_seek_with(pending_seek_error);
-        self.discard_active();
-        self.publish(self.failed_snapshot(playback_id, code));
-        if scope == FailureScope::Item {
-            if let Some(item) = self.next_after_item_failure() {
-                let (reply, _receiver) = mpsc::sync_channel(1);
-                self.begin_start(item, reply, false);
-            }
-        }
-    }
-
-    fn refresh_default_device(&mut self) -> bool {
-        let resolved = match resolve_output_selection(&AudioOutputSelection::SystemDefault) {
-            Ok(resolved) => resolved,
-            Err(_) => return false,
-        };
-        if let Some(active) = self.active.as_mut() {
-            active.output_config.device_id = resolved.identity.id;
-            active.output_config.device_name = resolved.identity.name;
-        } else {
-            return false;
-        }
-        if let Some(snapshot) = self.refresh_active_snapshot() {
-            self.publish(snapshot);
-        }
-        true
-    }
-
-    fn handle_signal(&mut self, signal: OutputSignal) {
-        let id = signal_stream_id(&signal);
-        let Some(active) = self.active.as_ref() else {
-            return;
-        };
-        if active.id != id {
-            return;
-        }
-
-        match signal {
-            OutputSignal::FinalFramesSubmitted { end_time, .. } => {
-                if let Some(active) = self.active.as_mut() {
-                    active.completion_time = Some(end_time);
-                }
-            }
-            OutputSignal::StreamFailed { kind, .. } => {
-                match stream_signal_action(&self.output_selection, kind) {
-                    StreamSignalAction::RefreshDefaultDevice => {
-                        info!("playback.stream_interrupted stream_id={}", id.0);
-                        self.cancel_pending_seek_with(PlaybackServiceError::Output(
-                            PlaybackFailureCode::OutputDeviceUnavailable,
-                        ));
-                        if self.refresh_default_device() {
-                            info!("playback.output_recovered stream_id={}", id.0);
-                        } else {
-                            self.fail_output(PlaybackFailureCode::OutputDeviceUnavailable);
-                        }
-                    }
-                    StreamSignalAction::PreservePlayback => {}
-                    StreamSignalAction::Fail(error) => {
-                        error!("playback.stream_failed stream_id={} code={:?}", id.0, error);
-                        self.fail_output(error);
-                    }
-                }
-            }
-            OutputSignal::CompletionTimingFailed { .. } => {
-                error!("playback.completion_timing_failed stream_id={}", id.0);
-                self.fail_output(PlaybackFailureCode::CompletionTimingFailed);
-            }
-            OutputSignal::DecodeFailed { .. } => {
-                error!("playback.decode_failed stream_id={}", id.0);
-                self.fail_active(
-                    PlaybackFailureCode::DecodeFailed,
-                    FailureScope::Item,
-                    PlaybackServiceError::Decode,
-                );
-            }
-            OutputSignal::SampleRateConversionFailed { .. } => {
-                error!("playback.sample_rate_conversion_failed stream_id={}", id.0);
-                self.fail_active(
-                    PlaybackFailureCode::SampleRateConversionFailed,
-                    FailureScope::Item,
-                    PlaybackServiceError::Output(PlaybackFailureCode::SampleRateConversionFailed),
-                );
-            }
-        }
-    }
-
-    fn fail_output(&mut self, code: PlaybackFailureCode) {
-        self.fail_active(
-            code.clone(),
-            FailureScope::Output,
-            PlaybackServiceError::Output(code),
-        );
-    }
-
-    fn finish_if_due(&mut self) {
-        let is_due = self.active.as_ref().is_some_and(|active| {
-            should_finish(&self.current(), active.completion_time, active.stream.now())
-        });
-        if !is_due {
-            return;
-        }
-        self.discard_pending_seek();
-        self.discard_active();
-        match self
-            .queue
-            .advance(AdvanceReason::Natural, &mut self.rng)
-            .cloned()
-        {
-            Some(item) => {
-                self.skipped_in_a_row = 0;
-                self.publish_queue();
-                let (reply, _receiver) = mpsc::sync_channel(1);
-                self.begin_start(item, reply, false);
-            }
-            None => {
-                self.queue.clear();
-                self.publish_queue();
-                self.publish(self.stopped_snapshot());
-            }
-        }
-    }
-
-    fn update_playback_position(&mut self) {
-        let is_playing = matches!(self.current(), PlaybackSnapshot::Playing { .. });
-        let Some((playback_id, position_frame, sample_rate, duration_ms)) =
-            self.active.as_mut().and_then(|active| {
-                if !is_playing {
-                    return None;
-                }
-                let relative_frame = active.stream.played_frame_position(
-                    active.sample_rate,
-                    active.duration_ms.map(|ms| {
-                        ((u128::from(ms) * u128::from(active.sample_rate)) / 1_000) as u64
-                    }),
-                );
-                let position_frame = absolute_position(active, relative_frame);
-                if !should_publish_position(
-                    active.last_position_publish.elapsed(),
-                    position_frame != active.position_frame,
-                ) {
-                    return None;
-                }
-                active.position_frame = position_frame;
-                active.last_position_publish = Instant::now();
-                Some((
-                    active.session_id.to_string(),
-                    position_frame,
-                    active.sample_rate,
-                    active.duration_ms,
-                ))
-            })
-        else {
-            return;
-        };
-        self.publish(self.playing_snapshot(
-            playback_id,
-            frame_to_millis(position_frame, sample_rate),
-            duration_ms,
-        ));
     }
 }
 
 /// Whether "previous" should restart the current track rather than leave it.
 pub(super) fn previous_restarts_track(position_ms: u64, duration_ms: Option<u64>) -> bool {
     duration_ms.is_some() && position_ms >= PREVIOUS_RESTART_THRESHOLD_MS
-}
-
-pub(super) fn signal_stream_id(signal: &OutputSignal) -> OutputStreamId {
-    match signal {
-        OutputSignal::FinalFramesSubmitted { stream_id, .. }
-        | OutputSignal::StreamFailed { stream_id, .. }
-        | OutputSignal::CompletionTimingFailed { stream_id }
-        | OutputSignal::DecodeFailed { stream_id }
-        | OutputSignal::SampleRateConversionFailed { stream_id } => *stream_id,
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1525,75 +1359,40 @@ pub(super) enum StreamSignalAction {
 
 pub(super) fn stream_signal_action(
     selection: &AudioOutputSelection,
-    kind: crate::audio::output::StreamFailureKind,
+    kind: StreamFailureKind,
 ) -> StreamSignalAction {
     match kind {
-        crate::audio::output::StreamFailureKind::DeviceChanged => match selection {
+        StreamFailureKind::DeviceChanged => match selection {
             AudioOutputSelection::SystemDefault => StreamSignalAction::RefreshDefaultDevice,
             AudioOutputSelection::Device { .. } => StreamSignalAction::PreservePlayback,
         },
-        crate::audio::output::StreamFailureKind::DeviceUnavailable => {
+        StreamFailureKind::DeviceUnavailable => {
             StreamSignalAction::Fail(PlaybackFailureCode::OutputDeviceUnavailable)
         }
-        crate::audio::output::StreamFailureKind::RuntimeFailed => {
+        StreamFailureKind::RuntimeFailed => {
             StreamSignalAction::Fail(PlaybackFailureCode::OutputStreamRuntimeFailed)
         }
-    }
-}
-
-pub(super) fn completion_time_reached(end: StreamInstant, now: StreamInstant) -> bool {
-    now >= end
-}
-
-pub(super) fn should_finish(
-    snapshot: &PlaybackSnapshot,
-    completion_time: Option<StreamInstant>,
-    now: StreamInstant,
-) -> bool {
-    matches!(snapshot, PlaybackSnapshot::Playing { .. })
-        && completion_time.is_some_and(|end| completion_time_reached(end, now))
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum PlaybackControlAction {
-    Change,
-    Idempotent,
-    Invalid,
-}
-
-pub(super) fn pause_action(snapshot: &PlaybackSnapshot) -> PlaybackControlAction {
-    match snapshot {
-        PlaybackSnapshot::Playing { .. } => PlaybackControlAction::Change,
-        PlaybackSnapshot::Paused { .. } => PlaybackControlAction::Idempotent,
-        PlaybackSnapshot::Stopped { .. } | PlaybackSnapshot::Failed { .. } => {
-            PlaybackControlAction::Invalid
+        StreamFailureKind::CompletionTimingFailed => {
+            StreamSignalAction::Fail(PlaybackFailureCode::CompletionTimingFailed)
         }
     }
 }
 
-pub(super) fn resume_action(snapshot: &PlaybackSnapshot) -> PlaybackControlAction {
-    match snapshot {
-        PlaybackSnapshot::Paused { .. } => PlaybackControlAction::Change,
-        PlaybackSnapshot::Playing { .. } => PlaybackControlAction::Idempotent,
-        PlaybackSnapshot::Stopped { .. } | PlaybackSnapshot::Failed { .. } => {
-            PlaybackControlAction::Invalid
+fn resolution_error(error: DeviceResolutionError) -> PlaybackServiceError {
+    match error {
+        DeviceResolutionError::InvalidDeviceId => PlaybackServiceError::InvalidDeviceId,
+        DeviceResolutionError::DeviceUnavailable | DeviceResolutionError::NoDefaultOutputDevice => {
+            PlaybackServiceError::OutputDeviceUnavailable
         }
     }
-}
-
-pub(super) fn read_snapshot(snapshot: &RwLock<PlaybackSnapshot>) -> PlaybackSnapshot {
-    snapshot
-        .read()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
-        .clone()
 }
 
 pub(super) fn output_failure_code(error: AudioOutputError) -> PlaybackFailureCode {
     match error {
-        AudioOutputError::UnsupportedConfiguration | AudioOutputError::ConfigurationQueryFailed => {
-            PlaybackFailureCode::UnsupportedOutputConfiguration
-        }
-        AudioOutputError::StreamConfigurationUnsupported => {
+        AudioOutputError::NoOutputDevice => PlaybackFailureCode::NoOutputDevice,
+        AudioOutputError::UnsupportedConfiguration
+        | AudioOutputError::ConfigurationQueryFailed
+        | AudioOutputError::StreamConfigurationUnsupported => {
             PlaybackFailureCode::UnsupportedOutputConfiguration
         }
         AudioOutputError::StreamBuildFailed => PlaybackFailureCode::OutputStreamBuildFailed,
@@ -1601,14 +1400,5 @@ pub(super) fn output_failure_code(error: AudioOutputError) -> PlaybackFailureCod
         AudioOutputError::StreamPauseFailed => PlaybackFailureCode::OutputStreamPauseFailed,
         AudioOutputError::StreamResumeFailed => PlaybackFailureCode::OutputStreamResumeFailed,
         AudioOutputError::DeviceUnavailable => PlaybackFailureCode::OutputDeviceUnavailable,
-    }
-}
-
-pub(super) fn device_resolution_failure_code(error: DeviceResolutionError) -> PlaybackFailureCode {
-    match error {
-        DeviceResolutionError::NoDefaultOutputDevice => PlaybackFailureCode::NoOutputDevice,
-        DeviceResolutionError::InvalidDeviceId | DeviceResolutionError::DeviceUnavailable => {
-            PlaybackFailureCode::OutputDeviceUnavailable
-        }
     }
 }
