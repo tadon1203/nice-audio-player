@@ -1,7 +1,8 @@
 {
   "enabledPlugins": {
     "svelte@svelte": true,
-    "mattpocock-skills@claude-plugins-official": true
+    "mattpocock-skills@claude-plugins-official": true,
+    "rust-analyzer-lsp@claude-plugins-official": true
   },
   "extraKnownMarketplaces": {
     "svelte": {
