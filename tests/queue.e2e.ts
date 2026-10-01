@@ -18,7 +18,7 @@ async function openQueue(page: import("@playwright/test").Page) {
 }
 
 const upcomingTitles = (panel: import("@playwright/test").Locator) =>
-  panel.locator('[data-tone="upcoming"] p.truncate.text-sm').allTextContents();
+  panel.locator('[data-tone="upcoming"] [data-slot="queue-row-title"]').allTextContents();
 
 test("drags an upcoming track to any position", async ({ page }) => {
   const panel = await openQueue(page);

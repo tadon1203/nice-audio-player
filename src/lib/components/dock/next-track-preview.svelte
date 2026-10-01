@@ -1,25 +1,28 @@
 <script lang="ts">
-  import { prefersReducedMotion } from "svelte/motion";
-  import type { TransitionConfig } from "svelte/transition";
   import { getPlayback } from "$lib/playback/context";
+  import { watchClock } from "$lib/playback/clock";
+  import { getMotionBudget } from "$lib/shell/motion-budget.svelte";
   import Artwork from "$lib/ui/artwork.svelte";
-  import { motionFor } from "$lib/ui/motion/svelte-motion";
+  import { slideTransition } from "$lib/ui/motion/svelte-slide";
   import { cn } from "$lib/utils/cn.js";
 
   /** The next track's artwork shows this long before the current one ends. */
   const PREVIEW_MS = 3_000;
   const SHOWN_OPACITY = 0.6;
+  const SLIDE_PX = 8;
 
   /**
    * In the last three seconds of a track, the next track's artwork slides in at the dock's edge
    * and goes when the track changes (the Sleeve's own slide takes over). Nothing shows for
    * repeat-one, at the end of the queue, or when the next artwork is the one already on the
    * Sleeve (the same artwork is never shown in two places). It watches the one playback clock and
-   * only changes state when the last three seconds begin or end.
+   * only changes state when the last three seconds begin or end. It appears by itself, so under
+   * calm motion it only fades.
    */
   let { class: className }: { class?: string } = $props();
 
   const playback = getPlayback();
+  const budget = getMotionBudget();
   let inLastSeconds = $state(false);
 
   $effect(() => {
@@ -28,16 +31,12 @@
       inLastSeconds = false;
       return;
     }
-    const check = (positionMs: number) => {
+    const stop = watchClock(playback.clock, (positionMs) => {
       const remaining = total - positionMs;
       inLastSeconds = remaining > 0 && remaining <= PREVIEW_MS;
-    };
-    check(playback.clock.position.get());
-    const release = playback.clock.retain();
-    const unsubscribe = playback.clock.position.subscribe(check);
+    });
     return () => {
-      unsubscribe();
-      release();
+      stop();
       inLastSeconds = false;
     };
   });
@@ -50,16 +49,11 @@
       next.artwork?.contentHash !== playback.item?.artwork?.contentHash,
   );
 
-  function slideIn(_node: Element): TransitionConfig {
-    const reduced = prefersReducedMotion.current;
-    const { duration, easing } = motionFor("smallMove", reduced);
-    return {
-      duration,
-      easing,
-      css: (t, u) =>
-        `transform: translateX(${reduced ? 0 : 8 * u}px); opacity: ${t * SHOWN_OPACITY}`,
-    };
-  }
+  const slideIn = (_node: Element) =>
+    slideTransition("smallMove", budget.current !== "full", {
+      x: SLIDE_PX,
+      opacity: SHOWN_OPACITY,
+    });
 </script>
 
 {#if show && next !== null}

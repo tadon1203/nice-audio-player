@@ -24,8 +24,7 @@
     showPlayhead = true,
     valueMs,
     durationMs,
-    clock,
-    retainClock,
+    watchClock,
     disabled,
     onInput,
     onCommit,
@@ -33,6 +32,7 @@
     hoveredLineSpan = null,
     onHoverPositionChange,
     sweepBars = false,
+    stillBars = false,
     lineOnly = false,
     playedClassName = "text-foreground",
     class: className,
@@ -44,16 +44,12 @@
     /** The playhead tick and hover guideline. Off for the dock's plain bar, where the fill edge
      * already marks the position and a second line would be redundant. */
     showPlayhead?: boolean;
-    /** The position to print and to announce, in ms. Changes a few times a second. */
+    /** The position to print and to announce, in ms. Changes about once a second. */
     valueMs: number;
     durationMs: number | null;
-    /** The playback clock's position, in ms; moves every frame while playing. */
-    clock: {
-      get: () => number;
-      subscribe: (listener: (ms: number) => void) => () => void;
-    };
-    /** Keeps the clock's frame loop running while the bar is shown. */
-    retainClock: () => () => void;
+    /** Follows the playback clock's position (it moves every frame while playing) until the
+     * returned function is called; it also keeps the clock's frame loop running meanwhile. */
+    watchClock: (listener: (positionMs: number) => void) => () => void;
     disabled: boolean;
     onInput: (positionMs: number) => void;
     onCommit: (positionMs: number) => void;
@@ -65,6 +61,8 @@
     onHoverPositionChange?: (positionMs: number | null) => void;
     /** Bars grow from left to right when the waveform arrives, instead of all at once. */
     sweepBars?: boolean;
+    /** The bars appear without growing (calm or reduced motion). */
+    stillBars?: boolean;
     /** A plain progress line with no bars (the dock): centred in its box. */
     lineOnly?: boolean;
     /** Colour class for the played part; the unplayed part is always dimmed ink. */
@@ -89,7 +87,7 @@
    * Writes the played fraction to `--progress` from the clock. While dragging it follows the
    * pointer instead (`valueMs` is then the preview position).
    */
-  const drive: Attachment<HTMLElement> = (node) => {
+  const drawProgress: Attachment<HTMLElement> = (node) => {
     const total = duration;
     const preview = pointer.dragging ? valueMs : null;
     const draw = (positionMs: number) => {
@@ -97,13 +95,7 @@
       const progress = total > 0 ? Math.min(1, Math.max(0, position / total)) : 0;
       node.style.setProperty("--progress", String(progress));
     };
-    draw(clock.get());
-    const release = retainClock();
-    const unsubscribe = clock.subscribe(draw);
-    return () => {
-      unsubscribe();
-      release();
-    };
+    return watchClock(draw);
   };
 
   const hasPeaks = $derived(rms !== null && rms.length > 0);
@@ -124,9 +116,15 @@
       : undefined;
 </script>
 
+{#snippet layer(className: string, style?: string)}
+  <div aria-hidden="true" class={cn("absolute inset-0", className)} {style}>
+    <WaveformBars {bars} {height} {grown} sweep={sweepBars} centered={lineOnly} still={stillBars} />
+  </div>
+{/snippet}
+
 <div
   {@attach pointer.attach}
-  {@attach drive}
+  {@attach drawProgress}
   bind:clientWidth={width}
   role="slider"
   tabindex={seekable ? 0 : -1}
@@ -146,16 +144,8 @@
   )}
   style:height="{height}px"
 >
-  <div aria-hidden="true" class="absolute inset-0 text-foreground/35">
-    <WaveformBars {bars} {height} {grown} sweep={sweepBars} centered={lineOnly} />
-  </div>
-  <div
-    aria-hidden="true"
-    class={cn("absolute inset-0", playedClassName)}
-    style="clip-path: inset(0 calc((1 - var(--progress, 0)) * 100%) 0 0)"
-  >
-    <WaveformBars {bars} {height} {grown} sweep={sweepBars} centered={lineOnly} />
-  </div>
+  {@render layer("text-foreground/35")}
+  {@render layer(playedClassName, "clip-path: inset(0 calc((1 - var(--progress, 0)) * 100%) 0 0)")}
   {#if activeSpan !== null}
     <div
       aria-hidden="true"
@@ -191,7 +181,7 @@
     <span
       aria-hidden="true"
       data-slot="waveform-hover-time"
-      class="pointer-events-none absolute bottom-full z-20 mb-1 -translate-x-1/2 rounded-sm bg-popover px-1.5 py-0.5 text-xs text-popover-foreground tabular-nums shadow-floating"
+      class="pointer-events-none absolute bottom-full z-20 mb-1 -translate-x-1/2 rounded-sm bg-popover px-1.5 py-0.5 text-sm text-popover-foreground tabular-nums shadow-floating"
       style:left="{Math.min(width - 20, Math.max(20, pointer.hoverX))}px"
     >
       {#if pointer.dragging}

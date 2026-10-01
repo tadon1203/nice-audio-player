@@ -265,6 +265,17 @@ export class Playback {
     void this.#flushVolume();
   }
 
+  /** Sets the volume; changing it while muted unmutes, so the change is audible. */
+  changeVolume(value: number) {
+    this.setVolume(value);
+    if (this.output.muted && !this.mutePending) void this.toggleMute();
+  }
+
+  /** Dismisses the last reported failure. */
+  clearError() {
+    this.error = null;
+  }
+
   async toggleMute() {
     if (this.mutePending) return;
     this.mutePending = true;

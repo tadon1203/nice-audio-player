@@ -295,6 +295,60 @@ describe("starting playback", () => {
 
     expect(playback.error).toBe("That track is unavailable on disk.");
   });
+
+  it("clears a reported failure on request", async () => {
+    const playback = createPlayback(
+      baseApi({
+        startPlayback: async () => {
+          throw { code: "trackUnavailable" };
+        },
+      }),
+    );
+    await playback.initialize();
+    await playback.startPlayback({ kind: "album", key: { title: "A", albumArtist: "B" } }, "1");
+    expect(playback.error).not.toBeNull();
+
+    playback.clearError();
+
+    expect(playback.error).toBeNull();
+    expect(playback.transport.commandError).toBeNull();
+  });
+});
+
+describe("changing the volume", () => {
+  const mutedSnapshot = (): PlaybackSnapshot => {
+    const snapshot = stopped(1, null);
+    return { ...snapshot, base: { ...snapshot.base, muted: true } };
+  };
+
+  it("unmutes when the volume changes while muted", async () => {
+    const setPlaybackMuted = vi.fn(async () => stopped(3, null));
+    const playback = createPlayback(
+      baseApi({
+        getPlaybackState: async () => mutedSnapshot(),
+        setPlaybackVolume: vi.fn(async () => mutedSnapshot()),
+        setPlaybackMuted,
+      }),
+    );
+    await playback.initialize();
+
+    playback.changeVolume(0.4);
+
+    expect(playback.output.volume).toBe(0.4);
+    expect(setPlaybackMuted).toHaveBeenCalledWith(false);
+  });
+
+  it("leaves mute alone when not muted", async () => {
+    const setPlaybackMuted = vi.fn(async () => stopped(3, null));
+    const playback = createPlayback(
+      baseApi({ setPlaybackVolume: async () => stopped(2, null), setPlaybackMuted }),
+    );
+    await playback.initialize();
+
+    playback.changeVolume(0.4);
+
+    expect(setPlaybackMuted).not.toHaveBeenCalled();
+  });
 });
 
 describe("last navigation", () => {

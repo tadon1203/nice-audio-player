@@ -39,8 +39,15 @@
   } = $props();
 </script>
 
+<!-- Time has three luminances: the whole row (title, artist, duration) is as bright as its tone. -->
 <div
-  class="group/queue-row relative flex h-14 min-w-0 items-center gap-2 px-4"
+  class={cn(
+    "group/queue-row relative flex min-w-0 items-center gap-2 px-4",
+    tone === "current" && "text-foreground",
+    tone === "upcoming" && "text-muted-foreground",
+    tone === "past" && "text-muted-foreground/60",
+  )}
+  style:height="{QUEUE_ROW_PX}px"
   data-tone={tone}
   aria-current={tone === "current" ? "true" : undefined}
 >
@@ -65,21 +72,12 @@
   {/if}
   <Artwork artwork={item.artwork} class="size-10 shrink-0 rounded-md" />
   <div class="min-w-0 flex-1">
-    <p
-      class={cn(
-        "truncate text-sm",
-        tone === "current" && "text-foreground",
-        tone === "upcoming" && "text-muted-foreground",
-        tone === "past" && "text-muted-foreground/60",
-      )}
-    >
-      {item.title}
-    </p>
+    <p class="truncate text-sm" data-slot="queue-row-title">{item.title}</p>
     {#if item.artist}
-      <p class="truncate text-xs text-muted-foreground">{item.artist}</p>
+      <p class="truncate text-sm">{item.artist}</p>
     {/if}
   </div>
-  <span class="shrink-0 text-xs tabular-nums text-muted-foreground">
+  <span class="shrink-0 text-sm tabular-nums">
     {formatDuration(item.durationMs ?? null)}
   </span>
   {#if tone === "upcoming"}

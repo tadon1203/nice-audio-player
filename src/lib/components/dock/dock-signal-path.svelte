@@ -4,6 +4,8 @@
   import { createPlaybackSignalPath } from "$lib/components/signal-path/signal-path.svelte";
   import { getPlayback } from "$lib/playback/context";
   import { createAudioOutputDevices } from "$lib/playback/output-devices.svelte";
+  import DropdownMenuContent from "$lib/ui/dropdown-menu/dropdown-menu-content.svelte";
+  import DropdownMenuRadioItem from "$lib/ui/dropdown-menu/dropdown-menu-radio-item.svelte";
   import FlapText from "$lib/ui/rolling-number/flap-text.svelte";
   import { cn } from "$lib/utils/cn.js";
 
@@ -39,9 +41,6 @@
       value === DEFAULT_DEVICE ? { kind: "systemDefault" } : { kind: "device", deviceId: value },
     );
   }
-
-  const itemClass =
-    "relative flex w-full cursor-default items-center gap-2 rounded-md py-1.5 pr-8 pl-2 text-sm outline-hidden select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground data-disabled:pointer-events-none data-disabled:opacity-50 data-[state=checked]:text-foreground";
 </script>
 
 <div
@@ -68,23 +67,13 @@
       <span class="truncate">{outputLabel}</span>
       <ChevronDown aria-hidden="true" class="size-3.5 shrink-0" />
     </MenuPrimitive.Trigger>
-    <MenuPrimitive.Portal>
-      <MenuPrimitive.Content
-        data-slot="menu-content"
-        align="end"
-        class="acrylic data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 z-20 min-w-44 origin-(--bits-dropdown-menu-content-transform-origin) rounded-lg p-1 text-sm text-popover-foreground shadow-floating ring-1 ring-foreground/10 outline-none duration-100"
-      >
-        <MenuPrimitive.RadioGroup value={selected} onValueChange={select}>
-          <MenuPrimitive.RadioItem value={DEFAULT_DEVICE} class={itemClass}>
-            System default
-          </MenuPrimitive.RadioItem>
-          {#each devices.data ?? [] as device (device.id)}
-            <MenuPrimitive.RadioItem value={device.id} class={itemClass}>
-              {device.name}
-            </MenuPrimitive.RadioItem>
-          {/each}
-        </MenuPrimitive.RadioGroup>
-      </MenuPrimitive.Content>
-    </MenuPrimitive.Portal>
+    <DropdownMenuContent align="end">
+      <MenuPrimitive.RadioGroup value={selected} onValueChange={select}>
+        <DropdownMenuRadioItem value={DEFAULT_DEVICE}>System default</DropdownMenuRadioItem>
+        {#each devices.data ?? [] as device (device.id)}
+          <DropdownMenuRadioItem value={device.id}>{device.name}</DropdownMenuRadioItem>
+        {/each}
+      </MenuPrimitive.RadioGroup>
+    </DropdownMenuContent>
   </MenuPrimitive.Root>
 </div>

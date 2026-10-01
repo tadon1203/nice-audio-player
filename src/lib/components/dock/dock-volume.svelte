@@ -9,6 +9,7 @@
     volumeToSlider,
   } from "$lib/playback/volume-step";
   import { nowPlaying } from "$lib/shell/now-playing.svelte";
+  import { getMotionBudget } from "$lib/shell/motion-budget.svelte";
   import { queuePanel } from "$lib/shell/queue-panel.svelte";
   import RollingNumber from "$lib/ui/rolling-number/rolling-number.svelte";
   import { Button } from "$lib/ui/shadcn/button";
@@ -22,6 +23,7 @@
    * transport's centre line.
    */
   const playback = getPlayback();
+  const budget = getMotionBudget();
   const output = $derived(playback.output);
   const ready = $derived(playback.transport.connection === "ready");
   const readout = $derived(formatVolumeDb(output.volume, output.muted));
@@ -30,18 +32,14 @@
   let dragging = $state(false);
   let readoutNode = $state<HTMLElement | null>(null);
 
-  // Changing the volume while muted unmutes, so the change is audible.
-  function setVolume(value: number) {
-    playback.setVolume(value);
-    if (output.muted && !output.mutePending) void playback.toggleMute();
-  }
-
   function onWheel(event: WheelEvent) {
     if (!ready || event.deltaY === 0) return;
     // Pushing past either end of the range nudges the readout instead of doing nothing.
     const atCeiling = event.deltaY < 0 && output.volume >= 1 && !output.muted;
     const atFloor = event.deltaY > 0 && (output.volume <= 0 || output.muted);
     if (atCeiling || atFloor) {
+      // Under reduced motion there is nothing to nudge; the readout already says it is at its end.
+      if (budget.current === "reduced") return;
       const dx = atCeiling ? 2 : -2;
       readoutNode?.animate(
         [
@@ -53,7 +51,7 @@
       );
       return;
     }
-    setVolume(stepVolumeDb(output.volume, event.deltaY < 0 ? 1 : -1));
+    playback.changeVolume(stepVolumeDb(output.volume, event.deltaY < 0 ? 1 : -1));
   }
 </script>
 
@@ -120,7 +118,7 @@
         "aria-label": "Volume",
         "aria-valuetext": output.muted ? "Muted" : formatVolumeDb(output.volume, false),
       }}
-      onValueChange={(position) => setVolume(sliderToVolume(position))}
+      onValueChange={(position) => playback.changeVolume(sliderToVolume(position))}
     />
   </div>
   <span

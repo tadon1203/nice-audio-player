@@ -144,3 +144,21 @@ export function createPlaybackClock(environment: ClockEnvironment = browserEnvir
 }
 
 export type PlaybackClock = ReturnType<typeof createPlaybackClock>;
+
+/**
+ * Follows the clock's position for as long as the returned function is not called: calls
+ * `listener` with the current position, keeps the frame loop running, and calls it again on every
+ * change. The one way to read time for drawing; return it from an effect or an attachment.
+ */
+export function watchClock(
+  clock: Pick<PlaybackClock, "position" | "retain">,
+  listener: (positionMs: number) => void,
+): () => void {
+  listener(clock.position.get());
+  const release = clock.retain();
+  const unsubscribe = clock.position.subscribe(listener);
+  return () => {
+    unsubscribe();
+    release();
+  };
+}

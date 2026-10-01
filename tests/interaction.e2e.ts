@@ -18,7 +18,7 @@ async function playFirstTrack(page: Page) {
 const upcomingTitles = (page: Page) =>
   page
     .getByRole("dialog", { name: "Queue" })
-    .locator('[data-tone="upcoming"] p.truncate.text-sm')
+    .locator('[data-tone="upcoming"] [data-slot="queue-row-title"]')
     .allTextContents();
 
 test("Escape closes Now Playing, and Ctrl+L does nothing without a track", async ({ page }) => {

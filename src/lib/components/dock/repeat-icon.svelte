@@ -2,33 +2,30 @@
   import { untrack } from "svelte";
   import { Repeat } from "@lucide/svelte";
   import { fade } from "svelte/transition";
-  import { prefersReducedMotion, Tween } from "svelte/motion";
+  import { Tween } from "svelte/motion";
+  import type { PlaybackRepeatMode } from "$lib/native";
+  import { getMotionBudget } from "$lib/shell/motion-budget.svelte";
   import { motionFor } from "$lib/ui/motion/svelte-motion";
+  import { slideTransition } from "$lib/ui/motion/svelte-slide";
 
   /** One turn of the icon per mode change; `one` drops a superscript 1 beside it. */
-  let { mode }: { mode: string } = $props();
+  let { mode }: { mode: PlaybackRepeatMode } = $props();
+
+  const budget = getMotionBudget();
+  const reduced = $derived(budget.current === "reduced");
+  const motion = $derived(motionFor("mediumMove", reduced));
 
   const rotation = new Tween(0);
   let shown = untrack(() => mode);
   $effect(() => {
     if (mode === shown) return;
     shown = mode;
-    const motion = motionFor("mediumMove", prefersReducedMotion.current);
+    // With reduced motion the icon does not turn; the superscript's crossfade shows the change.
+    if (reduced) return;
     untrack(() => void rotation.set(rotation.target + 360, motion));
   });
-  const motion = $derived(motionFor("mediumMove", prefersReducedMotion.current));
 
-  function drop(_node: Element): {
-    duration: number;
-    easing: (t: number) => number;
-    css: (t: number, u: number) => string;
-  } {
-    const reduced = prefersReducedMotion.current;
-    return {
-      ...motion,
-      css: (t, u) => `transform: translateY(${reduced ? 0 : -6 * u}px); opacity: ${t}`,
-    };
-  }
+  const drop = (_node: Element) => slideTransition("mediumMove", reduced, { y: -6 });
 </script>
 
 <span class="flex" style:transform="rotate({rotation.current}deg)">

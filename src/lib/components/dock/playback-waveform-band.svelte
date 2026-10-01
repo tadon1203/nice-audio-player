@@ -7,8 +7,10 @@
 
 <script lang="ts">
   import { onMount, tick, type Snippet } from "svelte";
+  import { watchClock } from "$lib/playback/clock";
   import { getPlayback } from "$lib/playback/context";
   import { createPlaybackWaveform } from "$lib/playback/waveform.svelte";
+  import { getMotionBudget } from "$lib/shell/motion-budget.svelte";
   import { lyricsWaveformLink } from "$lib/shell/lyrics-waveform-link.svelte";
   import RollingNumber from "$lib/ui/rolling-number/rolling-number.svelte";
   import { spinTurns } from "$lib/ui/rolling-number/rolling-model";
@@ -47,15 +49,25 @@
   } = $props();
 
   const playback = getPlayback();
+  const budget = getMotionBudget();
   const itemPath = $derived(playback.item?.file.path ?? "none");
   const canSeek = $derived(playback.transport.active && playback.durationMs !== null);
   const waveform = createPlaybackWaveform(() =>
     showWaveform && playback.transport.active && playback.item ? playback.item.file.path : null,
   );
 
+  // The printed time and the announced value come from the same clock as the bar. They are
+  // rounded down to the whole second, so they change once a second instead of every frame.
+  const wholeSecondMs = () => Math.floor(playback.clock.estimate() / 1000) * 1000;
+  let clockMs = $state(wholeSecondMs());
+  $effect(() =>
+    // Not the eased position: after a seek the digits go to the new time at once, and spin.
+    watchClock(playback.clock, () => (clockMs = wholeSecondMs())),
+  );
+
   let seekPreviewMs = $state<number | null>(null);
   let showRemaining = $state(true);
-  const seekValue = $derived(seekPreviewMs ?? playback.positionMs);
+  const seekValue = $derived(seekPreviewMs ?? clockMs);
   const dragging = $derived(seekPreviewMs !== null);
 
   // A seek that just completed spins the time digits with its distance. Ordinary ticks, a new
@@ -99,9 +111,9 @@
       showPlayhead={showWaveform}
       valueMs={seekValue}
       durationMs={playback.durationMs}
-      clock={playback.clock.position}
-      retainClock={() => playback.clock.retain()}
+      watchClock={(listener) => watchClock(playback.clock, listener)}
       sweepBars={showWaveform}
+      stillBars={budget.current !== "full"}
       lineOnly={!showWaveform}
       playedClassName={showWaveform ? "text-(--artwork-accent)" : undefined}
       disabled={!canSeek || playback.seekPending}
@@ -131,7 +143,7 @@
 {#if timeLayout === "inline"}
   <div
     class={cn(
-      "flex items-center gap-2 text-xs leading-none text-muted-foreground tabular-nums",
+      "flex items-center gap-2 text-sm leading-none text-muted-foreground tabular-nums",
       className,
     )}
   >
@@ -147,7 +159,7 @@
     {@render seekBar()}
     <div
       class={cn(
-        "flex items-center justify-between text-xs text-muted-foreground tabular-nums",
+        "flex items-center justify-between text-sm text-muted-foreground tabular-nums",
         timeClass,
       )}
       data-region="playback-times"

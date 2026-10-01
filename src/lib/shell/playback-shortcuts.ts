@@ -71,15 +71,12 @@ export function handlePlaybackShortcut(event: KeyboardEvent, playback: Playback)
     return;
   }
 
-  const { snapshot, positionMs, durationMs } = playback;
+  const { snapshot, durationMs } = playback;
 
   if ((event.key === "ArrowUp" || event.key === "ArrowDown") && event.ctrlKey) {
-    const base = snapshot?.base;
-    if (base === undefined) return;
+    if (snapshot === null) return;
     event.preventDefault();
-    const volume = playback.volumePreview ?? base.volume;
-    playback.setVolume(stepVolumeDb(volume, event.key === "ArrowUp" ? 1 : -1));
-    if (base.muted) void playback.toggleMute();
+    playback.changeVolume(stepVolumeDb(playback.output.volume, event.key === "ArrowUp" ? 1 : -1));
     return;
   }
 
@@ -90,8 +87,9 @@ export function handlePlaybackShortcut(event: KeyboardEvent, playback: Playback)
       void (event.key === "ArrowLeft" ? playback.previous() : playback.next());
       return;
     }
-    // Holding the key continues from the seek still waiting to be sent, not the stale position.
-    const from = playback.pendingSeekMs() ?? positionMs;
+    // Holding the key continues from the seek still waiting to be sent, not the stale position;
+    // otherwise from where the clock is now.
+    const from = playback.pendingSeekMs() ?? playback.clock.estimate();
     const next = nextSeekPosition(event.key, from, durationMs ?? 0);
     if (next === null) return;
     event.preventDefault();

@@ -8,16 +8,16 @@
   import Artwork from "$lib/ui/artwork.svelte";
   import ContextMenuContent from "$lib/ui/context-menu/context-menu-content.svelte";
   import ContextMenuItem from "$lib/ui/context-menu/context-menu-item.svelte";
-  import { motionFor } from "$lib/ui/motion/svelte-motion";
+  import { getMotionBudget } from "$lib/shell/motion-budget.svelte";
+  import { slideTransition } from "$lib/ui/motion/svelte-slide";
   import { Button } from "$lib/ui/shadcn/button";
   import * as Tooltip from "$lib/ui/shadcn/tooltip";
-  import { prefersReducedMotion } from "svelte/motion";
-  import type { TransitionConfig } from "svelte/transition";
 
   /** Sliding distance for the artwork, title and artist. One value so they travel together. */
   const SLIDE_PX = 16;
 
   const playback = getPlayback();
+  const budget = getMotionBudget();
   const item = $derived(playback.item);
   const trackKey = $derived(item?.file.path ?? "none");
   const title = $derived(item?.title ?? "Nothing playing");
@@ -32,16 +32,11 @@
    * Next enters from the right and pushes the old track out to the left; previous mirrors it.
    * Under reduced motion it is a plain crossfade.
    */
-  function slide(_node: Element, { entering }: { entering: boolean }): TransitionConfig {
-    const reduced = prefersReducedMotion.current;
-    const { duration, easing } = motionFor("mediumMove", reduced);
+  function slide(_node: Element, { entering }: { entering: boolean }) {
     const direction = playback.lastNavigation === "previous" ? -1 : 1;
-    const x = reduced ? 0 : (entering ? direction : -direction) * SLIDE_PX;
-    return {
-      duration,
-      easing,
-      css: (t, u) => `transform: translateX(${x * u}px); opacity: ${t}`,
-    };
+    return slideTransition("mediumMove", budget.current === "reduced", {
+      x: (entering ? direction : -direction) * SLIDE_PX,
+    });
   }
 
   // Plain strings from routes.ts, not resolve(): see there.
@@ -133,24 +128,33 @@
             {title}
           </button>
           {#if playback.transport.commandError}
-            <Tooltip.Root bind:open={errorTooltipOpen}>
-              <Tooltip.Trigger>
-                {#snippet child({ props })}
-                  <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-                  <span
-                    {...props}
-                    class="block truncate text-sm text-destructive"
-                    role="alert"
-                    tabindex="0"
-                    onfocus={() => (errorTooltipOpen = true)}
-                    onblur={() => (errorTooltipOpen = false)}
-                  >
-                    {playback.transport.commandError}
-                  </span>
-                {/snippet}
-              </Tooltip.Trigger>
-              <Tooltip.Content>{playback.transport.commandError}</Tooltip.Content>
-            </Tooltip.Root>
+            <div class="flex min-w-0 items-center gap-2">
+              <Tooltip.Root bind:open={errorTooltipOpen}>
+                <Tooltip.Trigger>
+                  {#snippet child({ props })}
+                    <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+                    <span
+                      {...props}
+                      class="block truncate text-sm text-destructive"
+                      role="alert"
+                      tabindex="0"
+                      onfocus={() => (errorTooltipOpen = true)}
+                      onblur={() => (errorTooltipOpen = false)}
+                    >
+                      {playback.transport.commandError}
+                    </span>
+                  {/snippet}
+                </Tooltip.Trigger>
+                <Tooltip.Content>{playback.transport.commandError}</Tooltip.Content>
+              </Tooltip.Root>
+              <button
+                type="button"
+                onclick={() => playback.clearError()}
+                class="shrink-0 cursor-pointer rounded-sm text-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                Dismiss
+              </button>
+            </div>
           {:else if item?.artist}
             <span class="block truncate text-sm text-muted-foreground" title={item.artist}>
               {item.artist}

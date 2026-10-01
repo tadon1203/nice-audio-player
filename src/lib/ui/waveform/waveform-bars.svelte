@@ -18,6 +18,7 @@
     grown,
     sweep,
     centered = false,
+    still = false,
   }: {
     /** Resampled RMS levels, 0-255. Empty while the backend analyzes the file. */
     bars: readonly number[];
@@ -29,6 +30,8 @@
     /** Draw the baseline on the box's centre line instead of its bottom edge, for a bar that
      * never grows bars, so text beside it can share that centre line. */
     centered?: boolean;
+    /** The bars appear without growing: the caller's motion budget does not allow it. */
+    still?: boolean;
   } = $props();
 </script>
 
@@ -48,7 +51,10 @@
       {#each bars as level, index (index)}
         {@const barHeight = Math.max(BASELINE, levelToUnit(level) * (height - 2))}
         <rect
-          class="transition-transform duration-300 ease-out"
+          class={cn(
+            "transition-transform duration-300 ease-out motion-reduce:transition-none",
+            still && "transition-none",
+          )}
           x={index + 0.15}
           y={height - barHeight}
           width={0.7}
@@ -56,7 +62,9 @@
           style:transform-box="fill-box"
           style:transform-origin="50% 100%"
           style:transform="scaleY({grown ? 1 : BASELINE / barHeight})"
-          style:transition-delay={sweep ? `${(index / bars.length) * SWEEP_MS}ms` : undefined}
+          style:transition-delay={sweep && !still
+            ? `${(index / bars.length) * SWEEP_MS}ms`
+            : undefined}
         />
       {/each}
     </g>

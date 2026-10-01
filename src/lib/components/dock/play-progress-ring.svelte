@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Attachment } from "svelte/attachments";
+  import { watchClock } from "$lib/playback/clock";
   import { getPlayback } from "$lib/playback/context";
 
   /**
@@ -9,19 +10,13 @@
    */
   const playback = getPlayback();
 
-  const drive: Attachment<SVGCircleElement> = (node) => {
+  const drawProgress: Attachment<SVGCircleElement> = (node) => {
     const total = playback.durationMs;
     const draw = (positionMs: number) => {
       const fill = total !== null && total > 0 ? Math.min(1, Math.max(0, positionMs / total)) : 0;
       node.style.strokeDashoffset = String(1 - fill);
     };
-    draw(playback.clock.position.get());
-    const release = playback.clock.retain();
-    const unsubscribe = playback.clock.position.subscribe(draw);
-    return () => {
-      unsubscribe();
-      release();
-    };
+    return watchClock(playback.clock, draw);
   };
 </script>
 
@@ -32,7 +27,7 @@
   class="pointer-events-none absolute -inset-[3px] size-[calc(100%+6px)] -rotate-90 fill-none stroke-(--artwork-accent) forced-colors:stroke-[CanvasText]"
 >
   <circle
-    {@attach drive}
+    {@attach drawProgress}
     cx="21"
     cy="21"
     r="20"

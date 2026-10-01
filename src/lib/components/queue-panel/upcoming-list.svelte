@@ -1,6 +1,6 @@
 <script lang="ts">
   import { flip } from "svelte/animate";
-  import { prefersReducedMotion } from "svelte/motion";
+  import { getMotionBudget } from "$lib/shell/motion-budget.svelte";
   import { getPlayback } from "$lib/playback/context";
   import { createUpcomingItems } from "$lib/playback/upcoming-items.svelte";
   import { motionFor } from "$lib/ui/motion/svelte-motion";
@@ -62,7 +62,8 @@
     }),
   );
 
-  const reduced = $derived(prefersReducedMotion.current);
+  const budget = getMotionBudget();
+  const reduced = $derived(budget.current === "reduced");
   const motion = $derived(motionFor("mediumMove", reduced));
 
   /** Which edge of row `index` shows the drop line for insertion `slot`, if any. */
@@ -89,14 +90,16 @@
       }}
       aria-hidden={item === undefined ? "true" : undefined}
       class={cn(
-        "relative h-14 transition-[translate,rotate,scale] duration-300 ease-(--ease-out) motion-reduce:transition-none",
+        "relative transition-[translate,rotate,scale] duration-300 ease-(--ease-out)",
+        reduced && "transition-none",
         dragging && "z-10 rounded-lg bg-popover shadow-floating",
       )}
+      style:height="{QUEUE_ROW_PX}px"
       style:translate={drag !== null && !dragging && index >= drag.slot
         ? `0 ${queueDrag.rowHeight}px`
         : undefined}
-      style:rotate={dragging ? "1deg" : undefined}
-      style:scale={dragging ? "1.02" : undefined}
+      style:rotate={dragging && !reduced ? "1deg" : undefined}
+      style:scale={dragging && !reduced ? "1.02" : undefined}
       style:--drop-shift="{queueDrag.rowHeight}px"
       data-dragging={dragging ? "true" : undefined}
       data-drop={dropMarker(drag?.slot ?? null, index)}
