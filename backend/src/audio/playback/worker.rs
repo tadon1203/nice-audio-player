@@ -12,7 +12,7 @@ use super::input::{
 };
 use super::item::{PlaybackItem, PlaybackItemSeed};
 use super::pipeline::{
-    open_pipeline, OpenedPipeline, OutputChoice, PipelineError, PipelineRequest, StartPoint,
+    open_pipeline, OpenedPipeline, PipelineError, PipelineKind, PipelineRequest,
 };
 use super::preferences::{PlaybackPreferences, PreferencesObserver};
 use super::queue::{AdvanceReason, PlaybackQueue, QueueError};
@@ -33,7 +33,7 @@ use crate::audio::devices::{
 use crate::audio::output::{
     AudioOutputError, OutputBackend, OutputLinks, OutputStreamId, StreamFailureKind,
 };
-use crate::audio::timebase::{millis_to_frame, rescale_frame};
+use crate::audio::timebase::millis_to_frame;
 use crate::audio::volume::{AtomicEffectiveGain, VolumeState};
 use crate::events::{BackendEvent, SharedEventSink};
 use log::{error, info};
@@ -377,8 +377,7 @@ impl PlaybackWorker {
         &mut self,
         source: &CompressedAudioSource,
         extension: &str,
-        output: OutputChoice,
-        from: StartPoint,
+        kind: PipelineKind,
     ) -> Result<OpenedPipeline, PipelineError> {
         let stream_id = self.next_stream_id();
         let links = self.output_links(stream_id);
@@ -388,8 +387,7 @@ impl PlaybackWorker {
             PipelineRequest {
                 source,
                 extension,
-                output,
-                from,
+                kind,
                 stream_id,
                 links,
             },

@@ -29,20 +29,12 @@ impl PlaybackWorker {
         let opened = self.open_pipeline(
             &source,
             &extension,
-            OutputChoice::Reuse(config),
-            StartPoint::Seek { target_ms },
+            PipelineKind::Seek { config, target_ms },
         );
         match opened {
             Ok(opened) => {
                 let rate = opened.pipeline.sample_rate();
-                let source_rate = opened
-                    .pipeline
-                    .config
-                    .processing_plan
-                    .source()
-                    .sample_rate()
-                    .get();
-                let output_base_frame = rescale_frame(opened.start_source_frame, rate, source_rate);
+                let output_base_frame = opened.start_output_frame;
                 let total_output_frames = millis_to_frame(duration_ms, rate);
                 let seek = SeekInFlight {
                     pipeline: opened.pipeline,

@@ -134,8 +134,7 @@ impl PlaybackWorker {
         let opened = self.open_pipeline(
             &source,
             &request.item.file.extension,
-            OutputChoice::Select(selection),
-            StartPoint::Beginning,
+            PipelineKind::Start(selection),
         );
         match opened {
             Ok(opened) => {
