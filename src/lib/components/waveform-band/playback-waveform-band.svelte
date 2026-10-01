@@ -116,7 +116,7 @@
       stillBars={budget.current !== "full"}
       lineOnly={!showWaveform}
       playedClassName={showWaveform ? "text-(--artwork-accent)" : undefined}
-      disabled={!canSeek || playback.seekPending}
+      disabled={!canSeek}
       onInput={(value) => (seekPreviewMs = value)}
       onCommit={(value) => void playback.seek(value).finally(() => (seekPreviewMs = null))}
       activeSpan={lyricsWaveformLink.activeSpan}
