@@ -3,7 +3,7 @@
   import type { TransitionConfig } from "svelte/transition";
   import { getMotionBudget } from "$lib/shell/motion-budget.svelte";
   import { nowPlaying } from "$lib/shell/now-playing.svelte";
-  import { nowPlayingMotion } from "$lib/shell/now-playing-motion";
+  import { motionFor } from "$lib/ui/motion/svelte-motion";
   import { LIFT_PX } from "./now-playing-layout";
 
   /**
@@ -18,12 +18,15 @@
 
   const budget = getMotionBudget();
 
+  /** Leaving is quicker than arriving. */
+  const EXIT_SPEED = 0.7;
+
   function lift(opening: boolean) {
     return (_node: Element): TransitionConfig => {
       const reduced = budget.current === "reduced";
-      const { duration, easing } = nowPlayingMotion(opening, reduced);
+      const { duration, easing } = motionFor("large", reduced);
       return {
-        duration,
+        duration: opening || reduced ? duration : duration * EXIT_SPEED,
         easing,
         css: (t, u) => `opacity: ${t}; transform: translateY(${reduced ? 0 : LIFT_PX * u}px)`,
       };

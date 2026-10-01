@@ -1,12 +1,31 @@
 import { flushSync } from "svelte";
-import { animate } from "motion";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RETURN_TO_FOLLOW_MS } from "./lyrics-follow-model";
 import { createLyricsFollow } from "./lyrics-follow.svelte";
 
-vi.mock("motion", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("motion")>()),
-  animate: vi.fn(() => ({ stop: () => undefined })),
+// The spring is replaced by a recorder: a scroll is "animated" when the spring is given a target.
+const glideTargets = vi.hoisted(() => [] as number[]);
+vi.mock("svelte/motion", () => ({
+  Spring: class {
+    current: number;
+    #target: number;
+    constructor(value: number) {
+      this.current = value;
+      this.#target = value;
+    }
+    get target() {
+      return this.#target;
+    }
+    set target(value: number) {
+      this.#target = value;
+      glideTargets.push(value);
+    }
+    set(value: number) {
+      this.current = value;
+      this.#target = value;
+      return Promise.resolve();
+    }
+  },
 }));
 vi.mock("$lib/shell/motion-budget.svelte", () => ({
   getMotionBudget: () => ({ current: "full" }),
@@ -21,10 +40,13 @@ let cleanup: () => void;
 let scrollTops: number[];
 let container: HTMLElement;
 let stops: Array<() => void>;
+let fadeAnimation: ReturnType<typeof vi.fn>;
 
 function mount(start: number) {
   index = start;
   container = document.createElement("div");
+  fadeAnimation = vi.fn(() => ({ cancel: () => undefined }));
+  Object.assign(container, { animate: fadeAnimation });
   Object.defineProperty(container, "clientHeight", { configurable: true, value: 400 });
   Object.defineProperty(container, "scrollHeight", {
     configurable: true,
@@ -58,13 +80,13 @@ function show(next: number) {
 
 /** How many times the list was animated to a position (as opposed to set at once). */
 function animatedScrolls() {
-  return vi.mocked(animate).mock.calls.filter(([from]) => typeof from === "number").length;
+  return glideTargets.length;
 }
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
-  vi.mocked(animate).mockClear();
+  glideTargets.length = 0;
   scrollTops = [];
   stops = [];
 });
@@ -94,7 +116,7 @@ describe("createLyricsFollow", () => {
     show(7);
     expect(animatedScrolls()).toBe(0);
     expect(scrollTops.at(-1)).toBe(7 * LINE_HEIGHT + LINE_HEIGHT / 2 - 160);
-    expect(vi.mocked(animate).mock.calls.some(([target]) => target === container)).toBe(true);
+    expect(fadeAnimation).toHaveBeenCalledOnce();
   });
 
   it("animates a seek of a few lines", () => {

@@ -56,8 +56,8 @@
   const distance = $derived(Math.abs(index - Math.max(currentIndex, 0)));
   const startLabel = $derived(formatDuration(line.startMs));
 
-  // Luminance moves as a small move; under reduced motion it is the shared short crossfade.
-  const motion = $derived(motionFor("smallMove", budget.current === "reduced"));
+  // Luminance moves as a `move`; under reduced motion it is the shared short crossfade.
+  const motion = $derived(motionFor("move", budget.current === "reduced"));
   const transition = (property: string) =>
     `${property} ${motion.duration}ms cubic-bezier(0.2, 0, 0, 1)`;
 </script>

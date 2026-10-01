@@ -35,7 +35,7 @@
    */
   function slide(_node: Element, { entering }: { entering: boolean }) {
     const direction = playback.lastNavigation === "previous" ? -1 : 1;
-    return slideTransition("mediumMove", budget.current === "reduced", {
+    return slideTransition("move", budget.current === "reduced", {
       x: (entering ? direction : -direction) * SLIDE_PX,
     });
   }

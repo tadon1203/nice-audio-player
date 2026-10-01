@@ -50,7 +50,7 @@
   );
 
   const slideIn = (_node: Element) =>
-    slideTransition("smallMove", budget.current !== "full", {
+    slideTransition("move", budget.current !== "full", {
       x: SLIDE_PX,
       opacity: SHOWN_OPACITY,
     });

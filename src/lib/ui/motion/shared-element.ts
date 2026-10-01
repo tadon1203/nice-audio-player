@@ -121,7 +121,7 @@ function arrive(key: string, node: HTMLElement) {
   if (!departure || !isFresh(departure.at, performance.now())) return;
 
   const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const { duration, easing } = motionFor("largeMove", reduced);
+  const { duration, easing } = motionFor("large", reduced);
 
   // Under reduced motion nothing travels: the Sleeve appears with a brief crossfade.
   if (reduced) {

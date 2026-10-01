@@ -1,11 +1,12 @@
-import { animate } from "motion";
+import { cubicInOut } from "svelte/easing";
+import { tweenNumber } from "$lib/ui/motion/tween-number";
 import type { ClockPosition, PlaybackClock } from "./clock";
 import { levelAt, smoothLevel } from "./loudness";
 
 /** The level a paused Light rests at: neither dimmed nor at full. */
 const PAUSED_LEVEL = 0.5;
 /** How long the Light takes to ease to rest when playback pauses. */
-const REST_S = 1.2;
+const REST_MS = 1200;
 
 export type LoudnessLevelParams = {
   rms: readonly number[] | null;
@@ -53,9 +54,9 @@ export function createLoudnessLevel({
     lastStepAt = null;
     stopRest();
     if (!params.enabled || params.playing) return;
-    rest = animate(current, PAUSED_LEVEL, {
-      duration: REST_S,
-      ease: "easeInOut",
+    rest = tweenNumber(current, PAUSED_LEVEL, {
+      duration: REST_MS,
+      easing: cubicInOut,
       onUpdate: set,
     });
   };

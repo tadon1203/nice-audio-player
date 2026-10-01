@@ -50,7 +50,7 @@
   /** Grows from the left edge, later the further into the album the segment starts. */
   function sweep(_node: Element, { start }: { start: number }): TransitionConfig {
     const reduced = prefersReducedMotion.current;
-    const { duration, easing } = motionFor("mediumMove", reduced);
+    const { duration, easing } = motionFor("move", reduced);
     return {
       delay: reduced ? 0 : start * SWEEP_S * 1000,
       duration,

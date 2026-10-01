@@ -1,13 +1,18 @@
-import { motionFor, type SvelteMotion } from "$lib/ui/motion/svelte-motion";
+import { settle } from "$lib/ui/motion/tokens";
 
 /** Leaving is quicker than arriving. */
 const EXIT_SPEED = 0.7;
 
 /**
- * The one timeline for opening and closing Now Playing: the dock gives up its waveform slot, the
- * surface lifts, the sleeve lands. Closing plays the same motion in about 70% of the time.
+ * The spring for opening and closing Now Playing: the one timeline the dock gives up its waveform
+ * slot on, the surface lifts and the sleeve lands. Closing is the same spring run about 30%
+ * faster (stiffness scales with the square of the speed, damping with the speed, so it stays
+ * fully damped).
  */
-export function nowPlayingMotion(opening: boolean, reducedMotion: boolean): SvelteMotion {
-  const base = motionFor("largeMove", reducedMotion);
-  return opening || reducedMotion ? base : { ...base, duration: base.duration * EXIT_SPEED };
+export function nowPlayingSpring(opening: boolean): { stiffness: number; damping: number } {
+  if (opening) return settle;
+  return {
+    stiffness: settle.stiffness / EXIT_SPEED ** 2,
+    damping: settle.damping / EXIT_SPEED,
+  };
 }

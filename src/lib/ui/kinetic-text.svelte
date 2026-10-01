@@ -1,9 +1,8 @@
 <script lang="ts">
-  import { animate } from "motion";
   import { prefersReducedMotion } from "svelte/motion";
   import type { Attachment } from "svelte/attachments";
-  import { toMotionOptions } from "$lib/ui/motion/motion-options";
-  import { motionTokens } from "$lib/ui/motion/tokens";
+  import { EASE_OUT_CSS, motionTokens } from "$lib/ui/motion/tokens";
+  import { tweenNumber } from "$lib/ui/motion/tween-number";
   import { REVEAL_END_PERCENT, wipeMask } from "$lib/ui/wipe-mask";
   import { cn } from "$lib/utils/cn.js";
 
@@ -27,19 +26,23 @@
     class?: string;
   } = $props();
 
-  const options = toMotionOptions(motionTokens.mediumMove);
+  const { duration } = motionTokens.move;
+  const options = { duration, easing: EASE_OUT_CSS };
   const reduced = prefersReducedMotion.current;
 
   // Plays once per mount. The wipe ends past the text, so once it is done the mask clips nothing
   // (and is removed).
   const play: Attachment<HTMLElement> = (node) => {
     if (reduced) {
-      const fade = animate(node, { opacity: [0, 1] }, options);
-      return () => fade.stop();
+      const fade = node.animate({ opacity: [0, 1] }, { ...options, fill: "both" });
+      return () => fade.cancel();
     }
-    const slide = animate(node, { x: [8 * direction, 0] }, options);
-    const wipe = animate(0, REVEAL_END_PERCENT, {
-      ...options,
+    const slide = node.animate(
+      { transform: [`translateX(${8 * direction}px)`, "translateX(0)"] },
+      { ...options, fill: "backwards" },
+    );
+    const wipe = tweenNumber(0, REVEAL_END_PERCENT, {
+      duration,
       onUpdate: (percent) => {
         const mask = wipeMask(percent);
         node.style.maskImage = mask;
@@ -51,7 +54,7 @@
       },
     });
     return () => {
-      slide.stop();
+      slide.cancel();
       wipe.stop();
     };
   };

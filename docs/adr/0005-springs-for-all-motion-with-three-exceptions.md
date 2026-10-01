@@ -1,5 +1,7 @@
 # 0005: All motion is a spring, with three exceptions
 
+Superseded by [0006](./0006-three-durations-and-one-spring-for-interruptible-motion.md).
+
 Every movement and every change of state (including hover and press color changes and the Light fade) is a fully damped spring (`bounce: 0`). There are three exceptions:
 
 1. **Press** may overshoot (`bounce: 0.25`).

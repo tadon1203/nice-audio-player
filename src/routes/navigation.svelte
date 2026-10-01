@@ -36,8 +36,8 @@
   // `crossfade` is created per Navigation, because the sidebar and the mobile sheet can both be
   // mounted and must not trade pills.
   const [send, receive] = crossfade({
-    duration: () => motionFor("smallMove", prefersReducedMotion.current).duration,
-    easing: (t) => motionFor("smallMove", prefersReducedMotion.current).easing(t),
+    duration: () => motionFor("move", prefersReducedMotion.current).duration,
+    easing: (t) => motionFor("move", prefersReducedMotion.current).easing(t),
     fallback: (node) =>
       fade(node, { duration: motionFor("feedback", prefersReducedMotion.current).duration }),
   });

@@ -20,7 +20,7 @@
   import ArtworkLight from "./artwork-light.svelte";
 
   /**
-   * A single faint Light behind a grid that follows the hovered or focused tile (spring, not a
+   * A single faint Light behind a grid that follows the hovered or focused tile (eased, not a
    * jump) and takes that tile's artwork (crossfading, like any Light). It fades away when the
    * pointer leaves. Mount it once there is a target; it starts invisible at the first tile.
    * Place it first inside a `relative` container, under the grid.
@@ -33,7 +33,7 @@
 
   $effect(() => {
     const goal = { x: target.x - SIZE_PX / 2, y: target.y - SIZE_PX / 2 };
-    const move = motionFor("mediumMove", prefersReducedMotion.current);
+    const move = motionFor("move", prefersReducedMotion.current);
     untrack(() => {
       void x.set(goal.x, move);
       void y.set(goal.y, move);
@@ -42,7 +42,7 @@
 
   $effect(() => {
     const goal = target.active ? 1 : 0;
-    const light = motionFor("light", prefersReducedMotion.current);
+    const light = motionFor("large", prefersReducedMotion.current);
     untrack(() => void opacity.set(goal, light));
   });
 </script>

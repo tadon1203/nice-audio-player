@@ -14,7 +14,7 @@
   /** Turns in from `from` degrees (and out to `-from`) while fading. */
   function flip(node: Element, { from }: { from: number }): TransitionConfig {
     if (reduced) return fade(node, { duration: 100 });
-    const { duration, easing } = motionFor("smallMove", false);
+    const { duration, easing } = motionFor("move", false);
     return {
       duration,
       easing,

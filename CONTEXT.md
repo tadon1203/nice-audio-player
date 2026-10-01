@@ -27,4 +27,4 @@ The language of Nice Audio Player. Use these terms in code, docs, and tickets; d
 - **Gutter**: position and order on the left, in tabular figures. It is also the button of its row.
 - **Path**: technical notation for audio, such as `FLAC 24/96 › Speakers`. Its length alone says whether playback is bit-perfect.
 - **Calm motion**: a setting under which only the position marker moves on its own.
-- **Progress motion**: motion proportional to time or to work done (the playing position, scan progress). It runs at constant speed and is the one kind of movement that is not a spring.
+- **Progress motion**: motion proportional to time or to work done (the playing position, scan progress). It runs at constant speed, unlike every other movement, which eases.

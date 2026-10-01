@@ -19,7 +19,7 @@
   const points = new Tween(untrack(() => (playing ? PAUSE : PLAY)));
   $effect(() => {
     const goal = playing ? PAUSE : PLAY;
-    const motion = motionFor("smallMove", prefersReducedMotion.current);
+    const motion = motionFor("move", prefersReducedMotion.current);
     untrack(() => void points.set(goal, motion));
   });
 

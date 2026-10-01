@@ -10,5 +10,5 @@ import { CONTENT_DELAY_MS } from "./now-playing-layout";
  */
 export function contentFade(node: Element) {
   const reduced = prefersReducedMotion.current;
-  return fade(node, { ...motionFor("largeMove", reduced), delay: reduced ? 0 : CONTENT_DELAY_MS });
+  return fade(node, { ...motionFor("large", reduced), delay: reduced ? 0 : CONTENT_DELAY_MS });
 }

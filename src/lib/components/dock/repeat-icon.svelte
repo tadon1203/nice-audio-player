@@ -13,7 +13,7 @@
 
   const budget = getMotionBudget();
   const reduced = $derived(budget.current === "reduced");
-  const motion = $derived(motionFor("mediumMove", reduced));
+  const motion = $derived(motionFor("move", reduced));
 
   const rotation = new Tween(0);
   let shown = untrack(() => mode);
@@ -25,7 +25,7 @@
     untrack(() => void rotation.set(rotation.target + 360, motion));
   });
 
-  const drop = (_node: Element) => slideTransition("mediumMove", reduced, { y: -6 });
+  const drop = (_node: Element) => slideTransition("move", reduced, { y: -6 });
 </script>
 
 <span class="flex" style:transform="rotate({rotation.current}deg)">

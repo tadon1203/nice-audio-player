@@ -52,7 +52,7 @@
     }
     // Every lap looks the same, so re-centre (keeping any fraction) to always have room to roll.
     void position.set(HOME + (position.current % 10), { duration: 0 });
-    const motion = motionFor(turns > 0 ? "spin" : "roll", false);
+    const motion = motionFor(turns > 0 ? "large" : "move", false);
     void position
       .set(rollTarget(position.current, next, way, turns), { ...motion, delay: wait * 1000 })
       .then(() => {

@@ -2,7 +2,7 @@
   import { untrack } from "svelte";
   import RollingNumber from "./rolling-number/rolling-number.svelte";
 
-  /** The shared-element move (`largeMove`) takes about this long; counting starts after it. */
+  /** The shared-element move (`large`) takes about this long; counting starts after it. */
   const COUNT_UP_DELAY_MS = 420;
 
   let { text }: { text: string } = $props();

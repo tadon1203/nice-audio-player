@@ -2,13 +2,14 @@ import { describe, expect, it } from "vitest";
 import { cssMotionFor } from "./css-motion";
 
 describe("cssMotionFor", () => {
-  it("turns a spring into a linear() easing that starts at 0 and ends at 1", () => {
-    const { easing, duration } = cssMotionFor("feedback", false);
-    expect(easing).toMatch(/^linear\(0, .*, 1\)$/);
-    expect(parseInt(duration)).toBeGreaterThanOrEqual(100);
+  it("gives the token's duration and the shared ease-out", () => {
+    expect(cssMotionFor("move", false)).toEqual({
+      duration: "300ms",
+      easing: "cubic-bezier(0.33, 1, 0.68, 1)",
+    });
   });
 
   it("is the 100ms crossfade for every token under reduced motion", () => {
-    expect(cssMotionFor("smallMove", true)).toEqual({ duration: "100ms", easing: "ease-out" });
+    expect(cssMotionFor("large", true).duration).toBe("100ms");
   });
 });

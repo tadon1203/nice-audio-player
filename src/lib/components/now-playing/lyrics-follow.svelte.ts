@@ -1,9 +1,8 @@
 import { untrack } from "svelte";
 import type { Attachment } from "svelte/attachments";
-import { animate } from "motion";
+import { Spring } from "svelte/motion";
 import { getMotionBudget } from "$lib/shell/motion-budget.svelte";
-import { toMotionOptions } from "$lib/ui/motion/motion-options";
-import { resolveTransition } from "$lib/ui/motion/tokens";
+import { crossfade, settle } from "$lib/ui/motion/tokens";
 import { anchorScrollTop } from "./anchor";
 import {
   decideLineChange,
@@ -14,7 +13,7 @@ import {
   type ScrollHow,
 } from "./lyrics-follow-model";
 
-const FADE_S = 0.1;
+const FADE_MS = crossfade.duration;
 
 const isGutterTarget = (target: EventTarget | null) =>
   target instanceof Element && target.closest('[data-slot="lyrics-gutter"]') !== null;
@@ -38,12 +37,27 @@ export function createLyricsFollow(currentIndex: () => number) {
   let container = $state.raw<HTMLElement | null>(null);
   let lastInteractionAt = 0;
   let previousIndex: number | null = null;
-  let running: { stop: () => void } | null = null;
+  let fade: Animation | null = null;
+  // The scroll position as a spring (retargeted by every line change, keeping its velocity). It
+  // is written to the container only while a glide is active.
+  const glide = new Spring(0, settle);
+  let gliding = $state(false);
 
   const stopRunning = () => {
-    running?.stop();
-    running = null;
+    fade?.cancel();
+    fade = null;
+    gliding = false;
   };
+
+  $effect(() => {
+    const element = container;
+    if (gliding && element !== null) element.scrollTop = glide.current;
+  });
+
+  $effect(() => {
+    // Done once the spring has come to rest on its target.
+    if (gliding && glide.current === glide.target) gliding = false;
+  });
 
   const scrollTo = (index: number, how: ScrollHow) => {
     const element = container;
@@ -60,16 +74,13 @@ export function createLyricsFollow(currentIndex: () => number) {
     if (reduced || how !== "animate") {
       element.scrollTop = target;
       if (how === "fade" && !reduced) {
-        running = animate(element, { opacity: [0, 1] }, { duration: FADE_S });
+        fade = element.animate({ opacity: [0, 1] }, { duration: FADE_MS });
       }
       return;
     }
-    running = animate(element.scrollTop, target, {
-      ...toMotionOptions(resolveTransition("mediumMove", false)),
-      onUpdate: (value) => {
-        element.scrollTop = value;
-      },
-    });
+    void glide.set(element.scrollTop, { instant: true });
+    glide.target = target;
+    gliding = true;
   };
 
   const markUserScroll = () => {

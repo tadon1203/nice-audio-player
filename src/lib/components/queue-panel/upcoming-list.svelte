@@ -64,7 +64,7 @@
 
   const budget = getMotionBudget();
   const reduced = $derived(budget.current === "reduced");
-  const motion = $derived(motionFor("mediumMove", reduced));
+  const motion = $derived(motionFor("move", reduced));
 
   /** Which edge of row `index` shows the drop line for insertion `slot`, if any. */
   function dropMarker(slot: number | null, index: number): "before" | "after" | undefined {

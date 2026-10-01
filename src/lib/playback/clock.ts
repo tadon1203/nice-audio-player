@@ -1,6 +1,5 @@
-import { animate } from "motion";
-import { toMotionOptions } from "$lib/ui/motion/motion-options";
-import { resolveTransition } from "$lib/ui/motion/tokens";
+import { motionFor } from "$lib/ui/motion/svelte-motion";
+import { tweenNumber, type NumberTween } from "$lib/ui/motion/tween-number";
 import {
   estimateClock,
   initialClockState,
@@ -59,7 +58,7 @@ export function createPlaybackClock(environment: ClockEnvironment = browserEnvir
   let state: ClockState = initialClockState;
   let retained = 0;
   let frame = 0;
-  let glide: { stop: () => void } | null = null;
+  let glide: NumberTween | null = null;
   let lastJump: ClockJump | null = null;
   const jumpListeners = new Set<(jump: ClockJump) => void>();
   const reportListeners = new Set<() => void>();
@@ -91,12 +90,12 @@ export function createPlaybackClock(environment: ClockEnvironment = browserEnvir
     if (jump.kind === "seek" && retained > 0) {
       // Ease across a seek: the fill glides to the new place instead of snapping.
       stopFrames();
-      const controls = animate(current, jump.toMs, {
-        ...toMotionOptions(resolveTransition("smallMove", environment.reducedMotion())),
+      const controls = tweenNumber(current, jump.toMs, {
+        ...motionFor("move", environment.reducedMotion()),
         onUpdate: setPosition,
       });
       glide = controls;
-      void controls.then(() => {
+      void controls.finished.then(() => {
         if (glide !== controls) return;
         glide = null;
         // Playback carried on under the glide: pick the clock up where it is now.
