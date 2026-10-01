@@ -2,11 +2,16 @@
   import "../app.css";
   import { onMount } from "svelte";
   import { QueryClientProvider } from "@tanstack/svelte-query";
+  import ArtworkAccent from "$lib/components/dock/artwork-accent.svelte";
+  import PlaybackRegion from "$lib/components/dock/playback-region.svelte";
+  import QueuePanel from "$lib/components/queue-panel/queue-panel.svelte";
   import { native } from "$lib/native";
   import { setPlayback } from "$lib/playback/context";
   import { createPlayback } from "$lib/playback/playback.svelte";
   import { setSettings } from "$lib/settings/context";
   import { createSettings } from "$lib/settings/settings.svelte";
+  import { createMotionBudget, setMotionBudget } from "$lib/shell/motion-budget.svelte";
+  import { handlePlaybackShortcut } from "$lib/shell/playback-shortcuts";
   import { queryClient } from "$lib/shell/query-client";
   import { startNativeSession } from "$lib/shell/session";
   import { TooltipProvider } from "$lib/ui/shadcn/tooltip";
@@ -21,6 +26,7 @@
   if (playback !== null && settings !== null) {
     setPlayback(playback);
     setSettings(settings);
+    setMotionBudget(createMotionBudget(settings));
   }
 
   onMount(() => {
@@ -28,6 +34,8 @@
     return startNativeSession({ playback, settings, queryClient });
   });
 </script>
+
+<svelte:window onkeydown={(event) => playback && handlePlaybackShortcut(event, playback)} />
 
 {#if playback === null}
   <div class="flex h-full items-center justify-center bg-background p-8">
@@ -50,8 +58,11 @@
         <main class="row-start-2 min-h-0 min-w-0 md:col-start-2" data-slot="app-main">
           {@render children()}
         </main>
-        <!-- The dock lands here. -->
-        <div class="col-span-full row-start-3 min-h-0 min-w-0" data-slot="dock-region"></div>
+        <div class="col-span-full row-start-3 min-h-0 min-w-0" data-slot="dock-region">
+          <PlaybackRegion />
+        </div>
+        <QueuePanel />
+        <ArtworkAccent />
       </div>
     </TooltipProvider>
   </QueryClientProvider>

@@ -59,7 +59,7 @@ test("the filter takes focus from the slash key", async ({ page }) => {
 test("the volume slider runs in decibels and Ctrl+arrows step by one", async ({ page }) => {
   const dock = await playFirstTrack(page);
   const volume = dock.getByRole("slider", { name: "Volume" });
-  await expect(volume).toHaveAttribute("max", "60");
+  await expect(volume).toHaveAttribute("aria-valuemax", "60");
   await page.locator("body").click();
   const readout = dock.locator('[data-region="volume-readout"]');
   await page.keyboard.press("Control+ArrowDown");
