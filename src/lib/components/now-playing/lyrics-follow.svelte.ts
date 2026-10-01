@@ -14,6 +14,10 @@ import {
 } from "./lyrics-follow-model";
 
 const FADE_MS = crossfade.duration;
+/** The glide ends this close to its target. */
+const GLIDE_END_PX = 0.5;
+/** A scroll position further than this from what the glide wrote was moved by something else. */
+const GLIDE_INTERRUPT_PX = 1;
 
 const isGutterTarget = (target: EventTarget | null) =>
   target instanceof Element && target.closest('[data-slot="lyrics-gutter"]') !== null;
@@ -42,6 +46,8 @@ export function createLyricsFollow(currentIndex: () => number) {
   // is written to the container only while a glide is active.
   const glide = new Spring(0, settle);
   let gliding = $state(false);
+  /** The value last written to `scrollTop` by the glide, to tell whether something else moved it. */
+  let lastWritten: number | null = null;
 
   const stopRunning = () => {
     fade?.cancel();
@@ -51,12 +57,22 @@ export function createLyricsFollow(currentIndex: () => number) {
 
   $effect(() => {
     const element = container;
-    if (gliding && element !== null) element.scrollTop = glide.current;
-  });
-
-  $effect(() => {
-    // Done once the spring has come to rest on its target.
-    if (gliding && glide.current === glide.target) gliding = false;
+    if (!gliding || element === null) return;
+    const value = glide.current;
+    const goal = glide.target;
+    // Something else moved the list (the wheel, the scrollbar, the browser clamping it): let go.
+    if (lastWritten !== null && Math.abs(element.scrollTop - lastWritten) > GLIDE_INTERRUPT_PX) {
+      gliding = false;
+      return;
+    }
+    // Close enough: land exactly on the target and stop.
+    if (Math.abs(value - goal) < GLIDE_END_PX) {
+      element.scrollTop = goal;
+      gliding = false;
+      return;
+    }
+    element.scrollTop = value;
+    lastWritten = value;
   });
 
   const scrollTo = (index: number, how: ScrollHow) => {
@@ -80,10 +96,12 @@ export function createLyricsFollow(currentIndex: () => number) {
     }
     void glide.set(element.scrollTop, { instant: true });
     glide.target = target;
+    lastWritten = null;
     gliding = true;
   };
 
   const markUserScroll = () => {
+    stopRunning();
     lastInteractionAt = Date.now();
     mode = "free";
   };

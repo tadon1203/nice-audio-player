@@ -4,14 +4,17 @@ import { RETURN_TO_FOLLOW_MS } from "./lyrics-follow-model";
 import { createLyricsFollow } from "./lyrics-follow.svelte";
 
 // The spring is replaced by a recorder: a scroll is "animated" when the spring is given a target.
+// `current` is reactive so a test can move the spring by hand, as the animation frames would.
 const glideTargets = vi.hoisted(() => [] as number[]);
+const springs = vi.hoisted(() => [] as Array<{ current: number }>);
 vi.mock("svelte/motion", () => ({
   Spring: class {
-    current: number;
-    #target: number;
+    current = $state(0);
+    #target = 0;
     constructor(value: number) {
       this.current = value;
       this.#target = value;
+      springs.push(this);
     }
     get target() {
       return this.#target;
@@ -123,6 +126,54 @@ describe("createLyricsFollow", () => {
     mount(10);
     show(8);
     expect(animatedScrolls()).toBe(1);
+  });
+
+  describe("the glide", () => {
+    /** One animation frame: the spring is at `value`. */
+    const frame = (value: number) => {
+      springs.at(-1)!.current = value;
+      flushSync();
+    };
+
+    it("follows the spring while it moves", () => {
+      mount(10);
+      show(11);
+      frame(220);
+      expect(scrollTops.at(-1)).toBe(220);
+      frame(235);
+      expect(scrollTops.at(-1)).toBe(235);
+    });
+
+    it("lands exactly on the target once within half a pixel, then lets go", () => {
+      mount(10);
+      show(11);
+      const target = glideTargets.at(-1)!;
+      frame(target - 0.3);
+      expect(scrollTops.at(-1)).toBe(target);
+      const writes = scrollTops.length;
+      frame(target - 30);
+      expect(scrollTops.length).toBe(writes);
+    });
+
+    it("stops at once on a scroll intent", () => {
+      mount(10);
+      show(11);
+      frame(220);
+      follow.onwheel();
+      const writes = scrollTops.length;
+      frame(240);
+      expect(scrollTops.length).toBe(writes);
+    });
+
+    it("lets go when something else moved the list", () => {
+      mount(10);
+      show(11);
+      frame(220);
+      scrollTops.push(500);
+      const writes = scrollTops.length;
+      frame(240);
+      expect(scrollTops.length).toBe(writes);
+    });
   });
 
   it("returns to follow on a seek", () => {
