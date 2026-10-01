@@ -15,8 +15,9 @@
    * Its size never changes for a given caller, so geometry stays stable while the waveform
    * loads. Before analysis finishes it is a 2px line, and the bars grow out of that same line.
    *
-   * The fill and playhead are drawn straight from the one playback clock into a CSS variable,
-   * so this component does not re-run with time.
+   * The fill and playhead are written straight from the one playback clock to those two
+   * elements, so this component does not re-run with time. A custom property is deliberately
+   * avoided: an inherited one would restyle every bar each frame.
    */
   let {
     height,
@@ -83,20 +84,36 @@
     onHoverPositionChange,
   }));
 
+  // The two elements the clock draws into. Each carries a static initial inline style, which
+  // Svelte never rewrites, so the values written below stay put.
+  let played = $state.raw<HTMLElement | null>(null);
+  let playhead = $state.raw<HTMLElement | null>(null);
+  const refTo =
+    (set: (node: HTMLElement | null) => void): Attachment<HTMLElement> =>
+    (node) => {
+      set(node);
+      return () => set(null);
+    };
+  const attachPlayed = refTo((node) => (played = node));
+  const attachPlayhead = refTo((node) => (playhead = node));
+
   /**
-   * Writes the played fraction to `--progress` from the clock. While dragging it follows the
-   * pointer instead (`valueMs` is then the preview position).
+   * Writes the played fraction to the fill's `clip-path` and the playhead's `left` from the
+   * clock. While dragging it follows the pointer instead (`valueMs` is then the preview position).
    */
-  const drawProgress: Attachment<HTMLElement> = (node) => {
+  $effect(() => {
+    const fill = played;
+    const tick = playhead;
     const total = duration;
     const preview = pointer.dragging ? valueMs : null;
     const draw = (positionMs: number) => {
       const position = preview ?? positionMs;
       const progress = total > 0 ? Math.min(1, Math.max(0, position / total)) : 0;
-      node.style.setProperty("--progress", String(progress));
+      if (fill) fill.style.clipPath = `inset(0 ${(1 - progress) * 100}% 0 0)`;
+      if (tick) tick.style.left = `${progress * 100}%`;
     };
     return watchClock(draw);
-  };
+  });
 
   const hasPeaks = $derived(rms !== null && rms.length > 0);
   // The bars mount flat on the baseline and grow one frame later, so the growth can transition.
@@ -116,15 +133,14 @@
       : undefined;
 </script>
 
-{#snippet layer(className: string, style?: string)}
-  <div aria-hidden="true" class={cn("absolute inset-0", className)} {style}>
+{#snippet layer(className: string, style?: string, ref?: Attachment<HTMLElement>)}
+  <div aria-hidden="true" class={cn("absolute inset-0", className)} {style} {@attach ref}>
     <WaveformBars {bars} {height} {grown} sweep={sweepBars} centered={lineOnly} still={stillBars} />
   </div>
 {/snippet}
 
 <div
   {@attach pointer.attach}
-  {@attach drawProgress}
   bind:clientWidth={width}
   role="slider"
   tabindex={seekable ? 0 : -1}
@@ -145,7 +161,7 @@
   style:height="{height}px"
 >
   {@render layer("text-foreground/35")}
-  {@render layer(playedClassName, "clip-path: inset(0 calc((1 - var(--progress, 0)) * 100%) 0 0)")}
+  {@render layer(playedClassName, "clip-path: inset(0 100% 0 0)", attachPlayed)}
   {#if activeSpan !== null}
     <div
       aria-hidden="true"
@@ -166,8 +182,9 @@
     <div
       aria-hidden="true"
       class="absolute inset-y-0 w-px bg-foreground"
-      style="left: calc(var(--progress, 0) * 100%)"
+      style="left: 0"
       data-slot="waveform-playhead"
+      {@attach attachPlayhead}
     ></div>
   {/if}
   {#if seekable && pointer.hoverX !== null}

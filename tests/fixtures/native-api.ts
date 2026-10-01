@@ -47,6 +47,8 @@ type InstallNativeApiOptions = {
   extraAlbums?: number;
   /** Tracks in the library (default 140). */
   trackCount?: number;
+  /** Gives every track the same artwork (served at `ARTWORK_URL`), so Light and Sleeve draw. */
+  artwork?: boolean;
 };
 
 declare global {
@@ -96,7 +98,13 @@ function createNativeMock(options: InstallNativeApiOptions) {
         artist: "Test artist",
         album: "Test album",
         albumArtist: "Test artist",
-        artwork: null,
+        artwork: options.artwork
+          ? {
+              contentHash: "ab".repeat(32),
+              mimeType: "png",
+              relativePath: `artwork/ab/${"ab".repeat(32)}.png`,
+            }
+          : null,
         durationMs: 120_000 + index * 1_000,
         fileFormat: "FLAC",
         bitDepth: 24,

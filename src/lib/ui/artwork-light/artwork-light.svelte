@@ -27,8 +27,10 @@
    * without artwork, and is hidden under `forced-colors` by CSS. Changing artwork crossfades
    * (light is not an object), or wipes with the track direction (`enter`) while the old image
    * stays put until covered. With a `level` it breathes: only its opacity moves, straight on the
-   * element (a scaled blurred image is re-rasterised on every frame), and only ever dims from
-   * its strength.
+   * element (a scaled blurred image would be re-rasterised on every frame), and only ever dims
+   * from its strength. The breathing wrapper is promoted with `will-change: opacity`, so the
+   * blurred raster is cached and only its opacity is composited per frame; a still Light gets
+   * no such layer.
    */
   let {
     artwork,
@@ -90,7 +92,11 @@
     data-strength={strength}
     class={cn("artwork-light pointer-events-none absolute inset-0 overflow-hidden", className)}
   >
-    <div {@attach breathe} class="absolute inset-0">
+    <div
+      {@attach breathe}
+      class="absolute inset-0"
+      style:will-change={level === undefined ? undefined : "opacity"}
+    >
       {#key url}
         <img
           src={url}
