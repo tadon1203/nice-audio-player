@@ -52,7 +52,7 @@
         {@const barHeight = Math.max(BASELINE, levelToUnit(level) * (height - 2))}
         <rect
           class={cn(
-            "transition-transform duration-300 ease-out motion-reduce:transition-none",
+            "transition-transform duration-(--motion-medium-duration) ease-(--motion-medium-easing) motion-reduce:transition-none",
             still && "transition-none",
           )}
           x={index + 0.15}

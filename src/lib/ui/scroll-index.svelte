@@ -14,7 +14,7 @@
   <div
     aria-hidden="true"
     data-slot="scroll-index"
-    class="pointer-events-none absolute top-1/4 right-10 hidden text-[10rem] leading-none text-foreground/5 transition-opacity duration-400 @min-[40rem]:block forced-colors:hidden"
+    class="pointer-events-none absolute top-1/4 right-10 hidden text-[10rem] leading-none text-foreground/5 transition-opacity @min-[40rem]:block forced-colors:hidden"
     style:opacity={visible ? 1 : 0}
   >
     {#if /^\d+$/.test(label)}

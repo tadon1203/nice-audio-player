@@ -27,15 +27,9 @@
 @theme {
   --font-sans: "Satoshi", "Noto Sans JP", "Segoe UI", system-ui, sans-serif;
   /*
-   * Motion values that CSS uses. The JS side (`shared/ui/motion/tokens.ts`) owns springs and
-   * reads none of these, but its `feedback` duration must equal `--duration-feedback`
-   * (`tokens-css.test.ts` checks it). Feedback (hover, press, colour) is 100ms; overlays and sheets take 160ms.
+   * CSS owns no timing (ADR 0005). `applyCssMotion` (`ui/motion/css-motion.ts`) sets
+   * `--default-transition-*` and `--motion-overlay-*` from the tokens at runtime.
    */
-  --duration-feedback: 100ms;
-  --duration-overlay: 160ms;
-  --ease-out: cubic-bezier(0.2, 0, 0, 1);
-  --default-transition-duration: var(--duration-feedback);
-  --default-transition-timing-function: var(--ease-out);
   /* Only `shadow-none` and `shadow-floating` exist; persistent UI has no shadow. */
   --shadow-*: initial;
   --shadow-floating: 0 4px 12px oklch(0 0 0 / 0.4);
@@ -142,8 +136,8 @@
  */
 @utility motion-overlay {
   transition-property: opacity, scale;
-  transition-duration: var(--duration-overlay);
-  transition-timing-function: var(--ease-out);
+  transition-duration: var(--motion-overlay-duration);
+  transition-timing-function: var(--motion-overlay-easing);
 
   &[data-starting-style],
   &[data-ending-style] {
@@ -154,8 +148,8 @@
 
 @utility motion-overlay-fade {
   transition-property: opacity;
-  transition-duration: var(--duration-overlay);
-  transition-timing-function: var(--ease-out);
+  transition-duration: var(--motion-overlay-duration);
+  transition-timing-function: var(--motion-overlay-easing);
 
   &[data-starting-style],
   &[data-ending-style] {
@@ -213,8 +207,6 @@
   *::before,
   *::after {
     scroll-behavior: auto !important;
-    /* Same short crossfade the JS tokens fall back to (`reducedMotionTransition`). */
-    transition-duration: var(--duration-feedback) !important;
   }
 }
 

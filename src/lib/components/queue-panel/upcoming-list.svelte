@@ -90,7 +90,7 @@
       }}
       aria-hidden={item === undefined ? "true" : undefined}
       class={cn(
-        "relative transition-[translate,rotate,scale] duration-300 ease-(--ease-out)",
+        "relative transition-[translate,rotate,scale]",
         reduced && "transition-none",
         dragging && "z-10 rounded-lg bg-popover shadow-floating",
       )}

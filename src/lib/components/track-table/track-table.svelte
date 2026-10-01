@@ -275,7 +275,7 @@
                             >
                               <div
                                 class={cn(
-                                  "flex flex-col transition-transform duration-160 ease-out",
+                                  "flex flex-col transition-transform duration-(--motion-overlay-duration) ease-(--motion-overlay-easing)",
                                   action.persistent && "-translate-y-9",
                                   available &&
                                     !action.persistent &&

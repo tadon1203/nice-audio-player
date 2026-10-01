@@ -1,6 +1,8 @@
 <script lang="ts">
   import "../app.css";
   import { onMount } from "svelte";
+  import { prefersReducedMotion } from "svelte/motion";
+  import { applyCssMotion } from "$lib/ui/motion/css-motion";
   import { QueryClientProvider } from "@tanstack/svelte-query";
   import ArtworkAccent from "$lib/components/dock/artwork-accent.svelte";
   import PlaybackRegion from "$lib/components/dock/playback-region.svelte";
@@ -37,6 +39,8 @@
     if (playback === null || settings === null) return;
     return startNativeSession({ playback, settings, queryClient });
   });
+
+  $effect(() => applyCssMotion(document.documentElement, prefersReducedMotion.current));
 </script>
 
 <svelte:window onkeydown={(event) => playback && handlePlaybackShortcut(event, playback)} />

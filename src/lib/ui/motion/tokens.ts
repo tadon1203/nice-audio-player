@@ -1,7 +1,8 @@
 /**
- * Motion tokens (DESIGN.md, principle 7). Everything that moves uses a fully damped
- * spring (`bounce: 0`, except `press`); only hover/press feedback and the Light crossfade use a fixed
- * duration. Never animate a blur radius: animate `transform`, `opacity`, `clip-path`.
+ * Motion tokens (DESIGN.md, principle 7, ADR 0005). Everything that moves or changes state is a
+ * fully damped spring (`bounce: 0`, except `press`). The exceptions are `press` (may overshoot),
+ * the reduced-motion `crossfade` (a fixed tween) and progress motion (constant speed, not a token).
+ * Never animate a blur radius: animate `transform`, `opacity`, `clip-path`.
  *
  * The tokens are plain data. Converting one into a Svelte transition, a CSS value or an imperative
  * animation is done where it is used, so nothing here depends on an animation library.
@@ -22,9 +23,12 @@ export type TweenToken = {
 
 export type MotionTransition = SpringToken | TweenToken;
 
+/** Under reduced motion every movement becomes this fixed 100ms crossfade. */
+export const crossfade: TweenToken = { kind: "tween", duration: 0.1, ease: "easeOut" };
+
 export const motionTokens = {
-  /** Hover, press, color changes. Must equal `--duration-feedback` in app.css. */
-  feedback: { kind: "tween", duration: 0.1, ease: "easeOut" },
+  /** Hover, press and color changes. */
+  feedback: { kind: "spring", visualDuration: 0.1, bounce: 0 },
   /** Tabs, Select, tooltips, lyric line luminance. */
   smallMove: { kind: "spring", visualDuration: 0.2, bounce: 0 },
   /** Queue panel, Sheet, lyrics scroll, track changes. */
@@ -38,14 +42,11 @@ export const motionTokens = {
   /** The play button's press. The only spring allowed to overshoot. */
   press: { kind: "spring", visualDuration: 0.15, bounce: 0.25 },
   /** Light is illumination, not an object, so it fades instead of moving. */
-  light: { kind: "tween", duration: 0.4, ease: "easeInOut" },
-} as const satisfies Record<string, MotionTransition>;
+  light: { kind: "spring", visualDuration: 0.4, bounce: 0 },
+} as const satisfies Record<string, SpringToken>;
 
 export type MotionToken = keyof typeof motionTokens;
 
-/** Under reduced motion every movement becomes a 100ms crossfade. */
-export const reducedMotionTransition: TweenToken = motionTokens.feedback;
-
 export function resolveTransition(token: MotionToken, reducedMotion: boolean): MotionTransition {
-  return reducedMotion ? reducedMotionTransition : motionTokens[token];
+  return reducedMotion ? crossfade : motionTokens[token];
 }
