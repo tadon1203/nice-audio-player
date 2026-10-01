@@ -118,7 +118,13 @@
       playedClassName={showWaveform ? "text-(--artwork-accent)" : undefined}
       disabled={!canSeek}
       onInput={(value) => (seekPreviewMs = value)}
-      onCommit={(value) => void playback.seek(value).finally(() => (seekPreviewMs = null))}
+      onCommit={(value) => {
+        const release = playback.clock.hold(value);
+        void playback.seek(value).finally(() => {
+          release();
+          seekPreviewMs = null;
+        });
+      }}
       activeSpan={lyricsWaveformLink.activeSpan}
       hoveredLineSpan={lyricsWaveformLink.hoveredLineSpan}
       onHoverPositionChange={(ms) => lyricsWaveformLink.setHoveredWaveformMs(ms)}

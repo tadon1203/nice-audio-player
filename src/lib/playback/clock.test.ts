@@ -130,6 +130,28 @@ describe("playback clock", () => {
     expect(clock.lastJump()?.kind).toBe("track");
   });
 
+  it("draws the committed position, never the old one, while a seek is in flight", () => {
+    const { clock, report, advance } = setup();
+    const drawn: number[] = [];
+    clock.position.subscribe((ms) => drawn.push(ms));
+    clock.retain();
+    report(snapshot("playing", "a", 10_000));
+    advance(16);
+
+    const release = clock.hold(40_000);
+    advance(16);
+    advance(16);
+    report(snapshot("playing", "a", 40_000, 1));
+    advance(16);
+    release();
+    advance(16);
+
+    expect(drawn.slice(drawn.indexOf(40_000))).toSatisfy((rest: number[]) =>
+      rest.every((ms) => ms >= 40_000),
+    );
+    expect(clock.position.get()).toBeGreaterThanOrEqual(40_000);
+  });
+
   it("does not announce a slow report as a seek", () => {
     const { clock, report, advance } = setup();
     const jumps: unknown[] = [];

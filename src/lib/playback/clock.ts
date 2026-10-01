@@ -59,6 +59,7 @@ export function createPlaybackClock(environment: ClockEnvironment = browserEnvir
   let retained = 0;
   let frame = 0;
   let glide: NumberTween | null = null;
+  let holds = 0;
   let lastJump: ClockJump | null = null;
   const jumpListeners = new Set<(jump: ClockJump) => void>();
   const reportListeners = new Set<() => void>();
@@ -69,7 +70,7 @@ export function createPlaybackClock(environment: ClockEnvironment = browserEnvir
   };
   const step = () => {
     frame = 0;
-    setPosition(estimateClock(state, environment.now()));
+    if (holds === 0) setPosition(estimateClock(state, environment.now()));
     schedule();
   };
   function schedule() {
@@ -79,7 +80,7 @@ export function createPlaybackClock(environment: ClockEnvironment = browserEnvir
 
   const settle = () => {
     stopFrames();
-    if (glide === null) setPosition(estimateClock(state, environment.now()));
+    if (glide === null && holds === 0) setPosition(estimateClock(state, environment.now()));
     schedule();
   };
 
@@ -119,6 +120,24 @@ export function createPlaybackClock(environment: ClockEnvironment = browserEnvir
     estimate: () => estimateClock(state, environment.now()),
     playing: () => state.report?.playing === true,
     durationMs: () => state.report?.durationMs ?? null,
+    /**
+     * Draws `ms` until the returned function is called, whatever the reports say: a seek has
+     * been asked for but not yet reported, and the bar must not fall back to the old position
+     * (or glide from it) meanwhile.
+     */
+    hold: (ms: number) => {
+      holds += 1;
+      glide?.stop();
+      glide = null;
+      setPosition(ms);
+      let released = false;
+      return () => {
+        if (released) return;
+        released = true;
+        holds -= 1;
+        settle();
+      };
+    },
     /** Keeps the frame loop running until the returned function is called. */
     retain: () => {
       retained += 1;
