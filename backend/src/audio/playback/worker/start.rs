@@ -1,0 +1,285 @@
+//! Starting a playback: loading the source, prebuffering, and failing or skipping on.
+
+use super::*;
+
+impl PlaybackWorker {
+    /// Replaces the queue and starts its `start_index` item.
+    pub(super) fn start_queue(
+        &mut self,
+        items: Vec<PlaybackItemSeed>,
+        start_index: usize,
+        reply: Reply<PlaybackSnapshot>,
+    ) {
+        if self
+            .queue
+            .replace(items, start_index, &mut self.rng)
+            .is_err()
+        {
+            let _ = reply.send(Err(PlaybackServiceError::InvalidPlaybackState));
+            return;
+        }
+        self.skipped_in_a_row = 0;
+        self.start_current(Some(reply), false);
+    }
+
+    /// A start of `item` as a new playback.
+    pub(super) fn new_start(
+        &mut self,
+        item: PlaybackItem,
+        responder: Option<Reply<PlaybackSnapshot>>,
+        start_paused: bool,
+    ) -> StartRequest {
+        StartRequest {
+            id: self.ids.next(),
+            item,
+            responder,
+            start_paused,
+            resume_at_ms: None,
+            selection: None,
+        }
+    }
+
+    /// Starts whatever the queue points at, after telling listeners where the queue stands.
+    pub(super) fn start_current(
+        &mut self,
+        responder: Option<Reply<PlaybackSnapshot>>,
+        start_paused: bool,
+    ) {
+        let Some(item) = self.queue.current().cloned() else {
+            respond(responder, Err(PlaybackServiceError::InvalidPlaybackState));
+            return;
+        };
+        self.publish_queue();
+        let request = self.new_start(item, responder, start_paused);
+        self.begin_start(request);
+    }
+
+    pub(super) fn begin_start(&mut self, request: StartRequest) {
+        let was_visible = matches!(
+            self.transport,
+            Transport::Loaded(_) | Transport::Failed { .. }
+        );
+        self.discard_transport();
+        if was_visible {
+            self.publish_state();
+        }
+        let load_id = self.source_load_ids.next();
+        match SourceLoad::spawn(request.item.file.clone(), load_id, self.inbox.clone()) {
+            Ok(load) => {
+                self.transport = Transport::Loading(Loading {
+                    request,
+                    stage: LoadStage::Source(load),
+                });
+            }
+            Err(()) => self.fail_start(
+                request,
+                StartFailure {
+                    code: PlaybackFailureCode::DecodeFailed,
+                    phase: StartFailurePhase::SourceWorker,
+                    error: PlaybackServiceError::WorkerUnavailable,
+                },
+            ),
+        }
+    }
+
+    pub(super) fn source_loaded(
+        &mut self,
+        id: SourceLoadId,
+        result: Result<CompressedAudioSource, CompressedSourceError>,
+    ) {
+        let is_current_load = matches!(
+            &self.transport,
+            Transport::Loading(loading)
+                if matches!(&loading.stage, LoadStage::Source(load) if load.id() == id)
+        );
+        if !is_current_load {
+            return;
+        }
+        let Transport::Loading(loading) = std::mem::replace(&mut self.transport, Transport::Idle)
+        else {
+            return;
+        };
+        if let LoadStage::Source(load) = loading.stage {
+            load.join();
+        }
+        let request = loading.request;
+        match result {
+            Ok(source) => self.begin_prebuffering(request, source),
+            Err(CompressedSourceError::Cancelled) => {
+                respond(request.responder, Err(PlaybackServiceError::Superseded));
+            }
+            Err(error) => {
+                let phase = match error {
+                    CompressedSourceError::OpenFailed => StartFailurePhase::SourceOpen,
+                    CompressedSourceError::MetadataFailed => StartFailurePhase::SourceMetadata,
+                    CompressedSourceError::ReadFailed => StartFailurePhase::SourceRead,
+                    CompressedSourceError::SourceChanged => StartFailurePhase::SourceChanged,
+                    CompressedSourceError::Cancelled => unreachable!(),
+                };
+                self.fail_start(request, StartFailure::item(phase));
+            }
+        }
+    }
+
+    /// Opens the decoder, prepares the output and starts the decode thread that fills it.
+    pub(super) fn begin_prebuffering(
+        &mut self,
+        request: StartRequest,
+        source: CompressedAudioSource,
+    ) {
+        let selection = request
+            .selection
+            .clone()
+            .unwrap_or_else(|| self.output_selection.clone());
+        let opened = self.open_pipeline(
+            &source,
+            &request.item.file.extension,
+            OutputChoice::Select(selection),
+            StartPoint::Beginning,
+        );
+        match opened {
+            Ok(opened) => {
+                self.transport = Transport::Loading(Loading {
+                    request,
+                    stage: LoadStage::Prebuffering(Prebuffering {
+                        source,
+                        pipeline: opened.pipeline,
+                        duration_ms: opened.duration_ms,
+                    }),
+                });
+            }
+            Err(error) => self.fail_start(request, start_failure(error)),
+        }
+    }
+
+    /// The prebuffer is ready: start the output (unless starting paused) and answer the caller.
+    pub(super) fn finish_start(&mut self) {
+        let Transport::Loading(loading) = std::mem::replace(&mut self.transport, Transport::Idle)
+        else {
+            return;
+        };
+        let Loading { request, stage } = loading;
+        let LoadStage::Prebuffering(prebuffering) = stage else {
+            return;
+        };
+        let Prebuffering {
+            source,
+            pipeline,
+            duration_ms,
+        } = prebuffering;
+        if !request.start_paused {
+            if let Err(error) = pipeline.stream.start() {
+                let code = output_failure_code(error);
+                pipeline.cancel();
+                self.fail_start(
+                    request,
+                    StartFailure::output(StartFailurePhase::StreamStart, code),
+                );
+                return;
+            }
+        }
+        let StartRequest {
+            id,
+            item,
+            responder,
+            start_paused,
+            resume_at_ms,
+            selection,
+        } = request;
+        if let Some(selection) = selection {
+            self.output_selection = selection;
+            self.preferences_changed();
+        }
+        self.last_item = Some(item.clone());
+        self.skipped_in_a_row = 0;
+        self.transport = Transport::Loaded(Loaded {
+            id,
+            item,
+            source,
+            position: Position::from_start(pipeline.sample_rate(), duration_ms),
+            pipeline,
+            completion_time: None,
+            paused: start_paused,
+            seek: None,
+        });
+        let snapshot = self.publish_state();
+        respond(responder, Ok(snapshot));
+        if let Some(position_ms) = resume_at_ms {
+            self.begin_seek(position_ms, None);
+        }
+    }
+
+    /// Reports a failed start and, when only this file is at fault, moves on to the next one.
+    /// Listeners see the failure first, so a skipped file is never silent.
+    pub(super) fn fail_start(&mut self, request: StartRequest, failure: StartFailure) {
+        let id = Some(request.id);
+        error!(
+            "playback.start_failed code={:?} phase={:?} playback_id={:?}",
+            failure.code, failure.phase, id
+        );
+        self.transport = Transport::Failed {
+            id,
+            code: failure.code,
+        };
+        self.publish_state();
+        let responder = request.responder;
+        if failure.phase.scope() == FailureScope::Item && request.selection.is_none() {
+            if let Some(item) = self.next_after_item_failure() {
+                let request = self.new_start(item, responder, false);
+                self.begin_start(request);
+                return;
+            }
+        }
+        respond(responder, Err(failure.error));
+    }
+
+    /// The item to try after the current one could not be played, if there is one to try.
+    pub(super) fn next_after_item_failure(&mut self) -> Option<PlaybackItem> {
+        self.skipped_in_a_row += 1;
+        if self.skipped_in_a_row >= self.queue.len() {
+            return None;
+        }
+        let item = self
+            .queue
+            .advance(AdvanceReason::UserNext, &mut self.rng)?
+            .clone();
+        self.publish_queue();
+        Some(item)
+    }
+
+    pub(super) fn navigate(&mut self, reason: AdvanceReason, reply: Reply<PlaybackSnapshot>) {
+        if reason == AdvanceReason::UserPrevious {
+            if let Transport::Loaded(loaded) = &self.transport {
+                if previous_restarts_track(loaded.position_ms(), loaded.position.duration_ms) {
+                    self.begin_seek(0, Some(reply));
+                    return;
+                }
+            }
+        }
+        let paused = matches!(&self.transport, Transport::Loaded(loaded) if loaded.paused);
+        self.skipped_in_a_row = 0;
+        if self.queue.advance(reason, &mut self.rng).is_none() {
+            let _ = reply.send(Ok(self.render()));
+            return;
+        }
+        self.start_current(Some(reply), paused);
+    }
+}
+
+fn start_failure(error: PipelineError) -> StartFailure {
+    match error {
+        PipelineError::DecoderOpen => StartFailure::item(StartFailurePhase::DecoderOpen),
+        PipelineError::OutputPrepare(error) => {
+            StartFailure::output(StartFailurePhase::OutputPrepare, output_failure_code(error))
+        }
+        PipelineError::ProcessorCreate => StartFailure::output(
+            StartFailurePhase::ProcessorCreate,
+            PlaybackFailureCode::SampleRateConversionFailed,
+        ),
+        // A start reads from the beginning of a file it opened itself, so only a seek meets a
+        // changed format or a failed seek.
+        PipelineError::FirstPacketDecode
+        | PipelineError::SpecChanged
+        | PipelineError::SeekFailed => StartFailure::item(StartFailurePhase::FirstPacketDecode),
+    }
+}
