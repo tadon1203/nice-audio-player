@@ -1,11 +1,25 @@
-import type { LibraryTrackSortKey, LibraryTrackSummary } from "$lib/native";
-import { formatDuration, MISSING } from "$lib/utils/format";
+import type {
+  LibraryAlbumTrackSummary,
+  LibraryTrackSortKey,
+  LibraryTrackSummary,
+} from "$lib/native";
+import { formatDuration, formatKilohertz, MISSING } from "$lib/utils/format";
 
-/** A track row; the Library layout and (later) the Album layout both satisfy it. */
+/** A track row shared by the Library and Album layouts; both DTOs satisfy it directly. */
 export type TrackTableRow = Pick<
   LibraryTrackSummary,
-  "id" | "title" | "artist" | "album" | "albumArtist" | "durationMs" | "availability" | "playable"
->;
+  "id" | "title" | "artist" | "durationMs" | "availability" | "playable"
+> &
+  Partial<
+    Pick<LibraryTrackSummary, "album" | "albumArtist"> &
+      Pick<
+        LibraryAlbumTrackSummary,
+        "trackNumber" | "discNumber" | "fileFormat" | "bitDepth" | "sampleRate"
+      >
+  >;
+
+/** The Library lists tracks across albums; the Album layout is one album's tracks in order. */
+export type TrackTableLayout = "library" | "album";
 
 export type TrackPlaybackStatus = "stopped" | "playing" | "paused" | "failed";
 
@@ -15,8 +29,12 @@ export type TrackPlaybackStatus = "stopped" | "playing" | "paused" | "failed";
  * are written out in full so Tailwind can see them.
  */
 export const trackTableBreakpoints = {
-  compact: "@max-[600px]/track-table:hidden",
-  narrow: "@max-[760px]/track-table:hidden",
+  compact: {
+    hide: "@max-[600px]/track-table:hidden",
+    /** For what takes the hidden column's place: the title cell's artist line. */
+    show: "@max-[600px]/track-table:block",
+  },
+  narrow: { hide: "@max-[760px]/track-table:hidden" },
 } as const;
 
 export type TrackTableBreakpoint = keyof typeof trackTableBreakpoints;
@@ -46,6 +64,15 @@ export type TextColumn = ColumnBase & {
 
 export type TrackColumn = TextColumn | (ColumnBase & { kind: "action" | "title" });
 
+const timeColumn: TrackColumn = {
+  id: "durationMs",
+  kind: "text",
+  header: "Time",
+  width: "w-20",
+  sortKey: "duration",
+  text: (row) => formatDuration(row.durationMs),
+};
+
 export const libraryTrackColumns: readonly TrackColumn[] = [
   { id: "action", kind: "action", header: null, width: "w-10" },
   { id: "title", kind: "title", header: "Title", width: "", sortKey: "title" },
@@ -65,15 +92,64 @@ export const libraryTrackColumns: readonly TrackColumn[] = [
     sortKey: "album",
     text: (row) => row.album,
   },
-  {
-    id: "durationMs",
-    kind: "text",
-    header: "Time",
-    width: "w-20",
-    sortKey: "duration",
-    text: (row) => formatDuration(row.durationMs),
-  },
+  timeColumn,
 ];
+
+/** Sort keys apply to the Library layout only: an album's tracks are always in disc order. */
+export const albumTrackColumns: readonly TrackColumn[] = [
+  { id: "action", kind: "action", header: "#", width: "w-12" },
+  { id: "title", kind: "title", header: "Title", width: "" },
+  {
+    id: "artist",
+    kind: "text",
+    header: "Artist",
+    width: "w-36",
+    hideBelow: "compact",
+    text: (row) => row.artist,
+  },
+  {
+    id: "fileFormat",
+    kind: "text",
+    header: "Format",
+    width: "w-24",
+    hideBelow: "narrow",
+    text: (row) => row.fileFormat,
+  },
+  {
+    id: "sampleRate",
+    kind: "text",
+    header: "Quality",
+    width: "w-36",
+    hideBelow: "narrow",
+    text: trackQuality,
+  },
+  { ...timeColumn, sortKey: undefined },
+];
+
+/**
+ * Bit depth and sample rate in the signal path's notation (`24/96`) without the codec, which has
+ * its own column; `44.1 kHz` when the depth is unknown, `null` when the rate is.
+ */
+export function trackQuality(row: Pick<TrackTableRow, "bitDepth" | "sampleRate">): string | null {
+  if (!row.sampleRate) return null;
+  return row.bitDepth
+    ? `${row.bitDepth}/${formatKilohertz(row.sampleRate)}`
+    : `${formatKilohertz(row.sampleRate)} kHz`;
+}
+
+/** Whether the tracks are on more than one disc, which splits them by "Disc n" rows. */
+export function hasSeveralDiscs(rows: readonly Pick<TrackTableRow, "discNumber">[]): boolean {
+  return rows.some((row) => (row.discNumber ?? 1) > 1);
+}
+
+/** Whether `rows[index]` opens a disc (only meaningful when `hasSeveralDiscs`). */
+export function startsDisc(
+  rows: readonly Pick<TrackTableRow, "discNumber">[],
+  index: number,
+): boolean {
+  const disc = rows[index]?.discNumber;
+  return disc != null && disc !== rows[index - 1]?.discNumber;
+}
 
 /** The text a plain column shows, `MISSING` when the value is unknown. */
 export function columnText(column: TextColumn, row: TrackTableRow): string {

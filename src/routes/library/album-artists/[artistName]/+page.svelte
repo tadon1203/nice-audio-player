@@ -13,6 +13,7 @@
   import CollectionSortControl from "$lib/ui/collection-sort-control.svelte";
   import EmptyStatus from "$lib/ui/empty-status.svelte";
   import ErrorAlert from "$lib/ui/error-alert.svelte";
+  import FactLine from "$lib/ui/fact-line.svelte";
   import LoadMoreSentinel from "$lib/ui/load-more-sentinel.svelte";
   import LoadingStatus from "$lib/ui/loading-status.svelte";
   import VirtualMediaGrid from "$lib/ui/media-grid/virtual-media-grid.svelte";
@@ -75,10 +76,10 @@
   {:else}
     {@const artist = artistQuery.data}
     <MediaDetailsHeader title={label} artwork={artist.artwork} round>
-      <p class="mt-2 flex flex-wrap gap-x-4 text-sm text-muted-foreground tabular-nums">
-        <span>{formatCount(artist.albumCount, "album")}</span>
-        <span>{formatCount(artist.trackCount, "track")}</span>
-      </p>
+      <FactLine
+        class="mt-2"
+        facts={[formatCount(artist.albumCount, "album"), formatCount(artist.trackCount, "track")]}
+      />
     </MediaDetailsHeader>
 
     <section class="mt-10" aria-labelledby="artist-albums-title">
@@ -106,6 +107,7 @@
             <AlbumTile
               {album}
               showArtist={false}
+              parentArtist={name}
               onplay={(played) =>
                 void playback.startPlayback({ kind: "album", key: played.key }, null)}
             />

@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   albumArtistOf,
+  albumTrackColumns,
+  hasSeveralDiscs,
+  startsDisc,
+  trackQuality,
   columnText,
   type TextColumn,
   libraryTrackColumns,
@@ -83,5 +87,43 @@ describe("track rows", () => {
     expect(trackRowState(row, "t1", "paused").playbackState).toBe("paused");
     expect(trackRowState(row, "t1", "stopped").playbackState).toBeUndefined();
     expect(trackRowState(row, "t2", "playing").playbackState).toBeUndefined();
+  });
+});
+
+describe("album track columns", () => {
+  it("number the rows, keep the title flexible and take no sort keys", () => {
+    expect(albumTrackColumns[0]).toMatchObject({ kind: "action", header: "#" });
+    expect(albumTrackColumns.find((column) => column.id === "title")?.width).toBe("");
+    for (const column of albumTrackColumns) expect(column.sortKey, column.id).toBeUndefined();
+  });
+
+  it("only hide below breakpoints the table defines", () => {
+    for (const column of albumTrackColumns) {
+      if (column.hideBelow) expect(trackTableBreakpoints).toHaveProperty(column.hideBelow);
+    }
+  });
+
+  it("write quality like the signal path, without the codec", () => {
+    expect(trackQuality({ bitDepth: 24, sampleRate: 96_000 })).toBe("24/96");
+    expect(trackQuality({ bitDepth: 16, sampleRate: 44_100 })).toBe("16/44.1");
+    expect(trackQuality({ bitDepth: null, sampleRate: 44_100 })).toBe("44.1 kHz");
+    expect(trackQuality({ bitDepth: 16, sampleRate: null })).toBeNull();
+    const quality = albumTrackColumns.find((column) => column.id === "sampleRate") as TextColumn;
+    expect(columnText(quality, { ...row, sampleRate: null })).toBe("—");
+  });
+});
+
+describe("disc rows", () => {
+  const discs = (...numbers: (number | null)[]) => numbers.map((discNumber) => ({ discNumber }));
+
+  it("split an album on several discs where each disc begins", () => {
+    const rows = discs(1, 1, 2, 2);
+    expect(hasSeveralDiscs(rows)).toBe(true);
+    expect(rows.map((_, index) => startsDisc(rows, index))).toEqual([true, false, true, false]);
+  });
+
+  it("add nothing to a single disc or to tracks without a disc number", () => {
+    expect(hasSeveralDiscs(discs(1, 1))).toBe(false);
+    expect(hasSeveralDiscs(discs(null, null))).toBe(false);
   });
 });

@@ -3,6 +3,7 @@
   import type { ArtworkRef } from "$lib/native";
   import { getSettings } from "$lib/settings/context";
   import Artwork from "$lib/ui/artwork.svelte";
+  import { sharedElement } from "$lib/ui/motion/shared-element";
   import ArtworkLight from "$lib/ui/artwork-light/artwork-light.svelte";
   import PageTitle from "$lib/ui/page-title.svelte";
 
@@ -10,14 +11,20 @@
     title,
     artist,
     artwork,
+    sharedKey,
     round = false,
     children,
+    strip,
   }: {
     title: string;
     artist?: string;
     artwork: ArtworkRef | null;
+    /** The key of the library tile this artwork came from, so it moves in from there. */
+    sharedKey?: string;
     round?: boolean;
     children?: Snippet;
+    /** The track-structure Strip along the header band's bottom edge (album details only). */
+    strip?: Snippet;
   } = $props();
 
   const settings = getSettings();
@@ -35,7 +42,14 @@
   <header
     class="relative grid grid-cols-1 items-start gap-8 @md:grid-cols-[minmax(0,14rem)_minmax(0,1fr)] @md:items-end"
   >
-    <Artwork {artwork} alt="{title} artwork" {round} loading="eager" class="w-full max-w-56" />
+    <Artwork
+      {artwork}
+      alt="{title} artwork"
+      {round}
+      loading="eager"
+      class="w-full max-w-56"
+      {@attach sharedKey === undefined ? undefined : sharedElement(sharedKey)}
+    />
     <div class="min-w-0">
       <PageTitle>{title}</PageTitle>
       {#if artist}
@@ -44,4 +58,7 @@
       {@render children?.()}
     </div>
   </header>
+  {#if strip}
+    <div class="relative mt-6">{@render strip()}</div>
+  {/if}
 </div>

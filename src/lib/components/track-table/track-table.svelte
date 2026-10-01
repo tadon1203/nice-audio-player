@@ -21,17 +21,23 @@
     TableRow,
   } from "$lib/ui/shadcn/table";
   import { cn } from "$lib/utils/cn.js";
+  import { MISSING } from "$lib/utils/format";
   import { createVirtualRows } from "$lib/ui/virtual-rows.svelte";
   import {
     albumArtistOf,
     columnText,
     isFilePresent,
+    albumTrackColumns,
     isTrackAvailable,
     libraryTrackColumns,
+    hasSeveralDiscs,
+    startsDisc,
     trackRowState,
     trackTableBreakpoints,
     TRACK_ROW_HEIGHT,
     type TrackColumn,
+    type TrackRowAction,
+    type TrackTableLayout,
     type TrackTableRow,
   } from "./track-columns";
   import TrackPropertiesSheet from "./track-properties-sheet.svelte";
@@ -39,6 +45,7 @@
   let {
     rows,
     caption,
+    layout = "library",
     scrollElement,
     initialOffset = 0,
     ontopindexchange,
@@ -49,8 +56,12 @@
   }: {
     rows: readonly TrackTableRow[];
     caption: string;
-    /** The region the table scrolls in (`null` while it is still mounting). */
-    scrollElement: HTMLElement | null;
+    layout?: TrackTableLayout;
+    /**
+     * The region the table scrolls in to virtualize its rows against (`null` while it is still
+     * mounting). Omit it to render every row.
+     */
+    scrollElement?: HTMLElement | null;
     initialOffset?: number;
     /** Told the index of the first row in view, for the scroll index label. */
     ontopindexchange?: (index: number) => void;
@@ -61,7 +72,8 @@
     onplaytrack: (id: string) => void;
   } = $props();
 
-  const columns = libraryTrackColumns;
+  const columns = $derived(layout === "library" ? libraryTrackColumns : albumTrackColumns);
+  const virtualized = $derived(scrollElement !== undefined);
   const playback = getPlayback();
 
   let propertiesFor = $state<string | null>(null);
@@ -70,20 +82,31 @@
 
   const virtual = createVirtualRows({
     count: () => rows.length,
-    scrollElement: () => scrollElement,
+    scrollElement: () => scrollElement ?? null,
     rowHeight: TRACK_ROW_HEIGHT,
     overscan: 10,
     initialOffset: () => initialOffset,
     container: () => container,
     body: () => body,
   });
-  $effect(() => ontopindexchange?.(virtual.topIndex));
+  $effect(() => {
+    if (virtualized) ontopindexchange?.(virtual.topIndex);
+  });
+
+  const visibleIndexes = $derived(
+    virtualized ? virtual.items.map((item) => item.index) : rows.map((_, index) => index),
+  );
+  const topSpacer = $derived(virtualized ? virtual.topSpacer : 0);
+  const bottomSpacer = $derived(virtualized ? virtual.bottomSpacer : 0);
+  // An album on several discs is split by a "Disc n" row. Only in the plain (unvirtualized)
+  // album layout, where every row has the same height.
+  const splitsDiscs = $derived(!virtualized && layout === "album" && hasSeveralDiscs(rows));
 
   /** Width (for `<col>` only) and breakpoint visibility from one column definition. */
   function columnClass(column: TrackColumn, withWidth = false) {
     return cn(
       withWidth && column.width,
-      column.hideBelow && trackTableBreakpoints[column.hideBelow],
+      column.hideBelow && trackTableBreakpoints[column.hideBelow].hide,
     );
   }
 
@@ -115,6 +138,29 @@
   }
 </script>
 
+{#snippet actionButton(
+  action: TrackRowAction,
+  run: () => void,
+  available: boolean,
+  className: string,
+)}
+  <Button
+    type="button"
+    variant="ghost"
+    size="icon-lg"
+    class={className}
+    aria-label={action.label}
+    title={action.label}
+    disabled={!available}
+    onclick={(event) => {
+      event.stopPropagation();
+      run();
+    }}
+  >
+    <PlayPauseIcon playing={action.kind === "pause"} />
+  </Button>
+{/snippet}
+
 <div bind:this={container} class="@container/track-table min-w-0">
   <!-- Not the shadcn Table root: its overflow wrapper would break the sticky header. -->
   <table class="w-full table-fixed border-collapse text-sm">
@@ -127,7 +173,7 @@
     <TableHeader class="acrylic sticky top-0 z-10 text-left text-muted-foreground">
       <TableRow class="h-9 border-b border-border">
         {#each columns as column (column.id)}
-          {@const key = column.sortKey}
+          {@const key = layout === "library" ? column.sortKey : undefined}
           {@const active = key !== undefined && key === sortKey}
           <TableHead
             scope="col"
@@ -164,16 +210,26 @@
     <TableBody bind:ref={body}>
       <!-- Spacer heights must jump, never animate: the reduced-motion rule gives every element a
            transition, and a lagging spacer puts the rows in the wrong place. -->
-      {#if virtual.topSpacer > 0}
+      {#if topSpacer > 0}
         <tr aria-hidden="true">
           <td colspan={columns.length} class="p-0"
-            ><div class="transition-none" style:height="{virtual.topSpacer}px"></div></td
+            ><div class="transition-none" style:height="{topSpacer}px"></div></td
           >
         </tr>
       {/if}
-      {#each virtual.items as item (rows[item.index]?.id ?? item.key)}
-        {@const row = rows[item.index]}
+      {#each visibleIndexes as index (rows[index]?.id ?? index)}
+        {@const row = rows[index]}
         {#if row}
+          {#if splitsDiscs && startsDisc(rows, index)}
+            <TableRow class="border-b border-border/70">
+              <TableCell
+                colspan={columns.length}
+                class="px-3 pt-6 pb-2 text-sm text-muted-foreground"
+              >
+                Disc {row.discNumber}
+              </TableCell>
+            </TableRow>
+          {/if}
           {@const { action, clickIntent, playbackState } = trackRowState(
             row,
             playback.activeTrackId,
@@ -209,30 +265,55 @@
                       )}
                     >
                       {#if column.kind === "action"}
-                        <div class="relative flex h-9 w-full items-center justify-center">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon-lg"
-                            class={cn(
-                              "absolute transition-opacity",
-                              !action.persistent &&
-                                "opacity-0 group-hover/track:opacity-100 group-focus-within/track:opacity-100",
-                              !available &&
+                        {#if layout === "album"}
+                          <!-- The number and the button are two stacked cells in a one-cell window;
+                               hover slides the number up and the button in. The ring sits on the
+                               window so the clip does not cut it. -->
+                          <div class="flex h-9 w-full items-center justify-center">
+                            <div
+                              class="size-9 overflow-clip rounded-md has-focus-visible:ring-2 has-focus-visible:ring-ring"
+                            >
+                              <div
+                                class={cn(
+                                  "flex flex-col transition-transform duration-160 ease-out",
+                                  action.persistent && "-translate-y-9",
+                                  available &&
+                                    !action.persistent &&
+                                    "group-focus-within/track:-translate-y-9 group-hover/track:-translate-y-9",
+                                )}
+                              >
+                                <span
+                                  aria-hidden="true"
+                                  class="flex size-9 items-center justify-center text-sm text-muted-foreground"
+                                >
+                                  {row.trackNumber ?? MISSING}
+                                </span>
+                                {@render actionButton(
+                                  action,
+                                  runAction,
+                                  available,
+                                  "focus-visible:ring-0",
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        {:else}
+                          <div class="relative flex h-9 w-full items-center justify-center">
+                            {@render actionButton(
+                              action,
+                              runAction,
+                              available,
+                              cn(
+                                "absolute transition-opacity",
                                 !action.persistent &&
-                                "pointer-events-none opacity-0 disabled:opacity-0",
+                                  "opacity-0 group-hover/track:opacity-100 group-focus-within/track:opacity-100",
+                                !available &&
+                                  !action.persistent &&
+                                  "pointer-events-none opacity-0 disabled:opacity-0",
+                              ),
                             )}
-                            aria-label={action.label}
-                            title={action.label}
-                            disabled={!available}
-                            onclick={(event) => {
-                              event.stopPropagation();
-                              runAction();
-                            }}
-                          >
-                            <PlayPauseIcon playing={action.kind === "pause"} />
-                          </Button>
-                        </div>
+                          </div>
+                        {/if}
                       {:else if column.kind === "title"}
                         <div class="min-w-0 text-left">
                           <div class="flex min-w-0 items-center gap-2">
@@ -241,6 +322,15 @@
                               <span class="shrink-0 text-sm text-muted-foreground">Missing</span>
                             {/if}
                           </div>
+                          {#if layout === "album" && row.artist}
+                            <span
+                              class={cn(
+                                "mt-0.5 hidden truncate text-sm text-muted-foreground",
+                                trackTableBreakpoints.compact.show,
+                              )}
+                              title={row.artist}>{row.artist}</span
+                            >
+                          {/if}
                         </div>
                       {:else if column.kind === "text"}
                         {@const text = columnText(column, row)}
@@ -260,10 +350,10 @@
                   Add to queue
                 </ContextMenuItem>
               {/if}
-              {#if row.album}
+              {#if layout === "library" && row.album}
                 <ContextMenuItem onSelect={() => goToAlbum(row)}>Go to album</ContextMenuItem>
               {/if}
-              {#if albumArtistOf(row) !== ""}
+              {#if layout === "library" && albumArtistOf(row) !== ""}
                 <ContextMenuItem onSelect={() => goToArtist(row)}>Go to artist</ContextMenuItem>
               {/if}
               {#if isFilePresent(row)}
@@ -277,10 +367,10 @@
           </ContextMenuPrimitive.Root>
         {/if}
       {/each}
-      {#if virtual.bottomSpacer > 0}
+      {#if bottomSpacer > 0}
         <tr aria-hidden="true">
           <td colspan={columns.length} class="p-0"
-            ><div class="transition-none" style:height="{virtual.bottomSpacer}px"></div></td
+            ><div class="transition-none" style:height="{bottomSpacer}px"></div></td
           >
         </tr>
       {/if}

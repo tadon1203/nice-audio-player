@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { HTMLAttributes } from "svelte/elements";
   import { artworkUrl, type ArtworkRef } from "$lib/native";
   import { cn } from "$lib/utils/cn.js";
 
@@ -8,7 +9,8 @@
     loading = "lazy",
     round = false,
     class: className,
-  }: {
+    ...restProps
+  }: Omit<HTMLAttributes<HTMLSpanElement>, "children"> & {
     artwork: ArtworkRef | null | undefined;
     alt?: string;
     loading?: "eager" | "lazy";
@@ -23,6 +25,7 @@
 
 <!-- The Sleeve: a square of artwork, or a quiet block when there is none. -->
 <span
+  {...restProps}
   data-slot="artwork"
   class={cn(
     "block aspect-square overflow-hidden bg-muted",

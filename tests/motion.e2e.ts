@@ -141,8 +141,11 @@ test("an album's artwork moves from its tile to the details header", async ({ pa
   const tile = page.getByRole("link", { name: "Open album Test album by Test artist" });
   const tileBox = (await tile.locator('[data-slot="artwork"]').boundingBox())!;
   const measure = () => {
-    const artwork = document.querySelector('main [data-slot="artwork"]');
-    const rect = artwork?.parentElement?.getBoundingClientRect();
+    // The Sleeve in flight is a clone drawn over the page; once it lands, the header's own.
+    const artwork =
+      document.querySelector('[data-shared-element="flying"]') ??
+      document.querySelector('main [data-slot="artwork"]');
+    const rect = artwork?.getBoundingClientRect();
     return rect ? { x: rect.x, y: rect.y } : null;
   };
   const frames = (await sampleFrames(page, measure, () => tile.click(), 1200)).filter(

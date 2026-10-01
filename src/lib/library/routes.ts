@@ -1,8 +1,8 @@
 import { toNameSegment } from "./unknown-name";
 
 /*
- * Library URLs, in one place. Plain strings rather than `resolve()`: the album detail route is
- * typed only once it exists (ticket 08), and every caller shares this one spelling.
+ * Library URLs, in one place. Plain strings rather than `resolve()`, so every caller (links,
+ * `goto`, the track menu) shares this one spelling of a name segment.
  */
 
 const segment = (name: string) => encodeURIComponent(toNameSegment(name));
