@@ -11,6 +11,7 @@ use super::source_loader::SourceLoad;
 use crate::audio::compressed_source::CompressedAudioSource;
 use crate::audio::devices::AudioOutputSelection;
 use crate::audio::output::{OutputStream, OutputStreamId, PreparedOutputConfig};
+use crate::audio::timebase::{frame_to_millis, millis_to_frame};
 use cpal::StreamInstant;
 
 pub(super) const POSITION_UPDATE_INTERVAL: Duration = Duration::from_millis(250);
@@ -101,7 +102,7 @@ impl Loaded {
         let max_frames = self
             .position
             .duration_ms
-            .map(|duration| duration_to_frames(duration, rate));
+            .map(|duration| millis_to_frame(duration, rate));
         let relative = self.pipeline.stream.played_frame_position(rate, max_frames);
         self.position.absolute(relative)
     }
@@ -125,7 +126,7 @@ impl Position {
             duration_ms,
             frame: 0,
             base_frame: 0,
-            remaining_frames: duration_ms.map(|duration| duration_to_frames(duration, sample_rate)),
+            remaining_frames: duration_ms.map(|duration| millis_to_frame(duration, sample_rate)),
             last_publish: Instant::now(),
         }
     }
@@ -146,34 +147,6 @@ pub(super) struct SeekInFlight {
     pub remaining_frames: u64,
     pub duration_ms: u64,
     pub responder: Option<Reply<PlaybackSnapshot>>,
-}
-
-pub(super) fn frame_to_millis(frame_position: u64, sample_rate: u32) -> u64 {
-    if sample_rate == 0 {
-        return 0;
-    }
-    ((u128::from(frame_position) * 1_000) / u128::from(sample_rate)).min(u128::from(u64::MAX))
-        as u64
-}
-
-pub(super) fn millis_to_frame(position_ms: u64, sample_rate: u32) -> u64 {
-    u128::from(position_ms)
-        .saturating_mul(u128::from(sample_rate))
-        .checked_div(1_000)
-        .unwrap_or(0)
-        .min(u128::from(u64::MAX)) as u64
-}
-
-pub(super) fn source_to_output_frame(source_frame: u64, output_rate: u32, source_rate: u32) -> u64 {
-    u128::from(source_frame)
-        .saturating_mul(u128::from(output_rate))
-        .checked_div(u128::from(source_rate))
-        .unwrap_or(0)
-        .min(u128::from(u64::MAX)) as u64
-}
-
-pub(super) fn duration_to_frames(duration_ms: u64, sample_rate: u32) -> u64 {
-    millis_to_frame(duration_ms, sample_rate)
 }
 
 pub(super) fn should_publish_position(

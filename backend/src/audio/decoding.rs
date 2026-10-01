@@ -1,8 +1,6 @@
 #![allow(dead_code)]
 
 use std::fs::File;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
 
 use symphonia::core::codecs::audio::{AudioDecoder, AudioDecoderOptions};
 use symphonia::core::errors::Error as SymphoniaError;
@@ -13,7 +11,9 @@ use symphonia::core::meta::MetadataOptions;
 use symphonia::core::units::{Time, TimeBase, Timestamp};
 use symphonia::default::{get_codecs, get_probe};
 
+use super::cancellation::Cancellation;
 use super::pcm::{ChannelCount, PcmBuffer, PcmBufferBuildError, PcmSpec, SampleRate};
+use super::timebase::frame_to_millis;
 use crate::media::validation::ValidatedAudioFile;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -34,21 +34,6 @@ pub enum PcmDecodeError {
     VerificationFailed,
     DecodeFailed,
     SeekFailed,
-}
-
-#[derive(Clone, Default)]
-pub struct DecodeCancellation {
-    cancelled: Arc<AtomicBool>,
-}
-
-impl DecodeCancellation {
-    pub fn cancel(&self) {
-        self.cancelled.store(true, Ordering::Relaxed);
-    }
-
-    pub fn is_cancelled(&self) -> bool {
-        self.cancelled.load(Ordering::Relaxed)
-    }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -296,7 +281,7 @@ impl StreamingDecoder {
 
 pub fn decode_audio_file(
     file: &ValidatedAudioFile,
-    cancellation: &DecodeCancellation,
+    cancellation: &Cancellation,
 ) -> Result<PcmBuffer, PcmDecodeError> {
     decode_audio_file_with_cancel_check(file, || cancellation.is_cancelled())
 }
@@ -375,14 +360,6 @@ fn timestamp_delta_to_frames(
     u64::try_from(frames).map_err(|_| PcmDecodeError::SeekFailed)
 }
 
-fn frame_to_millis(frame: u64, sample_rate: u32) -> u64 {
-    u128::from(frame)
-        .saturating_mul(1_000)
-        .checked_div(u128::from(sample_rate))
-        .unwrap_or(0)
-        .min(u128::from(u64::MAX)) as u64
-}
-
 fn check_cancelled(is_cancelled: &mut impl FnMut() -> bool) -> Result<(), PcmDecodeError> {
     if is_cancelled() {
         Err(PcmDecodeError::Cancelled)
@@ -436,10 +413,11 @@ fn map_pcm_build_error(error: PcmBufferBuildError) -> PcmDecodeError {
 #[cfg(test)]
 mod tests {
     use super::{
-        decode_audio_file, decode_audio_file_with_cancel_check, DecodeCancellation, DecodeStep,
-        PcmDecodeError, SeekStep,
+        decode_audio_file, decode_audio_file_with_cancel_check, DecodeStep, PcmDecodeError,
+        SeekStep,
     };
-    use crate::audio::compressed_source::{prepare_compressed_source, SourceLoadCancellation};
+    use crate::audio::cancellation::Cancellation;
+    use crate::audio::compressed_source::prepare_compressed_source;
     use crate::media::validation::ValidatedAudioFile;
     use crate::test_support::{write_pcm_i16_wav, TestDirectory};
     use std::fs::{File, OpenOptions};
@@ -454,7 +432,7 @@ mod tests {
     }
 
     fn open_source_decoder(file: &ValidatedAudioFile) -> super::StreamingDecoder {
-        prepare_compressed_source(file, &SourceLoadCancellation::default())
+        prepare_compressed_source(file, &Cancellation::default())
             .unwrap()
             .open_decoder(&file.extension)
             .unwrap()
@@ -466,7 +444,7 @@ mod tests {
         let path = directory.file("mono.wav");
         write_pcm_i16_wav(&path, 44_100, 1, &[-32_768, -16_384, 0, 16_384, 32_767]);
 
-        let cancellation = DecodeCancellation::default();
+        let cancellation = Cancellation::default();
         let buffer = decode_audio_file(&validated(&path), &cancellation).expect("decode succeeds");
         let expected = [-1.0, -0.5, 0.0, 0.5, 32_767.0 / 32_768.0];
         for (actual, expected) in buffer.samples().iter().zip(expected) {
@@ -483,7 +461,7 @@ mod tests {
         let path = directory.file("stereo.wav");
         write_pcm_i16_wav(&path, 48_000, 2, &[-32_768, 32_767, -16_384, 16_384]);
 
-        let buffer = decode_audio_file(&validated(&path), &DecodeCancellation::default())
+        let buffer = decode_audio_file(&validated(&path), &Cancellation::default())
             .expect("decode succeeds");
         let expected = [-1.0, 32_767.0 / 32_768.0, -0.5, 0.5];
         for (actual, expected) in buffer.samples().iter().zip(expected) {
@@ -500,7 +478,7 @@ mod tests {
         let path = directory.file("eos.wav");
         write_pcm_i16_wav(&path, 44_100, 1, &[0, 16_384, 32_767]);
 
-        let buffer = decode_audio_file(&validated(&path), &DecodeCancellation::default())
+        let buffer = decode_audio_file(&validated(&path), &Cancellation::default())
             .expect("normal EOS must succeed");
         assert_eq!(buffer.samples().len(), 3);
     }
@@ -512,7 +490,7 @@ mod tests {
         write_pcm_i16_wav(&path, 44_100, 1, &[]);
 
         assert_eq!(
-            decode_audio_file(&validated(&path), &DecodeCancellation::default()).err(),
+            decode_audio_file(&validated(&path), &Cancellation::default()).err(),
             Some(PcmDecodeError::EmptyAudioStream)
         );
     }
@@ -526,7 +504,7 @@ mod tests {
         file.set_len(44).unwrap();
 
         assert_eq!(
-            decode_audio_file(&validated(&path), &DecodeCancellation::default()).err(),
+            decode_audio_file(&validated(&path), &Cancellation::default()).err(),
             Some(PcmDecodeError::ReadFailed)
         );
     }
@@ -535,7 +513,7 @@ mod tests {
     fn rejects_cancellation_before_opening() {
         let directory = TestDirectory::new();
         let path = directory.file("missing.wav");
-        let cancellation = DecodeCancellation::default();
+        let cancellation = Cancellation::default();
         cancellation.cancel();
 
         assert_eq!(
@@ -571,7 +549,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            decode_audio_file(&validated(&path), &DecodeCancellation::default()).err(),
+            decode_audio_file(&validated(&path), &Cancellation::default()).err(),
             Some(PcmDecodeError::ReadFailed)
         );
     }

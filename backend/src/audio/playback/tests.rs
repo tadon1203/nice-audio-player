@@ -7,10 +7,7 @@ use super::item::{PlaybackItem, PlaybackItemSeed};
 use super::preferences::PlaybackPreferences;
 use super::queue::{PlaybackQueue, PlaybackRepeatMode};
 use super::service::{PlaybackCommand, PlaybackService, PlaybackServiceError, Reply};
-use super::session::{
-    duration_to_frames, frame_to_millis, millis_to_frame, should_publish_position,
-    source_to_output_frame,
-};
+use super::session::should_publish_position;
 use super::snapshot::{
     ActiveSession, PlaybackChannelConversion, PlaybackFailureCode, PlaybackProcessingInfo,
     PlaybackQueueSnapshot, PlaybackSnapshot, SnapshotBase,
@@ -1324,27 +1321,6 @@ fn position_publication_requires_interval_and_a_changed_position() {
     assert!(!should_publish_position(Duration::from_millis(250), false));
     assert!(should_publish_position(Duration::from_millis(250), true));
     assert!(should_publish_position(Duration::from_millis(500), true));
-}
-
-#[test]
-fn converts_frames_and_calculates_duration_in_milliseconds() {
-    assert_eq!(frame_to_millis(22_050, 44_100), 500);
-    assert_eq!(frame_to_millis(132_300, 44_100), 3_000);
-    assert_eq!(frame_to_millis(96_000, 96_000), 1_000);
-}
-
-#[test]
-fn seek_position_helpers_use_floor_alignment_and_output_rate() {
-    assert_eq!(millis_to_frame(999, 44_100), 44_055);
-    assert_eq!(frame_to_millis(44_055, 44_100), 998);
-    assert_eq!(source_to_output_frame(44_100, 48_000, 44_100), 48_000);
-    assert_eq!(duration_to_frames(2_001, 48_000), 96_048);
-}
-
-#[test]
-fn seek_position_helpers_saturate_large_values() {
-    assert_eq!(millis_to_frame(u64::MAX, u32::MAX), u64::MAX);
-    assert_eq!(source_to_output_frame(u64::MAX, u32::MAX, 1), u64::MAX);
 }
 
 // ---- the wire format ----

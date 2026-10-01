@@ -5,6 +5,7 @@ use std::sync::Arc;
 use log::warn;
 use symphonia::core::io::MediaSource;
 
+use super::cancellation::Cancellation;
 use super::decoding::{PcmDecodeError, StreamingDecoder};
 use crate::media::validation::ValidatedAudioFile;
 
@@ -30,25 +31,9 @@ pub(crate) enum CompressedSourceError {
     SourceChanged,
 }
 
-#[derive(Clone, Default)]
-pub(crate) struct SourceLoadCancellation {
-    cancelled: Arc<std::sync::atomic::AtomicBool>,
-}
-
-impl SourceLoadCancellation {
-    pub(crate) fn cancel(&self) {
-        self.cancelled
-            .store(true, std::sync::atomic::Ordering::Relaxed);
-    }
-
-    pub(crate) fn is_cancelled(&self) -> bool {
-        self.cancelled.load(std::sync::atomic::Ordering::Relaxed)
-    }
-}
-
 pub(crate) fn prepare_compressed_source(
     file: &ValidatedAudioFile,
-    cancellation: &SourceLoadCancellation,
+    cancellation: &Cancellation,
 ) -> Result<CompressedAudioSource, CompressedSourceError> {
     if cancellation.is_cancelled() {
         return Err(CompressedSourceError::Cancelled);

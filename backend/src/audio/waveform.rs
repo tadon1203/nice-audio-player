@@ -14,9 +14,8 @@ use std::time::{Duration, Instant};
 
 use serde::Serialize;
 
-use super::decoding::{
-    open_analysis_decoder, DecodeCancellation, DecodeStep, PcmDecodeError, SeekStep,
-};
+use super::cancellation::Cancellation;
+use super::decoding::{open_analysis_decoder, DecodeStep, PcmDecodeError, SeekStep};
 use crate::events::{BackendEvent, SharedEventSink};
 use crate::media::validation::ValidatedAudioFile;
 
@@ -102,7 +101,7 @@ impl Chunker {
 /// is `None`.
 fn analyze_range(
     file: &ValidatedAudioFile,
-    cancellation: &DecodeCancellation,
+    cancellation: &Cancellation,
     start_chunk: usize,
     limit: Option<usize>,
 ) -> Result<Vec<ChunkStats>, PcmDecodeError> {
@@ -137,7 +136,7 @@ fn analyze_range(
 /// a single-threaded pass.
 pub fn analyze(
     file: &ValidatedAudioFile,
-    cancellation: &DecodeCancellation,
+    cancellation: &Cancellation,
     threads: usize,
 ) -> Result<Waveform, PcmDecodeError> {
     let chunks = match analyze_parallel(file, cancellation, threads) {
@@ -154,7 +153,7 @@ pub fn analyze(
 
 fn analyze_parallel(
     file: &ValidatedAudioFile,
-    cancellation: &DecodeCancellation,
+    cancellation: &Cancellation,
     threads: usize,
 ) -> Option<Result<Vec<ChunkStats>, PcmDecodeError>> {
     if threads <= 1 {
@@ -206,7 +205,7 @@ fn stream_frames(file: &ValidatedAudioFile) -> Option<(u64, u32)> {
 /// of the file, so the dock can show a waveform while the exact analysis is still running.
 pub fn sample(
     file: &ValidatedAudioFile,
-    cancellation: &DecodeCancellation,
+    cancellation: &Cancellation,
     budget: Duration,
 ) -> Result<Waveform, PcmDecodeError> {
     let mut decoder = open_analysis_decoder(file)?;
@@ -341,7 +340,7 @@ fn file_stamp(path: &str) -> Option<FileStamp> {
 /// The single slot of waveform work: the job in flight and at most one newer request behind it.
 #[derive(Default)]
 struct Jobs {
-    running: Option<(String, DecodeCancellation)>,
+    running: Option<(String, Cancellation)>,
     pending: Option<ValidatedAudioFile>,
     closed: bool,
 }
@@ -377,14 +376,14 @@ impl Shared {
     }
 
     /// Blocks until there is a request, and returns it with the cancellation for its job.
-    fn next_job(&self) -> Option<(ValidatedAudioFile, DecodeCancellation)> {
+    fn next_job(&self) -> Option<(ValidatedAudioFile, Cancellation)> {
         let mut jobs = self.jobs();
         loop {
             if jobs.closed {
                 return None;
             }
             if let Some(file) = jobs.pending.take() {
-                let cancellation = DecodeCancellation::default();
+                let cancellation = Cancellation::default();
                 jobs.running = Some((file.path.clone(), cancellation.clone()));
                 return Some((file, cancellation));
             }
@@ -453,7 +452,7 @@ impl Drop for WaveformService {
 impl Shared {
     /// Publishes a quick approximation first when the file is long and not cached, then the exact
     /// waveform, which is also written to the cache.
-    fn process(&self, file: &ValidatedAudioFile, cancellation: &DecodeCancellation) {
+    fn process(&self, file: &ValidatedAudioFile, cancellation: &Cancellation) {
         let Some(stamp) = file_stamp(&file.path) else {
             return;
         };
@@ -532,7 +531,7 @@ mod tests {
         let mut samples = vec![1_000i16; 8_000];
         samples.extend(vec![30_000i16; 8_000]);
         let file = wav(&directory, "ramp.wav", &samples);
-        let waveform = analyze(&file, &DecodeCancellation::default(), 1).unwrap();
+        let waveform = analyze(&file, &Cancellation::default(), 1).unwrap();
         assert_eq!(waveform.peaks.len(), waveform.rms.len());
         assert!(waveform.peaks.len() <= WAVEFORM_BUCKETS);
         let last = waveform.peaks.len() - 1;
@@ -567,7 +566,7 @@ mod tests {
     fn parallel_analysis_matches_a_single_pass_exactly() {
         let directory = TestDirectory::new();
         let file = varying_wav(&directory, 400);
-        let cancellation = DecodeCancellation::default();
+        let cancellation = Cancellation::default();
         let serial = analyze(&file, &cancellation, 1).unwrap();
         let parallel = analyze(&file, &cancellation, 4).unwrap();
         assert_eq!(serial, parallel);
@@ -578,7 +577,7 @@ mod tests {
     fn sampled_waveform_stays_close_to_the_exact_one() {
         let directory = TestDirectory::new();
         let file = varying_wav(&directory, 240);
-        let cancellation = DecodeCancellation::default();
+        let cancellation = Cancellation::default();
         let exact = analyze(&file, &cancellation, 1).unwrap();
         let sampled = sample(&file, &cancellation, Duration::from_secs(10)).unwrap();
         assert_eq!(sampled.peaks.len(), WAVEFORM_BUCKETS);
@@ -596,12 +595,7 @@ mod tests {
     fn short_files_are_not_sampled() {
         let directory = TestDirectory::new();
         let file = varying_wav(&directory, 10);
-        assert!(sample(
-            &file,
-            &DecodeCancellation::default(),
-            Duration::from_secs(1)
-        )
-        .is_err());
+        assert!(sample(&file, &Cancellation::default(), Duration::from_secs(1)).is_err());
     }
 
     #[test]

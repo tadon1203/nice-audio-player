@@ -5,7 +5,8 @@ use log::error;
 use std::thread::{self, JoinHandle};
 
 use super::input::{Inbox, WorkerEvent};
-use crate::audio::decoding::{DecodeCancellation, DecodeStep, StreamingDecoder};
+use crate::audio::cancellation::Cancellation;
+use crate::audio::decoding::{DecodeStep, StreamingDecoder};
 use crate::audio::output::OutputStreamId;
 use crate::audio::output_processing::{OutputPcmProcessor, OutputProcessingError};
 use crate::audio::pcm_queue::{PcmProducer, PcmWaker};
@@ -44,7 +45,7 @@ struct DecodeTask {
     converter: OutputPcmProcessor,
     converted: Vec<f32>,
     discard_output_samples: usize,
-    cancellation: DecodeCancellation,
+    cancellation: Cancellation,
     inbox: Inbox,
     stream: OutputStreamId,
     prebuffer_frames: usize,
@@ -52,7 +53,7 @@ struct DecodeTask {
 }
 
 pub(crate) struct DecodeWorker {
-    cancellation: DecodeCancellation,
+    cancellation: Cancellation,
     join_handle: JoinHandle<()>,
     waker: PcmWaker,
     stream: OutputStreamId,
@@ -60,7 +61,7 @@ pub(crate) struct DecodeWorker {
 
 impl DecodeWorker {
     pub(super) fn spawn(input: DecodeTaskInput, inbox: Inbox, stream: OutputStreamId) -> Self {
-        let cancellation = DecodeCancellation::default();
+        let cancellation = Cancellation::default();
         let waker = input.producer.waker();
         let decoder = input.decoder;
         let task = DecodeTask {
@@ -191,7 +192,8 @@ fn discard_output_prefix(samples: &mut Vec<f32>, remaining_samples: &mut usize) 
 #[cfg(test)]
 mod tests {
     use super::{prebuffer_frames, DecodeTaskInput, DecodeWorker, Stop};
-    use crate::audio::compressed_source::{prepare_compressed_source, SourceLoadCancellation};
+    use crate::audio::cancellation::Cancellation;
+    use crate::audio::compressed_source::prepare_compressed_source;
     use crate::audio::output::OutputStreamId;
     use crate::audio::output_processing::{
         OutputPcmProcessor, OutputProcessingError, OutputProcessingPlan,
@@ -217,7 +219,7 @@ mod tests {
         file: &ValidatedAudioFile,
         capacity_frames: usize,
     ) -> (DecodeWorker, PcmConsumer, Receiver<WorkerInput>) {
-        let mut decoder = prepare_compressed_source(file, &SourceLoadCancellation::default())
+        let mut decoder = prepare_compressed_source(file, &Cancellation::default())
             .unwrap()
             .open_decoder(&file.extension)
             .unwrap();

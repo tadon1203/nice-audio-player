@@ -1,3 +1,4 @@
+pub mod cancellation;
 mod compressed_source;
 pub mod decoding;
 pub mod devices;
@@ -8,6 +9,7 @@ pub mod output_processing;
 pub mod pcm;
 pub mod pcm_queue;
 pub mod playback;
+pub mod timebase;
 pub mod volume;
 pub mod waveform;
 

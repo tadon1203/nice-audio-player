@@ -6,13 +6,12 @@ use std::thread::{self, JoinHandle};
 use log::error;
 
 use super::input::{Inbox, PlaybackId, WorkerEvent};
-use crate::audio::compressed_source::{
-    prepare_compressed_source, CompressedSourceError, SourceLoadCancellation,
-};
+use crate::audio::cancellation::Cancellation;
+use crate::audio::compressed_source::{prepare_compressed_source, CompressedSourceError};
 use crate::media::validation::ValidatedAudioFile;
 
 pub(crate) struct SourceLoad {
-    cancellation: SourceLoadCancellation,
+    cancellation: Cancellation,
     join_handle: JoinHandle<()>,
 }
 
@@ -23,7 +22,7 @@ impl SourceLoad {
         id: PlaybackId,
         inbox: Inbox,
     ) -> Result<Self, ()> {
-        let cancellation = SourceLoadCancellation::default();
+        let cancellation = Cancellation::default();
         let worker_cancellation = cancellation.clone();
         let join_handle = thread::Builder::new()
             .name("audio-source-load".into())

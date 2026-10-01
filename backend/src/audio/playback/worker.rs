@@ -14,9 +14,8 @@ use super::preferences::{PlaybackPreferences, PreferencesObserver};
 use super::queue::{AdvanceReason, PlaybackQueue, QueueError};
 use super::service::{respond, PlaybackCommand, PlaybackServiceError, Reply};
 use super::session::{
-    duration_to_frames, millis_to_frame, should_publish_position, source_to_output_frame,
-    LoadStage, Loaded, Loading, Pipeline, Position, Prebuffering, SeekInFlight, StartRequest,
-    Transport,
+    should_publish_position, LoadStage, Loaded, Loading, Pipeline, Position, Prebuffering,
+    SeekInFlight, StartRequest, Transport,
 };
 use super::snapshot::{
     ActiveSession, PlaybackFailureCode, PlaybackProcessingInfo, PlaybackQueueSnapshot,
@@ -32,6 +31,7 @@ use crate::audio::output::{
     AudioOutputError, OutputBackend, OutputLinks, OutputStreamId, OutputTarget, StreamFailureKind,
 };
 use crate::audio::output_processing::OutputPcmProcessor;
+use crate::audio::timebase::{millis_to_frame, rescale_frame};
 use crate::audio::volume::{AtomicEffectiveGain, VolumeState};
 use crate::events::{BackendEvent, SharedEventSink};
 use log::{error, info};
@@ -738,7 +738,7 @@ impl PlaybackWorker {
             )
             .map_err(|error| PlaybackServiceError::Output(output_failure_code(error)))?;
         let sample_rate = prepared.config.processing_plan.output().sample_rate().get();
-        let discard_output_frames = source_to_output_frame(
+        let discard_output_frames = rescale_frame(
             seek.confirmed_source_frame
                 .saturating_sub(seek.preroll_source_frame),
             sample_rate,
@@ -759,12 +759,12 @@ impl PlaybackWorker {
             self.inbox.clone(),
             stream_id,
         );
-        let output_base_frame = source_to_output_frame(
+        let output_base_frame = rescale_frame(
             seek.confirmed_source_frame,
             sample_rate,
             source_spec.sample_rate().get(),
         );
-        let total_output_frames = duration_to_frames(duration_ms, sample_rate);
+        let total_output_frames = millis_to_frame(duration_ms, sample_rate);
         Ok(SeekInFlight {
             pipeline: Pipeline {
                 stream_id,
