@@ -56,6 +56,26 @@ pub struct ActiveSession {
     pub resampling_active: bool,
 }
 
+/// Where the loaded track is. Sent on its own, far more often than the snapshot, so a tick
+/// never carries (or re-renders) the rest of the playback state.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaybackPosition {
+    pub playback_id: String,
+    pub position_ms: u64,
+    pub seek_revision: u64,
+}
+
+impl ActiveSession {
+    pub fn position(&self) -> PlaybackPosition {
+        PlaybackPosition {
+            playback_id: self.playback_id.clone(),
+            position_ms: self.position_ms,
+            seek_revision: self.seek_revision,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, serde::Serialize, specta::Type)]
 #[serde(
     tag = "status",

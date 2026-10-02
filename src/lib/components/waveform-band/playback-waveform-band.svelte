@@ -51,10 +51,8 @@
   const playback = getPlayback();
   const budget = getMotionBudget();
   const itemPath = $derived(playback.item?.file.path ?? "none");
-  const canSeek = $derived(playback.transport.active && playback.durationMs !== null);
-  const waveform = createPlaybackWaveform(() =>
-    showWaveform && playback.transport.active && playback.item ? playback.item.file.path : null,
-  );
+  const canSeek = $derived(playback.active && playback.durationMs !== null);
+  const waveform = createPlaybackWaveform(() => (showWaveform ? playback.playbackId : null));
 
   // The printed time and the announced value come from the same clock as the bar. They are
   // rounded down to the whole second, so they change once a second instead of every frame.

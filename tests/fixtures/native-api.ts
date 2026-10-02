@@ -189,6 +189,7 @@ function createNativeMock(options: InstallNativeApiOptions) {
     canGoPrevious: false,
     canGoNext: false,
   };
+  const playbackIdOf = (item: PlaybackItem) => `playback-${item.trackId}`;
   const snapshotOf = (): PlaybackSnapshot => {
     const base = {
       revision: playbackRevision,
@@ -206,7 +207,7 @@ function createNativeMock(options: InstallNativeApiOptions) {
       base,
       session: {
         item: mock.item,
-        playbackId: `playback-${mock.item.trackId}`,
+        playbackId: playbackIdOf(mock.item),
         positionMs: mock.positionMs,
         seekRevision: mock.seekRevision,
         durationMs: mock.durationMs,
@@ -256,8 +257,20 @@ function createNativeMock(options: InstallNativeApiOptions) {
     if (playbackTicker !== null) return;
     playbackTicker = setInterval(() => {
       if (mock.status !== "playing") return;
-      commit({
+      // A tick moves the position and nothing else, as in the backend: the snapshot is not
+      // re-published.
+      mock = {
+        ...mock,
         positionMs: Math.min(mock.positionMs + 250, mock.durationMs ?? mock.positionMs + 250),
+      };
+      if (mock.item === null) return;
+      emit({
+        event: "playbackPositionChanged",
+        payload: {
+          playbackId: playbackIdOf(mock.item),
+          positionMs: mock.positionMs,
+          seekRevision: mock.seekRevision,
+        },
       });
     }, 10);
   };
@@ -478,13 +491,17 @@ function createNativeMock(options: InstallNativeApiOptions) {
       outputSelection = selection;
       return commit({});
     },
-    getPlaybackWaveform: async (path) => {
+    getPlaybackWaveform: async () => {
       recordRequest("waveform");
-      if (!waveformReady || mock.item?.file.path !== path) return null;
+      if (!waveformReady || mock.item === null || mock.status === "stopped") return null;
       const peaks = Array.from({ length: 400 }, (_, index) =>
         Math.round(40 + 200 * Math.abs(Math.sin(index / 9))),
       );
-      return { path, peaks, rms: peaks.map((peak) => Math.round(peak * 0.6)) };
+      return {
+        playbackId: playbackIdOf(mock.item),
+        peaks,
+        rms: peaks.map((peak) => Math.round(peak * 0.6)),
+      };
     },
     getLibraryScanState: async () => scan,
     startLibraryScan: async () => {
@@ -634,7 +651,7 @@ function createNativeMock(options: InstallNativeApiOptions) {
     publishWaveform: () => {
       waveformReady = true;
       if (mock.item !== null) {
-        emit({ event: "waveformReady", payload: { path: mock.item.file.path } });
+        emit({ event: "waveformReady", payload: { playbackId: playbackIdOf(mock.item) } });
       }
     },
     setScanState,

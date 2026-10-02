@@ -40,14 +40,19 @@ const stopped = (revision: number, id: string | null): PlaybackSnapshot => ({
   item: id ? item(id) : null,
 });
 
-const playing = (revision: number, id: string, positionMs: number): PlaybackSnapshot => ({
+const playing = (
+  revision: number,
+  id: string,
+  positionMs: number,
+  seekRevision = 0,
+): PlaybackSnapshot => ({
   status: "playing",
   base: base(revision),
   session: {
     item: item(id),
     playbackId: "1",
     positionMs,
-    seekRevision: 0,
+    seekRevision,
     durationMs: 60_000,
     outputDevice: { id: "speakers", name: "Speakers" },
     channelConversion: "none",
@@ -100,7 +105,6 @@ describe("playback session ordering", () => {
 
     expect(playback.snapshot?.base.revision).toBe(2);
     expect(playback.item?.trackId).toBe("b");
-    expect(playback.playbackRevision).toBe(2);
   });
 
   it("accepts queue revisions independently from playback revisions", () => {
@@ -117,8 +121,8 @@ describe("playback session ordering", () => {
       shuffleEnabled: false,
     });
 
-    expect(playback.playbackRevision).toBe(50);
-    expect(playback.queueRevision).toBe(2);
+    expect(playback.snapshot?.base.revision).toBe(50);
+    expect(playback.queue?.revision).toBe(2);
     expect(playback.queue?.current?.title).toBe("Current track");
   });
 
@@ -169,7 +173,7 @@ describe("playback session ordering", () => {
     playback.setVolume(0.2);
     playback.setVolume(0.8);
     expect(playback.volumePending).toBe(true);
-    expect(playback.output.volume).toBe(0.8);
+    expect(playback.volume).toBe(0.8);
     expect(volumeCalls).toEqual([0.2]);
 
     await Promise.all([playback.pause(), playback.seek(1000)]);
@@ -198,7 +202,7 @@ describe("playback session ordering", () => {
     const first = playback.pause();
     const second = playback.resume();
     expect(playback.transportPending).toBe("pause");
-    expect(playback.transport.pending).toBe("pause");
+    expect(playback.transportPending).toBe("pause");
     await second;
     expect(api.resumePlayback).not.toHaveBeenCalled();
 
@@ -218,7 +222,6 @@ describe("playback session derived state", () => {
     playback.acceptPlayback(playing(3, "a", 500));
 
     expect(playback.item).toBe(first);
-    expect(playback.positionMs).toBe(500);
     expect(playback.durationMs).toBe(60_000);
   });
 
@@ -233,14 +236,14 @@ describe("playback session derived state", () => {
     expect(playback.item?.trackId).toBe("b");
   });
 
-  it("keeps naming the last track while stopped and resets the position", () => {
+  it("keeps naming the last track while stopped and drops the session", () => {
     const playback = createPlayback(baseApi());
 
     playback.acceptPlayback(playing(1, "a", 4_000));
     playback.acceptPlayback(stopped(2, "a"));
 
     expect(playback.item?.trackId).toBe("a");
-    expect(playback.positionMs).toBe(0);
+    expect(playback.playbackId).toBeNull();
     expect(playback.durationMs).toBeNull();
   });
 
@@ -252,6 +255,85 @@ describe("playback session derived state", () => {
     playback.acceptPlayback(playing(1, "a", 0));
 
     expect(accept).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("position events", () => {
+  const position = (positionMs: number, seekRevision = 0, playbackId = "1") => ({
+    playbackId,
+    positionMs,
+    seekRevision,
+  });
+
+  it("feed the clock without touching the snapshot", () => {
+    const accept = vi.fn();
+    const playback = createPlayback(baseApi(), { accept } as never);
+    playback.acceptPlayback(playing(1, "a", 0));
+    const snapshot = playback.snapshot;
+    accept.mockClear();
+
+    playback.acceptPosition(position(250));
+
+    expect(accept).toHaveBeenCalledTimes(1);
+    expect(accept).toHaveBeenCalledWith(
+      expect.objectContaining({ itemId: "queue-a", positionMs: 250 }),
+    );
+    expect(playback.snapshot).toBe(snapshot);
+  });
+
+  it("keep the playing flag the snapshot reported", () => {
+    const accept = vi.fn();
+    const playback = createPlayback(baseApi(), { accept } as never);
+    playback.acceptPlayback(playing(1, "a", 0));
+
+    playback.acceptPosition(position(250));
+
+    expect(accept).toHaveBeenLastCalledWith(expect.objectContaining({ playing: true }));
+  });
+
+  it("are ignored for another session or an older seek", () => {
+    const accept = vi.fn();
+    const playback = createPlayback(baseApi(), { accept } as never);
+    playback.acceptPlayback(playing(1, "a", 0, 1));
+    accept.mockClear();
+
+    playback.acceptPosition(position(250, 0));
+    playback.acceptPosition(position(250, 1, "other"));
+
+    expect(accept).not.toHaveBeenCalled();
+  });
+
+  it("are ignored while paused, so a tick sent before the pause cannot move the clock back", () => {
+    const accept = vi.fn();
+    const playback = createPlayback(baseApi(), { accept } as never);
+    playback.acceptPlayback({ ...playing(1, "a", 1_100), status: "paused" } as PlaybackSnapshot);
+    accept.mockClear();
+
+    playback.acceptPosition(position(1_000));
+
+    expect(accept).not.toHaveBeenCalled();
+  });
+
+  it("are ignored while nothing is loaded", () => {
+    const accept = vi.fn();
+    const playback = createPlayback(baseApi(), { accept } as never);
+    playback.acceptPlayback(stopped(1, "a"));
+    accept.mockClear();
+
+    playback.acceptPosition(position(250));
+
+    expect(accept).not.toHaveBeenCalled();
+  });
+
+  it("arrive through acceptEvent", () => {
+    const accept = vi.fn();
+    const playback = createPlayback(baseApi(), { accept } as never);
+    playback.acceptPlayback(playing(1, "a", 0));
+    accept.mockClear();
+
+    playback.acceptEvent({ event: "playbackPositionChanged", payload: position(500) });
+
+    expect(accept).toHaveBeenCalledWith(expect.objectContaining({ positionMs: 500 }));
   });
 });
 
@@ -314,7 +396,7 @@ describe("starting playback", () => {
     playback.clearError();
 
     expect(playback.error).toBeNull();
-    expect(playback.transport.commandError).toBeNull();
+    expect(playback.error).toBeNull();
   });
 });
 
@@ -337,7 +419,7 @@ describe("changing the volume", () => {
 
     playback.changeVolume(0.4);
 
-    expect(playback.output.volume).toBe(0.4);
+    expect(playback.volume).toBe(0.4);
     expect(setPlaybackMuted).toHaveBeenCalledWith(false);
   });
 

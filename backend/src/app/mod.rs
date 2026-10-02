@@ -80,17 +80,15 @@ impl BackendApp {
             .map_or_else(|_| LibraryScanSnapshot::idle(), Library::scan_state)
     }
 
-    /// Waveform of the file that is loaded right now; `None` while it is still being analyzed.
-    /// Other paths are ignored so the renderer cannot make the backend read arbitrary files.
-    pub fn playback_waveform(&self, path: &str) -> Option<PlaybackWaveform> {
+    /// Waveform of the track that is loaded right now; `None` while it is still being analyzed
+    /// or nothing is loaded. The renderer never names a file, so it cannot make the backend read
+    /// arbitrary ones.
+    pub fn playback_waveform(&self) -> Option<PlaybackWaveform> {
         let snapshot = self.playback.snapshot();
-        let file = &snapshot
-            .active_item()
-            .filter(|item| item.file.path == path)?
-            .file;
-        let waveform = self.waveforms.get_or_queue(file)?;
+        let session = snapshot.session()?;
+        let waveform = self.waveforms.get_or_queue(&session.item.file)?;
         Some(PlaybackWaveform {
-            path: file.path.clone(),
+            playback_id: session.playback_id.clone(),
             peaks: waveform.peaks.clone(),
             rms: waveform.rms.clone(),
         })

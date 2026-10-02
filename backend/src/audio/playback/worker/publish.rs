@@ -13,8 +13,7 @@ impl PlaybackWorker {
                 item: self.last_item.clone(),
             },
             Transport::Loaded(loaded) => {
-                base.can_go_previous = self.queue.can_go_previous()
-                    || previous_restarts_track(loaded.position_ms(), loaded.position.duration_ms);
+                base.can_go_previous = self.loaded_can_go_previous(loaded);
                 base.can_go_next = self.queue.can_go_next();
                 let session = self.render_session(loaded);
                 if loaded.paused {
@@ -68,16 +67,59 @@ impl PlaybackWorker {
         }
     }
 
-    /// Renders the transport as a new revision and tells listeners.
+    /// Renders the transport as a new revision and tells listeners. The snapshot carries the
+    /// newest position too, so a listener that joins here starts from the right place.
     pub(super) fn publish_state(&mut self) -> PlaybackSnapshot {
+        if let Transport::Loaded(loaded) = &mut self.transport {
+            if !loaded.paused {
+                loaded.position.frame = loaded.sample_position();
+            }
+        }
         self.revision = self.revision.saturating_add(1);
         let snapshot = self.render();
+        self.store_position(snapshot.session().map(ActiveSession::position));
         *self
             .snapshot
             .write()
             .unwrap_or_else(std::sync::PoisonError::into_inner) = snapshot.clone();
         self.events.emit(BackendEvent::PlaybackChanged);
         snapshot
+    }
+
+    /// Tells listeners the loaded track moved on, without a new snapshot.
+    pub(super) fn publish_position(&mut self) {
+        let Transport::Loaded(loaded) = &self.transport else {
+            return;
+        };
+        self.store_position(Some(PlaybackPosition {
+            playback_id: loaded.id.to_string(),
+            position_ms: loaded.position_ms(),
+            seek_revision: self.seek_revision,
+        }));
+        self.events.emit(BackendEvent::PlaybackPositionChanged);
+    }
+
+    /// Previous is offered when the queue has an earlier item, or the track has played long
+    /// enough that Previous restarts it.
+    pub(super) fn loaded_can_go_previous(&self, loaded: &Loaded) -> bool {
+        self.queue.can_go_previous()
+            || previous_restarts_track(loaded.position_ms(), loaded.position.duration_ms)
+    }
+
+    fn store_position(&self, position: Option<PlaybackPosition>) {
+        *self
+            .position
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = position;
+    }
+
+    /// Whether Previous is offered, as listeners last saw it.
+    pub(super) fn published_can_go_previous(&self) -> bool {
+        self.snapshot
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .base()
+            .can_go_previous
     }
 
     pub(super) fn publish_queue(&mut self) -> PlaybackQueueSnapshot {

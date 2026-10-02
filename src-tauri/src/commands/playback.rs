@@ -249,8 +249,7 @@ pub async fn clear_queue(
 #[tauri::command]
 #[specta::specta]
 pub async fn get_playback_waveform(
-    path: String,
     state: tauri::State<'_, AppState>,
 ) -> Result<Option<PlaybackWaveform>, PlaybackServiceError> {
-    blocking(&state, move |backend| Ok(backend.playback_waveform(&path))).await
+    blocking(&state, move |backend| Ok(backend.playback_waveform())).await
 }

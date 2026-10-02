@@ -137,7 +137,7 @@
           >
             {title}
           </button>
-          {#if playback.transport.commandError}
+          {#if playback.error}
             <div class="flex min-w-0 items-center gap-2">
               <Tooltip.Root bind:open={errorTooltipOpen}>
                 <Tooltip.Trigger>
@@ -151,11 +151,11 @@
                       onfocus={() => (errorTooltipOpen = true)}
                       onblur={() => (errorTooltipOpen = false)}
                     >
-                      {playback.transport.commandError}
+                      {playback.error}
                     </span>
                   {/snippet}
                 </Tooltip.Trigger>
-                <Tooltip.Content>{playback.transport.commandError}</Tooltip.Content>
+                <Tooltip.Content>{playback.error}</Tooltip.Content>
               </Tooltip.Root>
               <button
                 type="button"

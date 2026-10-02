@@ -17,6 +17,8 @@ The language of Nice Audio Player. Use these terms in code, docs, and tickets; d
 - **PlaybackItem**: a queue entry, carrying the library `track_id`. Nothing looks a playing track up by path.
 - **Output stream**: the one device stream a session opens. It lives until the track ends, stops or the device changes; seeks do not replace it.
 - **Pipeline**: a decode thread and the queue it fills for the output stream. A seek builds a new one and hands its queue to the running stream.
+- **Position event**: the playing position (playback id, position, seek revision), sent on its own while a track plays. The playback snapshot is sent only when state changes, so a tick never re-renders anything but the Playback clock.
+- **Playback id**: identifies one loaded session; stable across seeks, new for every track that loads. The waveform is requested for the loaded item with no arguments and keyed by it.
 - **Playback clock**: the single animation-frame clock that everything drawing the playing position reads.
 - **Now Playing**: the dock extended upward, a layer over the current location. Not a page; Back closes it.
 - **Dock**: the persistent playback bar at the bottom of the workspace.

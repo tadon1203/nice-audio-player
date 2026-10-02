@@ -60,7 +60,6 @@ export function createPlaybackClock(environment: ClockEnvironment = browserEnvir
   let frame = 0;
   let glide: NumberTween | null = null;
   let holds = 0;
-  let lastJump: ClockJump | null = null;
   const jumpListeners = new Set<(jump: ClockJump) => void>();
   const reportListeners = new Set<() => void>();
 
@@ -85,7 +84,6 @@ export function createPlaybackClock(environment: ClockEnvironment = browserEnvir
   };
 
   const onJump = (jump: ClockJump) => {
-    lastJump = jump;
     glide?.stop();
     glide = null;
     if (jump.kind === "seek" && retained > 0) {
@@ -108,7 +106,7 @@ export function createPlaybackClock(environment: ClockEnvironment = browserEnvir
 
   return {
     position,
-    /** Feeds the clock what the latest playback snapshot says about time. */
+    /** Feeds the clock what the latest playback snapshot or position event says about time. */
     accept: (report: ClockReport | null) => {
       const result = reduceClock(state, report, environment.now());
       state = result.state;
@@ -119,7 +117,6 @@ export function createPlaybackClock(environment: ClockEnvironment = browserEnvir
     /** Where playback is now, exactly (not eased): for logic, not for drawing. */
     estimate: () => estimateClock(state, environment.now()),
     playing: () => state.report?.playing === true,
-    durationMs: () => state.report?.durationMs ?? null,
     /**
      * Draws `ms` until the returned function is called, whatever the reports say: a seek has
      * been asked for but not yet reported, and the bar must not fall back to the old position
@@ -147,8 +144,6 @@ export function createPlaybackClock(environment: ClockEnvironment = browserEnvir
         if (retained === 0) stopFrames();
       };
     },
-    /** The latest jump, or null before any. */
-    lastJump: () => lastJump,
     onJump: (listener: (jump: ClockJump) => void) => {
       jumpListeners.add(listener);
       return () => void jumpListeners.delete(listener);

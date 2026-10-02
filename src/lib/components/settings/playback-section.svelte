@@ -19,10 +19,9 @@
   const devices = createAudioOutputDevices(() => deviceMenuOpen);
 
   const path = $derived(signalPath.current);
-  const selection = $derived(playback.outputSelection);
-  const selected = $derived(selection.kind === "device" ? selection.deviceId : DEFAULT_DEVICE);
+  const selected = $derived(playback.outputDeviceId ?? DEFAULT_DEVICE);
   const outputLabel = $derived(
-    path?.output ?? (selection.kind === "device" ? "Output" : "System default"),
+    path?.output ?? (playback.outputDeviceId !== null ? "Output" : "System default"),
   );
   const rows = $derived([
     { label: "Source", value: path?.source ?? "—" },

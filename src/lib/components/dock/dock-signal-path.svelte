@@ -22,11 +22,10 @@
   let open = $state(false);
   const devices = createAudioOutputDevices(() => open);
 
-  const disabled = $derived(playback.transport.connection !== "ready");
-  const selection = $derived(playback.output.outputSelection);
-  const selected = $derived(selection.kind === "device" ? selection.deviceId : DEFAULT_DEVICE);
+  const disabled = $derived(playback.connection !== "ready");
+  const selected = $derived(playback.outputDeviceId ?? DEFAULT_DEVICE);
   const outputLabel = $derived(
-    path.current?.output ?? (selection.kind === "device" ? "Output" : "System default"),
+    path.current?.output ?? (playback.outputDeviceId !== null ? "Output" : "System default"),
   );
   const steps = $derived(
     path.current === null

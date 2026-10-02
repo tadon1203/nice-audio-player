@@ -39,11 +39,12 @@ export const commands = {
 	enqueueTrack: (trackId: string, next: boolean) => __TAURI_INVOKE<PlaybackQueueSnapshot>("enqueue_track", { trackId, next }),
 	clearQueue: () => __TAURI_INVOKE<PlaybackQueueSnapshot>("clear_queue"),
 	/**  Waveform of the loaded track, or `None` while it is analyzed; `waveformReady` follows. */
-	getPlaybackWaveform: (path: string) => __TAURI_INVOKE<{
-	path: string,
+	getPlaybackWaveform: () => __TAURI_INVOKE<{
+	/**  The playback the waveform belongs to, so a late answer cannot be drawn for another track. */
+	playbackId: string,
 	peaks: number[],
 	rms: number[],
-} | null>("get_playback_waveform", { path }),
+} | null>("get_playback_waveform"),
 	getLibraryStatus: () => __TAURI_INVOKE<LibraryStatus>("get_library_status"),
 	getLibraryScanState: () => __TAURI_INVOKE<LibraryScanSnapshot>("get_library_scan_state"),
 	listLibraryRoots: () => __TAURI_INVOKE<LibraryRoot[]>("list_library_roots"),
@@ -132,8 +133,10 @@ export type ActiveSession = {
 	resamplingActive: boolean,
 };
 
-export type AppEvent = { event: "playbackStateChanged"; payload: PlaybackSnapshot } | { event: "playbackQueueStateChanged"; payload: PlaybackQueueSnapshot } | { event: "applicationActivitiesChanged"; payload: ApplicationActivity[] } | { event: "libraryScanStateChanged"; payload: LibraryScanSnapshot } | { event: "waveformReady"; payload: {
-	path: string,
+export type AppEvent = { event: "playbackStateChanged"; payload: PlaybackSnapshot } | { event: "playbackPositionChanged"; payload: PlaybackPosition } | { event: "playbackQueueStateChanged"; payload: PlaybackQueueSnapshot } | { event: "applicationActivitiesChanged"; payload: ApplicationActivity[] } | { event: "libraryScanStateChanged"; payload: LibraryScanSnapshot } | 
+/**  The loaded track's waveform can be asked for again. */
+{ event: "waveformReady"; payload: {
+	playbackId: string,
 } } | { event: "settingsChanged"; payload: AppearanceSettings };
 
 export type AppearancePatch = {
@@ -397,6 +400,16 @@ export type PlaybackItem = {
 	albumTrackCount: number | null,
 };
 
+/**
+ *  Where the loaded track is. Sent on its own, far more often than the snapshot, so a tick
+ *  never carries (or re-renders) the rest of the playback state.
+ */
+export type PlaybackPosition = {
+	playbackId: string,
+	positionMs: number,
+	seekRevision: number,
+};
+
 /**  A queue entry as the queue panel shows it; the file path stays in the backend. */
 export type PlaybackQueueItem = {
 	id: string,
@@ -447,7 +460,8 @@ export type PlaybackSnapshot =
 { status: "stopped"; base: SnapshotBase; item: PlaybackItem | null } | { status: "playing"; base: SnapshotBase; session: ActiveSession } | { status: "paused"; base: SnapshotBase; session: ActiveSession } | { status: "failed"; base: SnapshotBase; item: PlaybackItem | null; playbackId: string | null; error: PlaybackFailureCode };
 
 export type PlaybackWaveform = {
-	path: string,
+	/**  The playback the waveform belongs to, so a late answer cannot be drawn for another track. */
+	playbackId: string,
 	peaks: number[],
 	rms: number[],
 };

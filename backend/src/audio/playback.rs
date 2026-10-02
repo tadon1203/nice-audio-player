@@ -20,8 +20,8 @@ pub use service::{
     PlaybackService, PlaybackServiceError, PlaybackServiceHandle, PlaybackServiceStartError,
 };
 pub use snapshot::{
-    ActiveSession, PlaybackChannelConversion, PlaybackFailureCode, PlaybackQueueItem,
-    PlaybackQueueSnapshot, PlaybackQueueWindow, PlaybackSnapshot, SnapshotBase,
+    ActiveSession, PlaybackChannelConversion, PlaybackFailureCode, PlaybackPosition,
+    PlaybackQueueItem, PlaybackQueueSnapshot, PlaybackQueueWindow, PlaybackSnapshot, SnapshotBase,
 };
 
 #[cfg(test)]

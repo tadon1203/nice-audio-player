@@ -6,17 +6,34 @@
 
 use std::sync::Arc;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Declaration order is delivery order: a state change reaches the host before the position
+/// that belongs to it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum BackendEvent {
     PlaybackChanged,
+    /// The playing position moved; the snapshot did not.
+    PlaybackPositionChanged,
     PlaybackQueueChanged,
     ActivitiesChanged,
     LibraryScanChanged,
-    /// A waveform became available or was refined for this file.
-    WaveformReady {
-        path: String,
-    },
+    /// A waveform became available or was refined for the loaded track.
+    WaveformChanged,
     SettingsChanged,
+}
+
+impl BackendEvent {
+    /// The name logs use for this event.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::PlaybackChanged => "playback_changed",
+            Self::PlaybackPositionChanged => "playback_position_changed",
+            Self::PlaybackQueueChanged => "playback_queue_changed",
+            Self::ActivitiesChanged => "activities_changed",
+            Self::LibraryScanChanged => "library_scan_changed",
+            Self::WaveformChanged => "waveform_changed",
+            Self::SettingsChanged => "settings_changed",
+        }
+    }
 }
 
 /// Receives events on whichever thread produced them, so it must return quickly.
@@ -50,7 +67,7 @@ impl Notifier {
     }
 
     pub fn notify(&self) {
-        self.sink.emit(self.event.clone());
+        self.sink.emit(self.event);
     }
 }
 

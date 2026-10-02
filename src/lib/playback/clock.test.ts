@@ -130,7 +130,6 @@ describe("playback clock", () => {
     report(snapshot("playing", "a", 40_250, 1));
     report(snapshot("playing", "b", 0, 1));
     expect(jumps).toEqual(["seek:10500->40000", "track:40250->0"]);
-    expect(clock.lastJump()?.kind).toBe("track");
   });
 
   it("draws the committed position, never the old one, while a seek is in flight", () => {

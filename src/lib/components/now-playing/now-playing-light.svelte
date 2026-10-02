@@ -19,8 +19,8 @@
   const item = $derived(playback.item);
   // The Light breathes by itself, so only the full budget allows it.
   const breathing = $derived(budget.current === "full");
-  const playing = $derived(playback.transport.status === "playing");
-  const waveform = createPlaybackWaveform(() => item?.file.path ?? null);
+  const playing = $derived(playback.status === "playing");
+  const waveform = createPlaybackWaveform(() => playback.playbackId);
 
   const loudness = createLoudnessLevel({
     clock: playback.clock,

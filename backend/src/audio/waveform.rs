@@ -38,7 +38,8 @@ pub struct Waveform {
 #[derive(Debug, Clone, Serialize, specta::Type, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct PlaybackWaveform {
-    pub path: String,
+    /// The playback the waveform belongs to, so a late answer cannot be drawn for another track.
+    pub playback_id: String,
     pub peaks: Vec<u8>,
     pub rms: Vec<u8>,
 }
@@ -485,9 +486,7 @@ impl Shared {
 
     fn publish(&self, path: &str, stamp: FileStamp, waveform: Waveform) {
         self.remember(path, stamp, waveform);
-        self.events.emit(BackendEvent::WaveformReady {
-            path: path.to_owned(),
-        });
+        self.events.emit(BackendEvent::WaveformChanged);
     }
 
     fn remember(&self, path: &str, stamp: FileStamp, waveform: Waveform) {
@@ -611,9 +610,7 @@ mod tests {
         }
         assert_eq!(
             recorder.events().first(),
-            Some(&BackendEvent::WaveformReady {
-                path: file.path.clone()
-            })
+            Some(&BackendEvent::WaveformChanged)
         );
         assert!(service.get_or_queue(&file).is_some());
         let hash = content_hash(Path::new(&file.path)).unwrap();

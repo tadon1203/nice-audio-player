@@ -27,9 +27,8 @@
    */
   const playback = getPlayback();
   const budget = getMotionBudget();
-  const output = $derived(playback.output);
-  const ready = $derived(playback.transport.connection === "ready");
-  const readout = $derived(formatVolumeDb(output.volume, output.muted));
+  const ready = $derived(playback.connection === "ready");
+  const readout = $derived(formatVolumeDb(playback.volume, playback.muted));
 
   // Dragging the slider tracks the pointer 1:1; only the wheel and mute roll the readout.
   let dragging = $state(false);
@@ -38,8 +37,8 @@
   function onWheel(event: WheelEvent) {
     if (!ready || event.deltaY === 0) return;
     // Pushing past either end of the range nudges the readout instead of doing nothing.
-    const atCeiling = event.deltaY < 0 && output.volume >= 1 && !output.muted;
-    const atFloor = event.deltaY > 0 && (output.volume <= 0 || output.muted);
+    const atCeiling = event.deltaY < 0 && playback.volume >= 1 && !playback.muted;
+    const atFloor = event.deltaY > 0 && (playback.volume <= 0 || playback.muted);
     if (atCeiling || atFloor) {
       // Under reduced motion there is nothing to nudge; the readout already says it is at its end.
       if (budget.current === "reduced") return;
@@ -54,7 +53,7 @@
       );
       return;
     }
-    playback.changeVolume(stepVolumeDb(output.volume, event.deltaY < 0 ? 1 : -1));
+    playback.changeVolume(stepVolumeDb(playback.volume, event.deltaY < 0 ? 1 : -1));
   }
 </script>
 
@@ -72,7 +71,7 @@
     aria-label="Now Playing"
     title="Now Playing"
     aria-pressed={nowPlaying.isOpen}
-    disabled={!playback.transport.active}
+    disabled={!playback.active}
     onclick={() => nowPlaying.toggle()}
     class="max-md:hidden"
   >
@@ -92,11 +91,11 @@
   <Button
     size="icon-lg"
     variant="ghost"
-    aria-label={output.muted ? "Unmute" : "Mute"}
-    disabled={output.mutePending || !ready}
+    aria-label={playback.muted ? "Unmute" : "Mute"}
+    disabled={playback.mutePending || !ready}
     onclick={() => void playback.toggleMute()}
   >
-    {#if output.muted}
+    {#if playback.muted}
       <VolumeX aria-hidden="true" />
     {:else}
       <Volume2 aria-hidden="true" />
@@ -115,11 +114,11 @@
       min={0}
       max={VOLUME_SLIDER_MAX}
       step={1}
-      value={volumeToSlider(output.volume)}
+      value={volumeToSlider(playback.volume)}
       disabled={!ready}
       thumbProps={{
         "aria-label": "Volume",
-        "aria-valuetext": output.muted ? "Muted" : formatVolumeDb(output.volume, false),
+        "aria-valuetext": playback.muted ? "Muted" : formatVolumeDb(playback.volume, false),
       }}
       onValueChange={(position) => playback.changeVolume(sliderToVolume(position))}
     />

@@ -12,10 +12,9 @@
 
   /** Shuffle, previous, play/pause, next, repeat. */
   const playback = getPlayback();
-  const transport = $derived(playback.transport);
-  const playing = $derived(transport.status === "playing");
-  const ready = $derived(transport.connection === "ready");
-  const playLabel = $derived(playing ? "Pause" : transport.active ? "Resume" : "Play");
+  const playing = $derived(playback.status === "playing");
+  const ready = $derived(playback.connection === "ready");
+  const playLabel = $derived(playing ? "Pause" : playback.active ? "Resume" : "Play");
 </script>
 
 <div
@@ -38,7 +37,7 @@
     variant="ghost"
     aria-label="Previous track"
     title="Previous track"
-    disabled={!transport.canGoPrevious}
+    disabled={!playback.canGoPrevious}
     onclick={() => void playback.previous()}
   >
     <SkipBack aria-hidden="true" />
@@ -48,12 +47,12 @@
     variant="default"
     aria-label={playLabel}
     title={playLabel}
-    disabled={!transport.active}
+    disabled={!playback.active}
     onclick={() => void (playing ? playback.pause() : playback.resume())}
     class="relative rounded-full transition-[background-color,color,transform] duration-(--motion-press-duration) ease-(--motion-press-easing) active:translate-y-0 active:scale-[0.94] disabled:bg-secondary disabled:text-muted-foreground disabled:opacity-100"
   >
     <PlayPauseIcon {playing} />
-    {#if transport.active}
+    {#if playback.active}
       <PlayProgressRing />
     {/if}
   </Button>
@@ -62,7 +61,7 @@
     variant="ghost"
     aria-label="Next track"
     title="Next track"
-    disabled={!transport.canGoNext}
+    disabled={!playback.canGoNext}
     onclick={() => void playback.next()}
   >
     <SkipForward aria-hidden="true" />

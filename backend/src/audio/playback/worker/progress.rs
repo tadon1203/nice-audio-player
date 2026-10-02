@@ -67,6 +67,13 @@ impl PlaybackWorker {
         }
         loaded.position.frame = frame;
         loaded.position.last_publish = Instant::now();
-        self.publish_state();
+        self.publish_position();
+        // Previous restarts the track once it has played a while; that is state, not position.
+        let Transport::Loaded(loaded) = &self.transport else {
+            return;
+        };
+        if self.loaded_can_go_previous(loaded) != self.published_can_go_previous() {
+            self.publish_state();
+        }
     }
 }

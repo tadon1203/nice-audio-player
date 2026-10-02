@@ -9,8 +9,8 @@ use super::queue::{PlaybackQueue, PlaybackRepeatMode};
 use super::service::{PlaybackCommand, PlaybackService, PlaybackServiceError, Reply};
 use super::session::should_publish_position;
 use super::snapshot::{
-    ActiveSession, PlaybackChannelConversion, PlaybackFailureCode, PlaybackProcessingInfo,
-    PlaybackQueueSnapshot, PlaybackSnapshot, SnapshotBase,
+    ActiveSession, PlaybackChannelConversion, PlaybackFailureCode, PlaybackPosition,
+    PlaybackProcessingInfo, PlaybackQueueSnapshot, PlaybackSnapshot, SnapshotBase,
 };
 use super::worker::{
     output_failure_code, previous_restarts_track, stream_signal_action, FailureScope,
@@ -20,6 +20,7 @@ use crate::audio::devices::AudioOutputSelection;
 use crate::audio::fake_output::FakeOutput;
 use crate::audio::output::{AudioOutputError, OutputStreamId, PipelineId, StreamFailureKind};
 use crate::audio::volume::{AtomicEffectiveGain, VolumeState};
+use crate::events::BackendEvent;
 use crate::media::validation::ValidatedAudioFile;
 use crate::test_support::{write_pcm_i16_wav, TestDirectory};
 use cpal::StreamInstant;
@@ -37,6 +38,8 @@ struct Harness {
     worker: PlaybackWorker,
     inputs: Receiver<WorkerInput>,
     snapshot: Arc<RwLock<PlaybackSnapshot>>,
+    position: Arc<RwLock<Option<PlaybackPosition>>>,
+    recorded: Arc<crate::events::testing::RecordingEventSink>,
     queue_snapshot: Arc<RwLock<PlaybackQueueSnapshot>>,
     gain: AtomicEffectiveGain,
     output: FakeOutput,
@@ -54,6 +57,8 @@ impl Harness {
             item: None,
         }));
         let queue_snapshot = Arc::new(RwLock::new(PlaybackQueueSnapshot::of(0, &queue)));
+        let position = Arc::new(RwLock::new(None));
+        let (recorded, events) = crate::events::testing::RecordingEventSink::shared();
         let gain = AtomicEffectiveGain::new(1.0);
         let output = FakeOutput::new();
         let preferences = Arc::new(Mutex::new(Vec::new()));
@@ -61,10 +66,11 @@ impl Harness {
         let worker = PlaybackWorker::new(
             WorkerLinks {
                 snapshot: Arc::clone(&snapshot),
+                position: Arc::clone(&position),
                 queue_snapshot: Arc::clone(&queue_snapshot),
                 effective_gain: gain.clone(),
                 inbox,
-                events: crate::events::null_event_sink(),
+                events,
                 observer: Arc::new(move |preferences| observed.lock().unwrap().push(preferences)),
                 backend: Box::new(output.clone()),
             },
@@ -76,6 +82,8 @@ impl Harness {
             worker,
             inputs,
             snapshot,
+            position,
+            recorded,
             queue_snapshot,
             gain,
             output,
@@ -105,6 +113,14 @@ impl Harness {
 
     fn snapshot(&self) -> PlaybackSnapshot {
         self.snapshot.read().unwrap().clone()
+    }
+
+    fn position(&self) -> Option<PlaybackPosition> {
+        self.position.read().unwrap().clone()
+    }
+
+    fn events(&self) -> Vec<BackendEvent> {
+        self.recorded.events()
     }
 
     fn queue_snapshot(&self) -> PlaybackQueueSnapshot {
@@ -569,16 +585,26 @@ fn pause_and_resume_need_a_loaded_track() {
 }
 
 #[test]
-fn a_tick_publishes_the_position_the_speakers_reached() {
+fn a_tick_publishes_the_position_the_speakers_reached_without_a_new_snapshot() {
     let mut harness = Harness::new();
     let tracks = vec![harness.track("a", 2)];
-    harness.start(tracks, 0).unwrap();
+    let started = harness.start(tracks, 0).unwrap();
     harness.output.set_played_frames(44_100);
+    let events = harness.events().len();
 
     std::thread::sleep(Duration::from_millis(260));
     harness.tick();
 
-    assert_eq!(session(&harness.snapshot()).position_ms, 1_000);
+    assert_eq!(harness.position().unwrap().position_ms, 1_000);
+    assert_eq!(
+        harness.position().unwrap().playback_id,
+        session(&started).playback_id
+    );
+    assert_eq!(
+        harness.events()[events..],
+        [BackendEvent::PlaybackPositionChanged]
+    );
+    assert_eq!(harness.snapshot(), started);
 }
 
 #[test]
@@ -587,10 +613,57 @@ fn a_tick_inside_the_publish_interval_publishes_nothing() {
     let tracks = vec![harness.track("a", 2)];
     let started = harness.start(tracks, 0).unwrap();
     harness.output.set_played_frames(44_100);
+    let events = harness.events().len();
 
     harness.tick();
 
     assert_eq!(harness.snapshot(), started);
+    assert_eq!(harness.events().len(), events);
+}
+
+#[test]
+fn a_state_change_carries_the_newest_position() {
+    let mut harness = Harness::new();
+    let tracks = vec![harness.track("a", 2)];
+    harness.start(tracks, 0).unwrap();
+    harness.output.set_played_frames(22_050);
+
+    let muted = harness
+        .call(|reply| PlaybackCommand::Mute { reply })
+        .unwrap();
+
+    assert_eq!(session(&muted).position_ms, 500);
+    assert_eq!(harness.position().unwrap().position_ms, 500);
+}
+
+#[test]
+fn previous_becomes_available_once_the_track_has_played_a_while() {
+    let mut harness = Harness::new();
+    let tracks = vec![harness.track("a", 10)];
+    let started = harness.start(tracks, 0).unwrap();
+    assert!(!started.base().can_go_previous);
+    harness.output.set_played_frames(SAMPLE_RATE as u64 * 5);
+
+    std::thread::sleep(Duration::from_millis(260));
+    harness.tick();
+
+    assert!(harness.snapshot().base().can_go_previous);
+    assert_eq!(
+        harness.events().last(),
+        Some(&BackendEvent::PlaybackChanged)
+    );
+}
+
+#[test]
+fn stopping_clears_the_position() {
+    let mut harness = Harness::new();
+    let tracks = vec![harness.track("a", 2)];
+    harness.start(tracks, 0).unwrap();
+    assert!(harness.position().is_some());
+
+    harness.stop().unwrap();
+
+    assert!(harness.position().is_none());
 }
 
 // ---- the end of a track ----
@@ -941,7 +1014,7 @@ fn the_position_after_a_seek_counts_from_the_target_on_the_same_stream() {
     std::thread::sleep(Duration::from_millis(260));
     harness.tick();
 
-    let position = session(&harness.snapshot()).position_ms;
+    let position = harness.position().unwrap().position_ms;
     assert!((1_450..=1_550).contains(&position), "position {position}");
 }
 

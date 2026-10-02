@@ -3,6 +3,7 @@ import type {
   AudioOutputSelection,
   PlaybackContext,
   PlaybackItem,
+  PlaybackPosition,
   PlaybackQueueSnapshot,
   PlaybackRepeatMode,
   PlaybackSnapshot,
@@ -26,12 +27,11 @@ export type TransportCommand =
 const acceptsRevision = (incoming: number | null, current: number | null) =>
   incoming === null ? current === null : current === null || incoming >= current;
 
-const SYSTEM_DEFAULT: AudioOutputSelection = { kind: "systemDefault" };
-
 /**
  * Mirrors the backend's playback state. Raw fields hold what the backend said; everything a
- * component shows is derived from them, so a position tick changes `positionMs` and nothing
- * else, and `item` keeps its identity while the same queue item plays.
+ * component shows is a primitive derived from them, so a component re-renders only for the
+ * fact it reads. Position never lands here: position events feed the clock and nothing else,
+ * and `item` keeps its identity while the same queue item plays.
  */
 export class Playback {
   readonly clock: PlaybackClock;
@@ -43,8 +43,6 @@ export class Playback {
   item = $state.raw<PlaybackItem | null>(null);
   /** How the current item was reached: Next/Previous, or anything else (counts as "next"). */
   lastNavigation = $state.raw<PlaybackNavigation>("next");
-  playbackRevision = $state.raw<number | null>(null);
-  queueRevision = $state.raw<number | null>(null);
   connection = $state.raw<PlaybackConnection>("loading");
   transportPending = $state.raw<TransportCommand | null>(null);
   seekPending = $state.raw(false);
@@ -62,37 +60,25 @@ export class Playback {
   #pendingNavigation: PlaybackNavigation | null = null;
 
   readonly #session = $derived(snapshotSession(this.snapshot));
-  readonly positionMs = $derived(this.#session?.positionMs ?? 0);
+  readonly status = $derived(this.snapshot?.status ?? ("stopped" as const));
+  /** True while a track is loaded, whether it is playing or paused. */
+  readonly active = $derived(isActivePlayback(this.snapshot));
+  /** Identifies the loaded session; stable across seeks, new for every track that loads. */
+  readonly playbackId = $derived(this.#session?.playbackId ?? null);
   readonly durationMs = $derived(this.#session?.durationMs ?? null);
-  readonly transport = $derived({
-    status: this.snapshot?.status ?? ("stopped" as const),
-    active: isActivePlayback(this.snapshot),
-    canGoPrevious: this.snapshot?.base.canGoPrevious ?? false,
-    canGoNext: this.snapshot?.base.canGoNext ?? false,
-    connection: this.connection,
-    pending: this.transportPending,
-    seekPending: this.seekPending,
-    commandError: this.error,
-  });
-  readonly #deviceId = $derived.by(() => {
+  readonly canGoPrevious = $derived(this.snapshot?.base.canGoPrevious ?? false);
+  readonly canGoNext = $derived(this.snapshot?.base.canGoNext ?? false);
+  readonly volume = $derived(this.volumePreview ?? this.snapshot?.base.volume ?? 1);
+  readonly muted = $derived(this.snapshot?.base.muted ?? false);
+  /** The chosen output device, or null for the system default. */
+  readonly outputDeviceId = $derived.by(() => {
     const selection = this.snapshot?.base.outputSelection;
     return selection?.kind === "device" ? selection.deviceId : null;
-  });
-  readonly outputSelection = $derived<AudioOutputSelection>(
-    this.#deviceId === null ? SYSTEM_DEFAULT : { kind: "device", deviceId: this.#deviceId },
-  );
-  readonly output = $derived({
-    volume: this.volumePreview ?? this.snapshot?.base.volume ?? 1,
-    muted: this.snapshot?.base.muted ?? false,
-    mutePending: this.mutePending,
-    deviceId: this.#deviceId,
-    outputSelection: this.outputSelection,
   });
   readonly repeatMode = $derived<PlaybackRepeatMode>(this.queue?.repeatMode ?? "off");
   readonly shuffleEnabled = $derived(this.queue?.shuffleEnabled ?? false);
   /** Which library track is loaded, for highlighting track rows. */
   readonly activeTrackId = $derived(this.item?.trackId ?? null);
-  readonly status = $derived(this.snapshot?.status ?? ("stopped" as const));
 
   constructor(api: TNativeAPI, clock: PlaybackClock) {
     this.#api = api;
@@ -106,7 +92,7 @@ export class Playback {
   }
 
   acceptPlayback(snapshot: PlaybackSnapshot) {
-    if (!acceptsRevision(snapshot.base.revision, this.playbackRevision)) return;
+    if (!acceptsRevision(snapshot.base.revision, this.snapshot?.base.revision ?? null)) return;
     const incoming = snapshotItem(snapshot);
     const itemChanged = incoming?.queueItemId !== this.item?.queueItemId;
     if (itemChanged) {
@@ -115,18 +101,29 @@ export class Playback {
       this.item = incoming;
     }
     this.snapshot = snapshot;
-    this.playbackRevision = snapshot.base.revision;
     this.clock.accept(clockReportOf(snapshot));
   }
 
   acceptQueue(queue: PlaybackQueueSnapshot) {
-    if (!acceptsRevision(queue.revision, this.queueRevision)) return;
+    if (!acceptsRevision(queue.revision, this.queue?.revision ?? null)) return;
     this.queue = queue;
-    this.queueRevision = queue.revision;
+  }
+
+  /**
+   * Time only: a position for another session or seek than the snapshot's is stale. A paused
+   * snapshot already holds the exact position, and a tick sent before the pause must not move it.
+   */
+  acceptPosition(position: PlaybackPosition) {
+    const session = this.#session;
+    if (session === null || this.status !== "playing") return;
+    if (position.playbackId !== session.playbackId) return;
+    if (position.seekRevision !== session.seekRevision) return;
+    this.clock.accept(clockReportOf(this.snapshot, position));
   }
 
   acceptEvent(event: AppEvent) {
     if (event.event === "playbackStateChanged") this.acceptPlayback(event.payload);
+    if (event.event === "playbackPositionChanged") this.acceptPosition(event.payload);
     if (event.event === "playbackQueueStateChanged") this.acceptQueue(event.payload);
   }
 
@@ -270,7 +267,7 @@ export class Playback {
   /** Sets the volume; changing it while muted unmutes, so the change is audible. */
   changeVolume(value: number) {
     this.setVolume(value);
-    if (this.output.muted && !this.mutePending) void this.toggleMute();
+    if (this.muted && !this.mutePending) void this.toggleMute();
   }
 
   /** Dismisses the last reported failure. */
@@ -283,8 +280,7 @@ export class Playback {
     this.mutePending = true;
     this.error = null;
     try {
-      const muted = this.snapshot?.base.muted ?? false;
-      this.acceptPlayback(await this.#api.setPlaybackMuted(!muted));
+      this.acceptPlayback(await this.#api.setPlaybackMuted(!this.muted));
     } catch (error) {
       this.#setError(error);
     } finally {

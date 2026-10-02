@@ -105,7 +105,7 @@ describe("Settings", () => {
     expect(settings.artworkBackdrop).toBe(false);
     expect(settings.calmMotion).toBe(true);
 
-    settings.mirrorEvent({ event: "waveformReady", payload: { path: "a" } });
+    settings.mirrorEvent({ event: "waveformReady", payload: { playbackId: "a" } });
     expect(settings.calmMotion).toBe(true);
   });
 });

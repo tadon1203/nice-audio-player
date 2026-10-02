@@ -12,7 +12,8 @@ use super::item::PlaybackItemSeed;
 use super::preferences::{PlaybackPreferences, PreferencesObserver};
 use super::queue::{PlaybackQueue, PlaybackRepeatMode};
 use super::snapshot::{
-    PlaybackFailureCode, PlaybackQueueSnapshot, PlaybackQueueWindow, PlaybackSnapshot, SnapshotBase,
+    PlaybackFailureCode, PlaybackPosition, PlaybackQueueSnapshot, PlaybackQueueWindow,
+    PlaybackSnapshot, SnapshotBase,
 };
 use super::worker::{PlaybackWorker, WorkerLinks};
 use crate::audio::devices::AudioOutputSelection;
@@ -196,6 +197,7 @@ pub(super) enum PlaybackCommand {
 pub struct PlaybackServiceHandle {
     inbox: Inbox,
     snapshot: Arc<RwLock<PlaybackSnapshot>>,
+    position: Arc<RwLock<Option<PlaybackPosition>>>,
     queue_snapshot: Arc<RwLock<PlaybackQueueSnapshot>>,
 }
 
@@ -232,8 +234,10 @@ impl PlaybackService {
             item: None,
         }));
         let queue_state = Arc::new(RwLock::new(PlaybackQueueSnapshot::of(0, &queue)));
+        let position = Arc::new(RwLock::new(None));
         let links = WorkerLinks {
             snapshot: Arc::clone(&state),
+            position: Arc::clone(&position),
             queue_snapshot: Arc::clone(&queue_state),
             effective_gain,
             inbox: inbox.clone(),
@@ -251,6 +255,7 @@ impl PlaybackService {
             handle: PlaybackServiceHandle {
                 inbox,
                 snapshot: state,
+                position,
                 queue_snapshot: queue_state,
             },
             worker: Mutex::new(Some(worker)),
@@ -263,6 +268,10 @@ impl PlaybackService {
 
     pub fn snapshot(&self) -> PlaybackSnapshot {
         self.handle.snapshot()
+    }
+
+    pub fn position(&self) -> Option<PlaybackPosition> {
+        self.handle.position()
     }
 
     pub fn queue_snapshot(&self) -> PlaybackQueueSnapshot {
@@ -290,6 +299,14 @@ impl Drop for PlaybackService {
 impl PlaybackServiceHandle {
     pub fn snapshot(&self) -> PlaybackSnapshot {
         self.snapshot
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+    }
+
+    /// The newest position of the loaded track, `None` when nothing is loaded.
+    pub fn position(&self) -> Option<PlaybackPosition> {
+        self.position
             .read()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clone()

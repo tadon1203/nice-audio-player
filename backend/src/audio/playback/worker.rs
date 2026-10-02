@@ -22,8 +22,8 @@ use super::session::{
     StartRequest, Transport,
 };
 use super::snapshot::{
-    ActiveSession, PlaybackFailureCode, PlaybackProcessingInfo, PlaybackQueueSnapshot,
-    PlaybackSnapshot, SnapshotBase,
+    ActiveSession, PlaybackFailureCode, PlaybackPosition, PlaybackProcessingInfo,
+    PlaybackQueueSnapshot, PlaybackSnapshot, SnapshotBase,
 };
 use super::source_loader::SourceLoad;
 use crate::audio::compressed_source::{CompressedAudioSource, CompressedSourceError};
@@ -136,6 +136,7 @@ enum PipelineOwner {
 /// The channels and shared state the service hands to the worker thread.
 pub(super) struct WorkerLinks {
     pub snapshot: Arc<RwLock<PlaybackSnapshot>>,
+    pub position: Arc<RwLock<Option<PlaybackPosition>>>,
     pub queue_snapshot: Arc<RwLock<PlaybackQueueSnapshot>>,
     pub effective_gain: AtomicEffectiveGain,
     pub inbox: Inbox,
@@ -165,6 +166,7 @@ pub(super) struct PlaybackWorker {
     output_selection: AudioOutputSelection,
     last_tick: Instant,
     snapshot: Arc<RwLock<PlaybackSnapshot>>,
+    position: Arc<RwLock<Option<PlaybackPosition>>>,
     queue_snapshot: Arc<RwLock<PlaybackQueueSnapshot>>,
     inbox: Inbox,
     events: SharedEventSink,
@@ -197,6 +199,7 @@ impl PlaybackWorker {
             output_selection,
             last_tick: Instant::now(),
             snapshot: links.snapshot,
+            position: links.position,
             queue_snapshot: links.queue_snapshot,
             inbox: links.inbox,
             events: links.events,

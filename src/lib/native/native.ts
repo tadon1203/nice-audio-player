@@ -51,6 +51,7 @@ function withNativeErrors(source: Commands): Commands {
  */
 const appEventNames: Readonly<Record<AppEvent["event"], true>> = {
   playbackStateChanged: true,
+  playbackPositionChanged: true,
   playbackQueueStateChanged: true,
   applicationActivitiesChanged: true,
   libraryScanStateChanged: true,

@@ -324,3 +324,32 @@ test("the progress line and the elapsed time share one centre line", async ({ pa
   expect(Math.abs(centre(line) - centre(elapsed))).toBeLessThanOrEqual(0.5);
   expect(Math.abs(centre(line) - centre(remaining))).toBeLessThanOrEqual(0.5);
 });
+
+test("position ticks redraw neither the signal path nor the volume row", async ({ page }) => {
+  const dock = await playFirstTrack(page);
+  const quiet = dock.locator('[data-region="signal-path"], [data-region="volume"]');
+  await quiet.first().waitFor();
+  await page.evaluate(() => {
+    const counter = { mutations: 0 };
+    (window as unknown as { __quietMutations: typeof counter }).__quietMutations = counter;
+    const observer = new MutationObserver((records) => (counter.mutations += records.length));
+    document
+      .querySelectorAll('[data-region="signal-path"], [data-region="volume"]')
+      .forEach((node) =>
+        observer.observe(node, { subtree: true, childList: true, attributes: true }),
+      );
+    window.__niceAudioPlayerTest?.startPlaybackTicks();
+  });
+
+  // The seek bar still moves, so ticks are arriving.
+  const seek = dock.getByRole("slider", { name: "Playback position" });
+  const before = await seek.getAttribute("aria-valuenow");
+  await expect.poll(() => seek.getAttribute("aria-valuenow")).not.toBe(before);
+  await page.waitForTimeout(300);
+
+  const mutations = await page.evaluate(
+    () =>
+      (window as unknown as { __quietMutations: { mutations: number } }).__quietMutations.mutations,
+  );
+  expect(mutations).toBe(0);
+});

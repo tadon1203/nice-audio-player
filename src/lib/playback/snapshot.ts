@@ -1,6 +1,7 @@
 import type {
   ActiveSession,
   PlaybackItem,
+  PlaybackPosition,
   PlaybackRepeatMode,
   PlaybackSnapshot,
 } from "$lib/native";
@@ -25,13 +26,19 @@ export function snapshotItem(snapshot: PlaybackSnapshot | null): PlaybackItem | 
   return isActivePlayback(snapshot) ? snapshot.session.item : snapshot.item;
 }
 
-/** What the clock needs from a snapshot. */
-export function clockReportOf(snapshot: PlaybackSnapshot | null): ClockReport | null {
+/**
+ * What the clock needs from a snapshot, with the position of a newer position event when there
+ * is one. A position that is not for this session and seek is stale and ignored.
+ */
+export function clockReportOf(
+  snapshot: PlaybackSnapshot | null,
+  position?: PlaybackPosition,
+): ClockReport | null {
   if (!isActivePlayback(snapshot)) return null;
   const { session } = snapshot;
   return {
     itemId: session.item.queueItemId,
-    positionMs: session.positionMs,
+    positionMs: position?.positionMs ?? session.positionMs,
     durationMs: session.durationMs,
     playing: snapshot.status === "playing",
     seekRevision: session.seekRevision,

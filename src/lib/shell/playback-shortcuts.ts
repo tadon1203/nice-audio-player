@@ -1,5 +1,5 @@
 import type { Playback } from "$lib/playback/playback.svelte";
-import { isActivePlayback, nextRepeatMode } from "$lib/playback/snapshot";
+import { nextRepeatMode } from "$lib/playback/snapshot";
 import { stepVolumeDb } from "$lib/playback/volume-step";
 import { nextSeekPosition } from "$lib/ui/waveform/waveform-model";
 import { nowPlaying } from "./now-playing.svelte";
@@ -32,7 +32,7 @@ export function handlePlaybackShortcut(event: KeyboardEvent, playback: Playback)
   if (event.key === "l" && event.ctrlKey) {
     event.preventDefault();
     // Like the dock button, it has nothing to open without a track (closing always works).
-    if (isActivePlayback(playback.snapshot) || nowPlaying.isOpen) nowPlaying.toggle();
+    if (playback.active || nowPlaying.isOpen) nowPlaying.toggle();
     return;
   }
 
@@ -76,12 +76,12 @@ export function handlePlaybackShortcut(event: KeyboardEvent, playback: Playback)
   if ((event.key === "ArrowUp" || event.key === "ArrowDown") && event.ctrlKey) {
     if (snapshot === null) return;
     event.preventDefault();
-    playback.changeVolume(stepVolumeDb(playback.output.volume, event.key === "ArrowUp" ? 1 : -1));
+    playback.changeVolume(stepVolumeDb(playback.volume, event.key === "ArrowUp" ? 1 : -1));
     return;
   }
 
   if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
-    if (!isActivePlayback(snapshot)) return;
+    if (!playback.active) return;
     if (event.ctrlKey) {
       event.preventDefault();
       void (event.key === "ArrowLeft" ? playback.previous() : playback.next());
@@ -99,8 +99,8 @@ export function handlePlaybackShortcut(event: KeyboardEvent, playback: Playback)
 
   if (event.key === " " || event.code === "Space") {
     if (isInteractiveTarget(event.target)) return;
-    if (!isActivePlayback(snapshot)) return;
+    if (!playback.active) return;
     event.preventDefault();
-    void (snapshot.status === "playing" ? playback.pause() : playback.resume());
+    void (playback.status === "playing" ? playback.pause() : playback.resume());
   }
 }
