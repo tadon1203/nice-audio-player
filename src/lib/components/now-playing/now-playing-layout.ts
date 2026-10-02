@@ -32,3 +32,30 @@ export function contentFade(node: Element) {
   const reduced = prefersReducedMotion.current;
   return fade(node, { ...motionFor("large"), delay: reduced ? 0 : CONTENT_DELAY_MS });
 }
+
+/** A column that comes or goes while Now Playing is open (lyrics found or lost): a plain crossfade. */
+export function columnFade(node: Element) {
+  return fade(node, motionFor("large"));
+}
+
+/** How far lyrics travel while a track change swaps them, in px: a nudge, not a slide. */
+const SWAP_PX = 12;
+
+/**
+ * The lyrics column on a track change: the old lyrics leave and the new ones arrive crossfading,
+ * with no delay. Going to the next track the old lyrics leave to the left; going back, to the
+ * right; the new ones come from the opposite side. Under reduced motion it is the plain
+ * crossfade.
+ */
+export function lyricsSwap(
+  _node: Element,
+  { direction, leaving }: { direction: "next" | "previous"; leaving: boolean },
+) {
+  const motion = motionFor("move");
+  const sign = (direction === "next" ? -1 : 1) * (leaving ? 1 : -1);
+  const distance = prefersReducedMotion.current ? 0 : SWAP_PX;
+  return {
+    ...motion,
+    css: (t: number, u: number) => `opacity: ${t}; translate: ${sign * u * distance}px 0`,
+  };
+}

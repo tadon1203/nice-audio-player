@@ -4,7 +4,7 @@
 </script>
 
 <script lang="ts">
-  import { onMount, tick, type Snippet } from "svelte";
+  import { onMount, tick } from "svelte";
   import { watchClock } from "$lib/playback/clock";
   import { getPlayback } from "$lib/playback/context";
   import { createPlaybackWaveform } from "$lib/playback/waveform.svelte";
@@ -29,14 +29,11 @@
     showWaveform = true,
     class: className,
     timeClass,
-    trailing,
   }: {
     height: number;
     showWaveform?: boolean;
     class?: string;
     timeClass?: string;
-    /** Placed after the remaining time: Now Playing's next track. */
-    trailing?: Snippet;
   } = $props();
 
   const playback = getPlayback();
@@ -146,5 +143,4 @@
   </span>
   {@render seekBar()}
   <span class={cn("shrink-0", timeClass)}>{@render remainingButton()}</span>
-  {@render trailing?.()}
 </div>

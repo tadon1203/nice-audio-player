@@ -1,10 +1,6 @@
 import { untrack } from "svelte";
 import type { Attachment } from "svelte/attachments";
-import { getMotionBudget } from "$lib/shell/motion-budget.svelte";
-import { RetargetableSpring } from "$lib/ui/motion/retargetable-spring.svelte";
-import { springLinear } from "$lib/ui/motion/spring-curve";
-import { crossfade, motionTokens } from "$lib/ui/motion/tokens";
-import { anchorScrollTop } from "./anchor-column";
+import { createAnchorFollow } from "./anchor-follow.svelte";
 import {
   decideLineChange,
   isScrollIntentKey,
@@ -13,12 +9,6 @@ import {
   type OffscreenSide,
   type ScrollHow,
 } from "./lyrics-follow-model";
-
-const FADE_MS = crossfade.duration;
-/** The glide ends this close to its target. */
-const GLIDE_END_PX = 0.5;
-/** A scroll position further than this from what the glide wrote was moved by something else. */
-const GLIDE_INTERRUPT_PX = 1;
 
 const isGutterTarget = (target: EventTarget | null) =>
   target instanceof Element && target.closest('[data-slot="lyrics-gutter"]') !== null;
@@ -35,80 +25,18 @@ const isGutterTarget = (target: EventTarget | null) =>
  * component initialises.
  */
 export function createLyricsFollow(currentIndex: () => number) {
-  const budget = getMotionBudget();
   const lines = new Map<number, HTMLElement>();
   let mode = $state<FollowMode>("follow");
   let offscreen = $state.raw<OffscreenSide>(null);
-  let container = $state.raw<HTMLElement | null>(null);
   let lastInteractionAt = 0;
   let previousIndex: number | null = null;
-  let fade: Animation | null = null;
-  // The scroll position as a spring (retargeted by every line change, keeping its velocity). It
-  // is written to the container only while a glide is active.
-  const glide = new RetargetableSpring(0, {
-    precision: GLIDE_END_PX,
-    duration: motionTokens.move.duration,
-  });
-  let gliding = $state(false);
-  /** The value last written to `scrollTop` by the glide, to tell whether something else moved it. */
-  let lastWritten: number | null = null;
-
-  const stopRunning = () => {
-    fade?.cancel();
-    fade = null;
-    glide.stop();
-    gliding = false;
-  };
-
-  $effect(() => {
-    const element = container;
-    if (!gliding || element === null) return;
-    const value = glide.current;
-    const goal = glide.target;
-    // Something else moved the list (the wheel, the scrollbar, the browser clamping it): let go.
-    if (lastWritten !== null && Math.abs(element.scrollTop - lastWritten) > GLIDE_INTERRUPT_PX) {
-      gliding = false;
-      return;
-    }
-    // Close enough: land exactly on the target and stop.
-    if (Math.abs(value - goal) < GLIDE_END_PX) {
-      element.scrollTop = goal;
-      gliding = false;
-      return;
-    }
-    element.scrollTop = value;
-    lastWritten = value;
-  });
+  let container = $state.raw<HTMLElement | null>(null);
+  const mover = createAnchorFollow();
+  const stopRunning = mover.stop;
 
   const scrollTo = (index: number, how: ScrollHow) => {
-    const element = container;
     const line = lines.get(index);
-    if (element === null || line === undefined) return;
-    stopRunning();
-    const reduced = budget.current === "reduced";
-    const target = anchorScrollTop({
-      rowTop: line.offsetTop,
-      rowHeight: line.offsetHeight,
-      clientHeight: element.clientHeight,
-      scrollHeight: element.scrollHeight,
-    });
-    if (reduced || how !== "animate") {
-      element.scrollTop = target;
-      if (how === "fade" && !reduced) {
-        fade = element.animate(
-          { opacity: [0, 1] },
-          {
-            duration: FADE_MS,
-            easing: springLinear,
-          },
-        );
-      }
-      return;
-    }
-    glide.set(element.scrollTop, { instant: true });
-    glide.set(target);
-    lastWritten = null;
-    gliding = true;
+    if (line !== undefined) mover.scrollToRow(line, how);
   };
 
   const markUserScroll = () => {
@@ -138,8 +66,6 @@ export function createLyricsFollow(currentIndex: () => number) {
       if (decision.scroll !== null) scrollTo(current, decision.scroll);
     });
   });
-
-  $effect(() => stopRunning);
 
   // Which side the current line is off-screen on, while the reader is free.
   $effect(() => {
@@ -173,7 +99,9 @@ export function createLyricsFollow(currentIndex: () => number) {
   /** The scroll container. */
   const containerAttachment: Attachment<HTMLElement> = (node) => {
     container = node;
+    const detach = mover.attach(node);
     return () => {
+      detach?.();
       if (container === node) container = null;
     };
   };

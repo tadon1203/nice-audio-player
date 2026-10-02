@@ -61,22 +61,18 @@ for (const size of SIZES) {
   });
 }
 
-test("shows the queue rail and no Up next in the waveform band at 1920 with lyrics", async ({
-  page,
-  native,
-}) => {
+test("shows the queue as a rail with no switch at 1920 with lyrics", async ({ page, native }) => {
   const layer = await openNowPlaying(page, native, SIZES[2], true);
-  await expect(layer.getByText("Up next", { exact: true })).toBeVisible();
-  await expect(layer.getByRole("button", { name: /Open the queue/ })).toBeHidden();
+  await expect(layer.getByRole("list", { name: "Queue" })).toBeVisible();
+  await expect(layer.getByRole("button", { name: "Lyrics", exact: true })).toBeHidden();
 });
 
-test("shows Up next in the waveform band and no rail at 1360 with lyrics", async ({
-  page,
-  native,
-}) => {
+test("shows a Lyrics / Queue switch and no rail at 1360 with lyrics", async ({ page, native }) => {
   const layer = await openNowPlaying(page, native, SIZES[1], true);
-  await expect(layer.getByRole("button", { name: /Open the queue/ })).toBeVisible();
-  await expect(layer.getByText("Up next", { exact: true })).toBeHidden();
+  await expect(layer.getByRole("list", { name: "Queue" })).toBeHidden();
+  await layer.getByRole("button", { name: "Queue", exact: true }).click();
+  await expect(layer.getByRole("list", { name: "Queue" })).toBeVisible();
+  await expect(layer.getByRole("log", { name: "Lyrics" })).toBeHidden();
 });
 
 test("puts the current row 40% from the top of the queue without lyrics", async ({
