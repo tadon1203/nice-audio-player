@@ -15,15 +15,15 @@
   import { EDGE_MASK, opacityAtDistance } from "./anchor-column";
   import { createAnchorPadding } from "./anchor-column.svelte";
   import { createAnchorFollow } from "./anchor-follow.svelte";
-  import { buildQueueRows, gutterLabel, hiddenUpcomingCount } from "./queue-rows";
+  import { buildQueueRows, hiddenUpcomingCount } from "./queue-rows";
 
   /**
    * What really plays, in the order it plays: history (oldest first), the current track, then
    * what is upcoming. One list wherever Now Playing shows it (beside lyrics or alone); its text
    * is sized from the column's width (`cqi`), and the current track sits 40% from the top like
    * the current lyric line. It scrolls there when the current track changes, and only then.
-   * Only upcoming rows can be played, which moves within the queue and so replaces nothing;
-   * editing stays in the queue panel.
+   * Any other row can be played, which moves within the queue and so replaces nothing; the
+   * Gutter numbers rows from the top of the queue. Editing stays in the queue panel.
    */
   let { class: className }: { class?: string } = $props();
 
@@ -40,6 +40,8 @@
   const currentId = $derived(current?.id ?? null);
   const hasRows = $derived(current !== null || history.length + upcoming.length > 0);
   const rows = $derived(buildQueueRows(history, current, upcoming));
+  /** Where the current track sits in `rows` (past rows are before it). */
+  const currentIndex = $derived(history.length);
 
   // Luminance moves as a `move`, like a lyric line; under reduced motion it is the short crossfade.
   const motion = $derived(motionFor("move"));
@@ -72,19 +74,19 @@
       class={cn("relative h-full overflow-y-auto", EDGE_MASK)}
     >
       <div aria-hidden="true" class={SPACER} style:height="{anchor.top}px"></div>
-      {#each rows as { item, offset }, index (item.id)}
-        {@const isCurrent = offset === 0}
-        {@const isPast = offset < 0}
+      {#each rows as item, index (item.id)}
+        {@const isCurrent = current !== null && index === currentIndex}
+        {@const isPast = index < currentIndex}
         <div
           animate:flipMotion
           role="listitem"
           aria-current={isCurrent ? "true" : undefined}
-          style:opacity={opacityAtDistance(Math.abs(index - history.length))}
+          style:opacity={opacityAtDistance(Math.abs(index - currentIndex))}
           style:transition={transition("opacity")}
         >
           <button
             type="button"
-            disabled={offset <= 0}
+            disabled={isCurrent}
             aria-label="Play {item.title}"
             onclick={() => void playback.playQueueItem(item.id)}
             style:transition={transition("color")}
@@ -103,8 +105,8 @@
                   aria-hidden="true"
                   class="size-3.5 fill-(--artwork-accent) text-(--artwork-accent)"
                 />
-              {:else if offset > 0}
-                {gutterLabel(offset)}
+              {:else}
+                {index + 1}
               {/if}
             </span>
             <Artwork artwork={item.artwork} class="size-10 shrink-0 rounded-sm" />

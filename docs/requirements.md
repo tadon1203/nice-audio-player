@@ -54,7 +54,7 @@ Dragging the seek bar slows down the further the pointer is from the bar (or wit
 
 - Local `.lrc` sidecar files and embedded lyrics; sidecars may be UTF-8, UTF-16, or a legacy encoding such as Shift_JIS
 - Lyrics are read again after a library scan finishes
-- Now Playing keeps one layout with or without lyrics: the Sleeve and track info on the left; on the right the lyrics, or the queue (click to play an upcoming track) when there are none. With lyrics, the queue sits beside them on a wide window and behind a Lyrics / Queue switch on a narrower one. The queue is the same list wherever it appears, and the current line and the current track sit at the same height wherever they appear.
+- Now Playing keeps one layout with or without lyrics: the Sleeve and track info on the left; on the right the lyrics, or the queue (click any track to play it; rows are numbered from the top of the queue) when there are none. With lyrics, the queue sits beside them on a wide window and behind a Lyrics / Queue switch on a narrower one. The queue is the same list wherever it appears, and the current line and the current track sit at the same height wherever they appear.
 - Synced lyrics follow the playing line. Scrolling them by hand lets the reader look around, with every line equally readable; they follow again when the reader brings the current line back, on a seek, on `Jump to current line` or `Esc`, or after a short pause, longer when the current line is out of view and not counted while the pointer rests on the lyrics. A click alone never stops following.
 
 ## Metadata
