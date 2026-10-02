@@ -20,7 +20,7 @@ const GLIDE_INTERRUPT_PX = 1;
  * A glide lets go when something else moves the list (the wheel, the scrollbar, the browser
  * clamping it).
  */
-export function createAnchorFollow({ onInterrupted }: { onInterrupted?: () => void } = {}) {
+export function createAnchorFollow() {
   const budget = getMotionBudget();
   let container = $state.raw<HTMLElement | null>(null);
   let fade: Animation | null = null;
