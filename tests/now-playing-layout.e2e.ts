@@ -1,5 +1,6 @@
 import { type Page } from "@playwright/test";
 import type { Native } from "./fixtures/native-api";
+import { motionMs } from "./fixtures/motion";
 import { expect, test } from "./fixtures/test";
 
 const SIZES = [
@@ -102,7 +103,7 @@ test("keeps the artist line in place while the title animates", async ({ page, n
   await expect(artist).toBeVisible();
   const before = (await artist.boundingBox())!;
   await page.keyboard.press("Control+ArrowRight");
-  for (const wait of [0, 150, 650]) {
+  for (const wait of [0, motionMs("move") / 2, motionMs("large") * 2]) {
     await page.waitForTimeout(wait);
     const box = (await artist.boundingBox())!;
     expect(box.y).toBeCloseTo(before.y, 0);

@@ -1,5 +1,6 @@
 import { type Page } from "@playwright/test";
 import { albumSequence } from "./fixtures/data";
+import { motionMs } from "./fixtures/motion";
 import { expect, test } from "./fixtures/test";
 import { workspaceViewport } from "./fixtures/locators";
 
@@ -354,7 +355,7 @@ test("position ticks redraw neither the signal path nor the volume row", async (
   const seek = dock.getByRole("slider", { name: "Playback position" });
   const before = await seek.getAttribute("aria-valuenow");
   await expect.poll(() => seek.getAttribute("aria-valuenow")).not.toBe(before);
-  await page.waitForTimeout(300);
+  await page.waitForTimeout(motionMs("move"));
 
   const mutations = await page.evaluate(
     () =>

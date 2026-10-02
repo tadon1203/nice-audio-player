@@ -1,5 +1,6 @@
 import { type Page } from "@playwright/test";
 import { albumSequence } from "./fixtures/data";
+import { motionMs } from "./fixtures/motion";
 import { expect, test } from "./fixtures/test";
 
 // Real timing: the rest of the suite runs with reduced motion (see playwright.config.ts).
@@ -25,7 +26,7 @@ async function sampleFrames<T>(
   page: Page,
   measure: () => T,
   action: () => Promise<void>,
-  ms = 900,
+  ms = motionMs("large") * 2,
 ): Promise<T[]> {
   await page.evaluate(
     ([source]) => {
@@ -149,9 +150,9 @@ test("an album's artwork moves from its tile to the details header", async ({ pa
     const rect = artwork?.getBoundingClientRect();
     return rect ? { x: rect.x, y: rect.y } : null;
   };
-  const frames = (await sampleFrames(page, measure, () => tile.click(), 1200)).filter(
-    (frame) => frame !== null,
-  );
+  const frames = (
+    await sampleFrames(page, measure, () => tile.click(), motionMs("large") * 3)
+  ).filter((frame) => frame !== null);
   const first = frames[0]!;
   // It starts where the tile was and travels (many distinct positions), rather than appearing
   // at the destination.

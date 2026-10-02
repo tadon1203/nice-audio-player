@@ -1,6 +1,10 @@
 import { deflateSync } from "node:zlib";
 import { testLibrary } from "./fixtures/data";
+import { motionMs } from "./fixtures/motion";
 import { expect, test } from "./fixtures/test";
+
+/** Time for the cover to decode and draw once Now Playing is open, besides its motion. */
+const IMAGE_DECODE_MS = 2000;
 
 test.use({ reducedMotion: "no-preference" });
 
@@ -84,7 +88,7 @@ test("Now Playing stays cheap while a track plays", async ({ page, native, playe
   await player.publishWaveform();
   await dock.getByRole("button", { name: "Open Now Playing" }).click();
   await page.getByRole("region", { name: "Now Playing" }).waitFor();
-  await page.waitForTimeout(2500); // entry motion and image decode settle
+  await page.waitForTimeout(motionMs("large") + IMAGE_DECODE_MS);
 
   const cdp = await page.context().newCDPSession(page);
   await cdp.send("Performance.enable");
