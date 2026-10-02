@@ -1,13 +1,15 @@
 <script lang="ts">
   import SettingsScreen from "$lib/components/settings/settings-screen.svelte";
-  import { captureScroll, restoreScroll } from "$lib/shell/scroll-memory";
+  import { createWorkspaceScroll } from "$lib/shell/workspace-scroll.svelte";
   import WorkspaceScroll from "$lib/ui/workspace-scroll.svelte";
 
   let viewport = $state<HTMLElement | null>(null);
 
+  const scroll = createWorkspaceScroll({ viewport: () => viewport });
+
   export const snapshot = {
-    capture: () => captureScroll(viewport),
-    restore: (offset: number) => restoreScroll(viewport, offset),
+    capture: () => scroll.capture(),
+    restore: (offset: number) => scroll.restore(offset),
   };
 </script>
 

@@ -10,7 +10,7 @@
   import { albumArtistHref } from "$lib/library/routes";
   import { albumTitleLabel, artistNameLabel, fromNameSegment } from "$lib/library/unknown-name";
   import { getPlayback } from "$lib/playback/context";
-  import { captureScroll, restoreScroll } from "$lib/shell/scroll-memory";
+  import { createWorkspaceScroll } from "$lib/shell/workspace-scroll.svelte";
   import BackLink from "$lib/ui/back-link.svelte";
   import EmptyStatus from "$lib/ui/empty-status.svelte";
   import ErrorAlert from "$lib/ui/error-alert.svelte";
@@ -52,9 +52,14 @@
 
   let viewport = $state<HTMLElement | null>(null);
 
+  const scroll = createWorkspaceScroll({
+    viewport: () => viewport,
+    ready: () => details.data !== undefined && !tracks.isPending && tracks.items.length > 0,
+  });
+
   export const snapshot = {
-    capture: () => captureScroll(viewport),
-    restore: (offset: number) => restoreScroll(viewport, offset),
+    capture: () => scroll.capture(),
+    restore: (offset: number) => scroll.restore(offset),
   };
 </script>
 

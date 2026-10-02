@@ -14,7 +14,6 @@
   export type LibraryScroll = {
     /** `null` until the scroll region has mounted. */
     viewport: HTMLElement | null;
-    initialOffset: number;
     /** The list reports the index of its first visible item here (for the scroll index). */
     ontopindexchange: (index: number) => void;
   };
@@ -33,17 +32,13 @@
     fetchNextPage: () => unknown;
     refetch: () => unknown;
   };
-
-  /** How long the scroll index stays after the last scroll. */
-  const INDEX_HOLD_MS = 800;
 </script>
 
 <script lang="ts" generics="Item, Key extends string">
   import type { Snippet } from "svelte";
-  import { untrack } from "svelte";
   import { resolve } from "$app/paths";
   import { libraryCommandErrorMessage } from "$lib/library/library-errors";
-  import { recallScroll, rememberScroll } from "$lib/shell/scroll-memory";
+  import { createWorkspaceScroll } from "$lib/shell/workspace-scroll.svelte";
   import EmptyStatus from "$lib/ui/empty-status.svelte";
   import ErrorAlert from "$lib/ui/error-alert.svelte";
   import LoadMoreSentinel from "$lib/ui/load-more-sentinel.svelte";
@@ -88,38 +83,13 @@
   } = $props();
 
   let viewport = $state<HTMLElement | null>(null);
-  // Read once: the list is built at this offset, then scrolling keeps the memory current.
-  const initialOffset = untrack(() => recallScroll(scrollKey));
   let topIndex = $state(0);
-  let scrolling = $state(false);
 
-  $effect(() => {
-    const element = viewport;
-    if (element === null) return;
-    let hold: ReturnType<typeof setTimeout> | undefined;
-    const onScroll = () => {
-      rememberScroll(scrollKey, element.scrollTop);
-      scrolling = true;
-      clearTimeout(hold);
-      hold = setTimeout(() => (scrolling = false), INDEX_HOLD_MS);
-    };
-    element.addEventListener("scroll", onScroll, { passive: true });
-    return () => {
-      element.removeEventListener("scroll", onScroll);
-      clearTimeout(hold);
-    };
-  });
-
-  // Back to the top when the filter or sort changes, but not on first run.
-  let previousKey: string | null = null;
-  $effect(() => {
-    const key = stateKey;
-    const element = viewport;
-    const previous = previousKey;
-    previousKey = key;
-    if (previous === null || previous === key || element === null) return;
-    element.scrollTo({ top: 0 });
-    rememberScroll(scrollKey, 0);
+  const workspaceScroll = createWorkspaceScroll({
+    viewport: () => viewport,
+    key: () => scrollKey,
+    resetKey: () => stateKey,
+    ready: () => catalog.items.length > 0,
   });
 
   const item = $derived(catalog.items[topIndex]);
@@ -129,7 +99,6 @@
 
   const scroll = $derived<LibraryScroll>({
     viewport,
-    initialOffset,
     ontopindexchange: (index) => (topIndex = index),
   });
 </script>
@@ -147,7 +116,7 @@
   />
 
   <div class="@container relative min-h-0">
-    <ScrollIndex label={scrollIndexLabel} visible={scrolling} />
+    <ScrollIndex label={scrollIndexLabel} visible={workspaceScroll.scrolling} />
     <WorkspaceScroll bind:viewportRef={viewport} contentClass="pt-6 pb-16">
       {#if catalog.viewState === "loading"}
         <LoadingStatus>Loading library…</LoadingStatus>

@@ -8,7 +8,6 @@ type VirtualRowsOptions = {
   /** Fixed row height in px; rows are placed by arithmetic. */
   rowHeight: number;
   overscan: number;
-  initialOffset: () => number;
   /** The element whose size changes re-measure the scroll margin. */
   container: () => HTMLElement | null;
   /** The element holding the rows; its top is where the first row sits. */
@@ -17,11 +16,10 @@ type VirtualRowsOptions = {
 
 /**
  * Virtualizes fixed-height rows inside a scroll region: which rows to render, the spacer heights
- * above and below them, and the restore of the initial scroll offset. Call during component init.
+ * above and below them. Call during component init.
  */
 export function createVirtualRows(options: VirtualRowsOptions) {
   const { rowHeight, overscan } = options;
-  let measured = $state(false);
   let scrollMargin = $state(0);
 
   // Where the first row sits inside the scroll region (below the header), re-measured when the
@@ -38,7 +36,6 @@ export function createVirtualRows(options: VirtualRowsOptions) {
           scroller.getBoundingClientRect().top +
           scroller.scrollTop;
       }
-      measured = true;
     };
     measure();
     const observer = new ResizeObserver(measure);
@@ -71,26 +68,6 @@ export function createVirtualRows(options: VirtualRowsOptions) {
     instance.measure();
   });
 
-  // The region cannot scroll further than the spacer the virtualizer has produced, which arrives
-  // a frame or two after the first layout; wait for it before applying the offset.
-  let restored = false;
-  $effect(() => {
-    const element = options.scrollElement();
-    if (restored || element === null || !measured) return;
-    restored = true;
-    const initialOffset = options.initialOffset();
-    if (initialOffset === 0) return;
-    let frames = 0;
-    let frame = 0;
-    const step = () => {
-      const reachable = element.scrollHeight - element.clientHeight >= initialOffset;
-      if (reachable || frames++ > 30) element.scrollTop = initialOffset;
-      else frame = requestAnimationFrame(step);
-    };
-    step();
-    return () => cancelAnimationFrame(frame);
-  });
-
   const items = $derived(state.current.getVirtualItems());
   const firstItem = $derived(items[0]);
   const lastItem = $derived(items.at(-1));
@@ -102,6 +79,11 @@ export function createVirtualRows(options: VirtualRowsOptions) {
   const topIndex = $derived.by(() => {
     void items;
     return state.current.range?.startIndex ?? 0;
+  });
+
+  const range = $derived.by(() => {
+    void items;
+    return state.current.range ?? null;
   });
 
   return {
@@ -116,6 +98,13 @@ export function createVirtualRows(options: VirtualRowsOptions) {
     },
     get topIndex() {
       return topIndex;
+    },
+    get scrollMargin() {
+      return scrollMargin;
+    },
+    /** The rows really in view (not the overscan), `null` before the first layout. */
+    get range() {
+      return range;
     },
   };
 }

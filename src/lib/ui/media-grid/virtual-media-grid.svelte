@@ -1,12 +1,11 @@
 <script lang="ts" generics="Item">
   import { untrack, type Snippet } from "svelte";
   import { prefersReducedMotion } from "svelte/motion";
-  import { get } from "svelte/store";
   import type { TransitionConfig } from "svelte/transition";
-  import { createVirtualizer } from "@tanstack/svelte-virtual";
   import type { ArtworkRef } from "$lib/native";
   import RovingLight, { type RovingTarget } from "$lib/ui/artwork-light/roving-light.svelte";
   import { motionFor } from "$lib/ui/motion/svelte-motion";
+  import { createVirtualRows } from "$lib/ui/virtual-rows.svelte";
   import { createSortMotion } from "./sort-motion.svelte";
   import {
     columnCount,
@@ -19,7 +18,6 @@
   let {
     items,
     scrollElement,
-    initialOffset = 0,
     itemKey,
     artworkAt,
     sortSignature,
@@ -29,7 +27,6 @@
     items: readonly Item[];
     /** The region the grid scrolls in (`null` while it is still mounting). */
     scrollElement: HTMLElement | null;
-    initialOffset?: number;
     itemKey: (item: Item) => string;
     /**
      * The artwork of the item at `index`. With it, hovering or focusing a tile lets a faint
@@ -62,7 +59,6 @@
   let wrap = $state<HTMLElement | null>(null);
   let list = $state<HTMLElement | null>(null);
   let width = $state(0);
-  let scrollMargin = $state(0);
 
   const sortMotion = createSortMotion(
     () => sortSignature,
@@ -169,74 +165,29 @@
 
   $effect(() => {
     const element = wrap;
-    const scroller = scrollElement;
     if (element === null) return;
-    const measure = () => {
-      const box = element.getBoundingClientRect();
-      width = box.width;
-      if (scroller !== null) {
-        scrollMargin = box.top - scroller.getBoundingClientRect().top + scroller.scrollTop;
-      }
-    };
+    const measure = () => (width = element.getBoundingClientRect().width);
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(element);
     return () => observer.disconnect();
   });
 
-  const virtualizer = createVirtualizer<HTMLElement, HTMLElement>({
-    count: 0,
-    getScrollElement: () => null,
-    estimateSize: () => rowHeight,
+  const virtual = createVirtualRows({
+    count: () => rowCount,
+    scrollElement: () => scrollElement,
+    rowHeight,
     overscan: OVERSCAN_ROWS,
+    container: () => wrap,
+    body: () => wrap,
   });
 
-  // The scroll region exists only after it is bound, and the row count and scroll margin change
-  // with the width, so the virtualizer is told again each time. Read through `get` so this effect
-  // does not depend on the store it updates.
-  $effect(() => {
-    const element = scrollElement;
-    const instance = get(virtualizer);
-    instance.setOptions({
-      count: rowCount,
-      getScrollElement: () => element,
-      estimateSize: () => rowHeight,
-      scrollMargin,
-    });
-    instance._willUpdate();
-    instance.measure();
-  });
-
-  // The region cannot scroll further than the padding the virtualizer has produced, which
-  // arrives a frame or two after the first layout; wait for it before applying the offset.
-  let restored = false;
-  $effect(() => {
-    const element = scrollElement;
-    if (restored || element === null || width === 0) return;
-    restored = true;
-    if (initialOffset === 0) return;
-    let frames = 0;
-    let frame = 0;
-    const step = () => {
-      const reachable = element.scrollHeight - element.clientHeight >= initialOffset;
-      if (reachable || frames++ > 30) element.scrollTop = initialOffset;
-      else frame = requestAnimationFrame(step);
-    };
-    step();
-    return () => cancelAnimationFrame(frame);
-  });
-
-  const rows = $derived($virtualizer.getVirtualItems());
-  const firstRow = $derived(rows[0]);
-  const lastRow = $derived(rows.at(-1));
-  const first = $derived((firstRow?.index ?? 0) * columns);
-  const last = $derived(Math.min(items.length, ((lastRow?.index ?? -1) + 1) * columns));
+  const rows = $derived(virtual.items);
+  const first = $derived((rows[0]?.index ?? 0) * columns);
+  const last = $derived(Math.min(items.length, ((rows.at(-1)?.index ?? -1) + 1) * columns));
   const visible = $derived(items.slice(first, last));
   // The first row really in view (not the overscan rows above it) names the scroll index.
-  const topIndex = $derived.by(() => {
-    void rows;
-    return ($virtualizer.range?.startIndex ?? 0) * columns;
-  });
+  const topIndex = $derived(virtual.topIndex * columns);
   $effect(() => ontopindexchange?.(topIndex));
 
   // Arrow keys move focus between tiles. A tile that is not mounted yet is scrolled to and
@@ -259,7 +210,7 @@
 
   function onkeydown(event: KeyboardEvent) {
     if (focusedIndex === null || event.ctrlKey || event.altKey || event.metaKey) return;
-    const range = $virtualizer.range;
+    const range = virtual.range;
     const next = keyTarget(event.key, {
       from: focusedIndex,
       columns,
@@ -272,7 +223,7 @@
     wanted = next;
     if (scrollElement !== null) {
       const offset = scrollOffsetToReveal({
-        top: rowTop(next, columns, scrollMargin, metrics),
+        top: rowTop(next, columns, virtual.scrollMargin, metrics),
         height: metrics.tileHeight,
         scrollTop: scrollElement.scrollTop,
         viewHeight: scrollElement.clientHeight,
@@ -307,10 +258,8 @@
     class="relative grid justify-start gap-x-5 gap-y-8"
     style:grid-template-columns="repeat({columns}, {TILE_WIDTH_REM}rem)"
     style:grid-auto-rows="{TILE_HEIGHT_REM}rem"
-    style:padding-top="{firstRow ? firstRow.start - scrollMargin : 0}px"
-    style:padding-bottom="{lastRow
-      ? $virtualizer.getTotalSize() - (lastRow.end - scrollMargin)
-      : 0}px"
+    style:padding-top="{virtual.topSpacer}px"
+    style:padding-bottom="{virtual.bottomSpacer}px"
     style:box-sizing="content-box"
   >
     {#each visible as item, offset (itemKey(item))}

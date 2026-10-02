@@ -33,7 +33,6 @@
       rows={tracks}
       caption="Library tracks"
       scrollElement={scroll.viewport}
-      initialOffset={scroll.initialOffset}
       ontopindexchange={scroll.ontopindexchange}
       sortKey={view.sortKey}
       sortDirection={view.direction}

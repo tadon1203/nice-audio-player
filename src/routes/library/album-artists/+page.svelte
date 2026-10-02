@@ -39,7 +39,6 @@
     <VirtualMediaGrid
       items={artists}
       scrollElement={scroll.viewport}
-      initialOffset={scroll.initialOffset}
       itemKey={(artist) => artist.key.name}
       artworkAt={(index) => artists[index]?.artwork}
       sortSignature="{view.sortKey}:{view.direction}"

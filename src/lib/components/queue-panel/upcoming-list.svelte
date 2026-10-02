@@ -44,7 +44,6 @@
     scrollElement: () => scrollElement,
     rowHeight: QUEUE_ROW_PX,
     overscan: 8,
-    initialOffset: () => 0,
     container: () => content,
     body: () => list,
   });

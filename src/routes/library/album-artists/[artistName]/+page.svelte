@@ -8,7 +8,7 @@
   import { artistNameLabel, fromNameSegment } from "$lib/library/unknown-name";
   import { getPlayback } from "$lib/playback/context";
   import { libraryViews } from "$lib/shell/library-views.svelte";
-  import { captureScroll, restoreScroll } from "$lib/shell/scroll-memory";
+  import { createWorkspaceScroll } from "$lib/shell/workspace-scroll.svelte";
   import BackLink from "$lib/ui/back-link.svelte";
   import CollectionSortControl from "$lib/ui/collection-sort-control.svelte";
   import EmptyStatus from "$lib/ui/empty-status.svelte";
@@ -39,19 +39,15 @@
 
   let viewport = $state<HTMLElement | null>(null);
 
-  // Back to the top when the sort changes, but not on first run.
-  let previousKey: string | null = null;
-  $effect(() => {
-    const current = view.stateKey;
-    const previous = previousKey;
-    previousKey = current;
-    if (previous === null || previous === current) return;
-    viewport?.scrollTo({ top: 0 });
+  const scroll = createWorkspaceScroll({
+    viewport: () => viewport,
+    resetKey: () => view.stateKey,
+    ready: () => artistQuery.data !== undefined && !albums.isPending && albums.items.length > 0,
   });
 
   export const snapshot = {
-    capture: () => captureScroll(viewport),
-    restore: (offset: number) => restoreScroll(viewport, offset),
+    capture: () => scroll.capture(),
+    restore: (offset: number) => scroll.restore(offset),
   };
 </script>
 

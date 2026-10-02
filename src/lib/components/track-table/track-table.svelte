@@ -44,7 +44,6 @@
     caption,
     layout = "library",
     scrollElement,
-    initialOffset = 0,
     ontopindexchange,
     sortKey,
     sortDirection = "ascending",
@@ -59,7 +58,6 @@
      * mounting). Omit it to render every row.
      */
     scrollElement?: HTMLElement | null;
-    initialOffset?: number;
     /** Told the index of the first row in view, for the scroll index label. */
     ontopindexchange?: (index: number) => void;
     sortKey?: LibraryTrackSortKey;
@@ -82,7 +80,6 @@
     scrollElement: () => scrollElement ?? null,
     rowHeight: TRACK_ROW_HEIGHT,
     overscan: 10,
-    initialOffset: () => initialOffset,
     container: () => container,
     body: () => body,
   });
