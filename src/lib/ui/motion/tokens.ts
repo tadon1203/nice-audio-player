@@ -23,6 +23,11 @@ export type MotionToken = keyof typeof motionTokens;
 /** Under reduced motion every movement becomes this crossfade (it runs this long, as is). */
 export const crossfade = { duration: 100 } as const;
 
+/** A delay as a share of a token's perceptual duration, so retuning the token retunes it. */
+export function delayOf(token: MotionToken, share: number): number {
+  return Math.round(motionTokens[token].duration * share);
+}
+
 /** How long a token runs, in ms: its settling length, or the crossfade under reduced motion. */
 export function tokenDuration(token: MotionToken, reducedMotion: boolean): number {
   return reducedMotion ? crossfade.duration : settlingLength(motionTokens[token].duration);

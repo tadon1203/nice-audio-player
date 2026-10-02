@@ -1,15 +1,16 @@
 <script lang="ts">
-  import { flip } from "svelte/animate";
   import { getMotionBudget } from "$lib/shell/motion-budget.svelte";
   import { getPlayback } from "$lib/playback/context";
   import { createUpcomingItems } from "$lib/playback/upcoming-items.svelte";
-  import { motionFor } from "$lib/ui/motion/svelte-motion";
+  import { flipMotion } from "$lib/ui/motion/svelte-flip";
+  import { delayOf } from "$lib/ui/motion/tokens";
   import { createVirtualRows } from "$lib/ui/virtual-rows.svelte";
   import { cn } from "$lib/utils/cn.js";
   import { QueueDrag } from "./queue-drag.svelte";
   import QueueRow, { QUEUE_ROW_PX } from "./queue-row.svelte";
 
-  const CASCADE_STEP_MS = 15;
+  /** Each row starts a little after the one above it. */
+  const CASCADE_STEP_MS = delayOf("feedback", 0.2);
   const CASCADE_ROWS = 12;
 
   let {
@@ -63,7 +64,6 @@
 
   const budget = getMotionBudget();
   const reduced = $derived(budget.current === "reduced");
-  const motion = $derived(motionFor("move"));
 
   /** Which edge of row `index` shows the drop line for insertion `slot`, if any. */
   function dropMarker(slot: number | null, index: number): "before" | "after" | undefined {
@@ -82,10 +82,8 @@
   {#each rows as { index, item, key } (key)}
     {@const dragging = item !== undefined && drag?.id === item.id}
     <li
-      animate:flip={{
-        duration: motion.duration,
-        easing: motion.easing,
-        delay: cascading ? Math.min(index, CASCADE_ROWS) * CASCADE_STEP_MS : 0,
+      animate:flipMotion={{
+        delay: cascading && !reduced ? Math.min(index, CASCADE_ROWS) * CASCADE_STEP_MS : 0,
       }}
       aria-hidden={item === undefined ? "true" : undefined}
       class={cn(

@@ -7,9 +7,6 @@
     get: () => number;
     subscribe: (listener: (value: number) => void) => () => void;
   };
-
-  /** The old image only goes once the new one has covered it. */
-  const WIPE_HOLD_MS = 300;
 </script>
 
 <script lang="ts">
@@ -66,9 +63,9 @@
     };
   }
 
-  /** The outgoing image fades, or (under a wipe) stays until the new one has covered it. */
+  /** The outgoing image fades, or (under a wipe) stays until the new one has covered it (the wipe's own length). */
   function leave(node: Element) {
-    return wipe === null ? fade(node, motion) : { delay: WIPE_HOLD_MS, duration: 0 };
+    return wipe === null ? fade(node, motion) : { delay: wipeMotion.duration, duration: 0 };
   }
 
   const breathe: Attachment<HTMLElement> = (node) => {

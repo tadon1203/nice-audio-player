@@ -1,6 +1,7 @@
 import { prefersReducedMotion } from "svelte/motion";
 import { fade } from "svelte/transition";
 import { motionFor } from "$lib/ui/motion/svelte-motion";
+import { delayOf } from "$lib/ui/motion/tokens";
 
 /**
  * One Sleeve size for every state. Container units resolve against the grid area (the layer
@@ -13,7 +14,7 @@ export const SLEEVE_SIZE = "max(10rem, min(calc(100cqh - 15rem), 38cqw, 40rem))"
 export const LIFT_PX = 24;
 
 /** Delay before the text and lyrics settle in, so the Sleeve lands first. */
-const CONTENT_DELAY_MS = 120;
+const CONTENT_DELAY_MS = delayOf("large", 0.4);
 
 /** The waveform band's height for the room the layer has: it gives way to the content. */
 export function waveformHeightFor(layerHeightPx: number): number {
