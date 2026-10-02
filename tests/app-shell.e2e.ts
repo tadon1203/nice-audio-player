@@ -1,7 +1,4 @@
-import { expect, test } from "@playwright/test";
-import { installNativeApi } from "./fixtures/native-api";
-
-test.beforeEach(async ({ page }) => installNativeApi(page));
+import { expect, test } from "./fixtures/test";
 
 test("navigates between the three library presentations and Settings", async ({ page }) => {
   await page.goto("/");

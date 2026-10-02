@@ -1,9 +1,10 @@
-import { expect, test } from "@playwright/test";
-import { installNativeApi } from "./fixtures/native-api";
+import { testLibrary } from "./fixtures/data";
+import { expect, test } from "./fixtures/test";
 import { workspaceViewport } from "./fixtures/locators";
 
+test.use({ library: testLibrary({ extraAlbums: 2_000 }) });
+
 test.beforeEach(async ({ page }) => {
-  await installNativeApi(page, { extraAlbums: 2_000 });
   await page.setViewportSize({ width: 1360, height: 900 });
 });
 

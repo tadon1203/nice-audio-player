@@ -1,9 +1,8 @@
-import { expect, test, type Page } from "@playwright/test";
-import { installNativeApi } from "./fixtures/native-api";
+import { type Page } from "@playwright/test";
+import { expect, test } from "./fixtures/test";
 import { workspaceViewport } from "./fixtures/locators";
 
 test.beforeEach(async ({ page }) => {
-  await installNativeApi(page);
   await page.setViewportSize({ width: 1360, height: 900 });
 });
 
@@ -85,7 +84,26 @@ test("a queue row plays on click", async ({ page }) => {
   await expect.poll(async () => (await upcomingTitles(page))[0]).toBe(before[3]);
 });
 
-test("Play next and Add to queue put a track where they say", async ({ page }) => {
+test("Play next and Add to queue put a track where they say", async ({
+  page,
+  native,
+  player,
+  library,
+}) => {
+  // What the queue should hold once each command has run: the test states it.
+  const rest = library.tracks.filter((track) => track.playable).slice(1);
+  const track = (title: string) => library.tracks.find((entry) => entry.title === title)!;
+  const without = (tracks: typeof rest, ...removed: typeof rest) =>
+    tracks.filter((entry) => !removed.some((gone) => gone.id === entry.id));
+  const afterPlayNext = [track("Track 010"), ...without(rest, track("Track 010"))];
+  native.respond("enqueueTrack", ({ next }) =>
+    next
+      ? player.queue({ upcoming: afterPlayNext })
+      : player.queue({
+          upcoming: [...without(afterPlayNext, track("Track 011")), track("Track 011")],
+        }),
+  );
+
   const dock = await playFirstTrack(page);
   await dock.getByRole("button", { name: "Queue", exact: true }).click();
   const panel = page.getByRole("dialog", { name: "Queue" });
@@ -104,7 +122,10 @@ test("Play next and Add to queue put a track where they say", async ({ page }) =
   await expect.poll(async () => (await upcomingTitles(page)).at(-1)).toBe("Track 011");
 });
 
-test("clearing the upcoming tracks can be undone", async ({ page }) => {
+test("clearing the upcoming tracks can be undone", async ({ page, native, player, library }) => {
+  const rest = library.tracks.filter((track) => track.playable).slice(1);
+  native.respond("clearQueue", () => player.queue({ upcoming: [] }));
+  native.respond("enqueueTrack", () => player.queue({ upcoming: rest }));
   const dock = await playFirstTrack(page);
   await dock.getByRole("button", { name: "Queue", exact: true }).click();
   const panel = page.getByRole("dialog", { name: "Queue" });

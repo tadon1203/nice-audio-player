@@ -127,13 +127,8 @@ const tauriWindow: NativeWindow = {
   },
 };
 
-type TestWindow = Window & { __TAURI_TEST_API__?: TNativeAPI };
-
 function resolveNative(): TNativeAPI | null {
   if (typeof window === "undefined") return null;
-  // E2E tests install their own API before the app loads (`tests/fixtures/native-api.ts`).
-  const testApi = (window as TestWindow).__TAURI_TEST_API__;
-  if (testApi !== undefined) return testApi;
   return isTauri() ? tauriApi : null;
 }
 

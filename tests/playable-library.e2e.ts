@@ -1,7 +1,5 @@
-import { expect, test } from "@playwright/test";
-import { installNativeApi } from "./fixtures/native-api";
-
-test.beforeEach(async ({ page }) => installNativeApi(page));
+import { albumSequence } from "./fixtures/data";
+import { expect, test } from "./fixtures/test";
 
 test("plays tracks and operates the persistent seek, transport, volume, and technical status", async ({
   page,
@@ -78,10 +76,10 @@ test("plays tracks and operates the persistent seek, transport, volume, and tech
   await expect(path.getByRole("button", { name: "Output device: Speakers" })).toBeVisible();
 });
 
-test("remains operable while playback position events are streaming", async ({ page }) => {
+test("remains operable while playback position events are streaming", async ({ page, player }) => {
   await page.goto("/library/tracks");
   await page.getByRole("button", { name: "Play Test track" }).click();
-  await page.evaluate(() => window.__niceAudioPlayerTest?.startPlaybackTicks());
+  player.startTicks();
 
   try {
     const filter = page.getByRole("searchbox", { name: "Search tracks" });
@@ -94,14 +92,23 @@ test("remains operable while playback position events are streaming", async ({ p
     await page.getByRole("link", { name: "Tracks", exact: true }).first().click();
     await expect(page.getByRole("heading", { name: "Tracks", exact: true })).toBeVisible();
   } finally {
-    await page.evaluate(() => window.__niceAudioPlayerTest?.stopPlaybackTicks());
+    player.stopTicks();
   }
 });
 
-test("uses the album as the queue context when Play album starts playback", async ({ page }) => {
+test("uses the album as the queue context when Play album starts playback", async ({
+  page,
+  native,
+  player,
+  library,
+}) => {
+  player.setSequence(albumSequence(library));
   await page.goto("/library/albums");
   await page.getByRole("link", { name: "Open album Test album by Test artist" }).click();
   await page.getByRole("button", { name: "Play album" }).click();
+  await expect
+    .poll(() => native.callsTo("startPlayback").map((call) => call.context))
+    .toEqual([{ kind: "album", key: library.albumDetails.summary.key }]);
 
   const dock = page.getByRole("contentinfo", { name: "Playback controls" });
   await expect(dock.getByText("Test track", { exact: true })).toBeVisible();

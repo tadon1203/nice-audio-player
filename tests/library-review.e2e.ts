@@ -1,12 +1,24 @@
-import { expect, test } from "@playwright/test";
-import { installNativeApi } from "./fixtures/native-api";
-import { workspaceViewport } from "./fixtures/locators";
+import type { LibraryRoot, LibraryScanState } from "$lib/native";
+import { pageOf, scanSnapshot, testRoot } from "./fixtures/data";
+import type { Native } from "./fixtures/native-api";
+import { expect, test } from "./fixtures/test";
 
-test.beforeEach(async ({ page }) => installNativeApi(page));
+/** The scan is in `state`: what the renderer reads now, and the event that announces it. */
+async function publishScan(native: Native, state: LibraryScanState) {
+  const snapshot = scanSnapshot(state);
+  native.respond("getLibraryScanState", snapshot);
+  await native.emit({ event: "libraryScanStateChanged", payload: snapshot });
+}
+import { workspaceViewport } from "./fixtures/locators";
 
 test("keeps each library filter and sort when switching peers and visiting Settings", async ({
   page,
+  native,
+  library,
 }) => {
+  native.respond("listLibraryAlbums", ({ search }) =>
+    pageOf(search === "Test album" ? [library.albums[0]!] : library.albums, null, 100),
+  );
   await page.goto("/library/albums");
   let filter = page.getByRole("searchbox", { name: "Search albums" });
   await filter.fill("Test album");
@@ -120,7 +132,31 @@ test("restores the virtual track container after switching library presentations
     .toBeGreaterThan(1_000);
 });
 
-test("manages folders and shows scan progress and terminal states", async ({ page }) => {
+test("manages folders and shows scan progress and terminal states", async ({ page, native }) => {
+  const added: LibraryRoot = { ...testRoot, id: "root-2", path: "C:/More Music" };
+  let roots = [testRoot];
+  native.respond("listLibraryRoots", () => roots);
+  native.respond("registerLibraryRoot", () => {
+    roots = [...roots, added];
+    return added;
+  });
+  native.respond("setLibraryRootEnabled", ({ id, enabled }) => {
+    roots = roots.map((root) => (root.id === id ? { ...root, enabled } : root));
+    return roots.find((root) => root.id === id)!;
+  });
+  native.respond("removeLibraryRoot", ({ id }) => {
+    roots = roots.filter((root) => root.id !== id);
+    return null;
+  });
+  native.respond("startLibraryScan", async () => {
+    await publishScan(native, "running");
+    return null;
+  });
+  native.respond("cancelLibraryScan", async () => {
+    await publishScan(native, "cancelled");
+    return null;
+  });
+
   await page.goto("/settings");
   await page.getByRole("button", { name: "Add folder" }).click();
   await expect(page.getByTitle("C:/More Music", { exact: true })).toBeVisible();
@@ -140,9 +176,9 @@ test("manages folders and shows scan progress and terminal states", async ({ pag
   await page.getByRole("button", { name: "Cancel scan" }).click();
   await expect(page.getByRole("status")).toContainText("Scan cancelled");
 
-  await page.evaluate(() => window.__niceAudioPlayerTest?.setScanState("completed"));
+  await publishScan(native, "completed");
   await expect(page.getByText(/20 discovered, 20 inspected, 18 indexed, 0 failed/)).toBeVisible();
-  await page.evaluate(() => window.__niceAudioPlayerTest?.setScanState("failed"));
+  await publishScan(native, "failed");
   await expect(page.getByRole("alert")).toContainText("A library folder could not be read.");
 
   await page.getByRole("button", { name: "Remove C:/More Music from library" }).click();
@@ -157,23 +193,33 @@ test("manages folders and shows scan progress and terminal states", async ({ pag
 
 test("invalidates mounted library queries after terminal scan events and root changes", async ({
   page,
+  native,
+  library,
 }) => {
+  let roots = [testRoot];
+  native.respond("listLibraryRoots", () => roots);
+  native.respond("setLibraryRootEnabled", ({ id, enabled }) => {
+    roots = roots.map((root) => (root.id === id ? { ...root, enabled } : root));
+    return roots.find((root) => root.id === id)!;
+  });
+  native.respond("listLibraryTracks", ({ cursor }) =>
+    pageOf(roots.some((root) => root.enabled) ? library.tracks : [], cursor),
+  );
   await page.goto("/library/tracks");
-  const getCount = () =>
-    page.evaluate(() => window.__niceAudioPlayerTest?.getRequestCount("tracks") ?? 0);
+  const getCount = () => native.callsTo("listLibraryTracks").length;
   await expect.poll(getCount).toBeGreaterThan(0);
 
-  let requestCount = await getCount();
-  await page.evaluate(() => window.__niceAudioPlayerTest?.setScanState("completed"));
+  let requestCount = getCount();
+  await publishScan(native, "completed");
   await expect.poll(getCount).toBeGreaterThan(requestCount);
-  requestCount = await getCount();
-  await page.evaluate(() => window.__niceAudioPlayerTest?.setScanState("cancelled"));
+  requestCount = getCount();
+  await publishScan(native, "cancelled");
   await expect.poll(getCount).toBeGreaterThan(requestCount);
-  requestCount = await getCount();
-  await page.evaluate(() => window.__niceAudioPlayerTest?.setScanState("failed"));
+  requestCount = getCount();
+  await publishScan(native, "failed");
   await expect.poll(getCount).toBeGreaterThan(requestCount);
 
-  requestCount = await getCount();
+  requestCount = getCount();
   await page.getByRole("link", { name: "Settings", exact: true }).click();
   // The checkbox is controlled by the saved setting, so it flips after the round trip; assert on
   // that instead of `uncheck()`, which expects the state to change synchronously.

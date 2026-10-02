@@ -1,8 +1,6 @@
-import { expect, test } from "@playwright/test";
-import { installNativeApi } from "./fixtures/native-api";
+import { expect, test } from "./fixtures/test";
 
 test.beforeEach(async ({ page }) => {
-  await installNativeApi(page);
   await page.setViewportSize({ width: 1360, height: 900 });
 });
 
@@ -20,10 +18,16 @@ async function openQueue(page: import("@playwright/test").Page) {
 const upcomingTitles = (panel: import("@playwright/test").Locator) =>
   panel.locator('[data-tone="upcoming"] [data-slot="queue-row-title"]').allTextContents();
 
-test("drags an upcoming track to any position", async ({ page }) => {
+test("drags an upcoming track to any position", async ({ page, native, player, library }) => {
+  const upcoming = library.tracks.filter((track) => track.playable).slice(1);
+  // Dropping the first row below the fourth: it is expected to land after it.
+  native.respond("moveQueueItem", () =>
+    player.queue({ upcoming: [...upcoming.slice(1, 4), upcoming[0]!, ...upcoming.slice(4)] }),
+  );
   const panel = await openQueue(page);
   const before = await upcomingTitles(panel);
   expect(before.length).toBeGreaterThan(3);
+  expect(before[0]).toBe(upcoming[0]!.title);
 
   const handle = panel.getByRole("button", { name: `Drag ${before[0]} to reorder` });
   const fourth = panel.locator('[data-tone="upcoming"]').nth(3);
@@ -40,6 +44,7 @@ test("drags an upcoming track to any position", async ({ page }) => {
     .poll(() => upcomingTitles(panel))
     .toEqual([...before.slice(1, 4), before[0], ...before.slice(4)]);
   await expect(panel.locator("[data-drop]")).toHaveCount(0);
+  expect(native.callsTo("moveQueueItem")).toEqual([{ id: upcoming[0]!.id, to: 3 }]);
 });
 
 test("a drag released where it started changes nothing", async ({ page }) => {

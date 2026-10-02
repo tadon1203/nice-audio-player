@@ -1,12 +1,13 @@
-import { expect, test, type Page } from "@playwright/test";
-import { installNativeApi } from "./fixtures/native-api";
+import { type Page } from "@playwright/test";
+import { albumSequence } from "./fixtures/data";
+import { expect, test } from "./fixtures/test";
 
 // Real timing: the rest of the suite runs with reduced motion (see playwright.config.ts).
 // These tests check invariants sampled every frame, never screenshots of the motion.
 test.use({ reducedMotion: "no-preference" });
 
-test.beforeEach(async ({ page }) => {
-  await installNativeApi(page);
+test.beforeEach(async ({ page, player, library }) => {
+  player.setSequence(albumSequence(library));
   await page.setViewportSize({ width: 1360, height: 900 });
 });
 

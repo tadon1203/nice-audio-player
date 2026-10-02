@@ -1,7 +1,5 @@
-import { expect, test, type Locator } from "@playwright/test";
-import { installNativeApi } from "./fixtures/native-api";
-
-test.beforeEach(async ({ page }) => installNativeApi(page));
+import { type Locator } from "@playwright/test";
+import { expect, test } from "./fixtures/test";
 
 async function boxOf(locator: Locator) {
   const box = await locator.boundingBox();

@@ -1,5 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
-import { installNativeApi } from "./fixtures/native-api";
+import { type Page } from "@playwright/test";
+import { expect, test } from "./fixtures/test";
 
 async function styleOfInjected(page: Page, className: string) {
   return page.evaluate((name) => {
@@ -13,7 +13,6 @@ async function styleOfInjected(page: Page, className: string) {
 }
 
 test.beforeEach(async ({ page }) => {
-  await installNativeApi(page);
   await page.goto("/");
   await expect(page.locator('[data-slot="app-main"]')).toBeVisible();
 });

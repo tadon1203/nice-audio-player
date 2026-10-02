@@ -1,8 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test } from "@playwright/test";
-import { installNativeApi } from "./fixtures/native-api";
-
-test.beforeEach(async ({ page }) => installNativeApi(page));
+import { expect, test } from "./fixtures/test";
 
 for (const path of ["/library/albums", "/library/tracks", "/settings"] as const) {
   test(`has no automatically detectable serious accessibility violations on ${path}`, async ({

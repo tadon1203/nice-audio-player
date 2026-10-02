@@ -1,23 +1,26 @@
-import { expect, test, type Page } from "@playwright/test";
-import { installNativeApi } from "./fixtures/native-api";
+import { type Page } from "@playwright/test";
+import { albumSequence } from "./fixtures/data";
+import { expect, test } from "./fixtures/test";
 import { workspaceViewport } from "./fixtures/locators";
 
 test.beforeEach(async ({ page }) => {
-  await installNativeApi(page);
   await page.setViewportSize({ width: 1360, height: 900 });
 });
 
-async function playFirstTrack(page: Page, beforePlay?: () => Promise<void>) {
+async function playFirstTrack(page: Page, beforePlay?: () => void) {
   await page.goto("/library/tracks");
   // Lyrics are fetched as soon as a track plays, so anything they should find is set first.
-  await beforePlay?.();
+  beforePlay?.();
   await page.getByRole("button", { name: "Play Test track" }).click();
   const dock = page.getByRole("contentinfo", { name: "Playback controls" });
   await expect(dock.getByRole("button", { name: "Pause", exact: true })).toBeEnabled();
   return dock;
 }
 
-test("shows a plain progress line in the dock, never the waveform bars", async ({ page }) => {
+test("shows a plain progress line in the dock, never the waveform bars", async ({
+  page,
+  player,
+}) => {
   const dock = await playFirstTrack(page);
   const seek = dock.getByRole("slider", { name: "Playback position" });
   await expect(seek).toHaveAttribute("data-ready", "false");
@@ -28,7 +31,7 @@ test("shows a plain progress line in the dock, never the waveform bars", async (
 
   // The dock never fetches or draws the waveform, even once one is available — only Now
   // Playing does (see `PlaybackWaveformBand`'s `showWaveform` prop).
-  await page.evaluate(() => window.__niceAudioPlayerTest?.publishWaveform());
+  await player.publishWaveform();
   await expect(seek).toHaveAttribute("data-ready", "false");
   await expect(seek.locator('[data-slot="waveform-bars"]')).toHaveCount(0);
 
@@ -233,34 +236,32 @@ test("preserves the library scroll position across Now Playing open and close", 
   await expect.poll(async () => list.evaluate((element) => element.scrollTop)).toBe(before);
 });
 
-test("shows synced lyrics and follows the current line", async ({ page }) => {
+test("shows synced lyrics and follows the current line", async ({ page, native, player }) => {
   const dock = await playFirstTrack(page, () =>
-    page.evaluate(() =>
-      window.__niceAudioPlayerTest?.setLyrics("track-1", {
-        status: "resolved",
-        trackId: "track-1",
-        notice: null,
-        document: {
-          source: "sidecar",
-          language: null,
-          content: {
-            kind: "timed",
-            lines: [
-              { startMs: 0, text: "First line" },
-              { startMs: 30_000, text: "Second line" },
-              { startMs: 90_000, text: "Third line" },
-            ],
-          },
+    native.respond("getTrackLyrics", {
+      status: "resolved",
+      trackId: "track-1",
+      notice: null,
+      document: {
+        source: "sidecar",
+        language: null,
+        content: {
+          kind: "timed",
+          lines: [
+            { startMs: 0, text: "First line" },
+            { startMs: 30_000, text: "Second line" },
+            { startMs: 90_000, text: "Third line" },
+          ],
         },
-      }),
-    ),
+      },
+    }),
   );
   await dock.getByRole("button", { name: "Open Now Playing" }).click();
 
   const layer = page.getByRole("region", { name: "Now Playing" });
   await expect(layer.locator('[aria-current="true"]')).toContainText("First line");
 
-  await page.evaluate(() => window.__niceAudioPlayerTest?.startPlaybackTicks());
+  await player.reportPosition(31_000);
   await expect(layer.locator('[aria-current="true"]')).toContainText("Second line");
 });
 
@@ -273,7 +274,12 @@ test("shows the no-lyrics and unreadable-lyrics states", async ({ page }) => {
   await expect(layer.getByText("Test track", { exact: true }).first()).toBeVisible();
 });
 
-test("toggles play/pause and changes tracks with the keyboard", async ({ page }) => {
+test("toggles play/pause and changes tracks with the keyboard", async ({
+  page,
+  player,
+  library,
+}) => {
+  player.setSequence(albumSequence(library));
   const dock = page.getByRole("contentinfo", { name: "Playback controls" });
   await page.goto("/library/albums");
   await page.getByRole("link", { name: "Open album Test album by Test artist" }).click();
@@ -325,7 +331,10 @@ test("the progress line and the elapsed time share one centre line", async ({ pa
   expect(Math.abs(centre(line) - centre(remaining))).toBeLessThanOrEqual(0.5);
 });
 
-test("position ticks redraw neither the signal path nor the volume row", async ({ page }) => {
+test("position ticks redraw neither the signal path nor the volume row", async ({
+  page,
+  player,
+}) => {
   const dock = await playFirstTrack(page);
   const quiet = dock.locator('[data-region="signal-path"], [data-region="volume"]');
   await quiet.first().waitFor();
@@ -338,8 +347,8 @@ test("position ticks redraw neither the signal path nor the volume row", async (
       .forEach((node) =>
         observer.observe(node, { subtree: true, childList: true, attributes: true }),
       );
-    window.__niceAudioPlayerTest?.startPlaybackTicks();
   });
+  player.startTicks();
 
   // The seek bar still moves, so ticks are arriving.
   const seek = dock.getByRole("slider", { name: "Playback position" });

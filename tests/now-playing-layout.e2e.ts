@@ -1,9 +1,6 @@
-import { expect, test, type Page } from "@playwright/test";
-import { installNativeApi } from "./fixtures/native-api";
-
-test.beforeEach(async ({ page }) => {
-  await installNativeApi(page);
-});
+import { type Page } from "@playwright/test";
+import type { Native } from "./fixtures/native-api";
+import { expect, test } from "./fixtures/test";
 
 const SIZES = [
   { width: 1100, height: 680 },
@@ -28,14 +25,16 @@ const timedLyrics = {
   },
 } as const;
 
-async function openNowPlaying(page: Page, size: (typeof SIZES)[number], lyrics: boolean) {
+async function openNowPlaying(
+  page: Page,
+  native: Native,
+  size: (typeof SIZES)[number],
+  lyrics: boolean,
+) {
   await page.setViewportSize(size);
   await page.goto("/library/tracks");
   if (lyrics) {
-    await page.evaluate(
-      (value) => window.__niceAudioPlayerTest?.setLyrics("track-1", value as never),
-      timedLyrics,
-    );
+    native.respond("getTrackLyrics", timedLyrics);
   }
   await page.getByRole("button", { name: "Play Test track" }).click();
   const dock = page.getByRole("contentinfo", { name: "Playback controls" });
@@ -49,8 +48,9 @@ async function openNowPlaying(page: Page, size: (typeof SIZES)[number], lyrics: 
 for (const size of SIZES) {
   test(`keeps the info block clear of the waveform at ${size.width}x${size.height}`, async ({
     page,
+    native,
   }) => {
-    const layer = await openNowPlaying(page, size, true);
+    const layer = await openNowPlaying(page, native, size, true);
     const facts = layer.locator("p", { hasText: /Track \d/ }).first();
     const band = layer.getByRole("slider", { name: "Playback position" });
     await expect(facts).toBeVisible();
@@ -62,20 +62,27 @@ for (const size of SIZES) {
 
 test("shows the queue rail and no Up next in the waveform band at 1920 with lyrics", async ({
   page,
+  native,
 }) => {
-  const layer = await openNowPlaying(page, SIZES[2], true);
+  const layer = await openNowPlaying(page, native, SIZES[2], true);
   await expect(layer.getByText("Up next", { exact: true })).toBeVisible();
   await expect(layer.getByRole("button", { name: /Open the queue/ })).toBeHidden();
 });
 
-test("shows Up next in the waveform band and no rail at 1360 with lyrics", async ({ page }) => {
-  const layer = await openNowPlaying(page, SIZES[1], true);
+test("shows Up next in the waveform band and no rail at 1360 with lyrics", async ({
+  page,
+  native,
+}) => {
+  const layer = await openNowPlaying(page, native, SIZES[1], true);
   await expect(layer.getByRole("button", { name: /Open the queue/ })).toBeVisible();
   await expect(layer.getByText("Up next", { exact: true })).toBeHidden();
 });
 
-test("puts the current row 40% from the top of the queue without lyrics", async ({ page }) => {
-  const layer = await openNowPlaying(page, SIZES[1], false);
+test("puts the current row 40% from the top of the queue without lyrics", async ({
+  page,
+  native,
+}) => {
+  const layer = await openNowPlaying(page, native, SIZES[1], false);
   const list = layer.getByRole("list", { name: "Queue" });
   await expect(list).toBeVisible();
   const current = list.locator('[aria-current="true"]');
@@ -89,8 +96,8 @@ test("puts the current row 40% from the top of the queue without lyrics", async 
     .toBeLessThanOrEqual(8);
 });
 
-test("keeps the artist line in place while the title animates", async ({ page }) => {
-  const layer = await openNowPlaying(page, SIZES[1], false);
+test("keeps the artist line in place while the title animates", async ({ page, native }) => {
+  const layer = await openNowPlaying(page, native, SIZES[1], false);
   const artist = layer.getByRole("link", { name: "Test artist" }).first();
   await expect(artist).toBeVisible();
   const before = (await artist.boundingBox())!;

@@ -1,5 +1,6 @@
-import { expect, test, type Page } from "@playwright/test";
-import { installNativeApi } from "./fixtures/native-api";
+import { type Page } from "@playwright/test";
+import { testLibrary } from "./fixtures/data";
+import { expect, test } from "./fixtures/test";
 
 async function openQueue(page: Page) {
   await page.goto("/library/tracks");
@@ -11,8 +12,9 @@ async function openQueue(page: Page) {
 }
 
 test.describe("a queue as long as the library", () => {
+  test.use({ library: testLibrary({ trackCount: 1_000 }) });
+
   test.beforeEach(async ({ page }) => {
-    await installNativeApi(page, { trackCount: 1_000 });
     await page.setViewportSize({ width: 1360, height: 900 });
   });
 
@@ -31,7 +33,6 @@ test.describe("a queue as long as the library", () => {
 
 test.describe("the queue as a history", () => {
   test.beforeEach(async ({ page }) => {
-    await installNativeApi(page);
     await page.setViewportSize({ width: 1360, height: 900 });
   });
 
@@ -49,7 +50,6 @@ test.describe("the queue as a history", () => {
 
 test.describe("a track's menu", () => {
   test.beforeEach(async ({ page }) => {
-    await installNativeApi(page);
     await page.setViewportSize({ width: 1360, height: 900 });
   });
 

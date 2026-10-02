@@ -1,6 +1,6 @@
 import { deflateSync } from "node:zlib";
-import { expect, test } from "@playwright/test";
-import { installNativeApi } from "./fixtures/native-api";
+import { testLibrary } from "./fixtures/data";
+import { expect, test } from "./fixtures/test";
 
 test.use({ reducedMotion: "no-preference" });
 
@@ -69,21 +69,19 @@ const lyrics = {
 // measurement as raster CPU and frame rate, which are too machine-dependent to assert.
 test.use({ reducedMotion: "no-preference" });
 
-test("Now Playing stays cheap while a track plays", async ({ page }) => {
+test.use({ library: testLibrary({ artwork: true }) });
+
+test("Now Playing stays cheap while a track plays", async ({ page, native, player }) => {
   await page.setViewportSize({ width: 1920, height: 1080 });
   await page.route("http://nice-artwork.localhost/**", (route) =>
     route.fulfill({ contentType: "image/png", body: png(600) }),
   );
-  await installNativeApi(page, { artwork: true });
   await page.goto("/library/tracks");
-  await page.evaluate(
-    (value) => window.__niceAudioPlayerTest?.setLyrics("track-1", value as never),
-    lyrics as never,
-  );
+  native.respond("getTrackLyrics", lyrics);
   await page.getByRole("button", { name: "Play Test track" }).click();
   const dock = page.getByRole("contentinfo", { name: "Playback controls" });
   await dock.getByRole("button", { name: "Pause", exact: true }).waitFor();
-  await page.evaluate(() => window.__niceAudioPlayerTest?.publishWaveform());
+  await player.publishWaveform();
   await dock.getByRole("button", { name: "Open Now Playing" }).click();
   await page.getByRole("region", { name: "Now Playing" }).waitFor();
   await page.waitForTimeout(2500); // entry motion and image decode settle
