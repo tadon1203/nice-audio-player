@@ -50,22 +50,13 @@ export const albumSortKeys = albums.keys;
 export const albumSortOptions = albums.options;
 export const isAlbumSortKey = albums.isKey;
 
-export const albumArtistSortKeys = albumArtists.keys;
 export const albumArtistSortOptions = albumArtists.options;
-export const isAlbumArtistSortKey = albumArtists.isKey;
 
-export const artistAlbumSortKeys = artistAlbums.keys;
 export const artistAlbumSortOptions = artistAlbums.options;
-export const isArtistAlbumSortKey = artistAlbums.isKey;
 
 export const trackSortKeys = tracks.keys;
 export const trackSortOptions = tracks.options;
 export const isTrackSortKey = tracks.isKey;
-
-export const sortDirections = defineSortKeys<LibrarySortDirection>({
-  ascending: "Ascending",
-  descending: "Descending",
-}).keys;
 
 export function toggleSortDirection(direction: LibrarySortDirection): LibrarySortDirection {
   return direction === "ascending" ? "descending" : "ascending";

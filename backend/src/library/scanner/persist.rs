@@ -125,11 +125,7 @@ pub(super) fn plan(reader: &Connection, root_id: i64, file: DiscoveredFile) -> P
             revision,
             file,
         },
-        Some((file_id, _, key, status, _))
-            if key == file.modification_key && status != InspectionStatus::Pending =>
-        {
-            Plan::Touch { file_id }
-        }
+        Some((file_id, _, key, ..)) if key == file.modification_key => Plan::Touch { file_id },
         Some((file_id, revision, ..)) => Plan::Inspect {
             known: Some((file_id, revision + 1)),
             file,

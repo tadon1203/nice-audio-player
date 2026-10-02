@@ -40,17 +40,14 @@ sql_text_enum!(Availability {
     Missing => "missing",
 });
 
-/// Where a file stands: `Pending` until it has been inspected, `Unsupported` when it cannot be
-/// decoded.
+/// Where a file stands once inspected: `Unsupported` when it cannot be decoded.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InspectionStatus {
-    Pending,
     Indexed,
     Unsupported,
 }
 
 sql_text_enum!(InspectionStatus {
-    Pending => "pending",
     Indexed => "indexed",
     Unsupported => "unsupported",
 });

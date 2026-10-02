@@ -36,11 +36,6 @@ export function createArtistAlbums(
   );
 }
 
-/** Tags, audio format and file location of a track, read when the Properties view opens. */
-export function createLibraryTrackProperties(trackId: () => string | null) {
-  return createQuery(() => libraryQueryOptions.trackProperties(trackId()));
-}
-
 /** Representative artwork color as `#rrggbb`, for backgrounds only; `null` until known. */
 export function createArtworkAccent(artwork: () => ArtworkRef | null | undefined) {
   const query = createQuery(() => libraryQueryOptions.accent(artwork()?.contentHash ?? null));
@@ -49,10 +44,6 @@ export function createArtworkAccent(artwork: () => ArtworkRef | null | undefined
       return query.data ?? null;
     },
   };
-}
-
-export function createLibraryStatus() {
-  return createQuery(() => libraryQueryOptions.status());
 }
 
 export function createLibraryScan() {
