@@ -68,11 +68,13 @@ describe("the real app", () => {
     await $(`${dock} button[aria-label="Resume"]`).click();
     await expect($(`${dock} button[aria-label="Pause"]`)).toBeEnabled();
 
-    // The 6px seek bar ignores WebDriver's synthetic pointer and key input (the renderer suite
-    // covers operating it), so the seek is sent as a command: the backend moves, reports the
-    // position, and the dock follows.
-    await invoke("seek_playback", { positionMs: 60_000 });
-    await browser.waitUntil(async () => (await position()) >= 60_000, {
+    // The seek bar listens for pointer events, which WebDriver's click does not send (it fires
+    // only a `click`), so it is operated by keyboard. One press is one step: further presses
+    // before the bar's value updates (about once a second) would start from the same value.
+    const before = await position();
+    await browser.execute((element) => (element as HTMLElement).focus(), await $(seek));
+    await browser.keys("ArrowRight");
+    await browser.waitUntil(async () => (await position()) >= before + 5_000, {
       timeoutMsg: "the seek did not move the position",
     });
 
