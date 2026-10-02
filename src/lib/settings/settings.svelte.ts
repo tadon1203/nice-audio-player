@@ -1,10 +1,5 @@
 import { nativeErrorCode } from "$lib/native";
-import type {
-  AppEvent,
-  AppearanceSettings,
-  Settings as BackendSettings,
-  TNativeAPI,
-} from "$lib/native";
+import type { AppEvent, AppearanceSettings, TNativeAPI } from "$lib/native";
 
 /** The appearance fields the renderer may change. */
 export type SettingsUpdate = {
@@ -24,21 +19,21 @@ export class Settings {
   error = $state<string | null>(null);
 
   #api: TNativeAPI;
-  // Fields arrive optional (the backend fills defaults), so they are read defensively below.
-  #mirror = $state.raw<BackendSettings>({});
+  // The backend owns the defaults; nothing is known until the first load.
+  #mirror = $state.raw<AppearanceSettings | null>(null);
 
   constructor(api: TNativeAPI) {
     this.#api = api;
   }
 
-  /** Artwork light behind the library and Now Playing. On by default. */
-  get artworkBackdrop(): boolean {
-    return this.#mirror.appearance?.artworkBackdrop ?? true;
+  /** Artwork light behind the library and Now Playing; `null` until the settings have loaded. */
+  get artworkBackdrop(): boolean | null {
+    return this.#mirror?.artworkBackdrop ?? null;
   }
 
-  /** Only what marks the position moves by itself. Off by default. */
-  get calmMotion(): boolean {
-    return this.#mirror.appearance?.calmMotion ?? false;
+  /** Only what marks the position moves by itself; `null` until the settings have loaded. */
+  get calmMotion(): boolean | null {
+    return this.#mirror?.calmMotion ?? null;
   }
 
   async load(): Promise<void> {
@@ -57,10 +52,12 @@ export class Settings {
 
   async update(patch: SettingsUpdate): Promise<SettingsUpdateResult> {
     const previous = this.#mirror;
-    const appearance: AppearanceSettings = { ...previous.appearance };
-    if (patch.artworkBackdrop !== undefined) appearance.artworkBackdrop = patch.artworkBackdrop;
-    if (patch.calmMotion !== undefined) appearance.calmMotion = patch.calmMotion;
-    const optimistic = { ...previous, appearance };
+    // Before the first load there is nothing to apply the change to; the saved answer is shown.
+    const optimistic = previous && {
+      ...previous,
+      ...(patch.artworkBackdrop === undefined ? {} : { artworkBackdrop: patch.artworkBackdrop }),
+      ...(patch.calmMotion === undefined ? {} : { calmMotion: patch.calmMotion }),
+    };
     this.#mirror = optimistic;
     try {
       const saved = await this.#api.updateSettings({

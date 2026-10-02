@@ -86,3 +86,9 @@ pub(crate) fn parse_id(value: &str) -> Result<i64, StoreError> {
         .filter(|id: &i64| *id > 0)
         .ok_or(StoreError::InvalidId)
 }
+
+impl crate::tasks::TaskError for LibraryCommandError {
+    fn task_failed() -> Self {
+        Self::TaskFailed
+    }
+}

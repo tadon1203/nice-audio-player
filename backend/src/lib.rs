@@ -6,6 +6,7 @@ pub mod library;
 pub mod lyrics;
 pub mod media;
 pub mod settings;
+pub mod tasks;
 
 #[cfg(test)]
 #[path = "audio/test_support.rs"]

@@ -1,11 +1,21 @@
 import { describe, expect, it, vi } from "vitest";
-import type { Settings as BackendSettings, TNativeAPI } from "$lib/native";
+import type { AppearanceSettings, TNativeAPI } from "$lib/native";
 import { createSettings } from "./settings.svelte";
 
 function stubApi(overrides: Partial<Pick<TNativeAPI, "getSettings" | "updateSettings">> = {}) {
   return {
-    getSettings: vi.fn(async (): Promise<BackendSettings> => ({})),
-    updateSettings: vi.fn(async (): Promise<BackendSettings> => ({})),
+    getSettings: vi.fn(
+      async (): Promise<AppearanceSettings> => ({
+        artworkBackdrop: true,
+        calmMotion: false,
+      }),
+    ),
+    updateSettings: vi.fn(
+      async (): Promise<AppearanceSettings> => ({
+        artworkBackdrop: true,
+        calmMotion: false,
+      }),
+    ),
     ...overrides,
   } as unknown as TNativeAPI & {
     getSettings: ReturnType<typeof vi.fn>;
@@ -24,10 +34,10 @@ function deferred<T>() {
 }
 
 describe("Settings", () => {
-  it("defaults missing fields", async () => {
+  it("knows nothing until loaded, then holds the backend values", async () => {
     const settings = createSettings(stubApi());
-    expect(settings.artworkBackdrop).toBe(true);
-    expect(settings.calmMotion).toBe(false);
+    expect(settings.artworkBackdrop).toBeNull();
+    expect(settings.calmMotion).toBeNull();
     await settings.load();
     expect(settings.artworkBackdrop).toBe(true);
     expect(settings.calmMotion).toBe(false);
@@ -36,7 +46,8 @@ describe("Settings", () => {
   it("loads the backend values", async () => {
     const api = stubApi({
       getSettings: vi.fn(async () => ({
-        appearance: { artworkBackdrop: false, calmMotion: true },
+        artworkBackdrop: false,
+        calmMotion: true,
       })),
     });
     const settings = createSettings(api);
@@ -54,9 +65,10 @@ describe("Settings", () => {
   });
 
   it("applies an update before the backend answers, sending null for untouched fields", async () => {
-    const pending = deferred<BackendSettings>();
+    const pending = deferred<AppearanceSettings>();
     const api = stubApi({ updateSettings: vi.fn(() => pending.promise) });
     const settings = createSettings(api);
+    await settings.load();
 
     const result = settings.update({ calmMotion: true });
     expect(settings.calmMotion).toBe(true);
@@ -64,7 +76,7 @@ describe("Settings", () => {
       appearance: { artworkBackdrop: null, calmMotion: true },
     });
 
-    pending.resolve({ appearance: { artworkBackdrop: true, calmMotion: true } });
+    pending.resolve({ artworkBackdrop: true, calmMotion: true });
     expect(await result).toEqual({ ok: true });
     expect(settings.calmMotion).toBe(true);
   });
@@ -74,6 +86,7 @@ describe("Settings", () => {
       updateSettings: vi.fn().mockRejectedValue({ code: "persistenceFailed" }),
     });
     const settings = createSettings(api);
+    await settings.load();
 
     const result = await settings.update({ artworkBackdrop: false });
 
@@ -87,7 +100,7 @@ describe("Settings", () => {
     const settings = createSettings(stubApi());
     settings.mirrorEvent({
       event: "settingsChanged",
-      payload: { appearance: { artworkBackdrop: false, calmMotion: true } },
+      payload: { artworkBackdrop: false, calmMotion: true },
     });
     expect(settings.artworkBackdrop).toBe(false);
     expect(settings.calmMotion).toBe(true);

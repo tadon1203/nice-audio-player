@@ -84,25 +84,27 @@
     </div>
   </dl>
 
-  <SettingsSwitchField
-    id="artwork-backdrop"
-    label="Artwork backdrop"
-    class="mt-5 border-y"
-    checked={settings.artworkBackdrop}
-    onChange={(checked) => update({ artworkBackdrop: checked })}
-  >
-    Light the playback dock and Now Playing with the current track's artwork.
-  </SettingsSwitchField>
+  {#if settings.artworkBackdrop !== null && settings.calmMotion !== null}
+    <SettingsSwitchField
+      id="artwork-backdrop"
+      label="Artwork backdrop"
+      class="mt-5 border-y"
+      checked={settings.artworkBackdrop}
+      onChange={(checked) => update({ artworkBackdrop: checked })}
+    >
+      Light the playback dock and Now Playing with the current track's artwork.
+    </SettingsSwitchField>
 
-  <SettingsSwitchField
-    id="calm-motion"
-    label="Calm motion"
-    checked={settings.calmMotion}
-    onChange={(checked) => update({ calmMotion: checked })}
-  >
-    Only what marks the current position moves on its own: the Light stops breathing and lyric
-    characters stop lifting.
-  </SettingsSwitchField>
+    <SettingsSwitchField
+      id="calm-motion"
+      label="Calm motion"
+      checked={settings.calmMotion}
+      onChange={(checked) => update({ calmMotion: checked })}
+    >
+      Only what marks the current position moves on its own: the Light stops breathing and lyric
+      characters stop lifting.
+    </SettingsSwitchField>
+  {/if}
 
   {#if settings.error}
     <p class="mt-3 text-sm text-destructive" role="alert">{settings.error}</p>

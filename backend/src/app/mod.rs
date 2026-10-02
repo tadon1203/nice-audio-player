@@ -5,7 +5,9 @@ pub mod playback_context;
 use crate::{
     activity::ApplicationActivityService,
     audio::{
-        playback::{PlaybackQueueSnapshot, PlaybackService, PlaybackSnapshot},
+        playback::{
+            PlaybackQueueSnapshot, PlaybackService, PlaybackServiceError, PlaybackSnapshot,
+        },
         waveform::{PlaybackWaveform, WaveformService},
     },
     events::SharedEventSink,
@@ -17,7 +19,7 @@ use crate::{
     lyrics::{model::LyricsTrackContext, LyricsCommandError, LyricsResolution, LyricsService},
     settings::SettingsService,
 };
-use playback_context::{PlaybackContext, StartPlaybackError};
+use playback_context::PlaybackContext;
 use std::{path::PathBuf, sync::Arc};
 
 #[derive(Debug)]
@@ -94,75 +96,56 @@ impl BackendApp {
         })
     }
 
-    pub async fn resolve_lyrics(
-        &self,
-        track_id: String,
-    ) -> Result<LyricsResolution, LyricsCommandError> {
+    /// Blocking: the host runs it on a blocking thread.
+    pub fn resolve_lyrics(&self, track_id: String) -> Result<LyricsResolution, LyricsCommandError> {
         let library = self
             .library
             .as_ref()
-            .map_err(|_| LyricsCommandError::LibraryUnavailable)?
-            .clone();
-        let lyrics = self.lyrics;
-        tokio::task::spawn_blocking(move || {
-            // The Library says where the file is; lyrics reads what is beside and inside it.
-            let file = library
-                .store()
-                .track_location(&track_id)
-                .map_err(map_lyrics_context_error)?
-                .existing()
-                .map_err(|_| LyricsCommandError::TrackUnavailable)?;
-            Ok(lyrics.resolve(LyricsTrackContext {
-                track_id,
-                source: file.path,
-                root: file.root,
-            }))
-        })
-        .await
-        .map_err(|_| LyricsCommandError::TaskFailed)?
+            .map_err(|_| LyricsCommandError::LibraryUnavailable)?;
+        // The Library says where the file is; lyrics reads what is beside and inside it.
+        let file = library
+            .store()
+            .track_location(&track_id)
+            .map_err(map_lyrics_context_error)?
+            .existing()
+            .map_err(|_| LyricsCommandError::TrackUnavailable)?;
+        Ok(self.lyrics.resolve(LyricsTrackContext {
+            track_id,
+            source: file.path,
+            root: file.root,
+        }))
     }
 
     /// Replaces the queue with `context` and plays from `start_track_id` (its first track when
-    /// `None`). Runs on a blocking thread because the playback worker answers only once the
-    /// source is loaded and the stream is running.
-    pub async fn start_playback(
+    /// `None`). Blocking: the playback worker answers only once the source is loaded and the
+    /// stream is running.
+    pub fn start_playback(
         &self,
-        context: PlaybackContext,
-        start_track_id: Option<String>,
-    ) -> Result<PlaybackSnapshot, StartPlaybackError> {
+        context: &PlaybackContext,
+        start_track_id: Option<&str>,
+    ) -> Result<PlaybackSnapshot, PlaybackServiceError> {
         let library = self
             .library
             .as_ref()
-            .map_err(|_| StartPlaybackError::LibraryUnavailable)?
-            .clone();
-        let playback = self.playback.handle();
-        tokio::task::spawn_blocking(move || {
-            let (items, start_index) =
-                playback_context::resolve(library.store(), &context, start_track_id.as_deref())?;
-            Ok(playback.start(items, start_index)?)
-        })
-        .await
-        .map_err(|_| StartPlaybackError::TaskFailed)?
+            .map_err(|_| PlaybackServiceError::LibraryUnavailable)?;
+        let (items, start_index) =
+            playback_context::resolve(library.store(), context, start_track_id)?;
+        self.playback.handle().start(items, start_index)
     }
 
     /// Adds a library track to the queue: right after the current one (`next`) or at the end.
-    pub async fn enqueue_track(
+    /// Blocking, like `start_playback`.
+    pub fn enqueue_track(
         &self,
-        track_id: String,
+        track_id: &str,
         next: bool,
-    ) -> Result<PlaybackQueueSnapshot, StartPlaybackError> {
+    ) -> Result<PlaybackQueueSnapshot, PlaybackServiceError> {
         let library = self
             .library
             .as_ref()
-            .map_err(|_| StartPlaybackError::LibraryUnavailable)?
-            .clone();
-        let playback = self.playback.handle();
-        tokio::task::spawn_blocking(move || {
-            let item = playback_context::resolve_track(library.store(), &track_id)?;
-            Ok(playback.enqueue(vec![item], next)?)
-        })
-        .await
-        .map_err(|_| StartPlaybackError::TaskFailed)?
+            .map_err(|_| PlaybackServiceError::LibraryUnavailable)?;
+        let item = playback_context::resolve_track(library.store(), track_id)?;
+        self.playback.handle().enqueue(vec![item], next)
     }
 
     pub fn shutdown(&self) {

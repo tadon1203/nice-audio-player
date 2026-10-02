@@ -108,7 +108,7 @@ impl PlaybackWorker {
             code: code.clone(),
         };
         self.publish_state();
-        PlaybackServiceError::Output(code)
+        PlaybackServiceError::from(code)
     }
 
     /// Switches the output device. While a track is loaded, playback restarts on the new device

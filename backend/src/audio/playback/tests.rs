@@ -404,7 +404,7 @@ fn when_every_file_fails_each_is_tried_once_and_the_queue_survives() {
 
     let result = harness.start(missing(3), 0);
 
-    assert_eq!(result, Err(PlaybackServiceError::Decode));
+    assert_eq!(result, Err(PlaybackServiceError::DecodeFailed));
     assert_eq!(harness.queue_snapshot().upcoming_count, 0);
     assert_eq!(harness.queue_snapshot().history_count, 2);
     assert_eq!(
@@ -435,7 +435,7 @@ fn skipping_failed_files_is_bounded_even_when_the_queue_repeats() {
 
     let result = harness.start(missing(4), 1);
 
-    assert_eq!(result, Err(PlaybackServiceError::Decode));
+    assert_eq!(result, Err(PlaybackServiceError::DecodeFailed));
     let queue = harness.queue_snapshot();
     assert_eq!(queue.history_count + 1 + queue.upcoming_count, 4);
 }
@@ -449,7 +449,7 @@ fn navigating_onto_a_broken_file_reports_the_failure_and_keeps_the_queue() {
 
     let result = harness.next();
 
-    assert_eq!(result, Err(PlaybackServiceError::Decode));
+    assert_eq!(result, Err(PlaybackServiceError::DecodeFailed));
     let queue = harness.queue_snapshot();
     assert_eq!(queue.history_count + 1 + queue.upcoming_count, 2);
     assert!(matches!(
@@ -473,7 +473,7 @@ fn an_output_that_cannot_be_prepared_fails_without_skipping() {
 
     assert_eq!(
         result,
-        Err(PlaybackServiceError::Output(
+        Err(PlaybackServiceError::from(
             PlaybackFailureCode::UnsupportedOutputConfiguration
         ))
     );
@@ -497,7 +497,7 @@ fn a_missing_output_device_is_reported_as_such() {
 
     assert_eq!(
         harness.start(tracks, 0),
-        Err(PlaybackServiceError::Output(
+        Err(PlaybackServiceError::from(
             PlaybackFailureCode::NoOutputDevice
         ))
     );
@@ -515,7 +515,7 @@ fn a_stream_that_will_not_start_fails_the_start_without_skipping() {
 
     assert_eq!(
         result,
-        Err(PlaybackServiceError::Output(
+        Err(PlaybackServiceError::from(
             PlaybackFailureCode::OutputStreamStartFailed
         ))
     );
@@ -960,7 +960,7 @@ fn a_seek_whose_decode_fails_keeps_the_session_and_its_stream() {
         pipeline: PipelineId(2),
     });
 
-    assert_eq!(seek.try_recv(), Ok(Err(PlaybackServiceError::Decode)));
+    assert_eq!(seek.try_recv(), Ok(Err(PlaybackServiceError::DecodeFailed)));
     let snapshot = harness.snapshot();
     assert!(matches!(snapshot, PlaybackSnapshot::Playing { .. }));
     assert_eq!(
@@ -984,7 +984,7 @@ fn a_failed_pause_fails_the_player() {
 
     assert_eq!(
         result,
-        Err(PlaybackServiceError::Output(
+        Err(PlaybackServiceError::from(
             PlaybackFailureCode::OutputStreamPauseFailed
         ))
     );
@@ -1060,7 +1060,7 @@ fn a_failed_device_switch_keeps_the_saved_selection_and_the_queue() {
 
     assert_eq!(
         result,
-        Err(PlaybackServiceError::Output(
+        Err(PlaybackServiceError::from(
             PlaybackFailureCode::OutputDeviceUnavailable
         ))
     );

@@ -11,7 +11,7 @@ use backend::{
     app::BackendApp,
     audio::playback::{PlaybackQueueSnapshot, PlaybackSnapshot},
     events::{BackendEvent, EventSink},
-    settings::Settings,
+    settings::AppearanceSettings,
 };
 use serde::Serialize;
 use tauri::Emitter;
@@ -30,7 +30,7 @@ pub enum AppEvent {
     #[serde(rename = "waveformReady")]
     WaveformReady { path: String },
     #[serde(rename = "settingsChanged")]
-    Settings(Settings),
+    Settings(AppearanceSettings),
 }
 
 impl AppEvent {
@@ -108,7 +108,7 @@ impl PendingEvents {
             ));
         }
         if self.settings {
-            events.push(AppEvent::Settings(backend.settings.get()));
+            events.push(AppEvent::Settings(backend.settings.appearance()));
         }
         events.extend(
             self.waveforms

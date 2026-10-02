@@ -98,15 +98,15 @@ impl PlaybackWorker {
 
 fn seek_error(error: PipelineError) -> PlaybackServiceError {
     match error {
-        PipelineError::SeekFailed => PlaybackServiceError::Seek,
+        PipelineError::SeekFailed => PlaybackServiceError::SeekFailed,
         PipelineError::OutputPrepare(error) => {
-            PlaybackServiceError::Output(output_failure_code(error))
+            PlaybackServiceError::from(output_failure_code(error))
         }
         PipelineError::ProcessorCreate => {
-            PlaybackServiceError::Output(PlaybackFailureCode::SampleRateConversionFailed)
+            PlaybackServiceError::from(PlaybackFailureCode::SampleRateConversionFailed)
         }
         PipelineError::DecoderOpen
         | PipelineError::SpecChanged
-        | PipelineError::FirstPacketDecode => PlaybackServiceError::Decode,
+        | PipelineError::FirstPacketDecode => PlaybackServiceError::DecodeFailed,
     }
 }

@@ -47,7 +47,7 @@ impl PlaybackWorker {
         match stream_signal_action(&self.output_selection, kind) {
             StreamSignalAction::RefreshDefaultDevice => {
                 info!("playback.stream_interrupted stream_id={}", stream.0);
-                self.cancel_seek(PlaybackServiceError::Output(
+                self.cancel_seek(PlaybackServiceError::from(
                     PlaybackFailureCode::OutputDeviceUnavailable,
                 ));
                 if self.refresh_default_device() {
@@ -71,7 +71,7 @@ impl PlaybackWorker {
         self.fail_active(
             code.clone(),
             FailureScope::Output,
-            PlaybackServiceError::Output(code),
+            PlaybackServiceError::from(code),
         );
     }
 

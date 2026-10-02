@@ -6,7 +6,6 @@ use tauri::Manager;
 mod artwork;
 mod bindings;
 mod commands;
-mod errors;
 mod events;
 
 pub use bindings::render_typescript as render_typescript_bindings;

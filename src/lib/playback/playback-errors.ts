@@ -1,11 +1,11 @@
-import type { PlaybackCommandError, StartPlaybackError } from "$lib/native";
+import type { PlaybackServiceError } from "$lib/native";
 import { messageForCode, nativeErrorCode } from "$lib/native";
 
-type PlaybackErrorCode = (PlaybackCommandError | StartPlaybackError)["code"];
+type PlaybackErrorCode = PlaybackServiceError["code"];
 
 const messages = {
   invalidArgument: "The playback request was invalid.",
-  playbackWorkerUnavailable: "The playback engine is unavailable.",
+  workerUnavailable: "The playback engine is unavailable.",
   superseded: "That request was replaced by a newer one.",
   queueItemNotFound: "That item is no longer in the queue.",
   queueBusy: "The playback queue is busy. Try again.",
@@ -25,7 +25,6 @@ const messages = {
   outputStreamRuntimeFailed: "The audio output stopped unexpectedly.",
   completionTimingFailed: "Playback completion could not be determined.",
   sampleRateConversionFailed: "The audio could not be converted.",
-  outputFailed: "The audio output failed.",
   invalidAlbumKey: "That album reference is invalid.",
   invalidTrackId: "That track reference is invalid.",
   trackNotMember: "That track is not part of this album.",

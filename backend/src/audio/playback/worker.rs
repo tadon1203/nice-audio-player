@@ -114,8 +114,8 @@ impl StartFailure {
     fn service_error(&self) -> PlaybackServiceError {
         match (self.phase, &self.code) {
             (StartFailurePhase::SourceWorker, _) => PlaybackServiceError::WorkerUnavailable,
-            (_, PlaybackFailureCode::DecodeFailed) => PlaybackServiceError::Decode,
-            (_, code) => PlaybackServiceError::Output(code.clone()),
+            (_, PlaybackFailureCode::DecodeFailed) => PlaybackServiceError::DecodeFailed,
+            (_, code) => PlaybackServiceError::from(code.clone()),
         }
     }
 }

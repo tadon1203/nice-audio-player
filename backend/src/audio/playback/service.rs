@@ -19,11 +19,17 @@ use crate::audio::devices::AudioOutputSelection;
 use crate::audio::output::{CpalBackend, OutputBackend};
 use crate::audio::volume::{AtomicEffectiveGain, VolumeState};
 use crate::events::SharedEventSink;
+use crate::library::store::PlaybackSourceError;
 use crate::media::validation::ValidatedAudioFile;
+use crate::tasks::TaskError;
 use log::error;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Why a playback request failed: the one error vocabulary for every command that plays or
+/// queues, serialized as `{ "code": "<camelCase>" }`.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, specta::Type)]
+#[serde(tag = "code", rename_all = "camelCase")]
 pub enum PlaybackServiceError {
+    InvalidArgument,
     WorkerUnavailable,
     /// A newer request replaced this one before it finished; the caller should not report it.
     Superseded,
@@ -31,12 +37,72 @@ pub enum PlaybackServiceError {
     QueueBusy,
     InvalidVolume,
     InvalidDeviceId,
-    OutputDeviceUnavailable,
     InvalidPlaybackState,
     DurationUnavailable,
-    Seek,
-    Output(PlaybackFailureCode),
-    Decode,
+    SeekFailed,
+    DecodeFailed,
+    NoOutputDevice,
+    OutputDeviceUnavailable,
+    UnsupportedOutputConfiguration,
+    OutputStreamBuildFailed,
+    OutputStreamStartFailed,
+    OutputStreamPauseFailed,
+    OutputStreamResumeFailed,
+    OutputStreamRuntimeFailed,
+    CompletionTimingFailed,
+    SampleRateConversionFailed,
+    // Resolving what to play from the library.
+    InvalidAlbumKey,
+    InvalidTrackId,
+    AlbumNotFound,
+    TrackNotMember,
+    TrackUnavailable,
+    TrackNotPlayable,
+    NoPlayableTracks,
+    LibraryUnavailable,
+    PersistenceFailed,
+    TaskFailed,
+}
+
+impl From<PlaybackFailureCode> for PlaybackServiceError {
+    fn from(code: PlaybackFailureCode) -> Self {
+        match code {
+            PlaybackFailureCode::NoOutputDevice => Self::NoOutputDevice,
+            PlaybackFailureCode::OutputDeviceUnavailable => Self::OutputDeviceUnavailable,
+            PlaybackFailureCode::UnsupportedOutputConfiguration => {
+                Self::UnsupportedOutputConfiguration
+            }
+            PlaybackFailureCode::OutputStreamBuildFailed => Self::OutputStreamBuildFailed,
+            PlaybackFailureCode::OutputStreamStartFailed => Self::OutputStreamStartFailed,
+            PlaybackFailureCode::OutputStreamPauseFailed => Self::OutputStreamPauseFailed,
+            PlaybackFailureCode::OutputStreamResumeFailed => Self::OutputStreamResumeFailed,
+            PlaybackFailureCode::OutputStreamRuntimeFailed => Self::OutputStreamRuntimeFailed,
+            PlaybackFailureCode::CompletionTimingFailed => Self::CompletionTimingFailed,
+            PlaybackFailureCode::DecodeFailed => Self::DecodeFailed,
+            PlaybackFailureCode::SampleRateConversionFailed => Self::SampleRateConversionFailed,
+        }
+    }
+}
+
+impl From<PlaybackSourceError> for PlaybackServiceError {
+    fn from(error: PlaybackSourceError) -> Self {
+        match error {
+            PlaybackSourceError::InvalidAlbumKey => Self::InvalidAlbumKey,
+            PlaybackSourceError::InvalidTrackId => Self::InvalidTrackId,
+            PlaybackSourceError::AlbumNotFound => Self::AlbumNotFound,
+            PlaybackSourceError::TrackNotMember => Self::TrackNotMember,
+            PlaybackSourceError::TrackUnavailable => Self::TrackUnavailable,
+            PlaybackSourceError::TrackNotPlayable => Self::TrackNotPlayable,
+            PlaybackSourceError::NoPlayableTracks => Self::NoPlayableTracks,
+            PlaybackSourceError::PersistenceFailed => Self::PersistenceFailed,
+        }
+    }
+}
+
+impl TaskError for PlaybackServiceError {
+    fn task_failed() -> Self {
+        Self::TaskFailed
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -66,6 +66,12 @@ pub enum LyricsCommandError {
     TaskFailed,
 }
 
+impl crate::tasks::TaskError for LyricsCommandError {
+    fn task_failed() -> Self {
+        Self::TaskFailed
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct LyricsTrackContext {
     pub track_id: String,

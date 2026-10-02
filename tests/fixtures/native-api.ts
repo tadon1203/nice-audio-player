@@ -14,7 +14,7 @@ import type {
   PlaybackQueueItem,
   PlaybackQueueSnapshot,
   PlaybackSnapshot,
-  Settings,
+  AppearanceSettings,
   TNativeAPI,
 } from "$lib/native";
 
@@ -314,7 +314,7 @@ function createNativeMock(options: InstallNativeApiOptions) {
       canGoNext: index < currentSequence.length - 1,
     });
   };
-  let settings: Settings = { appearance: { artworkBackdrop: true } };
+  let settings: AppearanceSettings = { artworkBackdrop: true, calmMotion: false };
   const scanRoot = (): LibraryRoot | null => roots.find((item) => item.enabled) ?? null;
   let scan: LibraryScanSnapshot = {
     state: "idle",
@@ -611,15 +611,12 @@ function createNativeMock(options: InstallNativeApiOptions) {
     updateSettings: async (patch) => {
       settings = {
         ...settings,
-        appearance: {
-          ...settings.appearance,
-          ...(patch.appearance?.artworkBackdrop == null
-            ? {}
-            : { artworkBackdrop: patch.appearance.artworkBackdrop }),
-          ...(patch.appearance?.calmMotion == null
-            ? {}
-            : { calmMotion: patch.appearance.calmMotion }),
-        },
+        ...(patch.appearance?.artworkBackdrop == null
+          ? {}
+          : { artworkBackdrop: patch.appearance.artworkBackdrop }),
+        ...(patch.appearance?.calmMotion == null
+          ? {}
+          : { calmMotion: patch.appearance.calmMotion }),
       };
       emit({ event: "settingsChanged", payload: settings });
       return settings;

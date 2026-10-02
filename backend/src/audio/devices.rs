@@ -33,6 +33,12 @@ pub enum AudioDeviceListError {
     EnumerationFailed,
 }
 
+impl crate::tasks::TaskError for AudioDeviceListError {
+    fn task_failed() -> Self {
+        Self::EnumerationFailed
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum DeviceResolutionError {
     NoDefaultOutputDevice,

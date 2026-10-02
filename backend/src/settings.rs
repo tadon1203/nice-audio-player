@@ -15,7 +15,7 @@ use std::{
 };
 
 use log::{error, warn};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::audio::playback::PlaybackPreferences;
 use crate::events::{BackendEvent, SharedEventSink};
@@ -23,13 +23,34 @@ use crate::events::{BackendEvent, SharedEventSink};
 const FILE_NAME: &str = "settings.json";
 const WRITE_DEBOUNCE: Duration = Duration::from_millis(400);
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
-#[serde(rename_all = "camelCase", default)]
+/// What the renderer reads and writes. Every field is always present, so the renderer declares
+/// no defaults of its own; a saved file missing a field takes the default here.
+#[derive(Debug, Clone, PartialEq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
 pub struct AppearanceSettings {
     /// Artwork light behind the library and Now Playing.
     pub artwork_backdrop: bool,
     /// Only what marks the position moves by itself: nothing breathes or lifts on its own.
     pub calm_motion: bool,
+}
+
+/// How the file stores appearance: every field may be missing.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct StoredAppearance {
+    artwork_backdrop: Option<bool>,
+    calm_motion: Option<bool>,
+}
+
+fn appearance_from_file<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<AppearanceSettings, D::Error> {
+    let stored = StoredAppearance::deserialize(deserializer)?;
+    let defaults = AppearanceSettings::default();
+    Ok(AppearanceSettings {
+        artwork_backdrop: stored.artwork_backdrop.unwrap_or(defaults.artwork_backdrop),
+        calm_motion: stored.calm_motion.unwrap_or(defaults.calm_motion),
+    })
 }
 
 impl Default for AppearanceSettings {
@@ -41,10 +62,12 @@ impl Default for AppearanceSettings {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, specta::Type)]
+/// Everything saved in the settings file. The renderer sees only the appearance part.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Settings {
     pub playback: PlaybackPreferences,
+    #[serde(deserialize_with = "appearance_from_file")]
     pub appearance: AppearanceSettings,
 }
 
@@ -112,13 +135,18 @@ impl SettingsService {
         self.state.lock().expect("settings lock").clone()
     }
 
+    /// The part of the settings the renderer reads.
+    pub fn appearance(&self) -> AppearanceSettings {
+        self.get().appearance
+    }
+
     /// Applies a renderer update and announces it when something changed.
-    pub fn update(&self, patch: &SettingsPatch) -> Settings {
+    pub fn update(&self, patch: &SettingsPatch) -> AppearanceSettings {
         let (settings, changed) = self.modify(|settings| settings.apply(patch));
         if changed {
             self.events.emit(BackendEvent::SettingsChanged);
         }
-        settings
+        settings.appearance
     }
 
     /// Remembers the playback preferences. They are persisted but not announced: the playback
