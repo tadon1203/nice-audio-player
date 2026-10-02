@@ -2,7 +2,7 @@
   import { createArtworkAccent } from "$lib/library/detail.svelte";
   import { getPlayback } from "$lib/playback/context";
   import { getSettings } from "$lib/settings/context";
-  import { readableAccent } from "$lib/ui/artwork-light/artwork-accent";
+  import { readableAccent } from "$lib/ui/artwork-light/light-model";
 
   /**
    * Publishes the playing track's color as `--artwork-accent` on the document. Only the played

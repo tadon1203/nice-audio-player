@@ -1,15 +1,11 @@
 <script lang="ts">
   import FolderPlus from "@lucide/svelte/icons/folder-plus";
-  import RefreshCw from "@lucide/svelte/icons/refresh-cw";
-  import X from "@lucide/svelte/icons/x";
   import { createLibraryRoots, createLibraryScan } from "$lib/library/detail.svelte";
   import { libraryCommandErrorMessage } from "$lib/library/library-errors";
   import {
     createAddLibraryRoot,
-    createCancelLibraryScan,
     createRemoveLibraryRoot,
     createSetLibraryRootEnabled,
-    createStartLibraryScan,
   } from "$lib/library/mutations";
   import type { LibraryRoot } from "$lib/native";
   import EmptyStatus from "$lib/ui/empty-status.svelte";
@@ -29,30 +25,21 @@
   } from "$lib/ui/shadcn/item/index.js";
   import { Spinner } from "$lib/ui/shadcn/spinner/index.js";
   import RemoveLibraryRootDialog from "./remove-library-root-dialog.svelte";
+  import ScanControls from "./scan-controls.svelte";
   import ScanResult from "./scan-result.svelte";
   import ScanRunning from "./scan-running.svelte";
-  import { scanLabel } from "./scan-status";
 
   const rootsQuery = createLibraryRoots();
   const scanQuery = createLibraryScan();
   const addRoot = createAddLibraryRoot();
   const setEnabled = createSetLibraryRootEnabled();
   const removeRoot = createRemoveLibraryRoot();
-  const startScan = createStartLibraryScan();
-  const cancelScan = createCancelLibraryScan();
 
   let removeTarget = $state<LibraryRoot | null>(null);
 
   const roots = $derived(rootsQuery.data ?? []);
   const scan = $derived(scanQuery.data);
   const scanRunning = $derived(scan?.state === "running");
-  // Counts change constantly; the live region announces state changes only.
-  const scanProgress = $derived(
-    scan && scan.inspectedCount !== null
-      ? `${scan.inspectedCount.toLocaleString()} inspected`
-      : null,
-  );
-  const scanControlError = $derived(startScan.error ?? cancelScan.error ?? scanQuery.error);
 
   function confirmRemove() {
     if (!removeTarget) return;
@@ -127,48 +114,7 @@
         Enable a folder to include its audio files in the catalog.
       </p>
     </div>
-    <div class="flex max-w-sm flex-col items-end gap-2">
-      <div class="flex items-center gap-2">
-        <span role="status" aria-live="polite" class="text-sm text-muted-foreground">
-          {scanLabel(scan?.state)}
-          {#if scanProgress}
-            <span aria-hidden="true" class="ml-3">{scanProgress}</span>
-          {/if}
-        </span>
-        {#if scanRunning}
-          <Button
-            type="button"
-            variant="outline"
-            onclick={() => {
-              cancelScan.reset();
-              cancelScan.mutate();
-            }}
-            disabled={cancelScan.isPending}
-          >
-            <X data-icon="inline-start" aria-hidden="true" />
-            Cancel scan
-          </Button>
-        {:else}
-          <Button
-            type="button"
-            variant="outline"
-            onclick={() => {
-              startScan.reset();
-              startScan.mutate();
-            }}
-            disabled={scanQuery.isPending || roots.length === 0 || startScan.isPending}
-          >
-            <RefreshCw data-icon="inline-start" aria-hidden="true" />
-            Rescan
-          </Button>
-        {/if}
-      </div>
-      {#if scanControlError}
-        <p class="text-right text-sm text-destructive" role="alert">
-          {libraryCommandErrorMessage(scanControlError)}
-        </p>
-      {/if}
-    </div>
+    <ScanControls rootCount={roots.length} />
   </div>
 
   {#if scan?.state === "running"}

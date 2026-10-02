@@ -4,9 +4,9 @@
   import { getPlayback } from "$lib/playback/context";
   import { nowPlaying } from "$lib/shell/now-playing.svelte";
   import Artwork from "$lib/ui/artwork.svelte";
-  import KineticText from "$lib/ui/kinetic-text.svelte";
+  import KineticText from "$lib/ui/kinetic-text/kinetic-text.svelte";
   import { SLEEVE_RADIUS, sharedElement, sharedKey } from "$lib/ui/motion/shared-element";
-  import { contentFade } from "./content-fade";
+  import { contentFade } from "./now-playing-layout";
   import TrackFacts from "./track-facts.svelte";
 
   /**

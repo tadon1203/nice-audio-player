@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { watchClock } from "$lib/playback/clock";
   import { getPlayback } from "$lib/playback/context";
   import { createLoudnessLevel } from "$lib/playback/loudness-level";
   import { createPlaybackWaveform } from "$lib/playback/waveform.svelte";
@@ -38,12 +37,6 @@
     });
   });
   $effect(() => () => loudness.destroy());
-
-  // The clock's frame loop runs only while someone follows it.
-  $effect(() => {
-    if (!breathing) return;
-    return watchClock(playback.clock, () => {});
-  });
 </script>
 
 {#if settings.artworkBackdrop}

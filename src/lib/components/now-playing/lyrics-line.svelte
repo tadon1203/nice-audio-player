@@ -19,7 +19,7 @@
   import { motionFor } from "$lib/ui/motion/svelte-motion";
   import { cn } from "$lib/utils/cn.js";
   import { formatDuration } from "$lib/utils/format";
-  import { opacityAtDistance } from "./distance-opacity";
+  import { opacityAtDistance } from "./anchor-column";
   import IntervalLine from "./interval-line.svelte";
   import { lineSpan } from "./lyrics-lines";
 

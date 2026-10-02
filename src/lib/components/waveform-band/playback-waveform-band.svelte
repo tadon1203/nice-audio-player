@@ -1,8 +1,6 @@
 <script lang="ts" module>
   /** The dock's slim progress line: no waveform data, just position. */
   export const DOCK_SEEK_HEIGHT = 6;
-  /** Now Playing's hero band: the only place the waveform itself is drawn. */
-  export const NOW_PLAYING_WAVEFORM_HEIGHT = 96;
 </script>
 
 <script lang="ts">
@@ -19,32 +17,25 @@
   import { formatDuration } from "$lib/utils/format";
 
   /**
-   * The seek bar and its elapsed/remaining labels, used by both the dock (a plain progress line,
-   * `showWaveform={false}`) and Now Playing (the waveform hero, `showWaveform` defaulted true).
+   * The seek bar and its elapsed/remaining labels in one line, used by both the dock (a plain
+   * progress line, `showWaveform={false}`) and Now Playing (the waveform hero, `showWaveform`
+   * defaulted true).
    * They are two separate bars, never morphed into each other: Now Playing's bars grow out of
    * its baseline once the waveform arrives. Only one is mounted at a time, since the dock hides
    * its band while Now Playing is open.
-   *
-   * `timeLayout="inline"` puts the labels beside the bar instead of on their own row below it,
-   * so the whole band is only as tall as one line of text (the dock's shape); `"stacked"` (Now
-   * Playing) keeps the labels on their own row under the full-height hero waveform.
    */
   let {
     height,
     showWaveform = true,
-    timeLayout = "stacked",
     class: className,
-    seekClass,
     timeClass,
     trailing,
   }: {
     height: number;
     showWaveform?: boolean;
-    timeLayout?: "stacked" | "inline";
     class?: string;
-    seekClass?: string;
     timeClass?: string;
-    /** Placed after the remaining time (inline layout only): Now Playing's next track. */
+    /** Placed after the remaining time: Now Playing's next track. */
     trailing?: Snippet;
   } = $props();
 
@@ -126,7 +117,7 @@
       activeSpan={lyricsWaveformLink.activeSpan}
       hoveredLineSpan={lyricsWaveformLink.hoveredLineSpan}
       onHoverPositionChange={(ms) => lyricsWaveformLink.setHoveredWaveformMs(ms)}
-      class={cn(timeLayout === "inline" && "flex-1", seekClass)}
+      class="flex-1"
     />
   {/key}
 {/snippet}
@@ -144,32 +135,16 @@
   </button>
 {/snippet}
 
-{#if timeLayout === "inline"}
-  <div
-    class={cn(
-      "flex items-center gap-2 text-sm leading-none text-muted-foreground tabular-nums",
-      className,
-    )}
-  >
-    <span class={cn("shrink-0", timeClass)} aria-label="Elapsed time">
-      {@render rolling(formatDuration(seekValue))}
-    </span>
-    {@render seekBar()}
-    <span class={cn("shrink-0", timeClass)}>{@render remainingButton()}</span>
-    {@render trailing?.()}
-  </div>
-{:else}
-  <div class={cn("flex flex-col gap-1", className)}>
-    {@render seekBar()}
-    <div
-      class={cn(
-        "flex items-center justify-between text-sm text-muted-foreground tabular-nums",
-        timeClass,
-      )}
-      data-region="playback-times"
-    >
-      <span aria-label="Elapsed time">{@render rolling(formatDuration(seekValue))}</span>
-      {@render remainingButton()}
-    </div>
-  </div>
-{/if}
+<div
+  class={cn(
+    "flex items-center gap-2 text-sm leading-none text-muted-foreground tabular-nums",
+    className,
+  )}
+>
+  <span class={cn("shrink-0", timeClass)} aria-label="Elapsed time">
+    {@render rolling(formatDuration(seekValue))}
+  </span>
+  {@render seekBar()}
+  <span class={cn("shrink-0", timeClass)}>{@render remainingButton()}</span>
+  {@render trailing?.()}
+</div>

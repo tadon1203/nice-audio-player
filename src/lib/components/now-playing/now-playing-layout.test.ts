@@ -1,4 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+// `svelte/motion` reads `matchMedia` as it loads, and this file only tests pure sizes.
+vi.mock("svelte/motion", () => ({ prefersReducedMotion: { current: false } }));
 import { waveformHeightFor } from "./now-playing-layout";
 
 describe("waveformHeightFor", () => {

@@ -3,7 +3,7 @@
   import type { Attachment } from "svelte/attachments";
   import { EASE_OUT_CSS, motionTokens } from "$lib/ui/motion/tokens";
   import { tweenNumber } from "$lib/ui/motion/tween-number";
-  import { REVEAL_END_PERCENT, wipeMask } from "$lib/ui/wipe-mask";
+  import { REVEAL_END_PERCENT, wipeMask } from "./wipe-mask";
   import { cn } from "$lib/utils/cn.js";
 
   /**

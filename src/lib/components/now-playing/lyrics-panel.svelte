@@ -6,7 +6,7 @@
   import { lyricsWaveformLink } from "$lib/shell/lyrics-waveform-link.svelte";
   import { Button } from "$lib/ui/shadcn/button";
   import { cn } from "$lib/utils/cn.js";
-  import { createAnchorPadding } from "./anchor-padding.svelte";
+  import { createAnchorPadding } from "./anchor-column.svelte";
   import LyricsLine, { LYRICS_TEXT } from "./lyrics-line.svelte";
   import { createLyricsFollow } from "./lyrics-follow.svelte";
   import { findCurrentLineIndex, lineSpan, withIntro } from "./lyrics-lines";

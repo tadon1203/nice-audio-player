@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { albumItemKey } from "$lib/library/album-key";
   import { createLibraryCatalog } from "$lib/library/catalog.svelte";
   import { getPlayback } from "$lib/playback/context";
   import { libraryViews } from "$lib/shell/library-views.svelte";
@@ -37,7 +38,7 @@
     <VirtualMediaGrid
       items={albums}
       scrollElement={scroll.viewport}
-      itemKey={(album) => `${album.key.albumArtist}\u0000${album.key.title}`}
+      itemKey={(album) => albumItemKey(album.key)}
       artworkAt={(index) => albums[index]?.artwork}
       sortSignature={view.sortSignature}
       ontopindexchange={scroll.ontopindexchange}

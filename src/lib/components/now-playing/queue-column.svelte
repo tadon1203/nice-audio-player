@@ -12,9 +12,8 @@
   import Artwork from "$lib/ui/artwork.svelte";
   import { cn } from "$lib/utils/cn.js";
   import { formatDuration } from "$lib/utils/format";
-  import { anchorScrollTop } from "./anchor";
-  import { createAnchorPadding } from "./anchor-padding.svelte";
-  import { opacityAtDistance } from "./distance-opacity";
+  import { anchorScrollTop, opacityAtDistance } from "./anchor-column";
+  import { createAnchorPadding } from "./anchor-column.svelte";
   import { buildQueueRows, gutterLabel, hiddenUpcomingCount } from "./queue-rows";
   import ReadingBand from "./reading-band.svelte";
 

@@ -1,5 +1,5 @@
 import type { Attachment } from "svelte/attachments";
-import { anchorSpacers } from "./anchor";
+import { anchorSpacers } from "./anchor-column";
 
 /**
  * Measures a scroll container for the spacers that let its first and last rows reach the anchor

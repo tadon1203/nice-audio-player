@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { anchorScrollTop } from "./anchor";
+import { anchorScrollTop } from "./anchor-column";
 import {
   decideLineChange,
   isScrollIntentKey,

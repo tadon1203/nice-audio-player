@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { readableAccent } from "./artwork-accent";
 import {
   breathingOpacity,
   contrastRatio,
   grayLuminance,
   INK,
   LIGHT,
+  readableAccent,
   worstCaseSurfaceLuminance,
   type LightStrength,
 } from "./light-model";

@@ -5,6 +5,7 @@
   import AlbumStrip from "$lib/components/media-details/album-strip.svelte";
   import MediaDetailsHeader from "$lib/components/media-details/media-details-header.svelte";
   import TrackTable from "$lib/components/track-table/track-table.svelte";
+  import { albumItemKey } from "$lib/library/album-key";
   import { createAlbumDetails, createAlbumTracks } from "$lib/library/detail.svelte";
   import { libraryCommandErrorMessage } from "$lib/library/library-errors";
   import { albumArtistHref } from "$lib/library/routes";
@@ -17,7 +18,6 @@
   import FactLine from "$lib/ui/fact-line.svelte";
   import LoadMoreSentinel from "$lib/ui/load-more-sentinel.svelte";
   import LoadingStatus from "$lib/ui/loading-status.svelte";
-  import { sharedKey } from "$lib/ui/motion/shared-element";
   import PlayPauseIcon from "$lib/ui/play-pause-icon.svelte";
   import SectionTitle from "$lib/ui/section-title.svelte";
   import { Button } from "$lib/ui/shadcn/button/index.js";
@@ -31,7 +31,7 @@
   const key = $derived({ albumArtist, title: albumTitle });
   const title = $derived(albumTitleLabel(albumTitle));
   const artist = $derived(artistNameLabel(albumArtist));
-  const shared = $derived(sharedKey.album(key));
+  const shared = $derived(albumItemKey(key));
   // Where the album was opened from, when that was an album artist's page.
   const parentArtist = $derived(page.state.parentArtist);
 

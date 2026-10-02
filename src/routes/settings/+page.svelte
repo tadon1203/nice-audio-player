@@ -1,5 +1,5 @@
 <script lang="ts">
-  import SettingsScreen from "$lib/components/settings/settings-screen.svelte";
+  import SettingsScreen from "./settings-screen.svelte";
   import { createWorkspaceScroll } from "$lib/shell/workspace-scroll.svelte";
   import WorkspaceScroll from "$lib/ui/workspace-scroll.svelte";
 

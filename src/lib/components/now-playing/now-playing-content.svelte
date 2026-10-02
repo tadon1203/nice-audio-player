@@ -5,10 +5,9 @@
   import { createTrackLyrics } from "$lib/lyrics/lyrics.svelte";
   import { getPlayback } from "$lib/playback/context";
   import { cn } from "$lib/utils/cn.js";
-  import { contentFade } from "./content-fade";
   import Identity from "./identity.svelte";
   import LyricsPanel from "./lyrics-panel.svelte";
-  import { SLEEVE_SIZE, waveformHeightFor } from "./now-playing-layout";
+  import { SLEEVE_SIZE, contentFade, waveformHeightFor } from "./now-playing-layout";
   import NowPlayingLight from "./now-playing-light.svelte";
   import QueueColumn from "./queue-column.svelte";
   import UpNext from "./up-next.svelte";
@@ -85,7 +84,6 @@
   {/snippet}
   <PlaybackWaveformBand
     height={waveformHeightFor(layerHeight)}
-    timeLayout="inline"
     class="relative shrink-0 border-t border-border/50 px-6 py-4"
     timeClass="text-sm"
     trailing={showLyrics ? upNext : undefined}

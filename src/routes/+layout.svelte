@@ -4,7 +4,7 @@
   import { prefersReducedMotion } from "svelte/motion";
   import { applyCssMotion } from "$lib/ui/motion/css-motion";
   import { QueryClientProvider } from "@tanstack/svelte-query";
-  import ArtworkAccent from "$lib/components/dock/artwork-accent.svelte";
+  import ArtworkAccent from "./artwork-accent.svelte";
   import PlaybackRegion from "$lib/components/dock/playback-region.svelte";
   import LyricsPrefetch from "$lib/components/now-playing/lyrics-prefetch.svelte";
   import NowPlayingContent from "$lib/components/now-playing/now-playing-content.svelte";

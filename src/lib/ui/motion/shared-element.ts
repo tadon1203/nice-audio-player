@@ -1,5 +1,4 @@
 import type { Attachment } from "svelte/attachments";
-import type { LibraryAlbumKey } from "$lib/native";
 import { motionFor } from "./svelte-motion";
 
 /*
@@ -10,10 +9,7 @@ import { motionFor } from "./svelte-motion";
  * flight departs from wherever the clone is) and does not depend on any scroll region.
  */
 
-/** Keys that pair a library tile with its details header. */
 export const sharedKey = {
-  album: (key: LibraryAlbumKey) => `album\u0000${key.albumArtist}\u0000${key.title}`,
-  artist: (name: string) => `artist\u0000${name}`,
   /** The Sleeve between the dock and Now Playing. */
   sleeve: "now-playing-sleeve",
 };

@@ -1,24 +1,8 @@
 import { describe, expect, it } from "vitest";
-import {
-  DEPARTURE_TTL_MS,
-  flightKeyframes,
-  isFresh,
-  lerpBox,
-  sharedKey,
-  type Box,
-} from "./shared-element";
+import { DEPARTURE_TTL_MS, flightKeyframes, isFresh, lerpBox, type Box } from "./shared-element";
 
 const tile: Box = { x: 100, y: 200, width: 160, height: 160, radius: 8 };
 const header: Box = { x: 40, y: 60, width: 224, height: 224, radius: 8 };
-
-describe("shared element keys", () => {
-  it("pair an album by both parts of its key, and keep artists apart from albums", () => {
-    const key = sharedKey.album({ albumArtist: "A", title: "B" });
-    expect(key).toBe(sharedKey.album({ albumArtist: "A", title: "B" }));
-    expect(key).not.toBe(sharedKey.album({ albumArtist: "B", title: "A" }));
-    expect(sharedKey.artist("A")).not.toBe(sharedKey.album({ albumArtist: "", title: "A" }));
-  });
-});
 
 describe("flight", () => {
   it("interpolates position, size and radius", () => {

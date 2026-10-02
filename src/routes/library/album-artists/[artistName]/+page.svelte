@@ -2,6 +2,7 @@
   import { page } from "$app/state";
   import { resolve } from "$app/paths";
   import MediaDetailsHeader from "$lib/components/media-details/media-details-header.svelte";
+  import { albumItemKey } from "$lib/library/album-key";
   import { createAlbumArtist, createArtistAlbums } from "$lib/library/detail.svelte";
   import { libraryCommandErrorMessage } from "$lib/library/library-errors";
   import { artistNameLabel, fromNameSegment } from "$lib/library/unknown-name";
@@ -87,7 +88,7 @@
         <VirtualMediaGrid
           items={albums.items}
           scrollElement={viewport}
-          itemKey={(album) => `${album.key.albumArtist}\u0000${album.key.title}`}
+          itemKey={(album) => albumItemKey(album.key)}
           artworkAt={(index) => albums.items[index]?.artwork}
           sortSignature={view.sortSignature}
         >

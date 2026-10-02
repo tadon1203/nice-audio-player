@@ -3,7 +3,7 @@ import type { Attachment } from "svelte/attachments";
 import { Spring } from "svelte/motion";
 import { getMotionBudget } from "$lib/shell/motion-budget.svelte";
 import { crossfade, settle } from "$lib/ui/motion/tokens";
-import { anchorScrollTop } from "./anchor";
+import { anchorScrollTop } from "./anchor-column";
 import {
   decideLineChange,
   isScrollIntentKey,

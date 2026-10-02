@@ -47,7 +47,6 @@
         <PlaybackWaveformBand
           height={DOCK_SEEK_HEIGHT}
           showWaveform={false}
-          timeLayout="inline"
           class="px-2 md:px-4 lg:px-6"
           timeClass="hidden md:inline"
         />
