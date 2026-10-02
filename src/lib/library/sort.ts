@@ -59,6 +59,7 @@ export const artistAlbumSortOptions = artistAlbums.options;
 export const isArtistAlbumSortKey = artistAlbums.isKey;
 
 export const trackSortKeys = tracks.keys;
+export const trackSortOptions = tracks.options;
 export const isTrackSortKey = tracks.isKey;
 
 export const sortDirections = defineSortKeys<LibrarySortDirection>({

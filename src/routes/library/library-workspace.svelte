@@ -1,7 +1,6 @@
 <script lang="ts" module>
   import type { LibraryViewState } from "$lib/library/catalog.svelte";
-  import type { LibrarySortDirection } from "$lib/native";
-  import type { SortOption } from "$lib/ui/sort-option";
+  import type { SortableView } from "$lib/ui/sort-option";
 
   export type LibraryPresentationMeta = {
     title: string;
@@ -45,7 +44,6 @@
   import LoadingStatus from "$lib/ui/loading-status.svelte";
   import ScrollIndex from "$lib/ui/scroll-index.svelte";
   import WorkspaceScroll from "$lib/ui/workspace-scroll.svelte";
-  import { formatCount } from "$lib/utils/format";
   import LibraryToolbar from "./library-toolbar.svelte";
 
   let {
@@ -66,13 +64,7 @@
     onfilterchange: (filter: string) => void;
     /** Changes when the filter or sort does, returning the list to the top. */
     stateKey: string;
-    sort?: {
-      key: Key;
-      direction: LibrarySortDirection;
-      options: readonly SortOption<Key>[];
-      onkeychange: (key: Key) => void;
-      ontoggledirection: () => void;
-    };
+    sort?: SortableView<Key>;
     catalog: WorkspaceCatalog<Item>;
     /**
      * The index key of an item (a letter or a year) for the big label shown while scrolling.
@@ -106,7 +98,9 @@
 <div class="grid h-full min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden">
   <LibraryToolbar
     title={meta.title}
-    countLabel={formatCount(catalog.totalCount, meta.singular, meta.plural)}
+    count={catalog.totalCount}
+    singular={meta.singular}
+    plural={meta.plural}
     searchLabel={meta.searchLabel}
     searchPlaceholder={meta.searchPlaceholder}
     {filter}

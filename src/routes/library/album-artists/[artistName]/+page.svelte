@@ -4,7 +4,6 @@
   import MediaDetailsHeader from "$lib/components/media-details/media-details-header.svelte";
   import { createAlbumArtist, createArtistAlbums } from "$lib/library/detail.svelte";
   import { libraryCommandErrorMessage } from "$lib/library/library-errors";
-  import { artistAlbumSortOptions } from "$lib/library/sort";
   import { artistNameLabel, fromNameSegment } from "$lib/library/unknown-name";
   import { getPlayback } from "$lib/playback/context";
   import { libraryViews } from "$lib/shell/library-views.svelte";
@@ -81,14 +80,7 @@
     <section class="mt-10" aria-labelledby="artist-albums-title">
       <div class="mb-5 flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
         <SectionTitle id="artist-albums-title">Albums</SectionTitle>
-        <CollectionSortControl
-          selectLabel="Sort artist albums"
-          value={view.sortKey}
-          options={artistAlbumSortOptions}
-          direction={view.direction}
-          onValueChange={(value) => view.setSort(value, "ascending")}
-          onToggleDirection={view.toggleDirection}
-        />
+        <CollectionSortControl selectLabel="Sort artist albums" {view} />
       </div>
 
       {#if albums.items.length > 0}
@@ -97,7 +89,7 @@
           scrollElement={viewport}
           itemKey={(album) => `${album.key.albumArtist}\u0000${album.key.title}`}
           artworkAt={(index) => albums.items[index]?.artwork}
-          sortSignature="{view.sortKey}:{view.direction}"
+          sortSignature={view.sortSignature}
         >
           {#snippet tile(album)}
             <AlbumTile

@@ -1,5 +1,11 @@
 import type { LibraryCatalogRequest } from "$lib/library/queries";
-import { toggleSortDirection } from "$lib/library/sort";
+import {
+  albumArtistSortOptions,
+  albumSortOptions,
+  artistAlbumSortOptions,
+  toggleSortDirection,
+  trackSortOptions,
+} from "$lib/library/sort";
 import type {
   LibraryAlbumArtistSortKey,
   LibraryAlbumSortKey,
@@ -7,6 +13,7 @@ import type {
   LibrarySortDirection,
   LibraryTrackSortKey,
 } from "$lib/native";
+import type { SortOption } from "$lib/ui/sort-option";
 
 export type LibraryPresentation = "albums" | "albumArtists" | "tracks";
 
@@ -26,9 +33,15 @@ class LibraryView<Presentation extends LibraryPresentation> {
   direction: LibrarySortDirection = $state("ascending");
 
   readonly #presentation: Presentation;
+  readonly sortOptions: readonly SortOption<SortKeyOf[Presentation]>[];
 
-  constructor(presentation: Presentation, sortKey: SortKeyOf[Presentation]) {
+  constructor(
+    presentation: Presentation,
+    sortKey: SortKeyOf[Presentation],
+    sortOptions: readonly SortOption<SortKeyOf[Presentation]>[],
+  ) {
     this.#presentation = presentation;
+    this.sortOptions = sortOptions;
     this.sortKey = $state.raw(sortKey);
   }
 
@@ -39,6 +52,11 @@ class LibraryView<Presentation extends LibraryPresentation> {
       sortKey: this.sortKey,
       direction: this.direction,
     } as Extract<LibraryCatalogRequest, { presentation: Presentation }>;
+  }
+
+  /** Identifies the sort alone, so a list can tell when its order changed. */
+  get sortSignature(): string {
+    return `${this.sortKey}:${this.direction}`;
   }
 
   /** Identifies the filter and sort so views can reset scroll when it changes. */
@@ -64,6 +82,12 @@ class LibraryView<Presentation extends LibraryPresentation> {
 class ArtistAlbumsView {
   sortKey: LibraryArtistAlbumSortKey = $state.raw("year");
   direction: LibrarySortDirection = $state("ascending");
+  readonly sortOptions = artistAlbumSortOptions;
+
+  /** Identifies the sort alone, so a list can tell when its order changed. */
+  get sortSignature(): string {
+    return `${this.sortKey}:${this.direction}`;
+  }
 
   get stateKey(): string {
     return `${this.sortKey}\u0000${this.direction}`;
@@ -83,9 +107,9 @@ class ArtistAlbumsView {
 }
 
 class LibraryViews {
-  readonly albums = new LibraryView("albums", "title");
-  readonly albumArtists = new LibraryView("albumArtists", "artist");
-  readonly tracks = new LibraryView("tracks", "title");
+  readonly albums = new LibraryView("albums", "title", albumSortOptions);
+  readonly albumArtists = new LibraryView("albumArtists", "artist", albumArtistSortOptions);
+  readonly tracks = new LibraryView("tracks", "title", trackSortOptions);
   readonly artistAlbums = new ArtistAlbumsView();
 }
 

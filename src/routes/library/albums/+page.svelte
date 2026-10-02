@@ -1,6 +1,5 @@
 <script lang="ts">
   import { createLibraryCatalog } from "$lib/library/catalog.svelte";
-  import { albumSortOptions } from "$lib/library/sort";
   import { getPlayback } from "$lib/playback/context";
   import { libraryViews } from "$lib/shell/library-views.svelte";
   import VirtualMediaGrid from "$lib/ui/media-grid/virtual-media-grid.svelte";
@@ -27,13 +26,7 @@
   filter={view.filter}
   onfilterchange={view.setFilter}
   stateKey={view.stateKey}
-  sort={{
-    key: view.sortKey,
-    direction: view.direction,
-    options: albumSortOptions,
-    onkeychange: (key) => view.setSort(key),
-    ontoggledirection: view.toggleDirection,
-  }}
+  sort={view}
   {catalog}
   indexFor={(album) =>
     view.sortKey === "year"
@@ -46,7 +39,7 @@
       scrollElement={scroll.viewport}
       itemKey={(album) => `${album.key.albumArtist}\u0000${album.key.title}`}
       artworkAt={(index) => albums[index]?.artwork}
-      sortSignature="{view.sortKey}:{view.direction}"
+      sortSignature={view.sortSignature}
       ontopindexchange={scroll.ontopindexchange}
     >
       {#snippet tile(album)}

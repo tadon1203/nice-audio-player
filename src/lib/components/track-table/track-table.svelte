@@ -1,17 +1,12 @@
 <script lang="ts">
   import { ContextMenu as ContextMenuPrimitive } from "bits-ui";
-  import ArrowDown from "@lucide/svelte/icons/arrow-down";
-  import ArrowUp from "@lucide/svelte/icons/arrow-up";
   import { goto } from "$app/navigation";
   import { isFilePresent, isTrackAvailable, trackLinks } from "$lib/library/tracks";
-  import { toggleSortDirection, trackSortLabels } from "$lib/library/sort";
   import type { LibrarySortDirection, LibraryTrackSortKey } from "$lib/native";
   import { requireNative } from "$lib/native";
   import { getPlayback } from "$lib/playback/context";
   import ContextMenuContent from "$lib/ui/context-menu/context-menu-content.svelte";
   import ContextMenuItem from "$lib/ui/context-menu/context-menu-item.svelte";
-  import PlayPauseIcon from "$lib/ui/play-pause-icon.svelte";
-  import { Button } from "$lib/ui/shadcn/button/index.js";
   import {
     TableBody,
     TableCaption,
@@ -21,7 +16,6 @@
     TableRow,
   } from "$lib/ui/shadcn/table";
   import { cn } from "$lib/utils/cn.js";
-  import { MISSING } from "$lib/utils/format";
   import { createVirtualRows } from "$lib/ui/virtual-rows.svelte";
   import {
     columnText,
@@ -33,11 +27,12 @@
     trackTableBreakpoints,
     TRACK_ROW_HEIGHT,
     type TrackColumn,
-    type TrackRowAction,
     type TrackTableLayout,
     type TrackTableRow,
   } from "./track-columns";
+  import TrackActionCell from "./track-action-cell.svelte";
   import TrackPropertiesSheet from "./track-properties-sheet.svelte";
+  import TrackSortHeader from "./track-sort-header.svelte";
 
   let {
     rows,
@@ -72,6 +67,7 @@
   const playback = getPlayback();
 
   let propertiesFor = $state<string | null>(null);
+  let menuRow = $state<TrackTableRow | null>(null);
   let container = $state<HTMLElement | null>(null);
   let body = $state<HTMLElement | null>(null);
 
@@ -119,35 +115,24 @@
     else if (intent === "resume") void playback.resume();
   }
 
+  /** Resolves the row under a right-click; the spacer rows have none, so no menu opens there. */
+  function selectMenuRow(event: MouseEvent) {
+    const target = event.target;
+    const id =
+      target instanceof Element
+        ? (target.closest<HTMLElement>("tr[data-row-id]")?.dataset.rowId ?? null)
+        : null;
+    const row = id === null ? undefined : rows.find((candidate) => candidate.id === id);
+    if (row) menuRow = row;
+    else event.stopPropagation();
+  }
+
   // Plain strings from routes.ts, not resolve(): see there.
   function goTo(href: string) {
     // eslint-disable-next-line svelte/no-navigation-without-resolve
     void goto(href);
   }
 </script>
-
-{#snippet actionButton(
-  action: TrackRowAction,
-  run: () => void,
-  available: boolean,
-  className: string,
-)}
-  <Button
-    type="button"
-    variant="ghost"
-    size="icon-lg"
-    class={className}
-    aria-label={action.label}
-    title={action.label}
-    disabled={!available}
-    onclick={(event) => {
-      event.stopPropagation();
-      run();
-    }}
-  >
-    <PlayPauseIcon playing={action.kind === "pause"} />
-  </Button>
-{/snippet}
 
 <div bind:this={container} class="@container/track-table min-w-0">
   <!-- Not the shadcn Table root: its overflow wrapper would break the sticky header. -->
@@ -170,24 +155,13 @@
             aria-sort={active ? sortDirection : undefined}
           >
             {#if key !== undefined && onsortchange}
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                class="-mx-2 h-8 px-2 text-sm"
-                aria-label="Sort by {trackSortLabels[key]}"
-                onclick={() =>
-                  onsortchange(key, active ? toggleSortDirection(sortDirection) : "ascending")}
-              >
-                <span>{column.header}</span>
-                {#if active}
-                  {#if sortDirection === "ascending"}
-                    <ArrowUp aria-hidden="true" />
-                  {:else}
-                    <ArrowDown aria-hidden="true" />
-                  {/if}
-                {/if}
-              </Button>
+              <TrackSortHeader
+                header={column.header}
+                sortKey={key}
+                {active}
+                direction={sortDirection}
+                {onsortchange}
+              />
             {:else}
               {column.header}
             {/if}
@@ -195,46 +169,46 @@
         {/each}
       </TableRow>
     </TableHeader>
-    <TableBody bind:ref={body}>
-      <!-- Spacer heights must jump, never animate: the reduced-motion rule gives every element a
+    <ContextMenuPrimitive.Root>
+      <ContextMenuPrimitive.Trigger>
+        {#snippet child({ props })}
+          <TableBody {...props} bind:ref={body} oncontextmenucapture={selectMenuRow}>
+            <!-- Spacer heights must jump, never animate: the reduced-motion rule gives every element a
            transition, and a lagging spacer puts the rows in the wrong place. -->
-      {#if topSpacer > 0}
-        <tr aria-hidden="true">
-          <td colspan={columns.length} class="p-0"
-            ><div class="transition-none" style:height="{topSpacer}px"></div></td
-          >
-        </tr>
-      {/if}
-      {#each visibleIndexes as index (rows[index]?.id ?? index)}
-        {@const row = rows[index]}
-        {#if row}
-          {#if splitsDiscs && startsDisc(rows, index)}
-            <TableRow class="border-b border-border/70">
-              <TableCell
-                colspan={columns.length}
-                class="px-3 pt-6 pb-2 text-sm text-muted-foreground"
-              >
-                Disc {row.discNumber}
-              </TableCell>
-            </TableRow>
-          {/if}
-          {@const { action, clickIntent, playbackState } = trackRowState(
-            row,
-            playback.activeTrackId,
-            playback.status,
-          )}
-          {@const available = isTrackAvailable(row)}
-          {@const runAction = {
-            play: () => onplaytrack(row.id),
-            pause: () => void playback.pause(),
-            resume: () => void playback.resume(),
-          }[action.kind]}
-          <ContextMenuPrimitive.Root>
-            <ContextMenuPrimitive.Trigger>
-              {#snippet child({ props })}
+            {#if topSpacer > 0}
+              <tr aria-hidden="true">
+                <td colspan={columns.length} class="p-0"
+                  ><div class="transition-none" style:height="{topSpacer}px"></div></td
+                >
+              </tr>
+            {/if}
+            {#each visibleIndexes as index (rows[index]?.id ?? index)}
+              {@const row = rows[index]}
+              {#if row}
+                {#if splitsDiscs && startsDisc(rows, index)}
+                  <TableRow class="border-b border-border/70">
+                    <TableCell
+                      colspan={columns.length}
+                      class="px-3 pt-6 pb-2 text-sm text-muted-foreground"
+                    >
+                      Disc {row.discNumber}
+                    </TableCell>
+                  </TableRow>
+                {/if}
+                {@const { action, clickIntent, playbackState } = trackRowState(
+                  row,
+                  playback.activeTrackId,
+                  playback.status,
+                )}
+                {@const available = isTrackAvailable(row)}
+                {@const runAction = {
+                  play: () => onplaytrack(row.id),
+                  pause: () => void playback.pause(),
+                  resume: () => void playback.resume(),
+                }[action.kind]}
                 <!-- Clicking the row is a pointer shortcut; the action button is the keyboard path. -->
                 <tr
-                  {...props}
+                  data-row-id={row.id}
                   data-playback-state={playbackState}
                   data-availability={row.availability}
                   style:height="{TRACK_ROW_HEIGHT}px"
@@ -253,55 +227,7 @@
                       )}
                     >
                       {#if column.kind === "action"}
-                        {#if layout === "album"}
-                          <!-- The number and the button are two stacked cells in a one-cell window;
-                               hover slides the number up and the button in. The ring sits on the
-                               window so the clip does not cut it. -->
-                          <div class="flex h-9 w-full items-center justify-center">
-                            <div
-                              class="size-9 overflow-clip rounded-md has-focus-visible:ring-2 has-focus-visible:ring-ring"
-                            >
-                              <div
-                                class={cn(
-                                  "flex flex-col transition-transform duration-(--motion-overlay-duration) ease-(--motion-overlay-easing)",
-                                  action.persistent && "-translate-y-9",
-                                  available &&
-                                    !action.persistent &&
-                                    "group-focus-within/track:-translate-y-9 group-hover/track:-translate-y-9",
-                                )}
-                              >
-                                <span
-                                  aria-hidden="true"
-                                  class="flex size-9 items-center justify-center text-sm text-muted-foreground"
-                                >
-                                  {row.trackNumber ?? MISSING}
-                                </span>
-                                {@render actionButton(
-                                  action,
-                                  runAction,
-                                  available,
-                                  "focus-visible:ring-0",
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        {:else}
-                          <div class="relative flex h-9 w-full items-center justify-center">
-                            {@render actionButton(
-                              action,
-                              runAction,
-                              available,
-                              cn(
-                                "absolute transition-opacity",
-                                !action.persistent &&
-                                  "opacity-0 group-hover/track:opacity-100 group-focus-within/track:opacity-100",
-                                !available &&
-                                  !action.persistent &&
-                                  "pointer-events-none opacity-0 disabled:opacity-0",
-                              ),
-                            )}
-                          </div>
-                        {/if}
+                        <TrackActionCell {row} {action} {available} {layout} run={runAction} />
                       {:else if column.kind === "title"}
                         <div class="min-w-0 text-left">
                           <div class="flex min-w-0 items-center gap-2">
@@ -327,47 +253,49 @@
                     </TableCell>
                   {/each}
                 </tr>
-              {/snippet}
-            </ContextMenuPrimitive.Trigger>
-            <ContextMenuContent>
-              {#if available}
-                <ContextMenuItem onSelect={() => void playback.enqueueTrack(row.id, true)}>
-                  Play next
-                </ContextMenuItem>
-                <ContextMenuItem onSelect={() => void playback.enqueueTrack(row.id, false)}>
-                  Add to queue
-                </ContextMenuItem>
               {/if}
-              {#if layout === "library"}
-                {@const links = trackLinks(row)}
-                {#if links.album?.href}
-                  {@const href = links.album.href}
-                  <ContextMenuItem onSelect={() => goTo(href)}>Go to album</ContextMenuItem>
-                {/if}
-                {#if links.artist?.href}
-                  {@const href = links.artist.href}
-                  <ContextMenuItem onSelect={() => goTo(href)}>Go to artist</ContextMenuItem>
-                {/if}
-              {/if}
-              {#if isFilePresent(row)}
-                <ContextMenuItem onSelect={() => void requireNative().revealLibraryTrack(row.id)}>
-                  Show in Explorer
-                </ContextMenuItem>
-              {/if}
-              <ContextMenuItem onSelect={() => (propertiesFor = row.id)}>Properties</ContextMenuItem
-              >
-            </ContextMenuContent>
-          </ContextMenuPrimitive.Root>
+            {/each}
+            {#if bottomSpacer > 0}
+              <tr aria-hidden="true">
+                <td colspan={columns.length} class="p-0"
+                  ><div class="transition-none" style:height="{bottomSpacer}px"></div></td
+                >
+              </tr>
+            {/if}
+          </TableBody>
+        {/snippet}
+      </ContextMenuPrimitive.Trigger>
+      <ContextMenuContent>
+        {#if menuRow}
+          {@const row = menuRow}
+          {#if isTrackAvailable(row)}
+            <ContextMenuItem onSelect={() => void playback.enqueueTrack(row.id, true)}>
+              Play next
+            </ContextMenuItem>
+            <ContextMenuItem onSelect={() => void playback.enqueueTrack(row.id, false)}>
+              Add to queue
+            </ContextMenuItem>
+          {/if}
+          {#if layout === "library"}
+            {@const links = trackLinks(row)}
+            {#if links.album?.href}
+              {@const href = links.album.href}
+              <ContextMenuItem onSelect={() => goTo(href)}>Go to album</ContextMenuItem>
+            {/if}
+            {#if links.artist?.href}
+              {@const href = links.artist.href}
+              <ContextMenuItem onSelect={() => goTo(href)}>Go to artist</ContextMenuItem>
+            {/if}
+          {/if}
+          {#if isFilePresent(row)}
+            <ContextMenuItem onSelect={() => void requireNative().revealLibraryTrack(row.id)}>
+              Show in Explorer
+            </ContextMenuItem>
+          {/if}
+          <ContextMenuItem onSelect={() => (propertiesFor = row.id)}>Properties</ContextMenuItem>
         {/if}
-      {/each}
-      {#if bottomSpacer > 0}
-        <tr aria-hidden="true">
-          <td colspan={columns.length} class="p-0"
-            ><div class="transition-none" style:height="{bottomSpacer}px"></div></td
-          >
-        </tr>
-      {/if}
-    </TableBody>
+      </ContextMenuContent>
+    </ContextMenuPrimitive.Root>
   </table>
   <TrackPropertiesSheet trackId={propertiesFor} onclose={() => (propertiesFor = null)} />
 </div>
