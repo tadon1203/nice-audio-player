@@ -34,18 +34,11 @@ export function createRemoveLibraryRoot() {
   }));
 }
 
-function createLibraryScanCommand(command: () => Promise<unknown>) {
-  const client = useQueryClient();
-  return createMutation(() => ({
-    mutationFn: command,
-    onSuccess: () => client.invalidateQueries({ queryKey: libraryQueryKeys.scan }),
-  }));
-}
-
+// Scan state arrives by event, so these do not touch the query cache.
 export function createStartLibraryScan() {
-  return createLibraryScanCommand(() => requireNative().startLibraryScan());
+  return createMutation(() => ({ mutationFn: () => requireNative().startLibraryScan() }));
 }
 
 export function createCancelLibraryScan() {
-  return createLibraryScanCommand(() => requireNative().cancelLibraryScan());
+  return createMutation(() => ({ mutationFn: () => requireNative().cancelLibraryScan() }));
 }

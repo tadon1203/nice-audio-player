@@ -18,7 +18,7 @@
 
 <script lang="ts">
   import type { Attachment } from "svelte/attachments";
-  import { isTrackAvailable } from "$lib/components/track-table/track-columns";
+  import { isTrackAvailable } from "$lib/library/tracks";
   import { prefersReducedMotion } from "svelte/motion";
   import type { TransitionConfig } from "svelte/transition";
   import { getPlayback } from "$lib/playback/context";

@@ -17,6 +17,9 @@ import type {
   LibraryAlbumArtistSummary,
 } from "$lib/native";
 
+/** The request a catalog query key was built from. */
+export const requestOfCatalogKey = (key: readonly unknown[]) => key[2] as LibraryCatalogRequest;
+
 type CatalogPage = LibraryAlbumPage | LibraryAlbumArtistPage | LibraryTrackPage;
 
 export type Page<Item> = {
@@ -60,15 +63,8 @@ export const libraryQueryKeys = {
   status: ["library", "status"] as const,
   scan: ["library", "scan"] as const,
   roots: [...data, "roots"] as const,
-  presentation: (request: LibraryCatalogRequest) =>
-    [
-      ...data,
-      "catalog",
-      request.presentation,
-      request.filter,
-      request.sortKey,
-      request.direction,
-    ] as const,
+  /** Carries the request itself, so what the data was fetched for can be read back from the key. */
+  presentation: (request: LibraryCatalogRequest) => [...data, "catalog", request] as const,
   album: (key: LibraryAlbumKey) =>
     [...data, "album", "detail", key.title, key.albumArtist] as const,
   albumTracks: (key: LibraryAlbumKey) =>
@@ -79,7 +75,6 @@ export const libraryQueryKeys = {
     sortKey: LibraryArtistAlbumSortKey,
     direction: LibrarySortDirection,
   ) => [...data, "artist", "albums", key.name, sortKey, direction] as const,
-  track: (trackId: string | null) => [...data, "track", trackId] as const,
   trackProperties: (trackId: string | null) => [...data, "track", "properties", trackId] as const,
   /** Content-addressed, so it is never invalidated with the catalog. */
   accent: (contentHash: string | null) => ["library", "accent", contentHash] as const,
@@ -109,21 +104,12 @@ export const libraryQueryOptions = {
       getNextPageParam: (page: CatalogPage) => page.nextCursor ?? undefined,
       enabled,
     }),
-  track: (trackId: string | null) =>
-    queryOptions({
-      queryKey: libraryQueryKeys.track(trackId),
-      queryFn: trackId === null ? skipToken : () => requireNative().getLibraryTrack(trackId),
-      gcTime: Infinity,
-    }),
   trackProperties: (trackId: string | null) =>
     queryOptions({
       queryKey: libraryQueryKeys.trackProperties(trackId),
       queryFn:
         trackId === null ? skipToken : () => requireNative().getLibraryTrackProperties(trackId),
     }),
-};
-
-export const libraryDetailQueryOptions = {
   album: (key: LibraryAlbumKey) =>
     queryOptions({
       queryKey: libraryQueryKeys.album(key),

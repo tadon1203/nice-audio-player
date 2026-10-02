@@ -3,7 +3,8 @@
   import { createPlaybackSignalPath } from "$lib/components/signal-path/signal-path.svelte";
   import FactLine from "$lib/ui/fact-line.svelte";
   import { cn } from "$lib/utils/cn.js";
-  import { lyricsState, trackFacts, trackLinks } from "./track-facts";
+  import { trackLinks } from "$lib/library/tracks";
+  import { lyricsState, trackFacts } from "./track-facts";
 
   /**
    * Artist and album, each a link to its page (following one closes Now Playing: page state is

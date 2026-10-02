@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { LyricsResolution, PlaybackItem } from "$lib/native";
-import { expectedLyricsPath, lyricsState, trackFacts, trackLinks } from "./track-facts";
+import { expectedLyricsPath, lyricsState, trackFacts } from "./track-facts";
 
 const item: PlaybackItem = {
   queueItemId: "q1",
@@ -27,25 +27,6 @@ const resolved = (
   trackId: "t1",
   notice,
   document: { source: "sidecar", language: null, content },
-});
-
-describe("trackLinks", () => {
-  it("links the artist to the album artist's page and the album to its own", () => {
-    const links = trackLinks(item);
-    expect(links.artist).toEqual({ text: "Artist", href: "/library/album-artists/Album%20Artist" });
-    expect(links.album).toEqual({ text: "Album", href: "/library/albums/Album%20Artist/Album" });
-  });
-
-  it("falls back to the artist, then to no link", () => {
-    const loose = trackLinks({ ...item, albumKey: null, albumArtist: null });
-    expect(loose.artist?.href).toBe("/library/album-artists/Artist");
-    expect(loose.album).toEqual({ text: "Album", href: null });
-    expect(trackLinks({ ...item, artist: null, albumKey: null }).artist).toBeNull();
-  });
-
-  it("omits an album the track does not have", () => {
-    expect(trackLinks({ ...item, album: " " }).album).toBeNull();
-  });
 });
 
 describe("trackFacts", () => {

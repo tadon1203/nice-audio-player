@@ -1,32 +1,4 @@
-import { albumArtistHref, albumHref } from "$lib/library/routes";
 import type { LyricsResolution, PlaybackItem } from "$lib/native";
-
-/** Artist and album as shown, each with the page it links to (null when it has none). */
-export function trackLinks(item: PlaybackItem): {
-  artist: { text: string; href: string | null } | null;
-  album: { text: string; href: string | null } | null;
-} {
-  const album = item.album?.trim() ?? "";
-  const artist = item.artist?.trim() ?? "";
-  // The catalog's own key, so the link cannot drift from how the library groups albums.
-  const albumArtist = item.albumKey?.albumArtist || item.albumArtist?.trim() || artist;
-  return {
-    artist:
-      artist === ""
-        ? null
-        : { text: artist, href: albumArtist === "" ? null : albumArtistHref(albumArtist) },
-    album:
-      album === ""
-        ? null
-        : {
-            text: album,
-            href:
-              item.albumKey === null
-                ? null
-                : albumHref(item.albumKey.albumArtist, item.albumKey.title),
-          },
-  };
-}
 
 /**
  * `2019  Disc 2  Track 4 of 12  FLAC 24/96`: what the library knows, then what is really decoded

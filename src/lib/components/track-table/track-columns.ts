@@ -3,6 +3,7 @@ import type {
   LibraryTrackSortKey,
   LibraryTrackSummary,
 } from "$lib/native";
+import { isTrackAvailable } from "$lib/library/tracks";
 import { formatDuration, formatKilohertz, MISSING } from "$lib/utils/format";
 
 /** A track row shared by the Library and Album layouts; both DTOs satisfy it directly. */
@@ -11,7 +12,7 @@ export type TrackTableRow = Pick<
   "id" | "title" | "artist" | "durationMs" | "availability" | "playable"
 > &
   Partial<
-    Pick<LibraryTrackSummary, "album" | "albumArtist"> &
+    Pick<LibraryTrackSummary, "album" | "albumArtist" | "albumKey"> &
       Pick<
         LibraryAlbumTrackSummary,
         "trackNumber" | "discNumber" | "fileFormat" | "bitDepth" | "sampleRate"
@@ -154,21 +155,6 @@ export function startsDisc(
 /** The text a plain column shows, `MISSING` when the value is unknown. */
 export function columnText(column: TextColumn, row: TrackTableRow): string {
   return column.text(row) ?? MISSING;
-}
-
-/** The artist the library groups the track under: album artist, else artist. */
-export function albumArtistOf(row: Pick<TrackTableRow, "albumArtist" | "artist">): string {
-  return row.albumArtist?.trim() || row.artist?.trim() || "";
-}
-
-/** Whether the file is on disk (it can be shown in Explorer). */
-export function isFilePresent(row: Pick<TrackTableRow, "availability">): boolean {
-  return row.availability === "available";
-}
-
-/** Whether the track can be played or queued now. */
-export function isTrackAvailable(row: Pick<TrackTableRow, "playable" | "availability">): boolean {
-  return row.playable && isFilePresent(row);
 }
 
 export type TrackRowAction = {

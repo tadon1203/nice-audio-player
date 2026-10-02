@@ -7,7 +7,7 @@ import type {
   LibrarySortDirection,
 } from "$lib/native";
 import { collectionOf } from "./catalog.svelte";
-import { libraryDetailQueryOptions, libraryQueryOptions } from "./queries";
+import { libraryQueryOptions } from "./queries";
 
 /*
  * Thin wrappers over the options in `queries.ts`. Arguments are accessors so the query follows
@@ -15,15 +15,15 @@ import { libraryDetailQueryOptions, libraryQueryOptions } from "./queries";
  */
 
 export function createAlbumDetails(key: () => LibraryAlbumKey) {
-  return createQuery(() => libraryDetailQueryOptions.album(key()));
+  return createQuery(() => libraryQueryOptions.album(key()));
 }
 
 export function createAlbumTracks(key: () => LibraryAlbumKey) {
-  return collectionOf(createInfiniteQuery(() => libraryDetailQueryOptions.albumTracks(key())));
+  return collectionOf(createInfiniteQuery(() => libraryQueryOptions.albumTracks(key())));
 }
 
 export function createAlbumArtist(key: () => LibraryAlbumArtistKey) {
-  return createQuery(() => libraryDetailQueryOptions.artist(key()));
+  return createQuery(() => libraryQueryOptions.artist(key()));
 }
 
 export function createArtistAlbums(
@@ -32,9 +32,7 @@ export function createArtistAlbums(
   direction: () => LibrarySortDirection,
 ) {
   return collectionOf(
-    createInfiniteQuery(() =>
-      libraryDetailQueryOptions.artistAlbums(key(), sortKey(), direction()),
-    ),
+    createInfiniteQuery(() => libraryQueryOptions.artistAlbums(key(), sortKey(), direction())),
   );
 }
 
@@ -45,7 +43,7 @@ export function createLibraryTrackProperties(trackId: () => string | null) {
 
 /** Representative artwork color as `#rrggbb`, for backgrounds only; `null` until known. */
 export function createArtworkAccent(artwork: () => ArtworkRef | null | undefined) {
-  const query = createQuery(() => libraryDetailQueryOptions.accent(artwork()?.contentHash ?? null));
+  const query = createQuery(() => libraryQueryOptions.accent(artwork()?.contentHash ?? null));
   return {
     get current(): string | null {
       return query.data ?? null;

@@ -1,20 +1,22 @@
 import type { QueryClient } from "@tanstack/svelte-query";
-import type { AppEvent, LibraryScanSnapshot, LibraryScanState } from "$lib/native";
+import type { LibraryScanSnapshot, LibraryScanState } from "$lib/native";
 import { libraryQueryKeys } from "./queries";
 
-const terminalScanStates: readonly LibraryScanState[] = ["completed", "cancelled", "failed"];
+const finishedScanStates: readonly LibraryScanState[] = ["completed", "cancelled", "failed"];
+
+/** Whether a scan has stopped running: the moment the catalog may have changed. */
+export const isScanFinished = (state: LibraryScanState) => finishedScanStates.includes(state);
 
 /**
- * Mirrors backend library events into the query cache: scan snapshots replace the
- * cached scan state, and a scan reaching a new terminal state invalidates catalog data.
+ * Replaces the cached scan state with a pushed snapshot. A fetch still in flight would resolve
+ * with older data and overwrite it, so it is cancelled first.
  */
-export function applyLibraryEvent(client: QueryClient, event: AppEvent) {
-  if (event.event !== "libraryScanStateChanged") return;
+export function cacheScanSnapshot(client: QueryClient, snapshot: LibraryScanSnapshot) {
+  void client.cancelQueries({ queryKey: libraryQueryKeys.scan });
+  client.setQueryData(libraryQueryKeys.scan, snapshot);
+}
 
-  const previous = client.getQueryData<LibraryScanSnapshot>(libraryQueryKeys.scan)?.state;
-  const next = event.payload.state;
-  client.setQueryData(libraryQueryKeys.scan, event.payload);
-  if (terminalScanStates.includes(next) && previous !== next) {
-    void client.invalidateQueries({ queryKey: libraryQueryKeys.data });
-  }
+/** Refetches everything the catalog serves. */
+export function refreshLibrary(client: QueryClient) {
+  void client.invalidateQueries({ queryKey: libraryQueryKeys.data });
 }

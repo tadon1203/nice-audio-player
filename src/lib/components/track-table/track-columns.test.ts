@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  albumArtistOf,
   albumTrackColumns,
   hasSeveralDiscs,
   startsDisc,
@@ -54,12 +53,6 @@ describe("track columns", () => {
 });
 
 describe("track rows", () => {
-  it("group under the album artist, else the artist", () => {
-    expect(albumArtistOf({ albumArtist: " Band ", artist: "Solo" })).toBe("Band");
-    expect(albumArtistOf({ albumArtist: null, artist: "Solo" })).toBe("Solo");
-    expect(albumArtistOf({ albumArtist: null, artist: null })).toBe("");
-  });
-
   it("offer Pause or Resume only for the active track", () => {
     const action = (id: string | null, status: Parameters<typeof trackRowState>[2]) =>
       trackRowState(row, id, status).action;

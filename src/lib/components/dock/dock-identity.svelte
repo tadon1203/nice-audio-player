@@ -2,7 +2,7 @@
   import { ContextMenu as ContextMenuPrimitive } from "bits-ui";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import { goto } from "$app/navigation";
-  import { albumArtistHref, albumHref } from "$lib/library/routes";
+  import { trackLinks } from "$lib/library/tracks";
   import { getPlayback } from "$lib/playback/context";
   import { nowPlaying } from "$lib/shell/now-playing.svelte";
   import Artwork from "$lib/ui/artwork.svelte";
@@ -24,10 +24,7 @@
   const title = $derived(item?.title ?? "Nothing playing");
   const nowPlayingOpen = $derived(nowPlaying.isOpen);
   const hasTrack = $derived(item !== null);
-  const albumKey = $derived(item?.albumKey ?? null);
-  const artistName = $derived(
-    albumKey?.albumArtist || item?.albumArtist?.trim() || item?.artist?.trim() || "",
-  );
+  const links = $derived(item === null ? null : trackLinks(item));
 
   /**
    * Next enters from the right and pushes the old track out to the left; previous mirrors it.
@@ -41,15 +38,9 @@
   }
 
   // Plain strings from routes.ts, not resolve(): see there.
-  function goToAlbum() {
-    if (albumKey === null) return;
+  function goTo(href: string) {
     // eslint-disable-next-line svelte/no-navigation-without-resolve
-    void goto(albumHref(albumKey.albumArtist, albumKey.title));
-  }
-
-  function goToArtist() {
-    // eslint-disable-next-line svelte/no-navigation-without-resolve
-    void goto(albumArtistHref(artistName));
+    void goto(href);
   }
 
   let errorTooltipOpen = $state(false);
@@ -111,11 +102,13 @@
       </ContextMenuPrimitive.Trigger>
       {#if hasTrack}
         <ContextMenuContent side="right" align="start" class="min-w-40">
-          {#if albumKey !== null}
-            <ContextMenuItem onSelect={goToAlbum}>Go to album</ContextMenuItem>
+          {#if links?.album?.href}
+            {@const href = links.album.href}
+            <ContextMenuItem onSelect={() => goTo(href)}>Go to album</ContextMenuItem>
           {/if}
-          {#if artistName !== ""}
-            <ContextMenuItem onSelect={goToArtist}>Go to artist</ContextMenuItem>
+          {#if links?.artist?.href}
+            {@const href = links.artist.href}
+            <ContextMenuItem onSelect={() => goTo(href)}>Go to artist</ContextMenuItem>
           {/if}
         </ContextMenuContent>
       {/if}

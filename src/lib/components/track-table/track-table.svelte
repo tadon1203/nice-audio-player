@@ -3,7 +3,7 @@
   import ArrowDown from "@lucide/svelte/icons/arrow-down";
   import ArrowUp from "@lucide/svelte/icons/arrow-up";
   import { goto } from "$app/navigation";
-  import { albumArtistHref, albumHref } from "$lib/library/routes";
+  import { isFilePresent, isTrackAvailable, trackLinks } from "$lib/library/tracks";
   import { toggleSortDirection, trackSortLabels } from "$lib/library/sort";
   import type { LibrarySortDirection, LibraryTrackSortKey } from "$lib/native";
   import { requireNative } from "$lib/native";
@@ -24,11 +24,8 @@
   import { MISSING } from "$lib/utils/format";
   import { createVirtualRows } from "$lib/ui/virtual-rows.svelte";
   import {
-    albumArtistOf,
     columnText,
-    isFilePresent,
     albumTrackColumns,
-    isTrackAvailable,
     libraryTrackColumns,
     hasSeveralDiscs,
     startsDisc,
@@ -126,15 +123,9 @@
   }
 
   // Plain strings from routes.ts, not resolve(): see there.
-  function goToAlbum(row: TrackTableRow) {
-    if (!row.album) return;
+  function goTo(href: string) {
     // eslint-disable-next-line svelte/no-navigation-without-resolve
-    void goto(albumHref(albumArtistOf(row), row.album.trim()));
-  }
-
-  function goToArtist(row: TrackTableRow) {
-    // eslint-disable-next-line svelte/no-navigation-without-resolve
-    void goto(albumArtistHref(albumArtistOf(row)));
+    void goto(href);
   }
 </script>
 
@@ -350,11 +341,16 @@
                   Add to queue
                 </ContextMenuItem>
               {/if}
-              {#if layout === "library" && row.album}
-                <ContextMenuItem onSelect={() => goToAlbum(row)}>Go to album</ContextMenuItem>
-              {/if}
-              {#if layout === "library" && albumArtistOf(row) !== ""}
-                <ContextMenuItem onSelect={() => goToArtist(row)}>Go to artist</ContextMenuItem>
+              {#if layout === "library"}
+                {@const links = trackLinks(row)}
+                {#if links.album?.href}
+                  {@const href = links.album.href}
+                  <ContextMenuItem onSelect={() => goTo(href)}>Go to album</ContextMenuItem>
+                {/if}
+                {#if links.artist?.href}
+                  {@const href = links.artist.href}
+                  <ContextMenuItem onSelect={() => goTo(href)}>Go to artist</ContextMenuItem>
+                {/if}
               {/if}
               {#if isFilePresent(row)}
                 <ContextMenuItem onSelect={() => void requireNative().revealLibraryTrack(row.id)}>

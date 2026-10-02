@@ -8,6 +8,7 @@ import { libraryStatusMessage } from "./library-errors";
 import {
   flattenPages,
   libraryQueryOptions,
+  requestOfCatalogKey,
   type LibraryCatalogItem,
   type LibraryCatalogRequest,
   type Page,
@@ -98,12 +99,15 @@ export function createLibraryCatalog<Request extends LibraryCatalogRequest>(
       : current;
   });
 
-  // Keep the previous list only while the presentation stays the same (index 3 of the key).
+  // Keep the previous list only while the presentation stays the same.
   const keepWithinPresentation = <Data>(
     previousData: Data | undefined,
     previousQuery: { queryKey: readonly unknown[] } | undefined,
   ): Data | undefined =>
-    previousQuery?.queryKey[3] === queryRequest.presentation ? previousData : undefined;
+    previousQuery !== undefined &&
+    requestOfCatalogKey(previousQuery.queryKey).presentation === queryRequest.presentation
+      ? previousData
+      : undefined;
 
   const query = createInfiniteQuery(() => ({
     ...libraryQueryOptions.catalog(queryRequest, statusQuery.data?.status === "ready"),
