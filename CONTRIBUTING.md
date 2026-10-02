@@ -30,5 +30,5 @@
 
 - Usually: `pnpm check` (and `pnpm test` if logic changed).
 - Backend changes: `pnpm check:native` and `pnpm test:native`.
-- Startup, IPC, or routing changes: `pnpm test:e2e` (browser only; the Tauri window, its capabilities, and the titlebar controls are checked by hand with `pnpm dev`).
+- Startup, IPC, or routing changes: `pnpm test:e2e` (browser only, against the built bundle via `vite preview`, so it builds first; the Tauri window, its capabilities, and the titlebar controls are checked by hand with `pnpm dev`).
 - Before a release: `pnpm validate`, then `pnpm package`.

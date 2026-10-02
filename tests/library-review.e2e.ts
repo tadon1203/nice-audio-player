@@ -87,14 +87,15 @@ test("sorts tracks, disables missing files, and loads more rows", async ({ page 
     "descending",
   );
 
-  // Reaching the end of the list loads the next page by itself.
+  // Reaching the end of the list loads every next page by itself. Wait for the last row, the one
+  // state that stays: a row in the middle is rendered only while the list ends right there.
   const viewport = workspaceViewport(page);
   await expect
     .poll(async () => {
       await viewport.evaluate((element) => {
         element.scrollTop = element.scrollHeight;
       });
-      return table.getByRole("row", { name: /Track 080/ }).count();
+      return table.getByRole("row", { name: /Track 140/ }).count();
     })
     .toBe(1);
 });
