@@ -2,13 +2,18 @@
 //! reference the catalog and playback items hand to the renderer.
 
 use super::status::sql_text_enum;
+use image::{codecs::jpeg::JpegEncoder, imageops::FilterType, ImageReader};
 use serde::Serialize;
 use std::{
     fs::{self, OpenOptions},
-    io::Write,
+    io::{Cursor, Write},
     path::Path,
     sync::atomic::{AtomicU64, Ordering},
 };
+
+/// The longest edge of a thumbnail, in pixels.
+pub const THUMBNAIL_EDGE: u32 = 512;
+const THUMBNAIL_QUALITY: u8 = 85;
 
 static TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
@@ -84,6 +89,23 @@ impl ArtworkPath {
     fn shard(&self) -> &str {
         &self.hash[..2]
     }
+
+    /// The thumbnail of this image, stored next to it: `artwork/<shard>/<hash>.thumb.jpg`.
+    pub fn thumbnail(&self) -> String {
+        thumbnail_path(&self.hash)
+    }
+}
+
+/// Where the thumbnail of the artwork with this hash lives below the data directory.
+pub fn thumbnail_path(hash: &str) -> String {
+    format!("artwork/{}/{hash}.thumb.jpg", &hash[..2])
+}
+
+/// The hash of a thumbnail's file name (`<hash>.thumb.jpg`), when it is one.
+pub fn thumbnail_hash(file_name: &str) -> Option<&str> {
+    file_name
+        .strip_suffix(".thumb.jpg")
+        .filter(|hash| is_hash(hash))
 }
 
 impl std::fmt::Display for ArtworkPath {
@@ -174,9 +196,92 @@ pub fn materialize(
     Ok(stored(bytes.len() as u64))
 }
 
+/// Writes the thumbnail of a stored image unless it exists. The original is never touched.
+pub fn ensure_thumbnail(
+    root: &Path,
+    original: &ArtworkPath,
+) -> Result<(), ArtworkMaterializeError> {
+    let final_path = root.join(original.thumbnail());
+    if final_path.exists() {
+        return Ok(());
+    }
+    let bytes =
+        fs::read(root.join(original.to_string())).map_err(|_| ArtworkMaterializeError::Io)?;
+    let decoded = ImageReader::new(Cursor::new(bytes))
+        .with_guessed_format()
+        .map_err(|_| ArtworkMaterializeError::Io)?
+        .decode()
+        .map_err(|_| ArtworkMaterializeError::Io)?;
+    let decoded = if decoded.width() > THUMBNAIL_EDGE || decoded.height() > THUMBNAIL_EDGE {
+        decoded.resize(THUMBNAIL_EDGE, THUMBNAIL_EDGE, FilterType::Lanczos3)
+    } else {
+        decoded
+    };
+    let mut encoded = Vec::new();
+    JpegEncoder::new_with_quality(&mut encoded, THUMBNAIL_QUALITY)
+        .encode_image(&decoded.to_rgb8())
+        .map_err(|_| ArtworkMaterializeError::Io)?;
+    let temp_path = final_path.with_extension(format!(
+        "jpg.tmp-{}-{}",
+        std::process::id(),
+        TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed)
+    ));
+    let written =
+        fs::write(&temp_path, &encoded).and_then(|()| fs::rename(&temp_path, &final_path));
+    if written.is_err() {
+        let _ = fs::remove_file(&temp_path);
+        // Another writer may have stored it first.
+        return if final_path.exists() {
+            Ok(())
+        } else {
+            Err(ArtworkMaterializeError::Io)
+        };
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn png(width: u32, height: u32) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        image::DynamicImage::new_rgb8(width, height)
+            .write_to(&mut Cursor::new(&mut bytes), image::ImageFormat::Png)
+            .unwrap();
+        bytes
+    }
+
+    #[test]
+    fn a_thumbnail_is_made_next_to_an_untouched_original() {
+        let root = std::env::temp_dir().join(format!("nap-thumb-{}", std::process::id()));
+        let bytes = png(1200, 800);
+        let stored = materialize(&root, &bytes, ArtworkMimeType::Png).unwrap();
+        let original = ArtworkPath::parse(&stored.relative_path).unwrap();
+
+        ensure_thumbnail(&root, &original).unwrap();
+        ensure_thumbnail(&root, &original).unwrap();
+
+        let thumb = image::open(root.join(original.thumbnail())).unwrap();
+        assert_eq!((thumb.width(), thumb.height()), (512, 341));
+        assert_eq!(fs::read(root.join(&stored.relative_path)).unwrap(), bytes);
+        assert_eq!(
+            thumbnail_hash(&format!("{}.thumb.jpg", stored.hash)),
+            Some(stored.hash.as_str())
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn a_small_image_is_not_enlarged() {
+        let root = std::env::temp_dir().join(format!("nap-thumb-small-{}", std::process::id()));
+        let stored = materialize(&root, &png(100, 100), ArtworkMimeType::Png).unwrap();
+        let original = ArtworkPath::parse(&stored.relative_path).unwrap();
+        ensure_thumbnail(&root, &original).unwrap();
+        let thumb = image::open(root.join(original.thumbnail())).unwrap();
+        assert_eq!((thumb.width(), thumb.height()), (100, 100));
+        let _ = fs::remove_dir_all(root);
+    }
 
     #[test]
     fn a_canonical_path_is_formatted_and_parsed_by_one_type() {

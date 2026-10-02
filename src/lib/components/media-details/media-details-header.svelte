@@ -47,6 +47,7 @@
       alt="{title} artwork"
       {round}
       loading="eager"
+      level="full"
       class="w-full max-w-56"
       {@attach sharedKey === undefined ? undefined : sharedElement(sharedKey)}
     />

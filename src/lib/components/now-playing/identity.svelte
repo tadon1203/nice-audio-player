@@ -41,6 +41,7 @@
         artwork={item?.artwork ?? null}
         alt={item === null ? "" : `${item.title} artwork`}
         loading="eager"
+        level="full"
         class="size-full rounded-none"
       />
     </div>

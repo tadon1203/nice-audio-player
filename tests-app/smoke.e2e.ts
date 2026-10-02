@@ -1,8 +1,14 @@
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { browser, $, $$, expect } from "@wdio/globals";
 
 // The real app, the real Rust backend, a real output device, over a throwaway profile: these
 // check the seams the mocked renderer suite (`tests/`) cannot, not the UI.
 
+const ONE_PIXEL_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC",
+  "base64",
+);
 const musicDir = process.env.E2E_MUSIC_DIR!;
 const dock = '[aria-label="Playback controls"]';
 const seek = `${dock} [role="slider"][aria-label="Playback position"]`;
@@ -35,6 +41,26 @@ describe("the real app", () => {
   it("starts and shows the library", async () => {
     await expect($("main")).toBeDisplayed();
     expect(await invoke<{ status: string }>("get_library_status")).toEqual({ status: "ready" });
+  });
+
+  it("serves artwork from the throwaway profile, a thumbnail falling back to the original", async () => {
+    const hash = "ab".repeat(32);
+    // Written now, not at launch: startup housekeeping deletes artwork no track owns.
+    const shard = join(process.env.E2E_SCRATCH!, "data", "artwork", "ab");
+    mkdirSync(shard, { recursive: true });
+    writeFileSync(join(shard, `${hash}.png`), ONE_PIXEL_PNG);
+    // An image element, because a fetch from the app's origin to the scheme's is cross-origin.
+    const loadedWidth = (path: string) =>
+      browser.executeAsync((url: string, done: (width: number) => void) => {
+        const image = new Image();
+        image.onload = () => done(image.naturalWidth);
+        image.onerror = () => done(0);
+        image.src = url;
+      }, `http://nice-artwork.localhost/artwork/ab/${path}`);
+
+    expect(await loadedWidth(`${hash}.png`)).toBe(1);
+    // No thumbnail was stored for it: the original is served in its place.
+    expect(await loadedWidth(`${hash}.thumb.jpg`)).toBe(1);
   });
 
   it("scans a folder and lists its tracks", async () => {

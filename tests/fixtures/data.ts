@@ -92,23 +92,23 @@ export function testLibrary(
   options: { trackCount?: number; extraAlbums?: number; artwork?: boolean } = {},
 ): LibraryData {
   const tracks = makeTracks(options.trackCount ?? 140, { artwork: options.artwork });
+  const artwork = options.artwork ? ARTWORK : null;
+  const albumOf = (album: LibraryAlbumSummary): LibraryAlbumSummary => ({ ...album, artwork });
   const extra = Array.from(
     { length: options.extraAlbums ?? 0 },
     (_, index): LibraryAlbumSummary => ({
       key: { title: `Extra album ${String(index).padStart(4, "0")}`, albumArtist: "Extra artist" },
-      artwork: null,
+      artwork,
       year: 2000 + (index % 20),
     }),
   );
   return {
     roots: [testRoot],
     tracks,
-    albums: [testAlbum, secondAlbum, ...extra],
-    artists: [
-      { key: { name: "Test artist" }, artwork: null, albumCount: 2, trackCount: tracks.length },
-    ],
+    albums: [albumOf(testAlbum), albumOf(secondAlbum), ...extra],
+    artists: [{ key: { name: "Test artist" }, artwork, albumCount: 2, trackCount: tracks.length }],
     albumDetails: {
-      summary: testAlbum,
+      summary: albumOf(testAlbum),
       date: "2020",
       trackCount: 3,
       durationMs: 421_000,

@@ -203,6 +203,7 @@ impl Actor {
                     .unwrap_or_default()
                     .into_iter()
                     .collect();
+                maintenance::spawn_thumbnail_backfill(&self.database);
                 self.queue.push_back(Input::GcFinished { rescan });
             }
             Effect::SetActivity(activity) => self.set_activity(activity),

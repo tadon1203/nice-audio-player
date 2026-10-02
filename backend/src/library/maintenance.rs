@@ -2,7 +2,7 @@
 //! uses, and delete files no asset owns.
 
 use super::{
-    artwork::{ArtworkMimeType, ArtworkPath},
+    artwork::{self, ArtworkMimeType, ArtworkPath},
     database::Database,
     error::StoreError,
     status::ArtworkStatus,
@@ -53,6 +53,7 @@ pub(crate) fn collect_source_artwork(database: &Database) -> Result<Vec<i64>, St
         for row in live {
             let (hash, mime_type, relative) = row?;
             if ArtworkPath::is_canonical(&hash, mime_type, &relative) {
+                live_paths.insert(artwork::thumbnail_path(&hash));
                 live_paths.insert(relative);
             }
         }
@@ -94,6 +95,39 @@ fn broken_assets(database: &Database, data_dir: &Path) -> Result<Vec<i64>, Store
     Ok(broken)
 }
 
+/// Generates, on a background thread, the thumbnails that libraries scanned before thumbnails
+/// existed lack. Until one exists the original is served.
+pub(crate) fn spawn_thumbnail_backfill(database: &Database) {
+    let data_dir = database.data_dir().to_path_buf();
+    let Ok(connection) = database.read() else {
+        return;
+    };
+    let Ok(mut statement) = connection.prepare("SELECT relative_path FROM artwork_assets") else {
+        return;
+    };
+    let originals: Vec<ArtworkPath> = statement
+        .query_map([], |row| row.get::<_, String>(0))
+        .map(|rows| {
+            rows.flatten()
+                .filter_map(|relative| ArtworkPath::parse(&relative))
+                .filter(|path| !data_dir.join(path.thumbnail()).exists())
+                .collect()
+        })
+        .unwrap_or_default();
+    if originals.is_empty() {
+        return;
+    }
+    let _ = std::thread::Builder::new()
+        .name("thumbnail-backfill".into())
+        .spawn(move || {
+            for original in originals {
+                let _ = crate::containment::contain("library.thumbnail", || {
+                    artwork::ensure_thumbnail(&data_dir, &original)
+                });
+            }
+        });
+}
+
 fn remove_unowned_files(data_dir: &Path, live_paths: &HashSet<String>) {
     let root = data_dir.join("artwork");
     let Ok(shards) = fs::read_dir(root) else {
@@ -109,9 +143,9 @@ fn remove_unowned_files(data_dir: &Path, live_paths: &HashSet<String>) {
                 continue;
             };
             let relative = format!("artwork/{}/{}", shard.file_name().to_string_lossy(), name);
-            if name.contains(".tmp-")
-                || (ArtworkPath::parse(&relative).is_some() && !live_paths.contains(&relative))
-            {
+            let owned_kind =
+                ArtworkPath::parse(&relative).is_some() || artwork::thumbnail_hash(name).is_some();
+            if name.contains(".tmp-") || (owned_kind && !live_paths.contains(&relative)) {
                 let _ = fs::remove_file(path);
             }
         }

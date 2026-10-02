@@ -43,8 +43,8 @@ pub fn run() {
     );
 
     let app = builder
-        .register_uri_scheme_protocol("nice-artwork", |context, request| {
-            artwork::serve_artwork(context.app_handle(), request)
+        .register_asynchronous_uri_scheme_protocol("nice-artwork", |context, request, responder| {
+            artwork::serve_artwork(context.app_handle(), request, responder)
         })
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
@@ -54,6 +54,7 @@ pub fn run() {
                 Some(dir) => std::path::PathBuf::from(dir),
                 None => app.path().app_data_dir()?,
             };
+            app.manage(artwork::ArtworkDir(data_dir.clone()));
             let (sink, event_receiver) = events::event_channel();
             let backend = BackendApp::initialize(data_dir, sink)
                 .map_err(|_| std::io::Error::other("backend startup failed"))?;

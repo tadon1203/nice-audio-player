@@ -45,7 +45,7 @@
     class?: string;
   } = $props();
 
-  const url = $derived(artworkUrl(artwork));
+  const url = $derived(artworkUrl(artwork, "thumb"));
   const motion = $derived(motionFor("large"));
   const wipeMotion = $derived(motionFor("move"));
   const wipe = $derived(!prefersReducedMotion.current && enter !== "fade" ? enter : null);

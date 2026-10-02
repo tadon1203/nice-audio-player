@@ -29,7 +29,14 @@ impl ArtworkOutcome {
     fn from_read(read: &ArtworkRead, data_dir: &Path) -> Self {
         let stored = match read {
             ArtworkRead::Selected { bytes, mime_type } => {
-                artwork::materialize(data_dir, bytes, *mime_type).ok()
+                artwork::materialize(data_dir, bytes, *mime_type)
+                    .ok()
+                    .inspect(|stored| {
+                        if let Some(path) = artwork::ArtworkPath::parse(&stored.relative_path) {
+                            // Best effort: until one exists the original is served.
+                            let _ = artwork::ensure_thumbnail(data_dir, &path);
+                        }
+                    })
             }
             _ => None,
         };
