@@ -24,5 +24,9 @@ export function waveformQueryOptions(playbackId: string | null) {
 
 export function applyWaveformEvent(client: QueryClient, event: AppEvent) {
   if (event.event !== "waveformReady") return;
-  void client.invalidateQueries({ queryKey: waveformKeys.playback(event.payload.playbackId) });
+  const queryKey = waveformKeys.playback(event.payload.playbackId);
+  // A fetch still in flight asked before the analysis finished, so its answer is the stale
+  // "not yet". Invalidating alone would join it (a query without data ignores `cancelRefetch`),
+  // and `staleTime: Infinity` would then keep that answer; cancel it so the refetch asks again.
+  void client.cancelQueries({ queryKey }).then(() => client.invalidateQueries({ queryKey }));
 }
