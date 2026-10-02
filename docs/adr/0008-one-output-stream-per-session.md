@@ -1,5 +1,7 @@
 # 0008: One output stream per session
 
+Partly superseded by [0010](./0010-output-stream-spans-tracks-for-gapless.md): the stream now outlives a track when the next one has the same format.
+
 A session opens its output stream once. A seek builds a new pipeline (decoder, queue, decode thread) and, when its prebuffer is ready, hands the new queue to the running cpal callback through a lock-free single-slot handoff (the `triple_buffer` crate; the newest unread handoff wins). The callback switches at its next run, restarts its frame count and drops nothing on the audio thread: the queue it leaves goes back into the slot for the worker to free.
 
 - Opening a second stream per seek was slow and could fail on devices that allow only one stream.
