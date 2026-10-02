@@ -1,4 +1,6 @@
 import type { Attachment } from "svelte/attachments";
+import { prefersReducedMotion } from "svelte/motion";
+import { springLinear } from "./spring-curve";
 import { motionFor } from "./svelte-motion";
 
 /*
@@ -116,12 +118,11 @@ function arrive(key: string, node: HTMLElement) {
   departures.delete(key);
   if (!departure || !isFresh(departure.at, performance.now())) return;
 
-  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const { duration, easing } = motionFor("large", reduced);
+  const { duration, easing } = motionFor("large");
 
   // Under reduced motion nothing travels: the Sleeve appears with a brief crossfade.
-  if (reduced) {
-    node.animate([{ opacity: 0 }, { opacity: 1 }], { duration });
+  if (prefersReducedMotion.current) {
+    node.animate([{ opacity: 0 }, { opacity: 1 }], { duration, easing: springLinear });
     return;
   }
 

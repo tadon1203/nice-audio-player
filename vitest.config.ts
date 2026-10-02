@@ -13,6 +13,7 @@ export default defineConfig({
           environment: "jsdom",
           include: ["src/**/*.test.ts"],
           exclude: ["src/lib/native/**"],
+          setupFiles: ["tests/renderer-setup.ts"],
         },
       },
       {

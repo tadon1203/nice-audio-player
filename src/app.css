@@ -26,8 +26,8 @@
 @theme {
   --font-sans: "Satoshi", "Noto Sans JP", "Segoe UI", system-ui, sans-serif;
   /*
-   * CSS owns no timing (ADR 0005). `applyCssMotion` (`ui/motion/css-motion.ts`) sets
-   * `--default-transition-*` and `--motion-overlay-*` from the tokens at runtime.
+   * CSS owns no timing (ADR 0007). `applyCssMotion` (`ui/motion/css-motion.ts`) sets
+   * `--default-transition-*`, `--motion-easing` and `--motion-<token>-duration` at runtime.
    */
   /* Only `shadow-none` and `shadow-floating` exist; persistent UI has no shadow. */
   --shadow-*: initial;
@@ -139,8 +139,8 @@
  */
 @utility motion-overlay {
   transition-property: opacity, scale;
-  transition-duration: var(--motion-overlay-duration);
-  transition-timing-function: var(--motion-overlay-easing);
+  transition-duration: var(--motion-move-duration);
+  transition-timing-function: var(--motion-easing);
 
   &[data-starting-style],
   &[data-ending-style] {
@@ -151,8 +151,8 @@
 
 @utility motion-overlay-fade {
   transition-property: opacity;
-  transition-duration: var(--motion-overlay-duration);
-  transition-timing-function: var(--motion-overlay-easing);
+  transition-duration: var(--motion-move-duration);
+  transition-timing-function: var(--motion-easing);
 
   &[data-starting-style],
   &[data-ending-style] {

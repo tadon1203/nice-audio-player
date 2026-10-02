@@ -13,6 +13,8 @@
   } from "$lib/playback/volume-step";
   import { nowPlaying } from "$lib/shell/now-playing.svelte";
   import { getMotionBudget } from "$lib/shell/motion-budget.svelte";
+  import { springLinear } from "$lib/ui/motion/spring-curve";
+  import { motionFor } from "$lib/ui/motion/svelte-motion";
   import { queuePanel } from "$lib/shell/queue-panel.svelte";
   import RollingNumber from "$lib/ui/rolling-number/rolling-number.svelte";
   import { Button } from "$lib/ui/shadcn/button";
@@ -49,7 +51,7 @@
           { transform: `translateX(${dx}px)` },
           { transform: "translateX(0)" },
         ],
-        { duration: 120 },
+        { duration: motionFor("feedback").duration, easing: springLinear },
       );
       return;
     }

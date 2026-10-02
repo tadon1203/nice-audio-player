@@ -7,5 +7,10 @@
     "paths": { "$lib/*": ["../src/lib/*"] },
     "types": ["node", "vitest/globals", "@playwright/test"]
   },
-  "include": ["./**/*.ts", "../src/lib/native/**/*.ts"]
+  "include": [
+    "./**/*.ts",
+    "../src/lib/native/**/*.ts",
+    "../src/lib/ui/motion/spring-curve.ts",
+    "../src/lib/ui/motion/tokens.ts"
+  ]
 }

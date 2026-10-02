@@ -94,7 +94,7 @@
       return;
     }
     if (before.size === 0 || list === null) return;
-    const { duration, easing } = motionFor("move", false);
+    const { duration, easing } = motionFor("move");
     const steps = 24;
     let moved = false;
     list.querySelectorAll<HTMLElement>("li[data-key]").forEach((element) => {
@@ -116,7 +116,7 @@
 
   function fadeIn(_node: Element): TransitionConfig {
     if (tileMotion !== "fade") return { duration: 0 };
-    const { duration, easing } = motionFor("move", prefersReducedMotion.current);
+    const { duration, easing } = motionFor("move");
     return { duration, easing, css: (t) => `opacity: ${t}` };
   }
 

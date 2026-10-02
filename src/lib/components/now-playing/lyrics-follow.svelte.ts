@@ -1,8 +1,9 @@
 import { untrack } from "svelte";
 import type { Attachment } from "svelte/attachments";
-import { Spring } from "svelte/motion";
 import { getMotionBudget } from "$lib/shell/motion-budget.svelte";
-import { crossfade, settle } from "$lib/ui/motion/tokens";
+import { RetargetableSpring } from "$lib/ui/motion/retargetable-spring.svelte";
+import { springLinear } from "$lib/ui/motion/spring-curve";
+import { crossfade, motionTokens } from "$lib/ui/motion/tokens";
 import { anchorScrollTop } from "./anchor-column";
 import {
   decideLineChange,
@@ -44,7 +45,10 @@ export function createLyricsFollow(currentIndex: () => number) {
   let fade: Animation | null = null;
   // The scroll position as a spring (retargeted by every line change, keeping its velocity). It
   // is written to the container only while a glide is active.
-  const glide = new Spring(0, settle);
+  const glide = new RetargetableSpring(0, {
+    precision: GLIDE_END_PX,
+    duration: motionTokens.move.duration,
+  });
   let gliding = $state(false);
   /** The value last written to `scrollTop` by the glide, to tell whether something else moved it. */
   let lastWritten: number | null = null;
@@ -52,6 +56,7 @@ export function createLyricsFollow(currentIndex: () => number) {
   const stopRunning = () => {
     fade?.cancel();
     fade = null;
+    glide.stop();
     gliding = false;
   };
 
@@ -90,12 +95,18 @@ export function createLyricsFollow(currentIndex: () => number) {
     if (reduced || how !== "animate") {
       element.scrollTop = target;
       if (how === "fade" && !reduced) {
-        fade = element.animate({ opacity: [0, 1] }, { duration: FADE_MS });
+        fade = element.animate(
+          { opacity: [0, 1] },
+          {
+            duration: FADE_MS,
+            easing: springLinear,
+          },
+        );
       }
       return;
     }
-    void glide.set(element.scrollTop, { instant: true });
-    glide.target = target;
+    glide.set(element.scrollTop, { instant: true });
+    glide.set(target);
     lastWritten = null;
     gliding = true;
   };

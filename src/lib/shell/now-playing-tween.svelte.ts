@@ -1,9 +1,11 @@
 import { untrack } from "svelte";
-import { Spring } from "svelte/motion";
 import { nowPlaying } from "./now-playing.svelte";
 import { getMotionBudget } from "./motion-budget.svelte";
-import { settle } from "$lib/ui/motion/tokens";
-import { nowPlayingSpring } from "./now-playing-motion";
+import { RetargetableSpring } from "$lib/ui/motion/retargetable-spring.svelte";
+import { nowPlayingDuration } from "./now-playing-motion";
+
+/** The spring counts as stopped within this share of the distance it travels. */
+const PRECISION_OF_SPAN = 0.002;
 
 /**
  * A number that follows Now Playing opening (`whenOpen`) and closing (`whenClosed`) on its one
@@ -12,22 +14,18 @@ import { nowPlayingSpring } from "./now-playing-motion";
  */
 export function createNowPlayingTween(whenClosed: number, whenOpen: number) {
   const budget = getMotionBudget();
-  const spring = new Spring(
+  const spring = new RetargetableSpring(
     untrack(() => (nowPlaying.isOpen ? whenOpen : whenClosed)),
-    settle,
+    { precision: Math.abs(whenOpen - whenClosed) * PRECISION_OF_SPAN },
   );
   $effect(() => {
     const open = nowPlaying.isOpen;
     const reduced = budget.current === "reduced";
     untrack(() => {
-      const target = open ? whenOpen : whenClosed;
-      if (reduced) {
-        void spring.set(target, { instant: true });
-        return;
-      }
-      Object.assign(spring, nowPlayingSpring(open));
-      spring.target = target;
+      spring.duration = nowPlayingDuration(open);
+      spring.set(open ? whenOpen : whenClosed, { instant: reduced });
     });
   });
+  $effect(() => () => spring.stop());
   return spring;
 }

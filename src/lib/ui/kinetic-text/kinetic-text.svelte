@@ -1,7 +1,8 @@
 <script lang="ts">
   import { prefersReducedMotion } from "svelte/motion";
   import type { Attachment } from "svelte/attachments";
-  import { EASE_OUT_CSS, motionTokens } from "$lib/ui/motion/tokens";
+  import { motionFor } from "$lib/ui/motion/svelte-motion";
+  import { springLinear } from "$lib/ui/motion/spring-curve";
   import { tweenNumber } from "$lib/ui/motion/tween-number";
   import { REVEAL_END_PERCENT, wipeMask } from "./wipe-mask";
   import { cn } from "$lib/utils/cn.js";
@@ -26,8 +27,8 @@
     class?: string;
   } = $props();
 
-  const { duration } = motionTokens.move;
-  const options = { duration, easing: EASE_OUT_CSS };
+  const { duration, easing } = motionFor("move");
+  const options = { duration, easing: springLinear };
   const reduced = prefersReducedMotion.current;
 
   // Plays once per mount. The wipe ends past the text, so once it is done the mask clips nothing
@@ -43,6 +44,7 @@
     );
     const wipe = tweenNumber(0, REVEAL_END_PERCENT, {
       duration,
+      easing,
       onUpdate: (percent) => {
         const mask = wipeMask(percent);
         node.style.maskImage = mask;

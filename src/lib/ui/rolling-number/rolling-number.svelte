@@ -2,6 +2,7 @@
   import { untrack } from "svelte";
   import { fade } from "svelte/transition";
   import { prefersReducedMotion } from "svelte/motion";
+  import { motionFor } from "$lib/ui/motion/svelte-motion";
   import { cn } from "$lib/utils/cn.js";
   import DigitColumn from "./digit-column.svelte";
   import { resolveDirection, settleDelay, type RollDirection } from "./rolling-model";
@@ -32,7 +33,6 @@
   } = $props();
 
   const GLYPH = "before:content-[attr(data-glyph)]";
-  const FEEDBACK_MS = 100;
   const isDigit = (c: string) => c >= "0" && c <= "9";
 
   // The value before this one, to tell which way a number moved.
@@ -51,6 +51,7 @@
     }),
   );
   const reduced = $derived(prefersReducedMotion.current);
+  const feedback = $derived(motionFor("feedback"));
 </script>
 
 <span class={cn("inline-flex", className)}>
@@ -59,8 +60,8 @@
     {#each cells as cell (cell.key)}
       <span
         class="inline-flex"
-        in:fade={{ duration: FEEDBACK_MS }}
-        out:fade={{ duration: FEEDBACK_MS }}
+        in:fade={{ duration: feedback.duration }}
+        out:fade={{ duration: feedback.duration }}
       >
         {#if !isDigit(cell.char)}
           <span data-glyph={cell.char} class={cn("whitespace-pre", GLYPH)}></span>
@@ -70,7 +71,7 @@
             {#key cell.char}
               <span
                 data-glyph={cell.char}
-                in:fade={{ duration: FEEDBACK_MS }}
+                in:fade={{ duration: feedback.duration }}
                 class={cn("block", GLYPH)}
               ></span>
             {/key}

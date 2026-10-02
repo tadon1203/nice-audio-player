@@ -4,7 +4,6 @@
   import ListMusic from "@lucide/svelte/icons/list-music";
   import Settings2 from "@lucide/svelte/icons/settings-2";
   import type { Component } from "svelte";
-  import { prefersReducedMotion } from "svelte/motion";
   import { crossfade, fade } from "svelte/transition";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
@@ -36,10 +35,9 @@
   // `crossfade` is created per Navigation, because the sidebar and the mobile sheet can both be
   // mounted and must not trade pills.
   const [send, receive] = crossfade({
-    duration: () => motionFor("move", prefersReducedMotion.current).duration,
-    easing: (t) => motionFor("move", prefersReducedMotion.current).easing(t),
-    fallback: (node) =>
-      fade(node, { duration: motionFor("feedback", prefersReducedMotion.current).duration }),
+    duration: () => motionFor("move").duration,
+    easing: (t) => motionFor("move").easing(t),
+    fallback: (node) => fade(node, { duration: motionFor("feedback").duration }),
   });
 </script>
 

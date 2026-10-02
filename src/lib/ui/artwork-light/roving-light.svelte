@@ -15,7 +15,7 @@
 
 <script lang="ts">
   import { untrack } from "svelte";
-  import { prefersReducedMotion, Tween } from "svelte/motion";
+  import { Tween } from "svelte/motion";
   import { motionFor } from "$lib/ui/motion/svelte-motion";
   import ArtworkLight from "./artwork-light.svelte";
 
@@ -33,7 +33,7 @@
 
   $effect(() => {
     const goal = { x: target.x - SIZE_PX / 2, y: target.y - SIZE_PX / 2 };
-    const move = motionFor("move", prefersReducedMotion.current);
+    const move = motionFor("move");
     untrack(() => {
       void x.set(goal.x, move);
       void y.set(goal.y, move);
@@ -42,7 +42,7 @@
 
   $effect(() => {
     const goal = target.active ? 1 : 0;
-    const light = motionFor("large", prefersReducedMotion.current);
+    const light = motionFor("large");
     untrack(() => void opacity.set(goal, light));
   });
 </script>

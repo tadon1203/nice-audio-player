@@ -63,7 +63,7 @@
 
   const budget = getMotionBudget();
   const reduced = $derived(budget.current === "reduced");
-  const motion = $derived(motionFor("move", reduced));
+  const motion = $derived(motionFor("move"));
 
   /** Which edge of row `index` shows the drop line for insertion `slot`, if any. */
   function dropMarker(slot: number | null, index: number): "before" | "after" | undefined {
@@ -83,7 +83,7 @@
     {@const dragging = item !== undefined && drag?.id === item.id}
     <li
       animate:flip={{
-        duration: reduced ? 0 : motion.duration,
+        duration: motion.duration,
         easing: motion.easing,
         delay: cascading ? Math.min(index, CASCADE_ROWS) * CASCADE_STEP_MS : 0,
       }}

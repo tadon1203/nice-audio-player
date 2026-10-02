@@ -29,5 +29,5 @@ export function waveformHeightFor(layerHeightPx: number): number {
  */
 export function contentFade(node: Element) {
   const reduced = prefersReducedMotion.current;
-  return fade(node, { ...motionFor("large", reduced), delay: reduced ? 0 : CONTENT_DELAY_MS });
+  return fade(node, { ...motionFor("large"), delay: reduced ? 0 : CONTENT_DELAY_MS });
 }

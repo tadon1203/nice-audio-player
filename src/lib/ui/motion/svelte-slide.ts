@@ -11,7 +11,7 @@ export function slideTransition(
   reduced: boolean,
   { x = 0, y = 0, opacity = 1 }: { x?: number; y?: number; opacity?: number } = {},
 ): TransitionConfig {
-  const { duration, easing } = motionFor(token, reduced);
+  const { duration, easing } = motionFor(token);
   return {
     duration,
     easing,

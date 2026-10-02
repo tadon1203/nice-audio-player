@@ -1,5 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { ActiveSession, PlaybackItem, PlaybackSnapshot } from "$lib/native";
+vi.mock("svelte/motion", () => ({ prefersReducedMotion: { current: true } }));
+
 import { createPlaybackClock } from "./clock";
 import { clockReportOf } from "./snapshot";
 
@@ -70,7 +72,6 @@ function setup() {
     cancelFrame: () => {
       pending = null;
     },
-    reducedMotion: () => true,
   });
   const report = (next: PlaybackSnapshot) => clock.accept(clockReportOf(next));
   const advance = (ms: number) => {

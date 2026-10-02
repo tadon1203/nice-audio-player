@@ -1,7 +1,7 @@
 <script lang="ts">
   import { untrack } from "svelte";
   import type { SVGAttributes } from "svelte/elements";
-  import { prefersReducedMotion, Tween } from "svelte/motion";
+  import { Tween } from "svelte/motion";
   import { motionFor } from "$lib/ui/motion/svelte-motion";
 
   // Both glyphs are two four-point shapes with the same vertex order (top-left, top-right,
@@ -19,7 +19,7 @@
   const points = new Tween(untrack(() => (playing ? PAUSE : PLAY)));
   $effect(() => {
     const goal = playing ? PAUSE : PLAY;
-    const motion = motionFor("move", prefersReducedMotion.current);
+    const motion = motionFor("move");
     untrack(() => void points.set(goal, motion));
   });
 

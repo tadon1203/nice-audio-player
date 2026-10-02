@@ -13,14 +13,12 @@ type ClockEnvironment = {
   now: () => number;
   requestFrame: (callback: () => void) => number;
   cancelFrame: (handle: number) => void;
-  reducedMotion: () => boolean;
 };
 
 const browserEnvironment: ClockEnvironment = {
   now: () => performance.now(),
   requestFrame: (callback) => requestAnimationFrame(callback),
   cancelFrame: (handle) => cancelAnimationFrame(handle),
-  reducedMotion: () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
 };
 
 /** A number that tells subscribers when it changes, without any framework. */
@@ -90,7 +88,7 @@ export function createPlaybackClock(environment: ClockEnvironment = browserEnvir
       // Ease across a seek: the fill glides to the new place instead of snapping.
       stopFrames();
       const controls = tweenNumber(current, jump.toMs, {
-        ...motionFor("move", environment.reducedMotion()),
+        ...motionFor("move"),
         onUpdate: setPosition,
       });
       glide = controls;

@@ -13,7 +13,7 @@
 
   const budget = getMotionBudget();
   const reduced = $derived(budget.current === "reduced");
-  const motion = $derived(motionFor("move", reduced));
+  const motion = $derived(motionFor("move"));
 
   const rotation = new Tween(0);
   let shown = untrack(() => mode);

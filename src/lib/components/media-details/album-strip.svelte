@@ -1,9 +1,6 @@
 <script lang="ts" module>
   import type { LibraryFileAvailability } from "$lib/native";
 
-  /** The bars-grow-in sweep, the same 320ms as the Now Playing waveform. */
-  const SWEEP_S = 0.32;
-
   export type AlbumStripTrack = {
     id: string;
     title: string;
@@ -50,9 +47,9 @@
   /** Grows from the left edge, later the further into the album the segment starts. */
   function sweep(_node: Element, { start }: { start: number }): TransitionConfig {
     const reduced = prefersReducedMotion.current;
-    const { duration, easing } = motionFor("move", reduced);
+    const { duration, easing } = motionFor("move");
     return {
-      delay: reduced ? 0 : start * SWEEP_S * 1000,
+      delay: reduced ? 0 : start * duration,
       duration,
       easing,
       css: (t) => (reduced ? `opacity: ${t}` : `transform: scaleX(${t}); opacity: ${t}`),

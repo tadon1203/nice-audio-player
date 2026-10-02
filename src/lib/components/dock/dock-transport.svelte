@@ -49,7 +49,7 @@
     title={playLabel}
     disabled={!playback.active}
     onclick={() => void (playing ? playback.pause() : playback.resume())}
-    class="relative rounded-full transition-[background-color,color,transform] duration-(--motion-press-duration) ease-(--motion-press-easing) active:translate-y-0 active:scale-[0.94] disabled:bg-secondary disabled:text-muted-foreground disabled:opacity-100"
+    class="relative rounded-full transition-[background-color,color,transform] duration-(--motion-feedback-duration) ease-(--motion-easing) active:translate-y-0 active:scale-[0.94] disabled:bg-secondary disabled:text-muted-foreground disabled:opacity-100"
   >
     <PlayPauseIcon {playing} />
     {#if playback.active}

@@ -49,8 +49,8 @@
   } = $props();
 
   const url = $derived(artworkUrl(artwork));
-  const motion = $derived(motionFor("large", prefersReducedMotion.current));
-  const wipeMotion = $derived(motionFor("move", prefersReducedMotion.current));
+  const motion = $derived(motionFor("large"));
+  const wipeMotion = $derived(motionFor("move"));
   const wipe = $derived(!prefersReducedMotion.current && enter !== "fade" ? enter : null);
 
   /** The incoming image: faded in, or clipped so that it grows from the edge it came from. */

@@ -49,7 +49,7 @@
     >
       <div
         class={cn(
-          "flex flex-col transition-transform duration-(--motion-overlay-duration) ease-(--motion-overlay-easing)",
+          "flex flex-col transition-transform duration-(--motion-move-duration) ease-(--motion-easing)",
           action.persistent && "-translate-y-9",
           available &&
             !action.persistent &&

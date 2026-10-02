@@ -1,4 +1,4 @@
-import { cubicOut } from "svelte/easing";
+import { springEasing } from "./spring-curve";
 
 export type NumberTween = {
   stop: () => void;
@@ -15,7 +15,7 @@ export function tweenNumber(
   to: number,
   {
     duration,
-    easing = cubicOut,
+    easing = springEasing,
     onUpdate,
     onComplete,
   }: {

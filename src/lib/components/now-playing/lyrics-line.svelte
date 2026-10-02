@@ -15,7 +15,6 @@
   import type { LyricsTimedLine } from "$lib/native";
   import { getPlayback } from "$lib/playback/context";
   import { lyricsWaveformLink } from "$lib/shell/lyrics-waveform-link.svelte";
-  import { getMotionBudget } from "$lib/shell/motion-budget.svelte";
   import { motionFor } from "$lib/ui/motion/svelte-motion";
   import { cn } from "$lib/utils/cn.js";
   import { formatDuration } from "$lib/utils/format";
@@ -45,7 +44,6 @@
   } = $props();
 
   const playback = getPlayback();
-  const budget = getMotionBudget();
 
   const line = $derived(lines[index]!);
   const isInterval = $derived(line.text.trim() === "");
@@ -57,9 +55,8 @@
   const startLabel = $derived(formatDuration(line.startMs));
 
   // Luminance moves as a `move`; under reduced motion it is the shared short crossfade.
-  const motion = $derived(motionFor("move", budget.current === "reduced"));
-  const transition = (property: string) =>
-    `${property} ${motion.duration}ms cubic-bezier(0.2, 0, 0, 1)`;
+  const motion = $derived(motionFor("move"));
+  const transition = (property: string) => `${property} ${motion.duration}ms var(--motion-easing)`;
 </script>
 
 <div
