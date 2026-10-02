@@ -43,6 +43,8 @@ pub async fn reset_library_and_rescan(
     state: tauri::State<'_, AppState>,
 ) -> Result<(), LibraryCommandError> {
     blocking(&state, |backend| backend.request_library_reset()).await?;
+    // `restart` skips the exit event, so close the database cleanly first.
+    state.backend.shutdown();
     app.restart()
 }
 

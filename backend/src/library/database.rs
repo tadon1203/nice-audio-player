@@ -113,10 +113,9 @@ fn back_up_before_migration(
         return Ok(());
     }
     let backup = directory.join(format!("{DATABASE_FILE}.v{version}.bak"));
-    // `VACUUM INTO` refuses to overwrite, and a leftover from an earlier attempt is just as good.
-    if backup.exists() {
-        return Ok(());
-    }
+    // `VACUUM INTO` refuses to overwrite; a leftover is from an attempt that did not finish, and
+    // this copy is the fresher one.
+    let _ = std::fs::remove_file(&backup);
     connection
         .execute("VACUUM INTO ?1", [backup.to_string_lossy().as_ref()])
         .map(drop)
@@ -149,9 +148,13 @@ pub(crate) fn apply_requested_reset(directory: &Path) {
                 let _ = std::fs::remove_file(&to);
                 std::fs::rename(&from, &to)
             }) {
-                // Keep the marker: the reset is tried again at the next start.
                 log::error!("library.database.reset_failed cause={cause}");
-                return;
+                if suffix.is_empty() {
+                    // Nothing moved; the marker stays and the reset is tried again at next start.
+                    return;
+                }
+                // The database is already aside: a stale WAL left here must not meet the new one.
+                let _ = std::fs::remove_file(&from);
             }
         }
     }
