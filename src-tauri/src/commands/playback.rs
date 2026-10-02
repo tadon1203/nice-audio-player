@@ -245,7 +245,7 @@ pub async fn clear_queue(
     .await
 }
 
-/// Waveform of the loaded track, or `None` while it is analyzed; `waveformReady` follows.
+/// Waveform of the loaded track, or `None` while it is analyzed; `waveformChanged` follows.
 #[tauri::command]
 #[specta::specta]
 pub async fn get_playback_waveform(

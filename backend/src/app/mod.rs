@@ -2,13 +2,14 @@
 
 pub mod playback_context;
 
+use crate::media::validation::ValidatedAudioFile;
 use crate::{
     activity::ApplicationActivityService,
     audio::{
         playback::{
             PlaybackQueueSnapshot, PlaybackService, PlaybackServiceError, PlaybackSnapshot,
         },
-        waveform::{PlaybackWaveform, WaveformService},
+        waveform::{PlaybackWaveform, Waveform, WaveformService},
     },
     events::SharedEventSink,
     library::{
@@ -81,12 +82,26 @@ impl BackendApp {
     }
 
     /// Waveform of the track that is loaded right now; `None` while it is still being analyzed
-    /// or nothing is loaded. The renderer never names a file, so it cannot make the backend read
-    /// arbitrary ones.
+    /// (it is requested, and `WaveformChanged` follows) or nothing is loaded. The renderer never
+    /// names a file, so it cannot make the backend read arbitrary ones.
     pub fn playback_waveform(&self) -> Option<PlaybackWaveform> {
+        self.loaded_waveform(|file| self.waveforms.get_or_queue(file))
+    }
+
+    /// Like [`Self::playback_waveform`], but only reports a waveform that is already there.
+    pub fn ready_playback_waveform(&self) -> Option<PlaybackWaveform> {
+        self.loaded_waveform(|file| self.waveforms.get(file))
+    }
+
+    /// The waveform of the loaded track, always paired with that track's playback id from the
+    /// same snapshot, so the two cannot disagree.
+    fn loaded_waveform(
+        &self,
+        find: impl FnOnce(&ValidatedAudioFile) -> Option<Arc<Waveform>>,
+    ) -> Option<PlaybackWaveform> {
         let snapshot = self.playback.snapshot();
         let session = snapshot.session()?;
-        let waveform = self.waveforms.get_or_queue(&session.item.file)?;
+        let waveform = find(&session.item.file)?;
         Some(PlaybackWaveform {
             playback_id: session.playback_id.clone(),
             peaks: waveform.peaks.clone(),

@@ -6,9 +6,7 @@ export function createPlaybackWaveform(playbackId: () => string | null) {
   const query = createQuery(() => waveformQueryOptions(playbackId()));
   return {
     get current() {
-      const waveform = query.data ?? null;
-      // An answer is for the track that was loaded when it was asked; never draw it for another.
-      return waveform?.playbackId === playbackId() ? waveform : null;
+      return query.data ?? null;
     },
   };
 }

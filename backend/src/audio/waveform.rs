@@ -419,22 +419,26 @@ impl WaveformService {
         Self { shared }
     }
 
-    /// Returns the waveform if it is ready; otherwise requests analysis and returns `None`.
-    pub fn get_or_queue(&self, file: &ValidatedAudioFile) -> Option<Arc<Waveform>> {
+    /// The waveform if it is ready. Never starts an analysis.
+    pub fn get(&self, file: &ValidatedAudioFile) -> Option<Arc<Waveform>> {
         let stamp = file_stamp(&file.path)?;
-        if let Some((remembered, waveform)) = self
+        let ready = self
             .shared
             .ready
             .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .get(&file.path)
-        {
-            if *remembered == stamp {
-                return Some(Arc::clone(waveform));
-            }
+            .unwrap_or_else(PoisonError::into_inner);
+        let (remembered, waveform) = ready.get(&file.path)?;
+        (*remembered == stamp).then(|| Arc::clone(waveform))
+    }
+
+    /// Returns the waveform if it is ready; otherwise requests analysis and returns `None`.
+    pub fn get_or_queue(&self, file: &ValidatedAudioFile) -> Option<Arc<Waveform>> {
+        file_stamp(&file.path)?;
+        let ready = self.get(file);
+        if ready.is_none() {
+            self.shared.request(file);
         }
-        self.shared.request(file);
-        None
+        ready
     }
 }
 
@@ -626,6 +630,17 @@ mod tests {
             wake: Condvar::new(),
             events: sink,
         }
+    }
+
+    #[test]
+    fn peeking_never_starts_an_analysis() {
+        let directory = TestDirectory::new();
+        let file = wav(&directory, "a.wav", &[100, 200, 300, 400]);
+        let (_, sink) = crate::events::testing::RecordingEventSink::shared();
+        let service = WaveformService::start(directory.file("cache"), sink);
+        assert!(service.get(&file).is_none());
+        assert!(service.shared.jobs().pending.is_none());
+        assert!(service.shared.jobs().running.is_none());
     }
 
     #[test]

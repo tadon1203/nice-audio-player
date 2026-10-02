@@ -138,8 +138,7 @@ export function scriptPlayback(native: Native, initialSequence: LibraryTrackSumm
     shuffleEnabled = enabled;
     return commitQueue();
   });
-  native.respond("getPlaybackWaveform", () => {
-    if (!waveformReady || index < 0) return null;
+  const waveform = () => {
     const peaks = Array.from({ length: 400 }, (_, bar) =>
       Math.round(40 + 200 * Math.abs(Math.sin(bar / 9))),
     );
@@ -148,7 +147,8 @@ export function scriptPlayback(native: Native, initialSequence: LibraryTrackSumm
       peaks,
       rms: peaks.map((peak) => Math.round(peak * 0.6)),
     };
-  });
+  };
+  native.respond("getPlaybackWaveform", () => (waveformReady && index >= 0 ? waveform() : null));
 
   const stopped = (): PlaybackSnapshot => ({
     status: "stopped",
@@ -190,13 +190,10 @@ export function scriptPlayback(native: Native, initialSequence: LibraryTrackSumm
       if (ticker !== null) clearInterval(ticker);
       ticker = null;
     },
-    /** Makes the waveform available and tells the renderer to ask again. */
+    /** Makes the waveform available and pushes it, as the backend does when analysis finishes. */
     publishWaveform: async () => {
       waveformReady = true;
-      await native.emit({
-        event: "waveformReady",
-        payload: { playbackId: playbackIdOf(playbackItemFor(current())) },
-      });
+      await native.emit({ event: "waveformChanged", payload: waveform() });
     },
   };
   return player;

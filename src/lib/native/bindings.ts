@@ -38,7 +38,7 @@ export const commands = {
 	 */
 	enqueueTrack: (trackId: string, next: boolean) => __TAURI_INVOKE<PlaybackQueueSnapshot>("enqueue_track", { trackId, next }),
 	clearQueue: () => __TAURI_INVOKE<PlaybackQueueSnapshot>("clear_queue"),
-	/**  Waveform of the loaded track, or `None` while it is analyzed; `waveformReady` follows. */
+	/**  Waveform of the loaded track, or `None` while it is analyzed; `waveformChanged` follows. */
 	getPlaybackWaveform: () => __TAURI_INVOKE<{
 	/**  The playback the waveform belongs to, so a late answer cannot be drawn for another track. */
 	playbackId: string,
@@ -134,10 +134,8 @@ export type ActiveSession = {
 };
 
 export type AppEvent = { event: "playbackStateChanged"; payload: PlaybackSnapshot } | { event: "playbackPositionChanged"; payload: PlaybackPosition } | { event: "playbackQueueStateChanged"; payload: PlaybackQueueSnapshot } | { event: "applicationActivitiesChanged"; payload: ApplicationActivity[] } | { event: "libraryScanStateChanged"; payload: LibraryScanSnapshot } | 
-/**  The loaded track's waveform can be asked for again. */
-{ event: "waveformReady"; payload: {
-	playbackId: string,
-} } | { event: "settingsChanged"; payload: AppearanceSettings };
+/**  The loaded track's waveform, whenever a better one is ready. */
+{ event: "waveformChanged"; payload: PlaybackWaveform } | { event: "settingsChanged"; payload: AppearanceSettings };
 
 export type AppearancePatch = {
 	artworkBackdrop: boolean | null,

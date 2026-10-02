@@ -55,7 +55,7 @@ const appEventNames: Readonly<Record<AppEvent["event"], true>> = {
   playbackQueueStateChanged: true,
   applicationActivitiesChanged: true,
   libraryScanStateChanged: true,
-  waveformReady: true,
+  waveformChanged: true,
   settingsChanged: true,
 };
 

@@ -10,7 +10,10 @@ use std::{
 use backend::{
     activity::ApplicationActivity,
     app::BackendApp,
-    audio::playback::{PlaybackPosition, PlaybackQueueSnapshot, PlaybackSnapshot},
+    audio::{
+        playback::{PlaybackPosition, PlaybackQueueSnapshot, PlaybackSnapshot},
+        waveform::PlaybackWaveform,
+    },
     events::{BackendEvent, EventSink},
     settings::AppearanceSettings,
 };
@@ -30,9 +33,9 @@ pub enum AppEvent {
     ApplicationActivities(Vec<ApplicationActivity>),
     #[serde(rename = "libraryScanStateChanged")]
     LibraryScan(backend::library::models::LibraryScanSnapshot),
-    /// The loaded track's waveform can be asked for again.
-    #[serde(rename = "waveformReady", rename_all = "camelCase")]
-    WaveformReady { playback_id: String },
+    /// The loaded track's waveform, whenever a better one is ready.
+    #[serde(rename = "waveformChanged")]
+    Waveform(PlaybackWaveform),
     #[serde(rename = "settingsChanged")]
     Settings(AppearanceSettings),
 }
@@ -52,9 +55,7 @@ fn read(event: BackendEvent, backend: &BackendApp) -> Option<AppEvent> {
             AppEvent::ApplicationActivities(backend.activities.handle().snapshot())
         }
         BackendEvent::LibraryScanChanged => AppEvent::LibraryScan(backend.library_scan_state()),
-        BackendEvent::WaveformChanged => AppEvent::WaveformReady {
-            playback_id: backend.playback.position()?.playback_id,
-        },
+        BackendEvent::WaveformChanged => AppEvent::Waveform(backend.ready_playback_waveform()?),
         BackendEvent::SettingsChanged => AppEvent::Settings(backend.settings.appearance()),
     })
 }

@@ -4,18 +4,14 @@ import { createSettings } from "./settings.svelte";
 
 function stubApi(overrides: Partial<Pick<TNativeAPI, "getSettings" | "updateSettings">> = {}) {
   return {
-    getSettings: vi.fn(
-      async (): Promise<AppearanceSettings> => ({
-        artworkBackdrop: true,
-        calmMotion: false,
-      }),
-    ),
-    updateSettings: vi.fn(
-      async (): Promise<AppearanceSettings> => ({
-        artworkBackdrop: true,
-        calmMotion: false,
-      }),
-    ),
+    getSettings: vi.fn(async (): Promise<AppearanceSettings> => ({
+      artworkBackdrop: true,
+      calmMotion: false,
+    })),
+    updateSettings: vi.fn(async (): Promise<AppearanceSettings> => ({
+      artworkBackdrop: true,
+      calmMotion: false,
+    })),
     ...overrides,
   } as unknown as TNativeAPI & {
     getSettings: ReturnType<typeof vi.fn>;
@@ -105,7 +101,10 @@ describe("Settings", () => {
     expect(settings.artworkBackdrop).toBe(false);
     expect(settings.calmMotion).toBe(true);
 
-    settings.mirrorEvent({ event: "waveformReady", payload: { playbackId: "a" } });
+    settings.mirrorEvent({
+      event: "waveformChanged",
+      payload: { playbackId: "a", peaks: [], rms: [] },
+    });
     expect(settings.calmMotion).toBe(true);
   });
 });
