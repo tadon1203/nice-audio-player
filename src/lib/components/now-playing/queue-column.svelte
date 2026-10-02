@@ -12,10 +12,9 @@
   import Artwork from "$lib/ui/artwork.svelte";
   import { cn } from "$lib/utils/cn.js";
   import { formatDuration } from "$lib/utils/format";
-  import { anchorScrollTop, opacityAtDistance } from "./anchor-column";
+  import { anchorScrollTop, EDGE_MASK, opacityAtDistance } from "./anchor-column";
   import { createAnchorPadding } from "./anchor-column.svelte";
   import { buildQueueRows, gutterLabel, hiddenUpcomingCount } from "./queue-rows";
-  import ReadingBand from "./reading-band.svelte";
 
   /**
    * The right column when a track has no lyrics (`full`), or the narrow column beside lyrics on a
@@ -99,13 +98,12 @@
   {/if}
 {:else if hasRows}
   <div class={cn("relative h-full min-h-0", className)}>
-    <ReadingBand />
     <div
       bind:this={container}
       {@attach anchor.attach}
       role="list"
       aria-label="Queue"
-      class="relative h-full overflow-y-auto mask-[linear-gradient(to_bottom,transparent,black_15%,black_80%,transparent)] [scrollbar-width:none] forced-colors:mask-none [&::-webkit-scrollbar]:hidden"
+      class={cn("relative h-full overflow-y-auto", EDGE_MASK)}
     >
       <div aria-hidden="true" class={SPACER} style:height="{anchor.top}px"></div>
       {#each rows as { item, offset }, index (item.id)}
@@ -128,7 +126,7 @@
             onclick={() => void playback.playQueueItem(item.id)}
             class="flex w-full cursor-pointer items-baseline gap-4 rounded-sm py-2 text-left outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default"
           >
-            <span class="flex w-8 shrink-0 justify-end text-right text-sm tabular-nums">
+            <span class="flex w-16 shrink-0 justify-end text-right text-sm tabular-nums">
               {#if isCurrent}
                 <Play
                   aria-hidden="true"
@@ -151,10 +149,10 @@
         </div>
       {/each}
       {#if upcomingCount === 0 && current !== null}
-        <p class="py-2 pl-12 text-sm text-muted-foreground">Nothing else in the queue</p>
+        <p class="py-2 pl-20 text-sm text-muted-foreground">Nothing else in the queue</p>
       {/if}
       {#if hidden > 0}
-        <div class="pl-12">{@render more()}</div>
+        <div class="pl-20">{@render more()}</div>
       {/if}
       <div aria-hidden="true" class={SPACER} style:height="{anchor.bottom}px"></div>
     </div>
