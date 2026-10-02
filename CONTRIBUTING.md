@@ -15,6 +15,7 @@
 - Tauri commands are registered once in `src-tauri/src/bindings.rs`; regenerate the TypeScript bindings with `pnpm bindings` and never edit the generated file by hand.
 - Tauri commands that can wait on the playback worker or do blocking work are `async` and use `spawn_blocking`; a synchronous command runs on the main thread.
 - Library columns that hold a state (availability, inspection, artwork status) map to Rust enums in `library/status.rs`; the migration's CHECK lists the same names, plus any retired ones (SQLite cannot change a CHECK without rebuilding the table). Foreign keys cascade, so deleting a parent needs no hand-written child deletes.
+- Library migrations must be non-destructive: the database is copied to `library.sqlite3.v<N>.bak` before one runs, and a migration must not make that copy the only place data survives.
 - What the catalog files a track under (title, artist, album and Album Artist keys, year) is computed only in `library/keys.rs`, stored in key columns when a track is written, and read back from them. A track's file path is built only through `TrackLocation`, which checks it stays inside its root.
 - The backend never returns display strings: an unnamed album or artist is `""`, sorted last, and the renderer labels it.
 - Use semantic tokens for UI surfaces; no raw palette values.

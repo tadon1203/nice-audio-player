@@ -34,6 +34,11 @@ export function createRemoveLibraryRoot() {
   }));
 }
 
+// The backend restarts the app on success, so the promise normally never settles.
+export function createResetLibrary() {
+  return createMutation(() => ({ mutationFn: () => requireNative().resetLibraryAndRescan() }));
+}
+
 // Scan state arrives by event, so these do not touch the query cache.
 export function createStartLibraryScan() {
   return createMutation(() => ({ mutationFn: () => requireNative().startLibraryScan() }));

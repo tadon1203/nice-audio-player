@@ -13,7 +13,7 @@ use crate::{
     },
     events::SharedEventSink,
     library::{
-        error::StoreError,
+        error::{LibraryCommandError, StoreError},
         models::{LibraryScanSnapshot, LibraryStatus, LibraryUnavailableReason},
         Library,
     },
@@ -36,16 +36,18 @@ pub struct BackendApp {
     pub waveforms: WaveformService,
     pub settings: Arc<SettingsService>,
     lyrics: LyricsService,
+    data_dir: PathBuf,
 }
 
 impl BackendApp {
     /// Starts every service. `events` is how they tell the host that something changed.
     pub fn initialize(data_dir: PathBuf, events: SharedEventSink) -> Result<Self, BackendError> {
         let settings = Arc::new(SettingsService::load(data_dir.clone(), events.clone()));
+        let library_dir = data_dir.clone();
         let activities = ApplicationActivityService::new(events.clone());
         let activity = activities.handle();
         let waveforms = WaveformService::start(data_dir.join("waveforms"), events.clone());
-        let library = Library::open(data_dir, Some(activity), events.clone());
+        let library = Library::open(library_dir, Some(activity), events.clone());
         let remember = Arc::clone(&settings);
         let playback = PlaybackService::start(
             events,
@@ -60,6 +62,17 @@ impl BackendApp {
             waveforms,
             settings,
             lyrics: LyricsService,
+            data_dir,
+        })
+    }
+
+    /// Asks for the library database to be moved to a `.bak` file and recreated, which happens at
+    /// the next start (the caller restarts the app). The tracks are found again by the rescan that
+    /// start-up does.
+    pub fn request_library_reset(&self) -> Result<(), LibraryCommandError> {
+        crate::library::database::request_reset(&self.data_dir).map_err(|cause| {
+            log::error!("library.database.reset_request_failed cause={cause}");
+            LibraryCommandError::PersistenceFailed
         })
     }
 

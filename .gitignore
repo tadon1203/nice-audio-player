@@ -39,3 +39,5 @@ Thumbs.db
 
 # Skill working notes (specs and tickets)
 /.scratch/
+backend/target/
+/src-tauri/target/

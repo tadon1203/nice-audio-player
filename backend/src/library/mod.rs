@@ -55,6 +55,7 @@ impl Library {
         activity: Option<ApplicationActivityHandle>,
         events: SharedEventSink,
     ) -> Result<Self, LibraryUnavailableReason> {
+        database::apply_requested_reset(&directory);
         let database = Database::initialize(&directory).map_err(|error| {
             let reason = match error {
                 DatabaseError::Corrupt => LibraryUnavailableReason::DatabaseCorrupt,

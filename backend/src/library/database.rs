@@ -55,13 +55,14 @@ impl Database {
 impl Database {
     pub fn initialize(directory: &Path) -> Result<Self, DatabaseError> {
         std::fs::create_dir_all(directory).map_err(|_| DatabaseError::Open)?;
-        let path = directory.join("library.sqlite3");
+        let path = directory.join(DATABASE_FILE);
         let mut connection = Connection::open(&path).map_err(map_error)?;
         configure_common(&connection).map_err(map_error)?;
         connection
             .pragma_update(None, "journal_mode", "WAL")
             .map_err(map_error)?;
         verify_wal(&connection).map_err(map_error)?;
+        back_up_before_migration(&connection, directory)?;
         migrations::apply(&mut connection).map_err(DatabaseError::Migration)?;
         Ok(Self {
             path,
@@ -93,6 +94,71 @@ impl Database {
         Ok(c)
     }
 }
+/// The database file's name; a reset or a migration backup is this plus a suffix.
+const DATABASE_FILE: &str = "library.sqlite3";
+/// Dropped in the data directory to ask for a reset at the next start (see [`request_reset`]).
+const RESET_MARKER: &str = "reset-library";
+
+/// Copies a database that is about to be migrated to `library.sqlite3.v<N>.bak` (N is the schema
+/// version it is leaving), so a migration that goes wrong or loses data can be undone by hand.
+/// A new database has nothing to save, and a failed copy stops the migration.
+fn back_up_before_migration(
+    connection: &Connection,
+    directory: &Path,
+) -> Result<(), DatabaseError> {
+    let version: i32 = connection
+        .pragma_query_value(None, "user_version", |row| row.get(0))
+        .map_err(map_error)?;
+    if version == 0 || version >= migrations::CURRENT_SCHEMA_VERSION {
+        return Ok(());
+    }
+    let backup = directory.join(format!("{DATABASE_FILE}.v{version}.bak"));
+    // `VACUUM INTO` refuses to overwrite, and a leftover from an earlier attempt is just as good.
+    if backup.exists() {
+        return Ok(());
+    }
+    connection
+        .execute("VACUUM INTO ?1", [backup.to_string_lossy().as_ref()])
+        .map(drop)
+        .map_err(|cause| {
+            log::error!("library.database.backup_failed cause={cause}");
+            DatabaseError::Open
+        })
+}
+
+/// Asks for the database to be moved aside and recreated at the next start. Done at start-up,
+/// before anything has it open, so it works even when the database cannot be opened at all.
+pub fn request_reset(directory: &Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(directory)?;
+    std::fs::write(directory.join(RESET_MARKER), b"")
+}
+
+/// Carries out a requested reset: the database (and its WAL files) becomes `library.sqlite3.bak`,
+/// replacing an older one, and the next open creates an empty one. Artwork and waveform caches
+/// are kept; the rescan finds them again.
+pub(crate) fn apply_requested_reset(directory: &Path) {
+    let marker = directory.join(RESET_MARKER);
+    if !marker.exists() {
+        return;
+    }
+    for suffix in ["", "-wal", "-shm"] {
+        let from = directory.join(format!("{DATABASE_FILE}{suffix}"));
+        let to = directory.join(format!("{DATABASE_FILE}{suffix}.bak"));
+        if from.exists() {
+            if let Err(cause) = std::fs::rename(&from, &to).or_else(|_| {
+                let _ = std::fs::remove_file(&to);
+                std::fs::rename(&from, &to)
+            }) {
+                // Keep the marker: the reset is tried again at the next start.
+                log::error!("library.database.reset_failed cause={cause}");
+                return;
+            }
+        }
+    }
+    let _ = std::fs::remove_file(marker);
+    log::info!("library.database.reset");
+}
+
 fn configure_common(connection: &Connection) -> rusqlite::Result<()> {
     connection.execute_batch("PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;")?;
     Ok(())
@@ -112,5 +178,101 @@ fn map_error(error: rusqlite::Error) -> DatabaseError {
             DatabaseError::Corrupt
         }
         _ => DatabaseError::Open,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_support::TestDirectory;
+
+    fn user_version(path: &Path) -> i32 {
+        Connection::open(path)
+            .unwrap()
+            .pragma_query_value(None, "user_version", |row| row.get(0))
+            .unwrap()
+    }
+
+    #[test]
+    fn a_database_is_backed_up_before_it_is_migrated() {
+        let directory = TestDirectory::new();
+        let dir = directory.file("");
+        let database = Database::initialize(&dir).unwrap();
+        drop(database);
+        // Pretend the file is one schema version behind.
+        let old = migrations::CURRENT_SCHEMA_VERSION - 1;
+        Connection::open(dir.join(DATABASE_FILE))
+            .unwrap()
+            .pragma_update(None, "user_version", old)
+            .unwrap();
+
+        Database::initialize(&dir).ok();
+
+        let backup = dir.join(format!("{DATABASE_FILE}.v{old}.bak"));
+        assert!(backup.exists(), "a backup exists after the migration ran");
+        assert_eq!(
+            user_version(&backup),
+            old,
+            "it holds the pre-migration state"
+        );
+    }
+
+    #[test]
+    fn a_new_or_current_database_makes_no_backup() {
+        let directory = TestDirectory::new();
+        let dir = directory.file("");
+        Database::initialize(&dir).unwrap();
+        Database::initialize(&dir).unwrap();
+        assert!(std::fs::read_dir(&dir).unwrap().all(|entry| !entry
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .ends_with(".bak")));
+    }
+
+    #[test]
+    fn a_requested_reset_moves_the_database_to_bak_and_starts_empty() {
+        let directory = TestDirectory::new();
+        let dir = directory.file("");
+        {
+            let database = Database::initialize(&dir).unwrap();
+            database
+                .write()
+                .unwrap()
+                .execute(
+                    "INSERT INTO library_roots(path, enabled, scan_generation) VALUES('x', 1, 0)",
+                    [],
+                )
+                .unwrap();
+        }
+        request_reset(&dir).unwrap();
+
+        apply_requested_reset(&dir);
+        let fresh = Database::initialize(&dir).unwrap();
+
+        assert!(dir.join(format!("{DATABASE_FILE}.bak")).exists());
+        assert!(!dir.join(RESET_MARKER).exists());
+        let roots: i64 = fresh
+            .read()
+            .unwrap()
+            .query_row("SELECT COUNT(*) FROM library_roots", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(roots, 0);
+    }
+
+    #[test]
+    fn a_corrupt_database_can_be_reset() {
+        let directory = TestDirectory::new();
+        let dir = directory.file("");
+        std::fs::write(dir.join(DATABASE_FILE), vec![b'x'; 200]).unwrap();
+        assert!(matches!(
+            Database::initialize(&dir),
+            Err(DatabaseError::Corrupt)
+        ));
+
+        request_reset(&dir).unwrap();
+        apply_requested_reset(&dir);
+
+        assert!(Database::initialize(&dir).is_ok());
     }
 }

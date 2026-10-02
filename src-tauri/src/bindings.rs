@@ -29,6 +29,7 @@ pub fn builder() -> Builder<tauri::Wry> {
             commands::playback::clear_queue,
             commands::playback::get_playback_waveform,
             commands::library::get_library_status,
+            commands::library::reset_library_and_rescan,
             commands::library::get_library_scan_state,
             commands::library::list_library_roots,
             commands::library::register_library_root,

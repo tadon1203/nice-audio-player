@@ -46,6 +46,8 @@ export const commands = {
 	rms: number[],
 } | null>("get_playback_waveform"),
 	getLibraryStatus: () => __TAURI_INVOKE<LibraryStatus>("get_library_status"),
+	/**  Moves the library database aside and restarts the app, which recreates it and rescans. */
+	resetLibraryAndRescan: () => __TAURI_INVOKE<null>("reset_library_and_rescan"),
 	getLibraryScanState: () => __TAURI_INVOKE<LibraryScanSnapshot>("get_library_scan_state"),
 	listLibraryRoots: () => __TAURI_INVOKE<LibraryRoot[]>("list_library_roots"),
 	registerLibraryRoot: (path: string) => __TAURI_INVOKE<LibraryRoot>("register_library_root", { path }),
@@ -255,7 +257,9 @@ export type LibraryAlbumTrackSummary = {
 
 export type LibraryArtistAlbumSortKey = "year" | "title";
 
-export type LibraryCommandError = { code: "invalidRoot" } | { code: "rootNotDirectory" } | { code: "canonicalizationFailed" } | { code: "duplicateRoot" } | { code: "overlappingRoot" } | { code: "scanInProgress" } | { code: "invalidId" } | { code: "trackNotFound" } | { code: "trackUnavailable" } | { code: "albumNotFound" } | { code: "invalidCursor" } | { code: "invalidAlbumKey" } | { code: "invalidAlbumArtistKey" } | { code: "albumArtistNotFound" } | { code: "rootMissing" } | { code: "scanAlreadyRunning" } | { code: "noEnabledRoots" } | { code: "scanNotRunning" } | { code: "libraryUnavailable" } | { code: "persistenceFailed" } | { code: "taskFailed" };
+export type LibraryCommandError = { code: "invalidRoot" } | { code: "rootNotDirectory" } | { code: "canonicalizationFailed" } | { code: "duplicateRoot" } | { code: "overlappingRoot" } | 
+/**  The folder holds the app's own data directory, which a scan would read as music. */
+{ code: "rootContainsDataDirectory" } | { code: "scanInProgress" } | { code: "invalidId" } | { code: "trackNotFound" } | { code: "trackUnavailable" } | { code: "albumNotFound" } | { code: "invalidCursor" } | { code: "invalidAlbumKey" } | { code: "invalidAlbumArtistKey" } | { code: "albumArtistNotFound" } | { code: "rootMissing" } | { code: "scanAlreadyRunning" } | { code: "noEnabledRoots" } | { code: "scanNotRunning" } | { code: "libraryUnavailable" } | { code: "persistenceFailed" } | { code: "taskFailed" };
 
 export type LibraryFileAvailability = "available" | "missing";
 
@@ -470,7 +474,9 @@ export type PlaybackWaveform = {
 };
 
 /**  Why a scan stopped without finishing. */
-export type ScanFailure = "persistenceFailed" | "rootTraversalFailed";
+export type ScanFailure = "persistenceFailed" | "rootTraversalFailed" | 
+/**  The scan thread died unexpectedly. */
+"panicked";
 
 /**
  *  A partial update from the renderer; absent fields stay as they are. Playback preferences are

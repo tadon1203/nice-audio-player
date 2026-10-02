@@ -35,6 +35,17 @@ pub fn get_library_status(state: tauri::State<'_, AppState>) -> LibraryStatus {
     state.backend.library_status()
 }
 
+/// Moves the library database aside and restarts the app, which recreates it and rescans.
+#[tauri::command]
+#[specta::specta]
+pub async fn reset_library_and_rescan(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), LibraryCommandError> {
+    blocking(&state, |backend| backend.request_library_reset()).await?;
+    app.restart()
+}
+
 #[tauri::command]
 #[specta::specta]
 pub fn get_library_scan_state(state: tauri::State<'_, AppState>) -> LibraryScanSnapshot {

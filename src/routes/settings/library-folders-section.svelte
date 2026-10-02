@@ -5,6 +5,7 @@
   import {
     createAddLibraryRoot,
     createRemoveLibraryRoot,
+    createResetLibrary,
     createSetLibraryRootEnabled,
   } from "$lib/library/mutations";
   import type { LibraryRoot } from "$lib/native";
@@ -25,6 +26,7 @@
   } from "$lib/ui/shadcn/item/index.js";
   import { Spinner } from "$lib/ui/shadcn/spinner/index.js";
   import RemoveLibraryRootDialog from "./remove-library-root-dialog.svelte";
+  import ResetLibraryDialog from "./reset-library-dialog.svelte";
   import ScanControls from "./scan-controls.svelte";
   import ScanResult from "./scan-result.svelte";
   import ScanRunning from "./scan-running.svelte";
@@ -35,7 +37,10 @@
   const setEnabled = createSetLibraryRootEnabled();
   const removeRoot = createRemoveLibraryRoot();
 
+  const resetLibrary = createResetLibrary();
+
   let removeTarget = $state<LibraryRoot | null>(null);
+  let resetOpen = $state(false);
 
   const roots = $derived(rootsQuery.data ?? []);
   const scan = $derived(scanQuery.data);
@@ -193,6 +198,43 @@
   {#if scan}
     <ScanResult {scan} />
   {/if}
+
+  <div class="mt-8 flex flex-wrap items-start justify-between gap-4 border-t border-border pt-6">
+    <p class="max-w-prose text-sm leading-5 text-muted-foreground">
+      Use this if the library looks wrong or cannot be opened.
+    </p>
+    <div class="flex max-w-sm flex-col items-end gap-2">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={scanRunning || resetLibrary.isPending}
+        onclick={() => {
+          resetLibrary.reset();
+          resetOpen = true;
+        }}
+      >
+        {#if resetLibrary.isPending}
+          <Spinner data-icon="inline-start" aria-hidden="true" role="presentation" />
+        {/if}
+        Reset library and rescan
+      </Button>
+      {#if resetLibrary.error}
+        <p class="text-right text-sm text-destructive" role="alert">
+          {libraryCommandErrorMessage(resetLibrary.error)}
+        </p>
+      {/if}
+    </div>
+  </div>
+
+  <ResetLibraryDialog
+    open={resetOpen}
+    onOpenChange={(open) => (resetOpen = open)}
+    onConfirm={() => {
+      resetOpen = false;
+      resetLibrary.mutate();
+    }}
+  />
 
   <RemoveLibraryRootDialog
     root={removeTarget}
