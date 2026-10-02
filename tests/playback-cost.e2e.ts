@@ -103,3 +103,19 @@ test("Now Playing stays cheap while a track plays", async ({ page, native, playe
 
   expect(share("RecalcStyleDuration")).toBeLessThan(15);
 });
+
+// The waveform was one SVG rect per bar per layer (~1300 at 1920px), each with its own
+// transition: opening Now Playing mounted them all at once and froze the UI for a frame or more.
+// The bars are drawn on canvases now; the number of elements is the seam, and it is deterministic.
+test("Now Playing's waveform is a few elements, not one per bar", async ({ page, player }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await page.goto("/library/tracks");
+  await page.getByRole("button", { name: "Play Test track" }).click();
+  const dock = page.getByRole("contentinfo", { name: "Playback controls" });
+  await dock.getByRole("button", { name: "Pause", exact: true }).waitFor();
+  await player.publishWaveform();
+  await dock.getByRole("button", { name: "Open Now Playing" }).click();
+  const seek = page.getByRole("region", { name: "Now Playing" }).getByRole("slider");
+  await expect(seek).toHaveAttribute("data-ready", "true");
+  expect(await seek.locator("*").count()).toBeLessThan(20);
+});
