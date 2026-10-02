@@ -2541,7 +2541,6 @@ dependencies = [
  "serde_json",
  "specta",
  "symphonia",
- "tokio",
  "triple_buffer",
  "walkdir",
 ]

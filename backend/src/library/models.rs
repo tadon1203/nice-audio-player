@@ -215,6 +215,8 @@ impl LibraryScanSnapshot {
 pub enum ScanFailure {
     PersistenceFailed,
     RootTraversalFailed,
+    /// The scan thread died unexpectedly.
+    Panicked,
 }
 
 #[derive(Debug, Clone, Serialize, specta::Type)]

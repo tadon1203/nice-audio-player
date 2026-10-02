@@ -40,10 +40,7 @@ pub struct BackendApp {
 
 impl BackendApp {
     /// Starts every service. `events` is how they tell the host that something changed.
-    pub async fn initialize(
-        data_dir: PathBuf,
-        events: SharedEventSink,
-    ) -> Result<Self, BackendError> {
+    pub fn initialize(data_dir: PathBuf, events: SharedEventSink) -> Result<Self, BackendError> {
         let settings = Arc::new(SettingsService::load(data_dir.clone(), events.clone()));
         let activities = ApplicationActivityService::new(events.clone());
         let activity = activities.handle();

@@ -9,6 +9,7 @@ use crate::audio::decoding::{DecodeStep, StreamingDecoder};
 use crate::audio::output::PipelineId;
 use crate::audio::output_processing::{OutputPcmProcessor, OutputProcessingError};
 use crate::audio::pcm_queue::{PcmProducer, PcmWaker};
+use crate::containment::contain;
 
 pub(crate) struct DecodeTaskInput {
     pub(crate) decoder: StreamingDecoder,
@@ -75,7 +76,7 @@ impl DecodeWorker {
             prebuffer_frames: prebuffer_frames(input.output_sample_rate),
             prebuffer_sent: false,
         };
-        let _join_handle = thread::spawn(move || task.run(decoder));
+        let _join_handle = thread::spawn(move || task.run_contained(decoder));
         Self {
             cancellation,
             #[cfg(test)]
@@ -110,6 +111,14 @@ fn prebuffer_frames(sample_rate: u32) -> usize {
 }
 
 impl DecodeTask {
+    /// A decoder that panics on a bad file fails that playback, not the app.
+    fn run_contained(self, decoder: StreamingDecoder) {
+        let (inbox, pipeline) = (self.inbox.clone(), self.pipeline);
+        if contain("playback.decode", move || self.run(decoder)).is_none() {
+            inbox.event(WorkerEvent::DecodeFailed { pipeline });
+        }
+    }
+
     fn run(mut self, decoder: StreamingDecoder) {
         match self.decode_to_end(decoder) {
             Ok(()) => self.producer.finish(),

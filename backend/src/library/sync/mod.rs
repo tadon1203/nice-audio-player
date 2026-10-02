@@ -19,7 +19,7 @@ use crate::activity::{
     ApplicationActivityState,
 };
 use crate::events::Notifier;
-use log::{info, warn};
+use log::{error, info, warn};
 use notify::RecommendedWatcher;
 use std::{
     collections::{HashMap, VecDeque},
@@ -152,8 +152,7 @@ struct Actor {
 impl Actor {
     fn run(mut self, receiver: Receiver<Message>) {
         let enabled = self
-            .enabled_roots()
-            .unwrap_or_default()
+            .enabled_roots_or_log()
             .iter()
             .filter_map(root_id)
             .collect();
@@ -290,10 +289,18 @@ impl Actor {
             .collect())
     }
 
+    /// For callers that carry on without folders: a failed read is logged, not mistaken for
+    /// "no folders".
+    fn enabled_roots_or_log(&self) -> Vec<LibraryRoot> {
+        self.enabled_roots().unwrap_or_else(|error| {
+            error!("library.roots.read_failed error={error:?}");
+            Vec::new()
+        })
+    }
+
     fn start_scan(&mut self, ids: &[RootId]) {
         let roots: Vec<LibraryRoot> = self
-            .enabled_roots()
-            .unwrap_or_default()
+            .enabled_roots_or_log()
             .into_iter()
             .filter(|root| root_id(root).is_some_and(|id| ids.contains(&id)))
             .collect();
@@ -318,13 +325,13 @@ impl Actor {
         );
         let messages = self.messages.clone();
         self.scanner = Some(thread::spawn(move || {
+            let mut ending = ScanEnding::new(messages, scan.clone(), notify.clone());
             let outcome = scanner::run(database, roots, scan, cancel, notify);
-            let outcome = match outcome {
+            ending.finish(match outcome {
                 LibraryScanState::Completed => ScanOutcome::Completed,
                 LibraryScanState::Cancelled => ScanOutcome::Cancelled,
                 _ => ScanOutcome::Failed,
-            };
-            let _ = messages.send(Message::Input(Input::ScanFinished(outcome)));
+            });
         }));
     }
 
@@ -338,8 +345,7 @@ impl Actor {
 
     fn attach(&mut self, id: RootId) {
         let path = self
-            .enabled_roots()
-            .unwrap_or_default()
+            .enabled_roots_or_log()
             .into_iter()
             .find(|root| root_id(root) == Some(id))
             .map(|root| root.path);
@@ -389,6 +395,79 @@ impl Actor {
     }
 }
 
+/// Tells the actor how a scan thread ended. If the thread dies first, the scan ends as failed
+/// when this drops, so the scan never stays "Running".
+struct ScanEnding {
+    messages: Sender<Message>,
+    scan: Arc<Mutex<LibraryScanSnapshot>>,
+    notify: Notifier,
+    finished: bool,
+}
+
+impl ScanEnding {
+    fn new(
+        messages: Sender<Message>,
+        scan: Arc<Mutex<LibraryScanSnapshot>>,
+        notify: Notifier,
+    ) -> Self {
+        Self {
+            messages,
+            scan,
+            notify,
+            finished: false,
+        }
+    }
+
+    fn finish(&mut self, outcome: ScanOutcome) {
+        self.finished = true;
+        let _ = self
+            .messages
+            .send(Message::Input(Input::ScanFinished(outcome)));
+    }
+}
+
+impl Drop for ScanEnding {
+    fn drop(&mut self) {
+        if !self.finished {
+            scanner::fail(&self.scan, &self.notify);
+            let _ = self
+                .messages
+                .send(Message::Input(Input::ScanFinished(ScanOutcome::Failed)));
+        }
+    }
+}
+
 fn root_id(root: &LibraryRoot) -> Option<RootId> {
     parse_id(&root.id).ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::events::{null_event_sink, BackendEvent};
+
+    #[test]
+    fn a_scan_thread_that_dies_ends_the_scan_as_failed() {
+        let (messages, received) = mpsc::channel();
+        let scan = Arc::new(Mutex::new(LibraryScanSnapshot {
+            state: LibraryScanState::Running,
+            ..LibraryScanSnapshot::idle()
+        }));
+        let notify = Notifier::new(null_event_sink(), BackendEvent::LibraryScanChanged);
+        let thread_scan = scan.clone();
+
+        let died = thread::spawn(move || {
+            let _ending = ScanEnding::new(messages, thread_scan, notify);
+            panic!("scanner bug");
+        })
+        .join();
+
+        assert!(died.is_err());
+        let snapshot = scan.lock().unwrap_or_else(|p| p.into_inner()).clone();
+        assert_eq!(snapshot.state, LibraryScanState::Failed);
+        assert!(matches!(
+            received.try_recv(),
+            Ok(Message::Input(Input::ScanFinished(ScanOutcome::Failed)))
+        ));
+    }
 }

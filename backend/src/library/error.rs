@@ -13,6 +13,8 @@ pub enum LibraryCommandError {
     CanonicalizationFailed,
     DuplicateRoot,
     OverlappingRoot,
+    /// The folder holds the app's own data directory, which a scan would read as music.
+    RootContainsDataDirectory,
     ScanInProgress,
     InvalidId,
     TrackNotFound,

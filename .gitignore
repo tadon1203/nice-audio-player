@@ -3,8 +3,7 @@ node_modules/
 /.pnpm-store/
 /.angular/
 /.agents/
-backend/target/
-/src-tauri/target/
+/target/
 /src-tauri/gen/schemas/
 build/
 dist/

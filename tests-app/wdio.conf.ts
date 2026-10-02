@@ -16,7 +16,7 @@ process.env.E2E_MUSIC_DIR = musicDir;
 process.env.NICE_AUDIO_PLAYER_DATA_DIR = join(scratch, "data");
 process.env.WEBVIEW2_USER_DATA_FOLDER = join(scratch, "webview2");
 
-const appBinaryPath = resolve("src-tauri/target/debug/nice-audio-player.exe");
+const appBinaryPath = resolve("target/debug/nice-audio-player.exe");
 
 export const config: WebdriverIO.Config = {
   runner: "local",

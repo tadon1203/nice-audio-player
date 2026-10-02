@@ -8,6 +8,7 @@ use std::sync::{
 };
 
 use super::discover::DiscoveredFile;
+use crate::containment::contain;
 use crate::library::artwork::{self, StoredArtwork};
 use crate::library::status::{ArtworkStatus, TagStatus};
 use crate::media::{
@@ -45,10 +46,10 @@ impl ArtworkOutcome {
 
 /// Reads and stores only the artwork, for a file whose earlier attempt to store it failed.
 pub(super) fn read_artwork(path: &Path, data_dir: &Path) -> ArtworkOutcome {
-    let read = match read_source_metadata(path) {
-        Ok(Some(metadata)) => metadata.artwork,
-        Ok(None) => ArtworkRead::NotPresent,
-        Err(_) => ArtworkRead::Unavailable,
+    let read = match contain("library.read_artwork", || read_source_metadata(path)) {
+        Some(Ok(Some(metadata))) => metadata.artwork,
+        Some(Ok(None)) => ArtworkRead::NotPresent,
+        Some(Err(_)) | None => ArtworkRead::Unavailable,
     };
     ArtworkOutcome::from_read(&read, data_dir)
 }
@@ -131,8 +132,10 @@ pub(super) fn inspect_all(
                 let Some(file) = files.get(index) else {
                     return;
                 };
-                *results[index].lock().expect("inspection result lock") =
-                    Some(inspect(file, data_dir));
+                // A file that panics a parser is a file that cannot be read, not a dead scan.
+                let result = contain("library.inspect", || inspect(file, data_dir))
+                    .unwrap_or(Err(Undecodable));
+                *results[index].lock().expect("inspection result lock") = Some(result);
             });
         }
     });

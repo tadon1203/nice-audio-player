@@ -1,6 +1,7 @@
 pub mod activity;
 pub mod app;
 pub mod audio;
+pub(crate) mod containment;
 pub mod events;
 pub mod library;
 pub mod lyrics;

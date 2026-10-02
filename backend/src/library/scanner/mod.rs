@@ -91,6 +91,24 @@ pub(crate) fn run(
     }
 }
 
+/// Ends the scan as failed, for a scan thread that died before it could say how it ended.
+pub(crate) fn fail(state: &SharedScanState, notify: &Notifier) {
+    // A panic can poison the lock; the snapshot is plain counters, so it is still good to use.
+    let mut scan = state.lock().unwrap_or_else(|poisoned| {
+        state.clear_poison();
+        poisoned.into_inner()
+    });
+    scan.state = LibraryScanState::Failed;
+    scan.current_root = None;
+    scan.failure_code = Some(ScanFailure::Panicked);
+    drop(scan);
+    error!(
+        "library.scan.failed failure_code={:?}",
+        ScanFailure::Panicked
+    );
+    notify.notify();
+}
+
 /// How many files earlier scans left in `roots`: a rescan should find about as many again.
 fn expected_files(database: &Database, roots: &[LibraryRoot]) -> u64 {
     let Ok(connection) = database.read() else {

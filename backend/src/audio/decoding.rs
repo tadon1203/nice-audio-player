@@ -426,4 +426,35 @@ mod tests {
             Ok(DecodeStep::EndOfStream)
         ));
     }
+
+    #[test]
+    fn a_truncated_or_garbage_file_ends_decoding_without_a_panic() {
+        let directory = TestDirectory::new();
+        let whole = directory.file("whole.wav");
+        write_pcm_i16_wav(&whole, 8_000, 1, &vec![500i16; 8_000]);
+        let bytes = std::fs::read(&whole).unwrap();
+        let truncated = directory.file("truncated.wav");
+        std::fs::write(&truncated, &bytes[..bytes.len() / 2]).unwrap();
+        let garbage = directory.file("garbage.wav");
+        std::fs::write(
+            &garbage,
+            (0..4_096u32)
+                .map(|n| (n * 31 % 251) as u8)
+                .collect::<Vec<_>>(),
+        )
+        .unwrap();
+
+        for path in [truncated, garbage] {
+            let outcome = std::panic::catch_unwind(|| {
+                let Ok(mut decoder) = super::open_analysis_decoder(&validated(&path)) else {
+                    return;
+                };
+                let mut buffer = Vec::new();
+                while let Ok(DecodeStep::Samples) = decoder.decode_next(&mut buffer) {
+                    buffer.clear();
+                }
+            });
+            assert!(outcome.is_ok(), "{path:?} panicked the decoder");
+        }
+    }
 }

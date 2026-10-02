@@ -37,7 +37,7 @@ pub fn run() {
                 None => app.path().app_data_dir()?,
             };
             let (sink, event_receiver) = events::event_channel();
-            let backend = tauri::async_runtime::block_on(BackendApp::initialize(data_dir, sink))
+            let backend = BackendApp::initialize(data_dir, sink)
                 .map_err(|_| std::io::Error::other("backend startup failed"))?;
             let backend = Arc::new(backend);
             app.manage(AppState {

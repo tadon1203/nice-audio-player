@@ -16,6 +16,7 @@ use serde::Serialize;
 
 use super::cancellation::Cancellation;
 use super::decoding::{open_analysis_decoder, DecodeStep, PcmDecodeError, SeekStep};
+use crate::containment::contain;
 use crate::events::{BackendEvent, SharedEventSink};
 use crate::media::validation::ValidatedAudioFile;
 
@@ -412,7 +413,8 @@ impl WaveformService {
             .name("waveform-analysis".into())
             .spawn(move || {
                 while let Some((file, cancellation)) = worker.next_job() {
-                    worker.process(&file, &cancellation);
+                    // A file that panics the analysis gets no waveform; the worker lives on.
+                    contain("waveform.process", || worker.process(&file, &cancellation));
                     worker.jobs().running = None;
                 }
             });
@@ -689,5 +691,22 @@ mod tests {
 
         write_pcm_i16_wav(Path::new(&file.path), 8_000, 1, &vec![9_000i16; 24_000]);
         assert!(service.get_or_queue(&file).is_none());
+    }
+
+    #[test]
+    fn a_truncated_or_garbage_file_fails_its_analysis_without_a_panic() {
+        let directory = TestDirectory::new();
+        let whole = wav(&directory, "whole.wav", &vec![500i16; 16_000]);
+        let bytes = std::fs::read(&whole.path).unwrap();
+        let truncated = directory.file("truncated.wav");
+        std::fs::write(&truncated, &bytes[..bytes.len() / 2]).unwrap();
+        let garbage = directory.file("garbage.wav");
+        std::fs::write(&garbage, vec![0x5Au8; 2_048]).unwrap();
+
+        for path in [truncated, garbage] {
+            let file = validate_audio_file(path.to_str().unwrap()).unwrap();
+            let outcome = contain("test", || analyze(&file, &Cancellation::default(), 1));
+            assert!(outcome.is_some(), "{path:?} panicked the analysis");
+        }
     }
 }

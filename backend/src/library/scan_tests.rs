@@ -330,3 +330,40 @@ fn a_file_that_stops_being_decodable_keeps_its_track_without_its_old_tags() {
         "the tags of the earlier revision are cleared"
     );
 }
+
+#[test]
+fn truncated_and_garbage_files_are_reported_failed_and_the_scan_completes() {
+    let fixture = fixture();
+    write_tone(&fixture.music.join("good.wav"), 8_000);
+    write_tone(&fixture.music.join("whole.wav"), 8_000);
+    let bytes = std::fs::read(fixture.music.join("whole.wav")).unwrap();
+    std::fs::write(fixture.music.join("truncated.wav"), &bytes[..30]).unwrap();
+    std::fs::write(fixture.music.join("half.wav"), &bytes[..bytes.len() / 2]).unwrap();
+    std::fs::write(fixture.music.join("garbage.flac"), vec![0xFFu8; 4_096]).unwrap();
+    std::fs::write(fixture.music.join("empty.mp3"), b"").unwrap();
+    std::fs::write(
+        fixture.music.join("tags.mp3"),
+        b"ID3\x04\x00\x00\xff\xff\xff\xff",
+    )
+    .unwrap();
+
+    let scan = run_scan(&fixture, false);
+
+    assert_eq!(scan.state, LibraryScanState::Completed);
+    assert_eq!(scan.discovered_count, 7);
+    assert_eq!(scan.inspected_count, 7);
+    assert!(scan.indexed_count >= 2, "the good files are indexed");
+}
+
+#[test]
+fn a_folder_holding_the_data_directory_cannot_be_registered() {
+    let fixture = fixture();
+    let parent = fixture.music.parent().unwrap();
+
+    let refused = roots::register(&fixture.database, &parent.to_string_lossy());
+
+    assert!(matches!(
+        refused,
+        Err(super::error::LibraryCommandError::RootContainsDataDirectory)
+    ));
+}

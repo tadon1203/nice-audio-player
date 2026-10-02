@@ -7,6 +7,7 @@ const commandMessages = {
   canonicalizationFailed: "The selected folder could not be resolved.",
   duplicateRoot: "That folder is already in the library.",
   overlappingRoot: "That folder overlaps an existing library folder.",
+  rootContainsDataDirectory: "That folder contains the app's own data, so it cannot be a library folder.",
   scanInProgress: "Library folders cannot be changed while a scan is running.",
   invalidId: "That item reference is invalid.",
   trackNotFound: "That track could not be found.",
@@ -36,6 +37,7 @@ const unavailableMessages = {
 const scanFailureMessages: Readonly<Record<string, string>> = {
   persistenceFailed: "The library database could not be updated.",
   rootTraversalFailed: "A library folder could not be read.",
+  panicked: "The scan stopped unexpectedly.",
 };
 
 export function libraryStatusMessage(status: LibraryStatus): string | null {

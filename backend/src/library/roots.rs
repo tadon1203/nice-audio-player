@@ -41,6 +41,12 @@ pub(crate) fn register(
         .to_str()
         .ok_or(LibraryCommandError::CanonicalizationFailed)?
         .to_owned();
+    // Compared canonically: the data directory may be reached through a link or a drive alias.
+    let data_dir =
+        dunce::canonicalize(database.data_dir()).unwrap_or_else(|_| database.data_dir().into());
+    if data_dir.starts_with(&canonical) {
+        return Err(LibraryCommandError::RootContainsDataDirectory);
+    }
     let reader = database.read().map_err(StoreError::from)?;
     for root in list(&reader)? {
         let other = Path::new(&root.path);
