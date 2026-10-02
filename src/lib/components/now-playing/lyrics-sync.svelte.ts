@@ -51,5 +51,12 @@ export function createLyricsSync(lines: () => readonly LyricsTimedLine[] | null)
     get index() {
       return index;
     },
+    /** Ms until the next line starts; null when there is none or the clock is not playing. */
+    msToNextLine(): number | null {
+      const current = lines();
+      if (current === null || !clock.playing()) return null;
+      const next = current[index + 1];
+      return next === undefined ? null : Math.max(0, next.startMs - clock.estimate());
+    },
   };
 }

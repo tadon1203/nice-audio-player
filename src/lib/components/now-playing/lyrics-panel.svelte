@@ -30,7 +30,7 @@
   const timedLines = $derived(rawLines === null ? null : withIntro(rawLines));
 
   const sync = createLyricsSync(() => timedLines);
-  const follow = createLyricsFollow(() => sync.index);
+  const follow = createLyricsFollow(() => sync.index, sync.msToNextLine);
   const anchor = createAnchorPadding();
 
   const hoveredIndex = $derived(
@@ -74,9 +74,10 @@
       role="log"
       aria-label="Lyrics"
       tabindex="0"
-      onwheel={follow.onwheel}
-      ontouchstart={follow.ontouchstart}
-      onpointerdown={follow.onpointerdown}
+      onscroll={follow.onscroll}
+      onpointerenter={follow.onpointerenter}
+      onpointermove={follow.onpointermove}
+      onpointerleave={follow.onpointerleave}
       onkeydown={follow.onkeydown}
       class={cn("relative min-h-0 flex-1 overflow-y-auto outline-none", EDGE_MASK)}
     >

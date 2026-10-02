@@ -11,6 +11,8 @@ const FADE_MS = crossfade.duration;
 const GLIDE_END_PX = 0.5;
 /** A scroll position further than this from what the glide wrote was moved by something else. */
 const GLIDE_INTERRUPT_PX = 1;
+/** How many of the follower's own recent writes to `scrollTop` it remembers. */
+const OWN_WRITES = 8;
 
 /**
  * Moves a scroll container so a row's centre sits on the anchor line (40% from the top): animated
@@ -18,7 +20,7 @@ const GLIDE_INTERRUPT_PX = 1;
  * once, or set at once with the list faded in. Reduced motion always sets it at once. Shared by
  * the lyrics and the queue. Call it while a component initialises.
  * A glide lets go when something else moves the list (the wheel, the scrollbar, the browser
- * clamping it).
+ * clamping it). `isOwnScroll` tells a scroll event caused by its own writes from the reader's.
  */
 export function createAnchorFollow() {
   const budget = getMotionBudget();
@@ -32,6 +34,14 @@ export function createAnchorFollow() {
   let gliding = $state(false);
   /** The value last written to `scrollTop` by the glide, to tell whether something else moved it. */
   let lastWritten: number | null = null;
+  /** The last few values the follower wrote to `scrollTop`. */
+  const written: number[] = [];
+
+  const write = (element: HTMLElement, value: number) => {
+    element.scrollTop = value;
+    written.push(value);
+    if (written.length > OWN_WRITES) written.shift();
+  };
 
   const stop = () => {
     fade?.cancel();
@@ -51,11 +61,11 @@ export function createAnchorFollow() {
     }
     // Close enough: land exactly on the target and stop.
     if (Math.abs(value - goal) < GLIDE_END_PX) {
-      element.scrollTop = goal;
+      write(element, goal);
       gliding = false;
       return;
     }
-    element.scrollTop = value;
+    write(element, value);
     lastWritten = value;
   });
 
@@ -72,6 +82,10 @@ export function createAnchorFollow() {
   return {
     attach,
     stop,
+    /** Whether a scroll position is one the follower wrote itself (so not the reader's doing). */
+    isOwnScroll(scrollTop: number) {
+      return written.some((value) => Math.abs(scrollTop - value) <= GLIDE_INTERRUPT_PX);
+    },
     /** Brings `row` to the anchor line. Does nothing before the container is mounted. */
     scrollToRow(row: HTMLElement, how: ScrollHow) {
       const element = container;
@@ -85,7 +99,7 @@ export function createAnchorFollow() {
       });
       const reduced = budget.current === "reduced";
       if (reduced || how !== "animate") {
-        element.scrollTop = target;
+        write(element, target);
         if (how === "fade" && !reduced) {
           fade = element.animate({ opacity: [0, 1] }, { duration: FADE_MS, easing: springLinear });
         }

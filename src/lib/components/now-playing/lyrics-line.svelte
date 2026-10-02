@@ -62,9 +62,12 @@
 <div
   {@attach attach}
   aria-current={isCurrent ? "true" : undefined}
-  style:opacity={opacityAtDistance(distance)}
+  style:--line-opacity={opacityAtDistance(distance)}
   style:transition={transition("opacity")}
-  class={cn("group flex items-baseline gap-4 rounded-sm py-2", isHovered && "bg-accent/60")}
+  class={cn(
+    "group flex items-baseline gap-4 rounded-sm py-2 opacity-(--line-opacity) in-data-[mode=free]:opacity-100",
+    isHovered && "bg-accent/60",
+  )}
 >
   <button
     type="button"

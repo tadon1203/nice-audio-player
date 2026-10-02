@@ -2,12 +2,17 @@ import { describe, expect, it } from "vitest";
 import { anchorScrollTop } from "./anchor-column";
 import {
   decideLineChange,
-  isScrollIntentKey,
+  isNearAnchor,
   offscreenSide,
-  RETURN_TO_FOLLOW_MS,
+  POINTER_REST_CAP_MS,
+  returnScroll,
+  returnsAtWaitEnd,
+  waitEndsAt,
+  WAIT_IN_VIEW_MS,
+  WAIT_OUT_OF_VIEW_MS,
 } from "./lyrics-follow-model";
 
-const base = { mode: "follow", now: 10_000, lastInteractionAt: 0 } as const;
+const base = { mode: "follow", now: 10_000, waitEndsAt: 0, selecting: false } as const;
 
 describe("decideLineChange", () => {
   it("sets the position at once for the first line seen", () => {
@@ -49,28 +54,89 @@ describe("decideLineChange", () => {
     );
   });
 
-  it("returns to follow at a step once 3s have passed since the last interaction", () => {
+  it("returns to follow at a step once the wait is over", () => {
     expect(
       decideLineChange({
+        ...base,
         mode: "free",
         previous: 2,
         current: 3,
-        now: RETURN_TO_FOLLOW_MS,
-        lastInteractionAt: 0,
+        now: 5_000,
+        waitEndsAt: 5_000,
       }),
     ).toEqual({ mode: "follow", scroll: "animate" });
   });
 
-  it("stays free at a step within 3s of the last interaction", () => {
+  it("stays free at a step before the wait is over", () => {
     expect(
       decideLineChange({
+        ...base,
         mode: "free",
         previous: 2,
         current: 3,
-        now: RETURN_TO_FOLLOW_MS - 1,
-        lastInteractionAt: 0,
+        now: 4_999,
+        waitEndsAt: 5_000,
       }),
     ).toEqual({ mode: "free", scroll: null });
+  });
+
+  it("pauses at a step while text is selected, without becoming free", () => {
+    expect(decideLineChange({ ...base, selecting: true, previous: 2, current: 3 })).toEqual({
+      mode: "follow",
+      scroll: null,
+    });
+  });
+
+  it("still follows a seek while text is selected", () => {
+    expect(decideLineChange({ ...base, selecting: true, previous: 2, current: 30 }).scroll).toBe(
+      "fade",
+    );
+  });
+});
+
+describe("waitEndsAt", () => {
+  it("is 2s after the last activity while the current line is in view", () => {
+    expect(waitEndsAt({ idleSince: 100, pointerResting: false, currentInView: true })).toBe(
+      100 + WAIT_IN_VIEW_MS,
+    );
+  });
+
+  it("is 6s while the current line is out of view", () => {
+    expect(waitEndsAt({ idleSince: 100, pointerResting: false, currentInView: false })).toBe(
+      100 + WAIT_OUT_OF_VIEW_MS,
+    );
+  });
+
+  it("does not count a resting pointer, but only up to the cap", () => {
+    expect(waitEndsAt({ idleSince: 0, pointerResting: true, currentInView: true })).toBe(
+      POINTER_REST_CAP_MS + WAIT_IN_VIEW_MS,
+    );
+  });
+});
+
+describe("returnsAtWaitEnd", () => {
+  it("returns at once when no line change is coming or it is 1s or more away", () => {
+    expect(returnsAtWaitEnd(null)).toBe(true);
+    expect(returnsAtWaitEnd(1_000)).toBe(true);
+  });
+
+  it("waits for the line change when it is under 1s away", () => {
+    expect(returnsAtWaitEnd(999)).toBe(false);
+  });
+});
+
+describe("returnScroll", () => {
+  it("glides within one viewport height and fades beyond it", () => {
+    expect(returnScroll(-400, 400)).toBe("animate");
+    expect(returnScroll(401, 400)).toBe("fade");
+  });
+});
+
+describe("isNearAnchor", () => {
+  it("is true within one line of the anchor position", () => {
+    expect(isNearAnchor(460, 400, 60)).toBe(true);
+    expect(isNearAnchor(340, 400, 60)).toBe(true);
+    expect(isNearAnchor(461, 400, 60)).toBe(false);
   });
 });
 
@@ -85,16 +151,6 @@ describe("offscreenSide", () => {
     expect(offscreenSide({ top: 90, bottom: 130 }, list)).toBe("above");
     expect(offscreenSide({ top: 480, bottom: 520 }, list)).toBe("below");
     expect(offscreenSide({ top: 600, bottom: 640 }, list)).toBe("below");
-  });
-});
-
-describe("isScrollIntentKey", () => {
-  it("recognises the keys that scroll a list", () => {
-    for (const key of ["PageUp", "PageDown", "Home", "End", "ArrowUp", "ArrowDown"]) {
-      expect(isScrollIntentKey(key)).toBe(true);
-    }
-    expect(isScrollIntentKey("Escape")).toBe(false);
-    expect(isScrollIntentKey("a")).toBe(false);
   });
 });
 
