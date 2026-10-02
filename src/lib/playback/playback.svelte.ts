@@ -24,6 +24,16 @@ export type TransportCommand =
   | "next"
   | "outputSelection";
 
+/** How long the notice about skipped tracks stays after the last skip. */
+const NOTICE_MS = 6_000;
+
+type QueuedTransport = {
+  command: TransportCommand;
+  operation: () => Promise<PlaybackSnapshot>;
+  navigation: PlaybackNavigation | null;
+  settle: (done: boolean) => void;
+};
+
 const acceptsRevision = (incoming: number | null, current: number | null) =>
   incoming === null ? current === null : current === null || incoming >= current;
 
@@ -50,6 +60,8 @@ export class Playback {
   mutePending = $state.raw(false);
   volumePreview = $state.raw<number | null>(null);
   error = $state.raw<string | null>(null);
+  /** What the player did by itself, e.g. skipped unplayable tracks. Clears after a while. */
+  notice = $state.raw<string | null>(null);
 
   #initializePromise: Promise<void> | null = null;
   #requestedVolume: number | null = null;
@@ -58,9 +70,17 @@ export class Playback {
   // Set when Next/Previous is pressed and consumed by the snapshot that changes the item, so
   // the direction and the new item reach subscribers in the same update.
   #pendingNavigation: PlaybackNavigation | null = null;
+  // Latest wins, like the backend: one transport command waits for the one in flight.
+  #queuedTransport: QueuedTransport | null = null;
+  #skippedTitles: string[] = [];
+  #noticeTimer: ReturnType<typeof setTimeout> | null = null;
 
   readonly #session = $derived(snapshotSession(this.snapshot));
   readonly status = $derived(this.snapshot?.status ?? ("stopped" as const));
+  /** Why playback stopped, until the listener retries or plays something else. */
+  readonly failure = $derived(
+    this.snapshot?.status === "failed" && !this.snapshot.skipping ? this.snapshot.error : null,
+  );
   /** True while a track is loaded, whether it is playing or paused. */
   readonly active = $derived(isActivePlayback(this.snapshot));
   /** Identifies the loaded session; stable across seeks, new for every track that loads. */
@@ -102,6 +122,26 @@ export class Playback {
     }
     this.snapshot = snapshot;
     this.clock.accept(clockReportOf(snapshot));
+    if (snapshot.status === "failed" && snapshot.skipping) this.#noteSkip(snapshot.item);
+  }
+
+  /** Consecutive skips share one notice. */
+  #noteSkip(item: PlaybackItem | null) {
+    this.#skippedTitles.push(item?.title ?? "a track");
+    const [first, ...others] = this.#skippedTitles;
+    this.notice =
+      others.length === 0
+        ? `Couldn't play ${first}, skipped`
+        : `Couldn't play ${first} and ${others.length} more, skipped`;
+    if (this.#noticeTimer !== null) clearTimeout(this.#noticeTimer);
+    this.#noticeTimer = setTimeout(() => this.dismissNotice(), NOTICE_MS);
+  }
+
+  dismissNotice() {
+    if (this.#noticeTimer !== null) clearTimeout(this.#noticeTimer);
+    this.#noticeTimer = null;
+    this.#skippedTitles = [];
+    this.notice = null;
   }
 
   acceptQueue(queue: PlaybackQueueSnapshot) {
@@ -127,12 +167,31 @@ export class Playback {
     if (event.event === "playbackQueueStateChanged") this.acceptQueue(event.payload);
   }
 
-  async #runTransport(
+  /**
+   * Runs a transport command. One that arrives while another is in flight waits for it, and a
+   * newer one replaces it, so the latest press wins instead of being dropped.
+   */
+  #runTransport(
     command: TransportCommand,
     operation: () => Promise<PlaybackSnapshot>,
+    navigation: PlaybackNavigation | null = null,
   ): Promise<boolean> {
-    if (this.transportPending !== null) return false;
+    if (this.transportPending === null) {
+      return this.#performTransport(command, operation, navigation);
+    }
+    this.#queuedTransport?.settle(false);
+    return new Promise((settle) => {
+      this.#queuedTransport = { command, operation, navigation, settle };
+    });
+  }
+
+  async #performTransport(
+    command: TransportCommand,
+    operation: () => Promise<PlaybackSnapshot>,
+    navigation: PlaybackNavigation | null,
+  ): Promise<boolean> {
     this.transportPending = command;
+    this.#pendingNavigation = navigation;
     this.error = null;
     try {
       this.acceptPlayback(await operation());
@@ -143,15 +202,24 @@ export class Playback {
     } finally {
       this.#pendingNavigation = null;
       this.transportPending = null;
+      const queued = this.#queuedTransport;
+      this.#queuedTransport = null;
+      if (queued !== null) {
+        void this.#performTransport(queued.command, queued.operation, queued.navigation).then(
+          queued.settle,
+        );
+      }
     }
   }
 
-  async #runQueueCommand(operation: () => Promise<PlaybackQueueSnapshot>) {
+  async #runQueueCommand(operation: () => Promise<PlaybackQueueSnapshot>): Promise<boolean> {
     this.error = null;
     try {
       this.acceptQueue(await operation());
+      return true;
     } catch (error) {
       this.#setError(error);
+      return false;
     }
   }
 
@@ -212,20 +280,17 @@ export class Playback {
     return this.#runTransport("pause", () => this.#api.pausePlayback());
   }
 
+  /** Resumes a paused track; after a failure, retries the current item with the queue intact. */
   resume() {
     return this.#runTransport("resume", () => this.#api.resumePlayback());
   }
 
   previous() {
-    if (this.transportPending !== null) return Promise.resolve(false);
-    this.#pendingNavigation = "previous";
-    return this.#runTransport("previous", () => this.#api.previousPlayback());
+    return this.#runTransport("previous", () => this.#api.previousPlayback(), "previous");
   }
 
   next() {
-    if (this.transportPending !== null) return Promise.resolve(false);
-    this.#pendingNavigation = "next";
-    return this.#runTransport("next", () => this.#api.nextPlayback());
+    return this.#runTransport("next", () => this.#api.nextPlayback(), "next");
   }
 
   /**
@@ -233,9 +298,10 @@ export class Playback {
    * first returns, so holding an arrow key keeps moving instead of dropping most presses.
    */
   async seek(positionMs: number) {
+    // The one place every seek passes: the backend takes whole milliseconds.
+    const rounded = Math.round(positionMs);
     const duration = this.durationMs;
-    this.#requestedSeek =
-      duration === null ? positionMs : Math.min(Math.max(positionMs, 0), duration);
+    this.#requestedSeek = duration === null ? rounded : Math.min(Math.max(rounded, 0), duration);
     if (this.seekPending) return;
     this.seekPending = true;
     this.error = null;
@@ -290,6 +356,12 @@ export class Playback {
 
   setShuffle(enabled: boolean) {
     return this.#runQueueCommand(() => this.#api.setPlaybackShuffle(enabled));
+  }
+
+  /** Turns the global shuffle on, then replaces the queue with `context`. Nothing starts if the shuffle cannot be turned on. */
+  async shuffleAndStart(context: PlaybackContext) {
+    if (!(await this.setShuffle(true))) return;
+    await this.startPlayback(context, null);
   }
 
   setRepeatMode(mode: PlaybackRepeatMode) {

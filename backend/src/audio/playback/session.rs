@@ -27,6 +27,8 @@ pub(super) enum Transport {
     Failed {
         id: Option<PlaybackId>,
         code: PlaybackFailureCode,
+        /// The worker is moving on to the next item, so this failure is a skip, not a stop.
+        skipping: bool,
     },
 }
 
@@ -85,7 +87,7 @@ pub(super) struct Pipeline {
 
 impl Pipeline {
     pub fn cancel(self) {
-        self.decode.cancel_and_join();
+        self.decode.cancel();
     }
 }
 

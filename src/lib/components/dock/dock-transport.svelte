@@ -14,7 +14,10 @@
   const playback = getPlayback();
   const playing = $derived(playback.status === "playing");
   const ready = $derived(playback.connection === "ready");
-  const playLabel = $derived(playing ? "Pause" : playback.active ? "Resume" : "Play");
+  const failed = $derived(playback.failure !== null);
+  const playLabel = $derived(
+    playing ? "Pause" : failed ? "Retry" : playback.active ? "Resume" : "Play",
+  );
 </script>
 
 <div
@@ -47,7 +50,7 @@
     variant="default"
     aria-label={playLabel}
     title={playLabel}
-    disabled={!playback.active}
+    disabled={!playback.active && !failed}
     onclick={() => void (playing ? playback.pause() : playback.resume())}
     class="relative rounded-full transition-[background-color,color,transform] duration-(--motion-feedback-duration) ease-(--motion-easing) active:translate-y-0 active:scale-[0.94] disabled:bg-secondary disabled:text-muted-foreground disabled:opacity-100"
   >

@@ -1,5 +1,6 @@
 use std::fs::File;
 
+use log::warn;
 use symphonia::core::codecs::audio::{AudioDecoder, AudioDecoderOptions};
 use symphonia::core::errors::Error as SymphoniaError;
 use symphonia::core::formats::probe::Hint;
@@ -48,6 +49,31 @@ pub(crate) enum SeekStep {
     EndOfStream,
 }
 
+/// Consecutive undecodable packets after which a track is given up on. One damaged frame is
+/// common in real files and is skipped; a long run means the rest is unreadable too.
+const MAX_CONSECUTIVE_DAMAGED_PACKETS: u32 = 8;
+
+/// Counts the packets a decoder discarded, per Symphonia's contract for `DecodeError`: the packet
+/// is undecodable and decoding continues with the next one.
+#[derive(Debug, Default)]
+struct DamagedPackets {
+    consecutive: u32,
+    skipped: u64,
+}
+
+impl DamagedPackets {
+    /// Records a discarded packet. False once too many in a row have been discarded.
+    fn skip(&mut self) -> bool {
+        self.consecutive += 1;
+        self.skipped += 1;
+        self.consecutive <= MAX_CONSECUTIVE_DAMAGED_PACKETS
+    }
+
+    fn decoded(&mut self) {
+        self.consecutive = 0;
+    }
+}
+
 pub(crate) struct StreamingDecoder {
     format: Box<dyn FormatReader>,
     decoder: Box<dyn AudioDecoder>,
@@ -56,6 +82,7 @@ pub(crate) struct StreamingDecoder {
     time_base: TimeBase,
     duration_ms: Option<u64>,
     finished: bool,
+    damaged: DamagedPackets,
 }
 
 /// Opens a decoder for whole-file analysis; CRC verification is skipped because nothing is played.
@@ -130,6 +157,7 @@ fn open_decoder_from_media_source(
         time_base,
         duration_ms,
         finished: false,
+        damaged: DamagedPackets::default(),
     })
 }
 
@@ -217,13 +245,33 @@ impl StreamingDecoder {
         loop {
             let Some(packet) = self.format.next_packet().map_err(map_packet_error)? else {
                 self.finished = true;
+                if self.damaged.skipped > 0 {
+                    warn!(
+                        "decoding.damaged_packets_skipped count={}",
+                        self.damaged.skipped
+                    );
+                }
                 return Ok(DecodeStep::EndOfStream);
             };
             if packet.track_id != self.track_id {
                 continue;
             }
 
-            let decoded = self.decoder.decode(&packet).map_err(map_decode_error)?;
+            let decoded = match self.decoder.decode(&packet) {
+                Ok(decoded) => decoded,
+                Err(SymphoniaError::DecodeError(_)) => {
+                    if self.damaged.skip() {
+                        continue;
+                    }
+                    warn!(
+                        "decoding.damaged_packets_gave_up count={}",
+                        self.damaged.skipped
+                    );
+                    return Err(PcmDecodeError::CorruptedAudioData);
+                }
+                Err(error) => return Err(map_decode_error(error)),
+            };
+            self.damaged.decoded();
             let packet_sample_count = decoded.samples_interleaved();
             if packet_sample_count == 0 {
                 continue;
@@ -317,7 +365,7 @@ fn map_decode_error(error: SymphoniaError) -> PcmDecodeError {
 
 #[cfg(test)]
 mod tests {
-    use super::{DecodeStep, SeekStep};
+    use super::{DamagedPackets, DecodeStep, SeekStep, MAX_CONSECUTIVE_DAMAGED_PACKETS};
     use crate::audio::cancellation::Cancellation;
     use crate::audio::compressed_source::prepare_compressed_source;
     use crate::media::validation::ValidatedAudioFile;
@@ -336,6 +384,25 @@ mod tests {
             .unwrap()
             .open_decoder(&file.extension)
             .unwrap()
+    }
+
+    #[test]
+    fn a_damaged_packet_among_good_ones_is_skipped() {
+        let mut damaged = DamagedPackets::default();
+        for _ in 0..100 {
+            assert!(damaged.skip());
+            damaged.decoded();
+        }
+        assert_eq!(damaged.skipped, 100);
+    }
+
+    #[test]
+    fn a_run_of_damaged_packets_gives_up() {
+        let mut damaged = DamagedPackets::default();
+        for _ in 0..MAX_CONSECUTIVE_DAMAGED_PACKETS {
+            assert!(damaged.skip());
+        }
+        assert!(!damaged.skip());
     }
 
     #[test]

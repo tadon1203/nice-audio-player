@@ -266,7 +266,7 @@ impl PlaybackWorker {
                 let _ = reply.send(self.pause());
             }
             PlaybackCommand::Resume { reply } => {
-                let _ = reply.send(self.resume());
+                self.resume_command(reply);
             }
             PlaybackCommand::Seek { position_ms, reply } => {
                 self.begin_seek(position_ms, Some(reply));

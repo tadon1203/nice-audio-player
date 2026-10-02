@@ -94,15 +94,14 @@ pub async fn seek_playback(
     position_ms: f64,
     state: tauri::State<'_, AppState>,
 ) -> Result<PlaybackSnapshot, PlaybackServiceError> {
-    if !position_ms.is_finite()
-        || position_ms < 0.0
-        || position_ms.fract() != 0.0
-        || position_ms > 9_007_199_254_740_991.0
-    {
+    if !position_ms.is_finite() {
         return Err(PlaybackServiceError::InvalidArgument);
     }
+    // A position between milliseconds is rounded down; one outside the track is clamped by the
+    // worker.
+    let position_ms = position_ms.clamp(0.0, 9_007_199_254_740_991.0).floor() as u64;
     blocking(&state, move |backend| {
-        backend.playback.handle().seek(position_ms as u64)
+        backend.playback.handle().seek(position_ms)
     })
     .await
 }

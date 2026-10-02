@@ -9,7 +9,7 @@ impl PlaybackWorker {
             Transport::Idle | Transport::Failed { .. } => {}
             Transport::Loading(loading) => {
                 match loading.stage {
-                    LoadStage::Source(load) => load.cancel_and_join(),
+                    LoadStage::Source(load) => load.cancel(),
                     LoadStage::Prebuffering(prebuffering) => prebuffering.pipeline.cancel(),
                 }
                 respond(
@@ -78,6 +78,16 @@ impl PlaybackWorker {
         Ok(self.publish_state())
     }
 
+    /// Resume, or after a failure Retry: starts the current queue item again, queue intact.
+    pub(super) fn resume_command(&mut self, reply: Reply<PlaybackSnapshot>) {
+        if matches!(self.transport, Transport::Failed { .. }) {
+            self.skipped_in_a_row = 0;
+            self.start_current(Some(reply), false);
+            return;
+        }
+        let _ = reply.send(self.resume());
+    }
+
     pub(super) fn resume(&mut self) -> Result<PlaybackSnapshot, PlaybackServiceError> {
         if let Transport::Loading(loading) = &mut self.transport {
             loading.request.start_paused = false;
@@ -106,6 +116,7 @@ impl PlaybackWorker {
         self.transport = Transport::Failed {
             id,
             code: code.clone(),
+            skipping: false,
         };
         self.publish_state();
         PlaybackServiceError::from(code)

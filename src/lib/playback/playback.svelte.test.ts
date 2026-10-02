@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   PlaybackItem,
   PlaybackQueueItem,
@@ -185,7 +185,7 @@ describe("playback session ordering", () => {
     await vi.waitFor(() => expect(playback.volumePending).toBe(false));
   });
 
-  it("permits only one transport command at a time", async () => {
+  it("keeps only the latest transport command that arrives while one is in flight", async () => {
     let releasePause: (() => void) | undefined;
     const api = baseApi({
       pausePlayback: vi.fn(async () => {
@@ -195,20 +195,158 @@ describe("playback session ordering", () => {
         return stopped(2, null);
       }),
       resumePlayback: vi.fn(async () => stopped(3, null)),
+      nextPlayback: vi.fn(async () => stopped(4, null)),
     });
     const playback = createPlayback(api);
     await playback.initialize();
 
     const first = playback.pause();
-    const second = playback.resume();
+    const replaced = playback.resume();
+    const latest = playback.next();
     expect(playback.transportPending).toBe("pause");
-    expect(playback.transportPending).toBe("pause");
-    await second;
+    expect(await replaced).toBe(false);
     expect(api.resumePlayback).not.toHaveBeenCalled();
+    expect(api.nextPlayback).not.toHaveBeenCalled();
 
     releasePause?.();
     await first;
+    expect(await latest).toBe(true);
+    expect(api.nextPlayback).toHaveBeenCalledTimes(1);
+    expect(api.resumePlayback).not.toHaveBeenCalled();
     expect(playback.transportPending).toBeNull();
+  });
+
+  it("does not delay a seek or a volume change behind a transport command", async () => {
+    let releaseStart: (() => void) | undefined;
+    const api = baseApi({
+      startPlayback: vi.fn(async () => {
+        await new Promise<void>((resolve) => {
+          releaseStart = resolve;
+        });
+        return playing(2, "a", 0);
+      }),
+      seekPlayback: vi.fn(async () => playing(3, "a", 1_000)),
+      setPlaybackVolume: vi.fn(async () => playing(4, "a", 0)),
+    });
+    const playback = createPlayback(api);
+    await playback.initialize();
+    playback.acceptPlayback(playing(1, "a", 0));
+
+    const start = playback.startPlayback({ kind: "tracks" } as never, "a");
+    void playback.seek(1_000);
+    playback.setVolume(0.2);
+
+    await vi.waitFor(() => expect(api.seekPlayback).toHaveBeenCalledWith(1_000));
+    await vi.waitFor(() => expect(api.setPlaybackVolume).toHaveBeenCalledWith(0.2));
+    releaseStart?.();
+    await start;
+  });
+});
+
+describe("seeking", () => {
+  it("rounds to whole milliseconds", async () => {
+    const seekPlayback = vi.fn(async () => playing(2, "a", 1_000));
+    const playback = createPlayback(baseApi({ seekPlayback }));
+    playback.acceptPlayback(playing(1, "a", 0));
+
+    await playback.seek(1_234.56);
+
+    expect(seekPlayback).toHaveBeenCalledWith(1_235);
+  });
+});
+
+describe("failures", () => {
+  const failed = (revision: number, skipping: boolean, id = "a"): PlaybackSnapshot => ({
+    status: "failed",
+    base: base(revision),
+    item: item(id),
+    playbackId: null,
+    error: "outputDeviceUnavailable",
+    skipping,
+  });
+
+  it("exposes why playback stopped, and retries through resume", async () => {
+    const resumePlayback = vi.fn(async () => playing(3, "a", 0));
+    const playback = createPlayback(baseApi({ resumePlayback }));
+    playback.acceptPlayback(failed(2, false));
+
+    expect(playback.status).toBe("failed");
+    expect(playback.failure).toBe("outputDeviceUnavailable");
+
+    await playback.resume();
+
+    expect(resumePlayback).toHaveBeenCalledTimes(1);
+    expect(playback.failure).toBeNull();
+  });
+
+  it("is not a stop while the player moves on by itself", () => {
+    const playback = createPlayback(baseApi());
+
+    playback.acceptPlayback(failed(2, true));
+
+    expect(playback.failure).toBeNull();
+  });
+
+  describe("skipped tracks", () => {
+    afterEach(() => vi.useRealTimers());
+
+    it("are told once, and consecutive skips share the notice", () => {
+      vi.useFakeTimers();
+      const playback = createPlayback(baseApi());
+
+      playback.acceptPlayback(failed(1, true, "a"));
+      expect(playback.notice).toBe("Couldn't play a, skipped");
+      playback.acceptPlayback(failed(2, true, "b"));
+      playback.acceptPlayback(failed(3, true, "c"));
+      expect(playback.notice).toBe("Couldn't play a and 2 more, skipped");
+
+      vi.advanceTimersByTime(6_000);
+      expect(playback.notice).toBeNull();
+      playback.acceptPlayback(failed(4, true, "d"));
+      expect(playback.notice).toBe("Couldn't play d, skipped");
+    });
+  });
+});
+
+describe("album shuffle", () => {
+  const context = { kind: "album", key: { title: "A", albumArtist: "B" } } as const;
+
+  it("turns the shuffle on, then starts", async () => {
+    const order: string[] = [];
+    const playback = createPlayback(
+      baseApi({
+        setPlaybackShuffle: vi.fn(async () => {
+          order.push("shuffle");
+          return { ...queue(2), shuffleEnabled: true };
+        }),
+        startPlayback: vi.fn(async () => {
+          order.push("start");
+          return playing(2, "a", 0);
+        }),
+      }),
+    );
+
+    await playback.shuffleAndStart(context);
+
+    expect(order).toEqual(["shuffle", "start"]);
+    expect(playback.shuffleEnabled).toBe(true);
+  });
+
+  it("does not start when the shuffle cannot be turned on, and says why", async () => {
+    const startPlayback = vi.fn(async () => playing(2, "a", 0));
+    const playback = createPlayback(
+      baseApi({
+        setPlaybackShuffle: async () => {
+          throw { code: "workerUnavailable" };
+        },
+        startPlayback,
+      }),
+    );
+
+    await playback.shuffleAndStart(context);
+
+    expect(startPlayback).not.toHaveBeenCalled();
+    expect(playback.error).toBe("The playback engine is unavailable.");
   });
 });
 
@@ -456,8 +594,9 @@ describe("last navigation", () => {
     expect(playback.lastNavigation).toBe("next");
   });
 
-  it("does not let a refused Previous recolour the Next in flight", async () => {
+  it("does not let a Previous waiting behind a Next recolour the Next in flight", async () => {
     let finishNext: (() => void) | undefined;
+    let finishPrevious: (() => void) | undefined;
     const playback = createPlayback(
       baseApi({
         getPlaybackState: async () => playing(1, "a", 0),
@@ -467,16 +606,27 @@ describe("last navigation", () => {
           });
           return playing(2, "b", 0);
         },
+        previousPlayback: async () => {
+          await new Promise<void>((resolve) => {
+            finishPrevious = resolve;
+          });
+          return playing(3, "a", 0);
+        },
       }),
     );
     await playback.initialize();
 
     const next = playback.next();
-    await playback.previous();
+    const previous = playback.previous();
     finishNext?.();
     await next;
     expect(playback.item?.trackId).toBe("b");
     expect(playback.lastNavigation).toBe("next");
+
+    finishPrevious?.();
+    await previous;
+    expect(playback.item?.trackId).toBe("a");
+    expect(playback.lastNavigation).toBe("previous");
   });
 
   it("does not let a failed Previous colour the next automatic change", async () => {

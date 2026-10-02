@@ -84,7 +84,8 @@ impl PlaybackWorker {
         seek_error: PlaybackServiceError,
     ) {
         let id = self.drop_loaded(seek_error);
-        self.transport = Transport::Failed { id, code };
+        let skipping = scope == FailureScope::Item && self.will_skip();
+        self.transport = Transport::Failed { id, code, skipping };
         self.publish_state();
         if scope == FailureScope::Item {
             if let Some(item) = self.next_after_item_failure() {

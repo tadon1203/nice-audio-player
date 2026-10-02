@@ -101,6 +101,9 @@ pub enum PlaybackSnapshot {
         item: Option<PlaybackItem>,
         playback_id: Option<String>,
         error: PlaybackFailureCode,
+        /// The player is moving on to the next item by itself: a skip the listener is told
+        /// about, not a stop that waits for Retry.
+        skipping: bool,
     },
 }
 

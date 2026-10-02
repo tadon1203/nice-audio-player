@@ -4,6 +4,7 @@
   import { goto } from "$app/navigation";
   import { trackLinks } from "$lib/library/tracks";
   import { getPlayback } from "$lib/playback/context";
+  import { playbackFailureMessage } from "$lib/playback/playback-failure";
   import { nowPlaying } from "$lib/shell/now-playing.svelte";
   import Artwork from "$lib/ui/artwork.svelte";
   import ContextMenuContent from "$lib/ui/context-menu/context-menu-content.svelte";
@@ -153,6 +154,33 @@
               <button
                 type="button"
                 onclick={() => playback.clearError()}
+                class="shrink-0 cursor-pointer rounded-sm text-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                Dismiss
+              </button>
+            </div>
+          {:else if playback.failure !== null}
+            {@const reason = playbackFailureMessage(playback.failure)}
+            <div class="flex min-w-0 items-center gap-2">
+              <span class="block truncate text-sm text-destructive" role="alert" title={reason}>
+                {reason}
+              </span>
+              <button
+                type="button"
+                onclick={() => void playback.resume()}
+                class="shrink-0 cursor-pointer rounded-sm text-sm text-foreground outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                Retry
+              </button>
+            </div>
+          {:else if playback.notice}
+            <div class="flex min-w-0 items-center gap-2">
+              <span class="block truncate text-sm text-muted-foreground" role="status">
+                {playback.notice}
+              </span>
+              <button
+                type="button"
+                onclick={() => playback.dismissNotice()}
                 class="shrink-0 cursor-pointer rounded-sm text-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
               >
                 Dismiss

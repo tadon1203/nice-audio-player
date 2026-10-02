@@ -455,7 +455,12 @@ export type PlaybackServiceError = { code: "invalidArgument" } | { code: "worker
 
 export type PlaybackSnapshot = 
 /**  `item` is the last track that played, kept so the UI can still say what it was. */
-{ status: "stopped"; base: SnapshotBase; item: PlaybackItem | null } | { status: "playing"; base: SnapshotBase; session: ActiveSession } | { status: "paused"; base: SnapshotBase; session: ActiveSession } | { status: "failed"; base: SnapshotBase; item: PlaybackItem | null; playbackId: string | null; error: PlaybackFailureCode };
+{ status: "stopped"; base: SnapshotBase; item: PlaybackItem | null } | { status: "playing"; base: SnapshotBase; session: ActiveSession } | { status: "paused"; base: SnapshotBase; session: ActiveSession } | { status: "failed"; base: SnapshotBase; item: PlaybackItem | null; playbackId: string | null; error: PlaybackFailureCode; 
+/**
+ *  The player is moving on to the next item by itself: a skip the listener is told
+ *  about, not a stop that waits for Retry.
+ */
+skipping: boolean };
 
 export type PlaybackWaveform = {
 	/**  The playback the waveform belongs to, so a late answer cannot be drawn for another track. */

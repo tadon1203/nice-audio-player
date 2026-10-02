@@ -16,7 +16,7 @@ MP3, FLAC, WAV, AAC, M4A. A file counts as supported only if it can actually be 
 - Output device selection
 - Volume, mute, output device, repeat, and shuffle are remembered across restarts
 - Playback state (position, source/output sample rate, resampling) reflects the real audio state
-- Decode and output failures are reported clearly. A file that cannot be read or decoded is reported and skipped, and the queue survives; an output failure (device, stream) stops playback and keeps the queue
+- Decode and output failures are reported clearly. A file that cannot be read or decoded is reported with a transient notice and skipped (consecutive skips share one notice), and the queue survives; a few damaged packets inside a file are skipped silently and the track plays on; an output failure (device, stream) stops playback, keeps the queue, and the dock shows the reason with a Retry that restarts the current item
 
 ## Keyboard
 

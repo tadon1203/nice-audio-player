@@ -236,13 +236,15 @@ impl PlaybackWorker {
             failure.code, failure.phase, id
         );
         let error = failure.service_error();
+        let skips = failure.phase.scope() == FailureScope::Item && request.selection.is_none();
         self.transport = Transport::Failed {
             id,
             code: failure.code,
+            skipping: skips && self.will_skip(),
         };
         self.publish_state();
         let responder = request.responder;
-        if failure.phase.scope() == FailureScope::Item && request.selection.is_none() {
+        if skips {
             if let Some(item) = self.next_after_item_failure() {
                 let request = self.new_start(item, responder, false);
                 self.begin_start(request);
@@ -250,6 +252,11 @@ impl PlaybackWorker {
             }
         }
         respond(responder, Err(error));
+    }
+
+    /// Whether a failure of the current item will be followed by trying the next one.
+    pub(super) fn will_skip(&self) -> bool {
+        self.skipped_in_a_row + 1 < self.queue.len() && self.queue.can_go_next()
     }
 
     /// The item to try after the current one could not be played, if there is one to try.

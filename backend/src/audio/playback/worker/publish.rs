@@ -22,7 +22,7 @@ impl PlaybackWorker {
                     PlaybackSnapshot::Playing { base, session }
                 }
             }
-            Transport::Failed { id, code } => {
+            Transport::Failed { id, code, skipping } => {
                 base.can_go_previous = self.queue.can_go_previous();
                 base.can_go_next = self.queue.can_go_next();
                 PlaybackSnapshot::Failed {
@@ -34,6 +34,7 @@ impl PlaybackWorker {
                         .or_else(|| self.last_item.clone()),
                     playback_id: id.map(|id| id.to_string()),
                     error: code.clone(),
+                    skipping: *skipping,
                 }
             }
         }

@@ -762,6 +762,46 @@ fn a_stream_failure_stops_with_the_queue_intact() {
 }
 
 #[test]
+fn resume_after_an_output_failure_retries_the_current_item_with_the_queue_intact() {
+    let mut harness = Harness::new();
+    let tracks = vec![harness.track("a", 1), harness.track("b", 1)];
+    harness.start(tracks, 0).unwrap();
+    harness.output.fail_stream(StreamFailureKind::RuntimeFailed);
+    harness.deliver_pending();
+    assert!(matches!(
+        harness.snapshot(),
+        PlaybackSnapshot::Failed {
+            skipping: false,
+            ..
+        }
+    ));
+
+    let snapshot = harness.resume().unwrap();
+
+    assert!(is_playing(&snapshot, "a"));
+    assert_eq!(harness.queue_titles(), ["a", "b"]);
+}
+
+#[test]
+fn a_failure_of_the_last_item_is_not_a_skip() {
+    let mut harness = Harness::new();
+    let tracks = vec![harness.track("a", 1)];
+    harness.start(tracks, 0).unwrap();
+
+    harness.event(WorkerEvent::DecodeFailed {
+        pipeline: PipelineId(1),
+    });
+
+    assert!(matches!(
+        harness.snapshot(),
+        PlaybackSnapshot::Failed {
+            skipping: false,
+            ..
+        }
+    ));
+}
+
+#[test]
 fn a_device_change_on_the_system_default_keeps_playing() {
     let mut harness = Harness::new();
     let tracks = vec![harness.track("a", 1)];
@@ -1675,6 +1715,7 @@ fn serializes_a_missing_playback_id_as_null_in_a_failed_snapshot() {
         item: None,
         playback_id: None,
         error: PlaybackFailureCode::NoOutputDevice,
+        skipping: false,
     };
 
     assert_eq!(
@@ -1684,7 +1725,8 @@ fn serializes_a_missing_playback_id_as_null_in_a_failed_snapshot() {
             "base": base_json(),
             "item": null,
             "playbackId": null,
-            "error": "noOutputDevice"
+            "error": "noOutputDevice",
+            "skipping": false
         })
     );
 }

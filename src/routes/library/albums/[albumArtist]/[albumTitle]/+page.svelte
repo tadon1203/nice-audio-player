@@ -126,11 +126,7 @@
           type="button"
           variant="outline"
           disabled={album.firstPlayableTrackId === null}
-          onclick={() =>
-            // Shuffle is a preference the queue applies as it is built.
-            void playback
-              .setShuffle(true)
-              .then(() => playback.startPlayback({ kind: "album", key }, null))}
+          onclick={() => void playback.shuffleAndStart({ kind: "album", key })}
         >
           <Shuffle data-icon="inline-start" aria-hidden="true" />
           Shuffle

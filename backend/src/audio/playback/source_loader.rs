@@ -54,8 +54,9 @@ impl SourceLoad {
         let _ = self.join_handle.join();
     }
 
-    pub(crate) fn cancel_and_join(self) {
+    /// Abandons the load without waiting for it: a stalled network path must not block the
+    /// worker. The thread stops on its own, and its result is ignored by id.
+    pub(crate) fn cancel(self) {
         self.cancellation.cancel();
-        self.join();
     }
 }

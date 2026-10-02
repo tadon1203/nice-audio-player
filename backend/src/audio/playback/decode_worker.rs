@@ -1,8 +1,7 @@
 //! The decode thread of one pipeline: decodes, converts and feeds the PCM queue, and tells the
 //! worker when the prebuffer is ready or decoding failed. End of stream is declared on the queue.
 
-use log::error;
-use std::thread::{self, JoinHandle};
+use std::thread;
 
 use super::input::{Inbox, WorkerEvent};
 use crate::audio::cancellation::Cancellation;
@@ -54,9 +53,9 @@ struct DecodeTask {
 
 pub(crate) struct DecodeWorker {
     cancellation: Cancellation,
-    join_handle: JoinHandle<()>,
+    #[cfg(test)]
+    join_handle: thread::JoinHandle<()>,
     waker: PcmWaker,
-    pipeline: PipelineId,
 }
 
 impl DecodeWorker {
@@ -76,23 +75,28 @@ impl DecodeWorker {
             prebuffer_frames: prebuffer_frames(input.output_sample_rate),
             prebuffer_sent: false,
         };
+        let _join_handle = thread::spawn(move || task.run(decoder));
         Self {
             cancellation,
-            join_handle: thread::spawn(move || task.run(decoder)),
+            #[cfg(test)]
+            join_handle: _join_handle,
             waker,
-            pipeline,
         }
     }
 
+    /// Stops the decode thread without waiting for it: a read stalled on a network path must
+    /// not block the playback worker. Whatever the thread still reports is ignored by pipeline
+    /// id.
+    pub(crate) fn cancel(self) {
+        self.cancellation.cancel();
+        self.waker.wake();
+    }
+
+    #[cfg(test)]
     pub(crate) fn cancel_and_join(self) {
         self.cancellation.cancel();
         self.waker.wake();
-        if self.join_handle.join().is_err() {
-            error!(
-                "playback.decode_worker_panicked pipeline_id={}",
-                self.pipeline.0
-            );
-        }
+        let _ = self.join_handle.join();
     }
 }
 
