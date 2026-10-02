@@ -31,4 +31,5 @@
 - Usually: `pnpm check` (and `pnpm test` if logic changed).
 - Backend changes: `pnpm check:native` and `pnpm test:native`.
 - Startup, IPC, or routing changes: `pnpm test:e2e` (browser only, against the built bundle via `vite preview`, so it builds first; the Tauri window, its capabilities, and the titlebar controls are checked by hand with `pnpm dev`).
+- Changes to how the renderer and the Rust backend meet (commands, events, startup, playback wiring): `pnpm test:e2e:app`. It builds an app with the `wdio` cargo feature and `VITE_E2E=1` (WebdriverIO plugins, never in a shipped build) and drives the real one through `@wdio/tauri-service` over a throwaway profile (`NICE_AUDIO_PLAYER_DATA_DIR`), playing silent files on the real output device. Windows, local only, not in CI.
 - Before a release: `pnpm validate`, then `pnpm package`.

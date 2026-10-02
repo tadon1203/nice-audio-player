@@ -16,14 +16,26 @@ pub struct AppState {
 }
 
 pub fn run() {
-    let app = tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    #[cfg(feature = "wdio")]
+    let builder = builder
+        .plugin(tauri_plugin_wdio::init())
+        .plugin(tauri_plugin_wdio_webdriver::init());
+    // `tauri_plugin_wdio` installs its own logger, and a second one fails the build of the app.
+    #[cfg(not(feature = "wdio"))]
+    let builder = builder.plugin(tauri_plugin_log::Builder::new().build());
+
+    let app = builder
         .register_uri_scheme_protocol("nice-artwork", |context, request| {
             artwork::serve_artwork(context.app_handle(), request)
         })
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_log::Builder::new().build())
         .setup(|app| {
-            let data_dir = app.path().app_data_dir()?;
+            // The app-level E2E suite (`tests-app/`) points the app at a throwaway directory.
+            let data_dir = match std::env::var_os("NICE_AUDIO_PLAYER_DATA_DIR") {
+                Some(dir) => std::path::PathBuf::from(dir),
+                None => app.path().app_data_dir()?,
+            };
             let (sink, event_receiver) = events::event_channel();
             let backend = tauri::async_runtime::block_on(BackendApp::initialize(data_dir, sink))
                 .map_err(|_| std::io::Error::other("backend startup failed"))?;
