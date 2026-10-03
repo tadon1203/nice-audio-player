@@ -46,6 +46,15 @@ pub fn run() {
         .register_asynchronous_uri_scheme_protocol("nice-artwork", |context, request, responder| {
             artwork::serve_artwork(context.app_handle(), request, responder)
         })
+        // A reloaded page has lost its channel and cannot end its subscription; end it here so
+        // nothing keeps measuring for nobody.
+        .on_page_load(|webview, payload| {
+            if matches!(payload.event(), tauri::webview::PageLoadEvent::Started) {
+                // Ending it waits for the analysis thread, so not on the main thread.
+                let meter = webview.state::<AppState>().backend.playback.meter();
+                tauri::async_runtime::spawn_blocking(move || meter.unsubscribe_all());
+            }
+        })
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .setup(|app| {

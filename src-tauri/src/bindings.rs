@@ -55,6 +55,8 @@ pub fn builder() -> Builder<tauri::Wry> {
             commands::library::reveal_library_track,
             commands::library::get_artwork_accent,
             commands::lyrics::get_track_lyrics,
+            commands::meter::subscribe_meter_frames,
+            commands::meter::unsubscribe_meter_frames,
             commands::settings::get_settings,
             commands::settings::update_settings,
         ])

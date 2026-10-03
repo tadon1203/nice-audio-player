@@ -4,6 +4,7 @@ pub(crate) mod decoding;
 pub mod devices;
 #[cfg(test)]
 pub(crate) mod fake_output;
+pub mod meter;
 pub(crate) mod output;
 pub(crate) mod output_processing;
 pub(crate) mod pcm;

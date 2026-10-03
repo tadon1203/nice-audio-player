@@ -17,6 +17,7 @@ use super::snapshot::{
 };
 use super::worker::{PlaybackWorker, WorkerLinks};
 use crate::audio::devices::AudioOutputSelection;
+use crate::audio::meter::MeterHub;
 use crate::audio::output::{CpalBackend, OutputBackend};
 use crate::audio::volume::{AtomicEffectiveGain, VolumeState};
 use crate::events::SharedEventSink;
@@ -199,6 +200,7 @@ pub struct PlaybackServiceHandle {
     snapshot: Arc<RwLock<PlaybackSnapshot>>,
     position: Arc<RwLock<Option<PlaybackPosition>>>,
     queue_snapshot: Arc<RwLock<PlaybackQueueSnapshot>>,
+    meter: MeterHub,
 }
 
 pub struct PlaybackService {
@@ -229,6 +231,7 @@ impl PlaybackService {
         let (inbox, inputs) = Inbox::channel();
         let volume_state = VolumeState::restored(preferences.volume, preferences.muted);
         let effective_gain = AtomicEffectiveGain::new(volume_state.effective_gain());
+        let meter = MeterHub::new();
         let output_selection = preferences.output_selection;
         let queue = PlaybackQueue::new(preferences.repeat_mode, preferences.shuffle_enabled);
         let state = Arc::new(RwLock::new(PlaybackSnapshot::Stopped {
@@ -246,6 +249,7 @@ impl PlaybackService {
             position: Arc::clone(&position),
             queue_snapshot: Arc::clone(&queue_state),
             effective_gain,
+            meter: meter.clone(),
             inbox: inbox.clone(),
             events,
             observer,
@@ -264,6 +268,7 @@ impl PlaybackService {
                 snapshot: state,
                 position,
                 queue_snapshot: queue_state,
+                meter,
             },
             worker: Mutex::new(Some(worker)),
         })
@@ -271,6 +276,11 @@ impl PlaybackService {
 
     pub fn handle(&self) -> PlaybackServiceHandle {
         self.handle.clone()
+    }
+
+    /// Where Meter frames are subscribed to; its taps belong to this service's output streams.
+    pub fn meter(&self) -> MeterHub {
+        self.handle.meter.clone()
     }
 
     pub fn snapshot(&self) -> PlaybackSnapshot {

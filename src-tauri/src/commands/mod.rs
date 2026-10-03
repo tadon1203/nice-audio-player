@@ -1,5 +1,6 @@
 pub mod library;
 pub mod lyrics;
+pub mod meter;
 pub mod playback;
 pub mod settings;
 

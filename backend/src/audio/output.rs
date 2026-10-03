@@ -19,6 +19,7 @@ use super::devices::{
     resolve_output_selection, AudioOutputDeviceIdentity, AudioOutputSelection,
     DeviceResolutionError, ResolvedAudioOutputDevice,
 };
+use super::meter::{MeterHub, MeterTap};
 use super::output_processing::{OutputProcessingError, OutputProcessingPlan};
 use super::pcm::{ChannelCount, PcmSpec, SampleRate};
 use super::pcm_queue::{bounded_pcm_queue, PcmConsumer, PcmProducer};
@@ -70,6 +71,8 @@ pub(crate) type OutputEvents = Arc<dyn Fn(OutputEvent) + Send + Sync>;
 pub(crate) struct OutputLinks {
     pub(crate) gain: AtomicEffectiveGain,
     pub(crate) events: OutputEvents,
+    /// Where the callback copies what it plays for the meters.
+    pub(crate) meter: MeterHub,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -571,6 +574,7 @@ pub(crate) struct CallbackState {
     sample_rate: u32,
     links: OutputLinks,
     latest_position: LatestPosition,
+    meter: MeterTap,
     position_frame: u64,
     last_end_time: Option<StreamInstant>,
     completion: Completion,
@@ -591,6 +595,7 @@ impl CallbackState {
             handoff,
             channel_count,
             sample_rate,
+            meter: links.meter.tap(sample_rate, channel_count),
             links,
             latest_position,
             position_frame: 0,
@@ -655,9 +660,11 @@ impl CallbackState {
         let mut consumed = 0;
         for destination in output.chunks_mut(FILL_CHUNK_SAMPLES) {
             let popped = self.consumer.pop_samples(&mut chunk[..destination.len()]);
-            for (slot, sample) in destination.iter_mut().zip(&chunk[..popped]) {
-                *slot = T::from_sample(process_sample(*sample, gain));
+            for (slot, sample) in destination.iter_mut().zip(&mut chunk[..popped]) {
+                *sample = process_sample(*sample, gain);
+                *slot = T::from_sample(*sample);
             }
+            self.meter.push(&chunk[..popped]);
             destination[popped..].fill(T::EQUILIBRIUM);
             consumed += popped;
         }
@@ -775,6 +782,7 @@ mod tests {
         NativeAttemptDecision, OutputEvent, OutputLinks, PipelineId, PositionUpdate,
         StreamFailureKind,
     };
+    use crate::audio::meter::MeterHub;
     use crate::audio::pcm::ChannelCount;
     use crate::audio::pcm_queue::{bounded_pcm_queue, PcmProducer};
     use crate::audio::volume::AtomicEffectiveGain;
@@ -1023,6 +1031,7 @@ mod tests {
         position: LatestPosition,
         events: Arc<Mutex<Vec<OutputEvent>>>,
         handoff: triple_buffer::Input<Option<Generation>>,
+        meter: MeterHub,
     }
 
     fn callback(channels: usize, capacity_frames: usize, gain: f32) -> Callback {
@@ -1031,6 +1040,7 @@ mod tests {
         let events = Arc::new(Mutex::new(Vec::new()));
         let sink = Arc::clone(&events);
         let position = LatestPosition::default();
+        let meter = MeterHub::new();
         let (handoff, slot) = triple_buffer::TripleBuffer::default().split();
         let state = CallbackState::new(
             Generation {
@@ -1043,6 +1053,7 @@ mod tests {
             OutputLinks {
                 gain: AtomicEffectiveGain::new(gain),
                 events: Arc::new(move |event| sink.lock().unwrap().push(event)),
+                meter: meter.clone(),
             },
             position.clone(),
         );
@@ -1052,6 +1063,7 @@ mod tests {
             position,
             events,
             handoff,
+            meter,
         }
     }
 
@@ -1073,6 +1085,25 @@ mod tests {
         let mut empty = [0u16; 2];
         callback.state.fill(&mut empty, at(11));
         assert_eq!(empty, [u16::EQUILIBRIUM; 2]);
+    }
+
+    #[test]
+    fn fill_feeds_the_meter_what_it_played_after_gain() {
+        let mut callback = callback(2, 8, 0.5);
+        callback.producer.push_samples(&[1.0; 8]);
+        let (sender, receiver) = std::sync::mpsc::channel();
+        callback
+            .meter
+            .subscribe(Box::new(move |frame| sender.send(frame.clone()).is_ok()));
+
+        let mut output = [0.0_f32; 8];
+        callback.state.fill(&mut output, at(10));
+
+        let frame = receiver
+            .recv_timeout(Duration::from_secs(5))
+            .expect("a frame arrives");
+        assert!((frame.peak[0] - 20.0 * 0.5_f32.log10()).abs() < 0.01);
+        assert!(!frame.full_scale, "full scale is judged after the volume");
     }
 
     #[test]

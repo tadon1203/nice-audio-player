@@ -21,6 +21,7 @@ use super::worker::{
 };
 use crate::audio::devices::AudioOutputSelection;
 use crate::audio::fake_output::FakeOutput;
+use crate::audio::meter::MeterHub;
 use crate::audio::output::{AudioOutputError, OutputStreamId, PipelineId, StreamFailureKind};
 use crate::audio::volume::{AtomicEffectiveGain, VolumeState};
 use crate::events::BackendEvent;
@@ -81,6 +82,7 @@ impl Harness {
                 position: Arc::clone(&position),
                 queue_snapshot: Arc::clone(&queue_snapshot),
                 effective_gain: gain.clone(),
+                meter: MeterHub::new(),
                 inbox,
                 events,
                 observer: Arc::new(move |preferences| observed.lock().unwrap().push(preferences)),
