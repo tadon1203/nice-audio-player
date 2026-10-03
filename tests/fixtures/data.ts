@@ -31,6 +31,8 @@ export const testRoot: LibraryRoot = {
   enabled: true,
   scanGeneration: 0,
   lastSuccessfulScanAtMs: null,
+  trackCount: 0,
+  missingCount: 0,
 };
 
 export const testAlbum: LibraryAlbumSummary = {

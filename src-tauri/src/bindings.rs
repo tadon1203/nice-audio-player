@@ -36,6 +36,8 @@ pub fn builder() -> Builder<tauri::Wry> {
             commands::library::register_library_root,
             commands::library::set_library_root_enabled,
             commands::library::remove_library_root,
+            commands::library::delete_missing_library_tracks,
+            commands::library::open_log_directory,
             commands::library::start_library_scan,
             commands::library::cancel_library_scan,
             commands::library::list_library_tracks,

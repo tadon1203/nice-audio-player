@@ -68,6 +68,8 @@ pub(super) enum Input {
     Enabled(RootId),
     Disabled(RootId),
     Removed(RootId),
+    /// The listener deleted the Missing tracks; their artwork is nobody's now.
+    MissingDeleted,
     /// The listener started a scan of these folders.
     ScanRequested {
         roots: Vec<RootId>,
@@ -155,6 +157,7 @@ impl State {
                 // Its artwork is nobody's now.
                 self.gc_pending = true;
             }
+            Input::MissingDeleted => self.gc_pending = true,
             Input::ScanRequested { roots } => {
                 if !self.scanning() {
                     self.dirty.clear();

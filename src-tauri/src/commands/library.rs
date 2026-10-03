@@ -90,6 +90,43 @@ pub async fn remove_library_root(
     with_library(&state, move |library| library.remove_root(id)).await
 }
 
+/// Deletes the Missing tracks from the Library and returns how many there were. Never touches a
+/// source file.
+#[tauri::command]
+#[specta::specta]
+pub async fn delete_missing_library_tracks(
+    state: tauri::State<'_, AppState>,
+) -> Result<u64, LibraryCommandError> {
+    with_library(&state, |library| library.delete_missing()).await
+}
+
+/// Opens the folder holding the log files in the file manager.
+#[tauri::command]
+#[specta::specta]
+pub fn open_log_directory(app: tauri::AppHandle) -> Result<(), LibraryCommandError> {
+    use tauri::Manager;
+    let directory = app
+        .path()
+        .app_log_dir()
+        .map_err(|_| LibraryCommandError::TaskFailed)?;
+    std::fs::create_dir_all(&directory).map_err(|_| LibraryCommandError::TaskFailed)?;
+    open_in_file_manager(&directory.to_string_lossy())
+}
+
+#[cfg(windows)]
+fn open_in_file_manager(path: &str) -> Result<(), LibraryCommandError> {
+    std::process::Command::new("explorer.exe")
+        .arg(path.replace('/', "\\"))
+        .spawn()
+        .map(|_| ())
+        .map_err(|_| LibraryCommandError::TaskFailed)
+}
+
+#[cfg(not(windows))]
+fn open_in_file_manager(_path: &str) -> Result<(), LibraryCommandError> {
+    Err(LibraryCommandError::TaskFailed)
+}
+
 #[tauri::command]
 #[specta::specta]
 pub async fn start_library_scan(

@@ -11,7 +11,12 @@ use std::path::Path;
 
 pub(crate) fn list(connection: &Connection) -> Result<Vec<LibraryRoot>, StoreError> {
     let mut statement = connection.prepare(
-        "SELECT id, path, enabled, scan_generation, last_successful_scan_at_ms FROM library_roots ORDER BY id",
+        "SELECT r.id, r.path, r.enabled, r.scan_generation, r.last_successful_scan_at_ms,
+                (SELECT COUNT(*) FROM library_files f JOIN tracks t ON t.file_id = f.id
+                  WHERE f.root_id = r.id AND f.availability = 'available'),
+                (SELECT COUNT(*) FROM library_files f JOIN tracks t ON t.file_id = f.id
+                  WHERE f.root_id = r.id AND f.availability = 'missing')
+         FROM library_roots r ORDER BY r.id",
     )?;
     let rows = statement.query_map([], |row| {
         Ok(LibraryRoot {
@@ -20,6 +25,8 @@ pub(crate) fn list(connection: &Connection) -> Result<Vec<LibraryRoot>, StoreErr
             enabled: row.get(2)?,
             scan_generation: row.get::<_, i64>(3)? as u64,
             last_successful_scan_at_ms: row.get::<_, Option<i64>>(4)?.map(|value| value as u64),
+            track_count: row.get::<_, i64>(5)? as u64,
+            missing_count: row.get::<_, i64>(6)? as u64,
         })
     })?;
     Ok(rows.collect::<Result<_, _>>()?)
@@ -71,6 +78,8 @@ pub(crate) fn register(
         enabled: true,
         scan_generation: 0,
         last_successful_scan_at_ms: None,
+        track_count: 0,
+        missing_count: 0,
     })
 }
 
@@ -107,4 +116,28 @@ pub(crate) fn remove(database: &Database, id: &str) -> Result<(), LibraryCommand
         return Err(LibraryCommandError::RootMissing);
     }
     Ok(())
+}
+
+/// Forgets the tracks whose file is gone, for good. Never touches a source file. Returns how many
+/// tracks went.
+pub(crate) fn delete_missing(database: &Database) -> Result<u64, LibraryCommandError> {
+    let mut connection = database.write().map_err(StoreError::from)?;
+    let transaction = connection.transaction().map_err(StoreError::from)?;
+    let tracks: i64 = transaction
+        .query_row(
+            "SELECT COUNT(*) FROM library_files f JOIN tracks t ON t.file_id = f.id
+             WHERE f.availability = 'missing'",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(StoreError::from)?;
+    // Tracks and their metadata cascade.
+    transaction
+        .execute(
+            "DELETE FROM library_files WHERE availability = 'missing'",
+            [],
+        )
+        .map_err(StoreError::from)?;
+    transaction.commit().map_err(StoreError::from)?;
+    Ok(tracks as u64)
 }

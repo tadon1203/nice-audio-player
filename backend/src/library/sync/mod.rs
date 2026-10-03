@@ -41,6 +41,7 @@ enum Command {
     Register(String, Reply<LibraryRoot>),
     Enable(String, bool, Reply<LibraryRoot>),
     Remove(String, Reply<()>),
+    DeleteMissing(Reply<u64>),
     Start(Reply<()>),
     Cancel(Reply<()>),
 }
@@ -106,6 +107,10 @@ impl LibrarySync {
 
     pub fn remove_root(&self, id: String) -> Result<(), LibraryCommandError> {
         self.call(|reply| Command::Remove(id, reply))
+    }
+
+    pub fn delete_missing(&self) -> Result<u64, LibraryCommandError> {
+        self.call(Command::DeleteMissing)
     }
 
     pub fn start_scan(&self) -> Result<(), LibraryCommandError> {
@@ -241,6 +246,13 @@ impl Actor {
                     if let Ok(id) = parse_id(&id) {
                         self.feed(Input::Removed(id));
                     }
+                }
+                let _ = reply.send(result);
+            }
+            Command::DeleteMissing(reply) => {
+                let result = self.while_idle(|actor| roots::delete_missing(&actor.database));
+                if result.is_ok() {
+                    self.feed(Input::MissingDeleted);
                 }
                 let _ = reply.send(result);
             }

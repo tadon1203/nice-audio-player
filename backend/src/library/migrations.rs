@@ -1,7 +1,7 @@
 use super::keys::TrackKeys;
 use rusqlite::{params, Connection, Transaction};
 
-pub const CURRENT_SCHEMA_VERSION: i32 = 2;
+pub const CURRENT_SCHEMA_VERSION: i32 = 3;
 
 /// One step of a migration: a script, or Rust code for what SQL cannot compute.
 enum Step {
@@ -17,6 +17,7 @@ const MIGRATIONS: [&[Step]; CURRENT_SCHEMA_VERSION as usize] = [
         // After the backfill, so the indexes are built once instead of kept up to date per row.
         Step::Sql(include_str!("migrations/0002_catalog_indexes.sql")),
     ],
+    &[Step::Sql(include_str!("migrations/0003_file_identity.sql"))],
 ];
 
 #[derive(Debug)]
@@ -153,6 +154,22 @@ mod tests {
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
         assert_eq!(version, CURRENT_SCHEMA_VERSION);
+    }
+
+    #[test]
+    fn files_get_identity_columns_and_are_read_once_more_to_fill_them() {
+        let mut connection = first_release();
+
+        apply(&mut connection).unwrap();
+
+        let file: (i64, Option<String>, i64, String) = connection
+            .query_row(
+                "SELECT byte_length, content_hash, relink_pending, modification_key FROM library_files",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .unwrap();
+        assert_eq!(file, (0, None, 0, "rescan".into()));
     }
 
     #[test]

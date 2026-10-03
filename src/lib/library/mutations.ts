@@ -34,6 +34,19 @@ export function createRemoveLibraryRoot() {
   }));
 }
 
+/** Removes the Missing tracks from the Library (never a source file); resolves to how many. */
+export function createDeleteMissingTracks() {
+  const client = useQueryClient();
+  return createMutation(() => ({
+    mutationFn: () => requireNative().deleteMissingLibraryTracks(),
+    onSuccess: () => client.invalidateQueries({ queryKey: libraryQueryKeys.data }),
+  }));
+}
+
+export function createOpenLogDirectory() {
+  return createMutation(() => ({ mutationFn: () => requireNative().openLogDirectory() }));
+}
+
 // The backend restarts the app on success, so the promise normally never settles.
 export function createResetLibrary() {
   return createMutation(() => ({ mutationFn: () => requireNative().resetLibraryAndRescan() }));

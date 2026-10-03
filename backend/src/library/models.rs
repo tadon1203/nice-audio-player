@@ -22,6 +22,10 @@ pub struct LibraryRoot {
     pub enabled: bool,
     pub scan_generation: u64,
     pub last_successful_scan_at_ms: Option<u64>,
+    /// Tracks whose file is there.
+    pub track_count: u64,
+    /// Tracks whose file is gone (see **Missing** in CONTEXT.md).
+    pub missing_count: u64,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]

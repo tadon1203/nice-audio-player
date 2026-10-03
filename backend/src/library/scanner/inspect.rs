@@ -68,6 +68,8 @@ pub(super) struct InspectedFile {
     pub tags: SourceMetadata,
     pub artwork: ArtworkOutcome,
     pub bitrate_kbps: Option<i64>,
+    /// `None` when the file could not be read for it (see `identity.rs`).
+    pub content_hash: Option<String>,
 }
 
 /// Reads a file. One that cannot be decoded is kept in the library but is not playable.
@@ -96,6 +98,7 @@ pub(super) fn inspect(
         bitrate_kbps: average_bitrate_kbps(file.byte_length, audio.info.duration_ms)
             .map(|value| value as i64),
         artwork: ArtworkOutcome::from_read(&artwork_read, data_dir),
+        content_hash: super::identity::content_hash(&file.path).ok(),
         audio,
         tag_status,
         tags,

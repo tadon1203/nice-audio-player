@@ -112,6 +112,11 @@ impl Library {
         self.sync.remove_root(id)
     }
 
+    /// Deletes every Missing track from the Library. Source files are never touched.
+    pub fn delete_missing(&self) -> Result<u64, LibraryCommandError> {
+        self.sync.delete_missing()
+    }
+
     pub fn start_scan(&self) -> Result<(), LibraryCommandError> {
         self.sync.start_scan()
     }

@@ -39,7 +39,7 @@ Dragging the seek bar slows down the further the pointer is from the bar (or wit
 ## Library
 
 - Register local music folders; scan, index, and pick up file changes while idle (a burst of changes is one scan; progress and cancel for long scans; a cancelled or failed scan never leaves a half-written batch; a failed scan stays flagged until a scan succeeds)
-- Missing files are shown as missing, never auto-deleted
+- Missing files are shown as missing, never auto-deleted. A file that was moved or renamed is found again by its size and the hash of its head and tail (else by its tags, when exactly one Missing track carries them) and is the same track, so queues still resolve and nothing is left Missing. Settings shows each folder's last scan, track count and Missing count, offers "Delete Missing" (with confirmation; source files are never touched) and a way to open the log folder
 - Browse as Albums, Album Artists, or Tracks; Album Artists drill into their Albums
 - Each view keeps its own filter and scroll position across view switches and Library/Settings round trips
 - Back returns to the semantic parent (Album Artist → Album → Album Artist)

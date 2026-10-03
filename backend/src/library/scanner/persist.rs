@@ -11,7 +11,7 @@ use crate::library::status::{ArtworkStatus, Availability, InspectionStatus, TagS
 use crate::media::inspection::Undecodable;
 
 const SELECT_EXISTING_FILE: &str = "
-    SELECT f.id, f.source_revision, f.modification_key, f.inspection_status,
+    SELECT f.id, f.source_revision, f.modification_key, f.byte_length, f.inspection_status,
            m.artwork_status
     FROM library_files f
     LEFT JOIN tracks t ON t.file_id = f.id
@@ -24,13 +24,14 @@ const TOUCH_FILE: &str = "
 const REVISE_FILE: &str = "
     UPDATE library_files
     SET modification_key = ?2, source_revision = ?3, seen_generation = ?4, availability = ?5,
-        inspection_status = ?6
+        inspection_status = ?6, byte_length = ?7, content_hash = ?8
     WHERE id = ?1";
 
 const INSERT_FILE: &str = "
     INSERT INTO library_files(root_id, relative_path, file_name, extension, modification_key,
-                              source_revision, seen_generation, availability, inspection_status)
-    VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6, ?7, ?8)";
+                              source_revision, seen_generation, availability, inspection_status,
+                              byte_length, content_hash, relink_pending)
+    VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6, ?7, ?8, ?9, ?10, ?11)";
 
 const UPSERT_ARTWORK_ASSET: &str = "
     INSERT INTO artwork_assets(content_hash, mime_type, relative_path, byte_length)
@@ -99,9 +100,18 @@ pub(super) enum Plan {
     },
 }
 
-/// Compares a discovered file with the database. Read-only.
+/// Compares a discovered file with the database. Read-only. A file is unchanged when its size
+/// and modification time both are.
 pub(super) fn plan(reader: &Connection, root_id: i64, file: DiscoveredFile) -> Persisted<Plan> {
-    let existing: Option<(i64, i64, String, InspectionStatus, Option<ArtworkStatus>)> = reader
+    type Existing = (
+        i64,
+        i64,
+        String,
+        i64,
+        InspectionStatus,
+        Option<ArtworkStatus>,
+    );
+    let existing: Option<Existing> = reader
         .prepare_cached(SELECT_EXISTING_FILE)?
         .query_row(params![root_id, file.relative], |row| {
             Ok((
@@ -110,22 +120,27 @@ pub(super) fn plan(reader: &Connection, root_id: i64, file: DiscoveredFile) -> P
                 row.get(2)?,
                 row.get(3)?,
                 row.get(4)?,
+                row.get(5)?,
             ))
         })
         .optional()?;
+    let unchanged = |key: &str, length: i64| {
+        key == file.modification_key && u64::try_from(length).is_ok_and(|n| n == file.byte_length)
+    };
     Ok(match existing {
         Some((
             file_id,
             revision,
             key,
+            length,
             InspectionStatus::Indexed,
             Some(ArtworkStatus::StoreFailed),
-        )) if key == file.modification_key => Plan::RetryArtwork {
+        )) if unchanged(&key, length) => Plan::RetryArtwork {
             file_id,
             revision,
             file,
         },
-        Some((file_id, _, key, ..)) if key == file.modification_key => Plan::Touch { file_id },
+        Some((file_id, _, key, length, ..)) if unchanged(&key, length) => Plan::Touch { file_id },
         Some((file_id, revision, ..)) => Plan::Inspect {
             known: Some((file_id, revision + 1)),
             file,
@@ -239,6 +254,10 @@ fn store_file(
         Ok(_) => InspectionStatus::Indexed,
         Err(Undecodable) => InspectionStatus::Unsupported,
     };
+    let content_hash = result
+        .as_ref()
+        .ok()
+        .and_then(|inspected| inspected.content_hash.as_deref());
     let (file_id, revision) = match known {
         Some((file_id, revision)) => {
             transaction.execute(
@@ -249,7 +268,9 @@ fn store_file(
                     revision,
                     generation,
                     Availability::Available,
-                    status
+                    status,
+                    file.byte_length as i64,
+                    content_hash
                 ],
             )?;
             (file_id, revision)
@@ -265,7 +286,10 @@ fn store_file(
                     file.modification_key,
                     generation,
                     Availability::Available,
-                    status
+                    status,
+                    file.byte_length as i64,
+                    content_hash,
+                    result.is_ok()
                 ],
             )?;
             (transaction.last_insert_rowid(), 1)

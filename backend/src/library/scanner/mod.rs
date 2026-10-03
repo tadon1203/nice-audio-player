@@ -6,8 +6,10 @@
 //! never held while files are read.
 
 mod discover;
+mod identity;
 mod inspect;
 mod persist;
+mod relink;
 
 use std::path::Path;
 use std::sync::{
@@ -80,15 +82,33 @@ pub(crate) fn run(
         }
     }
     if traversal_failed {
-        finish(
+        return finish(
             &state,
             LibraryScanState::Failed,
             Some(ScanFailure::RootTraversalFailed),
             &notify,
-        )
-    } else {
-        finish(&state, LibraryScanState::Completed, None, &notify)
+        );
     }
+    // Only once every folder has been seen in full is a Missing track known to be missing, and so
+    // a file that arrived known to be that track moved.
+    if relink_moved(&database).is_err() {
+        return finish(
+            &state,
+            LibraryScanState::Failed,
+            Some(ScanFailure::PersistenceFailed),
+            &notify,
+        );
+    }
+    finish(&state, LibraryScanState::Completed, None, &notify)
+}
+
+fn relink_moved(database: &Database) -> Result<(), PersistError> {
+    let mut connection = database.write()?;
+    let relinked = relink::relink_moved(&mut connection)?;
+    if relinked > 0 {
+        info!("library.scan.relinked count={relinked}");
+    }
+    Ok(())
 }
 
 /// Ends the scan as failed, for a scan thread that died before it could say how it ended.

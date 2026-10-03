@@ -367,3 +367,112 @@ fn a_folder_holding_the_data_directory_cannot_be_registered() {
         Err(super::error::LibraryCommandError::RootContainsDataDirectory)
     ));
 }
+
+fn track_ids_by_path(fixture: &Fixture) -> Vec<(String, i64)> {
+    let c = fixture.database.read().unwrap();
+    let mut statement = c
+        .prepare("SELECT f.relative_path, t.id FROM tracks t JOIN library_files f ON f.id = t.file_id ORDER BY f.relative_path")
+        .unwrap();
+    let rows = statement
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    rows
+}
+
+#[test]
+fn a_moved_folder_and_a_renamed_file_keep_their_tracks_and_leave_nothing_missing() {
+    let fixture = fixture();
+    std::fs::create_dir_all(fixture.music.join("Old")).unwrap();
+    write_tone(&fixture.music.join("Old").join("one.wav"), 8_000);
+    write_tone(&fixture.music.join("Old").join("two.wav"), 16_000);
+    write_tone(&fixture.music.join("loose.wav"), 24_000);
+    run_scan(&fixture, false);
+    let before = track_ids_by_path(&fixture);
+    let id_of = |tracks: &[(String, i64)], path: &str| {
+        tracks.iter().find(|(p, _)| p == path).map(|(_, id)| *id)
+    };
+
+    std::fs::rename(fixture.music.join("Old"), fixture.music.join("New")).unwrap();
+    std::fs::rename(
+        fixture.music.join("loose.wav"),
+        fixture.music.join("renamed.wav"),
+    )
+    .unwrap();
+    let scan = run_scan(&fixture, false);
+
+    assert_eq!(scan.state, LibraryScanState::Completed);
+    let after = track_ids_by_path(&fixture);
+    assert_eq!(after.len(), 3, "no duplicates: {after:?}");
+    assert_eq!(id_of(&after, "New/one.wav"), id_of(&before, "Old/one.wav"));
+    assert_eq!(id_of(&after, "New/two.wav"), id_of(&before, "Old/two.wav"));
+    assert_eq!(id_of(&after, "renamed.wav"), id_of(&before, "loose.wav"));
+    assert_eq!(
+        count(
+            &fixture,
+            "SELECT COUNT(*) FROM library_files WHERE availability = 'missing'"
+        ),
+        0
+    );
+    assert_eq!(count(&fixture, "SELECT COUNT(*) FROM library_files"), 3);
+    assert_eq!(
+        count(&fixture, "SELECT COUNT(*) FROM track_source_metadata"),
+        3
+    );
+    assert_eq!(
+        count(
+            &fixture,
+            "SELECT COUNT(*) FROM library_files WHERE relink_pending = 1"
+        ),
+        0,
+        "arrivals are settled once a scan completes"
+    );
+}
+
+#[test]
+fn a_deleted_file_stays_missing_until_the_listener_deletes_it() {
+    let fixture = fixture();
+    write_tone(&fixture.music.join("keep.wav"), 8_000);
+    write_tone(&fixture.music.join("gone.wav"), 16_000);
+    run_scan(&fixture, false);
+    std::fs::remove_file(fixture.music.join("gone.wav")).unwrap();
+    // A file that is new, not the deleted one moved.
+    write_tone(&fixture.music.join("new.wav"), 24_000);
+    run_scan(&fixture, false);
+    run_scan(&fixture, false);
+
+    let roots = roots::list(&fixture.database.read().unwrap()).unwrap();
+    assert_eq!((roots[0].track_count, roots[0].missing_count), (2, 1));
+    assert_eq!(files(&fixture)[0].1, "missing", "gone.wav sorts first");
+
+    let deleted = roots::delete_missing(&fixture.database).unwrap();
+
+    assert_eq!(deleted, 1);
+    let roots = roots::list(&fixture.database.read().unwrap()).unwrap();
+    assert_eq!((roots[0].track_count, roots[0].missing_count), (2, 0));
+    assert!(fixture.music.join("keep.wav").exists(), "source files stay");
+    assert_eq!(count(&fixture, "SELECT COUNT(*) FROM tracks"), 2);
+}
+
+#[test]
+fn an_unchanged_file_is_told_from_a_changed_one_by_size_as_well_as_time() {
+    let fixture = fixture();
+    let path = fixture.music.join("a.wav");
+    write_tone(&path, 8_000);
+    run_scan(&fixture, false);
+    fixture
+        .database
+        .write()
+        .unwrap()
+        .execute("UPDATE library_files SET byte_length = byte_length + 1", [])
+        .unwrap();
+
+    let scan = run_scan(&fixture, false);
+
+    assert_eq!(scan.inspected_count, 1, "a different size is a change");
+    assert!(
+        count(&fixture, "SELECT byte_length FROM library_files") > 16_000,
+        "the size is recorded"
+    );
+}

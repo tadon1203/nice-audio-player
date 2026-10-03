@@ -4,6 +4,8 @@
   import { libraryCommandErrorMessage } from "$lib/library/library-errors";
   import {
     createAddLibraryRoot,
+    createDeleteMissingTracks,
+    createOpenLogDirectory,
     createRemoveLibraryRoot,
     createResetLibrary,
     createSetLibraryRootEnabled,
@@ -25,6 +27,8 @@
     ItemTitle,
   } from "$lib/ui/shadcn/item/index.js";
   import { Spinner } from "$lib/ui/shadcn/spinner/index.js";
+  import { formatNumber } from "$lib/utils/format";
+  import DeleteMissingDialog from "./delete-missing-dialog.svelte";
   import RemoveLibraryRootDialog from "./remove-library-root-dialog.svelte";
   import ResetLibraryDialog from "./reset-library-dialog.svelte";
   import ScanControls from "./scan-controls.svelte";
@@ -39,10 +43,16 @@
 
   const resetLibrary = createResetLibrary();
 
+  const deleteMissing = createDeleteMissingTracks();
+  const openLogDirectory = createOpenLogDirectory();
+  const scanTime = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
+
   let removeTarget = $state<LibraryRoot | null>(null);
   let resetOpen = $state(false);
+  let deleteMissingOpen = $state(false);
 
   const roots = $derived(rootsQuery.data ?? []);
+  const missingTotal = $derived(roots.reduce((n, r) => n + r.missingCount, 0));
   const scan = $derived(scanQuery.data);
   const scanRunning = $derived(scan?.state === "running");
 
@@ -151,8 +161,17 @@
             <ItemDescription class="mt-1 whitespace-normal">
               {root.enabled ? "Included in library" : "Excluded from library"}
               <span class="ml-3">
-                {root.lastSuccessfulScanAtMs !== null ? "Scanned" : "Not scanned"}
+                {root.lastSuccessfulScanAtMs !== null
+                  ? `Scanned ${scanTime.format(root.lastSuccessfulScanAtMs)}`
+                  : "Not scanned"}
               </span>
+              <span class="ml-3">
+                {formatNumber(root.trackCount)}
+                {root.trackCount === 1 ? "track" : "tracks"}
+              </span>
+              {#if root.missingCount > 0}
+                <span class="ml-3">{formatNumber(root.missingCount)} missing</span>
+              {/if}
             </ItemDescription>
             {#if error}
               <p class="mt-1 text-sm text-destructive" role="alert">
@@ -201,6 +220,53 @@
 
   <div class="mt-8 flex flex-wrap items-start justify-between gap-4 border-t border-border pt-6">
     <p class="max-w-prose text-sm leading-5 text-muted-foreground">
+      Missing tracks are kept until you delete them. Deleting never touches your audio files.
+      <span class="ml-1 text-foreground">{formatNumber(missingTotal)} missing</span>
+    </p>
+    <div class="flex max-w-sm flex-col items-end gap-2">
+      <div class="flex flex-wrap justify-end gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={scanRunning || deleteMissing.isPending || missingTotal === 0}
+          onclick={() => {
+            deleteMissing.reset();
+            deleteMissingOpen = true;
+          }}
+        >
+          {#if deleteMissing.isPending}
+            <Spinner data-icon="inline-start" aria-hidden="true" role="presentation" />
+          {/if}
+          Delete Missing
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onclick={() => {
+            openLogDirectory.reset();
+            openLogDirectory.mutate();
+          }}
+        >
+          Open log folder
+        </Button>
+      </div>
+      {#if deleteMissing.error}
+        <p class="text-right text-sm text-destructive" role="alert">
+          {libraryCommandErrorMessage(deleteMissing.error)}
+        </p>
+      {/if}
+      {#if openLogDirectory.error}
+        <p class="text-right text-sm text-destructive" role="alert">
+          {libraryCommandErrorMessage(openLogDirectory.error)}
+        </p>
+      {/if}
+    </div>
+  </div>
+
+  <div class="mt-6 flex flex-wrap items-start justify-between gap-4 border-t border-border pt-6">
+    <p class="max-w-prose text-sm leading-5 text-muted-foreground">
       Use this if the library looks wrong or cannot be opened.
     </p>
     <div class="flex max-w-sm flex-col items-end gap-2">
@@ -233,6 +299,16 @@
     onConfirm={() => {
       resetOpen = false;
       resetLibrary.mutate();
+    }}
+  />
+
+  <DeleteMissingDialog
+    open={deleteMissingOpen}
+    count={missingTotal}
+    onOpenChange={(open) => (deleteMissingOpen = open)}
+    onConfirm={() => {
+      deleteMissingOpen = false;
+      deleteMissing.mutate();
     }}
   />
 

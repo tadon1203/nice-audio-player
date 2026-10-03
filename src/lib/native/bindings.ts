@@ -55,6 +55,13 @@ export const commands = {
 	registerLibraryRoot: (path: string) => __TAURI_INVOKE<LibraryRoot>("register_library_root", { path }),
 	setLibraryRootEnabled: (id: string, enabled: boolean) => __TAURI_INVOKE<LibraryRoot>("set_library_root_enabled", { id, enabled }),
 	removeLibraryRoot: (id: string) => __TAURI_INVOKE<null>("remove_library_root", { id }),
+	/**
+	 *  Deletes the Missing tracks from the Library and returns how many there were. Never touches a
+	 *  source file.
+	 */
+	deleteMissingLibraryTracks: () => __TAURI_INVOKE<number>("delete_missing_library_tracks"),
+	/**  Opens the folder holding the log files in the file manager. */
+	openLogDirectory: () => __TAURI_INVOKE<null>("open_log_directory"),
 	startLibraryScan: () => __TAURI_INVOKE<null>("start_library_scan"),
 	cancelLibraryScan: () => __TAURI_INVOKE<null>("cancel_library_scan"),
 	listLibraryTracks: (cursor: string | null, search: string | null, sortKey: LibraryTrackSortKey, sortDirection: LibrarySortDirection) => __TAURI_INVOKE<LibraryTrackPage>("list_library_tracks", { cursor, search, sortKey, sortDirection }),
@@ -271,6 +278,10 @@ export type LibraryRoot = {
 	enabled: boolean,
 	scanGeneration: number,
 	lastSuccessfulScanAtMs: number | null,
+	/**  Tracks whose file is there. */
+	trackCount: number,
+	/**  Tracks whose file is gone (see **Missing** in CONTEXT.md). */
+	missingCount: number,
 };
 
 export type LibraryScanSnapshot = {
