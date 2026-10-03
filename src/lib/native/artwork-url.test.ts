@@ -4,7 +4,11 @@ import { artworkUrl } from "./artwork-url";
 
 describe("artworkUrl", () => {
   const hash = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
-  const jpeg: ArtworkRef = { contentHash: hash, mimeType: "jpeg", relativePath: `artwork/ab/${hash}.jpg` };
+  const jpeg: ArtworkRef = {
+    contentHash: hash,
+    mimeType: "jpeg",
+    relativePath: `artwork/ab/${hash}.jpg`,
+  };
 
   it("maps the full level to the original", () => {
     expect(artworkUrl(jpeg, "full")).toBe(`http://nice-artwork.localhost/artwork/ab/${hash}.jpg`);

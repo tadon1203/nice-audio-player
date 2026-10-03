@@ -36,7 +36,9 @@
     </p>
     <AlertDialogFooter>
       <AlertDialogCancel>Cancel</AlertDialogCancel>
-      <AlertDialogAction variant="destructive" onclick={onConfirm}>Reset and restart</AlertDialogAction>
+      <AlertDialogAction variant="destructive" onclick={onConfirm}
+        >Reset and restart</AlertDialogAction
+      >
     </AlertDialogFooter>
   </AlertDialogContent>
 </AlertDialog>

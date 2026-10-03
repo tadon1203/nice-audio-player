@@ -24,6 +24,28 @@ Non-trivial feature:
 
 `/clear` after each step above finishes (grill, spec, tickets, each ticket), once decisions are written to docs and work is committed. Not mid-grill or mid-implement.
 
+## Commands
+
+Run the cheapest command that covers the change, once, when it can fail. There is no CI, so the pre-commit check is the only gate.
+
+| Changed                                                           | While iterating                                                 | Before commit                                                                               |
+| ----------------------------------------------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Docs, comments only                                               | nothing                                                         | nothing                                                                                     |
+| Renderer (`src/`)                                                 | `svelte-autofixer` for `.svelte`; `vitest run <file>` for logic | `pnpm check`; `pnpm test:renderer` or `pnpm test:shared` if logic changed                   |
+| Rust                                                              | `cargo check -p <crate>`; `cargo test -p <crate> <name>`        | `pnpm check:native` and `pnpm test:native`                                                  |
+| Tauri command signature or event                                  | `pnpm bindings`                                                 | the Renderer and Rust rows                                                                  |
+| Startup, IPC, routing                                             |                                                                 | add `pnpm test:e2e`                                                                         |
+| Renderer and backend wiring (commands, events, startup, playback) |                                                                 | add `pnpm test:e2e:app` (Windows, local only, plays silent files on the real output device) |
+| Release                                                           |                                                                 | `pnpm validate`, then `pnpm package`                                                        |
+
+- Run only the rows the diff touches. A renderer-only change skips `cargo`; a Rust-only change skips `pnpm check`.
+- Do not re-run a check that already passed on the same tree. Fix, then re-run only what failed.
+- Prefer `pnpm test:renderer` / `pnpm test:shared` / `pnpm test:native` over `pnpm test`, which runs everything.
+- `pnpm validate` is for releases only, never for routine commits.
+- Fix format with `pnpm format` instead of by hand.
+- Run slow commands (`test:e2e*`, `package`, `validate`) in the background.
+- The Tauri window, its capabilities, and the titlebar controls are checked by hand with `pnpm dev`.
+
 ## Token efficiency
 
 Offload large or exploratory searches (broad `grep`/`glob` sweeps, multi-file investigations) to a Haiku subagent so the raw results stay out of the main context; bring back only the conclusion.

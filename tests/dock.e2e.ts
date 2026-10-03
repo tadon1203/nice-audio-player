@@ -260,10 +260,14 @@ test("shows synced lyrics and follows the current line", async ({ page, native, 
   await dock.getByRole("button", { name: "Open Now Playing" }).click();
 
   const layer = page.getByRole("region", { name: "Now Playing" });
-  await expect(layer.getByRole("log", { name: "Lyrics" }).locator('[aria-current="true"]')).toContainText("First line");
+  await expect(
+    layer.getByRole("log", { name: "Lyrics" }).locator('[aria-current="true"]'),
+  ).toContainText("First line");
 
   await player.reportPosition(31_000);
-  await expect(layer.getByRole("log", { name: "Lyrics" }).locator('[aria-current="true"]')).toContainText("Second line");
+  await expect(
+    layer.getByRole("log", { name: "Lyrics" }).locator('[aria-current="true"]'),
+  ).toContainText("Second line");
 });
 
 test("shows the no-lyrics and unreadable-lyrics states", async ({ page }) => {

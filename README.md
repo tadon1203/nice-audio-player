@@ -15,11 +15,9 @@ A local-first Windows desktop music player focused on reliable playback and a ca
 ```text
 pnpm install
 pnpm dev
-pnpm check
-pnpm test
-pnpm validate
-pnpm package
 ```
+
+Which checks to run is in [CLAUDE.md](./CLAUDE.md#commands).
 
 The renderer is SvelteKit (Svelte 5, `adapter-static`, SPA) built by Vite. Tauri 2 hosts the Windows WebView and packages the desktop application; Rust owns playback, library, persistence, and native work directly, without an Electron process or N-API addon.
 

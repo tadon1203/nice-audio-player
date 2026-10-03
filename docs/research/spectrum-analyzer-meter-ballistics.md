@@ -57,16 +57,16 @@ Confidence: high on the EBU, ITU and IEC 61260-1 facts; medium on RME's behaviou
 
 Primary sources give fall rates only for PPM and for the RME level meter. They give **no** spectrum-bar or cap numbers, because nobody standardised them. Everything below Table 1 is therefore partly judgement.
 
-| Element | Sourced fact | Source |
-| --- | --- | --- |
-| Meter fall shape | Linear in dB ("approximately constant" return; "logarithmic decay" per sample) | EBU Tech 3205-E s.3.10; BS.1770-5 Annex 2 App. 1 |
-| Quasi-peak return | 24 dB in 2.8 s, about 8.6 dB/s | EBU Tech 3205-E s.3.10 |
-| Quasi-peak attack | 10 ms integration | EBU Tech 3205-E s.3.3 |
-| Level meter release | 10 dB/s recommended for low-noise readability | RME DIGICheck Tech Info |
-| Level meter peak hold | Adjustable 0.2 s to 100 s; fall rate not stated | RME DIGICheck Tech Info |
-| Analyzer rise / release | 7 ms rise; release 1 s fast, 2 s easy to read (definition unstated) | RME Spectral Analyser note |
-| Overload light hold | at least 150 ms | ITU-R BS.1771-1 |
-| Analyzer range | 60 dB (ADI-2), 50 dB (DIGICheck) | RME manuals / note |
+| Element                 | Sourced fact                                                                   | Source                                           |
+| ----------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------ |
+| Meter fall shape        | Linear in dB ("approximately constant" return; "logarithmic decay" per sample) | EBU Tech 3205-E s.3.10; BS.1770-5 Annex 2 App. 1 |
+| Quasi-peak return       | 24 dB in 2.8 s, about 8.6 dB/s                                                 | EBU Tech 3205-E s.3.10                           |
+| Quasi-peak attack       | 10 ms integration                                                              | EBU Tech 3205-E s.3.3                            |
+| Level meter release     | 10 dB/s recommended for low-noise readability                                  | RME DIGICheck Tech Info                          |
+| Level meter peak hold   | Adjustable 0.2 s to 100 s; fall rate not stated                                | RME DIGICheck Tech Info                          |
+| Analyzer rise / release | 7 ms rise; release 1 s fast, 2 s easy to read (definition unstated)            | RME Spectral Analyser note                       |
+| Overload light hold     | at least 150 ms                                                                | ITU-R BS.1771-1                                  |
+| Analyzer range          | 60 dB (ADI-2), 50 dB (DIGICheck)                                               | RME manuals / note                               |
 
 Does the fall accelerate? EBU says the PPM return should be roughly constant in dB. A one-pole (Fast/Slow style) average is a constant in dB per second only after the input has dropped well below the old level; it looks like an exponential in linear amplitude. I found no primary source describing an accelerating (gravity-style) fall for any pro meter. A gravity-style cap is a decorative choice and not recommended here (DESIGN principle 8).
 
@@ -74,25 +74,25 @@ Does the fall accelerate? EBU says the PPM return should be roughly constant in 
 
 For a 90 dB range (for example 0 to -90 dBFS) at ~120 Hz analysis frames. Source column says where a number comes from.
 
-| Quantity | Value | Basis |
-| --- | --- | --- |
-| Analysis frame to display | take the maximum of all frames since the last draw | **judgement** (never drop a peak between a 120 Hz frame and a 144 Hz or 60 Hz draw) |
-| Bar rise | instant (follow the analysis value); the band filter and a ~7 ms window already provide integration | 7 ms rise is **sourced** (RME note); "instant at the frame rate" is **judgement** |
-| Bar fall | linear in dB at **30 dB/s** (90 dB in 3 s) | **judgement**; sits between RME's "1 s" and "2 s" releases for a 50 dB range (about 50 and 25 dB/s if read as full-range time, **[unverified]** reading) |
-| Cap hold | **1.5 s** after the last time the bar touched the cap | **judgement**; inside RME's 0.2 s to 100 s adjustable range (sourced range), above the 150 ms floor (sourced) |
-| Cap fall after hold | linear in dB at **10 dB/s** | 10 dB/s anchored on RME's recommended release rate (**sourced**); applying it to the cap is **judgement** |
-| Cap floor | never below the bar | **judgement** |
-| Level meter (L/R) bar | instant rise; linear fall at **8.6 dB/s** (EBU return) | **sourced** (EBU Tech 3205-E s.3.10) for the rate; instant rise is the BS.1770 sample-peak convention (**sourced**) |
-| Level meter hold marker | **1.5 s**, then falls at 8.6 dB/s | rate **sourced**; hold time **judgement** |
-| Clip / over indicator | latch at 0 dBFS (or after N consecutive full-scale samples), hold at least 150 ms; suggest **2 s or until clicked** | 150 ms floor **sourced** (BS.1771-1); 2 s **judgement**. RME counts overs after "a user defined count (1 to 20) of consecutive full scale samples" (**sourced**, DIGICheck Tech Info) |
-| Fast/Slow-type smoothing | not used for the bars (they would hide short peaks); optional Slow mode with tau = 1 s | **judgement**; the 1 s value is **[unreached]** in IEC 61672-1 |
-| Display resolution | 0.5 dB steps (RME ADI-2) | **sourced** (ADI-2 manual s.15.2) |
+| Quantity                  | Value                                                                                                               | Basis                                                                                                                                                                                 |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Analysis frame to display | take the maximum of all frames since the last draw                                                                  | **judgement** (never drop a peak between a 120 Hz frame and a 144 Hz or 60 Hz draw)                                                                                                   |
+| Bar rise                  | instant (follow the analysis value); the band filter and a ~7 ms window already provide integration                 | 7 ms rise is **sourced** (RME note); "instant at the frame rate" is **judgement**                                                                                                     |
+| Bar fall                  | linear in dB at **30 dB/s** (90 dB in 3 s)                                                                          | **judgement**; sits between RME's "1 s" and "2 s" releases for a 50 dB range (about 50 and 25 dB/s if read as full-range time, **[unverified]** reading)                              |
+| Cap hold                  | **1.5 s** after the last time the bar touched the cap                                                               | **judgement**; inside RME's 0.2 s to 100 s adjustable range (sourced range), above the 150 ms floor (sourced)                                                                         |
+| Cap fall after hold       | linear in dB at **10 dB/s**                                                                                         | 10 dB/s anchored on RME's recommended release rate (**sourced**); applying it to the cap is **judgement**                                                                             |
+| Cap floor                 | never below the bar                                                                                                 | **judgement**                                                                                                                                                                         |
+| Level meter (L/R) bar     | instant rise; linear fall at **8.6 dB/s** (EBU return)                                                              | **sourced** (EBU Tech 3205-E s.3.10) for the rate; instant rise is the BS.1770 sample-peak convention (**sourced**)                                                                   |
+| Level meter hold marker   | **1.5 s**, then falls at 8.6 dB/s                                                                                   | rate **sourced**; hold time **judgement**                                                                                                                                             |
+| Clip / over indicator     | latch at 0 dBFS (or after N consecutive full-scale samples), hold at least 150 ms; suggest **2 s or until clicked** | 150 ms floor **sourced** (BS.1771-1); 2 s **judgement**. RME counts overs after "a user defined count (1 to 20) of consecutive full scale samples" (**sourced**, DIGICheck Tech Info) |
+| Fast/Slow-type smoothing  | not used for the bars (they would hide short peaks); optional Slow mode with tau = 1 s                              | **judgement**; the 1 s value is **[unreached]** in IEC 61672-1                                                                                                                        |
+| Display resolution        | 0.5 dB steps (RME ADI-2)                                                                                            | **sourced** (ADI-2 manual s.15.2)                                                                                                                                                     |
 
 If the product wants the analyzer to match RME, the honest statement is: RME does not publish its numbers, so ours are chosen for readability, not copied.
 
 ## Q4: jitter-free drawing from frames at ~120 Hz
 
-- **Frame-rate independence.** One-pole smoothing is `y[n] = x[n] + R*(y[n-1] - x[n])` with `R = exp(-T/tau)`; the exact relation is `e^(-t/tau) -> e^(-nT/tau) = R^n`, so `R = e^(-T/tau)`, and `R ~ 1 - T/tau` only when `T << tau` (Julius O. Smith III, *Introduction to Digital Filters*, "Time Constant of One Pole", <https://ccrma.stanford.edu/~jos/fp/Time_Constant_One_Pole.html>). [verified] Taking `T` as the real elapsed time since the previous update (not a fixed frame interval) gives the same decay at 60, 120 and 144 Hz: `alpha = 1 - exp(-dt / tau)`. [derived]
+- **Frame-rate independence.** One-pole smoothing is `y[n] = x[n] + R*(y[n-1] - x[n])` with `R = exp(-T/tau)`; the exact relation is `e^(-t/tau) -> e^(-nT/tau) = R^n`, so `R = e^(-T/tau)`, and `R ~ 1 - T/tau` only when `T << tau` (Julius O. Smith III, _Introduction to Digital Filters_, "Time Constant of One Pole", <https://ccrma.stanford.edu/~jos/fp/Time_Constant_One_Pole.html>). [verified] Taking `T` as the real elapsed time since the previous update (not a fixed frame interval) gives the same decay at 60, 120 and 144 Hz: `alpha = 1 - exp(-dt / tau)`. [derived]
 - **Linear-in-dB decay** is naturally frame independent: `level = max(input, level - rate * dt)`, with `dt` from a monotonic clock. A per-frame constant (as in BS.1770's "multiplied by a constant slightly less than unity") is only frame-rate independent when the update rate is fixed; the constant per second is `c_s = c_frame^(frames per second)`. [derived]
 - **60 dB decay time.** For a one-pole in amplitude, `T60 = tau * ln(1000) = 6.91 * tau` [derived]; so a 1 s release defined as T60 equals tau of 0.145 s. This is why a "release" number must say what it measures (the RME note does not).
 - **Aliasing between frame rate and display rate.** Frames at 120 Hz drawn at 144 Hz repeat one frame in six; at 60 Hz every second frame is skipped. A peak in a skipped frame is lost unless the draw takes the max since the last draw (the table's first row). **[judgement; no primary source on this]**

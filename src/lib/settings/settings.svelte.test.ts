@@ -4,14 +4,18 @@ import { createSettings } from "./settings.svelte";
 
 function stubApi(overrides: Partial<Pick<TNativeAPI, "getSettings" | "updateSettings">> = {}) {
   return {
-    getSettings: vi.fn(async (): Promise<AppearanceSettings> => ({
-      artworkBackdrop: true,
-      calmMotion: false,
-    })),
-    updateSettings: vi.fn(async (): Promise<AppearanceSettings> => ({
-      artworkBackdrop: true,
-      calmMotion: false,
-    })),
+    getSettings: vi.fn(
+      async (): Promise<AppearanceSettings> => ({
+        artworkBackdrop: true,
+        calmMotion: false,
+      }),
+    ),
+    updateSettings: vi.fn(
+      async (): Promise<AppearanceSettings> => ({
+        artworkBackdrop: true,
+        calmMotion: false,
+      }),
+    ),
     ...overrides,
   } as unknown as TNativeAPI & {
     getSettings: ReturnType<typeof vi.fn>;

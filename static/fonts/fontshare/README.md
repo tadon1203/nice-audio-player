@@ -1,21 +1,8 @@
 # Fontshare assets
 
-Nice Audio Player uses Satoshi as specified by `DESIGN.md`.
+Satoshi (see `DESIGN.md`). Font binaries are excluded from Git; remote font loading is not supported.
 
-Download Satoshi from the official Fontshare distribution with:
+- `pnpm fonts:download` fetches `Satoshi-Variable.woff2` from Fontshare and verifies its SHA-256.
+- `pnpm fonts:check` verifies the bundled license text and the font hash (part of `pnpm check`).
 
-```text
-pnpm fonts:download
-```
-
-The command downloads `https://api.fontshare.com/v2/fonts/download/satoshi`,
-extracts `Satoshi-Variable.woff2`, and verifies its SHA-256 hash. The source
-page is https://www.fontshare.com/fonts/satoshi.
-
-Font binaries are intentionally excluded from Git. Remote font loading is not
-supported.
-
-The applicable license is available in [LICENSE.txt](./LICENSE.txt).
-
-`pnpm fonts` verifies the bundled FFL text and approved font hash. This check is
-included in `pnpm validate` and `pnpm build`.
+License: [LICENSE.txt](./LICENSE.txt).
