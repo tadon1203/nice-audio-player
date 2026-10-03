@@ -77,7 +77,7 @@ impl TrackKeys {
             artist_sort: text::sort_key(&artist_key, sort.artist),
             album_sort: text::sort_key(&album_key, sort.album),
             album_artist_sort: text::sort_key(&album_artist_key, album_artist_sort_tag),
-            search: text::search_key(&[&title_key, &artist_key, &album_key, &album_artist_key]),
+            search: track_search_key(&title_key, &artist_key, &album_key, &album_artist_key),
             album_dir: if album_key.is_empty() {
                 String::new()
             } else {
@@ -90,6 +90,17 @@ impl TrackKeys {
             year: date.and_then(year_of),
         }
     }
+}
+
+/// What a track's filter looks in: its title, artist, album and Album Artist, folded. The one
+/// place that lists them, for the scanner and for the compilations that refile a track.
+pub(crate) fn track_search_key(
+    title: &str,
+    artist: &str,
+    album: &str,
+    album_artist: &str,
+) -> String {
+    text::search_key(&[title, artist, album, album_artist])
 }
 
 /// The printing of an album a file belongs to: its folder, or the folder above it when it is a

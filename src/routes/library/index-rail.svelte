@@ -23,7 +23,7 @@
       aria-label={`Jump to ${bucket.label === "?" ? "names without a value" : bucket.label}`}
       aria-current={bucket.label === current ? "true" : undefined}
       class={[
-        "grid size-5 shrink-0 place-items-center rounded-md text-xs tabular-nums outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50",
+        "grid size-6 shrink-0 place-items-center rounded-md text-sm tabular-nums outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50",
         bucket.label === current ? "font-bold text-foreground" : "text-muted-foreground",
       ]}
       onclick={() => onselect(bucket.label)}

@@ -5,7 +5,7 @@
 //! It also settles **Compilations**: tracks that share a directory and an album title but not an
 //! artist, and carry no Album Artist tag, are one album filed under Various Artists.
 
-use super::text;
+use super::{keys, text};
 use rusqlite::{params, OptionalExtension, Transaction};
 use std::collections::BTreeSet;
 
@@ -159,7 +159,7 @@ fn settle_compilation(
             row.track_id,
             under,
             sort,
-            text::search_key(&[&row.title, &row.artist, album, under]),
+            keys::track_search_key(&row.title, &row.artist, album, under),
         ])?;
     }
     Ok(())

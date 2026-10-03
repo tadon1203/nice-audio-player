@@ -103,14 +103,19 @@ pub async fn delete_missing_library_tracks(
 /// Opens the folder holding the log files in the file manager.
 #[tauri::command]
 #[specta::specta]
-pub fn open_log_directory(app: tauri::AppHandle) -> Result<(), LibraryCommandError> {
+pub async fn open_log_directory(app: tauri::AppHandle) -> Result<(), LibraryCommandError> {
     use tauri::Manager;
     let directory = app
         .path()
         .app_log_dir()
         .map_err(|_| LibraryCommandError::TaskFailed)?;
-    std::fs::create_dir_all(&directory).map_err(|_| LibraryCommandError::TaskFailed)?;
-    open_in_file_manager(&directory.to_string_lossy())
+    // The filesystem and a spawned process stay off the main thread.
+    tauri::async_runtime::spawn_blocking(move || {
+        std::fs::create_dir_all(&directory).map_err(|_| LibraryCommandError::TaskFailed)?;
+        open_in_file_manager(&directory.to_string_lossy())
+    })
+    .await
+    .map_err(|_| LibraryCommandError::TaskFailed)?
 }
 
 #[cfg(windows)]
