@@ -1,22 +1,28 @@
 import type { QueryClient } from "@tanstack/svelte-query";
-import { cacheScanSnapshot, isScanFinished, refreshLibrary } from "$lib/library/events";
+import { cacheScanSnapshot, refreshLibrary } from "$lib/library/events";
 import { refreshLyrics } from "$lib/lyrics/events";
-import type { AppEvent, LibraryScanState } from "$lib/native";
+import type { AppEvent } from "$lib/native";
 
 /**
- * Watches scan snapshots and, the first time one reports a finished scan, refreshes everything
- * that depends on the files: the Library and lyrics. The one place that decides "scan finished".
+ * Watches scan snapshots and refreshes what depends on the files when a scan has ended since the
+ * last one seen: lyrics always, the Library only if scans changed something. Both are read from
+ * counters that only grow, so a scan is never missed because the snapshots in between were
+ * coalesced, and a scan that found nothing new costs no refetch. The one place that decides
+ * "scan finished".
  */
 export function createScanWatcher(client: QueryClient): (event: AppEvent) => void {
-  let previous: LibraryScanState | undefined;
+  let finished = 0;
+  let changed = 0;
   return (event) => {
     if (event.event !== "libraryScanStateChanged") return;
-    const next = event.payload.state;
-    cacheScanSnapshot(client, event.payload);
-    if (isScanFinished(next) && previous !== next) {
+    const snapshot = event.payload;
+    cacheScanSnapshot(client, snapshot);
+    if (snapshot.finishedCount <= finished) return;
+    finished = snapshot.finishedCount;
+    if (snapshot.changedCount > changed) {
+      changed = snapshot.changedCount;
       refreshLibrary(client);
-      refreshLyrics(client);
     }
-    previous = next;
+    refreshLyrics(client);
   };
 }

@@ -11,6 +11,7 @@
 
 use std::{
     collections::{BTreeMap, BTreeSet},
+    path::PathBuf,
     time::{Duration, Instant},
 };
 
@@ -24,6 +25,27 @@ pub(super) const STARTUP_DELAY: Duration = Duration::from_millis(500);
 pub(super) const WATCH_RETRY: Duration = Duration::from_secs(10);
 /// A watcher that failed to attach this many times in a row needs the listener's attention.
 const ATTENTION_AFTER_FAILURES: u32 = 2;
+
+/// What a scan of one folder covers: all of it, or only the directories where something changed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct ScanTarget {
+    pub root: RootId,
+    /// `None` walks the whole folder.
+    pub dirs: Option<Vec<PathBuf>>,
+}
+
+impl ScanTarget {
+    pub fn whole(root: RootId) -> Self {
+        Self { root, dirs: None }
+    }
+}
+
+/// What is waiting to be scanned in one folder.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Dirty {
+    Everything,
+    Dirs(BTreeSet<PathBuf>),
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Phase {
@@ -75,8 +97,13 @@ pub(super) enum Input {
         roots: Vec<RootId>,
     },
     CancelRequested,
-    /// A watcher saw something change in this folder.
+    /// A watcher saw something change in this folder, somewhere it could not say.
     FolderChanged(RootId),
+    /// A watcher saw changes at these paths (files or directories) in this folder.
+    PathsChanged {
+        root: RootId,
+        paths: Vec<PathBuf>,
+    },
     Attached(RootId),
     AttachFailed(RootId),
     ScanFinished(ScanOutcome),
@@ -90,7 +117,7 @@ pub(super) enum Input {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum Effect {
-    StartScan(Vec<RootId>),
+    StartScan(Vec<ScanTarget>),
     CancelScan,
     RunGc,
     SetActivity(Option<Activity>),
@@ -99,7 +126,7 @@ pub(super) enum Effect {
 }
 
 pub(super) struct State {
-    dirty: BTreeSet<RootId>,
+    dirty: BTreeMap<RootId, Dirty>,
     debounce: Option<Instant>,
     gc_pending: bool,
     phase: Phase,
@@ -110,7 +137,7 @@ pub(super) struct State {
 impl State {
     pub fn new() -> Self {
         Self {
-            dirty: BTreeSet::new(),
+            dirty: BTreeMap::new(),
             debounce: None,
             gc_pending: false,
             phase: Phase::Idle,
@@ -140,14 +167,16 @@ impl State {
         match input {
             Input::Started { enabled } => {
                 self.gc_pending = true;
-                self.dirty.extend(enabled.iter().copied());
+                for id in &enabled {
+                    self.mark_everything(*id);
+                }
                 self.debounce = Some(now + STARTUP_DELAY);
                 for id in enabled {
                     self.watch(id, &mut effects);
                 }
             }
             Input::Registered(id) | Input::Enabled(id) => {
-                self.dirty.insert(id);
+                self.mark_everything(id);
                 self.debounce = Some(now);
                 self.watch(id, &mut effects);
             }
@@ -163,7 +192,9 @@ impl State {
                     self.dirty.clear();
                     self.debounce = None;
                     self.phase = Phase::Running;
-                    effects.push(Effect::StartScan(roots));
+                    effects.push(Effect::StartScan(
+                        roots.into_iter().map(ScanTarget::whole).collect(),
+                    ));
                 }
             }
             Input::CancelRequested => {
@@ -175,7 +206,20 @@ impl State {
             }
             Input::FolderChanged(id) => {
                 if self.watches.contains_key(&id) {
-                    self.dirty.insert(id);
+                    self.mark_everything(id);
+                    self.debounce = Some(now + DEBOUNCE);
+                }
+            }
+            Input::PathsChanged { root, paths } => {
+                if self.watches.contains_key(&root) {
+                    match self
+                        .dirty
+                        .entry(root)
+                        .or_insert(Dirty::Dirs(BTreeSet::new()))
+                    {
+                        Dirty::Everything => {}
+                        Dirty::Dirs(dirs) => dirs.extend(paths),
+                    }
                     self.debounce = Some(now + DEBOUNCE);
                 }
             }
@@ -184,7 +228,7 @@ impl State {
                 Some(watch) => {
                     // A watcher that had to be retried missed whatever changed meanwhile.
                     if matches!(watch, Watch::Failed { .. }) {
-                        self.dirty.insert(id);
+                        self.mark_everything(id);
                         self.debounce = Some(now);
                     }
                     self.watches.insert(id, Watch::Attached);
@@ -225,7 +269,9 @@ impl State {
             }
             Input::GcFinished { rescan } => {
                 if !rescan.is_empty() {
-                    self.dirty.extend(rescan);
+                    for id in rescan {
+                        self.mark_everything(id);
+                    }
                     self.debounce = Some(now);
                 }
             }
@@ -238,6 +284,10 @@ impl State {
             effects.push(Effect::SetActivity(activity));
         }
         effects
+    }
+
+    fn mark_everything(&mut self, id: RootId) {
+        self.dirty.insert(id, Dirty::Everything);
     }
 
     fn watch(&mut self, id: RootId, effects: &mut Vec<Effect>) {
@@ -282,7 +332,16 @@ impl State {
             if !self.dirty.is_empty() {
                 self.phase = Phase::Running;
                 effects.push(Effect::StartScan(
-                    std::mem::take(&mut self.dirty).into_iter().collect(),
+                    std::mem::take(&mut self.dirty)
+                        .into_iter()
+                        .map(|(root, dirty)| ScanTarget {
+                            root,
+                            dirs: match dirty {
+                                Dirty::Everything => None,
+                                Dirty::Dirs(dirs) => Some(dirs.into_iter().collect()),
+                            },
+                        })
+                        .collect(),
                 ));
                 return;
             }
@@ -361,7 +420,9 @@ mod tests {
         effects
             .iter()
             .filter_map(|effect| match effect {
-                Effect::StartScan(roots) => Some(roots.clone()),
+                Effect::StartScan(targets) => {
+                    Some(targets.iter().map(|target| target.root).collect::<Vec<_>>())
+                }
                 _ => None,
             })
             .collect()
@@ -375,6 +436,54 @@ mod tests {
                 _ => None,
             })
             .collect()
+    }
+
+    fn targets(effects: &[Effect]) -> Vec<ScanTarget> {
+        effects
+            .iter()
+            .filter_map(|effect| match effect {
+                Effect::StartScan(targets) => Some(targets.clone()),
+                _ => None,
+            })
+            .flatten()
+            .collect()
+    }
+
+    #[test]
+    fn changes_at_paths_scan_only_those_paths_unless_the_watcher_lost_track() {
+        let mut clock = Clock::idle(&[1]);
+        let (a, b) = (PathBuf::from("/m/a"), PathBuf::from("/m/b"));
+        clock.feed(Input::PathsChanged {
+            root: 1,
+            paths: vec![a.clone()],
+        });
+        clock.feed(Input::PathsChanged {
+            root: 1,
+            paths: vec![b.clone(), a.clone()],
+        });
+
+        let started = clock.wait(DEBOUNCE);
+
+        assert_eq!(
+            targets(&started),
+            vec![ScanTarget {
+                root: 1,
+                dirs: Some(vec![a.clone(), b.clone()])
+            }]
+        );
+        clock.feed(Input::ScanFinished(ScanOutcome::Completed));
+
+        clock.feed(Input::PathsChanged {
+            root: 1,
+            paths: vec![a],
+        });
+        clock.feed(Input::FolderChanged(1));
+        clock.feed(Input::PathsChanged {
+            root: 1,
+            paths: vec![b],
+        });
+        let started = clock.wait(DEBOUNCE);
+        assert_eq!(targets(&started), vec![ScanTarget::whole(1)]);
     }
 
     #[test]

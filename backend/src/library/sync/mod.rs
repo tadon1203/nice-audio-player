@@ -31,7 +31,7 @@ use std::{
     thread::{self, JoinHandle},
     time::Instant,
 };
-use step::{Activity, Effect, Input, RootId, ScanOutcome, State};
+use step::{Activity, Effect, Input, RootId, ScanOutcome, ScanTarget, State};
 
 const LIBRARY_ACTIVITY_ID: &str = "library-sync";
 
@@ -201,7 +201,7 @@ impl Actor {
 
     fn execute(&mut self, effect: Effect) {
         match effect {
-            Effect::StartScan(ids) => self.start_scan(&ids),
+            Effect::StartScan(targets) => self.start_scan(targets),
             Effect::CancelScan => self.cancel.store(true, Ordering::Release),
             Effect::RunGc => {
                 let rescan = maintenance::collect_source_artwork(&self.database)
@@ -311,24 +311,36 @@ impl Actor {
         })
     }
 
-    fn start_scan(&mut self, ids: &[RootId]) {
-        let roots: Vec<LibraryRoot> = self
+    fn start_scan(&mut self, targets: Vec<ScanTarget>) {
+        let jobs: Vec<scanner::ScanJob> = self
             .enabled_roots_or_log()
             .into_iter()
-            .filter(|root| root_id(root).is_some_and(|id| ids.contains(&id)))
+            .filter_map(|root| {
+                let id = root_id(&root)?;
+                let target = targets.iter().find(|target| target.root == id)?;
+                Some(scanner::ScanJob {
+                    root,
+                    dirs: target.dirs.clone(),
+                })
+            })
             .collect();
-        if roots.is_empty() {
+        if jobs.is_empty() {
             // Every folder that wanted a scan is gone: there is nothing to do.
             self.queue
                 .push_back(Input::ScanFinished(ScanOutcome::Completed));
             return;
         }
         self.cancel.store(false, Ordering::Release);
-        *self.scan.lock().expect("scan state lock") = LibraryScanSnapshot {
-            state: LibraryScanState::Running,
-            ..LibraryScanSnapshot::idle()
-        };
-        info!("library.scan.started root_count={}", roots.len());
+        {
+            let mut scan = self.scan.lock().expect("scan state lock");
+            *scan = LibraryScanSnapshot {
+                state: LibraryScanState::Running,
+                finished_count: scan.finished_count,
+                changed_count: scan.changed_count,
+                ..LibraryScanSnapshot::idle()
+            };
+        }
+        info!("library.scan.started root_count={}", jobs.len());
         self.notify.notify();
         let (database, scan, cancel, notify) = (
             self.database.clone(),
@@ -339,7 +351,7 @@ impl Actor {
         let messages = self.messages.clone();
         self.scanner = Some(thread::spawn(move || {
             let mut ending = ScanEnding::new(messages, scan.clone(), notify.clone());
-            let outcome = scanner::run(database, roots, scan, cancel, notify);
+            let outcome = scanner::run(database, jobs, scan, cancel, notify);
             ending.finish(match outcome {
                 LibraryScanState::Completed => ScanOutcome::Completed,
                 LibraryScanState::Cancelled => ScanOutcome::Cancelled,
@@ -364,8 +376,13 @@ impl Actor {
             .map(|root| root.path);
         let messages = self.messages.clone();
         let attached = path.and_then(|path| {
-            watcher::attach(std::path::Path::new(&path), move || {
-                let _ = messages.send(Message::Input(Input::FolderChanged(id)));
+            watcher::attach(std::path::Path::new(&path), move |paths| {
+                let input = if paths.is_empty() {
+                    Input::FolderChanged(id)
+                } else {
+                    Input::PathsChanged { root: id, paths }
+                };
+                let _ = messages.send(Message::Input(input));
             })
             .ok()
         });

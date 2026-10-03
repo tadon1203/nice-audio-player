@@ -297,6 +297,17 @@ export type LibraryScanSnapshot = {
 	indexedCount: number,
 	failedCount: number,
 	failureCode: ScanFailure | null,
+	/**
+	 *  How many scans have ended since the app started. Only ever grows, so a listener that saw
+	 *  the count change knows a scan ended, however many snapshots it missed in between.
+	 */
+	finishedCount: number,
+	/**
+	 *  How many files scans have added, changed, relinked, or found Missing or back since the app
+	 *  started. Only ever grows: a listener that sees it move since it last looked knows the
+	 *  catalog changed, and one that does not knows it did not.
+	 */
+	changedCount: number,
 };
 
 export type LibraryScanState = "idle" | "running" | "completed" | "cancelled" | "failed";

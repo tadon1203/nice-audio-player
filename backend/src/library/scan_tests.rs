@@ -38,20 +38,30 @@ fn write_tone(path: &Path, samples: usize) {
 }
 
 fn run_scan(fixture: &Fixture, cancelled: bool) -> LibraryScanSnapshot {
+    run_jobs(fixture, cancelled, None)
+}
+
+/// A scan that follows changes: only the directories holding `changed` paths are walked.
+fn run_scan_of(fixture: &Fixture, changed: &[PathBuf]) -> LibraryScanSnapshot {
+    run_jobs(fixture, false, Some(changed.to_vec()))
+}
+
+fn run_jobs(fixture: &Fixture, cancelled: bool, dirs: Option<Vec<PathBuf>>) -> LibraryScanSnapshot {
     let roots = roots::list(&fixture.database.read().unwrap()).expect("roots");
+    let jobs = roots
+        .into_iter()
+        .map(|root| super::scanner::ScanJob {
+            root,
+            dirs: dirs.clone(),
+        })
+        .collect();
     let state = Arc::new(Mutex::new(LibraryScanSnapshot {
         state: LibraryScanState::Running,
-        current_root: None,
-        expected_count: 0,
-        discovered_count: 0,
-        inspected_count: 0,
-        indexed_count: 0,
-        failed_count: 0,
-        failure_code: None,
+        ..LibraryScanSnapshot::idle()
     }));
     super::scanner::run(
         fixture.database.clone(),
-        roots,
+        jobs,
         Arc::clone(&state),
         Arc::new(AtomicBool::new(cancelled)),
         notifier(),
@@ -474,5 +484,87 @@ fn an_unchanged_file_is_told_from_a_changed_one_by_size_as_well_as_time() {
     assert!(
         count(&fixture, "SELECT byte_length FROM library_files") > 16_000,
         "the size is recorded"
+    );
+}
+
+#[test]
+fn a_scan_that_follows_a_change_walks_only_that_directory() {
+    let fixture = fixture();
+    for album in ["A", "B", "C"] {
+        std::fs::create_dir_all(fixture.music.join(album)).unwrap();
+        for index in 0..3 {
+            write_tone(
+                &fixture.music.join(album).join(format!("{index}.wav")),
+                800 + index * 10,
+            );
+        }
+    }
+    run_scan(&fixture, false);
+    write_tone(&fixture.music.join("B").join("new.wav"), 4_000);
+    std::fs::remove_file(fixture.music.join("C").join("0.wav")).unwrap();
+
+    let scan = run_scan_of(&fixture, &[fixture.music.join("B").join("new.wav")]);
+
+    assert_eq!(scan.state, LibraryScanState::Completed);
+    assert_eq!(scan.discovered_count, 4, "B's four files, nothing else");
+    assert_eq!((scan.inspected_count, scan.changed_count), (1, 1));
+    assert_eq!(
+        count(
+            &fixture,
+            "SELECT COUNT(*) FROM library_files WHERE availability = 'missing'"
+        ),
+        0,
+        "C was out of scope, so its deleted file is not noticed yet"
+    );
+
+    let scan = run_scan_of(&fixture, &[fixture.music.join("C").join("0.wav")]);
+
+    assert_eq!(scan.discovered_count, 2, "the vanished file's directory");
+    assert_eq!(scan.changed_count, 1);
+    assert_eq!(
+        count(
+            &fixture,
+            "SELECT COUNT(*) FROM library_files WHERE availability = 'missing'"
+        ),
+        1
+    );
+}
+
+#[test]
+fn a_removed_directory_is_found_through_its_nearest_existing_parent() {
+    let fixture = fixture();
+    std::fs::create_dir_all(fixture.music.join("A").join("Gone")).unwrap();
+    write_tone(&fixture.music.join("A").join("Gone").join("1.wav"), 800);
+    write_tone(&fixture.music.join("A").join("kept.wav"), 1_600);
+    run_scan(&fixture, false);
+    let gone = fixture.music.join("A").join("Gone");
+    std::fs::remove_dir_all(&gone).unwrap();
+
+    run_scan_of(&fixture, &[gone]);
+
+    let roots = roots::list(&fixture.database.read().unwrap()).unwrap();
+    assert_eq!((roots[0].track_count, roots[0].missing_count), (1, 1));
+}
+
+#[test]
+fn a_scan_reports_whether_it_changed_anything_and_every_end_is_counted() {
+    let fixture = fixture();
+    write_tone(&fixture.music.join("a.wav"), 8_000);
+
+    let first = run_scan(&fixture, false);
+    let second = run_scan(&fixture, false);
+    write_tone(&fixture.music.join("b.wav"), 16_000);
+    let third = run_scan(&fixture, false);
+
+    assert_eq!(first.changed_count, 1);
+    assert_eq!(
+        second.changed_count, 0,
+        "nothing changed, nothing to refetch"
+    );
+    assert_eq!(third.changed_count, 1);
+    assert_eq!(
+        (first.finished_count, second.finished_count),
+        (1, 1),
+        "each scan here starts from its own snapshot"
     );
 }

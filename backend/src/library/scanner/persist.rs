@@ -12,7 +12,7 @@ use crate::media::inspection::Undecodable;
 
 const SELECT_EXISTING_FILE: &str = "
     SELECT f.id, f.source_revision, f.modification_key, f.byte_length, f.inspection_status,
-           m.artwork_status
+           m.artwork_status, f.availability
     FROM library_files f
     LEFT JOIN tracks t ON t.file_id = f.id
     LEFT JOIN track_source_metadata m ON m.track_id = t.id AND m.source_revision = f.source_revision
@@ -85,8 +85,8 @@ type Persisted<T> = Result<T, PersistError>;
 /// What a discovered file needs, decided from what the database already holds.
 #[derive(Debug)]
 pub(super) enum Plan {
-    /// Unchanged: only record that it was seen.
-    Touch { file_id: i64 },
+    /// Unchanged: only record that it was seen (and that it is back, when it was Missing).
+    Touch { file_id: i64, was_missing: bool },
     /// Unchanged, but its artwork could not be stored last time.
     RetryArtwork {
         file_id: i64,
@@ -110,6 +110,7 @@ pub(super) fn plan(reader: &Connection, root_id: i64, file: DiscoveredFile) -> P
         i64,
         InspectionStatus,
         Option<ArtworkStatus>,
+        Availability,
     );
     let existing: Option<Existing> = reader
         .prepare_cached(SELECT_EXISTING_FILE)?
@@ -121,6 +122,7 @@ pub(super) fn plan(reader: &Connection, root_id: i64, file: DiscoveredFile) -> P
                 row.get(3)?,
                 row.get(4)?,
                 row.get(5)?,
+                row.get(6)?,
             ))
         })
         .optional()?;
@@ -135,12 +137,18 @@ pub(super) fn plan(reader: &Connection, root_id: i64, file: DiscoveredFile) -> P
             length,
             InspectionStatus::Indexed,
             Some(ArtworkStatus::StoreFailed),
+            _,
         )) if unchanged(&key, length) => Plan::RetryArtwork {
             file_id,
             revision,
             file,
         },
-        Some((file_id, _, key, length, ..)) if unchanged(&key, length) => Plan::Touch { file_id },
+        Some((file_id, _, key, length, _, _, availability)) if unchanged(&key, length) => {
+            Plan::Touch {
+                file_id,
+                was_missing: availability == Availability::Missing,
+            }
+        }
         Some((file_id, revision, ..)) => Plan::Inspect {
             known: Some((file_id, revision + 1)),
             file,
@@ -153,6 +161,7 @@ pub(super) fn plan(reader: &Connection, root_id: i64, file: DiscoveredFile) -> P
 pub(super) enum Outcome {
     Touch {
         file_id: i64,
+        was_missing: bool,
     },
     RetryArtwork {
         file_id: i64,
@@ -185,19 +194,27 @@ impl LibraryWriter {
         )?)
     }
 
-    /// Writes a batch in one transaction, so a failure never leaves half of it behind.
+    /// Writes a batch in one transaction, so a failure never leaves half of it behind. Returns
+    /// how many of its files changed what the Library holds.
     pub fn write_batch(
         &mut self,
         root_id: i64,
         generation: i64,
         outcomes: &[Outcome],
-    ) -> Persisted<()> {
+    ) -> Persisted<u64> {
+        let mut changed = 0;
         let transaction = self
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
         for outcome in outcomes {
             match outcome {
-                Outcome::Touch { file_id } => touch(&transaction, *file_id, generation)?,
+                Outcome::Touch {
+                    file_id,
+                    was_missing,
+                } => {
+                    touch(&transaction, *file_id, generation)?;
+                    changed += u64::from(*was_missing);
+                }
                 Outcome::RetryArtwork {
                     file_id,
                     revision,
@@ -205,29 +222,48 @@ impl LibraryWriter {
                 } => {
                     touch(&transaction, *file_id, generation)?;
                     apply_artwork(&transaction, *file_id, *revision, artwork)?;
+                    changed += 1;
                 }
                 Outcome::Inspected {
                     known,
                     file,
                     result,
-                } => store_file(&transaction, root_id, generation, *known, file, result)?,
+                } => {
+                    store_file(&transaction, root_id, generation, *known, file, result)?;
+                    changed += 1;
+                }
             }
         }
-        Ok(transaction.commit()?)
+        transaction.commit()?;
+        Ok(changed)
     }
 
     /// After a complete pass: files not seen this generation are missing (kept, not deleted).
-    pub fn finish_root(&self, root_id: i64, generation: i64) -> Persisted<()> {
-        self.connection.execute(
-            "UPDATE library_files SET availability = ?3
-             WHERE root_id = ?1 AND seen_generation < ?2",
-            params![root_id, generation, Availability::Missing],
-        )?;
-        self.connection.execute(
-            "UPDATE library_roots SET last_successful_scan_at_ms = ?2 WHERE id = ?1",
-            params![root_id, crate::library::now_ms()],
-        )?;
-        Ok(())
+    /// A pass over only some directories (`within`, as `/`-terminated relative prefixes, `""`
+    /// for the whole folder) marks only the files in them. Returns how many files became Missing.
+    pub fn finish_root(
+        &self,
+        root_id: i64,
+        generation: i64,
+        within: Option<&[String]>,
+    ) -> Persisted<u64> {
+        let mut gone = 0;
+        let whole = [String::new()];
+        for prefix in within.unwrap_or(&whole) {
+            gone += self.connection.execute(
+                "UPDATE library_files SET availability = ?3
+                 WHERE root_id = ?1 AND seen_generation < ?2 AND availability <> ?3
+                   AND substr(relative_path, 1, length(?4)) = ?4",
+                params![root_id, generation, Availability::Missing, prefix],
+            )? as u64;
+        }
+        if within.is_none() {
+            self.connection.execute(
+                "UPDATE library_roots SET last_successful_scan_at_ms = ?2 WHERE id = ?1",
+                params![root_id, crate::library::now_ms()],
+            )?;
+        }
+        Ok(gone)
     }
 }
 

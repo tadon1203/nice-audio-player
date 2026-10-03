@@ -193,6 +193,8 @@ export const idleScan: LibraryScanSnapshot = {
   indexedCount: 0,
   failedCount: 0,
   failureCode: null,
+  finishedCount: 0,
+  changedCount: 0,
 };
 
 /** A scan snapshot in a state, with the counts a scan in that state would show. */
@@ -207,6 +209,8 @@ export function scanSnapshot(state: LibraryScanState): LibraryScanSnapshot {
     indexedCount: state === "running" ? 6 : 18,
     failedCount: state === "failed" ? 2 : 0,
     failureCode: state === "failed" ? "rootTraversalFailed" : null,
+    finishedCount: state === "running" ? 0 : 1,
+    changedCount: 20,
   };
 }
 

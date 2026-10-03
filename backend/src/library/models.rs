@@ -209,6 +209,8 @@ impl LibraryScanSnapshot {
             indexed_count: 0,
             failed_count: 0,
             failure_code: None,
+            finished_count: 0,
+            changed_count: 0,
         }
     }
 }
@@ -236,4 +238,11 @@ pub struct LibraryScanSnapshot {
     pub indexed_count: u64,
     pub failed_count: u64,
     pub failure_code: Option<ScanFailure>,
+    /// How many scans have ended since the app started. Only ever grows, so a listener that saw
+    /// the count change knows a scan ended, however many snapshots it missed in between.
+    pub finished_count: u64,
+    /// How many files scans have added, changed, relinked, or found Missing or back since the app
+    /// started. Only ever grows: a listener that sees it move since it last looked knows the
+    /// catalog changed, and one that does not knows it did not.
+    pub changed_count: u64,
 }
