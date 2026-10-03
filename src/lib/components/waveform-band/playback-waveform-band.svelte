@@ -101,7 +101,6 @@
       sweepBars={showWaveform}
       stillBars={budget.current !== "full"}
       lineOnly={!showWaveform}
-      playedClassName={showWaveform ? "text-(--artwork-accent)" : undefined}
       disabled={!canSeek}
       onInput={(value) => (seekPreviewMs = value)}
       onCommit={(value) => {
