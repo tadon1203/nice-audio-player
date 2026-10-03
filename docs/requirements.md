@@ -81,6 +81,11 @@ Source audio files are never modified.
 - Smart playlists and advanced statistics
 - Lyrics and artwork from local, embedded, manually selected, or external sources; a user's confirmed choice is never silently replaced, and external failures never block playback
 - Visualization: supplementary only, never needed to understand playback state
+- Meters: a third view of Now Playing (beside Lyrics and Queue; on a wide window it takes the place of the lyrics and the queue stays) shows the Spectrum (30 one-third-octave bands, left and right summed) and the Level meter (left and right side by side, peak and RMS, each with a held peak), on one shared dB axis (−90 to 0 dBFS). It measures the audio as it leaves the app, after volume.
+  - Bars are thin and drawn in the artwork's ink; the held peak is a thin white cap. Bars rise instantly; the Spectrum bars fall at 30 dB/s and the Level meter at 8.6 dB/s; caps hold for 1.5 s, then fall at 10 dB/s.
+  - Each channel shows its held peak in dBFS as text, refreshed a few times a second. A clip is shown as the word "Clip" for 2 s (click to clear), never by color alone.
+  - It runs only while visible. When playback is paused or stopped the bars fall to the floor. With Calm motion it is stopped and says so.
+  - On a narrow window the Spectrum takes the full width and the left and right meters become two horizontal bars below it. A mono device shows the same level on both; a device with more than two channels shows its first two.
 - Audio processing (loudness normalization, ReplayGain): explicit and visible to the user, bypassable, no clipping
 - Gapless playback, exclusive output, bit-perfect playback
 - Metadata overrides and editing (only on explicit user request)

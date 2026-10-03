@@ -24,6 +24,9 @@ The language of Nice Audio Player. Use these terms in code, docs, and tickets; d
 - **Position event**: the playing position (playback id, position, seek revision), sent on its own while a track plays. The playback snapshot is sent only when state changes, so a tick never re-renders anything but the Playback clock.
 - **Playback id**: identifies one loaded session; stable across seeks, new for every track that loads.
 - **Waveform**: the loaded Playback's RMS and peak levels, keyed by its playback id. The backend pushes it whenever a better one is ready (a quick approximation, then the exact one), always with the playback id of the track it was read for; the renderer asks only for one that was ready before it was watching, so a late answer never decides what is shown.
+- **Spectrum**: the level of the audio being played in 30 one-third-octave bands, left and right summed. Unlike the Waveform, it describes the sound as it is leaving the app (after volume), not the file.
+- **Level meter**: the left and right channel levels of the audio being played, each as peak (with a held peak) and RMS.
+- **Meter frame**: one measurement of the Spectrum and the Level meter, taken at a moment of the output. Frames are a live stream that is only sent while a meter is visible; unlike the Waveform they are never state, and a missed one is simply skipped.
 - **Playback clock**: the single animation-frame clock that everything drawing the playing position reads.
 - **Now Playing**: the dock extended upward, a layer over the current location. Not a page; Back closes it.
 - **Dock**: the persistent playback bar at the bottom of the workspace.
