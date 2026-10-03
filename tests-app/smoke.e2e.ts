@@ -107,4 +107,43 @@ describe("the real app", () => {
     await $(`${dock} button[aria-label="Next track"]`).click();
     await expect($(`${dock} button[aria-label="Previous track"]`)).toBeEnabled();
   });
+
+  it("streams Meter frames while Meters is open and stops when it is closed", async () => {
+    // Counts the binary messages the app's channels receive: a Meter frame is 35 32-bit words.
+    await browser.execute(() => {
+      const w = window as unknown as {
+        __meterMessages: number;
+        __TAURI_INTERNALS__: {
+          transformCallback: (callback?: (data: unknown) => void, once?: boolean) => number;
+        };
+      };
+      w.__meterMessages = 0;
+      const original = w.__TAURI_INTERNALS__.transformCallback;
+      w.__TAURI_INTERNALS__.transformCallback = (callback, once) =>
+        original((data) => {
+          const message = (data as { message?: unknown } | null)?.message;
+          if (message instanceof ArrayBuffer && message.byteLength === 140) w.__meterMessages += 1;
+          callback?.(data);
+        }, once);
+    });
+    const messages = () =>
+      browser.execute(() => (window as unknown as { __meterMessages: number }).__meterMessages);
+
+    await $(`${dock} button[aria-label="Open Now Playing"]`).click();
+    const layer = '[aria-label="Now Playing"]';
+    await $(`${layer} button=Meters`).click();
+    await expect($(`${layer} section[aria-label="Meters"]`)).toBeDisplayed();
+
+    await browser.waitUntil(async () => (await messages()) > 10, {
+      timeoutMsg: "no Meter frames arrived",
+    });
+    // A silent file measures the floor on both channels.
+    await expect($$(`${layer} section[aria-label="Meters"] span=-inf`)).toBeElementsArrayOfSize(2);
+
+    await $(`${layer} button=Queue`).click();
+    await browser.pause(300);
+    const stopped = await messages();
+    await browser.pause(500);
+    expect(await messages()).toBe(stopped);
+  });
 });

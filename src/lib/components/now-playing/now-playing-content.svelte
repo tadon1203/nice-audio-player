@@ -7,6 +7,7 @@
   import { cn } from "$lib/utils/cn.js";
   import Identity from "./identity.svelte";
   import LyricsPanel from "./lyrics-panel.svelte";
+  import MetersView from "./meters-view.svelte";
   import {
     SLEEVE_SIZE,
     columnFade,
@@ -22,9 +23,10 @@
   /**
    * Now Playing's content: one skeleton in every state. Left, the Sleeve and the track's info;
    * right, what this playback is doing now: its lyrics, or else the queue in the order it plays,
-   * the current line or track always 40% from the top. Beside lyrics, from 90rem, the same queue
-   * is a rail; below that a Lyrics / Queue switch above the column chooses one of them (the
-   * choice is kept for the session). The queue stays mounted: only its place changes, so it
+   * the current line or track always 40% from the top; or the meters. Beside lyrics or meters,
+   * from 90rem, the same queue is a rail; below that a Lyrics / Queue / Meters switch above the
+   * column chooses one of them (the choice is kept for the session; with no lyrics, only Queue
+   * and Meters). The queue stays mounted: only its place changes, so it
    * keeps its scroll and its rows move instead of being re-created. The Sleeve continues its
    * shared-element motion from the dock; the text is not shared, it fades in behind the Sleeve.
    * Below `md` everything stacks. The waveform grows along the bottom edge when its data arrives.
@@ -41,6 +43,9 @@
   $effect.pre(() => {
     if (resolution !== undefined) showLyrics = resolution.status === "resolved";
   });
+
+  // The left column exists beside the queue rail when there are lyrics or the meters are chosen.
+  const hasLeft = $derived(showLyrics || rightColumn.view === "meters");
 
   // Which way the track changed, for the lyrics to leave and arrive in: going back puts the track
   // we left first among the upcoming ones.
@@ -78,42 +83,48 @@
         <Identity {item} resolution={resolution ?? null} />
       </div>
       <!--
-        The right column. The lyrics and the queue are cells of one grid: stacked below 90rem (the
-        switch picks one), side by side from there. Each is an inline-size container: its text is
+        The right column. The switch is the first row; below it the lyrics, the meters and the queue are
+        cells of one grid: stacked below 90rem (the switch picks one), from there the queue is a
+        rail beside the lyrics or the meters. Each is an inline-size container: its text is
         sized from its own width (`cqi`).
       -->
       <div
         in:contentFade|global
         class={cn(
           "grid min-h-0 min-w-0 flex-1 gap-y-3 p-6 pt-0 md:p-0",
-          showLyrics
-            ? "grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)] @min-[90rem]/npw:grid-cols-[minmax(0,1fr)_20rem] @min-[90rem]/npw:grid-rows-[minmax(0,1fr)] @min-[90rem]/npw:gap-x-12"
-            : "grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)]",
+          hasLeft
+            ? "grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)] @min-[90rem]/npw:grid-cols-[minmax(0,1fr)_20rem] @min-[90rem]/npw:gap-x-12"
+            : "grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)]",
         )}
       >
-        {#if showLyrics}
-          <div
-            role="group"
-            aria-label="Show"
-            class="row-start-1 flex gap-1 @min-[90rem]/npw:hidden"
-          >
-            {#each ["lyrics", "queue"] as const as view (view)}
+        <div role="group" aria-label="Show" class="col-start-1 row-start-1 flex gap-1">
+          {#each ["lyrics", "queue", "meters"] as const as view (view)}
+            {#if view !== "lyrics" || showLyrics}
               <Button
                 type="button"
                 size="sm"
                 variant={rightColumn.view === view ? "secondary" : "ghost"}
                 aria-pressed={rightColumn.view === view}
+                class={view === "queue" && showLyrics ? "@min-[90rem]/npw:hidden" : undefined}
                 onclick={() => (rightColumn.view = view)}
               >
-                {view === "lyrics" ? "Lyrics" : "Queue"}
+                {view === "lyrics" ? "Lyrics" : view === "queue" ? "Queue" : "Meters"}
               </Button>
-            {/each}
+            {/if}
+          {/each}
+        </div>
+        {#if rightColumn.view === "meters"}
+          <div class="col-start-1 row-start-2 min-h-0">
+            <MetersView />
           </div>
+        {/if}
+        {#if showLyrics}
           <div
             transition:columnFade
             class={cn(
-              "col-start-1 row-start-2 grid min-h-0 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)] [container-type:inline-size] @min-[90rem]/npw:row-start-1",
-              rightColumn.view === "queue" && "hidden @min-[90rem]/npw:grid",
+              "col-start-1 row-start-2 grid min-h-0 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)] [container-type:inline-size]",
+              rightColumn.view !== "lyrics" && "hidden",
+              rightColumn.view === "queue" && "@min-[90rem]/npw:grid",
             )}
           >
             {#key trackId}
@@ -130,10 +141,11 @@
         <div
           class={cn(
             "col-start-1 min-h-0 [container-type:inline-size]",
-            showLyrics
-              ? "row-start-2 @min-[90rem]/npw:col-start-2 @min-[90rem]/npw:row-start-1"
-              : "row-start-1",
-            showLyrics && rightColumn.view === "lyrics" && "hidden @min-[90rem]/npw:block",
+            "row-start-2",
+            hasLeft &&
+              "@min-[90rem]/npw:col-start-2 @min-[90rem]/npw:row-span-2 @min-[90rem]/npw:row-start-1",
+            rightColumn.view === "meters" && "hidden @min-[90rem]/npw:block",
+            rightColumn.view === "lyrics" && showLyrics && "hidden @min-[90rem]/npw:block",
           )}
         >
           <QueueColumn />

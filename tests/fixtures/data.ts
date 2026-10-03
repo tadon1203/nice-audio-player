@@ -248,9 +248,32 @@ export const emptyQueue: PlaybackQueueSnapshot = {
   canRestorePrevious: false,
 };
 
+/** A Meter frame as the backend sends it (35 little-endian 32-bit words, see `decodeMeterFrame`). */
+export function meterFrameBytes({
+  band = -90,
+  peak = [-90, -90],
+  rms = [-90, -90],
+  fullScale = false,
+}: {
+  band?: number;
+  peak?: [number, number];
+  rms?: [number, number];
+  fullScale?: boolean;
+} = {}): number[] {
+  const view = new DataView(new ArrayBuffer(35 * 4));
+  [...Array.from({ length: 30 }, () => band), ...peak, ...rms].forEach((value, i) =>
+    view.setFloat32(i * 4, value, true),
+  );
+  view.setUint32(34 * 4, fullScale ? 1 : 0, true);
+  return Array.from(new Uint8Array(view.buffer));
+}
+
 /** What an app answers before anything plays. */
 export function idleResponses() {
+  let nextMeterSubscription = 1;
   return {
+    subscribeMeterFrames: () => nextMeterSubscription++,
+    unsubscribeMeterFrames: null,
     getPlaybackState: stoppedPlayback,
     getPlaybackQueue: emptyQueue,
     getPlaybackQueueWindow: ({ offset }: { offset: number }) => ({

@@ -27,6 +27,9 @@ The language of Nice Audio Player. Use these terms in code, docs, and tickets; d
 - **Spectrum**: the level of the audio being played in 30 one-third-octave bands, left and right summed. Unlike the Waveform, it describes the sound as it is leaving the app (after volume), not the file.
 - **Level meter**: the left and right channel levels of the audio being played, each as peak (with a held peak) and RMS.
 - **Meter frame**: one measurement of the Spectrum and the Level meter, taken at a moment of the output. Frames are a live stream that is only sent while a meter is visible; unlike the Waveform they are never state, and a missed one is simply skipped.
+- **Bar**: one drawn level of the Spectrum (a band) or the Level meter (a channel's RMS), filled from the floor. It rises instantly and falls at a fixed dB-per-second rate.
+- **Cap**: the thin line above a Bar marking its held peak; it never sits below its Bar.
+- **Hold**: how long a Cap stays where it is (1.5 s) before it starts to fall, and how long "Clip" stays shown (2 s).
 - **Playback clock**: the single animation-frame clock that everything drawing the playing position reads.
 - **Now Playing**: the dock extended upward, a layer over the current location. Not a page; Back closes it.
 - **Dock**: the persistent playback bar at the bottom of the workspace.

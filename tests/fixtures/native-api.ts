@@ -19,6 +19,7 @@ declare global {
     /** Node side of the IPC bridge, bound by `installNativeApi`. */
     __nativeInvoke?: (command: string, args: unknown) => Promise<Reply>;
     __emitNativeEvent?: (name: string, payload: unknown) => void;
+    __emitChannelMessage?: (channelId: number, bytes: number[]) => void;
   }
 }
 
@@ -78,6 +79,14 @@ function installIpcBridge() {
     value: { unregisterListener: (_event: string, id: number) => callbacks.delete(id) },
   });
   Object.defineProperty(window, "isTauri", { value: true });
+  // A Tauri channel numbers its messages so they are delivered in order.
+  const channelIndexes = new Map<number, number>();
+  window.__emitChannelMessage = (channelId, bytes) => {
+    const index = channelIndexes.get(channelId) ?? 0;
+    channelIndexes.set(channelId, index + 1);
+    const message = new Uint8Array(bytes).buffer;
+    callbacks.get(channelId)?.({ index, message });
+  };
   window.__emitNativeEvent = (name, payload) => {
     for (const id of listeners.get(name) ?? []) callbacks.get(id)?.({ event: name, id, payload });
   };
@@ -142,6 +151,20 @@ export class Native {
   /** Sends an event to the renderer, as the backend does on `app:event`. */
   async emit(event: AppEvent) {
     await this.#page.evaluate((payload) => window.__emitNativeEvent?.("app:event", payload), event);
+  }
+
+  /** Sends one binary message down the channel the renderer passed to its latest call of `name`. */
+  async emitChannelMessage(name: CommandName, argument: string, bytes: number[]) {
+    // A channel reaches the bridge as the object Playwright serialises; its `id` names the callback.
+    const channel = this.callsTo(name).at(-1)?.[argument] as { id?: number } | string | undefined;
+    const id =
+      typeof channel === "string" ? Number(channel.replace("__CHANNEL__:", "")) : channel?.id;
+    if (id === undefined || !Number.isInteger(id))
+      throw new Error(`no channel was passed to ${name}`);
+    await this.#page.evaluate(
+      ([channelId, payload]) => window.__emitChannelMessage?.(channelId, payload),
+      [id, bytes] as const,
+    );
   }
 
   /** Arguments of every call to a command, oldest first. */

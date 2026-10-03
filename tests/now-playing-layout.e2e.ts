@@ -61,10 +61,14 @@ for (const size of SIZES) {
   });
 }
 
-test("shows the queue as a rail with no switch at 1920 with lyrics", async ({ page, native }) => {
+test("shows the queue as a rail with no Queue choice at 1920 with lyrics", async ({
+  page,
+  native,
+}) => {
   const layer = await openNowPlaying(page, native, SIZES[2], true);
   await expect(layer.getByRole("list", { name: "Queue" })).toBeVisible();
-  await expect(layer.getByRole("button", { name: "Lyrics", exact: true })).toBeHidden();
+  await expect(layer.getByRole("button", { name: "Queue", exact: true })).toBeHidden();
+  await expect(layer.getByRole("button", { name: "Meters", exact: true })).toBeVisible();
 });
 
 test("shows a Lyrics / Queue switch and no rail at 1360 with lyrics", async ({ page, native }) => {
