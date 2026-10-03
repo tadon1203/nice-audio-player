@@ -19,6 +19,7 @@
 - What the catalog files a track under (title, artist, album and Album Artist keys, year) is computed only in `library/keys.rs`, stored in key columns when a track is written, and read back from them. A track's file path is built only through `TrackLocation`, which checks it stays inside its root.
 - The backend never returns display strings: an unnamed album or artist is `""`, sorted last, and the renderer labels it.
 - Use semantic tokens for UI surfaces; no raw palette values.
+- Shared UI owns its presentation policy through constrained interfaces, enforced by standard tools and rendered tests; see [ADR 0013](./docs/adr/0013-shared-ui-owns-presentation-policy.md).
 - Import icons one by one (`@lucide/svelte/icons/x`), never from the `@lucide/svelte` barrel: in `vite dev` the barrel transforms every icon module and slows page loads and E2E runs.
 - Do not weaken type checking or lint rules just to make a change pass.
 
