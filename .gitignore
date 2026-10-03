@@ -2,7 +2,6 @@
 node_modules/
 /.pnpm-store/
 /.angular/
-/.agents/
 /target/
 /src-tauri/gen/schemas/
 build/
