@@ -2,8 +2,6 @@
 
 Personal project. Keep things simple and just get it done.
 
-- [CONTEXT.md](./CONTEXT.md) — glossary; use these terms in code, docs, and tickets
-- [docs/adr/](./docs/adr/) — decisions and their reasons
 - [docs/requirements.md](./docs/requirements.md) — product behavior
 - [DESIGN.md](./DESIGN.md) — UI principles (no implementation details)
 - [CONTRIBUTING.md](./CONTRIBUTING.md) — engineering rules and principles
@@ -38,36 +36,22 @@ Run the cheapest command that covers the change, once, when it can fail. There i
 | Renderer and backend wiring (commands, events, startup, playback) |                                                                 | add `pnpm test:e2e:app` (Windows, local only, plays silent files on the real output device) |
 | Release                                                           |                                                                 | `pnpm validate`, then `pnpm package`                                                        |
 
-- Run only the rows the diff touches. A renderer-only change skips `cargo`; a Rust-only change skips `pnpm check`.
-- Do not re-run a check that already passed on the same tree. Fix, then re-run only what failed.
-- Prefer `pnpm test:renderer` / `pnpm test:shared` / `pnpm test:native` over `pnpm test`, which runs everything.
-- `pnpm validate` is for releases only, never for routine commits.
+- Run only the rows the diff touches, and don't re-run a check that already passed on the same tree. Fix, then re-run only what failed.
+- Prefer `pnpm test:renderer` / `pnpm test:shared` / `pnpm test:native` over `pnpm test`. `pnpm validate` is for releases only.
 - Fix format with `pnpm format` instead of by hand.
 - Run slow commands (`test:e2e*`, `package`, `validate`) in the background.
 - The Tauri window, its capabilities, and the titlebar controls are checked by hand with `pnpm dev`.
 
-## Token efficiency
+## Tool usage
 
-Offload large or exploratory searches (broad `grep`/`glob` sweeps, multi-file investigations) to a Haiku subagent so the raw results stay out of the main context; bring back only the conclusion.
+- On Windows, prefer PowerShell. Use Bash only when a POSIX shell is required.
+- Do not use heredocs, here-strings, `sed -i`, or shell redirection to write source files when `Edit` or `Write` can do the job.
+- Prefer `LSP` for symbols (definitions, references, types); `Grep` for strings and config keys.
+- Delegate creating and editing `.svelte` / `.svelte.ts` files to the `svelte-file-editor` subagent, and fix until `svelte-autofixer` reports no issues.
+- Offload large or exploratory searches to a Haiku subagent; bring back only the conclusion.
+- Keep tool output small: narrow searches by path, type, or pattern.
 
-Code search: use `LSP` (references, definition, hover) for symbols with ambiguous names, rename/delete impact, and types. Use `Grep` for strings, config keys, comments, and unique names.
+## Conventions
 
-Delegate creating and editing `.svelte` / `.svelte.ts` files to the `svelte-file-editor` subagent, and fix until `svelte-autofixer` reports no issues before finishing.
-
-## Language
-
-Documents that stay in the repo (docs, ADRs, specs, tickets, `CONTEXT.md`) are written in English.
-
-## Agent skills
-
-### Issue tracker
-
-Local markdown files under `.scratch/<feature>/`. See `docs/agents/issue-tracker.md`.
-
-### Triage labels
-
-Two labels (`ready-for-agent`, `done`), recorded as a `Status:` line in each ticket. See `docs/agents/triage-labels.md`.
-
-### Domain docs
-
-Single-context (`CONTEXT.md` + `docs/adr/` at the repo root). See `docs/agents/domain.md`.
+- Documents that stay in the repo (docs, ADRs, specs, tickets, `CONTEXT.md`) are written in English.
+- Issue tracker, triage labels, and domain docs: see `docs/agents/issue-tracker.md`, `triage-labels.md`, `domain.md`.
