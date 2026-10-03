@@ -18,7 +18,7 @@ Non-trivial feature:
 
 - `/grill-with-docs` settles the design; new terms go to `CONTEXT.md`, hard-to-reverse decisions to `docs/adr/`, in the same commit.
 - `/to-spec` and `/to-tickets` write to `.scratch/<feature>/` (gitignored working notes). Anything worth keeping moves to `CONTEXT.md`, an ADR, or `requirements.md`.
-- `/implement` runs `/tdd`, then `/code-review`, then commits. For a feature small enough to hold in one head, skip the spec and tickets and go from `/grill-with-docs` straight to `/implement`.
+- For a feature small enough to hold in one head, skip the spec and tickets and go from `/grill-with-docs` straight to `/implement`.
 
 `/clear` after each step above finishes (grill, spec, tickets, each ticket), once decisions are written to docs and work is committed. Not mid-grill or mid-implement.
 
@@ -45,10 +45,10 @@ Run the cheapest command that covers the change, once, when it can fail. There i
 ## Tool usage
 
 - On Windows, prefer PowerShell. Use Bash only when a POSIX shell is required.
-- Do not use heredocs, here-strings, `sed -i`, or shell redirection to write source files when `Edit` or `Write` can do the job.
-- Prefer `LSP` for symbols (definitions, references, types); `Grep` for strings and config keys.
-- Delegate creating and editing `.svelte` / `.svelte.ts` files to the `svelte-file-editor` subagent, and fix until `svelte-autofixer` reports no issues.
-- Offload large or exploratory searches to a Haiku subagent; bring back only the conclusion.
+- Use `Edit` for existing project files and `Write` for new or full-replacement files. Do not use heredocs, here-strings, `sed -i`, or shell redirection to create or modify project files.
+- Prefer `LSP` for symbol definitions, references, types, and diagnostics when available; use `Grep` for text, strings, and config keys.
+- For `.svelte` / `.svelte.ts`, use `svelte-file-editor` for non-trivial component work; make small local edits directly. Run `svelte-autofixer` on changed `.svelte` files and fix reported issues.
+- Offload large or exploratory searches to a Haiku subagent when that avoids pulling substantial context into the main session; bring back only the conclusion.
 - Keep tool output small: narrow searches by path, type, or pattern.
 
 ## Conventions
