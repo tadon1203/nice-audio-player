@@ -17,8 +17,9 @@ use crate::audio::output_processing::{OutputPcmProcessor, OutputProcessingPlan};
 use crate::audio::pcm_queue::{PcmConsumer, PcmProducer};
 use crate::audio::timebase::{millis_to_frame, rescale_frame};
 
-/// What the pipeline is for. The two differ in where the decoder starts reading, and so in what
-/// they know up front: a seek reuses the playing output and its processing plan.
+/// What the pipeline is for. They differ in where the decoder starts reading, and so in what
+/// they know up front: a seek and the next track reuse the playing output and its processing
+/// plan.
 pub(super) enum PipelineKind {
     /// From the beginning of the file, on a new stream on the device a selection names.
     Start {
@@ -33,6 +34,9 @@ pub(super) enum PipelineKind {
         config: PreparedOutputConfig,
         target_ms: u64,
     },
+    /// From the beginning of the file that follows the playing one, for the stream already
+    /// playing. The file must have the format the stream was opened for.
+    Next { config: PreparedOutputConfig },
 }
 
 pub(super) struct PipelineRequest<'a> {
@@ -46,7 +50,8 @@ pub(super) struct PipelineRequest<'a> {
 pub(super) enum OpenedOutput {
     /// A new stream, not started yet.
     Stream(Output),
-    /// The queue for the stream already playing; hand it over when the prebuffer is ready.
+    /// The queue for the stream already playing; hand it over when the prebuffer is ready, or
+    /// for the next track, right away.
     Queue(PcmConsumer),
 }
 
@@ -130,6 +135,41 @@ pub(super) fn open_pipeline(
                     config: prepared.config,
                 }),
                 producer: prepared.producer,
+                processor,
+                plan,
+            };
+            (positioned, queue)
+        }
+        PipelineKind::Next { config } => {
+            let plan = config.processing_plan;
+            let processor =
+                OutputPcmProcessor::new(plan).map_err(|_| PipelineError::ProcessorCreate)?;
+            let mut decoder = request
+                .source
+                .open_decoder(request.extension)
+                .map_err(|_| PipelineError::DecoderOpen)?;
+            if decoder.spec() != plan.source() {
+                return Err(PipelineError::SpecChanged);
+            }
+            let mut first_packet = Vec::new();
+            match decoder.decode_next(&mut first_packet) {
+                Ok(DecodeStep::Samples) => {}
+                Ok(DecodeStep::EndOfStream) | Err(_) => {
+                    return Err(PipelineError::FirstPacketDecode)
+                }
+            }
+            let (producer, consumer) =
+                make_queue(plan.output()).map_err(PipelineError::OutputPrepare)?;
+            let positioned = Positioned {
+                duration_ms: decoder.duration_ms(),
+                decoder,
+                first_packet,
+                discard_output_frames: 0,
+                start_output_frame: 0,
+            };
+            let queue = Queue {
+                output: OpenedOutput::Queue(consumer),
+                producer,
                 processor,
                 plan,
             };

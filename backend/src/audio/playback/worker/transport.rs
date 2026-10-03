@@ -22,6 +22,9 @@ impl PlaybackWorker {
                     seek.pipeline.cancel();
                     respond(seek.responder, Err(PlaybackServiceError::Superseded));
                 }
+                if let Some(prefetch) = loaded.prefetch.take() {
+                    prefetch.cancel();
+                }
                 loaded.pipeline.cancel();
             }
         }
@@ -39,6 +42,9 @@ impl PlaybackWorker {
             respond(seek.responder, Err(seek_error));
         }
         let id = loaded.id;
+        if let Some(prefetch) = loaded.prefetch.take() {
+            prefetch.cancel();
+        }
         loaded.pipeline.cancel();
         Some(id)
     }

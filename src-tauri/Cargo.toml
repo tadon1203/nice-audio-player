@@ -43,3 +43,7 @@ serde_json = "1"
 specta = { version = "=2.0.0-rc.25", features = ["derive"] }
 specta-typescript = "=0.0.12"
 tauri-specta = { version = "=2.0.0-rc.25", features = ["derive", "typescript"] }
+
+# Windows system media transport controls: media keys and the overlay.
+[target.'cfg(windows)'.dependencies]
+souvlaki = "0.8.3"

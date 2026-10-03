@@ -7,6 +7,7 @@ mod artwork;
 mod bindings;
 mod commands;
 mod events;
+mod media_controls;
 
 pub use bindings::render_typescript as render_typescript_bindings;
 
@@ -65,13 +66,19 @@ pub fn run() {
             };
             app.manage(artwork::ArtworkDir(data_dir.clone()));
             let (sink, event_receiver) = events::event_channel();
-            let backend = BackendApp::initialize(data_dir, sink)
+            let backend = BackendApp::initialize(data_dir.clone(), sink)
                 .map_err(|_| std::io::Error::other("backend startup failed"))?;
             let backend = Arc::new(backend);
             app.manage(AppState {
                 backend: Arc::clone(&backend),
             });
-            events::start_dispatcher(app.handle(), &backend, event_receiver);
+            let media_controls = app
+                .get_webview_window("main")
+                .and_then(|window| window.hwnd().ok())
+                .and_then(|hwnd| {
+                    media_controls::start(hwnd.0 as _, Arc::clone(&backend), data_dir.clone())
+                });
+            events::start_dispatcher(app.handle(), &backend, event_receiver, media_controls);
             Ok(())
         })
         .invoke_handler(bindings::builder().invoke_handler())

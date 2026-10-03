@@ -7,6 +7,7 @@ impl PlaybackWorker {
         self.last_tick = Instant::now();
         self.finish_if_due();
         self.update_position();
+        self.maybe_prefetch();
     }
 
     pub(super) fn finish_if_due(&mut self) {
@@ -18,6 +19,9 @@ impl PlaybackWorker {
                     .is_some_and(|end| loaded.output.stream.now() >= end)
         );
         if !is_due {
+            return;
+        }
+        if self.adopt_prefetched() {
             return;
         }
         self.advance_after_track(None, false);

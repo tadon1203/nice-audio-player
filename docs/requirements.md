@@ -13,6 +13,8 @@ MP3, FLAC, WAV, AAC, M4A. A file counts as supported only if it can actually be 
 - Previous restarts the track once it has played for 3 seconds, and goes to the previous track before that
 - Volume and mute
 - Queue, repeat, shuffle. Shuffle is a real random order: the current track stays first and a repeated queue is shuffled again on every pass; tracks added, removed or moved while shuffled keep their intended place when shuffle is turned off. Starting from a very long list responds at once, however large the library is
+- Gapless playback, always on and without a setting: consecutive tracks of the same sample rate and channel count play with no silence inserted between them, on the same output stream. The next track is opened about 10 seconds before the end (right after loading, for a shorter track), and each track is still its own playback with its own waveform and position. A track of another format reopens the output stream and leaves a short gap, so the Path stays true; so does the end of a shuffled queue that repeats (its next pass is shuffled only then). Anything that changes what plays next (Play next, shuffle, repeat one, removal, a seek, a device change) discards the opened track and opens the right one again. Encoder delay and padding are trimmed where the file carries them (MP3 with a LAME header); FLAC and WAV are exact; M4A is not trimmed, so it keeps the few milliseconds of silence its encoder added
+- Windows media controls: the media keys (play, pause, next, previous), the media overlay and the lock screen control the playback, also while the window is not focused, and show the current title, artist, album and cover, the position, and whether it plays, is paused or has stopped. A failed or stopped playback never leaves a "playing" overlay. They send the same commands as the buttons in the app
 - Output device selection
 - Volume, mute, output device, repeat, and shuffle are remembered across restarts
 - Playback state (position, source/output sample rate, resampling) reflects the real audio state
@@ -87,6 +89,6 @@ Source audio files are never modified.
   - It runs only while visible. When playback is paused or stopped the bars fall to the floor. With Calm motion it is stopped and says so.
   - On a narrow window the Spectrum takes the full width and the left and right meters become two horizontal bars below it. A mono device shows the same level on both; a device with more than two channels shows its first two.
 - Audio processing (loudness normalization, ReplayGain): explicit and visible to the user, bypassable, no clipping
-- Gapless playback, exclusive output, bit-perfect playback
+- Exclusive output, bit-perfect playback
 - Metadata overrides and editing (only on explicit user request)
 - External services: opt-in only, credentials never exposed to the UI or logs; local library data stays local otherwise

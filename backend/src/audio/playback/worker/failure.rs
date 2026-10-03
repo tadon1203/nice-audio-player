@@ -32,6 +32,7 @@ impl PlaybackWorker {
                     }
                 }
             }
+            PipelineOwner::Prefetch => self.prefetch_unusable(),
             PipelineOwner::Gone => {}
         }
     }

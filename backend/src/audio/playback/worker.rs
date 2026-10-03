@@ -20,8 +20,8 @@ use super::queue::{AdvanceReason, PlaybackQueue, QueueEntry, QueueError};
 use super::resolver::TrackResolver;
 use super::service::{respond, PlaybackCommand, PlaybackServiceError, Reply};
 use super::session::{
-    should_publish_position, LoadStage, Loaded, Loading, Position, Prebuffering, SeekInFlight,
-    StartRequest, Transport,
+    should_publish_position, LoadStage, Loaded, Loading, Position, Prebuffering, Prefetch,
+    PrefetchState, PrefetchedTrack, SeekInFlight, StartRequest, Transport,
 };
 use super::snapshot::{
     ActiveSession, PlaybackFailureCode, PlaybackPosition, PlaybackProcessingInfo,
@@ -45,6 +45,7 @@ use rand::{rngs::StdRng, SeedableRng};
 
 mod failure;
 mod preferences;
+mod prefetch;
 mod progress;
 mod publish;
 mod seek;
@@ -60,8 +61,6 @@ const PREVIOUS_RESTART_THRESHOLD_MS: u64 = 3_000;
 pub(super) enum StartFailurePhase {
     SourceOpen,
     SourceMetadata,
-    SourceRead,
-    SourceChanged,
     SourceWorker,
     DecoderOpen,
     FirstPacketDecode,
@@ -86,8 +85,6 @@ impl StartFailurePhase {
         match self {
             Self::SourceOpen
             | Self::SourceMetadata
-            | Self::SourceRead
-            | Self::SourceChanged
             | Self::DecoderOpen
             | Self::FirstPacketDecode
             | Self::ProcessorCreate
@@ -133,6 +130,8 @@ enum PipelineOwner {
     Active,
     /// The pipeline of a seek that is prebuffering.
     Seek,
+    /// The pipeline of the next track, waiting in the stream's chain.
+    Prefetch,
     /// A pipeline the worker has already let go of.
     Gone,
 }
@@ -255,7 +254,10 @@ impl PlaybackWorker {
     /// Takes one input. Returns whether the worker should keep running.
     pub(super) fn handle(&mut self, input: WorkerInput) -> bool {
         match input {
-            WorkerInput::Command(command) => self.handle_command(command),
+            WorkerInput::Command(command) => {
+                self.handle_command(command);
+                self.revalidate_prefetch();
+            }
             WorkerInput::Event(event) => self.handle_event(event),
             WorkerInput::Shutdown => return false,
         }
@@ -357,7 +359,7 @@ impl PlaybackWorker {
             WorkerEvent::PrebufferReady { pipeline } => match self.owner_of(pipeline) {
                 PipelineOwner::Start => self.finish_start(),
                 PipelineOwner::Seek => self.finish_seek(),
-                PipelineOwner::Active | PipelineOwner::Gone => {}
+                PipelineOwner::Active | PipelineOwner::Prefetch | PipelineOwner::Gone => {}
             },
             WorkerEvent::DecodeFailed { pipeline } => {
                 error!("playback.decode_failed pipeline_id={}", pipeline.0);
@@ -374,6 +376,14 @@ impl PlaybackWorker {
                 if let Transport::Loaded(loaded) = &mut self.transport {
                     if loaded.pipeline.id == pipeline {
                         loaded.completion_time = Some(end_time);
+                    } else if let Some(Prefetch {
+                        state: PrefetchState::Ready(next),
+                        ..
+                    }) = &mut loaded.prefetch
+                    {
+                        if next.pipeline.id == pipeline {
+                            next.completion_time = Some(end_time);
+                        }
                     }
                 }
             }
@@ -395,6 +405,15 @@ impl PlaybackWorker {
                     .is_some_and(|seek| seek.pipeline.id == pipeline) =>
             {
                 PipelineOwner::Seek
+            }
+            Transport::Loaded(loaded)
+                if matches!(
+                    &loaded.prefetch,
+                    Some(Prefetch { state: PrefetchState::Ready(next), .. })
+                        if next.pipeline.id == pipeline
+                ) =>
+            {
+                PipelineOwner::Prefetch
             }
             _ => PipelineOwner::Gone,
         }

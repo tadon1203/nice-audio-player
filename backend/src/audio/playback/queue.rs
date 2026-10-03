@@ -379,6 +379,23 @@ impl PlaybackQueue {
         self.current()
     }
 
+    /// The entry a natural finish would move to, when that is already decided. A shuffled queue
+    /// that wraps is shuffled only when it does, so it has no next entry yet.
+    pub fn peek_natural(&self) -> Option<&QueueEntry> {
+        if self.is_empty() {
+            return None;
+        }
+        if self.repeat == PlaybackRepeatMode::One {
+            return self.current();
+        }
+        if self.current + 1 < self.len() {
+            return self.play_order().get(self.current + 1);
+        }
+        (self.repeat == PlaybackRepeatMode::All && self.shuffled.is_none())
+            .then(|| self.play_order().first())
+            .flatten()
+    }
+
     /// Starts another pass. A shuffled queue is shuffled again, without repeating the item that
     /// just played back to back.
     fn wrap_to_start<R: Rng + ?Sized>(&mut self, rng: &mut R) {
@@ -822,6 +839,33 @@ mod tests {
                 assert_eq!(queue.shuffled.is_some(), queue.shuffle && !queue.is_empty());
             }
         }
+    }
+
+    #[test]
+    fn peek_natural_names_the_entry_a_natural_finish_moves_to() {
+        let mut queue = queue_of(3, 0, PlaybackRepeatMode::Off, false);
+        let second = queue.play_order()[1].id;
+        assert_eq!(queue.peek_natural().map(|entry| entry.id), Some(second));
+        queue.advance(AdvanceReason::Natural, &mut rng());
+        queue.advance(AdvanceReason::Natural, &mut rng());
+        assert!(queue.peek_natural().is_none(), "the end of the queue");
+
+        queue.set_repeat(PlaybackRepeatMode::All);
+        let first = queue.play_order()[0].id;
+        assert_eq!(queue.peek_natural().map(|entry| entry.id), Some(first));
+
+        queue.set_repeat(PlaybackRepeatMode::One);
+        let current = queue.current().map(|entry| entry.id);
+        assert_eq!(queue.peek_natural().map(|entry| entry.id), current);
+
+        queue.set_repeat(PlaybackRepeatMode::All);
+        queue.set_shuffle(true, &mut rng());
+        queue.advance(AdvanceReason::Natural, &mut rng());
+        queue.advance(AdvanceReason::Natural, &mut rng());
+        assert!(
+            queue.peek_natural().is_none(),
+            "a shuffled pass is shuffled again only when it wraps"
+        );
     }
 
     #[test]

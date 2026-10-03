@@ -37,7 +37,7 @@ impl SourceLoad {
                 }))
                 .unwrap_or_else(|_| {
                     error!("playback.source_loader_panicked");
-                    Err(CompressedSourceError::ReadFailed)
+                    Err(CompressedSourceError::OpenFailed)
                 });
                 inbox.event(WorkerEvent::SourceLoaded { id, result });
             })

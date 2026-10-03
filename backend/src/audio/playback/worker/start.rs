@@ -140,6 +140,10 @@ impl PlaybackWorker {
         id: SourceLoadId,
         result: Result<CompressedAudioSource, CompressedSourceError>,
     ) {
+        if self.is_prefetch_load(id) {
+            self.prefetch_source_loaded(result);
+            return;
+        }
         let is_current_load = matches!(
             &self.transport,
             Transport::Loading(loading)
@@ -166,8 +170,6 @@ impl PlaybackWorker {
                     }
                     CompressedSourceError::OpenFailed => StartFailurePhase::SourceOpen,
                     CompressedSourceError::MetadataFailed => StartFailurePhase::SourceMetadata,
-                    CompressedSourceError::ReadFailed => StartFailurePhase::SourceRead,
-                    CompressedSourceError::SourceChanged => StartFailurePhase::SourceChanged,
                 };
                 self.fail_start(request, StartFailure::item(phase));
             }
@@ -261,6 +263,7 @@ impl PlaybackWorker {
             completion_time: None,
             paused: start_paused,
             seek: None,
+            prefetch: None,
         });
         let snapshot = self.publish_state();
         respond(responder, Ok(snapshot));

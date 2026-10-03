@@ -9,6 +9,11 @@ impl PlaybackWorker {
         responder: Option<Reply<PlaybackSnapshot>>,
     ) {
         self.cancel_seek(PlaybackServiceError::Superseded);
+        if let Transport::Loaded(loaded) = &mut self.transport {
+            // The stream plays something else from here on, and what follows is opened again
+            // when the end is near.
+            loaded.cancel_prefetch();
+        }
         let Transport::Loaded(loaded) = &self.transport else {
             respond(responder, Err(PlaybackServiceError::InvalidPlaybackState));
             return;

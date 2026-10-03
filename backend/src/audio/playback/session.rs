@@ -102,9 +102,62 @@ pub(super) struct Loaded {
     pub completion_time: Option<StreamInstant>,
     pub paused: bool,
     pub seek: Option<SeekInFlight>,
+    /// The track that follows, opened while this one plays.
+    pub prefetch: Option<Prefetch>,
+}
+
+/// The track that plays after the loaded one, made ready ahead of time. It is a disposable
+/// cache keyed to the queue entry that plays next: whatever changes what plays next throws it
+/// away.
+pub(super) struct Prefetch {
+    pub entry_id: u64,
+    pub state: PrefetchState,
+}
+
+pub(super) enum PrefetchState {
+    /// Reading the file.
+    Source {
+        load: SourceLoad,
+        item: PlaybackItem,
+    },
+    /// Decoding into a queue the stream plays right after the loaded track.
+    Ready(PrefetchedTrack),
+    /// The track cannot follow gaplessly (another format, unreadable, undecodable); it starts
+    /// the ordinary way when the loaded one ends.
+    Unusable,
+}
+
+pub(super) struct PrefetchedTrack {
+    pub item: PlaybackItem,
+    pub source: CompressedAudioSource,
+    pub pipeline: Pipeline,
+    pub duration_ms: Option<u64>,
+    /// When its last frames are heard, once the stream has reported it.
+    pub completion_time: Option<StreamInstant>,
+}
+
+impl Prefetch {
+    /// Stops whatever work the prefetch has going.
+    pub fn cancel(self) {
+        match self.state {
+            PrefetchState::Source { load, .. } => load.cancel(),
+            PrefetchState::Ready(track) => track.pipeline.cancel(),
+            PrefetchState::Unusable => {}
+        }
+    }
 }
 
 impl Loaded {
+    /// Throws the prefetch away and tells the stream not to play it.
+    pub fn cancel_prefetch(&mut self) {
+        if let Some(prefetch) = self.prefetch.take() {
+            if matches!(prefetch.state, PrefetchState::Ready(_)) {
+                self.output.stream.clear_next();
+            }
+            prefetch.cancel();
+        }
+    }
+
     pub fn position_ms(&self) -> u64 {
         frame_to_millis(self.position.frame, self.position.sample_rate)
     }

@@ -25,6 +25,10 @@ struct StreamState {
     pipeline: PipelineId,
     /// How many times a seek handed the stream a new queue.
     queue_switches: usize,
+    /// The pipeline whose queue was chained to play after the current one, and the queue.
+    next: Option<(PipelineId, PcmConsumer)>,
+    /// How many times the stream moved on to a chained queue.
+    adoptions: usize,
     /// Keeps the queue alive like the real callback would.
     _consumer: PcmConsumer,
 }
@@ -83,6 +87,24 @@ impl FakeOutput {
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .queue_switches
+    }
+
+    /// The pipeline chained to play after the current one on the newest stream, if any.
+    pub(crate) fn chained_pipeline(&self) -> Option<PipelineId> {
+        self.latest()
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .next
+            .as_ref()
+            .map(|(pipeline, _)| *pipeline)
+    }
+
+    /// How many times the newest stream moved on to a chained queue.
+    pub(crate) fn adoptions(&self) -> usize {
+        self.latest()
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .adoptions
     }
 
     /// The selections new sessions were prepared for, in order.
@@ -202,6 +224,8 @@ impl OutputBackend for FakeOutput {
             fail_pause: None,
             pipeline: first,
             queue_switches: 0,
+            next: None,
+            adoptions: 0,
             _consumer: consumer,
         }));
         self.shared().streams.push(Arc::clone(&state));
@@ -266,5 +290,25 @@ impl OutputStream for FakeStream {
         state.pipeline = pipeline;
         state.played_frames = 0;
         state.queue_switches += 1;
+        state.next = None;
+    }
+
+    fn queue_next(&mut self, _after: PipelineId, consumer: PcmConsumer, pipeline: PipelineId) {
+        self.state().next = Some((pipeline, consumer));
+    }
+
+    fn clear_next(&mut self) {
+        self.state().next = None;
+    }
+
+    fn adopt_next(&mut self, pipeline: PipelineId) {
+        self.last_position = 0;
+        let mut state = self.state();
+        if let Some((_, consumer)) = state.next.take() {
+            state._consumer = consumer;
+        }
+        state.pipeline = pipeline;
+        state.played_frames = 0;
+        state.adoptions += 1;
     }
 }

@@ -150,6 +150,16 @@ pub(crate) struct Generation {
 type QueueHandoff = triple_buffer::Input<Option<Generation>>;
 type QueueSlot = triple_buffer::Output<Option<Generation>>;
 
+/// The queue that plays right after the one of `after` runs out, with no silence in between.
+/// `None` in the slot withdraws the one handed over before.
+pub(crate) struct Chain {
+    after: PipelineId,
+    next: Generation,
+}
+
+type ChainHandoff = triple_buffer::Input<Option<Chain>>;
+type ChainSlot = triple_buffer::Output<Option<Chain>>;
+
 pub(crate) trait OutputBackend: Send {
     /// Checks that a selection names a usable device and says which one it is.
     fn resolve(
@@ -179,8 +189,21 @@ pub(crate) trait OutputStream {
     /// Forgets the newest report, so the position holds until the callback reports again.
     fn clear_timing_anchor(&mut self);
     /// Hands the callback the queue of the next pipeline. It switches at its next run and counts
-    /// frames from zero again; a handoff it has not taken yet is replaced.
+    /// frames from zero again; a handoff it has not taken yet is replaced. A queue handed over
+    /// with `queue_next` is forgotten.
     fn switch_queue(&mut self, consumer: PcmConsumer, pipeline: PipelineId);
+    /// Hands the callback the queue of the pipeline that follows `after`. The callback moves on
+    /// to it the moment `after`'s queue has played out, within the same buffer, so nothing is
+    /// inserted between the two. It counts frames from zero again and reports the end of
+    /// `after` as usual. The handoff is void once the stream plays anything but `after`, and a
+    /// newer one replaces it.
+    fn queue_next(&mut self, after: PipelineId, consumer: PcmConsumer, pipeline: PipelineId);
+    /// Withdraws the queue handed over with `queue_next`, unless the callback already moved on
+    /// to it.
+    fn clear_next(&mut self);
+    /// The stream moved on to the queue handed over with `queue_next`: reports of `pipeline`
+    /// count from now on, from the first frame.
+    fn adopt_next(&mut self, pipeline: PipelineId);
 }
 
 pub(crate) struct CpalBackend;
@@ -238,6 +261,7 @@ struct CpalStream {
     stream: cpal::Stream,
     latest_position: LatestPosition,
     handoff: QueueHandoff,
+    chain: ChainHandoff,
     /// The pipeline whose reports count; reports of an earlier one are stale.
     pipeline: PipelineId,
     latest_position_update: Option<PositionUpdate>,
@@ -289,6 +313,24 @@ impl OutputStream for CpalStream {
 
     fn switch_queue(&mut self, consumer: PcmConsumer, pipeline: PipelineId) {
         self.handoff.write(Some(Generation { consumer, pipeline }));
+        self.chain.write(None);
+        self.pipeline = pipeline;
+        self.clear_timing_anchor();
+        self.last_played_frame_position = 0;
+    }
+
+    fn queue_next(&mut self, after: PipelineId, consumer: PcmConsumer, pipeline: PipelineId) {
+        self.chain.write(Some(Chain {
+            after,
+            next: Generation { consumer, pipeline },
+        }));
+    }
+
+    fn clear_next(&mut self) {
+        self.chain.write(None);
+    }
+
+    fn adopt_next(&mut self, pipeline: PipelineId) {
         self.pipeline = pipeline;
         self.clear_timing_anchor();
         self.last_played_frame_position = 0;
@@ -363,12 +405,14 @@ fn build_stream_for_config(
 ) -> Result<CpalStream, AudioOutputError> {
     let latest_position = LatestPosition::default();
     let (handoff, slot) = triple_buffer::TripleBuffer::default().split();
+    let (chain, chain_slot) = triple_buffer::TripleBuffer::default().split();
     let state = CallbackState::new(
         Generation {
             consumer,
             pipeline: first,
         },
         slot,
+        chain_slot,
         usize::from(config.channels),
         config.sample_rate,
         links,
@@ -381,6 +425,7 @@ fn build_stream_for_config(
         stream,
         latest_position,
         handoff,
+        chain,
         pipeline: first,
         latest_position_update: None,
         last_played_frame_position: 0,
@@ -570,6 +615,9 @@ pub(crate) struct CallbackState {
     /// The pipeline `consumer` belongs to.
     pipeline: PipelineId,
     handoff: QueueSlot,
+    chain_slot: ChainSlot,
+    /// The queue that plays when `consumer` runs out.
+    chained: Option<Chain>,
     channel_count: usize,
     sample_rate: u32,
     links: OutputLinks,
@@ -584,6 +632,7 @@ impl CallbackState {
     pub(crate) fn new(
         first: Generation,
         handoff: QueueSlot,
+        chain_slot: ChainSlot,
         channel_count: usize,
         sample_rate: u32,
         links: OutputLinks,
@@ -593,6 +642,8 @@ impl CallbackState {
             consumer: first.consumer,
             pipeline: first.pipeline,
             handoff,
+            chain_slot,
+            chained: None,
             channel_count,
             sample_rate,
             meter: links.meter.tap(sample_rate, channel_count),
@@ -605,53 +656,106 @@ impl CallbackState {
     }
 
     /// The output callback: switches to a queue handed off since the last run, fills `output`
-    /// from the queue with the gain applied, pads an underrun with silence, reports the position,
-    /// and reports completion once the producer has finished and the queue is drained.
+    /// from the queue with the gain applied, moves on to the chained queue when the current one
+    /// runs out, pads an underrun with silence, reports the position, and reports completion
+    /// once the producer has finished and the queue is drained.
     pub(crate) fn fill<T>(&mut self, output: &mut [T], playback_time: StreamInstant)
     where
         T: Sample + FromSample<f32>,
     {
         self.take_handoff();
-        let start_frame = self.position_frame;
         let gain = self.links.gain.load();
-        let consumed_samples = self.write_queue_samples(output, gain);
-        let consumed_frames = consumed_samples / self.channel_count;
-        self.position_frame = self.position_frame.saturating_add(consumed_frames as u64);
-        if consumed_frames > 0 {
-            self.last_end_time = calculate_end_time(
-                playback_time,
-                consumed_samples,
-                self.channel_count,
-                self.sample_rate,
-            );
+        let mut written = 0;
+        // What the current queue has played in this call, and when its first frame is heard.
+        let mut start_frame = self.position_frame;
+        let mut segment_samples = 0;
+        let mut segment_time = playback_time;
+        loop {
+            let popped = self.write_queue_samples(&mut output[written..], gain);
+            written += popped;
+            segment_samples += popped;
+            if written == output.len() || self.chained.is_none() || !self.consumer.is_finished() {
+                break;
+            }
+            self.position_frame = self
+                .position_frame
+                .saturating_add((segment_samples / self.channel_count) as u64);
+            self.note_end_time(segment_time, segment_samples);
+            self.report_completion();
+            self.chain_to_next();
+            start_frame = 0;
+            segment_samples = 0;
+            segment_time =
+                calculate_end_time(playback_time, written, self.channel_count, self.sample_rate)
+                    .unwrap_or(playback_time);
         }
+        output[written..].fill(T::EQUILIBRIUM);
+        self.position_frame = self
+            .position_frame
+            .saturating_add((segment_samples / self.channel_count) as u64);
+        self.note_end_time(segment_time, segment_samples);
         self.latest_position.publish(PositionUpdate {
             pipeline: self.pipeline,
             start_frame,
             end_frame: self.position_frame,
-            playback_time,
+            playback_time: segment_time,
         });
         self.report_completion();
     }
 
-    /// Switches to the queue the stream handed off, if any. The queue it leaves goes back into
-    /// the slot, so the stream's thread frees it rather than this one.
-    fn take_handoff(&mut self) {
-        if !self.handoff.update() {
-            return;
+    /// Notes when the `samples` played from `start` will have been heard.
+    fn note_end_time(&mut self, start: StreamInstant, samples: usize) {
+        if samples > 0 {
+            self.last_end_time =
+                calculate_end_time(start, samples, self.channel_count, self.sample_rate);
         }
-        let Some(next) = self.handoff.output_buffer_mut().take() else {
+    }
+
+    /// Takes what the stream handed over since the last run: a queue that replaces the current
+    /// one, and the queue that follows it.
+    fn take_handoff(&mut self) {
+        if self.handoff.update() {
+            if let Some(next) = self.handoff.output_buffer_mut().take() {
+                *self.handoff.output_buffer_mut() = Some(Generation {
+                    consumer: std::mem::replace(&mut self.consumer, next.consumer),
+                    pipeline: std::mem::replace(&mut self.pipeline, next.pipeline),
+                });
+                self.position_frame = 0;
+                self.last_end_time = None;
+                self.completion = Completion::Pending;
+            }
+        }
+        if self.chain_slot.update() {
+            self.chained = self.chain_slot.output_buffer_mut().take();
+        }
+        // Dropping a queue here frees it on this thread, which only a withdrawn or outdated
+        // handoff costs.
+        if self
+            .chained
+            .as_ref()
+            .is_some_and(|chain| chain.after != self.pipeline)
+        {
+            self.chained = None;
+        }
+    }
+
+    /// Moves on to the chained queue. The queue it leaves goes back into the slot, so the
+    /// stream's thread frees it rather than this one.
+    fn chain_to_next(&mut self) {
+        let Some(chain) = self.chained.take() else {
             return;
         };
         *self.handoff.output_buffer_mut() = Some(Generation {
-            consumer: std::mem::replace(&mut self.consumer, next.consumer),
-            pipeline: std::mem::replace(&mut self.pipeline, next.pipeline),
+            consumer: std::mem::replace(&mut self.consumer, chain.next.consumer),
+            pipeline: std::mem::replace(&mut self.pipeline, chain.next.pipeline),
         });
         self.position_frame = 0;
         self.last_end_time = None;
         self.completion = Completion::Pending;
     }
 
+    /// Plays what the queue has into the start of `output`, with the gain applied, and returns
+    /// how many samples that was. The rest of `output` is left alone.
     fn write_queue_samples<T>(&mut self, output: &mut [T], gain: f32) -> usize
     where
         T: Sample + FromSample<f32>,
@@ -665,8 +769,10 @@ impl CallbackState {
                 *slot = T::from_sample(*sample);
             }
             self.meter.push(&chunk[..popped]);
-            destination[popped..].fill(T::EQUILIBRIUM);
             consumed += popped;
+            if popped < destination.len() {
+                break;
+            }
         }
         consumed
     }
@@ -778,7 +884,7 @@ mod tests {
     use super::{
         calculate_end_time, classify_fallback_build, classify_native_attempt,
         classify_stream_error_kind, played_frame_position, sample_format_rank,
-        select_output_config, AudioOutputError, CallbackState, Generation, LatestPosition,
+        select_output_config, AudioOutputError, CallbackState, Chain, Generation, LatestPosition,
         NativeAttemptDecision, OutputEvent, OutputLinks, PipelineId, PositionUpdate,
         StreamFailureKind,
     };
@@ -1031,6 +1137,7 @@ mod tests {
         position: LatestPosition,
         events: Arc<Mutex<Vec<OutputEvent>>>,
         handoff: triple_buffer::Input<Option<Generation>>,
+        chain: triple_buffer::Input<Option<Chain>>,
         meter: MeterHub,
     }
 
@@ -1042,12 +1149,14 @@ mod tests {
         let position = LatestPosition::default();
         let meter = MeterHub::new();
         let (handoff, slot) = triple_buffer::TripleBuffer::default().split();
+        let (chain, chain_slot) = triple_buffer::TripleBuffer::default().split();
         let state = CallbackState::new(
             Generation {
                 consumer,
                 pipeline: PipelineId(1),
             },
             slot,
+            chain_slot,
             channels,
             100,
             OutputLinks {
@@ -1063,6 +1172,7 @@ mod tests {
             position,
             events,
             handoff,
+            chain,
             meter,
         }
     }
@@ -1251,5 +1361,101 @@ mod tests {
                 end_time: calculate_end_time(at(10), 2, 1, 100).unwrap()
             }]
         );
+    }
+
+    fn chain_queue(
+        callback: &mut Callback,
+        after: u64,
+        pipeline: u64,
+        samples: &[f32],
+    ) -> PcmProducer {
+        let (mut producer, consumer) = bounded_pcm_queue(8, ChannelCount::new(1).unwrap()).unwrap();
+        producer.push_samples(samples);
+        callback.chain.write(Some(Chain {
+            after: PipelineId(after),
+            next: Generation {
+                consumer,
+                pipeline: PipelineId(pipeline),
+            },
+        }));
+        producer
+    }
+
+    /// Declares the end of the callback's first queue, which holds what it was given.
+    fn finish_first_queue(callback: &mut Callback) {
+        let spare = bounded_pcm_queue(1, ChannelCount::new(1).unwrap())
+            .unwrap()
+            .0;
+        std::mem::replace(&mut callback.producer, spare).finish();
+    }
+
+    #[test]
+    fn fill_moves_to_the_chained_queue_inside_one_buffer_without_silence() {
+        let mut callback = callback(1, 8, 1.0);
+        callback.producer.push_samples(&[0.1, 0.2, 0.3]);
+        finish_first_queue(&mut callback);
+        let next = chain_queue(&mut callback, 1, 2, &[0.4, 0.5, 0.6, 0.7]);
+        let mut output = [9.0_f32; 6];
+
+        callback.state.fill(&mut output, at(10));
+
+        assert_eq!(output, [0.1, 0.2, 0.3, 0.4, 0.5, 0.6]);
+        let update = callback.position.take().expect("a position was reported");
+        assert_eq!(update.pipeline, PipelineId(2));
+        assert_eq!((update.start_frame, update.end_frame), (0, 3));
+        assert_eq!(
+            callback.events.lock().unwrap().clone(),
+            [OutputEvent::FinalFrames {
+                pipeline: PipelineId(1),
+                end_time: calculate_end_time(at(10), 3, 1, 100).unwrap()
+            }],
+            "the first queue's end is reported as it was heard"
+        );
+        next.finish();
+        let mut rest = [9.0_f32; 3];
+        callback.state.fill(&mut rest, at(11));
+        assert_eq!(rest, [0.7, 0.0, 0.0]);
+    }
+
+    #[test]
+    fn fill_waits_for_the_current_queue_before_moving_on() {
+        let mut callback = callback(1, 8, 1.0);
+        callback.producer.push_samples(&[0.1, 0.2]);
+        let _next = chain_queue(&mut callback, 1, 2, &[0.4, 0.5]);
+        let mut output = [9.0_f32; 4];
+
+        callback.state.fill(&mut output, at(10));
+
+        assert_eq!(output, [0.1, 0.2, 0.0, 0.0], "an underrun is silence");
+        assert_eq!(
+            callback.position.take().map(|update| update.pipeline),
+            Some(PipelineId(1))
+        );
+    }
+
+    #[test]
+    fn fill_ignores_a_chain_for_a_queue_it_no_longer_plays() {
+        let mut callback = callback(1, 8, 1.0);
+        let _next = chain_queue(&mut callback, 1, 2, &[0.4; 2]);
+        let _seeked = handoff_queue(&mut callback, 3, &[0.3; 4]);
+        let mut output = [0.0_f32; 2];
+
+        callback.state.fill(&mut output, at(10));
+
+        assert_eq!(output, [0.3, 0.3]);
+        assert!(callback.state.chained.is_none());
+    }
+
+    #[test]
+    fn a_withdrawn_chain_is_not_played() {
+        let mut callback = callback(1, 8, 1.0);
+        finish_first_queue(&mut callback);
+        let _next = chain_queue(&mut callback, 1, 2, &[0.4; 2]);
+        callback.chain.write(None);
+        let mut output = [9.0_f32; 2];
+
+        callback.state.fill(&mut output, at(10));
+
+        assert_eq!(output, [0.0, 0.0]);
     }
 }
