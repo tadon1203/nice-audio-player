@@ -8,6 +8,7 @@ import type {
   LibraryAlbumPage,
   LibraryAlbumSortKey,
   LibraryAlbumSummary,
+  LibraryIndexBucket,
   LibraryAlbumTrackPage,
   LibraryArtistAlbumSortKey,
   LibrarySortDirection,
@@ -24,7 +25,8 @@ type CatalogPage = LibraryAlbumPage | LibraryAlbumArtistPage | LibraryTrackPage;
 
 export type Page<Item> = {
   readonly items: readonly Item[];
-  readonly totalCount: number;
+  /** How long the whole list is; only its first page says. */
+  readonly totalCount: number | null;
   readonly nextCursor: string | null;
 };
 
@@ -41,18 +43,22 @@ export type LibraryCatalogRequest =
       readonly filter: string;
       readonly sortKey: LibraryAlbumSortKey;
       readonly direction: LibrarySortDirection;
+      readonly skip: number;
     }
   | {
       readonly presentation: "albumArtists";
       readonly filter: string;
       readonly sortKey: LibraryAlbumArtistSortKey;
       readonly direction: LibrarySortDirection;
+      readonly skip: number;
     }
   | {
       readonly presentation: "tracks";
       readonly filter: string;
       readonly sortKey: LibraryTrackSortKey;
       readonly direction: LibrarySortDirection;
+      /** Rows to start after, for a list entered at a letter of its scroll index. */
+      readonly skip: number;
     };
 
 const data = ["library", "data"] as const;
@@ -65,6 +71,9 @@ export const libraryQueryKeys = {
   roots: [...data, "roots"] as const,
   /** Carries the request itself, so what the data was fetched for can be read back from the key. */
   presentation: (request: LibraryCatalogRequest) => [...data, "catalog", request] as const,
+  /** The scroll index of a list: how its names are filed, in its order. Not tied to `skip`. */
+  index: (request: LibraryCatalogRequest) =>
+    [...data, "catalogIndex", { ...request, skip: 0 }] as const,
   album: (key: LibraryAlbumKey) =>
     [...data, "album", "detail", key.title, key.albumArtist] as const,
   albumTracks: (key: LibraryAlbumKey) =>
@@ -102,6 +111,12 @@ export const libraryQueryOptions = {
       initialPageParam: null as string | null,
       queryFn: ({ pageParam }) => listCatalogPage(request, pageParam),
       getNextPageParam: (page: CatalogPage) => page.nextCursor ?? undefined,
+      enabled,
+    }),
+  catalogIndex: (request: LibraryCatalogRequest, enabled: boolean) =>
+    queryOptions({
+      queryKey: libraryQueryKeys.index(request),
+      queryFn: () => listCatalogIndex(request),
       enabled,
     }),
   trackProperties: (trackId: string | null) =>
@@ -169,10 +184,41 @@ function listCatalogPage(
   const search = request.filter === "" ? null : request.filter;
   switch (request.presentation) {
     case "albums":
-      return api.listLibraryAlbums(cursor, search, request.sortKey, request.direction);
+      return api.listLibraryAlbums(
+        cursor,
+        search,
+        request.sortKey,
+        request.direction,
+        request.skip,
+      );
     case "albumArtists":
-      return api.listLibraryAlbumArtists(cursor, search, request.sortKey, request.direction);
+      return api.listLibraryAlbumArtists(
+        cursor,
+        search,
+        request.sortKey,
+        request.direction,
+        request.skip,
+      );
     case "tracks":
-      return api.listLibraryTracks(cursor, search, request.sortKey, request.direction);
+      return api.listLibraryTracks(
+        cursor,
+        search,
+        request.sortKey,
+        request.direction,
+        request.skip,
+      );
+  }
+}
+
+function listCatalogIndex(request: LibraryCatalogRequest): Promise<LibraryIndexBucket[]> {
+  const api = requireNative();
+  const search = request.filter === "" ? null : request.filter;
+  switch (request.presentation) {
+    case "albums":
+      return api.listLibraryAlbumIndex(search, request.sortKey, request.direction);
+    case "albumArtists":
+      return api.listLibraryAlbumArtistIndex(search, request.sortKey, request.direction);
+    case "tracks":
+      return api.listLibraryTrackIndex(search, request.sortKey, request.direction);
   }
 }

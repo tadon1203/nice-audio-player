@@ -5,6 +5,7 @@ use super::{
     database::Database,
     error::{parse_id, LibraryCommandError, StoreError},
     models::LibraryRoot,
+    summary,
 };
 use rusqlite::{params, Connection};
 use std::path::Path;
@@ -108,13 +109,16 @@ pub(crate) fn set_enabled(
 /// Removes the folder with its files, tracks and metadata (they cascade).
 pub(crate) fn remove(database: &Database, id: &str) -> Result<(), LibraryCommandError> {
     let id = parse_id(id)?;
-    let connection = database.write().map_err(StoreError::from)?;
-    let removed = connection
+    let mut connection = database.write().map_err(StoreError::from)?;
+    let transaction = connection.transaction().map_err(StoreError::from)?;
+    let removed = transaction
         .execute("DELETE FROM library_roots WHERE id = ?1", params![id])
         .map_err(StoreError::from)?;
     if removed == 0 {
         return Err(LibraryCommandError::RootMissing);
     }
+    summary::rebuild(&transaction).map_err(StoreError::from)?;
+    transaction.commit().map_err(StoreError::from)?;
     Ok(())
 }
 
@@ -138,6 +142,7 @@ pub(crate) fn delete_missing(database: &Database) -> Result<u64, LibraryCommandE
             [],
         )
         .map_err(StoreError::from)?;
+    summary::rebuild(&transaction).map_err(StoreError::from)?;
     transaction.commit().map_err(StoreError::from)?;
     Ok(tracks as u64)
 }

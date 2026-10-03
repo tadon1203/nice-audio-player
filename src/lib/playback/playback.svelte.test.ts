@@ -387,7 +387,7 @@ describe("failures", () => {
 });
 
 describe("album shuffle", () => {
-  const context = { kind: "album", key: { title: "A", albumArtist: "B" } } as const;
+  const context = { kind: "album", key: { title: "A", albumArtist: "B", edition: "" } } as const;
 
   it("turns the shuffle on, then starts", async () => {
     const order: string[] = [];
@@ -558,7 +558,10 @@ describe("starting playback", () => {
     const startPlayback = vi.fn(async () => playing(2, "c", 0));
     const playback = createPlayback(baseApi({ startPlayback }));
     await playback.initialize();
-    const context = { kind: "album", key: { title: "Album", albumArtist: "Artist" } } as const;
+    const context = {
+      kind: "album",
+      key: { title: "Album", albumArtist: "Artist", edition: "" },
+    } as const;
 
     await playback.startPlayback(context, "c");
 
@@ -576,7 +579,10 @@ describe("starting playback", () => {
     );
     await playback.initialize();
 
-    await playback.startPlayback({ kind: "album", key: { title: "A", albumArtist: "B" } }, null);
+    await playback.startPlayback(
+      { kind: "album", key: { title: "A", albumArtist: "B", edition: "" } },
+      null,
+    );
 
     expect(playback.error).toBeNull();
     expect(playback.transportPending).toBeNull();
@@ -592,7 +598,10 @@ describe("starting playback", () => {
     );
     await playback.initialize();
 
-    await playback.startPlayback({ kind: "album", key: { title: "A", albumArtist: "B" } }, "1");
+    await playback.startPlayback(
+      { kind: "album", key: { title: "A", albumArtist: "B", edition: "" } },
+      "1",
+    );
 
     expect(playback.error).toBe("That track is unavailable on disk.");
   });
@@ -606,7 +615,10 @@ describe("starting playback", () => {
       }),
     );
     await playback.initialize();
-    await playback.startPlayback({ kind: "album", key: { title: "A", albumArtist: "B" } }, "1");
+    await playback.startPlayback(
+      { kind: "album", key: { title: "A", albumArtist: "B", edition: "" } },
+      "1",
+    );
     expect(playback.error).not.toBeNull();
 
     playback.clearError();

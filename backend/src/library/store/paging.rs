@@ -163,18 +163,43 @@ pub(super) struct PagedQuery {
     /// are `params`, numbered from `?1`.
     pub from_where: String,
     pub params: Vec<Value>,
-    /// `GROUP BY …`, or empty.
-    pub group_by: String,
+    /// What counts the list's rows: `FROM … WHERE <the same filters>`, without the joins the page
+    /// needs for display. Built from the same filter as `from_where`, so the count is of the list.
+    pub count_from_where: String,
 }
 
 impl PagedQuery {
+    /// How many rows the whole list has.
+    pub fn total(&self, connection: &Connection) -> Result<u64, StoreError> {
+        let total: i64 = connection.query_row(
+            &format!("SELECT COUNT(*) {}", self.count_from_where),
+            params_from_iter(self.params.clone()),
+            |row| row.get(0),
+        )?;
+        Ok(total as u64)
+    }
+
+    /// A page: after the cursor's row, or from the start of the list, or, with no cursor and a
+    /// `skip`, after the `skip` rows that lead the list (found without reading them).
     pub fn fetch<T>(
         &self,
         connection: &Connection,
         raw_cursor: Option<&str>,
+        skip: u64,
         build: impl Fn(&Row<'_>) -> rusqlite::Result<T>,
     ) -> Result<Page<T>, StoreError> {
-        let cursor = raw_cursor.map(|raw| self.decode(raw)).transpose()?;
+        let mut cursor = raw_cursor.map(|raw| self.decode(raw)).transpose()?;
+        if cursor.is_none() && skip > 0 {
+            match self.row_before(connection, skip)? {
+                Some(found) => cursor = Some(found),
+                None => {
+                    return Ok(Page {
+                        items: Vec::new(),
+                        next_cursor: None,
+                    })
+                }
+            }
+        }
         let start = cursor.as_ref().map_or(0, |cursor| cursor.phase);
         let mut rows: Vec<(T, usize, Vec<Key>)> = Vec::new();
         for (index, phase) in self.ordering.phases.iter().enumerate().skip(start) {
@@ -216,6 +241,60 @@ impl PagedQuery {
             items: rows.into_iter().map(|(item, ..)| item).collect(),
             next_cursor,
         })
+    }
+
+    /// The cursor that continues after the first `skip` rows of the list, `None` when the list
+    /// has no more rows than that.
+    fn row_before(&self, connection: &Connection, skip: u64) -> Result<Option<Cursor>, StoreError> {
+        let mut before = skip - 1;
+        for (index, phase) in self.ordering.phases.iter().enumerate() {
+            let in_phase: i64 = connection.query_row(
+                &format!(
+                    "SELECT COUNT(*) {} AND ({})",
+                    self.count_from_where, phase.predicate
+                ),
+                params_from_iter(self.params.clone()),
+                |row| row.get(0),
+            )?;
+            let in_phase = in_phase as u64;
+            if before >= in_phase {
+                before -= in_phase;
+                continue;
+            }
+            let direction = self.ordering.sql_direction();
+            let values = phase
+                .terms
+                .iter()
+                .enumerate()
+                .map(|(at, term)| format!("{term} AS k{at}"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let order = phase
+                .terms
+                .iter()
+                .map(|term| format!("{term} {direction}"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let sql = format!(
+                "SELECT {values} {} AND ({}) ORDER BY {order} LIMIT 1 OFFSET {before}",
+                self.from_where, phase.predicate
+            );
+            let after = connection.prepare_cached(&sql)?.query_row(
+                params_from_iter(self.params.clone()),
+                |row| {
+                    (0..phase.terms.len())
+                        .map(|term| row.get(term))
+                        .collect::<rusqlite::Result<Vec<Key>>>()
+                },
+            )?;
+            return Ok(Some(Cursor {
+                version: CURSOR_VERSION,
+                scope: self.scope.clone(),
+                phase: index,
+                after,
+            }));
+        }
+        Ok(None)
     }
 
     /// How SQLite runs a phase's query, one line per step. For checking that a list reads an
@@ -267,10 +346,9 @@ impl PagedQuery {
             .collect::<Vec<_>>()
             .join(", ");
         format!(
-            "SELECT {select}{values} {from_where} AND {condition} {group_by} ORDER BY {order} LIMIT {limit}",
+            "SELECT {select}{values} {from_where} AND {condition} ORDER BY {order} LIMIT {limit}",
             select = self.select,
             from_where = self.from_where,
-            group_by = self.group_by,
         )
     }
 
@@ -314,7 +392,7 @@ mod tests {
             select_count: 1,
             from_where: "FROM items WHERE 1".into(),
             params: Vec::new(),
-            group_by: String::new(),
+            count_from_where: "FROM items WHERE 1".into(),
         }
     }
 
@@ -345,7 +423,7 @@ mod tests {
         let mut cursor: Option<String> = None;
         loop {
             let page = query
-                .fetch(connection, cursor.as_deref(), |row| row.get::<_, i64>(0))
+                .fetch(connection, cursor.as_deref(), 0, |row| row.get::<_, i64>(0))
                 .unwrap();
             ids.extend(page.items);
             match page.next_cursor {
@@ -382,7 +460,7 @@ mod tests {
         let connection = items();
         let query = query(LibrarySortDirection::Ascending);
         let first = query
-            .fetch(&connection, None, |row| row.get::<_, i64>(0))
+            .fetch(&connection, None, 0, |row| row.get::<_, i64>(0))
             .unwrap();
         // Rows land before and after the cursor while the listener scrolls.
         connection
@@ -393,7 +471,7 @@ mod tests {
             .unwrap();
 
         let second = query
-            .fetch(&connection, first.next_cursor.as_deref(), |row| {
+            .fetch(&connection, first.next_cursor.as_deref(), 0, |row| {
                 row.get::<_, i64>(0)
             })
             .unwrap();
@@ -414,7 +492,7 @@ mod tests {
         let mut ids = Vec::new();
         while cursor.is_some() {
             let page = query
-                .fetch(connection, cursor.as_deref(), |row| row.get::<_, i64>(0))
+                .fetch(connection, cursor.as_deref(), 0, |row| row.get::<_, i64>(0))
                 .unwrap();
             ids.extend(page.items);
             cursor = page.next_cursor;
@@ -427,18 +505,98 @@ mod tests {
         let connection = items();
         let ascending = query(LibrarySortDirection::Ascending);
         let cursor = ascending
-            .fetch(&connection, None, |row| row.get::<_, i64>(0))
+            .fetch(&connection, None, 0, |row| row.get::<_, i64>(0))
             .unwrap()
             .next_cursor
             .unwrap();
 
         let descending = query(LibrarySortDirection::Descending);
         for bad in [cursor.as_str(), "", "not json", r#"{"version":1}"#] {
-            let error = match descending.fetch(&connection, Some(bad), |row| row.get::<_, i64>(0)) {
-                Err(error) => error,
-                Ok(_) => panic!("{bad:?} was accepted"),
-            };
+            let error =
+                match descending.fetch(&connection, Some(bad), 0, |row| row.get::<_, i64>(0)) {
+                    Err(error) => error,
+                    Ok(_) => panic!("{bad:?} was accepted"),
+                };
             assert_eq!(error, StoreError::InvalidCursor);
+        }
+    }
+}
+
+#[cfg(test)]
+mod skip_tests {
+    use super::*;
+
+    #[test]
+    fn a_page_can_start_after_any_number_of_rows_in_either_direction_and_phase() {
+        let connection = Connection::open_in_memory().unwrap();
+        connection
+            .execute_batch("CREATE TABLE items(id INTEGER PRIMARY KEY, name TEXT NOT NULL);")
+            .unwrap();
+        for id in 1..=450 {
+            let name = if id % 5 == 0 {
+                String::new()
+            } else {
+                format!("n{id:04}")
+            };
+            connection
+                .execute(
+                    "INSERT INTO items VALUES(?1, ?2)",
+                    rusqlite::params![id, name],
+                )
+                .unwrap();
+        }
+        for direction in [
+            LibrarySortDirection::Ascending,
+            LibrarySortDirection::Descending,
+        ] {
+            let query = PagedQuery {
+                scope: Scope::new(View::Tracks, "", "", &"name", direction),
+                ordering: Ordering {
+                    phases: vec![
+                        Phase::new("name <> ''", &["name", "id"]),
+                        Phase::new("name = ''", &["id"]),
+                    ],
+                    direction,
+                },
+                select: "id".into(),
+                select_count: 1,
+                from_where: "FROM items WHERE 1".into(),
+                params: Vec::new(),
+                count_from_where: "FROM items WHERE 1".into(),
+            };
+            let all = |skip: u64| -> Vec<i64> {
+                let mut ids = Vec::new();
+                let mut cursor: Option<String> = None;
+                let mut first = true;
+                loop {
+                    let page = query
+                        .fetch(
+                            &connection,
+                            cursor.as_deref(),
+                            if first { skip } else { 0 },
+                            |row| row.get::<_, i64>(0),
+                        )
+                        .unwrap();
+                    first = false;
+                    ids.extend(page.items);
+                    match page.next_cursor {
+                        Some(next) => cursor = Some(next),
+                        None => return ids,
+                    }
+                }
+            };
+            let everything = all(0);
+            assert_eq!(everything.len(), 450);
+            assert_eq!(query.total(&connection).unwrap(), 450);
+            for skip in [1, 99, 100, 101, 359, 360, 361, 449] {
+                assert_eq!(
+                    all(skip),
+                    everything[skip as usize..],
+                    "{direction:?} {skip}"
+                );
+            }
+            assert!(all(450).is_empty());
+            assert!(all(9_999).is_empty());
         }
     }
 }

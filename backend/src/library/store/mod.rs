@@ -15,7 +15,7 @@ use super::{
     database::{Database, ReadConnection},
     error::StoreError,
     models::LibraryRoot,
-    roots,
+    roots, text,
 };
 
 #[derive(Clone)]
@@ -47,34 +47,31 @@ fn literal_like_pattern(value: &str) -> String {
     format!("%{escaped}%")
 }
 
-/// A search over some key columns: its SQL condition ("1" for no search) and its parameters
-/// (`?1`).
+/// A search over a folded key column (see `text.rs`): its SQL condition ("1" for no search) and
+/// its parameters (`?1`). The search text is folded like the keys are, so "ゆず" finds "ユズ".
 struct SearchFilter {
     sql: String,
     params: Vec<rusqlite::types::Value>,
 }
 
 impl SearchFilter {
-    fn new(search: Option<&str>, columns: &[&str]) -> Self {
-        let search = search.unwrap_or_default().trim();
+    fn new(search: Option<&str>, column: &str) -> Self {
+        let search = text::search_text(search.unwrap_or_default());
         if search.is_empty() {
             return Self {
                 sql: "1".into(),
                 params: Vec::new(),
             };
         }
-        let conditions: Vec<String> = columns
-            .iter()
-            .map(|column| format!("{column} LIKE ?1 ESCAPE '\\'"))
-            .collect();
         Self {
-            sql: format!("({})", conditions.join(" OR ")),
-            params: vec![literal_like_pattern(search).into()],
+            sql: format!("{column} LIKE ?1 ESCAPE '\\'"),
+            params: vec![literal_like_pattern(&search).into()],
         }
     }
 
-    fn text(search: Option<&str>) -> &str {
-        search.unwrap_or_default().trim()
+    /// The search as the scope of a cursor: cursors of another search are refused.
+    fn text(search: Option<&str>) -> String {
+        text::search_text(search.unwrap_or_default())
     }
 }
 

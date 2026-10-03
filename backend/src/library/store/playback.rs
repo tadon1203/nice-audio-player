@@ -98,6 +98,7 @@ struct PlaybackRow {
     album: String,
     album_artist: Option<String>,
     album_artist_key: String,
+    album_dir: String,
     duration_ms: Option<i64>,
     artwork: Option<ArtworkRef>,
     track_number: Option<i64>,
@@ -117,6 +118,7 @@ impl PlaybackRow {
         (!self.album.is_empty()).then(|| LibraryAlbumKey {
             title: self.album.clone(),
             album_artist: self.album_artist_key.clone(),
+            edition: self.album_dir.clone(),
         })
     }
 }
@@ -125,7 +127,7 @@ type AlbumCounts = HashMap<LibraryAlbumKey, u32>;
 
 /// The columns every playback query returns, in the order `playback_row` reads them, and what they
 /// are selected from.
-const PLAYBACK_COLUMNS: &str = "t.id, r.path, f.relative_path, f.availability, f.inspection_status, m.title_key, m.artist_key, m.album_key, m.album_artist, m.album_artist_key, m.duration_ms, a.content_hash, a.mime_type, a.relative_path, m.track_number, m.disc_number, m.year, m.file_format, m.bit_depth, m.bitrate_kbps";
+const PLAYBACK_COLUMNS: &str = "t.id, r.path, f.relative_path, f.availability, f.inspection_status, m.title_key, m.artist_key, m.album_key, m.album_artist, m.album_artist_key, m.duration_ms, a.content_hash, a.mime_type, a.relative_path, m.track_number, m.disc_number, m.year, m.file_format, m.bit_depth, m.bitrate_kbps, m.album_dir";
 const PLAYBACK_FROM: &str = "FROM track_source_metadata m JOIN tracks t ON t.id = m.track_id JOIN library_files f ON f.id = t.file_id JOIN library_roots r ON r.id = f.root_id LEFT JOIN artwork_assets a ON a.id = m.artwork_id";
 
 fn playback_row(row: &Row<'_>) -> rusqlite::Result<PlaybackRow> {
@@ -142,6 +144,7 @@ fn playback_row(row: &Row<'_>) -> rusqlite::Result<PlaybackRow> {
         album: row.get(7)?,
         album_artist: row.get(8)?,
         album_artist_key: row.get(9)?,
+        album_dir: row.get(20)?,
         duration_ms: row.get(10)?,
         artwork: artwork_ref(row.get(11)?, row.get(12)?, row.get(13)?),
         track_number: row.get(14)?,
@@ -292,10 +295,10 @@ impl LibraryStore {
             &connection,
             &format!(
                 "SELECT {SELECTION_COLUMNS} {SELECTION_FROM}
-                 WHERE m.album_artist_key = ?1 AND m.album_key = ?2
+                 WHERE m.album_artist_key = ?1 AND m.album_key = ?2 AND m.album_dir = ?3
                  ORDER BY {ALBUM_ORDER}"
             ),
-            params![key.album_artist, key.title],
+            params![key.album_artist, key.title, key.edition],
         )?;
         if rows.is_empty() {
             return Err(PlaybackSourceError::AlbumNotFound);
@@ -390,25 +393,30 @@ fn album_counts(
     }
     let mut counts = AlbumCounts::new();
     for chunk in wanted.chunks(IDS_PER_QUERY / 2) {
-        let pairs = vec!["(?,?)"; chunk.len()].join(",");
+        let pairs = vec!["(?,?,?)"; chunk.len()].join(",");
         let mut statement = connection
             .prepare(&format!(
-                "SELECT album_artist_key, album_key, COUNT(*) FROM track_source_metadata
-                 WHERE (album_artist_key, album_key) IN (VALUES {pairs})
-                 GROUP BY album_artist_key, album_key"
+                "SELECT album_artist_key, album_key, album_dir, COUNT(*) FROM track_source_metadata
+                 WHERE (album_artist_key, album_key, album_dir) IN (VALUES {pairs})
+                 GROUP BY album_artist_key, album_key, album_dir"
             ))
             .map_err(StoreError::from)?;
-        let params = chunk
-            .iter()
-            .flat_map(|key| [key.album_artist.as_str(), key.title.as_str()]);
+        let params = chunk.iter().flat_map(|key| {
+            [
+                key.album_artist.as_str(),
+                key.title.as_str(),
+                key.edition.as_str(),
+            ]
+        });
         let rows = statement
             .query_map(rusqlite::params_from_iter(params), |row| {
                 Ok((
                     LibraryAlbumKey {
                         album_artist: row.get(0)?,
                         title: row.get(1)?,
+                        edition: row.get(2)?,
                     },
-                    row.get::<_, u32>(2)?,
+                    row.get::<_, u32>(3)?,
                 ))
             })
             .map_err(StoreError::from)?;

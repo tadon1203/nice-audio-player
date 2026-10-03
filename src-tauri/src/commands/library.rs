@@ -3,8 +3,8 @@ use backend::library::{
     models::{
         LibraryAlbumArtistKey, LibraryAlbumArtistPage, LibraryAlbumArtistSortKey,
         LibraryAlbumArtistSummary, LibraryAlbumDetails, LibraryAlbumKey, LibraryAlbumPage,
-        LibraryAlbumSortKey, LibraryAlbumTrackPage, LibraryArtistAlbumSortKey, LibraryRoot,
-        LibraryScanSnapshot, LibrarySortDirection, LibraryStatus, LibraryTrackPage,
+        LibraryAlbumSortKey, LibraryAlbumTrackPage, LibraryArtistAlbumSortKey, LibraryIndexBucket,
+        LibraryRoot, LibraryScanSnapshot, LibrarySortDirection, LibraryStatus, LibraryTrackPage,
         LibraryTrackProperties, LibraryTrackSortKey, LibraryTrackSummary,
     },
     Library,
@@ -150,11 +150,13 @@ pub async fn list_library_tracks(
     search: Option<String>,
     sort_key: LibraryTrackSortKey,
     sort_direction: LibrarySortDirection,
+    skip: u64,
     state: tauri::State<'_, AppState>,
 ) -> Result<LibraryTrackPage, LibraryCommandError> {
     with_library(&state, move |library| {
-        Ok(library.store().catalog_tracks(
+        Ok(library.store().catalog_tracks_from(
             cursor.as_deref(),
+            skip,
             search.as_deref(),
             sort_key,
             sort_direction,
@@ -170,11 +172,13 @@ pub async fn list_library_albums(
     search: Option<String>,
     sort_key: LibraryAlbumSortKey,
     sort_direction: LibrarySortDirection,
+    skip: u64,
     state: tauri::State<'_, AppState>,
 ) -> Result<LibraryAlbumPage, LibraryCommandError> {
     with_library(&state, move |library| {
-        Ok(library.store().catalog_albums(
+        Ok(library.store().catalog_albums_from(
             cursor.as_deref(),
+            skip,
             search.as_deref(),
             sort_key,
             sort_direction,
@@ -190,11 +194,64 @@ pub async fn list_library_album_artists(
     search: Option<String>,
     sort_key: LibraryAlbumArtistSortKey,
     sort_direction: LibrarySortDirection,
+    skip: u64,
     state: tauri::State<'_, AppState>,
 ) -> Result<LibraryAlbumArtistPage, LibraryCommandError> {
     with_library(&state, move |library| {
-        Ok(library.store().catalog_album_artists(
+        Ok(library.store().catalog_album_artists_from(
             cursor.as_deref(),
+            skip,
+            search.as_deref(),
+            sort_key,
+            sort_direction,
+        )?)
+    })
+    .await
+}
+
+/// The scroll index of the Tracks list: how many names start under each label, in list order.
+#[tauri::command]
+#[specta::specta]
+pub async fn list_library_track_index(
+    search: Option<String>,
+    sort_key: LibraryTrackSortKey,
+    sort_direction: LibrarySortDirection,
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<LibraryIndexBucket>, LibraryCommandError> {
+    with_library(&state, move |library| {
+        Ok(library
+            .store()
+            .catalog_track_index(search.as_deref(), sort_key, sort_direction)?)
+    })
+    .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn list_library_album_index(
+    search: Option<String>,
+    sort_key: LibraryAlbumSortKey,
+    sort_direction: LibrarySortDirection,
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<LibraryIndexBucket>, LibraryCommandError> {
+    with_library(&state, move |library| {
+        Ok(library
+            .store()
+            .catalog_album_index(search.as_deref(), sort_key, sort_direction)?)
+    })
+    .await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn list_library_album_artist_index(
+    search: Option<String>,
+    sort_key: LibraryAlbumArtistSortKey,
+    sort_direction: LibrarySortDirection,
+    state: tauri::State<'_, AppState>,
+) -> Result<Vec<LibraryIndexBucket>, LibraryCommandError> {
+    with_library(&state, move |library| {
+        Ok(library.store().catalog_album_artist_index(
             search.as_deref(),
             sort_key,
             sort_direction,

@@ -2,7 +2,7 @@
   import TrackTable from "$lib/components/track-table/track-table.svelte";
   import { createLibraryCatalog } from "$lib/library/catalog.svelte";
   import { getPlayback } from "$lib/playback/context";
-  import { trackIndexKey, trackListContext } from "$lib/library/track-list";
+  import { trackListContext } from "$lib/library/track-list";
   import { libraryViews } from "$lib/shell/library-views.svelte";
   import LibraryWorkspace from "../library-workspace.svelte";
 
@@ -26,7 +26,8 @@
   onfilterchange={view.setFilter}
   stateKey={view.stateKey}
   {catalog}
-  indexFor={(track) => trackIndexKey(track, view.sortKey)}
+  skip={view.skip}
+  onjump={view.jumpTo}
 >
   {#snippet content(tracks, scroll)}
     <TrackTable

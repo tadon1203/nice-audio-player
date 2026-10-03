@@ -2,7 +2,6 @@
   import { createLibraryCatalog } from "$lib/library/catalog.svelte";
   import { libraryViews } from "$lib/shell/library-views.svelte";
   import VirtualMediaGrid from "$lib/ui/media-grid/virtual-media-grid.svelte";
-  import { sortIndexLetter } from "$lib/utils/sort-index";
   import ArtistTile from "../artist-tile.svelte";
   import LibraryWorkspace from "../library-workspace.svelte";
 
@@ -26,7 +25,8 @@
   stateKey={view.stateKey}
   sort={view}
   {catalog}
-  indexFor={view.sortKey === "artist" ? (artist) => sortIndexLetter(artist.key.name) : undefined}
+  skip={view.skip}
+  onjump={view.jumpTo}
 >
   {#snippet content(artists, scroll)}
     <VirtualMediaGrid

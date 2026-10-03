@@ -26,7 +26,7 @@
 
   const title = $derived(albumTitleLabel(album.key.title));
   const artist = $derived(artistNameLabel(album.key.albumArtist));
-  const href = $derived(albumHref(album.key.albumArtist, album.key.title));
+  const href = $derived(albumHref(album.key));
 
   // Where the album was opened from rides in history state, for Back and the shared element.
   function open(event: MouseEvent) {

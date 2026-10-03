@@ -5,7 +5,7 @@ const track = {
   artist: "Artist",
   album: "Album",
   albumArtist: "Tag Album Artist",
-  albumKey: { albumArtist: "Catalog Album Artist", title: "Catalog Album" },
+  albumKey: { albumArtist: "Catalog Album Artist", title: "Catalog Album", edition: "" },
 };
 
 describe("trackLinks", () => {

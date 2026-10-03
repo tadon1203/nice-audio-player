@@ -9,6 +9,7 @@ describe("libraryViews", () => {
       filter: "",
       sortKey: "title",
       direction: "ascending",
+      skip: 0,
     });
     expect(views.albumArtists.sortKey).toBe("artist");
     expect(views.tracks.sortKey).toBe("title");
@@ -24,6 +25,24 @@ describe("libraryViews", () => {
     expect(views.tracks.direction).toBe("descending");
     expect(views.albumArtists.filter).toBe("");
     expect(views.albums.sortKey).toBe("title");
+  });
+
+  it("enters a list at a letter and starts over from the top when the filter or sort changes", () => {
+    const views = createLibraryViews();
+    const top = views.tracks.stateKey;
+
+    views.tracks.jumpTo(1_200);
+    expect(views.tracks.request.skip).toBe(1_200);
+    expect(views.tracks.stateKey).not.toBe(top);
+
+    views.tracks.setFilter("x");
+    expect(views.tracks.skip).toBe(0);
+    views.tracks.jumpTo(5);
+    views.tracks.setSort("artist");
+    expect(views.tracks.skip).toBe(0);
+    views.tracks.jumpTo(5);
+    views.tracks.toggleDirection();
+    expect(views.tracks.skip).toBe(0);
   });
 
   it("resets direction to ascending when the sort key changes without one", () => {

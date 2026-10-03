@@ -4,7 +4,6 @@
   import { getPlayback } from "$lib/playback/context";
   import { libraryViews } from "$lib/shell/library-views.svelte";
   import VirtualMediaGrid from "$lib/ui/media-grid/virtual-media-grid.svelte";
-  import { sortIndexLetter } from "$lib/utils/sort-index";
   import AlbumTile from "../album-tile.svelte";
   import LibraryWorkspace from "../library-workspace.svelte";
 
@@ -29,10 +28,8 @@
   stateKey={view.stateKey}
   sort={view}
   {catalog}
-  indexFor={(album) =>
-    view.sortKey === "year"
-      ? (album.year?.toString() ?? "#")
-      : sortIndexLetter(view.sortKey === "artist" ? album.key.albumArtist : album.key.title)}
+  skip={view.skip}
+  onjump={view.jumpTo}
 >
   {#snippet content(albums, scroll)}
     <VirtualMediaGrid

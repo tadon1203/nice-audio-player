@@ -4,6 +4,7 @@ import {
   type CreateInfiniteQueryResult,
   type InfiniteData,
 } from "@tanstack/svelte-query";
+import type { LibraryIndexBucket } from "$lib/native";
 import { libraryStatusMessage } from "./library-errors";
 import {
   flattenPages,
@@ -113,6 +114,12 @@ export function createLibraryCatalog<Request extends LibraryCatalogRequest>(
     ...libraryQueryOptions.catalog(queryRequest, statusQuery.data?.status === "ready"),
     placeholderData: keepWithinPresentation,
   }));
+  // The scroll index follows the list's filter and sort (not where it was entered), so a jump
+  // keeps the buckets it was made from.
+  const indexQuery = createQuery(() => ({
+    ...libraryQueryOptions.catalogIndex(queryRequest, statusQuery.data?.status === "ready"),
+    placeholderData: (previous: LibraryIndexBucket[] | undefined) => previous,
+  }));
   // The query function is chosen by `presentation`, so its pages hold exactly that
   // presentation's item type; TypeScript cannot correlate the two through the union.
   const collection = collectionOf(query) as unknown as LibraryCollection<
@@ -158,6 +165,10 @@ export function createLibraryCatalog<Request extends LibraryCatalogRequest>(
     },
     get totalCount() {
       return collection.totalCount;
+    },
+    /** The list's scroll index: buckets of names in list order; empty when the sort has none. */
+    get index(): readonly LibraryIndexBucket[] {
+      return indexQuery.data ?? [];
     },
     get nextCursor() {
       return collection.nextCursor;

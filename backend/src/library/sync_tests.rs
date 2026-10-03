@@ -65,7 +65,7 @@ impl Harness {
                 LibraryTrackSortKey::Title,
                 LibrarySortDirection::Ascending,
             )
-            .map_or(0, |page| page.total_count)
+            .map_or(0, |page| page.total_count.unwrap_or(0))
     }
 
     /// How many scans have covered the folder: each one bumps its generation.

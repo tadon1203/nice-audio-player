@@ -14,6 +14,11 @@ pub struct SourceMetadata {
     pub artist: Option<String>,
     pub album: Option<String>,
     pub album_artist: Option<String>,
+    /// The SortOrder tags: how the title, artist, album and Album Artist are to be sorted.
+    pub title_sort: Option<String>,
+    pub artist_sort: Option<String>,
+    pub album_sort: Option<String>,
+    pub album_artist_sort: Option<String>,
     pub track_number: Option<u32>,
     pub track_total: Option<u32>,
     pub disc_number: Option<u32>,
@@ -53,6 +58,18 @@ pub fn read_source_metadata(
         artist: tag.artist().map(|v| v.into_owned()),
         album: tag.album().map(|v| v.into_owned()),
         album_artist: tag.get_string(ItemKey::AlbumArtist).map(ToOwned::to_owned),
+        title_sort: tag
+            .get_string(ItemKey::TrackTitleSortOrder)
+            .map(ToOwned::to_owned),
+        artist_sort: tag
+            .get_string(ItemKey::TrackArtistSortOrder)
+            .map(ToOwned::to_owned),
+        album_sort: tag
+            .get_string(ItemKey::AlbumTitleSortOrder)
+            .map(ToOwned::to_owned),
+        album_artist_sort: tag
+            .get_string(ItemKey::AlbumArtistSortOrder)
+            .map(ToOwned::to_owned),
         track_number: tag.track(),
         track_total: tag.track_total(),
         disc_number: tag.disk(),

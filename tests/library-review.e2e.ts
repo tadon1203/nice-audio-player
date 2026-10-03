@@ -3,9 +3,19 @@ import { pageOf, scanSnapshot, testRoot } from "./fixtures/data";
 import type { Native } from "./fixtures/native-api";
 import { expect, test } from "./fixtures/test";
 
-/** The scan is in `state`: what the renderer reads now, and the event that announces it. */
+let scansEnded = 0;
+
+/**
+ * The scan is in `state`: what the renderer reads now, and the event that announces it. Every
+ * scan that ends has ended one more than the last and changed something, as a real one would.
+ */
 async function publishScan(native: Native, state: LibraryScanState) {
-  const snapshot = scanSnapshot(state);
+  if (state !== "running" && state !== "idle") scansEnded += 1;
+  const snapshot = {
+    ...scanSnapshot(state),
+    finishedCount: scansEnded,
+    changedCount: scansEnded * 20,
+  };
   native.respond("getLibraryScanState", snapshot);
   await native.emit({ event: "libraryScanStateChanged", payload: snapshot });
 }
@@ -170,7 +180,7 @@ test("manages folders and shows scan progress and terminal states", async ({ pag
   await expect(include).toBeChecked();
   await expect(musicRow.getByText("Included in library")).toBeVisible();
 
-  await page.getByRole("button", { name: "Rescan" }).click();
+  await page.getByRole("button", { name: "Rescan", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("Scanning");
   await expect(page.getByRole("progressbar", { name: "Scan progress" })).toBeVisible();
   await page.getByRole("button", { name: "Cancel scan" }).click();

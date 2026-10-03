@@ -48,7 +48,11 @@ Dragging the seek bar slows down the further the pointer is from the bar (or wit
   - Albums: album title, album artist
   - Album Artists: album artist
   - Tracks: title, track artist, album, album artist
+  - Text is compared folded (NFKC, katakana as hiragana, lowercase, Latin accents dropped): "ゆず" finds "ユズ", and full-width and half-width forms match each other
   - `\`, `%`, and `_` are searched literally
+- Sort order uses the same folding, or the file's SortOrder tag (`TITLESORT`, `ARTISTSORT`, `ALBUMSORT`, `ALBUMARTISTSORT`) when it has one; a leading "The" is not skipped by the app. Symbols and digits come first, then Latin, other scripts, the kana in gojūon order, and kanji (which have no reading) by code point; names with no value come last in both directions
+- The list's scroll index (letters, or years for albums sorted by year) is read from the library, in the list's own order: kana are filed under the head of their row (か for が), all kanji as one "漢", and the big letter shown while scrolling and the index rail agree with the order by construction. Choosing a letter starts the list there without loading what precedes it; choosing the first one (or changing the sort or filter) starts it from the top
+- Albums are filed by Album Artist, title and the folder they are in: tracks that share a folder and an album title but not an artist (with no Album Artist tag) are one compilation under "Various Artists", the same title and artist in two folders are two albums (an original and a remaster), and a disc folder ("CD1", "Disc 2") belongs to the album folder above it
 
 ## Lyrics
 

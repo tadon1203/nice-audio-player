@@ -115,7 +115,8 @@ pub struct LibraryTrackProperties {
 #[serde(rename_all = "camelCase")]
 pub struct LibraryTrackPage {
     pub items: Vec<LibraryTrackSummary>,
-    pub total_count: u64,
+    /// How many rows the whole list has; only the first page (no cursor) says.
+    pub total_count: Option<u64>,
     pub next_cursor: Option<String>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, specta::Type, serde::Deserialize)]
@@ -123,6 +124,18 @@ pub struct LibraryTrackPage {
 pub struct LibraryAlbumKey {
     pub title: String,
     pub album_artist: String,
+    /// Which printing of the album: its folder. Two folders holding the same title and Album
+    /// Artist are two albums. Opaque to the renderer, `""` for the album of tracks with no album.
+    pub edition: String,
+}
+
+/// One entry of a list's scroll index: the label its names are filed under, and how many there
+/// are. Buckets come in the list's own order.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryIndexBucket {
+    pub label: String,
+    pub count: u64,
 }
 #[derive(Debug, Clone, Serialize, specta::Type, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -140,7 +153,8 @@ pub struct LibraryAlbumSummary {
 #[serde(rename_all = "camelCase")]
 pub struct LibraryAlbumPage {
     pub items: Vec<LibraryAlbumSummary>,
-    pub total_count: u64,
+    /// How many rows the whole list has; only the first page (no cursor) says.
+    pub total_count: Option<u64>,
     pub next_cursor: Option<String>,
 }
 #[derive(Debug, Clone, Serialize, specta::Type)]
@@ -155,7 +169,8 @@ pub struct LibraryAlbumArtistSummary {
 #[serde(rename_all = "camelCase")]
 pub struct LibraryAlbumArtistPage {
     pub items: Vec<LibraryAlbumArtistSummary>,
-    pub total_count: u64,
+    /// How many rows the whole list has; only the first page (no cursor) says.
+    pub total_count: Option<u64>,
     pub next_cursor: Option<String>,
 }
 #[derive(Debug, Clone, Serialize, specta::Type)]
@@ -186,7 +201,8 @@ pub struct LibraryAlbumTrackSummary {
 #[serde(rename_all = "camelCase")]
 pub struct LibraryAlbumTrackPage {
     pub items: Vec<LibraryAlbumTrackSummary>,
-    pub total_count: u64,
+    /// How many rows the whole list has; only the first page (no cursor) says.
+    pub total_count: Option<u64>,
     pub next_cursor: Option<String>,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]

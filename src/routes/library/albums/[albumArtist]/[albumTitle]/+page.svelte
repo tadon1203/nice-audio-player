@@ -8,7 +8,7 @@
   import { albumItemKey } from "$lib/library/album-key";
   import { createAlbumDetails, createAlbumTracks } from "$lib/library/detail.svelte";
   import { libraryCommandErrorMessage } from "$lib/library/library-errors";
-  import { albumArtistHref } from "$lib/library/routes";
+  import { albumArtistHref, albumEditionOf } from "$lib/library/routes";
   import { albumTitleLabel, artistNameLabel, fromNameSegment } from "$lib/library/unknown-name";
   import { getPlayback } from "$lib/playback/context";
   import { createWorkspaceScroll } from "$lib/shell/workspace-scroll.svelte";
@@ -28,7 +28,8 @@
 
   const albumArtist = $derived(fromNameSegment(page.params.albumArtist ?? ""));
   const albumTitle = $derived(fromNameSegment(page.params.albumTitle ?? ""));
-  const key = $derived({ albumArtist, title: albumTitle });
+  const edition = $derived(albumEditionOf(page.url.searchParams));
+  const key = $derived({ albumArtist, title: albumTitle, edition });
   const title = $derived(albumTitleLabel(albumTitle));
   const artist = $derived(artistNameLabel(albumArtist));
   const shared = $derived(albumItemKey(key));
@@ -42,6 +43,7 @@
   const albumIsLoaded = $derived(
     playback.item?.albumKey?.title === albumTitle &&
       playback.item.albumKey.albumArtist === albumArtist &&
+      playback.item.albumKey.edition === edition &&
       (playback.status === "playing" || playback.status === "paused"),
   );
   const albumIsPlaying = $derived(albumIsLoaded && playback.status === "playing");

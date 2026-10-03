@@ -64,9 +64,13 @@ export const commands = {
 	openLogDirectory: () => __TAURI_INVOKE<null>("open_log_directory"),
 	startLibraryScan: () => __TAURI_INVOKE<null>("start_library_scan"),
 	cancelLibraryScan: () => __TAURI_INVOKE<null>("cancel_library_scan"),
-	listLibraryTracks: (cursor: string | null, search: string | null, sortKey: LibraryTrackSortKey, sortDirection: LibrarySortDirection) => __TAURI_INVOKE<LibraryTrackPage>("list_library_tracks", { cursor, search, sortKey, sortDirection }),
-	listLibraryAlbums: (cursor: string | null, search: string | null, sortKey: LibraryAlbumSortKey, sortDirection: LibrarySortDirection) => __TAURI_INVOKE<LibraryAlbumPage>("list_library_albums", { cursor, search, sortKey, sortDirection }),
-	listLibraryAlbumArtists: (cursor: string | null, search: string | null, sortKey: LibraryAlbumArtistSortKey, sortDirection: LibrarySortDirection) => __TAURI_INVOKE<LibraryAlbumArtistPage>("list_library_album_artists", { cursor, search, sortKey, sortDirection }),
+	listLibraryTracks: (cursor: string | null, search: string | null, sortKey: LibraryTrackSortKey, sortDirection: LibrarySortDirection, skip: number) => __TAURI_INVOKE<LibraryTrackPage>("list_library_tracks", { cursor, search, sortKey, sortDirection, skip }),
+	listLibraryAlbums: (cursor: string | null, search: string | null, sortKey: LibraryAlbumSortKey, sortDirection: LibrarySortDirection, skip: number) => __TAURI_INVOKE<LibraryAlbumPage>("list_library_albums", { cursor, search, sortKey, sortDirection, skip }),
+	listLibraryAlbumArtists: (cursor: string | null, search: string | null, sortKey: LibraryAlbumArtistSortKey, sortDirection: LibrarySortDirection, skip: number) => __TAURI_INVOKE<LibraryAlbumArtistPage>("list_library_album_artists", { cursor, search, sortKey, sortDirection, skip }),
+	/**  The scroll index of the Tracks list: how many names start under each label, in list order. */
+	listLibraryTrackIndex: (search: string | null, sortKey: LibraryTrackSortKey, sortDirection: LibrarySortDirection) => __TAURI_INVOKE<LibraryIndexBucket[]>("list_library_track_index", { search, sortKey, sortDirection }),
+	listLibraryAlbumIndex: (search: string | null, sortKey: LibraryAlbumSortKey, sortDirection: LibrarySortDirection) => __TAURI_INVOKE<LibraryIndexBucket[]>("list_library_album_index", { search, sortKey, sortDirection }),
+	listLibraryAlbumArtistIndex: (search: string | null, sortKey: LibraryAlbumArtistSortKey, sortDirection: LibrarySortDirection) => __TAURI_INVOKE<LibraryIndexBucket[]>("list_library_album_artist_index", { search, sortKey, sortDirection }),
 	getLibraryAlbumArtist: (artistKey: LibraryAlbumArtistKey) => __TAURI_INVOKE<LibraryAlbumArtistSummary>("get_library_album_artist", { artistKey }),
 	listLibraryArtistAlbums: (artistKey: LibraryAlbumArtistKey, cursor: string | null, sortKey: LibraryArtistAlbumSortKey, sortDirection: LibrarySortDirection) => __TAURI_INVOKE<LibraryAlbumPage>("list_library_artist_albums", { artistKey, cursor, sortKey, sortDirection }),
 	getLibraryAlbumDetails: (albumKey: LibraryAlbumKey) => __TAURI_INVOKE<LibraryAlbumDetails>("get_library_album_details", { albumKey }),
@@ -204,7 +208,8 @@ export type LibraryAlbumArtistKey = {
 
 export type LibraryAlbumArtistPage = {
 	items: LibraryAlbumArtistSummary[],
-	totalCount: number,
+	/**  How many rows the whole list has; only the first page (no cursor) says. */
+	totalCount: number | null,
 	nextCursor: string | null,
 };
 
@@ -228,11 +233,17 @@ export type LibraryAlbumDetails = {
 export type LibraryAlbumKey = {
 	title: string,
 	albumArtist: string,
+	/**
+	 *  Which printing of the album: its folder. Two folders holding the same title and Album
+	 *  Artist are two albums. Opaque to the renderer, `""` for the album of tracks with no album.
+	 */
+	edition: string,
 };
 
 export type LibraryAlbumPage = {
 	items: LibraryAlbumSummary[],
-	totalCount: number,
+	/**  How many rows the whole list has; only the first page (no cursor) says. */
+	totalCount: number | null,
 	nextCursor: string | null,
 };
 
@@ -246,7 +257,8 @@ export type LibraryAlbumSummary = {
 
 export type LibraryAlbumTrackPage = {
 	items: LibraryAlbumTrackSummary[],
-	totalCount: number,
+	/**  How many rows the whole list has; only the first page (no cursor) says. */
+	totalCount: number | null,
 	nextCursor: string | null,
 };
 
@@ -271,6 +283,15 @@ export type LibraryCommandError = { code: "invalidRoot" } | { code: "rootNotDire
 { code: "rootContainsDataDirectory" } | { code: "scanInProgress" } | { code: "invalidId" } | { code: "trackNotFound" } | { code: "trackUnavailable" } | { code: "albumNotFound" } | { code: "invalidCursor" } | { code: "invalidAlbumKey" } | { code: "invalidAlbumArtistKey" } | { code: "albumArtistNotFound" } | { code: "rootMissing" } | { code: "scanAlreadyRunning" } | { code: "noEnabledRoots" } | { code: "scanNotRunning" } | { code: "libraryUnavailable" } | { code: "persistenceFailed" } | { code: "taskFailed" };
 
 export type LibraryFileAvailability = "available" | "missing";
+
+/**
+ *  One entry of a list's scroll index: the label its names are filed under, and how many there
+ *  are. Buckets come in the list's own order.
+ */
+export type LibraryIndexBucket = {
+	label: string,
+	count: number,
+};
 
 export type LibraryRoot = {
 	id: string,
@@ -318,7 +339,8 @@ export type LibraryStatus = { status: "ready" } | { status: "unavailable"; reaso
 
 export type LibraryTrackPage = {
 	items: LibraryTrackSummary[],
-	totalCount: number,
+	/**  How many rows the whole list has; only the first page (no cursor) says. */
+	totalCount: number | null,
 	nextCursor: string | null,
 };
 

@@ -20,9 +20,11 @@ mod scan_tests;
 pub(crate) mod scanner;
 pub mod status;
 pub mod store;
+pub(crate) mod summary;
 pub(crate) mod sync;
 #[cfg(test)]
 mod sync_tests;
+pub(crate) mod text;
 pub(crate) mod watcher;
 
 use crate::activity::ApplicationActivityHandle;

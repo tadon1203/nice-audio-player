@@ -36,12 +36,12 @@ export const testRoot: LibraryRoot = {
 };
 
 export const testAlbum: LibraryAlbumSummary = {
-  key: { title: "Test album", albumArtist: "Test artist" },
+  key: { title: "Test album", albumArtist: "Test artist", edition: "" },
   artwork: null,
   year: 2020,
 };
 export const secondAlbum: LibraryAlbumSummary = {
-  key: { title: "Second album", albumArtist: "Test artist" },
+  key: { title: "Second album", albumArtist: "Test artist", edition: "" },
   artwork: null,
   year: 2024,
 };
@@ -99,7 +99,11 @@ export function testLibrary(
   const extra = Array.from(
     { length: options.extraAlbums ?? 0 },
     (_, index): LibraryAlbumSummary => ({
-      key: { title: `Extra album ${String(index).padStart(4, "0")}`, albumArtist: "Extra artist" },
+      key: {
+        title: `Extra album ${String(index).padStart(4, "0")}`,
+        albumArtist: "Extra artist",
+        edition: "",
+      },
       artwork,
       year: 2000 + (index % 20),
     }),
@@ -143,6 +147,9 @@ export function libraryResponses(library: LibraryData = testLibrary()) {
     listLibraryTracks: ({ cursor }: { cursor: string | null }) => pageOf(library.tracks, cursor),
     listLibraryAlbums: () => pageOf(library.albums, null, library.albums.length),
     listLibraryAlbumArtists: () => pageOf(library.artists, null),
+    listLibraryTrackIndex: [],
+    listLibraryAlbumIndex: [],
+    listLibraryAlbumArtistIndex: [],
     getLibraryAlbumArtist: library.artists[0],
     listLibraryArtistAlbums: () => pageOf(library.albums.slice(0, 2), null),
     getLibraryAlbumDetails: library.albumDetails,

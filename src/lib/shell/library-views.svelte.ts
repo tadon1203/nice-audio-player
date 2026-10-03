@@ -31,6 +31,8 @@ class LibraryView<Presentation extends LibraryPresentation> {
   filter = $state("");
   sortKey: SortKeyOf[Presentation];
   direction: LibrarySortDirection = $state("ascending");
+  /** Rows the list starts after: 0, or where the scroll index jumped to. */
+  skip = $state(0);
 
   readonly #presentation: Presentation;
   readonly sortOptions: readonly SortOption<SortKeyOf[Presentation]>[];
@@ -51,6 +53,7 @@ class LibraryView<Presentation extends LibraryPresentation> {
       filter: this.filter,
       sortKey: this.sortKey,
       direction: this.direction,
+      skip: this.skip,
     } as Extract<LibraryCatalogRequest, { presentation: Presentation }>;
   }
 
@@ -61,20 +64,28 @@ class LibraryView<Presentation extends LibraryPresentation> {
 
   /** Identifies the filter and sort so views can reset scroll when it changes. */
   get stateKey(): string {
-    return `${this.filter}\u0000${this.sortKey}\u0000${this.direction}`;
+    return `${this.filter}\u0000${this.sortKey}\u0000${this.direction}\u0000${this.skip}`;
   }
 
   setFilter = (next: string): void => {
     this.filter = next;
+    this.skip = 0;
   };
 
   setSort = (key: SortKeyOf[Presentation], direction: LibrarySortDirection = "ascending"): void => {
     this.sortKey = key;
     this.direction = direction;
+    this.skip = 0;
   };
 
   toggleDirection = (): void => {
     this.direction = toggleSortDirection(this.direction);
+    this.skip = 0;
+  };
+
+  /** Starts the list after `skip` rows (a letter of the scroll index); 0 is the top. */
+  jumpTo = (skip: number): void => {
+    this.skip = skip;
   };
 }
 

@@ -152,6 +152,9 @@ pub(super) fn relink_moved(connection: &mut Connection) -> rusqlite::Result<usiz
         "UPDATE library_files SET relink_pending = 0 WHERE relink_pending = 1",
         [],
     )?;
+    if !pairs.is_empty() {
+        crate::library::summary::rebuild(&transaction)?;
+    }
     transaction.commit()?;
     Ok(pairs.len())
 }

@@ -568,3 +568,143 @@ fn a_scan_reports_whether_it_changed_anything_and_every_end_is_counted() {
         "each scan here starts from its own snapshot"
     );
 }
+
+/// Tags the WAV at `path` the way a music player would.
+fn tag(path: &Path, fields: &[(lofty::tag::ItemKey, &str)]) {
+    use lofty::config::WriteOptions;
+    use lofty::tag::{Tag, TagExt, TagType};
+    let mut tag = Tag::new(TagType::Id3v2);
+    for (key, value) in fields {
+        assert!(tag.insert_text(*key, (*value).to_owned()));
+    }
+    tag.save_to_path(path, WriteOptions::default())
+        .expect("tag written");
+}
+
+fn tagged_tone(path: &Path, samples: usize, fields: &[(lofty::tag::ItemKey, &str)]) {
+    write_tone(path, samples);
+    tag(path, fields);
+}
+
+fn albums(fixture: &Fixture) -> Vec<(String, String, String, i64)> {
+    let connection = fixture.database.read().unwrap();
+    let mut statement = connection
+        .prepare(
+            "SELECT album_artist_key, album_key, album_dir, track_count FROM albums
+             ORDER BY album_dir, album_artist_key",
+        )
+        .unwrap();
+    let rows = statement
+        .query_map([], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+        })
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    rows
+}
+
+#[test]
+fn tracks_of_one_folder_and_album_with_different_artists_are_a_compilation() {
+    use lofty::tag::ItemKey::{AlbumTitle, TrackArtist, TrackTitle};
+    let fixture = fixture();
+    for (folder, files) in [
+        ("Hits", vec![("1", "A"), ("2", "B"), ("3", "C")]),
+        ("Solo", vec![("1", "X"), ("2", "X")]),
+        ("Solo Remaster", vec![("1", "X")]),
+        ("Multi/CD1", vec![("1", "Y")]),
+        ("Multi/CD2", vec![("1", "Y")]),
+    ] {
+        std::fs::create_dir_all(fixture.music.join(folder)).unwrap();
+        for (index, (number, artist)) in files.into_iter().enumerate() {
+            let album = match folder {
+                "Hits" => "Hits",
+                "Solo" | "Solo Remaster" => "Record",
+                _ => "Double",
+            };
+            tagged_tone(
+                &fixture.music.join(folder).join(format!("{number}.wav")),
+                800 + index * 40 + folder.len(),
+                &[
+                    (TrackTitle, &format!("{folder} {number}")),
+                    (TrackArtist, artist),
+                    (AlbumTitle, album),
+                ],
+            );
+        }
+    }
+
+    run_scan(&fixture, false);
+
+    assert_eq!(
+        albums(&fixture),
+        vec![
+            ("Various Artists".into(), "Hits".into(), "1/Hits".into(), 3),
+            ("Y".into(), "Double".into(), "1/Multi".into(), 2),
+            ("X".into(), "Record".into(), "1/Solo".into(), 2),
+            ("X".into(), "Record".into(), "1/Solo Remaster".into(), 1),
+        ],
+        "one compilation, one two-disc album, and two printings of the same title and artist"
+    );
+    let artists: Vec<String> = fixture
+        .database
+        .read()
+        .unwrap()
+        .prepare("SELECT name FROM album_artists ORDER BY name")
+        .unwrap()
+        .query_map([], |row| row.get(0))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
+    assert_eq!(artists, ["Various Artists", "X", "Y"]);
+
+    // Take the third artist away: the others are one artist's album again, and the album under
+    // Various Artists is gone.
+    std::fs::remove_file(fixture.music.join("Hits").join("3.wav")).unwrap();
+    std::fs::remove_file(fixture.music.join("Hits").join("2.wav")).unwrap();
+    run_scan(&fixture, false);
+    roots::delete_missing(&fixture.database).unwrap();
+    let after = albums(&fixture);
+    assert_eq!(after[0], ("A".into(), "Hits".into(), "1/Hits".into(), 1));
+}
+
+#[test]
+fn sort_order_tags_win_over_derived_sort_keys() {
+    use lofty::tag::ItemKey::{TrackTitle, TrackTitleSortOrder};
+    let fixture = fixture();
+    tagged_tone(
+        &fixture.music.join("a.wav"),
+        800,
+        &[
+            (TrackTitle, "The Apple"),
+            (TrackTitleSortOrder, "Apple, The"),
+        ],
+    );
+    tagged_tone(
+        &fixture.music.join("b.wav"),
+        1_600,
+        &[(TrackTitle, "Banana")],
+    );
+    tagged_tone(&fixture.music.join("c.wav"), 2_400, &[(TrackTitle, "ユズ")]);
+    run_scan(&fixture, false);
+
+    let keys: Vec<(String, String)> = fixture
+        .database
+        .read()
+        .unwrap()
+        .prepare("SELECT title_key, title_sort FROM track_source_metadata ORDER BY title_sort")
+        .unwrap()
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
+
+    assert_eq!(
+        keys,
+        [
+            ("The Apple".to_owned(), "apple, the".to_owned()),
+            ("Banana".to_owned(), "banana".to_owned()),
+            ("ユズ".to_owned(), "ゆず".to_owned()),
+        ]
+    );
+}

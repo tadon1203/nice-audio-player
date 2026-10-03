@@ -28,7 +28,7 @@ export function trackLinks(track: TrackLinkSource): { artist: Link | null; album
         ? null
         : {
             text: album,
-            href: key === null ? null : albumHref(key.albumArtist, key.title),
+            href: key === null ? null : albumHref(key),
           },
   };
 }

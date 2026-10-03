@@ -1,5 +1,6 @@
 <script lang="ts" module>
   import type { LibraryViewState } from "$lib/library/catalog.svelte";
+  import type { LibraryIndexBucket } from "$lib/native";
   import type { SortableView } from "$lib/ui/sort-option";
 
   export type LibraryPresentationMeta = {
@@ -30,6 +31,8 @@
     isFetchingNextPage: boolean;
     fetchNextPage: () => unknown;
     refetch: () => unknown;
+    /** The scroll index of the list's order; empty when the sort has none. */
+    index: readonly LibraryIndexBucket[];
   };
 </script>
 
@@ -37,6 +40,7 @@
   import type { Snippet } from "svelte";
   import { resolve } from "$app/paths";
   import { libraryCommandErrorMessage } from "$lib/library/library-errors";
+  import { labelAt, skipTo } from "$lib/library/scroll-index";
   import { createWorkspaceScroll } from "$lib/shell/workspace-scroll.svelte";
   import EmptyStatus from "$lib/ui/empty-status.svelte";
   import ErrorAlert from "$lib/ui/error-alert.svelte";
@@ -44,6 +48,7 @@
   import LoadingStatus from "$lib/ui/loading-status.svelte";
   import ScrollIndex from "$lib/ui/scroll-index.svelte";
   import WorkspaceScroll from "$lib/ui/workspace-scroll.svelte";
+  import IndexRail from "./index-rail.svelte";
   import LibraryToolbar from "./library-toolbar.svelte";
 
   let {
@@ -54,7 +59,8 @@
     stateKey,
     sort,
     catalog,
-    indexFor,
+    skip,
+    onjump,
     content,
   }: {
     meta: LibraryPresentationMeta;
@@ -66,11 +72,9 @@
     stateKey: string;
     sort?: SortableView<Key>;
     catalog: WorkspaceCatalog<Item>;
-    /**
-     * The index key of an item (a letter or a year) for the big label shown while scrolling.
-     * The list must report its first visible item through `scroll.ontopindexchange`.
-     */
-    indexFor?: (item: Item) => string | null;
+    /** Rows the list starts after (it begins at the letter jumped to). */
+    skip: number;
+    onjump: (skip: number) => void;
     content: Snippet<[readonly Item[], LibraryScroll]>;
   } = $props();
 
@@ -84,10 +88,7 @@
     ready: () => catalog.items.length > 0,
   });
 
-  const item = $derived(catalog.items[topIndex]);
-  const scrollIndexLabel = $derived(
-    indexFor === undefined || item === undefined ? null : indexFor(item),
-  );
+  const scrollIndexLabel = $derived(labelAt(catalog.index, skip + topIndex));
 
   const scroll = $derived<LibraryScroll>({
     viewport,
@@ -111,6 +112,13 @@
 
   <div class="@container relative min-h-0">
     <ScrollIndex label={scrollIndexLabel} visible={workspaceScroll.scrolling} />
+    {#if catalog.index.length > 1}
+      <IndexRail
+        buckets={catalog.index}
+        current={scrollIndexLabel}
+        onselect={(label) => onjump(skipTo(catalog.index, label) ?? 0)}
+      />
+    {/if}
     <WorkspaceScroll bind:viewportRef={viewport} contentClass="pt-6 pb-16">
       {#if catalog.viewState === "loading"}
         <LoadingStatus>Loading library…</LoadingStatus>

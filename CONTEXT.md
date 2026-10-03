@@ -9,6 +9,8 @@ The language of Nice Audio Player. Use these terms in code, docs, and tickets; d
 - **Scan**: discovering, inspecting, and indexing files in batches. A cancelled or failed scan never leaves a half-written batch.
 - **Missing**: a track whose file is gone. Shown as missing, never auto-deleted; the user may delete Missing tracks explicitly, after confirmation. A new file with the same content as a Missing track is that track again (relinked, same `track_id`).
 - **Compilation**: tracks that share a directory and an album title but not an artist are one album, filed under Various Artists, even when no Album Artist is tagged.
+- **Edition**: which printing of an album: the folder its tracks are in (a disc folder counts as the folder above it). An album is its Album Artist, title and Edition, so an original and a remaster with the same title and artist are two albums.
+- **Scroll index**: a list's names grouped by first character (kana by row, kanji as one), counted in the list's own order. It backs the big letter shown while scrolling and the jump to a letter.
 
 ## Playback
 

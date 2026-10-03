@@ -11,8 +11,8 @@ use crate::library::{
 use rusqlite::{params, OptionalExtension, Row};
 
 /// The columns `summary_from_row` reads, in its order.
-pub(super) const SUMMARY_COLUMNS: &str = "t.id, m.title_key, m.artist_key, m.album_key, m.album_artist, m.album_artist_key, m.duration_ms, a.content_hash, a.mime_type, a.relative_path, m.file_format, m.bit_depth, m.bitrate_kbps, f.availability, f.inspection_status";
-pub(super) const SUMMARY_COLUMN_COUNT: usize = 15;
+pub(super) const SUMMARY_COLUMNS: &str = "t.id, m.title_key, m.artist_key, m.album_key, m.album_artist, m.album_artist_key, m.duration_ms, a.content_hash, a.mime_type, a.relative_path, m.file_format, m.bit_depth, m.bitrate_kbps, f.availability, f.inspection_status, m.album_dir";
+pub(super) const SUMMARY_COLUMN_COUNT: usize = 16;
 
 /// What `SUMMARY_COLUMNS` are selected from.
 pub(super) const SUMMARY_FROM: &str = "FROM track_source_metadata m JOIN tracks t ON t.id = m.track_id JOIN library_files f ON f.id = t.file_id LEFT JOIN artwork_assets a ON a.id = m.artwork_id";
@@ -41,6 +41,7 @@ pub(super) fn summary_from_row(row: &Row<'_>) -> rusqlite::Result<LibraryTrackSu
     let availability: Availability = row.get(13)?;
     let inspection: InspectionStatus = row.get(14)?;
     let artist: String = row.get(2)?;
+    let edition: String = row.get(15)?;
     Ok(LibraryTrackSummary {
         id: id.to_string(),
         title: row.get(1)?,
@@ -48,6 +49,7 @@ pub(super) fn summary_from_row(row: &Row<'_>) -> rusqlite::Result<LibraryTrackSu
         album_key: (!album.is_empty()).then(|| LibraryAlbumKey {
             title: album.clone(),
             album_artist: album_artist_key,
+            edition,
         }),
         album: (!album.is_empty()).then_some(album),
         album_artist: non_blank(row.get(4)?),

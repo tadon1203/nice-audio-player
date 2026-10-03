@@ -37,6 +37,16 @@ impl Deref for ReadConnection {
     }
 }
 
+#[cfg(test)]
+impl ReadConnection {
+    /// For tests that watch which statements a read runs.
+    pub(crate) fn connection_mut(&mut self) -> &mut Connection {
+        self.connection
+            .as_mut()
+            .expect("connection is present until drop")
+    }
+}
+
 impl Drop for ReadConnection {
     fn drop(&mut self) {
         if let Some(connection) = self.connection.take() {
