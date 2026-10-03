@@ -19,6 +19,7 @@ Communicate with subagents through **context pointers** (paths, commit hashes), 
    2. Spawn one **implementer subagent** with a short prompt:
       - Paths to the spec, and this ticket.
       - Hashes of the commits of its `Blocked by` tickets, so it can read what they did.
+      - Invoke `/tdd` to implement the ticket using its red-green-refactor workflow.
       - Instructions: implement only this ticket; follow the repository's engineering rules and run the checks required by the diff; commit to the current branch; then set the ticket to `Status: done` with `Commit: <hash>` pointing to that implementation commit, following the issue tracker's conventions; reply with the hash and a 2-3 line summary, plus anything that affects later tickets.
    3. Verify: `git status` is clean and the ticket file says `done` with a commit hash. If the subagent failed or left a mess, fix the ticket's instructions or spawn a fresh implementer to finish it; do not patch the code yourself. If it is stuck on a design question, ask the user.
    4. If the summary changes later tickets (a renamed seam, a dropped assumption), edit those ticket files now. Commit tracked ticket updates before starting the next implementer; local gitignored tickets stay in the issue tracker.
