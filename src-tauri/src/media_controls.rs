@@ -173,7 +173,10 @@ mod windows_impl {
 
     fn show_track(controls: &mut MediaControls, track: &Track, data_dir: &Path, no_cover: &Path) {
         let existing = |relative: &str| {
-            let path = data_dir.join(relative);
+            // The Windows storage API refuses a path that mixes `/` into `\` ones.
+            let path = relative
+                .split('/')
+                .fold(data_dir.to_path_buf(), |path, part| path.join(part));
             path.is_file().then_some(path)
         };
         let cover = track
