@@ -232,6 +232,7 @@ export const emptyQueue: PlaybackQueueSnapshot = {
   upcomingCount: 0,
   repeatMode: "off",
   shuffleEnabled: false,
+  canRestorePrevious: false,
 };
 
 /** What an app answers before anything plays. */

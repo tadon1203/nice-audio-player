@@ -6,15 +6,11 @@ impl PlaybackWorker {
     /// Replaces the queue and starts its `start_index` item.
     pub(super) fn start_queue(
         &mut self,
-        items: Vec<PlaybackItemSeed>,
+        track_ids: Vec<String>,
         start_index: usize,
         reply: Reply<PlaybackSnapshot>,
     ) {
-        if self
-            .queue
-            .replace(items, start_index, &mut self.rng)
-            .is_err()
-        {
+        if self.replace_queue(track_ids, start_index).is_err() {
             let _ = reply.send(Err(PlaybackServiceError::InvalidPlaybackState));
             return;
         }
@@ -22,14 +18,51 @@ impl PlaybackWorker {
         self.start_current(Some(reply), false);
     }
 
+    /// Replaces the queue, keeping the old one for one-step undo. Nothing is kept when nothing
+    /// was queued, so an Undo never resurrects something older than what was just replaced.
+    fn replace_queue(
+        &mut self,
+        track_ids: Vec<String>,
+        start_index: usize,
+    ) -> Result<(), QueueError> {
+        let before = self.queue.clone();
+        self.queue.replace(track_ids, start_index, &mut self.rng)?;
+        self.previous_queue = (!before.is_empty()).then_some(before);
+        // What was read about the old queue's tracks may be out of date by now.
+        self.tracks.forget();
+        Ok(())
+    }
+
+    /// Puts back the queue the last replacement or Clear upcoming took away. When the same item
+    /// is still current, it keeps playing; otherwise the restored current item starts.
+    pub(super) fn restore_previous_queue(&mut self, reply: Reply<PlaybackSnapshot>) {
+        let Some(previous) = self.previous_queue.take() else {
+            let _ = reply.send(Err(PlaybackServiceError::InvalidPlaybackState));
+            return;
+        };
+        let same_current = matches!(
+            (self.queue.current(), previous.current()),
+            (Some(now), Some(then)) if now.id == then.id
+        ) && matches!(self.transport, Transport::Loaded(_));
+        self.queue.restore(previous, &mut self.rng);
+        self.skipped_in_a_row = 0;
+        if same_current {
+            self.publish_queue();
+            let snapshot = self.publish_state();
+            let _ = reply.send(Ok(snapshot));
+        } else {
+            self.start_current(Some(reply), false);
+        }
+    }
+
     /// Items enqueued with nothing current: they start playing, and the caller gets the queue
     /// as it stands without waiting for the track to load.
     pub(super) fn start_enqueued(
         &mut self,
-        items: Vec<PlaybackItemSeed>,
+        track_ids: Vec<String>,
         reply: Reply<PlaybackQueueSnapshot>,
     ) {
-        if self.queue.replace(items, 0, &mut self.rng).is_err() {
+        if self.replace_queue(track_ids, 0).is_err() {
             let _ = reply.send(Err(PlaybackServiceError::InvalidPlaybackState));
             return;
         }
@@ -61,8 +94,17 @@ impl PlaybackWorker {
         responder: Option<Reply<PlaybackSnapshot>>,
         start_paused: bool,
     ) {
-        let Some(item) = self.queue.current().cloned() else {
+        if self.queue.current().is_none() {
             respond(responder, Err(PlaybackServiceError::InvalidPlaybackState));
+            return;
+        }
+        let Some(item) = self.resolve_current() else {
+            // Every track left in the queue has gone from the library.
+            self.discard_transport();
+            self.queue.clear();
+            self.publish_queue();
+            self.publish_state();
+            respond(responder, Err(PlaybackServiceError::TrackUnavailable));
             return;
         };
         self.publish_queue();
@@ -265,12 +307,55 @@ impl PlaybackWorker {
         if self.skipped_in_a_row >= self.queue.len() {
             return None;
         }
-        let item = self
-            .queue
-            .advance(AdvanceReason::UserNext, &mut self.rng)?
-            .clone();
+        self.queue.advance(AdvanceReason::UserNext, &mut self.rng)?;
+        let item = self.resolve_current()?;
         self.publish_queue();
         Some(item)
+    }
+
+    /// The item the queue points at, read from the library. A track the library no longer has
+    /// is dropped from the queue and the one after it is tried, so an entry that disappeared
+    /// between starting and playing never stops the queue.
+    pub(super) fn resolve_current(&mut self) -> Option<PlaybackItem> {
+        loop {
+            let entry = self.queue.current()?.clone();
+            if let Some(item) = self.item_of(&entry) {
+                return Some(item);
+            }
+            self.queue.remove_entries(&HashSet::from([entry.id]));
+        }
+    }
+
+    /// The queue entry as a playable item, `None` when the library no longer has its track.
+    pub(super) fn item_of(&self, entry: &QueueEntry) -> Option<PlaybackItem> {
+        Some(PlaybackItem {
+            queue_item_id: entry.queue_item_id(),
+            track: self.tracks.resolve_one(&entry.track_id)?,
+        })
+    }
+
+    /// Drops the queued items the library no longer has from the part of the queue that is about
+    /// to be shown, so the counts and the rows agree. The current item is `resolve_current`'s.
+    pub(super) fn prune_unavailable(&mut self) {
+        loop {
+            let history = self.queue.history();
+            let upcoming = self.queue.upcoming();
+            let mut shown: Vec<&QueueEntry> = history
+                [history.len().saturating_sub(HISTORY_IN_SNAPSHOT)..]
+                .iter()
+                .collect();
+            shown.extend(&upcoming[..upcoming.len().min(UPCOMING_IN_SNAPSHOT)]);
+            let ids: Vec<&str> = shown.iter().map(|entry| &*entry.track_id).collect();
+            let gone: HashSet<u64> = shown
+                .iter()
+                .zip(self.tracks.resolve(&ids))
+                .filter(|(_, track)| track.is_none())
+                .map(|(entry, _)| entry.id)
+                .collect();
+            if gone.is_empty() || !self.queue.remove_entries(&gone) {
+                return;
+            }
+        }
     }
 
     pub(super) fn navigate(&mut self, reason: AdvanceReason, reply: Reply<PlaybackSnapshot>) {

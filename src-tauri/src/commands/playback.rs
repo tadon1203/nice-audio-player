@@ -26,19 +26,21 @@ pub fn get_playback_queue(state: tauri::State<'_, AppState>) -> PlaybackQueueSna
 }
 
 /// Upcoming queue items from `offset` (at most `limit`), for the parts of a long queue the
-/// snapshot does not carry.
+/// snapshot does not carry. Their tracks are read from the library now.
 #[tauri::command]
 #[specta::specta]
-pub fn get_playback_queue_window(
+pub async fn get_playback_queue_window(
     offset: u32,
     limit: u32,
     state: tauri::State<'_, AppState>,
-) -> PlaybackQueueWindow {
-    state
-        .backend
-        .playback
-        .handle()
-        .queue_window(offset as usize, limit as usize)
+) -> Result<PlaybackQueueWindow, PlaybackServiceError> {
+    blocking(&state, move |backend| {
+        Ok(backend
+            .playback
+            .handle()
+            .queue_window(offset as usize, limit as usize))
+    })
+    .await
 }
 
 /// Replaces the queue with `context` and plays from `start_track_id`, or from the context's
@@ -240,6 +242,18 @@ pub async fn clear_queue(
 ) -> Result<PlaybackQueueSnapshot, PlaybackServiceError> {
     blocking(&state, move |backend| {
         backend.playback.handle().clear_queue()
+    })
+    .await
+}
+
+/// Puts back the queue the last replacement or Clear upcoming took away.
+#[tauri::command]
+#[specta::specta]
+pub async fn restore_previous_queue(
+    state: tauri::State<'_, AppState>,
+) -> Result<PlaybackSnapshot, PlaybackServiceError> {
+    blocking(&state, move |backend| {
+        backend.playback.handle().restore_previous_queue()
     })
     .await
 }

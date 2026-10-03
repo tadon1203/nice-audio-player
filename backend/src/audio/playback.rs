@@ -7,15 +7,17 @@ mod item;
 mod pipeline;
 mod preferences;
 mod queue;
+mod resolver;
 mod service;
 mod session;
 mod snapshot;
 mod source_loader;
 mod worker;
 
-pub use item::{PlaybackItem, PlaybackItemSeed, SourceFacts};
+pub use item::PlaybackItem;
 pub use preferences::{PlaybackPreferences, PreferencesObserver};
 pub use queue::PlaybackRepeatMode;
+pub use resolver::{NoTracks, TrackResolver, TrackSource};
 pub use service::{
     PlaybackService, PlaybackServiceError, PlaybackServiceHandle, PlaybackServiceStartError,
 };

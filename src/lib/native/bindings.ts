@@ -7,7 +7,7 @@ export const commands = {
 	getPlaybackState: () => __TAURI_INVOKE<PlaybackSnapshot>("get_playback_state"),
 	/**
 	 *  Upcoming queue items from `offset` (at most `limit`), for the parts of a long queue the
-	 *  snapshot does not carry.
+	 *  snapshot does not carry. Their tracks are read from the library now.
 	 */
 	getPlaybackQueueWindow: (offset: number, limit: number) => __TAURI_INVOKE<PlaybackQueueWindow>("get_playback_queue_window", { offset, limit }),
 	getPlaybackQueue: () => __TAURI_INVOKE<PlaybackQueueSnapshot>("get_playback_queue"),
@@ -38,6 +38,8 @@ export const commands = {
 	 */
 	enqueueTrack: (trackId: string, next: boolean) => __TAURI_INVOKE<PlaybackQueueSnapshot>("enqueue_track", { trackId, next }),
 	clearQueue: () => __TAURI_INVOKE<PlaybackQueueSnapshot>("clear_queue"),
+	/**  Puts back the queue the last replacement or Clear upcoming took away. */
+	restorePreviousQueue: () => __TAURI_INVOKE<PlaybackSnapshot>("restore_previous_queue"),
 	/**  Waveform of the loaded track, or `None` while it is analyzed; `waveformChanged` follows. */
 	getPlaybackWaveform: () => __TAURI_INVOKE<{
 	/**  The playback the waveform belongs to, so a late answer cannot be drawn for another track. */
@@ -364,27 +366,15 @@ export type LyricsTimedLine = {
 	text: string,
 };
 
-export type PlaybackChannelConversion = "none" | "monoToStereo" | "stereoToMono" | "downmix";
-
-export type PlaybackContext = 
-/**  An album in disc and track order. */
-{ kind: "album"; key: LibraryAlbumKey } | 
-/**  Exactly these library tracks in this order: how a replaced queue is put back. */
-{ kind: "trackIds"; trackIds: string[] } | 
-/**  The tracks list as currently filtered and sorted. */
-{ kind: "tracks"; search: string | null; sortKey: LibraryTrackSortKey; sortDirection: LibrarySortDirection };
-
-export type PlaybackFailureCode = "noOutputDevice" | "outputDeviceUnavailable" | "unsupportedOutputConfiguration" | "outputStreamBuildFailed" | "outputStreamStartFailed" | "outputStreamPauseFailed" | "outputStreamResumeFailed" | "outputStreamRuntimeFailed" | "completionTimingFailed" | "decodeFailed" | "sampleRateConversionFailed";
-
 /**
- *  One entry of the playback queue and the identity of the loaded track.
+ *  A library track ready to be played, and the one track-metadata type of the whole playback
+ *  path: the library reads it, the queue item wraps it, and the renderer sees it.
  * 
- *  Everything a listener-facing feature needs about "what is playing" lives here, so history,
- *  system media controls, and the UI never have to look the track up again by path.
+ *  The file facts (`file_format`, `bit_depth`, `bitrate_kbps`) feed the signal path and stay in
+ *  the backend.
  */
-export type PlaybackItem = {
-	queueItemId: string,
-	trackId: string | null,
+export type PlayableTrack = {
+	trackId: string,
 	file: ValidatedAudioFile,
 	title: string,
 	artist: string | null,
@@ -392,15 +382,35 @@ export type PlaybackItem = {
 	albumArtist: string | null,
 	artwork: ArtworkRef | null,
 	durationMs: number | null,
-	/**  From the library's metadata; `None` for a file outside it. */
 	trackNumber: number | null,
 	discNumber: number | null,
 	year: number | null,
-	/**  The catalog key of the album, for links; `None` when the file has no album. */
+	/**  The catalog's key for the album, `None` for a track with no album tag. */
 	albumKey: LibraryAlbumKey | null,
-	/**  Tracks the library holds for the album. */
+	/**  How many tracks the library holds for that album. */
 	albumTrackCount: number | null,
 };
+
+export type PlaybackChannelConversion = "none" | "monoToStereo" | "stereoToMono" | "downmix";
+
+export type PlaybackContext = 
+/**  An album in disc and track order. */
+{ kind: "album"; key: LibraryAlbumKey } | 
+/**  The tracks list as currently filtered and sorted. */
+{ kind: "tracks"; search: string | null; sortKey: LibraryTrackSortKey; sortDirection: LibrarySortDirection };
+
+export type PlaybackFailureCode = "noOutputDevice" | "outputDeviceUnavailable" | "unsupportedOutputConfiguration" | "outputStreamBuildFailed" | "outputStreamStartFailed" | "outputStreamPauseFailed" | "outputStreamResumeFailed" | "outputStreamRuntimeFailed" | "completionTimingFailed" | "decodeFailed" | "sampleRateConversionFailed";
+
+/**
+ *  One entry of the playback queue and the identity of the loaded track: the queue's id for the
+ *  entry and the track's metadata, shared with every other layer as one type.
+ * 
+ *  Everything a listener-facing feature needs about "what is playing" lives here, so history,
+ *  system media controls, and the UI never have to look the track up again by path.
+ */
+export type PlaybackItem = {
+	queueItemId: string,
+} & PlayableTrack;
 
 /**
  *  Where the loaded track is. Sent on its own, far more often than the snapshot, so a tick
@@ -415,7 +425,7 @@ export type PlaybackPosition = {
 /**  A queue entry as the queue panel shows it; the file path stays in the backend. */
 export type PlaybackQueueItem = {
 	id: string,
-	trackId: string | null,
+	trackId: string,
 	title: string,
 	artist: string | null,
 	album: string | null,
@@ -438,6 +448,8 @@ export type PlaybackQueueSnapshot = {
 	upcomingCount: number,
 	repeatMode: PlaybackRepeatMode,
 	shuffleEnabled: boolean,
+	/**  The queue before the last replacement can be put back. */
+	canRestorePrevious: boolean,
 };
 
 /**  A slice of the upcoming list, tagged with the queue revision it was cut from. */

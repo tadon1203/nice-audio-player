@@ -8,9 +8,9 @@ use std::sync::{
 use std::thread::{self, JoinHandle};
 
 use super::input::{Inbox, WorkerInput};
-use super::item::PlaybackItemSeed;
 use super::preferences::{PlaybackPreferences, PreferencesObserver};
 use super::queue::{PlaybackQueue, PlaybackRepeatMode};
+use super::resolver::TrackResolver;
 use super::snapshot::{
     PlaybackFailureCode, PlaybackPosition, PlaybackQueueSnapshot, PlaybackQueueWindow,
     PlaybackSnapshot, SnapshotBase,
@@ -21,7 +21,6 @@ use crate::audio::output::{CpalBackend, OutputBackend};
 use crate::audio::volume::{AtomicEffectiveGain, VolumeState};
 use crate::events::SharedEventSink;
 use crate::library::store::PlaybackSourceError;
-use crate::media::validation::ValidatedAudioFile;
 use crate::tasks::TaskError;
 use log::error;
 
@@ -122,7 +121,7 @@ pub(super) fn respond<T>(reply: Option<Reply<T>>, result: Result<T, PlaybackServ
 
 pub(super) enum PlaybackCommand {
     Start {
-        items: Vec<PlaybackItemSeed>,
+        track_ids: Vec<String>,
         start_index: usize,
         reply: Reply<PlaybackSnapshot>,
     },
@@ -130,9 +129,6 @@ pub(super) enum PlaybackCommand {
         reply: Reply<PlaybackSnapshot>,
     },
     Next {
-        reply: Reply<PlaybackSnapshot>,
-    },
-    Stop {
         reply: Reply<PlaybackSnapshot>,
     },
     Pause {
@@ -180,13 +176,17 @@ pub(super) enum PlaybackCommand {
     ClearQueue {
         reply: Reply<PlaybackQueueSnapshot>,
     },
+    /// Puts back the queue the last replacement (or Clear upcoming) took away.
+    RestorePreviousQueue {
+        reply: Reply<PlaybackSnapshot>,
+    },
     /// Makes an upcoming item current and plays it.
     PlayQueueItem {
         id: String,
         reply: Reply<PlaybackSnapshot>,
     },
     Enqueue {
-        items: Vec<PlaybackItemSeed>,
+        track_ids: Vec<String>,
         /// Right after the current item rather than at the end.
         next: bool,
         reply: Reply<PlaybackQueueSnapshot>,
@@ -208,19 +208,21 @@ pub struct PlaybackService {
 
 impl PlaybackService {
     /// Starts the worker with the saved preferences. `observer` hears about every later change
-    /// so the caller can persist them.
+    /// so the caller can persist them; `tracks` is where queue entries get their metadata.
     pub fn start(
         events: SharedEventSink,
         preferences: PlaybackPreferences,
         observer: PreferencesObserver,
+        tracks: Arc<TrackResolver>,
     ) -> Result<Self, PlaybackServiceStartError> {
-        Self::start_with_backend(events, preferences, observer, Box::new(CpalBackend))
+        Self::start_with_backend(events, preferences, observer, tracks, Box::new(CpalBackend))
     }
 
     pub(super) fn start_with_backend(
         events: SharedEventSink,
         preferences: PlaybackPreferences,
         observer: PreferencesObserver,
+        tracks: Arc<TrackResolver>,
         backend: Box<dyn OutputBackend>,
     ) -> Result<Self, PlaybackServiceStartError> {
         let preferences = preferences.sanitized();
@@ -233,7 +235,11 @@ impl PlaybackService {
             base: SnapshotBase::new(volume_state, output_selection.clone()),
             item: None,
         }));
-        let queue_state = Arc::new(RwLock::new(PlaybackQueueSnapshot::of(0, &queue)));
+        let queue_state = Arc::new(RwLock::new(PlaybackQueueSnapshot::empty(
+            0,
+            queue.repeat(),
+            queue.shuffle(),
+        )));
         let position = Arc::new(RwLock::new(None));
         let links = WorkerLinks {
             snapshot: Arc::clone(&state),
@@ -244,6 +250,7 @@ impl PlaybackService {
             events,
             observer,
             backend,
+            tracks,
         };
         let worker = thread::Builder::new()
             .name("audio-playback".into())
@@ -319,33 +326,25 @@ impl PlaybackServiceHandle {
             .clone()
     }
 
-    /// Upcoming items from `offset`; a window of the queue the snapshot only starts.
+    /// Upcoming items from `offset`; a window of the queue the snapshot only starts. Reads the
+    /// library, so it blocks like the other requests.
     pub fn queue_window(&self, offset: usize, limit: usize) -> PlaybackQueueWindow {
-        self.queue_snapshot
-            .read()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .window(offset, limit)
+        // Copy the snapshot out first: the library is read without holding the worker's lock.
+        self.queue_snapshot().window(offset, limit)
     }
 
-    /// Replaces the queue with `items` and starts the one at `start_index`.
+    /// Replaces the queue with the tracks `track_ids` (in play order) and starts the one at
+    /// `start_index`. Returns once that track is playing; the others are read when needed.
     pub fn start(
         &self,
-        items: Vec<PlaybackItemSeed>,
+        track_ids: Vec<String>,
         start_index: usize,
     ) -> Result<PlaybackSnapshot, PlaybackServiceError> {
         self.request(|reply| PlaybackCommand::Start {
-            items,
+            track_ids,
             start_index,
             reply,
         })
-    }
-
-    /// Plays one file that has no library identity.
-    pub fn play_file(
-        &self,
-        file: ValidatedAudioFile,
-    ) -> Result<PlaybackSnapshot, PlaybackServiceError> {
-        self.start(vec![PlaybackItemSeed::from_file(file)], 0)
     }
 
     pub fn previous(&self) -> Result<PlaybackSnapshot, PlaybackServiceError> {
@@ -354,10 +353,6 @@ impl PlaybackServiceHandle {
 
     pub fn next(&self) -> Result<PlaybackSnapshot, PlaybackServiceError> {
         self.request(|reply| PlaybackCommand::Next { reply })
-    }
-
-    pub fn stop(&self) -> Result<PlaybackSnapshot, PlaybackServiceError> {
-        self.request(|reply| PlaybackCommand::Stop { reply })
     }
 
     pub fn pause(&self) -> Result<PlaybackSnapshot, PlaybackServiceError> {
@@ -428,14 +423,23 @@ impl PlaybackServiceHandle {
     /// start playing instead; the worker decides, so the check cannot race a stop.
     pub fn enqueue(
         &self,
-        items: Vec<PlaybackItemSeed>,
+        track_ids: Vec<String>,
         next: bool,
     ) -> Result<PlaybackQueueSnapshot, PlaybackServiceError> {
-        self.request(|reply| PlaybackCommand::Enqueue { items, next, reply })
+        self.request(|reply| PlaybackCommand::Enqueue {
+            track_ids,
+            next,
+            reply,
+        })
     }
 
     pub fn clear_queue(&self) -> Result<PlaybackQueueSnapshot, PlaybackServiceError> {
         self.request(|reply| PlaybackCommand::ClearQueue { reply })
+    }
+
+    /// Puts back the queue before the last replacement, playing the item that was current.
+    pub fn restore_previous_queue(&self) -> Result<PlaybackSnapshot, PlaybackServiceError> {
+        self.request(|reply| PlaybackCommand::RestorePreviousQueue { reply })
     }
 
     /// Blocks until the worker answers, which for a start is after the source is loaded and the

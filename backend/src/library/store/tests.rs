@@ -332,7 +332,9 @@ fn a_track_without_a_title_is_named_after_its_file_in_playback_and_in_search() {
     let selection = store
         .playback_for_tracks(None, LibraryTrackSortKey::Title, ASC, Some("1"))
         .unwrap();
-    let track = &selection.tracks[selection.start_index];
+    let ids: Vec<&str> = selection.track_ids.iter().map(String::as_str).collect();
+    let tracks = store.playable_tracks(&ids).unwrap();
+    let track = tracks[selection.start_index].as_ref().unwrap();
     assert_eq!(track.title, "multi.part");
     assert_eq!(
         track.album_key,
@@ -346,10 +348,12 @@ fn a_track_without_a_title_is_named_after_its_file_in_playback_and_in_search() {
         store.playback_for_track("1").unwrap().album_track_count,
         Some(1)
     );
-    let restored = store
-        .playback_for_track_ids(&["1".to_owned(), "999".to_owned()], Some("1"))
-        .unwrap();
-    assert_eq!(restored.tracks.len(), 1, "unknown ids are left out");
+    let restored = store.playable_tracks(&["1", "999", "x"]).unwrap();
+    assert_eq!(
+        restored.iter().map(Option::is_some).collect::<Vec<_>>(),
+        [true, false, false],
+        "unknown ids come back as holes, in the order asked"
+    );
 
     let by_stem = store
         .catalog_tracks(None, Some("multi.part"), LibraryTrackSortKey::Title, ASC)
@@ -375,21 +379,26 @@ fn track_playback_follows_the_list_order_and_skips_tracks_that_cannot_play() {
     let selection = store
         .playback_for_tracks(None, LibraryTrackSortKey::Title, DESC, Some("2"))
         .unwrap();
-    let titles: Vec<_> = selection.tracks.iter().map(|t| t.title.as_str()).collect();
     assert_eq!(
-        titles,
-        ["Charlie", "Bravo", "Alpha"],
+        selection.track_ids,
+        ["3", "1", "2"],
         "sorted as listed, missing skipped"
     );
-    assert_eq!(selection.tracks[selection.start_index].track_id, "2");
-    assert_eq!(selection.tracks[0].album.as_deref(), Some("Album"));
+    assert_eq!(selection.track_ids[selection.start_index], "2");
+    let first = store.playable_tracks(&["3"]).unwrap().remove(0).unwrap();
+    assert_eq!(first.album.as_deref(), Some("Album"));
 
     let filtered = store
         .playback_for_tracks(Some("alp"), LibraryTrackSortKey::Title, ASC, None)
         .unwrap();
-    assert_eq!(filtered.tracks.len(), 1);
+    assert_eq!(filtered.track_ids, ["2"]);
     assert_eq!(
-        filtered.tracks[0].album_track_count,
+        store
+            .playable_tracks(&["2"])
+            .unwrap()
+            .remove(0)
+            .unwrap()
+            .album_track_count,
         Some(4),
         "an album is counted whole, whatever the filter shows of it"
     );
@@ -443,10 +452,7 @@ fn playing_what_the_list_shows_holds_for_every_sort_and_direction() {
                 .store
                 .playback_for_tracks(None, key, direction, None)
                 .unwrap()
-                .tracks
-                .into_iter()
-                .map(|track| track.track_id)
-                .collect();
+                .track_ids;
             assert_eq!(played, listed, "{key:?} {direction:?}");
         }
     }
@@ -610,7 +616,10 @@ fn an_album_playback_sequence_is_complete_beyond_one_page() {
         )
         .unwrap();
 
-    assert_eq!((selection.tracks.len(), selection.start_index), (101, 100));
+    assert_eq!(
+        (selection.track_ids.len(), selection.start_index),
+        (101, 100)
+    );
 }
 
 #[test]
@@ -667,7 +676,13 @@ fn a_year_is_the_same_on_the_grid_the_details_header_and_in_playback() {
         None
     );
     let playback = store.playback_for_album(&key("Dated"), None).unwrap();
-    let years: Vec<_> = playback.tracks.iter().map(|track| track.year).collect();
+    let ids: Vec<&str> = playback.track_ids.iter().map(String::as_str).collect();
+    let years: Vec<_> = store
+        .playable_tracks(&ids)
+        .unwrap()
+        .iter()
+        .map(|track| track.as_ref().unwrap().year)
+        .collect();
     assert_eq!(
         years,
         [Some(1999), None],
@@ -1082,4 +1097,45 @@ fn track_properties_list_the_tags_and_the_files_path() {
     assert_eq!(properties.date.as_deref(), Some("2001-02-03"));
     assert!(properties.path.ends_with("1.wav") && properties.path.contains("music"));
     assert!(fixture.store.track_properties("99").unwrap().is_none());
+}
+
+/// Measurement for the lazy queue (run with `--ignored --nocapture`): what starting playback
+/// from a library of this size costs before the first track can load.
+#[test]
+#[ignore = "measurement, not a check"]
+fn starting_from_a_huge_tracks_list_costs_one_narrow_query() {
+    for count in [5_000i64, 50_000] {
+        let fixture = fixture();
+        let seeds: Vec<Seed> = (1..=count)
+            .map(|id| {
+                Seed::new(
+                    id,
+                    "Track",
+                    "Artist",
+                    ["Lp", "Ep", "Single"][id as usize % 3],
+                )
+            })
+            .collect();
+        fixture.add_all(&seeds);
+        fixture.sql("UPDATE library_files SET availability='available'");
+        let started = std::time::Instant::now();
+        let selection = fixture
+            .store
+            .playback_for_tracks(None, LibraryTrackSortKey::Title, ASC, None)
+            .unwrap();
+        let ids_ms = started.elapsed().as_millis();
+        let started = std::time::Instant::now();
+        let ids: Vec<&str> = selection
+            .track_ids
+            .iter()
+            .take(251)
+            .map(String::as_str)
+            .collect();
+        let _ = fixture.store.playable_tracks(&ids).unwrap();
+        let first_ms = started.elapsed().as_millis();
+        println!(
+            "{count} tracks: {} ids in {ids_ms} ms, first 251 tracks in {first_ms} ms",
+            selection.track_ids.len()
+        );
+    }
 }

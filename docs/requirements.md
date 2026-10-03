@@ -12,7 +12,7 @@ MP3, FLAC, WAV, AAC, M4A. A file counts as supported only if it can actually be 
 - Playing a track continues through the context it was picked from: an album plays on through the album, a track in the Tracks list plays on through that list as filtered and sorted
 - Previous restarts the track once it has played for 3 seconds, and goes to the previous track before that
 - Volume and mute
-- Queue, repeat, shuffle. Shuffle is a real random order: the current track stays first and a repeated queue is shuffled again on every pass
+- Queue, repeat, shuffle. Shuffle is a real random order: the current track stays first and a repeated queue is shuffled again on every pass; tracks added, removed or moved while shuffled keep their intended place when shuffle is turned off. Starting from a very long list responds at once, however large the library is
 - Output device selection
 - Volume, mute, output device, repeat, and shuffle are remembered across restarts
 - Playback state (position, source/output sample rate, resampling) reflects the real audio state
@@ -34,7 +34,7 @@ MP3, FLAC, WAV, AAC, M4A. A file counts as supported only if it can actually be 
 | `Ctrl+R`            | Repeat: off, all, one                                                          |
 | Arrow keys          | Move between tiles when focus is in an album or artist grid (they do not seek) |
 
-Dragging the seek bar slows down the further the pointer is from the bar (or with `Shift`), for fine positioning. A track row's context menu offers Play next, Add to queue, Go to album, Go to artist, Show in Explorer, and Properties (tags, audio format, and file location); a queue row plays on click, and the tracks already played sit above the current one, faintest, and play again on click. Starting playback from a list replaces the queue.
+Dragging the seek bar slows down the further the pointer is from the bar (or with `Shift`), for fine positioning. A track row's context menu offers Play next, Add to queue, Go to album, Go to artist, Show in Explorer, and Properties (tags, audio format, and file location); a queue row plays on click, and the tracks already played sit above the current one, faintest, and play again on click. Starting playback from a list replaces the queue, and the dock offers "Queue replaced · Undo" for a few seconds to put the previous queue (and its current track) back in one click; Clear upcoming is undone the same way. Only one step back is kept, and not across restarts.
 
 ## Library
 

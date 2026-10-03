@@ -14,8 +14,8 @@ The language of Nice Audio Player. Use these terms in code, docs, and tickets; d
 
 - **Playback context**: where a track was picked from (an album, or the Tracks list as filtered and sorted). Playback continues through it and becomes the queue.
 - **Playback**: one queue item being played, identified by its playback id. A seek or an output device switch keeps the same Playback; starting an item again makes a new one.
-- **Queue**: the ordered items to play. Starting playback from a list replaces it; the replacement can be undone once.
-- **PlaybackItem**: a queue entry, carrying the library `track_id`. Nothing looks a playing track up by path.
+- **Queue**: the items to play, held as track ids and read from the library only where they are shown or played. Its **arranged order** is the one source of truth; shuffle is a separate **play order** over it, so editing while shuffled and then turning shuffle off loses and reorders nothing. Starting playback from a list replaces it; the replacement (or Clear upcoming) can be undone once.
+- **PlaybackItem**: a queue entry's id plus the one track-metadata type (`PlayableTrack`), carrying the library `track_id`. Nothing looks a playing track up by path.
 - **Output stream**: the device stream playback opens. It lives until playback stops, the device changes or the next track's audio format differs; seeks and same-format track changes do not replace it, so it can span several Playbacks.
 - **Gapless**: consecutive tracks of the same audio format play with no silence between them, always on. A format change reopens the output stream and leaves a short gap, so the Path stays true.
 - **Pipeline**: a decode thread and the queue it fills for the output stream. A seek builds a new one and hands its queue to the running stream; the next track's Pipeline is built ahead of the end and handed over the same way.

@@ -43,20 +43,6 @@ impl PlaybackWorker {
         Some(id)
     }
 
-    pub(super) fn stop(&mut self) -> PlaybackSnapshot {
-        let was_visible = matches!(
-            self.transport,
-            Transport::Loaded(_) | Transport::Failed { .. }
-        );
-        self.discard_transport();
-        self.queue.clear();
-        self.publish_queue();
-        if was_visible {
-            return self.publish_state();
-        }
-        self.render()
-    }
-
     pub(super) fn pause(&mut self) -> Result<PlaybackSnapshot, PlaybackServiceError> {
         if let Transport::Loading(loading) = &mut self.transport {
             loading.request.start_paused = true;

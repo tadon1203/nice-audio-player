@@ -24,7 +24,7 @@ export type TransportCommand =
   | "next"
   | "outputSelection";
 
-/** How long the notice about skipped tracks stays after the last skip. */
+/** How long the notice about skipped tracks, or the offer to undo, stays. */
 const NOTICE_MS = 6_000;
 
 type QueuedTransport = {
@@ -62,6 +62,8 @@ export class Playback {
   error = $state.raw<string | null>(null);
   /** What the player did by itself, e.g. skipped unplayable tracks. Clears after a while. */
   notice = $state.raw<string | null>(null);
+  /** A queue change the listener can take back ("Queue replaced"). Clears after a while. */
+  undoOffer = $state.raw<string | null>(null);
 
   #initializePromise: Promise<void> | null = null;
   #requestedVolume: number | null = null;
@@ -74,6 +76,7 @@ export class Playback {
   #queuedTransport: QueuedTransport | null = null;
   #skippedTitles: string[] = [];
   #noticeTimer: ReturnType<typeof setTimeout> | null = null;
+  #undoTimer: ReturnType<typeof setTimeout> | null = null;
 
   readonly #session = $derived(snapshotSession(this.snapshot));
   readonly status = $derived(this.snapshot?.status ?? ("stopped" as const));
@@ -142,6 +145,24 @@ export class Playback {
     this.#noticeTimer = null;
     this.#skippedTitles = [];
     this.notice = null;
+  }
+
+  #offerUndo(message: string) {
+    this.undoOffer = message;
+    if (this.#undoTimer !== null) clearTimeout(this.#undoTimer);
+    this.#undoTimer = setTimeout(() => this.dismissUndo(), NOTICE_MS);
+  }
+
+  dismissUndo() {
+    if (this.#undoTimer !== null) clearTimeout(this.#undoTimer);
+    this.#undoTimer = null;
+    this.undoOffer = null;
+  }
+
+  /** Puts back the queue the last replacement or "Clear upcoming" took away. */
+  async undoQueueChange(): Promise<void> {
+    this.dismissUndo();
+    await this.#runTransport("start", () => this.#api.restorePreviousQueue());
   }
 
   acceptQueue(queue: PlaybackQueueSnapshot) {
@@ -268,7 +289,11 @@ export class Playback {
 
   /** Replaces the queue with `context` and plays from `startTrackId` (its first track if null). */
   async startPlayback(context: PlaybackContext, startTrackId: string | null): Promise<void> {
-    await this.#runTransport("start", () => this.#api.startPlayback(context, startTrackId));
+    const replaced = this.queue?.current != null;
+    const started = await this.#runTransport("start", () =>
+      this.#api.startPlayback(context, startTrackId),
+    );
+    if (started && replaced) this.#offerUndo("Queue replaced");
   }
 
   /** A slice of the upcoming list beyond what the queue snapshot carries. */
@@ -377,8 +402,11 @@ export class Playback {
     return this.#runQueueCommand(() => this.#api.moveQueueItem(id, to));
   }
 
-  clearQueue() {
-    return this.#runQueueCommand(() => this.#api.clearQueue());
+  async clearQueue() {
+    const hadUpcoming = (this.queue?.upcomingCount ?? 0) > 0;
+    const cleared = await this.#runQueueCommand(() => this.#api.clearQueue());
+    if (cleared && hadUpcoming) this.#offerUndo("Upcoming cleared");
+    return cleared;
   }
 
   /** Jumps to an upcoming item and plays it. */

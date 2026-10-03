@@ -30,11 +30,11 @@ impl PlaybackWorker {
         responder: Option<Reply<PlaybackSnapshot>>,
         start_paused: bool,
     ) {
-        match self
+        let advanced = self
             .queue
             .advance(AdvanceReason::Natural, &mut self.rng)
-            .cloned()
-        {
+            .is_some();
+        match advanced.then(|| self.resolve_current()).flatten() {
             Some(item) => {
                 self.skipped_in_a_row = 0;
                 self.publish_queue();

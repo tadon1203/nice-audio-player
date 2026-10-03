@@ -30,7 +30,7 @@ impl PlaybackWorker {
                     item: self
                         .queue
                         .current()
-                        .cloned()
+                        .and_then(|entry| self.item_of(entry))
                         .or_else(|| self.last_item.clone()),
                     playback_id: id.map(|id| id.to_string()),
                     error: code.clone(),
@@ -56,12 +56,11 @@ impl PlaybackWorker {
             channel_conversion: processing.channel_conversion,
             source_format: loaded
                 .item
-                .source
-                .format
+                .file_format
                 .clone()
                 .unwrap_or_else(|| loaded.item.file.extension.clone()),
-            source_bit_depth: loaded.item.source.bit_depth,
-            source_bitrate_kbps: loaded.item.source.bitrate_kbps,
+            source_bit_depth: loaded.item.bit_depth,
+            source_bitrate_kbps: loaded.item.bitrate_kbps,
             source_sample_rate: processing.source_sample_rate,
             output_sample_rate: processing.output_sample_rate,
             resampling_active: processing.resampling_active(),
@@ -124,8 +123,14 @@ impl PlaybackWorker {
     }
 
     pub(super) fn publish_queue(&mut self) -> PlaybackQueueSnapshot {
+        self.prune_unavailable();
         self.next_queue_revision = self.next_queue_revision.saturating_add(1);
-        let snapshot = PlaybackQueueSnapshot::of(self.next_queue_revision, &self.queue);
+        let snapshot = PlaybackQueueSnapshot::of(
+            self.next_queue_revision,
+            &self.queue,
+            &self.tracks,
+            self.previous_queue.is_some(),
+        );
         *self
             .queue_snapshot
             .write()

@@ -45,6 +45,7 @@ export function scriptPlayback(native: Native, initialSequence: LibraryTrackSumm
       upcomingCount: upcoming.length,
       repeatMode,
       shuffleEnabled,
+      canRestorePrevious: false,
     };
   };
 

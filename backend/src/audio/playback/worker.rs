@@ -4,18 +4,20 @@
 //! an event from a decode, source-load or output thread. It ticks only while a track is playing,
 //! to publish the position and notice the end of the track.
 
+use std::collections::HashSet;
 use std::sync::{mpsc::Receiver, Arc, RwLock};
 use std::time::{Duration, Instant};
 
 use super::input::{
     Inbox, PlaybackId, PlaybackIds, SourceLoadId, SourceLoadIds, WorkerEvent, WorkerInput,
 };
-use super::item::{PlaybackItem, PlaybackItemSeed};
+use super::item::PlaybackItem;
 use super::pipeline::{
     open_pipeline, OpenedOutput, OpenedPipeline, PipelineError, PipelineKind, PipelineRequest,
 };
 use super::preferences::{PlaybackPreferences, PreferencesObserver};
-use super::queue::{AdvanceReason, PlaybackQueue, QueueError};
+use super::queue::{AdvanceReason, PlaybackQueue, QueueEntry, QueueError};
+use super::resolver::TrackResolver;
 use super::service::{respond, PlaybackCommand, PlaybackServiceError, Reply};
 use super::session::{
     should_publish_position, LoadStage, Loaded, Loading, Position, Prebuffering, SeekInFlight,
@@ -23,7 +25,8 @@ use super::session::{
 };
 use super::snapshot::{
     ActiveSession, PlaybackFailureCode, PlaybackPosition, PlaybackProcessingInfo,
-    PlaybackQueueSnapshot, PlaybackSnapshot, SnapshotBase,
+    PlaybackQueueSnapshot, PlaybackSnapshot, SnapshotBase, HISTORY_IN_SNAPSHOT,
+    UPCOMING_IN_SNAPSHOT,
 };
 use super::source_loader::SourceLoad;
 use crate::audio::compressed_source::{CompressedAudioSource, CompressedSourceError};
@@ -143,6 +146,8 @@ pub(super) struct WorkerLinks {
     pub events: SharedEventSink,
     pub observer: PreferencesObserver,
     pub backend: Box<dyn OutputBackend>,
+    /// Where queue entries get their metadata.
+    pub tracks: Arc<TrackResolver>,
 }
 
 pub(super) struct PlaybackWorker {
@@ -158,6 +163,9 @@ pub(super) struct PlaybackWorker {
     /// The last track that reached the output, kept so a stopped player can still name it.
     last_item: Option<PlaybackItem>,
     queue: PlaybackQueue,
+    /// The queue before the last replacement, for one-step undo. Not kept across restarts.
+    previous_queue: Option<PlaybackQueue>,
+    tracks: Arc<TrackResolver>,
     rng: StdRng,
     /// Files skipped in a row after failing; bounds the skipping to one pass over the queue.
     skipped_in_a_row: usize,
@@ -192,6 +200,8 @@ impl PlaybackWorker {
             seek_revision: 0,
             last_item: None,
             queue,
+            previous_queue: None,
+            tracks: links.tracks,
             rng: StdRng::from_rng(&mut rand::rng()),
             skipped_in_a_row: 0,
             volume_state,
@@ -251,17 +261,14 @@ impl PlaybackWorker {
     fn handle_command(&mut self, command: PlaybackCommand) {
         match command {
             PlaybackCommand::Start {
-                items,
+                track_ids,
                 start_index,
                 reply,
-            } => self.start_queue(items, start_index, reply),
+            } => self.start_queue(track_ids, start_index, reply),
             PlaybackCommand::Previous { reply } => {
                 self.navigate(AdvanceReason::UserPrevious, reply)
             }
             PlaybackCommand::Next { reply } => self.navigate(AdvanceReason::UserNext, reply),
-            PlaybackCommand::Stop { reply } => {
-                let _ = reply.send(Ok(self.stop()));
-            }
             PlaybackCommand::Pause { reply } => {
                 let _ = reply.send(self.pause());
             }
@@ -314,17 +321,28 @@ impl PlaybackWorker {
                     }
                 }
             }
-            PlaybackCommand::Enqueue { items, next, reply } => {
+            PlaybackCommand::Enqueue {
+                track_ids,
+                next,
+                reply,
+            } => {
                 if self.queue.current().is_none() {
-                    self.start_enqueued(items, reply);
+                    self.start_enqueued(track_ids, reply);
                     return;
                 }
-                let result = self.edit_queue(|queue| queue.enqueue(items, next).map(|()| true));
+                let result = self.edit_queue(|queue| queue.enqueue(track_ids, next).map(|()| true));
                 let _ = reply.send(result.map(|changed| self.queue_changed(changed)));
             }
             PlaybackCommand::ClearQueue { reply } => {
+                let before = self.queue.clone();
                 let changed = self.queue.clear_upcoming();
+                if changed {
+                    self.previous_queue = Some(before);
+                }
                 let _ = reply.send(Ok(self.queue_changed(changed)));
+            }
+            PlaybackCommand::RestorePreviousQueue { reply } => {
+                self.restore_previous_queue(reply);
             }
         }
     }

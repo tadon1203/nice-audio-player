@@ -173,6 +173,20 @@
                 Retry
               </button>
             </div>
+          {:else if playback.undoOffer}
+            <div class="flex min-w-0 items-center gap-2">
+              <span class="block truncate text-sm text-muted-foreground" role="status">
+                {playback.undoOffer}
+              </span>
+              <span aria-hidden="true" class="shrink-0 text-sm text-muted-foreground">·</span>
+              <button
+                type="button"
+                onclick={() => void playback.undoQueueChange()}
+                class="shrink-0 cursor-pointer rounded-sm text-sm text-foreground outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                Undo
+              </button>
+            </div>
           {:else if playback.notice}
             <div class="flex min-w-0 items-center gap-2">
               <span class="block truncate text-sm text-muted-foreground" role="status">

@@ -3,14 +3,17 @@
 //! test decides when a tick happens and when an event is delivered.
 
 use super::input::{Inbox, WorkerEvent, WorkerInput};
-use super::item::{PlaybackItem, PlaybackItemSeed, SourceFacts};
+use super::item::PlaybackItem;
 use super::preferences::PlaybackPreferences;
 use super::queue::{PlaybackQueue, PlaybackRepeatMode};
+use super::resolver::testing::{resolver_of, track as library_track, FakeTracks};
+use super::resolver::{NoTracks, TrackResolver};
 use super::service::{PlaybackCommand, PlaybackService, PlaybackServiceError, Reply};
 use super::session::should_publish_position;
 use super::snapshot::{
     ActiveSession, PlaybackChannelConversion, PlaybackFailureCode, PlaybackPosition,
     PlaybackProcessingInfo, PlaybackQueueSnapshot, PlaybackSnapshot, SnapshotBase,
+    UPCOMING_IN_SNAPSHOT,
 };
 use super::worker::{
     output_failure_code, previous_restarts_track, stream_signal_action, FailureScope,
@@ -21,9 +24,11 @@ use crate::audio::fake_output::FakeOutput;
 use crate::audio::output::{AudioOutputError, OutputStreamId, PipelineId, StreamFailureKind};
 use crate::audio::volume::{AtomicEffectiveGain, VolumeState};
 use crate::events::BackendEvent;
+use crate::library::store::PlayableTrack;
 use crate::media::validation::ValidatedAudioFile;
 use crate::test_support::{write_pcm_i16_wav, TestDirectory};
 use cpal::StreamInstant;
+use rand::{rngs::StdRng, SeedableRng};
 use std::sync::mpsc::Receiver;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
@@ -45,6 +50,8 @@ struct Harness {
     output: FakeOutput,
     preferences: Arc<Mutex<Vec<PlaybackPreferences>>>,
     files: TestDirectory,
+    /// What the library knows; the queue reads its tracks from here.
+    library: Arc<FakeTracks>,
 }
 
 impl Harness {
@@ -56,7 +63,12 @@ impl Harness {
             base: SnapshotBase::new(volume, AudioOutputSelection::SystemDefault),
             item: None,
         }));
-        let queue_snapshot = Arc::new(RwLock::new(PlaybackQueueSnapshot::of(0, &queue)));
+        let queue_snapshot = Arc::new(RwLock::new(PlaybackQueueSnapshot::empty(
+            0,
+            PlaybackRepeatMode::Off,
+            false,
+        )));
+        let library = Arc::new(FakeTracks::default());
         let position = Arc::new(RwLock::new(None));
         let (recorded, events) = crate::events::testing::RecordingEventSink::shared();
         let gain = AtomicEffectiveGain::new(1.0);
@@ -73,6 +85,7 @@ impl Harness {
                 events,
                 observer: Arc::new(move |preferences| observed.lock().unwrap().push(preferences)),
                 backend: Box::new(output.clone()),
+                tracks: resolver_of(&library),
             },
             queue,
             volume,
@@ -89,11 +102,12 @@ impl Harness {
             output,
             preferences,
             files: TestDirectory::new(),
+            library,
         }
     }
 
     /// A real WAV of `seconds` of silence, which the decode thread reads as any other file.
-    fn track(&self, name: &str, seconds: usize) -> PlaybackItemSeed {
+    fn track(&self, name: &str, seconds: usize) -> PlayableTrack {
         let path = self.files.file(&format!("{name}.wav"));
         write_pcm_i16_wav(
             &path,
@@ -101,14 +115,29 @@ impl Harness {
             1,
             &vec![0; SAMPLE_RATE as usize * seconds],
         );
-        PlaybackItemSeed {
+        PlayableTrack {
             title: name.into(),
-            ..PlaybackItemSeed::from_file(ValidatedAudioFile {
-                path: path.to_string_lossy().into_owned(),
-                file_name: format!("{name}.wav"),
-                extension: "wav".into(),
-            })
+            ..library_track(
+                name,
+                ValidatedAudioFile {
+                    path: path.to_string_lossy().into_owned(),
+                    file_name: format!("{name}.wav"),
+                    extension: "wav".into(),
+                },
+            )
         }
+    }
+
+    /// Makes the library know `tracks` and returns their ids, which is what a queue is made of.
+    fn register(&self, tracks: Vec<PlayableTrack>) -> Vec<String> {
+        tracks
+            .into_iter()
+            .map(|track| {
+                let id = track.track_id.clone();
+                self.library.add(track);
+                id
+            })
+            .collect()
     }
 
     fn snapshot(&self) -> PlaybackSnapshot {
@@ -184,11 +213,12 @@ impl Harness {
 
     fn start(
         &mut self,
-        items: Vec<PlaybackItemSeed>,
+        tracks: Vec<PlayableTrack>,
         start_index: usize,
     ) -> Answer<PlaybackSnapshot> {
+        let track_ids = self.register(tracks);
         self.call(|reply| PlaybackCommand::Start {
-            items,
+            track_ids,
             start_index,
             reply,
         })
@@ -204,10 +234,6 @@ impl Harness {
 
     fn next(&mut self) -> Answer<PlaybackSnapshot> {
         self.call(|reply| PlaybackCommand::Next { reply })
-    }
-
-    fn stop(&mut self) -> Answer<PlaybackSnapshot> {
-        self.call(|reply| PlaybackCommand::Stop { reply })
     }
 
     fn seek(&mut self, position_ms: u64) -> Answer<PlaybackSnapshot> {
@@ -237,14 +263,17 @@ impl Drop for Harness {
 }
 
 /// Files that do not exist, so loading them fails as an unreadable file.
-fn missing(count: usize) -> Vec<PlaybackItemSeed> {
+fn missing(count: usize) -> Vec<PlayableTrack> {
     (0..count)
         .map(|i| {
-            PlaybackItemSeed::from_file(ValidatedAudioFile {
-                path: format!("C:/missing/track-{i}.flac"),
-                file_name: format!("track-{i}.flac"),
-                extension: "flac".into(),
-            })
+            library_track(
+                &format!("track-{i}"),
+                ValidatedAudioFile {
+                    path: format!("C:/missing/track-{i}.flac"),
+                    file_name: format!("track-{i}.flac"),
+                    extension: "flac".into(),
+                },
+            )
         })
         .collect()
 }
@@ -286,10 +315,6 @@ fn the_worker_ticks_only_while_a_track_is_playing() {
     harness.pause().unwrap();
     assert!(!harness.worker.wants_ticks(), "paused");
 
-    harness.resume().unwrap();
-    harness.stop().unwrap();
-    assert!(!harness.worker.wants_ticks(), "stopped");
-
     harness.start(missing(1), 0).unwrap_err();
     assert!(!harness.worker.wants_ticks(), "failed");
 }
@@ -297,26 +322,29 @@ fn the_worker_ticks_only_while_a_track_is_playing() {
 #[test]
 fn a_start_through_a_service_thread_needs_no_poll() {
     let output = FakeOutput::new();
+    let library = Arc::new(FakeTracks::default());
+    let directory = TestDirectory::new();
+    let path = directory.file("a.wav");
+    write_pcm_i16_wav(&path, SAMPLE_RATE, 1, &vec![0; SAMPLE_RATE as usize]);
+    library.add(library_track(
+        "a",
+        ValidatedAudioFile {
+            path: path.to_string_lossy().into_owned(),
+            file_name: "a.wav".into(),
+            extension: "wav".into(),
+        },
+    ));
     let service = PlaybackService::start_with_backend(
         crate::events::null_event_sink(),
         PlaybackPreferences::default(),
         Arc::new(|_| {}),
+        resolver_of(&library),
         Box::new(output.clone()),
     )
     .expect("worker should start");
-    let directory = TestDirectory::new();
-    let path = directory.file("a.wav");
-    write_pcm_i16_wav(&path, SAMPLE_RATE, 1, &vec![0; SAMPLE_RATE as usize]);
 
     // The worker sleeps in a blocking receive while idle; only an event can wake it for this.
-    let snapshot = service
-        .handle()
-        .play_file(ValidatedAudioFile {
-            path: path.to_string_lossy().into_owned(),
-            file_name: "a.wav".into(),
-            extension: "wav".into(),
-        })
-        .unwrap();
+    let snapshot = service.handle().start(vec!["a".to_owned()], 0).unwrap();
 
     assert!(matches!(snapshot, PlaybackSnapshot::Playing { .. }));
     assert!(output.is_running());
@@ -342,8 +370,9 @@ fn navigating_while_paused_starts_the_next_track_paused() {
 fn volume_and_next_are_answered_while_a_start_loads() {
     let mut harness = Harness::new();
     let tracks = vec![harness.track("a", 1), harness.track("b", 1)];
+    let track_ids = harness.register(tracks);
     let start = harness.send(|reply| PlaybackCommand::Start {
-        items: tracks,
+        track_ids,
         start_index: 0,
         reply,
     });
@@ -365,38 +394,21 @@ fn a_superseded_start_is_answered_instead_of_dropped() {
     let first_tracks = vec![harness.track("a", 1)];
     let second_tracks = vec![harness.track("b", 1)];
 
+    let first_ids = harness.register(first_tracks);
+    let second_ids = harness.register(second_tracks);
     let first = harness.send(|reply| PlaybackCommand::Start {
-        items: first_tracks,
+        track_ids: first_ids,
         start_index: 0,
         reply,
     });
     let second = harness.send(|reply| PlaybackCommand::Start {
-        items: second_tracks,
+        track_ids: second_ids,
         start_index: 0,
         reply,
     });
 
     assert_eq!(first.try_recv(), Ok(Err(PlaybackServiceError::Superseded)));
     assert!(is_playing(&harness.wait_for(&second).unwrap(), "b"));
-}
-
-#[test]
-fn stopping_while_loading_answers_the_waiting_start() {
-    let mut harness = Harness::new();
-    let tracks = vec![harness.track("a", 1)];
-    let start = harness.send(|reply| PlaybackCommand::Start {
-        items: tracks,
-        start_index: 0,
-        reply,
-    });
-
-    harness.stop().unwrap();
-
-    assert_eq!(start.try_recv(), Ok(Err(PlaybackServiceError::Superseded)));
-    assert!(matches!(
-        harness.snapshot(),
-        PlaybackSnapshot::Stopped { .. }
-    ));
 }
 
 // ---- failures while starting ----
@@ -654,18 +666,6 @@ fn previous_becomes_available_once_the_track_has_played_a_while() {
     );
 }
 
-#[test]
-fn stopping_clears_the_position() {
-    let mut harness = Harness::new();
-    let tracks = vec![harness.track("a", 2)];
-    harness.start(tracks, 0).unwrap();
-    assert!(harness.position().is_some());
-
-    harness.stop().unwrap();
-
-    assert!(harness.position().is_none());
-}
-
 // ---- the end of a track ----
 
 #[test]
@@ -890,11 +890,9 @@ fn a_conversion_failure_while_playing_is_reported_with_its_own_code() {
 fn the_session_carries_the_source_format_of_the_loaded_track() {
     let mut harness = Harness::new();
     let mut known = harness.track("known", 1);
-    known.source = SourceFacts {
-        format: Some("FLAC".into()),
-        bit_depth: Some(24),
-        bitrate_kbps: Some(1_411),
-    };
+    known.file_format = Some("FLAC".into());
+    known.bit_depth = Some(24);
+    known.bitrate_kbps = Some(1_411);
     let unknown = harness.track("unknown", 1);
 
     let snapshot = harness.start(vec![known, unknown], 0).unwrap();
@@ -1114,8 +1112,9 @@ fn a_failed_pause_fails_the_player() {
 fn pausing_while_a_track_loads_starts_it_paused() {
     let mut harness = Harness::new();
     let tracks = vec![harness.track("a", 1)];
+    let track_ids = harness.register(tracks);
     let start = harness.send(|reply| PlaybackCommand::Start {
-        items: tracks,
+        track_ids,
         start_index: 0,
         reply,
     });
@@ -1216,40 +1215,6 @@ fn navigation_availability_follows_the_queue_and_the_restart_rule() {
     harness.output.set_played_frames(4 * u64::from(SAMPLE_RATE));
     let late = harness.pause().unwrap();
     assert!(late.base().can_go_previous, "previous restarts the track");
-
-    let stopped = harness.stop().unwrap();
-    assert!(!stopped.base().can_go_previous && !stopped.base().can_go_next);
-}
-
-// ---- stop ----
-
-#[test]
-fn stop_is_stopped_when_called_twice() {
-    let mut harness = Harness::new();
-    let tracks = vec![harness.track("a", 1)];
-    harness.start(tracks, 0).unwrap();
-
-    let first = harness.stop().unwrap();
-    let again = harness.stop().unwrap();
-
-    assert!(matches!(first, PlaybackSnapshot::Stopped { .. }));
-    assert_eq!(again, first);
-    assert_eq!(harness.snapshot(), first);
-}
-
-#[test]
-fn stop_clears_the_queue_and_keeps_naming_the_last_item() {
-    let mut harness = Harness::new();
-    let tracks = vec![harness.track("a", 1), harness.track("b", 1)];
-    harness.start(tracks, 0).unwrap();
-
-    let PlaybackSnapshot::Stopped { item, .. } = harness.stop().unwrap() else {
-        panic!("stop must stop");
-    };
-
-    assert_eq!(item.unwrap().title, "a");
-    assert!(harness.queue_snapshot().current.is_none());
-    assert_eq!(harness.queue_snapshot().upcoming_count, 0);
 }
 
 // ---- queue edits ----
@@ -1259,14 +1224,16 @@ fn queue_edits_are_rejected_while_a_start_loads() {
     let mut harness = Harness::new();
     let tracks = vec![harness.track("a", 1)];
     let extra = vec![harness.track("b", 1)];
+    let track_ids = harness.register(tracks);
     let start = harness.send(|reply| PlaybackCommand::Start {
-        items: tracks,
+        track_ids,
         start_index: 0,
         reply,
     });
 
+    let extra_ids = harness.register(extra);
     let result = harness.call(|reply| PlaybackCommand::Enqueue {
-        items: extra,
+        track_ids: extra_ids,
         next: false,
         reply,
     });
@@ -1278,11 +1245,12 @@ fn queue_edits_are_rejected_while_a_start_loads() {
 #[test]
 fn enqueueing_on_an_empty_queue_starts_playback_inside_the_worker() {
     let mut harness = Harness::new();
-    let items = vec![harness.track("a", 1), harness.track("b", 1)];
+    let tracks = vec![harness.track("a", 1), harness.track("b", 1)];
+    let track_ids = harness.register(tracks);
 
     let queue = harness
         .call(|reply| PlaybackCommand::Enqueue {
-            items,
+            track_ids,
             next: false,
             reply,
         })
@@ -1298,7 +1266,7 @@ fn enqueueing_nothing_on_an_empty_queue_is_refused() {
     let mut harness = Harness::new();
 
     let result = harness.call(|reply| PlaybackCommand::Enqueue {
-        items: Vec::new(),
+        track_ids: Vec::new(),
         next: false,
         reply,
     });
@@ -1345,8 +1313,9 @@ fn an_unusable_output_is_rejected() {
 fn the_output_cannot_be_chosen_while_a_start_loads() {
     let mut harness = Harness::new();
     let tracks = vec![harness.track("a", 1)];
+    let track_ids = harness.register(tracks);
     let start = harness.send(|reply| PlaybackCommand::Start {
-        items: tracks,
+        track_ids,
         start_index: 0,
         reply,
     });
@@ -1455,6 +1424,7 @@ fn start_service() -> PlaybackService {
         crate::events::null_event_sink(),
         PlaybackPreferences::default(),
         Arc::new(|_| {}),
+        Arc::new(TrackResolver::new(Box::new(NoTracks))),
         Box::new(FakeOutput::new()),
     )
     .expect("worker should start")
@@ -1604,14 +1574,17 @@ fn position_publication_requires_interval_and_a_changed_position() {
 // ---- the wire format ----
 
 fn test_item() -> PlaybackItem {
-    PlaybackItem::from_seed(
-        "queue-item-1".into(),
-        PlaybackItemSeed::from_file(ValidatedAudioFile {
-            path: "C:/test.flac".into(),
-            file_name: "test.flac".into(),
-            extension: "flac".into(),
-        }),
-    )
+    PlaybackItem {
+        queue_item_id: "queue-item-1".into(),
+        track: library_track(
+            "7",
+            ValidatedAudioFile {
+                path: "C:/test.flac".into(),
+                file_name: "test.flac".into(),
+                extension: "flac".into(),
+            },
+        ),
+    }
 }
 
 fn base() -> SnapshotBase {
@@ -1642,7 +1615,7 @@ fn wire_session() -> ActiveSession {
 fn item_json() -> serde_json::Value {
     serde_json::json!({
         "queueItemId": "queue-item-1",
-        "trackId": null,
+        "trackId": "7",
         "trackNumber": null,
         "discNumber": null,
         "year": null,
@@ -1729,4 +1702,263 @@ fn serializes_a_missing_playback_id_as_null_in_a_failed_snapshot() {
             "skipping": false
         })
     );
+}
+
+// ---- undo ----
+
+fn restore(harness: &mut Harness) -> Answer<PlaybackSnapshot> {
+    harness.call(|reply| PlaybackCommand::RestorePreviousQueue { reply })
+}
+
+#[test]
+fn replacing_the_queue_can_be_undone_in_one_step() {
+    let mut harness = Harness::new();
+    let first = vec![harness.track("a", 1), harness.track("b", 1)];
+    harness.start(first, 0).unwrap();
+    assert!(!harness.queue_snapshot().can_restore_previous);
+
+    let second = vec![harness.track("c", 1)];
+    harness.start(second, 0).unwrap();
+    assert!(harness.queue_snapshot().can_restore_previous);
+
+    let restored = restore(&mut harness).unwrap();
+
+    assert!(
+        is_playing(&restored, "a"),
+        "the item that was current plays again"
+    );
+    assert_eq!(harness.queue_titles(), ["a", "b"]);
+    assert!(
+        !harness.queue_snapshot().can_restore_previous,
+        "one step back, no further"
+    );
+    assert_eq!(
+        restore(&mut harness),
+        Err(PlaybackServiceError::InvalidPlaybackState)
+    );
+}
+
+#[test]
+fn there_is_nothing_to_undo_after_starting_from_an_empty_queue() {
+    let mut harness = Harness::new();
+    let tracks = vec![harness.track("a", 1)];
+    harness.start(tracks, 0).unwrap();
+
+    assert!(!harness.queue_snapshot().can_restore_previous);
+    assert_eq!(
+        restore(&mut harness),
+        Err(PlaybackServiceError::InvalidPlaybackState)
+    );
+}
+
+#[test]
+fn clearing_upcoming_can_be_undone_without_restarting_the_track() {
+    let mut harness = Harness::new();
+    let tracks = vec![
+        harness.track("a", 1),
+        harness.track("b", 1),
+        harness.track("c", 1),
+    ];
+    let playing = harness.start(tracks, 0).unwrap();
+    harness
+        .call(|reply| PlaybackCommand::ClearQueue { reply })
+        .unwrap();
+    assert_eq!(harness.queue_titles(), ["a"]);
+    assert!(harness.queue_snapshot().can_restore_previous);
+
+    let restored = restore(&mut harness).unwrap();
+
+    assert_eq!(harness.queue_titles(), ["a", "b", "c"]);
+    assert_eq!(
+        session(&restored).playback_id,
+        session(&playing).playback_id,
+        "the track that kept playing is not restarted"
+    );
+}
+
+#[test]
+fn an_undone_queue_follows_the_shuffle_chosen_since() {
+    let mut harness = Harness::new();
+    let first = vec![harness.track("a", 1), harness.track("b", 1)];
+    harness.start(first, 0).unwrap();
+    let second = vec![harness.track("c", 1)];
+    harness.start(second, 0).unwrap();
+    harness
+        .call(|reply| PlaybackCommand::SetShuffle {
+            enabled: true,
+            reply,
+        })
+        .unwrap();
+
+    restore(&mut harness).unwrap();
+
+    let queue = harness.queue_snapshot();
+    assert!(queue.shuffle_enabled);
+    assert_eq!(queue.current.map(|item| item.title), Some("a".into()));
+    assert_eq!(queue.upcoming_count, 1);
+}
+
+// ---- lazy resolution ----
+
+#[test]
+fn starting_reads_only_the_part_of_a_huge_queue_that_is_shown() {
+    let mut harness = Harness::new();
+    let mut tracks = vec![harness.track("first", 1)];
+    tracks.extend((0..4_999).map(|i| named_track(&format!("t{i}"))));
+
+    let snapshot = harness.start(tracks, 0).unwrap();
+
+    assert!(is_playing(&snapshot, "first"));
+    let queue = harness.queue_snapshot();
+    assert_eq!(queue.upcoming_count, 4_999);
+    assert_eq!(queue.upcoming.len(), UPCOMING_IN_SNAPSHOT);
+    assert!(
+        harness.library.reads() <= UPCOMING_IN_SNAPSHOT + 2,
+        "read {} tracks for a queue of 5000",
+        harness.library.reads()
+    );
+}
+
+#[test]
+fn the_rows_further_down_a_long_queue_are_read_when_asked_for() {
+    let mut harness = Harness::new();
+    let mut tracks = vec![harness.track("first", 1)];
+    tracks.extend((0..999).map(|i| named_track(&format!("t{i}"))));
+    harness.start(tracks, 0).unwrap();
+    let before = harness.library.reads();
+
+    let window = harness.queue_snapshot().window(500, 50);
+
+    assert_eq!(window.offset, 500);
+    assert_eq!(window.items.len(), 50);
+    assert_eq!(window.items[0].title, "t500.flac");
+    assert_eq!(harness.library.reads() - before, 50);
+}
+
+#[test]
+fn a_track_that_left_the_library_after_the_start_is_dropped_where_it_is_read() {
+    let mut harness = Harness::new();
+    let first = harness.track("first", 1);
+    let mut tracks = vec![first];
+    tracks.extend(["x", "gone", "y"].map(named_track));
+    let track_ids = harness.register(tracks);
+    harness.library.remove("gone");
+
+    harness
+        .call(|reply| PlaybackCommand::Start {
+            track_ids,
+            start_index: 0,
+            reply,
+        })
+        .unwrap();
+
+    let queue = harness.queue_snapshot();
+    assert_eq!(queue.upcoming_count, 2, "the missing item is not counted");
+    assert_eq!(
+        harness.queue_titles(),
+        ["first", "x.flac", "y.flac"],
+        "nor shown"
+    );
+}
+
+#[test]
+fn a_current_track_that_left_the_library_is_skipped() {
+    let mut harness = Harness::new();
+    let tracks = vec![named_track("gone"), harness.track("b", 1)];
+    let track_ids = harness.register(tracks);
+    harness.library.remove("gone");
+
+    let snapshot = harness
+        .call(|reply| PlaybackCommand::Start {
+            track_ids,
+            start_index: 0,
+            reply,
+        })
+        .unwrap();
+
+    assert!(is_playing(&snapshot, "b"));
+    assert_eq!(harness.queue_snapshot().history_count, 0);
+}
+
+#[test]
+fn when_every_track_has_left_the_library_the_start_is_refused() {
+    let mut harness = Harness::new();
+    let track_ids = harness.register(vec![named_track("gone")]);
+    harness.library.remove("gone");
+
+    let result = harness.call(|reply| PlaybackCommand::Start {
+        track_ids,
+        start_index: 0,
+        reply,
+    });
+
+    assert_eq!(result, Err(PlaybackServiceError::TrackUnavailable));
+    assert!(harness.queue_snapshot().current.is_none());
+}
+
+#[test]
+fn a_window_leaves_out_a_track_that_has_left_the_library_since() {
+    let library = Arc::new(FakeTracks::default());
+    let tracks = resolver_of(&library);
+    let ids: Vec<String> = (0..10).map(|i| format!("t{i}")).collect();
+    for id in &ids {
+        library.add(named_track(id));
+    }
+    let mut queue = PlaybackQueue::new(PlaybackRepeatMode::Off, false);
+    queue
+        .replace(ids, 0, &mut StdRng::seed_from_u64(1))
+        .unwrap();
+    let snapshot = PlaybackQueueSnapshot::of(1, &queue, &tracks, false);
+    tracks.forget();
+    library.remove("t4");
+
+    let window = snapshot.window(0, 20);
+
+    assert_eq!(window.items.len(), 8, "nine upcoming, one of them gone");
+    assert!(window.items.iter().all(|item| item.track_id != "t4"));
+}
+
+#[test]
+fn a_long_queue_snapshot_carries_a_prefix_and_serves_the_rest_in_windows() {
+    let library = Arc::new(FakeTracks::default());
+    let tracks = resolver_of(&library);
+    let total = UPCOMING_IN_SNAPSHOT + 150;
+    let ids: Vec<String> = (0..total + 61).map(|i| format!("t{i}")).collect();
+    for id in &ids {
+        library.add(named_track(id));
+    }
+    let mut queue = PlaybackQueue::new(PlaybackRepeatMode::Off, false);
+    queue
+        .replace(ids, 60, &mut StdRng::seed_from_u64(1))
+        .unwrap();
+
+    let snapshot = PlaybackQueueSnapshot::of(7, &queue, &tracks, false);
+
+    assert_eq!(snapshot.history.len(), 50);
+    assert_eq!(snapshot.history_count, 60);
+    assert_eq!(
+        snapshot.history.last().map(|i| i.title.as_str()),
+        Some("t59.flac")
+    );
+    assert_eq!(snapshot.upcoming.len(), UPCOMING_IN_SNAPSHOT);
+    assert_eq!(snapshot.upcoming_count as usize, total);
+    assert_eq!(library.reads(), 50 + 1 + UPCOMING_IN_SNAPSHOT);
+    let window = snapshot.window(UPCOMING_IN_SNAPSHOT, 500);
+    assert_eq!(window.revision, 7);
+    assert_eq!(window.offset as usize, UPCOMING_IN_SNAPSHOT);
+    assert_eq!(window.items.len(), 150);
+    assert_eq!(window.items[0].title, "t261.flac");
+    assert!(snapshot.window(total + 10, 5).items.is_empty());
+}
+
+/// A track whose file does not exist: fine to queue and show, unplayable.
+fn named_track(name: &str) -> PlayableTrack {
+    library_track(
+        name,
+        ValidatedAudioFile {
+            path: format!("C:/music/{name}.flac"),
+            file_name: format!("{name}.flac"),
+            extension: "flac".into(),
+        },
+    )
 }

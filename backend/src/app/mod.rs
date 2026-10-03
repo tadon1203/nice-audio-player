@@ -7,7 +7,8 @@ use crate::{
     activity::ApplicationActivityService,
     audio::{
         playback::{
-            PlaybackQueueSnapshot, PlaybackService, PlaybackServiceError, PlaybackSnapshot,
+            NoTracks, PlaybackQueueSnapshot, PlaybackService, PlaybackServiceError,
+            PlaybackSnapshot, TrackResolver, TrackSource,
         },
         waveform::{PlaybackWaveform, Waveform, WaveformService},
     },
@@ -20,7 +21,7 @@ use crate::{
     lyrics::{model::LyricsTrackContext, LyricsCommandError, LyricsResolution, LyricsService},
     settings::SettingsService,
 };
-use playback_context::PlaybackContext;
+use playback_context::{LibraryTracks, PlaybackContext};
 use std::{path::PathBuf, sync::Arc};
 
 #[derive(Debug)]
@@ -49,10 +50,15 @@ impl BackendApp {
         let waveforms = WaveformService::start(data_dir.join("waveforms"), events.clone());
         let library = Library::open(library_dir, Some(activity), events.clone());
         let remember = Arc::clone(&settings);
+        let tracks: Box<dyn TrackSource> = match &library {
+            Ok(library) => Box::new(LibraryTracks(library.store().clone())),
+            Err(_) => Box::new(NoTracks),
+        };
         let playback = PlaybackService::start(
             events,
             settings.get().playback,
             Arc::new(move |preferences| remember.record_playback(preferences)),
+            Arc::new(TrackResolver::new(tracks)),
         )
         .map_err(|_| BackendError::PlaybackStartFailed)?;
         Ok(Self {
@@ -151,9 +157,15 @@ impl BackendApp {
             .library
             .as_ref()
             .map_err(|_| PlaybackServiceError::LibraryUnavailable)?;
-        let (items, start_index) =
-            playback_context::resolve(library.store(), context, start_track_id)?;
-        self.playback.handle().start(items, start_index)
+        let selection = playback_context::resolve(library.store(), context, start_track_id)?;
+        // The track the listener picked is checked now, so they get a clear answer when its
+        // file is gone; the others are read when the queue needs them.
+        if let Some(requested) = start_track_id {
+            playback_context::resolve_track(library.store(), requested)?;
+        }
+        self.playback
+            .handle()
+            .start(selection.track_ids, selection.start_index)
     }
 
     /// Adds a library track to the queue: right after the current one (`next`) or at the end.
@@ -167,8 +179,8 @@ impl BackendApp {
             .library
             .as_ref()
             .map_err(|_| PlaybackServiceError::LibraryUnavailable)?;
-        let item = playback_context::resolve_track(library.store(), track_id)?;
-        self.playback.handle().enqueue(vec![item], next)
+        let track = playback_context::resolve_track(library.store(), track_id)?;
+        self.playback.handle().enqueue(vec![track.track_id], next)
     }
 
     pub fn shutdown(&self) {
