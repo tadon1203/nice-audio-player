@@ -289,11 +289,7 @@ export class Playback {
 
   /** Replaces the queue with `context` and plays from `startTrackId` (its first track if null). */
   async startPlayback(context: PlaybackContext, startTrackId: string | null): Promise<void> {
-    const replaced = this.queue?.current != null;
-    const started = await this.#runTransport("start", () =>
-      this.#api.startPlayback(context, startTrackId),
-    );
-    if (started && replaced) this.#offerUndo("Queue replaced");
+    await this.#runTransport("start", () => this.#api.startPlayback(context, startTrackId));
   }
 
   /** A slice of the upcoming list beyond what the queue snapshot carries. */

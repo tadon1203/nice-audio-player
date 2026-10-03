@@ -255,54 +255,6 @@ describe("undoing a queue change", () => {
     upcomingCount: 1,
   });
 
-  it("is offered after a start replaced a queue, and restores it in one command", async () => {
-    const restorePreviousQueue = vi.fn(async () => playing(4, "a", 0));
-    const playback = createPlayback(
-      baseApi({
-        getPlaybackQueue: async () => withUpcoming(1),
-        startPlayback: vi.fn(async () => playing(3, "c", 0)),
-        restorePreviousQueue,
-      }),
-    );
-    await playback.initialize();
-
-    await playback.startPlayback({ kind: "tracks" } as never, "c");
-    expect(playback.undoOffer).toBe("Queue replaced");
-
-    await playback.undoQueueChange();
-
-    expect(restorePreviousQueue).toHaveBeenCalledTimes(1);
-    expect(playback.undoOffer).toBeNull();
-    expect(playback.item?.trackId).toBe("a");
-  });
-
-  it("is not offered when nothing was queued before the start", async () => {
-    const playback = createPlayback(
-      baseApi({ startPlayback: vi.fn(async () => playing(3, "c", 0)) }),
-    );
-    await playback.initialize();
-
-    await playback.startPlayback({ kind: "tracks" } as never, "c");
-
-    expect(playback.undoOffer).toBeNull();
-  });
-
-  it("is not offered when the start failed", async () => {
-    const playback = createPlayback(
-      baseApi({
-        getPlaybackQueue: async () => withUpcoming(1),
-        startPlayback: vi.fn(async () => {
-          throw { code: "trackUnavailable" };
-        }),
-      }),
-    );
-    await playback.initialize();
-
-    await playback.startPlayback({ kind: "tracks" } as never, "c");
-
-    expect(playback.undoOffer).toBeNull();
-  });
-
   it("is offered after clearing upcoming, and goes away after a while", async () => {
     vi.useFakeTimers();
     const playback = createPlayback(

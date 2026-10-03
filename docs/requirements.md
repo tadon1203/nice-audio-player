@@ -36,7 +36,7 @@ MP3, FLAC, WAV, AAC, M4A. A file counts as supported only if it can actually be 
 | `Ctrl+R`            | Repeat: off, all, one                                                          |
 | Arrow keys          | Move between tiles when focus is in an album or artist grid (they do not seek) |
 
-Dragging the seek bar slows down the further the pointer is from the bar (or with `Shift`), for fine positioning. A track row's context menu offers Play next, Add to queue, Go to album, Go to artist, Show in Explorer, and Properties (tags, audio format, and file location); a queue row plays on click, and the tracks already played sit above the current one, faintest, and play again on click. Starting playback from a list replaces the queue, and the dock offers "Queue replaced · Undo" for a few seconds to put the previous queue (and its current track) back in one click; Clear upcoming is undone the same way. Only one step back is kept, and not across restarts.
+Dragging the seek bar slows down the further the pointer is from the bar (or with `Shift`), for fine positioning. A track row's context menu offers Play next, Add to queue, Go to album, Go to artist, Show in Explorer, and Properties (tags, audio format, and file location); a queue row plays on click, and the tracks already played sit above the current one, faintest, and play again on click. Starting playback from a list replaces the queue. Clear upcoming offers "Upcoming cleared · Undo" in the dock for a few seconds to put the previous queue (and its current track) back in one click. Only one step back is kept, and not across restarts.
 
 ## Library
 
