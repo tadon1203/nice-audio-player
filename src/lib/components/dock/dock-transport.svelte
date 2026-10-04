@@ -7,7 +7,6 @@
   import PlayPauseIcon from "$lib/ui/play-pause-icon.svelte";
   import { Button } from "$lib/ui/shadcn/button";
   import DockToggleButton from "./dock-toggle-button.svelte";
-  import PlayProgressRing from "./play-progress-ring.svelte";
   import RepeatIcon from "./repeat-icon.svelte";
 
   /** Shuffle, previous, play/pause, next, repeat. */
@@ -56,9 +55,6 @@
     class="relative rounded-full hover:bg-primary active:translate-y-0 active:scale-[0.94] disabled:bg-secondary disabled:text-muted-foreground disabled:opacity-100"
   >
     <PlayPauseIcon {playing} />
-    {#if playback.active}
-      <PlayProgressRing />
-    {/if}
   </Button>
   <Button
     size="largeIcon"
