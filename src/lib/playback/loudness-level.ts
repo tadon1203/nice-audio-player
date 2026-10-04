@@ -1,6 +1,6 @@
 import { motionFor } from "$lib/ui/motion/svelte-motion";
 import { tweenNumber } from "$lib/ui/motion/tween-number";
-import { watchClock, type ClockPosition, type PlaybackClock } from "./clock";
+import type { ClockPosition, PlaybackClock } from "./clock";
 import { levelAt, smoothLevel } from "./loudness";
 
 /** The level a paused Light rests at: neither dimmed nor at full. */
@@ -16,14 +16,14 @@ export type LoudnessLevelParams = {
 /**
  * A 0-1 loudness that follows the playing position over the track's energy, smoothed so the
  * Light breathes instead of flickering (see `loudness.ts`). No audio is analysed here; the
- * levels are already loaded for the waveform. It has no frame loop of its own: while `enabled`
- * it follows the playback clock (which keeps its loop running) and steps whenever `position`
- * moves. It costs nothing while disabled, and eases to a middle level when paused.
+ * levels are already loaded for the waveform. While `enabled` and playing it steps once
+ * per frame from the clock's estimate (a stopgap until the Light is driven by keyframes). It
+ * costs nothing while disabled, and eases to a middle level when paused.
  */
 export function createLoudnessLevel({
   clock,
   ...initial
-}: { clock: Pick<PlaybackClock, "position" | "retain"> } & LoudnessLevelParams) {
+}: { clock: Pick<PlaybackClock, "estimate"> } & LoudnessLevelParams) {
   let params: LoudnessLevelParams = initial;
   let current = PAUSED_LEVEL;
   let lastStepAt: number | null = null;
@@ -67,14 +67,20 @@ export function createLoudnessLevel({
     set(smoothLevel(current, target, elapsed));
   };
 
-  let unfollow: (() => void) | null = null;
+  // Until the Light is driven by keyframes, it keeps its own frame loop while it breathes.
+  let frame = 0;
+  const loop = () => {
+    step(clock.estimate());
+    frame = requestAnimationFrame(loop);
+  };
   const syncFollow = () => {
-    if (params.enabled === (unfollow !== null)) return;
-    if (params.enabled) {
-      unfollow = watchClock(clock, step);
+    const wanted = params.enabled && params.playing;
+    if (wanted === (frame !== 0)) return;
+    if (wanted) {
+      frame = requestAnimationFrame(loop);
     } else {
-      unfollow?.();
-      unfollow = null;
+      cancelAnimationFrame(frame);
+      frame = 0;
     }
   };
 
@@ -91,8 +97,8 @@ export function createLoudnessLevel({
       if (restChanged) syncRest();
     },
     destroy() {
-      unfollow?.();
-      unfollow = null;
+      cancelAnimationFrame(frame);
+      frame = 0;
       stopRest();
       listeners.clear();
     },

@@ -1,6 +1,5 @@
 <script lang="ts">
   import { getPlayback } from "$lib/playback/context";
-  import { watchClock } from "$lib/playback/clock";
   import { getMotionBudget } from "$lib/shell/motion-budget.svelte";
   import Artwork from "$lib/ui/artwork.svelte";
   import { slideTransition } from "$lib/ui/motion/svelte-slide";
@@ -15,8 +14,8 @@
    * In the last three seconds of a track, the next track's artwork slides in at the dock's edge
    * and goes when the track changes (the Sleeve's own slide takes over). Nothing shows for
    * repeat-one, at the end of the queue, or when the next artwork is the one already on the
-   * Sleeve (the same artwork is never shown in two places). It watches the one playback clock and
-   * only changes state when the last three seconds begin or end. It appears by itself, so under
+   * Sleeve (the same artwork is never shown in two places). It wakes on the playback clock at the
+   * boundary and only changes state when the last three seconds begin or end. It appears by itself, so under
    * calm motion it only fades.
    */
   let { class: className }: { class?: string } = $props();
@@ -31,10 +30,13 @@
       inLastSeconds = false;
       return;
     }
-    const stop = watchClock(playback.clock, (positionMs) => {
-      const remaining = total - positionMs;
-      inLastSeconds = remaining > 0 && remaining <= PREVIEW_MS;
-    });
+    const stop = playback.clock.onBoundary(
+      (positionMs) => (positionMs < total - PREVIEW_MS ? total - PREVIEW_MS : null),
+      (positionMs) => {
+        const remaining = total - positionMs;
+        inLastSeconds = remaining > 0 && remaining <= PREVIEW_MS;
+      },
+    );
     return () => {
       stop();
       inLastSeconds = false;

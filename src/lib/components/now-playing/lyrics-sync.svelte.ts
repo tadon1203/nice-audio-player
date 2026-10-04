@@ -4,10 +4,9 @@ import { getPlayback } from "$lib/playback/context";
 import { findCurrentLineIndex } from "./lyrics-lines";
 
 /**
- * Tracks the current lyric line index from the playback clock. It re-reads the clock whenever a
- * report reaches it (covers seeks, track changes, pauses) and otherwise advances with a single
- * `setTimeout` armed for the next line's start, so readers rerun only when the line changes,
- * never with the position. Call it while a component initialises.
+ * Tracks the current lyric line index from the playback clock. It rides the clock's boundary: the
+ * clock wakes it on every report (covers seeks, track changes, pauses) and at the next line's
+ * start, so readers rerun only when the line changes, never with the position. Call it while a component initialises.
  */
 export function createLyricsSync(lines: () => readonly LyricsTimedLine[] | null) {
   const { clock } = getPlayback();
@@ -28,23 +27,10 @@ export function createLyricsSync(lines: () => readonly LyricsTimedLine[] | null)
       index = -1;
       return;
     }
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const arm = () => {
-      clearTimeout(timer);
-      const estimated = clock.estimate();
-      const found = findCurrentLineIndex(current, estimated);
-      index = found;
-      if (!clock.playing()) return;
-      const next = current[found + 1];
-      if (next === undefined) return;
-      timer = setTimeout(arm, Math.max(0, next.startMs - estimated));
-    };
-    arm();
-    const stopListening = clock.onReport(arm);
-    return () => {
-      clearTimeout(timer);
-      stopListening();
-    };
+    return clock.onBoundary(
+      (positionMs) => current[findCurrentLineIndex(current, positionMs) + 1]?.startMs ?? null,
+      (positionMs) => (index = findCurrentLineIndex(current, positionMs)),
+    );
   });
 
   return {

@@ -58,24 +58,16 @@
   }
 
   /**
-   * Draws the playing segment's fill straight from the playback clock, so neither the strip nor
-   * the page re-renders with time. Retaining the clock keeps its frame loop running.
+   * The playing segment's fill, driven by the playback clock across the track, so neither the
+   * strip nor the page re-renders with time.
    */
-  const fill =
-    (rowDurationMs: number | null): Attachment<HTMLElement> =>
-    (node) => {
-      const total = playback.durationMs ?? rowDurationMs;
-      const draw = (positionMs: number) => {
-        node.style.transform = `scaleX(${segmentFill(positionMs, total)})`;
-      };
-      draw(playback.clock.position.get());
-      const release = playback.clock.retain();
-      const unsubscribe = playback.clock.position.subscribe(draw);
-      return () => {
-        unsubscribe();
-        release();
-      };
-    };
+  const fill = (rowDurationMs: number | null): Attachment<HTMLElement> => {
+    const total = playback.durationMs ?? rowDurationMs ?? 0;
+    return playback.clock.drive([
+      { atMs: 0, transform: `scaleX(${segmentFill(0, total)})` },
+      { atMs: total, transform: `scaleX(${segmentFill(total, total)})` },
+    ]);
+  };
 </script>
 
 {#if totalMs > 0}
@@ -112,6 +104,7 @@
                   <span
                     aria-hidden="true"
                     class="absolute inset-0 origin-left rounded-full bg-foreground"
+                    style="transform: scaleX(0)"
                     {@attach fill(track.durationMs)}
                   ></span>
                 {/if}

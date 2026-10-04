@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ActiveSession, PlaybackItem, PlaybackSnapshot } from "$lib/native";
-vi.mock("svelte/motion", () => ({ prefersReducedMotion: { current: true } }));
+vi.mock("svelte/motion", () => ({ prefersReducedMotion: { current: false } }));
 
 import { createPlaybackClock } from "./clock";
 import { clockReportOf } from "./snapshot";
@@ -57,68 +57,91 @@ const snapshot = (
   session: session(id, positionMs, seekRevision),
 });
 
-/** A clock on a hand-turned frame loop, so a test decides when time passes. */
+class FakeAnimation {
+  currentTime: number | null = null;
+  running = false;
+  cancelled = false;
+  plays = 0;
+  constructor(readonly keyframes: Keyframe[]) {}
+  play() {
+    this.running = true;
+    this.plays += 1;
+  }
+  pause() {
+    this.running = false;
+  }
+  cancel() {
+    this.cancelled = true;
+  }
+}
+
+/** A clock on hand-turned time, frames, timers and animations, so a test decides what passes. */
 function setup() {
   let now = 0;
-  let pending: (() => void) | null = null;
-  let frameRequests = 0;
+  let frame: (() => void) | null = null;
+  let timers: { at: number; callback: () => void; id: number }[] = [];
+  let nextId = 1;
+  const animations: FakeAnimation[] = [];
   const clock = createPlaybackClock({
     now: () => now,
     requestFrame: (callback) => {
-      frameRequests += 1;
-      pending = callback;
-      return frameRequests;
+      frame = callback;
+      return 1;
     },
     cancelFrame: () => {
-      pending = null;
+      frame = null;
     },
+    animate: (_node, keyframes) => {
+      const animation = new FakeAnimation(keyframes);
+      animations.push(animation);
+      return animation;
+    },
+    setTimer: (callback, ms) => {
+      const id = nextId++;
+      timers.push({ at: now + ms, callback, id });
+      return id as unknown as ReturnType<typeof setTimeout>;
+    },
+    clearTimer: (handle) => {
+      timers = timers.filter((timer) => timer.id !== (handle as unknown as number));
+    },
+    reducedMotion: () => false,
   });
   const report = (next: PlaybackSnapshot) => clock.accept(clockReportOf(next));
+  /** Moves time forward, firing due timers in order. */
   const advance = (ms: number) => {
+    const end = now + ms;
+    for (;;) {
+      const due = timers.filter((timer) => timer.at <= end).sort((a, b) => a.at - b.at)[0];
+      if (due === undefined) break;
+      timers = timers.filter((timer) => timer !== due);
+      now = Math.max(now, due.at);
+      due.callback();
+    }
+    now = end;
+  };
+  const nextFrame = (ms: number) => {
     now += ms;
-    const callback = pending;
-    pending = null;
+    const callback = frame;
+    frame = null;
     callback?.();
   };
-  return { clock, report, advance, frames: () => frameRequests };
+  const drive = (keyframes = [{ atMs: 0 }, { atMs: 60_000 }]) =>
+    clock.drive(keyframes)({} as HTMLElement) as () => void;
+  return { clock, report, advance, nextFrame, drive, animations, timers: () => timers.length };
 }
 
+const wholeSecond = (positionMs: number) => Math.floor(positionMs / 1000 + 1) * 1000;
+
 describe("playback clock", () => {
-  it("moves the position every frame while playing, once someone holds it", () => {
-    const { clock, report, advance, frames } = setup();
-    report(snapshot("playing", "a", 10_000));
-    expect(frames()).toBe(0);
-
-    const release = clock.retain();
-    advance(16);
-    expect(clock.position.get()).toBe(10_016);
-    advance(16);
-    expect(clock.position.get()).toBe(10_032);
-
-    release();
-    const before = frames();
-    advance(16);
-    expect(frames()).toBe(before);
-  });
-
-  it("stands still while paused, and needs no frames", () => {
-    const { clock, report, frames } = setup();
-    clock.retain();
-    report(snapshot("paused", "a", 10_000));
-    expect(clock.position.get()).toBe(10_000);
-    expect(frames()).toBe(0);
-    expect(clock.playing()).toBe(false);
-  });
-
-  it("re-anchors on each report instead of drifting", () => {
+  it("estimates the position from the last report, frozen while paused", () => {
     const { clock, report, advance } = setup();
-    clock.retain();
     report(snapshot("playing", "a", 10_000));
-    advance(250);
-    report(snapshot("playing", "a", 10_240));
-    advance(0);
-    expect(clock.estimate()).toBe(10_240);
-    expect(clock.position.get()).toBe(10_240);
+    advance(500);
+    expect(clock.estimate()).toBe(10_500);
+    report(snapshot("paused", "a", 12_000));
+    advance(500);
+    expect(clock.estimate()).toBe(12_000);
+    expect(clock.playing()).toBe(false);
   });
 
   it("announces a seek once, from the seek revision, and a new track", () => {
@@ -133,28 +156,6 @@ describe("playback clock", () => {
     expect(jumps).toEqual(["seek:10500->40000", "track:40250->0"]);
   });
 
-  it("draws the committed position, never the old one, while a seek is in flight", () => {
-    const { clock, report, advance } = setup();
-    const drawn: number[] = [];
-    clock.position.subscribe((ms) => drawn.push(ms));
-    clock.retain();
-    report(snapshot("playing", "a", 10_000));
-    advance(16);
-
-    const release = clock.hold(40_000);
-    advance(16);
-    advance(16);
-    report(snapshot("playing", "a", 40_000, 1));
-    advance(16);
-    release();
-    advance(16);
-
-    expect(drawn.slice(drawn.indexOf(40_000))).toSatisfy((rest: number[]) =>
-      rest.every((ms) => ms >= 40_000),
-    );
-    expect(clock.position.get()).toBeGreaterThanOrEqual(40_000);
-  });
-
   it("does not announce a slow report as a seek", () => {
     const { clock, report, advance } = setup();
     const jumps: unknown[] = [];
@@ -165,12 +166,171 @@ describe("playback clock", () => {
     expect(jumps).toEqual([]);
   });
 
-  it("tells listeners about every report", () => {
-    const { clock, report } = setup();
-    let reports = 0;
-    clock.onReport(() => (reports += 1));
-    report(snapshot("playing", "a", 0));
-    report(snapshot("playing", "a", 250));
-    expect(reports).toBe(2);
+  describe("onBoundary", () => {
+    it("wakes at each boundary while playing, and stops while paused", () => {
+      const { clock, report, advance, timers } = setup();
+      const seen: number[] = [];
+      report(snapshot("playing", "a", 10_400));
+      clock.onBoundary(wholeSecond, (ms) => seen.push(ms));
+      expect(seen).toEqual([10_400]);
+
+      advance(600);
+      expect(seen).toEqual([10_400, 11_000]);
+      advance(1_000);
+      expect(seen).toEqual([10_400, 11_000, 12_000]);
+
+      report(snapshot("paused", "a", 12_300));
+      expect(timers()).toBe(0);
+      advance(5_000);
+      expect(seen.at(-1)).toBe(12_300);
+    });
+
+    it("re-arms on a report and on a jump", () => {
+      const { clock, report, advance } = setup();
+      const seen: number[] = [];
+      report(snapshot("playing", "a", 10_000));
+      clock.onBoundary(wholeSecond, (ms) => seen.push(ms));
+
+      advance(300);
+      report(snapshot("playing", "a", 10_500));
+      advance(499);
+      expect(seen).toEqual([10_000, 10_500]);
+      advance(1);
+      expect(seen.at(-1)).toBe(11_000);
+
+      report(snapshot("playing", "a", 40_200, 1));
+      advance(800);
+      expect(seen.at(-1)).toBe(41_000);
+    });
+
+    it("has no boundary past the end of the track, or after being removed", () => {
+      const { clock, report, timers } = setup();
+      report(snapshot("playing", "a", 59_500));
+      const stop = clock.onBoundary(wholeSecond, () => {});
+      expect(timers()).toBe(1);
+      report(snapshot("playing", "a", 60_000));
+      expect(timers()).toBe(0);
+      report(snapshot("playing", "a", 1_000));
+      expect(timers()).toBe(1);
+      stop();
+      expect(timers()).toBe(0);
+    });
+  });
+
+  describe("drive", () => {
+    it("runs nothing while the duration is unknown, then starts at the position", () => {
+      const { drive, animations, report } = setup();
+      drive();
+      expect(animations).toHaveLength(0);
+      report(snapshot("playing", "a", 10_000));
+      expect(animations).toHaveLength(1);
+      expect(animations[0]).toMatchObject({ currentTime: 10_000, running: true });
+    });
+
+    it("sets offsets from track time", () => {
+      const { drive, animations, report } = setup();
+      report(snapshot("playing", "a", 0));
+      drive([{ atMs: 0 }, { atMs: 15_000 }, { atMs: 60_000 }]);
+      expect(animations[0]?.keyframes.map((k) => k.offset)).toEqual([0, 0.25, 1]);
+    });
+
+    it("moves a running animation only when it has drifted more than 20 ms", () => {
+      const { drive, animations, report, advance } = setup();
+      report(snapshot("playing", "a", 10_000));
+      drive();
+      const animation = animations[0]!;
+      advance(1_000);
+      animation.currentTime = 11_000;
+      report(snapshot("playing", "a", 11_015));
+      expect(animation.currentTime).toBe(11_000);
+      report(snapshot("playing", "a", 11_060));
+      expect(animation.currentTime).toBe(11_060);
+    });
+
+    it("pauses at the reported position while paused", () => {
+      const { drive, animations, report } = setup();
+      report(snapshot("playing", "a", 10_000));
+      drive();
+      report(snapshot("paused", "a", 10_500));
+      expect(animations[0]).toMatchObject({ currentTime: 10_500, running: false });
+    });
+
+    it("cancels on detach", () => {
+      const { drive, animations, report } = setup();
+      report(snapshot("playing", "a", 0));
+      drive()();
+      expect(animations[0]?.cancelled).toBe(true);
+    });
+
+    it("rebuilds for a new track and snaps to its position", () => {
+      const { drive, animations, report } = setup();
+      report(snapshot("playing", "a", 10_000));
+      drive();
+      report(snapshot("playing", "b", 5_000));
+      expect(animations).toHaveLength(2);
+      expect(animations[0]?.cancelled).toBe(true);
+      expect(animations[1]).toMatchObject({ currentTime: 5_000, running: true });
+    });
+  });
+
+  describe("glide", () => {
+    it("eases currentTime to the new position over 300 ms, then plays", () => {
+      const { drive, animations, report, nextFrame } = setup();
+      report(snapshot("playing", "a", 10_000));
+      drive();
+      const animation = animations[0]!;
+      const plays = animation.plays;
+
+      report(snapshot("playing", "a", 40_000, 1));
+      expect(animation.running).toBe(false);
+      nextFrame(150);
+      const middle = animation.currentTime!;
+      expect(middle).toBeGreaterThan(10_000);
+      expect(middle).toBeLessThan(40_150);
+      nextFrame(100);
+      expect(animation.currentTime!).toBeGreaterThan(middle);
+      expect(animation.running).toBe(false);
+
+      nextFrame(100);
+      expect(animation.currentTime).toBe(40_350);
+      expect(animation.running).toBe(true);
+      expect(animation.plays).toBeGreaterThan(plays);
+    });
+  });
+
+  describe("hold", () => {
+    it("pauses every driven animation at the held position, whatever the reports say", () => {
+      const { clock, drive, animations, report } = setup();
+      report(snapshot("playing", "a", 10_000));
+      drive();
+      drive();
+      const release = clock.hold(40_000);
+      expect(animations.map((a) => [a.currentTime, a.running])).toEqual([
+        [40_000, false],
+        [40_000, false],
+      ]);
+
+      report(snapshot("playing", "a", 10_100));
+      report(snapshot("playing", "a", 40_000, 1));
+      expect(animations.map((a) => a.running)).toEqual([false, false]);
+      expect(animations[0]?.currentTime).toBe(40_000);
+
+      release();
+      expect(animations.map((a) => a.running)).toEqual([true, true]);
+    });
+
+    it("moves when held again before it is released, without running in between", () => {
+      const { clock, drive, animations, report } = setup();
+      report(snapshot("playing", "a", 10_000));
+      drive();
+      const first = clock.hold(20_000);
+      const plays = animations[0]!.plays;
+      const second = clock.hold(30_000);
+      first();
+      expect(animations[0]).toMatchObject({ currentTime: 30_000, running: false });
+      expect(animations[0]?.plays).toBe(plays);
+      second();
+      expect(animations[0]?.running).toBe(true);
+    });
   });
 });

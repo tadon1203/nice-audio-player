@@ -15,9 +15,8 @@
    * Its size never changes for a given caller, so geometry stays stable while the waveform
    * loads. Before analysis finishes it is a 2px line, and the bars grow out of that same line.
    *
-   * The fill and playhead are written straight from the one playback clock to those two
-   * elements, so this component does not re-run with time. A custom property is deliberately
-   * avoided: an inherited one would restyle every bar each frame.
+   * The fill and playhead are animated by the one playback clock (`drive`), so this component
+   * does not re-run with time.
    */
   let {
     height,
@@ -25,10 +24,11 @@
     showPlayhead = true,
     valueMs,
     durationMs,
-    watchClock,
+    drive,
     disabled,
     onInput,
     onCommit,
+    onCancel,
     activeSpan = null,
     hoveredLineSpan = null,
     onHoverPositionChange,
@@ -48,12 +48,13 @@
     /** The position to print and to announce, in ms. Changes about once a second. */
     valueMs: number;
     durationMs: number | null;
-    /** Follows the playback clock's position (it moves every frame while playing) until the
-     * returned function is called; it also keeps the clock's frame loop running meanwhile. */
-    watchClock: (listener: (positionMs: number) => void) => () => void;
+    /** The playback clock's `drive`: runs an animation over the track on an element. */
+    drive: (keyframes: readonly { atMs: number; transform: string }[]) => Attachment<HTMLElement>;
     disabled: boolean;
     onInput: (positionMs: number) => void;
     onCommit: (positionMs: number) => void;
+    /** A drag ended without a commit. */
+    onCancel?: () => void;
     /** The current lyric line's span, lit over the waveform. */
     activeSpan?: Span | null;
     /** The hovered lyric line's span, faintly marked over the waveform. */
@@ -81,39 +82,33 @@
     valueMs,
     onInput,
     onCommit,
+    onCancel,
     onHoverPositionChange,
   }));
 
-  // The two elements the clock draws into. Each carries a static initial inline style, which
-  // Svelte never rewrites, so the values written below stay put.
-  let played = $state.raw<HTMLElement | null>(null);
-  let playhead = $state.raw<HTMLElement | null>(null);
-  const refTo =
-    (set: (node: HTMLElement | null) => void): Attachment<HTMLElement> =>
-    (node) => {
-      set(node);
-      return () => set(null);
-    };
-  const attachPlayed = refTo((node) => (played = node));
-  const attachPlayhead = refTo((node) => (playhead = node));
-
-  /**
-   * Writes the played fraction to the fill's `clip-path` and the playhead's `left` from the
-   * clock. While dragging it follows the pointer instead (`valueMs` is then the preview position).
-   */
-  $effect(() => {
-    const fill = played;
-    const tick = playhead;
-    const total = duration;
-    const preview = pointer.dragging ? valueMs : null;
-    const draw = (positionMs: number) => {
-      const position = preview ?? positionMs;
-      const progress = total > 0 ? Math.min(1, Math.max(0, position / total)) : 0;
-      if (fill) fill.style.clipPath = `inset(0 ${(1 - progress) * 100}% 0 0)`;
-      if (tick) tick.style.left = `${progress * 100}%`;
-    };
-    return watchClock(draw);
-  });
+  // The played part is revealed by an outer translate countered by an inner one, and the
+  // playhead is a full-width wrapper translated across; the clock drives all three over the whole
+  // track (the compositor cannot animate `clip-path` or `left`). Each carries a static initial
+  // inline style for the moments before the clock runs. While dragging, the clock holds them at
+  // the preview position.
+  const revealOuter = $derived(
+    drive([
+      { atMs: 0, transform: "translateX(-100%)" },
+      { atMs: duration, transform: "translateX(0%)" },
+    ]),
+  );
+  const revealInner = $derived(
+    drive([
+      { atMs: 0, transform: "translateX(100%)" },
+      { atMs: duration, transform: "translateX(0%)" },
+    ]),
+  );
+  const sweepPlayhead = $derived(
+    drive([
+      { atMs: 0, transform: "translateX(0%)" },
+      { atMs: duration, transform: "translateX(100%)" },
+    ]),
+  );
 
   const hasPeaks = $derived(rms !== null && rms.length > 0);
   // The bars mount flat on the baseline and grow one frame later, so the growth can transition.
@@ -133,10 +128,8 @@
       : undefined;
 </script>
 
-{#snippet layer(className: string, style?: string, ref?: Attachment<HTMLElement>)}
-  <div aria-hidden="true" class={cn("absolute inset-0", className)} {style} {@attach ref}>
-    <WaveformBars {bars} {height} {grown} sweep={sweepBars} centered={lineOnly} still={stillBars} />
-  </div>
+{#snippet bar()}
+  <WaveformBars {bars} {height} {grown} sweep={sweepBars} centered={lineOnly} still={stillBars} />
 {/snippet}
 
 <div
@@ -160,8 +153,23 @@
   )}
   style:height="{height}px"
 >
-  {@render layer("text-foreground/35")}
-  {@render layer(playedClassName, "clip-path: inset(0 100% 0 0)", attachPlayed)}
+  <div aria-hidden="true" class="absolute inset-0 text-foreground/35">
+    {@render bar()}
+  </div>
+  <div
+    aria-hidden="true"
+    class="absolute inset-0 overflow-hidden"
+    style="transform: translateX(-100%)"
+    {@attach revealOuter}
+  >
+    <div
+      class={cn("absolute inset-0", playedClassName)}
+      style="transform: translateX(100%)"
+      {@attach revealInner}
+    >
+      {@render bar()}
+    </div>
+  </div>
   {#if activeSpan !== null}
     <div
       aria-hidden="true"
@@ -181,11 +189,12 @@
   {#if showPlayhead && duration > 0}
     <div
       aria-hidden="true"
-      class="absolute inset-y-0 w-px bg-foreground"
-      style="left: 0"
-      data-slot="waveform-playhead"
-      {@attach attachPlayhead}
-    ></div>
+      class="pointer-events-none absolute inset-0"
+      style="transform: translateX(0%)"
+      {@attach sweepPlayhead}
+    >
+      <div class="absolute inset-y-0 left-0 w-px bg-foreground" data-slot="waveform-playhead"></div>
+    </div>
   {/if}
   {#if seekable && pointer.hoverX !== null}
     {#if showPlayhead}

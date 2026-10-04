@@ -5,8 +5,7 @@
 
 <script lang="ts">
   import { Button } from "$lib/ui/shadcn/button";
-  import { onMount, tick } from "svelte";
-  import { watchClock } from "$lib/playback/clock";
+  import { onDestroy, onMount, tick } from "svelte";
   import { getPlayback } from "$lib/playback/context";
   import { createPlaybackWaveform } from "$lib/playback/waveform.svelte";
   import { getMotionBudget } from "$lib/shell/motion-budget.svelte";
@@ -45,14 +44,28 @@
 
   // The printed time and the announced value come from the same clock as the bar. They are
   // rounded down to the whole second, so they change once a second instead of every frame.
-  const wholeSecondMs = () => Math.floor(playback.clock.estimate() / 1000) * 1000;
-  let clockMs = $state(wholeSecondMs());
+  let clockMs = $state(Math.floor(playback.clock.estimate() / 1000) * 1000);
   $effect(() =>
     // Not the eased position: after a seek the digits go to the new time at once, and spin.
-    watchClock(playback.clock, () => (clockMs = wholeSecondMs())),
+    playback.clock.onBoundary(
+      (positionMs) => Math.floor(positionMs / 1000 + 1) * 1000,
+      (positionMs) => (clockMs = Math.floor(positionMs / 1000) * 1000),
+    ),
   );
 
   let seekPreviewMs = $state<number | null>(null);
+  // While dragging, the clock holds the bar at the preview position instead of playing on.
+  let releaseHold: (() => void) | null = null;
+  const holdAt = (ms: number) => {
+    const next = playback.clock.hold(ms);
+    releaseHold?.();
+    releaseHold = next;
+  };
+  const letGo = () => {
+    releaseHold?.();
+    releaseHold = null;
+  };
+  onDestroy(letGo);
   let showRemaining = $state(true);
   const seekValue = $derived(seekPreviewMs ?? clockMs);
   const dragging = $derived(seekPreviewMs !== null);
@@ -98,16 +111,24 @@
       showPlayhead={showWaveform}
       valueMs={seekValue}
       durationMs={playback.durationMs}
-      watchClock={(listener) => watchClock(playback.clock, listener)}
+      drive={playback.clock.drive}
       sweepBars={showWaveform}
       stillBars={budget.current !== "full"}
       lineOnly={!showWaveform}
       disabled={!canSeek}
-      onInput={(value) => (seekPreviewMs = value)}
+      onInput={(value) => {
+        seekPreviewMs = value;
+        holdAt(value);
+      }}
+      onCancel={() => {
+        letGo();
+        seekPreviewMs = null;
+      }}
       onCommit={(value) => {
-        const release = playback.clock.hold(value);
+        // Holds the committed position until the seek is reported, so the bar never falls back.
+        holdAt(value);
         void playback.seek(value).finally(() => {
-          release();
+          letGo();
           seekPreviewMs = null;
         });
       }}

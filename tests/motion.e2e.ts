@@ -115,27 +115,26 @@ test("changing track never leaves the dock without a visible title", async ({ pa
   for (const opacity of frames.slice(1)) expect(opacity).toBeGreaterThan(0.1);
 });
 
-test("the progress fill advances every frame between position reports", async ({ page }) => {
+test("the progress fill advances smoothly between position reports", async ({ page }) => {
   const dock = await playAlbum(page);
-  // The mock sends no position events on its own, so every change here is interpolation.
+  // The mock sends no position events on its own, so every change here is the clock's animation.
   const measure = () => {
     const layers = document.querySelectorAll<HTMLElement>(
       '[data-slot="playback-dock"] [data-region="seek"] > div[aria-hidden="true"]',
     );
     const played = layers[1]!;
-    const match = /inset\([^)]*?([\d.]+)%[^)]*\)/.exec(getComputedStyle(played).clipPath);
-    return match ? Number(match[1]) : -1;
+    return new DOMMatrix(getComputedStyle(played).transform).m41;
   };
   const frames = await sampleFrames(page, measure, async () => {
     await expect(dock.getByRole("button", { name: "Pause", exact: true })).toBeEnabled();
   });
-  const insets = frames.filter((value) => value >= 0);
-  expect(insets.length).toBeGreaterThan(10);
-  for (let index = 1; index < insets.length; index += 1) {
-    expect(insets[index]!).toBeLessThanOrEqual(insets[index - 1]!);
+  const offsets = frames.filter((value) => value > -1e6);
+  expect(offsets.length).toBeGreaterThan(10);
+  for (let index = 1; index < offsets.length; index += 1) {
+    expect(offsets[index]!).toBeGreaterThanOrEqual(offsets[index - 1]!);
   }
-  // Steps between reports would show as a handful of values; a frame-by-frame fill shows many.
-  expect(new Set(insets).size).toBeGreaterThan(10);
+  // Steps between reports would show as a handful of values; a running animation shows many.
+  expect(new Set(offsets).size).toBeGreaterThan(10);
 });
 
 test("an album's artwork moves from its tile to the details header", async ({ page }) => {

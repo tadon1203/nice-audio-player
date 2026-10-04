@@ -7,6 +7,7 @@ type PointerSeekOptions = {
   valueMs: number;
   onInput: (positionMs: number) => void;
   onCommit: (positionMs: number) => void;
+  onCancel?: () => void;
   onHoverPositionChange?: (positionMs: number | null) => void;
 };
 
@@ -84,6 +85,7 @@ export function createPointerSeek(options: () => PointerSeekOptions) {
   function onPointerCancel() {
     dragging = false;
     scrubMs = null;
+    options().onCancel?.();
   }
 
   function onPointerLeave() {
