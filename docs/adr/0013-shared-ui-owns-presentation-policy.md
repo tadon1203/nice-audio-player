@@ -1,6 +1,6 @@
 # 0013: Shared UI owns presentation policy
 
-Accepted design; implementation pending.
+Accepted and implemented; enforcement simplified on 2026-10-04.
 
 Floating surfaces, typography and controls, and time-state presentation are owned by deep
 modules in `lib/ui`, within ADR 0002's dependency direction. Existing primitive-library
@@ -18,11 +18,12 @@ interface callers use. Keep the existing domain folders and adapt the existing U
 avoid a second forwarding facade or a single generic module for every kind of row.
 
 Type checking rejects styling props, including typed spreads, while preserving typed control
-attributes, events, refs and composition snippets. Import restrictions keep private adapters
-internal. Keep Oxlint and add Svelte-aware ESLint using established rules and scoped
-configuration where markup needs checking: ordinary native controls outside their UI owners
-must use the shared controls. Ordinary content and layout markup remain local. Do not create
-a bespoke checker script or custom lint rule. Ordinary tests in the existing Playwright suite
+attributes, events, refs and composition snippets. Keep Oxlint for general linting. Review
+checks that private adapters stay internal and ordinary native controls outside their UI
+owners use shared controls; the concise rule lives in CONTRIBUTING.md. ESLint and its
+dedicated lint-contract tests were removed to reduce tooling overhead. Ordinary content and
+layout markup remain local. Do not create a bespoke checker script or custom lint rule.
+Ordinary tests in the existing Playwright suite
 verify real rendered policy; static checks alone do not prove the CSS cascade, compositing
 or runtime stacking.
 
