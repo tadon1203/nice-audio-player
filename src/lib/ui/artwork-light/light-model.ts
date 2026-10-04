@@ -8,7 +8,7 @@ export const LIGHT = {
   /** Multiplies the artwork's brightness before it is composited. */
   brightness: 0.55,
   /** How much of the page background is laid back over the blurred artwork. */
-  veilOpacity: 0.7,
+  veilOpacity: 0.8,
   /** Share of the artwork that reaches the surface, per place. */
   strength: { max: 1, strong: 0.85, medium: 0.6, faint: 0.3 },
 } as const;
