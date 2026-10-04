@@ -30,7 +30,7 @@ The language of Nice Audio Player. Use these terms in code, docs, and tickets; d
 - **Bar**: one drawn level of the Spectrum (a band) or the Level meter (a channel's RMS), filled from the floor. It rises instantly and falls at a fixed dB-per-second rate.
 - **Cap**: the thin line above a Bar marking its held peak; it never sits below its Bar.
 - **Hold**: how long a Cap stays where it is (1.5 s) before it starts to fall, and how long "Clip" stays shown (2 s).
-- **Playback clock**: the single animation-frame clock that everything drawing the playing position reads.
+- **Playback clock**: the single source of the playing position. It is read in two ways only: a timer that wakes at a boundary (a whole second, a lyric line, the last seconds of a track), or an animation the compositor advances (the position marker, fills). Nothing draws time frame by frame on the main thread.
 - **Now Playing**: the dock extended upward, a layer over the current location. Not a page; Back closes it.
 - **Dock**: the persistent playback bar at the bottom of the workspace.
 
