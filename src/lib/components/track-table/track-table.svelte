@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ContextMenu as ContextMenuPrimitive } from "bits-ui";
+  import { Root as ContextMenuRoot, Trigger as ContextMenuTrigger } from "$lib/ui/context-menu";
   import { goto } from "$app/navigation";
   import { isFilePresent, isTrackAvailable, trackLinks } from "$lib/library/tracks";
   import type { LibrarySortDirection, LibraryTrackSortKey } from "$lib/native";
@@ -169,8 +169,8 @@
         {/each}
       </TableRow>
     </TableHeader>
-    <ContextMenuPrimitive.Root>
-      <ContextMenuPrimitive.Trigger>
+    <ContextMenuRoot>
+      <ContextMenuTrigger>
         {#snippet child({ props })}
           <TableBody {...props} bind:ref={body} oncontextmenucapture={selectMenuRow}>
             <!-- Spacer heights must jump, never animate: the reduced-motion rule gives every element a
@@ -264,7 +264,7 @@
             {/if}
           </TableBody>
         {/snippet}
-      </ContextMenuPrimitive.Trigger>
+      </ContextMenuTrigger>
       <ContextMenuContent>
         {#if menuRow}
           {@const row = menuRow}
@@ -295,7 +295,7 @@
           <ContextMenuItem onSelect={() => (propertiesFor = row.id)}>Properties</ContextMenuItem>
         {/if}
       </ContextMenuContent>
-    </ContextMenuPrimitive.Root>
+    </ContextMenuRoot>
   </table>
   <TrackPropertiesSheet trackId={propertiesFor} onclose={() => (propertiesFor = null)} />
 </div>

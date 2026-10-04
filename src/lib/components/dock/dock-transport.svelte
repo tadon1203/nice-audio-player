@@ -5,7 +5,7 @@
   import { getPlayback } from "$lib/playback/context";
   import { nextRepeatMode } from "$lib/playback/snapshot";
   import PlayPauseIcon from "$lib/ui/play-pause-icon.svelte";
-  import { LegacyButton as Button } from "$lib/ui/shadcn/button";
+  import { Button } from "$lib/ui/shadcn/button";
   import DockToggleButton from "./dock-toggle-button.svelte";
   import PlayProgressRing from "./play-progress-ring.svelte";
   import RepeatIcon from "./repeat-icon.svelte";
@@ -26,18 +26,19 @@
   role="group"
   aria-label="Transport controls"
 >
-  <DockToggleButton
-    label="Shuffle"
-    pressed={playback.shuffleEnabled}
-    disabled={!ready}
-    onclick={() => void playback.setShuffle(!playback.shuffleEnabled)}
-    class="max-md:hidden"
-  >
-    <Shuffle aria-hidden="true" />
-  </DockToggleButton>
+  <div class="max-md:hidden">
+    <DockToggleButton
+      label="Shuffle"
+      pressed={playback.shuffleEnabled}
+      disabled={!ready}
+      onclick={() => void playback.setShuffle(!playback.shuffleEnabled)}
+    >
+      <Shuffle aria-hidden="true" />
+    </DockToggleButton>
+  </div>
   <Button
-    size="icon-lg"
-    variant="ghost"
+    density="largeIcon"
+    purpose="quiet"
     aria-label="Previous track"
     title="Previous track"
     disabled={!playback.canGoPrevious}
@@ -46,13 +47,13 @@
     <SkipBack aria-hidden="true" />
   </Button>
   <Button
-    size="icon-lg"
-    variant="default"
+    density="largeIcon"
+    purpose="transport"
     aria-label={playLabel}
     title={playLabel}
     disabled={!playback.active && !failed}
     onclick={() => void (playing ? playback.pause() : playback.resume())}
-    class="relative rounded-full transition-[background-color,color,transform] duration-(--motion-feedback-duration) ease-(--motion-easing) active:translate-y-0 active:scale-[0.94] disabled:bg-secondary disabled:text-muted-foreground disabled:opacity-100"
+    geometry="round"
   >
     <PlayPauseIcon {playing} />
     {#if playback.active}
@@ -60,8 +61,8 @@
     {/if}
   </Button>
   <Button
-    size="icon-lg"
-    variant="ghost"
+    density="largeIcon"
+    purpose="quiet"
     aria-label="Next track"
     title="Next track"
     disabled={!playback.canGoNext}
@@ -69,13 +70,14 @@
   >
     <SkipForward aria-hidden="true" />
   </Button>
-  <DockToggleButton
-    label="Repeat: {playback.repeatMode}"
-    pressed={playback.repeatMode !== "off"}
-    disabled={!ready}
-    onclick={() => void playback.setRepeatMode(nextRepeatMode(playback.repeatMode))}
-    class="max-md:hidden"
-  >
-    <RepeatIcon mode={playback.repeatMode} />
-  </DockToggleButton>
+  <div class="max-md:hidden">
+    <DockToggleButton
+      label="Repeat: {playback.repeatMode}"
+      pressed={playback.repeatMode !== "off"}
+      disabled={!ready}
+      onclick={() => void playback.setRepeatMode(nextRepeatMode(playback.repeatMode))}
+    >
+      <RepeatIcon mode={playback.repeatMode} />
+    </DockToggleButton>
+  </div>
 </div>

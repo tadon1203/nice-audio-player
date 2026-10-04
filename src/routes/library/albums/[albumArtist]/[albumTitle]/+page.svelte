@@ -20,7 +20,7 @@
   import LoadingStatus from "$lib/ui/loading-status.svelte";
   import PlayPauseIcon from "$lib/ui/play-pause-icon.svelte";
   import SectionTitle from "$lib/ui/section-title.svelte";
-  import { LegacyButton as Button } from "$lib/ui/shadcn/button/index.js";
+  import { Button } from "$lib/ui/shadcn/button/index.js";
   import WorkspaceScroll from "$lib/ui/workspace-scroll.svelte";
   import { formatCount, formatDuration } from "$lib/utils/format";
 
@@ -126,7 +126,7 @@
         </Button>
         <Button
           type="button"
-          variant="outline"
+          purpose="outline"
           disabled={album.firstPlayableTrackId === null}
           onclick={() => void playback.shuffleAndStart({ kind: "album", key })}
         >
@@ -137,7 +137,7 @@
     </MediaDetailsHeader>
 
     <section class="mt-10" aria-labelledby="album-track-list-title">
-      <SectionTitle id="album-track-list-title" class="sr-only">Tracks</SectionTitle>
+      <SectionTitle id="album-track-list-title" hidden>Tracks</SectionTitle>
       {#if tracks.items.length > 0}
         <div class="mt-4">
           <TrackTable

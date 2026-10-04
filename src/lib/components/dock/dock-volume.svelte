@@ -17,7 +17,7 @@
   import { motionFor } from "$lib/ui/motion/svelte-motion";
   import { queuePanel } from "$lib/shell/queue-panel.svelte";
   import RollingNumber from "$lib/ui/rolling-number/rolling-number.svelte";
-  import { LegacyButton as Button } from "$lib/ui/shadcn/button";
+  import { Button } from "$lib/ui/shadcn/button";
   import { Slider } from "$lib/ui/shadcn/slider";
   import DockSignalPath from "./dock-signal-path.svelte";
   import NextTrackPreview from "./next-track-preview.svelte";
@@ -67,32 +67,34 @@
 >
   <!-- Out of flow, in the gap before the group, so it never moves anything. -->
   <NextTrackPreview class="absolute top-1/2 right-full mr-4 -translate-y-1/2 max-lg:hidden" />
+  <div class="max-md:hidden">
+    <Button
+      density="largeIcon"
+      purpose="quiet"
+      aria-label="Now Playing"
+      title="Now Playing"
+      aria-pressed={nowPlaying.isOpen}
+      disabled={!playback.active}
+      onclick={() => nowPlaying.toggle()}
+    >
+      <Music2 aria-hidden="true" />
+    </Button>
+  </div>
+  <div class="max-md:hidden">
+    <Button
+      density="largeIcon"
+      purpose="quiet"
+      aria-label="Queue"
+      title="Queue"
+      aria-pressed={queuePanel.isOpen}
+      onclick={() => queuePanel.toggle()}
+    >
+      <List aria-hidden="true" />
+    </Button>
+  </div>
   <Button
-    size="icon-lg"
-    variant="ghost"
-    aria-label="Now Playing"
-    title="Now Playing"
-    aria-pressed={nowPlaying.isOpen}
-    disabled={!playback.active}
-    onclick={() => nowPlaying.toggle()}
-    class="max-md:hidden"
-  >
-    <Music2 aria-hidden="true" />
-  </Button>
-  <Button
-    size="icon-lg"
-    variant="ghost"
-    aria-label="Queue"
-    title="Queue"
-    aria-pressed={queuePanel.isOpen}
-    onclick={() => queuePanel.toggle()}
-    class="max-md:hidden"
-  >
-    <List aria-hidden="true" />
-  </Button>
-  <Button
-    size="icon-lg"
-    variant="ghost"
+    density="largeIcon"
+    purpose="quiet"
     aria-label={playback.muted ? "Unmute" : "Mute"}
     disabled={playback.mutePending || !ready}
     onclick={() => void playback.toggleMute()}
@@ -105,14 +107,13 @@
   </Button>
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
-    class="w-24 shrink-0 sm:w-28"
+    class="w-[96px] shrink-0 sm:w-[112px]"
     data-region="volume-slider"
     onpointerdown={() => (dragging = true)}
     onwheel={onWheel}
   >
     <Slider
       type="single"
-      class="w-full"
       min={0}
       max={VOLUME_SLIDER_MAX}
       step={1}

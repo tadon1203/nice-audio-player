@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ContextMenu as ContextMenuPrimitive } from "bits-ui";
+  import { Root as ContextMenuRoot, Trigger as ContextMenuTrigger } from "$lib/ui/context-menu";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import { goto } from "$app/navigation";
   import { trackLinks } from "$lib/library/tracks";
@@ -12,7 +12,7 @@
   import { SLEEVE_RADIUS, sharedElement, sharedKey } from "$lib/ui/motion/shared-element";
   import { getMotionBudget } from "$lib/shell/motion-budget.svelte";
   import { slideTransition } from "$lib/ui/motion/svelte-slide";
-  import { LegacyButton as Button } from "$lib/ui/shadcn/button";
+  import { Button } from "$lib/ui/shadcn/button";
   import * as Tooltip from "$lib/ui/shadcn/tooltip";
 
   /** Sliding distance for the artwork, title and artist. One value so they travel together. */
@@ -52,28 +52,30 @@
   holds the close affordance instead, so the dock's layout does not shift. -->
   {#if nowPlayingOpen}
     <Button
-      variant="ghost"
+      purpose="quiet"
       aria-label="Close Now Playing"
       onclick={() => nowPlaying.close()}
       data-slot="sleeve-close"
-      class="size-16 shrink-0"
+      density="sleeve"
     >
       <ChevronDown aria-hidden="true" class="size-6" />
     </Button>
   {:else}
-    <ContextMenuPrimitive.Root>
-      <ContextMenuPrimitive.Trigger>
+    <ContextMenuRoot>
+      <ContextMenuTrigger>
         {#snippet child({ props })}
           <!-- Inset, not edge-filling: a rounded tile that sits inside the identity column like
           any other artwork placed in the workspace. -->
-          <button
+          <Button
             {...props}
             type="button"
             aria-label="Open Now Playing"
             disabled={!hasTrack}
             onclick={() => nowPlaying.open()}
             data-slot="sleeve"
-            class="grid aspect-square size-16 shrink-0 cursor-pointer overflow-hidden rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default"
+            purpose="bare"
+            density="sleeve"
+            geometry="sleeve"
           >
             <!-- The shared element: this Sleeve flies to Now Playing on open and back on close.
             The radius is set inline (not by class) so the flight's scale does not stretch the
@@ -98,9 +100,9 @@
                 </span>
               {/key}
             </span>
-          </button>
+          </Button>
         {/snippet}
-      </ContextMenuPrimitive.Trigger>
+      </ContextMenuTrigger>
       {#if hasTrack}
         <ContextMenuContent side="right" align="start" width="compact">
           {#if links?.album?.href}
@@ -113,7 +115,7 @@
           {/if}
         </ContextMenuContent>
       {/if}
-    </ContextMenuPrimitive.Root>
+    </ContextMenuRoot>
     <div class="grid min-w-0">
       <!-- Title and artist are one keyed block, so they leave and arrive as one piece. -->
       {#key trackKey}
@@ -122,15 +124,17 @@
           in:slide={{ entering: true }}
           out:slide={{ entering: false }}
         >
-          <button
+          <Button
             type="button"
             disabled={item === null}
             onclick={() => nowPlaying.toggle()}
             {title}
-            class="block max-w-full cursor-pointer truncate rounded-sm text-left text-sm font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default"
+            purpose="bare"
+            density="inline"
+            geometry="title"
           >
             {title}
-          </button>
+          </Button>
           {#if playback.error}
             <div class="flex min-w-0 items-center gap-2">
               <Tooltip.Root bind:open={errorTooltipOpen}>
@@ -151,13 +155,15 @@
                 </Tooltip.Trigger>
                 <Tooltip.Content>{playback.error}</Tooltip.Content>
               </Tooltip.Root>
-              <button
+              <Button
                 type="button"
                 onclick={() => playback.clearError()}
-                class="shrink-0 cursor-pointer rounded-sm text-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                purpose="text"
+                density="inline"
+                typeRole="label"
               >
                 Dismiss
-              </button>
+              </Button>
             </div>
           {:else if playback.failure !== null}
             {@const reason = playbackFailureMessage(playback.failure)}
@@ -165,13 +171,15 @@
               <span class="block truncate text-sm text-destructive" role="alert" title={reason}>
                 {reason}
               </span>
-              <button
+              <Button
                 type="button"
                 onclick={() => void playback.resume()}
-                class="shrink-0 cursor-pointer rounded-sm text-sm text-foreground outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+                purpose="text"
+                density="inline"
+                typeRole="label"
               >
                 Retry
-              </button>
+              </Button>
             </div>
           {:else if playback.undoOffer}
             <div class="flex min-w-0 items-center gap-2">
@@ -179,26 +187,30 @@
                 {playback.undoOffer}
               </span>
               <span aria-hidden="true" class="shrink-0 text-sm text-muted-foreground">·</span>
-              <button
+              <Button
                 type="button"
                 onclick={() => void playback.undoQueueChange()}
-                class="shrink-0 cursor-pointer rounded-sm text-sm text-foreground outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+                purpose="text"
+                density="inline"
+                typeRole="label"
               >
                 Undo
-              </button>
+              </Button>
             </div>
           {:else if playback.notice}
             <div class="flex min-w-0 items-center gap-2">
               <span class="block truncate text-sm text-muted-foreground" role="status">
                 {playback.notice}
               </span>
-              <button
+              <Button
                 type="button"
                 onclick={() => playback.dismissNotice()}
-                class="shrink-0 cursor-pointer rounded-sm text-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                purpose="text"
+                density="inline"
+                typeRole="label"
               >
                 Dismiss
-              </button>
+              </Button>
             </div>
           {:else if item?.artist}
             <span class="block truncate text-sm text-muted-foreground" title={item.artist}>

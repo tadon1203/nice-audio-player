@@ -11,6 +11,7 @@
 </script>
 
 <script lang="ts">
+  import { floatingLayer } from "$lib/ui/floating-layer";
   import { ContextMenu as ContextMenuPrimitive } from "bits-ui";
   import { cn } from "$lib/utils/cn.js";
 
@@ -24,14 +25,16 @@
     width = "standard",
     ...restProps
   }: ContextMenuContentProps = $props();
+  const layer = floatingLayer("popup");
 </script>
 
 <ContextMenuPrimitive.Portal>
   <ContextMenuPrimitive.Content
     bind:ref
     data-slot="menu-content"
+    style={`z-index: ${layer}`}
     class={cn(
-			"acrylic z-50 origin-(--bits-context-menu-content-transform-origin) rounded-lg p-1 text-sm text-popover-foreground shadow-floating ring-1 ring-foreground/10 outline-none motion-overlay",
+      "acrylic  origin-(--bits-context-menu-content-transform-origin) rounded-lg p-1 text-sm text-popover-foreground shadow-floating ring-1 ring-foreground/10 outline-none motion-overlay",
       width === "compact" ? "min-w-40" : "min-w-44",
     )}
     {...restProps}

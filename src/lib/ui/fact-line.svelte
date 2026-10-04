@@ -12,12 +12,12 @@
   let {
     facts,
     fallback,
-    class: className,
   }: {
     facts: readonly Fact[];
     /** Shown when no fact is available; the line is omitted without it. */
     fallback?: string;
-    class?: string;
+    class?: never;
+    style?: never;
   } = $props();
 
   const present = $derived(
@@ -30,7 +30,7 @@
 </script>
 
 {#if items.length > 0}
-  <p class={cn("flex flex-wrap gap-x-4 text-sm tabular-nums text-muted-foreground", className)}>
+  <p class={cn("flex flex-wrap gap-x-4 text-sm tabular-nums text-muted-foreground")}>
     {#each items as item, index (index)}
       {#if typeof item === "object"}
         <CountUpText text={item.text} />

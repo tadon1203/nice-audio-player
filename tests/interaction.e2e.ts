@@ -1,6 +1,7 @@
 import { type Page } from "@playwright/test";
 import { expect, test } from "./fixtures/test";
 import { workspaceViewport } from "./fixtures/locators";
+import { playbackItemFor, playingSnapshot } from "./fixtures/data";
 
 test.beforeEach(async ({ page }) => {
   await page.setViewportSize({ width: 1360, height: 900 });
@@ -125,15 +126,29 @@ test("Play next and Add to queue put a track where they say", async ({
 test("clearing the upcoming tracks can be undone", async ({ page, native, player, library }) => {
   const rest = library.tracks.filter((track) => track.playable).slice(1);
   native.respond("clearQueue", () => player.queue({ upcoming: [] }));
-  native.respond("enqueueTrack", () => player.queue({ upcoming: rest }));
+  native.respond("restorePreviousQueue", async () => {
+    await player.queue({ upcoming: rest });
+    return playingSnapshot({
+      revision: 100,
+      status: "playing",
+      item: playbackItemFor(library.tracks[0]!),
+      positionMs: 12_000,
+      seekRevision: 0,
+      volume: 0.72,
+      muted: false,
+      outputSelection: { kind: "systemDefault" },
+      canGoPrevious: false,
+      canGoNext: true,
+    });
+  });
   const dock = await playFirstTrack(page);
   await dock.getByRole("button", { name: "Queue", exact: true }).click();
   const panel = page.getByRole("dialog", { name: "Queue" });
   await expect(panel.locator('[data-tone="upcoming"]').first()).toBeVisible();
   await panel.getByRole("button", { name: "Clear upcoming" }).click();
-  await expect(panel.getByRole("status")).toContainText(/Cleared \d+ tracks/);
+  await expect(dock.getByRole("status")).toContainText("Upcoming cleared");
   await expect(panel.locator('[data-tone="upcoming"]')).toHaveCount(0);
-  await panel.getByRole("button", { name: "Undo" }).click();
+  await dock.getByRole("button", { name: "Undo" }).click();
   await expect(panel.locator('[data-tone="upcoming"]').first()).toBeVisible();
 });
 

@@ -18,6 +18,7 @@
 </script>
 
 <script lang="ts">
+  import { floatingLayer } from "$lib/ui/floating-layer";
   import { Select as SelectPrimitive } from "bits-ui";
   import { cn } from "$lib/utils/cn.js";
   import SelectPortal from "./select-portal.svelte";
@@ -32,6 +33,7 @@
     preventScroll = true,
     ...restProps
   }: SelectContentProps = $props();
+  const layer = floatingLayer("popup");
 </script>
 
 <SelectPortal {...portalProps}>
@@ -40,8 +42,9 @@
     {sideOffset}
     {preventScroll}
     data-slot="select-content"
+    style={`z-index: ${layer}`}
     class={cn(
-      "acrylic text-popover-foreground ring-foreground/10 min-w-36 rounded-lg shadow-floating ring-1 relative z-50 max-h-(--bits-select-content-available-height) origin-(--bits-select-content-transform-origin) overflow-x-hidden overflow-y-auto motion-overlay",
+      "acrylic text-popover-foreground ring-foreground/10 min-w-36 rounded-lg shadow-floating ring-1 relative  max-h-(--bits-select-content-available-height) origin-(--bits-select-content-transform-origin) overflow-x-hidden overflow-y-auto motion-overlay",
     )}
     {...restProps}
   >

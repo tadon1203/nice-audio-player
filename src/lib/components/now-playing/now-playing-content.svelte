@@ -18,7 +18,7 @@
   import NowPlayingLight from "./now-playing-light.svelte";
   import QueueColumn from "./queue-column.svelte";
   import { rightColumn } from "./right-column.svelte";
-  import { LegacyButton as Button } from "$lib/ui/shadcn/button";
+  import { Button } from "$lib/ui/shadcn/button";
 
   /**
    * Now Playing's content: one skeleton in every state. Left, the Sleeve and the track's info;
@@ -100,16 +100,17 @@
         <div role="group" aria-label="Show" class="col-start-1 row-start-1 flex gap-1">
           {#each ["lyrics", "queue", "meters"] as const as view (view)}
             {#if view !== "lyrics" || showLyrics}
-              <Button
-                type="button"
-                size="sm"
-                variant={rightColumn.view === view ? "secondary" : "ghost"}
-                aria-pressed={rightColumn.view === view}
-                class={view === "queue" && showLyrics ? "@min-[90rem]/npw:hidden" : undefined}
-                onclick={() => (rightColumn.view = view)}
-              >
-                {view === "lyrics" ? "Lyrics" : view === "queue" ? "Queue" : "Meters"}
-              </Button>
+              <div class={view === "queue" && showLyrics ? "@min-[90rem]/npw:hidden" : undefined}>
+                <Button
+                  type="button"
+                  density="compact"
+                  purpose={rightColumn.view === view ? "neutral" : "quiet"}
+                  aria-pressed={rightColumn.view === view}
+                  onclick={() => (rightColumn.view = view)}
+                >
+                  {view === "lyrics" ? "Lyrics" : view === "queue" ? "Queue" : "Meters"}
+                </Button>
+              </div>
             {/if}
           {/each}
         </div>

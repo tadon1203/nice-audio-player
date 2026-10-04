@@ -25,7 +25,7 @@
   <AlertDialogContent>
     <AlertDialogHeader>
       <AlertDialogTitle>Reset library and rescan?</AlertDialogTitle>
-      <AlertDialogDescription class="sr-only">
+      <AlertDialogDescription hidden>
         Moves the library database to a backup file and restarts the app.
       </AlertDialogDescription>
     </AlertDialogHeader>
@@ -36,7 +36,7 @@
     </p>
     <AlertDialogFooter>
       <AlertDialogCancel>Cancel</AlertDialogCancel>
-      <AlertDialogAction variant="destructive" onclick={onConfirm}
+      <AlertDialogAction purpose="destructive" onclick={onConfirm}
         >Reset and restart</AlertDialogAction
       >
     </AlertDialogFooter>

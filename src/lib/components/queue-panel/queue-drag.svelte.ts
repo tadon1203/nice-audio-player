@@ -1,4 +1,4 @@
-import type { HTMLButtonAttributes } from "svelte/elements";
+import type { HTMLAttributes } from "svelte/elements";
 import { dropSlotForFixedRows, slotToIndex } from "./queue-drag";
 
 /** Within this distance of the scroll region's edge a drag scrolls it, this far per move. */
@@ -37,7 +37,13 @@ export class QueueDrag {
   }
 
   /** The pointer handlers for the drag handle of upcoming item `id` at index `from`. */
-  handlersFor(id: string, from: number): HTMLButtonAttributes {
+  handlersFor(
+    id: string,
+    from: number,
+  ): Pick<
+    HTMLAttributes<HTMLElement>,
+    "onpointerdown" | "onpointermove" | "onpointerup" | "onpointercancel"
+  > {
     return {
       onpointerdown: (event) => {
         if (event.button !== 0) return;

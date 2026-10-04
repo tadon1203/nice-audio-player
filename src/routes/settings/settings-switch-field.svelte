@@ -29,11 +29,11 @@
   orientation="horizontal"
   class={cn("items-center justify-between gap-6 border-b border-border py-3 text-sm", className)}
 >
-  <FieldLabel for={id} class="flex-col items-start gap-0.5">
+  <FieldLabel for={id} stacked>
     <span class="font-normal text-foreground">{label}</span>
     <span class="max-w-prose text-sm leading-5 font-normal text-muted-foreground">
       {@render children()}
     </span>
   </FieldLabel>
-  <Switch {id} bind:checked={() => checked, onChange} class="shrink-0" />
+  <Switch {id} bind:checked={() => checked, onChange} />
 </Field>

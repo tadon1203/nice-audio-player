@@ -4,6 +4,7 @@
 </script>
 
 <script lang="ts">
+  import { Button } from "$lib/ui/shadcn/button";
   import { onMount, tick } from "svelte";
   import { watchClock } from "$lib/playback/clock";
   import { getPlayback } from "$lib/playback/context";
@@ -119,16 +120,18 @@
 {/snippet}
 
 {#snippet remainingButton()}
-  <button
+  <Button
     type="button"
     aria-pressed={showRemaining}
     aria-label={showRemaining ? "Time remaining" : "Track length"}
     title={showRemaining ? "Show track length" : "Show time remaining"}
-    class="shrink-0 cursor-pointer rounded-sm px-1 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+    purpose="bare"
+    density="inline"
+    typeRole="label"
     onclick={() => (showRemaining = !showRemaining)}
   >
     {@render rolling(remainingOrLength)}
-  </button>
+  </Button>
 {/snippet}
 
 <div

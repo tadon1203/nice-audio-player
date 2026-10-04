@@ -1,6 +1,6 @@
 <script lang="ts">
   import PlayPauseIcon from "$lib/ui/play-pause-icon.svelte";
-  import { LegacyButton as Button } from "$lib/ui/shadcn/button/index.js";
+  import { Button } from "$lib/ui/shadcn/button/index.js";
   import { cn } from "$lib/utils/cn.js";
   import { MISSING } from "$lib/utils/format";
   import type { TrackRowAction, TrackTableLayout, TrackTableRow } from "./track-columns";
@@ -21,12 +21,11 @@
   } = $props();
 </script>
 
-{#snippet actionButton(className: string)}
+{#snippet actionButton()}
   <Button
     type="button"
-    variant="ghost"
-    size="icon-lg"
-    class={className}
+    purpose="quiet"
+    density="largeIcon"
     aria-label={action.label}
     title={action.label}
     disabled={!available}
@@ -62,19 +61,21 @@
         >
           {row.trackNumber ?? MISSING}
         </span>
-        {@render actionButton("focus-visible:ring-0")}
+        {@render actionButton()}
       </div>
     </div>
   </div>
 {:else}
   <div class="relative flex h-9 w-full items-center justify-center">
-    {@render actionButton(
-      cn(
+    <div
+      class={cn(
         "absolute transition-opacity",
         !action.persistent &&
           "opacity-0 group-hover/track:opacity-100 group-focus-within/track:opacity-100",
         !available && !action.persistent && "pointer-events-none opacity-0 disabled:opacity-0",
-      ),
-    )}
+      )}
+    >
+      {@render actionButton()}
+    </div>
   </div>
 {/if}

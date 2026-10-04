@@ -42,9 +42,11 @@
     trapFocus={false}
     preventScroll={false}
   >
-    <SheetHeader class="border-b border-border pb-4">
-      <SheetTitle>Queue</SheetTitle>
-    </SheetHeader>
+    <div class="border-b border-border">
+      <SheetHeader>
+        <SheetTitle>Queue</SheetTitle>
+      </SheetHeader>
+    </div>
     <div bind:this={scrollElement} class="min-h-0 flex-1 overflow-y-auto py-2">
       <div bind:this={content}>
         {#each history as item (item.id)}

@@ -4,7 +4,7 @@
   import { createTrackLyrics } from "$lib/lyrics/lyrics.svelte";
   import { getPlayback } from "$lib/playback/context";
   import { lyricsWaveformLink } from "$lib/shell/lyrics-waveform-link.svelte";
-  import { LegacyButton as Button } from "$lib/ui/shadcn/button";
+  import { Button } from "$lib/ui/shadcn/button";
   import { cn } from "$lib/utils/cn.js";
   import { EDGE_MASK } from "./anchor-column";
   import { createAnchorPadding } from "./anchor-column.svelte";
@@ -95,20 +95,16 @@
       <div aria-hidden="true" class="transition-none" style:height="{anchor.bottom}px"></div>
     </div>
     {#if follow.mode === "free" && follow.offscreen !== null}
-      <Button
-        type="button"
-        variant="secondary"
-        size="sm"
-        onclick={follow.jumpToCurrent}
-        class={cn("absolute left-20", follow.offscreen === "above" ? "top-2" : "bottom-2")}
-      >
-        {#if follow.offscreen === "above"}
-          <ArrowUp aria-hidden="true" />
-        {:else}
-          <ArrowDown aria-hidden="true" />
-        {/if}
-        Jump to current line
-      </Button>
+      <div class={cn("absolute left-20", follow.offscreen === "above" ? "top-2" : "bottom-2")}>
+        <Button type="button" purpose="neutral" density="compact" onclick={follow.jumpToCurrent}>
+          {#if follow.offscreen === "above"}
+            <ArrowUp aria-hidden="true" />
+          {:else}
+            <ArrowDown aria-hidden="true" />
+          {/if}
+          Jump to current line
+        </Button>
+      </div>
     {/if}
   </div>
 {/if}

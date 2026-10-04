@@ -4,14 +4,13 @@
 </script>
 
 <script lang="ts">
+  import { Button } from "$lib/ui/shadcn/button";
   import Play from "@lucide/svelte/icons/play";
   import { getPlayback } from "$lib/playback/context";
   import { queuePanel } from "$lib/shell/queue-panel.svelte";
   import { flipMotion } from "$lib/ui/motion/svelte-flip";
-  import { motionFor } from "$lib/ui/motion/svelte-motion";
   import Artwork from "$lib/ui/artwork.svelte";
   import { cn } from "$lib/utils/cn.js";
-  import { timeStateClass } from "$lib/ui/time-state";
   import { formatDuration } from "$lib/utils/format";
   import { EDGE_MASK } from "./anchor-column";
   import { createAnchorPadding } from "./anchor-column.svelte";
@@ -44,10 +43,6 @@
   /** Where the current track sits in `rows` (past rows are before it). */
   const currentIndex = $derived(history.length);
 
-  // Luminance moves as a `move`, like a lyric line; under reduced motion it is the short crossfade.
-  const motion = $derived(motionFor("move"));
-  const transition = (property: string) => `${property} ${motion.duration}ms var(--motion-easing)`;
-
   const currentRow = () => container?.querySelector<HTMLElement>('[aria-current="true"]') ?? null;
 
   // The current row glides to the anchor when it changes, and only then; a column that has just
@@ -79,16 +74,16 @@
         {@const isCurrent = current !== null && index === currentIndex}
         {@const isPast = index < currentIndex}
         <div animate:flipMotion role="listitem" aria-current={isCurrent ? "true" : undefined}>
-          <button
+          <Button
             type="button"
             disabled={isCurrent}
             aria-label="Play {item.title}"
             onclick={() => void playback.playQueueItem(item.id)}
-            style:transition={transition("color")}
-            class={cn(
-              "flex w-full cursor-pointer items-center gap-4 rounded-sm py-2 text-left outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default",
-              timeStateClass(isCurrent ? "present" : isPast ? "past" : "future"),
-            )}
+            purpose="bare"
+            density="inline"
+            geometry="queueRow"
+            typeRole="label"
+            timeState={isCurrent ? "present" : isPast ? "past" : "future"}
           >
             <span class="flex w-16 shrink-0 justify-end text-right text-sm tabular-nums">
               {#if isCurrent}
@@ -110,7 +105,7 @@
                 <span class="shrink-0 tabular-nums">{formatDuration(item.durationMs)}</span>
               </span>
             </span>
-          </button>
+          </Button>
         </div>
       {/each}
       {#if upcomingCount === 0 && current !== null}
@@ -118,13 +113,15 @@
       {/if}
       {#if hidden > 0}
         <div class="pl-20">
-          <button
+          <Button
             type="button"
             onclick={() => queuePanel.open()}
-            class="cursor-pointer rounded-sm px-1 py-2 text-left text-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            purpose="text"
+            density="compact"
+            typeRole="label"
           >
             {hidden} more in the queue
-          </button>
+          </Button>
         </div>
       {/if}
       <div aria-hidden="true" class={SPACER} style:height="{anchor.bottom}px"></div>

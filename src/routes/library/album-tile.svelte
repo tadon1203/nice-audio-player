@@ -7,7 +7,7 @@
   import Artwork from "$lib/ui/artwork.svelte";
   import { sharedElement } from "$lib/ui/motion/shared-element";
   import PlayPauseIcon from "$lib/ui/play-pause-icon.svelte";
-  import { LegacyButton as Button } from "$lib/ui/shadcn/button/index.js";
+  import { Button } from "$lib/ui/shadcn/button/index.js";
   import { MISSING } from "$lib/utils/format";
 
   let {
@@ -75,15 +75,20 @@
   <!-- Beside the link, not inside it: the tile opens the album, this starts it. -->
   {#if onplay}
     <div class="pointer-events-none absolute inset-x-0 top-0 aspect-square">
-      <Button
-        type="button"
-        size="icon-lg"
-        class="pointer-events-auto absolute right-2 bottom-2 rounded-full opacity-0 transition-opacity group-focus-within/tile:opacity-100 group-hover/tile:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100"
-        aria-label="Play {title}"
-        onclick={() => onplay(album)}
+      <div
+        class="pointer-events-auto absolute right-2 bottom-2 opacity-0 transition-opacity group-focus-within/tile:opacity-100 group-hover/tile:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100"
       >
-        <PlayPauseIcon playing={false} />
-      </Button>
+        <Button
+          type="button"
+          density="largeIcon"
+          purpose="primary"
+          geometry="round"
+          aria-label="Play {title}"
+          onclick={() => onplay(album)}
+        >
+          <PlayPauseIcon playing={false} />
+        </Button>
+      </div>
     </div>
   {/if}
 </div>

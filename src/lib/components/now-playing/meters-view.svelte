@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Button } from "$lib/ui/shadcn/button";
   import type { Attachment } from "svelte/attachments";
   import {
     BALLISTICS,
@@ -190,16 +191,18 @@
       {floorText}
     </span>
   {:else if clips[channel]}
-    <button
-      type="button"
-      onclick={() => clear(channel)}
-      class={cn(
-        "self-center justify-self-start rounded-xs bg-foreground px-1 text-sm leading-[1.375rem] tabular-nums text-background outline-none focus-visible:ring-2 ring-ring",
-        narrow && "order-3",
-      )}
-    >
-      Clip
-    </button>
+    <span class={cn("self-center justify-self-start", narrow && "order-3")}>
+      <Button
+        type="button"
+        onclick={() => clear(channel)}
+        purpose="primary"
+        density="inline"
+        geometry="clip"
+        typeRole="label"
+      >
+        Clip
+      </Button>
+    </span>
   {:else}
     <span
       class={cn(

@@ -26,7 +26,7 @@ export function breathingOpacity(strength: LightStrength, level: number): number
 }
 
 /** OKLCH lightness of the page background and of the three inks (see `styles.css`). */
-export const INK = { background: 0.145, one: 0.985, two: 0.708, three: 0.6 } as const;
+export const INK = { background: 0.145, one: 0.985, two: 0.708, three: 0.62 } as const;
 
 /** Neutral OKLCH grays have relative luminance Y = L^3. */
 export const grayLuminance = (oklchLightness: number) => oklchLightness ** 3;

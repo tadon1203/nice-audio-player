@@ -72,10 +72,11 @@
   {:else}
     {@const artist = artistQuery.data}
     <MediaDetailsHeader title={label} artwork={artist.artwork} round>
-      <FactLine
-        class="mt-2"
-        facts={[formatCount(artist.albumCount, "album"), formatCount(artist.trackCount, "track")]}
-      />
+      <div class="mt-2">
+        <FactLine
+          facts={[formatCount(artist.albumCount, "album"), formatCount(artist.trackCount, "track")]}
+        />
+      </div>
     </MediaDetailsHeader>
 
     <section class="mt-10" aria-labelledby="artist-albums-title">

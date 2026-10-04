@@ -1,5 +1,9 @@
 <script lang="ts">
-  import { DropdownMenu as MenuPrimitive } from "bits-ui";
+  import {
+    Root as MenuRoot,
+    Trigger as MenuTrigger,
+    RadioGroup as MenuRadioGroup,
+  } from "$lib/ui/dropdown-menu";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import { createPlaybackSignalPath } from "$lib/components/signal-path/signal-path.svelte";
   import { getPlayback } from "$lib/playback/context";
@@ -55,22 +59,18 @@
       <span aria-hidden="true">›</span>
     </span>
   {/each}
-  <MenuPrimitive.Root bind:open>
-    <MenuPrimitive.Trigger
-      {disabled}
-      aria-label="Output device: {outputLabel}"
-      class="flex min-w-0 cursor-pointer items-center gap-0.5 rounded-sm outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:opacity-50"
-    >
+  <MenuRoot bind:open>
+    <MenuTrigger {disabled} aria-label="Output device: {outputLabel}">
       <span class="truncate">{outputLabel}</span>
       <ChevronDown aria-hidden="true" class="size-3.5 shrink-0" />
-    </MenuPrimitive.Trigger>
+    </MenuTrigger>
     <DropdownMenuContent align="end">
-      <MenuPrimitive.RadioGroup value={selected} onValueChange={select}>
+      <MenuRadioGroup value={selected} onValueChange={select}>
         <DropdownMenuRadioItem value={DEFAULT_DEVICE}>System default</DropdownMenuRadioItem>
         {#each devices.data ?? [] as device (device.id)}
           <DropdownMenuRadioItem value={device.id}>{device.name}</DropdownMenuRadioItem>
         {/each}
-      </MenuPrimitive.RadioGroup>
+      </MenuRadioGroup>
     </DropdownMenuContent>
-  </MenuPrimitive.Root>
+  </MenuRoot>
 </div>

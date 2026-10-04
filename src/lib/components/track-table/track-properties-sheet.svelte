@@ -2,7 +2,7 @@
   import { createQuery } from "@tanstack/svelte-query";
   import { libraryQueryOptions } from "$lib/library/queries";
   import { requireNative } from "$lib/native";
-  import { LegacyButton as Button } from "$lib/ui/shadcn/button/index.js";
+  import { Button } from "$lib/ui/shadcn/button/index.js";
   import {
     Sheet,
     SheetContent,
@@ -46,12 +46,14 @@
   }}
 >
   <SheetContent side="right" width="properties" flush>
-    <SheetHeader class="border-b border-border pb-4">
-      <SheetTitle>Properties</SheetTitle>
-      <SheetDescription class="truncate">
-        {properties?.title ?? properties?.fileName ?? " "}
-      </SheetDescription>
-    </SheetHeader>
+    <div class="border-b border-border">
+      <SheetHeader>
+        <SheetTitle>Properties</SheetTitle>
+        <SheetDescription truncate>
+          {properties?.title ?? properties?.fileName ?? " "}
+        </SheetDescription>
+      </SheetHeader>
+    </div>
     <div class="min-h-0 flex-1 overflow-y-auto p-4">
       {#if properties}
         <dl class="grid grid-cols-[7rem_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm">
@@ -90,16 +92,16 @@
             <span class="mt-2 flex gap-2">
               <Button
                 type="button"
-                variant="ghost"
-                size="sm"
+                purpose="quiet"
+                density="compact"
                 onclick={() => void navigator.clipboard?.writeText(properties.path)}
               >
                 Copy path
               </Button>
               <Button
                 type="button"
-                variant="ghost"
-                size="sm"
+                purpose="quiet"
+                density="compact"
                 onclick={() => void requireNative().revealLibraryTrack(properties.id)}
               >
                 Show in Explorer

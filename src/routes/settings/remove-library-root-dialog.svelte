@@ -26,7 +26,7 @@
   <AlertDialogContent>
     <AlertDialogHeader>
       <AlertDialogTitle>Remove library folder?</AlertDialogTitle>
-      <AlertDialogDescription class="break-words text-foreground">
+      <AlertDialogDescription>
         {root?.path}
       </AlertDialogDescription>
     </AlertDialogHeader>
@@ -35,7 +35,7 @@
     </p>
     <AlertDialogFooter>
       <AlertDialogCancel>Cancel</AlertDialogCancel>
-      <AlertDialogAction variant="destructive" onclick={onConfirm}>Remove</AlertDialogAction>
+      <AlertDialogAction purpose="destructive" onclick={onConfirm}>Remove</AlertDialogAction>
     </AlertDialogFooter>
   </AlertDialogContent>
 </AlertDialog>

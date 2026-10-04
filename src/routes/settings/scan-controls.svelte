@@ -4,7 +4,7 @@
   import { createLibraryScan } from "$lib/library/detail.svelte";
   import { libraryCommandErrorMessage } from "$lib/library/library-errors";
   import { createCancelLibraryScan, createStartLibraryScan } from "$lib/library/mutations";
-  import { LegacyButton as Button } from "$lib/ui/shadcn/button/index.js";
+  import { Button } from "$lib/ui/shadcn/button/index.js";
   import { scanLabel } from "./scan-status";
 
   /** The scan's state in words, and the button that starts or cancels it. */
@@ -26,7 +26,7 @@
     {#if scan?.state === "running"}
       <Button
         type="button"
-        variant="outline"
+        purpose="outline"
         onclick={() => {
           cancelScan.reset();
           cancelScan.mutate();
@@ -39,7 +39,7 @@
     {:else}
       <Button
         type="button"
-        variant="outline"
+        purpose="outline"
         onclick={() => {
           startScan.reset();
           startScan.mutate();

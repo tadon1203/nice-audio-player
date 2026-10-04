@@ -1,6 +1,7 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["typescript", "oxc"],
+  "ignorePatterns": ["**/skills/**"],
   "overrides": [
     {
       "files": ["src/lib/native/**"],

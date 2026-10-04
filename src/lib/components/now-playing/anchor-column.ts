@@ -26,6 +26,5 @@ export function anchorScrollTop({
   return Math.max(0, Math.min(target, maxScroll));
 }
 
-/** The fade at the top and bottom edges of a scrolling column, and no scrollbar. */
-export const EDGE_MASK =
-  "mask-[linear-gradient(to_bottom,transparent,black_15%,black_80%,transparent)] [scrollbar-width:none] forced-colors:mask-none [&::-webkit-scrollbar]:hidden";
+/** Keep distant rows readable; time ink supplies their de-emphasis without an opacity mask. */
+export const EDGE_MASK = "[scrollbar-width:none] [&::-webkit-scrollbar]:hidden";

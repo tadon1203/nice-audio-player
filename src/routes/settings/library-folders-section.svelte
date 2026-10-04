@@ -15,7 +15,7 @@
   import ErrorAlert from "$lib/ui/error-alert.svelte";
   import LoadingStatus from "$lib/ui/loading-status.svelte";
   import SectionTitle from "$lib/ui/section-title.svelte";
-  import { Button, LegacyButton as CompatButton } from "$lib/ui/shadcn/button/index.js";
+  import { Button } from "$lib/ui/shadcn/button/index.js";
   import { Checkbox } from "$lib/ui/shadcn/checkbox/index.js";
   import { Field, FieldLabel } from "$lib/ui/shadcn/field/index.js";
   import {
@@ -90,7 +90,7 @@
       <p class="mt-1 text-sm leading-5 text-muted-foreground">Choose where your music lives.</p>
     </div>
     <div class="flex max-w-sm flex-col items-end gap-2">
-      <CompatButton
+      <Button
         type="button"
         onclick={() => {
           addRoot.reset();
@@ -104,7 +104,7 @@
           <FolderPlus data-icon="inline-start" aria-hidden="true" />
         {/if}
         Add folder
-      </CompatButton>
+      </Button>
       {#if addRoot.error}
         <p class="text-right text-sm text-destructive" role="alert">
           {libraryCommandErrorMessage(addRoot.error)}
@@ -187,12 +187,11 @@
                 bind:checked={() => root.enabled, (checked) => setRootEnabled(root.id, checked)}
                 disabled={scanRunning || pending}
               />
-              <FieldLabel
-                for={`enabled-${root.id}`}
-                class="font-normal text-muted-foreground max-sm:sr-only"
+              <span class="text-muted-foreground max-sm:sr-only"
+                ><FieldLabel for={`enabled-${root.id}`}>
+                  Include <span class="sr-only">{root.path} </span>in library
+                </FieldLabel></span
               >
-                Include <span class="sr-only">{root.path} </span>in library
-              </FieldLabel>
             </Field>
             <Button
               type="button"
@@ -224,10 +223,10 @@
     </p>
     <div class="flex max-w-sm flex-col items-end gap-2">
       <div class="flex flex-wrap justify-end gap-2">
-        <CompatButton
+        <Button
           type="button"
-          variant="outline"
-          size="sm"
+          purpose="outline"
+          density="compact"
           disabled={scanRunning || deleteMissing.isPending || missingTotal === 0}
           onclick={() => {
             deleteMissing.reset();
@@ -238,18 +237,18 @@
             <Spinner data-icon="inline-start" aria-hidden="true" role="presentation" />
           {/if}
           Delete Missing
-        </CompatButton>
-        <CompatButton
+        </Button>
+        <Button
           type="button"
-          variant="outline"
-          size="sm"
+          purpose="outline"
+          density="compact"
           onclick={() => {
             openLogDirectory.reset();
             openLogDirectory.mutate();
           }}
         >
           Open log folder
-        </CompatButton>
+        </Button>
       </div>
       {#if deleteMissing.error}
         <p class="text-right text-sm text-destructive" role="alert">
@@ -269,10 +268,10 @@
       Use this if the library looks wrong or cannot be opened.
     </p>
     <div class="flex max-w-sm flex-col items-end gap-2">
-      <CompatButton
+      <Button
         type="button"
-        variant="outline"
-        size="sm"
+        purpose="outline"
+        density="compact"
         disabled={scanRunning || resetLibrary.isPending}
         onclick={() => {
           resetLibrary.reset();
@@ -283,7 +282,7 @@
           <Spinner data-icon="inline-start" aria-hidden="true" role="presentation" />
         {/if}
         Reset library and rescan
-      </CompatButton>
+      </Button>
       {#if resetLibrary.error}
         <p class="text-right text-sm text-destructive" role="alert">
           {libraryCommandErrorMessage(resetLibrary.error)}

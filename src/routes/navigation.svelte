@@ -8,8 +8,7 @@
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
   import { motionFor } from "$lib/ui/motion/svelte-motion";
-  import { cn } from "$lib/utils/cn.js";
-  import { legacyButtonVariants } from "$lib/ui/shadcn/button/index.js";
+  import { Button } from "$lib/ui/shadcn/button/index.js";
 
   type NavigationItem = {
     label: string;
@@ -43,15 +42,13 @@
 
 {#snippet link(item: NavigationItem)}
   {@const active = isActive(item.to)}
-  <a
+  <Button
+    purpose="quiet"
+    density="standard"
+    geometry="navigation"
     href={resolve(item.to)}
     aria-current={active ? "page" : undefined}
     onclick={onNavigate}
-    class={cn(
-      legacyButtonVariants({ variant: "ghost", size: "lg" }),
-      "relative h-10 w-full justify-start gap-2 px-2 text-muted-foreground hover:bg-sidebar-accent",
-      active && "text-foreground",
-    )}
   >
     {#if active}
       <span
@@ -63,7 +60,7 @@
     {/if}
     <item.icon aria-hidden="true" class="relative" />
     <span class="relative truncate">{item.label}</span>
-  </a>
+  </Button>
 {/snippet}
 
 <nav

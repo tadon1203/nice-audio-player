@@ -1,8 +1,6 @@
 <script lang="ts">
   import Menu from "@lucide/svelte/icons/menu";
   import X from "@lucide/svelte/icons/x";
-  import { cn } from "$lib/utils/cn.js";
-  import { legacyButtonVariants } from "$lib/ui/shadcn/button/index.js";
   import {
     Sheet,
     SheetClose,
@@ -22,13 +20,11 @@
 >
   <div class="flex min-w-0 items-center gap-2 border-sidebar-border px-2 md:border-r md:px-4">
     <Sheet bind:open={mobileNavigationOpen}>
-      <SheetTrigger
-        type="button"
-        class={cn(legacyButtonVariants({ variant: "ghost", size: "icon-lg" }), "md:hidden")}
-        aria-label="Open navigation"
-      >
-        <Menu aria-hidden="true" class="size-4" />
-      </SheetTrigger>
+      <div class="md:hidden">
+        <SheetTrigger type="button" aria-label="Open navigation">
+          <Menu aria-hidden="true" class="size-4" />
+        </SheetTrigger>
+      </div>
       <SheetContent
         side="left"
         showCloseButton={false}
@@ -38,11 +34,7 @@
       >
         <div class="flex h-10 items-center justify-between border-b border-sidebar-border px-3">
           <SheetTitle>Nice Audio Player</SheetTitle>
-          <SheetClose
-            type="button"
-            class={legacyButtonVariants({ variant: "ghost", size: "icon-lg" })}
-            aria-label="Close navigation"
-          >
+          <SheetClose type="button" aria-label="Close navigation">
             <X aria-hidden="true" class="size-4" />
           </SheetClose>
         </div>

@@ -1,17 +1,17 @@
-import type { ButtonProps } from "./shadcn/button/button.svelte";
+import type { ButtonProps } from "./shadcn/button";
 import type { ContextMenuContentProps } from "./context-menu/context-menu-content.svelte";
 import type { SelectContentProps } from "./shadcn/select/select-content.svelte";
 
 const acceptedButton: ButtonProps = {
-	type: "button",
-	density: "compact",
-	purpose: "quiet",
-	typeRole: "label",
-	"aria-label": "Open queue",
-	"data-region": "queue-control",
-	disabled: false,
-	onclick: () => undefined,
-	ref: null,
+  type: "button",
+  density: "compact",
+  purpose: "quiet",
+  typeRole: "label",
+  "aria-label": "Open queue",
+  "data-region": "queue-control",
+  disabled: false,
+  onclick: () => undefined,
+  ref: null,
 };
 
 const typedStyleOverride = { style: { color: "red" } };
@@ -25,9 +25,9 @@ const rejectedMenuClass: ContextMenuContentProps = { class: "z-0" };
 const rejectedSelectStyle: SelectContentProps = typedStyleOverride;
 
 void [
-	acceptedButton,
-	rejectedButtonClass,
-	rejectedButtonStyle,
-	rejectedMenuClass,
-	rejectedSelectStyle,
+  acceptedButton,
+  rejectedButtonClass,
+  rejectedButtonStyle,
+  rejectedMenuClass,
+  rejectedSelectStyle,
 ];

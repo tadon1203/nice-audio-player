@@ -14,6 +14,7 @@
 </script>
 
 <script lang="ts">
+  import { Button } from "$lib/ui/shadcn/button";
   import type { Attachment } from "svelte/attachments";
   import { isTrackAvailable } from "$lib/library/tracks";
   import { prefersReducedMotion } from "svelte/motion";
@@ -82,37 +83,43 @@
     {#each tracks as track, index (track.id)}
       {@const state = states[index]}
       {@const playable = isTrackAvailable(track)}
-      <Tooltip>
-        <!-- Pointer-only: the track table below is the keyboard path to the same tracks. -->
-        <TooltipTrigger
-          type="button"
-          aria-label={track.title}
-          aria-current={state === "current" ? "true" : undefined}
-          tabindex={-1}
-          disabled={!playable}
-          onclick={() => onplaytrack(track.id)}
-          class="group/segment relative h-full min-w-0.5 cursor-pointer rounded-full outline-none before:absolute before:inset-x-0 before:-inset-y-3 before:content-[''] disabled:cursor-default"
-          style="flex-grow: {track.durationMs ?? 0}"
-        >
-          <span
-            aria-hidden="true"
-            in:sweep|global={{ start: starts[index] ?? 0 }}
-            class={cn(
-              "absolute inset-0 origin-left overflow-clip rounded-full transition-colors",
-              state === "past" ? PAST : IDLE,
-              state === "future" && "group-hover/segment:bg-foreground/60",
-            )}
-          ></span>
-          {#if state === "current"}
-            <span
-              aria-hidden="true"
-              class="absolute inset-0 origin-left rounded-full bg-foreground"
-              {@attach fill(track.durationMs)}
-            ></span>
-          {/if}
-        </TooltipTrigger>
-        <TooltipContent>{track.title}</TooltipContent>
-      </Tooltip>
+      <div class="group/segment relative h-full min-w-0.5" style:flex-grow={track.durationMs ?? 0}>
+        <Tooltip>
+          <!-- Pointer-only: the track table below is the keyboard path to the same tracks. -->
+          <TooltipTrigger>
+            {#snippet child({ props })}<Button
+                {...props}
+                type="button"
+                aria-label={track.title}
+                aria-current={state === "current" ? "true" : undefined}
+                tabindex={-1}
+                disabled={!playable}
+                onclick={() => onplaytrack(track.id)}
+                purpose="bare"
+                density="inline"
+                geometry="strip"
+              >
+                <span
+                  aria-hidden="true"
+                  in:sweep|global={{ start: starts[index] ?? 0 }}
+                  class={cn(
+                    "absolute inset-0 origin-left overflow-clip rounded-full transition-colors",
+                    state === "past" ? PAST : IDLE,
+                    state === "future" && "group-hover/segment:bg-foreground/60",
+                  )}
+                ></span>
+                {#if state === "current"}
+                  <span
+                    aria-hidden="true"
+                    class="absolute inset-0 origin-left rounded-full bg-foreground"
+                    {@attach fill(track.durationMs)}
+                  ></span>
+                {/if}
+              </Button>{/snippet}
+          </TooltipTrigger>
+          <TooltipContent>{track.title}</TooltipContent>
+        </Tooltip>
+      </div>
     {/each}
   </div>
 {/if}

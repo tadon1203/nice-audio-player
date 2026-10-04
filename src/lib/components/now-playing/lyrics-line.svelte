@@ -10,13 +10,13 @@
 </script>
 
 <script lang="ts">
+  import { Button } from "$lib/ui/shadcn/button";
   import Play from "@lucide/svelte/icons/play";
   import type { Attachment } from "svelte/attachments";
   import type { LyricsTimedLine } from "$lib/native";
   import { getPlayback } from "$lib/playback/context";
   import { lyricsWaveformLink } from "$lib/shell/lyrics-waveform-link.svelte";
-  import { motionFor } from "$lib/ui/motion/svelte-motion";
-  import { timeStateClass } from "$lib/ui/time-state";
+  import TimePresentation from "$lib/ui/time-presentation.svelte";
   import { cn } from "$lib/utils/cn.js";
   import { formatDuration } from "$lib/utils/format";
   import IntervalLine from "./interval-line.svelte";
@@ -51,10 +51,6 @@
   const isPast = $derived(index < currentIndex);
   const isHovered = $derived(index === hoveredIndex);
   const startLabel = $derived(formatDuration(line.startMs));
-
-  // Luminance moves as a `move`; under reduced motion it is the shared short crossfade.
-  const motion = $derived(motionFor("move"));
-  const transition = (property: string) => `${property} ${motion.duration}ms var(--motion-easing)`;
 </script>
 
 <div
@@ -62,14 +58,17 @@
   aria-current={isCurrent ? "true" : undefined}
   class={cn("group flex items-baseline gap-4 rounded-sm py-2", isHovered && "bg-accent/60")}
 >
-  <button
+  <Button
     type="button"
     data-slot="lyrics-gutter"
     aria-label={`Seek to ${startLabel}`}
     onclick={() => void playback.seek(line.startMs)}
     onpointerenter={() => lyricsWaveformLink.setHoveredLineSpan(lineSpan(lines, index, durationMs))}
     onpointerleave={() => lyricsWaveformLink.setHoveredLineSpan(null)}
-    class="relative w-16 shrink-0 cursor-pointer text-right text-sm tabular-nums text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+    purpose="bare"
+    density="inline"
+    geometry="gutter"
+    typeRole="label"
   >
     <span class={SHOW_TIME}>{startLabel}</span>
     <!-- The present is marked with ▶ in the artwork's colour until the time takes its place. -->
@@ -82,7 +81,7 @@
         )}
       />
     {/if}
-  </button>
+  </Button>
   {#if isInterval}
     <IntervalLine
       startMs={line.startMs}
@@ -92,12 +91,9 @@
   {:else}
     <span class={cn("relative", LYRICS_TEXT)}>
       <!-- Past is faintest, the present brightest, the future between; the current line is lit in the artwork's colour. -->
-      <span
-        style:transition={transition("color")}
-        class={isCurrent ? "text-(--artwork-accent)" : timeStateClass(isPast ? "past" : "future")}
+      <TimePresentation state={isCurrent ? "present" : isPast ? "past" : "future"} lyric
+        >{line.text}</TimePresentation
       >
-        {line.text}
-      </span>
     </span>
   {/if}
 </div>

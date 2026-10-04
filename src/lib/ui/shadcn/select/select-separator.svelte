@@ -1,18 +1,18 @@
 <script lang="ts">
+  import type { PresentationProps } from "$lib/ui/presentation-props";
 	import { Separator } from "$lib/ui/shadcn/separator/index.js";
 	import { cn } from "$lib/utils/cn.js";
 	import type { Separator as SeparatorPrimitive } from "bits-ui";
 
 	let {
 		ref = $bindable(null),
-		class: className,
 		...restProps
-	}: SeparatorPrimitive.RootProps = $props();
+	}: PresentationProps<SeparatorPrimitive.RootProps> = $props();
 </script>
 
 <Separator
 	bind:ref
 	data-slot="select-separator"
-	class={cn("bg-border -mx-1 my-1 h-px pointer-events-none", className)}
+	class={cn("bg-border -mx-1 my-1 h-px pointer-events-none")}
 	{...restProps}
 />

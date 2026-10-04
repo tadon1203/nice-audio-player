@@ -1,8 +1,8 @@
 <script lang="ts">
+  import { Button } from "$lib/ui/shadcn/button";
   import type { LyricsResolution, PlaybackItem } from "$lib/native";
   import { createPlaybackSignalPath } from "$lib/components/signal-path/signal-path.svelte";
   import FactLine from "$lib/ui/fact-line.svelte";
-  import { cn } from "$lib/utils/cn.js";
   import { trackLinks } from "$lib/library/tracks";
   import { lyricsState, trackFacts } from "./track-facts";
 
@@ -59,14 +59,16 @@
     {#if lyrics?.kind === "notFound"}
       <span>No lyrics</span>
     {:else if lyrics?.kind === "sourceFailed"}
-      <button
+      <Button
         type="button"
         title="{lyrics.expectedPath} (click to copy)"
         onclick={() => copy(lyrics.expectedPath)}
-        class={cn("cursor-pointer", linkClass)}
+        purpose="text"
+        density="inline"
+        typeRole="label"
       >
         Lyrics file unreadable
-      </button>
+      </Button>
     {:else if lyrics?.kind === "embedded"}
       <span title="The .lrc file couldn't be read.">Embedded lyrics</span>
     {:else if lyrics?.kind === "unsynced"}

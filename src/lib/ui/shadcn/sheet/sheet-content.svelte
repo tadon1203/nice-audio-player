@@ -3,9 +3,10 @@
 </script>
 
 <script lang="ts">
+  import { floatingLayer } from "$lib/ui/floating-layer";
   import { Dialog as SheetPrimitive } from "bits-ui";
   import XIcon from "@lucide/svelte/icons/x";
-  import { LegacyButton as Button } from "$lib/ui/shadcn/button/index.js";
+  import { Button } from "$lib/ui/shadcn/button/index.js";
   import { cn, type WithoutChildrenOrChild } from "$lib/utils/cn.js";
   import SheetOverlay from "./sheet-overlay.svelte";
   import SheetPortal from "./sheet-portal.svelte";
@@ -36,18 +37,20 @@
     overlay?: boolean;
     children: Snippet;
   } = $props();
+  const layer = floatingLayer("panel");
 </script>
 
 <SheetPortal {...portalProps}>
   {#if overlay}
-    <SheetOverlay />
+    <SheetOverlay layer={layer - 1} />
   {/if}
   <SheetPrimitive.Content
     bind:ref
     data-slot="sheet-content"
+    style={`z-index: ${layer}`}
     data-side={side}
     class={cn(
-      "fixed z-40 flex flex-col gap-4 bg-clip-padding text-sm motion-overlay data-[side=bottom]:inset-x-0 data-[side=bottom]:bottom-0 data-[side=bottom]:h-auto data-[side=bottom]:border-t data-[side=left]:inset-y-0 data-[side=left]:left-0 data-[side=left]:h-full data-[side=left]:w-3/4 data-[side=left]:border-r data-[side=right]:inset-y-0 data-[side=right]:right-0 data-[side=right]:h-full data-[side=right]:w-3/4 data-[side=right]:border-l data-[side=top]:inset-x-0 data-[side=top]:top-0 data-[side=top]:h-auto data-[side=top]:border-b data-[side=left]:sm:max-w-sm data-[side=right]:sm:max-w-sm",
+      "fixed  flex flex-col gap-4 bg-clip-padding text-sm motion-overlay data-[side=bottom]:inset-x-0 data-[side=bottom]:bottom-0 data-[side=bottom]:h-auto data-[side=bottom]:border-t data-[side=left]:inset-y-0 data-[side=left]:left-0 data-[side=left]:h-full data-[side=left]:w-3/4 data-[side=left]:border-r data-[side=right]:inset-y-0 data-[side=right]:right-0 data-[side=right]:h-full data-[side=right]:w-3/4 data-[side=right]:border-l data-[side=top]:inset-x-0 data-[side=top]:top-0 data-[side=top]:h-auto data-[side=top]:border-b data-[side=left]:sm:max-w-sm data-[side=right]:sm:max-w-sm",
       surface === "task" && "acrylic text-popover-foreground shadow-floating",
       surface === "navigation" && "bg-sidebar text-sidebar-foreground",
       width === "navigation" && "w-64",
@@ -61,10 +64,10 @@
     {#if showCloseButton}
       <SheetPrimitive.Close data-slot="sheet-close">
         {#snippet child({ props })}
-          <Button variant="ghost" class="absolute top-3 right-3" size="icon-sm" {...props}>
+          <div class="absolute top-3 right-3"><Button purpose="quiet" density="compactIcon" {...props}>
             <XIcon />
             <span class="sr-only">Close</span>
-          </Button>
+          </Button></div>
         {/snippet}
       </SheetPrimitive.Close>
     {/if}

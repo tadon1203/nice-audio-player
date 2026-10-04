@@ -95,7 +95,7 @@
   --muted: oklch(0.269 0 0);
   --muted-foreground: oklch(0.708 0 0);
   /* Ink-3: past lyric lines and queue history. */
-  --faint-foreground: oklch(0.6 0 0);
+  --faint-foreground: oklch(0.62 0 0);
   --accent: oklch(0.225 0 0);
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
