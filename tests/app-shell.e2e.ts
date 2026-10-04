@@ -3,6 +3,7 @@ import { expect, test } from "./fixtures/test";
 test("navigates between the three library presentations and Settings", async ({ page }) => {
   await page.goto("/");
   await expect(page).toHaveURL(/\/library\/albums(?:\?|$)/);
+  await page.addStyleTag({ content: "* { transition: none !important; }" });
 
   for (const [label, path] of [
     ["Albums", "/library/albums"],
@@ -14,6 +15,13 @@ test("navigates between the three library presentations and Settings", async ({ 
     await link.click();
     await expect(page).toHaveURL(new RegExp(`${path.replaceAll("/", "\\/")}(?:\\?|$)`));
     await expect(link).toHaveAttribute("aria-current", "page");
+    await page.getByRole("main").hover({ position: { x: 1, y: 1 } });
+    const inactive = page.getByRole("link", {
+      name: label === "Albums" ? "Tracks" : "Albums",
+      exact: true,
+    });
+    const color = (element: HTMLElement | SVGElement) => getComputedStyle(element).color;
+    await expect.poll(() => link.evaluate(color)).not.toBe(await inactive.evaluate(color));
     await expect(page.getByRole("main")).toBeVisible();
   }
 

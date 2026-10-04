@@ -48,7 +48,7 @@
     href={resolve(item.to)}
     aria-current={active ? "page" : undefined}
     onclick={onNavigate}
-    class="relative h-10 w-full justify-start gap-2 px-2 text-muted-foreground aria-current:text-foreground hover:bg-sidebar-accent"
+    class="relative h-10 w-full justify-start gap-2 px-2 text-muted-foreground aria-[current=page]:text-foreground hover:bg-sidebar-accent"
   >
     {#if active}
       <span
