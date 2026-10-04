@@ -257,7 +257,7 @@ impl PlaybackService {
             tracks,
         };
         let worker = thread::Builder::new()
-            .name("audio-playback".into())
+            .name("worker".into())
             .spawn(move || {
                 PlaybackWorker::new(links, queue, volume_state, output_selection).run(inputs);
             })

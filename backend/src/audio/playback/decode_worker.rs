@@ -76,7 +76,10 @@ impl DecodeWorker {
             prebuffer_frames: prebuffer_frames(input.output_sample_rate),
             prebuffer_sent: false,
         };
-        let _join_handle = thread::spawn(move || task.run_contained(decoder));
+        let _join_handle = thread::Builder::new()
+            .name("decode".into())
+            .spawn(move || task.run_contained(decoder))
+            .expect("decode thread spawns");
         Self {
             cancellation,
             #[cfg(test)]

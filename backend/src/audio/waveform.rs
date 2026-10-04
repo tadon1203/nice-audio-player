@@ -410,7 +410,7 @@ impl WaveformService {
         });
         let worker = Arc::clone(&shared);
         let _ = thread::Builder::new()
-            .name("waveform-analysis".into())
+            .name("waveform".into())
             .spawn(move || {
                 while let Some((file, cancellation)) = worker.next_job() {
                     // A file that panics the analysis gets no waveform; the worker lives on.
