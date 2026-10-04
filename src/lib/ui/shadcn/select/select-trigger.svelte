@@ -10,8 +10,9 @@
     width = "fit",
     appearance = "control",
     ...restProps
-  }: Omit<WithoutChild<SelectPrimitive.TriggerProps>, "class"> & {
+  }: Omit<WithoutChild<SelectPrimitive.TriggerProps>, "class" | "style"> & {
     class?: never;
+    style?: never;
     width?: "fit" | "sort-control";
     appearance?: "control" | "inline-value";
     size?: "sm" | "default";

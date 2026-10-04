@@ -135,10 +135,10 @@
 /*
  * Enter/exit for floating surfaces (tooltip, select, menu, dialog). Base UI sets
  * `data-starting-style` / `data-ending-style` around mount and unmount, so a plain transition
- * is enough: they fade and grow from 97% (`scale`, which does not fight `translate`).
+ * is enough. Opacity keeps reduced-motion behavior to a brief crossfade.
  */
 @utility motion-overlay {
-  transition-property: opacity, scale;
+  transition-property: opacity;
   transition-duration: var(--motion-move-duration);
   transition-timing-function: var(--motion-easing);
 
@@ -146,12 +146,10 @@
   &[data-ending-style],
   &[data-state="closed"] {
     opacity: 0;
-    scale: 0.97;
   }
 
   &[data-state="open"] {
     opacity: 1;
-    scale: 1;
   }
 }
 
