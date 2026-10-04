@@ -26,12 +26,13 @@ const lyrics = {
   },
 } as const;
 
-// Time is drawn by the compositor (ADR 0014), not a frame loop. Enabled in ticket 03, when the
-// per-frame loops are gone; until then it fails against the current code. Meters are not mounted
+// Time is drawn by the compositor (ADR 0014), not a frame loop. The Light is now keyframe-driven, but
+// the rolling digit columns (`Tween`, rAF) still run a loop on every whole second; enable this
+// once they move to WAAPI. Meters are not mounted
 // here, so they are excluded. Paint has no counter in `Performance.getMetrics`; layout and style
 // recalculation stand in for per-frame work.
 for (const nowPlaying of ["closed", "on Lyrics"] as const) {
-  test.skip(`playback runs no frame loop with Now Playing ${nowPlaying} (enable in ticket 03)`, async ({
+  test.skip(`playback runs no frame loop with Now Playing ${nowPlaying} (blocked: the seconds display's rolling digits tween on rAF)`, async ({
     page,
     native,
     player,

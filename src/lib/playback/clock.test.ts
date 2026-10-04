@@ -298,6 +298,27 @@ describe("playback clock", () => {
     });
   });
 
+  describe("an element that does not follow", () => {
+    it("jumps to the live position on a seek, through holds and glides", () => {
+      const { clock, drive, animations, report, nextFrame } = setup();
+      report(snapshot("playing", "a", 10_000));
+      drive();
+      clock.drive([{ atMs: 0 }, { atMs: 60_000 }], { follows: false })({} as HTMLElement);
+      const [gliding, free] = animations as [FakeAnimation, FakeAnimation];
+
+      const release = clock.hold(30_000);
+      expect(gliding).toMatchObject({ currentTime: 30_000, running: false });
+      expect(free.running).toBe(true);
+      release();
+
+      report(snapshot("playing", "a", 40_000, 1));
+      expect(gliding.running).toBe(false);
+      expect(free).toMatchObject({ currentTime: 40_000, running: true });
+      nextFrame(300);
+      expect(gliding.running).toBe(true);
+    });
+  });
+
   describe("hold", () => {
     it("pauses every driven animation at the held position, whatever the reports say", () => {
       const { clock, drive, animations, report } = setup();

@@ -77,6 +77,8 @@ type Driven = {
   node: HTMLElement;
   keyframes: readonly DriveKeyframe[];
   animation: ClockAnimation | null;
+  /** False for an element that eases itself: holds and glides pass it by. */
+  follows: boolean;
 };
 type Boundary = {
   nextBoundaryMs: (positionMs: number) => number | null;
@@ -108,12 +110,14 @@ export function createPlaybackClock(overrides: Partial<ClockEnvironment> = {}) {
   const durationMs = () => state.report?.durationMs ?? null;
 
   const setAll = (ms: number) => {
-    for (const { animation } of driven) if (animation) animation.currentTime = ms;
+    for (const { animation, follows } of driven) {
+      if (animation && follows) animation.currentTime = ms;
+    }
   };
 
   /** Puts one animation where the clock is, unless a hold or a glide is moving it. */
-  const resync = (animation: ClockAnimation, force: boolean) => {
-    if (holds > 0 || glide !== null) return;
+  const resync = ({ animation, follows }: Driven, force: boolean) => {
+    if (animation === null || (follows && (holds > 0 || glide !== null))) return;
     const at = estimate();
     if (playing()) {
       if (force || Math.abs((animation.currentTime ?? Number.NaN) - at) > RESYNC_DRIFT_MS) {
@@ -135,13 +139,13 @@ export function createPlaybackClock(overrides: Partial<ClockEnvironment> = {}) {
     }));
     const animation = environment.animate(entry.node, keyframes, { duration: total });
     entry.animation = animation;
-    if (holds > 0) {
+    if (entry.follows && holds > 0) {
       animation.pause();
       animation.currentTime = heldMs;
-    } else if (glide !== null) {
+    } else if (entry.follows && glide !== null) {
       animation.pause();
     } else {
-      resync(animation, true);
+      resync(entry, true);
     }
   };
   const stop = (entry: Driven) => {
@@ -177,7 +181,7 @@ export function createPlaybackClock(overrides: Partial<ClockEnvironment> = {}) {
   /** Eases every driven animation from `fromMs` to the live position, then lets them run. */
   const startGlide = (fromMs: number) => {
     stopGlide();
-    for (const { animation } of driven) animation?.pause();
+    for (const { animation, follows } of driven) if (follows) animation?.pause();
     const begun = environment.now();
     const current = { frame: 0 };
     glide = current;
@@ -187,7 +191,7 @@ export function createPlaybackClock(overrides: Partial<ClockEnvironment> = {}) {
       const target = estimate();
       if (t >= 1) {
         glide = null;
-        for (const { animation } of driven) if (animation) resync(animation, true);
+        for (const entry of driven) resync(entry, true);
         return;
       }
       setAll(fromMs + (target - fromMs) * easeOutCubic(t));
@@ -198,7 +202,8 @@ export function createPlaybackClock(overrides: Partial<ClockEnvironment> = {}) {
 
   const onJump = (jump: ClockJump) => {
     stopGlide();
-    if (jump.kind === "seek" && holds === 0 && driven.size > 0 && !environment.reducedMotion()) {
+    const gliding = [...driven].some((entry) => entry.follows);
+    if (jump.kind === "seek" && holds === 0 && gliding && !environment.reducedMotion()) {
       startGlide(jump.fromMs);
     }
     jumpListeners.forEach((listener) => listener(jump));
@@ -220,7 +225,7 @@ export function createPlaybackClock(overrides: Partial<ClockEnvironment> = {}) {
         if (entry.animation === null) start(entry);
       }
       if (result.jump !== null) onJump(result.jump);
-      for (const entry of driven) if (entry.animation) resync(entry.animation, false);
+      for (const entry of driven) resync(entry, false);
       boundaries.forEach(arm);
     },
     /** Where playback is now, exactly: for logic, not for drawing. */
@@ -235,9 +240,10 @@ export function createPlaybackClock(overrides: Partial<ClockEnvironment> = {}) {
       holds += 1;
       heldMs = ms;
       stopGlide();
-      for (const { animation } of driven) {
-        animation?.pause();
-        if (animation) animation.currentTime = ms;
+      for (const { animation, follows } of driven) {
+        if (!animation || !follows) continue;
+        animation.pause();
+        animation.currentTime = ms;
       }
       let released = false;
       return () => {
@@ -245,18 +251,22 @@ export function createPlaybackClock(overrides: Partial<ClockEnvironment> = {}) {
         released = true;
         holds -= 1;
         if (holds > 0) return;
-        for (const { animation } of driven) if (animation) resync(animation, false);
+        for (const entry of driven) resync(entry, false);
       };
     },
     /**
      * An attachment that runs one animation on its element across the whole track: `keyframes`
      * are in track ms, and the compositor advances them. Nothing runs while the duration is
-     * unknown.
+     * unknown. With `follows: false` the element stays on the live position through holds and
+     * seeks, for one that eases between its own values (the Light).
      */
     drive:
-      (keyframes: readonly DriveKeyframe[]): Attachment<HTMLElement> =>
+      (
+        keyframes: readonly DriveKeyframe[],
+        { follows = true }: { follows?: boolean } = {},
+      ): Attachment<HTMLElement> =>
       (node) => {
-        const entry: Driven = { node, keyframes, animation: null };
+        const entry: Driven = { node, keyframes, animation: null, follows };
         driven.add(entry);
         start(entry);
         return () => {

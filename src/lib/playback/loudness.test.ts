@@ -1,21 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ATTACK_MS, levelAt, RELEASE_MS, smoothLevel } from "./loudness";
-
-describe("levelAt", () => {
-  const rms = [0, 51, 102, 255];
-
-  it("reads the level under the position on the waveform's dB scale", () => {
-    expect(levelAt(rms, 0, 4000)).toBe(0);
-    expect(levelAt(rms, 1500, 4000)).toBeCloseTo(1 - 13.98 / 36, 2);
-    expect(levelAt(rms, 4000, 4000)).toBe(1);
-  });
-
-  it("is 0 without a waveform or a duration", () => {
-    expect(levelAt(null, 100, 4000)).toBe(0);
-    expect(levelAt(rms, 100, null)).toBe(0);
-    expect(levelAt([], 100, 4000)).toBe(0);
-  });
-});
+import { ATTACK_MS, loudnessKeyframes, RELEASE_MS, smoothLevel } from "./loudness";
 
 describe("smoothLevel", () => {
   it("rises faster than it falls", () => {
@@ -31,5 +15,34 @@ describe("smoothLevel", () => {
 
   it("stays put with no time passing", () => {
     expect(smoothLevel(0.3, 1, 0)).toBe(0.3);
+  });
+});
+
+describe("loudnessKeyframes", () => {
+  it("is empty without a waveform or a duration", () => {
+    expect(loudnessKeyframes(null, 4000)).toEqual([]);
+    expect(loudnessKeyframes([], 4000)).toEqual([]);
+    expect(loudnessKeyframes([255, 255], null)).toEqual([]);
+    expect(loudnessKeyframes([255, 255], 0)).toEqual([]);
+  });
+
+  it("makes one keyframe per bucket, evenly spread over the track", () => {
+    const keyframes = loudnessKeyframes([0, 0, 0, 0], 4000);
+    expect(keyframes.map((keyframe) => keyframe.atMs)).toEqual([0, 1000, 2000, 3000]);
+  });
+
+  it("starts at the first bucket and then follows the smoothing forward in time", () => {
+    const rms = [255, 255, 0, 0];
+    const keyframes = loudnessKeyframes(rms, 4000);
+    expect(keyframes[0]?.level).toBe(0);
+    const rise = smoothLevel(0, 1, 1000);
+    expect(keyframes[1]?.level).toBeCloseTo(rise, 6);
+    expect(keyframes[2]?.level).toBeCloseTo(smoothLevel(rise, 0, 1000), 6);
+  });
+
+  it("rises faster than it falls", () => {
+    const keyframes = loudnessKeyframes([255, 255, 255, 0, 0, 0], 6000);
+    const peak = keyframes[2]!.level;
+    expect(peak - keyframes[0]!.level).toBeGreaterThan(peak - keyframes[5]!.level);
   });
 });

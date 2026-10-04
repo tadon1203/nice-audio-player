@@ -1,12 +1,6 @@
 <script lang="ts" module>
   /** How a new image arrives: faded in, or wiped in from the right (`wipe-next`) or left. */
   export type LightEnter = "fade" | "wipe-next" | "wipe-previous";
-
-  /** A number that tells subscribers when it changes (structurally, the playback clock's). */
-  export type LightLevel = {
-    get: () => number;
-    subscribe: (listener: (value: number) => void) => () => void;
-  };
 </script>
 
 <script lang="ts">
@@ -16,16 +10,16 @@
   import { artworkUrl, type ArtworkRef } from "$lib/native";
   import { motionFor } from "$lib/ui/motion/svelte-motion";
   import { cn } from "$lib/utils/cn.js";
-  import { breathingOpacity, LIGHT, type LightStrength } from "./light-model";
+  import { LIGHT, type LightStrength } from "./light-model";
 
   /**
    * The artwork as the app's light source: a static blurred image under a veil. Place it as the
    * first child of a `relative` surface; it never receives pointer events. It renders nothing
    * without artwork, and is hidden under `forced-colors` by CSS. Changing artwork crossfades
    * (light is not an object), or wipes with the track direction (`enter`) while the old image
-   * stays put until covered. With a `level` it breathes: only its opacity moves, straight on the
-   * element (a scaled blurred image would be re-rasterised on every frame), and only ever dims
-   * from its strength. The breathing wrapper is promoted with `will-change: opacity`, so the
+   * stays put until covered. With a `breathe` attachment it breathes: only its opacity moves,
+   * straight on the element (a scaled blurred image would be re-rasterised on every frame), as a
+   * share of its strength, so it only ever dims. The breathing wrapper is promoted with `will-change: opacity`, so the
    * blurred raster is cached and only its opacity is composited per frame; a still Light gets
    * no such layer.
    */
@@ -33,15 +27,15 @@
     artwork,
     strength,
     enter = "fade",
-    level,
+    breathe,
     class: className,
   }: {
     artwork: ArtworkRef | null | undefined;
     strength: LightStrength;
     /** Wipes need motion: under reduced motion every `enter` fades. */
     enter?: LightEnter;
-    /** Loudness 0-1 for a Light that breathes with the music. Omit it for a still Light. */
-    level?: LightLevel;
+    /** Moves the breathing wrapper's opacity. Omit it for a still Light. */
+    breathe?: Attachment<HTMLElement>;
     class?: string;
   } = $props();
 
@@ -67,19 +61,6 @@
   function leave(node: Element) {
     return wipe === null ? fade(node, motion) : { delay: wipeMotion.duration, duration: 0 };
   }
-
-  const breathe: Attachment<HTMLElement> = (node) => {
-    if (level === undefined) return;
-    const apply = (value: number) => {
-      node.style.opacity = String(breathingOpacity(strength, value) / LIGHT.strength[strength]);
-    };
-    apply(level.get());
-    const unsubscribe = level.subscribe(apply);
-    return () => {
-      unsubscribe();
-      node.style.opacity = "";
-    };
-  };
 </script>
 
 {#if url !== null}
@@ -92,7 +73,7 @@
     <div
       {@attach breathe}
       class="absolute inset-0"
-      style:will-change={level === undefined ? undefined : "opacity"}
+      style:will-change={breathe === undefined ? undefined : "opacity"}
     >
       {#key url}
         <img
