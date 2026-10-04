@@ -43,12 +43,12 @@
 {#snippet link(item: NavigationItem)}
   {@const active = isActive(item.to)}
   <Button
-    purpose="quiet"
-    density="standard"
-    geometry="navigation"
+    variant="quiet"
+    size="standard"
     href={resolve(item.to)}
     aria-current={active ? "page" : undefined}
     onclick={onNavigate}
+    class="relative h-10 w-full justify-start gap-2 px-2 text-muted-foreground aria-current:text-foreground hover:bg-sidebar-accent"
   >
     {#if active}
       <span

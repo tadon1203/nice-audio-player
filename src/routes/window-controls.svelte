@@ -21,19 +21,21 @@
   <div class="flex h-10 shrink-0 items-stretch" aria-label="Window controls" role="group">
     <Button
       type="button"
-      purpose="quiet"
-      density="titlebar"
+      variant="quiet"
+      size="inline"
       aria-label="Minimize window"
       onclick={() => void appWindow.minimize()}
+      class="size-10 rounded-none"
     >
       <Minus aria-hidden="true" class="size-4" />
     </Button>
     <Button
       type="button"
-      purpose="quiet"
-      density="titlebar"
+      variant="quiet"
+      size="inline"
       aria-label={maximized ? "Restore window" : "Maximize window"}
       onclick={() => void appWindow.toggleMaximize()}
+      class="size-10 rounded-none"
     >
       {#if maximized}
         <Copy aria-hidden="true" class="size-3.5" />
@@ -43,10 +45,11 @@
     </Button>
     <Button
       type="button"
-      purpose="window-close"
-      density="titlebar"
+      variant="bare"
+      size="inline"
       aria-label="Close window"
       onclick={() => void appWindow.close()}
+      class="hover:bg-destructive hover:text-destructive-foreground size-10 rounded-none"
     >
       <X aria-hidden="true" class="size-4" />
     </Button>

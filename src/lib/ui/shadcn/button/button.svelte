@@ -1,32 +1,24 @@
 <script lang="ts" module>
   import type { HTMLAnchorAttributes, HTMLButtonAttributes, HTMLAttributes } from "svelte/elements";
   import type { WithElementRef } from "$lib/utils/cn.js";
-  import { controlButtonVariants, type ButtonPurpose, type ButtonDensity, type ButtonGeometry, type ButtonTypeRole } from "./control-styles";
-  export type { ButtonPurpose, ButtonDensity, ButtonGeometry, ButtonTypeRole } from "./control-styles";
-  export type ButtonProps = Omit<
-    WithElementRef<HTMLAttributes<HTMLElement>> & Omit<HTMLButtonAttributes, keyof HTMLAttributes<HTMLElement>> & Omit<HTMLAnchorAttributes, keyof HTMLAttributes<HTMLElement>>,
-    "class" | "style"
-  > & {
-    purpose?: ButtonPurpose;
-    density?: ButtonDensity;
-    geometry?: ButtonGeometry;
-    stretch?: boolean;
-    typeRole?: ButtonTypeRole;
-    class?: never;
-    style?: never;
-    timeState?: "past" | "present" | "future";
-  };
+  import type { ButtonVariant, ButtonSize } from "./control-styles";
+  export type { ButtonVariant, ButtonSize } from "./control-styles";
+  export type ButtonProps =
+    WithElementRef<HTMLAttributes<HTMLElement>> &
+    Omit<HTMLButtonAttributes, keyof HTMLAttributes<HTMLElement>> &
+    Omit<HTMLAnchorAttributes, keyof HTMLAttributes<HTMLElement>> & {
+      variant?: ButtonVariant;
+      size?: ButtonSize;
+    };
 </script>
 
 <script lang="ts">
-  import { timeStateClass } from "$lib/ui/time-state";
+  import { cn } from "$lib/utils/cn.js";
+  import { buttonVariants } from "./control-styles";
   let {
-    purpose = "neutral",
-    density = "standard",
-    geometry = "standard",
-    stretch = false,
-    typeRole = "emphasis",
-    timeState,
+    variant = "neutral",
+    size = "standard",
+    class: className,
     ref = $bindable(null),
     href = undefined,
     type = "button",
@@ -40,7 +32,7 @@
   <a
     bind:this={ref}
     data-slot="button"
-    class={[controlButtonVariants({ purpose, density, geometry, typeRole }), stretch && "w-full", timeState && timeStateClass(timeState)]}
+    class={cn(buttonVariants({ variant, size }), className)}
     href={disabled ? undefined : href}
     aria-disabled={disabled}
     role={disabled ? "link" : undefined}
@@ -53,7 +45,7 @@
   <button
     bind:this={ref}
     data-slot="button"
-    class={[controlButtonVariants({ purpose, density, geometry, typeRole }), stretch && "w-full", timeState && timeStateClass(timeState)]}
+    class={cn(buttonVariants({ variant, size }), className)}
     {type}
     {disabled}
     {...restProps}

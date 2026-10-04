@@ -37,8 +37,8 @@
     </DockToggleButton>
   </div>
   <Button
-    density="largeIcon"
-    purpose="quiet"
+    size="largeIcon"
+    variant="quiet"
     aria-label="Previous track"
     title="Previous track"
     disabled={!playback.canGoPrevious}
@@ -47,13 +47,13 @@
     <SkipBack aria-hidden="true" />
   </Button>
   <Button
-    density="largeIcon"
-    purpose="transport"
+    size="largeIcon"
+    variant="primary"
     aria-label={playLabel}
     title={playLabel}
     disabled={!playback.active && !failed}
     onclick={() => void (playing ? playback.pause() : playback.resume())}
-    geometry="round"
+    class="relative rounded-full hover:bg-primary active:translate-y-0 active:scale-[0.94] disabled:bg-secondary disabled:text-muted-foreground disabled:opacity-100"
   >
     <PlayPauseIcon {playing} />
     {#if playback.active}
@@ -61,8 +61,8 @@
     {/if}
   </Button>
   <Button
-    density="largeIcon"
-    purpose="quiet"
+    size="largeIcon"
+    variant="quiet"
     aria-label="Next track"
     title="Next track"
     disabled={!playback.canGoNext}

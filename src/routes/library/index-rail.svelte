@@ -23,11 +23,10 @@
       type="button"
       aria-label={`Jump to ${bucket.label === "?" ? "names without a value" : bucket.label}`}
       aria-current={bucket.label === current ? "true" : undefined}
-      purpose="bare"
-      density="inline"
-      geometry="index"
-      typeRole="label"
+      variant="bare"
+      size="inline"
       onclick={() => onselect(bucket.label)}
+      class="h-auto min-h-6 w-auto min-w-6 shrink-0 px-1 py-0.5 font-normal"
     >
       {bucket.label === "?" ? "…" : bucket.label}
     </Button>

@@ -34,8 +34,7 @@
 >
   <SheetContent
     side="right"
-    width="queue"
-    flush
+    class="w-80 gap-0 p-0"
     overlay={false}
     showCloseButton={false}
     interactOutsideBehavior="ignore"

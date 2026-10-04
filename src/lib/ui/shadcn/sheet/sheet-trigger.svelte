@@ -1,8 +1,8 @@
 <script lang="ts">
+  import { cn } from "$lib/utils/cn.js";
   import { Dialog as Primitive } from "bits-ui";
-  import type { PresentationProps } from "$lib/ui/presentation-props";
-  import { controlButtonVariants, type ButtonPurpose, type ButtonDensity } from "$lib/ui/shadcn/button/control-styles";
-  let { ref = $bindable(null), purpose = "quiet", density = "largeIcon", ...props }: PresentationProps<Primitive.TriggerProps> & { purpose?: ButtonPurpose; density?: ButtonDensity } = $props();
+  import { buttonVariants, type ButtonVariant, type ButtonSize } from "$lib/ui/shadcn/button";
+  let { ref = $bindable(null), class: className, variant = "quiet", size = "largeIcon", ...props }: Primitive.TriggerProps & { variant?: ButtonVariant; size?: ButtonSize } = $props();
 </script>
 
-<Primitive.Trigger bind:ref class={controlButtonVariants({ purpose, density })} {...props} />
+<Primitive.Trigger bind:ref class={cn(buttonVariants({ variant, size }), className)} {...props} />

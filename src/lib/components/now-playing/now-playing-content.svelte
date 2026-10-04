@@ -103,8 +103,8 @@
               <div class={view === "queue" && showLyrics ? "@min-[90rem]/npw:hidden" : undefined}>
                 <Button
                   type="button"
-                  density="compact"
-                  purpose={rightColumn.view === view ? "neutral" : "quiet"}
+                  size="compact"
+                  variant={rightColumn.view === view ? "neutral" : "quiet"}
                   aria-pressed={rightColumn.view === view}
                   onclick={() => (rightColumn.view = view)}
                 >

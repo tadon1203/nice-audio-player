@@ -1,16 +1,16 @@
 <script lang="ts">
-  import type { PresentationProps } from "$lib/ui/presentation-props";
 	import { Slider as SliderPrimitive } from "bits-ui";
 	import { cn, type WithoutChildrenOrChild } from "$lib/utils/cn.js";
 
 	let {
 		ref = $bindable(null),
+    class: className,
 		value = $bindable(),
 		orientation = "horizontal",
 
 		thumbProps,
 		...restProps
-	}: PresentationProps<WithoutChildrenOrChild<SliderPrimitive.RootProps>> & {
+	}: WithoutChildrenOrChild<SliderPrimitive.RootProps> & {
 		/** Attributes for each thumb, which is the element that carries role=slider (aria-label, aria-valuetext). */
 		thumbProps?: Pick<SliderPrimitive.ThumbProps, "aria-label" | "aria-valuetext" | "aria-describedby">;
 	} = $props();
@@ -26,7 +26,7 @@ get along, so we shut typescript up by casting `value` to `never`.
 	data-slot="slider"
 	{orientation}
 	class={cn(
-		"data-vertical:min-h-40 relative flex w-full touch-none items-center select-none data-disabled:opacity-50 data-vertical:h-full data-vertical:w-auto data-vertical:flex-col"
+		"data-vertical:min-h-40 relative flex w-full touch-none items-center select-none data-disabled:opacity-50 data-vertical:h-full data-vertical:w-auto data-vertical:flex-col", className
 	)}
 	{...restProps}
 >

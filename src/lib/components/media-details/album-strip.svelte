@@ -95,9 +95,9 @@
                 tabindex={-1}
                 disabled={!playable}
                 onclick={() => onplaytrack(track.id)}
-                purpose="bare"
-                density="inline"
-                geometry="strip"
+                variant="bare"
+                size="inline"
+                class="relative h-full w-full cursor-pointer rounded-full border-0 before:absolute before:inset-x-0 before:-inset-y-3 before:content-[''] disabled:cursor-default disabled:opacity-100"
               >
                 <span
                   aria-hidden="true"

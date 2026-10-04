@@ -1,8 +1,8 @@
 <script lang="ts">
+  import { cn } from "$lib/utils/cn.js";
   import { AlertDialog as Primitive } from "bits-ui";
-  import type { PresentationProps } from "$lib/ui/presentation-props";
-  import { controlButtonVariants, type ButtonPurpose, type ButtonDensity } from "$lib/ui/shadcn/button/control-styles";
-  let { ref = $bindable(null), purpose = "primary", density = "standard", ...props }: PresentationProps<Primitive.ActionProps> & { purpose?: ButtonPurpose; density?: ButtonDensity } = $props();
+  import { buttonVariants, type ButtonVariant, type ButtonSize } from "$lib/ui/shadcn/button";
+  let { ref = $bindable(null), class: className, variant = "primary", size = "standard", ...props }: Primitive.ActionProps & { variant?: ButtonVariant; size?: ButtonSize } = $props();
 </script>
 
-<Primitive.Action bind:ref class={controlButtonVariants({ purpose, density })} {...props} />
+<Primitive.Action bind:ref class={cn(buttonVariants({ variant, size }), className)} {...props} />

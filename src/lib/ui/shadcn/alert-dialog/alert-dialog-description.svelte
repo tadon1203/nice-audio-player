@@ -1,17 +1,16 @@
 <script lang="ts">
-  import type { PresentationProps } from "$lib/ui/presentation-props";
 	import { AlertDialog as AlertDialogPrimitive } from "bits-ui";
 	import { cn } from "$lib/utils/cn.js";
 
 	let {
 		ref = $bindable(null),
-		hidden = false, ...restProps
-	}: PresentationProps<AlertDialogPrimitive.DescriptionProps> & { hidden?: boolean } = $props();
+		class: className, ...restProps
+	}: AlertDialogPrimitive.DescriptionProps = $props();
 </script>
 
 <AlertDialogPrimitive.Description
 	bind:ref
 	data-slot="alert-dialog-description"
-	class={cn("text-muted-foreground break-words *:[a]:hover:text-foreground text-sm text-balance md:text-pretty *:[a]:underline *:[a]:underline-offset-3", hidden && "sr-only")}
+	class={cn("text-muted-foreground break-words *:[a]:hover:text-foreground text-sm text-balance md:text-pretty *:[a]:underline *:[a]:underline-offset-3", className)}
 	{...restProps}
 />

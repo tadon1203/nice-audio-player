@@ -195,8 +195,8 @@
             </Field>
             <Button
               type="button"
-              purpose="destructive"
-              density="compact"
+              variant="destructive"
+              size="compact"
               aria-label={`Remove ${root.path} from library`}
               disabled={scanRunning || pending}
               onclick={() => {
@@ -225,8 +225,8 @@
       <div class="flex flex-wrap justify-end gap-2">
         <Button
           type="button"
-          purpose="outline"
-          density="compact"
+          variant="outline"
+          size="compact"
           disabled={scanRunning || deleteMissing.isPending || missingTotal === 0}
           onclick={() => {
             deleteMissing.reset();
@@ -240,8 +240,8 @@
         </Button>
         <Button
           type="button"
-          purpose="outline"
-          density="compact"
+          variant="outline"
+          size="compact"
           onclick={() => {
             openLogDirectory.reset();
             openLogDirectory.mutate();
@@ -270,8 +270,8 @@
     <div class="flex max-w-sm flex-col items-end gap-2">
       <Button
         type="button"
-        purpose="outline"
-        density="compact"
+        variant="outline"
+        size="compact"
         disabled={scanRunning || resetLibrary.isPending}
         onclick={() => {
           resetLibrary.reset();

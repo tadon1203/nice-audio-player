@@ -26,7 +26,7 @@
     {#if scan?.state === "running"}
       <Button
         type="button"
-        purpose="outline"
+        variant="outline"
         onclick={() => {
           cancelScan.reset();
           cancelScan.mutate();
@@ -39,7 +39,7 @@
     {:else}
       <Button
         type="button"
-        purpose="outline"
+        variant="outline"
         onclick={() => {
           startScan.reset();
           startScan.mutate();

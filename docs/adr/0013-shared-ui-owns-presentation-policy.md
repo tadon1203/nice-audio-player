@@ -1,26 +1,23 @@
 # 0013: Shared UI owns presentation policy
 
-Accepted and implemented; enforcement simplified on 2026-10-04.
+Accepted and implemented; scope and enforcement simplified on 2026-10-04.
 
-Floating surfaces, typography and controls, and time-state presentation are owned by deep
-modules in `lib/ui`, within ADR 0002's dependency direction. Existing primitive-library
-adapters retain their keyboard, focus, dismissal and portal behavior. The module's interface
-offers purpose, density and geometry choices rather than arbitrary `class` or `style`
-overrides; adapters and exports that bypass that policy stay internal. Callers retain their
-domain behavior and layout. This improves locality by concentrating policy and leverage by
-applying one implementation across the existing adapters.
+Shared UI in `lib/ui` owns common control defaults, floating surfaces and stacking, and base
+past/present/future ink, within ADR 0002's dependency direction. Primitive-library adapters
+retain keyboard, focus, dismissal and portal behavior. Generic controls expose variants and
+sizes, plus normal attributes and local styling. They do not enumerate the domains that use
+them: Queue rows, lyric Gutter geometry, transport treatment, panel widths and lyric reading
+mode belong to their callers.
 
-Why: shared defaults alone do not enforce consistency when every caller can overwrite them.
-Independent popup styling, caller repairs to small text, and different definitions of past
-Queue ink already demonstrate the cost. Sealing the presentation seam requires migrating
-callers and accepting fewer ad-hoc styling options, in exchange for checking the same small
-interface callers use. Keep the existing domain folders and adapt the existing UI source;
-avoid a second forwarding facade or a single generic module for every kind of row.
+Why: common defaults correct repeated presentation in one place, but banning all styling
+forced generic controls to accumulate domain-specific geometry variants. Allow local
+`class`/`style` for ordinary controls and composition; keep floating layer management internal.
+Adapt existing UI source rather than adding forwarding facades, and extract domain components
+only when their structure and behavior are actually shared.
 
-Type checking rejects styling props, including typed spreads, while preserving typed control
-attributes, events, refs and composition snippets. Keep Oxlint for general linting. Review
-checks that private adapters stay internal and ordinary native controls outside their UI
-owners use shared controls; the concise rule lives in CONTRIBUTING.md. ESLint and its
+Type checking preserves typed control attributes, events, refs and composition snippets.
+Keep Oxlint for general linting. Review checks shared defaults and responsibility boundaries;
+the concise rule lives in CONTRIBUTING.md. ESLint and its
 dedicated lint-contract tests were removed to reduce tooling overhead. Ordinary content and
 layout markup remain local. Do not create a bespoke checker script or custom lint rule.
 Ordinary tests in the existing Playwright suite
@@ -32,8 +29,8 @@ or runtime stacking.
 - Floating surfaces share background, stacking and ADR 0007 motion policy. Popups follow
   their caller's surface context so a popup opened within a dialog can appear above it.
   Navigation retains its own opaque surface, as defined in DESIGN.md.
-- Compact control geometry is independent of text size. Allowed type roles own font size
-  and weight; callers need no corrective typography classes.
+- Compact control geometry is independent of text size. Common defaults respect the font-size
+  floor and weight vocabulary; callers own their local layout and emphasis.
 - Queue and lyrics share past/present/future presentation, current semantics and state-change
   motion. They retain their own actions, density, anchor-follow and free-reading behavior;
   current lyric ink remains the artwork's readable accent.

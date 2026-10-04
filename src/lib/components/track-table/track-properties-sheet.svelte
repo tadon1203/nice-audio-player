@@ -45,11 +45,11 @@
     if (!open) onclose();
   }}
 >
-  <SheetContent side="right" width="properties" flush>
+  <SheetContent side="right" class="w-96 gap-0 p-0">
     <div class="border-b border-border">
       <SheetHeader>
         <SheetTitle>Properties</SheetTitle>
-        <SheetDescription truncate>
+        <SheetDescription class="truncate">
           {properties?.title ?? properties?.fileName ?? " "}
         </SheetDescription>
       </SheetHeader>
@@ -92,16 +92,16 @@
             <span class="mt-2 flex gap-2">
               <Button
                 type="button"
-                purpose="quiet"
-                density="compact"
+                variant="quiet"
+                size="compact"
                 onclick={() => void navigator.clipboard?.writeText(properties.path)}
               >
                 Copy path
               </Button>
               <Button
                 type="button"
-                purpose="quiet"
-                density="compact"
+                variant="quiet"
+                size="compact"
                 onclick={() => void requireNative().revealLibraryTrack(properties.id)}
               >
                 Show in Explorer

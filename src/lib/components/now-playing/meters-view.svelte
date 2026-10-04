@@ -195,10 +195,9 @@
       <Button
         type="button"
         onclick={() => clear(channel)}
-        purpose="primary"
-        density="inline"
-        geometry="clip"
-        typeRole="label"
+        variant="primary"
+        size="inline"
+        class="h-auto min-w-8 p-0 tabular-nums font-normal"
       >
         Clip
       </Button>

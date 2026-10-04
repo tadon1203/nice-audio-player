@@ -125,10 +125,10 @@
     aria-pressed={showRemaining}
     aria-label={showRemaining ? "Time remaining" : "Track length"}
     title={showRemaining ? "Show track length" : "Show time remaining"}
-    purpose="bare"
-    density="inline"
-    typeRole="label"
+    variant="bare"
+    size="inline"
     onclick={() => (showRemaining = !showRemaining)}
+    class="font-normal"
   >
     {@render rolling(remainingOrLength)}
   </Button>

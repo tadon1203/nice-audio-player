@@ -35,7 +35,7 @@
     </p>
     <AlertDialogFooter>
       <AlertDialogCancel>Cancel</AlertDialogCancel>
-      <AlertDialogAction purpose="destructive" onclick={onConfirm}>Remove</AlertDialogAction>
+      <AlertDialogAction variant="destructive" onclick={onConfirm}>Remove</AlertDialogAction>
     </AlertDialogFooter>
   </AlertDialogContent>
 </AlertDialog>

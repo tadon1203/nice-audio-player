@@ -21,6 +21,41 @@ const upcomingTitles = (page: Page) =>
     .locator('[data-tone="upcoming"] [data-slot="queue-row-title"]')
     .allTextContents();
 
+test("transport hover stays stable and window close keeps its destructive hover", async ({
+  page,
+}) => {
+  const dock = await playFirstTrack(page);
+  const transport = dock.getByRole("button", { name: "Pause", exact: true });
+  await transport.evaluate(async (element) => {
+    await Promise.allSettled(element.getAnimations().map((animation) => animation.finished));
+  });
+  const background = await transport.evaluate(
+    (element) => getComputedStyle(element).backgroundColor,
+  );
+  await transport.hover();
+  await transport.evaluate(async (element) => {
+    await Promise.allSettled(element.getAnimations().map((animation) => animation.finished));
+  });
+  expect(await transport.evaluate((element) => getComputedStyle(element).backgroundColor)).toBe(
+    background,
+  );
+
+  const close = page.getByRole("button", { name: "Close window", exact: true });
+  await close.hover();
+  await close.evaluate(async (element) => {
+    await Promise.allSettled(element.getAnimations().map((animation) => animation.finished));
+  });
+  const colors = await close.evaluate((element) => {
+    const probe = document.createElement("span");
+    probe.style.backgroundColor = "var(--destructive)";
+    document.body.append(probe);
+    const expected = getComputedStyle(probe).backgroundColor;
+    probe.remove();
+    return { actual: getComputedStyle(element).backgroundColor, expected };
+  });
+  expect(colors.actual).toBe(colors.expected);
+});
+
 test("Escape closes Now Playing, and Ctrl+L does nothing without a track", async ({ page }) => {
   await page.goto("/library/tracks");
   const layer = page.getByRole("region", { name: "Now Playing" });

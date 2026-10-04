@@ -65,10 +65,9 @@
     onclick={() => void playback.seek(line.startMs)}
     onpointerenter={() => lyricsWaveformLink.setHoveredLineSpan(lineSpan(lines, index, durationMs))}
     onpointerleave={() => lyricsWaveformLink.setHoveredLineSpan(null)}
-    purpose="bare"
-    density="inline"
-    geometry="gutter"
-    typeRole="label"
+    variant="bare"
+    size="inline"
+    class="relative w-16 shrink-0 justify-end text-right tabular-nums font-normal"
   >
     <span class={SHOW_TIME}>{startLabel}</span>
     <!-- The present is marked with ▶ in the artwork's colour until the time takes its place. -->
@@ -91,8 +90,12 @@
   {:else}
     <span class={cn("relative", LYRICS_TEXT)}>
       <!-- Past is faintest, the present brightest, the future between; the current line is lit in the artwork's colour. -->
-      <TimePresentation state={isCurrent ? "present" : isPast ? "past" : "future"} lyric
-        >{line.text}</TimePresentation
+      <TimePresentation
+        state={isCurrent ? "present" : isPast ? "past" : "future"}
+        class={cn(
+          "inline in-data-[mode=free]:text-foreground",
+          isCurrent && "text-(--artwork-accent)",
+        )}>{line.text}</TimePresentation
       >
     </span>
   {/if}

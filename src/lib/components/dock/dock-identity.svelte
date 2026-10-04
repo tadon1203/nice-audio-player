@@ -52,11 +52,12 @@
   holds the close affordance instead, so the dock's layout does not shift. -->
   {#if nowPlayingOpen}
     <Button
-      purpose="quiet"
+      variant="quiet"
       aria-label="Close Now Playing"
       onclick={() => nowPlaying.close()}
       data-slot="sleeve-close"
-      density="sleeve"
+      size="inline"
+      class="size-16 rounded-lg p-0"
     >
       <ChevronDown aria-hidden="true" class="size-6" />
     </Button>
@@ -73,9 +74,9 @@
             disabled={!hasTrack}
             onclick={() => nowPlaying.open()}
             data-slot="sleeve"
-            purpose="bare"
-            density="sleeve"
-            geometry="sleeve"
+            variant="bare"
+            size="inline"
+            class="grid aspect-square overflow-hidden rounded-lg size-16 p-0"
           >
             <!-- The shared element: this Sleeve flies to Now Playing on open and back on close.
             The radius is set inline (not by class) so the flight's scale does not stretch the
@@ -129,9 +130,9 @@
             disabled={item === null}
             onclick={() => nowPlaying.toggle()}
             {title}
-            purpose="bare"
-            density="inline"
-            geometry="title"
+            variant="bare"
+            size="inline"
+            class="block max-w-full truncate text-left text-foreground"
           >
             {title}
           </Button>
@@ -158,9 +159,9 @@
               <Button
                 type="button"
                 onclick={() => playback.clearError()}
-                purpose="text"
-                density="inline"
-                typeRole="label"
+                variant="text"
+                size="inline"
+                class="font-normal"
               >
                 Dismiss
               </Button>
@@ -174,9 +175,9 @@
               <Button
                 type="button"
                 onclick={() => void playback.resume()}
-                purpose="text"
-                density="inline"
-                typeRole="label"
+                variant="text"
+                size="inline"
+                class="font-normal"
               >
                 Retry
               </Button>
@@ -190,9 +191,9 @@
               <Button
                 type="button"
                 onclick={() => void playback.undoQueueChange()}
-                purpose="text"
-                density="inline"
-                typeRole="label"
+                variant="text"
+                size="inline"
+                class="font-normal"
               >
                 Undo
               </Button>
@@ -205,9 +206,9 @@
               <Button
                 type="button"
                 onclick={() => playback.dismissNotice()}
-                purpose="text"
-                density="inline"
-                typeRole="label"
+                variant="text"
+                size="inline"
+                class="font-normal"
               >
                 Dismiss
               </Button>

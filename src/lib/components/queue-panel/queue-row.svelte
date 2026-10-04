@@ -58,10 +58,10 @@
         type="button"
         aria-label={`Drag ${item.title} to reorder`}
         data-slot="queue-drag-handle"
-        purpose="bare"
-        density="inline"
-        geometry="drag"
+        variant="bare"
+        size="inline"
         {...dragHandlers}
+        class="relative z-10 -ml-2 cursor-grab touch-none p-1 active:cursor-grabbing"
       >
         <GripVertical aria-hidden="true" class="size-4" />
       </Button>
@@ -71,9 +71,9 @@
         type="button"
         aria-label={`Play ${item.title}`}
         onclick={onPlay}
-        purpose="bare"
-        density="inline"
-        geometry="rowOverlay"
+        variant="bare"
+        size="inline"
+        class="absolute inset-0 size-full cursor-pointer focus-visible:ring-inset active:translate-y-0"
       ></Button>
     {/if}
     <Artwork artwork={item.artwork} class="size-10 shrink-0 rounded-md" />
@@ -92,8 +92,8 @@
       >
         <Button
           type="button"
-          purpose="quiet"
-          density="compactIcon"
+          variant="quiet"
+          size="compactIcon"
           aria-label="Move earlier in queue"
           disabled={!canMoveEarlier}
           onclick={onMoveEarlier}
@@ -102,8 +102,8 @@
         </Button>
         <Button
           type="button"
-          purpose="quiet"
-          density="compactIcon"
+          variant="quiet"
+          size="compactIcon"
           aria-label="Move later in queue"
           disabled={!canMoveLater}
           onclick={onMoveLater}
@@ -112,8 +112,8 @@
         </Button>
         <Button
           type="button"
-          purpose="destructive"
-          density="compactIcon"
+          variant="destructive"
+          size="compactIcon"
           aria-label={`Remove ${item.title} from queue`}
           onclick={onRemove}
         >

@@ -80,11 +80,11 @@
       >
         <Button
           type="button"
-          density="largeIcon"
-          purpose="primary"
-          geometry="round"
+          size="largeIcon"
+          variant="primary"
           aria-label="Play {title}"
           onclick={() => onplay(album)}
+          class="rounded-full"
         >
           <PlayPauseIcon playing={false} />
         </Button>

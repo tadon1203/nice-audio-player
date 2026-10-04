@@ -28,9 +28,8 @@
       <SheetContent
         side="left"
         showCloseButton={false}
-        width="navigation"
-        flush
-        surface="navigation"
+        class="w-64 gap-0 p-0 bg-sidebar text-sidebar-foreground"
+        surface="opaque"
       >
         <div class="flex h-10 items-center justify-between border-b border-sidebar-border px-3">
           <SheetTitle>Nice Audio Player</SheetTitle>

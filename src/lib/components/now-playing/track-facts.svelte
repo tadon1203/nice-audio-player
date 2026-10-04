@@ -63,9 +63,9 @@
         type="button"
         title="{lyrics.expectedPath} (click to copy)"
         onclick={() => copy(lyrics.expectedPath)}
-        purpose="text"
-        density="inline"
-        typeRole="label"
+        variant="text"
+        size="inline"
+        class="font-normal"
       >
         Lyrics file unreadable
       </Button>

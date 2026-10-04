@@ -69,8 +69,8 @@
   <NextTrackPreview class="absolute top-1/2 right-full mr-4 -translate-y-1/2 max-lg:hidden" />
   <div class="max-md:hidden">
     <Button
-      density="largeIcon"
-      purpose="quiet"
+      size="largeIcon"
+      variant="quiet"
       aria-label="Now Playing"
       title="Now Playing"
       aria-pressed={nowPlaying.isOpen}
@@ -82,8 +82,8 @@
   </div>
   <div class="max-md:hidden">
     <Button
-      density="largeIcon"
-      purpose="quiet"
+      size="largeIcon"
+      variant="quiet"
       aria-label="Queue"
       title="Queue"
       aria-pressed={queuePanel.isOpen}
@@ -93,8 +93,8 @@
     </Button>
   </div>
   <Button
-    density="largeIcon"
-    purpose="quiet"
+    size="largeIcon"
+    variant="quiet"
     aria-label={playback.muted ? "Unmute" : "Mute"}
     disabled={playback.mutePending || !ready}
     onclick={() => void playback.toggleMute()}

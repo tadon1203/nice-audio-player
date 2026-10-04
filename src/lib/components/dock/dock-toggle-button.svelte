@@ -20,13 +20,14 @@
 </script>
 
 <Button
-  density="largeIcon"
-  purpose="toggle"
+  size="largeIcon"
+  variant="bare"
   aria-label={label}
   aria-pressed={pressed}
   title={label}
   {disabled}
   {onclick}
+  class="relative text-muted-foreground aria-pressed:text-foreground hover:bg-muted"
 >
   {@render children()}
   <span

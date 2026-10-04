@@ -4,6 +4,7 @@
 </script>
 
 <script lang="ts">
+  import { timeStateClass } from "$lib/ui/time-state";
   import { Button } from "$lib/ui/shadcn/button";
   import Play from "@lucide/svelte/icons/play";
   import { getPlayback } from "$lib/playback/context";
@@ -79,11 +80,12 @@
             disabled={isCurrent}
             aria-label="Play {item.title}"
             onclick={() => void playback.playQueueItem(item.id)}
-            purpose="bare"
-            density="inline"
-            geometry="queueRow"
-            typeRole="label"
-            timeState={isCurrent ? "present" : isPast ? "past" : "future"}
+            variant="bare"
+            size="inline"
+            class={cn(
+              "flex w-full items-center gap-4 rounded-sm py-2 text-left whitespace-normal disabled:opacity-100 active:translate-y-0 font-normal",
+              timeStateClass(isCurrent ? "present" : isPast ? "past" : "future"),
+            )}
           >
             <span class="flex w-16 shrink-0 justify-end text-right text-sm tabular-nums">
               {#if isCurrent}
@@ -116,9 +118,9 @@
           <Button
             type="button"
             onclick={() => queuePanel.open()}
-            purpose="text"
-            density="compact"
-            typeRole="label"
+            variant="text"
+            size="compact"
+            class="font-normal"
           >
             {hidden} more in the queue
           </Button>

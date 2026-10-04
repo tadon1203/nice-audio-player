@@ -126,7 +126,7 @@
         </Button>
         <Button
           type="button"
-          purpose="outline"
+          variant="outline"
           disabled={album.firstPlayableTrackId === null}
           onclick={() => void playback.shuffleAndStart({ kind: "album", key })}
         >
@@ -137,7 +137,7 @@
     </MediaDetailsHeader>
 
     <section class="mt-10" aria-labelledby="album-track-list-title">
-      <SectionTitle id="album-track-list-title" hidden>Tracks</SectionTitle>
+      <SectionTitle id="album-track-list-title" class="sr-only">Tracks</SectionTitle>
       {#if tracks.items.length > 0}
         <div class="mt-4">
           <TrackTable

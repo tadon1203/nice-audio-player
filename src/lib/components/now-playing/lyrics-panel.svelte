@@ -96,7 +96,7 @@
     </div>
     {#if follow.mode === "free" && follow.offscreen !== null}
       <div class={cn("absolute left-20", follow.offscreen === "above" ? "top-2" : "bottom-2")}>
-        <Button type="button" purpose="neutral" density="compact" onclick={follow.jumpToCurrent}>
+        <Button type="button" variant="neutral" size="compact" onclick={follow.jumpToCurrent}>
           {#if follow.offscreen === "above"}
             <ArrowUp aria-hidden="true" />
           {:else}

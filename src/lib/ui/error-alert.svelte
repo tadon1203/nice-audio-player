@@ -12,7 +12,7 @@
   <AlertDescription>{message}</AlertDescription>
   {#if onRetry}
     <AlertAction>
-      <Button type="button" purpose="outline" density="compact" onclick={onRetry}>Retry</Button>
+      <Button type="button" variant="outline" size="compact" onclick={onRetry}>Retry</Button>
     </AlertAction>
   {/if}
 </Alert>

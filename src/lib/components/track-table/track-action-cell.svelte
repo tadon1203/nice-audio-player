@@ -24,8 +24,8 @@
 {#snippet actionButton()}
   <Button
     type="button"
-    purpose="quiet"
-    density="largeIcon"
+    variant="quiet"
+    size="largeIcon"
     aria-label={action.label}
     title={action.label}
     disabled={!available}

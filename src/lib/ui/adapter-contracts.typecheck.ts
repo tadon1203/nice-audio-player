@@ -7,18 +7,14 @@ import type Adapter4 from "./shadcn/sheet/sheet-content.svelte";
 import type Adapter5 from "./shadcn/tooltip/tooltip-content.svelte";
 import type Adapter6 from "./shadcn/alert-dialog/alert-dialog-content.svelte";
 const callerStyling = { class: "text-xs", style: "color:red" };
-// @ts-expect-error input/input owns presentation, including typed spreads.
-const rejected0: ComponentProps<typeof Adapter0> = { ...callerStyling };
-void rejected0;
-// @ts-expect-error checkbox/checkbox owns presentation, including typed spreads.
-const rejected1: ComponentProps<typeof Adapter1> = { ...callerStyling };
-void rejected1;
-// @ts-expect-error switch/switch owns presentation, including typed spreads.
-const rejected2: ComponentProps<typeof Adapter2> = { ...callerStyling };
-void rejected2;
-// @ts-expect-error label/label owns presentation, including typed spreads.
-const rejected3: ComponentProps<typeof Adapter3> = { ...callerStyling };
-void rejected3;
+const styledInput: ComponentProps<typeof Adapter0> = { ...callerStyling };
+void styledInput;
+const styledCheckbox: ComponentProps<typeof Adapter1> = { ...callerStyling };
+void styledCheckbox;
+const styledSwitch: ComponentProps<typeof Adapter2> = { ...callerStyling };
+void styledSwitch;
+const styledLabel: ComponentProps<typeof Adapter3> = { ...callerStyling };
+void styledLabel;
 // @ts-expect-error sheet/sheet-content owns presentation, including typed spreads.
 const rejected4: ComponentProps<typeof Adapter4> = { ...callerStyling };
 void rejected4;
@@ -38,5 +34,6 @@ const acceptedInput: ComponentProps<typeof Adapter0> = {
   },
   ref: null,
   disabled: false,
+  class: "flex-1",
 };
 void acceptedInput;

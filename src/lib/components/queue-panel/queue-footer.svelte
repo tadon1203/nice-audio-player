@@ -12,10 +12,10 @@
   <div class="border-t border-border p-3">
     <Button
       type="button"
-      purpose="quiet"
-      density="compact"
-      stretch
+      variant="quiet"
+      size="compact"
       onclick={() => void playback.clearQueue()}
+      class="w-full"
     >
       Clear upcoming
     </Button>
