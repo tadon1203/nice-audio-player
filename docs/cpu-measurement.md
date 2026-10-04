@@ -14,13 +14,9 @@ Profilers show these names: `decode`, `meter-analysis`, `waveform`, `worker` (pl
 4. For per-thread cost, use Process Explorer (Threads tab) on the same process, or Windows Performance Recorder with the CPU profile.
 5. Note the machine, power mode and output device next to the numbers.
 
-## Frame-budget test
-
-`tests/frame-budget.e2e.ts` traces 3 s of mocked playback with Now Playing closed and on Lyrics. It expects 0 `requestAnimationFrame` callbacks and at most a few layouts and style recalculations. It is skipped until ticket 03 of `.scratch/cpu-optimization`; to measure the baseline, change `test.skip` to `test` and run `pnpm test:e2e`.
-
 ## Baseline (before the CPU optimization work)
 
-Frame-budget trace, 3 s, mocked playback, 1920x1080, full motion:
+Count of `requestAnimationFrame` callbacks over 3 s of mocked playback, 1920x1080, full motion (measured with a since-removed e2e trace):
 
 | Now Playing | rAF callbacks |
 | ----------- | ------------- |
