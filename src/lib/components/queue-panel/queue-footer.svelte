@@ -12,9 +12,9 @@
   <div class="border-t border-border p-3">
     <Button
       type="button"
-      variant="ghost"
-      size="sm"
-      class="w-full"
+      purpose="quiet"
+      density="compact"
+      stretch
       onclick={() => void playback.clearQueue()}
     >
       Clear upcoming

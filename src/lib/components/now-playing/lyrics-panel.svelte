@@ -4,7 +4,7 @@
   import { createTrackLyrics } from "$lib/lyrics/lyrics.svelte";
   import { getPlayback } from "$lib/playback/context";
   import { lyricsWaveformLink } from "$lib/shell/lyrics-waveform-link.svelte";
-  import { Button } from "$lib/ui/shadcn/button";
+  import { LegacyButton as Button } from "$lib/ui/shadcn/button";
   import { cn } from "$lib/utils/cn.js";
   import { EDGE_MASK } from "./anchor-column";
   import { createAnchorPadding } from "./anchor-column.svelte";

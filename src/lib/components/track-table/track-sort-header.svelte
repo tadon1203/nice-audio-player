@@ -22,9 +22,9 @@
 
 <Button
   type="button"
-  variant="ghost"
-  size="sm"
-  class="-mx-2 h-8 px-2 text-sm"
+  purpose="quiet"
+  density="standard"
+  geometry="tableSort"
   aria-label="Sort by {trackSortLabels[sortKey]}"
   onclick={() => onsortchange(sortKey, active ? toggleSortDirection(direction) : "ascending")}
 >

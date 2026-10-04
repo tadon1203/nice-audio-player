@@ -8,7 +8,7 @@ export const LIGHT = {
   /** Multiplies the artwork's brightness before it is composited. */
   brightness: 0.55,
   /** How much of the page background is laid back over the blurred artwork. */
-  veilOpacity: 0.7,
+  veilOpacity: 0.9,
   /** Share of the artwork that reaches the surface, per place. */
   strength: { max: 1, strong: 0.85, medium: 0.6, faint: 0.3 },
 } as const;
@@ -50,7 +50,7 @@ export function worstCaseSurfaceLuminance(): number {
 }
 
 const MIN_CONTRAST = 4.5;
-const STEP = 0.05;
+const STEP = 0.01;
 
 const luminanceOf = ([r, g, b]: readonly [number, number, number]) =>
   0.2126 * fromSrgb(r / 255) + 0.7152 * fromSrgb(g / 255) + 0.0722 * fromSrgb(b / 255);
@@ -75,7 +75,9 @@ export function readableAccent(hex: string | null | undefined): string | null {
   const surface = worstCaseSurfaceLuminance();
   for (let mix = 0; mix <= 1; mix += STEP) {
     const mixed = rgb.map((channel) => channel + (255 - channel) * mix) as [number, number, number];
-    if (contrastRatio(luminanceOf(mixed), surface) >= MIN_CONTRAST) return toHex(mixed);
+    const color = toHex(mixed);
+    const rounded = parseHex(color)!;
+    if (contrastRatio(luminanceOf(rounded), surface) >= MIN_CONTRAST) return color;
   }
   return "#ffffff";
 }

@@ -11,6 +11,7 @@
   import type { HTMLButtonAttributes } from "svelte/elements";
   import type { PlaybackQueueItem } from "$lib/native";
   import Artwork from "$lib/ui/artwork.svelte";
+  import { timeStateClass } from "$lib/ui/time-state";
   import { Button } from "$lib/ui/shadcn/button";
   import { cn } from "$lib/utils/cn.js";
   import { formatDuration } from "$lib/utils/format";
@@ -42,10 +43,8 @@
 <!-- Time has three luminances: the whole row (title, artist, duration) is as bright as its tone. -->
 <div
   class={cn(
-    "group/queue-row relative flex min-w-0 items-center gap-2 px-4",
-    tone === "current" && "text-foreground",
-    tone === "upcoming" && "text-muted-foreground",
-    tone === "past" && "text-muted-foreground/60",
+    "group/queue-row relative flex min-w-0 items-center gap-2 px-4 transition-colors duration-(--motion-move-duration) ease-(--motion-easing)",
+    timeStateClass(tone === "current" ? "present" : tone === "past" ? "past" : "future"),
   )}
   style:height="{QUEUE_ROW_PX}px"
   data-tone={tone}
@@ -86,8 +85,8 @@
     >
       <Button
         type="button"
-        variant="ghost"
-        size="icon-sm"
+        purpose="quiet"
+        density="compactIcon"
         aria-label="Move earlier in queue"
         disabled={!canMoveEarlier}
         onclick={onMoveEarlier}
@@ -96,8 +95,8 @@
       </Button>
       <Button
         type="button"
-        variant="ghost"
-        size="icon-sm"
+        purpose="quiet"
+        density="compactIcon"
         aria-label="Move later in queue"
         disabled={!canMoveLater}
         onclick={onMoveLater}
@@ -106,8 +105,8 @@
       </Button>
       <Button
         type="button"
-        variant="ghost"
-        size="icon-sm"
+        purpose="destructive"
+        density="compactIcon"
         aria-label={`Remove ${item.title} from queue`}
         onclick={onRemove}
       >

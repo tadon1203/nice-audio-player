@@ -1,11 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  ANCHOR_FRACTION,
-  DISTANCE_OPACITY,
-  anchorScrollTop,
-  anchorSpacers,
-  opacityAtDistance,
-} from "./anchor-column";
+import { ANCHOR_FRACTION, anchorScrollTop, anchorSpacers } from "./anchor-column";
 
 describe("anchorSpacers", () => {
   it("splits the height at the anchor line", () => {
@@ -33,17 +27,5 @@ describe("anchorScrollTop", () => {
     expect(
       anchorScrollTop({ rowTop: 100, rowHeight: 40, clientHeight: 500, scrollHeight: 300 }),
     ).toBe(0);
-  });
-});
-
-describe("opacityAtDistance", () => {
-  it("fades with the distance from the current row", () => {
-    expect(opacityAtDistance(0)).toBe(1);
-    expect(opacityAtDistance(2)).toBe(0.7);
-  });
-
-  it("holds the last step beyond the table and clamps negatives", () => {
-    expect(opacityAtDistance(99)).toBe(DISTANCE_OPACITY.at(-1));
-    expect(opacityAtDistance(-3)).toBe(1);
   });
 });

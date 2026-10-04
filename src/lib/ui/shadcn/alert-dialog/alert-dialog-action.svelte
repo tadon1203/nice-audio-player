@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { AlertDialog as AlertDialogPrimitive } from "bits-ui";
 	import {
-		buttonVariants,
-		type ButtonVariant,
-		type ButtonSize,
+		legacyButtonVariants,
+		type LegacyButtonVariant,
+		type LegacyButtonSize,
 	} from "$lib/ui/shadcn/button/index.js";
 	import { cn } from "$lib/utils/cn.js";
 
@@ -14,14 +14,14 @@
 		size = "default",
 		...restProps
 	}: AlertDialogPrimitive.ActionProps & {
-		variant?: ButtonVariant;
-		size?: ButtonSize;
+		variant?: LegacyButtonVariant;
+		size?: LegacyButtonSize;
 	} = $props();
 </script>
 
 <AlertDialogPrimitive.Action
 	bind:ref
 	data-slot="alert-dialog-action"
-	class={cn(buttonVariants({ variant, size }), "", className)}
+	class={cn(legacyButtonVariants({ variant, size }), "", className)}
 	{...restProps}
 />

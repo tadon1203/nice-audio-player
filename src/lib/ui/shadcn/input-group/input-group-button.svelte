@@ -20,7 +20,7 @@
 </script>
 
 <script lang="ts">
-	import { Button } from "$lib/ui/shadcn/button/index.js";
+	import { LegacyButton as Button } from "$lib/ui/shadcn/button/index.js";
 	import { cn } from "$lib/utils/cn.js";
 	import type { ComponentProps } from "svelte";
 

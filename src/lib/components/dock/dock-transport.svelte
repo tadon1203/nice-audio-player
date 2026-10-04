@@ -5,7 +5,7 @@
   import { getPlayback } from "$lib/playback/context";
   import { nextRepeatMode } from "$lib/playback/snapshot";
   import PlayPauseIcon from "$lib/ui/play-pause-icon.svelte";
-  import { Button } from "$lib/ui/shadcn/button";
+  import { LegacyButton as Button } from "$lib/ui/shadcn/button";
   import DockToggleButton from "./dock-toggle-button.svelte";
   import PlayProgressRing from "./play-progress-ring.svelte";
   import RepeatIcon from "./repeat-icon.svelte";

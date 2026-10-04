@@ -1,3 +1,15 @@
+<script lang="ts" module>
+  import type { ContextMenu as ContextMenuPrimitiveTypes } from "bits-ui";
+  export type ContextMenuContentProps = Omit<
+    ContextMenuPrimitiveTypes.ContentProps,
+    "class" | "style"
+  > & {
+    class?: never;
+    style?: never;
+    width?: "compact" | "standard";
+  };
+</script>
+
 <script lang="ts">
   import { ContextMenu as ContextMenuPrimitive } from "bits-ui";
   import { cn } from "$lib/utils/cn.js";
@@ -8,10 +20,10 @@
    */
   let {
     ref = $bindable(null),
-    class: className,
     children,
+    width = "standard",
     ...restProps
-  }: ContextMenuPrimitive.ContentProps = $props();
+  }: ContextMenuContentProps = $props();
 </script>
 
 <ContextMenuPrimitive.Portal>
@@ -19,8 +31,8 @@
     bind:ref
     data-slot="menu-content"
     class={cn(
-      "acrylic data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 z-20 min-w-44 origin-(--bits-context-menu-content-transform-origin) rounded-lg p-1 text-sm text-popover-foreground shadow-floating ring-1 ring-foreground/10 outline-none duration-(--motion-move-duration) ease-(--motion-easing)",
-      className,
+			"acrylic z-50 origin-(--bits-context-menu-content-transform-origin) rounded-lg p-1 text-sm text-popover-foreground shadow-floating ring-1 ring-foreground/10 outline-none motion-overlay",
+      width === "compact" ? "min-w-40" : "min-w-44",
     )}
     {...restProps}
   >

@@ -50,7 +50,7 @@
     <div in:contentFade|global class="flex min-w-0 flex-col gap-1">
       <!-- Always two lines tall, so the lines below never move when the title wraps differently. -->
       <p
-        class="line-clamp-2 min-h-[2lh] text-2xl font-semibold text-foreground md:text-3xl lg:text-4xl"
+        class="line-clamp-2 min-h-[2lh] text-2xl font-medium text-foreground md:text-3xl lg:text-4xl"
       >
         {#if item !== null && changedSinceOpen}
           <KineticText

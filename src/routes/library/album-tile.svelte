@@ -7,7 +7,7 @@
   import Artwork from "$lib/ui/artwork.svelte";
   import { sharedElement } from "$lib/ui/motion/shared-element";
   import PlayPauseIcon from "$lib/ui/play-pause-icon.svelte";
-  import { Button } from "$lib/ui/shadcn/button/index.js";
+  import { LegacyButton as Button } from "$lib/ui/shadcn/button/index.js";
   import { MISSING } from "$lib/utils/format";
 
   let {

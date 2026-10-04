@@ -23,8 +23,8 @@ describe("artwork light", () => {
     expect(contrast(luminance(ink.two), surface)).toBeGreaterThanOrEqual(4.5);
   });
 
-  it("keeps past lyric lines (Ink-3, large text) at 3:1 on the brightest artwork", () => {
-    expect(contrast(luminance(ink.three), surface)).toBeGreaterThanOrEqual(3);
+  it("keeps past lyrics and small metadata at AA on the brightest artwork", () => {
+    expect(contrast(luminance(ink.three), surface)).toBeGreaterThanOrEqual(4.5);
   });
 
   it("keeps Ink-3 at AA on the plain workspace background", () => {

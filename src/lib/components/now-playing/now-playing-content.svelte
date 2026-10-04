@@ -18,7 +18,7 @@
   import NowPlayingLight from "./now-playing-light.svelte";
   import QueueColumn from "./queue-column.svelte";
   import { rightColumn } from "./right-column.svelte";
-  import { Button } from "$lib/ui/shadcn/button";
+  import { LegacyButton as Button } from "$lib/ui/shadcn/button";
 
   /**
    * Now Playing's content: one skeleton in every state. Left, the Sleeve and the track's info;

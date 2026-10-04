@@ -4,7 +4,7 @@
   import Square from "@lucide/svelte/icons/square";
   import X from "@lucide/svelte/icons/x";
   import { nativeWindow } from "$lib/native";
-  import { Button } from "$lib/ui/shadcn/button/index.js";
+  import { Button, LegacyButton as CompatButton } from "$lib/ui/shadcn/button/index.js";
 
   const appWindow = nativeWindow;
   let maximized = $state(false);
@@ -19,7 +19,7 @@
 
 {#if appWindow !== null}
   <div class="flex h-10 shrink-0 items-stretch" aria-label="Window controls" role="group">
-    <Button
+    <CompatButton
       type="button"
       variant="ghost"
       class="size-10 rounded-none"
@@ -27,8 +27,8 @@
       onclick={() => void appWindow.minimize()}
     >
       <Minus aria-hidden="true" class="size-4" />
-    </Button>
-    <Button
+    </CompatButton>
+    <CompatButton
       type="button"
       variant="ghost"
       class="size-10 rounded-none"
@@ -40,11 +40,11 @@
       {:else}
         <Square aria-hidden="true" class="size-3.5" />
       {/if}
-    </Button>
+    </CompatButton>
     <Button
       type="button"
-      variant="ghost"
-      class="size-10 rounded-none hover:bg-destructive hover:text-destructive-foreground"
+      purpose="window-close"
+      density="titlebar"
       aria-label="Close window"
       onclick={() => void appWindow.close()}
     >

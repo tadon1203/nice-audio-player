@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
-  import { Button } from "$lib/ui/shadcn/button";
+  import { LegacyButton as Button } from "$lib/ui/shadcn/button";
   import { cn } from "$lib/utils/cn.js";
 
   /** On/off is the icon plus a dot beneath it, never color alone. */

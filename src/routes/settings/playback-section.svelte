@@ -68,7 +68,7 @@
           <Select.Trigger
             disabled={playback.connection !== "ready"}
             aria-label={`Output device: ${outputLabel}`}
-            class="h-auto min-w-0 cursor-pointer gap-1 rounded-sm border-0 bg-transparent p-0 text-foreground outline-none hover:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:opacity-50 dark:bg-transparent dark:hover:bg-transparent"
+            appearance="inline-value"
           >
             <span class="truncate tabular-nums">{outputLabel}</span>
           </Select.Trigger>

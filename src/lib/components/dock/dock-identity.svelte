@@ -12,7 +12,7 @@
   import { SLEEVE_RADIUS, sharedElement, sharedKey } from "$lib/ui/motion/shared-element";
   import { getMotionBudget } from "$lib/shell/motion-budget.svelte";
   import { slideTransition } from "$lib/ui/motion/svelte-slide";
-  import { Button } from "$lib/ui/shadcn/button";
+  import { LegacyButton as Button } from "$lib/ui/shadcn/button";
   import * as Tooltip from "$lib/ui/shadcn/tooltip";
 
   /** Sliding distance for the artwork, title and artist. One value so they travel together. */
@@ -102,7 +102,7 @@
         {/snippet}
       </ContextMenuPrimitive.Trigger>
       {#if hasTrack}
-        <ContextMenuContent side="right" align="start" class="min-w-40">
+        <ContextMenuContent side="right" align="start" width="compact">
           {#if links?.album?.href}
             {@const href = links.album.href}
             <ContextMenuItem onSelect={() => goTo(href)}>Go to album</ContextMenuItem>

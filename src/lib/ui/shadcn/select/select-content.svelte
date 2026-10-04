@@ -1,45 +1,58 @@
-<script lang="ts">
-	import { Select as SelectPrimitive } from "bits-ui";
-	import { cn, type WithoutChild } from "$lib/utils/cn.js";
-	import type { WithoutChildrenOrChild } from "$lib/utils/cn.js";
-	import SelectPortal from "./select-portal.svelte";
-	import SelectScrollDownButton from "./select-scroll-down-button.svelte";
-	import SelectScrollUpButton from "./select-scroll-up-button.svelte";
-	import type { ComponentProps } from "svelte";
+<script lang="ts" module>
+  import type { Select as SelectPrimitiveTypes } from "bits-ui";
+  import type {
+    WithoutChild as WithoutChildType,
+    WithoutChildrenOrChild as WithoutChildrenOrChildType,
+  } from "$lib/utils/cn.js";
+  import type { ComponentProps as ComponentPropsType } from "svelte";
+  export type SelectContentProps = Omit<
+    WithoutChildType<SelectPrimitiveTypes.ContentProps>,
+    "class" | "style"
+  > & {
+    class?: never;
+    style?: never;
+    portalProps?: WithoutChildrenOrChildType<
+      ComponentPropsType<typeof import("./select-portal.svelte").default>
+    >;
+  };
+</script>
 
-	let {
-		ref = $bindable(null),
-		class: className,
-		sideOffset = 4,
-		portalProps,
-		children,
-		preventScroll = true,
-		...restProps
-	}: WithoutChild<SelectPrimitive.ContentProps> & {
-		portalProps?: WithoutChildrenOrChild<ComponentProps<typeof SelectPortal>>;
-	} = $props();
+<script lang="ts">
+  import { Select as SelectPrimitive } from "bits-ui";
+  import { cn } from "$lib/utils/cn.js";
+  import SelectPortal from "./select-portal.svelte";
+  import SelectScrollDownButton from "./select-scroll-down-button.svelte";
+  import SelectScrollUpButton from "./select-scroll-up-button.svelte";
+
+  let {
+    ref = $bindable(null),
+    sideOffset = 4,
+    portalProps,
+    children,
+    preventScroll = true,
+    ...restProps
+  }: SelectContentProps = $props();
 </script>
 
 <SelectPortal {...portalProps}>
-	<SelectPrimitive.Content
-		bind:ref
-		{sideOffset}
-		{preventScroll}
-		data-slot="select-content"
-		class={cn(
-			"bg-popover text-popover-foreground data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 ring-foreground/10 min-w-36 rounded-lg shadow-md ring-1 duration-100 relative z-50 max-h-(--bits-select-content-available-height) origin-(--bits-select-content-transform-origin) overflow-x-hidden overflow-y-auto",
-			className
-		)}
-		{...restProps}
-	>
-		<SelectScrollUpButton />
-		<SelectPrimitive.Viewport
-			class={cn(
-				"h-(--bits-select-anchor-height) w-full min-w-(--bits-select-anchor-width) scroll-my-1"
-			)}
-		>
-			{@render children?.()}
-		</SelectPrimitive.Viewport>
-		<SelectScrollDownButton />
-	</SelectPrimitive.Content>
+  <SelectPrimitive.Content
+    bind:ref
+    {sideOffset}
+    {preventScroll}
+    data-slot="select-content"
+    class={cn(
+      "acrylic text-popover-foreground ring-foreground/10 min-w-36 rounded-lg shadow-floating ring-1 relative z-50 max-h-(--bits-select-content-available-height) origin-(--bits-select-content-transform-origin) overflow-x-hidden overflow-y-auto motion-overlay",
+    )}
+    {...restProps}
+  >
+    <SelectScrollUpButton />
+    <SelectPrimitive.Viewport
+      class={cn(
+        "h-(--bits-select-anchor-height) w-full min-w-(--bits-select-anchor-width) scroll-my-1",
+      )}
+    >
+      {@render children?.()}
+    </SelectPrimitive.Viewport>
+    <SelectScrollDownButton />
+  </SelectPrimitive.Content>
 </SelectPortal>

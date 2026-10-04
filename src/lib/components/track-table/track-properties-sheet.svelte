@@ -2,7 +2,7 @@
   import { createQuery } from "@tanstack/svelte-query";
   import { libraryQueryOptions } from "$lib/library/queries";
   import { requireNative } from "$lib/native";
-  import { Button } from "$lib/ui/shadcn/button/index.js";
+  import { LegacyButton as Button } from "$lib/ui/shadcn/button/index.js";
   import {
     Sheet,
     SheetContent,
@@ -45,7 +45,7 @@
     if (!open) onclose();
   }}
 >
-  <SheetContent side="right" class="w-96 gap-0 p-0">
+  <SheetContent side="right" width="properties" flush>
     <SheetHeader class="border-b border-border pb-4">
       <SheetTitle>Properties</SheetTitle>
       <SheetDescription class="truncate">

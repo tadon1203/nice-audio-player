@@ -34,12 +34,13 @@
 >
   <SheetContent
     side="right"
+    width="queue"
+    flush
     overlay={false}
     showCloseButton={false}
     interactOutsideBehavior="ignore"
     trapFocus={false}
     preventScroll={false}
-    class="w-80 gap-0 bg-popover/82 p-0 shadow-floating backdrop-blur-xl backdrop-saturate-150"
   >
     <SheetHeader class="border-b border-border pb-4">
       <SheetTitle>Queue</SheetTitle>

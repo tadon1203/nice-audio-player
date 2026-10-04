@@ -11,8 +11,9 @@
   import { motionFor } from "$lib/ui/motion/svelte-motion";
   import Artwork from "$lib/ui/artwork.svelte";
   import { cn } from "$lib/utils/cn.js";
+  import { timeStateClass } from "$lib/ui/time-state";
   import { formatDuration } from "$lib/utils/format";
-  import { EDGE_MASK, opacityAtDistance } from "./anchor-column";
+  import { EDGE_MASK } from "./anchor-column";
   import { createAnchorPadding } from "./anchor-column.svelte";
   import { createAnchorFollow } from "./anchor-follow.svelte";
   import { buildQueueRows, hiddenUpcomingCount } from "./queue-rows";
@@ -77,13 +78,7 @@
       {#each rows as item, index (item.id)}
         {@const isCurrent = current !== null && index === currentIndex}
         {@const isPast = index < currentIndex}
-        <div
-          animate:flipMotion
-          role="listitem"
-          aria-current={isCurrent ? "true" : undefined}
-          style:opacity={opacityAtDistance(Math.abs(index - currentIndex))}
-          style:transition={transition("opacity")}
-        >
+        <div animate:flipMotion role="listitem" aria-current={isCurrent ? "true" : undefined}>
           <button
             type="button"
             disabled={isCurrent}
@@ -92,11 +87,7 @@
             style:transition={transition("color")}
             class={cn(
               "flex w-full cursor-pointer items-center gap-4 rounded-sm py-2 text-left outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default",
-              isCurrent
-                ? "text-foreground"
-                : isPast
-                  ? "text-faint-foreground"
-                  : "text-muted-foreground",
+              timeStateClass(isCurrent ? "present" : isPast ? "past" : "future"),
             )}
           >
             <span class="flex w-16 shrink-0 justify-end text-right text-sm tabular-nums">

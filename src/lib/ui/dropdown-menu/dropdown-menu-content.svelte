@@ -5,10 +5,14 @@
   /** A floating menu opened from a button. Same surface as the context menu: Acrylic, layer 20. */
   let {
     ref = $bindable(null),
-    class: className,
     children,
+    width = "standard",
     ...restProps
-  }: DropdownMenuPrimitive.ContentProps = $props();
+  }: Omit<DropdownMenuPrimitive.ContentProps, "class" | "style"> & {
+    class?: never;
+    style?: never;
+    width?: "compact" | "standard";
+  } = $props();
 </script>
 
 <DropdownMenuPrimitive.Portal>
@@ -16,8 +20,8 @@
     bind:ref
     data-slot="menu-content"
     class={cn(
-      "acrylic data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 z-20 min-w-44 origin-(--bits-dropdown-menu-content-transform-origin) rounded-lg p-1 text-sm text-popover-foreground shadow-floating ring-1 ring-foreground/10 outline-none duration-(--motion-move-duration) ease-(--motion-easing)",
-      className,
+			"acrylic z-50 origin-(--bits-dropdown-menu-content-transform-origin) rounded-lg p-1 text-sm text-popover-foreground shadow-floating ring-1 ring-foreground/10 outline-none motion-overlay",
+      width === "compact" ? "min-w-40" : "min-w-44",
     )}
     {...restProps}
   >

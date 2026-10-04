@@ -17,7 +17,7 @@
   import { motionFor } from "$lib/ui/motion/svelte-motion";
   import { queuePanel } from "$lib/shell/queue-panel.svelte";
   import RollingNumber from "$lib/ui/rolling-number/rolling-number.svelte";
-  import { Button } from "$lib/ui/shadcn/button";
+  import { LegacyButton as Button } from "$lib/ui/shadcn/button";
   import { Slider } from "$lib/ui/shadcn/slider";
   import DockSignalPath from "./dock-signal-path.svelte";
   import NextTrackPreview from "./next-track-preview.svelte";

@@ -1,7 +1,7 @@
 <script lang="ts">
   import AlertCircle from "@lucide/svelte/icons/circle-alert";
   import { Alert, AlertAction, AlertDescription } from "$lib/ui/shadcn/alert/index.js";
-  import { Button } from "$lib/ui/shadcn/button/index.js";
+  import { LegacyButton as Button } from "$lib/ui/shadcn/button/index.js";
 
   let { message, onRetry }: { message: string; onRetry?: () => void } = $props();
 </script>

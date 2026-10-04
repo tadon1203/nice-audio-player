@@ -9,7 +9,7 @@
   import { page } from "$app/state";
   import { motionFor } from "$lib/ui/motion/svelte-motion";
   import { cn } from "$lib/utils/cn.js";
-  import { buttonVariants } from "$lib/ui/shadcn/button/index.js";
+  import { legacyButtonVariants } from "$lib/ui/shadcn/button/index.js";
 
   type NavigationItem = {
     label: string;
@@ -48,7 +48,7 @@
     aria-current={active ? "page" : undefined}
     onclick={onNavigate}
     class={cn(
-      buttonVariants({ variant: "ghost", size: "lg" }),
+      legacyButtonVariants({ variant: "ghost", size: "lg" }),
       "relative h-10 w-full justify-start gap-2 px-2 text-muted-foreground hover:bg-sidebar-accent",
       active && "text-foreground",
     )}

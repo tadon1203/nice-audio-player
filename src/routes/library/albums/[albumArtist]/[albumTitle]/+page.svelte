@@ -20,7 +20,7 @@
   import LoadingStatus from "$lib/ui/loading-status.svelte";
   import PlayPauseIcon from "$lib/ui/play-pause-icon.svelte";
   import SectionTitle from "$lib/ui/section-title.svelte";
-  import { Button } from "$lib/ui/shadcn/button/index.js";
+  import { LegacyButton as Button } from "$lib/ui/shadcn/button/index.js";
   import WorkspaceScroll from "$lib/ui/workspace-scroll.svelte";
   import { formatCount, formatDuration } from "$lib/utils/format";
 

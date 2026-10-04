@@ -15,7 +15,7 @@
   import ErrorAlert from "$lib/ui/error-alert.svelte";
   import LoadingStatus from "$lib/ui/loading-status.svelte";
   import SectionTitle from "$lib/ui/section-title.svelte";
-  import { Button } from "$lib/ui/shadcn/button/index.js";
+  import { Button, LegacyButton as CompatButton } from "$lib/ui/shadcn/button/index.js";
   import { Checkbox } from "$lib/ui/shadcn/checkbox/index.js";
   import { Field, FieldLabel } from "$lib/ui/shadcn/field/index.js";
   import {
@@ -90,7 +90,7 @@
       <p class="mt-1 text-sm leading-5 text-muted-foreground">Choose where your music lives.</p>
     </div>
     <div class="flex max-w-sm flex-col items-end gap-2">
-      <Button
+      <CompatButton
         type="button"
         onclick={() => {
           addRoot.reset();
@@ -104,7 +104,7 @@
           <FolderPlus data-icon="inline-start" aria-hidden="true" />
         {/if}
         Add folder
-      </Button>
+      </CompatButton>
       {#if addRoot.error}
         <p class="text-right text-sm text-destructive" role="alert">
           {libraryCommandErrorMessage(addRoot.error)}
@@ -196,9 +196,8 @@
             </Field>
             <Button
               type="button"
-              variant="ghost"
-              size="sm"
-              class="text-muted-foreground hover:text-destructive"
+              purpose="destructive"
+              density="compact"
               aria-label={`Remove ${root.path} from library`}
               disabled={scanRunning || pending}
               onclick={() => {
@@ -225,7 +224,7 @@
     </p>
     <div class="flex max-w-sm flex-col items-end gap-2">
       <div class="flex flex-wrap justify-end gap-2">
-        <Button
+        <CompatButton
           type="button"
           variant="outline"
           size="sm"
@@ -239,8 +238,8 @@
             <Spinner data-icon="inline-start" aria-hidden="true" role="presentation" />
           {/if}
           Delete Missing
-        </Button>
-        <Button
+        </CompatButton>
+        <CompatButton
           type="button"
           variant="outline"
           size="sm"
@@ -250,7 +249,7 @@
           }}
         >
           Open log folder
-        </Button>
+        </CompatButton>
       </div>
       {#if deleteMissing.error}
         <p class="text-right text-sm text-destructive" role="alert">
@@ -270,7 +269,7 @@
       Use this if the library looks wrong or cannot be opened.
     </p>
     <div class="flex max-w-sm flex-col items-end gap-2">
-      <Button
+      <CompatButton
         type="button"
         variant="outline"
         size="sm"
@@ -284,7 +283,7 @@
           <Spinner data-icon="inline-start" aria-hidden="true" role="presentation" />
         {/if}
         Reset library and rescan
-      </Button>
+      </CompatButton>
       {#if resetLibrary.error}
         <p class="text-right text-sm text-destructive" role="alert">
           {libraryCommandErrorMessage(resetLibrary.error)}

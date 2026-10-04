@@ -16,9 +16,9 @@
   import { getPlayback } from "$lib/playback/context";
   import { lyricsWaveformLink } from "$lib/shell/lyrics-waveform-link.svelte";
   import { motionFor } from "$lib/ui/motion/svelte-motion";
+  import { timeStateClass } from "$lib/ui/time-state";
   import { cn } from "$lib/utils/cn.js";
   import { formatDuration } from "$lib/utils/format";
-  import { opacityAtDistance } from "./anchor-column";
   import IntervalLine from "./interval-line.svelte";
   import { lineSpan } from "./lyrics-lines";
 
@@ -50,8 +50,6 @@
   const isCurrent = $derived(index === currentIndex);
   const isPast = $derived(index < currentIndex);
   const isHovered = $derived(index === hoveredIndex);
-  /** Lines away from the current one, capped: how much dimmer the line is. */
-  const distance = $derived(Math.abs(index - Math.max(currentIndex, 0)));
   const startLabel = $derived(formatDuration(line.startMs));
 
   // Luminance moves as a `move`; under reduced motion it is the shared short crossfade.
@@ -62,12 +60,7 @@
 <div
   {@attach attach}
   aria-current={isCurrent ? "true" : undefined}
-  style:--line-opacity={opacityAtDistance(distance)}
-  style:transition={transition("opacity")}
-  class={cn(
-    "group flex items-baseline gap-4 rounded-sm py-2 opacity-(--line-opacity) in-data-[mode=free]:opacity-100",
-    isHovered && "bg-accent/60",
-  )}
+  class={cn("group flex items-baseline gap-4 rounded-sm py-2", isHovered && "bg-accent/60")}
 >
   <button
     type="button"
@@ -101,11 +94,7 @@
       <!-- Past is faintest, the present brightest, the future between; the current line is lit in the artwork's colour. -->
       <span
         style:transition={transition("color")}
-        class={isCurrent
-          ? "text-(--artwork-accent)"
-          : isPast
-            ? "text-faint-foreground"
-            : "text-muted-foreground"}
+        class={isCurrent ? "text-(--artwork-accent)" : timeStateClass(isPast ? "past" : "future")}
       >
         {line.text}
       </span>

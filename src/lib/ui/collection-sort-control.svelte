@@ -28,7 +28,7 @@
       if (option) view.setSort(option.key);
     }}
   >
-    <SelectTrigger role="combobox" class="w-40 shrink-0" aria-label={selectLabel}>
+    <SelectTrigger role="combobox" width="sort-control" aria-label={selectLabel}>
       {selectedLabel}
     </SelectTrigger>
     <SelectContent>
@@ -39,8 +39,8 @@
   </Select>
   <Button
     type="button"
-    variant="outline"
-    size="icon"
+    purpose="outline"
+    density="icon"
     aria-label={view.direction === "ascending" ? "Sort descending" : "Sort ascending"}
     onclick={view.toggleDirection}
   >
