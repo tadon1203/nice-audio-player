@@ -8,7 +8,7 @@ Personal project. Keep things simple and just get it done.
 
 ## Workflow
 
-Small change or tweak: just do it and commit. Bug: `/diagnosing-bugs`. Unsure about a state model or UI feel: `/prototype`. Unsure about a fact: `/research`.
+Small change or tweak: just do it and commit. Bug: `/diagnosing-bugs`. Unsure about a fact: `/research`.
 
 Non-trivial feature:
 
