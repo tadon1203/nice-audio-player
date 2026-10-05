@@ -1,8 +1,9 @@
 //! The playback worker thread: owns the queue, the transport state and every in-flight operation.
 //!
 //! The worker sleeps until something arrives on its one input channel: a command from a caller or
-//! an event from a decode, source-load or output thread. It ticks only while a track is playing,
-//! to publish the position and notice the end of the track.
+//! an event from a decode, source-load or output thread. While a track is playing it also wakes
+//! at its next deadline, to publish the position, start the prefetch and notice the end of the
+//! track.
 
 use std::collections::HashSet;
 use std::sync::{mpsc::Receiver, Arc, RwLock};
@@ -22,6 +23,7 @@ use super::service::{respond, PlaybackCommand, PlaybackServiceError, Reply};
 use super::session::{
     should_publish_position, LoadStage, Loaded, Loading, Position, Prebuffering, Prefetch,
     PrefetchState, PrefetchedTrack, SeekInFlight, StartRequest, Transport,
+    POSITION_UPDATE_INTERVAL,
 };
 use super::snapshot::{
     ActiveSession, PlaybackFailureCode, PlaybackPosition, PlaybackProcessingInfo,
@@ -51,8 +53,6 @@ mod publish;
 mod seek;
 mod start;
 mod transport;
-
-const TICK_INTERVAL: Duration = Duration::from_millis(50);
 
 /// "Previous" restarts the track instead of leaving it once it has played this long.
 const PREVIOUS_RESTART_THRESHOLD_MS: u64 = 3_000;
@@ -174,7 +174,6 @@ pub(super) struct PlaybackWorker {
     effective_gain: AtomicEffectiveGain,
     meter: MeterHub,
     output_selection: AudioOutputSelection,
-    last_tick: Instant,
     snapshot: Arc<RwLock<PlaybackSnapshot>>,
     position: Arc<RwLock<Option<PlaybackPosition>>>,
     queue_snapshot: Arc<RwLock<PlaybackQueueSnapshot>>,
@@ -210,7 +209,6 @@ impl PlaybackWorker {
             effective_gain: links.effective_gain,
             meter: links.meter,
             output_selection,
-            last_tick: Instant::now(),
             snapshot: links.snapshot,
             position: links.position,
             queue_snapshot: links.queue_snapshot,
@@ -223,32 +221,32 @@ impl PlaybackWorker {
 
     pub(super) fn run(mut self, inputs: Receiver<WorkerInput>) {
         loop {
-            let input = if self.wants_ticks() {
-                match inputs.recv_timeout(TICK_INTERVAL) {
-                    Ok(input) => Some(input),
-                    Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-                        self.tick();
-                        continue;
+            let input = match self.next_deadline() {
+                Some(deadline) => {
+                    match inputs.recv_timeout(deadline.saturating_duration_since(Instant::now())) {
+                        Ok(input) => Some(input),
+                        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                            self.tick();
+                            continue;
+                        }
+                        Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
                     }
-                    Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
                 }
-            } else {
-                inputs.recv().ok()
+                None => inputs.recv().ok(),
             };
             let Some(input) = input else { break };
             if !self.handle(input) {
                 break;
             }
-            if self.wants_ticks() && self.last_tick.elapsed() >= TICK_INTERVAL {
+            // A steady stream of inputs must not starve the deadlines.
+            if self
+                .next_deadline()
+                .is_some_and(|deadline| deadline <= Instant::now())
+            {
                 self.tick();
             }
         }
         self.shutdown();
-    }
-
-    /// Whether the worker has anything to do between inputs: only a playing track does.
-    pub(super) fn wants_ticks(&self) -> bool {
-        matches!(&self.transport, Transport::Loaded(loaded) if !loaded.paused)
     }
 
     /// Takes one input. Returns whether the worker should keep running.

@@ -5,7 +5,7 @@ use super::*;
 
 /// How long before the end of a track the next one is opened. A shorter track opens it right
 /// after it has loaded.
-const PREFETCH_LEAD_MS: u64 = 10_000;
+pub(super) const PREFETCH_LEAD_MS: u64 = 10_000;
 
 impl PlaybackWorker {
     /// Starts opening the track that follows the loaded one once its end is near.

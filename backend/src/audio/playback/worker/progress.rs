@@ -1,13 +1,57 @@
-//! The tick: position updates and the end of a track.
+//! The tick: position updates and the end of a track, run at the worker's next deadline.
 
+use super::prefetch::PREFETCH_LEAD_MS;
 use super::*;
 
 impl PlaybackWorker {
     pub(in super::super) fn tick(&mut self) {
-        self.last_tick = Instant::now();
         self.finish_if_due();
         self.update_position();
         self.maybe_prefetch();
+    }
+
+    /// When the worker next has something to do on its own, if a track is playing: the end of the
+    /// track, the next position publish, the start of the prefetch or the "previous restarts"
+    /// boundary, whichever comes first. `None` means sleep until an input arrives.
+    pub(in super::super) fn next_deadline(&self) -> Option<Instant> {
+        let Transport::Loaded(loaded) = &self.transport else {
+            return None;
+        };
+        if loaded.paused {
+            return None;
+        }
+        let now = Instant::now();
+        // An overdue publish that found no new position (a stalled stream) waits a full interval.
+        let publish_at = loaded.position.last_publish + POSITION_UPDATE_INTERVAL;
+        let mut deadline = if publish_at > now {
+            publish_at
+        } else {
+            now + POSITION_UPDATE_INTERVAL
+        };
+        let mut consider = |at: Instant| deadline = deadline.min(at);
+
+        if let Some(end) = loaded.completion_time {
+            let stream_now = loaded.output.stream.now();
+            consider(now + end.duration_since(stream_now));
+        }
+        let position_ms = loaded.position_ms();
+        if let Some(duration_ms) = loaded.position.duration_ms {
+            if loaded.prefetch.is_none()
+                && loaded.seek.is_none()
+                && self.queue.peek_natural().is_some()
+            {
+                let until = duration_ms
+                    .saturating_sub(position_ms)
+                    .saturating_sub(PREFETCH_LEAD_MS);
+                if until > 0 {
+                    consider(now + Duration::from_millis(until));
+                }
+            }
+            if position_ms < PREVIOUS_RESTART_THRESHOLD_MS {
+                consider(now + Duration::from_millis(PREVIOUS_RESTART_THRESHOLD_MS - position_ms));
+            }
+        }
+        Some(deadline)
     }
 
     pub(super) fn finish_if_due(&mut self) {
@@ -63,15 +107,12 @@ impl PlaybackWorker {
             return;
         }
         let frame = loaded.sample_position();
-        if !should_publish_position(
-            loaded.position.last_publish.elapsed(),
-            frame != loaded.position.frame,
-        ) {
-            return;
-        }
+        let changed = frame != loaded.position.frame;
         loaded.position.frame = frame;
-        loaded.position.last_publish = Instant::now();
-        self.publish_position();
+        if should_publish_position(loaded.position.last_publish.elapsed(), changed) {
+            loaded.position.last_publish = Instant::now();
+            self.publish_position();
+        }
         // Previous restarts the track once it has played a while; that is state, not position.
         let Transport::Loaded(loaded) = &self.transport else {
             return;

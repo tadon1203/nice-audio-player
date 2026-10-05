@@ -9,7 +9,7 @@ use super::queue::{PlaybackQueue, PlaybackRepeatMode};
 use super::resolver::testing::{resolver_of, track as library_track, FakeTracks};
 use super::resolver::{NoTracks, TrackResolver};
 use super::service::{PlaybackCommand, PlaybackService, PlaybackServiceError, Reply};
-use super::session::should_publish_position;
+use super::session::{should_publish_position, POSITION_UPDATE_INTERVAL};
 use super::snapshot::{
     ActiveSession, PlaybackChannelConversion, PlaybackFailureCode, PlaybackPosition,
     PlaybackProcessingInfo, PlaybackQueueSnapshot, PlaybackSnapshot, SnapshotBase,
@@ -306,19 +306,40 @@ fn a_start_plays_as_soon_as_the_prebuffer_is_ready() {
 }
 
 #[test]
-fn the_worker_ticks_only_while_a_track_is_playing() {
+fn the_worker_has_a_deadline_only_while_a_track_is_playing() {
     let mut harness = Harness::new();
-    assert!(!harness.worker.wants_ticks(), "idle");
+    assert!(harness.worker.next_deadline().is_none(), "idle");
 
     let tracks = vec![harness.track("a", 1)];
     harness.start(tracks, 0).unwrap();
-    assert!(harness.worker.wants_ticks(), "playing");
+    assert!(harness.worker.next_deadline().is_some(), "playing");
 
     harness.pause().unwrap();
-    assert!(!harness.worker.wants_ticks(), "paused");
+    assert!(harness.worker.next_deadline().is_none(), "paused");
 
     harness.start(missing(1), 0).unwrap_err();
-    assert!(!harness.worker.wants_ticks(), "failed");
+    assert!(harness.worker.next_deadline().is_none(), "failed");
+}
+
+#[test]
+fn a_playing_worker_wakes_only_a_few_times_per_second() {
+    let mut harness = Harness::new();
+    let tracks = vec![harness.track("a", 60)];
+    harness.start(tracks, 0).unwrap();
+    harness.tick();
+
+    let end = Instant::now() + Duration::from_secs(2);
+    let mut wakes = 0;
+    while let Some(deadline) = harness.worker.next_deadline() {
+        if deadline >= end {
+            break;
+        }
+        std::thread::sleep(deadline.saturating_duration_since(Instant::now()));
+        harness.tick();
+        wakes += 1;
+    }
+
+    assert!(wakes <= 4, "woke {wakes} times in 2 s");
 }
 
 #[test]
@@ -606,7 +627,7 @@ fn a_tick_publishes_the_position_the_speakers_reached_without_a_new_snapshot() {
     harness.output.set_played_frames(44_100);
     let events = harness.events().len();
 
-    std::thread::sleep(Duration::from_millis(260));
+    std::thread::sleep(POSITION_UPDATE_INTERVAL + Duration::from_millis(10));
     harness.tick();
 
     assert_eq!(harness.position().unwrap().position_ms, 1_000);
@@ -658,7 +679,7 @@ fn previous_becomes_available_once_the_track_has_played_a_while() {
     assert!(!started.base().can_go_previous);
     harness.output.set_played_frames(SAMPLE_RATE as u64 * 5);
 
-    std::thread::sleep(Duration::from_millis(260));
+    std::thread::sleep(POSITION_UPDATE_INTERVAL + Duration::from_millis(10));
     harness.tick();
 
     assert!(harness.snapshot().base().can_go_previous);
@@ -1051,7 +1072,7 @@ fn the_position_after_a_seek_counts_from_the_target_on_the_same_stream() {
 
     // The speakers got 0.5 s into the new queue.
     harness.output.set_played_frames(u64::from(SAMPLE_RATE) / 2);
-    std::thread::sleep(Duration::from_millis(260));
+    std::thread::sleep(POSITION_UPDATE_INTERVAL + Duration::from_millis(10));
     harness.tick();
 
     let position = harness.position().unwrap().position_ms;
@@ -1565,10 +1586,13 @@ fn previous_restarts_after_three_seconds_of_a_track_with_a_duration() {
 
 #[test]
 fn position_publication_requires_interval_and_a_changed_position() {
-    assert!(!should_publish_position(Duration::from_millis(249), true));
-    assert!(!should_publish_position(Duration::from_millis(250), false));
-    assert!(should_publish_position(Duration::from_millis(250), true));
-    assert!(should_publish_position(Duration::from_millis(500), true));
+    assert!(!should_publish_position(
+        POSITION_UPDATE_INTERVAL - Duration::from_millis(1),
+        true
+    ));
+    assert!(!should_publish_position(POSITION_UPDATE_INTERVAL, false));
+    assert!(should_publish_position(POSITION_UPDATE_INTERVAL, true));
+    assert!(should_publish_position(POSITION_UPDATE_INTERVAL * 2, true));
 }
 
 // ---- the wire format ----
@@ -2081,7 +2105,7 @@ fn a_long_track_is_not_prefetched_until_its_last_ten_seconds() {
     harness
         .output
         .set_played_frames(21 * u64::from(SAMPLE_RATE));
-    std::thread::sleep(Duration::from_millis(260));
+    std::thread::sleep(POSITION_UPDATE_INTERVAL + Duration::from_millis(10));
     harness.prefetch_next();
 }
 
