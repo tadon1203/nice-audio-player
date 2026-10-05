@@ -87,7 +87,7 @@ type Boundary = {
 };
 
 /**
- * The one clock for the playback position (ADR 0014). Nothing reads it frame by frame: a consumer
+ * The one clock for the playback position (ADR 0004). Nothing reads it frame by frame: a consumer
  * either `drive`s an element with keyframes over the track, which the compositor advances, or
  * asks to be woken at a boundary with `onBoundary`. Jumps are announced from facts the backend
  * reported (see `reduceClock`), once, to everyone.

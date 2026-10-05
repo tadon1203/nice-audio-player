@@ -28,13 +28,18 @@ Scan `docs/adr/` for the highest existing number and increment by one.
 
 ## When to offer an ADR
 
-All three of these must be true:
+Ask one question:
 
-1. **Hard to reverse**: the cost of changing your mind later is meaningful
-2. **Surprising without context**: a future reader will look at the code and wonder "why on earth did they do it this way?"
-3. **The result of a real trade-off**: there were genuine alternatives and you picked one for specific reasons
+> If this ADR did not exist, would a future reader (a person or an agent) overturn the decision, believing it an improvement?
 
-If a decision is easy to reverse, skip it: you'll just reverse it. If it's not surprising, nobody will wonder why. If there was no real alternative, there's nothing to record beyond "we did the obvious thing."
+If the answer is no, do not write the ADR. Nobody wants to undo the decision, or the code and the other docs already explain it.
+
+A decision that passes has a real alternative that someone will propose again, and the reason it lost is not visible in the code.
+
+An ADR is a list of the decisions that are in force now:
+
+- When a decision replaces an ADR, rewrite that ADR. Do not add a new file that supersedes it. History stays in git.
+- Do not use an ADR for a plain technology choice, a folder layout, a rule that belongs in `CONTRIBUTING.md`, or an algorithm. Those go in their own docs or in the code.
 
 ### What qualifies
 

@@ -7,7 +7,7 @@ const MAX_PENDING = 64;
 
 /**
  * The Meter frames from the backend, for as long as `active()` is true: it subscribes when it
- * becomes true and unsubscribes when it turns false or the owner is destroyed (ADR 0012). Call it
+ * becomes true and unsubscribes when it turns false or the owner is destroyed. Call it
  * while a component initialises. Frames are not state: `drain` hands over those that arrived since
  * it was last called, and none is kept after that. `onFrame` runs for each frame that arrives (the
  * backend sends none while the sound is silent and unchanged).

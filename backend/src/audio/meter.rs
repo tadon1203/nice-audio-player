@@ -1,4 +1,5 @@
-//! Meter frames: the Spectrum and Level meter measured from the audio leaving the app (ADR 0012).
+//! Meter frames: the Spectrum and Level meter measured from the audio leaving the app. A frame
+//! measures a moment, not state: a missed frame is skipped, never kept or replayed.
 //!
 //! The output callback copies what it wrote into a lock-free ring through a [`MeterTap`] and never
 //! waits. While a subscriber exists, an analysis thread reads the ring and feeds an [`Analyzer`],

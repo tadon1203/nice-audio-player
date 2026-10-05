@@ -17,4 +17,4 @@ Research date: 2026-10-03. Sources: the Symphonia 0.6.0 source as vendored in `~
 
 - Leaves `gapless` on (the default) and relies on MP3 trimming.
 - Does not trim M4A itself. A follow-up could read `iTunSMPB` (lofty already parses it as a freeform tag) or the `elst` entry and drop the leading and trailing frames in `StreamingDecoder::decode_next`; it must then also adjust seek targets. Not done: it touches seeking, and the ticket allows best effort where a format has no trim support.
-- The output side is gapless on its own: the stream keeps playing across tracks of the same format and the callback moves to the next track's queue inside one buffer (ADR 0010).
+- The output side is gapless on its own: the stream keeps playing across tracks of the same format and the callback moves to the next track's queue inside one buffer (ADR 0003).

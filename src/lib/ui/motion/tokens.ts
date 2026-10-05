@@ -1,7 +1,7 @@
 import { settlingLength } from "./spring-curve";
 
 /**
- * Motion tokens (DESIGN.md, principle 7, ADR 0007). Every movement follows the one spring curve
+ * Motion tokens (DESIGN.md, principle 7, ADR 0002). Every movement follows the one spring curve
  * in `spring-curve.ts`; a token is only how long it feels (Apple's perceptual duration), and the
  * length an animation actually runs is derived from it. Never animate a blur radius: animate
  * `transform`, `opacity`, `clip-path`.

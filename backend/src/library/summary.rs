@@ -1,6 +1,7 @@
 //! What the catalog lists albums and Album Artists from: one row each in `albums` and
 //! `album_artists`, kept in step with the tracks inside the transaction that changes them, so a
-//! page of either is a plain index range instead of an aggregate over every track.
+//! page of either is a plain index range instead of an aggregate over every track. Aggregating
+//! per page is simpler, but its cost grows with the whole Library on every page.
 //!
 //! It also settles **Compilations**: tracks that share a directory and an album title but not an
 //! artist, and carry no Album Artist tag, are one album filed under Various Artists.

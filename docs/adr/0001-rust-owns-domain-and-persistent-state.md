@@ -1,4 +1,4 @@
-# 0003: Rust owns domain and persistent state
+# 0001: Rust owns domain and persistent state
 
 Rust owns domain behavior, persistence, filesystem work, audio playback, and the privileged desktop boundary. The renderer only composes views and caches or mirrors native state. It never duplicates library data or holds a second source of truth.
 

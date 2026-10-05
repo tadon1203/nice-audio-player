@@ -1,5 +1,5 @@
 /**
- * A critically damped spring that can be retargeted while it moves (ADR 0007), as a closed
+ * A critically damped spring that can be retargeted while it moves (ADR 0002), as a closed
  * form: it never overshoots, keeps its velocity when the target changes, and is exact at any
  * frame rate because it is a function of time, not a per-frame integration.
  *

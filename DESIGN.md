@@ -17,6 +17,7 @@ A tool for a personal music library, not a storefront. Dark, precise, and quiet.
 7. **Motion explains.** Motion shows where something came from, where it went, or that its data changed.
    - Direction encodes hierarchy. Deeper goes up, and back comes down. Next leaves left, and previous leaves right.
    - Direct manipulation follows the input one to one.
+   - A shared element (the Sleeve, a tile opening into its page) moves by an interruptible crossfade, not by the View Transitions API, which ignores input while it runs.
    - Every movement follows one curve: a spring that never overshoots. It has one of three durations (feedback, move, large).
    - A movement that input drives, or that retargets while moving (opening Now Playing, lyrics scroll), keeps its velocity. It never jumps.
    - Reduced motion replaces every movement with a brief crossfade. No information is lost.

@@ -4,7 +4,8 @@ import { springLinear } from "./spring-curve";
 import { motionFor } from "./svelte-motion";
 
 /*
- * Shared elements (ADR 0004): the same Sleeve on two screens, and it moves from one to the other.
+ * Shared elements: the same Sleeve on two screens, and it moves from one to the other. Not the
+ * View Transitions API: it ignores input during the transition and cannot be interrupted.
  * Both ends mark their element with `sharedElement(key)`. The one that goes away remembers where
  * it was; the one that appears flies in from there. The flight is a clone drawn over the page,
  * placed at the destination and moved with `transform`, so it is interruptible (going back mid-

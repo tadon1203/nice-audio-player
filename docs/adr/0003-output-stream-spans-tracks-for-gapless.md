@@ -1,8 +1,10 @@
-# 0010: The output stream spans tracks for gapless playback
+# 0003: The output stream spans tracks for gapless playback
 
-Supersedes the "one session = one track" part of [0008](./0008-one-output-stream-per-session.md). The lock-free handoff stays. The behavior (when the next track opens, what is trimmed) is in [requirements.md](../requirements.md).
+The behavior (when the next track opens, what is trimmed) is in [requirements.md](../requirements.md).
 
-The output stream opens once. It stays open across track changes while the audio format (sample rate, channels) stays the same. The worker builds the next track's Pipeline ahead of time. It hands the sample queue to the running callback with the same single-slot handoff that a seek uses. Each track is still its own Playback with a new playback id, so position events, waveforms and revisions keep their meaning.
+A session opens its output stream once, not once per track or per seek. A second stream per seek was slow, and it could fail on devices that allow only one stream. A seek builds a new Pipeline (decoder, sample queue, decode thread). The worker hands its queue to the running cpal callback through a lock-free, single-slot handoff (the `triple_buffer` crate). The newest handoff wins. The callback drops nothing on the audio thread. Position reports and completion events carry the Pipeline id, and the app ignores reports from a replaced Pipeline.
+
+The stream stays open across track changes while the audio format (sample rate, channels) stays the same. The worker builds the next track's Pipeline ahead of time. It hands the sample queue to the running callback with the same single-slot handoff that a seek uses. Each track is still its own Playback with a new playback id, so position events, waveforms and revisions keep their meaning.
 
 - If the next track's format differs, the app reopens the stream and accepts a short gap. Resampling into the running stream would be gapless. But it would make the Path a resampled one and rule out bit-perfect playback later.
 - The prefetched Pipeline is a disposable cache. Any change to what plays next discards it.

@@ -1,4 +1,4 @@
-# 0014: Time is drawn by the compositor, not by a frame loop
+# 0004: Time is drawn by the compositor, not by a frame loop
 
 Nothing that follows the playing position runs on the main thread every frame. Code reads the Playback clock in two ways only:
 

@@ -23,11 +23,11 @@ The language of Nice Audio Player. Use these terms in code, docs, and tickets. D
 - **Gapless**: consecutive tracks of the same audio format play with no silence between them.
 - **Pipeline**: a decode thread and the sample queue it fills for the output stream.
 - **Position event**: the playing position (playback id, position, seek revision), sent by the backend while a track plays.
-- **Playback clock**: the single source of the playing position. See [ADR 0014](./docs/adr/0014-time-is-drawn-by-the-compositor-not-a-frame-loop.md).
-- **Waveform**: the RMS and peak levels of the loaded Playback, keyed by its playback id. See [ADR 0009](./docs/adr/0009-waveform-is-pushed-like-other-state.md).
+- **Playback clock**: the single source of the playing position. See [ADR 0004](./docs/adr/0004-time-is-drawn-by-the-compositor-not-a-frame-loop.md).
+- **Waveform**: the RMS and peak levels of the loaded Playback, keyed by its playback id.
 - **Spectrum**: the level of the audio being played, in 30 one-third-octave bands, with left and right summed.
 - **Level meter**: the left and right channel levels of the audio being played. Each channel has a peak (with a held peak) and an RMS.
-- **Meter frame**: one measurement of the Spectrum and the Level meter, taken at one moment of the output. See [ADR 0012](./docs/adr/0012-meter-frames-are-a-live-stream.md).
+- **Meter frame**: one measurement of the Spectrum and the Level meter, taken at one moment of the output.
 - **Bar**: one drawn level of the Spectrum (a band) or the Level meter (a channel's RMS).
 - **Cap**: the thin line above a Bar that marks its held peak.
 - **Hold**: how long a Cap stays in place before it falls, and how long "Clip" stays shown.

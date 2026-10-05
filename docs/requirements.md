@@ -117,6 +117,7 @@ A third view of Now Playing, beside Lyrics and Queue. On a wide window it replac
 - A clip shows as the word "Clip" for 2 s. A click clears it. Color is never the only signal.
 - The meters run only while visible. When playback is paused or stopped, the bars fall to the floor. With Calm motion, the meters stop and say so.
 - On a narrow window, the Spectrum takes the full width. The left and right meters become two horizontal bars below it.
+- Meter frames are a live stream, not state. The app skips a missed frame and never keeps or replays one.
 - A mono device shows the same level on both channels. A device with more than two channels shows its first two.
 
 ## Metadata

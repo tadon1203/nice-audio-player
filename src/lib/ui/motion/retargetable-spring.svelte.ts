@@ -10,7 +10,7 @@ import {
 import { motionTokens } from "./tokens";
 
 /**
- * A number that follows a target on the one spring (ADR 0007) and keeps its velocity when the
+ * A number that follows a target on the one spring (ADR 0002) and keeps its velocity when the
  * target changes mid-flight. A reactive wrapper over `analytic-spring.ts`: it samples the closed
  * form on animation frames, so the result does not depend on the frame rate, and it stops its
  * own loop once settled. Under reduced motion, or with `instant`, it jumps.

@@ -1,5 +1,5 @@
 /**
- * The one curve every movement follows (ADR 0007): a critically damped spring run from rest, so
+ * The one curve every movement follows (ADR 0002): a critically damped spring run from rest, so
  * it never overshoots. From rest it is `x(u) = 1 - (1 + u)·e^(-u)` with `u = ωt` and
  * `ω = 2π / perceptual duration`. It is cut off where the residual falls to `RESIDUAL` and
  * renormalized so it ends exactly at 1.

@@ -26,7 +26,7 @@
 @theme {
   --font-sans: "Satoshi", "Noto Sans JP", "Segoe UI", system-ui, sans-serif;
   /*
-   * CSS owns no timing (ADR 0007). `applyCssMotion` (`ui/motion/css-motion.ts`) sets
+   * CSS owns no timing (ADR 0002). `applyCssMotion` (`ui/motion/css-motion.ts`) sets
    * `--default-transition-*`, `--motion-easing` and `--motion-<token>-duration` at runtime.
    */
   /* Only `shadow-none` and `shadow-floating` exist; persistent UI has no shadow. */

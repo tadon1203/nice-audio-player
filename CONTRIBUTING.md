@@ -20,7 +20,13 @@
 - Build a track's file path only through `TrackLocation`. It checks that the path stays inside its root.
 - The backend never returns display strings. An unnamed album or artist is `""` and sorts last. The renderer labels it.
 - Use semantic tokens for UI surfaces. Do not use raw palette values.
-- Shared `lib/ui` controls provide common defaults only. Keep domain-specific names, layout and playback state in their callers, with a local `class` or `style`. Do not add domain variants to generic controls. Check this in review. Do not add ESLint rules or checker scripts. See [ADR 0013](./docs/adr/0013-shared-ui-owns-presentation-policy.md).
+- Renderer code under `src/lib` is split by domain: `native`, `playback`, `library`, `lyrics`, `meters`, `settings`, `shell`, `components`, `ui`, `utils`.
+  - Dependencies point one way: `routes → components → shell → {playback, library, lyrics, settings} → {ui, utils, native}`.
+  - Domains never import each other. Code that joins two domains lives in `components/`.
+  - Only `native` may import `@tauri-apps/*`. `oxlint` enforces this (`meters` has no override yet).
+- Shared `lib/ui` controls provide common defaults only. Keep domain-specific names, layout and playback state in their callers, with a local `class` or `style`. Do not add domain variants to generic controls.
+  - Why: a ban on all local styling made generic controls collect domain-specific variants.
+  - Check this in review. Do not add ESLint rules or checker scripts. Playwright checks the rendered result.
 - Import icons one by one (`@lucide/svelte/icons/x`). Never import from the `@lucide/svelte` barrel. In `vite dev`, the barrel transforms every icon module and slows page loads and E2E runs.
 
 ## Documentation

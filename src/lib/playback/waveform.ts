@@ -12,7 +12,9 @@ const waveformKeys = {
  * and then the exact one), and `applyWaveformEvent` writes it here; the query itself only asks
  * once, for a track whose waveform was ready before anyone was watching. Nothing is kept once the
  * track is no longer loaded: a file can be replaced at the same path, and the backend decides
- * whether its remembered waveform still fits.
+ * whether its remembered waveform still fits. The backend pushes it instead of only signalling
+ * "ask again": a pull that started before the analysis finished could answer "not yet" after the
+ * signal, and `staleTime: Infinity` would keep that answer.
  */
 export function waveformQueryOptions(playbackId: string | null) {
   return queryOptions({

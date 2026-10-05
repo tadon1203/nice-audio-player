@@ -30,10 +30,24 @@ Break the work into **tracer bullet** tickets.
 
 - Each slice cuts a narrow but COMPLETE path through every layer (schema, API, UI, tests): vertical, NOT a horizontal slice of one layer
 - A completed slice is demoable or verifiable on its own
-- Each slice is sized to fit in a single fresh context window
+- Each slice fits in one 200k-token context (see the size rule below)
 - Any prefactoring should be done first
 
 </vertical-slice-rules>
+
+<size-rule>
+
+**Size rule.** The agent reads, builds, checks and reviews one ticket in one 200k-token context. It does not `/clear` or compact in the middle. Decide this by estimate, not by feel:
+
+**total = 40k + read + write + checks**
+
+- 40k is the start of every session (system prompt, tools, skills, CLAUDE.md).
+- read: about 12 tokens per line, for the ticket, the spec, the docs, and each file the agent reads in full. Count each file once.
+- write: about 12 tokens per line added or changed, times 2 (the edit, and the thinking behind it).
+- checks: 5k for each check command that the ticket runs (see [CONTRIBUTING.md](../../../CONTRIBUTING.md)). Count 3 runs of each. Count one run of `pnpm test:e2e*` or a Rust build as 15k.
+
+If the total is over 200k, split the ticket. Never merge tickets to reduce their number. Split along a seam where each part is still demoable or verifiable. If no such seam exists, use a prefactoring ticket first. This rule also applies to the batches of a wide refactor.
+</size-rule>
 
 Give each ticket its **blocking edges**: the other tickets that must complete before it can start. A ticket with no blockers can start immediately.
 
@@ -46,12 +60,14 @@ Present the proposed breakdown as a numbered list. For each ticket, show:
 - **Title**: short descriptive name
 - **Blocked by**: which other tickets (if any) must complete first
 - **What it delivers**: the end-to-end behaviour this ticket makes work
+- **Size estimate**: the total from the size rule, with the files behind it
 
 Ask the user:
 
-- Does the granularity feel right? (too coarse / too fine)
 - Are the blocking edges correct: does each ticket only depend on tickets that genuinely gate it?
-- Should any tickets be merged or split further?
+- Is any size estimate wrong, for example a file that is much larger than it looks?
+
+Do not ask whether the granularity "feels right". The size rule decides it.
 
 Iterate until the user approves the breakdown.
 
@@ -59,27 +75,12 @@ Iterate until the user approves the breakdown.
 
 Publish the approved tickets. **How** depends on the tracker configured in `docs/agents/issue-tracker.md`; the tickets are the same either way, only the shape of the blocking edges changes:
 
-- **Local files** → write one file per ticket under `.scratch/<feature-slug>/issues/<NN>-<slug>.md`, numbered from `01` in dependency order (blockers first). Each file's "Blocked by" lists the numbers/titles it depends on. Use the per-ticket file template below: one ticket per file, never a single combined file.
+- **Local files** → write one file per ticket under `.scratch/<feature-slug>/issues/<NN>-<slug>.md`, numbered from `01` in dependency order (blockers first). Each file's "Blocked by" lists the numbers/titles it depends on. Use the ticket template in `docs/agents/issue-tracker.md`, exactly: one ticket per file, never a single combined file.
 - **A real issue tracker (GitHub, Linear, …)** → publish one issue per ticket in dependency order (blockers first) so each ticket's blocking edges can reference real identifiers. Use the platform's native blocking / sub-issue relationship where it has one; otherwise set each ticket's "Blocked by" to the blocking issues. Apply the `ready-for-agent` triage label unless instructed otherwise; the tickets are agent-grabbable by construction.
 
 Work the **frontier**: any ticket whose blockers are all done. For a purely linear chain that means top to bottom.
 
 Do NOT close or modify any parent issue.
-
-<local-ticket-template>
-
-# <NN>: <Ticket title>
-
-**What to build:** the end-to-end behaviour this ticket makes work, from the user's perspective, not a layer-by-layer implementation list.
-
-**Blocked by:** the numbers/titles of the tickets that gate this one, or "None (can start immediately)".
-
-**Status:** ready-for-agent
-
-- [ ] Acceptance criterion 1
-- [ ] Acceptance criterion 2
-
-</local-ticket-template>
 
 <issue-template>
 

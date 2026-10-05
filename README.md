@@ -18,7 +18,7 @@ The checks to run are in [CONTRIBUTING.md](./CONTRIBUTING.md#checks).
 
 ## Stack
 
-- Renderer: SvelteKit (Svelte 5, `adapter-static`, SPA), built by Vite. Code is in `src/routes` and `src/lib`. See [ADR 0002](./docs/adr/0002-domain-folders-instead-of-fsd.md) for the folders.
+- Renderer: SvelteKit (Svelte 5, `adapter-static`, SPA), built by Vite. Code is in `src/routes` and `src/lib`. The dependency rules between folders are in [CONTRIBUTING.md](./CONTRIBUTING.md).
 - Host: Tauri 2 runs the Windows WebView and packages the app.
 - Backend: Rust owns playback, library, persistence, and native work.
 
