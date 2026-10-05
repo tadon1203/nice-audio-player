@@ -11,4 +11,4 @@ The other roles in the skills (`needs-triage`, `needs-info`, `ready-for-human`, 
 
 When a skill mentions a role (e.g. "apply the AFK-ready triage label"), use the corresponding string from this table.
 
-When a ticket is finished, set `Status: done` and add a `**Commit:** <hash>` line. Never move finished tickets into another folder. `pnpm tickets` lists every ticket with its status.
+Finished tickets follow the conventions in [issue-tracker.md](./issue-tracker.md).

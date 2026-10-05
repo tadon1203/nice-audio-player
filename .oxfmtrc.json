@@ -8,17 +8,13 @@
   "trailingComma": "all",
   "ignorePatterns": [
     "**/skills/**",
-    "dist/**",
-    "out/**",
     "build/**",
     "backend/target/**",
     "src-tauri/target/**",
     "test-results/**",
     "playwright-report/**",
-    "project_snapshot.zip",
     "src/lib/native/bindings.ts",
     ".svelte-kit/**",
-    "release/**",
     "src/lib/ui/shadcn/**"
   ]
 }

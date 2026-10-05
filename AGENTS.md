@@ -1,4 +1,4 @@
-# CLAUDE.md
+# AGENTS.md
 
 Personal project. Keep things simple and just get it done.
 

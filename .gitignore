@@ -1,24 +1,11 @@
 # Dependencies and generated data
 node_modules/
 /.pnpm-store/
-/.angular/
 /target/
 /src-tauri/gen/schemas/
 build/
-dist/
-out/
 test-results/
 playwright-report/
-release/
-project_snapshot.zip
-
-# Local application scaffold and tool output
-/logs/
-/nice-audio-player-scaffold
-/.output/
-/.vercel/
-/.netlify/
-/.wrangler/
 
 # Fontshare assets installed locally.
 static/fonts/fontshare/*.woff2

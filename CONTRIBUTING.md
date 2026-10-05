@@ -8,7 +8,7 @@
 - Prefer common conventions and standard implementations. Do not reimplement what the standard library or an existing library provides, without a clear practical reason.
 - Share UI code only when it shares naturally.
 - Prefer deep modules: a small interface over a lot of behavior (`/codebase-design`).
-- Documentation is the single source of truth, branching like a tree from README.md and CLAUDE.md. Do not over-detail, and do not duplicate content across documents.
+- Documentation is the single source of truth, branching like a tree from README.md and AGENTS.md. Do not over-detail, and do not duplicate content across documents.
 
 ## Rules that matter
 
