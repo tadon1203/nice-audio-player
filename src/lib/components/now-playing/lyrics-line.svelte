@@ -2,7 +2,7 @@
   /** The lyric type, sized by the width of the lyrics column (`cqi`), so the text fills it. */
   export const LYRICS_TEXT = "text-[clamp(1.5rem,5.5cqi,3rem)] leading-snug text-pretty";
 
-  /** The Gutter shows the time on hover, on focus and while free-scrolling. */
+  /** The Row index shows the time on hover, on focus and while free-scrolling. */
   const SHOW_TIME =
     "opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 in-data-[mode=free]:opacity-100";
   const HIDE_ON_TIME =
@@ -60,7 +60,7 @@
 >
   <Button
     type="button"
-    data-slot="lyrics-gutter"
+    data-slot="lyrics-row-index"
     aria-label={`Seek to ${startLabel}`}
     onclick={() => void playback.seek(line.startMs)}
     onpointerenter={() => lyricsWaveformLink.setHoveredLineSpan(lineSpan(lines, index, durationMs))}

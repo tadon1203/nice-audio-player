@@ -1,6 +1,6 @@
 import { trackEnergy } from "$lib/playback/track-energy";
 
-/** Slow on purpose: the Light follows the passage (a chorus brightening it), not each beat. */
+/** Slow on purpose: the Artwork glow follows the passage (a chorus brightening it), not each beat. */
 export const ATTACK_MS = 700;
 export const RELEASE_MS = 1_800;
 
@@ -14,7 +14,7 @@ export function smoothLevel(current: number, target: number, dtMs: number): numb
 export type LoudnessKeyframe = { atMs: number; level: number };
 
 /**
- * The Light's loudness over the whole track, smoothed once, forward in time, at the waveform's
+ * The Artwork glow's loudness over the whole track, smoothed once, forward in time, at the waveform's
  * own resolution (one keyframe per bucket, each at the bucket's start). Empty without a waveform
  * or a duration. Linear interpolation between keyframes is what the compositor draws.
  */

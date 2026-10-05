@@ -84,24 +84,24 @@ describe("the bars", () => {
 describe("the caps", () => {
   it("follow the bar upward", () => {
     const state = stepDisplay(initialDisplay(), input({ bands: bandsAt(-20) }), 1 / 60);
-    expect(state.bands[0]!.cap).toBe(-20);
+    expect(state.bands[0]!.peakCap).toBe(-20);
   });
 
   it("hold for 1.5 s, then fall 10 dB/s", () => {
     let state = stepDisplay(initialDisplay(), input({ bands: bandsAt(-20) }), 1 / 60);
     state = run(state, input(), 1.4);
-    expect(state.bands[0]!.cap).toBe(-20);
+    expect(state.bands[0]!.peakCap).toBe(-20);
     state = run(state, input(), 0.1 + 1);
-    expect(state.bands[0]!.cap).toBeCloseTo(-30, 6);
+    expect(state.bands[0]!.peakCap).toBeCloseTo(-30, 6);
   });
 
   it("never fall below their bar", () => {
     let state = stepDisplay(initialDisplay(), input({ bands: bandsAt(-20) }), 1 / 60);
-    // A steady signal for longer than the hold keeps the cap on the bar.
+    // A steady signal for longer than the hold keeps the Peak cap on the Level bar.
     state = run(state, input({ bands: bandsAt(-15) }), 5);
-    expect(state.bands[0]!.cap).toBe(-15);
+    expect(state.bands[0]!.peakCap).toBe(-15);
     state = run(state, input({ bands: bandsAt(-89) }), 20);
-    expect(state.bands[0]!.cap).toBeGreaterThanOrEqual(state.bands[0]!.level);
+    expect(state.bands[0]!.peakCap).toBeGreaterThanOrEqual(state.bands[0]!.level);
   });
 
   it("restart their hold when the bar touches them again", () => {
@@ -109,14 +109,14 @@ describe("the caps", () => {
     state = run(state, input(), 1);
     state = stepDisplay(state, input({ bands: bandsAt(-20) }), 1 / 60);
     state = run(state, input(), 1.4);
-    expect(state.bands[0]!.cap).toBe(-20);
+    expect(state.bands[0]!.peakCap).toBe(-20);
   });
 
   it("are held on the Level meter peak too", () => {
     let state = stepDisplay(initialDisplay(), input({ peak: [-6, -9] }), 1 / 60);
     state = run(state, input(), 1);
-    expect(state.peak[0].cap).toBe(-6);
-    expect(state.peak[1].cap).toBe(-9);
+    expect(state.peak[0].peakCap).toBe(-6);
+    expect(state.peak[1].peakCap).toBe(-9);
   });
 });
 
@@ -125,7 +125,12 @@ describe("time", () => {
     const signal = (t: number) => (t < 0.5 ? input({ bands: bandsAt(-10), peak: [-6, -6] }) : null);
     const [first, ...others] = [60, 120, 144].map((hz) => {
       const state = run(initialDisplay(), signal, 2, hz);
-      return [state.bands[0]!.level, state.bands[0]!.cap, state.peak[0].level, state.peak[0].cap];
+      return [
+        state.bands[0]!.level,
+        state.bands[0]!.peakCap,
+        state.peak[0].level,
+        state.peak[0].peakCap,
+      ];
     });
     for (const other of others) {
       other.forEach((value, i) => expect(value).toBeCloseTo(first![i]!, 6));

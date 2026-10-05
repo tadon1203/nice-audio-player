@@ -2,7 +2,7 @@
 //! track is written (and when a migration backfills old rows), and the catalog reads them back
 //! from their columns, so every view agrees on what an album, an Album Artist or a year is.
 //!
-//! Unknown is the empty string: the backend never returns display strings (CONTRIBUTING).
+//! Unknown is the empty string: the backend never returns display strings (ARCHITECTURE).
 
 use super::text;
 use std::path::Path;
@@ -53,14 +53,14 @@ impl TrackKeys {
         )
     }
 
-    /// All the keys. `edition` is the album's directory (see [`edition_of`]), kept only when the
+    /// All the keys. `album_edition` is the album's directory (see [`album_edition_of`]), kept only when the
     /// track has an album.
     pub fn build(
         [title, artist, album, album_artist]: [Option<&str>; 4],
         date: Option<&str>,
         file_name: &str,
         sort: SortTags<'_>,
-        edition: &str,
+        album_edition: &str,
     ) -> Self {
         let title_key = title_key(title, file_name);
         let artist_key = text_key(artist);
@@ -81,7 +81,7 @@ impl TrackKeys {
             album_dir: if album_key.is_empty() {
                 String::new()
             } else {
-                edition.to_owned()
+                album_edition.to_owned()
             },
             title: title_key,
             artist: artist_key,
@@ -106,7 +106,7 @@ pub(crate) fn track_search_key(
 /// The printing of an album a file belongs to: its folder, or the folder above it when it is a
 /// disc folder ("CD1", "Disc 2"), so one album on several discs stays one album while the same
 /// title and artist in two folders (an original and a remaster) are two.
-pub(crate) fn edition_of(root_id: i64, relative_path: &str) -> String {
+pub(crate) fn album_edition_of(root_id: i64, relative_path: &str) -> String {
     let directory = relative_path
         .rsplit_once('/')
         .map_or("", |(directory, _)| directory);
@@ -211,21 +211,27 @@ mod tests {
     }
 
     #[test]
-    fn an_edition_is_a_folder_and_a_disc_folder_belongs_to_its_parent() {
-        assert_eq!(edition_of(1, "Artist/Album/01.flac"), "1/Artist/Album");
-        assert_eq!(edition_of(1, "Artist/Album/CD1/01.flac"), "1/Artist/Album");
+    fn an_album_edition_is_a_folder_and_a_disc_folder_belongs_to_its_parent() {
         assert_eq!(
-            edition_of(1, "Artist/Album/Disc 02/01.flac"),
+            album_edition_of(1, "Artist/Album/01.flac"),
             "1/Artist/Album"
         );
-        assert_eq!(edition_of(2, "01.flac"), "2/");
-        assert_eq!(edition_of(1, "CD1/01.flac"), "1/");
         assert_eq!(
-            edition_of(1, "Artist/Album (2011 Remaster)/01.flac"),
+            album_edition_of(1, "Artist/Album/CD1/01.flac"),
+            "1/Artist/Album"
+        );
+        assert_eq!(
+            album_edition_of(1, "Artist/Album/Disc 02/01.flac"),
+            "1/Artist/Album"
+        );
+        assert_eq!(album_edition_of(2, "01.flac"), "2/");
+        assert_eq!(album_edition_of(1, "CD1/01.flac"), "1/");
+        assert_eq!(
+            album_edition_of(1, "Artist/Album (2011 Remaster)/01.flac"),
             "1/Artist/Album (2011 Remaster)"
         );
         assert_eq!(
-            edition_of(1, "Artist/CD Collection/01.flac"),
+            album_edition_of(1, "Artist/CD Collection/01.flac"),
             "1/Artist/CD Collection"
         );
     }
@@ -249,7 +255,7 @@ mod tests {
             "the artist's order carries over"
         );
         assert_eq!(keys.album_sort, "");
-        assert_eq!(keys.album_dir, "", "no album, no edition");
+        assert_eq!(keys.album_dir, "", "no album, no album_edition");
         assert_eq!(keys.search, "ゆず\u{1f}the band\u{1f}\u{1f}the band");
     }
 

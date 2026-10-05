@@ -1,6 +1,6 @@
 <script lang="ts" module>
   /** How a new image arrives: faded in, or wiped in from the right (`wipe-next`) or left. */
-  export type LightEnter = "fade" | "wipe-next" | "wipe-previous";
+  export type GlowEnter = "fade" | "wipe-next" | "wipe-previous";
 </script>
 
 <script lang="ts">
@@ -10,7 +10,7 @@
   import { artworkUrl, type ArtworkRef } from "$lib/native";
   import { motionFor } from "$lib/ui/motion/svelte-motion";
   import { cn } from "$lib/utils/cn.js";
-  import { LIGHT, type LightStrength } from "./light-model";
+  import { GLOW, type GlowStrength } from "./glow-model";
 
   /**
    * The artwork as the app's light source: a static blurred image under a veil. Place it as the
@@ -20,7 +20,7 @@
    * stays put until covered. With a `breathe` attachment it breathes: only its opacity moves,
    * straight on the element (a scaled blurred image would be re-rasterised on every frame), as a
    * share of its strength, so it only ever dims. The breathing wrapper is promoted with `will-change: opacity`, so the
-   * blurred raster is cached and only its opacity is composited per frame; a still Light gets
+   * blurred raster is cached and only its opacity is composited per frame; a still Artwork glow gets
    * no such layer.
    */
   let {
@@ -31,10 +31,10 @@
     class: className,
   }: {
     artwork: ArtworkRef | null | undefined;
-    strength: LightStrength;
+    strength: GlowStrength;
     /** Wipes need motion: under reduced motion every `enter` fades. */
-    enter?: LightEnter;
-    /** Moves the breathing wrapper's opacity. Omit it for a still Light. */
+    enter?: GlowEnter;
+    /** Moves the breathing wrapper's opacity. Omit it for a still Artwork glow. */
     breathe?: Attachment<HTMLElement>;
     class?: string;
   } = $props();
@@ -66,9 +66,9 @@
 {#if url !== null}
   <div
     aria-hidden="true"
-    data-slot="artwork-light"
+    data-slot="artwork-glow"
     data-strength={strength}
-    class={cn("artwork-light pointer-events-none absolute inset-0 overflow-hidden", className)}
+    class={cn("artwork-glow pointer-events-none absolute inset-0 overflow-hidden", className)}
   >
     <div
       {@attach breathe}
@@ -82,11 +82,11 @@
           in:arrive
           out:leave
           class="absolute inset-0 size-full scale-125 object-cover"
-          style:opacity={LIGHT.strength[strength]}
-          style:filter="blur({LIGHT.blurPx}px) brightness({LIGHT.brightness})"
+          style:opacity={GLOW.strength[strength]}
+          style:filter="blur({GLOW.blurPx}px) brightness({GLOW.brightness})"
         />
       {/key}
     </div>
-    <div class="absolute inset-0 bg-background" style:opacity={LIGHT.veilOpacity}></div>
+    <div class="absolute inset-0 bg-background" style:opacity={GLOW.veilOpacity}></div>
   </div>
 {/if}

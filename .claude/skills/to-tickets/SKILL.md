@@ -44,7 +44,7 @@ Break the work into **tracer bullet** tickets.
 - 40k is the start of every session (system prompt, tools, skills, CLAUDE.md).
 - read: about 12 tokens per line, for the ticket, the spec, the docs, and each file the agent reads in full. Count each file once.
 - write: about 12 tokens per line added or changed, times 2 (the edit, and the thinking behind it).
-- checks: 5k for each check command that the ticket runs (see [CONTRIBUTING.md](../../../CONTRIBUTING.md)). Count 3 runs of each. Count one run of `pnpm test:e2e*` or a Rust build as 15k.
+- checks: 5k for each check command that the ticket runs (see [CLAUDE.md](../../../CLAUDE.md#commands)). Count 3 runs of each. Count one run of `pnpm test:e2e*` or a Rust build as 15k.
 
 If the total is over 200k, split the ticket. Never merge tickets to reduce their number. Split along a seam where each part is still demoable or verifiable. If no such seam exists, use a prefactoring ticket first. This rule also applies to the batches of a wide refactor.
 </size-rule>

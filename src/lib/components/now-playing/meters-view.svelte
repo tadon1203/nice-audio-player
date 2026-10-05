@@ -87,7 +87,8 @@
 
   function isAtRest(state: DisplayState): boolean {
     const floor = BALLISTICS.floorDb;
-    const resting = (bar: { level: number; cap: number }) => bar.level <= floor && bar.cap <= floor;
+    const resting = (bar: { level: number; peakCap: number }) =>
+      bar.level <= floor && bar.peakCap <= floor;
     return (
       state.bands.every(resting) &&
       resting(state.peak[0]) &&
@@ -107,7 +108,7 @@
   }
 
   function refreshReadouts() {
-    readouts = [formatHeldPeak(display.peak[0].cap), formatHeldPeak(display.peak[1].cap)];
+    readouts = [formatHeldPeak(display.peak[0].peakCap), formatHeldPeak(display.peak[1].peakCap)];
     clips = [display.clip[0], display.clip[1]];
   }
 
@@ -155,7 +156,7 @@
     refreshReadouts();
     const probe = surfaces.spectrum?.node ?? null;
     color = probe ? getComputedStyle(probe).color : color;
-    // The loop sleeps once every Bar and Cap is at the floor and wakes on the next frame.
+    // The loop sleeps once every Level bar and Peak cap is at the floor and wakes on the next frame.
     const loop = createDrawLoop(
       (elapsed) => {
         const input =

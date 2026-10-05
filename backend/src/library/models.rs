@@ -126,7 +126,7 @@ pub struct LibraryAlbumKey {
     pub album_artist: String,
     /// Which printing of the album: its folder. Two folders holding the same title and Album
     /// Artist are two albums. Opaque to the renderer, `""` for the album of tracks with no album.
-    pub edition: String,
+    pub album_edition: String,
 }
 
 /// One entry of a list's scroll index: the label its names are filed under, and how many there

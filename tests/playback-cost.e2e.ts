@@ -65,11 +65,11 @@ const lyrics = {
   },
 } as const;
 
-// Guards the cost of Now Playing while a track plays (full motion, Light breathing, waveform,
+// Guards the cost of Now Playing while a track plays (full motion, Artwork glow breathing, waveform,
 // lyrics). The seek bar writes progress to two elements instead of an inherited custom property,
 // which restyled every bar each frame: broken ~76% of the main thread in style recalculation,
 // healthy ~1%. Style time is CPU time, so it holds up under a loaded machine. The breathing
-// Light's own compositor layer (`will-change`) has no such seam; it was found with the same
+// Artwork glow's own compositor layer (`will-change`) has no such seam; it was found with the same
 // measurement as raster CPU and frame rate, which are too machine-dependent to assert.
 test.use({ reducedMotion: "no-preference" });
 

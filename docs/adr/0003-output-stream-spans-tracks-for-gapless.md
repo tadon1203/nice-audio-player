@@ -7,7 +7,7 @@ A session opens its output stream once, not once per track or per seek. A second
 The stream stays open across track changes while the audio format (sample rate, channels) stays the same. The worker builds the next track's Pipeline ahead of time. It hands the sample queue to the running callback with the same single-slot handoff that a seek uses. Each track is still its own Playback with a new playback id, so position events, waveforms and revisions keep their meaning.
 
 - If the next track's format differs, the app reopens the stream and accepts a short gap. Resampling into the running stream would be gapless. But it would make the Path a resampled one and rule out bit-perfect playback later.
-- The prefetched Pipeline is a disposable cache. Any change to what plays next discards it.
+- The prefetched decode pipeline is a disposable cache. Any change to what plays next discards it.
 - Prefetching needs sources that the positioned file reader reads. Loading the whole file into memory first would double memory use.
 - The handover happens in the output callback, not in the worker.
   - The next queue is chained to the playing one, through a second single-slot handoff beside the seek handoff. The chain is void once the stream plays anything else.

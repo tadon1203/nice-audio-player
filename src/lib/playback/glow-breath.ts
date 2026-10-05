@@ -2,11 +2,11 @@ import type { Attachment } from "svelte/attachments";
 import { springLinear } from "$lib/ui/motion/spring-curve";
 import type { DriveKeyframe, PlaybackClock } from "./clock";
 
-export type LightBreathOptions = {
+export type GlowBreathOptions = {
   clock: Pick<PlaybackClock, "drive" | "estimate" | "playing" | "onJump" | "onBoundary">;
   /** Opacity keyframes over the track, in track ms (precomputed from the loudness). */
   keyframes: readonly (DriveKeyframe & { opacity: number })[];
-  /** Where a paused Light rests. */
+  /** Where a paused Artwork glow rests. */
   restOpacity: number;
   /** Length of an ease between two values (a seek, a pause, a resume). */
   durationMs: number;
@@ -31,16 +31,16 @@ export function opacityAt(
 
 /**
  * Breathes an element's opacity along `keyframes`, which the clock's compositor animation
- * advances, so nothing runs per frame. The Light is not part of the seek glide: on a seek it
+ * advances, so nothing runs per frame. The Artwork glow is not part of the seek glide: on a seek it
  * eases from where it is to the curve's new value, on pause it eases to `restOpacity`, and on
  * resume back to the curve, each over `durationMs`, and only then does the clock drive it again.
  */
-export function lightBreath({
+export function glowBreath({
   clock,
   keyframes,
   restOpacity,
   durationMs,
-}: LightBreathOptions): Attachment<HTMLElement> {
+}: GlowBreathOptions): Attachment<HTMLElement> {
   return (node) => {
     let stopDrive: (() => void) | null = null;
     let ease: Animation | null = null;

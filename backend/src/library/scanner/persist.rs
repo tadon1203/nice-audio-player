@@ -6,7 +6,7 @@ use rusqlite::{params, Connection, OptionalExtension, Transaction, TransactionBe
 use super::discover::DiscoveredFile;
 use super::inspect::{ArtworkOutcome, InspectedFile};
 use crate::library::database::DatabaseError;
-use crate::library::keys::{edition_of, SortTags, TrackKeys};
+use crate::library::keys::{album_edition_of, SortTags, TrackKeys};
 use crate::library::status::{ArtworkStatus, Availability, InspectionStatus, TagStatus};
 use crate::library::summary::{self, Touched};
 use crate::media::inspection::Undecodable;
@@ -395,7 +395,7 @@ fn store_inspected(
             album: tags.album_sort.as_deref(),
             album_artist: tags.album_artist_sort.as_deref(),
         },
-        &edition_of(root_id, &file.relative),
+        &album_edition_of(root_id, &file.relative),
     );
     touched.stored_track(transaction, track_id)?;
     touched.album((

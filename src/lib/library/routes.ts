@@ -8,12 +8,12 @@ import { toNameSegment } from "./unknown-name";
 
 const segment = (name: string) => encodeURIComponent(toNameSegment(name));
 
-/** The edition (which printing of the album) travels as a query, since it is a folder path. */
+/** The albumEdition (which printing of the album) travels as a query, since it is a folder path. */
 export const albumHref = (key: LibraryAlbumKey) =>
   `/library/albums/${segment(key.albumArtist)}/${segment(key.title)}` +
-  (key.edition === "" ? "" : `?edition=${encodeURIComponent(key.edition)}`);
+  (key.albumEdition === "" ? "" : `?albumEdition=${encodeURIComponent(key.albumEdition)}`);
 
-/** The edition an album URL names; none is the album of tracks without one. */
-export const albumEditionOf = (search: URLSearchParams) => search.get("edition") ?? "";
+/** The albumEdition an album URL names; none is the album of tracks without one. */
+export const albumEditionOf = (search: URLSearchParams) => search.get("albumEdition") ?? "";
 
 export const albumArtistHref = (name: string) => `/library/album-artists/${segment(name)}`;

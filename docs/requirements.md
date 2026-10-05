@@ -22,7 +22,7 @@ MP3, FLAC, WAV, AAC, M4A. A file counts as supported only if it can actually be 
   - Consecutive tracks with the same sample rate and channel count play with no silence between them, on the same output stream.
   - The next track opens about 10 seconds before the end. A shorter track opens right after loading.
   - Each track is still its own playback, with its own waveform and position.
-  - A track of another format reopens the output stream and leaves a short gap, so the Path stays true. The end of a shuffled queue that repeats does the same, because its next pass is shuffled only then.
+  - A track of another format reopens the output stream and leaves a short gap, so the Signal path stays true. The end of a shuffled queue that repeats does the same, because its next pass is shuffled only then.
   - Anything that changes what plays next discards the opened track and opens the right one. This includes Play next, shuffle, repeat one, removal, a seek, and a device change.
   - Encoder delay and padding are trimmed where the file carries them (MP3 with a LAME header). FLAC and WAV are exact. M4A is not trimmed, so it keeps the few milliseconds of silence that its encoder added.
 - Output device selection
@@ -57,14 +57,14 @@ MP3, FLAC, WAV, AAC, M4A. A file counts as supported only if it can actually be 
 
 ## Library
 
-- Register local music folders. Scan and index them, and pick up file changes while idle.
+- Register local music folders. Run a Library scan to index them, and pick up file changes while idle.
   - A burst of changes is one scan.
   - Long scans show progress and can be cancelled.
   - A cancelled or failed scan never leaves a half-written batch.
   - A failed scan stays flagged until a scan succeeds.
 - Missing files are shown as missing. The app never deletes them automatically.
   - A moved or renamed file is found again by its size and the hash of its head and tail. If that fails, it is found by its tags, when exactly one Missing track carries them. It is the same track, so queues still resolve.
-  - Settings shows each folder's last scan, track count and Missing count.
+  - Settings shows each folder's last scan, track count and Missing track count.
   - Settings offers "Delete Missing", with confirmation. Source files are never touched.
   - Settings offers a way to open the log folder.
 - Browse as Albums, Album Artists, or Tracks; Album Artists drill into their Albums
@@ -84,7 +84,7 @@ MP3, FLAC, WAV, AAC, M4A. A file counts as supported only if it can actually be 
   - Kana are filed under the head of their row (か for が). All kanji are one "漢".
   - Choosing a letter starts the list there, without loading what precedes it.
   - Choosing the first letter, or changing the sort or filter, starts the list from the top.
-- Albums are filed by Album Artist, title and Edition. See Compilation and Edition in [CONTEXT.md](../CONTEXT.md). A disc folder ("CD1", "Disc 2") belongs to the album folder above it.
+- Albums are filed by Album Artist, title and Album edition. See Compilation and Album edition in [CONTEXT.md](../CONTEXT.md). A disc folder ("CD1", "Disc 2") belongs to the album folder above it.
 
 ## Lyrics
 
@@ -106,11 +106,11 @@ MP3, FLAC, WAV, AAC, M4A. A file counts as supported only if it can actually be 
 A third view of Now Playing, beside Lyrics and Queue. On a wide window it replaces the lyrics, and the queue stays. It shows the Spectrum and the Level meter (see [CONTEXT.md](../CONTEXT.md)) on one shared dB axis (−90 to 0 dBFS). It measures the audio as it leaves the app, after volume.
 
 - The Level meter shows left and right side by side, each with peak, RMS and a held peak.
-- Bars are thin and white, not tinted by the artwork, on the bare surface (no panel). The held peak is a thin full-white cap.
-- Bars rise instantly. Spectrum bars fall at 30 dB/s. Level meter bars fall at 8.6 dB/s. Caps hold for 1.5 s, then fall at 10 dB/s.
+- Level bars are thin and white, not tinted by the artwork, on the bare surface (no panel). The held peak is a thin full-white Peak cap.
+- Level bars rise instantly. Spectrum bars fall at 30 dB/s. Level meter bars fall at 8.6 dB/s. Peak caps hold for 1.5 s (the Peak hold time), then fall at 10 dB/s.
 - Each channel shows its held peak in dBFS as text, refreshed a few times a second.
-- A clip shows as the word "Clip" for 2 s. A click clears it. Color is never the only signal.
-- The meters run only while visible. When playback is paused or stopped, the bars fall to the floor. With Calm motion, the meters stop and say so.
+- The Clip warning shows the word "Clip" for 2 s. A click clears it. Color is never the only signal.
+- The meters run only while visible. When playback is paused or stopped, the Level bars fall to the floor. With Calm motion, the meters stop and say so.
 - On a narrow window, the Spectrum takes the full width. The left and right meters become two horizontal bars below it.
 - Meter frames are a live stream, not state. The app skips a missed frame and never keeps or replays one.
 - A mono device shows the same level on both channels. A device with more than two channels shows its first two.

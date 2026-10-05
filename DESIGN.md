@@ -22,7 +22,7 @@ A tool for a personal music library, not a storefront. Dark, precise, and quiet.
    - A movement that input drives, or that retargets while moving (opening Now Playing, lyrics scroll), keeps its velocity. It never jumps.
    - Reduced motion replaces every movement with a brief crossfade. No information is lost.
    - Progress motion runs at constant speed.
-   - Calm motion (a setting) stops motion that starts on its own. Only the position marker moves. The idle motion (the Light breathing) stops.
+   - Calm motion (a setting) stops motion that starts on its own. Only the position marker moves. The idle motion (the Artwork glow breathing) stops.
 8. **Decoration is data.** Anything that looks like an instrument shows real data and behaves truthfully: a magnifier magnifies the input, a meter measures. Nothing decorative that means nothing. An instrument may look like an instrument; it may not look like it measures what it does not.
 9. **Density follows the task.** Browsing artwork breathes; tables, metadata, settings, and technical readouts are compact. Hierarchy comes from size, luminance, and spacing, not from boxes, heavy weights, or large empty space. Use the structure the content has (grid, list, table, ledger); no dashboards of interchangeable cards.
 10. **Text is real.** Text stays real, selectable text in the flow of the page. Animated glyphs are only a layer drawn over it and hidden from assistive technology.
@@ -32,7 +32,7 @@ A tool for a personal music library, not a storefront. Dark, precise, and quiet.
 
 ## Vocabulary
 
-Screens are built from five elements (Sleeve, Light, Strip, Gutter, Path) rather than new looks. Their definitions are in [CONTEXT.md](./CONTEXT.md).
+Screens are built from five elements (Sleeve, Artwork glow, Album strip, Row index, Signal path) rather than new looks. Their definitions are in [CONTEXT.md](./CONTEXT.md).
 
 ## Space
 
@@ -48,7 +48,7 @@ One sans family: Satoshi for Latin, Noto Sans JP for Japanese, then the system U
 
 ## Where the details live
 
-Values, sizes, timings, and component behavior are in the code that owns them: the color and motion tokens, Light's readability caps (enforced by a test), and the comments and tests of each component.
+Values, sizes, timings, and component behavior are in the code that owns them: the color and motion tokens, the Artwork glow's readability caps (enforced by a test), and the comments and tests of each component. Use semantic tokens for UI surfaces. Do not use raw palette values.
 
 ## Amending
 

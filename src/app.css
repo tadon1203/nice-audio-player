@@ -122,7 +122,7 @@
 }
 
 /*
- * Floating UI surface (menus, dialogs, sheets, sticky headers). Light is not used there.
+ * Floating UI surface (menus, dialogs, sheets, sticky headers). Artwork glow is not used there.
  * No `-webkit-backdrop-filter` line: the renderer is Chromium only, and written by hand beside the
  * standard one it made the minifier keep just the prefixed form, which Chromium ignores, so the
  * blur vanished from the built app.
@@ -223,7 +223,7 @@
 }
 
 @media (forced-colors: active) {
-  .artwork-light {
+  .artwork-glow {
     display: none;
   }
 

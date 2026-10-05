@@ -1,4 +1,4 @@
-use super::keys::{edition_of, SortTags, TrackKeys};
+use super::keys::{album_edition_of, SortTags, TrackKeys};
 use super::summary;
 use rusqlite::{params, Connection, Transaction};
 
@@ -112,7 +112,7 @@ fn backfill_track_keys(transaction: &Transaction) -> rusqlite::Result<()> {
     Ok(())
 }
 
-/// Gives every existing track the sort, search and edition keys from the tags it already has
+/// Gives every existing track the sort, search and album_edition keys from the tags it already has
 /// (SortOrder tags arrive with the rescan this migration asks for), settles compilations and
 /// fills the album and Album Artist summaries.
 fn backfill_catalog_keys(transaction: &Transaction) -> rusqlite::Result<()> {
@@ -160,7 +160,7 @@ fn backfill_catalog_keys(transaction: &Transaction) -> rusqlite::Result<()> {
             date.as_deref(),
             &file_name,
             SortTags::default(),
-            &edition_of(root_id, &relative),
+            &album_edition_of(root_id, &relative),
         );
         update.execute(params![
             track_id,

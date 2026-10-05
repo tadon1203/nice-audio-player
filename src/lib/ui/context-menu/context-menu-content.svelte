@@ -16,7 +16,7 @@
   import { cn } from "$lib/utils/cn.js";
 
   /**
-   * A floating menu. It sits on Acrylic (never Light) at layer 20 and opens where the pointer
+   * A floating menu. It sits on Acrylic (never Artwork glow) at layer 20 and opens where the pointer
    * summoned it.
    */
   let {

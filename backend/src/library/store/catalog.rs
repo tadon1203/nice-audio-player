@@ -142,7 +142,7 @@ fn album_summary(row: &Row<'_>) -> rusqlite::Result<LibraryAlbumSummary> {
         key: LibraryAlbumKey {
             title: row.get(0)?,
             album_artist: row.get(1)?,
-            edition: row.get(2)?,
+            album_edition: row.get(2)?,
         },
         year: row.get(3)?,
         artwork: artwork_ref(row.get(4)?, row.get(5)?, row.get(6)?),
@@ -346,7 +346,7 @@ fn album_tracks_query(key: &LibraryAlbumKey) -> PagedQuery {
         Scope::new(
             View::AlbumTracks,
             "",
-            &format!("{}\u{1f}{}\u{1f}{}", key.album_artist, key.title, key.edition),
+            &format!("{}\u{1f}{}\u{1f}{}", key.album_artist, key.title, key.album_edition),
             &"position",
             LibrarySortDirection::Ascending,
         ),
@@ -374,7 +374,7 @@ fn album_tracks_query(key: &LibraryAlbumKey) -> PagedQuery {
             params: vec![
                 key.album_artist.clone().into(),
                 key.title.clone().into(),
-                key.edition.clone().into(),
+                key.album_edition.clone().into(),
             ],
         },
     )
@@ -698,7 +698,7 @@ impl LibraryStore {
                 key.album_artist,
                 key.title,
                 Availability::Available,
-                key.edition,
+                key.album_edition,
                 InspectionStatus::Indexed
             ],
             |row| {
@@ -789,9 +789,10 @@ fn album_cover(
             "SELECT a.content_hash, a.mime_type, a.relative_path {ALBUM_FROM}
              WHERE al.album_artist_key = ?1 AND al.album_key = ?2 AND al.album_dir = ?3"
         ))?
-        .query_row(params![key.album_artist, key.title, key.edition], |row| {
-            Ok(artwork_ref(row.get(0)?, row.get(1)?, row.get(2)?))
-        })
+        .query_row(
+            params![key.album_artist, key.title, key.album_edition],
+            |row| Ok(artwork_ref(row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
         .optional()?
         .flatten())
 }

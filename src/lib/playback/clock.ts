@@ -258,7 +258,7 @@ export function createPlaybackClock(overrides: Partial<ClockEnvironment> = {}) {
      * An attachment that runs one animation on its element across the whole track: `keyframes`
      * are in track ms, and the compositor advances them. Nothing runs while the duration is
      * unknown. With `follows: false` the element stays on the live position through holds and
-     * seeks, for one that eases between its own values (the Light).
+     * seeks, for one that eases between its own values (the Artwork glow).
      */
     drive:
       (

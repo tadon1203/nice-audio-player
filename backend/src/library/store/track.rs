@@ -41,7 +41,7 @@ pub(super) fn summary_from_row(row: &Row<'_>) -> rusqlite::Result<LibraryTrackSu
     let availability: Availability = row.get(13)?;
     let inspection: InspectionStatus = row.get(14)?;
     let artist: String = row.get(2)?;
-    let edition: String = row.get(15)?;
+    let album_edition: String = row.get(15)?;
     Ok(LibraryTrackSummary {
         id: id.to_string(),
         title: row.get(1)?,
@@ -49,7 +49,7 @@ pub(super) fn summary_from_row(row: &Row<'_>) -> rusqlite::Result<LibraryTrackSu
         album_key: (!album.is_empty()).then(|| LibraryAlbumKey {
             title: album.clone(),
             album_artist: album_artist_key,
-            edition,
+            album_edition,
         }),
         album: (!album.is_empty()).then_some(album),
         album_artist: non_blank(row.get(4)?),

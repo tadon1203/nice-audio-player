@@ -28,7 +28,7 @@ const WRITE_DEBOUNCE: Duration = Duration::from_millis(400);
 #[derive(Debug, Clone, PartialEq, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct AppearanceSettings {
-    /// Artwork light behind the library and Now Playing.
+    /// Artwork glow behind the library and Now Playing.
     pub artwork_backdrop: bool,
     /// Only what marks the position moves by itself: nothing breathes or lifts on its own.
     pub calm_motion: bool,

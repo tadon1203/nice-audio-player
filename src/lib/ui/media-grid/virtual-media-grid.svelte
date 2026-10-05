@@ -3,7 +3,7 @@
   import { prefersReducedMotion } from "svelte/motion";
   import type { TransitionConfig } from "svelte/transition";
   import type { ArtworkRef } from "$lib/native";
-  import RovingLight, { type RovingTarget } from "$lib/ui/artwork-light/roving-light.svelte";
+  import RovingGlow, { type RovingTarget } from "$lib/ui/artwork-glow/roving-glow.svelte";
   import { motionFor } from "$lib/ui/motion/svelte-motion";
   import { createVirtualRows } from "$lib/ui/virtual-rows.svelte";
   import { createSortMotion } from "./sort-motion.svelte";
@@ -30,7 +30,7 @@
     itemKey: (item: Item) => string;
     /**
      * The artwork of the item at `index`. With it, hovering or focusing a tile lets a faint
-     * Light from that artwork fall behind the grid.
+     * Artwork glow from that artwork fall behind the grid.
      */
     artworkAt?: (index: number) => ArtworkRef | null | undefined;
     /** Changes when the sort does: tiles then slide (or fade) to their new places. */
@@ -84,7 +84,7 @@
     list?.querySelectorAll<HTMLElement>("li[data-key]").forEach((element) => {
       before.set(element.dataset.key ?? "", element.getBoundingClientRect());
     });
-    deactivateLight();
+    deactivateGlow();
   });
 
   $effect(() => {
@@ -120,7 +120,7 @@
     return { duration, easing, css: (t) => `opacity: ${t}` };
   }
 
-  // The Light that follows the tile under the pointer or focus. Tiles report themselves (their
+  // The Artwork glow that follows the tile under the pointer or focus. Tiles report themselves (their
   // index and element), so nothing here reads the markup back out of the DOM.
   let target = $state<RovingTarget | null>(null);
   let targetTile: HTMLElement | null = null;
@@ -138,26 +138,26 @@
     };
   }
 
-  function deactivateLight() {
+  function deactivateGlow() {
     if (target !== null) target = { ...target, active: false };
     targetTile = null;
   }
 
-  // Focus still in the grid, or the pointer still over it, keeps the Light on.
+  // Focus still in the grid, or the pointer still over it, keeps the Artwork glow on.
   function pointerLeft() {
-    if (!wrap?.matches(":focus-within")) deactivateLight();
+    if (!wrap?.matches(":focus-within")) deactivateGlow();
   }
 
   function focusLeft(event: FocusEvent) {
     const to = event.relatedTarget;
     if (to instanceof Node && wrap?.contains(to)) return;
-    if (!wrap?.matches(":hover")) deactivateLight();
+    if (!wrap?.matches(":hover")) deactivateGlow();
   }
 
-  // A tile that is unmounted (filter, sort, scrolling away) no longer holds the Light.
+  // A tile that is unmounted (filter, sort, scrolling away) no longer holds the Artwork glow.
   $effect(() => {
     void visible;
-    if (targetTile !== null && !targetTile.isConnected) deactivateLight();
+    if (targetTile !== null && !targetTile.isConnected) deactivateGlow();
   });
 
   const columns = $derived(columnCount(width, metrics));
@@ -239,7 +239,7 @@
   the DOM. Rows are padding and mounted tiles; the browser must not "anchor" the scroll position
   to a tile that is about to be replaced.
 -->
-<!-- The wrapper only watches the pointer and focus leaving, for the Light; it is not interactive. -->
+<!-- The wrapper only watches the pointer and focus leaving, for the Artwork glow; it is not interactive. -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   bind:this={wrap}
@@ -248,7 +248,7 @@
   onfocusout={focusLeft}
 >
   {#if artworkAt !== undefined && target !== null}
-    <RovingLight {target} />
+    <RovingGlow {target} />
   {/if}
   <!-- Keys bubble up from the tiles, which hold the focus; the list itself is not interactive. -->
   <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->

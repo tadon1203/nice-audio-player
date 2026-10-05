@@ -28,8 +28,8 @@
 
   const albumArtist = $derived(fromNameSegment(page.params.albumArtist ?? ""));
   const albumTitle = $derived(fromNameSegment(page.params.albumTitle ?? ""));
-  const edition = $derived(albumEditionOf(page.url.searchParams));
-  const key = $derived({ albumArtist, title: albumTitle, edition });
+  const albumEdition = $derived(albumEditionOf(page.url.searchParams));
+  const key = $derived({ albumArtist, title: albumTitle, albumEdition });
   const title = $derived(albumTitleLabel(albumTitle));
   const artist = $derived(artistNameLabel(albumArtist));
   const shared = $derived(albumItemKey(key));
@@ -43,7 +43,7 @@
   const albumIsLoaded = $derived(
     playback.item?.albumKey?.title === albumTitle &&
       playback.item.albumKey.albumArtist === albumArtist &&
-      playback.item.albumKey.edition === edition &&
+      playback.item.albumKey.albumEdition === albumEdition &&
       (playback.status === "playing" || playback.status === "paused"),
   );
   const albumIsPlaying = $derived(albumIsLoaded && playback.status === "playing");

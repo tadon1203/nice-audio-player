@@ -12,11 +12,11 @@ export const BALLISTICS = {
   spectrumFallDbPerS: 30,
   /** Level meter bars (peak and RMS): EBU Tech 3205-E return rate. */
   levelFallDbPerS: 8.6,
-  /** A cap holds this long after its bar last touched it, then falls. */
-  capHoldS: 1.5,
-  capFallDbPerS: 10,
+  /** A Peak cap holds this long after its Level bar last touched it, then falls. */
+  peakHoldS: 1.5,
+  peakCapFallDbPerS: 10,
   /** "Clip" stays this long, and starts over on a new clip. */
-  clipHoldS: 2,
+  clipWarningS: 2,
   /** One step never covers more time than this, so a stalled draw does not jump. */
   maxElapsedS: 0.1,
 } as const;
@@ -32,13 +32,13 @@ export type MeterInput = {
   clip: readonly [boolean, boolean];
 };
 
-/** A Bar with its Cap: `level` is the filled bar, `cap` the held peak (never below `level`). */
-export type Bar = { level: number; cap: number; holdLeft: number };
+/** A Level bar with its Peak cap: `level` is the filled bar, `peakCap` the held peak (never below `level`). */
+export type LevelBar = { level: number; peakCap: number; peakHoldLeft: number };
 
 export type DisplayState = {
-  bands: readonly Bar[];
+  bands: readonly LevelBar[];
   /** The Level meter's peak bars, left and right. */
-  peak: readonly [Bar, Bar];
+  peak: readonly [LevelBar, LevelBar];
   /** The Level meter's RMS levels, left and right. */
   rms: readonly [number, number];
   /** Seconds of "Clip" left, per channel; 0 when not latched. */
@@ -49,13 +49,13 @@ export type DisplayState = {
 
 const { floorDb, ceilingDb } = BALLISTICS;
 
-const emptyBar = (): Bar => ({ level: floorDb, cap: floorDb, holdLeft: 0 });
+const emptyLevelBar = (): LevelBar => ({ level: floorDb, peakCap: floorDb, peakHoldLeft: 0 });
 
 /** The floor everywhere: what opening the view starts from. */
 export function initialDisplay(): DisplayState {
   return {
-    bands: Array.from({ length: BAND_COUNT }, emptyBar),
-    peak: [emptyBar(), emptyBar()],
+    bands: Array.from({ length: BAND_COUNT }, emptyLevelBar),
+    peak: [emptyLevelBar(), emptyLevelBar()],
     rms: [floorDb, floorDb],
     clipLeft: [0, 0],
     clip: [false, false],
@@ -70,17 +70,17 @@ function fall(level: number, target: number, rate: number, dt: number): number {
   return goal >= level ? goal : Math.max(goal, level - rate * dt);
 }
 
-function stepBar(bar: Bar, target: number, rate: number, dt: number): Bar {
+function stepLevelBar(bar: LevelBar, target: number, rate: number, dt: number): LevelBar {
   const level = fall(bar.level, target, rate, dt);
-  if (level >= bar.cap) {
-    return { level, cap: level, holdLeft: level > floorDb ? BALLISTICS.capHoldS : 0 };
+  if (level >= bar.peakCap) {
+    return { level, peakCap: level, peakHoldLeft: level > floorDb ? BALLISTICS.peakHoldS : 0 };
   }
-  const held = Math.min(bar.holdLeft, dt);
+  const held = Math.min(bar.peakHoldLeft, dt);
   const falling = dt - held;
   return {
     level,
-    cap: Math.max(level, bar.cap - BALLISTICS.capFallDbPerS * falling),
-    holdLeft: bar.holdLeft - held,
+    peakCap: Math.max(level, bar.peakCap - BALLISTICS.peakCapFallDbPerS * falling),
+    peakHoldLeft: bar.peakHoldLeft - held,
   };
 }
 
@@ -96,13 +96,15 @@ export function stepDisplay(
   const dt = Math.min(BALLISTICS.maxElapsedS, Math.max(0, elapsedS));
   const { spectrumFallDbPerS: spectrumRate, levelFallDbPerS: levelRate } = BALLISTICS;
   const clipLeft = [0, 1].map((channel) =>
-    input?.clip[channel] ? BALLISTICS.clipHoldS : Math.max(0, state.clipLeft[channel]! - dt),
+    input?.clip[channel] ? BALLISTICS.clipWarningS : Math.max(0, state.clipLeft[channel]! - dt),
   ) as [number, number];
   return {
-    bands: state.bands.map((bar, i) => stepBar(bar, input?.bands[i] ?? floorDb, spectrumRate, dt)),
+    bands: state.bands.map((bar, i) =>
+      stepLevelBar(bar, input?.bands[i] ?? floorDb, spectrumRate, dt),
+    ),
     peak: [
-      stepBar(state.peak[0], input?.peak[0] ?? floorDb, levelRate, dt),
-      stepBar(state.peak[1], input?.peak[1] ?? floorDb, levelRate, dt),
+      stepLevelBar(state.peak[0], input?.peak[0] ?? floorDb, levelRate, dt),
+      stepLevelBar(state.peak[1], input?.peak[1] ?? floorDb, levelRate, dt),
     ],
     rms: [
       fall(state.rms[0], input?.rms[0] ?? floorDb, levelRate, dt),

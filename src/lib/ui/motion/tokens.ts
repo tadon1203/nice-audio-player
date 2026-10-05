@@ -14,7 +14,7 @@ export const motionTokens = {
   feedback: { duration: 75 },
   /** Icons, digits, lyric lines, sweeps, the queue, overlays. */
   move: { duration: 220 },
-  /** Dock <-> Now Playing, album tile <-> details, the Sleeve, the Light. */
+  /** Dock <-> Now Playing, album tile <-> details, the Sleeve, the Artwork glow. */
   large: { duration: 310 },
 } as const;
 

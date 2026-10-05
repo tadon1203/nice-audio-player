@@ -15,7 +15,7 @@
     lyricsSwap,
     waveformHeightFor,
   } from "./now-playing-layout";
-  import NowPlayingLight from "./now-playing-light.svelte";
+  import NowPlayingGlow from "./now-playing-glow.svelte";
   import QueueColumn from "./queue-column.svelte";
   import { rightColumn } from "./right-column.svelte";
   import { Button } from "$lib/ui/shadcn/button";
@@ -72,7 +72,7 @@
 </script>
 
 <div {@attach observeHeight} class="@container/npw relative flex h-full min-h-0 min-w-0 flex-col">
-  <NowPlayingLight />
+  <NowPlayingGlow />
   <!-- The size container: the layer without the waveform band, and without padding. -->
   <div class="relative min-h-0 min-w-0 flex-1 [container-name:np] [container-type:size]">
     <div

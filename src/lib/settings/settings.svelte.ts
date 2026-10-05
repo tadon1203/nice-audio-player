@@ -26,7 +26,7 @@ export class Settings {
     this.#api = api;
   }
 
-  /** Artwork light behind the library and Now Playing; `null` until the settings have loaded. */
+  /** Artwork glow behind the library and Now Playing; `null` until the settings have loaded. */
   get artworkBackdrop(): boolean | null {
     return this.#mirror?.artworkBackdrop ?? null;
   }

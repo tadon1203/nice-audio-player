@@ -3,7 +3,7 @@
   import { getSettings } from "$lib/settings/context";
   import { nowPlaying } from "$lib/shell/now-playing.svelte";
   import { createNowPlayingTween } from "$lib/shell/now-playing-tween.svelte";
-  import ArtworkLight from "$lib/ui/artwork-light/artwork-light.svelte";
+  import ArtworkGlow from "$lib/ui/artwork-glow/artwork-glow.svelte";
   import { EDGE_PX, ROW_PX, SLOT_PX } from "./dock-metrics";
   import DockIdentity from "./dock-identity.svelte";
   import DockTransport from "./dock-transport.svelte";
@@ -30,7 +30,7 @@
   data-slot="playback-dock"
 >
   {#if settings.artworkBackdrop}
-    <ArtworkLight
+    <ArtworkGlow
       artwork={playback.item?.artwork ?? null}
       strength="strong"
       class="mask-[linear-gradient(to_right,black,transparent_85%)]"

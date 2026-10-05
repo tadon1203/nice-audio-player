@@ -5,7 +5,7 @@ import type { Settings } from "$lib/settings/settings.svelte";
 /**
  * How much may move by itself (DESIGN.md, the attention budget).
  *
- * - `full`: the position marker plus the small idle motion (the Light breathing).
+ * - `full`: the position marker plus the small idle motion (the Artwork glow breathing).
  * - `calm`: only what marks the current position moves on its own; everything else moves only
  *   when something changes.
  * - `reduced`: the system asks for less motion; every movement is a crossfade.

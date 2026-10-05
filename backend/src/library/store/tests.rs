@@ -9,7 +9,7 @@ use super::{
 use crate::library::{
     database::Database,
     error::StoreError,
-    keys::{edition_of, SortTags, TrackKeys},
+    keys::{album_edition_of, SortTags, TrackKeys},
     location::Unavailable,
     models::*,
     summary,
@@ -100,7 +100,7 @@ impl Fixture {
                 seed.date,
                 &file,
                 SortTags::default(),
-                &edition_of(1, &file),
+                &album_edition_of(1, &file),
             );
             transaction
                 .execute(
@@ -269,7 +269,7 @@ fn albums_keep_their_identity_and_take_the_cover_of_their_first_track_with_artwo
     let shared_key = LibraryAlbumKey {
         title: "Shared".into(),
         album_artist: "Album Artist".into(),
-        edition: "1/".into(),
+        album_edition: "1/".into(),
     };
     let details = store.catalog_album_details(shared_key.clone()).unwrap();
     assert_eq!(details.track_count, 2);
@@ -308,13 +308,13 @@ fn an_album_is_found_playable_and_reported_missing_by_its_key() {
     let shared = LibraryAlbumKey {
         title: "Shared".into(),
         album_artist: "Album Artist".into(),
-        edition: "1/".into(),
+        album_edition: "1/".into(),
     };
 
     let blank = LibraryAlbumKey {
         title: " ".into(),
         album_artist: "Album Artist".into(),
-        edition: "1/".into(),
+        album_edition: "1/".into(),
     };
     assert_eq!(
         store.playback_for_album(&blank, None).err(),
@@ -331,7 +331,7 @@ fn an_album_is_found_playable_and_reported_missing_by_its_key() {
     let missing = LibraryAlbumKey {
         title: "Nope".into(),
         album_artist: "Nobody".into(),
-        edition: "1/".into(),
+        album_edition: "1/".into(),
     };
     assert_eq!(
         store.playback_for_album(&missing, None).err(),
@@ -375,7 +375,7 @@ fn a_track_without_a_title_is_named_after_its_file_in_playback_and_in_search() {
         Some(LibraryAlbumKey {
             title: "Album".into(),
             album_artist: "Artist".into(),
-            edition: "1/".into()
+            album_edition: "1/".into()
         })
     );
     assert_eq!(track.album_track_count, Some(1));
@@ -607,7 +607,7 @@ fn an_album_is_case_sensitive_and_a_missing_album_artist_is_the_artist() {
             .catalog_album_details(LibraryAlbumKey {
                 title: title.into(),
                 album_artist: artist.into(),
-                edition: "1/".into(),
+                album_edition: "1/".into(),
             })
             .unwrap()
             .track_count
@@ -663,7 +663,7 @@ fn an_album_playback_sequence_is_complete_beyond_one_page() {
             &LibraryAlbumKey {
                 title: "Long Album".into(),
                 album_artist: "Artist".into(),
-                edition: "1/".into(),
+                album_edition: "1/".into(),
             },
             Some("101"),
         )
@@ -699,7 +699,7 @@ fn a_year_is_the_same_on_the_grid_the_details_header_and_in_playback() {
     let key = |title: &str| LibraryAlbumKey {
         title: title.into(),
         album_artist: "Artist".into(),
-        edition: "1/".into(),
+        album_edition: "1/".into(),
     };
 
     let grid = all_albums(store, None);
@@ -758,7 +758,7 @@ fn album_details_count_the_tracks_once_and_name_the_first_playable_one() {
     let key = LibraryAlbumKey {
         title: "Album".into(),
         album_artist: "Artist".into(),
-        edition: "1/".into(),
+        album_edition: "1/".into(),
     };
 
     let details = fixture.store.catalog_album_details(key.clone()).unwrap();
@@ -788,7 +788,7 @@ fn a_track_summary_carries_the_key_of_the_album_the_catalog_files_it_under() {
         Some(LibraryAlbumKey {
             title: "Record".into(),
             album_artist: "Band".into(),
-            edition: "1/".into()
+            album_edition: "1/".into()
         })
     );
     assert_eq!(summary("2").album_key, None, "no album tag, no album");

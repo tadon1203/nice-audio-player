@@ -1,4 +1,4 @@
-import { BALLISTICS, type Bar } from "./ballistics";
+import { BALLISTICS, type LevelBar } from "./ballistics";
 
 /** The dB values with a tick on the shared axis. */
 export const AXIS_TICKS = [0, -20, -40, -60, -80] as const;
@@ -14,7 +14,7 @@ const TRACK_ALPHA = 0.035;
 const GRID_ALPHA = 0.07;
 const BAR_ALPHA = 0.78;
 const EXTENSION_ALPHA = 0.3;
-const CAP_PX = 1.5;
+const PEAK_CAP_PX = 1.5;
 
 type Orientation = "vertical" | "horizontal";
 
@@ -32,15 +32,15 @@ function grid(c: CanvasRenderingContext2D, w: number, h: number, orientation: Or
   c.globalAlpha = 1;
 }
 
-/** One Bar: its faint track, `extendTo` (the peak above the RMS) as a dimmer segment, the level, and the Cap. */
-function bar(
+/** One Level bar: its faint track, `extendTo` (the peak above the RMS) as a dimmer segment, the level, and the Peak cap. */
+function levelBar(
   c: CanvasRenderingContext2D,
   orientation: Orientation,
   offset: number,
   thickness: number,
   length: number,
   level: number,
-  cap: number,
+  peakCap: number,
   extendTo?: number,
 ) {
   const rect = (from: number, to: number): [number, number, number, number] =>
@@ -56,10 +56,10 @@ function bar(
   }
   c.globalAlpha = BAR_ALPHA;
   c.fillRect(...rect(0, along(level, length)));
-  if (cap > floorDb + 1) {
-    const at = Math.min(length - CAP_PX, along(cap, length));
+  if (peakCap > floorDb + 1) {
+    const at = Math.min(length - PEAK_CAP_PX, along(peakCap, length));
     c.globalAlpha = 1;
-    c.fillRect(...rect(at, at + CAP_PX));
+    c.fillRect(...rect(at, at + PEAK_CAP_PX));
   }
   c.globalAlpha = 1;
 }
@@ -75,7 +75,7 @@ export function drawSpectrum(
   w: number,
   h: number,
   color: string,
-  bands: readonly Bar[],
+  bands: readonly LevelBar[],
 ) {
   begin(c, w, h, color);
   grid(c, w, h, "vertical");
@@ -83,17 +83,17 @@ export function drawSpectrum(
   const thickness = Math.max(2, pitch * 0.3);
   const offset = (pitch - thickness) / 2;
   bands.forEach((band, i) =>
-    bar(c, "vertical", i * pitch + offset, thickness, h, band.level, band.cap),
+    levelBar(c, "vertical", i * pitch + offset, thickness, h, band.level, band.peakCap),
   );
 }
 
-/** One channel of the Level meter: the RMS bar, with the peak above it and the held peak as the cap. */
+/** One channel of the Level meter: the RMS bar, with the peak above it and the held peak as the Peak cap. */
 export function drawLevel(
   c: CanvasRenderingContext2D,
   w: number,
   h: number,
   color: string,
-  peak: Bar,
+  peak: LevelBar,
   rms: number,
 ) {
   const orientation: Orientation = w > h ? "horizontal" : "vertical";
@@ -102,5 +102,14 @@ export function drawLevel(
   begin(c, w, h, color);
   grid(c, w, h, orientation);
   const thickness = orientation === "horizontal" ? across * 0.4 : Math.min(across * 0.5, 14);
-  bar(c, orientation, (across - thickness) / 2, thickness, length, rms, peak.cap, peak.level);
+  levelBar(
+    c,
+    orientation,
+    (across - thickness) / 2,
+    thickness,
+    length,
+    rms,
+    peak.peakCap,
+    peak.level,
+  );
 }

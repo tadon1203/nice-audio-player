@@ -14,7 +14,7 @@
   import { createLyricsSync } from "./lyrics-sync.svelte";
 
   /**
-   * Local LRC lyrics: synced (Gutter, auto-scroll, waveform link) or plain (static). Now Playing
+   * Local LRC lyrics: synced (Row index, auto-scroll, waveform link) or plain (static). Now Playing
    * shows it only once the lyrics are resolved; why there are none is said in its Facts line. The
    * current line sits 40% from the top, and a long intro shows as a gap bar.
    * Only a change of the current line reaches the lines: only the gap bar of an instrumental line

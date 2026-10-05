@@ -339,7 +339,10 @@ describe("failures", () => {
 });
 
 describe("album shuffle", () => {
-  const context = { kind: "album", key: { title: "A", albumArtist: "B", edition: "" } } as const;
+  const context = {
+    kind: "album",
+    key: { title: "A", albumArtist: "B", albumEdition: "" },
+  } as const;
 
   it("turns the shuffle on, then starts", async () => {
     const order: string[] = [];
@@ -512,7 +515,7 @@ describe("starting playback", () => {
     await playback.initialize();
     const context = {
       kind: "album",
-      key: { title: "Album", albumArtist: "Artist", edition: "" },
+      key: { title: "Album", albumArtist: "Artist", albumEdition: "" },
     } as const;
 
     await playback.startPlayback(context, "c");
@@ -532,7 +535,7 @@ describe("starting playback", () => {
     await playback.initialize();
 
     await playback.startPlayback(
-      { kind: "album", key: { title: "A", albumArtist: "B", edition: "" } },
+      { kind: "album", key: { title: "A", albumArtist: "B", albumEdition: "" } },
       null,
     );
 
@@ -551,7 +554,7 @@ describe("starting playback", () => {
     await playback.initialize();
 
     await playback.startPlayback(
-      { kind: "album", key: { title: "A", albumArtist: "B", edition: "" } },
+      { kind: "album", key: { title: "A", albumArtist: "B", albumEdition: "" } },
       "1",
     );
 
@@ -568,7 +571,7 @@ describe("starting playback", () => {
     );
     await playback.initialize();
     await playback.startPlayback(
-      { kind: "album", key: { title: "A", albumArtist: "B", edition: "" } },
+      { kind: "album", key: { title: "A", albumArtist: "B", albumEdition: "" } },
       "1",
     );
     expect(playback.error).not.toBeNull();

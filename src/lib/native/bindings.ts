@@ -174,7 +174,7 @@ export type AppearancePatch = {
  *  no defaults of its own; a saved file missing a field takes the default here.
  */
 export type AppearanceSettings = {
-	/**  Artwork light behind the library and Now Playing. */
+	/**  Artwork glow behind the library and Now Playing. */
 	artworkBackdrop: boolean,
 	/**  Only what marks the position moves by itself: nothing breathes or lifts on its own. */
 	calmMotion: boolean,
@@ -249,7 +249,7 @@ export type LibraryAlbumKey = {
 	 *  Which printing of the album: its folder. Two folders holding the same title and Album
 	 *  Artist are two albums. Opaque to the renderer, `""` for the album of tracks with no album.
 	 */
-	edition: string,
+	albumEdition: string,
 };
 
 export type LibraryAlbumPage = {

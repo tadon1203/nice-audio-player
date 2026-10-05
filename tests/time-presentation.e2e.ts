@@ -46,7 +46,7 @@ test("both Queue views retain readable metadata and ordered time tones over brig
   await readableText(page, farthest.locator("span.tabular-nums").last());
 });
 
-test("lyrics retain artwork ink, readable Gutter times and equal ink while reading freely", async ({
+test("lyrics retain artwork ink, readable Row index times and equal ink while reading freely", async ({
   page,
   native,
   player,
@@ -75,11 +75,11 @@ test("lyrics retain artwork ink, readable Gutter times and equal ink while readi
   const current = page.locator('[aria-current="true"] [data-slot="time-ink"]');
   await expect(current).toContainText("歌詞 8");
   await readableText(page, current);
-  const gutter = page.getByRole("button", { name: "Seek to 1:10" });
-  await gutter.hover();
-  await readableText(page, gutter.locator("span"));
-  await gutter.focus();
-  await readableText(page, gutter.locator("span"));
+  const rowIndex = page.getByRole("button", { name: "Seek to 1:10" });
+  await rowIndex.hover();
+  await readableText(page, rowIndex.locator("span"));
+  await rowIndex.focus();
+  await readableText(page, rowIndex.locator("span"));
   await page.locator('[data-mode="follow"]').hover();
   await page.mouse.wheel(0, 120);
   await expect(page.locator('[data-mode="free"]')).toBeVisible();

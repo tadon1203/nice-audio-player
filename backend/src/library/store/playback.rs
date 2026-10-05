@@ -123,7 +123,7 @@ impl PlaybackRow {
         (!self.album.is_empty()).then(|| LibraryAlbumKey {
             title: self.album.clone(),
             album_artist: self.album_artist_key.clone(),
-            edition: self.album_dir.clone(),
+            album_edition: self.album_dir.clone(),
         })
     }
 }
@@ -305,7 +305,7 @@ impl LibraryStore {
                  WHERE m.album_artist_key = ?1 AND m.album_key = ?2 AND m.album_dir = ?3
                  ORDER BY {ALBUM_ORDER}"
             ),
-            params![key.album_artist, key.title, key.edition],
+            params![key.album_artist, key.title, key.album_edition],
         )?;
         if rows.is_empty() {
             return Err(PlaybackSourceError::AlbumNotFound);
@@ -412,7 +412,7 @@ fn album_counts(
             [
                 key.album_artist.as_str(),
                 key.title.as_str(),
-                key.edition.as_str(),
+                key.album_edition.as_str(),
             ]
         });
         let rows = statement
@@ -421,7 +421,7 @@ fn album_counts(
                     LibraryAlbumKey {
                         album_artist: row.get(0)?,
                         title: row.get(1)?,
-                        edition: row.get(2)?,
+                        album_edition: row.get(2)?,
                     },
                     row.get::<_, u32>(3)?,
                 ))

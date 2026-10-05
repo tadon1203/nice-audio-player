@@ -15,7 +15,7 @@
   that leftover top gap equal the bottom gap.
 
   The height is animated as a real height, not a transform: scaling would squash the transport
-  buttons and the artwork light inside it.
+  buttons and the artwork glow inside it.
 -->
 <div class="flex min-h-0 min-w-0 flex-col">
   <div class="min-h-0 shrink-0" style:height="{height.current}px">

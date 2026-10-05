@@ -27,6 +27,9 @@ _Avoid_: Client, buyer, account
 - **Be opinionated.** When multiple words exist for the same concept, pick the best one and list the others under `_Avoid_`.
 - **Keep definitions tight.** One or two sentences max. Define what it IS, not what it does.
 - **Only include terms specific to this project's context.** General programming concepts (timeouts, error types, utility patterns) don't belong even if the project uses them extensively. Before adding a term, ask: is this a concept unique to this context, or a general programming concept? Only the former belongs.
+- **A name must explain itself.** Test: hear the name without its definition. A new team member must be able to say what kind of thing it is (a UI part, data, or an action). If not, rename it.
+- **No bare common words.** Do not use one everyday word alone as a term (for example Bar, Cap, Scan). Add a qualifier that makes it specific (for example Level bar, Peak cap). One exception: a standard word of the music-player domain, such as Queue or Playback.
+- **Metaphors must pass the test.** A metaphor name is allowed only when the name passes the first rule. Do not allow a metaphor just because it is a metaphor.
 - **Group terms under subheadings** when natural clusters emerge. If all terms belong to a single cohesive area, a flat list is fine.
 
 ## Single vs multi-context repos

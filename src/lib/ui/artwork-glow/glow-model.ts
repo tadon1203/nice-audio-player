@@ -1,9 +1,9 @@
 /**
- * Artwork Light: a static, blurred copy of the artwork under a veil (see DESIGN.md).
+ * Artwork glow: a static, blurred copy of the artwork under a veil (see DESIGN.md).
  * The caps below are what keep text readable on top of any artwork, including a
- * pure white one, so change them only together with `light-model.test.ts`.
+ * pure white one, so change them only together with `glow-model.test.ts`.
  */
-export const LIGHT = {
+export const GLOW = {
   blurPx: 64,
   /** Multiplies the artwork's brightness before it is composited. */
   brightness: 0.55,
@@ -13,16 +13,16 @@ export const LIGHT = {
   strength: { max: 1, strong: 0.85, medium: 0.6, faint: 0.3 },
 } as const;
 
-export type LightStrength = keyof typeof LIGHT.strength;
+export type GlowStrength = keyof typeof GLOW.strength;
 
 const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
 
 /**
- * The opacity of a breathing Light for a loudness `level` (0-1): it only ever dims from its
+ * The opacity of a breathing Artwork glow for a loudness `level` (0-1): it only ever dims from its
  * strength, never exceeds it, so the contrast guarantees below keep holding.
  */
-export function breathingOpacity(strength: LightStrength, level: number): number {
-  return LIGHT.strength[strength] * (0.85 + 0.15 * clamp01(level));
+export function breathingOpacity(strength: GlowStrength, level: number): number {
+  return GLOW.strength[strength] * (0.85 + 0.15 * clamp01(level));
 }
 
 /** OKLCH lightness of the page background and of the three inks (see `styles.css`). */
@@ -38,14 +38,14 @@ const fromSrgb = (c: number) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055
 export const contrastRatio = (a: number, b: number) =>
   (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
 
-/** Luminance of the brightest possible Light (pure white artwork) after the veil. */
+/** Luminance of the brightest possible Artwork glow (pure white artwork) after the veil. */
 export function worstCaseSurfaceLuminance(): number {
   const base = toSrgb(grayLuminance(INK.background));
   // Pure white artwork after `brightness()`. CSS blends in gamma-encoded sRGB: the artwork
   // over the base at `strength`, then the veil over that.
-  const artwork = Math.min(1, LIGHT.brightness);
-  const withArtwork = base * (1 - LIGHT.strength.max) + artwork * LIGHT.strength.max;
-  const surface = withArtwork * (1 - LIGHT.veilOpacity) + base * LIGHT.veilOpacity;
+  const artwork = Math.min(1, GLOW.brightness);
+  const withArtwork = base * (1 - GLOW.strength.max) + artwork * GLOW.strength.max;
+  const surface = withArtwork * (1 - GLOW.veilOpacity) + base * GLOW.veilOpacity;
   return fromSrgb(surface);
 }
 
@@ -66,7 +66,7 @@ const toHex = (rgb: readonly number[]) =>
 
 /**
  * The artwork's representative color, lightened just enough to read as text/ink over even the
- * brightest Light (AA, 4.5:1). Lightening mixes toward white, so the hue is kept. Returns
+ * brightest Artwork glow (AA, 4.5:1). Lightening mixes toward white, so the hue is kept. Returns
  * null for input that is not `#rrggbb`.
  */
 export function readableAccent(hex: string | null | undefined): string | null {

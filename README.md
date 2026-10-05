@@ -5,7 +5,7 @@ A local-first Windows desktop music player focused on reliable playback and a ca
 ## Documentation
 
 - [CLAUDE.md](./CLAUDE.md) — the list of documents
-- [Contributing](./CONTRIBUTING.md) — principles and engineering rules
+- [Architecture](./ARCHITECTURE.md) — system map and engineering rules
 
 ## Development
 
@@ -14,11 +14,11 @@ pnpm install
 pnpm dev
 ```
 
-The checks to run are in [CONTRIBUTING.md](./CONTRIBUTING.md#checks).
+The checks to run are in [CLAUDE.md](./CLAUDE.md#commands).
 
 ## Stack
 
-- Renderer: SvelteKit (Svelte 5, `adapter-static`, SPA), built by Vite. Code is in `src/routes` and `src/lib`. The dependency rules between folders are in [CONTRIBUTING.md](./CONTRIBUTING.md).
+- Renderer: SvelteKit (Svelte 5, `adapter-static`, SPA), built by Vite. Code is in `src/routes` and `src/lib`. The dependency rules between folders are in [ARCHITECTURE.md](./ARCHITECTURE.md).
 - Host: Tauri 2 runs the Windows WebView and packages the app.
 - Backend: Rust owns playback, library, persistence, and native work.
 

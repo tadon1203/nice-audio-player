@@ -17,11 +17,11 @@
   import { untrack } from "svelte";
   import { Tween } from "svelte/motion";
   import { motionFor } from "$lib/ui/motion/svelte-motion";
-  import ArtworkLight from "./artwork-light.svelte";
+  import ArtworkGlow from "./artwork-glow.svelte";
 
   /**
-   * A single faint Light behind a grid that follows the hovered or focused tile (eased, not a
-   * jump) and takes that tile's artwork (crossfading, like any Light). It fades away when the
+   * A single faint Artwork glow behind a grid that follows the hovered or focused tile (eased, not a
+   * jump) and takes that tile's artwork (crossfading, like any Artwork glow). It fades away when the
    * pointer leaves. Mount it once there is a target; it starts invisible at the first tile.
    * Place it first inside a `relative` container, under the grid.
    */
@@ -49,12 +49,12 @@
 
 <div
   aria-hidden="true"
-  data-slot="roving-light"
+  data-slot="roving-glow"
   class="pointer-events-none absolute top-0 left-0 mask-[radial-gradient(closest-side,black,transparent)]"
   style:width="{SIZE_PX}px"
   style:height="{SIZE_PX}px"
   style:transform="translate({x.current}px, {y.current}px)"
   style:opacity={opacity.current}
 >
-  <ArtworkLight artwork={target.artwork} strength="faint" />
+  <ArtworkGlow artwork={target.artwork} strength="faint" />
 </div>

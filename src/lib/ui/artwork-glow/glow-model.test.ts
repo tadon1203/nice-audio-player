@@ -4,18 +4,18 @@ import {
   contrastRatio,
   grayLuminance,
   INK,
-  LIGHT,
+  GLOW,
   readableAccent,
   worstCaseSurfaceLuminance,
-  type LightStrength,
-} from "./light-model";
+  type GlowStrength,
+} from "./glow-model";
 
 const luminance = grayLuminance;
 const contrast = contrastRatio;
 const background = INK.background;
 const ink = INK;
 
-describe("artwork light", () => {
+describe("artwork glow", () => {
   const surface = worstCaseSurfaceLuminance();
 
   it("keeps primary and secondary text at AA on the brightest artwork", () => {
@@ -48,7 +48,7 @@ describe("readable accent", () => {
   };
 
   it.each(["#000000", "#1a2b6d", "#7a1f1f", "#2e7d32", "#ffd54f", "#ffffff", "#808080"])(
-    "keeps %s at AA over the brightest Light",
+    "keeps %s at AA over the brightest Artwork glow",
     (hex) => {
       const accent = readableAccent(hex)!;
       expect(contrast(luminanceOf(accent), surface)).toBeGreaterThanOrEqual(4.5);
@@ -65,20 +65,20 @@ describe("readable accent", () => {
   });
 });
 
-describe("breathing light", () => {
-  it.each(Object.keys(LIGHT.strength) as LightStrength[])(
+describe("breathing glow", () => {
+  it.each(Object.keys(GLOW.strength) as GlowStrength[])(
     "never gets brighter than the %s strength, so the contrast caps still hold",
     (strength) => {
       for (const level of [-1, 0, 0.5, 1, 4]) {
-        expect(breathingOpacity(strength, level)).toBeLessThanOrEqual(LIGHT.strength[strength]);
+        expect(breathingOpacity(strength, level)).toBeLessThanOrEqual(GLOW.strength[strength]);
       }
-      expect(breathingOpacity(strength, 1)).toBeCloseTo(LIGHT.strength[strength]);
-      expect(breathingOpacity(strength, 0)).toBeCloseTo(LIGHT.strength[strength] * 0.85);
+      expect(breathingOpacity(strength, 1)).toBeCloseTo(GLOW.strength[strength]);
+      expect(breathingOpacity(strength, 0)).toBeCloseTo(GLOW.strength[strength] * 0.85);
     },
   );
 
-  it("keeps text readable over the faint light used behind library tiles", () => {
+  it("keeps text readable over the faint glow used behind library tiles", () => {
     // Faint is dimmer than max, so the max worst case (tested above) bounds it.
-    expect(LIGHT.strength.faint).toBeLessThan(LIGHT.strength.max);
+    expect(GLOW.strength.faint).toBeLessThan(GLOW.strength.max);
   });
 });

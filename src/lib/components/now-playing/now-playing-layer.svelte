@@ -11,7 +11,7 @@
    * The Now Playing layer: full width (sidebar included), from below the title bar to the top of
    * the dock, drawn over the library rather than instead of it. The surface lifts and fades in;
    * it is deliberately not clipped, so the Sleeve can travel in from the dock without being cut
-   * off (the Light clips itself). The close affordance lives in the dock's own Sleeve slot, not
+   * off (the Artwork glow clips itself). The close affordance lives in the dock's own Sleeve slot, not
    * here: the same object never appears twice. Place it as a direct child of the shell grid.
    * Under reduced motion nothing travels and it is a plain crossfade.
    */

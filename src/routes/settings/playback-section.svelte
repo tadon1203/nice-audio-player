@@ -43,10 +43,10 @@
 <section aria-labelledby="playback-heading" class="mt-8">
   <SectionTitle id="playback-heading">Playback</SectionTitle>
   <p class="mt-1 text-sm leading-5 text-muted-foreground">
-    The current signal path and how artwork lights the app.
+    The current signal path and how artwork glows the app.
   </p>
 
-  <!-- A technical ledger: each signal-path stage on the Gutter, next to its own setting. -->
+  <!-- A technical ledger: each signal-path stage on the Row index, next to its own setting. -->
   <dl class="mt-5 divide-y divide-border border-y border-border text-sm">
     {#each rows as row (row.label)}
       <div class="flex items-center gap-6 py-3">
@@ -100,8 +100,8 @@
       checked={settings.calmMotion}
       onChange={(checked) => update({ calmMotion: checked })}
     >
-      Only what marks the current position moves on its own: the Light stops breathing and lyric
-      characters stop lifting.
+      Only what marks the current position moves on its own: the Artwork glow stops breathing and
+      lyric characters stop lifting.
     </SettingsSwitchField>
   {/if}
 

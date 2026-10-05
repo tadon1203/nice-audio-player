@@ -39,7 +39,7 @@ A decision that passes has a real alternative that someone will propose again, a
 An ADR is a list of the decisions that are in force now:
 
 - When a decision replaces an ADR, rewrite that ADR. Do not add a new file that supersedes it. History stays in git.
-- Do not use an ADR for a plain technology choice, a folder layout, a rule that belongs in `CONTRIBUTING.md`, or an algorithm. Those go in their own docs or in the code.
+- Do not use an ADR for a plain technology choice, a folder layout, a rule that belongs in `ARCHITECTURE.md`, or an algorithm. Those go in their own docs or in the code.
 
 ### What qualifies
 

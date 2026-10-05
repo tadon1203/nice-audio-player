@@ -37,10 +37,10 @@ test("acrylic blurs what is underneath", async ({ page }) => {
   expect(acrylic.backdropFilter).toContain("blur");
 });
 
-test("acrylic turns solid and Light disappears under forced colors", async ({ page }) => {
+test("acrylic turns solid and Artwork glow disappears under forced colors", async ({ page }) => {
   await page.emulateMedia({ forcedColors: "active" });
   const acrylic = await styleOfInjected(page, "acrylic");
-  const light = await styleOfInjected(page, "artwork-light");
+  const light = await styleOfInjected(page, "artwork-glow");
   expect(acrylic.backdropFilter).toBe("none");
   expect(light.display).toBe("none");
 });

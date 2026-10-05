@@ -36,12 +36,12 @@ export const testRoot: LibraryRoot = {
 };
 
 export const testAlbum: LibraryAlbumSummary = {
-  key: { title: "Test album", albumArtist: "Test artist", edition: "" },
+  key: { title: "Test album", albumArtist: "Test artist", albumEdition: "" },
   artwork: null,
   year: 2020,
 };
 export const secondAlbum: LibraryAlbumSummary = {
-  key: { title: "Second album", albumArtist: "Test artist", edition: "" },
+  key: { title: "Second album", albumArtist: "Test artist", albumEdition: "" },
   artwork: null,
   year: 2024,
 };
@@ -102,7 +102,7 @@ export function testLibrary(
       key: {
         title: `Extra album ${String(index).padStart(4, "0")}`,
         albumArtist: "Extra artist",
-        edition: "",
+        albumEdition: "",
       },
       artwork,
       year: 2000 + (index % 20),

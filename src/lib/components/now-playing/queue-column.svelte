@@ -24,7 +24,7 @@
    * is sized from the column's width (`cqi`), and the current track sits 40% from the top like
    * the current lyric line. It scrolls there when the current track changes, and only then.
    * Any other row can be played, which moves within the queue and so replaces nothing; the
-   * Gutter numbers rows from the top of the queue. Editing stays in the queue panel.
+   * Row index numbers rows from the top of the queue. Editing stays in the queue panel.
    */
   let { class: className }: { class?: string } = $props();
 
