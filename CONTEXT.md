@@ -2,6 +2,11 @@
 
 The language of Nice Audio Player. Use these terms in code, docs, and tickets. Do not invent synonyms. Behavior is in [requirements.md](./docs/requirements.md). Reasons are in [docs/adr/](./docs/adr/).
 
+## Structure
+
+- **Backend**: the part of the app that owns the domain and the persistent state. It knows nothing about Tauri.
+- **Host**: the part of the app that connects the Backend to the window and the operating system. It registers commands, forwards events, and serves artwork. It holds no domain rules.
+
 ## Library
 
 - **Library**: the indexed set of tracks from the registered music folders.

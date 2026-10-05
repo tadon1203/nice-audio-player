@@ -120,8 +120,73 @@ impl std::fmt::Display for ArtworkPath {
     }
 }
 
+/// A content hash is 64 lowercase hex digits. One spelling per file, so one cache entry per file.
 fn is_hash(value: &str) -> bool {
-    value.len() == 64 && value.bytes().all(|b| b.is_ascii_hexdigit())
+    value.len() == 64
+        && value
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+}
+
+/// How long the renderer may keep a served image.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ArtworkCache {
+    /// Files are content-addressed, so a stored one never changes.
+    Immutable,
+    /// A thumbnail's fallback to the original ends when the thumbnail exists.
+    Temporary,
+}
+
+/// An image the artwork scheme answers a request with.
+#[derive(Debug, PartialEq, Eq)]
+pub struct ServedArtwork {
+    pub bytes: Vec<u8>,
+    pub mime_type: &'static str,
+    pub cache: ArtworkCache,
+}
+
+/// The hash of a thumbnail's relative path (`artwork/<shard>/<hash>.thumb.jpg`), when it is one.
+fn parse_thumbnail(relative: &str) -> Option<&str> {
+    let mut parts = relative.split('/');
+    let (Some("artwork"), Some(shard), Some(file), None) =
+        (parts.next(), parts.next(), parts.next(), parts.next())
+    else {
+        return None;
+    };
+    thumbnail_hash(file).filter(|hash| hash.starts_with(shard) && shard.len() == 2)
+}
+
+/// The image for a relative path below the data directory, or `None` when the path is not a
+/// canonical artwork path or no file exists. A thumbnail that does not exist yet falls back to
+/// its original.
+pub fn serve(data_dir: &Path, relative: &str) -> Option<ServedArtwork> {
+    let read = |path: &str, mime_type, cache, kind| {
+        let bytes = fs::read(data_dir.join(path)).ok()?;
+        log::debug!("artwork.served kind={kind}");
+        Some(ServedArtwork {
+            bytes,
+            mime_type,
+            cache,
+        })
+    };
+    if let Some(original) = ArtworkPath::parse(relative) {
+        let mime_type = original.mime_type.as_str();
+        return read(relative, mime_type, ArtworkCache::Immutable, "full");
+    }
+    let hash = parse_thumbnail(relative)?;
+    read(relative, "image/jpeg", ArtworkCache::Immutable, "thumb").or_else(|| {
+        [ArtworkMimeType::Jpeg, ArtworkMimeType::Png]
+            .into_iter()
+            .find_map(|mime| {
+                let original = ArtworkPath::new(hash.to_owned(), mime).to_string();
+                read(
+                    &original,
+                    mime.as_str(),
+                    ArtworkCache::Temporary,
+                    "thumb-fallback",
+                )
+            })
+    })
 }
 
 #[derive(Debug, Clone)]
@@ -303,9 +368,58 @@ mod tests {
     }
 
     #[test]
+    fn stored_files_are_cacheable_for_good_and_a_fallback_is_not() {
+        let dir = std::env::temp_dir().join(format!("nap-serve-{}", std::process::id()));
+        let hash = "ab".repeat(32);
+        fs::create_dir_all(dir.join("artwork/ab")).unwrap();
+        fs::write(dir.join(format!("artwork/ab/{hash}.png")), b"original").unwrap();
+        let thumb_path = format!("artwork/ab/{hash}.thumb.jpg");
+
+        let fallback = serve(&dir, &thumb_path).unwrap();
+        assert_eq!(fallback.bytes, b"original");
+        assert_eq!(fallback.mime_type, "image/png");
+        assert_eq!(fallback.cache, ArtworkCache::Temporary);
+
+        fs::write(dir.join(&thumb_path), b"thumb").unwrap();
+        let served = serve(&dir, &thumb_path).unwrap();
+        assert_eq!(served.bytes, b"thumb");
+        assert_eq!(served.mime_type, "image/jpeg");
+        assert_eq!(served.cache, ArtworkCache::Immutable);
+
+        let full = serve(&dir, &format!("artwork/ab/{hash}.png")).unwrap();
+        assert_eq!(full.cache, ArtworkCache::Immutable);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn nothing_is_served_for_a_path_that_is_not_canonical_or_has_no_file() {
+        let dir = std::env::temp_dir().join(format!("nap-serve-none-{}", std::process::id()));
+        let hash = "ab".repeat(32);
+        fs::create_dir_all(dir.join("artwork/ab")).unwrap();
+        fs::write(dir.join(format!("artwork/ab/{hash}.jpg")), b"x").unwrap();
+        fs::write(dir.join("secret.png"), b"x").unwrap();
+
+        assert!(serve(&dir, &format!("artwork/ab/{hash}.png")).is_none());
+        for bad in [
+            "artwork/../secret.png".to_owned(),
+            format!("artwork/aa/{hash}.jpg"),
+            format!("artwork/ab/{}.jpg", "AB".repeat(32)),
+            format!("artwork/ab/{hash}.jpg/extra"),
+            format!("artwork/ab/{hash}.thumb.png"),
+            format!("artwork/ab/x{hash}.thumb.jpg"),
+            format!("artwork/aa/{hash}.thumb.jpg"),
+            format!("asset/artwork/ab/{hash}.jpg"),
+        ] {
+            assert!(serve(&dir, &bad).is_none(), "{bad}");
+        }
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn a_path_that_is_not_content_addressed_is_not_canonical() {
         let hash = "ab".to_owned() + &"c".repeat(62);
         for bad in [
+            format!("artwork/AB/{}.png", "AB".to_owned() + &"C".repeat(62)),
             format!("artwork/cd/{hash}.png"),
             format!("artwork/ab/{hash}.gif"),
             format!("artwork/ab/../{hash}.png"),

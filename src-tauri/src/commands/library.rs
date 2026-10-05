@@ -11,7 +11,10 @@ use backend::library::{
 };
 
 use super::blocking;
-use crate::AppState;
+use crate::{
+    os::{open_in_file_manager, reveal_in_file_manager},
+    AppState,
+};
 
 /// Runs `work` on a blocking thread with the Library.
 async fn with_library<T: Send + 'static>(
@@ -116,20 +119,6 @@ pub async fn open_log_directory(app: tauri::AppHandle) -> Result<(), LibraryComm
     })
     .await
     .map_err(|_| LibraryCommandError::TaskFailed)?
-}
-
-#[cfg(windows)]
-fn open_in_file_manager(path: &str) -> Result<(), LibraryCommandError> {
-    std::process::Command::new("explorer.exe")
-        .arg(path.replace('/', "\\"))
-        .spawn()
-        .map(|_| ())
-        .map_err(|_| LibraryCommandError::TaskFailed)
-}
-
-#[cfg(not(windows))]
-fn open_in_file_manager(_path: &str) -> Result<(), LibraryCommandError> {
-    Err(LibraryCommandError::TaskFailed)
 }
 
 #[tauri::command]
@@ -360,22 +349,6 @@ pub async fn reveal_library_track(
         reveal_in_file_manager(&file.path.to_string_lossy())
     })
     .await
-}
-
-#[cfg(windows)]
-fn reveal_in_file_manager(path: &str) -> Result<(), LibraryCommandError> {
-    use std::os::windows::process::CommandExt;
-    // Explorer parses its own command line: `/select,` and the quoted path go through verbatim.
-    std::process::Command::new("explorer.exe")
-        .raw_arg(format!("/select,\"{}\"", path.replace('/', "\\")))
-        .spawn()
-        .map(|_| ())
-        .map_err(|_| LibraryCommandError::TaskFailed)
-}
-
-#[cfg(not(windows))]
-fn reveal_in_file_manager(_path: &str) -> Result<(), LibraryCommandError> {
-    Err(LibraryCommandError::TaskFailed)
 }
 
 #[tauri::command]

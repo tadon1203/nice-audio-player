@@ -342,8 +342,13 @@ fn has_current_magic(path: &Path) -> bool {
         .is_ok_and(|()| &magic == CACHE_MAGIC)
 }
 
+/// A content hash is 64 lowercase hex digits, the way `content_hash` writes it. One spelling per
+/// file, so one cache file per content.
 fn is_hash(value: &str) -> bool {
-    value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
+    value.len() == 64
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
 
 fn cache_path(directory: &Path, hash: &str) -> PathBuf {
@@ -689,6 +694,15 @@ mod tests {
         assert!(waveform.peaks[0] < 20);
         assert!(waveform.peaks[last] > 200);
         assert!(waveform.rms[last] > 200);
+    }
+
+    #[test]
+    fn only_a_lowercase_content_hash_names_a_cache_file() {
+        let hash = "ab".repeat(32);
+        assert!(is_hash(&hash));
+        assert!(!is_hash(&hash.to_uppercase()));
+        assert!(!is_hash(&hash[..63]));
+        assert!(!is_hash(&format!("{}g", &hash[..63])));
     }
 
     #[test]

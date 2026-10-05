@@ -20,8 +20,6 @@ use backend::{
 use serde::Serialize;
 use tauri::Emitter;
 
-use crate::media_controls::MediaControlsLink;
-
 #[derive(Clone, Serialize, specta::Type)]
 #[serde(tag = "event", content = "payload", rename_all = "camelCase")]
 pub enum AppEvent {
@@ -84,7 +82,6 @@ pub fn start_dispatcher(
     app: &tauri::AppHandle,
     backend: &Arc<BackendApp>,
     receiver: Receiver<BackendEvent>,
-    media_controls: Option<MediaControlsLink>,
 ) {
     let app = app.clone();
     let backend = Arc::clone(backend);
@@ -98,10 +95,6 @@ pub fn start_dispatcher(
                 let Some(payload) = read(event, &backend) else {
                     continue;
                 };
-                if let (AppEvent::Playback(snapshot), Some(controls)) = (&payload, &media_controls)
-                {
-                    controls.playback_changed(snapshot);
-                }
                 if app.emit("app:event", payload).is_err() {
                     log::error!("ipc.event_emit_failed event_name={}", event.name());
                 }
