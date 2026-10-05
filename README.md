@@ -4,7 +4,7 @@ A local-first Windows desktop music player focused on reliable playback and a ca
 
 ## Documentation
 
-- [AGENTS.md](./AGENTS.md) — the list of documents
+- [CLAUDE.md](./CLAUDE.md) — the list of documents
 - [Contributing](./CONTRIBUTING.md) — principles and engineering rules
 
 ## Development

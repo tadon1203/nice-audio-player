@@ -27,7 +27,7 @@
 
 - Documentation is the single source of truth. Each fact lives in one file. Link to it; do not copy it.
 - Do not over-detail. Do not record what the code already shows.
-- The files are listed in [AGENTS.md](./AGENTS.md). Two rules for adding to them:
+- The files are listed in [CLAUDE.md](./CLAUDE.md). Two rules for adding to them:
   - `CONTEXT.md`: add a term in the commit that first uses it. A term has a definition only, with no numbers or implementation.
   - `docs/adr/`: add an ADR in the same commit as the decision.
 - `.scratch/` holds gitignored working notes. Move anything worth keeping to a file above.

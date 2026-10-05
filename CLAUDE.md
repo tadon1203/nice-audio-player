@@ -1,4 +1,4 @@
-# AGENTS.md
+# CLAUDE.md
 
 - `README.md` - what the project is and how to run it
 - `docs/requirements.md` - how the product behaves
