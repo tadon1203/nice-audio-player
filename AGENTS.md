@@ -44,12 +44,9 @@ Run the cheapest command that covers the change, once, when it can fail. There i
 
 ## Tool usage
 
-- On Windows, prefer PowerShell. Use Bash only when a POSIX shell is required.
-- Use `Edit` for existing project files and `Write` for new or full-replacement files. Do not use heredocs, here-strings, `sed -i`, or shell redirection to create or modify project files.
-- Prefer `LSP` for symbol definitions, references, types, and diagnostics when available; use `Grep` for text, strings, and config keys.
+- Use `LSP` for code; use `Grep` for finding and replacing
 - For `.svelte` / `.svelte.ts`, use `svelte-file-editor` for non-trivial component work; make small local edits directly. Run `svelte-autofixer` on changed `.svelte` files and fix reported issues.
 - Offload large or exploratory searches to a Haiku subagent when that avoids pulling substantial context into the main session; bring back only the conclusion.
-- Keep tool output small: narrow searches by path, type, or pattern.
 
 ## Conventions
 
