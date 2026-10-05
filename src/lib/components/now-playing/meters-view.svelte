@@ -9,6 +9,7 @@
     stepDisplay,
   } from "$lib/meters/ballistics";
   import type { DisplayState } from "$lib/meters/ballistics";
+  import { createDrawLoop } from "$lib/meters/draw-loop";
   import { reduceFrames } from "$lib/meters/frame";
   import { AXIS_TICKS, drawLevel, drawSpectrum } from "$lib/meters/meter-draw";
   import { createMeterFeed } from "$lib/meters/meter-feed.svelte";
@@ -65,7 +66,11 @@
     return () => document.removeEventListener("visibilitychange", sync);
   });
 
-  const feed = createMeterFeed(() => active);
+  let wake = () => {};
+  const feed = createMeterFeed(
+    () => active,
+    () => wake(),
+  );
 
   const floorText = formatHeldPeak(BALLISTICS.floorDb);
   let readouts = $state<[string, string]>([floorText, floorText]);
@@ -150,28 +155,27 @@
     refreshReadouts();
     const probe = surfaces.spectrum?.node ?? null;
     color = probe ? getComputedStyle(probe).color : color;
-    let last: number | null = null;
-    let drawnAtRest = false;
-    let frameId = 0;
-
-    const tick = (now: number) => {
-      const elapsed = last === null ? 0 : (now - last) / 1000;
-      last = now;
-      const input =
-        playback.status === "playing" ? reduceFrames(feed.drain()) : (feed.drain(), null);
-      display = stepDisplay(display, input, elapsed);
-      const atRest = isAtRest(display);
-      if (!(atRest && drawnAtRest)) {
+    // The loop sleeps once every Bar and Cap is at the floor and wakes on the next frame.
+    const loop = createDrawLoop(
+      (elapsed) => {
+        const input =
+          playback.status === "playing" ? reduceFrames(feed.drain()) : (feed.drain(), null);
+        display = stepDisplay(display, input, elapsed);
         drawAll(color);
-        drawnAtRest = atRest;
-      }
-      frameId = requestAnimationFrame(tick);
-    };
-    frameId = requestAnimationFrame(tick);
+        return !isAtRest(display);
+      },
+      {
+        request: (callback) => requestAnimationFrame(callback),
+        cancel: (id) => cancelAnimationFrame(id),
+      },
+    );
+    wake = loop.wake;
+    loop.wake();
     const interval = setInterval(refreshReadouts, READOUT_MS);
 
     return () => {
-      cancelAnimationFrame(frameId);
+      wake = () => {};
+      loop.stop();
       clearInterval(interval);
       display = initialDisplay();
       refreshReadouts();

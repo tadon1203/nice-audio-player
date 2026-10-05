@@ -2,8 +2,9 @@
 //!
 //! The output callback copies what it wrote into a lock-free ring through a [`MeterTap`] and never
 //! waits. While a subscriber exists, an analysis thread reads the ring and feeds an [`Analyzer`],
-//! which produces one [`MeterFrame`] per ~8 ms and hands it to the subscriber's sink. With no
-//! subscriber nothing is copied and nothing is analysed.
+//! which measures one [`MeterFrame`] per ~8 ms (120 Hz). A [`FrameBatcher`] combines every two into
+//! one frame at 60 Hz for the subscriber's sink, and sends nothing while the sound is silent and
+//! unchanged. With no subscriber nothing is copied and nothing is analysed.
 
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
@@ -371,6 +372,70 @@ impl Analyzer {
     }
 }
 
+/// Measurements combined into one sent frame: 120 Hz in, 60 Hz out.
+const MEASUREMENTS_PER_FRAME: usize = 2;
+
+/// Combines every two measurements into one Meter frame (bands and peaks by max, RMS by mean
+/// energy, clip by OR) and holds back frames while the sound is silent and unchanged.
+pub struct FrameBatcher {
+    pending: Vec<MeterFrame>,
+    last_sent_silent: bool,
+}
+
+impl Default for FrameBatcher {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl FrameBatcher {
+    pub fn new() -> Self {
+        Self {
+            pending: Vec::with_capacity(MEASUREMENTS_PER_FRAME),
+            // The renderer starts from the floor, so a silent first frame says nothing new.
+            last_sent_silent: true,
+        }
+    }
+
+    /// Takes one measurement; returns the frame to send, if one is due and worth sending.
+    pub fn push(&mut self, measurement: MeterFrame) -> Option<MeterFrame> {
+        self.pending.push(measurement);
+        if self.pending.len() < MEASUREMENTS_PER_FRAME {
+            return None;
+        }
+        let frame = combine(&self.pending);
+        self.pending.clear();
+        let silent = frame == MeterFrame::silent();
+        if silent && self.last_sent_silent {
+            return None;
+        }
+        self.last_sent_silent = silent;
+        Some(frame)
+    }
+}
+
+fn combine(frames: &[MeterFrame]) -> MeterFrame {
+    let mut out = MeterFrame::silent();
+    for frame in frames {
+        for (slot, band) in out.bands.iter_mut().zip(&frame.bands) {
+            *slot = slot.max(*band);
+        }
+        for channel in 0..2 {
+            out.peak[channel] = out.peak[channel].max(frame.peak[channel]);
+        }
+        out.full_scale |= frame.full_scale;
+    }
+    for channel in 0..2 {
+        let energy: f64 = frames
+            .iter()
+            .map(|frame| 10_f64.powf(f64::from(frame.rms[channel]) / 10.0))
+            .sum::<f64>()
+            / frames.len() as f64;
+        out.rms[channel] = to_db(energy);
+    }
+    out
+}
+
 // --- The tap and the hub --------------------------------------------------------------------
 
 struct Source {
@@ -500,6 +565,7 @@ fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 fn run_analysis(shared: &Shared, id: u32, mut sink: FrameSink) {
     let mut current: Option<(Source, Analyzer)> = None;
     let mut buffer = [0.0_f32; 2048];
+    let mut batcher = FrameBatcher::new();
     let mut open = true;
     while open && shared.active.load(Ordering::Acquire) == id {
         if let Some(fresh) = lock(&shared.source).take() {
@@ -515,9 +581,11 @@ fn run_analysis(shared: &Shared, id: u32, mut sink: FrameSink) {
             thread::sleep(IDLE_SLEEP);
             continue;
         }
-        analyzer.process(&buffer[..read], &mut |frame| {
-            if open && !sink(&frame) {
-                open = false;
+        analyzer.process(&buffer[..read], &mut |measurement| {
+            if let Some(frame) = batcher.push(measurement) {
+                if open && !sink(&frame) {
+                    open = false;
+                }
             }
         });
     }
@@ -765,6 +833,65 @@ mod tests {
             u32::from_le_bytes(bytes[FRAME_BYTES - 4..].try_into().unwrap()),
             FLAG_FULL_SCALE
         );
+    }
+
+    // --- batching ---
+
+    fn level(db: f32) -> MeterFrame {
+        MeterFrame {
+            bands: [db; BAND_COUNT],
+            peak: [db; 2],
+            rms: [db; 2],
+            full_scale: false,
+        }
+    }
+
+    #[test]
+    fn two_measurements_become_one_frame_by_max_mean_energy_and_or() {
+        let mut batcher = FrameBatcher::new();
+        let mut first = level(-20.0);
+        first.bands[3] = -6.0;
+        first.rms = [-20.0, FLOOR_DB];
+        let mut second = level(-30.0);
+        second.peak = [-10.0, -40.0];
+        second.rms = [-20.0, -23.0];
+        second.full_scale = true;
+
+        assert_eq!(batcher.push(first), None);
+        let frame = batcher.push(second).expect("the second completes a frame");
+        assert_eq!(frame.bands[3], -6.0);
+        assert_eq!(frame.bands[4], -20.0);
+        assert_eq!(frame.peak, [-10.0, -20.0]);
+        assert!((frame.rms[0] - -20.0).abs() < 1e-4);
+        // Mean of the energies at -90 and -23 dB is half of -23 dB: about -26 dB.
+        assert!((frame.rms[1] - -26.01).abs() < 0.05, "{}", frame.rms[1]);
+        assert!(frame.full_scale);
+    }
+
+    #[test]
+    fn one_hundred_twenty_measurements_a_second_give_sixty_frames() {
+        let mut batcher = FrameBatcher::new();
+        let frames = (0..120).filter_map(|_| batcher.push(level(-20.0))).count();
+        assert_eq!(frames, 60);
+    }
+
+    #[test]
+    fn nothing_is_sent_while_silent_and_unchanged() {
+        let mut batcher = FrameBatcher::new();
+        let sent = (0..120)
+            .filter_map(|_| batcher.push(MeterFrame::silent()))
+            .count();
+        assert_eq!(sent, 0);
+
+        // Sound starts, then stops: the drop to silence is sent once, then nothing again.
+        assert!(batcher.push(level(-20.0)).is_none());
+        assert!(batcher.push(level(-20.0)).is_some());
+        assert!(batcher.push(MeterFrame::silent()).is_none());
+        assert!(batcher.push(MeterFrame::silent()).is_some());
+        let after = (0..20)
+            .filter_map(|_| batcher.push(MeterFrame::silent()))
+            .count();
+        assert_eq!(after, 0);
     }
 
     // --- tap and hub ---
