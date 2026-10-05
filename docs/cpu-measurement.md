@@ -30,11 +30,9 @@ That is about 65 callbacks per second, a frame loop at display rate. Whole-proce
 | Closed      |               |       |
 | On Lyrics   |               |       |
 
-## After (CPU optimization work, tickets 02-07)
+## After (CPU optimization work)
 
-Time is drawn by the compositor (ADR 0014), so the rAF count while a track plays should be near 0 per 3 s with meters closed, against 195-200 in the baseline. The backend sleeps to deadlines, publishes the position at 1 Hz, and analyses waveforms at background priority.
-
-These numbers still need a hand measurement with the procedure above; record them beside the baseline, on the same machine and power mode.
+Not measured yet: these numbers need a hand measurement with the procedure above; record them beside the baseline, on the same machine and power mode.
 
 | Now Playing | rAF callbacks / 3 s | Process CPU % | Notes |
 | ----------- | ------------------- | ------------- | ----- |

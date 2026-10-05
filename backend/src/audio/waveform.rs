@@ -498,7 +498,7 @@ pub struct WaveformService {
 
 impl WaveformService {
     pub fn start(directory: PathBuf, events: SharedEventSink) -> Self {
-        let purged = directory.clone();
+        let cache_directory = directory.clone();
         let shared = Arc::new(Shared {
             directory,
             ready: Mutex::new(HashMap::new()),
@@ -511,7 +511,7 @@ impl WaveformService {
             .name("waveform".into())
             .spawn(move || {
                 run_in_background();
-                purge_stale_cache(&purged);
+                purge_stale_cache(&cache_directory);
                 while let Some((request, cancellation)) = worker.next_job() {
                     // A file that panics the analysis gets no waveform; the worker lives on.
                     contain("waveform.process", || {
