@@ -40,3 +40,6 @@ Thumbs.db
 /.scratch/
 backend/target/
 /src-tauri/target/
+
+# Skill links created by `npx skills add` (machine-specific)
+.claude/skills/
