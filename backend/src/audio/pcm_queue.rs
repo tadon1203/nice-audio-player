@@ -17,6 +17,10 @@ use ringbuf::{
 
 use super::pcm::ChannelCount;
 
+/// The consumer wakes a waiting producer when occupancy falls below this fraction (1/2).
+const WAKE_NUMERATOR: usize = 1;
+const WAKE_DENOMINATOR: usize = 2;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum PcmQueueBuildError {
     ZeroCapacity,
@@ -132,11 +136,18 @@ impl PcmProducer {
 
 impl PcmConsumer {
     /// Pops up to `out.len()` samples and returns how many it got. Wakes a producer waiting for
-    /// room.
+    /// room only when this pop takes occupancy below `WAKE_BELOW_FRACTION` of capacity, so the
+    /// producer refills in large batches.
     pub(crate) fn pop_samples(&mut self, out: &mut [f32]) -> usize {
         let popped = self.consumer.pop_slice(out);
         if popped > 0 {
-            let _ = self.room.try_send(());
+            let capacity = self.consumer.capacity().get();
+            let after = self.consumer.occupied_len();
+            let before = after + popped;
+            let below = |occupied: usize| occupied * WAKE_DENOMINATOR < capacity * WAKE_NUMERATOR;
+            if below(after) && !below(before) {
+                let _ = self.room.try_send(());
+            }
         }
         popped
     }
@@ -234,6 +245,45 @@ mod tests {
 
         assert_eq!(writer.join().unwrap(), Ok(()));
         assert_eq!(collected, [1.0, 2.0, 3.0, 4.0]);
+    }
+
+    #[test]
+    fn the_producer_wakes_at_most_three_times_per_two_seconds_consumed() {
+        // A two second queue at 1 kHz, consumed in 10 ms callbacks for 4 s of audio.
+        let (mut producer, mut consumer) =
+            bounded_pcm_queue(2_000, ChannelCount::new(1).unwrap()).unwrap();
+        let writer = std::thread::spawn(move || {
+            let mut last = 0;
+            let mut refills = 0;
+            producer
+                .write_all(
+                    &vec![0.5; 4_000],
+                    || false,
+                    |queued| {
+                        if queued > last {
+                            refills += 1;
+                        }
+                        last = queued;
+                    },
+                )
+                .map(|()| refills)
+        });
+
+        let mut out = [0.0; 10];
+        let mut consumed = 0;
+        while consumed < 4_000 {
+            let popped = consumer.pop_samples(&mut out);
+            consumed += popped;
+            if popped == 0 {
+                std::thread::yield_now();
+            } else {
+                std::thread::sleep(Duration::from_micros(200));
+            }
+        }
+
+        // The first refill is the initial fill; the rest are wakes.
+        let wakes = writer.join().unwrap().unwrap() - 1;
+        assert!(wakes <= 6, "{wakes} wakes for 4 s consumed");
     }
 
     #[test]
