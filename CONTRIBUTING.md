@@ -55,6 +55,11 @@
 ## Workflow
 
 - Commit directly to `main`. Use a branch or PR only for big or risky changes.
+- Write commit messages in [Conventional Commits](https://www.conventionalcommits.org/) format: `<type>(<scope>): <description>`.
+  - Types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `chore`.
+  - The scope is optional. Use the area of the change (for example, `library`, `player`, `ui`).
+  - Write the description in the imperative mood, in lower case, without a final period.
+  - Mark a breaking change with `!` after the type or scope, or with a `BREAKING CHANGE:` footer.
 - Tests are welcome for fragile logic (`/tdd`) but not required for every change.
 - Small change or tweak: just do it and commit. Bug: `/diagnosing-bugs`. Unsure about a fact: `/research`.
 - Non-trivial feature: `/grill-with-docs` → `/to-spec` → `/to-tickets` → `/implement`. For a feature small enough to hold in one head, skip the spec and tickets.
