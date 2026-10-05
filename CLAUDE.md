@@ -1,5 +1,7 @@
 # CLAUDE.md
 
+Write comments and documentation in English following ASD-STE100 (Simplified Technical English).
+
 - `README.md` - what the project is and how to run it
 - `docs/requirements.md` - how the product behaves
 - `DESIGN.md` - UI principles

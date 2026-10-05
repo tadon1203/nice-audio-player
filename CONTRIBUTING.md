@@ -20,12 +20,9 @@
 - The backend never returns display strings. An unnamed album or artist is `""` and sorts last. The renderer labels it.
 - Use semantic tokens for UI surfaces. Do not use raw palette values.
 - Renderer code under `src/lib` is split by domain: `native`, `playback`, `library`, `lyrics`, `meters`, `settings`, `shell`, `components`, `ui`, `utils`.
-  - Dependencies point one way: `routes → components → shell → {playback, library, lyrics, settings} → {ui, utils, native}`.
-  - Domains never import each other. Code that joins two domains lives in `components/`.
-  - Only `native` may import `@tauri-apps/*`. `oxlint` enforces this (`meters` has no override yet).
-- Shared `lib/ui` controls provide common defaults only. Keep domain-specific names, layout and playback state in their callers, with a local `class` or `style`. Do not add domain variants to generic controls.
-  - Why: a ban on all local styling made generic controls collect domain-specific variants.
-  - Check this in review. Do not add ESLint rules or checker scripts. Playwright checks the rendered result.
+  - Dependency flow: `routes → components → shell → {playback, library, lyrics, settings} → {ui, utils, native}`.
+  - Only `native` may import `@tauri-apps/*`.
+- Shared `lib/ui` controls provide defaults only. Keep domain-specific styling local. Playwright validates the result.
 - Import icons one by one (`@lucide/svelte/icons/x`). Never import from the `@lucide/svelte` barrel. In `vite dev`, the barrel transforms every icon module and slows page loads and E2E runs.
 
 ## Documentation
@@ -51,34 +48,24 @@
 
 ## Workflow
 
-- Commit directly to `main`. Use a branch or PR only for big or risky changes.
-- Write commit messages in [Conventional Commits](https://www.conventionalcommits.org/) format: `<type>(<scope>): <description>`.
-  - Types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `chore`.
-  - The scope is optional. Use the area of the change (for example, `library`, `player`, `ui`).
-  - Write the description in the imperative mood, in lower case, without a final period.
-  - Mark a breaking change with `!` after the type or scope, or with a `BREAKING CHANGE:` footer.
-- Tests are welcome for fragile logic (`/tdd`) but not required for every change.
-- Small change or tweak: just do it and commit. Bug: `/diagnosing-bugs`. Unsure about a fact: `/research`.
-- Non-trivial feature: `/grill-with-docs` → `/to-spec` → `/to-tickets` → `/implement`. For a feature small enough to hold in one head, skip the spec and tickets.
-  - `/grill-with-docs` settles the design. Record new terms and decisions as described in Documentation.
-  - `/to-spec` and `/to-tickets` write to the local tracker ([issue-tracker.md](./docs/agents/issue-tracker.md)).
-- `/clear` after each step finishes (grill, spec, tickets, each ticket), once decisions are written to docs and work is committed. Not mid-grill or mid-implement.
+- Commit to `main`. Use branches for big or risky changes.
+- Commit message format: `<type>(<scope>): <description>` ([Conventional Commits](https://www.conventionalcommits.org/))
+  - Types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `chore`
+  - Description in imperative mood, lowercase, no period. Mark breaking changes with `!` or `BREAKING CHANGE:` footer.
+- Feature workflow: `/grill-with-docs` (design) → `/to-spec` → `/to-tickets` → `/implement`. Skip spec and tickets for small features.
+- Run `/clear` after each workflow step (once decisions are written to docs and work is committed).
 
 ## Checks
 
-There is no CI and no commit hook. These checks are the only gate. Run them before you commit.
+No CI or commit hooks. Run before committing:
 
-- Run the cheapest command that covers the diff, once. Do not run a check again if it passed on the same tree.
-- Run slow checks (`test:e2e*`, `package`, `validate`) in the background.
-- Fix format with `pnpm format`.
+- All changes: `pnpm check` (includes format, type check, lint)
+- Renderer logic: `pnpm test:renderer` or `pnpm test:shared`
+- Rust: `pnpm check:native` and `pnpm test:native`
+- Tauri bindings: `pnpm bindings` (regenerate TypeScript bindings)
+- IPC/startup/routing: `pnpm test:e2e`
+- Renderer and backend wiring: `pnpm test:e2e:app` (Windows)
+- UI/window behavior: test with `pnpm dev`
+- Release: `pnpm validate && pnpm package`
 
-| Change                                                            | Run                                                                                                                   |
-| ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| Docs or comments only                                             | `pnpm check` (it checks the format of Markdown too)                                                                   |
-| Renderer (`src/`)                                                 | `pnpm check`. If logic changed, add `pnpm test:renderer` or `pnpm test:shared`. While iterating: `vitest run <file>`  |
-| Rust                                                              | `pnpm check:native` and `pnpm test:native`. While iterating: `cargo check -p <crate>`, `cargo test -p <crate> <name>` |
-| Tauri command signature or event                                  | `pnpm bindings`, then the Renderer and Rust checks                                                                    |
-| Startup, IPC, routing                                             | Add `pnpm test:e2e`                                                                                                   |
-| Renderer and backend wiring (commands, events, startup, playback) | Add `pnpm test:e2e:app` (Windows, local only, plays silent files on the real output device)                           |
-| Release                                                           | `pnpm validate`, then `pnpm package`                                                                                  |
-| Tauri window, capabilities, titlebar controls                     | By hand with `pnpm dev`                                                                                               |
+Fix format with `pnpm format`. Run slow tests in background. While iterating, use focused checks (`vitest run <file>`, `cargo check -p <crate>`).
