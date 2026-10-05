@@ -1,6 +1,6 @@
 # Research: what does Symphonia 0.6 give us for gapless playback?
 
-Question (ticket `.scratch/codebase-review/issues/07-media-keys-and-gapless.md`): which formats does Symphonia 0.6.0 trim for encoder delay and padding, and what does the app have to do itself?
+Question (from a codebase-review ticket on media keys and gapless): which formats does Symphonia 0.6.0 trim for encoder delay and padding, and what does the app have to do itself?
 
 Research date: 2026-10-03. Sources: the Symphonia 0.6.0 source as vendored in `~/.cargo/registry/src/*/symphonia-*-0.6.0/` (cited `core:`, `mp3:`, `isomp4:`). No hardware or sample files were needed; nothing here was observed by decoding a real LAME or iTunes file, so each claim is marked **[verified]** (read in the cited source) or **[inferred]**.
 

@@ -1,9 +1,13 @@
 # AGENTS.md
 
+- `README.md` - what the project is and how to run it
 - `docs/requirements.md` - how the product behaves
-- `DESIGN.md` - UI principles (no implementation details)
+- `DESIGN.md` - UI principles
+- `CONTEXT.md` - domain terms (glossary)
+- `docs/adr/` - hard-to-reverse decisions, with the reason
+- `docs/research/` - sourced findings (`/research`)
 - `CONTRIBUTING.md` - engineering rules, workflow, and checks
-- `docs/agents/issue-tracker.md`, `triage-labels.md`, `domain.md` - issue tracker, triage labels, domain docs
+- `docs/agents/issue-tracker.md`, `domain.md` - issue tracker and triage labels, domain docs
 
 ## Tool usage
 

@@ -106,6 +106,19 @@ MP3, FLAC, WAV, AAC, M4A. A file counts as supported only if it can actually be 
   - The pause is longer when the current line is out of view. It does not count while the pointer rests on the lyrics.
   - A click alone never stops following.
 
+## Meters
+
+A third view of Now Playing, beside Lyrics and Queue. On a wide window it replaces the lyrics, and the queue stays. It shows the Spectrum and the Level meter (see [CONTEXT.md](../CONTEXT.md)) on one shared dB axis (−90 to 0 dBFS). It measures the audio as it leaves the app, after volume.
+
+- The Level meter shows left and right side by side, each with peak, RMS and a held peak.
+- Bars are thin and white, not tinted by the artwork, on the bare surface (no panel). The held peak is a thin full-white cap.
+- Bars rise instantly. Spectrum bars fall at 30 dB/s. Level meter bars fall at 8.6 dB/s. Caps hold for 1.5 s, then fall at 10 dB/s.
+- Each channel shows its held peak in dBFS as text, refreshed a few times a second.
+- A clip shows as the word "Clip" for 2 s. A click clears it. Color is never the only signal.
+- The meters run only while visible. When playback is paused or stopped, the bars fall to the floor. With Calm motion, the meters stop and say so.
+- On a narrow window, the Spectrum takes the full width. The left and right meters become two horizontal bars below it.
+- A mono device shows the same level on both channels. A device with more than two channels shows its first two.
+
 ## Metadata
 
 Displayed when available: title, album, artist, album artist, track/disc number, genre, date, duration, format/codec, sample rate, channels, bit depth, bit rate, file path, artwork.
@@ -126,15 +139,6 @@ Source audio files are never modified.
 - Smart playlists and advanced statistics
 - Lyrics and artwork from local, embedded, manually selected, or external sources; a user's confirmed choice is never silently replaced, and external failures never block playback
 - Visualization: supplementary only, never needed to understand playback state
-- Meters: a third view of Now Playing, beside Lyrics and Queue. On a wide window it replaces the lyrics, and the queue stays. It shows the Spectrum and the Level meter (see [CONTEXT.md](../CONTEXT.md)) on one shared dB axis (−90 to 0 dBFS). It measures the audio as it leaves the app, after volume.
-  - The Level meter shows left and right side by side, each with peak, RMS and a held peak.
-  - Bars are thin and white, not tinted by the artwork, on the bare surface (no panel). The held peak is a thin full-white cap.
-  - Bars rise instantly. Spectrum bars fall at 30 dB/s. Level meter bars fall at 8.6 dB/s. Caps hold for 1.5 s, then fall at 10 dB/s.
-  - Each channel shows its held peak in dBFS as text, refreshed a few times a second.
-  - A clip shows as the word "Clip" for 2 s. A click clears it. Color is never the only signal.
-  - The meters run only while visible. When playback is paused or stopped, the bars fall to the floor. With Calm motion, the meters stop and say so.
-  - On a narrow window, the Spectrum takes the full width. The left and right meters become two horizontal bars below it.
-  - A mono device shows the same level on both channels. A device with more than two channels shows its first two.
 - Audio processing (loudness normalization, ReplayGain): explicit and visible to the user, bypassable, no clipping
 - Exclusive output, bit-perfect playback
 - Metadata overrides and editing (only on explicit user request)

@@ -1,6 +1,6 @@
 # Research: is the Path notation ("bit-perfect") true in WASAPI shared mode?
 
-Question (ticket `.scratch/codebase-review/issues/03-research-path-truthfulness.md`): `CONTEXT.md` says a **Path**'s length alone shows whether playback is bit-perfect. The app plays through cpal 0.18.1, which uses WASAPI shared mode. Does a 96 kHz file yield `path=native` or `path=fallback`, does the Windows mixer still convert when the rate matches, and what should we do?
+Question (from a codebase-review ticket): `CONTEXT.md` said a **Path**'s length alone shows whether playback is bit-perfect. The app plays through cpal 0.18.1, which uses WASAPI shared mode. Does a 96 kHz file yield `path=native` or `path=fallback`, does the Windows mixer still convert when the rate matches, and what should we do?
 
 Research date: 2026-10-03. No real hardware was available. Every claim is marked **[verified]** (read in the cited source), **[inferred]** (follows from verified code/docs, not observed), or **[unverified]** (needs a log from real hardware). Sources: Microsoft Learn (Win32 Core Audio docs), the cpal 0.18.1 source as vendored in `~/.cargo/registry/src/*/cpal-0.18.1/` (cited `cpal:wasapi/device.rs:N`), and this repo.
 

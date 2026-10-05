@@ -1,6 +1,6 @@
 # DESIGN.md
 
-The principles every screen follows, and why. It holds no implementation. [requirements.md](./docs/requirements.md) decides what the app does. This document decides how it looks, moves, and feels.
+The principles every screen follows, and why. It holds no code paths or tuned values. [requirements.md](./docs/requirements.md) decides what the app does. This document decides how it looks, moves, and feels.
 
 ## Character
 
@@ -47,12 +47,7 @@ One sans family: Satoshi for Latin, Noto Sans JP for Japanese, then the system U
 
 ## Where the details live
 
-Values, sizes, timings, and component behavior are in the code that owns them.
-
-- Color tokens: `src/app.css` (semantic tokens only).
-- Motion tokens: `src/lib/ui/motion/tokens.ts`.
-- Light's readability caps: `src/lib/ui/artwork-light/light-model.ts`, enforced by its test.
-- Component behavior: the comment and tests of the component.
+Values, sizes, timings, and component behavior are in the code that owns them: the color and motion tokens, Light's readability caps (enforced by a test), and the comments and tests of each component.
 
 ## Amending
 

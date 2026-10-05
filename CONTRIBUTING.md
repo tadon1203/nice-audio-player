@@ -27,15 +27,10 @@
 
 - Documentation is the single source of truth. Each fact lives in one file. Link to it; do not copy it.
 - Do not over-detail. Do not record what the code already shows.
-- Where things go:
-  - `README.md`: what the project is and how to run it.
-  - `docs/requirements.md`: how the product behaves.
-  - `DESIGN.md`: UI principles. No implementation details.
-  - `CONTEXT.md`: domain terms. Add a term in the commit that first uses it.
-  - `docs/adr/`: hard-to-reverse decisions, with the reason. Add one in the same commit as the decision.
-  - `docs/research/`: sourced findings (`/research`).
-  - `CONTRIBUTING.md`: engineering rules, workflow and checks.
-  - `.scratch/`: gitignored working notes. Move anything worth keeping to a file above.
+- The files are listed in [AGENTS.md](./AGENTS.md). Two rules for adding to them:
+  - `CONTEXT.md`: add a term in the commit that first uses it. A term has a definition only, with no numbers or implementation.
+  - `docs/adr/`: add an ADR in the same commit as the decision.
+- `.scratch/` holds gitignored working notes. Move anything worth keeping to a file above.
 - Change the behavior and the doc in the same commit.
 - Write in English, in Simplified Technical English ([ASD-STE100](https://www.asd-ste100.org/)). The rules are a guide, not a gate. In short:
   - One idea per sentence. Keep sentences short (about 20 words for steps, 25 for descriptions).
@@ -64,12 +59,12 @@
 - Small change or tweak: just do it and commit. Bug: `/diagnosing-bugs`. Unsure about a fact: `/research`.
 - Non-trivial feature: `/grill-with-docs` → `/to-spec` → `/to-tickets` → `/implement`. For a feature small enough to hold in one head, skip the spec and tickets.
   - `/grill-with-docs` settles the design. Record new terms and decisions as described in Documentation.
-  - `/to-spec` and `/to-tickets` write to `.scratch/<feature>/`.
+  - `/to-spec` and `/to-tickets` write to the local tracker ([issue-tracker.md](./docs/agents/issue-tracker.md)).
 - `/clear` after each step finishes (grill, spec, tickets, each ticket), once decisions are written to docs and work is committed. Not mid-grill or mid-implement.
 
 ## Checks
 
-There is no CI, so the pre-commit check is the only gate.
+There is no CI and no commit hook. These checks are the only gate. Run them before you commit.
 
 - Run the cheapest command that covers the diff, once. Do not run a check again if it passed on the same tree.
 - Run slow checks (`test:e2e*`, `package`, `validate`) in the background.
@@ -77,7 +72,7 @@ There is no CI, so the pre-commit check is the only gate.
 
 | Change                                                            | Run                                                                                                                   |
 | ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| Docs or comments only                                             | Nothing                                                                                                               |
+| Docs or comments only                                             | `pnpm check` (it checks the format of Markdown too)                                                                   |
 | Renderer (`src/`)                                                 | `pnpm check`. If logic changed, add `pnpm test:renderer` or `pnpm test:shared`. While iterating: `vitest run <file>`  |
 | Rust                                                              | `pnpm check:native` and `pnpm test:native`. While iterating: `cargo check -p <crate>`, `cargo test -p <crate> <name>` |
 | Tauri command signature or event                                  | `pnpm bindings`, then the Renderer and Rust checks                                                                    |

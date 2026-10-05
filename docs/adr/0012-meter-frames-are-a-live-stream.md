@@ -13,6 +13,6 @@ The app measures the Spectrum and the Level meter from the audio that leaves it.
 - A frame measures a moment. It is not the state of something. The app skips a missed frame and never keeps or replays one. So it is not pushed like the Waveform (ADR 0009), whose answer must survive being late. A late meter frame has no meaning.
 - The callback timestamps a frame when it hands the samples to the device. The playback position uses the same moment, so the meter and the position agree. The app does not estimate or correct the output latency.
 - Rejected:
-  - Carrying the levels in `PlaybackPositionChanged`: it runs at 20 Hz, batched with state events, and is too slow to look live.
+  - Carrying the levels in `PlaybackPositionChanged`: it ran at 20 Hz, batched with state events, and was too slow to look live. (ADR 0014 later made the position event a 1 Hz correction. It is slower still.)
   - Polling a command from the renderer on every frame: it costs a round trip per frame for data that nobody needs twice.
   - Analysing in the renderer: it never has the samples.
