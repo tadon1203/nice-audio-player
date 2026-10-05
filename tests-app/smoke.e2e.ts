@@ -10,8 +10,16 @@ const ONE_PIXEL_PNG = Buffer.from(
   "base64",
 );
 const musicDir = process.env.E2E_MUSIC_DIR!;
+
+// Selectors: regions are found by their `aria-label` with CSS, narrowing from the page to the
+// element. A text selector (`button=Meters`) is only ever the last step of a chain, `$(scope).$(…)`:
+// WebdriverIO cannot mix strategies in one selector. The dock's toggle button shares the label
+// "Now Playing" with the layer, so the layer is picked by its tag.
 const dock = '[aria-label="Playback controls"]';
 const seek = `${dock} [role="slider"][aria-label="Playback position"]`;
+const layer = 'section[aria-label="Now Playing"]';
+const show = `${layer} [role="group"][aria-label="Show"]`;
+const meters = `${layer} section[aria-label="Meters"]`;
 
 /** Calls a backend command through the app's own IPC, the way the renderer does. */
 async function invoke<T>(command: string, args: Record<string, unknown> = {}): Promise<T> {
@@ -36,6 +44,12 @@ async function invoke<T>(command: string, args: Record<string, unknown> = {}): P
 }
 
 const position = async () => Number(await $(seek).getAttribute("aria-valuenow"));
+
+/** Meter frames the renderer has consumed; the E2E build counts them (`meter-feed.svelte.ts`). */
+const meterFrames = async () =>
+  (await browser.execute(
+    () => (window as unknown as { __e2e?: { meterFrames: number } }).__e2e?.meterFrames,
+  )) ?? 0;
 
 describe("the real app", () => {
   it("starts and shows the library", async () => {
@@ -109,41 +123,20 @@ describe("the real app", () => {
   });
 
   it("streams Meter frames while Meters is open and stops when it is closed", async () => {
-    // Counts the binary messages the app's channels receive: a Meter frame is 35 32-bit words.
-    await browser.execute(() => {
-      const w = window as unknown as {
-        __meterMessages: number;
-        __TAURI_INTERNALS__: {
-          transformCallback: (callback?: (data: unknown) => void, once?: boolean) => number;
-        };
-      };
-      w.__meterMessages = 0;
-      const original = w.__TAURI_INTERNALS__.transformCallback;
-      w.__TAURI_INTERNALS__.transformCallback = (callback, once) =>
-        original((data) => {
-          const message = (data as { message?: unknown } | null)?.message;
-          if (message instanceof ArrayBuffer && message.byteLength === 140) w.__meterMessages += 1;
-          callback?.(data);
-        }, once);
-    });
-    const messages = () =>
-      browser.execute(() => (window as unknown as { __meterMessages: number }).__meterMessages);
-
     await $(`${dock} button[aria-label="Open Now Playing"]`).click();
-    const layer = '[aria-label="Now Playing"]';
-    await $(`${layer} button=Meters`).click();
-    await expect($(`${layer} section[aria-label="Meters"]`)).toBeDisplayed();
+    await $(show).$("button=Meters").click();
+    await expect($(meters)).toBeDisplayed();
 
-    await browser.waitUntil(async () => (await messages()) > 10, {
+    await browser.waitUntil(async () => (await meterFrames()) > 10, {
       timeoutMsg: "no Meter frames arrived",
     });
     // A silent file measures the floor on both channels.
-    await expect($$(`${layer} section[aria-label="Meters"] span=-inf`)).toBeElementsArrayOfSize(2);
+    await expect($(meters).$$("span=-inf")).toBeElementsArrayOfSize(2);
 
-    await $(`${layer} button=Queue`).click();
+    await $(show).$("button=Queue").click();
     await browser.pause(300);
-    const stopped = await messages();
+    const stopped = await meterFrames();
     await browser.pause(500);
-    expect(await messages()).toBe(stopped);
+    expect(await meterFrames()).toBe(stopped);
   });
 });

@@ -25,6 +25,12 @@ export function createMeterFeed(active: () => boolean): { drain: () => MeterFram
       if (ended) return;
       const frame = decodeMeterFrame(message);
       if (frame === null) return;
+      // The app-level E2E build (`VITE_E2E=1`) counts the frames the app consumes, for
+      // `tests-app/` to read; a normal build drops this.
+      if (import.meta.env.VITE_E2E) {
+        const e2e = ((window as { __e2e?: { meterFrames: number } }).__e2e ??= { meterFrames: 0 });
+        e2e.meterFrames += 1;
+      }
       pending.push(frame);
       if (pending.length > MAX_PENDING) pending.shift();
     });

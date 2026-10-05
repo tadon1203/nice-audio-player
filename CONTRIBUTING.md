@@ -21,6 +21,8 @@
 - Use semantic tokens for UI surfaces; no raw palette values.
 - Shared `lib/ui` controls provide common defaults. Keep domain-specific names, layout and playback state in their callers; use local `class`/`style` where needed instead of adding domain variants to generic controls. Check this in review, without ESLint or custom checker scripts; see [ADR 0013](./docs/adr/0013-shared-ui-owns-presentation-policy.md).
 - Import icons one by one (`@lucide/svelte/icons/x`), never from the `@lucide/svelte` barrel: in `vite dev` the barrel transforms every icon module and slows page loads and E2E runs.
+- App e2e (`tests-app/`) selectors: find a region by its `aria-label` or role with CSS, narrowing from the page to the element (`$(scope).$(…)`). Use a text selector (`button=Meters`) only as the last step of a chain, never inside one selector string: WebdriverIO cannot mix strategies. When two elements share a label, add the tag or role to tell them apart (the dock's "Now Playing" button and the layer). Add `data-testid` only where no accessible name exists. Define each scope once, at the top of the spec.
+- App e2e observes the app through seams the repo owns (a `VITE_E2E`-only counter, a `wdio`-feature-only command), never through Tauri or WebdriverIO internals: they are read-only or private, and a patch on them is silently ignored. After a Tauri upgrade, run `pnpm test:e2e:app`. Rationale and sources: [tauri-app-e2e-stability.md](./docs/research/tauri-app-e2e-stability.md).
 - Do not weaken type checking or lint rules just to make a change pass.
 
 ## Workflow
