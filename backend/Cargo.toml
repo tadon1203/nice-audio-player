@@ -29,3 +29,7 @@ encoding_rs = "0.8.42"
 chardetng = "1.0.0"
 triple_buffer = "9.0.0"
 unicode-normalization = "0.1"
+
+# Background thread priority for waveform analysis.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_System_Threading"] }

@@ -1,8 +1,13 @@
 //! Waveform overview for the dock seek bar: peak and RMS per bucket, computed off the playback
-//! path and cached on disk by file content hash, so moving or renaming a file keeps its waveform.
+//! path and cached on disk by the library's file identity hash, so moving or renaming a file keeps
+//! its waveform.
 //!
 //! A long file that is not cached yet is shown in two steps: a quick sampled approximation, then
-//! the exact waveform, decoded in parallel segments and written to the cache.
+//! the exact waveform, decoded in parallel segments and written to the cache. Analysis runs at
+//! background priority, and the next track's analysis starts when its prefetch does.
+//!
+//! The cache key is the library's identity hash of the file; the hash is computed here only for a
+//! file the library has not stored one for.
 
 use std::collections::HashMap;
 use std::fs::File;
@@ -18,17 +23,21 @@ use super::cancellation::Cancellation;
 use super::decoding::{open_analysis_decoder, DecodeStep, PcmDecodeError, SeekStep};
 use crate::containment::contain;
 use crate::events::{BackendEvent, SharedEventSink};
+use crate::library::scanner::identity::content_hash;
+use crate::library::store::PlayableTrack;
 use crate::media::validation::ValidatedAudioFile;
 
 pub const WAVEFORM_BUCKETS: usize = 1000;
 const CHUNK_FRAMES: usize = 2048;
-const CACHE_MAGIC: &[u8; 5] = b"NAPW1";
+const CACHE_MAGIC: &[u8; 5] = b"NAPW2";
 const MEMORY_ENTRIES: usize = 16;
 /// Segments shorter than this are not worth another decoder and seek.
 const MIN_SEGMENT_CHUNKS: usize = 256;
 /// Shorter files are decoded exactly right away; sampling them would save nothing.
 const MIN_SAMPLED_SECONDS: u64 = 30;
 const SAMPLE_BUDGET: Duration = Duration::from_millis(1_500);
+/// Analysis never takes more threads than this.
+const MAX_ANALYSIS_THREADS: usize = 2;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Waveform {
@@ -172,12 +181,20 @@ fn analyze_parallel(
         let handles: Vec<_> = (0..segments)
             .map(|index| {
                 let limit = (index + 1 < segments).then_some(per_segment);
-                scope.spawn(move || analyze_range(file, cancellation, index * per_segment, limit))
+                thread::Builder::new()
+                    .name("waveform".into())
+                    .spawn_scoped(scope, move || {
+                        run_in_background();
+                        analyze_range(file, cancellation, index * per_segment, limit)
+                    })
             })
             .collect();
         handles
             .into_iter()
-            .map(|handle| handle.join().unwrap_or(Err(PcmDecodeError::DecodeFailed)))
+            .map(|handle| match handle {
+                Ok(handle) => handle.join().unwrap_or(Err(PcmDecodeError::DecodeFailed)),
+                Err(_) => Err(PcmDecodeError::DecodeFailed),
+            })
             .collect()
     });
     let mut chunks = Vec::with_capacity(total_chunks);
@@ -279,11 +296,54 @@ fn quantize(value: f32) -> u8 {
     (value.clamp(0.0, 1.0) * 255.0).round() as u8
 }
 
-/// BLAKE3 of the file bytes; identical audio at a new path hits the same cache entry.
-pub fn content_hash(path: &Path) -> std::io::Result<String> {
-    let mut hasher = blake3::Hasher::new();
-    hasher.update_reader(File::open(path)?)?;
-    Ok(hasher.finalize().to_hex().to_string())
+/// Lowers the calling thread to Windows background mode (low CPU, I/O and memory priority), so
+/// analysis never competes with playback or other apps. It lasts for the life of the thread.
+#[cfg(windows)]
+fn run_in_background() {
+    use windows_sys::Win32::System::Threading::{
+        GetCurrentThread, SetThreadPriority, THREAD_MODE_BACKGROUND_BEGIN,
+    };
+    // SAFETY: the pseudo handle of the current thread is always valid.
+    unsafe {
+        SetThreadPriority(GetCurrentThread(), THREAD_MODE_BACKGROUND_BEGIN);
+    }
+}
+
+#[cfg(not(windows))]
+fn run_in_background() {}
+
+/// Deletes cache files written under another format, silently; they are rebuilt on demand.
+fn purge_stale_cache(directory: &Path) {
+    let Ok(buckets) = std::fs::read_dir(directory) else {
+        return;
+    };
+    for bucket in buckets.flatten() {
+        let Ok(files) = std::fs::read_dir(bucket.path()) else {
+            continue;
+        };
+        for entry in files.flatten() {
+            let path = entry.path();
+            if path
+                .extension()
+                .is_some_and(|extension| extension == "napw")
+                && !has_current_magic(&path)
+            {
+                let _ = std::fs::remove_file(path);
+            }
+        }
+    }
+}
+
+fn has_current_magic(path: &Path) -> bool {
+    use std::io::Read;
+    let mut magic = [0u8; CACHE_MAGIC.len()];
+    File::open(path)
+        .and_then(|mut file| file.read_exact(&mut magic))
+        .is_ok_and(|()| &magic == CACHE_MAGIC)
+}
+
+fn is_hash(value: &str) -> bool {
+    value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
 fn cache_path(directory: &Path, hash: &str) -> PathBuf {
@@ -343,8 +403,14 @@ fn file_stamp(path: &str) -> Option<FileStamp> {
 #[derive(Default)]
 struct Jobs {
     running: Option<(String, Cancellation)>,
-    pending: Option<ValidatedAudioFile>,
+    pending: Option<Request>,
     closed: bool,
+}
+
+/// A file to analyze and the library's hash for it, when the library has one.
+struct Request {
+    file: ValidatedAudioFile,
+    hash: Option<String>,
 }
 
 struct Shared {
@@ -361,7 +427,7 @@ impl Shared {
     }
 
     /// Latest request wins: the job in flight is cancelled and an older queued request is dropped.
-    fn request(&self, file: &ValidatedAudioFile) {
+    fn request(&self, file: &ValidatedAudioFile, hash: Option<&str>) {
         let mut jobs = self.jobs();
         match &jobs.running {
             Some((path, cancellation)) if *path == file.path && !cancellation.is_cancelled() => {
@@ -371,23 +437,54 @@ impl Shared {
                 if let Some((_, cancellation)) = running {
                     cancellation.cancel();
                 }
-                jobs.pending = Some(file.clone());
+                jobs.pending = Some(Request {
+                    file: file.clone(),
+                    hash: hash.map(str::to_owned),
+                });
             }
         }
         self.wake.notify_one();
     }
 
+    /// Asks for the analysis of the track that plays next. It waits behind the job in flight and
+    /// behind a request for the track on screen, and cancels neither.
+    fn request_ahead(&self, file: &ValidatedAudioFile, hash: Option<&str>) {
+        let Some(stamp) = file_stamp(&file.path) else {
+            return;
+        };
+        let ready = self
+            .ready
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(&file.path)
+            .is_some_and(|(remembered, _)| *remembered == stamp);
+        let mut jobs = self.jobs();
+        let in_flight = jobs
+            .running
+            .as_ref()
+            .is_some_and(|(path, cancellation)| *path == file.path && !cancellation.is_cancelled());
+        if ready || in_flight || jobs.pending.is_some() || jobs.closed {
+            return;
+        }
+        jobs.pending = Some(Request {
+            file: file.clone(),
+            hash: hash.map(str::to_owned),
+        });
+        drop(jobs);
+        self.wake.notify_one();
+    }
+
     /// Blocks until there is a request, and returns it with the cancellation for its job.
-    fn next_job(&self) -> Option<(ValidatedAudioFile, Cancellation)> {
+    fn next_job(&self) -> Option<(Request, Cancellation)> {
         let mut jobs = self.jobs();
         loop {
             if jobs.closed {
                 return None;
             }
-            if let Some(file) = jobs.pending.take() {
+            if let Some(request) = jobs.pending.take() {
                 let cancellation = Cancellation::default();
-                jobs.running = Some((file.path.clone(), cancellation.clone()));
-                return Some((file, cancellation));
+                jobs.running = Some((request.file.path.clone(), cancellation.clone()));
+                return Some((request, cancellation));
             }
             jobs = self.wake.wait(jobs).unwrap_or_else(PoisonError::into_inner);
         }
@@ -401,6 +498,7 @@ pub struct WaveformService {
 
 impl WaveformService {
     pub fn start(directory: PathBuf, events: SharedEventSink) -> Self {
+        let purged = directory.clone();
         let shared = Arc::new(Shared {
             directory,
             ready: Mutex::new(HashMap::new()),
@@ -412,9 +510,13 @@ impl WaveformService {
         let _ = thread::Builder::new()
             .name("waveform".into())
             .spawn(move || {
-                while let Some((file, cancellation)) = worker.next_job() {
+                run_in_background();
+                purge_stale_cache(&purged);
+                while let Some((request, cancellation)) = worker.next_job() {
                     // A file that panics the analysis gets no waveform; the worker lives on.
-                    contain("waveform.process", || worker.process(&file, &cancellation));
+                    contain("waveform.process", || {
+                        worker.process(&request.file, request.hash.as_deref(), &cancellation);
+                    });
                     worker.jobs().running = None;
                 }
             });
@@ -434,15 +536,25 @@ impl WaveformService {
     }
 
     /// Returns the waveform if it is ready; otherwise requests analysis and returns `None`.
-    pub fn get_or_queue(&self, file: &ValidatedAudioFile) -> Option<Arc<Waveform>> {
-        file_stamp(&file.path)?;
-        let ready = self.get(file);
+    pub fn get_or_queue(&self, track: &PlayableTrack) -> Option<Arc<Waveform>> {
+        file_stamp(&track.file.path)?;
+        let ready = self.get(&track.file);
         if ready.is_none() {
-            self.shared.request(file);
+            self.shared
+                .request(&track.file, track.content_hash.as_deref());
         }
         ready
     }
+
+    /// What the playback worker calls when it starts opening the next track.
+    pub fn prefetcher(&self) -> PrefetchObserver {
+        let shared = Arc::clone(&self.shared);
+        Arc::new(move |track| shared.request_ahead(&track.file, track.content_hash.as_deref()))
+    }
 }
+
+/// Hears that a track is about to play next.
+pub type PrefetchObserver = Arc<dyn Fn(&PlayableTrack) + Send + Sync>;
 
 impl Drop for WaveformService {
     fn drop(&mut self) {
@@ -459,13 +571,25 @@ impl Drop for WaveformService {
 impl Shared {
     /// Publishes a quick approximation first when the file is long and not cached, then the exact
     /// waveform, which is also written to the cache.
-    fn process(&self, file: &ValidatedAudioFile, cancellation: &Cancellation) {
+    fn process(
+        &self,
+        file: &ValidatedAudioFile,
+        stored_hash: Option<&str>,
+        cancellation: &Cancellation,
+    ) {
         let Some(stamp) = file_stamp(&file.path) else {
             return;
         };
-        let Ok(hash) = content_hash(Path::new(&file.path)) else {
-            log::warn!("waveform.hash_failed");
-            return;
+        let hash = match stored_hash {
+            // The cache path is cut from the hash, so a malformed stored one is not trusted.
+            Some(hash) if is_hash(hash) => hash.to_owned(),
+            _ => match content_hash(Path::new(&file.path)) {
+                Ok(hash) => hash,
+                Err(_) => {
+                    log::warn!("waveform.hash_failed");
+                    return;
+                }
+            },
         };
         if let Some(cached) = read_cache(&self.directory, &hash) {
             self.publish(&file.path, stamp, cached);
@@ -474,8 +598,8 @@ impl Shared {
         if let Ok(sampled) = sample(file, cancellation, SAMPLE_BUDGET) {
             self.publish(&file.path, stamp, sampled);
         }
-        let threads =
-            thread::available_parallelism().map_or(1, |cores| (cores.get() / 2).clamp(1, 6));
+        let threads = thread::available_parallelism()
+            .map_or(1, |cores| (cores.get() / 2).clamp(1, MAX_ANALYSIS_THREADS));
         let waveform = match analyze(file, cancellation, threads) {
             Ok(waveform) => waveform,
             Err(PcmDecodeError::Cancelled) => return,
@@ -516,6 +640,28 @@ mod tests {
         validate_audio_file(path.to_str().unwrap()).unwrap()
     }
 
+    fn track_of(file: &ValidatedAudioFile, hash: Option<&str>) -> PlayableTrack {
+        PlayableTrack {
+            track_id: "1".into(),
+            title: file.file_name.clone(),
+            file: file.clone(),
+            artist: None,
+            album: None,
+            album_artist: None,
+            artwork: None,
+            duration_ms: None,
+            track_number: None,
+            disc_number: None,
+            year: None,
+            album_key: None,
+            album_track_count: None,
+            file_format: None,
+            bit_depth: None,
+            bitrate_kbps: None,
+            content_hash: hash.map(str::to_owned),
+        }
+    }
+
     fn varying_wav(directory: &TestDirectory, seconds: usize) -> ValidatedAudioFile {
         let rate = 8_000usize;
         let samples: Vec<i16> = (0..rate * seconds)
@@ -552,19 +698,87 @@ mod tests {
             rms: vec![0, 1, 2],
         };
         assert_eq!(decode(&encode(&waveform)), Some(waveform));
-        assert_eq!(decode(b"NAPW1\x03\x00\x01"), None);
+        assert_eq!(decode(b"NAPW2\x03\x00\x01"), None);
         assert_eq!(decode(b"nope"), None);
     }
 
     #[test]
-    fn content_hash_ignores_path() {
+    fn old_cache_files_are_removed_silently_and_current_ones_kept() {
         let directory = TestDirectory::new();
-        let first = wav(&directory, "a.wav", &[100, 200, 300, 400]);
-        let second = wav(&directory, "b.wav", &[100, 200, 300, 400]);
-        let other = wav(&directory, "c.wav", &[100, 200, 300, 401]);
-        let hash = |file: &ValidatedAudioFile| content_hash(Path::new(&file.path)).unwrap();
-        assert_eq!(hash(&first), hash(&second));
-        assert_ne!(hash(&first), hash(&other));
+        let cache = directory.file("cache");
+        let old = cache.join("ab").join(format!("{}.napw", "a".repeat(64)));
+        let current = cache.join("cd").join(format!("{}.napw", "c".repeat(64)));
+        std::fs::create_dir_all(old.parent().unwrap()).unwrap();
+        std::fs::create_dir_all(current.parent().unwrap()).unwrap();
+        std::fs::write(&old, b"NAPW1\x01\x00\x01\x02").unwrap();
+        std::fs::write(
+            &current,
+            encode(&Waveform {
+                peaks: vec![1],
+                rms: vec![2],
+            }),
+        )
+        .unwrap();
+
+        purge_stale_cache(&cache);
+
+        assert!(!old.exists());
+        assert!(current.exists());
+    }
+
+    #[test]
+    fn a_stored_library_hash_is_the_cache_key() {
+        let directory = TestDirectory::new();
+        let file = wav(&directory, "song.wav", &vec![5_000i16; 16_000]);
+        let stored = "ab".repeat(32);
+        let marker = Waveform {
+            peaks: vec![7, 8, 9],
+            rms: vec![1, 2, 3],
+        };
+        write_cache(&directory.file("cache"), &stored, &marker).unwrap();
+        let shared = idle_shared(&directory);
+
+        shared.process(&file, Some(&stored), &Cancellation::default());
+
+        let ready = shared.ready.lock().unwrap();
+        assert_eq!(*ready.get(&file.path).unwrap().1, marker);
+    }
+
+    #[test]
+    fn a_missing_hash_is_computed_the_way_the_library_computes_it() {
+        let directory = TestDirectory::new();
+        let file = wav(&directory, "song.wav", &vec![5_000i16; 16_000]);
+        let shared = idle_shared(&directory);
+
+        shared.process(&file, None, &Cancellation::default());
+
+        let hash = content_hash(Path::new(&file.path)).unwrap();
+        assert!(read_cache(&directory.file("cache"), &hash).is_some());
+    }
+
+    #[test]
+    fn prefetch_queues_behind_without_cancelling_anything() {
+        let directory = TestDirectory::new();
+        let current = wav(&directory, "a.wav", &[100, 200, 300, 400]);
+        let next = wav(&directory, "b.wav", &[100, 200, 300, 400]);
+        let after = wav(&directory, "c.wav", &[100, 200, 300, 400]);
+        let shared = idle_shared(&directory);
+        shared.request(&current, None);
+        let (_, in_flight) = shared.next_job().unwrap();
+
+        shared.request_ahead(&next, None);
+        assert!(!in_flight.is_cancelled());
+        assert_eq!(shared.jobs().pending.as_ref().unwrap().file.path, next.path);
+
+        // A request for the track on screen still wins over a prefetch, and a prefetch never
+        // replaces a request that is already waiting.
+        shared.request(&after, None);
+        assert!(in_flight.is_cancelled());
+        shared.request_ahead(&next, None);
+        assert_eq!(
+            shared.jobs().pending.as_ref().unwrap().file.path,
+            after.path
+        );
     }
 
     #[test]
@@ -609,8 +823,10 @@ mod tests {
         let file = wav(&directory, "song.wav", &vec![5_000i16; 16_000]);
         let (recorder, sink) = crate::events::testing::RecordingEventSink::shared();
         let service = WaveformService::start(directory.file("cache"), sink);
-        assert!(service.get_or_queue(&file).is_none());
-        let deadline = Instant::now() + Duration::from_secs(10);
+        let track = track_of(&file, None);
+        assert!(service.get_or_queue(&track).is_none());
+        // Background priority: the worker yields to the rest of a busy test run.
+        let deadline = Instant::now() + Duration::from_secs(60);
         while recorder.events().is_empty() && Instant::now() < deadline {
             thread::sleep(Duration::from_millis(10));
         }
@@ -618,7 +834,7 @@ mod tests {
             recorder.events().first(),
             Some(&BackendEvent::WaveformChanged)
         );
-        assert!(service.get_or_queue(&file).is_some());
+        assert!(service.get_or_queue(&track).is_some());
         let hash = content_hash(Path::new(&file.path)).unwrap();
         assert!(read_cache(&directory.file("cache"), &hash).is_some());
     }
@@ -653,10 +869,10 @@ mod tests {
             .collect();
         let shared = idle_shared(&directory);
         for file in &files {
-            shared.request(file);
+            shared.request(file, None);
         }
         let (latest, _) = shared.next_job().unwrap();
-        assert_eq!(latest.path, files[4].path);
+        assert_eq!(latest.file.path, files[4].path);
         assert!(shared.jobs().pending.is_none());
     }
 
@@ -666,14 +882,14 @@ mod tests {
         let first = wav(&directory, "a.wav", &[100, 200, 300, 400]);
         let second = wav(&directory, "b.wav", &[100, 200, 300, 400]);
         let shared = idle_shared(&directory);
-        shared.request(&first);
+        shared.request(&first, None);
         let (_, in_flight) = shared.next_job().unwrap();
-        shared.request(&first);
+        shared.request(&first, None);
         assert!(!in_flight.is_cancelled());
-        shared.request(&second);
+        shared.request(&second, None);
         assert!(in_flight.is_cancelled());
         let (next, _) = shared.next_job().unwrap();
-        assert_eq!(next.path, second.path);
+        assert_eq!(next.file.path, second.path);
     }
 
     #[test]
@@ -682,15 +898,16 @@ mod tests {
         let file = wav(&directory, "song.wav", &vec![5_000i16; 16_000]);
         let (recorder, sink) = crate::events::testing::RecordingEventSink::shared();
         let service = WaveformService::start(directory.file("cache"), sink);
-        assert!(service.get_or_queue(&file).is_none());
-        let deadline = Instant::now() + Duration::from_secs(10);
+        let track = track_of(&file, None);
+        assert!(service.get_or_queue(&track).is_none());
+        let deadline = Instant::now() + Duration::from_secs(60);
         while recorder.events().is_empty() && Instant::now() < deadline {
             thread::sleep(Duration::from_millis(10));
         }
-        assert!(service.get_or_queue(&file).is_some());
+        assert!(service.get_or_queue(&track).is_some());
 
         write_pcm_i16_wav(Path::new(&file.path), 8_000, 1, &vec![9_000i16; 24_000]);
-        assert!(service.get_or_queue(&file).is_none());
+        assert!(service.get_or_queue(&track).is_none());
     }
 
     #[test]

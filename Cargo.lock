@@ -2864,6 +2864,7 @@ dependencies = [
  "triple_buffer",
  "unicode-normalization",
  "walkdir",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

@@ -155,6 +155,7 @@ pub(super) mod testing {
             file_format: None,
             bit_depth: None,
             bitrate_kbps: None,
+            content_hash: None,
         }
     }
 }

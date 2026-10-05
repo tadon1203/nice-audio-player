@@ -2,7 +2,7 @@
 
 pub mod playback_context;
 
-use crate::media::validation::ValidatedAudioFile;
+use crate::library::store::PlayableTrack;
 use crate::{
     activity::ApplicationActivityService,
     audio::{
@@ -59,6 +59,7 @@ impl BackendApp {
             settings.get().playback,
             Arc::new(move |preferences| remember.record_playback(preferences)),
             Arc::new(TrackResolver::new(tracks)),
+            waveforms.prefetcher(),
         )
         .map_err(|_| BackendError::PlaybackStartFailed)?;
         Ok(Self {
@@ -101,23 +102,23 @@ impl BackendApp {
     /// (it is requested, and `WaveformChanged` follows) or nothing is loaded. The renderer never
     /// names a file, so it cannot make the backend read arbitrary ones.
     pub fn playback_waveform(&self) -> Option<PlaybackWaveform> {
-        self.loaded_waveform(|file| self.waveforms.get_or_queue(file))
+        self.loaded_waveform(|track| self.waveforms.get_or_queue(track))
     }
 
     /// Like [`Self::playback_waveform`], but only reports a waveform that is already there.
     pub fn ready_playback_waveform(&self) -> Option<PlaybackWaveform> {
-        self.loaded_waveform(|file| self.waveforms.get(file))
+        self.loaded_waveform(|track| self.waveforms.get(&track.file))
     }
 
     /// The waveform of the loaded track, always paired with that track's playback id from the
     /// same snapshot, so the two cannot disagree.
     fn loaded_waveform(
         &self,
-        find: impl FnOnce(&ValidatedAudioFile) -> Option<Arc<Waveform>>,
+        find: impl FnOnce(&PlayableTrack) -> Option<Arc<Waveform>>,
     ) -> Option<PlaybackWaveform> {
         let snapshot = self.playback.snapshot();
         let session = snapshot.session()?;
-        let waveform = find(&session.item.file)?;
+        let waveform = find(&session.item.track)?;
         Some(PlaybackWaveform {
             playback_id: session.playback_id.clone(),
             peaks: waveform.peaks.clone(),

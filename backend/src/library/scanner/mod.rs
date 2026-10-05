@@ -6,7 +6,7 @@
 //! never held while files are read.
 
 mod discover;
-mod identity;
+pub(crate) mod identity;
 mod inspect;
 mod persist;
 mod relink;

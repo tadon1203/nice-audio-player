@@ -88,6 +88,7 @@ impl Harness {
                 observer: Arc::new(move |preferences| observed.lock().unwrap().push(preferences)),
                 backend: Box::new(output.clone()),
                 tracks: resolver_of(&library),
+                on_prefetch: Arc::new(|_| {}),
             },
             queue,
             volume,
@@ -362,6 +363,7 @@ fn a_start_through_a_service_thread_needs_no_poll() {
         PlaybackPreferences::default(),
         Arc::new(|_| {}),
         resolver_of(&library),
+        Arc::new(|_| {}),
         Box::new(output.clone()),
     )
     .expect("worker should start");
@@ -1448,6 +1450,7 @@ fn start_service() -> PlaybackService {
         PlaybackPreferences::default(),
         Arc::new(|_| {}),
         Arc::new(TrackResolver::new(Box::new(NoTracks))),
+        Arc::new(|_| {}),
         Box::new(FakeOutput::new()),
     )
     .expect("worker should start")

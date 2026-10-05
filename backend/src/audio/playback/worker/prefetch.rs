@@ -27,6 +27,8 @@ impl PlaybackWorker {
         };
         let state = match self.item_of(&entry) {
             Some(item) => {
+                // Its waveform is analyzed now, in the background, so skipping ahead finds it.
+                (self.on_prefetch)(&item);
                 match SourceLoad::spawn(
                     item.file.clone(),
                     self.source_load_ids.next(),

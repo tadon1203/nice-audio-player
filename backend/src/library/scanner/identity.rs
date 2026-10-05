@@ -11,7 +11,7 @@ const SAMPLE_BYTES: u64 = 64 * 1024;
 /// The hash of a file's first and last `SAMPLE_BYTES` (all of it when it is shorter than two
 /// samples), together with its length. A file moved or renamed keeps it; any rewrite that
 /// changes either end, a retag included, does not.
-pub(super) fn content_hash(path: &Path) -> io::Result<String> {
+pub(crate) fn content_hash(path: &Path) -> io::Result<String> {
     let mut file = File::open(path)?;
     let length = file.metadata()?.len();
     let mut hasher = blake3::Hasher::new();

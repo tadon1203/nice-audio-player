@@ -49,6 +49,10 @@ pub struct PlayableTrack {
     #[serde(skip)]
     #[specta(skip)]
     pub bitrate_kbps: Option<u32>,
+    /// The library's identity hash of the file, when the scan stored one.
+    #[serde(skip)]
+    #[specta(skip)]
+    pub content_hash: Option<String>,
 }
 
 /// The playable tracks of a selection by id, in playing order, and where to start. The tracks
@@ -107,6 +111,7 @@ struct PlaybackRow {
     file_format: Option<String>,
     bit_depth: Option<u32>,
     bitrate_kbps: Option<u32>,
+    content_hash: Option<String>,
 }
 
 impl PlaybackRow {
@@ -127,7 +132,7 @@ type AlbumCounts = HashMap<LibraryAlbumKey, u32>;
 
 /// The columns every playback query returns, in the order `playback_row` reads them, and what they
 /// are selected from.
-const PLAYBACK_COLUMNS: &str = "t.id, r.path, f.relative_path, f.availability, f.inspection_status, m.title_key, m.artist_key, m.album_key, m.album_artist, m.album_artist_key, m.duration_ms, a.content_hash, a.mime_type, a.relative_path, m.track_number, m.disc_number, m.year, m.file_format, m.bit_depth, m.bitrate_kbps, m.album_dir";
+const PLAYBACK_COLUMNS: &str = "t.id, r.path, f.relative_path, f.availability, f.inspection_status, m.title_key, m.artist_key, m.album_key, m.album_artist, m.album_artist_key, m.duration_ms, a.content_hash, a.mime_type, a.relative_path, m.track_number, m.disc_number, m.year, m.file_format, m.bit_depth, m.bitrate_kbps, m.album_dir, f.content_hash";
 const PLAYBACK_FROM: &str = "FROM track_source_metadata m JOIN tracks t ON t.id = m.track_id JOIN library_files f ON f.id = t.file_id JOIN library_roots r ON r.id = f.root_id LEFT JOIN artwork_assets a ON a.id = m.artwork_id";
 
 fn playback_row(row: &Row<'_>) -> rusqlite::Result<PlaybackRow> {
@@ -157,6 +162,7 @@ fn playback_row(row: &Row<'_>) -> rusqlite::Result<PlaybackRow> {
         bitrate_kbps: row
             .get::<_, Option<i64>>(19)?
             .and_then(|value| u32::try_from(value).ok()),
+        content_hash: row.get(21)?,
     })
 }
 
@@ -215,6 +221,7 @@ fn playable_track(
         file_format: row.file_format,
         bit_depth: row.bit_depth,
         bitrate_kbps: row.bitrate_kbps,
+        content_hash: row.content_hash,
     }))
 }
 

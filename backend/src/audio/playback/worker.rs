@@ -41,6 +41,7 @@ use crate::audio::output::{
 };
 use crate::audio::timebase::millis_to_frame;
 use crate::audio::volume::{AtomicEffectiveGain, VolumeState};
+use crate::audio::waveform::PrefetchObserver;
 use crate::events::{BackendEvent, SharedEventSink};
 use log::{error, info};
 use rand::{rngs::StdRng, SeedableRng};
@@ -149,6 +150,8 @@ pub(super) struct WorkerLinks {
     pub backend: Box<dyn OutputBackend>,
     /// Where queue entries get their metadata.
     pub tracks: Arc<TrackResolver>,
+    /// Told of each track as it starts opening for gapless playback.
+    pub on_prefetch: PrefetchObserver,
 }
 
 pub(super) struct PlaybackWorker {
@@ -167,6 +170,7 @@ pub(super) struct PlaybackWorker {
     /// The queue before the last replacement, for one-step undo. Not kept across restarts.
     previous_queue: Option<PlaybackQueue>,
     tracks: Arc<TrackResolver>,
+    on_prefetch: PrefetchObserver,
     rng: StdRng,
     /// Files skipped in a row after failing; bounds the skipping to one pass over the queue.
     skipped_in_a_row: usize,
@@ -203,6 +207,7 @@ impl PlaybackWorker {
             queue,
             previous_queue: None,
             tracks: links.tracks,
+            on_prefetch: links.on_prefetch,
             rng: StdRng::from_rng(&mut rand::rng()),
             skipped_in_a_row: 0,
             volume_state,

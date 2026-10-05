@@ -127,11 +127,12 @@ describe("the real app", () => {
     await $(show).$("button=Meters").click();
     await expect($(meters)).toBeDisplayed();
 
-    await browser.waitUntil(async () => (await meterFrames()) > 10, {
-      timeoutMsg: "no Meter frames arrived",
-    });
-    // A silent file measures the floor on both channels.
+    // A silent file measures the floor on both channels, and a silent, unchanged measurement is
+    // not sent: the renderer already shows the floor, so no frame streams while this plays.
     await expect($(meters).$$("span=-inf")).toBeElementsArrayOfSize(2);
+    const silent = await meterFrames();
+    await browser.pause(500);
+    expect(await meterFrames()).toBe(silent);
 
     await $(show).$("button=Queue").click();
     await browser.pause(300);
