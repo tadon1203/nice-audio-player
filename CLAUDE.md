@@ -11,8 +11,7 @@ Respond and communicate with the user in the language they are using.
 - `CONTEXT.md` - domain terms (glossary)
 - `docs/adr/` - hard-to-reverse decisions, with the reason
 - `docs/research/` - sourced findings (`/research`)
-- `docs/agents/git-workflow.md` - branch and commit rules
-- `docs/agents/issue-tracker.md`, `domain.md` - issue tracker and triage labels, domain docs
+- `docs/agents/git-workflow.md`, `issue-tracker.md`, `domain.md` - branch and commit rules, issue tracker and triage labels, domain docs
 
 ## Tool usage
 
