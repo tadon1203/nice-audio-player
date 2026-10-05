@@ -11,10 +11,6 @@ const ONE_PIXEL_PNG = Buffer.from(
 );
 const musicDir = process.env.E2E_MUSIC_DIR!;
 
-// Selectors: regions are found by their `aria-label` with CSS, narrowing from the page to the
-// element. A text selector (`button=Meters`) is only ever the last step of a chain, `$(scope).$(…)`:
-// WebdriverIO cannot mix strategies in one selector. The dock's toggle button shares the label
-// "Now Playing" with the layer, so the layer is picked by its tag.
 const dock = '[aria-label="Playback controls"]';
 const seek = `${dock} [role="slider"][aria-label="Playback position"]`;
 const layer = 'section[aria-label="Now Playing"]';

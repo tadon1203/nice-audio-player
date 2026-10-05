@@ -1,6 +1,6 @@
 # DESIGN.md
 
-The constitution of the UI: the principles every screen follows and why. It holds no implementation. Values, sizes, timings, and how a particular component behaves live in the code that owns them (tokens, component comments, tests). [requirements.md](./docs/requirements.md) decides what the app does; this decides how it looks, moves, and feels.
+The principles every screen follows, and why. It holds no implementation. [requirements.md](./docs/requirements.md) decides what the app does. This document decides how it looks, moves, and feels.
 
 ## Character
 
@@ -14,7 +14,14 @@ A tool for a personal music library, not a storefront. Dark, precise, and quiet.
 4. **Time has three luminances.** The past is faintest, the present brightest, the future in between, everywhere time appears (lyrics, the queue, the playing track). Distance from the present may dim a row further only while its text stays readable. A change of state never changes size or weight, so nothing shifts.
 5. **One thing, one place.** The playing track is not repeated in the chrome. The objects the user follows across screens (the Sleeve, a tile opening into its page) move there instead of vanishing and reappearing. Everything else may simply crossfade.
 6. **Geometry is stable.** Primary controls never move. Loading, playback state, and secondary information never shift the layout. When space runs out: rearrange first, then drop secondary information, and shrink text last.
-7. **Motion explains.** Motion shows where something came from, where it went, or that its data changed. Direction encodes hierarchy: deeper goes up, back comes down; next leaves left, previous leaves right. Direct manipulation follows the input one to one. Every movement follows one curve, a spring that never overshoots, at one of three durations (feedback, move, large); what is driven by input or retargeted while moving (opening Now Playing, lyrics scroll) keeps its velocity when retargeted, so it never jumps. Reduced motion replaces every movement with a brief crossfade (no information is lost), and progress motion, which is proportional to time or work done, runs at constant speed. `Calm motion` (a setting) stops motion that happens on its own: only the position marker moves, and the idle motion (the Light breathing) stops.
+7. **Motion explains.** Motion shows where something came from, where it went, or that its data changed.
+   - Direction encodes hierarchy. Deeper goes up, and back comes down. Next leaves left, and previous leaves right.
+   - Direct manipulation follows the input one to one.
+   - Every movement follows one curve: a spring that never overshoots. It has one of three durations (feedback, move, large).
+   - A movement that input drives, or that retargets while moving (opening Now Playing, lyrics scroll), keeps its velocity. It never jumps.
+   - Reduced motion replaces every movement with a brief crossfade. No information is lost.
+   - Progress motion runs at constant speed.
+   - Calm motion (a setting) stops motion that starts on its own. Only the position marker moves. The idle motion (the Light breathing) stops.
 8. **Decoration is data.** Anything that looks like an instrument shows real data and behaves truthfully: a magnifier magnifies the input, a meter measures. Nothing decorative that means nothing. An instrument may look like an instrument; it may not look like it measures what it does not.
 9. **Density follows the task.** Browsing artwork breathes; tables, metadata, settings, and technical readouts are compact. Hierarchy comes from size, luminance, and spacing, not from boxes, heavy weights, or large empty space. Use the structure the content has (grid, list, table, ledger); no dashboards of interchangeable cards.
 10. **Text is real.** Text stays real, selectable text in the flow of the page. Animated glyphs are only a layer drawn over it and hidden from assistive technology.
@@ -40,6 +47,8 @@ One sans family: Satoshi for Latin, Noto Sans JP for Japanese, then the system U
 
 ## Where the details live
 
+Values, sizes, timings, and component behavior are in the code that owns them.
+
 - Color tokens: `src/app.css` (semantic tokens only).
 - Motion tokens: `src/lib/ui/motion/tokens.ts`.
 - Light's readability caps: `src/lib/ui/artwork-light/light-model.ts`, enforced by its test.
@@ -47,4 +56,4 @@ One sans family: Satoshi for Latin, Noto Sans JP for Japanese, then the system U
 
 ## Amending
 
-A feature that needs an exception to a principle changes the feature or rewrites the principle, with the reason. There are no exception lists. A detail this document does not cover is decided by the principles and recorded in the code, not here.
+If a feature needs an exception to a principle, change the feature or rewrite the principle, and give the reason. There are no exception lists. The principles decide any detail this document does not cover. Record that detail in the code, not here.
