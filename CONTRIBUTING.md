@@ -15,7 +15,6 @@
 - Library columns that hold a state (availability, inspection, artwork status) map to Rust enums in `library/status.rs`.
   - The migration's CHECK lists the same names, and any retired ones. SQLite cannot change a CHECK without rebuilding the table.
   - Foreign keys cascade. Do not write child deletes by hand.
-- Library migrations must not destroy data. The database is copied to `library.sqlite3.v<N>.bak` before a migration runs. A migration must not make that copy the only place where data survives.
 - Only `library/keys.rs` computes how the catalog files a track (title, artist, album and Album Artist keys, year). The key columns store the result when a track is written. Reads use the stored keys.
 - Build a track's file path only through `TrackLocation`. It checks that the path stays inside its root.
 - The backend never returns display strings. An unnamed album or artist is `""` and sorts last. The renderer labels it.
@@ -33,9 +32,6 @@
 
 - Documentation is the single source of truth. Each fact lives in one file. Link to it; do not copy it.
 - Do not over-detail. Do not record what the code already shows.
-- The files are listed in [CLAUDE.md](./CLAUDE.md). Two rules for adding to them:
-  - `CONTEXT.md`: add a term in the commit that first uses it. A term has a definition only, with no numbers or implementation.
-  - `docs/adr/`: add an ADR in the same commit as the decision.
 - `.scratch/` holds gitignored working notes. Move anything worth keeping to a file above.
 - Change the behavior and the doc in the same commit.
 - Write in English, in Simplified Technical English ([ASD-STE100](https://www.asd-ste100.org/)). The rules are a guide, not a gate. In short:
