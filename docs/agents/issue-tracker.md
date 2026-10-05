@@ -15,8 +15,6 @@ Issues and specs for this repo live as markdown files in `.scratch/`.
 This is the only definition of the ticket format. Skills link here.
 
 ```md
-Status: ready-for-agent
-
 # <NN>: <Ticket title>
 
 **Parent:** `.scratch/<feature-slug>/spec.md`
@@ -39,7 +37,7 @@ A ticket fits in one 200k-token context. The agent reads, builds, checks and rev
 
 ## Triage label
 
-The only value of the `Status:` line is `ready-for-agent`: fully specified, ready for an AFK agent. This repo does not use the other roles in the skills (`needs-triage`, `needs-info`, `ready-for-human`, `wontfix`). If a skill mentions a role, use `ready-for-agent`, or drop the ticket.
+Tickets have no status or triage label. A ticket that exists is ready for an AFK agent, and a finished ticket is deleted. If a skill mentions a triage label or role (`ready-for-agent`, `needs-triage`, `needs-info`, `ready-for-human`, `wontfix`), ignore it.
 
 ## When a skill says "publish to the issue tracker"
 
