@@ -5,6 +5,9 @@ export default defineConfig({
   outputDir: "test-results/playwright",
   globalSetup: "./tests/global-setup.ts",
   fullyParallel: true,
+  // The default worker count (half of the CPU cores) overloads the machine: each worker runs a
+  // browser, and the load makes tests time out. Override with `--workers=N`.
+  workers: "25%",
   reporter: "list",
   snapshotPathTemplate:
     "{snapshotDir}/{testFileDir}/{testFileName}-snapshots/{arg}-{platform}{ext}",
