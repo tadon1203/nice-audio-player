@@ -64,7 +64,7 @@ Data flow:
 - A Host command that blocks does not run on the main thread.
 - Backend services know nothing about the Host or each other. They emit events, which carry no state.
 - Every state that the Library stores is a closed set of values. The code and the database enforce the same set.
-- One place decides how the Library files a track (its Album Artist, album, and Edition). Reads use the stored result.
+- One place decides how the Library files a track (its Album Artist and album). Reads use the stored result.
 - One place builds the path of a track's file, and it keeps the path inside its Library folder.
 - The Backend never returns display strings. An unnamed album or artist is empty, and the Renderer labels it.
 - Renderer dependencies flow one way: routes, then components, then the Renderer shell, then the Renderer domains, then the shared layers (ui, utils, native). A Renderer domain does not import another Renderer domain.

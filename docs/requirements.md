@@ -84,7 +84,7 @@ MP3, FLAC, WAV, AAC, M4A. A file counts as supported only if it can actually be 
   - Kana are filed under the head of their row (か for が). All kanji are one "漢".
   - Choosing a letter starts the list there, without loading what precedes it.
   - Choosing the first letter, or changing the sort or filter, starts the list from the top.
-- Albums are filed by Album Artist, title and Album edition. See Compilation and Album edition in [CONTEXT.md](../CONTEXT.md). A disc folder ("CD1", "Disc 2") belongs to the album folder above it.
+- Albums are filed by Album Artist, title and folder. See Album and Compilation in [CONTEXT.md](../CONTEXT.md). A disc folder ("CD1", "Disc 2") belongs to the album folder above it.
 
 ## Lyrics
 

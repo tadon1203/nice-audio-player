@@ -9,6 +9,9 @@ The language of Nice Audio Player. Use these terms in code, docs, and tickets. D
 - **Renderer shell**: the part of the Renderer that holds app state spanning several Renderer domains, such as Now Playing, the queue panel, and workspace scroll. It sits between the product compositions and the Renderer domains.
 - **Backend**: the part of the app that owns the domain and the persistent state. It knows nothing about Tauri.
 - **Host**: the part of the app that connects the Backend to the window and the operating system. It registers commands, forwards events, and serves artwork. It holds no domain rules.
+- **Backend state**: a value that the Backend owns and the Renderer mirrors, such as the Playback, the Queue, the Library scan, the Waveform, and the Appearance. It always reaches the Renderer whole, with its revision.
+- **Backend occurrence**: a fact about one moment that the Backend reports once, such as a skipped track. The Renderer shows it and builds no state from it.
+- **Measurement stream**: the frequent measurements that the Backend sends while audio plays: the playing position and the Meter frames. _Avoid_: Stream (an Output stream is a different thing).
 
 ## Library
 
@@ -17,7 +20,7 @@ The language of Nice Audio Player. Use these terms in code, docs, and tickets. D
 - **Library scan**: discovering, inspecting, and indexing files in batches.
 - **Missing track**: a track whose file is gone. A new file with the same content is that track again (relinked, same `track_id`).
 - **Compilation**: tracks that share a directory and an album title, but not an artist. They are one album, filed under Various Artists.
-- **Album edition**: the printing of an album. It is the folder that holds the tracks. A disc folder counts as the folder above it. An album is its Album Artist, title and Album edition.
+- **Album**: the tracks that share an Album Artist, a title, and a folder. A disc folder counts as the folder above it. Two printings of one album in two folders are two albums.
 - **Scroll index**: a list's names grouped by first character, counted in the list's own order. It backs the big letter shown while scrolling and the jump to a letter.
 
 ## Playback
@@ -47,5 +50,6 @@ The language of Nice Audio Player. Use these terms in code, docs, and tickets. D
 - **Album strip**: a band that lays out an album's tracks as sections in proportion to their duration. It also shows the playing position.
 - **Row index**: position and order on the left, in tabular figures. It is also the button of its row.
 - **Signal path**: technical notation for audio, such as `FLAC 24/96 › Speakers`. Its length shows whether the app altered the audio.
+- **Appearance**: the user's display settings: the Artwork glow and Calm motion. _Avoid_: Settings, as the name of this data (each Backend area owns its own settings; the Settings screen is only where the user changes them).
 - **Calm motion**: a setting that stops motion that starts on its own.
 - **Progress motion**: motion proportional to time or to work done. It runs at constant speed.
