@@ -1,4 +1,4 @@
-import { isTauri } from "@tauri-apps/api/core";
+import { Channel, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -70,8 +70,12 @@ function isAppEvent(payload: unknown): payload is AppEvent {
   );
 }
 
+const nativeCommands = withNativeErrors(commands);
+
 const tauriApi: TNativeAPI = {
-  ...withNativeErrors(commands),
+  ...nativeCommands,
+  subscribeMeterFrames: (onFrame) =>
+    nativeCommands.subscribeMeterFrames(new Channel<ArrayBuffer>(onFrame)),
   selectLibraryDirectory: async () => {
     const selected = await open({ directory: true, multiple: false });
     return typeof selected === "string" ? selected : null;

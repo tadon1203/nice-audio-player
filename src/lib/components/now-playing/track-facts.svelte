@@ -37,7 +37,6 @@
   {#if links.artist !== null}
     <p class="truncate text-base text-foreground">
       {#if artistHref !== null}
-        <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
         <a href={artistHref} class={linkClass}>{links.artist.text}</a>
       {:else}
         {links.artist.text}
@@ -47,7 +46,6 @@
   {#if links.album !== null}
     <p class="truncate text-sm text-foreground [@container(max-height:520px)]:hidden">
       {#if albumLinkHref !== null}
-        <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
         <a href={albumLinkHref} class={linkClass}>{links.album.text}</a>
       {:else}
         {links.album.text}

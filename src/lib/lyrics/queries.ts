@@ -12,7 +12,7 @@ export const lyricsQueryOptions = {
       queryKey: lyricsQueryKeys.track(trackId),
       queryFn: trackId === null ? skipToken : () => requireNative().getTrackLyrics(trackId),
       // Lyrics come from local files, so they stay fresh until a library scan finishes
-      // (`applyLyricsEvent`), which is when an added or edited .lrc file can be noticed.
+      // (`refreshLyrics`), which is when an added or edited .lrc file can be noticed.
       staleTime: Infinity,
       gcTime: Infinity,
     }),

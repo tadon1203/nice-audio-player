@@ -1,4 +1,3 @@
-import { Channel } from "@tauri-apps/api/core";
 import { requireNative } from "$lib/native";
 import { decodeMeterFrame, type MeterFrame } from "./frame";
 
@@ -25,27 +24,30 @@ export function createMeterFeed(
     let subscription: number | null = null;
     const native = requireNative();
 
-    const channel = new Channel<ArrayBuffer>((message) => {
-      if (ended) return;
-      const frame = decodeMeterFrame(message);
-      if (frame === null) return;
-      // The app-level E2E build (`VITE_E2E=1`) counts the frames the app consumes, for
-      // `tests-app/` to read; a normal build drops this.
-      if (import.meta.env.VITE_E2E) {
-        const e2e = ((window as { __e2e?: { meterFrames: number } }).__e2e ??= { meterFrames: 0 });
-        e2e.meterFrames += 1;
-      }
-      pending.push(frame);
-      if (pending.length > MAX_PENDING) pending.shift();
-      onFrame?.();
-    });
-    native.subscribeMeterFrames(channel).then(
-      (id) => {
-        if (ended) void native.unsubscribeMeterFrames(id).catch(() => {});
-        else subscription = id;
-      },
-      () => {},
-    );
+    native
+      .subscribeMeterFrames((message) => {
+        if (ended) return;
+        const frame = decodeMeterFrame(message);
+        if (frame === null) return;
+        // The app-level E2E build (`VITE_E2E=1`) counts the frames the app consumes, for
+        // `tests-app/` to read; a normal build drops this.
+        if (import.meta.env.VITE_E2E) {
+          const e2e = ((window as { __e2e?: { meterFrames: number } }).__e2e ??= {
+            meterFrames: 0,
+          });
+          e2e.meterFrames += 1;
+        }
+        pending.push(frame);
+        if (pending.length > MAX_PENDING) pending.shift();
+        onFrame?.();
+      })
+      .then(
+        (id) => {
+          if (ended) void native.unsubscribeMeterFrames(id).catch(() => {});
+          else subscription = id;
+        },
+        () => {},
+      );
 
     return () => {
       ended = true;

@@ -18,8 +18,16 @@ import type {
   LibraryAlbumArtistSummary,
 } from "$lib/native";
 
+/** An Album is its Album Artist, title, and folder, so all three are in its query keys. */
+const albumIdentity = (key: LibraryAlbumKey) =>
+  [key.title, key.albumArtist, key.albumEdition] as const;
+
+/** Where `libraryQueryKeys.presentation` puts the request: after `data` and "catalog". */
+const CATALOG_REQUEST_INDEX = 3;
+
 /** The request a catalog query key was built from. */
-export const requestOfCatalogKey = (key: readonly unknown[]) => key[2] as LibraryCatalogRequest;
+export const requestOfCatalogKey = (key: readonly unknown[]) =>
+  key[CATALOG_REQUEST_INDEX] as LibraryCatalogRequest;
 
 type CatalogPage = LibraryAlbumPage | LibraryAlbumArtistPage | LibraryTrackPage;
 
@@ -74,10 +82,9 @@ export const libraryQueryKeys = {
   /** The scroll index of a list: how its names are filed, in its order. Not tied to `skip`. */
   index: (request: LibraryCatalogRequest) =>
     [...data, "catalogIndex", { ...request, skip: 0 }] as const,
-  album: (key: LibraryAlbumKey) =>
-    [...data, "album", "detail", key.title, key.albumArtist] as const,
+  album: (key: LibraryAlbumKey) => [...data, "album", "detail", ...albumIdentity(key)] as const,
   albumTracks: (key: LibraryAlbumKey) =>
-    [...data, "album", "tracks", key.title, key.albumArtist] as const,
+    [...data, "album", "tracks", ...albumIdentity(key)] as const,
   artist: (key: LibraryAlbumArtistKey) => [...data, "artist", "detail", key.name] as const,
   artistAlbums: (
     key: LibraryAlbumArtistKey,

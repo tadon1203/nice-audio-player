@@ -1,4 +1,9 @@
-import type { LibraryCommandError, LibraryStatus, LibraryUnavailableReason } from "$lib/native";
+import type {
+  LibraryCommandError,
+  LibraryStatus,
+  LibraryUnavailableReason,
+  ScanFailure,
+} from "$lib/native";
 import { messageForCode, nativeErrorCode } from "$lib/native";
 
 const commandMessages = {
@@ -34,12 +39,11 @@ const unavailableMessages = {
   databaseCorrupt: "The library database is corrupt.",
 } as const satisfies Record<LibraryUnavailableReason, string>;
 
-/** The backend reports scan failures as an untyped string; these are the known values. */
-const scanFailureMessages: Readonly<Record<string, string>> = {
+const scanFailureMessages = {
   persistenceFailed: "The library database could not be updated.",
   rootTraversalFailed: "A library folder could not be read.",
   panicked: "The scan stopped unexpectedly.",
-};
+} as const satisfies Record<ScanFailure, string>;
 
 export function libraryStatusMessage(status: LibraryStatus): string | null {
   return status.status === "ready"

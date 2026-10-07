@@ -129,7 +129,6 @@
 
   // Plain strings from routes.ts, not resolve(): see there.
   function goTo(href: string) {
-    // eslint-disable-next-line svelte/no-navigation-without-resolve
     void goto(href);
   }
 </script>

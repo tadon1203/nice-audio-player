@@ -114,6 +114,12 @@ export function createLibraryCatalog<Request extends LibraryCatalogRequest>(
     ...libraryQueryOptions.catalog(queryRequest, statusQuery.data?.status === "ready"),
     placeholderData: keepWithinPresentation,
   }));
+  // The request of the data on screen: it moves to the new request only when that data arrives.
+  // An effect is needed because the value must remember the previous request.
+  let shownRequest = $state.raw<Request>(queryRequest);
+  $effect(() => {
+    if (!query.isPending && !query.isPlaceholderData) shownRequest = queryRequest;
+  });
   // The scroll index follows the list's filter and sort (not where it was entered), so a jump
   // keeps the buckets it was made from.
   const indexQuery = createQuery(() => ({
@@ -146,6 +152,13 @@ export function createLibraryCatalog<Request extends LibraryCatalogRequest>(
   );
 
   return {
+    /**
+     * The request behind the list that shows. While a new list loads and the old one stays on
+     * screen, it is the old request, so a play context built from it plays what the user sees.
+     */
+    get request(): Request {
+      return shownRequest;
+    },
     get statusQuery() {
       return statusQuery;
     },

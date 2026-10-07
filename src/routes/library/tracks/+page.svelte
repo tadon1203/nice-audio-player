@@ -38,7 +38,7 @@
       sortKey={view.sortKey}
       sortDirection={view.direction}
       onsortchange={(key, direction) => view.setSort(key, direction)}
-      onplaytrack={(id) => void playback.startPlayback(trackListContext(view), id)}
+      onplaytrack={(id) => void playback.startPlayback(trackListContext(catalog.request), id)}
     />
   {/snippet}
 </LibraryWorkspace>

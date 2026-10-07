@@ -2,6 +2,15 @@
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["typescript", "oxc"],
   "ignorePatterns": ["**/skills/**"],
+  "options": { "typeAware": true },
+  "rules": {
+    "typescript/explicit-function-return-type": "warn",
+    "typescript/explicit-member-accessibility": "warn",
+    "typescript/consistent-type-definitions": ["warn", "interface"],
+    "typescript/no-floating-promises": ["warn", { "ignoreVoid": false }],
+    "typescript/prefer-readonly": "warn",
+    "typescript/no-extraneous-class": "off"
+  },
   "overrides": [
     {
       "files": ["src/lib/native/**"],
@@ -257,6 +266,50 @@
               {
                 "group": ["$lib/settings", "$lib/settings/**"],
                 "message": "Layering: `lyrics` must not import from `settings`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
+              },
+              {
+                "group": ["@tauri-apps/**"],
+                "message": "Only `lib/native` may import `@tauri-apps/*`."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/lib/meters/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["**/routes/**"],
+                "message": "Layering: `meters` must not import from `routes`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
+              },
+              {
+                "group": ["$lib/components", "$lib/components/**"],
+                "message": "Layering: `meters` must not import from `components`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
+              },
+              {
+                "group": ["$lib/shell", "$lib/shell/**"],
+                "message": "Layering: `meters` must not import from `shell`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
+              },
+              {
+                "group": ["$lib/playback", "$lib/playback/**"],
+                "message": "Layering: `meters` must not import from `playback`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
+              },
+              {
+                "group": ["$lib/library", "$lib/library/**"],
+                "message": "Layering: `meters` must not import from `library`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
+              },
+              {
+                "group": ["$lib/lyrics", "$lib/lyrics/**"],
+                "message": "Layering: `meters` must not import from `lyrics`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
+              },
+              {
+                "group": ["$lib/settings", "$lib/settings/**"],
+                "message": "Layering: `meters` must not import from `settings`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
                 "group": ["@tauri-apps/**"],

@@ -67,7 +67,6 @@
 
 <WorkspaceScroll bind:viewportRef={viewport} contentClass="py-8 pb-16">
   {#if parentArtist !== undefined}
-    <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
     <BackLink href={albumArtistHref(parentArtist)}>{artistNameLabel(parentArtist)}</BackLink>
   {:else}
     <BackLink href={resolve("/library/albums")}>Albums</BackLink>

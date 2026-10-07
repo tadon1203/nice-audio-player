@@ -1,4 +1,4 @@
-import { albumSequence } from "./fixtures/data";
+import { albumSequence, pageOf } from "./fixtures/data";
 import { expect, test } from "./fixtures/test";
 
 test("plays tracks and operates the persistent seek, transport, volume, and technical status", async ({
@@ -94,6 +94,46 @@ test("remains operable while playback position events are streaming", async ({ p
   } finally {
     player.stopTicks();
   }
+});
+
+test("plays the list that shows, also right after the filter changes", async ({
+  page,
+  native,
+  library,
+}) => {
+  // A search answers only when the test lets it, so the old list stays on screen until then.
+  let releaseSearch: () => void = () => {};
+  const searchMayAnswer = new Promise<void>((resolve) => (releaseSearch = resolve));
+  native.respond("listLibraryTracks", async ({ cursor, search }) => {
+    if (search === null) return pageOf(library.tracks, cursor);
+    await searchMayAnswer;
+    return pageOf(
+      library.tracks.filter((track) => track.title.includes(search)),
+      cursor,
+    );
+  });
+  await page.goto("/library/tracks");
+  const table = page.getByRole("table", { name: "Library tracks" });
+  await expect(table.getByRole("row", { name: /Test track/ })).toBeVisible();
+
+  await page.getByRole("searchbox", { name: "Search tracks" }).fill("Track 002");
+  // The search request is sent once the filter has settled; the old list still shows.
+  await expect.poll(() => native.callsTo("listLibraryTracks").length).toBe(2);
+  await page.getByRole("button", { name: "Play Test track" }).click();
+  await expect.poll(() => native.callsTo("startPlayback").length).toBe(1);
+  expect(native.callsTo("startPlayback")[0]!.context).toMatchObject({
+    kind: "tracks",
+    search: null,
+  });
+
+  releaseSearch();
+  await expect(table.getByRole("row", { name: /Test track/ })).toHaveCount(0);
+  await page.getByRole("button", { name: "Play Track 002" }).click();
+  await expect.poll(() => native.callsTo("startPlayback").length).toBe(2);
+  expect(native.callsTo("startPlayback")[1]!.context).toMatchObject({
+    kind: "tracks",
+    search: "Track 002",
+  });
 });
 
 test("uses the album as the queue context when Play album starts playback", async ({

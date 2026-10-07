@@ -12,7 +12,6 @@
 </script>
 
 <!-- An artwork-led album artist entry. -->
-<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
 <a
   {href}
   aria-label="Browse albums by {name}"

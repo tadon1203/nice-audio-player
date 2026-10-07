@@ -40,14 +40,12 @@
     )
       return;
     event.preventDefault();
-    // eslint-disable-next-line svelte/no-navigation-without-resolve
     void goto(href, { state: { parentArtist, artwork: album.artwork } });
   }
 </script>
 
 <!-- An artwork-led album entry. Titles are not headings: tiles belong to a list. -->
 <div class="group/tile relative min-w-0">
-  <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
   <a
     {href}
     onclick={open}
