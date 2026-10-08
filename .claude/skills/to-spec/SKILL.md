@@ -6,11 +6,11 @@ disable-model-invocation: true
 
 This skill takes the current conversation context and codebase understanding and produces a spec. Do NOT interview the user; just synthesize what you already know.
 
-The issue tracker and triage label vocabulary should have been provided to you. If not, read `docs/agents/issue-tracker.md`.
+Read `docs/agents/issue-tracker.md` and `docs/agents/implementation-ready.md`. The spec must meet the implementation-ready standard.
 
 ## Process
 
-1. Explore the repo to understand the current state of the codebase, if you haven't already. Use the project's domain glossary vocabulary throughout the spec, and respect any ADRs in the area you're touching.
+1. Explore the repo to understand the current state of the codebase, if you haven't already. Read `CONTEXT.md` and the ADRs for the area you work in.
 
 2. Sketch out the seams at which you're going to test the feature. Existing seams should be preferred to new ones. Use the highest seam possible. If new seams are needed, propose them at the highest point you can. The fewer seams across the codebase, the better - the ideal number is one.
 
@@ -41,25 +41,27 @@ This list of user stories should be extremely extensive and cover all aspects of
 
 ## Implementation Decisions
 
-A list of implementation decisions that were made. This can include:
+Decisions that apply to more than one module (architecture, schema, protocols, order of work) come first, each in its own subsection. Then one subsection per module that will be built or changed:
 
-- The modules that will be built/modified
-- The interfaces of those modules that will be modified
-- Technical clarifications from the developer
-- Architectural decisions
-- Schema changes
-- API contracts
-- Specific interactions
+### <Module>
 
-Do NOT include specific file paths or code snippets. They may end up being outdated very quickly.
+**Files:** the paths to create, change, and delete.
+
+**Contracts:**
+
+```ts
+// Public types and signatures, IPC commands and DTOs. No function bodies.
+```
+
+**Approach:** a few lines on how the module works. For example, where the state lives and which mechanism does the work.
 
 ## Testing Decisions
 
 A list of testing decisions that were made. Include:
 
 - A description of what makes a good test (only test external behavior, not implementation details)
-- Which modules will be tested
-- Prior art for the tests (i.e. similar types of tests in the codebase)
+- Which modules will be tested, and the test files
+- Prior art for the tests (i.e. similar types of tests in the codebase), with paths
 
 ## Out of Scope
 

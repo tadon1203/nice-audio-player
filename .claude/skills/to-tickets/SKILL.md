@@ -8,7 +8,7 @@ disable-model-invocation: true
 
 Break a plan, spec, or conversation into a set of **tickets**: tracer-bullet vertical slices, each declaring the tickets that **block** it.
 
-The issue tracker and triage label vocabulary should have been provided to you. If not, read `docs/agents/issue-tracker.md`.
+Read `docs/agents/issue-tracker.md` and `docs/agents/implementation-ready.md`. Each ticket, with the spec sections it links to, must meet the implementation-ready standard.
 
 ## Process
 
@@ -16,9 +16,11 @@ The issue tracker and triage label vocabulary should have been provided to you. 
 
 Work from whatever is already in the conversation context. If the user passes a reference (a spec path, an issue number or URL) as an argument, fetch it and read its full body and comments.
 
-### 2. Explore the codebase (optional)
+### 2. Explore the codebase
 
-If you have not already explored the codebase, do so to understand the current state of the code. Ticket titles and descriptions should use the project's domain glossary vocabulary, and respect ADRs in the area you're touching.
+If you have not already explored the codebase, do so to understand the current state of the code. Read `CONTEXT.md` and the ADRs for the area you work in. You need the current files to write each ticket's Files section.
+
+If a ticket needs a design decision that the spec does not make, add the decision to the spec. Do not write it only in the ticket.
 
 Look for opportunities to prefactor the code to make the implementation easier. "Make the change easy, then make the easy change."
 
@@ -91,6 +93,14 @@ A reference to the parent issue on the tracker (if the source was an existing is
 
 The end-to-end behaviour this ticket makes work, from the user's perspective, not layer-by-layer implementation.
 
+## Files
+
+The paths to create, change, and delete, test files included. For a file that an earlier ticket creates, give that ticket's number.
+
+## Design
+
+Links to the spec sections that give the Contracts and the Approach. Do not copy them.
+
 ## Acceptance criteria
 
 - [ ] Criterion 1
@@ -101,5 +111,3 @@ The end-to-end behaviour this ticket makes work, from the user's perspective, no
 - A reference to each blocking ticket, or "None (can start immediately)".
 
 </issue-template>
-
-In either form, avoid specific file paths or code snippets: they go stale fast.

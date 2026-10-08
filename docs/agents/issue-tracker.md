@@ -23,7 +23,20 @@ This is the only definition of the ticket format. Skills link here.
 
 ## What to build
 
-The end-to-end behavior this ticket makes work. Use domain terms. Put design details in the spec and link to them. Do not list file paths or code.
+The end-to-end behavior this ticket makes work. Use domain terms.
+
+## Files
+
+- Create `<path>`
+- Change `<path>`
+- Delete `<path>`
+- Change `<path>` (ticket <NN> creates it)
+
+Include test files.
+
+## Design
+
+Links to the spec sections that give the Contracts and the Approach, for example `spec.md` "Replica". Do not copy them.
 
 ## Acceptance criteria
 

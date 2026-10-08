@@ -8,10 +8,10 @@ Respond and communicate with the user in the language they are using.
 - `ARCHITECTURE.md` - system map, code map, and rules that must not break
 - `docs/requirements.md` - how the product behaves
 - `DESIGN.md` - UI principles
-- `CONTEXT.md` - domain terms (glossary)
-- `docs/adr/` - hard-to-reverse decisions, with the reason
+- `CONTEXT.md` - domain terms (glossary). Use these terms, not synonyms. If a term is missing, say so.
+- `docs/adr/` - hard-to-reverse decisions, with the reason. If your work contradicts an ADR, say so. Do not override it silently.
 - `docs/research/` - sourced findings (`/research`)
-- `docs/agents/git-workflow.md`, `issue-tracker.md`, `domain.md` - branch and commit rules, issue tracker and triage labels, domain docs
+- `docs/agents/git-workflow.md` - branch and commit rules
 
 ## Tool usage
 
