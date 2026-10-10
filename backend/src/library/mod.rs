@@ -15,15 +15,13 @@ pub(crate) mod maintenance;
 pub mod migrations;
 pub mod models;
 pub(crate) mod roots;
-#[cfg(test)]
-mod scan_tests;
 pub(crate) mod scanner;
 pub mod status;
 pub mod store;
 pub(crate) mod summary;
 pub(crate) mod sync;
 #[cfg(test)]
-mod sync_tests;
+mod tests;
 pub(crate) mod text;
 pub(crate) mod watcher;
 
@@ -145,43 +143,4 @@ pub(crate) fn now_ms() -> i64 {
         .as_millis()
         .try_into()
         .unwrap_or(i64::MAX)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::events::null_event_sink;
-    use crate::test_support::TestDirectory;
-
-    #[test]
-    fn a_library_that_cannot_be_opened_says_why() {
-        let corrupt = TestDirectory::new();
-        std::fs::write(
-            corrupt.file("library.sqlite3"),
-            b"this is not a database at all, just text that is long enough to look like a file",
-        )
-        .unwrap();
-        let too_new = TestDirectory::new();
-        let database = Database::initialize(&too_new.file("")).expect("database");
-        database
-            .write()
-            .unwrap()
-            .pragma_update(None, "user_version", migrations::CURRENT_SCHEMA_VERSION + 1)
-            .unwrap();
-
-        let reason = |directory: &TestDirectory| {
-            Library::open(directory.file(""), null_event_sink())
-                .err()
-                .expect("an unavailable Library")
-        };
-
-        assert!(matches!(
-            reason(&corrupt),
-            LibraryUnavailableReason::DatabaseCorrupt
-        ));
-        assert!(matches!(
-            reason(&too_new),
-            LibraryUnavailableReason::SchemaTooNew
-        ));
-    }
 }

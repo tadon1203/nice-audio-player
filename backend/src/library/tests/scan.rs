@@ -1,9 +1,9 @@
 //! End-to-end scans of real (tiny) audio files against a real database.
 
-use super::database::Database;
-use super::models::{LibraryScanSnapshot, LibraryScanState, ScanFailure};
-use super::roots;
 use crate::events::{null_event_sink, BackendEvent, Notifier};
+use crate::library::database::Database;
+use crate::library::models::{LibraryScanSnapshot, LibraryScanState, ScanFailure};
+use crate::library::roots;
 use crate::test_support::{write_pcm_i16_wav, TestDirectory};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
@@ -50,7 +50,7 @@ fn run_jobs(fixture: &Fixture, cancelled: bool, dirs: Option<Vec<PathBuf>>) -> L
     let roots = roots::list(&fixture.database.read().unwrap()).expect("roots");
     let jobs = roots
         .into_iter()
-        .map(|root| super::scanner::ScanJob {
+        .map(|root| crate::library::scanner::ScanJob {
             root,
             dirs: dirs.clone(),
         })
@@ -59,7 +59,7 @@ fn run_jobs(fixture: &Fixture, cancelled: bool, dirs: Option<Vec<PathBuf>>) -> L
         state: LibraryScanState::Running,
         ..LibraryScanSnapshot::idle()
     }));
-    super::scanner::run(
+    crate::library::scanner::run(
         fixture.database.clone(),
         jobs,
         Arc::clone(&state),
@@ -374,7 +374,7 @@ fn a_folder_holding_the_data_directory_cannot_be_registered() {
 
     assert!(matches!(
         refused,
-        Err(super::error::LibraryCommandError::RootContainsDataDirectory)
+        Err(crate::library::error::LibraryCommandError::RootContainsDataDirectory)
     ));
 }
 
@@ -419,7 +419,7 @@ fn a_moved_folder_and_a_renamed_file_keep_their_tracks_and_leave_nothing_missing
     assert_eq!(id_of(&after, "New/two.wav"), id_of(&before, "Old/two.wav"));
     assert_eq!(id_of(&after, "renamed.wav"), id_of(&before, "loose.wav"));
     // A queue entry holds the track id: it now resolves to the file's new place.
-    let store = super::store::LibraryStore::new(fixture.database.clone());
+    let store = crate::library::store::LibraryStore::new(fixture.database.clone());
     let queued = id_of(&before, "Old/one.wav").unwrap().to_string();
     let location = store.track_location(&queued).unwrap().existing().unwrap();
     assert!(

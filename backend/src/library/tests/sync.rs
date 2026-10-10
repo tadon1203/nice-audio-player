@@ -2,9 +2,9 @@
 //! change in a registered folder is picked up while idle, and a failed scan is reported until a
 //! scan succeeds.
 
-use super::Library;
 use crate::events::null_event_sink;
 use crate::library::models::{LibraryScanState, LibrarySortDirection, LibraryTrackSortKey};
+use crate::library::Library;
 use crate::test_support::{write_pcm_i16_wav, TestDirectory};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
