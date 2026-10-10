@@ -8,8 +8,9 @@ Run this in the same session as the design discussion. Read `docs/agents/tickets
 
 1. Explore the code as necessary. Read `CONTEXT.md` and the ADRs for the area. If the design contradicts an ADR, say so.
 2. Find the seams to test at. Prefer existing seams and the highest seam possible. The fewer seams, the better. Confirm them with the user.
-3. Make sure that the What and the How of each change are known. A ticket must be able to meet the standard in `docs/agents/implementation-ready.md` from the spec alone: each change needs its What (public types, signatures, cross-process messages), its How (the approach, with the mechanism and where the state lives), and its Where (the files, as a guide). Ask the user about each open decision.
-4. Write `.scratch/<feature-slug>/spec.md`:
+3. Run /codebase-design. Apply its tests to each module that the design adds or changes, before its What is fixed. If an existing module that the change touches fails a test, put the fix in the Decisions. If the interface of a new module is still open, offer Design It Twice to the user. Confirm the results with the user.
+4. Make sure that the What and the How of each change are known. A ticket must be able to meet the standard in `docs/agents/implementation-ready.md` from the spec alone: each change needs its What (public types, signatures, cross-process messages), its How (the approach, with the mechanism and where the state lives), and its Where (the files, as a guide). Ask the user about each open decision.
+5. Write `.scratch/<feature-slug>/spec.md`:
 
 <spec-template>
 
@@ -23,7 +24,7 @@ The solution, from the user's perspective.
 
 ## Decisions
 
-Decisions that apply to more than one change, then one subsection per module with its Files, Contracts, and Approach.
+Decisions that apply to more than one change, then one subsection per module with its Files, Contracts, and Approach. For a decision whose solution was not obvious, give each rejected alternative and its reason in one line.
 
 ## Seams
 
