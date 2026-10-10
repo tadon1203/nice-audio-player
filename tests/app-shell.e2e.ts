@@ -206,3 +206,23 @@ for (const width of [640, 767, 768, 1024, 1360, 1920]) {
     ).toBe(true);
   });
 }
+
+test("reloads the window, connects again, and shows the full playback state", async ({
+  page,
+  native,
+}) => {
+  await page.setViewportSize({ width: 1360, height: 900 });
+  await page.goto("/library/tracks");
+  await page.getByRole("button", { name: "Play Test track" }).click();
+  const dock = page.getByRole("contentinfo", { name: "Playback controls" });
+  await expect(dock.getByRole("button", { name: "Pause", exact: true })).toBeEnabled();
+
+  await page.reload();
+
+  await expect(dock.getByRole("button", { name: "Pause", exact: true })).toBeEnabled();
+  await expect(dock).toContainText("Test track");
+  await dock.getByRole("button", { name: "Queue" }).click();
+  const panel = page.getByRole("dialog", { name: "Queue" });
+  await expect(panel.locator('[data-tone="upcoming"]').first()).toBeVisible();
+  expect(native.callsTo("connect")).toHaveLength(2);
+});

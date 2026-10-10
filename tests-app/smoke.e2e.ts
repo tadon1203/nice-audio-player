@@ -19,24 +19,19 @@ const meters = `${layer} section[aria-label="Meters"]`;
 
 /** Calls a backend command through the app's own IPC, the way the renderer does. */
 async function invoke<T>(command: string, args: Record<string, unknown> = {}): Promise<T> {
-  const reply = await browser.executeAsync(
-    (name: string, payload: Record<string, unknown>, done: (reply: unknown) => void) => {
-      const internals = (
-        window as unknown as {
-          __TAURI_INTERNALS__: { invoke: (name: string, args: unknown) => Promise<unknown> };
-        }
-      ).__TAURI_INTERNALS__;
-      internals.invoke(name, payload).then(
-        (value) => done({ value }),
-        (error) => done({ error }),
-      );
-    },
+  // The rejection becomes a value inside the page: the plugin would otherwise turn a backend
+  // `{ code }` into a message that says only "[object Object]".
+  const reply = (await browser.tauri.execute(
+    ({ core }, name: string, payload: Record<string, unknown>) =>
+      core.invoke(name, payload).then(
+        (value: unknown) => ({ value }),
+        (error: unknown) => ({ error: JSON.stringify(error) }),
+      ),
     command,
     args,
-  );
-  const { value, error } = reply as { value?: T; error?: unknown };
-  if (error !== undefined) throw new Error(`${command} rejected: ${JSON.stringify(error)}`);
-  return value as T;
+  )) as { value?: T; error?: string };
+  if (reply.error !== undefined) throw new Error(`${command} rejected: ${reply.error}`);
+  return reply.value as T;
 }
 
 const position = async () => Number(await $(seek).getAttribute("aria-valuenow"));
@@ -46,6 +41,12 @@ const meterFrames = async () =>
   (await browser.execute(
     () => (window as unknown as { __e2e?: { meterFrames: number } }).__e2e?.meterFrames,
   )) ?? 0;
+
+/** Connections and state messages the renderer has had; the E2E build counts them (`e2e-counts.ts`). */
+const e2eCounts = async () =>
+  browser.execute(
+    () => (window as unknown as { __e2e: { connects: number; stateMessages: number } }).__e2e,
+  );
 
 describe("the real app", () => {
   it("starts and shows the library", async () => {
@@ -76,15 +77,14 @@ describe("the real app", () => {
   it("scans a folder and lists its tracks", async () => {
     // The folder picker is a native dialog WebDriver cannot drive, so the folder is registered
     // through the command the picker's result goes to.
+    // Registering a folder starts its scan by itself (after a short debounce), so the test does
+    // not start one: a second start would be refused as already running.
     await invoke("register_library_root", { path: musicDir });
-    await invoke("start_library_scan");
-    await browser.waitUntil(
-      async () => (await invoke<{ state: string }>("get_library_scan_state")).state === "completed",
-      { timeout: 30_000, timeoutMsg: "the scan did not complete" },
-    );
 
+    // The scan's end reaches the renderer on its channel, and the Library refreshes itself.
     await $("a=Tracks").click();
     await browser.waitUntil(async () => (await $$('button[aria-label^="Play "]').length) === 2, {
+      timeout: 30_000,
       timeoutMsg: "the two fixture tracks were not listed",
     });
   });
@@ -135,5 +135,21 @@ describe("the real app", () => {
     const stopped = await meterFrames();
     await browser.pause(500);
     expect(await meterFrames()).toBe(stopped);
+  });
+
+  it("connects on start, gets state messages, and connects again after a reload", async () => {
+    // The page connected once when the app started, and no state message has been counted since.
+    expect((await e2eCounts()).connects).toBe(1);
+    const before = (await e2eCounts()).stateMessages;
+    await invoke("start_library_scan");
+    await browser.waitUntil(async () => (await e2eCounts()).stateMessages > before, {
+      timeoutMsg: "no state message reached the renderer",
+    });
+
+    // The reloaded page counts from zero, so one connection means it connected again, and the
+    // Dock shows the playback state it got back.
+    await browser.refresh();
+    await expect($(`${dock} button[aria-label="Previous track"]`)).toBeEnabled();
+    expect((await e2eCounts()).connects).toBe(1);
   });
 });

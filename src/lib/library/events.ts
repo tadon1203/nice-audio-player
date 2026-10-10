@@ -1,15 +1,5 @@
 import type { InfiniteData, QueryClient } from "@tanstack/svelte-query";
-import type { LibraryScanSnapshot } from "$lib/native";
 import { libraryQueryKeys } from "./queries";
-
-/**
- * Replaces the cached scan state with a pushed snapshot. A fetch still in flight would resolve
- * with older data and overwrite it, so it is cancelled first.
- */
-export function cacheScanSnapshot(client: QueryClient, snapshot: LibraryScanSnapshot) {
-  void client.cancelQueries({ queryKey: libraryQueryKeys.scan });
-  client.setQueryData(libraryQueryKeys.scan, snapshot);
-}
 
 /**
  * Refetches everything the catalog serves. A list scrolled deep would refetch every loaded page,

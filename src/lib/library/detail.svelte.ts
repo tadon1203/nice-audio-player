@@ -46,10 +46,6 @@ export function createArtworkAccent(artwork: () => ArtworkRef | null | undefined
   };
 }
 
-export function createLibraryScan() {
-  return createQuery(() => libraryQueryOptions.scan());
-}
-
 export function createLibraryRoots() {
   return createQuery(() => libraryQueryOptions.roots());
 }

@@ -2,14 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import type { Appearance, TNativeAPI } from "$lib/native";
 import { createSettings } from "./settings.svelte";
 
-function stubApi(overrides: Partial<Pick<TNativeAPI, "getSettings" | "updateSettings">> = {}) {
+function stubApi(overrides: Partial<Pick<TNativeAPI, "updateSettings">> = {}) {
   return {
-    getSettings: vi.fn(
-      async (): Promise<Appearance> => ({
-        artworkBackdrop: true,
-        calmMotion: false,
-      }),
-    ),
     updateSettings: vi.fn(
       async (): Promise<Appearance> => ({
         artworkBackdrop: true,
@@ -18,10 +12,11 @@ function stubApi(overrides: Partial<Pick<TNativeAPI, "getSettings" | "updateSett
     ),
     ...overrides,
   } as unknown as TNativeAPI & {
-    getSettings: ReturnType<typeof vi.fn>;
     updateSettings: ReturnType<typeof vi.fn>;
   };
 }
+
+const appearance: Appearance = { artworkBackdrop: true, calmMotion: false };
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -34,33 +29,25 @@ function deferred<T>() {
 }
 
 describe("Settings", () => {
-  it("knows nothing until loaded, then holds the backend values", async () => {
+  it("knows nothing until the backend's appearance is accepted, then holds it", () => {
     const settings = createSettings(stubApi());
     expect(settings.artworkBackdrop).toBeNull();
     expect(settings.calmMotion).toBeNull();
-    await settings.load();
+    settings.accept(appearance);
     expect(settings.artworkBackdrop).toBe(true);
     expect(settings.calmMotion).toBe(false);
   });
 
-  it("loads the backend values", async () => {
-    const api = stubApi({
-      getSettings: vi.fn(async () => ({
-        artworkBackdrop: false,
-        calmMotion: true,
-      })),
-    });
-    const settings = createSettings(api);
-    await settings.load();
+  it("holds the values it accepts", () => {
+    const settings = createSettings(stubApi());
+    settings.accept({ artworkBackdrop: false, calmMotion: true });
     expect(settings.artworkBackdrop).toBe(false);
     expect(settings.calmMotion).toBe(true);
   });
 
-  it("records a failed load instead of throwing", async () => {
-    const settings = createSettings(
-      stubApi({ getSettings: vi.fn().mockRejectedValue(new Error("boom")) }),
-    );
-    await settings.load();
+  it("records a failed connect instead of throwing", () => {
+    const settings = createSettings(stubApi());
+    settings.initializeFailed(new Error("boom"));
     expect(settings.error).not.toBeNull();
   });
 
@@ -68,7 +55,7 @@ describe("Settings", () => {
     const pending = deferred<Appearance>();
     const api = stubApi({ updateSettings: vi.fn(() => pending.promise) });
     const settings = createSettings(api);
-    await settings.load();
+    settings.accept(appearance);
 
     const result = settings.update({ calmMotion: true });
     expect(settings.calmMotion).toBe(true);
@@ -86,7 +73,7 @@ describe("Settings", () => {
       updateSettings: vi.fn().mockRejectedValue({ code: "persistenceFailed" }),
     });
     const settings = createSettings(api);
-    await settings.load();
+    settings.accept(appearance);
 
     const result = await settings.update({ artworkBackdrop: false });
 
@@ -94,21 +81,5 @@ describe("Settings", () => {
     expect(result.ok).toBe(false);
     expect(settings.error).toBe(result.ok ? null : result.error);
     expect(settings.error).toContain("persistenceFailed");
-  });
-
-  it("mirrors settingsChanged events only", async () => {
-    const settings = createSettings(stubApi());
-    settings.mirrorEvent({
-      event: "settingsChanged",
-      payload: { artworkBackdrop: false, calmMotion: true },
-    });
-    expect(settings.artworkBackdrop).toBe(false);
-    expect(settings.calmMotion).toBe(true);
-
-    settings.mirrorEvent({
-      event: "waveformChanged",
-      payload: { playbackId: "a", peaks: [], rms: [] },
-    });
-    expect(settings.calmMotion).toBe(true);
   });
 });

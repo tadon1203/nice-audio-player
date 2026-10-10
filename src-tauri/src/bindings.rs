@@ -1,16 +1,14 @@
 use backend::messages::BackendMessage;
 use tauri_specta::{collect_commands, Builder, ErrorHandlingMode};
 
-use crate::{commands, events::AppEvent};
+use crate::commands;
 
 /// The single registry of IPC commands and shared types. Rust is authoritative;
 /// `bindings.ts` is generated from it and must not be edited by hand.
 pub fn builder() -> Builder<tauri::Wry> {
     Builder::<tauri::Wry>::new()
         .commands(collect_commands![
-            commands::playback::get_playback_state,
             commands::playback::get_playback_queue_window,
-            commands::playback::get_playback_queue,
             commands::playback::start_playback,
             commands::playback::pause_playback,
             commands::playback::resume_playback,
@@ -32,7 +30,6 @@ pub fn builder() -> Builder<tauri::Wry> {
             commands::playback::get_playback_waveform,
             commands::library::get_library_status,
             commands::library::reset_library_and_rescan,
-            commands::library::get_library_scan_state,
             commands::library::list_library_roots,
             commands::library::register_library_root,
             commands::library::set_library_root_enabled,
@@ -61,7 +58,6 @@ pub fn builder() -> Builder<tauri::Wry> {
             commands::settings::get_settings,
             commands::settings::update_settings,
         ])
-        .typ::<AppEvent>()
         .typ::<BackendMessage>()
         .error_handling(ErrorHandlingMode::Throw)
         .dangerously_cast_bigints_to_number()

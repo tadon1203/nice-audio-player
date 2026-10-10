@@ -7,7 +7,6 @@ use tauri::Manager;
 mod artwork;
 mod bindings;
 mod commands;
-mod events;
 mod os;
 mod session;
 
@@ -77,7 +76,7 @@ pub fn run() {
                 backend: Arc::clone(&backend),
                 subscriber: Arc::clone(&subscriber),
             });
-            session::start_dispatcher(app.handle().clone(), backend, subscriber, signals);
+            session::start_dispatcher(backend, subscriber, signals);
             Ok(())
         })
         .invoke_handler(bindings::builder().invoke_handler())

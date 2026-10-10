@@ -16,8 +16,7 @@ async function publishScan(native: Native, state: LibraryScanState) {
     finishedCount: scansEnded,
     changedCount: scansEnded * 20,
   };
-  native.respond("getLibraryScanState", snapshot);
-  await native.emit({ event: "libraryScanStateChanged", payload: snapshot });
+  await native.publish("libraryScan", snapshot);
 }
 import { workspaceViewport } from "./fixtures/locators";
 

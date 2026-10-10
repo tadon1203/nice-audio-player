@@ -1,6 +1,6 @@
 import { queryOptions, skipToken, type QueryClient } from "@tanstack/svelte-query";
 import { requireNative } from "$lib/native";
-import type { AppEvent, PlaybackWaveform } from "$lib/native";
+import type { PlaybackWaveform } from "$lib/native";
 
 const waveformKeys = {
   playback: (playbackId: string | null) => ["waveform", playbackId] as const,
@@ -8,8 +8,8 @@ const waveformKeys = {
 
 /**
  * The waveform of the loaded track, keyed by its playback id: `null` while the backend analyzes
- * the file. The backend pushes every waveform it has (`waveformChanged`, a quick approximation
- * and then the exact one), and `applyWaveformEvent` writes it here; the query itself only asks
+ * the file. The backend pushes every waveform it has (a quick approximation and then the exact
+ * one), and `applyWaveform` writes it here; the query itself only asks
  * once, for a track whose waveform was ready before anyone was watching. Nothing is kept once the
  * track is no longer loaded: a file can be replaced at the same path, and the backend decides
  * whether its remembered waveform still fits. The backend pushes it instead of only signalling
@@ -37,13 +37,9 @@ export function waveformQueryOptions(playbackId: string | null) {
  * existed and would resolve with "not yet", so it is cancelled first. A playback nobody is
  * watching is not cached: it asks when it is opened.
  */
-function cacheWaveform(client: QueryClient, waveform: PlaybackWaveform) {
+export function applyWaveform(client: QueryClient, waveform: PlaybackWaveform) {
   const queryKey = waveformKeys.playback(waveform.playbackId);
   if (client.getQueryState(queryKey) === undefined) return;
   void client.cancelQueries({ queryKey });
   client.setQueryData(queryKey, waveform);
-}
-
-export function applyWaveformEvent(client: QueryClient, event: AppEvent) {
-  if (event.event === "waveformChanged") cacheWaveform(client, event.payload);
 }

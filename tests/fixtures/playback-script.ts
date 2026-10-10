@@ -67,13 +67,13 @@ export function scriptPlayback(native: Native, initialSequence: LibraryTrackSumm
   const commit = async () => {
     playbackRevision += 1;
     const next = snapshot();
-    await native.emit({ event: "playbackStateChanged", payload: next });
+    await native.publish("playback", next);
     return next;
   };
   const commitQueue = async (patch?: { upcoming?: LibraryTrackSummary[] }) => {
     queueRevision += 1;
     const next = queue(patch);
-    await native.emit({ event: "playbackQueueStateChanged", payload: next });
+    await native.publish("queue", next);
     return next;
   };
   const moveTo = async (target: number) => {
@@ -84,13 +84,11 @@ export function scriptPlayback(native: Native, initialSequence: LibraryTrackSumm
     return commit();
   };
 
-  native.respond("getPlaybackQueue", () => queue());
   native.respond("getPlaybackQueueWindow", ({ offset, limit }) => ({
     revision: queueRevision,
     offset,
     items: upcoming.slice(offset, offset + Math.min(limit, 200)).map(queueItemFor),
   }));
-  native.respond("getPlaybackState", () => (index < 0 ? stopped() : snapshot()));
   native.respond("startPlayback", ({ startTrackId }) => {
     const start =
       startTrackId === null ? 0 : sequence.findIndex((track) => track.id === startTrackId);
@@ -151,20 +149,6 @@ export function scriptPlayback(native: Native, initialSequence: LibraryTrackSumm
   };
   native.respond("getPlaybackWaveform", () => (waveformReady && index >= 0 ? waveform() : null));
 
-  const stopped = (): PlaybackSnapshot => ({
-    status: "stopped",
-    base: { ...snapshotBase(), canGoPrevious: false, canGoNext: false },
-    item: null,
-  });
-  const snapshotBase = () => ({
-    revision: playbackRevision,
-    volume,
-    muted,
-    outputSelection,
-    canGoPrevious: false,
-    canGoNext: false,
-  });
-
   const player = {
     /** Changes what the next `startPlayback` plays: what the test expects its context to hold. */
     setSequence: (next: LibraryTrackSummary[]) => {
@@ -175,9 +159,11 @@ export function scriptPlayback(native: Native, initialSequence: LibraryTrackSumm
     /** Reports the loaded track's position (and nothing else), as the backend's ticks do. */
     reportPosition: (to: number) => {
       positionMs = to;
-      return native.emit({
-        event: "playbackPositionChanged",
-        payload: { playbackId: playbackIdOf(playbackItemFor(current())), positionMs, seekRevision },
+      return native.send({
+        kind: "position",
+        playbackId: playbackIdOf(playbackItemFor(current())),
+        positionMs,
+        seekRevision,
       });
     },
     /** Reports a position every 10 ms, 250 ms further each time, until stopped. */
@@ -194,7 +180,7 @@ export function scriptPlayback(native: Native, initialSequence: LibraryTrackSumm
     /** Makes the waveform available and pushes it, as the backend does when analysis finishes. */
     publishWaveform: async () => {
       waveformReady = true;
-      await native.emit({ event: "waveformChanged", payload: waveform() });
+      await native.publish("waveform", waveform());
     },
   };
   return player;

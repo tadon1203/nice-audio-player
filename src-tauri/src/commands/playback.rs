@@ -13,18 +13,6 @@ use backend::{
 use super::blocking;
 use crate::AppState;
 
-#[tauri::command]
-#[specta::specta]
-pub fn get_playback_state(state: tauri::State<'_, AppState>) -> PlaybackSnapshot {
-    state.backend.playback.snapshot()
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn get_playback_queue(state: tauri::State<'_, AppState>) -> PlaybackQueueSnapshot {
-    state.backend.playback.queue_snapshot()
-}
-
 /// Upcoming queue items from `offset` (at most `limit`), for the parts of a long queue the
 /// snapshot does not carry. Their tracks are read from the library now.
 #[tauri::command]
@@ -258,7 +246,8 @@ pub async fn restore_previous_queue(
     .await
 }
 
-/// Waveform of the loaded track, or `None` while it is analyzed; `waveformChanged` follows.
+/// Waveform of the loaded track, or `None` while it is analyzed; the channel carries each waveform
+/// the Backend has, as a state message.
 #[tauri::command]
 #[specta::specta]
 pub async fn get_playback_waveform(

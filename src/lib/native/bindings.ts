@@ -4,13 +4,11 @@ import { invoke as __TAURI_INVOKE, Channel } from "@tauri-apps/api/core";
 
 /** Commands */
 export const commands = {
-	getPlaybackState: () => __TAURI_INVOKE<PlaybackSnapshot>("get_playback_state"),
 	/**
 	 *  Upcoming queue items from `offset` (at most `limit`), for the parts of a long queue the
 	 *  snapshot does not carry. Their tracks are read from the library now.
 	 */
 	getPlaybackQueueWindow: (offset: number, limit: number) => __TAURI_INVOKE<PlaybackQueueWindow>("get_playback_queue_window", { offset, limit }),
-	getPlaybackQueue: () => __TAURI_INVOKE<PlaybackQueueSnapshot>("get_playback_queue"),
 	/**
 	 *  Replaces the queue with `context` and plays from `start_track_id`, or from the context's
 	 *  first track when it is `None`.
@@ -40,7 +38,10 @@ export const commands = {
 	clearQueue: () => __TAURI_INVOKE<PlaybackQueueSnapshot>("clear_queue"),
 	/**  Puts back the queue the last replacement or Clear upcoming took away. */
 	restorePreviousQueue: () => __TAURI_INVOKE<PlaybackSnapshot>("restore_previous_queue"),
-	/**  Waveform of the loaded track, or `None` while it is analyzed; `waveformChanged` follows. */
+	/**
+	 *  Waveform of the loaded track, or `None` while it is analyzed; the channel carries each waveform
+	 *  the Backend has, as a state message.
+	 */
 	getPlaybackWaveform: () => __TAURI_INVOKE<{
 	/**  The playback the waveform belongs to, so a late answer cannot be drawn for another track. */
 	playbackId: string,
@@ -50,7 +51,6 @@ export const commands = {
 	getLibraryStatus: () => __TAURI_INVOKE<LibraryStatus>("get_library_status"),
 	/**  Moves the library database aside and restarts the app, which recreates it and rescans. */
 	resetLibraryAndRescan: () => __TAURI_INVOKE<null>("reset_library_and_rescan"),
-	getLibraryScanState: () => __TAURI_INVOKE<LibraryScanSnapshot>("get_library_scan_state"),
 	listLibraryRoots: () => __TAURI_INVOKE<LibraryRoot[]>("list_library_roots"),
 	registerLibraryRoot: (path: string) => __TAURI_INVOKE<LibraryRoot>("register_library_root", { path }),
 	setLibraryRootEnabled: (id: string, enabled: boolean) => __TAURI_INVOKE<LibraryRoot>("set_library_root_enabled", { id, enabled }),
@@ -149,10 +149,6 @@ export type ActiveSession = {
 	outputSampleRate: number,
 	resamplingActive: boolean,
 };
-
-export type AppEvent = { event: "playbackStateChanged"; payload: PlaybackSnapshot } | { event: "playbackPositionChanged"; payload: PlaybackPosition } | { event: "playbackQueueStateChanged"; payload: PlaybackQueueSnapshot } | { event: "libraryScanStateChanged"; payload: LibraryScanSnapshot } | 
-/**  The loaded track's waveform, whenever a better one is ready. */
-{ event: "waveformChanged"; payload: PlaybackWaveform } | { event: "settingsChanged"; payload: Appearance };
 
 /**
  *  What the renderer reads and writes. Every field is always present, so the renderer declares

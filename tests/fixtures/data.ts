@@ -1,6 +1,7 @@
 import type {
   Appearance,
   AudioOutputSelection,
+  InitialState,
   LibraryAlbumArtistSummary,
   LibraryAlbumDetails,
   LibraryAlbumSummary,
@@ -266,14 +267,23 @@ export function meterFrameBytes({
   return Array.from(new Uint8Array(view.buffer));
 }
 
+/** The state an app holds before anything plays: what `connect` answers first. */
+export function idleInitialState(): InitialState {
+  return {
+    playback: { revision: 1, value: stoppedPlayback },
+    queue: { revision: 1, value: emptyQueue },
+    libraryScan: { revision: 0, value: idleScan },
+    waveform: { revision: 0, value: null },
+    appearance: { revision: 0, value: defaultSettings },
+  };
+}
+
 /** What an app answers before anything plays. */
 export function idleResponses() {
   let nextMeterSubscription = 1;
   return {
     subscribeMeterFrames: () => nextMeterSubscription++,
     unsubscribeMeterFrames: null,
-    getPlaybackState: stoppedPlayback,
-    getPlaybackQueue: emptyQueue,
     getPlaybackQueueWindow: ({ offset }: { offset: number }) => ({
       revision: 1,
       offset,
@@ -282,8 +292,6 @@ export function idleResponses() {
     getPlaybackWaveform: null,
     listAudioOutputDevices: outputDevices,
     getLibraryStatus: { status: "ready" as const },
-    getLibraryScanState: idleScan,
-    getSettings: defaultSettings,
     getTrackLyrics: ({ trackId }: { trackId: string }) => ({
       status: "notFound" as const,
       trackId,

@@ -14,9 +14,7 @@ use backend::{
     app::BackendApp,
     messages::{BackendMessage, MessageSink, Occurrence, StateTopic},
 };
-use tauri::{ipc::Channel, Emitter};
-
-use crate::events::app_event;
+use tauri::ipc::Channel;
 
 /// What a service reported, waiting for the dispatcher. A state topic is only named here; its
 /// value is read when the dispatcher sends it.
@@ -84,10 +82,8 @@ impl Subscriber {
 }
 
 /// Delivers queued messages in three steps. First the occurrences, in arrival order. Then each
-/// changed state topic once, with its latest value. Then the position. Each message also goes out
-/// as the `app:event` that the Renderer still listens to.
+/// changed state topic once, with its latest value. Then the position.
 pub fn start_dispatcher(
-    app: tauri::AppHandle,
     backend: Arc<BackendApp>,
     subscriber: Arc<Subscriber>,
     signals: Receiver<Signal>,
@@ -105,31 +101,22 @@ pub fn start_dispatcher(
                     }
                     Signal::Position => position = true,
                     Signal::Occurrence(occurrence) => {
-                        deliver(&app, &subscriber, BackendMessage::Occurrence(*occurrence));
+                        subscriber.send(BackendMessage::Occurrence(*occurrence));
                     }
                 }
             }
             for topic in topics {
                 if let Some(message) = backend.state_message(topic) {
-                    deliver(&app, &subscriber, message);
+                    subscriber.send(message);
                 }
             }
             if position {
                 if let Some(message) = backend.position_message() {
-                    deliver(&app, &subscriber, message);
+                    subscriber.send(message);
                 }
             }
         }
     });
-}
-
-fn deliver(app: &tauri::AppHandle, subscriber: &Subscriber, message: BackendMessage) {
-    if let Some(event) = app_event(&message) {
-        if app.emit("app:event", event).is_err() {
-            log::error!("ipc.event_emit_failed event_name=app:event");
-        }
-    }
-    subscriber.send(message);
 }
 
 #[cfg(test)]

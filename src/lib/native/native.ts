@@ -1,9 +1,8 @@
 import { Channel, isTauri } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open } from "@tauri-apps/plugin-dialog";
 import { commands } from "./bindings";
-import type { AppEvent } from "./bindings";
+import type { BackendMessage } from "./bindings";
 import type { TNativeAPI } from "./native-api";
 import { NativeCommandError } from "./native-error";
 
@@ -44,31 +43,6 @@ function withNativeErrors(source: Commands): Commands {
   return wrapped as Commands;
 }
 
-/**
- * Every event name the backend can send. Typed against the generated union, so an event added
- * in Rust is a compile error here until the renderer knows it; payloads are trusted to match
- * the generated contract.
- */
-const appEventNames: Readonly<Record<AppEvent["event"], true>> = {
-  playbackStateChanged: true,
-  playbackPositionChanged: true,
-  playbackQueueStateChanged: true,
-  libraryScanStateChanged: true,
-  waveformChanged: true,
-  settingsChanged: true,
-};
-
-function isAppEvent(payload: unknown): payload is AppEvent {
-  return (
-    typeof payload === "object" &&
-    payload !== null &&
-    "event" in payload &&
-    typeof payload.event === "string" &&
-    Object.hasOwn(appEventNames, payload.event) &&
-    "payload" in payload
-  );
-}
-
 const nativeCommands = withNativeErrors(commands);
 
 const tauriApi: TNativeAPI = {
@@ -79,20 +53,7 @@ const tauriApi: TNativeAPI = {
     const selected = await open({ directory: true, multiple: false });
     return typeof selected === "string" ? selected : null;
   },
-  onEvent: (listener) => {
-    let cancelled = false;
-    let unlisten: (() => void) | undefined;
-    void listen<unknown>("app:event", ({ payload }) => {
-      if (isAppEvent(payload)) listener(payload);
-    }).then((stopListening) => {
-      if (cancelled) stopListening();
-      else unlisten = stopListening;
-    });
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  },
+  connect: (onMessage) => nativeCommands.connect(new Channel<BackendMessage>(onMessage)),
 };
 
 /** The window chrome the renderer draws itself (the window has no native decorations). */

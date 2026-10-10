@@ -1,7 +1,7 @@
 <script lang="ts">
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
   import X from "@lucide/svelte/icons/x";
-  import { createLibraryScan } from "$lib/library/detail.svelte";
+  import { getLibraryScan } from "$lib/library/context";
   import { libraryCommandErrorMessage } from "$lib/library/library-errors";
   import { createCancelLibraryScan, createStartLibraryScan } from "$lib/library/mutations";
   import { Button } from "$lib/ui/shadcn/button/index.js";
@@ -10,12 +10,12 @@
   /** The scan's state in words, and the button that starts or cancels it. */
   let { rootCount }: { rootCount: number } = $props();
 
-  const scanQuery = createLibraryScan();
+  const scanState = getLibraryScan();
   const startScan = createStartLibraryScan();
   const cancelScan = createCancelLibraryScan();
 
-  const scan = $derived(scanQuery.data);
-  const error = $derived(startScan.error ?? cancelScan.error ?? scanQuery.error);
+  const scan = $derived(scanState.snapshot);
+  const error = $derived(startScan.error ?? cancelScan.error);
 </script>
 
 <div class="flex max-w-sm flex-col items-end gap-2">
@@ -44,7 +44,7 @@
           startScan.reset();
           startScan.mutate();
         }}
-        disabled={scanQuery.isPending || rootCount === 0 || startScan.isPending}
+        disabled={scan === null || rootCount === 0 || startScan.isPending}
       >
         <RefreshCw data-icon="inline-start" aria-hidden="true" />
         Rescan

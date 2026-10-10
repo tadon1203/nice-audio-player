@@ -86,18 +86,12 @@ const queue = (revision: number): PlaybackQueueSnapshot => ({
   canRestorePrevious: false,
 });
 
-const baseApi = (overrides: Partial<TNativeAPI> = {}) =>
-  ({
-    onEvent: () => () => undefined,
-    getPlaybackState: async () => stopped(1, null),
-    getPlaybackQueue: async () => queue(1),
-    ...overrides,
-  }) as unknown as TNativeAPI;
+const baseApi = (overrides: Partial<TNativeAPI> = {}) => overrides as unknown as TNativeAPI;
 
 describe("playback session ordering", () => {
-  it("rejects stale playback revisions", async () => {
-    const playback = createPlayback(baseApi({ getPlaybackState: async () => stopped(1, "a") }));
-    await playback.initialize();
+  it("rejects stale playback revisions", () => {
+    const playback = createPlayback(baseApi());
+    playback.initialize(stopped(1, "a"), queue(1));
 
     playback.acceptPlayback(stopped(0, "stale"));
     playback.acceptPlayback(stopped(1, "a"));
@@ -127,25 +121,19 @@ describe("playback session ordering", () => {
     expect(playback.queue?.current?.title).toBe("Current track");
   });
 
-  it("moves initialization from loading to ready", async () => {
+  it("moves initialization from loading to ready", () => {
     const playback = createPlayback(baseApi());
 
     expect(playback.connection).toBe("loading");
-    await playback.initialize();
+    playback.initialize(stopped(1, null), queue(1));
 
     expect(playback.connection).toBe("ready");
   });
 
-  it("moves initialization failures to failed instead of leaving loading", async () => {
-    const playback = createPlayback(
-      baseApi({
-        getPlaybackState: async () => {
-          throw { code: "noOutputDevice" };
-        },
-      }),
-    );
+  it("moves initialization failures to failed instead of leaving loading", () => {
+    const playback = createPlayback(baseApi());
 
-    await playback.initialize();
+    playback.initializeFailed({ code: "noOutputDevice" });
 
     expect(playback.connection).toBe("failed");
     expect(playback.error).toBe("No audio output device is available.");
@@ -169,7 +157,7 @@ describe("playback session ordering", () => {
       seekPlayback: vi.fn(async () => stopped(11, null)),
     });
     const playback = createPlayback(api);
-    await playback.initialize();
+    playback.initialize(stopped(1, null), queue(1));
 
     playback.setVolume(0.2);
     playback.setVolume(0.8);
@@ -199,7 +187,7 @@ describe("playback session ordering", () => {
       nextPlayback: vi.fn(async () => stopped(4, null)),
     });
     const playback = createPlayback(api);
-    await playback.initialize();
+    playback.initialize(stopped(1, null), queue(1));
 
     const first = playback.pause();
     const replaced = playback.resume();
@@ -230,7 +218,7 @@ describe("playback session ordering", () => {
       setPlaybackVolume: vi.fn(async () => playing(4, "a", 0)),
     });
     const playback = createPlayback(api);
-    await playback.initialize();
+    playback.initialize(stopped(1, null), queue(1));
     playback.acceptPlayback(playing(1, "a", 0));
 
     const start = playback.startPlayback({ kind: "tracks" } as never, "a");
@@ -258,11 +246,10 @@ describe("undoing a queue change", () => {
     vi.useFakeTimers();
     const playback = createPlayback(
       baseApi({
-        getPlaybackQueue: async () => withUpcoming(1),
         clearQueue: vi.fn(async () => queue(2)),
       }),
     );
-    await playback.initialize();
+    playback.initialize(stopped(1, null), withUpcoming(1));
 
     await playback.clearQueue();
     expect(playback.undoOffer).toBe("Upcoming cleared");
@@ -428,7 +415,7 @@ describe("playback session derived state", () => {
   });
 });
 
-describe("position events", () => {
+describe("position messages", () => {
   const position = (positionMs: number, seekRevision = 0, playbackId = "1") => ({
     playbackId,
     positionMs,
@@ -495,13 +482,13 @@ describe("position events", () => {
     expect(accept).not.toHaveBeenCalled();
   });
 
-  it("arrive through acceptEvent", () => {
+  it("arrive as the Backend's position messages", () => {
     const accept = vi.fn();
     const playback = createPlayback(baseApi(), { accept } as never);
     playback.acceptPlayback(playing(1, "a", 0));
     accept.mockClear();
 
-    playback.acceptEvent({ event: "playbackPositionChanged", payload: position(500) });
+    playback.acceptPosition(position(500));
 
     expect(accept).toHaveBeenCalledWith(expect.objectContaining({ positionMs: 500 }));
   });
@@ -511,7 +498,7 @@ describe("starting playback", () => {
   it("passes the context and the clicked track to the backend", async () => {
     const startPlayback = vi.fn(async () => playing(2, "c", 0));
     const playback = createPlayback(baseApi({ startPlayback }));
-    await playback.initialize();
+    playback.initialize(stopped(1, null), queue(1));
     const context = {
       kind: "album",
       key: { title: "Album", albumArtist: "Artist", albumEdition: "" },
@@ -531,7 +518,7 @@ describe("starting playback", () => {
         },
       }),
     );
-    await playback.initialize();
+    playback.initialize(stopped(1, null), queue(1));
 
     await playback.startPlayback(
       { kind: "album", key: { title: "A", albumArtist: "B", albumEdition: "" } },
@@ -550,7 +537,7 @@ describe("starting playback", () => {
         },
       }),
     );
-    await playback.initialize();
+    playback.initialize(stopped(1, null), queue(1));
 
     await playback.startPlayback(
       { kind: "album", key: { title: "A", albumArtist: "B", albumEdition: "" } },
@@ -568,7 +555,7 @@ describe("starting playback", () => {
         },
       }),
     );
-    await playback.initialize();
+    playback.initialize(stopped(1, null), queue(1));
     await playback.startPlayback(
       { kind: "album", key: { title: "A", albumArtist: "B", albumEdition: "" } },
       "1",
@@ -592,12 +579,11 @@ describe("changing the volume", () => {
     const setPlaybackMuted = vi.fn(async () => stopped(3, null));
     const playback = createPlayback(
       baseApi({
-        getPlaybackState: async () => mutedSnapshot(),
         setPlaybackVolume: vi.fn(async () => mutedSnapshot()),
         setPlaybackMuted,
       }),
     );
-    await playback.initialize();
+    playback.initialize(mutedSnapshot(), queue(1));
 
     playback.changeVolume(0.4);
 
@@ -610,7 +596,7 @@ describe("changing the volume", () => {
     const playback = createPlayback(
       baseApi({ setPlaybackVolume: async () => stopped(2, null), setPlaybackMuted }),
     );
-    await playback.initialize();
+    playback.initialize(stopped(1, null), queue(1));
 
     playback.changeVolume(0.4);
 
@@ -622,11 +608,10 @@ describe("last navigation", () => {
   it("records previous only for the item change it caused", async () => {
     const playback = createPlayback(
       baseApi({
-        getPlaybackState: async () => playing(1, "b", 0),
         previousPlayback: async () => playing(2, "a", 0),
       }),
     );
-    await playback.initialize();
+    playback.initialize(playing(1, "b", 0), queue(1));
 
     expect(playback.lastNavigation).toBe("next");
     await playback.previous();
@@ -643,7 +628,6 @@ describe("last navigation", () => {
     let finishPrevious: (() => void) | undefined;
     const playback = createPlayback(
       baseApi({
-        getPlaybackState: async () => playing(1, "a", 0),
         nextPlayback: async () => {
           await new Promise<void>((resolve) => {
             finishNext = resolve;
@@ -658,7 +642,7 @@ describe("last navigation", () => {
         },
       }),
     );
-    await playback.initialize();
+    playback.initialize(playing(1, "a", 0), queue(1));
 
     const next = playback.next();
     const previous = playback.previous();
@@ -676,13 +660,12 @@ describe("last navigation", () => {
   it("does not let a failed Previous colour the next automatic change", async () => {
     const playback = createPlayback(
       baseApi({
-        getPlaybackState: async () => playing(1, "b", 0),
         previousPlayback: async () => {
           throw { code: "trackUnavailable" };
         },
       }),
     );
-    await playback.initialize();
+    playback.initialize(playing(1, "b", 0), queue(1));
 
     await playback.previous();
     playback.acceptPlayback(playing(2, "c", 0));

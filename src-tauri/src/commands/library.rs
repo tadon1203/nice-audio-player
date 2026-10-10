@@ -4,8 +4,8 @@ use backend::library::{
         LibraryAlbumArtistKey, LibraryAlbumArtistPage, LibraryAlbumArtistSortKey,
         LibraryAlbumArtistSummary, LibraryAlbumDetails, LibraryAlbumKey, LibraryAlbumPage,
         LibraryAlbumSortKey, LibraryAlbumTrackPage, LibraryArtistAlbumSortKey, LibraryIndexBucket,
-        LibraryRoot, LibraryScanSnapshot, LibrarySortDirection, LibraryStatus, LibraryTrackPage,
-        LibraryTrackProperties, LibraryTrackSortKey,
+        LibraryRoot, LibrarySortDirection, LibraryStatus, LibraryTrackPage, LibraryTrackProperties,
+        LibraryTrackSortKey,
     },
     Library,
 };
@@ -49,12 +49,6 @@ pub async fn reset_library_and_rescan(
     // `restart` skips the exit event, so close the database cleanly first.
     state.backend.shutdown();
     app.restart()
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn get_library_scan_state(state: tauri::State<'_, AppState>) -> LibraryScanSnapshot {
-    state.backend.library_scan_state()
 }
 
 #[tauri::command]

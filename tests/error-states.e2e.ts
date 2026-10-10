@@ -4,7 +4,7 @@ test("shows playback initialization failure instead of remaining loading", async
   page,
   native,
 }) => {
-  native.fail("getPlaybackState", "noOutputDevice");
+  native.fail("connect", "noOutputDevice");
   await page.goto("/library/albums");
 
   const dock = page.getByRole("contentinfo", { name: "Playback controls" });

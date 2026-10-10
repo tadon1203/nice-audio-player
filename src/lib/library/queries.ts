@@ -75,7 +75,6 @@ const data = ["library", "data"] as const;
 export const libraryQueryKeys = {
   data,
   status: ["library", "status"] as const,
-  scan: ["library", "scan"] as const,
   roots: [...data, "roots"] as const,
   /** Carries the request itself, so what the data was fetched for can be read back from the key. */
   presentation: (request: LibraryCatalogRequest) => [...data, "catalog", request] as const,
@@ -101,11 +100,6 @@ export const libraryQueryOptions = {
     queryOptions({
       queryKey: libraryQueryKeys.status,
       queryFn: () => requireNative().getLibraryStatus(),
-    }),
-  scan: () =>
-    queryOptions({
-      queryKey: libraryQueryKeys.scan,
-      queryFn: () => requireNative().getLibraryScanState(),
     }),
   roots: () =>
     queryOptions({

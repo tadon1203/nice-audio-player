@@ -1,6 +1,7 @@
 <script lang="ts">
   import FolderPlus from "@lucide/svelte/icons/folder-plus";
-  import { createLibraryRoots, createLibraryScan } from "$lib/library/detail.svelte";
+  import { getLibraryScan } from "$lib/library/context";
+  import { createLibraryRoots } from "$lib/library/detail.svelte";
   import { libraryCommandErrorMessage } from "$lib/library/library-errors";
   import {
     createAddLibraryRoot,
@@ -36,7 +37,7 @@
   import ScanRunning from "./scan-running.svelte";
 
   const rootsQuery = createLibraryRoots();
-  const scanQuery = createLibraryScan();
+  const scanState = getLibraryScan();
   const addRoot = createAddLibraryRoot();
   const setEnabled = createSetLibraryRootEnabled();
   const removeRoot = createRemoveLibraryRoot();
@@ -53,7 +54,7 @@
 
   const roots = $derived(rootsQuery.data ?? []);
   const missingTotal = $derived(roots.reduce((n, r) => n + r.missingCount, 0));
-  const scan = $derived(scanQuery.data);
+  const scan = $derived(scanState.snapshot);
   const scanRunning = $derived(scan?.state === "running");
 
   function confirmRemove() {

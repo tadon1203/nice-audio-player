@@ -1,5 +1,5 @@
 import { nativeErrorCode } from "$lib/native";
-import type { AppEvent, Appearance, TNativeAPI } from "$lib/native";
+import type { Appearance, TNativeAPI } from "$lib/native";
 
 /** The appearance fields the renderer may change. */
 export type SettingsUpdate = {
@@ -36,18 +36,14 @@ export class Settings {
     return this.#mirror?.calmMotion ?? null;
   }
 
-  async load(): Promise<void> {
-    try {
-      this.#mirror = await this.#api.getSettings();
-      this.error = null;
-    } catch (cause) {
-      this.error = describe(cause, "Settings could not be loaded.");
-    }
+  /** Applies the value the backend holds, without writing it back: from `connect` or a pushed change. */
+  accept(appearance: Appearance): void {
+    this.#mirror = appearance;
   }
 
-  /** Applies the value the backend holds, without writing it back. */
-  mirrorEvent(event: AppEvent): void {
-    if (event.event === "settingsChanged") this.#mirror = event.payload;
+  /** `connect` failed, so the settings stay unknown. */
+  initializeFailed(cause: unknown): void {
+    this.error = describe(cause, "Settings could not be loaded.");
   }
 
   async update(patch: SettingsUpdate): Promise<SettingsUpdateResult> {

@@ -93,10 +93,6 @@ impl BackendApp {
         }
     }
 
-    pub fn library_scan_state(&self) -> LibraryScanSnapshot {
-        self.library_scan().value
-    }
-
     fn library_scan(&self) -> Versioned<LibraryScanSnapshot> {
         self.library.as_ref().map_or_else(
             |_| Versioned::new(LibraryScanSnapshot::idle()),

@@ -96,7 +96,7 @@ test("does not subscribe under Calm motion and says the meters are stopped", asy
   page,
   native,
 }) => {
-  native.respond("getSettings", { ...defaultSettings, calmMotion: true });
+  await native.publish("appearance", { ...defaultSettings, calmMotion: true });
   const { layer } = await openNowPlaying(page, MEDIUM);
   await choose(layer, "Meters");
   const meters = layer.getByRole("region", { name: "Meters" });

@@ -1,13 +1,11 @@
 import { QueryClient, QueryObserver } from "@tanstack/svelte-query";
 import { describe, expect, it, vi } from "vitest";
-import { applyWaveformEvent, waveformQueryOptions } from "./waveform";
+import { applyWaveform, waveformQueryOptions } from "./waveform";
 
 const getPlaybackWaveform = vi.fn();
 vi.mock("$lib/native", () => ({ requireNative: () => ({ getPlaybackWaveform }) }));
 
 const waveform = (playbackId: string) => ({ playbackId, peaks: [1], rms: [1] });
-const pushed = (playbackId: string) =>
-  ({ event: "waveformChanged", payload: waveform(playbackId) }) as const;
 
 function watch(client: QueryClient, playbackId: string) {
   const observer = new QueryObserver(client, waveformQueryOptions(playbackId));
@@ -22,7 +20,7 @@ describe("waveform cache", () => {
     getPlaybackWaveform.mockReturnValueOnce(new Promise((resolve) => (answerFirst = resolve)));
     const watching = watch(client, "p1");
 
-    applyWaveformEvent(client, pushed("p1"));
+    applyWaveform(client, waveform("p1"));
     answerFirst(null);
 
     await vi.waitFor(() => expect(watching.data()).toEqual(waveform("p1")));
@@ -36,7 +34,7 @@ describe("waveform cache", () => {
     await vi.waitFor(() => expect(watching.data()).toEqual(waveform("p1")));
 
     const refined = { ...waveform("p1"), rms: [2] };
-    applyWaveformEvent(client, { event: "waveformChanged", payload: refined });
+    applyWaveform(client, refined);
 
     expect(watching.data()).toEqual(refined);
     watching.stop();
@@ -54,7 +52,7 @@ describe("waveform cache", () => {
 
   it("drops a waveform pushed for a playback nobody watches", () => {
     const client = new QueryClient();
-    applyWaveformEvent(client, pushed("p9"));
+    applyWaveform(client, waveform("p9"));
     expect(client.getQueryCache().getAll()).toEqual([]);
   });
 });

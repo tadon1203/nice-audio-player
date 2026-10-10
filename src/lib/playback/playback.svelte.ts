@@ -1,5 +1,4 @@
 import type {
-  AppEvent,
   AudioOutputSelection,
   PlaybackContext,
   PlaybackItem,
@@ -65,7 +64,6 @@ export class Playback {
   /** A queue change the listener can take back ("Queue replaced"). Clears after a while. */
   undoOffer = $state.raw<string | null>(null);
 
-  #initializePromise: Promise<void> | null = null;
   #requestedVolume: number | null = null;
   #volumeWriteActive = false;
   #requestedSeek: number | null = null;
@@ -182,12 +180,6 @@ export class Playback {
     this.clock.accept(clockReportOf(this.snapshot, position));
   }
 
-  acceptEvent(event: AppEvent) {
-    if (event.event === "playbackStateChanged") this.acceptPlayback(event.payload);
-    if (event.event === "playbackPositionChanged") this.acceptPosition(event.payload);
-    if (event.event === "playbackQueueStateChanged") this.acceptQueue(event.payload);
-  }
-
   /**
    * Runs a transport command. One that arrives while another is in flight waits for it, and a
    * newer one replaces it, so the latest press wins instead of being dropped.
@@ -266,25 +258,18 @@ export class Playback {
     }
   }
 
-  initialize(): Promise<void> {
-    if (this.#initializePromise) return this.#initializePromise;
-    this.connection = "loading";
+  /** Applies the playback and queue that `connect` returned: the first state the Renderer holds. */
+  initialize(snapshot: PlaybackSnapshot, queue: PlaybackQueueSnapshot) {
+    this.acceptPlayback(snapshot);
+    this.acceptQueue(queue);
+    this.connection = "ready";
     this.error = null;
-    this.#initializePromise = (async () => {
-      try {
-        const [snapshot, queue] = await Promise.all([
-          this.#api.getPlaybackState(),
-          this.#api.getPlaybackQueue(),
-        ]);
-        this.acceptPlayback(snapshot);
-        this.acceptQueue(queue);
-        this.connection = "ready";
-      } catch (error) {
-        this.connection = "failed";
-        this.error = playbackCommandErrorMessage(error);
-      }
-    })();
-    return this.#initializePromise;
+  }
+
+  /** `connect` failed, so there is no playback state to show. */
+  initializeFailed(error: unknown) {
+    this.connection = "failed";
+    this.error = playbackCommandErrorMessage(error);
   }
 
   /** Replaces the queue with `context` and plays from `startTrackId` (its first track if null). */

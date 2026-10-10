@@ -10,6 +10,8 @@
   import NowPlayingContent from "$lib/components/now-playing/now-playing-content.svelte";
   import NowPlayingLayer from "$lib/components/now-playing/now-playing-layer.svelte";
   import QueuePanel from "$lib/components/queue-panel/queue-panel.svelte";
+  import { setLibraryScan } from "$lib/library/context";
+  import { LibraryScanState } from "$lib/library/library-scan-state.svelte";
   import { native } from "$lib/native";
   import { setPlayback } from "$lib/playback/context";
   import { createPlayback } from "$lib/playback/playback.svelte";
@@ -29,6 +31,8 @@
   // Created once: the native bridge never changes while the renderer lives.
   const playback = native ? createPlayback(native) : null;
   const settings = native ? createSettings(native) : null;
+  const libraryScan = new LibraryScanState();
+  setLibraryScan(libraryScan);
   if (playback !== null && settings !== null) {
     setPlayback(playback);
     setSettings(settings);
@@ -37,7 +41,7 @@
 
   onMount(() => {
     if (playback === null || settings === null) return;
-    return startNativeSession({ playback, settings, queryClient });
+    startNativeSession({ playback, settings, libraryScan, queryClient });
   });
 
   $effect(() => applyCssMotion(document.documentElement, prefersReducedMotion.current));

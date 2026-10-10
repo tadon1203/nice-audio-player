@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
-import type { AppEvent, commands } from "$lib/native";
-import { idleResponses, libraryResponses, type LibraryData } from "./data";
+import type { BackendMessage, InitialState, commands } from "$lib/native";
+import { idleInitialState, idleResponses, libraryResponses, type LibraryData } from "./data";
 
 type Commands = typeof commands;
 export type CommandName = keyof Commands;
@@ -18,8 +18,8 @@ declare global {
   interface Window {
     /** Node side of the IPC bridge, bound by `installNativeApi`. */
     __nativeInvoke?: (command: string, args: unknown) => Promise<Reply>;
-    __emitNativeEvent?: (name: string, payload: unknown) => void;
     __emitChannelMessage?: (channelId: number, bytes: number[]) => void;
+    __emitChannelValue?: (channelId: number, value: unknown) => void;
   }
 }
 
@@ -81,15 +81,14 @@ function installIpcBridge() {
   Object.defineProperty(window, "isTauri", { value: true });
   // A Tauri channel numbers its messages so they are delivered in order.
   const channelIndexes = new Map<number, number>();
-  window.__emitChannelMessage = (channelId, bytes) => {
+  const deliver = (channelId: number, message: unknown) => {
     const index = channelIndexes.get(channelId) ?? 0;
     channelIndexes.set(channelId, index + 1);
-    const message = new Uint8Array(bytes).buffer;
     callbacks.get(channelId)?.({ index, message });
   };
-  window.__emitNativeEvent = (name, payload) => {
-    for (const id of listeners.get(name) ?? []) callbacks.get(id)?.({ event: name, id, payload });
-  };
+  window.__emitChannelMessage = (channelId, bytes) =>
+    deliver(channelId, new Uint8Array(bytes).buffer);
+  window.__emitChannelValue = deliver;
 }
 
 const toCommandName = (name: string) =>
@@ -98,13 +97,16 @@ const toCommandName = (name: string) =>
 type Responder = (args: CommandArgs) => unknown;
 
 /**
- * What a test holds of the fake backend: it says what each command answers, emits events, and
- * reads which commands the renderer sent with which arguments.
+ * What a test holds of the fake backend: it says what each command answers, sends the Backend's
+ * messages on the channel `connect` registered, and reads which commands the renderer sent with
+ * which arguments.
  */
 export class Native {
   readonly #page: Page;
   readonly #responders = new Map<string, Responder>();
   readonly #calls: { command: string; args: CommandArgs }[] = [];
+  /** The current value of every state topic, as the Backend holds it; `connect` answers with it. */
+  #state: InitialState = idleInitialState();
 
   constructor(page: Page) {
     this.#page = page;
@@ -126,6 +128,8 @@ export class Native {
       },
     );
     await this.#page.addInitScript(installIpcBridge);
+    // A reloaded page connects again and gets the current state, as the Backend answers it.
+    this.respond("connect", () => this.#state);
   }
 
   /** Sets what a command answers: a value, or a function of the arguments it was sent. */
@@ -148,23 +152,52 @@ export class Native {
     this.#responders.set("plugin:dialog|open", () => path);
   }
 
-  /** Sends an event to the renderer, as the backend does on `app:event`. */
-  async emit(event: AppEvent) {
-    await this.#page.evaluate((payload) => window.__emitNativeEvent?.("app:event", payload), event);
+  /**
+   * Sends a message on the channel `connect` registered, as the Backend does. A state message also
+   * becomes the topic's value, so a later `connect` answers with it. Before the page connects there
+   * is no channel, so the message only updates that value.
+   */
+  async send(message: BackendMessage) {
+    if (message.kind === "state") {
+      this.#state = {
+        ...this.#state,
+        [message.topic]: { revision: message.revision, value: message.value },
+      };
+    }
+    const channelId = this.#channelId("connect", "channel");
+    if (channelId === undefined) return;
+    await this.#page.evaluate(([id, value]) => window.__emitChannelValue?.(id, value), [
+      channelId,
+      message,
+    ] as const);
+  }
+
+  /** Publishes a new value of a state topic: the next revision of it, sent as a state message. */
+  async publish<Topic extends keyof InitialState>(
+    topic: Topic,
+    value: InitialState[Topic]["value"],
+  ) {
+    const revision = this.#state[topic].revision + 1;
+    await this.send({ kind: "state", revision, topic, value } as BackendMessage);
   }
 
   /** Sends one binary message down the channel the renderer passed to its latest call of `name`. */
   async emitChannelMessage(name: CommandName, argument: string, bytes: number[]) {
-    // A channel reaches the bridge as the object Playwright serialises; its `id` names the callback.
-    const channel = this.callsTo(name).at(-1)?.[argument] as { id?: number } | string | undefined;
-    const id =
-      typeof channel === "string" ? Number(channel.replace("__CHANNEL__:", "")) : channel?.id;
-    if (id === undefined || !Number.isInteger(id))
-      throw new Error(`no channel was passed to ${name}`);
+    const id = this.#channelId(name, argument);
+    if (id === undefined) throw new Error(`no channel was passed to ${name}`);
     await this.#page.evaluate(
       ([channelId, payload]) => window.__emitChannelMessage?.(channelId, payload),
       [id, bytes] as const,
     );
+  }
+
+  /** The id of the channel the renderer passed as `argument` to its latest call of `name`. */
+  #channelId(name: CommandName, argument: string): number | undefined {
+    // A channel reaches the bridge as the object Playwright serialises; its `id` names the callback.
+    const channel = this.callsTo(name).at(-1)?.[argument] as { id?: number } | string | undefined;
+    const id =
+      typeof channel === "string" ? Number(channel.replace("__CHANNEL__:", "")) : channel?.id;
+    return id !== undefined && Number.isInteger(id) ? id : undefined;
   }
 
   /** Arguments of every call to a command, oldest first. */
