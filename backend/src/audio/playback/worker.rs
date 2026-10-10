@@ -42,7 +42,7 @@ use crate::audio::output::{
 use crate::audio::timebase::millis_to_frame;
 use crate::audio::volume::{AtomicEffectiveGain, VolumeState};
 use crate::audio::waveform::PrefetchObserver;
-use crate::events::{BackendEvent, SharedEventSink};
+use crate::messages::{SharedMessageSink, StateTopic, Versioned};
 use log::{error, info};
 use rand::{rngs::StdRng, SeedableRng};
 
@@ -139,13 +139,13 @@ enum PipelineOwner {
 
 /// The channels and shared state the service hands to the worker thread.
 pub(super) struct WorkerLinks {
-    pub snapshot: Arc<RwLock<PlaybackSnapshot>>,
+    pub snapshot: Arc<RwLock<Versioned<PlaybackSnapshot>>>,
     pub position: Arc<RwLock<Option<PlaybackPosition>>>,
-    pub queue_snapshot: Arc<RwLock<PlaybackQueueSnapshot>>,
+    pub queue_snapshot: Arc<RwLock<Versioned<PlaybackQueueSnapshot>>>,
     pub effective_gain: AtomicEffectiveGain,
     pub meter: MeterHub,
     pub inbox: Inbox,
-    pub events: SharedEventSink,
+    pub messages: SharedMessageSink,
     pub observer: PreferencesObserver,
     pub backend: Box<dyn OutputBackend>,
     /// Where queue entries get their metadata.
@@ -178,11 +178,11 @@ pub(super) struct PlaybackWorker {
     effective_gain: AtomicEffectiveGain,
     meter: MeterHub,
     output_selection: AudioOutputSelection,
-    snapshot: Arc<RwLock<PlaybackSnapshot>>,
+    snapshot: Arc<RwLock<Versioned<PlaybackSnapshot>>>,
     position: Arc<RwLock<Option<PlaybackPosition>>>,
-    queue_snapshot: Arc<RwLock<PlaybackQueueSnapshot>>,
+    queue_snapshot: Arc<RwLock<Versioned<PlaybackQueueSnapshot>>>,
     inbox: Inbox,
-    events: SharedEventSink,
+    messages: SharedMessageSink,
     observer: PreferencesObserver,
     backend: Box<dyn OutputBackend>,
 }
@@ -218,7 +218,7 @@ impl PlaybackWorker {
             position: links.position,
             queue_snapshot: links.queue_snapshot,
             inbox: links.inbox,
-            events: links.events,
+            messages: links.messages,
             observer: links.observer,
             backend: links.backend,
         }

@@ -25,7 +25,7 @@ mod tests;
 pub(crate) mod text;
 pub(crate) mod watcher;
 
-use crate::events::{BackendEvent, Notifier, SharedEventSink};
+use crate::messages::{Notifier, SharedMessageSink, StateTopic, Versioned};
 use database::{Database, DatabaseError};
 use error::LibraryCommandError;
 use log::error;
@@ -43,7 +43,7 @@ pub struct Library {
     database: Database,
     store: LibraryStore,
     sync: Arc<LibrarySync>,
-    scan: Arc<Mutex<LibraryScanSnapshot>>,
+    scan: Arc<Mutex<Versioned<LibraryScanSnapshot>>>,
 }
 
 impl Library {
@@ -51,7 +51,7 @@ impl Library {
     /// the registered folders.
     pub fn open(
         directory: PathBuf,
-        events: SharedEventSink,
+        messages: SharedMessageSink,
     ) -> Result<Self, LibraryUnavailableReason> {
         database::apply_requested_reset(&directory);
         let database = Database::initialize(&directory).map_err(|error| {
@@ -66,11 +66,11 @@ impl Library {
             error!("library.database.unavailable reason={reason:?}");
             reason
         })?;
-        let scan = Arc::new(Mutex::new(LibraryScanSnapshot::idle()));
+        let scan = Arc::new(Mutex::new(Versioned::new(LibraryScanSnapshot::idle())));
         let sync = LibrarySync::start(
             database.clone(),
             Arc::clone(&scan),
-            Notifier::new(events, BackendEvent::LibraryScanChanged),
+            Notifier::new(messages, StateTopic::LibraryScan),
         );
         Ok(Self {
             store: LibraryStore::new(database.clone()),
@@ -85,7 +85,8 @@ impl Library {
         &self.store
     }
 
-    pub fn scan_state(&self) -> LibraryScanSnapshot {
+    /// The scan state with the revision of its topic.
+    pub fn scan_state(&self) -> Versioned<LibraryScanSnapshot> {
         self.scan.lock().expect("scan state lock").clone()
     }
 

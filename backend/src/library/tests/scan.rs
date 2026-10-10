@@ -1,9 +1,9 @@
 //! End-to-end scans of real (tiny) audio files against a real database.
 
-use crate::events::{null_event_sink, BackendEvent, Notifier};
 use crate::library::database::Database;
 use crate::library::models::{LibraryScanSnapshot, LibraryScanState, ScanFailure};
 use crate::library::roots;
+use crate::messages::{null_message_sink, Notifier, StateTopic, Versioned};
 use crate::test_support::{write_pcm_i16_wav, TestDirectory};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
@@ -16,7 +16,7 @@ struct Fixture {
 }
 
 fn notifier() -> Notifier {
-    Notifier::new(null_event_sink(), BackendEvent::LibraryScanChanged)
+    Notifier::new(null_message_sink(), StateTopic::LibraryScan)
 }
 
 fn fixture() -> Fixture {
@@ -47,6 +47,14 @@ fn run_scan_of(fixture: &Fixture, changed: &[PathBuf]) -> LibraryScanSnapshot {
 }
 
 fn run_jobs(fixture: &Fixture, cancelled: bool, dirs: Option<Vec<PathBuf>>) -> LibraryScanSnapshot {
+    run_versioned(fixture, cancelled, dirs).value
+}
+
+fn run_versioned(
+    fixture: &Fixture,
+    cancelled: bool,
+    dirs: Option<Vec<PathBuf>>,
+) -> Versioned<LibraryScanSnapshot> {
     let roots = roots::list(&fixture.database.read().unwrap()).expect("roots");
     let jobs = roots
         .into_iter()
@@ -55,10 +63,10 @@ fn run_jobs(fixture: &Fixture, cancelled: bool, dirs: Option<Vec<PathBuf>>) -> L
             dirs: dirs.clone(),
         })
         .collect();
-    let state = Arc::new(Mutex::new(LibraryScanSnapshot {
+    let state = Arc::new(Mutex::new(Versioned::new(LibraryScanSnapshot {
         state: LibraryScanState::Running,
         ..LibraryScanSnapshot::idle()
-    }));
+    })));
     crate::library::scanner::run(
         fixture.database.clone(),
         jobs,
@@ -68,6 +76,17 @@ fn run_jobs(fixture: &Fixture, cancelled: bool, dirs: Option<Vec<PathBuf>>) -> L
     );
     let snapshot = state.lock().unwrap().clone();
     snapshot
+}
+
+#[test]
+fn the_scan_revision_grows_with_each_change_of_the_scan() {
+    let fixture = fixture();
+    write_tone(&fixture.music.join("a.wav"), 16_000);
+    let scan = run_versioned(&fixture, false, None);
+    // The scan sets the expected count and the root, counts the file it finds, and ends: each is
+    // a change, so the revision is at least four.
+    assert_eq!(scan.value.state, LibraryScanState::Completed);
+    assert!(scan.revision >= 4, "revision {}", scan.revision);
 }
 
 fn files(fixture: &Fixture) -> Vec<(String, String, String, i64)> {

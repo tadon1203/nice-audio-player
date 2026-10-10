@@ -14,7 +14,7 @@ use super::{
     models::{LibraryRoot, LibraryScanSnapshot, LibraryScanState},
     roots, scanner, watcher,
 };
-use crate::events::Notifier;
+use crate::messages::{Notifier, Versioned};
 use log::{error, info, warn};
 use notify::RecommendedWatcher;
 use std::{
@@ -55,7 +55,7 @@ pub(crate) struct LibrarySync {
 impl LibrarySync {
     pub fn start(
         database: Database,
-        scan: Arc<Mutex<LibraryScanSnapshot>>,
+        scan: Arc<Mutex<Versioned<LibraryScanSnapshot>>>,
         notify: Notifier,
     ) -> Self {
         let (messages, receiver) = mpsc::channel();
@@ -133,7 +133,7 @@ impl Drop for LibrarySync {
 
 struct Actor {
     database: Database,
-    scan: Arc<Mutex<LibraryScanSnapshot>>,
+    scan: Arc<Mutex<Versioned<LibraryScanSnapshot>>>,
     notify: Notifier,
     /// For the inputs the watchers and the scanner thread send back.
     messages: Sender<Message>,
@@ -321,15 +321,14 @@ impl Actor {
             return;
         }
         self.cancel.store(false, Ordering::Release);
-        {
-            let mut scan = self.scan.lock().expect("scan state lock");
+        self.scan.lock().expect("scan state lock").update(|scan| {
             *scan = LibraryScanSnapshot {
                 state: LibraryScanState::Running,
                 finished_count: scan.finished_count,
                 changed_count: scan.changed_count,
                 ..LibraryScanSnapshot::idle()
             };
-        }
+        });
         info!("library.scan.started root_count={}", jobs.len());
         self.notify.notify();
         let (database, scan, cancel, notify) = (
@@ -399,7 +398,7 @@ impl Actor {
 /// when this drops, so the scan never stays "Running".
 struct ScanEnding {
     messages: Sender<Message>,
-    scan: Arc<Mutex<LibraryScanSnapshot>>,
+    scan: Arc<Mutex<Versioned<LibraryScanSnapshot>>>,
     notify: Notifier,
     finished: bool,
 }
@@ -407,7 +406,7 @@ struct ScanEnding {
 impl ScanEnding {
     fn new(
         messages: Sender<Message>,
-        scan: Arc<Mutex<LibraryScanSnapshot>>,
+        scan: Arc<Mutex<Versioned<LibraryScanSnapshot>>>,
         notify: Notifier,
     ) -> Self {
         Self {
@@ -444,16 +443,16 @@ fn root_id(root: &LibraryRoot) -> Option<RootId> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::events::{null_event_sink, BackendEvent};
+    use crate::messages::{null_message_sink, StateTopic};
 
     #[test]
     fn a_scan_thread_that_dies_ends_the_scan_as_failed() {
         let (messages, received) = mpsc::channel();
-        let scan = Arc::new(Mutex::new(LibraryScanSnapshot {
+        let scan = Arc::new(Mutex::new(Versioned::new(LibraryScanSnapshot {
             state: LibraryScanState::Running,
             ..LibraryScanSnapshot::idle()
-        }));
-        let notify = Notifier::new(null_event_sink(), BackendEvent::LibraryScanChanged);
+        })));
+        let notify = Notifier::new(null_message_sink(), StateTopic::LibraryScan);
         let thread_scan = scan.clone();
 
         let died = thread::spawn(move || {
@@ -464,7 +463,7 @@ mod tests {
 
         assert!(died.is_err());
         let snapshot = scan.lock().unwrap_or_else(|p| p.into_inner()).clone();
-        assert_eq!(snapshot.state, LibraryScanState::Failed);
+        assert_eq!(snapshot.value.state, LibraryScanState::Failed);
         assert!(matches!(
             received.try_recv(),
             Ok(Message::Input(Input::ScanFinished(ScanOutcome::Failed)))

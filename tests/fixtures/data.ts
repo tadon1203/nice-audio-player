@@ -1,5 +1,5 @@
 import type {
-  AppearanceSettings,
+  Appearance,
   AudioOutputSelection,
   LibraryAlbumArtistSummary,
   LibraryAlbumDetails,
@@ -219,7 +219,7 @@ export function scanSnapshot(state: LibraryScanState): LibraryScanSnapshot {
   };
 }
 
-export const defaultSettings: AppearanceSettings = { artworkBackdrop: true, calmMotion: false };
+export const defaultSettings: Appearance = { artworkBackdrop: true, calmMotion: false };
 
 export const stoppedPlayback: PlaybackSnapshot = {
   status: "stopped",

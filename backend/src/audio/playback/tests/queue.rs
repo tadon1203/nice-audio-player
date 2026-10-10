@@ -1,6 +1,46 @@
 use super::*;
 
 #[test]
+fn queue_revisions_grow_on_each_queue_change_and_match_the_snapshot() {
+    let mut harness = Harness::new();
+
+    let repeat = harness
+        .call(|reply| PlaybackCommand::SetRepeatMode {
+            mode: PlaybackRepeatMode::All,
+            reply,
+        })
+        .unwrap();
+    let shuffled = harness
+        .call(|reply| PlaybackCommand::SetShuffle {
+            enabled: true,
+            reply,
+        })
+        .unwrap();
+    let shuffled_again = harness
+        .call(|reply| PlaybackCommand::SetShuffle {
+            enabled: true,
+            reply,
+        })
+        .unwrap();
+
+    assert_eq!(repeat.revision, 1);
+    assert_eq!(shuffled.revision, 2);
+    assert_eq!(shuffled_again.revision, 2);
+    let versioned = harness.versioned_queue_snapshot();
+    assert_eq!((versioned.revision, versioned.value.revision), (2, 2));
+    // Each queue change is announced once; the repeated shuffle changes nothing and says nothing.
+    assert_eq!(
+        harness.sent(),
+        [
+            Sent::State(StateTopic::Queue),
+            Sent::State(StateTopic::Playback),
+            Sent::State(StateTopic::Queue),
+            Sent::State(StateTopic::Playback),
+        ]
+    );
+}
+
+#[test]
 fn queue_edits_are_rejected_while_a_start_loads() {
     let mut harness = Harness::new();
     let tracks = vec![harness.track("a", 1)];

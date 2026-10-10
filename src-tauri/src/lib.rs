@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use backend::app::BackendApp;
+use session::Subscriber;
 use tauri::Manager;
 
 mod artwork;
@@ -8,12 +9,14 @@ mod bindings;
 mod commands;
 mod events;
 mod os;
+mod session;
 
 pub use bindings::render_typescript as render_typescript_bindings;
 
 #[derive(Clone)]
 pub struct AppState {
     pub backend: Arc<BackendApp>,
+    pub subscriber: Arc<Subscriber>,
 }
 
 pub fn run() {
@@ -65,14 +68,16 @@ pub fn run() {
                 None => app.path().app_data_dir()?,
             };
             app.manage(artwork::ArtworkDir(data_dir.clone()));
-            let (sink, event_receiver) = events::event_channel();
+            let (sink, signals) = session::message_channel();
             let backend = BackendApp::initialize(data_dir, sink)
                 .map_err(|_| std::io::Error::other("backend startup failed"))?;
             let backend = Arc::new(backend);
+            let subscriber = Arc::new(Subscriber::default());
             app.manage(AppState {
                 backend: Arc::clone(&backend),
+                subscriber: Arc::clone(&subscriber),
             });
-            events::start_dispatcher(app.handle(), &backend, event_receiver);
+            session::start_dispatcher(app.handle().clone(), backend, subscriber, signals);
             Ok(())
         })
         .invoke_handler(bindings::builder().invoke_handler())

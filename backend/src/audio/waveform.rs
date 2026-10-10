@@ -13,6 +13,7 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -22,10 +23,10 @@ use serde::Serialize;
 use super::cancellation::Cancellation;
 use super::decoding::{open_analysis_decoder, DecodeStep, PcmDecodeError, SeekStep};
 use crate::containment::contain;
-use crate::events::{BackendEvent, SharedEventSink};
 use crate::library::scanner::identity::content_hash;
 use crate::library::store::PlayableTrack;
 use crate::media::validation::ValidatedAudioFile;
+use crate::messages::{SharedMessageSink, StateTopic};
 
 pub const WAVEFORM_BUCKETS: usize = 1000;
 const CHUNK_FRAMES: usize = 2048;
@@ -423,7 +424,9 @@ struct Shared {
     ready: Mutex<HashMap<String, (FileStamp, Arc<Waveform>)>>,
     jobs: Mutex<Jobs>,
     wake: Condvar,
-    events: SharedEventSink,
+    messages: SharedMessageSink,
+    /// How many times the Waveform was rebuilt: its topic revision.
+    rebuilds: AtomicU64,
 }
 
 impl Shared {
@@ -502,14 +505,15 @@ pub struct WaveformService {
 }
 
 impl WaveformService {
-    pub fn start(directory: PathBuf, events: SharedEventSink) -> Self {
+    pub fn start(directory: PathBuf, messages: SharedMessageSink) -> Self {
         let cache_directory = directory.clone();
         let shared = Arc::new(Shared {
             directory,
             ready: Mutex::new(HashMap::new()),
             jobs: Mutex::new(Jobs::default()),
             wake: Condvar::new(),
-            events,
+            messages,
+            rebuilds: AtomicU64::new(0),
         });
         let worker = Arc::clone(&shared);
         let _ = thread::Builder::new()
@@ -526,6 +530,11 @@ impl WaveformService {
                 }
             });
         Self { shared }
+    }
+
+    /// The Waveform's topic revision: how many times it was rebuilt since the start.
+    pub fn revision(&self) -> u64 {
+        self.shared.rebuilds.load(Ordering::Acquire)
     }
 
     /// The waveform if it is ready. Never starts an analysis.
@@ -619,9 +628,12 @@ impl Shared {
         self.publish(&file.path, stamp, waveform);
     }
 
+    /// The waveform is stored before its revision moves, so a reader that sees the new revision
+    /// also sees a value at least that new.
     fn publish(&self, path: &str, stamp: FileStamp, waveform: Waveform) {
         self.remember(path, stamp, waveform);
-        self.events.emit(BackendEvent::WaveformChanged);
+        self.rebuilds.fetch_add(1, Ordering::Release);
+        self.messages.state_changed(StateTopic::Waveform);
     }
 
     fn remember(&self, path: &str, stamp: FileStamp, waveform: Waveform) {
@@ -637,6 +649,7 @@ impl Shared {
 mod tests {
     use super::*;
     use crate::media::validation::validate_audio_file;
+    use crate::messages::testing::Sent;
     use crate::test_support::{write_pcm_i16_wav, TestDirectory};
 
     fn wav(directory: &TestDirectory, name: &str, samples: &[i16]) -> ValidatedAudioFile {
@@ -835,18 +848,18 @@ mod tests {
     fn service_publishes_the_exact_waveform_and_caches_it() {
         let directory = TestDirectory::new();
         let file = wav(&directory, "song.wav", &vec![5_000i16; 16_000]);
-        let (recorder, sink) = crate::events::testing::RecordingEventSink::shared();
+        let (recorder, sink) = crate::messages::testing::RecordingMessageSink::shared();
         let service = WaveformService::start(directory.file("cache"), sink);
         let track = track_of(&file, None);
         assert!(service.get_or_queue(&track).is_none());
         // Background priority: the worker yields to the rest of a busy test run.
         let deadline = Instant::now() + Duration::from_secs(60);
-        while recorder.events().is_empty() && Instant::now() < deadline {
+        while recorder.sent().is_empty() && Instant::now() < deadline {
             thread::sleep(Duration::from_millis(10));
         }
         assert_eq!(
-            recorder.events().first(),
-            Some(&BackendEvent::WaveformChanged)
+            recorder.sent().first(),
+            Some(&Sent::State(StateTopic::Waveform))
         );
         assert!(service.get_or_queue(&track).is_some());
         let hash = content_hash(Path::new(&file.path)).unwrap();
@@ -854,21 +867,48 @@ mod tests {
     }
 
     fn idle_shared(directory: &TestDirectory) -> Shared {
-        let (_, sink) = crate::events::testing::RecordingEventSink::shared();
+        let (_, sink) = crate::messages::testing::RecordingMessageSink::shared();
         Shared {
             directory: directory.file("cache"),
             ready: Mutex::new(HashMap::new()),
             jobs: Mutex::new(Jobs::default()),
             wake: Condvar::new(),
-            events: sink,
+            messages: sink,
+            rebuilds: AtomicU64::new(0),
         }
+    }
+
+    #[test]
+    fn each_rebuild_is_one_waveform_revision_and_one_announcement() {
+        let directory = TestDirectory::new();
+        let (recorder, sink) = crate::messages::testing::RecordingMessageSink::shared();
+        let shared = Shared {
+            messages: sink,
+            ..idle_shared(&directory)
+        };
+        let service = WaveformService {
+            shared: Arc::new(shared),
+        };
+        let rebuilt = || Waveform {
+            peaks: vec![1],
+            rms: vec![1],
+        };
+        let stamp = || FileStamp {
+            length: 0,
+            modified: None,
+        };
+        service.shared.publish("a.wav", stamp(), rebuilt());
+        service.shared.publish("a.wav", stamp(), rebuilt());
+
+        assert_eq!(service.revision(), 2);
+        assert_eq!(recorder.sent(), vec![Sent::State(StateTopic::Waveform); 2]);
     }
 
     #[test]
     fn peeking_never_starts_an_analysis() {
         let directory = TestDirectory::new();
         let file = wav(&directory, "a.wav", &[100, 200, 300, 400]);
-        let (_, sink) = crate::events::testing::RecordingEventSink::shared();
+        let (_, sink) = crate::messages::testing::RecordingMessageSink::shared();
         let service = WaveformService::start(directory.file("cache"), sink);
         assert!(service.get(&file).is_none());
         assert!(service.shared.jobs().pending.is_none());
@@ -910,12 +950,12 @@ mod tests {
     fn a_file_replaced_at_the_same_path_is_analyzed_again() {
         let directory = TestDirectory::new();
         let file = wav(&directory, "song.wav", &vec![5_000i16; 16_000]);
-        let (recorder, sink) = crate::events::testing::RecordingEventSink::shared();
+        let (recorder, sink) = crate::messages::testing::RecordingMessageSink::shared();
         let service = WaveformService::start(directory.file("cache"), sink);
         let track = track_of(&file, None);
         assert!(service.get_or_queue(&track).is_none());
         let deadline = Instant::now() + Duration::from_secs(60);
-        while recorder.events().is_empty() && Instant::now() < deadline {
+        while recorder.sent().is_empty() && Instant::now() < deadline {
             thread::sleep(Duration::from_millis(10));
         }
         assert!(service.get_or_queue(&track).is_some());

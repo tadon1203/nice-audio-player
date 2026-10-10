@@ -2,9 +2,9 @@
 //! change in a registered folder is picked up while idle, and a failed scan is reported until a
 //! scan succeeds.
 
-use crate::events::null_event_sink;
 use crate::library::models::{LibraryScanState, LibrarySortDirection, LibraryTrackSortKey};
 use crate::library::Library;
+use crate::messages::null_message_sink;
 use crate::test_support::{write_pcm_i16_wav, TestDirectory};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
@@ -21,7 +21,7 @@ fn harness() -> Harness {
     let directory = TestDirectory::new();
     let music = directory.file("music");
     std::fs::create_dir_all(&music).unwrap();
-    let library = Library::open(directory.file("data"), null_event_sink()).expect("open library");
+    let library = Library::open(directory.file("data"), null_message_sink()).expect("open library");
     library
         .register_root(music.to_string_lossy().into_owned())
         .expect("register root");
@@ -66,7 +66,7 @@ impl Harness {
     }
 
     fn scan_state(&self) -> LibraryScanState {
-        self.library.scan_state().state
+        self.library.scan_state().value.state
     }
 
     fn wait_for_first_scan(&self) {

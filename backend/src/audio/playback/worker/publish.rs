@@ -81,8 +81,11 @@ impl PlaybackWorker {
         *self
             .snapshot
             .write()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = snapshot.clone();
-        self.events.emit(BackendEvent::PlaybackChanged);
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Versioned {
+            revision: self.revision,
+            value: snapshot.clone(),
+        };
+        self.messages.state_changed(StateTopic::Playback);
         snapshot
     }
 
@@ -96,7 +99,7 @@ impl PlaybackWorker {
             position_ms: loaded.position_ms(),
             seek_revision: self.seek_revision,
         }));
-        self.events.emit(BackendEvent::PlaybackPositionChanged);
+        self.messages.position_changed();
     }
 
     /// Previous is offered when the queue has an earlier item, or the track has played long
@@ -118,6 +121,7 @@ impl PlaybackWorker {
         self.snapshot
             .read()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .value
             .base()
             .can_go_previous
     }
@@ -134,8 +138,11 @@ impl PlaybackWorker {
         *self
             .queue_snapshot
             .write()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = snapshot.clone();
-        self.events.emit(BackendEvent::PlaybackQueueChanged);
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Versioned {
+            revision: self.next_queue_revision,
+            value: snapshot.clone(),
+        };
+        self.messages.state_changed(StateTopic::Queue);
         snapshot
     }
 
@@ -143,6 +150,7 @@ impl PlaybackWorker {
         self.queue_snapshot
             .read()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .value
             .clone()
     }
 

@@ -1,5 +1,5 @@
 import { nativeErrorCode } from "$lib/native";
-import type { AppEvent, AppearanceSettings, TNativeAPI } from "$lib/native";
+import type { AppEvent, Appearance, TNativeAPI } from "$lib/native";
 
 /** The appearance fields the renderer may change. */
 export type SettingsUpdate = {
@@ -20,7 +20,7 @@ export class Settings {
 
   #api: TNativeAPI;
   // The backend owns the defaults; nothing is known until the first load.
-  #mirror = $state.raw<AppearanceSettings | null>(null);
+  #mirror = $state.raw<Appearance | null>(null);
 
   constructor(api: TNativeAPI) {
     this.#api = api;

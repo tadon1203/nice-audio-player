@@ -1,17 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
-import type { AppearanceSettings, TNativeAPI } from "$lib/native";
+import type { Appearance, TNativeAPI } from "$lib/native";
 import { createSettings } from "./settings.svelte";
 
 function stubApi(overrides: Partial<Pick<TNativeAPI, "getSettings" | "updateSettings">> = {}) {
   return {
     getSettings: vi.fn(
-      async (): Promise<AppearanceSettings> => ({
+      async (): Promise<Appearance> => ({
         artworkBackdrop: true,
         calmMotion: false,
       }),
     ),
     updateSettings: vi.fn(
-      async (): Promise<AppearanceSettings> => ({
+      async (): Promise<Appearance> => ({
         artworkBackdrop: true,
         calmMotion: false,
       }),
@@ -65,7 +65,7 @@ describe("Settings", () => {
   });
 
   it("applies an update before the backend answers, sending null for untouched fields", async () => {
-    const pending = deferred<AppearanceSettings>();
+    const pending = deferred<Appearance>();
     const api = stubApi({ updateSettings: vi.fn(() => pending.promise) });
     const settings = createSettings(api);
     await settings.load();

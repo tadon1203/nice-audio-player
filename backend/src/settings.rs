@@ -7,6 +7,7 @@
 use std::{
     path::PathBuf,
     sync::{
+        atomic::{AtomicU64, Ordering},
         mpsc::{self, RecvTimeoutError, Sender},
         Mutex,
     },
@@ -18,7 +19,7 @@ use log::{error, warn};
 use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::audio::playback::PlaybackPreferences;
-use crate::events::{BackendEvent, SharedEventSink};
+use crate::messages::{SharedMessageSink, StateTopic, Versioned};
 
 const FILE_NAME: &str = "settings.json";
 const WRITE_DEBOUNCE: Duration = Duration::from_millis(400);
@@ -27,7 +28,7 @@ const WRITE_DEBOUNCE: Duration = Duration::from_millis(400);
 /// no defaults of its own; a saved file missing a field takes the default here.
 #[derive(Debug, Clone, PartialEq, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
-pub struct AppearanceSettings {
+pub struct Appearance {
     /// Artwork glow behind the library and Now Playing.
     pub artwork_backdrop: bool,
     /// Only what marks the position moves by itself: nothing breathes or lifts on its own.
@@ -44,16 +45,16 @@ struct StoredAppearance {
 
 fn appearance_from_file<'de, D: Deserializer<'de>>(
     deserializer: D,
-) -> Result<AppearanceSettings, D::Error> {
+) -> Result<Appearance, D::Error> {
     let stored = StoredAppearance::deserialize(deserializer)?;
-    let defaults = AppearanceSettings::default();
-    Ok(AppearanceSettings {
+    let defaults = Appearance::default();
+    Ok(Appearance {
         artwork_backdrop: stored.artwork_backdrop.unwrap_or(defaults.artwork_backdrop),
         calm_motion: stored.calm_motion.unwrap_or(defaults.calm_motion),
     })
 }
 
-impl Default for AppearanceSettings {
+impl Default for Appearance {
     fn default() -> Self {
         Self {
             artwork_backdrop: true,
@@ -68,7 +69,7 @@ impl Default for AppearanceSettings {
 pub struct Settings {
     pub playback: PlaybackPreferences,
     #[serde(deserialize_with = "appearance_from_file")]
-    pub appearance: AppearanceSettings,
+    pub appearance: Appearance,
 }
 
 /// A partial update from the renderer; absent fields stay as they are. Playback preferences are
@@ -106,7 +107,9 @@ impl Settings {
 
 pub struct SettingsService {
     state: Mutex<Settings>,
-    events: SharedEventSink,
+    /// The appearance topic's revision. Changed only under the `state` lock, with the value.
+    appearance_revision: AtomicU64,
+    messages: SharedMessageSink,
     writer: Mutex<Option<Sender<Settings>>>,
     writer_thread: Mutex<Option<JoinHandle<()>>>,
 }
@@ -114,7 +117,7 @@ pub struct SettingsService {
 impl SettingsService {
     /// Loads the saved settings from `directory`, or starts from defaults when there are none or
     /// the file is unusable (an unusable file is kept aside as `settings.json.bad`).
-    pub fn load(directory: PathBuf, events: SharedEventSink) -> Self {
+    pub fn load(directory: PathBuf, messages: SharedMessageSink) -> Self {
         let path = directory.join(FILE_NAME);
         let settings = read(&path);
         let (sender, receiver) = mpsc::channel();
@@ -125,7 +128,8 @@ impl SettingsService {
             .ok();
         Self {
             state: Mutex::new(settings),
-            events,
+            appearance_revision: AtomicU64::new(0),
+            messages,
             writer: Mutex::new(writer_thread.is_some().then_some(sender)),
             writer_thread: Mutex::new(writer_thread),
         }
@@ -135,16 +139,20 @@ impl SettingsService {
         self.state.lock().expect("settings lock").clone()
     }
 
-    /// The part of the settings the renderer reads.
-    pub fn appearance(&self) -> AppearanceSettings {
-        self.get().appearance
+    /// The appearance the renderer reads, with the revision of its topic.
+    pub fn appearance(&self) -> Versioned<Appearance> {
+        let state = self.state.lock().expect("settings lock");
+        Versioned {
+            revision: self.appearance_revision.load(Ordering::Acquire),
+            value: state.appearance.clone(),
+        }
     }
 
     /// Applies a renderer update and announces it when something changed.
-    pub fn update(&self, patch: &SettingsPatch) -> AppearanceSettings {
+    pub fn update(&self, patch: &SettingsPatch) -> Appearance {
         let (settings, changed) = self.modify(|settings| settings.apply(patch));
         if changed {
-            self.events.emit(BackendEvent::SettingsChanged);
+            self.messages.state_changed(StateTopic::Appearance);
         }
         settings.appearance
     }
@@ -160,6 +168,9 @@ impl SettingsService {
         let before = state.clone();
         change(&mut state);
         let changed = *state != before;
+        if state.appearance != before.appearance {
+            self.appearance_revision.fetch_add(1, Ordering::Release);
+        }
         let settings = state.clone();
         drop(state);
         if changed {
@@ -251,7 +262,10 @@ mod tests {
     use super::*;
     use crate::audio::devices::AudioOutputSelection;
     use crate::audio::playback::PlaybackRepeatMode;
-    use crate::events::{null_event_sink, testing::RecordingEventSink};
+    use crate::messages::{
+        null_message_sink,
+        testing::{RecordingMessageSink, Sent},
+    };
     use crate::test_support::TestDirectory;
 
     fn directory() -> (TestDirectory, PathBuf) {
@@ -264,7 +278,7 @@ mod tests {
     #[test]
     fn starts_from_defaults_without_a_file() {
         let (_guard, path) = directory();
-        let service = SettingsService::load(path, null_event_sink());
+        let service = SettingsService::load(path, null_message_sink());
         assert_eq!(service.get(), Settings::default());
         assert!(service.get().appearance.artwork_backdrop);
     }
@@ -272,7 +286,7 @@ mod tests {
     #[test]
     fn saved_changes_are_restored_on_the_next_start() {
         let (_guard, path) = directory();
-        let service = SettingsService::load(path.clone(), null_event_sink());
+        let service = SettingsService::load(path.clone(), null_message_sink());
         service.update(&SettingsPatch {
             appearance: Some(AppearancePatch {
                 artwork_backdrop: Some(false),
@@ -290,7 +304,7 @@ mod tests {
         });
         service.shutdown();
 
-        let restored = SettingsService::load(path, null_event_sink()).get();
+        let restored = SettingsService::load(path, null_message_sink()).get();
         assert!(!restored.appearance.artwork_backdrop);
         assert!(restored.appearance.calm_motion);
         assert_eq!(restored.playback.volume, 0.4);
@@ -312,7 +326,7 @@ mod tests {
             r#"{ "playback": { "volume": 0.25 } }"#,
         )
         .unwrap();
-        let settings = SettingsService::load(path, null_event_sink()).get();
+        let settings = SettingsService::load(path, null_message_sink()).get();
         assert_eq!(settings.playback.volume, 0.25);
         assert!(!settings.playback.muted);
         assert!(settings.appearance.artwork_backdrop);
@@ -324,7 +338,7 @@ mod tests {
         let (_guard, path) = directory();
         std::fs::write(path.join(FILE_NAME), r#"{ "playback": { "volume": 7.0 } }"#).unwrap();
         assert_eq!(
-            SettingsService::load(path.clone(), null_event_sink())
+            SettingsService::load(path.clone(), null_message_sink())
                 .get()
                 .playback
                 .volume,
@@ -332,7 +346,7 @@ mod tests {
         );
 
         std::fs::write(path.join(FILE_NAME), "not json").unwrap();
-        let settings = SettingsService::load(path.clone(), null_event_sink()).get();
+        let settings = SettingsService::load(path.clone(), null_message_sink()).get();
         assert_eq!(settings, Settings::default());
         assert!(path.join("settings.json.bad").exists());
     }
@@ -340,14 +354,14 @@ mod tests {
     #[test]
     fn only_renderer_visible_changes_are_announced() {
         let (_guard, path) = directory();
-        let (recorder, sink) = RecordingEventSink::shared();
+        let (recorder, sink) = RecordingMessageSink::shared();
         let service = SettingsService::load(path, sink);
 
         service.record_playback(PlaybackPreferences {
             volume: 0.5,
             ..PlaybackPreferences::default()
         });
-        assert!(recorder.events().is_empty());
+        assert!(recorder.sent().is_empty());
 
         let patch = SettingsPatch {
             appearance: Some(AppearancePatch {
@@ -357,6 +371,31 @@ mod tests {
         };
         service.update(&patch);
         service.update(&patch);
-        assert_eq!(recorder.events(), vec![BackendEvent::SettingsChanged]);
+        assert_eq!(recorder.sent(), vec![Sent::State(StateTopic::Appearance)]);
+    }
+
+    #[test]
+    fn the_appearance_revision_counts_appearance_changes_only() {
+        let (_guard, path) = directory();
+        let service = SettingsService::load(path, null_message_sink());
+        assert_eq!(service.appearance().revision, 0);
+
+        service.record_playback(PlaybackPreferences {
+            volume: 0.5,
+            ..PlaybackPreferences::default()
+        });
+        assert_eq!(service.appearance().revision, 0);
+
+        let patch = SettingsPatch {
+            appearance: Some(AppearancePatch {
+                artwork_backdrop: Some(false),
+                calm_motion: None,
+            }),
+        };
+        service.update(&patch);
+        service.update(&patch);
+        let appearance = service.appearance();
+        assert_eq!(appearance.revision, 1);
+        assert!(!appearance.value.artwork_backdrop);
     }
 }

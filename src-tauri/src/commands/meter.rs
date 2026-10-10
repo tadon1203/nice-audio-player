@@ -21,9 +21,9 @@ impl Type for MeterFrameBytes {
 }
 
 /// Starts streaming Meter frames to `frames` as binary messages (see `FRAME_BYTES` in the
-/// backend's `meter` module for the layout), replacing any earlier subscription. Returns the id
-/// to end it with. Frames the channel cannot deliver are dropped; a channel that is gone ends
-/// the subscription.
+/// backend's `meter` module for the layout), replacing any earlier subscription the way `connect`
+/// replaces the Renderer's channel. Returns the id to end it with. Frames the channel cannot
+/// deliver are dropped; a channel that is gone ends the subscription.
 #[tauri::command]
 #[specta::specta]
 pub async fn subscribe_meter_frames(

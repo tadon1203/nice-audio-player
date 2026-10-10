@@ -68,7 +68,7 @@ fn a_start_through_a_service_thread_needs_no_poll() {
         },
     ));
     let service = PlaybackService::start_with_backend(
-        crate::events::null_event_sink(),
+        crate::messages::null_message_sink(),
         PlaybackPreferences::default(),
         Arc::new(|_| {}),
         resolver_of(&library),
@@ -195,7 +195,7 @@ fn a_tick_publishes_the_position_the_speakers_reached_without_a_new_snapshot() {
     let tracks = vec![harness.track("a", 2)];
     let started = harness.start(tracks, 0).unwrap();
     harness.output.set_played_frames(44_100);
-    let events = harness.events().len();
+    let sent = harness.sent().len();
 
     std::thread::sleep(POSITION_UPDATE_INTERVAL + Duration::from_millis(10));
     harness.tick();
@@ -205,10 +205,7 @@ fn a_tick_publishes_the_position_the_speakers_reached_without_a_new_snapshot() {
         harness.position().unwrap().playback_id,
         session(&started).playback_id
     );
-    assert_eq!(
-        harness.events()[events..],
-        [BackendEvent::PlaybackPositionChanged]
-    );
+    assert_eq!(harness.sent()[sent..], [Sent::Position]);
     assert_eq!(harness.snapshot(), started);
 }
 
@@ -218,12 +215,12 @@ fn a_tick_inside_the_publish_interval_publishes_nothing() {
     let tracks = vec![harness.track("a", 2)];
     let started = harness.start(tracks, 0).unwrap();
     harness.output.set_played_frames(44_100);
-    let events = harness.events().len();
+    let sent = harness.sent().len();
 
     harness.tick();
 
     assert_eq!(harness.snapshot(), started);
-    assert_eq!(harness.events().len(), events);
+    assert_eq!(harness.sent().len(), sent);
 }
 
 #[test]
@@ -254,8 +251,8 @@ fn previous_becomes_available_once_the_track_has_played_a_while() {
 
     assert!(harness.snapshot().base().can_go_previous);
     assert_eq!(
-        harness.events().last(),
-        Some(&BackendEvent::PlaybackChanged)
+        harness.sent().last(),
+        Some(&Sent::State(StateTopic::Playback))
     );
 }
 
@@ -409,4 +406,5 @@ fn published_revisions_grow_and_commands_that_change_nothing_keep_theirs() {
     assert_eq!(changed.revision(), 1);
     assert_eq!(muted.revision(), 2);
     assert_eq!(muted_again.revision(), 2);
+    assert_eq!(harness.versioned_snapshot().revision, 2);
 }

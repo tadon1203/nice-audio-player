@@ -1,23 +1,12 @@
-use std::{
-    collections::BTreeSet,
-    sync::{
-        mpsc::{self, Receiver, Sender},
-        Arc,
-    },
-    thread,
-};
-
 use backend::{
-    app::BackendApp,
     audio::{
         playback::{PlaybackPosition, PlaybackQueueSnapshot, PlaybackSnapshot},
         waveform::PlaybackWaveform,
     },
-    events::{BackendEvent, EventSink},
-    settings::AppearanceSettings,
+    messages::{BackendMessage, StateMessage, StateValue},
+    settings::Appearance,
 };
 use serde::Serialize;
-use tauri::Emitter;
 
 #[derive(Clone, Serialize, specta::Type)]
 #[serde(tag = "event", content = "payload", rename_all = "camelCase")]
@@ -34,65 +23,21 @@ pub enum AppEvent {
     #[serde(rename = "waveformChanged")]
     Waveform(PlaybackWaveform),
     #[serde(rename = "settingsChanged")]
-    Settings(AppearanceSettings),
+    Settings(Appearance),
 }
 
-/// Reads the state a backend event announces, or `None` when there is nothing to tell. Events
-/// carry no state, so this is the one place each event meets its payload.
-fn read(event: BackendEvent, backend: &BackendApp) -> Option<AppEvent> {
-    Some(match event {
-        BackendEvent::PlaybackChanged => AppEvent::Playback(Box::new(backend.playback.snapshot())),
-        BackendEvent::PlaybackPositionChanged => {
-            AppEvent::PlaybackPosition(backend.playback.position()?)
-        }
-        BackendEvent::PlaybackQueueChanged => {
-            AppEvent::PlaybackQueue(backend.playback.queue_snapshot())
-        }
-        BackendEvent::LibraryScanChanged => AppEvent::LibraryScan(backend.library_scan_state()),
-        BackendEvent::WaveformChanged => AppEvent::Waveform(backend.ready_playback_waveform()?),
-        BackendEvent::SettingsChanged => AppEvent::Settings(backend.settings.appearance()),
+/// The `app:event` a message stands for, until the Renderer reads the channel. `None` when the
+/// old events had nothing to say: an occurrence, or a waveform that is not ready.
+pub fn app_event(message: &BackendMessage) -> Option<AppEvent> {
+    Some(match message {
+        BackendMessage::State(StateMessage { state, .. }) => match state {
+            StateValue::Playback(snapshot) => AppEvent::Playback(snapshot.clone()),
+            StateValue::Queue(queue) => AppEvent::PlaybackQueue(queue.clone()),
+            StateValue::LibraryScan(scan) => AppEvent::LibraryScan(scan.clone()),
+            StateValue::Waveform(waveform) => AppEvent::Waveform(waveform.clone()?),
+            StateValue::Appearance(appearance) => AppEvent::Settings(appearance.clone()),
+        },
+        BackendMessage::Position(position) => AppEvent::PlaybackPosition(position.clone()),
+        BackendMessage::Occurrence(_) => return None,
     })
-}
-
-/// The backend's event sink. It only queues; `start_dispatcher` delivers, so a service never
-/// waits on the webview.
-pub struct TauriEventSink {
-    sender: Sender<BackendEvent>,
-}
-
-impl EventSink for TauriEventSink {
-    fn emit(&self, event: BackendEvent) {
-        let _ = self.sender.send(event);
-    }
-}
-
-pub fn event_channel() -> (Arc<TauriEventSink>, Receiver<BackendEvent>) {
-    let (sender, receiver) = mpsc::channel();
-    (Arc::new(TauriEventSink { sender }), receiver)
-}
-
-/// Delivers queued backend events to the webview on the `app:event` channel.
-pub fn start_dispatcher(
-    app: &tauri::AppHandle,
-    backend: &Arc<BackendApp>,
-    receiver: Receiver<BackendEvent>,
-) {
-    let app = app.clone();
-    let backend = Arc::clone(backend);
-    thread::spawn(move || {
-        while let Ok(first) = receiver.recv() {
-            // Which events happened since the last delivery: any number of one kind become a
-            // single event with its latest value, in the order the variants are declared.
-            let mut pending = BTreeSet::from([first]);
-            pending.extend(receiver.try_iter());
-            for event in pending {
-                let Some(payload) = read(event, &backend) else {
-                    continue;
-                };
-                if app.emit("app:event", payload).is_err() {
-                    log::error!("ipc.event_emit_failed event_name={}", event.name());
-                }
-            }
-        }
-    });
 }

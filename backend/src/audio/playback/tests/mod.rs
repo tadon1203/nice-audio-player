@@ -32,9 +32,9 @@ use crate::audio::playback::snapshot::{
 };
 use crate::audio::playback::worker::{PlaybackWorker, WorkerLinks};
 use crate::audio::volume::{AtomicEffectiveGain, VolumeState};
-use crate::events::BackendEvent;
 use crate::library::store::PlayableTrack;
 use crate::media::validation::ValidatedAudioFile;
+use crate::messages::{testing::Sent, StateTopic, Versioned};
 use crate::test_support::{write_pcm_i16_wav, TestDirectory};
 use cpal::StreamInstant;
 use rand::{rngs::StdRng, SeedableRng};
@@ -51,10 +51,10 @@ type Answer<T> = Result<T, PlaybackServiceError>;
 struct Harness {
     worker: PlaybackWorker,
     inputs: Receiver<WorkerInput>,
-    snapshot: Arc<RwLock<PlaybackSnapshot>>,
+    snapshot: Arc<RwLock<Versioned<PlaybackSnapshot>>>,
     position: Arc<RwLock<Option<PlaybackPosition>>>,
-    recorded: Arc<crate::events::testing::RecordingEventSink>,
-    queue_snapshot: Arc<RwLock<PlaybackQueueSnapshot>>,
+    recorded: Arc<crate::messages::testing::RecordingMessageSink>,
+    queue_snapshot: Arc<RwLock<Versioned<PlaybackQueueSnapshot>>>,
     gain: AtomicEffectiveGain,
     output: FakeOutput,
     preferences: Arc<Mutex<Vec<PlaybackPreferences>>>,
@@ -68,18 +68,18 @@ impl Harness {
         let (inbox, inputs) = Inbox::channel();
         let queue = PlaybackQueue::new(PlaybackRepeatMode::Off, false);
         let volume = VolumeState::default();
-        let snapshot = Arc::new(RwLock::new(PlaybackSnapshot::Stopped {
+        let snapshot = Arc::new(RwLock::new(Versioned::new(PlaybackSnapshot::Stopped {
             base: SnapshotBase::new(volume, AudioOutputSelection::SystemDefault),
             item: None,
-        }));
-        let queue_snapshot = Arc::new(RwLock::new(PlaybackQueueSnapshot::empty(
+        })));
+        let queue_snapshot = Arc::new(RwLock::new(Versioned::new(PlaybackQueueSnapshot::empty(
             0,
             PlaybackRepeatMode::Off,
             false,
-        )));
+        ))));
         let library = Arc::new(FakeTracks::default());
         let position = Arc::new(RwLock::new(None));
-        let (recorded, events) = crate::events::testing::RecordingEventSink::shared();
+        let (recorded, messages) = crate::messages::testing::RecordingMessageSink::shared();
         let gain = AtomicEffectiveGain::new(1.0);
         let output = FakeOutput::new();
         let preferences = Arc::new(Mutex::new(Vec::new()));
@@ -92,7 +92,7 @@ impl Harness {
                 effective_gain: gain.clone(),
                 meter: MeterHub::new(),
                 inbox,
-                events,
+                messages,
                 observer: Arc::new(move |preferences| observed.lock().unwrap().push(preferences)),
                 backend: Box::new(output.clone()),
                 tracks: resolver_of(&library),
@@ -152,6 +152,10 @@ impl Harness {
     }
 
     fn snapshot(&self) -> PlaybackSnapshot {
+        self.versioned_snapshot().value
+    }
+
+    fn versioned_snapshot(&self) -> Versioned<PlaybackSnapshot> {
         self.snapshot.read().unwrap().clone()
     }
 
@@ -159,11 +163,15 @@ impl Harness {
         self.position.read().unwrap().clone()
     }
 
-    fn events(&self) -> Vec<BackendEvent> {
-        self.recorded.events()
+    fn sent(&self) -> Vec<Sent> {
+        self.recorded.sent()
     }
 
     fn queue_snapshot(&self) -> PlaybackQueueSnapshot {
+        self.versioned_queue_snapshot().value
+    }
+
+    fn versioned_queue_snapshot(&self) -> Versioned<PlaybackQueueSnapshot> {
         self.queue_snapshot.read().unwrap().clone()
     }
 
@@ -299,7 +307,7 @@ fn is_playing(snapshot: &PlaybackSnapshot, title: &str) -> bool {
 
 fn start_service() -> PlaybackService {
     PlaybackService::start_with_backend(
-        crate::events::null_event_sink(),
+        crate::messages::null_message_sink(),
         PlaybackPreferences::default(),
         Arc::new(|_| {}),
         Arc::new(TrackResolver::new(Box::new(NoTracks))),

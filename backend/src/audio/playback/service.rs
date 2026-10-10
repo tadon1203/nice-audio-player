@@ -21,8 +21,8 @@ use crate::audio::meter::MeterHub;
 use crate::audio::output::{CpalBackend, OutputBackend};
 use crate::audio::volume::{AtomicEffectiveGain, VolumeState};
 use crate::audio::waveform::PrefetchObserver;
-use crate::events::SharedEventSink;
 use crate::library::store::PlaybackSourceError;
+use crate::messages::{SharedMessageSink, Versioned};
 use crate::tasks::TaskError;
 use log::error;
 
@@ -198,9 +198,9 @@ pub(super) enum PlaybackCommand {
 #[derive(Clone)]
 pub struct PlaybackServiceHandle {
     inbox: Inbox,
-    snapshot: Arc<RwLock<PlaybackSnapshot>>,
+    snapshot: Arc<RwLock<Versioned<PlaybackSnapshot>>>,
     position: Arc<RwLock<Option<PlaybackPosition>>>,
-    queue_snapshot: Arc<RwLock<PlaybackQueueSnapshot>>,
+    queue_snapshot: Arc<RwLock<Versioned<PlaybackQueueSnapshot>>>,
     meter: MeterHub,
 }
 
@@ -214,14 +214,14 @@ impl PlaybackService {
     /// so the caller can persist them; `tracks` is where queue entries get their metadata;
     /// `on_prefetch` hears about each track the moment it starts opening as the next one.
     pub fn start(
-        events: SharedEventSink,
+        messages: SharedMessageSink,
         preferences: PlaybackPreferences,
         observer: PreferencesObserver,
         tracks: Arc<TrackResolver>,
         on_prefetch: PrefetchObserver,
     ) -> Result<Self, PlaybackServiceStartError> {
         Self::start_with_backend(
-            events,
+            messages,
             preferences,
             observer,
             tracks,
@@ -231,7 +231,7 @@ impl PlaybackService {
     }
 
     pub(super) fn start_with_backend(
-        events: SharedEventSink,
+        messages: SharedMessageSink,
         preferences: PlaybackPreferences,
         observer: PreferencesObserver,
         tracks: Arc<TrackResolver>,
@@ -245,15 +245,15 @@ impl PlaybackService {
         let meter = MeterHub::new();
         let output_selection = preferences.output_selection;
         let queue = PlaybackQueue::new(preferences.repeat_mode, preferences.shuffle_enabled);
-        let state = Arc::new(RwLock::new(PlaybackSnapshot::Stopped {
+        let state = Arc::new(RwLock::new(Versioned::new(PlaybackSnapshot::Stopped {
             base: SnapshotBase::new(volume_state, output_selection.clone()),
             item: None,
-        }));
-        let queue_state = Arc::new(RwLock::new(PlaybackQueueSnapshot::empty(
+        })));
+        let queue_state = Arc::new(RwLock::new(Versioned::new(PlaybackQueueSnapshot::empty(
             0,
             queue.repeat(),
             queue.shuffle(),
-        )));
+        ))));
         let position = Arc::new(RwLock::new(None));
         let links = WorkerLinks {
             snapshot: Arc::clone(&state),
@@ -262,7 +262,7 @@ impl PlaybackService {
             effective_gain,
             meter: meter.clone(),
             inbox: inbox.clone(),
-            events,
+            messages,
             observer,
             backend,
             tracks,
@@ -299,12 +299,22 @@ impl PlaybackService {
         self.handle.snapshot()
     }
 
+    /// The transport snapshot with the revision of its topic.
+    pub fn versioned_snapshot(&self) -> Versioned<PlaybackSnapshot> {
+        self.handle.versioned_snapshot()
+    }
+
     pub fn position(&self) -> Option<PlaybackPosition> {
         self.handle.position()
     }
 
     pub fn queue_snapshot(&self) -> PlaybackQueueSnapshot {
         self.handle.queue_snapshot()
+    }
+
+    /// The queue snapshot with the revision of its topic.
+    pub fn versioned_queue_snapshot(&self) -> Versioned<PlaybackQueueSnapshot> {
+        self.handle.versioned_queue_snapshot()
     }
 
     pub fn shutdown(&self) {
@@ -327,6 +337,10 @@ impl Drop for PlaybackService {
 
 impl PlaybackServiceHandle {
     pub fn snapshot(&self) -> PlaybackSnapshot {
+        self.versioned_snapshot().value
+    }
+
+    pub fn versioned_snapshot(&self) -> Versioned<PlaybackSnapshot> {
         self.snapshot
             .read()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -342,6 +356,10 @@ impl PlaybackServiceHandle {
     }
 
     pub fn queue_snapshot(&self) -> PlaybackQueueSnapshot {
+        self.versioned_queue_snapshot().value
+    }
+
+    pub fn versioned_queue_snapshot(&self) -> Versioned<PlaybackQueueSnapshot> {
         self.queue_snapshot
             .read()
             .unwrap_or_else(std::sync::PoisonError::into_inner)

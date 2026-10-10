@@ -28,8 +28,8 @@ Data flow:
 
 1. The Renderer calls a Host command through the `native` adapter.
 2. The Host command calls the Backend.
-3. A Backend service changes state and emits an event. The event carries no state.
-4. The Host reads the current snapshot and sends it to the Renderer.
+3. A Backend service changes state and reports it. A state topic is sent with its whole value and revision, and an occurrence with its value.
+4. The Host reads the current value and sends it to the Renderer on one channel.
 5. The Renderer updates its caches and views.
 
 ## Code map
@@ -52,9 +52,9 @@ Data flow:
 | `backend/src/library`    | The Library: its database, the Scan, and artwork.                                    |
 | `backend/src/lyrics`     | Lyrics parsing and service.                                                          |
 | `backend/src/media`      | Reading tags, embedded lyrics, and file checks.                                      |
-| `backend/src`            | Also holds the small modules that serve many domains (settings, events).             |
+| `backend/src`            | Also holds the small modules that serve many domains (settings, messages).           |
 | `src-tauri/src/commands` | Host commands, grouped by domain.                                                    |
-| `src-tauri/src`          | Also holds command registration, event forwarding, and the artwork protocol.         |
+| `src-tauri/src`          | Also holds command registration, message delivery, and the artwork protocol.         |
 | `tests`                  | Renderer E2E tests (Playwright, with a scripted native API).                         |
 | `tests-app`              | App E2E tests (WebdriverIO, on the real app).                                        |
 
@@ -62,7 +62,7 @@ Data flow:
 
 - The IPC contract is defined once, in the Backend. The Renderer's bindings are generated from it. Nobody edits them by hand.
 - A Host command that blocks does not run on the main thread.
-- Backend services know nothing about the Host or each other. They emit events, which carry no state.
+- Backend services know nothing about the Host or each other. They report through a message sink, and what each message carries is in [ADR 0008](./docs/adr/0008-backend-state-occurrences-and-measurements-on-one-channel.md).
 - Every state that the Library stores is a closed set of values. The code and the database enforce the same set.
 - One place decides how the Library files a track (its Album Artist and album). Reads use the stored result.
 - One place builds the path of a track's file, and it keeps the path inside its Library folder.

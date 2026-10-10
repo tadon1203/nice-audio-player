@@ -1,3 +1,4 @@
+use backend::messages::BackendMessage;
 use tauri_specta::{collect_commands, Builder, ErrorHandlingMode};
 
 use crate::{commands, events::AppEvent};
@@ -56,10 +57,12 @@ pub fn builder() -> Builder<tauri::Wry> {
             commands::lyrics::get_track_lyrics,
             commands::meter::subscribe_meter_frames,
             commands::meter::unsubscribe_meter_frames,
+            commands::session::connect,
             commands::settings::get_settings,
             commands::settings::update_settings,
         ])
         .typ::<AppEvent>()
+        .typ::<BackendMessage>()
         .error_handling(ErrorHandlingMode::Throw)
         .dangerously_cast_bigints_to_number()
         .disable_serde_phases()

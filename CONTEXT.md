@@ -8,7 +8,7 @@ The language of Nice Audio Player. Use these terms in code, docs, and tickets. D
 - **Renderer domain**: the part of the Renderer that serves one Backend area (the Library, Playback, lyrics, settings, or the meters). It holds that area's cached state and logic. It never depends on another Renderer domain.
 - **Renderer shell**: the part of the Renderer that holds app state spanning several Renderer domains, such as Now Playing, the queue panel, and workspace scroll. It sits between the product compositions and the Renderer domains.
 - **Backend**: the part of the app that owns the domain and the persistent state. It knows nothing about Tauri.
-- **Host**: the part of the app that connects the Backend to the window and the operating system. It registers commands, forwards events, and serves artwork. It holds no domain rules.
+- **Host**: the part of the app that connects the Backend to the window and the operating system. It registers commands, delivers the Backend's messages to the window, and serves artwork. It holds no domain rules.
 - **Backend state**: a value that the Backend owns and the Renderer mirrors, such as the Playback, the Queue, the Library scan, the Waveform, and the Appearance. It always reaches the Renderer whole, with its revision.
 - **Backend occurrence**: a fact about one moment that the Backend reports once, such as a skipped track. The Renderer shows it and builds no state from it.
 - **Measurement stream**: the frequent measurements that the Backend sends while audio plays: the playing position and the Meter frames. _Avoid_: Stream (an Output stream is a different thing).

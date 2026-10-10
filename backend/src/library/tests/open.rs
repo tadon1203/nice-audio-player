@@ -1,7 +1,7 @@
-use crate::events::null_event_sink;
 use crate::library::database::Database;
 use crate::library::models::LibraryUnavailableReason;
 use crate::library::{migrations, Library};
+use crate::messages::null_message_sink;
 use crate::test_support::TestDirectory;
 
 #[test]
@@ -21,7 +21,7 @@ fn a_library_that_cannot_be_opened_says_why() {
         .unwrap();
 
     let reason = |directory: &TestDirectory| {
-        Library::open(directory.file(""), null_event_sink())
+        Library::open(directory.file(""), null_message_sink())
             .err()
             .expect("an unavailable Library")
     };

@@ -103,9 +103,9 @@ export const commands = {
 	getTrackLyrics: (trackId: string) => __TAURI_INVOKE<LyricsResolution>("get_track_lyrics", { trackId }),
 	/**
 	 *  Starts streaming Meter frames to `frames` as binary messages (see `FRAME_BYTES` in the
-	 *  backend's `meter` module for the layout), replacing any earlier subscription. Returns the id
-	 *  to end it with. Frames the channel cannot deliver are dropped; a channel that is gone ends
-	 *  the subscription.
+	 *  backend's `meter` module for the layout), replacing any earlier subscription the way `connect`
+	 *  replaces the Renderer's channel. Returns the id to end it with. Frames the channel cannot
+	 *  deliver are dropped; a channel that is gone ends the subscription.
 	 */
 	subscribeMeterFrames: (frames: Channel<ArrayBuffer>) => __TAURI_INVOKE<number>("subscribe_meter_frames", { frames }),
 	/**
@@ -113,9 +113,15 @@ export const commands = {
 	 *  alone.
 	 */
 	unsubscribeMeterFrames: (subscription: number) => __TAURI_INVOKE<null>("unsubscribe_meter_frames", { subscription }),
-	getSettings: () => __TAURI_INVOKE<AppearanceSettings>("get_settings"),
+	/**
+	 *  Registers `channel` as the one channel to the Renderer, replacing an earlier one. Returns the
+	 *  current value of every state topic. A message sent in between has a revision that is not
+	 *  older than the returned value, so the Renderer can order them by revision.
+	 */
+	connect: (channel: Channel<BackendMessage>) => __TAURI_INVOKE<InitialState>("connect", { channel }),
+	getSettings: () => __TAURI_INVOKE<Appearance>("get_settings"),
 	/**  Applies a partial update and returns the appearance settings as they are afterwards. */
-	updateSettings: (patch: SettingsPatch) => __TAURI_INVOKE<AppearanceSettings>("update_settings", { patch }),
+	updateSettings: (patch: SettingsPatch) => __TAURI_INVOKE<Appearance>("update_settings", { patch }),
 };
 
 /* Types */
@@ -146,22 +152,22 @@ export type ActiveSession = {
 
 export type AppEvent = { event: "playbackStateChanged"; payload: PlaybackSnapshot } | { event: "playbackPositionChanged"; payload: PlaybackPosition } | { event: "playbackQueueStateChanged"; payload: PlaybackQueueSnapshot } | { event: "libraryScanStateChanged"; payload: LibraryScanSnapshot } | 
 /**  The loaded track's waveform, whenever a better one is ready. */
-{ event: "waveformChanged"; payload: PlaybackWaveform } | { event: "settingsChanged"; payload: AppearanceSettings };
-
-export type AppearancePatch = {
-	artworkBackdrop: boolean | null,
-	calmMotion: boolean | null,
-};
+{ event: "waveformChanged"; payload: PlaybackWaveform } | { event: "settingsChanged"; payload: Appearance };
 
 /**
  *  What the renderer reads and writes. Every field is always present, so the renderer declares
  *  no defaults of its own; a saved file missing a field takes the default here.
  */
-export type AppearanceSettings = {
+export type Appearance = {
 	/**  Artwork glow behind the library and Now Playing. */
 	artworkBackdrop: boolean,
 	/**  Only what marks the position moves by itself: nothing breathes or lifts on its own. */
 	calmMotion: boolean,
+};
+
+export type AppearancePatch = {
+	artworkBackdrop: boolean | null,
+	calmMotion: boolean | null,
 };
 
 export type ArtworkMimeType = "jpeg" | "png";
@@ -187,6 +193,30 @@ export type AudioOutputDeviceIdentity = {
 };
 
 export type AudioOutputSelection = { kind: "systemDefault" } | { kind: "device"; deviceId: string };
+
+/**  What the Renderer receives on its channel. */
+export type BackendMessage = 
+/**  The fields of the message merge into one object: { kind: "state", revision, topic, value }. */
+{
+	kind: "state",
+} & StateMessage | 
+/**  { kind: "occurrence", type: "...", ... } */
+{
+	kind: "occurrence",
+} & Occurrence | 
+/**  { kind: "position", playbackId, positionMs, seekRevision } */
+{
+	kind: "position",
+} & PlaybackPosition;
+
+/**  The current value of every Backend state topic. `connect` returns it. */
+export type InitialState = {
+	playback: Versioned<PlaybackSnapshot>,
+	queue: Versioned<PlaybackQueueSnapshot>,
+	libraryScan: Versioned<LibraryScanSnapshot>,
+	waveform: Versioned<PlaybackWaveform | null>,
+	appearance: Versioned<Appearance>,
+};
 
 export type LibraryAlbumArtistKey = {
 	name: string,
@@ -398,6 +428,11 @@ export type LyricsTimedLine = {
 	text: string,
 };
 
+/**  A fact that happened, with its value. */
+export type Occurrence = 
+/**  The player could not play `item` and skipped it by itself. */
+{ type: "trackSkipped"; item: PlaybackItem | null; error: PlaybackFailureCode };
+
 /**
  *  A library track ready to be played, and the one track-metadata type of the whole playback
  *  path: the library reads it, the queue item wraps it, and the renderer sees it.
@@ -537,5 +572,19 @@ export type SnapshotBase = {
 	outputSelection: AudioOutputSelection,
 	canGoPrevious: boolean,
 	canGoNext: boolean,
+};
+
+/**  One state topic's value with its revision. */
+export type StateMessage = {
+	revision: number,
+} & StateValue;
+
+/**  The whole value of one state topic. */
+export type StateValue = { topic: "playback"; value: PlaybackSnapshot } | { topic: "queue"; value: PlaybackQueueSnapshot } | { topic: "libraryScan"; value: LibraryScanSnapshot } | { topic: "waveform"; value: PlaybackWaveform | null } | { topic: "appearance"; value: Appearance };
+
+/**  A value with the revision of its topic. Revisions only grow, per topic. */
+export type Versioned<T> = {
+	revision: number,
+	value: T,
 };
 

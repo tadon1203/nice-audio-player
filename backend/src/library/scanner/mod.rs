@@ -23,7 +23,7 @@ use log::{error, info};
 use super::database::Database;
 use super::error::parse_id;
 use super::models::{LibraryRoot, LibraryScanSnapshot, LibraryScanState, ScanFailure};
-use crate::events::Notifier;
+use crate::messages::{Notifier, Versioned};
 use discover::{discover, relative_dir, scope, DiscoveredFile, Discovery};
 use inspect::{inspect_all, read_artwork};
 use persist::{plan, LibraryWriter, Outcome, PersistError, Plan};
@@ -40,7 +40,7 @@ pub(crate) struct ScanJob {
     pub dirs: Option<Vec<PathBuf>>,
 }
 
-pub(crate) type SharedScanState = Arc<Mutex<LibraryScanSnapshot>>;
+pub(crate) type SharedScanState = Arc<Mutex<Versioned<LibraryScanSnapshot>>>;
 
 /// Why a scan stopped before finishing.
 enum Stop {
@@ -63,7 +63,11 @@ pub(crate) fn run(
     cancel: Arc<AtomicBool>,
     notify: Notifier,
 ) -> LibraryScanState {
-    state.lock().expect("scan state lock").expected_count = expected_files(&database, &jobs);
+    let expected = expected_files(&database, &jobs);
+    state
+        .lock()
+        .expect("scan state lock")
+        .update(|scan| scan.expected_count = expected);
     let mut progress = Progress::new(&state, &notify);
     let mut traversal_failed = false;
     for job in jobs {
@@ -71,7 +75,10 @@ pub(crate) fn run(
         if cancel.load(Ordering::Acquire) {
             return finish(&state, LibraryScanState::Cancelled, None, &notify);
         }
-        state.lock().expect("scan state lock").current_root = Some(root.clone());
+        state
+            .lock()
+            .expect("scan state lock")
+            .update(|scan| scan.current_root = Some(root.clone()));
         notify.notify();
         match scan_root(&database, &job, &cancel, &mut progress) {
             Ok(complete) => traversal_failed |= !complete,
@@ -128,10 +135,12 @@ pub(crate) fn fail(state: &SharedScanState, notify: &Notifier) {
         state.clear_poison();
         poisoned.into_inner()
     });
-    scan.state = LibraryScanState::Failed;
-    scan.current_root = None;
-    scan.failure_code = Some(ScanFailure::Panicked);
-    scan.finished_count += 1;
+    scan.update(|scan| {
+        scan.state = LibraryScanState::Failed;
+        scan.current_root = None;
+        scan.failure_code = Some(ScanFailure::Panicked);
+        scan.finished_count += 1;
+    });
     drop(scan);
     error!(
         "library.scan.failed failure_code={:?}",
@@ -311,11 +320,13 @@ fn finish(
 ) -> LibraryScanState {
     let snapshot = {
         let mut scan = state.lock().expect("scan state lock");
-        scan.state = outcome;
-        scan.current_root = None;
-        scan.failure_code = failure;
-        scan.finished_count += 1;
-        scan.clone()
+        scan.update(|scan| {
+            scan.state = outcome;
+            scan.current_root = None;
+            scan.failure_code = failure;
+            scan.finished_count += 1;
+        });
+        scan.value.clone()
     };
     let counts = format!(
         "discovered_count={} inspected_count={} indexed_count={} failed_count={}",
@@ -354,7 +365,7 @@ impl<'a> Progress<'a> {
     }
 
     fn count(&mut self, update: impl FnOnce(&mut LibraryScanSnapshot)) {
-        update(&mut self.state.lock().expect("scan state lock"));
+        self.state.lock().expect("scan state lock").update(update);
         if self.last_signal.elapsed() >= PROGRESS_SIGNAL_INTERVAL {
             self.notify.notify();
             self.last_signal = Instant::now();
