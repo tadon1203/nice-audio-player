@@ -138,7 +138,8 @@ describe("the real app", () => {
   });
 
   it("connects on start, gets state messages, and connects again after a reload", async () => {
-    // The page connected once when the app started, and no state message has been counted since.
+    // The backend answered one connection when the app started, and no state message has been
+    // counted since.
     expect((await e2eCounts()).connects).toBe(1);
     const before = (await e2eCounts()).stateMessages;
     await invoke("start_library_scan");
@@ -146,10 +147,17 @@ describe("the real app", () => {
       timeoutMsg: "no state message reached the renderer",
     });
 
-    // The reloaded page counts from zero, so one connection means it connected again, and the
-    // Dock shows the playback state it got back.
+    // A track was skipped to earlier, so the backend has a previous one. A fresh page holds no
+    // playback state, so the Previous button being enabled again means it came from `connect`.
+    const previous = $(`${dock} button[aria-label="Previous track"]`);
+    await expect(previous).toBeEnabled();
     await browser.refresh();
+
+    // `connects` outlives the reload, so a second answered connection is the page connecting
+    // again. It is counted after the state is applied, so the Dock is checked after it.
+    await browser.waitUntil(async () => (await e2eCounts().catch(() => null))?.connects === 2, {
+      timeoutMsg: "the reloaded page did not connect again",
+    });
     await expect($(`${dock} button[aria-label="Previous track"]`)).toBeEnabled();
-    expect((await e2eCounts()).connects).toBe(1);
   });
 });

@@ -51,7 +51,6 @@ export function startNativeSession({
     }
   };
 
-  countE2e("connects");
   let early: BackendMessage[] | null = [];
   requireNative()
     .connect((message) => {
@@ -67,6 +66,8 @@ export function startNativeSession({
         if (initial.waveform.value !== null) applyWaveform(queryClient, initial.waveform.value);
         for (const message of early ?? []) apply(message);
         early = null;
+        // Counted once the state is applied, so a count says the backend answered.
+        countE2e("connects");
       },
       (error: unknown) => {
         early = null;

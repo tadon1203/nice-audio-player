@@ -216,13 +216,16 @@ test("reloads the window, connects again, and shows the full playback state", as
   await page.getByRole("button", { name: "Play Test track" }).click();
   const dock = page.getByRole("contentinfo", { name: "Playback controls" });
   await expect(dock.getByRole("button", { name: "Pause", exact: true })).toBeEnabled();
+  expect(native.callsTo("connect")).toHaveLength(1);
 
   await page.reload();
 
+  // The Dock shows the playing state only if the reloaded page's own `connect` returned it, so
+  // the second call is waited for before the Dock is read.
+  await expect.poll(() => native.callsTo("connect").length).toBe(2);
   await expect(dock.getByRole("button", { name: "Pause", exact: true })).toBeEnabled();
   await expect(dock).toContainText("Test track");
   await dock.getByRole("button", { name: "Queue" }).click();
   const panel = page.getByRole("dialog", { name: "Queue" });
   await expect(panel.locator('[data-tone="upcoming"]').first()).toBeVisible();
-  expect(native.callsTo("connect")).toHaveLength(2);
 });
