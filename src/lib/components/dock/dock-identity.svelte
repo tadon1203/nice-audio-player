@@ -21,7 +21,7 @@
   const playback = getPlayback();
   const budget = getMotionBudget();
   const item = $derived(playback.item);
-  const trackKey = $derived(item?.file.path ?? "none");
+  const trackKey = $derived(item?.trackId ?? "none");
   const title = $derived(item?.title ?? "Nothing playing");
   const nowPlayingOpen = $derived(nowPlaying.isOpen);
   const hasTrack = $derived(item !== null);

@@ -20,7 +20,6 @@ const base = (revision: number) => ({
 const item = (id: string): PlaybackItem => ({
   queueItemId: `queue-${id}`,
   trackId: id,
-  file: { path: `C:/Music/${id}.mp3`, fileName: `${id}.mp3`, extension: "mp3" },
   title: id,
   artist: null,
   album: null,

@@ -65,19 +65,6 @@ pub(super) fn summary_from_row(row: &Row<'_>) -> rusqlite::Result<LibraryTrackSu
 }
 
 impl LibraryStore {
-    /// One track's summary, looked up by its library id.
-    pub fn track_by_id(&self, id: &str) -> Result<Option<LibraryTrackSummary>, StoreError> {
-        let id = parse_id(id)?;
-        let connection = self.read()?;
-        Ok(connection
-            .query_row(
-                &format!("SELECT {SUMMARY_COLUMNS} {SUMMARY_FROM} WHERE t.id = ?1"),
-                params![id],
-                summary_from_row,
-            )
-            .optional()?)
-    }
-
     /// Where the track's file is. The one query every consumer of a track's path goes through.
     pub fn track_location(&self, id: &str) -> Result<TrackLocation, StoreError> {
         let id = parse_id(id)?;

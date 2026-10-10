@@ -18,7 +18,6 @@ const playing = (positionMs: number): PlaybackSnapshot => ({
     item: {
       queueItemId: "queue-a",
       trackId: "a",
-      file: { path: "C:/Music/a.mp3", fileName: "a.mp3", extension: "mp3" },
       title: "a",
       artist: null,
       album: null,

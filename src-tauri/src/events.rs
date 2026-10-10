@@ -8,7 +8,6 @@ use std::{
 };
 
 use backend::{
-    activity::ApplicationActivity,
     app::BackendApp,
     audio::{
         playback::{PlaybackPosition, PlaybackQueueSnapshot, PlaybackSnapshot},
@@ -29,8 +28,6 @@ pub enum AppEvent {
     PlaybackPosition(PlaybackPosition),
     #[serde(rename = "playbackQueueStateChanged")]
     PlaybackQueue(PlaybackQueueSnapshot),
-    #[serde(rename = "applicationActivitiesChanged")]
-    ApplicationActivities(Vec<ApplicationActivity>),
     #[serde(rename = "libraryScanStateChanged")]
     LibraryScan(backend::library::models::LibraryScanSnapshot),
     /// The loaded track's waveform, whenever a better one is ready.
@@ -50,9 +47,6 @@ fn read(event: BackendEvent, backend: &BackendApp) -> Option<AppEvent> {
         }
         BackendEvent::PlaybackQueueChanged => {
             AppEvent::PlaybackQueue(backend.playback.queue_snapshot())
-        }
-        BackendEvent::ActivitiesChanged => {
-            AppEvent::ApplicationActivities(backend.activities.handle().snapshot())
         }
         BackendEvent::LibraryScanChanged => AppEvent::LibraryScan(backend.library_scan_state()),
         BackendEvent::WaveformChanged => AppEvent::Waveform(backend.ready_playback_waveform()?),

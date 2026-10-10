@@ -38,7 +38,7 @@
 
   const playback = getPlayback();
   const budget = getMotionBudget();
-  const itemPath = $derived(playback.item?.file.path ?? "none");
+  const trackKey = $derived(playback.item?.trackId ?? "none");
   const canSeek = $derived(playback.active && playback.durationMs !== null);
   const waveform = createPlaybackWaveform(() => (showWaveform ? playback.playbackId : null));
 
@@ -97,14 +97,14 @@
   {#if dragging}
     {text}
   {:else}
-    {#key itemPath}
+    {#key trackKey}
       <RollingNumber value={text} {spin} instant={spin === 0} />
     {/key}
   {/if}
 {/snippet}
 
 {#snippet seekBar()}
-  {#key itemPath}
+  {#key trackKey}
     <WaveformSeek
       {height}
       rms={showWaveform ? (waveform.current?.rms ?? null) : null}

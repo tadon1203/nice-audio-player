@@ -27,7 +27,6 @@ mod sync_tests;
 pub(crate) mod text;
 pub(crate) mod watcher;
 
-use crate::activity::ApplicationActivityHandle;
 use crate::events::{BackendEvent, Notifier, SharedEventSink};
 use database::{Database, DatabaseError};
 use error::LibraryCommandError;
@@ -54,7 +53,6 @@ impl Library {
     /// the registered folders.
     pub fn open(
         directory: PathBuf,
-        activity: Option<ApplicationActivityHandle>,
         events: SharedEventSink,
     ) -> Result<Self, LibraryUnavailableReason> {
         database::apply_requested_reset(&directory);
@@ -75,7 +73,6 @@ impl Library {
             database.clone(),
             Arc::clone(&scan),
             Notifier::new(events, BackendEvent::LibraryScanChanged),
-            activity,
         );
         Ok(Self {
             store: LibraryStore::new(database.clone()),
@@ -173,7 +170,7 @@ mod tests {
             .unwrap();
 
         let reason = |directory: &TestDirectory| {
-            Library::open(directory.file(""), None, null_event_sink())
+            Library::open(directory.file(""), null_event_sink())
                 .err()
                 .expect("an unavailable Library")
         };

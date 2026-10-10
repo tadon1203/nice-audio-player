@@ -1648,7 +1648,6 @@ fn item_json() -> serde_json::Value {
         "year": null,
         "albumKey": null,
         "albumTrackCount": null,
-        "file": { "path": "C:/test.flac", "fileName": "test.flac", "extension": "flac" },
         "title": "test.flac",
         "artist": null,
         "album": null,

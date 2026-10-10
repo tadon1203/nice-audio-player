@@ -50,7 +50,6 @@ pub fn builder() -> Builder<tauri::Wry> {
             commands::library::list_library_artist_albums,
             commands::library::get_library_album_details,
             commands::library::list_library_album_tracks,
-            commands::library::get_library_track,
             commands::library::get_library_track_properties,
             commands::library::reveal_library_track,
             commands::library::get_artwork_accent,

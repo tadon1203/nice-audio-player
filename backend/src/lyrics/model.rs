@@ -52,6 +52,8 @@ pub enum LyricsResolution {
     },
     SourceFailed {
         track_id: String,
+        /// The name of the sidecar file the track looks for, without its folder.
+        sidecar_file_name: String,
     },
 }
 

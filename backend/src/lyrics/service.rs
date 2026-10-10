@@ -23,12 +23,16 @@ impl LyricsService {
             Ok(None) => LocalSource::Missing,
             Err(_) => LocalSource::Failed,
         };
-        resolve_local_sources(context.track_id, sidecar, embedded)
+        let sidecar_file_name = sidecar_path(&context.source)
+            .file_name()
+            .map_or_else(String::new, |name| name.to_string_lossy().into_owned());
+        resolve_local_sources(context.track_id, sidecar_file_name, sidecar, embedded)
     }
 }
 
 fn resolve_local_sources(
     track_id: String,
+    sidecar_file_name: String,
     sidecar: LocalSource,
     embedded: LocalSource,
 ) -> LyricsResolution {
@@ -65,7 +69,10 @@ fn resolve_local_sources(
             }
         }
         (LocalSource::Missing, LocalSource::Missing) => LyricsResolution::NotFound { track_id },
-        _ => LyricsResolution::SourceFailed { track_id },
+        _ => LyricsResolution::SourceFailed {
+            track_id,
+            sidecar_file_name,
+        },
     }
 }
 
@@ -144,8 +151,12 @@ mod tests {
 
     #[test]
     fn prefers_a_valid_sidecar_over_embedded_lyrics() {
-        let resolution =
-            resolve_local_sources("1".to_string(), plain("sidecar"), plain("embedded"));
+        let resolution = resolve_local_sources(
+            "1".to_string(),
+            "song.lrc".to_string(),
+            plain("sidecar"),
+            plain("embedded"),
+        );
         let LyricsResolution::Resolved {
             document, notice, ..
         } = resolution
@@ -158,8 +169,12 @@ mod tests {
 
     #[test]
     fn falls_back_to_embedded_lyrics_when_the_sidecar_is_broken() {
-        let resolution =
-            resolve_local_sources("1".to_string(), LocalSource::Failed, plain("embedded"));
+        let resolution = resolve_local_sources(
+            "1".to_string(),
+            "song.lrc".to_string(),
+            LocalSource::Failed,
+            plain("embedded"),
+        );
         let LyricsResolution::Resolved {
             document, notice, ..
         } = resolution
@@ -176,13 +191,29 @@ mod tests {
     #[test]
     fn distinguishes_missing_local_sources_from_failed_ones() {
         assert!(matches!(
-            resolve_local_sources("1".to_string(), LocalSource::Missing, LocalSource::Missing),
+            resolve_local_sources(
+                "1".to_string(),
+                "song.lrc".to_string(),
+                LocalSource::Missing,
+                LocalSource::Missing
+            ),
             LyricsResolution::NotFound { .. }
         ));
         assert!(matches!(
-            resolve_local_sources("1".to_string(), LocalSource::Failed, LocalSource::Missing),
+            resolve_local_sources(
+                "1".to_string(),
+                "song.lrc".to_string(),
+                LocalSource::Failed,
+                LocalSource::Missing
+            ),
             LyricsResolution::SourceFailed { .. }
         ));
+    }
+
+    #[test]
+    fn the_sidecar_name_swaps_only_the_final_extension() {
+        let sidecar = sidecar_path(std::path::Path::new("/m/a.b/c.d.mp3"));
+        assert_eq!(sidecar.file_name().unwrap(), "c.d.lrc");
     }
 
     #[test]

@@ -75,22 +75,6 @@ export const commands = {
 	listLibraryArtistAlbums: (artistKey: LibraryAlbumArtistKey, cursor: string | null, sortKey: LibraryArtistAlbumSortKey, sortDirection: LibrarySortDirection) => __TAURI_INVOKE<LibraryAlbumPage>("list_library_artist_albums", { artistKey, cursor, sortKey, sortDirection }),
 	getLibraryAlbumDetails: (albumKey: LibraryAlbumKey) => __TAURI_INVOKE<LibraryAlbumDetails>("get_library_album_details", { albumKey }),
 	listLibraryAlbumTracks: (albumKey: LibraryAlbumKey, cursor: string | null) => __TAURI_INVOKE<LibraryAlbumTrackPage>("list_library_album_tracks", { albumKey, cursor }),
-	getLibraryTrack: (trackId: string) => __TAURI_INVOKE<{
-	id: string,
-	title: string,
-	artist: string | null,
-	album: string | null,
-	albumArtist: string | null,
-	/**  The key the catalog files the track's album under, `None` for a track with no album tag. */
-	albumKey: LibraryAlbumKey | null,
-	artwork: ArtworkRef | null,
-	durationMs: number | null,
-	fileFormat: string | null,
-	bitDepth: number | null,
-	bitrateKbps: number | null,
-	availability: LibraryFileAvailability,
-	playable: boolean,
-} | null>("get_library_track", { trackId }),
 	getLibraryTrackProperties: (trackId: string) => __TAURI_INVOKE<{
 	id: string,
 	path: string,
@@ -160,7 +144,7 @@ export type ActiveSession = {
 	resamplingActive: boolean,
 };
 
-export type AppEvent = { event: "playbackStateChanged"; payload: PlaybackSnapshot } | { event: "playbackPositionChanged"; payload: PlaybackPosition } | { event: "playbackQueueStateChanged"; payload: PlaybackQueueSnapshot } | { event: "applicationActivitiesChanged"; payload: ApplicationActivity[] } | { event: "libraryScanStateChanged"; payload: LibraryScanSnapshot } | 
+export type AppEvent = { event: "playbackStateChanged"; payload: PlaybackSnapshot } | { event: "playbackPositionChanged"; payload: PlaybackPosition } | { event: "playbackQueueStateChanged"; payload: PlaybackQueueSnapshot } | { event: "libraryScanStateChanged"; payload: LibraryScanSnapshot } | 
 /**  The loaded track's waveform, whenever a better one is ready. */
 { event: "waveformChanged"; payload: PlaybackWaveform } | { event: "settingsChanged"; payload: AppearanceSettings };
 
@@ -179,16 +163,6 @@ export type AppearanceSettings = {
 	/**  Only what marks the position moves by itself: nothing breathes or lifts on its own. */
 	calmMotion: boolean,
 };
-
-export type ApplicationActivity = {
-	id: string,
-	kind: ApplicationActivityKind,
-	state: ApplicationActivityState,
-};
-
-export type ApplicationActivityKind = "librarySync";
-
-export type ApplicationActivityState = "running" | "attentionRequired";
 
 export type ArtworkMimeType = "jpeg" | "png";
 
@@ -411,7 +385,9 @@ export type LyricsDocument = {
 	content: LyricsContent,
 };
 
-export type LyricsResolution = { status: "resolved"; trackId: string; document: LyricsDocument; notice: LyricsResolutionNotice | null } | { status: "notFound"; trackId: string } | { status: "sourceFailed"; trackId: string };
+export type LyricsResolution = { status: "resolved"; trackId: string; document: LyricsDocument; notice: LyricsResolutionNotice | null } | { status: "notFound"; trackId: string } | { status: "sourceFailed"; trackId: string; 
+/**  The name of the sidecar file the track looks for, without its folder. */
+sidecarFileName: string };
 
 export type LyricsResolutionNotice = "sidecarFailedUsingEmbedded";
 
@@ -426,12 +402,11 @@ export type LyricsTimedLine = {
  *  A library track ready to be played, and the one track-metadata type of the whole playback
  *  path: the library reads it, the queue item wraps it, and the renderer sees it.
  * 
- *  The file facts (`file_format`, `bit_depth`, `bitrate_kbps`) feed the signal path and stay in
- *  the backend.
+ *  The file facts (`file`, `file_format`, `bit_depth`, `bitrate_kbps`) feed the signal path and
+ *  stay in the backend. The file is a path on disk, and the renderer never receives one.
  */
 export type PlayableTrack = {
 	trackId: string,
-	file: ValidatedAudioFile,
 	title: string,
 	artist: string | null,
 	album: string | null,
@@ -562,11 +537,5 @@ export type SnapshotBase = {
 	outputSelection: AudioOutputSelection,
 	canGoPrevious: boolean,
 	canGoNext: boolean,
-};
-
-export type ValidatedAudioFile = {
-	path: string,
-	fileName: string,
-	extension: string,
 };
 

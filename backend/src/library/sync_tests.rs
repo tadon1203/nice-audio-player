@@ -1,8 +1,8 @@
 //! The Library keeping itself in step with the disk, through the handle the commands use: a
-//! change in a registered folder is picked up while idle, and a failed scan stays flagged.
+//! change in a registered folder is picked up while idle, and a failed scan is reported until a
+//! scan succeeds.
 
 use super::Library;
-use crate::activity::{ApplicationActivityService, ApplicationActivityState};
 use crate::events::null_event_sink;
 use crate::library::models::{LibraryScanState, LibrarySortDirection, LibraryTrackSortKey};
 use crate::test_support::{write_pcm_i16_wav, TestDirectory};
@@ -14,7 +14,6 @@ const SETTLE: Duration = Duration::from_secs(10);
 struct Harness {
     _directory: TestDirectory,
     music: PathBuf,
-    activities: ApplicationActivityService,
     library: Library,
 }
 
@@ -22,20 +21,13 @@ fn harness() -> Harness {
     let directory = TestDirectory::new();
     let music = directory.file("music");
     std::fs::create_dir_all(&music).unwrap();
-    let activities = ApplicationActivityService::new(null_event_sink());
-    let library = Library::open(
-        directory.file("data"),
-        Some(activities.handle()),
-        null_event_sink(),
-    )
-    .expect("open library");
+    let library = Library::open(directory.file("data"), null_event_sink()).expect("open library");
     library
         .register_root(music.to_string_lossy().into_owned())
         .expect("register root");
     Harness {
         _directory: directory,
         music,
-        activities,
         library,
     }
 }
@@ -75,18 +67,6 @@ impl Harness {
 
     fn scan_state(&self) -> LibraryScanState {
         self.library.scan_state().state
-    }
-
-    fn attention(&self) -> bool {
-        self.activities
-            .handle()
-            .snapshot()
-            .iter()
-            .any(|activity| activity.state == ApplicationActivityState::AttentionRequired)
-    }
-
-    fn activity_cleared(&self) -> bool {
-        self.activities.handle().snapshot().is_empty()
     }
 
     fn wait_for_first_scan(&self) {
@@ -139,7 +119,7 @@ fn a_burst_of_changes_starts_one_scan() {
 }
 
 #[test]
-fn a_failed_scan_stays_flagged_until_a_scan_succeeds() {
+fn a_failed_scan_is_reported_until_a_scan_succeeds() {
     let harness = harness();
     write_tone(&harness.music.join("a.wav"));
     harness.wait_for_first_scan();
@@ -151,7 +131,11 @@ fn a_failed_scan_stays_flagged_until_a_scan_succeeds() {
         "an unreadable folder fails the scan"
     );
     for _ in 0..8 {
-        assert!(harness.attention(), "the failure stays flagged");
+        assert_eq!(
+            harness.scan_state(),
+            LibraryScanState::Failed,
+            "the failure is still reported"
+        );
         std::thread::sleep(Duration::from_millis(100));
     }
 
@@ -159,9 +143,8 @@ fn a_failed_scan_stays_flagged_until_a_scan_succeeds() {
     harness.scan_by_hand();
     assert!(
         wait_until(SETTLE, || harness.scan_state()
-            == LibraryScanState::Completed
-            && harness.activity_cleared()),
-        "the next successful scan clears the flag"
+            == LibraryScanState::Completed),
+        "the next successful scan completes"
     );
 }
 

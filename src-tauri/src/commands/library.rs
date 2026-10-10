@@ -5,7 +5,7 @@ use backend::library::{
         LibraryAlbumArtistSummary, LibraryAlbumDetails, LibraryAlbumKey, LibraryAlbumPage,
         LibraryAlbumSortKey, LibraryAlbumTrackPage, LibraryArtistAlbumSortKey, LibraryIndexBucket,
         LibraryRoot, LibraryScanSnapshot, LibrarySortDirection, LibraryStatus, LibraryTrackPage,
-        LibraryTrackProperties, LibraryTrackSortKey, LibraryTrackSummary,
+        LibraryTrackProperties, LibraryTrackSortKey,
     },
     Library,
 };
@@ -309,18 +309,6 @@ pub async fn list_library_album_tracks(
         Ok(library
             .store()
             .catalog_album_tracks(album_key, cursor.as_deref())?)
-    })
-    .await
-}
-
-#[tauri::command]
-#[specta::specta]
-pub async fn get_library_track(
-    track_id: String,
-    state: tauri::State<'_, AppState>,
-) -> Result<Option<LibraryTrackSummary>, LibraryCommandError> {
-    with_library(&state, move |library| {
-        Ok(library.store().track_by_id(&track_id)?)
     })
     .await
 }

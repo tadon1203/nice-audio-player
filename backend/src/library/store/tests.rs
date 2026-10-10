@@ -138,7 +138,7 @@ impl Fixture {
                         keys.album_sort,
                         keys.album_artist_sort,
                         keys.search,
-                        keys.album_dir
+                        keys.album_folder
                     ],
                 )
                 .unwrap();
@@ -781,7 +781,21 @@ fn a_track_summary_carries_the_key_of_the_album_the_catalog_files_it_under() {
     filed.album_artist = Some(" Band ");
     fixture.add_all(&[filed, Seed::new(2, "Single", "Singer", "")]);
 
-    let summary = |id| fixture.store.track_by_id(id).unwrap().unwrap();
+    let summary = |id: &str| {
+        fixture
+            .store
+            .catalog_tracks(
+                None,
+                None,
+                LibraryTrackSortKey::Title,
+                LibrarySortDirection::Ascending,
+            )
+            .unwrap()
+            .items
+            .into_iter()
+            .find(|track| track.id == id)
+            .unwrap()
+    };
 
     assert_eq!(
         summary("1").album_key,

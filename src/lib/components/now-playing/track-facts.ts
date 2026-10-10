@@ -20,27 +20,19 @@ export function trackFacts(
   ];
 }
 
-/** Where a sidecar `.lrc` for this file would be. */
-export function expectedLyricsPath(filePath: string): string {
-  return filePath.replace(/\.[^.\\/]+$/, ".lrc");
-}
-
 /** Why the right column shows no timed lyrics, said in the Facts line rather than the column. */
 export type LyricsState =
   | { kind: "none" }
   | { kind: "notFound" }
-  | { kind: "sourceFailed"; expectedPath: string }
+  | { kind: "sourceFailed"; fileName: string }
   | { kind: "embedded" }
   | { kind: "unsynced" };
 
-export function lyricsState(
-  item: PlaybackItem,
-  resolution: LyricsResolution | null | undefined,
-): LyricsState {
+export function lyricsState(resolution: LyricsResolution | null | undefined): LyricsState {
   if (resolution === null || resolution === undefined) return { kind: "none" };
   if (resolution.status === "notFound") return { kind: "notFound" };
   if (resolution.status === "sourceFailed") {
-    return { kind: "sourceFailed", expectedPath: expectedLyricsPath(item.file.path) };
+    return { kind: "sourceFailed", fileName: resolution.sidecarFileName };
   }
   if (resolution.notice === "sidecarFailedUsingEmbedded") return { kind: "embedded" };
   return resolution.document.content.kind === "plain" ? { kind: "unsynced" } : { kind: "none" };

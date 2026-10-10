@@ -401,7 +401,7 @@ fn store_inspected(
     touched.album((
         keys.album_artist.clone(),
         keys.album.clone(),
-        keys.album_dir.clone(),
+        keys.album_folder.clone(),
     ));
     transaction.execute(
         UPSERT_SOURCE_METADATA,
@@ -438,7 +438,7 @@ fn store_inspected(
             keys.album_sort,
             keys.album_artist_sort,
             keys.search,
-            keys.album_dir
+            keys.album_folder
         ],
     )?;
     Ok(())

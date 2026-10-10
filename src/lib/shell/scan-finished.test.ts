@@ -82,7 +82,7 @@ describe("createScanWatcher", () => {
   it("ignores events that are not about the library", () => {
     const { client, invalidate, watch } = setup();
 
-    watch({ event: "applicationActivitiesChanged", payload: [] });
+    watch({ event: "settingsChanged", payload: { artworkBackdrop: true, calmMotion: false } });
 
     expect(client.getQueryData(libraryQueryKeys.scan)).toBeUndefined();
     expect(invalidate).not.toHaveBeenCalled();

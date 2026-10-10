@@ -14,10 +14,6 @@ use super::{
     models::{LibraryRoot, LibraryScanSnapshot, LibraryScanState},
     roots, scanner, watcher,
 };
-use crate::activity::{
-    ApplicationActivity, ApplicationActivityHandle, ApplicationActivityKind,
-    ApplicationActivityState,
-};
 use crate::events::Notifier;
 use log::{error, info, warn};
 use notify::RecommendedWatcher;
@@ -31,9 +27,7 @@ use std::{
     thread::{self, JoinHandle},
     time::Instant,
 };
-use step::{Activity, Effect, Input, RootId, ScanOutcome, ScanTarget, State};
-
-const LIBRARY_ACTIVITY_ID: &str = "library-sync";
+use step::{Effect, Input, RootId, ScanOutcome, ScanTarget, State};
 
 type Reply<T> = SyncSender<Result<T, LibraryCommandError>>;
 
@@ -63,14 +57,12 @@ impl LibrarySync {
         database: Database,
         scan: Arc<Mutex<LibraryScanSnapshot>>,
         notify: Notifier,
-        activity: Option<ApplicationActivityHandle>,
     ) -> Self {
         let (messages, receiver) = mpsc::channel();
         let actor = Actor {
             database,
             scan,
             notify,
-            activity,
             messages: messages.clone(),
             cancel: Arc::new(AtomicBool::new(false)),
             state: State::new(),
@@ -143,7 +135,6 @@ struct Actor {
     database: Database,
     scan: Arc<Mutex<LibraryScanSnapshot>>,
     notify: Notifier,
-    activity: Option<ApplicationActivityHandle>,
     /// For the inputs the watchers and the scanner thread send back.
     messages: Sender<Message>,
     cancel: Arc<AtomicBool>,
@@ -211,7 +202,6 @@ impl Actor {
                 maintenance::spawn_thumbnail_backfill(&self.database);
                 self.queue.push_back(Input::GcFinished { rescan });
             }
-            Effect::SetActivity(activity) => self.set_activity(activity),
             Effect::Attach(id) => self.attach(id),
             Effect::Detach(id) => {
                 self.watchers.remove(&id);
@@ -398,30 +388,10 @@ impl Actor {
         }
     }
 
-    fn set_activity(&self, activity: Option<Activity>) {
-        let Some(handle) = &self.activity else {
-            return;
-        };
-        match activity {
-            Some(activity) => handle.set(ApplicationActivity {
-                id: LIBRARY_ACTIVITY_ID.into(),
-                kind: ApplicationActivityKind::LibrarySync,
-                state: match activity {
-                    Activity::Running => ApplicationActivityState::Running,
-                    Activity::AttentionRequired => ApplicationActivityState::AttentionRequired,
-                },
-            }),
-            None => handle.clear(LIBRARY_ACTIVITY_ID),
-        }
-    }
-
     fn stop(&mut self) {
         self.cancel.store(true, Ordering::Release);
         self.reap_scanner();
         self.watchers.clear();
-        if let Some(activity) = &self.activity {
-            activity.clear(LIBRARY_ACTIVITY_ID);
-        }
     }
 }
 

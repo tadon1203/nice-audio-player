@@ -13,6 +13,7 @@ Respond and communicate with the user in the language they are using.
 - `docs/research/` - sourced findings (`/research`)
 - `docs/agents/git-workflow.md` - branch and commit rules
 - `docs/agents/tickets.md` - specs, tickets, and the implementation-ready standard
+- `docs/conventions.md` - Renderer conventions that lint cannot check, with the reasons in `docs/adr/`
 
 ## Tool usage
 

@@ -32,7 +32,7 @@ pub(crate) struct TrackKeys {
     /// The folded names the filter looks in.
     pub search: String,
     /// Which printing of the album the track is on, `""` for a track with no album.
-    pub album_dir: String,
+    pub album_folder: String,
 }
 
 impl TrackKeys {
@@ -53,14 +53,14 @@ impl TrackKeys {
         )
     }
 
-    /// All the keys. `album_edition` is the album's directory (see [`album_edition_of`]), kept only when the
-    /// track has an album.
+    /// All the keys. `album_folder` is the album's folder (see [`album_edition_of`]), kept only
+    /// when the track has an album.
     pub fn build(
         [title, artist, album, album_artist]: [Option<&str>; 4],
         date: Option<&str>,
         file_name: &str,
         sort: SortTags<'_>,
-        album_edition: &str,
+        album_folder: &str,
     ) -> Self {
         let title_key = title_key(title, file_name);
         let artist_key = text_key(artist);
@@ -78,10 +78,10 @@ impl TrackKeys {
             album_sort: text::sort_key(&album_key, sort.album),
             album_artist_sort: text::sort_key(&album_artist_key, album_artist_sort_tag),
             search: track_search_key(&title_key, &artist_key, &album_key, &album_artist_key),
-            album_dir: if album_key.is_empty() {
+            album_folder: if album_key.is_empty() {
                 String::new()
             } else {
-                album_edition.to_owned()
+                album_folder.to_owned()
             },
             title: title_key,
             artist: artist_key,
@@ -255,7 +255,7 @@ mod tests {
             "the artist's order carries over"
         );
         assert_eq!(keys.album_sort, "");
-        assert_eq!(keys.album_dir, "", "no album, no album_edition");
+        assert_eq!(keys.album_folder, "", "no album, no album_folder");
         assert_eq!(keys.search, "ゆず\u{1f}the band\u{1f}\u{1f}the band");
     }
 

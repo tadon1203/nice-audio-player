@@ -1,4 +1,3 @@
-pub mod activity;
 pub mod app;
 pub mod audio;
 pub(crate) mod containment;

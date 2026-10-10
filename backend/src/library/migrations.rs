@@ -174,7 +174,7 @@ fn backfill_catalog_keys(transaction: &Transaction) -> rusqlite::Result<()> {
             keys.album_sort,
             keys.album_artist_sort,
             keys.search,
-            keys.album_dir,
+            keys.album_folder,
         ])?;
     }
     summary::rebuild(transaction)

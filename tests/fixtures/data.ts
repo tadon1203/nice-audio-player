@@ -154,8 +154,6 @@ export function libraryResponses(library: LibraryData = testLibrary()) {
     listLibraryArtistAlbums: () => pageOf(library.albums.slice(0, 2), null),
     getLibraryAlbumDetails: library.albumDetails,
     listLibraryAlbumTracks: library.albumTracks,
-    getLibraryTrack: ({ trackId }: { trackId: string }) =>
-      library.tracks.find((track) => track.id === trackId) ?? null,
     getLibraryTrackProperties: ({ trackId: id }: { trackId: string }) => {
       const track = library.tracks.find((entry) => entry.id === id);
       if (track === undefined) return null;
@@ -309,11 +307,6 @@ export function playbackItemFor(track: LibraryTrackSummary): PlaybackItem {
   return {
     ...identity,
     queueItemId,
-    file: {
-      path: `C:/Music/${track.id}.flac`,
-      fileName: `${track.title}.flac`,
-      extension: "flac",
-    },
     albumArtist: track.albumArtist,
     trackNumber: Number(track.id.replace(/\D/g, "")) % 12 || null,
     discNumber: null,

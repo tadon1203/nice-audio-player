@@ -5,9 +5,8 @@
 //! with made-up instants; the actor in `mod.rs` only feeds it inputs and executes its effects.
 //!
 //! The rules: a change in a watched folder starts a scan after the folder has been quiet for
-//! `DEBOUNCE`; a failed scan stays flagged until a scan succeeds or the listener acts; cancelling
-//! drops pending automatic work; the artwork garbage collection runs when nothing else is
-//! pending; a folder whose watcher cannot attach is retried and, after repeated failure, flagged.
+//! `DEBOUNCE`; cancelling drops pending automatic work; the artwork garbage collection runs when
+//! nothing else is pending; a folder whose watcher cannot attach is retried.
 
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -23,8 +22,6 @@ pub(super) const DEBOUNCE: Duration = Duration::from_millis(500);
 /// How long after start-up the folders are scanned, to let the window come up first.
 pub(super) const STARTUP_DELAY: Duration = Duration::from_millis(500);
 pub(super) const WATCH_RETRY: Duration = Duration::from_secs(10);
-/// A watcher that failed to attach this many times in a row needs the listener's attention.
-const ATTENTION_AFTER_FAILURES: u32 = 2;
 
 /// What a scan of one folder covers: all of it, or only the directories where something changed.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -51,8 +48,6 @@ enum Dirty {
 enum Phase {
     Idle,
     Running,
-    /// The last scan failed. Flagged until a scan completes or the listener acts.
-    Failed,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -61,16 +56,9 @@ enum Watch {
     Attaching,
     Attached,
     Failed {
-        attempts: u32,
         /// When to try again; `None` while an attempt is in flight.
         retry_at: Option<Instant>,
     },
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum Activity {
-    Running,
-    AttentionRequired,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -120,7 +108,6 @@ pub(super) enum Effect {
     StartScan(Vec<ScanTarget>),
     CancelScan,
     RunGc,
-    SetActivity(Option<Activity>),
     Attach(RootId),
     Detach(RootId),
 }
@@ -131,7 +118,6 @@ pub(super) struct State {
     gc_pending: bool,
     phase: Phase,
     watches: BTreeMap<RootId, Watch>,
-    published: Option<Activity>,
 }
 
 impl State {
@@ -142,7 +128,6 @@ impl State {
             gc_pending: false,
             phase: Phase::Idle,
             watches: BTreeMap::new(),
-            published: None,
         }
     }
 
@@ -235,25 +220,17 @@ impl State {
                 }
             },
             Input::AttachFailed(id) => {
-                if let Some(watch) = self.watches.get(&id) {
-                    let attempts = match watch {
-                        Watch::Failed { attempts, .. } => *attempts,
-                        _ => 0,
-                    } + 1;
+                if self.watches.contains_key(&id) {
                     self.watches.insert(
                         id,
                         Watch::Failed {
-                            attempts,
                             retry_at: Some(now + WATCH_RETRY),
                         },
                     );
                 }
             }
             Input::ScanFinished(outcome) => {
-                self.phase = match outcome {
-                    ScanOutcome::Failed => Phase::Failed,
-                    ScanOutcome::Completed | ScanOutcome::Cancelled => Phase::Idle,
-                };
+                self.phase = Phase::Idle;
                 match outcome {
                     ScanOutcome::Completed => self.gc_pending = true,
                     ScanOutcome::Cancelled => {
@@ -278,11 +255,6 @@ impl State {
             Input::Tick => {}
         }
         self.advance(now, &mut effects);
-        let activity = self.activity();
-        if activity != self.published {
-            self.published = activity;
-            effects.push(Effect::SetActivity(activity));
-        }
         effects
     }
 
@@ -295,31 +267,20 @@ impl State {
         effects.push(Effect::Attach(id));
     }
 
-    /// The listener took a folder out of the Library: drop its pending work and its watcher. That
-    /// is also acting on a failed scan, so the flag goes.
+    /// The listener took a folder out of the Library: drop its pending work and its watcher.
     fn release(&mut self, id: RootId, effects: &mut Vec<Effect>) {
         self.dirty.remove(&id);
         if self.watches.remove(&id).is_some() {
             effects.push(Effect::Detach(id));
-        }
-        if self.phase == Phase::Failed {
-            self.phase = Phase::Idle;
         }
     }
 
     /// Does what is due: retries watchers, starts a scan of the changed folders, collects garbage.
     fn advance(&mut self, now: Instant, effects: &mut Vec<Effect>) {
         for (id, watch) in &mut self.watches {
-            if let Watch::Failed {
-                attempts,
-                retry_at: Some(at),
-            } = *watch
-            {
+            if let Watch::Failed { retry_at: Some(at) } = *watch {
                 if at <= now {
-                    *watch = Watch::Failed {
-                        attempts,
-                        retry_at: None,
-                    };
+                    *watch = Watch::Failed { retry_at: None };
                     effects.push(Effect::Attach(*id));
                 }
             }
@@ -349,19 +310,6 @@ impl State {
         if self.gc_pending && self.debounce.is_none() && self.dirty.is_empty() {
             self.gc_pending = false;
             effects.push(Effect::RunGc);
-        }
-    }
-
-    fn activity(&self) -> Option<Activity> {
-        let watcher_needs_attention = self.watches.values().any(|watch| {
-            matches!(watch, Watch::Failed { attempts, .. } if *attempts >= ATTENTION_AFTER_FAILURES)
-        });
-        if self.phase == Phase::Failed || watcher_needs_attention {
-            Some(Activity::AttentionRequired)
-        } else if self.scanning() {
-            Some(Activity::Running)
-        } else {
-            None
         }
     }
 }
@@ -423,16 +371,6 @@ mod tests {
                 Effect::StartScan(targets) => {
                     Some(targets.iter().map(|target| target.root).collect::<Vec<_>>())
                 }
-                _ => None,
-            })
-            .collect()
-    }
-
-    fn activities(effects: &[Effect]) -> Vec<Option<Activity>> {
-        effects
-            .iter()
-            .filter_map(|effect| match effect {
-                Effect::SetActivity(activity) => Some(*activity),
                 _ => None,
             })
             .collect()
@@ -562,36 +500,7 @@ mod tests {
     }
 
     #[test]
-    fn a_failed_scan_stays_flagged_until_one_succeeds() {
-        let mut clock = Clock::idle(&[1]);
-        clock.feed(Input::ScanRequested { roots: vec![1] });
-
-        let failed = clock.feed(Input::ScanFinished(ScanOutcome::Failed));
-        assert_eq!(activities(&failed), vec![Some(Activity::AttentionRequired)]);
-        assert_eq!(
-            activities(&clock.wait(Duration::from_secs(60))),
-            Vec::<Option<Activity>>::new(),
-            "still flagged"
-        );
-
-        clock.feed(Input::ScanRequested { roots: vec![1] });
-        let succeeded = clock.feed(Input::ScanFinished(ScanOutcome::Completed));
-        assert_eq!(activities(&succeeded), vec![None]);
-    }
-
-    #[test]
-    fn a_scan_that_follows_a_failure_replaces_the_flag_while_it_runs() {
-        let mut clock = Clock::idle(&[1]);
-        clock.feed(Input::ScanRequested { roots: vec![1] });
-        clock.feed(Input::ScanFinished(ScanOutcome::Failed));
-
-        let again = clock.feed(Input::ScanRequested { roots: vec![1] });
-
-        assert_eq!(activities(&again), vec![Some(Activity::Running)]);
-    }
-
-    #[test]
-    fn a_folder_change_after_a_failure_scans_again_and_a_success_clears_the_flag() {
+    fn a_folder_change_after_a_failure_scans_again() {
         let mut clock = Clock::idle(&[1]);
         clock.feed(Input::ScanRequested { roots: vec![1] });
         clock.feed(Input::ScanFinished(ScanOutcome::Failed));
@@ -599,20 +508,6 @@ mod tests {
         clock.feed(Input::FolderChanged(1));
         let started = clock.wait(DEBOUNCE);
         assert_eq!(starts(&started), vec![vec![1]]);
-
-        let finished = clock.feed(Input::ScanFinished(ScanOutcome::Completed));
-        assert_eq!(activities(&finished), vec![None]);
-    }
-
-    #[test]
-    fn removing_the_folder_that_failed_acknowledges_the_failure() {
-        let mut clock = Clock::idle(&[1, 2]);
-        clock.feed(Input::ScanRequested { roots: vec![1, 2] });
-        clock.feed(Input::ScanFinished(ScanOutcome::Failed));
-
-        let removed = clock.feed(Input::Removed(1));
-
-        assert_eq!(activities(&removed), vec![None]);
     }
 
     #[test]
@@ -625,9 +520,8 @@ mod tests {
         assert!(cancelled.contains(&Effect::CancelScan));
         // A change that lands before the scan notices the cancellation is dropped too.
         clock.feed(Input::FolderChanged(1));
-        let finished = clock.feed(Input::ScanFinished(ScanOutcome::Cancelled));
+        clock.feed(Input::ScanFinished(ScanOutcome::Cancelled));
 
-        assert_eq!(activities(&finished), vec![None]);
         assert_eq!(starts(&clock.wait(DEBOUNCE * 4)), Vec::<Vec<RootId>>::new());
     }
 
@@ -689,16 +583,11 @@ mod tests {
     }
 
     #[test]
-    fn a_watcher_that_cannot_attach_is_retried_and_flagged_after_repeated_failure() {
+    fn a_watcher_that_cannot_attach_is_retried_until_it_attaches() {
         let mut clock = Clock::new();
         clock.feed(Input::Started { enabled: vec![1] });
 
-        let first = clock.feed(Input::AttachFailed(1));
-        assert_eq!(
-            activities(&first),
-            Vec::<Option<Activity>>::new(),
-            "one failure is not news"
-        );
+        clock.feed(Input::AttachFailed(1));
         // The start-up scan runs meanwhile and finishes.
         clock.wait(STARTUP_DELAY);
         clock.feed(Input::ScanFinished(ScanOutcome::Completed));
@@ -706,17 +595,11 @@ mod tests {
 
         let retried = clock.wait(WATCH_RETRY - STARTUP_DELAY);
         assert!(retried.contains(&Effect::Attach(1)));
-        let second = clock.feed(Input::AttachFailed(1));
-        assert_eq!(activities(&second), vec![Some(Activity::AttentionRequired)]);
+        clock.feed(Input::AttachFailed(1));
 
         let retried = clock.wait(WATCH_RETRY);
         assert!(retried.contains(&Effect::Attach(1)));
         let recovered = clock.feed(Input::Attached(1));
-        assert_eq!(
-            activities(&recovered),
-            vec![Some(Activity::Running)],
-            "the flag gives way to the scan that catches up"
-        );
         assert_eq!(
             starts(&recovered),
             vec![vec![1]],

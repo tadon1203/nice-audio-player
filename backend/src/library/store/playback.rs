@@ -1,5 +1,5 @@
-//! Resolves library selections (an album, the track list under a filter) into the tracks a
-//! ids a playback queue is built from, and reads those tracks back when they are needed.
+//! Resolves library selections (an album, the track list under a filter) into the track ids a
+//! playback queue is built from, and reads those tracks back when they are needed.
 
 use super::{
     catalog::{track_filter, track_ordering, validate_album_key, ALBUM_ORDER},
@@ -20,12 +20,14 @@ use std::collections::HashMap;
 /// A library track ready to be played, and the one track-metadata type of the whole playback
 /// path: the library reads it, the queue item wraps it, and the renderer sees it.
 ///
-/// The file facts (`file_format`, `bit_depth`, `bitrate_kbps`) feed the signal path and stay in
-/// the backend.
+/// The file facts (`file`, `file_format`, `bit_depth`, `bitrate_kbps`) feed the signal path and
+/// stay in the backend. The file is a path on disk, and the renderer never receives one.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct PlayableTrack {
     pub track_id: String,
+    #[serde(skip)]
+    #[specta(skip)]
     pub file: ValidatedAudioFile,
     pub title: String,
     pub artist: Option<String>,

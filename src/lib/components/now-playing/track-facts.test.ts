@@ -1,11 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { LyricsResolution, PlaybackItem } from "$lib/native";
-import { expectedLyricsPath, lyricsState, trackFacts } from "./track-facts";
+import { lyricsState, trackFacts } from "./track-facts";
 
 const item: PlaybackItem = {
   queueItemId: "q1",
   trackId: "t1",
-  file: { path: "C:\\Music\\Album\\01 Song.flac", extension: "flac" } as PlaybackItem["file"],
   title: "Song",
   artist: " Artist ",
   album: "Album",
@@ -47,28 +46,20 @@ describe("trackFacts", () => {
 
 describe("lyricsState", () => {
   it("says nothing before the lyrics are known or when they are synced", () => {
-    expect(lyricsState(item, null)).toEqual({ kind: "none" });
-    expect(lyricsState(item, resolved({ kind: "timed", lines: [] }))).toEqual({ kind: "none" });
+    expect(lyricsState(null)).toEqual({ kind: "none" });
+    expect(lyricsState(resolved({ kind: "timed", lines: [] }))).toEqual({ kind: "none" });
   });
 
   it("reports missing, unreadable, embedded fallback and unsynced lyrics", () => {
-    expect(lyricsState(item, { status: "notFound", trackId: "t1" })).toEqual({ kind: "notFound" });
-    expect(lyricsState(item, { status: "sourceFailed", trackId: "t1" })).toEqual({
-      kind: "sourceFailed",
-      expectedPath: "C:\\Music\\Album\\01 Song.lrc",
-    });
+    expect(lyricsState({ status: "notFound", trackId: "t1" })).toEqual({ kind: "notFound" });
     expect(
-      lyricsState(item, resolved({ kind: "timed", lines: [] }, "sidecarFailedUsingEmbedded")),
+      lyricsState({ status: "sourceFailed", trackId: "t1", sidecarFileName: "01 Song.lrc" }),
+    ).toEqual({ kind: "sourceFailed", fileName: "01 Song.lrc" });
+    expect(
+      lyricsState(resolved({ kind: "timed", lines: [] }, "sidecarFailedUsingEmbedded")),
     ).toEqual({ kind: "embedded" });
-    expect(lyricsState(item, resolved({ kind: "plain", lines: ["a"] }))).toEqual({
+    expect(lyricsState(resolved({ kind: "plain", lines: ["a"] }))).toEqual({
       kind: "unsynced",
     });
-  });
-});
-
-describe("expectedLyricsPath", () => {
-  it("swaps only the final extension", () => {
-    expect(expectedLyricsPath("/m/a.b/c.d.mp3")).toBe("/m/a.b/c.d.lrc");
-    expect(expectedLyricsPath("/m/noext")).toBe("/m/noext");
   });
 });

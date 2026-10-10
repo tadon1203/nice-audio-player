@@ -52,7 +52,7 @@ Data flow:
 | `backend/src/library`    | The Library: its database, the Scan, and artwork.                                    |
 | `backend/src/lyrics`     | Lyrics parsing and service.                                                          |
 | `backend/src/media`      | Reading tags, embedded lyrics, and file checks.                                      |
-| `backend/src`            | Also holds the small modules that serve many domains (settings, events, activity).   |
+| `backend/src`            | Also holds the small modules that serve many domains (settings, events).             |
 | `src-tauri/src/commands` | Host commands, grouped by domain.                                                    |
 | `src-tauri/src`          | Also holds command registration, event forwarding, and the artwork protocol.         |
 | `tests`                  | Renderer E2E tests (Playwright, with a scripted native API).                         |

@@ -26,7 +26,7 @@
   const links = $derived(item === null ? null : trackLinks(item));
   const artistHref = $derived(links?.artist?.href ?? null);
   const albumLinkHref = $derived(links?.album?.href ?? null);
-  const lyrics = $derived(item === null ? null : lyricsState(item, resolution));
+  const lyrics = $derived(item === null ? null : lyricsState(resolution));
 
   function copy(text: string) {
     void navigator.clipboard?.writeText(text).catch(() => undefined);
@@ -59,8 +59,8 @@
     {:else if lyrics?.kind === "sourceFailed"}
       <Button
         type="button"
-        title="{lyrics.expectedPath} (click to copy)"
-        onclick={() => copy(lyrics.expectedPath)}
+        title="{lyrics.fileName} (click to copy)"
+        onclick={() => copy(lyrics.fileName)}
         variant="text"
         size="inline"
         class="font-normal"

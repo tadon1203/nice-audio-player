@@ -4,7 +4,6 @@ pub mod playback_context;
 
 use crate::library::store::PlayableTrack;
 use crate::{
-    activity::ApplicationActivityService,
     audio::{
         playback::{
             NoTracks, PlaybackQueueSnapshot, PlaybackService, PlaybackServiceError,
@@ -31,7 +30,6 @@ pub enum BackendError {
 
 pub struct BackendApp {
     pub playback: PlaybackService,
-    pub activities: ApplicationActivityService,
     /// The Library, or why it is unavailable.
     pub library: Result<Library, LibraryUnavailableReason>,
     pub waveforms: WaveformService,
@@ -45,10 +43,8 @@ impl BackendApp {
     pub fn initialize(data_dir: PathBuf, events: SharedEventSink) -> Result<Self, BackendError> {
         let settings = Arc::new(SettingsService::load(data_dir.clone(), events.clone()));
         let library_dir = data_dir.clone();
-        let activities = ApplicationActivityService::new(events.clone());
-        let activity = activities.handle();
         let waveforms = WaveformService::start(data_dir.join("waveforms"), events.clone());
-        let library = Library::open(library_dir, Some(activity), events.clone());
+        let library = Library::open(library_dir, events.clone());
         let remember = Arc::clone(&settings);
         let tracks: Box<dyn TrackSource> = match &library {
             Ok(library) => Box::new(LibraryTracks(library.store().clone())),
@@ -64,7 +60,6 @@ impl BackendApp {
         .map_err(|_| BackendError::PlaybackStartFailed)?;
         Ok(Self {
             playback,
-            activities,
             library,
             waveforms,
             settings,
