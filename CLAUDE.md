@@ -12,6 +12,7 @@ Respond and communicate with the user in the language they are using.
 - `docs/adr/` - hard-to-reverse decisions, with the reason. If your work contradicts an ADR, say so. Do not override it silently.
 - `docs/research/` - sourced findings (`/research`)
 - `docs/agents/git-workflow.md` - branch and commit rules
+- `docs/agents/tickets.md` - specs, tickets, and the implementation-ready standard
 
 ## Tool usage
 
@@ -19,6 +20,7 @@ Respond and communicate with the user in the language they are using.
   - Use a shell command for these tasks only when it gives a clear benefit. Ask the user for permission first.
 - To find a symbol (function, type, component, variable), use `LSP` before `Grep`. This includes its definition, usages, and callers. Use `Grep` only for text that is not a symbol: strings, config, docs, comments.
 - For `.svelte` and `.svelte.ts` files, use `svelte-file-editor` for large changes. Make small edits directly. Run `svelte-autofixer` on each changed `.svelte` file. Fix the errors it reports.
+- Subagents: for exploration (`Explore`, or finding files and facts), use model `haiku` with effort `medium`. For review (each axis of `/code-review`), use model `sonnet` with effort `medium`. For all other subagents, use the defaults.
 
 ## Principles
 
@@ -44,8 +46,8 @@ Run slow tests in the background. While you iterate, use a focused check: `vites
 
 ## Workflow
 
-- Feature workflow: `/grill-with-docs` (design) → `/to-spec` → `/to-tickets` → `/implement`. Skip the spec and tickets for a small feature.
-- Run `/clear` after each step, when the decisions are in the docs and the work is committed.
+- Feature workflow: `/grill-with-docs` (design) → `/to-spec` → `/to-tickets` → `/implement` → `/commit-ticket`, one ticket at a time. Skip the spec and tickets for a small feature.
+- Run `/clear` after each step. Exception: run `/to-spec` in the same session as `/grill-with-docs`.
 
 ## E2E testing (`tests-app/`)
 

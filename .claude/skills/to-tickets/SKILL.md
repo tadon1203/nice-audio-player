@@ -1,113 +1,34 @@
 ---
 name: to-tickets
-description: Break a plan, spec, or the current conversation into a set of tracer-bullet tickets, each declaring its blocking edges, published to the configured tracker (edges as text in one file per ticket locally, or native blocking links on a real tracker).
+description: Break a spec into numbered tracer-bullet tickets that each meet the implementation-ready standard.
 disable-model-invocation: true
 ---
 
-# To Tickets
-
-Break a plan, spec, or conversation into a set of **tickets**: tracer-bullet vertical slices, each declaring the tickets that **block** it.
-
-Read `docs/agents/issue-tracker.md` and `docs/agents/implementation-ready.md`. Each ticket, with the spec sections it links to, must meet the implementation-ready standard.
+Read `docs/agents/tickets.md`. The input is `.scratch/<feature-slug>/spec.md`, or the path the user gives.
 
 ## Process
 
-### 1. Gather context
+1. Read the spec. Explore the code that it touches. Look for a prefactoring that makes the change easy.
+2. Draft the tickets:
+   - Each ticket is a vertical slice through every layer that it needs, and it is verifiable by itself. A prefactoring comes first.
+   - Number the tickets in the order of work.
+   - Copy into each ticket the decisions, contracts, and seams from the spec that it needs. Put each change from the spec's Docs section into the ticket that implements that behavior.
+   - If a ticket needs a What or a How that the spec does not give, it is an open decision. Write it down for step 3.
+   - Apply the size rule.
+3. Show the user the numbered list: title, what it delivers, size estimate with the files behind it, and the open decisions. Iterate until the user approves. Do not ask whether the granularity feels right. The size rule decides it.
+4. Write the tickets with the template in `docs/agents/tickets.md`. Then delete the spec.
 
-Work from whatever is already in the conversation context. If the user passes a reference (a spec path, an issue number or URL) as an argument, fetch it and read its full body and comments.
+## Size rule
 
-### 2. Explore the codebase
-
-If you have not already explored the codebase, do so to understand the current state of the code. Read `CONTEXT.md` and the ADRs for the area you work in. You need the current files to write each ticket's Files section.
-
-If a ticket needs a design decision that the spec does not make, add the decision to the spec. Do not write it only in the ticket.
-
-Look for opportunities to prefactor the code to make the implementation easier. "Make the change easy, then make the easy change."
-
-### 3. Draft vertical slices
-
-Break the work into **tracer bullet** tickets.
-
-<vertical-slice-rules>
-
-- Each slice cuts a narrow but COMPLETE path through every layer (schema, API, UI, tests): vertical, NOT a horizontal slice of one layer
-- A completed slice is demoable or verifiable on its own
-- Each slice fits in one 200k-token context (see the size rule below)
-- Any prefactoring should be done first
-
-</vertical-slice-rules>
-
-<size-rule>
-
-**Size rule.** The agent reads, builds, checks and reviews one ticket in one 200k-token context. It does not `/clear` or compact in the middle. Decide this by estimate, not by feel:
+The agent reads, builds, checks, and reviews one ticket in one 200k-token context, without `/clear` or compaction.
 
 **total = 40k + read + write + checks**
 
-- 40k is the start of every session (system prompt, tools, skills, CLAUDE.md).
-- read: about 12 tokens per line, for the ticket, the spec, the docs, and each file the agent reads in full. Count each file once.
-- write: about 12 tokens per line added or changed, times 2 (the edit, and the thinking behind it).
-- checks: 5k for each check command that the ticket runs (see [CLAUDE.md](../../../CLAUDE.md#commands)). Count 3 runs of each. Count one run of `pnpm test:e2e*` or a Rust build as 15k.
+- 40k: the start of every session.
+- read: about 12 tokens per line, for the ticket and each file read in full. Count each file once.
+- write: about 12 tokens per line added or changed, times 2.
+- checks: 5k per check command, 3 runs each. Count one E2E run or a Rust build as 15k.
 
-If the total is over 200k, split the ticket. Never merge tickets to reduce their number. Split along a seam where each part is still demoable or verifiable. If no such seam exists, use a prefactoring ticket first. This rule also applies to the batches of a wide refactor.
-</size-rule>
+If the total is over 200k, split the ticket where each part is still verifiable. If no such place exists, add a prefactoring ticket first. Never merge tickets to reduce their number.
 
-Give each ticket its **blocking edges**: the other tickets that must complete before it can start. A ticket with no blockers can start immediately.
-
-**Wide refactors are the exception to vertical slicing.** A **wide refactor** is one mechanical change (rename a column, retype a shared symbol) whose **blast radius** fans across the whole codebase, so a single edit breaks thousands of call sites at once and no vertical slice can land green. Don't force it into a tracer bullet; sequence it as **expand–contract**. First expand: add the new form beside the old so nothing breaks. Then migrate the call sites over in batches sized by blast radius (per package, per directory), each batch its own ticket blocked by the expand, keeping CI green batch to batch because the old form still exists. Finally contract: delete the old form once no caller remains, in a ticket blocked by every migrate batch. When even the batches can't stay green alone, keep the sequence but let them share an integration branch that all block a final integrate-and-verify ticket; green is promised only there.
-
-### 4. Quiz the user
-
-Present the proposed breakdown as a numbered list. For each ticket, show:
-
-- **Title**: short descriptive name
-- **Blocked by**: which other tickets (if any) must complete first
-- **What it delivers**: the end-to-end behaviour this ticket makes work
-- **Size estimate**: the total from the size rule, with the files behind it
-
-Ask the user:
-
-- Are the blocking edges correct: does each ticket only depend on tickets that genuinely gate it?
-- Is any size estimate wrong, for example a file that is much larger than it looks?
-
-Do not ask whether the granularity "feels right". The size rule decides it.
-
-Iterate until the user approves the breakdown.
-
-### 5. Publish the tickets to the configured tracker
-
-Publish the approved tickets. **How** depends on the tracker configured in `docs/agents/issue-tracker.md`; the tickets are the same either way, only the shape of the blocking edges changes:
-
-- **Local files** → write one file per ticket under `.scratch/<feature-slug>/issues/<NN>-<slug>.md`, numbered from `01` in dependency order (blockers first). Each file's "Blocked by" lists the numbers/titles it depends on. Use the ticket template in `docs/agents/issue-tracker.md`, exactly: one ticket per file, never a single combined file.
-- **A real issue tracker (GitHub, Linear, …)** → publish one issue per ticket in dependency order (blockers first) so each ticket's blocking edges can reference real identifiers. Use the platform's native blocking / sub-issue relationship where it has one; otherwise set each ticket's "Blocked by" to the blocking issues.
-Work the **frontier**: any ticket whose blockers are all done. For a purely linear chain that means top to bottom.
-
-Do NOT close or modify any parent issue.
-
-<issue-template>
-
-## Parent
-
-A reference to the parent issue on the tracker (if the source was an existing issue, otherwise omit this section).
-
-## What to build
-
-The end-to-end behaviour this ticket makes work, from the user's perspective, not layer-by-layer implementation.
-
-## Files
-
-The paths to create, change, and delete, test files included. For a file that an earlier ticket creates, give that ticket's number.
-
-## Design
-
-Links to the spec sections that give the Contracts and the Approach. Do not copy them.
-
-## Acceptance criteria
-
-- [ ] Criterion 1
-- [ ] Criterion 2
-
-## Blocked by
-
-- A reference to each blocking ticket, or "None (can start immediately)".
-
-</issue-template>
+A **wide refactor** (one mechanical change with call sites across the codebase) cannot be one vertical slice. Number it expand → migrate in batches → contract, so that each ticket leaves the old form working until the last one.
