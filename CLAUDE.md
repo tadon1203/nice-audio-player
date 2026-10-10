@@ -10,8 +10,7 @@ Respond and communicate with the user in the language they are using.
 - `DESIGN.md` - UI principles
 - `CONTEXT.md` - domain terms (glossary). Use these terms, not synonyms. If a term is missing, say so.
 - `docs/adr/` - hard-to-reverse decisions, with the reason. If your work contradicts an ADR, say so. Do not override it silently.
-- `docs/research/` - sourced findings (`/research`)
-- `docs/conventions.md` - Renderer conventions that lint cannot check, with the reasons in `docs/adr/`
+- `docs/coding-standards.md` - code rules that lint cannot check, with the reasons in `docs/adr/`. Follow them when you write or review code.
 
 ## Tool usage
 
@@ -22,10 +21,8 @@ Respond and communicate with the user in the language they are using.
 
 ## Principles
 
-- Write comments and documentation in English following ASD-STE100 (Simplified Technical English).
 - No ad-hoc fixes. Design for long-term consistency.
 - Documentation is the single source of truth. Keep facts in one file. Link; do not copy.
-- Import icons one by one (`@lucide/svelte/icons/x`). Never import from the `@lucide/svelte` barrel. It slows `vite dev` and the E2E runs.
 
 ## Commands
 
@@ -46,9 +43,3 @@ Run slow tests in the background. While you iterate, use a focused check: `vites
 
 - Feature workflow: `/grill-with-docs` (design) → `/to-spec` → `/to-tickets` → `/implement` → `/commit-ticket`, one ticket at a time. Skip the spec and tickets for a small feature.
 - Run `/clear` after each step. Exception: run `/to-spec` in the same session as `/grill-with-docs`.
-
-## E2E testing (`tests-app/`)
-
-- Selectors: Find regions by `aria-label` or role with CSS. Narrow from page to element: `$(scope).$(…)`.
-- Text selectors: Use only as the final step of a chain. Do not mix strategies in one selector string.
-- Add `data-testid` only where no accessible name exists. Do not use Tauri or WebdriverIO internals.
