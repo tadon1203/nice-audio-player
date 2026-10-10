@@ -522,3 +522,96 @@ pub(super) fn output_failure_code(error: AudioOutputError) -> PlaybackFailureCod
         AudioOutputError::DeviceUnavailable => PlaybackFailureCode::OutputDeviceUnavailable,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::audio::devices::AudioOutputSelection;
+    use crate::audio::output::{AudioOutputError, StreamFailureKind};
+    use crate::audio::playback::snapshot::PlaybackFailureCode;
+
+    #[test]
+    fn classifies_stream_failures_by_selection_and_kind() {
+        let device = AudioOutputSelection::Device {
+            device_id: "device".into(),
+        };
+        let default = AudioOutputSelection::SystemDefault;
+        assert_eq!(
+            stream_signal_action(&default, StreamFailureKind::DeviceChanged),
+            StreamSignalAction::RefreshDefaultDevice
+        );
+        assert_eq!(
+            stream_signal_action(&device, StreamFailureKind::DeviceChanged),
+            StreamSignalAction::PreservePlayback
+        );
+        assert_eq!(
+            stream_signal_action(&default, StreamFailureKind::DeviceUnavailable),
+            StreamSignalAction::Fail(PlaybackFailureCode::OutputDeviceUnavailable)
+        );
+        assert_eq!(
+            stream_signal_action(&default, StreamFailureKind::RuntimeFailed),
+            StreamSignalAction::Fail(PlaybackFailureCode::OutputStreamRuntimeFailed)
+        );
+        assert_eq!(
+            stream_signal_action(&default, StreamFailureKind::CompletionTimingFailed),
+            StreamSignalAction::Fail(PlaybackFailureCode::CompletionTimingFailed)
+        );
+    }
+
+    #[test]
+    fn maps_output_errors_to_failure_codes() {
+        use AudioOutputError as E;
+        use PlaybackFailureCode as C;
+        for (error, code) in [
+            (E::NoOutputDevice, C::NoOutputDevice),
+            (E::DeviceUnavailable, C::OutputDeviceUnavailable),
+            (
+                E::UnsupportedConfiguration,
+                C::UnsupportedOutputConfiguration,
+            ),
+            (
+                E::StreamConfigurationUnsupported,
+                C::UnsupportedOutputConfiguration,
+            ),
+            (
+                E::ConfigurationQueryFailed,
+                C::UnsupportedOutputConfiguration,
+            ),
+            (E::StreamBuildFailed, C::OutputStreamBuildFailed),
+            (E::StreamStartFailed, C::OutputStreamStartFailed),
+            (E::StreamPauseFailed, C::OutputStreamPauseFailed),
+            (E::StreamResumeFailed, C::OutputStreamResumeFailed),
+        ] {
+            assert_eq!(output_failure_code(error.clone()), code, "{error:?}");
+        }
+    }
+
+    #[test]
+    fn start_failure_scope_separates_file_problems_from_output_problems() {
+        for phase in [
+            StartFailurePhase::SourceOpen,
+            StartFailurePhase::SourceMetadata,
+            StartFailurePhase::DecoderOpen,
+            StartFailurePhase::FirstPacketDecode,
+            StartFailurePhase::ProcessorCreate,
+            StartFailurePhase::PrebufferDecode,
+            StartFailurePhase::PrebufferConversion,
+        ] {
+            assert_eq!(phase.scope(), FailureScope::Item, "{phase:?}");
+        }
+        for phase in [
+            StartFailurePhase::SourceWorker,
+            StartFailurePhase::OutputPrepare,
+            StartFailurePhase::StreamStart,
+        ] {
+            assert_eq!(phase.scope(), FailureScope::Output, "{phase:?}");
+        }
+    }
+
+    #[test]
+    fn previous_restarts_after_three_seconds_of_a_track_with_a_duration() {
+        assert!(!previous_restarts_track(2_999, Some(60_000)));
+        assert!(previous_restarts_track(3_000, Some(60_000)));
+        assert!(!previous_restarts_track(30_000, None));
+    }
+}

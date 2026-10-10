@@ -223,3 +223,20 @@ pub(super) fn should_publish_position(
 ) -> bool {
     elapsed_since_publish >= POSITION_UPDATE_INTERVAL && position_changed
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Duration;
+
+    #[test]
+    fn position_publication_requires_interval_and_a_changed_position() {
+        assert!(!should_publish_position(
+            POSITION_UPDATE_INTERVAL - Duration::from_millis(1),
+            true
+        ));
+        assert!(!should_publish_position(POSITION_UPDATE_INTERVAL, false));
+        assert!(should_publish_position(POSITION_UPDATE_INTERVAL, true));
+        assert!(should_publish_position(POSITION_UPDATE_INTERVAL * 2, true));
+    }
+}

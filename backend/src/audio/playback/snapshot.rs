@@ -381,3 +381,24 @@ impl PlaybackQueueSnapshot {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn processing_info_derives_resampling_from_rates() {
+        let equal = PlaybackProcessingInfo {
+            channel_conversion: PlaybackChannelConversion::None,
+            source_sample_rate: 44_100,
+            output_sample_rate: 44_100,
+        };
+        let different = PlaybackProcessingInfo {
+            source_sample_rate: 44_100,
+            output_sample_rate: 48_000,
+            ..equal
+        };
+        assert!(!equal.resampling_active());
+        assert!(different.resampling_active());
+    }
+}
