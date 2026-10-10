@@ -11,8 +11,6 @@ Respond and communicate with the user in the language they are using.
 - `CONTEXT.md` - domain terms (glossary). Use these terms, not synonyms. If a term is missing, say so.
 - `docs/adr/` - hard-to-reverse decisions, with the reason. If your work contradicts an ADR, say so. Do not override it silently.
 - `docs/research/` - sourced findings (`/research`)
-- `docs/agents/git-workflow.md` - branch and commit rules
-- `docs/agents/tickets.md` - specs, tickets, and the implementation-ready standard
 - `docs/conventions.md` - Renderer conventions that lint cannot check, with the reasons in `docs/adr/`
 
 ## Tool usage

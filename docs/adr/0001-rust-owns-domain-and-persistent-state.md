@@ -3,7 +3,7 @@
 Rust owns domain behavior, persistence, filesystem work, audio playback, and the privileged desktop boundary. The renderer only composes views and caches or mirrors native state. It never duplicates library data or holds a second source of truth.
 
 - The IPC contract is authoritative in Rust. TypeScript bindings are generated (rules in [ARCHITECTURE.md](../../ARCHITECTURE.md)). The renderer reaches native features only through one adapter.
-- Backend services know nothing about Tauri or each other. They emit `BackendEvent`s, which carry no state. The host reads the current snapshot and forwards it.
+- Backend services know nothing about Tauri or each other. They emit `BackendEvent`s. What an event carries is defined in [ADR 0008](0008-backend-state-occurrences-and-measurements-on-one-channel.md), which revises the earlier rule that events carry no state.
 - The playback worker alone owns the queue and the output stream. Everything else sends it commands and reads its published snapshots.
 - The library scanner works in batches, with one transaction per batch. A cancelled or failed scan never leaves a half-written batch. The scanner reconciles read-only and inspects files with no transaction open. The write lock is held only for the batch's writes.
 - The Library has a read side (`LibraryStore`, built from the database alone) and a write side (`LibrarySync`, one actor that owns the folders, watchers and scanner). Opening it gives a working Library or an unavailable reason.

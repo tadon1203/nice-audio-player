@@ -4,7 +4,7 @@ description: Break a spec into numbered tracer-bullet tickets that each meet the
 disable-model-invocation: true
 ---
 
-Read `docs/agents/tickets.md`. The input is `.scratch/<feature-slug>/spec.md`, or the path the user gives.
+Read `docs/agents/tickets.md` and `docs/agents/implementation-ready.md`. The input is `.scratch/<feature-slug>/spec.md`, or the path the user gives.
 
 ## Process
 
@@ -16,7 +16,7 @@ Read `docs/agents/tickets.md`. The input is `.scratch/<feature-slug>/spec.md`, o
    - If a ticket needs a What or a How that the spec does not give, it is an open decision. Write it down for step 3.
    - Apply the size rule.
 3. Show the user the numbered list: title, what it delivers, size estimate with the files behind it, and the open decisions. Iterate until the user approves. Do not ask whether the granularity feels right. The size rule decides it.
-4. Write the tickets with the template in `docs/agents/tickets.md`. Then delete the spec.
+4. Write the tickets with the template in `docs/agents/tickets.md`. Keep the spec.
 
 ## Size rule
 
