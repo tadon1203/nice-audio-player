@@ -15,6 +15,7 @@ Read a document only when its trigger applies. Do not read them all up front.
 | `CONTEXT.md`               | Domain terms (glossary)                                            | You name something or write docs                                         |
 | `docs/adr/`                | Hard-to-reverse decisions, with the reason                         | Your work may touch a recorded decision (search it)                      |
 | `docs/coding-standards.md` | Code rules that lint cannot check, with the reasons in `docs/adr/` | You write or review code                                                 |
+| `docs/git-workflow.md`     | Commit branch and commit message rules                             | You commit or prepare a commit                                           |
 
 - If a term that you need is missing from `CONTEXT.md`, say so.
 - If your work contradicts an ADR, say so. Do not override it silently.
