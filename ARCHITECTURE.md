@@ -25,7 +25,7 @@ The template of this document. Text in `<>` is a placeholder: replace it, and ke
 
 ## Mental model
 
-<The technology stack, by layer: its technology, what it owns, and what it must not hold.>
+<The technology stack, by layer: its directory, its technology, what it owns, and what it must not hold.>
 
 <How data flows through the layers: each path, its direction, and what it carries.>
 
@@ -44,11 +44,11 @@ The template of this document. Text in `<>` is a placeholder: replace it, and ke
 
 ## Mental model
 
-Three layers, one direction of control.
+Three layers, one direction of control. The terms are defined in [CONTEXT.md](./CONTEXT.md).
 
-- **Renderer:** SvelteKit (Svelte 5, `adapter-static`, SPA), built by Vite. It composes views and caches native state. It holds no second source of truth.
-- **Host:** Tauri 2. It runs the Windows WebView and connects the Backend to the window and the operating system. It holds no domain rules.
-- **Backend:** a Rust crate. It owns the domain and the persistent state: the Library, Playback, and settings. It knows nothing about Tauri. See [ADR 0001](./docs/adr/0001-rust-owns-domain-and-persistent-state.md).
+- **Renderer** (`src`): SvelteKit (Svelte 5, `adapter-static`, SPA), built by Vite. It composes views and caches native state. It holds no second source of truth.
+- **Host** (`src-tauri`): Tauri 2. It runs the Windows WebView and connects the Backend to the window and the operating system. It holds no domain rules.
+- **Backend** (`backend`): a Rust crate. It owns the domain and the persistent state: the Library, Playback, and settings. It knows nothing about Tauri. See [ADR 0001](./docs/adr/0001-rust-owns-domain-and-persistent-state.md).
 
 Communication: one path for requests, four for pushes.
 

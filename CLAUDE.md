@@ -4,13 +4,20 @@ Respond and communicate with the user in the language they are using.
 
 ## Documents
 
-- `README.md` - what the project is and how to run it
-- `ARCHITECTURE.md` - system map, code map, and rules that must not break
-- `docs/requirements.md` - how the product behaves
-- `DESIGN.md` - UI principles
-- `CONTEXT.md` - domain terms (glossary). Use these terms, not synonyms. If a term is missing, say so.
-- `docs/adr/` - hard-to-reverse decisions, with the reason. If your work contradicts an ADR, say so. Do not override it silently.
-- `docs/coding-standards.md` - code rules that lint cannot check, with the reasons in `docs/adr/`. Follow them when you write or review code.
+Read a document only when its trigger applies. Do not read them all up front.
+
+| Document                   | What it is                                                         | Read when                                                                |
+| -------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------ |
+| `README.md`                | What the project is and how to run it                              | You need setup or run steps                                              |
+| `ARCHITECTURE.md`          | System map, code map, and rules that must not break                | You change structure, add a module, or cross a process or layer boundary |
+| `docs/requirements.md`     | How the product behaves                                            | A task changes or depends on user-visible behavior                       |
+| `DESIGN.md`                | UI principles                                                      | You change UI                                                            |
+| `CONTEXT.md`               | Domain terms (glossary)                                            | You name something or write docs                                         |
+| `docs/adr/`                | Hard-to-reverse decisions, with the reason                         | Your work may touch a recorded decision (search it)                      |
+| `docs/coding-standards.md` | Code rules that lint cannot check, with the reasons in `docs/adr/` | You write or review code                                                 |
+
+- Use the terms in `CONTEXT.md`, not synonyms. If a term is missing, say so.
+- If your work contradicts an ADR, say so. Do not override it silently.
 
 ## Tool usage
 
