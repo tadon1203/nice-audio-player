@@ -1,20 +1,46 @@
 # Architecture
 
-This document is the map of the system and the rules that keep it in shape. The reasons for the large decisions are in [docs/adr/](./docs/adr/).
+This document is the map of the system and the rules that keep it in shape.
 
 ## About this document
 
 This document changes rarely. Keep it stable.
 
-- The sections are fixed. Do not add, remove, or rename a section. Put new content in one of them:
-  - **Mental model:** the technology stack, and how data flows through it.
-  - **Code map:** where each part lives, by directory.
-  - **Invariants:** the rules that must never break, so the design does not decay.
-
+- The sections are fixed, as in the template below. Do not add, remove, or rename a section. Put new content in one of them.
 - Do not put information here that changes often.
 - Do not name a file in the Code map. Name a directory.
 - Do not describe an implementation detail. The code and its comments do that.
 - Change this document only when the structure or a rule changes.
+
+The template of this document. Text in `<>` is a placeholder: replace it, and keep everything else.
+
+```markdown
+# Architecture
+
+<What this document is.>
+
+## About this document
+
+<The rules for changing this document.>
+
+## Mental model
+
+<The technology stack, by layer: its technology, what it owns, and what it must not hold.>
+
+<How data flows through the layers: each path, its direction, and what it carries.>
+
+## Code map
+
+<Where each part lives, by directory.>
+
+| Directory     | What it holds              |
+| ------------- | -------------------------- |
+| `<directory>` | <What it holds, in a line> |
+
+## Invariants
+
+- <A rule that must never break, so the design does not decay.>
+```
 
 ## Mental model
 
