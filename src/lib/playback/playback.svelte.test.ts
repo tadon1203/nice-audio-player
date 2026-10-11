@@ -5,11 +5,11 @@ import type {
   PlaybackQueueSnapshot,
   PlaybackSnapshot,
   TNativeAPI,
+  Versioned,
 } from "$lib/native";
 import { createPlayback } from "./playback.svelte";
 
-const base = (revision: number) => ({
-  revision,
+const base = () => ({
   volume: 0.5,
   muted: false,
   outputSelection: { kind: "systemDefault" as const },
@@ -33,10 +33,9 @@ const item = (id: string): PlaybackItem => ({
   albumTrackCount: null,
 });
 
-const stopped = (revision: number, id: string | null): PlaybackSnapshot => ({
-  status: "stopped",
-  base: base(revision),
-  item: id ? item(id) : null,
+const stopped = (revision: number, id: string | null): Versioned<PlaybackSnapshot> => ({
+  revision,
+  value: { status: "stopped", base: base(), item: id ? item(id) : null },
 });
 
 const playing = (
@@ -44,23 +43,26 @@ const playing = (
   id: string,
   positionMs: number,
   seekRevision = 0,
-): PlaybackSnapshot => ({
-  status: "playing",
-  base: base(revision),
-  session: {
-    item: item(id),
-    playbackId: "1",
-    positionMs,
-    seekRevision,
-    durationMs: 60_000,
-    outputDevice: { id: "speakers", name: "Speakers" },
-    channelConversion: "none",
-    sourceFormat: "FLAC",
-    sourceBitDepth: 24,
-    sourceBitrateKbps: null,
-    sourceSampleRate: 44_100,
-    outputSampleRate: 44_100,
-    resamplingActive: false,
+): Versioned<PlaybackSnapshot> => ({
+  revision,
+  value: {
+    status: "playing",
+    base: base(),
+    session: {
+      item: item(id),
+      playbackId: "1",
+      positionMs,
+      seekRevision,
+      durationMs: 60_000,
+      outputDevice: { id: "speakers", name: "Speakers" },
+      channelConversion: "none",
+      sourceFormat: "FLAC",
+      sourceBitDepth: 24,
+      sourceBitrateKbps: null,
+      sourceSampleRate: 44_100,
+      outputSampleRate: 44_100,
+      resamplingActive: false,
+    },
   },
 });
 
@@ -74,17 +76,25 @@ const queueItem = (id: string): PlaybackQueueItem => ({
   durationMs: 120_000,
 });
 
-const queue = (revision: number): PlaybackQueueSnapshot => ({
+const queueOf = (
+  revision: number,
+  patch: Partial<PlaybackQueueSnapshot> = {},
+): Versioned<PlaybackQueueSnapshot> => ({
   revision,
-  current: null,
-  history: [],
-  historyCount: 0,
-  upcoming: [],
-  upcomingCount: 0,
-  repeatMode: "off",
-  shuffleEnabled: false,
-  canRestorePrevious: false,
+  value: {
+    current: null,
+    history: [],
+    historyCount: 0,
+    upcoming: [],
+    upcomingCount: 0,
+    repeatMode: "off",
+    shuffleEnabled: false,
+    canRestorePrevious: false,
+    ...patch,
+  },
 });
+
+const queue = (revision: number) => queueOf(revision);
 
 const baseApi = (overrides: Partial<TNativeAPI> = {}) => overrides as unknown as TNativeAPI;
 
@@ -97,28 +107,43 @@ describe("playback session ordering", () => {
     playback.acceptPlayback(stopped(1, "a"));
     playback.acceptPlayback(stopped(2, "b"));
 
-    expect(playback.snapshot?.base.revision).toBe(2);
+    expect(playback.playbackRevision).toBe(2);
     expect(playback.item?.trackId).toBe("b");
   });
 
   it("accepts queue revisions independently from playback revisions", () => {
     const playback = createPlayback(baseApi());
     playback.acceptPlayback(stopped(50, null));
-    playback.acceptQueue({
-      revision: 2,
-      current: queueItem("track-1"),
-      history: [],
-      historyCount: 0,
-      upcoming: [],
-      upcomingCount: 0,
-      repeatMode: "off",
-      shuffleEnabled: false,
-      canRestorePrevious: false,
-    });
+    playback.acceptQueue(queueOf(2, { current: queueItem("track-1") }));
 
-    expect(playback.snapshot?.base.revision).toBe(50);
-    expect(playback.queue?.revision).toBe(2);
+    expect(playback.playbackRevision).toBe(50);
+    expect(playback.queueRevision).toBe(2);
     expect(playback.queue?.current?.title).toBe("Current track");
+  });
+
+  it("drops a command response older than the state it follows", async () => {
+    const playback = createPlayback(baseApi({ pausePlayback: vi.fn(async () => stopped(2, "a")) }));
+    playback.initialize(stopped(1, "a"), queue(1));
+    playback.acceptPlayback(stopped(3, "b"));
+
+    await playback.pause();
+
+    expect(playback.item?.trackId).toBe("b");
+    expect(playback.playbackRevision).toBe(3);
+  });
+
+  it("drops a queue command response older than the queue it follows", async () => {
+    const playback = createPlayback(
+      baseApi({
+        setPlaybackShuffle: vi.fn(async () => queueOf(2, { shuffleEnabled: false })),
+      }),
+    );
+    playback.initialize(stopped(1, null), queueOf(3, { shuffleEnabled: true }));
+
+    await playback.setShuffle(false);
+
+    expect(playback.shuffleEnabled).toBe(true);
+    expect(playback.queueRevision).toBe(3);
   });
 
   it("moves initialization from loading to ready", () => {
@@ -235,12 +260,12 @@ describe("playback session ordering", () => {
 describe("undoing a queue change", () => {
   afterEach(() => vi.useRealTimers());
 
-  const withUpcoming = (revision: number): PlaybackQueueSnapshot => ({
-    ...queue(revision),
-    current: queueItem("a"),
-    upcoming: [queueItem("b")],
-    upcomingCount: 1,
-  });
+  const withUpcoming = (revision: number) =>
+    queueOf(revision, {
+      current: queueItem("a"),
+      upcoming: [queueItem("b")],
+      upcomingCount: 1,
+    });
 
   it("is offered after clearing upcoming, and goes away after a while", async () => {
     vi.useFakeTimers();
@@ -272,13 +297,16 @@ describe("seeking", () => {
 });
 
 describe("failures", () => {
-  const failed = (revision: number, skipping: boolean, id = "a"): PlaybackSnapshot => ({
-    status: "failed",
-    base: base(revision),
-    item: item(id),
-    playbackId: null,
-    error: "outputDeviceUnavailable",
-    skipping,
+  const failed = (revision: number, skipping: boolean, id = "a"): Versioned<PlaybackSnapshot> => ({
+    revision,
+    value: {
+      status: "failed",
+      base: base(),
+      item: item(id),
+      playbackId: null,
+      error: "outputDeviceUnavailable",
+      skipping,
+    },
   });
 
   it("exposes why playback stopped, and retries through resume", async () => {
@@ -336,7 +364,7 @@ describe("album shuffle", () => {
       baseApi({
         setPlaybackShuffle: vi.fn(async () => {
           order.push("shuffle");
-          return { ...queue(2), shuffleEnabled: true };
+          return queueOf(2, { shuffleEnabled: true });
         }),
         startPlayback: vi.fn(async () => {
           order.push("start");
@@ -463,7 +491,8 @@ describe("position messages", () => {
   it("are ignored while paused, so a tick sent before the pause cannot move the clock back", () => {
     const accept = vi.fn();
     const playback = createPlayback(baseApi(), { accept } as never);
-    playback.acceptPlayback({ ...playing(1, "a", 1_100), status: "paused" } as PlaybackSnapshot);
+    const paused = playing(1, "a", 1_100);
+    playback.acceptPlayback({ ...paused, value: { ...paused.value, status: "paused" } } as never);
     accept.mockClear();
 
     playback.acceptPosition(position(1_000));
@@ -570,10 +599,10 @@ describe("starting playback", () => {
 });
 
 describe("changing the volume", () => {
-  const mutedSnapshot = (): PlaybackSnapshot => {
-    const snapshot = stopped(1, null);
-    return { ...snapshot, base: { ...snapshot.base, muted: true } };
-  };
+  const mutedSnapshot = (): Versioned<PlaybackSnapshot> => ({
+    revision: 1,
+    value: { status: "stopped", base: { ...base(), muted: true }, item: null },
+  });
 
   it("unmutes when the volume changes while muted", async () => {
     const setPlaybackMuted = vi.fn(async () => stopped(3, null));

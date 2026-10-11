@@ -73,7 +73,6 @@ impl Harness {
             item: None,
         })));
         let queue_snapshot = Arc::new(RwLock::new(Versioned::new(PlaybackQueueSnapshot::empty(
-            0,
             PlaybackRepeatMode::Off,
             false,
         ))));
@@ -230,6 +229,8 @@ impl Harness {
         self.worker.tick();
     }
 
+    // The transport helpers answer with the snapshot alone; a test that reads a revision calls
+    // `call` and gets the `Versioned` answer.
     fn start(
         &mut self,
         tracks: Vec<PlayableTrack>,
@@ -241,26 +242,32 @@ impl Harness {
             start_index,
             reply,
         })
+        .map(|versioned| versioned.value)
     }
 
     fn pause(&mut self) -> Answer<PlaybackSnapshot> {
         self.call(|reply| PlaybackCommand::Pause { reply })
+            .map(|versioned| versioned.value)
     }
 
     fn resume(&mut self) -> Answer<PlaybackSnapshot> {
         self.call(|reply| PlaybackCommand::Resume { reply })
+            .map(|versioned| versioned.value)
     }
 
     fn next(&mut self) -> Answer<PlaybackSnapshot> {
         self.call(|reply| PlaybackCommand::Next { reply })
+            .map(|versioned| versioned.value)
     }
 
     fn seek(&mut self, position_ms: u64) -> Answer<PlaybackSnapshot> {
         self.call(|reply| PlaybackCommand::Seek { position_ms, reply })
+            .map(|versioned| versioned.value)
     }
 
     fn select_output(&mut self, selection: AudioOutputSelection) -> Answer<PlaybackSnapshot> {
         self.call(|reply| PlaybackCommand::SetOutputSelection { selection, reply })
+            .map(|versioned| versioned.value)
     }
 
     /// The titles of the current item and then the upcoming ones.

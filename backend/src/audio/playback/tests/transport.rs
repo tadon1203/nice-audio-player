@@ -78,7 +78,11 @@ fn a_start_through_a_service_thread_needs_no_poll() {
     .expect("worker should start");
 
     // The worker sleeps in a blocking receive while idle; only an event can wake it for this.
-    let snapshot = service.handle().start(vec!["a".to_owned()], 0).unwrap();
+    let snapshot = service
+        .handle()
+        .start(vec!["a".to_owned()], 0)
+        .unwrap()
+        .value;
 
     assert!(matches!(snapshot, PlaybackSnapshot::Playing { .. }));
     assert!(output.is_running());
@@ -117,7 +121,7 @@ fn volume_and_next_are_answered_while_a_start_loads() {
     });
     let next = harness.next();
 
-    assert_eq!(volume.unwrap().base().volume, 0.25);
+    assert_eq!(volume.unwrap().value.base().volume, 0.25);
     assert!(is_playing(&next.unwrap(), "b"));
     assert_eq!(start.try_recv(), Ok(Err(PlaybackServiceError::Superseded)));
 }
@@ -142,7 +146,7 @@ fn a_superseded_start_is_answered_instead_of_dropped() {
     });
 
     assert_eq!(first.try_recv(), Ok(Err(PlaybackServiceError::Superseded)));
-    assert!(is_playing(&harness.wait_for(&second).unwrap(), "b"));
+    assert!(is_playing(&harness.wait_for(&second).unwrap().value, "b"));
 }
 
 #[test]
@@ -232,7 +236,8 @@ fn a_state_change_carries_the_newest_position() {
 
     let muted = harness
         .call(|reply| PlaybackCommand::Mute { reply })
-        .unwrap();
+        .unwrap()
+        .value;
 
     assert_eq!(session(&muted).position_ms, 500);
     assert_eq!(harness.position().unwrap().position_ms, 500);
@@ -339,7 +344,7 @@ fn pausing_while_a_track_loads_starts_it_paused() {
     });
 
     harness.pause().unwrap();
-    let loaded = harness.wait_for(&start).unwrap();
+    let loaded = harness.wait_for(&start).unwrap().value;
 
     assert!(matches!(loaded, PlaybackSnapshot::Paused { .. }));
     assert!(!harness.output.is_running());
@@ -355,7 +360,7 @@ fn resuming_while_a_paused_start_loads_plays_it() {
 
     harness.resume().unwrap();
 
-    assert!(is_playing(&harness.wait_for(&start).unwrap(), "b"));
+    assert!(is_playing(&harness.wait_for(&start).unwrap().value, "b"));
 }
 
 #[test]
@@ -368,7 +373,8 @@ fn previous_restarts_a_track_that_has_played_for_a_while() {
 
     let restarted = harness
         .call(|reply| PlaybackCommand::Previous { reply })
-        .unwrap();
+        .unwrap()
+        .value;
 
     assert!(
         matches!(&restarted, PlaybackSnapshot::Paused { session, .. } if session.item.title == "b")
@@ -403,8 +409,8 @@ fn published_revisions_grow_and_commands_that_change_nothing_keep_theirs() {
         .call(|reply| PlaybackCommand::Mute { reply })
         .unwrap();
 
-    assert_eq!(changed.revision(), 1);
-    assert_eq!(muted.revision(), 2);
-    assert_eq!(muted_again.revision(), 2);
+    assert_eq!(changed.revision, 1);
+    assert_eq!(muted.revision, 2);
+    assert_eq!(muted_again.revision, 2);
     assert_eq!(harness.versioned_snapshot().revision, 2);
 }

@@ -3,6 +3,7 @@ import type {
   LibraryTrackSummary,
   PlaybackQueueSnapshot,
   PlaybackSnapshot,
+  Versioned,
 } from "$lib/native";
 import type { Native } from "./native-api";
 import { playbackIdOf, playbackItemFor, playingSnapshot, queueItemFor } from "./data";
@@ -25,8 +26,6 @@ export function scriptPlayback(native: Native, initialSequence: LibraryTrackSumm
   let outputSelection: AudioOutputSelection = { kind: "systemDefault" };
   let repeatMode: PlaybackQueueSnapshot["repeatMode"] = "off";
   let shuffleEnabled = false;
-  let playbackRevision = 50;
-  let queueRevision = 1;
   let upcoming: LibraryTrackSummary[] = [];
   let waveformReady = false;
   let ticker: ReturnType<typeof setInterval> | null = null;
@@ -37,7 +36,6 @@ export function scriptPlayback(native: Native, initialSequence: LibraryTrackSumm
     if (patch.upcoming !== undefined) upcoming = patch.upcoming;
     const played = sequence.slice(0, Math.max(index, 0));
     return {
-      revision: queueRevision,
       current: index < 0 ? null : queueItemFor(current()),
       history: played.slice(-50).map(queueItemFor),
       historyCount: played.length,
@@ -51,7 +49,6 @@ export function scriptPlayback(native: Native, initialSequence: LibraryTrackSumm
 
   const snapshot = (): PlaybackSnapshot =>
     playingSnapshot({
-      revision: playbackRevision,
       status,
       item: playbackItemFor(current()),
       positionMs,
@@ -63,18 +60,18 @@ export function scriptPlayback(native: Native, initialSequence: LibraryTrackSumm
       canGoNext: index < sequence.length - 1,
     });
 
-  /** A playback change, published as a new revision the way the backend does. */
-  const commit = async () => {
-    playbackRevision += 1;
-    const next = snapshot();
-    await native.publish("playback", next);
-    return next;
+  /** A playback change, published as a new revision the way the backend does; the answer carries it. */
+  const commit = async (): Promise<Versioned<PlaybackSnapshot>> => {
+    const value = snapshot();
+    const revision = await native.publish("playback", value);
+    return { revision, value };
   };
-  const commitQueue = async (patch?: { upcoming?: LibraryTrackSummary[] }) => {
-    queueRevision += 1;
-    const next = queue(patch);
-    await native.publish("queue", next);
-    return next;
+  const commitQueue = async (patch?: {
+    upcoming?: LibraryTrackSummary[];
+  }): Promise<Versioned<PlaybackQueueSnapshot>> => {
+    const value = queue(patch);
+    const revision = await native.publish("queue", value);
+    return { revision, value };
   };
   const moveTo = async (target: number) => {
     index = target;
@@ -85,7 +82,7 @@ export function scriptPlayback(native: Native, initialSequence: LibraryTrackSumm
   };
 
   native.respond("getPlaybackQueueWindow", ({ offset, limit }) => ({
-    revision: queueRevision,
+    revision: native.revisionOf("queue"),
     offset,
     items: upcoming.slice(offset, offset + Math.min(limit, 200)).map(queueItemFor),
   }));
@@ -147,7 +144,10 @@ export function scriptPlayback(native: Native, initialSequence: LibraryTrackSumm
       rms: peaks.map((peak) => Math.round(peak * 0.6)),
     };
   };
-  native.respond("getPlaybackWaveform", () => (waveformReady && index >= 0 ? waveform() : null));
+  native.respond("getPlaybackWaveform", () => ({
+    revision: native.revisionOf("waveform"),
+    value: waveformReady && index >= 0 ? waveform() : null,
+  }));
 
   const player = {
     /** Changes what the next `startPlayback` plays: what the test expects its context to hold. */

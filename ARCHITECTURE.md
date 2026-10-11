@@ -24,13 +24,16 @@ Three layers, one direction of control.
 - **Host:** Tauri 2. It runs the Windows WebView and connects the Backend to the window and the operating system. It holds no domain rules.
 - **Backend:** a Rust crate. It owns the domain and the persistent state: the Library, Playback, and settings. It knows nothing about Tauri. See [ADR 0001](./docs/adr/0001-rust-owns-domain-and-persistent-state.md).
 
-Data flow:
+Communication: one path for requests, four for pushes.
 
-1. The Renderer calls a Host command through the `native` adapter.
-2. The Host command calls the Backend.
-3. A Backend service changes state and reports it. A state topic is sent with its whole value and revision, and an occurrence with its value.
-4. The Host reads the current value and sends it to the Renderer on one channel.
-5. The Renderer updates its caches and views.
+- **Renderer → Backend (1 path):** a command. The Renderer calls a Host command through the `native` adapter, and the Host calls the Backend. The answer is the command's return value. State answers are `Versioned`.
+- **Backend → Renderer (4 paths):**
+  1. **State:** a topic's whole value with its revision, on the `connect` channel.
+  2. **Occurrence:** a fact with its value, never merged, on the `connect` channel.
+  3. **Position:** the playing position, on the `connect` channel.
+  4. **Measurement:** meter frames, in binary, on a channel for each subscription.
+
+The Renderer updates its caches and views from these.
 
 ## Code map
 
@@ -62,7 +65,10 @@ Data flow:
 
 - The IPC contract is defined once, in the Backend. The Renderer's bindings are generated from it. Nobody edits them by hand.
 - A Host command that blocks does not run on the main thread.
-- Backend services know nothing about the Host or each other. They report through a message sink, and what each message carries is in [ADR 0008](./docs/adr/0008-backend-state-occurrences-and-measurements-on-one-channel.md).
+- Backend services know nothing about the Host or each other. They report through a message sink, and what each message carries is in [ADR 0008](./docs/adr/0008-backend-state-occurrences-and-measurements.md).
+- A state is its whole value with a revision. The Renderer keeps a value only if its revision is newer than the one it holds, whether it came on the channel or as a command answer.
+- An occurrence is a fact. It builds no state in the Renderer.
+- The Renderer subscribes, then fetches: `connect` registers the channel and returns the current values.
 - Every state that the Library stores is a closed set of values. The code and the database enforce the same set.
 - One place decides how the Library files a track (its Album Artist and album). Reads use the stored result.
 - One place builds the path of a track's file, and it keeps the path inside its Library folder.

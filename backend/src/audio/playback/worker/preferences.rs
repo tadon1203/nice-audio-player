@@ -6,7 +6,7 @@ impl PlaybackWorker {
     pub(super) fn set_volume(
         &mut self,
         volume: f32,
-    ) -> Result<PlaybackSnapshot, PlaybackServiceError> {
+    ) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
         let changed = self
             .volume_state
             .set_volume(volume)
@@ -14,19 +14,19 @@ impl PlaybackWorker {
         Ok(self.volume_changed(changed))
     }
 
-    pub(super) fn mute(&mut self) -> PlaybackSnapshot {
+    pub(super) fn mute(&mut self) -> Versioned<PlaybackSnapshot> {
         let changed = self.volume_state.mute();
         self.volume_changed(changed)
     }
 
-    pub(super) fn unmute(&mut self) -> PlaybackSnapshot {
+    pub(super) fn unmute(&mut self) -> Versioned<PlaybackSnapshot> {
         let changed = self.volume_state.unmute();
         self.volume_changed(changed)
     }
 
-    pub(super) fn volume_changed(&mut self, changed: bool) -> PlaybackSnapshot {
+    pub(super) fn volume_changed(&mut self, changed: bool) -> Versioned<PlaybackSnapshot> {
         if !changed {
-            return self.render();
+            return self.playback_versioned();
         }
         self.effective_gain
             .store(self.volume_state.effective_gain());

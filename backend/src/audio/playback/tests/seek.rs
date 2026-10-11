@@ -45,7 +45,7 @@ fn a_newer_seek_supersedes_one_still_prebuffering() {
     });
 
     assert_eq!(first.try_recv(), Ok(Err(PlaybackServiceError::Superseded)));
-    let position = session(&harness.wait_for(&second).unwrap()).position_ms;
+    let position = session(&harness.wait_for(&second).unwrap().value).position_ms;
     assert!((1_950..=2_050).contains(&position), "position {position}");
 }
 
@@ -64,7 +64,7 @@ fn other_commands_are_answered_while_a_seek_prebuffers() {
         reply,
     });
 
-    assert_eq!(volume.unwrap().base().volume, 0.25);
+    assert_eq!(volume.unwrap().value.base().volume, 0.25);
     harness.wait_for(&seek).unwrap();
 }
 

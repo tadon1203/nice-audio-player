@@ -6,7 +6,7 @@ export function createPlaybackWaveform(playbackId: () => string | null) {
   const query = createQuery(() => waveformQueryOptions(playbackId()));
   return {
     get current() {
-      return query.data ?? null;
+      return query.data?.value ?? null;
     },
   };
 }

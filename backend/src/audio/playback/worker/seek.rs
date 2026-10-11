@@ -6,7 +6,7 @@ impl PlaybackWorker {
     pub(super) fn begin_seek(
         &mut self,
         requested_position_ms: u64,
-        responder: Option<Reply<PlaybackSnapshot>>,
+        responder: Option<Reply<Versioned<PlaybackSnapshot>>>,
     ) {
         self.cancel_seek(PlaybackServiceError::Superseded);
         if let Transport::Loaded(loaded) = &mut self.transport {

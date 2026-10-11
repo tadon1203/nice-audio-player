@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn queue_revisions_grow_on_each_queue_change_and_match_the_snapshot() {
+fn queue_revisions_grow_on_each_queue_change() {
     let mut harness = Harness::new();
 
     let repeat = harness
@@ -26,8 +26,7 @@ fn queue_revisions_grow_on_each_queue_change_and_match_the_snapshot() {
     assert_eq!(repeat.revision, 1);
     assert_eq!(shuffled.revision, 2);
     assert_eq!(shuffled_again.revision, 2);
-    let versioned = harness.versioned_queue_snapshot();
-    assert_eq!((versioned.revision, versioned.value.revision), (2, 2));
+    assert_eq!(harness.versioned_queue_snapshot().revision, 2);
     // Each queue change is announced once; the repeated shuffle changes nothing and says nothing.
     assert_eq!(
         harness.sent(),
@@ -75,7 +74,8 @@ fn enqueueing_on_an_empty_queue_starts_playback_inside_the_worker() {
             next: false,
             reply,
         })
-        .unwrap();
+        .unwrap()
+        .value;
 
     assert_eq!(queue.current.map(|item| item.title), Some("a".into()));
     assert_eq!(queue.upcoming_count, 1);
@@ -96,7 +96,9 @@ fn enqueueing_nothing_on_an_empty_queue_is_refused() {
 }
 
 fn restore(harness: &mut Harness) -> Answer<PlaybackSnapshot> {
-    harness.call(|reply| PlaybackCommand::RestorePreviousQueue { reply })
+    harness
+        .call(|reply| PlaybackCommand::RestorePreviousQueue { reply })
+        .map(|versioned| versioned.value)
 }
 
 #[test]
@@ -216,7 +218,8 @@ fn the_rows_further_down_a_long_queue_are_read_when_asked_for() {
     harness.start(tracks, 0).unwrap();
     let before = harness.library.reads();
 
-    let window = harness.queue_snapshot().window(500, 50);
+    let queue = harness.versioned_queue_snapshot();
+    let window = queue.value.window(queue.revision, 500, 50);
 
     assert_eq!(window.offset, 500);
     assert_eq!(window.items.len(), 50);
@@ -263,7 +266,8 @@ fn a_current_track_that_left_the_library_is_skipped() {
             start_index: 0,
             reply,
         })
-        .unwrap();
+        .unwrap()
+        .value;
 
     assert!(is_playing(&snapshot, "b"));
     assert_eq!(harness.queue_snapshot().history_count, 0);
@@ -297,11 +301,11 @@ fn a_window_leaves_out_a_track_that_has_left_the_library_since() {
     queue
         .replace(ids, 0, &mut StdRng::seed_from_u64(1))
         .unwrap();
-    let snapshot = PlaybackQueueSnapshot::of(1, &queue, &tracks, false);
+    let snapshot = PlaybackQueueSnapshot::of(&queue, &tracks, false);
     tracks.forget();
     library.remove("t4");
 
-    let window = snapshot.window(0, 20);
+    let window = snapshot.window(1, 0, 20);
 
     assert_eq!(window.items.len(), 8, "nine upcoming, one of them gone");
     assert!(window.items.iter().all(|item| item.track_id != "t4"));
@@ -321,7 +325,7 @@ fn a_long_queue_snapshot_carries_a_prefix_and_serves_the_rest_in_windows() {
         .replace(ids, 60, &mut StdRng::seed_from_u64(1))
         .unwrap();
 
-    let snapshot = PlaybackQueueSnapshot::of(7, &queue, &tracks, false);
+    let snapshot = PlaybackQueueSnapshot::of(&queue, &tracks, false);
 
     assert_eq!(snapshot.history.len(), 50);
     assert_eq!(snapshot.history_count, 60);
@@ -332,12 +336,12 @@ fn a_long_queue_snapshot_carries_a_prefix_and_serves_the_rest_in_windows() {
     assert_eq!(snapshot.upcoming.len(), UPCOMING_IN_SNAPSHOT);
     assert_eq!(snapshot.upcoming_count as usize, total);
     assert_eq!(library.reads(), 50 + 1 + UPCOMING_IN_SNAPSHOT);
-    let window = snapshot.window(UPCOMING_IN_SNAPSHOT, 500);
+    let window = snapshot.window(7, UPCOMING_IN_SNAPSHOT, 500);
     assert_eq!(window.revision, 7);
     assert_eq!(window.offset as usize, UPCOMING_IN_SNAPSHOT);
     assert_eq!(window.items.len(), 150);
     assert_eq!(window.items[0].title, "t261.flac");
-    assert!(snapshot.window(total + 10, 5).items.is_empty());
+    assert!(snapshot.window(7, total + 10, 5).items.is_empty());
 }
 
 /// A track whose file does not exist: fine to queue and show, unplayable.

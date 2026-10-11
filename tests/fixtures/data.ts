@@ -225,7 +225,6 @@ export const defaultSettings: Appearance = { artworkBackdrop: true, calmMotion: 
 export const stoppedPlayback: PlaybackSnapshot = {
   status: "stopped",
   base: {
-    revision: 1,
     volume: 0.72,
     muted: false,
     outputSelection: { kind: "systemDefault" },
@@ -236,7 +235,6 @@ export const stoppedPlayback: PlaybackSnapshot = {
 };
 
 export const emptyQueue: PlaybackQueueSnapshot = {
-  revision: 1,
   current: null,
   history: [],
   historyCount: 0,
@@ -289,7 +287,7 @@ export function idleResponses() {
       offset,
       items: [],
     }),
-    getPlaybackWaveform: null,
+    getPlaybackWaveform: { revision: 0, value: null },
     listAudioOutputDevices: outputDevices,
     getLibraryStatus: { status: "ready" as const },
     getTrackLyrics: ({ trackId }: { trackId: string }) => ({
@@ -325,7 +323,6 @@ export function playbackItemFor(track: LibraryTrackSummary): PlaybackItem {
 }
 
 type PlayingFields = {
-  revision: number;
   status: "playing" | "paused";
   item: PlaybackItem;
   positionMs: number;
@@ -349,7 +346,6 @@ export function playingSnapshot(fields: PlayingFields): PlaybackSnapshot {
   return {
     status: fields.status,
     base: {
-      revision: fields.revision,
       volume: fields.volume,
       muted: fields.muted,
       outputSelection: fields.outputSelection,

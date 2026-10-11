@@ -163,8 +163,7 @@ test("clearing the upcoming tracks can be undone", async ({ page, native, player
   native.respond("clearQueue", () => player.queue({ upcoming: [] }));
   native.respond("restorePreviousQueue", async () => {
     await player.queue({ upcoming: rest });
-    return playingSnapshot({
-      revision: 100,
+    const value = playingSnapshot({
       status: "playing",
       item: playbackItemFor(library.tracks[0]!),
       positionMs: 12_000,
@@ -175,6 +174,7 @@ test("clearing the upcoming tracks can be undone", async ({ page, native, player
       canGoPrevious: false,
       canGoNext: true,
     });
+    return { revision: await native.publish("playback", value), value };
   });
   const dock = await playFirstTrack(page);
   await dock.getByRole("button", { name: "Queue", exact: true }).click();

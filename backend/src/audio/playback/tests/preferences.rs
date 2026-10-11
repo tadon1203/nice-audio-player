@@ -9,7 +9,10 @@ fn volume_commands_update_the_snapshot_and_the_gain() {
     let changed = harness
         .call(|reply| PlaybackCommand::SetVolume { volume: 0.5, reply })
         .unwrap();
-    assert_eq!((changed.base().volume, changed.base().muted), (0.5, false));
+    assert_eq!(
+        (changed.value.base().volume, changed.value.base().muted),
+        (0.5, false)
+    );
     assert_eq!(harness.gain.load(), 0.5);
 
     let before_invalid = harness.snapshot();
@@ -25,11 +28,17 @@ fn volume_commands_update_the_snapshot_and_the_gain() {
     let muted = harness
         .call(|reply| PlaybackCommand::Mute { reply })
         .unwrap();
-    assert_eq!((muted.base().volume, muted.base().muted), (0.5, true));
+    assert_eq!(
+        (muted.value.base().volume, muted.value.base().muted),
+        (0.5, true)
+    );
     assert_eq!(harness.gain.load(), 0.0);
     let unmuted = harness
         .call(|reply| PlaybackCommand::Unmute { reply })
         .unwrap();
-    assert_eq!((unmuted.base().volume, unmuted.base().muted), (0.5, false));
+    assert_eq!(
+        (unmuted.value.base().volume, unmuted.value.base().muted),
+        (0.5, false)
+    );
     assert_eq!(harness.gain.load(), 0.5);
 }

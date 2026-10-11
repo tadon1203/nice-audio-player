@@ -13,6 +13,7 @@ use crate::audio::devices::AudioOutputSelection;
 use crate::audio::output::{OutputStream, OutputStreamId, PipelineId, PreparedOutputConfig};
 use crate::audio::pcm_queue::PcmConsumer;
 use crate::audio::timebase::{frame_to_millis, millis_to_frame};
+use crate::messages::Versioned;
 use cpal::StreamInstant;
 
 pub(super) const POSITION_UPDATE_INTERVAL: Duration = Duration::from_secs(1);
@@ -38,7 +39,7 @@ pub(super) struct StartRequest {
     pub id: PlaybackId,
     pub item: PlaybackItem,
     /// `None` for starts the worker begins on its own (skipping on, the next track, a device switch).
-    pub responder: Option<Reply<PlaybackSnapshot>>,
+    pub responder: Option<Reply<Versioned<PlaybackSnapshot>>>,
     pub start_paused: bool,
     /// Where to seek to once playing, after a device switch restarted the track.
     pub resume_at_ms: Option<u64>,
@@ -214,7 +215,7 @@ pub(super) struct SeekInFlight {
     pub output_base_frame: u64,
     pub remaining_frames: u64,
     pub duration_ms: u64,
-    pub responder: Option<Reply<PlaybackSnapshot>>,
+    pub responder: Option<Reply<Versioned<PlaybackSnapshot>>>,
 }
 
 pub(super) fn should_publish_position(

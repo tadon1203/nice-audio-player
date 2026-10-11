@@ -158,11 +158,15 @@ impl BackendApp {
         }
     }
 
-    /// Waveform of the track that is loaded right now; `None` while it is still being analyzed
-    /// (it is requested, and a Waveform message follows) or nothing is loaded. The renderer never
-    /// names a file, so it cannot make the backend read arbitrary ones.
-    pub fn playback_waveform(&self) -> Option<PlaybackWaveform> {
-        self.loaded_waveform(|track| self.waveforms.get_or_queue(track))
+    /// Waveform of the track that is loaded right now, with the Waveform's revision; `None` while
+    /// it is still being analyzed (it is requested, and a Waveform message follows) or nothing is
+    /// loaded. The renderer never names a file, so it cannot make the backend read arbitrary ones.
+    pub fn playback_waveform(&self) -> Versioned<Option<PlaybackWaveform>> {
+        let revision = self.waveforms.revision();
+        Versioned {
+            revision,
+            value: self.loaded_waveform(|track| self.waveforms.get_or_queue(track)),
+        }
     }
 
     /// Like [`Self::playback_waveform`], but only reports a waveform that is already there.
@@ -213,7 +217,7 @@ impl BackendApp {
         &self,
         context: &PlaybackContext,
         start_track_id: Option<&str>,
-    ) -> Result<PlaybackSnapshot, PlaybackServiceError> {
+    ) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
         let library = self
             .library
             .as_ref()
@@ -235,7 +239,7 @@ impl BackendApp {
         &self,
         track_id: &str,
         next: bool,
-    ) -> Result<PlaybackQueueSnapshot, PlaybackServiceError> {
+    ) -> Result<Versioned<PlaybackQueueSnapshot>, PlaybackServiceError> {
         let library = self
             .library
             .as_ref()

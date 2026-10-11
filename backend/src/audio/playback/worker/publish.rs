@@ -6,7 +6,6 @@ impl PlaybackWorker {
     /// What listeners see, drawn from the transport, the queue and the volume.
     pub(super) fn render(&self) -> PlaybackSnapshot {
         let mut base = SnapshotBase::new(self.volume_state, self.output_selection.clone());
-        base.revision = self.revision;
         match &self.transport {
             Transport::Idle | Transport::Loading(_) => PlaybackSnapshot::Stopped {
                 base,
@@ -67,26 +66,32 @@ impl PlaybackWorker {
         }
     }
 
+    /// The transport as it stands, with the revision of its topic. A command that changes
+    /// nothing answers with it.
+    pub(super) fn playback_versioned(&self) -> Versioned<PlaybackSnapshot> {
+        Versioned {
+            revision: self.revision,
+            value: self.render(),
+        }
+    }
+
     /// Renders the transport as a new revision and tells listeners. The snapshot carries the
     /// newest position too, so a listener that joins here starts from the right place.
-    pub(super) fn publish_state(&mut self) -> PlaybackSnapshot {
+    pub(super) fn publish_state(&mut self) -> Versioned<PlaybackSnapshot> {
         if let Transport::Loaded(loaded) = &mut self.transport {
             if !loaded.paused {
                 loaded.position.frame = loaded.sample_position();
             }
         }
         self.revision = self.revision.saturating_add(1);
-        let snapshot = self.render();
-        self.store_position(snapshot.session().map(ActiveSession::position));
+        let published = self.playback_versioned();
+        self.store_position(published.value.session().map(ActiveSession::position));
         *self
             .snapshot
             .write()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = Versioned {
-            revision: self.revision,
-            value: snapshot.clone(),
-        };
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = published.clone();
         self.messages.state_changed(StateTopic::Playback);
-        snapshot
+        published
     }
 
     /// Tells listeners the loaded track moved on, without a new snapshot.
@@ -126,37 +131,35 @@ impl PlaybackWorker {
             .can_go_previous
     }
 
-    pub(super) fn publish_queue(&mut self) -> PlaybackQueueSnapshot {
+    pub(super) fn publish_queue(&mut self) -> Versioned<PlaybackQueueSnapshot> {
         self.prune_unavailable();
         self.next_queue_revision = self.next_queue_revision.saturating_add(1);
-        let snapshot = PlaybackQueueSnapshot::of(
-            self.next_queue_revision,
-            &self.queue,
-            &self.tracks,
-            self.previous_queue.is_some(),
-        );
+        let published = Versioned {
+            revision: self.next_queue_revision,
+            value: PlaybackQueueSnapshot::of(
+                &self.queue,
+                &self.tracks,
+                self.previous_queue.is_some(),
+            ),
+        };
         *self
             .queue_snapshot
             .write()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = Versioned {
-            revision: self.next_queue_revision,
-            value: snapshot.clone(),
-        };
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = published.clone();
         self.messages.state_changed(StateTopic::Queue);
-        snapshot
+        published
     }
 
-    pub(super) fn queue_snapshot(&self) -> PlaybackQueueSnapshot {
+    pub(super) fn queue_snapshot(&self) -> Versioned<PlaybackQueueSnapshot> {
         self.queue_snapshot
             .read()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .value
             .clone()
     }
 
     /// Publishes a queue change, and refreshes the transport so previous/next availability
     /// follows it even while paused.
-    pub(super) fn queue_changed(&mut self, changed: bool) -> PlaybackQueueSnapshot {
+    pub(super) fn queue_changed(&mut self, changed: bool) -> Versioned<PlaybackQueueSnapshot> {
         if !changed {
             return self.queue_snapshot();
         }

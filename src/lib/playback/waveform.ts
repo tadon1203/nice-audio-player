@@ -1,6 +1,7 @@
 import { queryOptions, skipToken, type QueryClient } from "@tanstack/svelte-query";
 import { requireNative } from "$lib/native";
-import type { PlaybackWaveform } from "$lib/native";
+import type { PlaybackWaveform, Versioned } from "$lib/native";
+import { isNewerRevision } from "$lib/utils/revision";
 
 const waveformKeys = {
   playback: (playbackId: string | null) => ["waveform", playbackId] as const,
@@ -22,10 +23,11 @@ export function waveformQueryOptions(playbackId: string | null) {
     queryFn:
       playbackId === null
         ? skipToken
-        : async () => {
+        : async (): Promise<Versioned<PlaybackWaveform> | null> => {
             const waveform = await requireNative().getPlaybackWaveform();
             // The backend answers for whatever is loaded now; keep it only under its own key.
-            return waveform?.playbackId === playbackId ? waveform : null;
+            const value = waveform.value;
+            return value?.playbackId === playbackId ? { revision: waveform.revision, value } : null;
           },
     staleTime: Infinity,
     gcTime: 0,
@@ -33,13 +35,17 @@ export function waveformQueryOptions(playbackId: string | null) {
 }
 
 /**
- * Replaces the cached waveform with a pushed one. A fetch still in flight asked before it
- * existed and would resolve with "not yet", so it is cancelled first. A playback nobody is
- * watching is not cached: it asks when it is opened.
+ * Replaces the cached waveform with a pushed one, if it is newer than the cached one. A fetch
+ * still in flight asked before it existed and would resolve with "not yet", so it is cancelled
+ * first. A playback nobody is watching is not cached: it asks when it is opened.
  */
-export function applyWaveform(client: QueryClient, waveform: PlaybackWaveform) {
-  const queryKey = waveformKeys.playback(waveform.playbackId);
+export function applyWaveform(client: QueryClient, waveform: Versioned<PlaybackWaveform | null>) {
+  const value = waveform.value;
+  if (value === null) return;
+  const queryKey = waveformKeys.playback(value.playbackId);
   if (client.getQueryState(queryKey) === undefined) return;
+  const held = client.getQueryData<Versioned<PlaybackWaveform> | null>(queryKey);
+  if (!isNewerRevision(waveform.revision, held?.revision ?? null)) return;
   void client.cancelQueries({ queryKey });
-  client.setQueryData(queryKey, waveform);
+  client.setQueryData(queryKey, { revision: waveform.revision, value });
 }

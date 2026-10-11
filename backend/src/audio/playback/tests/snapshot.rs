@@ -70,7 +70,6 @@ fn item_json() -> serde_json::Value {
 
 fn base_json() -> serde_json::Value {
     serde_json::json!({
-        "revision": 0,
         "volume": 1.0,
         "muted": false,
         "outputSelection": { "kind": "systemDefault" },

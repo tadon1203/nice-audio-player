@@ -7,10 +7,12 @@ import type {
   PlaybackRepeatMode,
   PlaybackSnapshot,
   TNativeAPI,
+  Versioned,
 } from "$lib/native";
 import { nativeErrorCode } from "$lib/native";
 import { createPlaybackClock, type PlaybackClock } from "./clock";
 import { playbackCommandErrorMessage } from "./playback-errors";
+import { isNewerRevision } from "$lib/utils/revision";
 import { clockReportOf, isActivePlayback, snapshotItem, snapshotSession } from "./snapshot";
 
 export type PlaybackNavigation = "next" | "previous";
@@ -28,13 +30,10 @@ const NOTICE_MS = 6_000;
 
 type QueuedTransport = {
   command: TransportCommand;
-  operation: () => Promise<PlaybackSnapshot>;
+  operation: () => Promise<Versioned<PlaybackSnapshot>>;
   navigation: PlaybackNavigation | null;
   settle: (done: boolean) => void;
 };
-
-const acceptsRevision = (incoming: number | null, current: number | null) =>
-  incoming === null ? current === null : current === null || incoming >= current;
 
 /**
  * Mirrors the backend's playback state. Raw fields hold what the backend said; everything a
@@ -47,7 +46,11 @@ export class Playback {
   readonly #api: TNativeAPI;
 
   snapshot = $state.raw<PlaybackSnapshot | null>(null);
+  /** The revision the held snapshot was published with. */
+  playbackRevision = $state.raw<number | null>(null);
   queue = $state.raw<PlaybackQueueSnapshot | null>(null);
+  /** The revision the held queue was published with. */
+  queueRevision = $state.raw<number | null>(null);
   /** The loaded track, or the last one that played. Replaced only when the queue item changes. */
   item = $state.raw<PlaybackItem | null>(null);
   /** How the current item was reached: Next/Previous, or anything else (counts as "next"). */
@@ -112,8 +115,9 @@ export class Playback {
     this.error = error ? playbackCommandErrorMessage(error) : null;
   }
 
-  acceptPlayback(snapshot: PlaybackSnapshot) {
-    if (!acceptsRevision(snapshot.base.revision, this.snapshot?.base.revision ?? null)) return;
+  /** Keeps the snapshot only if it is newer than the held one. Command responses come here too. */
+  acceptPlayback({ revision, value: snapshot }: Versioned<PlaybackSnapshot>) {
+    if (!isNewerRevision(revision, this.playbackRevision)) return;
     const incoming = snapshotItem(snapshot);
     const itemChanged = incoming?.queueItemId !== this.item?.queueItemId;
     if (itemChanged) {
@@ -121,6 +125,7 @@ export class Playback {
       this.#pendingNavigation = null;
       this.item = incoming;
     }
+    this.playbackRevision = revision;
     this.snapshot = snapshot;
     this.clock.accept(clockReportOf(snapshot));
     if (snapshot.status === "failed" && snapshot.skipping) this.#noteSkip(snapshot.item);
@@ -163,9 +168,11 @@ export class Playback {
     await this.#runTransport("start", () => this.#api.restorePreviousQueue());
   }
 
-  acceptQueue(queue: PlaybackQueueSnapshot) {
-    if (!acceptsRevision(queue.revision, this.queue?.revision ?? null)) return;
-    this.queue = queue;
+  /** Keeps the queue only if it is newer than the held one. Command responses come here too. */
+  acceptQueue({ revision, value }: Versioned<PlaybackQueueSnapshot>) {
+    if (!isNewerRevision(revision, this.queueRevision)) return;
+    this.queueRevision = revision;
+    this.queue = value;
   }
 
   /**
@@ -186,7 +193,7 @@ export class Playback {
    */
   #runTransport(
     command: TransportCommand,
-    operation: () => Promise<PlaybackSnapshot>,
+    operation: () => Promise<Versioned<PlaybackSnapshot>>,
     navigation: PlaybackNavigation | null = null,
   ): Promise<boolean> {
     if (this.transportPending === null) {
@@ -200,7 +207,7 @@ export class Playback {
 
   async #performTransport(
     command: TransportCommand,
-    operation: () => Promise<PlaybackSnapshot>,
+    operation: () => Promise<Versioned<PlaybackSnapshot>>,
     navigation: PlaybackNavigation | null,
   ): Promise<boolean> {
     this.transportPending = command;
@@ -225,7 +232,9 @@ export class Playback {
     }
   }
 
-  async #runQueueCommand(operation: () => Promise<PlaybackQueueSnapshot>): Promise<boolean> {
+  async #runQueueCommand(
+    operation: () => Promise<Versioned<PlaybackQueueSnapshot>>,
+  ): Promise<boolean> {
     this.error = null;
     try {
       this.acceptQueue(await operation());
@@ -259,7 +268,7 @@ export class Playback {
   }
 
   /** Applies the playback and queue that `connect` returned: the first state the Renderer holds. */
-  initialize(snapshot: PlaybackSnapshot, queue: PlaybackQueueSnapshot) {
+  initialize(snapshot: Versioned<PlaybackSnapshot>, queue: Versioned<PlaybackQueueSnapshot>) {
     this.acceptPlayback(snapshot);
     this.acceptQueue(queue);
     this.connection = "ready";

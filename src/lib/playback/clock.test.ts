@@ -37,7 +37,6 @@ const session = (id: string, positionMs: number, seekRevision = 0): ActiveSessio
   resamplingActive: false,
 });
 
-let revision = 0;
 const snapshot = (
   status: "playing" | "paused",
   id: string,
@@ -46,7 +45,6 @@ const snapshot = (
 ): PlaybackSnapshot => ({
   status,
   base: {
-    revision: (revision += 1),
     volume: 1,
     muted: false,
     outputSelection: { kind: "systemDefault" },

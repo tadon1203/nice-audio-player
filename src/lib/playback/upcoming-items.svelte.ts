@@ -21,9 +21,9 @@ export function createUpcomingItems(
 
   $effect(() => {
     const queue = playback.queue;
+    const revision = playback.queueRevision;
     const visible = range();
-    if (queue === null || visible === null) return;
-    const revision = queue.revision;
+    if (queue === null || revision === null || visible === null) return;
     const total = queue.upcomingCount;
     const { start, end } = visible;
     const first = Math.max(start, queue.upcoming.length);
@@ -51,7 +51,7 @@ export function createUpcomingItems(
       const queue = playback.queue;
       const prefix = queue?.upcoming ?? [];
       if (index < prefix.length) return prefix[index];
-      if (loaded.revision !== (queue?.revision ?? null)) return undefined;
+      if (loaded.revision !== playback.queueRevision) return undefined;
       return loaded.chunks.get(Math.floor(index / CHUNK))?.[index % CHUNK];
     },
   };

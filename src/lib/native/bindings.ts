@@ -13,41 +13,36 @@ export const commands = {
 	 *  Replaces the queue with `context` and plays from `start_track_id`, or from the context's
 	 *  first track when it is `None`.
 	 */
-	startPlayback: (context: PlaybackContext, startTrackId: string | null) => __TAURI_INVOKE<PlaybackSnapshot>("start_playback", { context, startTrackId }),
-	pausePlayback: () => __TAURI_INVOKE<PlaybackSnapshot>("pause_playback"),
-	resumePlayback: () => __TAURI_INVOKE<PlaybackSnapshot>("resume_playback"),
-	previousPlayback: () => __TAURI_INVOKE<PlaybackSnapshot>("previous_playback"),
-	nextPlayback: () => __TAURI_INVOKE<PlaybackSnapshot>("next_playback"),
-	seekPlayback: (positionMs: number) => __TAURI_INVOKE<PlaybackSnapshot>("seek_playback", { positionMs }),
-	setPlaybackVolume: (volume: number) => __TAURI_INVOKE<PlaybackSnapshot>("set_playback_volume", { volume }),
-	setPlaybackMuted: (muted: boolean) => __TAURI_INVOKE<PlaybackSnapshot>("set_playback_muted", { muted }),
+	startPlayback: (context: PlaybackContext, startTrackId: string | null) => __TAURI_INVOKE<Versioned<PlaybackSnapshot>>("start_playback", { context, startTrackId }),
+	pausePlayback: () => __TAURI_INVOKE<Versioned<PlaybackSnapshot>>("pause_playback"),
+	resumePlayback: () => __TAURI_INVOKE<Versioned<PlaybackSnapshot>>("resume_playback"),
+	previousPlayback: () => __TAURI_INVOKE<Versioned<PlaybackSnapshot>>("previous_playback"),
+	nextPlayback: () => __TAURI_INVOKE<Versioned<PlaybackSnapshot>>("next_playback"),
+	seekPlayback: (positionMs: number) => __TAURI_INVOKE<Versioned<PlaybackSnapshot>>("seek_playback", { positionMs }),
+	setPlaybackVolume: (volume: number) => __TAURI_INVOKE<Versioned<PlaybackSnapshot>>("set_playback_volume", { volume }),
+	setPlaybackMuted: (muted: boolean) => __TAURI_INVOKE<Versioned<PlaybackSnapshot>>("set_playback_muted", { muted }),
 	listAudioOutputDevices: () => __TAURI_INVOKE<AudioOutputDevice[]>("list_audio_output_devices"),
-	setPlaybackRepeatMode: (mode: PlaybackRepeatMode) => __TAURI_INVOKE<PlaybackQueueSnapshot>("set_playback_repeat_mode", { mode }),
-	setPlaybackShuffle: (enabled: boolean) => __TAURI_INVOKE<PlaybackQueueSnapshot>("set_playback_shuffle", { enabled }),
+	setPlaybackRepeatMode: (mode: PlaybackRepeatMode) => __TAURI_INVOKE<Versioned<PlaybackQueueSnapshot>>("set_playback_repeat_mode", { mode }),
+	setPlaybackShuffle: (enabled: boolean) => __TAURI_INVOKE<Versioned<PlaybackQueueSnapshot>>("set_playback_shuffle", { enabled }),
 	/**  Switches the output device; a loaded track restarts on it at the same position. */
-	setAudioOutputSelection: (selection: AudioOutputSelection) => __TAURI_INVOKE<PlaybackSnapshot>("set_audio_output_selection", { selection }),
-	removeQueueItem: (id: string) => __TAURI_INVOKE<PlaybackQueueSnapshot>("remove_queue_item", { id }),
-	moveQueueItem: (id: string, to: number) => __TAURI_INVOKE<PlaybackQueueSnapshot>("move_queue_item", { id, to }),
+	setAudioOutputSelection: (selection: AudioOutputSelection) => __TAURI_INVOKE<Versioned<PlaybackSnapshot>>("set_audio_output_selection", { selection }),
+	removeQueueItem: (id: string) => __TAURI_INVOKE<Versioned<PlaybackQueueSnapshot>>("remove_queue_item", { id }),
+	moveQueueItem: (id: string, to: number) => __TAURI_INVOKE<Versioned<PlaybackQueueSnapshot>>("move_queue_item", { id, to }),
 	/**  Makes an upcoming queue item current and plays it. */
-	playQueueItem: (id: string) => __TAURI_INVOKE<PlaybackSnapshot>("play_queue_item", { id }),
+	playQueueItem: (id: string) => __TAURI_INVOKE<Versioned<PlaybackSnapshot>>("play_queue_item", { id }),
 	/**
 	 *  Adds a library track to the queue: right after the current one (`next`) or at the end.
 	 *  With nothing queued it starts playing.
 	 */
-	enqueueTrack: (trackId: string, next: boolean) => __TAURI_INVOKE<PlaybackQueueSnapshot>("enqueue_track", { trackId, next }),
-	clearQueue: () => __TAURI_INVOKE<PlaybackQueueSnapshot>("clear_queue"),
+	enqueueTrack: (trackId: string, next: boolean) => __TAURI_INVOKE<Versioned<PlaybackQueueSnapshot>>("enqueue_track", { trackId, next }),
+	clearQueue: () => __TAURI_INVOKE<Versioned<PlaybackQueueSnapshot>>("clear_queue"),
 	/**  Puts back the queue the last replacement or Clear upcoming took away. */
-	restorePreviousQueue: () => __TAURI_INVOKE<PlaybackSnapshot>("restore_previous_queue"),
+	restorePreviousQueue: () => __TAURI_INVOKE<Versioned<PlaybackSnapshot>>("restore_previous_queue"),
 	/**
-	 *  Waveform of the loaded track, or `None` while it is analyzed; the channel carries each waveform
-	 *  the Backend has, as a state message.
+	 *  Waveform of the loaded track, or `None` while it is analyzed, with the Waveform's revision; the
+	 *  channel carries each waveform the Backend has, as a state message.
 	 */
-	getPlaybackWaveform: () => __TAURI_INVOKE<{
-	/**  The playback the waveform belongs to, so a late answer cannot be drawn for another track. */
-	playbackId: string,
-	peaks: number[],
-	rms: number[],
-} | null>("get_playback_waveform"),
+	getPlaybackWaveform: () => __TAURI_INVOKE<Versioned<PlaybackWaveform | null>>("get_playback_waveform"),
 	getLibraryStatus: () => __TAURI_INVOKE<LibraryStatus>("get_library_status"),
 	/**  Moves the library database aside and restarts the app, which recreates it and rescans. */
 	resetLibraryAndRescan: () => __TAURI_INVOKE<null>("reset_library_and_rescan"),
@@ -501,7 +496,6 @@ export type PlaybackQueueItem = {
  *  library-sized queue never crosses the IPC boundary in one piece.
  */
 export type PlaybackQueueSnapshot = {
-	revision: number,
 	current: PlaybackQueueItem | null,
 	/**  The most recently played items, oldest first. */
 	history: PlaybackQueueItem[],
@@ -562,7 +556,6 @@ export type SettingsPatch = {
 
 /**  Fields every transport state carries. */
 export type SnapshotBase = {
-	revision: number,
 	volume: number,
 	muted: boolean,
 	outputSelection: AudioOutputSelection,

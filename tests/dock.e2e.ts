@@ -1,5 +1,5 @@
 import { type Page } from "@playwright/test";
-import { albumSequence } from "./fixtures/data";
+import { albumSequence, playbackItemFor, playingSnapshot, stoppedPlayback } from "./fixtures/data";
 import { motionMs } from "./fixtures/motion";
 import { expect, test } from "./fixtures/test";
 import { workspaceViewport } from "./fixtures/locators";
@@ -334,6 +334,38 @@ test("the progress line and the elapsed time share one centre line", async ({ pa
   const centre = (box: { y: number; height: number }) => box.y + box.height / 2;
   expect(Math.abs(centre(line) - centre(elapsed))).toBeLessThanOrEqual(0.5);
   expect(Math.abs(centre(line) - centre(remaining))).toBeLessThanOrEqual(0.5);
+});
+
+test("a command answer older than the state on screen does not change the dock", async ({
+  page,
+  native,
+  library,
+}) => {
+  const second = albumSequence(library)[1]!;
+  native.respond("pausePlayback", async () => {
+    // The newer state reaches the Renderer first; the answer to Pause is older and says stopped.
+    await native.publish(
+      "playback",
+      playingSnapshot({
+        status: "playing",
+        item: playbackItemFor(second),
+        positionMs: 0,
+        seekRevision: 0,
+        volume: 0.72,
+        muted: false,
+        outputSelection: { kind: "systemDefault" },
+        canGoPrevious: true,
+        canGoNext: false,
+      }),
+    );
+    return { revision: 1, value: stoppedPlayback };
+  });
+  const dock = await playFirstTrack(page);
+
+  await dock.getByRole("button", { name: "Pause", exact: true }).click();
+
+  await expect(dock.getByText("Track 002", { exact: true })).toBeVisible();
+  await expect(dock.getByRole("button", { name: "Pause", exact: true })).toBeEnabled();
 });
 
 test("position ticks redraw neither the signal path nor the volume row", async ({

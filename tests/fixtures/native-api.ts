@@ -172,13 +172,23 @@ export class Native {
     ] as const);
   }
 
-  /** Publishes a new value of a state topic: the next revision of it, sent as a state message. */
+  /**
+   * Publishes a new value of a state topic: the next revision of it, sent as a state message.
+   * Returns that revision, so a command that answers with the same value can carry it.
+   */
   async publish<Topic extends keyof InitialState>(
     topic: Topic,
     value: InitialState[Topic]["value"],
-  ) {
-    const revision = this.#state[topic].revision + 1;
-    await this.send({ kind: "state", revision, topic, value } as BackendMessage);
+  ): Promise<number> {
+    const revision = this.revisionOf(topic);
+    const next = revision + 1;
+    await this.send({ kind: "state", revision: next, topic, value } as BackendMessage);
+    return next;
+  }
+
+  /** The revision of a state topic as the Backend last published it. */
+  revisionOf(topic: keyof InitialState): number {
+    return this.#state[topic].revision;
   }
 
   /** Sends one binary message down the channel the renderer passed to its latest call of `name`. */

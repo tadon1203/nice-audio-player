@@ -6,10 +6,13 @@ for (const width of [640, 1360]) {
     page,
     native,
   }) => {
-    native.respond("setAudioOutputSelection", ({ selection }) => ({
-      ...stoppedPlayback,
-      base: { ...stoppedPlayback.base, revision: 50, outputSelection: selection },
-    }));
+    native.respond("setAudioOutputSelection", async ({ selection }) => {
+      const value = {
+        ...stoppedPlayback,
+        base: { ...stoppedPlayback.base, outputSelection: selection },
+      };
+      return { revision: await native.publish("playback", value), value };
+    });
     await page.setViewportSize({ width, height: 1000 });
     await page.goto("/settings");
     await page.evaluate(() => (document.documentElement.style.fontSize = "200%"));

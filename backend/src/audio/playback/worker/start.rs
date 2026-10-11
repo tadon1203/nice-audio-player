@@ -8,7 +8,7 @@ impl PlaybackWorker {
         &mut self,
         track_ids: Vec<String>,
         start_index: usize,
-        reply: Reply<PlaybackSnapshot>,
+        reply: Reply<Versioned<PlaybackSnapshot>>,
     ) {
         if self.replace_queue(track_ids, start_index).is_err() {
             let _ = reply.send(Err(PlaybackServiceError::InvalidPlaybackState));
@@ -35,7 +35,7 @@ impl PlaybackWorker {
 
     /// Puts back the queue the last replacement or Clear upcoming took away. When the same item
     /// is still current, it keeps playing; otherwise the restored current item starts.
-    pub(super) fn restore_previous_queue(&mut self, reply: Reply<PlaybackSnapshot>) {
+    pub(super) fn restore_previous_queue(&mut self, reply: Reply<Versioned<PlaybackSnapshot>>) {
         let Some(previous) = self.previous_queue.take() else {
             let _ = reply.send(Err(PlaybackServiceError::InvalidPlaybackState));
             return;
@@ -60,7 +60,7 @@ impl PlaybackWorker {
     pub(super) fn start_enqueued(
         &mut self,
         track_ids: Vec<String>,
-        reply: Reply<PlaybackQueueSnapshot>,
+        reply: Reply<Versioned<PlaybackQueueSnapshot>>,
     ) {
         if self.replace_queue(track_ids, 0).is_err() {
             let _ = reply.send(Err(PlaybackServiceError::InvalidPlaybackState));
@@ -75,7 +75,7 @@ impl PlaybackWorker {
     pub(super) fn new_start(
         &mut self,
         item: PlaybackItem,
-        responder: Option<Reply<PlaybackSnapshot>>,
+        responder: Option<Reply<Versioned<PlaybackSnapshot>>>,
         start_paused: bool,
     ) -> StartRequest {
         StartRequest {
@@ -91,7 +91,7 @@ impl PlaybackWorker {
     /// Starts whatever the queue points at, after telling listeners where the queue stands.
     pub(super) fn start_current(
         &mut self,
-        responder: Option<Reply<PlaybackSnapshot>>,
+        responder: Option<Reply<Versioned<PlaybackSnapshot>>>,
         start_paused: bool,
     ) {
         if self.queue.current().is_none() {
@@ -361,7 +361,11 @@ impl PlaybackWorker {
         }
     }
 
-    pub(super) fn navigate(&mut self, reason: AdvanceReason, reply: Reply<PlaybackSnapshot>) {
+    pub(super) fn navigate(
+        &mut self,
+        reason: AdvanceReason,
+        reply: Reply<Versioned<PlaybackSnapshot>>,
+    ) {
         if reason == AdvanceReason::UserPrevious {
             if let Transport::Loaded(loaded) = &self.transport {
                 if previous_restarts_track(loaded.position_ms(), loaded.position.duration_ms) {
@@ -373,7 +377,7 @@ impl PlaybackWorker {
         let paused = matches!(&self.transport, Transport::Loaded(loaded) if loaded.paused);
         self.skipped_in_a_row = 0;
         if self.queue.advance(reason, &mut self.rng).is_none() {
-            let _ = reply.send(Ok(self.render()));
+            let _ = reply.send(Ok(self.playback_versioned()));
             return;
         }
         self.start_current(Some(reply), paused);

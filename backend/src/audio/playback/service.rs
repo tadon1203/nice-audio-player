@@ -125,73 +125,73 @@ pub(super) enum PlaybackCommand {
     Start {
         track_ids: Vec<String>,
         start_index: usize,
-        reply: Reply<PlaybackSnapshot>,
+        reply: Reply<Versioned<PlaybackSnapshot>>,
     },
     Previous {
-        reply: Reply<PlaybackSnapshot>,
+        reply: Reply<Versioned<PlaybackSnapshot>>,
     },
     Next {
-        reply: Reply<PlaybackSnapshot>,
+        reply: Reply<Versioned<PlaybackSnapshot>>,
     },
     Pause {
-        reply: Reply<PlaybackSnapshot>,
+        reply: Reply<Versioned<PlaybackSnapshot>>,
     },
     Resume {
-        reply: Reply<PlaybackSnapshot>,
+        reply: Reply<Versioned<PlaybackSnapshot>>,
     },
     Seek {
         position_ms: u64,
-        reply: Reply<PlaybackSnapshot>,
+        reply: Reply<Versioned<PlaybackSnapshot>>,
     },
     SetVolume {
         volume: f32,
-        reply: Reply<PlaybackSnapshot>,
+        reply: Reply<Versioned<PlaybackSnapshot>>,
     },
     Mute {
-        reply: Reply<PlaybackSnapshot>,
+        reply: Reply<Versioned<PlaybackSnapshot>>,
     },
     Unmute {
-        reply: Reply<PlaybackSnapshot>,
+        reply: Reply<Versioned<PlaybackSnapshot>>,
     },
     SetOutputSelection {
         selection: AudioOutputSelection,
-        reply: Reply<PlaybackSnapshot>,
+        reply: Reply<Versioned<PlaybackSnapshot>>,
     },
     SetRepeatMode {
         mode: PlaybackRepeatMode,
-        reply: Reply<PlaybackQueueSnapshot>,
+        reply: Reply<Versioned<PlaybackQueueSnapshot>>,
     },
     SetShuffle {
         enabled: bool,
-        reply: Reply<PlaybackQueueSnapshot>,
+        reply: Reply<Versioned<PlaybackQueueSnapshot>>,
     },
     RemoveQueueItem {
         id: String,
-        reply: Reply<PlaybackQueueSnapshot>,
+        reply: Reply<Versioned<PlaybackQueueSnapshot>>,
     },
     MoveQueueItem {
         id: String,
         /// Position in the upcoming list, 0 being next up.
         to: usize,
-        reply: Reply<PlaybackQueueSnapshot>,
+        reply: Reply<Versioned<PlaybackQueueSnapshot>>,
     },
     ClearQueue {
-        reply: Reply<PlaybackQueueSnapshot>,
+        reply: Reply<Versioned<PlaybackQueueSnapshot>>,
     },
     /// Puts back the queue the last replacement (or Clear upcoming) took away.
     RestorePreviousQueue {
-        reply: Reply<PlaybackSnapshot>,
+        reply: Reply<Versioned<PlaybackSnapshot>>,
     },
     /// Makes an upcoming item current and plays it.
     PlayQueueItem {
         id: String,
-        reply: Reply<PlaybackSnapshot>,
+        reply: Reply<Versioned<PlaybackSnapshot>>,
     },
     Enqueue {
         track_ids: Vec<String>,
         /// Right after the current item rather than at the end.
         next: bool,
-        reply: Reply<PlaybackQueueSnapshot>,
+        reply: Reply<Versioned<PlaybackQueueSnapshot>>,
     },
 }
 
@@ -250,7 +250,6 @@ impl PlaybackService {
             item: None,
         })));
         let queue_state = Arc::new(RwLock::new(Versioned::new(PlaybackQueueSnapshot::empty(
-            0,
             queue.repeat(),
             queue.shuffle(),
         ))));
@@ -370,7 +369,8 @@ impl PlaybackServiceHandle {
     /// library, so it blocks like the other requests.
     pub fn queue_window(&self, offset: usize, limit: usize) -> PlaybackQueueWindow {
         // Copy the snapshot out first: the library is read without holding the worker's lock.
-        self.queue_snapshot().window(offset, limit)
+        let queue = self.versioned_queue_snapshot();
+        queue.value.window(queue.revision, offset, limit)
     }
 
     /// Replaces the queue with the tracks `track_ids` (in play order) and starts the one at
@@ -379,7 +379,7 @@ impl PlaybackServiceHandle {
         &self,
         track_ids: Vec<String>,
         start_index: usize,
-    ) -> Result<PlaybackSnapshot, PlaybackServiceError> {
+    ) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
         self.request(|reply| PlaybackCommand::Start {
             track_ids,
             start_index,
@@ -387,63 +387,69 @@ impl PlaybackServiceHandle {
         })
     }
 
-    pub fn previous(&self) -> Result<PlaybackSnapshot, PlaybackServiceError> {
+    pub fn previous(&self) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
         self.request(|reply| PlaybackCommand::Previous { reply })
     }
 
-    pub fn next(&self) -> Result<PlaybackSnapshot, PlaybackServiceError> {
+    pub fn next(&self) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
         self.request(|reply| PlaybackCommand::Next { reply })
     }
 
-    pub fn pause(&self) -> Result<PlaybackSnapshot, PlaybackServiceError> {
+    pub fn pause(&self) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
         self.request(|reply| PlaybackCommand::Pause { reply })
     }
 
-    pub fn resume(&self) -> Result<PlaybackSnapshot, PlaybackServiceError> {
+    pub fn resume(&self) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
         self.request(|reply| PlaybackCommand::Resume { reply })
     }
 
-    pub fn seek(&self, position_ms: u64) -> Result<PlaybackSnapshot, PlaybackServiceError> {
+    pub fn seek(
+        &self,
+        position_ms: u64,
+    ) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
         self.request(|reply| PlaybackCommand::Seek { position_ms, reply })
     }
 
-    pub fn set_volume(&self, volume: f32) -> Result<PlaybackSnapshot, PlaybackServiceError> {
+    pub fn set_volume(
+        &self,
+        volume: f32,
+    ) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
         self.request(|reply| PlaybackCommand::SetVolume { volume, reply })
     }
 
-    pub fn mute(&self) -> Result<PlaybackSnapshot, PlaybackServiceError> {
+    pub fn mute(&self) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
         self.request(|reply| PlaybackCommand::Mute { reply })
     }
 
-    pub fn unmute(&self) -> Result<PlaybackSnapshot, PlaybackServiceError> {
+    pub fn unmute(&self) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
         self.request(|reply| PlaybackCommand::Unmute { reply })
     }
 
     pub fn set_output_selection(
         &self,
         selection: AudioOutputSelection,
-    ) -> Result<PlaybackSnapshot, PlaybackServiceError> {
+    ) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
         self.request(|reply| PlaybackCommand::SetOutputSelection { selection, reply })
     }
 
     pub fn set_repeat_mode(
         &self,
         mode: PlaybackRepeatMode,
-    ) -> Result<PlaybackQueueSnapshot, PlaybackServiceError> {
+    ) -> Result<Versioned<PlaybackQueueSnapshot>, PlaybackServiceError> {
         self.request(|reply| PlaybackCommand::SetRepeatMode { mode, reply })
     }
 
     pub fn set_shuffle(
         &self,
         enabled: bool,
-    ) -> Result<PlaybackQueueSnapshot, PlaybackServiceError> {
+    ) -> Result<Versioned<PlaybackQueueSnapshot>, PlaybackServiceError> {
         self.request(|reply| PlaybackCommand::SetShuffle { enabled, reply })
     }
 
     pub fn remove_queue_item(
         &self,
         id: String,
-    ) -> Result<PlaybackQueueSnapshot, PlaybackServiceError> {
+    ) -> Result<Versioned<PlaybackQueueSnapshot>, PlaybackServiceError> {
         self.request(|reply| PlaybackCommand::RemoveQueueItem { id, reply })
     }
 
@@ -451,11 +457,14 @@ impl PlaybackServiceHandle {
         &self,
         id: String,
         to: usize,
-    ) -> Result<PlaybackQueueSnapshot, PlaybackServiceError> {
+    ) -> Result<Versioned<PlaybackQueueSnapshot>, PlaybackServiceError> {
         self.request(|reply| PlaybackCommand::MoveQueueItem { id, to, reply })
     }
 
-    pub fn play_queue_item(&self, id: String) -> Result<PlaybackSnapshot, PlaybackServiceError> {
+    pub fn play_queue_item(
+        &self,
+        id: String,
+    ) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
         self.request(|reply| PlaybackCommand::PlayQueueItem { id, reply })
     }
 
@@ -465,7 +474,7 @@ impl PlaybackServiceHandle {
         &self,
         track_ids: Vec<String>,
         next: bool,
-    ) -> Result<PlaybackQueueSnapshot, PlaybackServiceError> {
+    ) -> Result<Versioned<PlaybackQueueSnapshot>, PlaybackServiceError> {
         self.request(|reply| PlaybackCommand::Enqueue {
             track_ids,
             next,
@@ -473,12 +482,14 @@ impl PlaybackServiceHandle {
         })
     }
 
-    pub fn clear_queue(&self) -> Result<PlaybackQueueSnapshot, PlaybackServiceError> {
+    pub fn clear_queue(&self) -> Result<Versioned<PlaybackQueueSnapshot>, PlaybackServiceError> {
         self.request(|reply| PlaybackCommand::ClearQueue { reply })
     }
 
     /// Puts back the queue before the last replacement, playing the item that was current.
-    pub fn restore_previous_queue(&self) -> Result<PlaybackSnapshot, PlaybackServiceError> {
+    pub fn restore_previous_queue(
+        &self,
+    ) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
         self.request(|reply| PlaybackCommand::RestorePreviousQueue { reply })
     }
 

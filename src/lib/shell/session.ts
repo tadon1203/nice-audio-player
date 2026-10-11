@@ -34,16 +34,16 @@ export function startNativeSession({
     if (message.kind === "occurrence") return;
     switch (message.topic) {
       case "playback":
-        playback.acceptPlayback(message.value);
+        playback.acceptPlayback({ revision: message.revision, value: message.value });
         return;
       case "queue":
-        playback.acceptQueue(message.value);
+        playback.acceptQueue({ revision: message.revision, value: message.value });
         return;
       case "libraryScan":
         watchScan(message.value);
         return;
       case "waveform":
-        if (message.value !== null) applyWaveform(queryClient, message.value);
+        applyWaveform(queryClient, { revision: message.revision, value: message.value });
         return;
       case "appearance":
         settings.accept(message.value);
@@ -60,10 +60,10 @@ export function startNativeSession({
     })
     .then(
       (initial) => {
-        playback.initialize(initial.playback.value, initial.queue.value);
+        playback.initialize(initial.playback, initial.queue);
         settings.accept(initial.appearance.value);
         watchScan(initial.libraryScan.value);
-        if (initial.waveform.value !== null) applyWaveform(queryClient, initial.waveform.value);
+        applyWaveform(queryClient, initial.waveform);
         for (const message of early ?? []) apply(message);
         early = null;
         // Counted once the state is applied, so a count says the backend answered.

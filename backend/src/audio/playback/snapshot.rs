@@ -14,7 +14,6 @@ use std::sync::Arc;
 #[derive(Debug, Clone, PartialEq, serde::Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct SnapshotBase {
-    pub revision: u64,
     pub volume: f32,
     pub muted: bool,
     pub output_selection: AudioOutputSelection,
@@ -25,7 +24,6 @@ pub struct SnapshotBase {
 impl SnapshotBase {
     pub(super) fn new(volume: VolumeState, output_selection: AudioOutputSelection) -> Self {
         Self {
-            revision: 0,
             volume: volume.volume(),
             muted: volume.muted(),
             output_selection,
@@ -117,10 +115,6 @@ impl PlaybackSnapshot {
             | Self::Paused { base, .. }
             | Self::Failed { base, .. } => base,
         }
-    }
-
-    pub fn revision(&self) -> u64 {
-        self.base().revision
     }
 
     /// The loaded session, whether playing or paused.
@@ -276,7 +270,6 @@ impl Eq for QueueList {}
 #[derive(Debug, Clone, serde::Serialize, specta::Type, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct PlaybackQueueSnapshot {
-    pub revision: u64,
     pub current: Option<PlaybackQueueItem>,
     /// The most recently played items, oldest first.
     pub history: Vec<PlaybackQueueItem>,
@@ -303,9 +296,8 @@ pub struct PlaybackQueueWindow {
 
 impl PlaybackQueueSnapshot {
     /// Nothing queued.
-    pub fn empty(revision: u64, repeat_mode: PlaybackRepeatMode, shuffle_enabled: bool) -> Self {
+    pub fn empty(repeat_mode: PlaybackRepeatMode, shuffle_enabled: bool) -> Self {
         Self {
-            revision,
             current: None,
             history: Vec::new(),
             history_count: 0,
@@ -321,7 +313,6 @@ impl PlaybackQueueSnapshot {
     /// Reads the tracks of the current item, the last few played and the first upcoming ones;
     /// everything else stays ids until a window asks for it.
     pub fn of(
-        revision: u64,
         queue: &PlaybackQueue,
         tracks: &Arc<TrackResolver>,
         can_restore_previous: bool,
@@ -342,7 +333,6 @@ impl PlaybackQueueSnapshot {
         let (history_rows, rest) = rows.split_at(shown_history.len());
         let (current_row, upcoming_rows) = rest.split_at(usize::from(queue.current().is_some()));
         Self {
-            revision,
             current: current_row.first().cloned().flatten(),
             history: history_rows.iter().flatten().cloned().collect(),
             history_count: u32::try_from(history.len()).unwrap_or(u32::MAX),
@@ -356,11 +346,12 @@ impl PlaybackQueueSnapshot {
     }
 
     /// Upcoming items from `offset`, at most `limit` (and never more than `MAX_QUEUE_WINDOW`),
-    /// read from the library now. Tracks the library no longer has are left out.
-    pub fn window(&self, offset: usize, limit: usize) -> PlaybackQueueWindow {
+    /// read from the library now. Tracks the library no longer has are left out. `revision` is
+    /// the queue revision this snapshot was published with.
+    pub fn window(&self, revision: u64, offset: usize, limit: usize) -> PlaybackQueueWindow {
         let Some(list) = &self.list else {
             return PlaybackQueueWindow {
-                revision: self.revision,
+                revision,
                 offset: 0,
                 items: Vec::new(),
             };
@@ -371,7 +362,7 @@ impl PlaybackQueueSnapshot {
             .saturating_add(limit.min(MAX_QUEUE_WINDOW))
             .min(upcoming.len());
         PlaybackQueueWindow {
-            revision: self.revision,
+            revision,
             offset: u32::try_from(start).unwrap_or(u32::MAX),
             items: list
                 .rows(&upcoming[start..end])

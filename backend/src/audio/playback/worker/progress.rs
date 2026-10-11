@@ -75,7 +75,7 @@ impl PlaybackWorker {
     /// or stop.
     pub(super) fn advance_after_track(
         &mut self,
-        responder: Option<Reply<PlaybackSnapshot>>,
+        responder: Option<Reply<Versioned<PlaybackSnapshot>>>,
         start_paused: bool,
     ) {
         let advanced = self
