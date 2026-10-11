@@ -33,6 +33,12 @@ The seams to test at, and the test files.
 ## Acceptance criteria
 
 - [ ] Criterion
+
+## Manual checks
+
+- [ ] A check that only the user can do. Omit this section if there is none.
 ```
+
+The implementer does not do the manual checks and does not report them as passed. It lists them for the user when it stops.
 
 When the implementer stops, it adds a `## Comments` section at the bottom and writes the problem there.

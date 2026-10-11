@@ -16,7 +16,7 @@ Read a document only when its trigger applies. Do not read them all up front.
 | `docs/adr/`                | Hard-to-reverse decisions, with the reason                         | Your work may touch a recorded decision (search it)                      |
 | `docs/coding-standards.md` | Code rules that lint cannot check, with the reasons in `docs/adr/` | You write or review code                                                 |
 
-- Use the terms in `CONTEXT.md`, not synonyms. If a term is missing, say so.
+- If a term that you need is missing from `CONTEXT.md`, say so.
 - If your work contradicts an ADR, say so. Do not override it silently.
 
 ## Tool usage
@@ -25,11 +25,6 @@ Read a document only when its trigger applies. Do not read them all up front.
 - To find a symbol (function, type, component, variable), use `LSP` before `Grep`. This includes its definition, usages, and callers. Use `Grep` only for text that is not a symbol: strings, config, docs, comments.
 - For `.svelte` and `.svelte.ts` files, use `svelte-file-editor` for large changes. Make small edits directly. Run `svelte-autofixer` on each changed `.svelte` file. Fix the errors it reports.
 - Subagents: for exploration (`Explore`, or finding files and facts), use model `haiku` with effort `medium`. For review (each axis of `/code-review`), use model `sonnet` with effort `medium`. For all other subagents, use the defaults.
-
-## Principles
-
-- No ad-hoc fixes. Design for long-term consistency.
-- Documentation is the single source of truth. Keep facts in one file. Link; do not copy.
 
 ## Commands
 

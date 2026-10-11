@@ -27,7 +27,7 @@ The agent reads, builds, checks, and reviews one ticket in one 200k-token contex
 - 40k: the start of every session.
 - read: about 12 tokens per line, for the ticket and each file read in full. Count each file once.
 - write: about 12 tokens per line added or changed, times 2.
-- checks: 5k per check command, 3 runs each. Count one E2E run or a Rust build as 15k.
+- checks: 5k per check command, 3 runs each. Count a slow check (a full build, an end-to-end run) as 15k.
 
 If the total is over 200k, split the ticket where each part is still verifiable. If no such place exists, add a prefactoring ticket first. Never merge tickets to reduce their number.
 

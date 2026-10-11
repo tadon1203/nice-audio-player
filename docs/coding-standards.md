@@ -1,10 +1,12 @@
 # Coding standards
 
-These are the rules for code that lint cannot check. Do not write a rule here if a lint or format tool enforces it. The tool configuration is the source of truth for those rules. The reasons are in the ADRs that each rule links.
+These are the rules for code and documentation that lint cannot check. Do not write a rule here if a lint or format tool enforces it. The tool configuration is the source of truth for those rules. The reasons are in the ADRs that each rule links.
 
-## All code
+## All code and documentation
 
 - Write comments and documentation in English. Follow ASD-STE100 (Simplified Technical English).
+- Use the terms in [CONTEXT.md](../CONTEXT.md), not synonyms.
+- Documentation is the single source of truth. Keep each fact in one file. Link; do not copy.
 
 ## Renderer
 

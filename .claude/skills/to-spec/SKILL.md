@@ -9,7 +9,7 @@ Run this in the same session as the design discussion. Read `docs/agents/tickets
 1. Explore the code as necessary. Read `CONTEXT.md` and the ADRs for the area. If the design contradicts an ADR, say so.
 2. Find the seams to test at. Prefer existing seams and the highest seam possible. The fewer seams, the better. Confirm them with the user.
 3. Run /codebase-design. Apply its tests to each module that the design adds or changes, before its What is fixed. If an existing module that the change touches fails a test, put the fix in the Decisions. If the interface of a new module is still open, offer Design It Twice to the user. Confirm the results with the user.
-4. Make sure that the What and the How of each change are known. A ticket must be able to meet the standard in `docs/agents/implementation-ready.md` from the spec alone: each change needs its What (public types, signatures, cross-process messages), its How (the approach, with the mechanism and where the state lives), and its Where (the files, as a guide). Ask the user about each open decision.
+4. Make sure that the What and the How of each change are known. A ticket must be able to meet the standard in `docs/agents/implementation-ready.md` from the spec alone: each change needs its What (public types, signatures, messages that cross a process or thread boundary), its How (the approach, with the mechanism and where the state lives), and its Where (the files, as a guide). Ask the user about each open decision.
 5. Write `.scratch/<feature-slug>/spec.md`:
 
 <spec-template>
@@ -32,7 +32,7 @@ The seams to test at, with prior art in the codebase.
 
 ## Docs
 
-The changes to `docs/requirements.md`, `ARCHITECTURE.md`, and other durable docs.
+The changes to the durable documents that `CLAUDE.md` lists.
 
 ## Out of scope
 
