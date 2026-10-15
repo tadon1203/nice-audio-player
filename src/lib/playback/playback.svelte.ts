@@ -128,11 +128,10 @@ export class Playback {
     this.playbackRevision = revision;
     this.snapshot = snapshot;
     this.clock.accept(clockReportOf(snapshot));
-    if (snapshot.status === "failed" && snapshot.skipping) this.#noteSkip(snapshot.item);
   }
 
-  /** Consecutive skips share one notice. */
-  #noteSkip(item: PlaybackItem | null) {
+  /** The backend skipped `item` by itself. Consecutive skips share one notice. */
+  acceptSkip(item: PlaybackItem | null) {
     this.#skippedTitles.push(item?.title ?? "a track");
     const [first, ...others] = this.#skippedTitles;
     this.notice =

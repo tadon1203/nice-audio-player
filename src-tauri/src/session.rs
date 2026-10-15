@@ -92,36 +92,74 @@ pub fn start_dispatcher(
         while let Ok(first) = signals.recv() {
             let mut batch = vec![first];
             batch.extend(signals.try_iter());
-            let mut topics = BTreeSet::new();
-            let mut position = false;
-            for signal in batch {
-                match signal {
-                    Signal::State(topic) => {
-                        topics.insert(topic);
-                    }
-                    Signal::Position => position = true,
-                    Signal::Occurrence(occurrence) => {
-                        subscriber.send(BackendMessage::Occurrence(*occurrence));
-                    }
-                }
-            }
-            for topic in topics {
-                if let Some(message) = backend.state_message(topic) {
-                    subscriber.send(message);
-                }
-            }
-            if position {
-                if let Some(message) = backend.position_message() {
-                    subscriber.send(message);
-                }
+            let messages = batch_messages(
+                batch,
+                |topic| backend.state_message(topic),
+                || backend.position_message(),
+            );
+            for message in messages {
+                subscriber.send(message);
             }
         }
     });
 }
 
+/// The messages one batch sends, in order: its occurrences as they arrived, then each changed
+/// state topic once with its latest value, then the position.
+fn batch_messages(
+    batch: Vec<Signal>,
+    state: impl Fn(StateTopic) -> Option<BackendMessage>,
+    position: impl Fn() -> Option<BackendMessage>,
+) -> Vec<BackendMessage> {
+    let mut messages = Vec::new();
+    let mut topics = BTreeSet::new();
+    let mut position_changed = false;
+    for signal in batch {
+        match signal {
+            Signal::State(topic) => {
+                topics.insert(topic);
+            }
+            Signal::Position => position_changed = true,
+            Signal::Occurrence(occurrence) => {
+                messages.push(BackendMessage::Occurrence(*occurrence));
+            }
+        }
+    }
+    messages.extend(topics.into_iter().filter_map(state));
+    if position_changed {
+        messages.extend(position());
+    }
+    messages
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use backend::audio::playback::PlaybackFailureCode;
+
+    #[test]
+    fn occurrences_are_sent_in_arrival_order_and_never_merged() {
+        let skipped = |error| Occurrence::TrackSkipped { item: None, error };
+        let first = skipped(PlaybackFailureCode::DecodeFailed);
+        let second = skipped(PlaybackFailureCode::OutputStreamRuntimeFailed);
+        let batch = vec![
+            Signal::Occurrence(Box::new(first.clone())),
+            Signal::State(StateTopic::Playback),
+            Signal::Occurrence(Box::new(second.clone())),
+            Signal::Occurrence(Box::new(first.clone())),
+        ];
+
+        let messages = batch_messages(batch, |_| None, || None);
+
+        let sent: Vec<Occurrence> = messages
+            .into_iter()
+            .filter_map(|message| match message {
+                BackendMessage::Occurrence(occurrence) => Some(occurrence),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(sent, [first.clone(), second, first]);
+    }
 
     #[test]
     fn a_second_replace_replaces_the_first_channel() {

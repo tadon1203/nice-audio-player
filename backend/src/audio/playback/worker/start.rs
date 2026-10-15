@@ -282,12 +282,16 @@ impl PlaybackWorker {
         );
         let error = failure.service_error();
         let skips = failure.phase.scope() == FailureScope::Item && request.selection.is_none();
+        let skipping = skips && self.will_skip();
         self.transport = Transport::Failed {
             id,
-            code: failure.code,
-            skipping: skips && self.will_skip(),
+            code: failure.code.clone(),
+            skipping,
         };
         self.publish_state();
+        if skipping {
+            self.occur_track_skipped(failure.code);
+        }
         let responder = request.responder;
         if skips {
             if let Some(item) = self.next_after_item_failure() {

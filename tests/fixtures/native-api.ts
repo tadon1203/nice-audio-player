@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import type { BackendMessage, InitialState, commands } from "$lib/native";
+import type { BackendMessage, InitialState, Occurrence, commands } from "$lib/native";
 import { idleInitialState, idleResponses, libraryResponses, type LibraryData } from "./data";
 
 type Commands = typeof commands;
@@ -170,6 +170,11 @@ export class Native {
       channelId,
       message,
     ] as const);
+  }
+
+  /** Sends a fact the Backend reports with its value, such as a skipped track, on the channel. */
+  async occur(occurrence: Occurrence) {
+    await this.send({ kind: "occurrence", ...occurrence });
   }
 
   /**

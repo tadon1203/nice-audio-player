@@ -334,20 +334,28 @@ describe("failures", () => {
   describe("skipped tracks", () => {
     afterEach(() => vi.useRealTimers());
 
-    it("are told once, and consecutive skips share the notice", () => {
+    it("are told by the occurrence, and consecutive skips share the notice", () => {
       vi.useFakeTimers();
       const playback = createPlayback(baseApi());
 
-      playback.acceptPlayback(failed(1, true, "a"));
+      playback.acceptSkip(item("a"));
       expect(playback.notice).toBe("Couldn't play a, skipped");
-      playback.acceptPlayback(failed(2, true, "b"));
-      playback.acceptPlayback(failed(3, true, "c"));
+      playback.acceptSkip(item("b"));
+      playback.acceptSkip(item("c"));
       expect(playback.notice).toBe("Couldn't play a and 2 more, skipped");
 
       vi.advanceTimersByTime(6_000);
       expect(playback.notice).toBeNull();
-      playback.acceptPlayback(failed(4, true, "d"));
+      playback.acceptSkip(item("d"));
       expect(playback.notice).toBe("Couldn't play d, skipped");
+    });
+
+    it("is not told by the snapshot alone, which only says the player is moving on", () => {
+      const playback = createPlayback(baseApi());
+
+      playback.acceptPlayback(failed(1, true, "a"));
+
+      expect(playback.notice).toBeNull();
     });
   });
 });

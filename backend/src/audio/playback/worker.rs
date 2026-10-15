@@ -42,7 +42,7 @@ use crate::audio::output::{
 use crate::audio::timebase::millis_to_frame;
 use crate::audio::volume::{AtomicEffectiveGain, VolumeState};
 use crate::audio::waveform::PrefetchObserver;
-use crate::messages::{SharedMessageSink, StateTopic, Versioned};
+use crate::messages::{Occurrence, SharedMessageSink, StateTopic, Versioned};
 use log::{error, info};
 use rand::{rngs::StdRng, SeedableRng};
 

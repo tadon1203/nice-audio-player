@@ -30,8 +30,10 @@ export function startNativeSession({
       playback.acceptPosition(message);
       return;
     }
-    // Occurrences have no consumer yet.
-    if (message.kind === "occurrence") return;
+    if (message.kind === "occurrence") {
+      if (message.type === "trackSkipped") playback.acceptSkip(message.item);
+      return;
+    }
     switch (message.topic) {
       case "playback":
         playback.acceptPlayback({ revision: message.revision, value: message.value });

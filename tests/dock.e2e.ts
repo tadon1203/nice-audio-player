@@ -399,3 +399,20 @@ test("position ticks redraw neither the signal path nor the volume row", async (
   );
   expect(mutations).toBe(0);
 });
+
+test("consecutive skips share one notice", async ({ page, native, library }) => {
+  const [, second, third] = albumSequence(library);
+  const dock = await playFirstTrack(page);
+  const first = playbackItemFor(second!);
+
+  await native.occur({ type: "trackSkipped", item: first, error: "decodeFailed" });
+  await native.occur({
+    type: "trackSkipped",
+    item: playbackItemFor(third!),
+    error: "decodeFailed",
+  });
+
+  await expect(dock.getByRole("status")).toHaveText(
+    `Couldn't play ${first.title} and 1 more, skipped`,
+  );
+});

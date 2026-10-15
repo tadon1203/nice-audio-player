@@ -1,4 +1,26 @@
 use super::*;
+use crate::messages::Occurrence;
+
+#[test]
+fn each_skipped_track_reaches_the_sink_as_an_occurrence_in_order() {
+    let mut harness = Harness::new();
+    let mut tracks = missing(2);
+    tracks.push(harness.track("c", 1));
+
+    harness.start(tracks, 0).unwrap();
+
+    let skipped: Vec<String> = harness
+        .sent()
+        .into_iter()
+        .filter_map(|sent| match sent {
+            Sent::Occurrence(occurrence) => match *occurrence {
+                Occurrence::TrackSkipped { item, .. } => item.map(|item| item.track_id.clone()),
+            },
+            _ => None,
+        })
+        .collect();
+    assert_eq!(skipped, ["track-0", "track-1"]);
+}
 
 #[test]
 fn a_file_that_cannot_be_read_is_skipped_to_the_next_one() {
@@ -228,6 +250,28 @@ fn a_decode_failure_while_playing_moves_on_to_the_next_track() {
         pipeline: PipelineId(1),
     });
     harness.pump_until(|harness| is_playing(&harness.snapshot(), "b"));
+}
+
+#[test]
+fn a_track_that_fails_while_playing_is_reported_as_skipped_once() {
+    let mut harness = Harness::new();
+    let tracks = vec![harness.track("a", 1), harness.track("b", 1)];
+    harness.start(tracks, 0).unwrap();
+
+    harness.event(WorkerEvent::DecodeFailed {
+        pipeline: PipelineId(1),
+    });
+    harness.pump_until(|harness| is_playing(&harness.snapshot(), "b"));
+
+    let skipped = harness
+        .sent()
+        .iter()
+        .filter(|sent| {
+            matches!(sent, Sent::Occurrence(occurrence)
+                if matches!(**occurrence, Occurrence::TrackSkipped { .. }))
+        })
+        .count();
+    assert_eq!(skipped, 1);
 }
 
 #[test]

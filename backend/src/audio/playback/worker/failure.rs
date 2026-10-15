@@ -86,14 +86,29 @@ impl PlaybackWorker {
     ) {
         let id = self.drop_loaded(seek_error);
         let skipping = scope == FailureScope::Item && self.will_skip();
-        self.transport = Transport::Failed { id, code, skipping };
+        self.transport = Transport::Failed {
+            id,
+            code: code.clone(),
+            skipping,
+        };
         self.publish_state();
+        if skipping {
+            self.occur_track_skipped(code);
+        }
         if scope == FailureScope::Item {
             if let Some(item) = self.next_after_item_failure() {
                 let request = self.new_start(item, None, false);
                 self.begin_start(request);
             }
         }
+    }
+
+    /// Tells listeners that the current item could not be played and the worker moves on. Call it
+    /// before the queue advances, so the current item is still the one that failed.
+    pub(super) fn occur_track_skipped(&self, error: PlaybackFailureCode) {
+        let item = self.queue.current().and_then(|entry| self.item_of(entry));
+        self.messages
+            .occurred(Occurrence::TrackSkipped { item, error });
     }
 
     pub(super) fn refresh_default_device(&mut self) -> bool {
