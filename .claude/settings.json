@@ -1,4 +1,8 @@
 {
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
   "enabledPlugins": {
     "svelte@svelte": true,
     "rust-analyzer-lsp@claude-plugins-official": true
