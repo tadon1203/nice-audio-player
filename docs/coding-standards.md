@@ -17,6 +17,8 @@ These are the rules for code and documentation that lint cannot check. Do not wr
 - Construct a class that uses `$effect` during component initialization. Do not use `$effect.root`. See [ADR 0006](adr/0006-renderer-logic-in-classes-svelte-declarative.md).
 - State transitions are value objects. Calculations are static-only classes. See [ADR 0006](adr/0006-renderer-logic-in-classes-svelte-declarative.md).
 - Failures are typed exceptions. See [ADR 0007](adr/0007-failures-are-typed-exceptions-caught-in-three-places.md).
+- Import another module only through its `index.ts` (the barrel), for example `#lib/native`. Do not import its inner files, for example `#lib/native/artwork-url`. The barrel is the public surface of the module, so the inner files can move without a change in the callers.
+- Inside a module, import the sibling files directly, with a relative path. Never import the module's own barrel. That causes a circular import.
 - Import icons one by one (`@lucide/svelte/icons/x`). Never import from the `@lucide/svelte` barrel. The barrel slows `vite dev` and the E2E runs.
 
 ## Dependencies

@@ -1,4 +1,5 @@
 import { Channel, isTauri } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
   commands,
@@ -22,9 +23,11 @@ import type {
   AppearanceClient,
   LibraryClient,
   LyricsClient,
+  MeterClient,
   NativeClients,
   PlaybackClient,
   SessionClient,
+  WindowClient,
 } from "./native-clients";
 
 type Commands = typeof commands;
@@ -47,6 +50,11 @@ async function callCommand<T, TError extends { readonly code: string }>(
     if (error === null) throw new IpcError();
     throw toError(error);
   }
+}
+
+/** Runs a call with no domain errors: whatever it rejects with is IpcError. */
+function ipc<T>(run: () => Promise<T>): Promise<T> {
+  return callCommand(run, () => new IpcError());
 }
 
 class TauriSessionClient implements SessionClient {
@@ -303,6 +311,54 @@ class TauriLyricsClient implements LyricsClient {
   }
 }
 
+class TauriMeterClient implements MeterClient {
+  readonly #commands: Commands;
+
+  constructor(source: Commands) {
+    this.#commands = source;
+  }
+
+  async subscribe(onFrame: (frame: ArrayBuffer) => void) {
+    const subscription = await ipc(() =>
+      this.#commands.subscribeMeterFrames(new Channel<ArrayBuffer>(onFrame)),
+    );
+    return async () => {
+      await ipc(() => this.#commands.unsubscribeMeterFrames(subscription));
+    };
+  }
+}
+
+/** The window chrome the renderer draws itself (the window has no native decorations). */
+class TauriWindowClient implements WindowClient {
+  minimize() {
+    return ipc(() => getCurrentWindow().minimize());
+  }
+  toggleMaximize() {
+    return ipc(() => getCurrentWindow().toggleMaximize());
+  }
+  close() {
+    return ipc(() => getCurrentWindow().close());
+  }
+  onMaximizedChange(listener: (maximized: boolean) => void) {
+    const appWindow = getCurrentWindow();
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    const sync = () =>
+      void appWindow.isMaximized().then((value) => {
+        if (!disposed) listener(value);
+      });
+    sync();
+    void appWindow.onResized(sync).then((stopListening) => {
+      if (disposed) stopListening();
+      else unlisten = stopListening;
+    });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }
+}
+
 /** The Tauri adapter: the only Renderer code that imports `@tauri-apps/*` for the native clients. */
 export class TauriNative {
   /**
@@ -320,6 +376,8 @@ export class TauriNative {
       appearance: new TauriAppearanceClient(commandSet),
       library: new TauriLibraryClient(commandSet),
       lyrics: new TauriLyricsClient(commandSet),
+      meter: new TauriMeterClient(commandSet),
+      window: new TauriWindowClient(),
     };
   }
 }

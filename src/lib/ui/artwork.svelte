@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { HTMLAttributes } from "svelte/elements";
-  import { artworkUrl, type ArtworkLevel, type ArtworkRef } from "#lib/native";
+  import type { ArtworkRef } from "#lib/native";
+  import { artworkUrl, type ArtworkLevel } from "#lib/native";
   import { cn } from "#lib/utils/cn.js";
 
   let {

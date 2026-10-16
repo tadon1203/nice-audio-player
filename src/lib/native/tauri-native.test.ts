@@ -22,6 +22,7 @@ function fakeCommands(reply: unknown) {
     getPlaybackWaveform: vi.fn(reject),
     getLibraryStatus: vi.fn(reject),
     getTrackLyrics: vi.fn(reject),
+    subscribeMeterFrames: vi.fn(reject),
   } as unknown as typeof commands;
 }
 
@@ -89,6 +90,12 @@ describe("TauriNative", () => {
     const failure = await clients.lyrics.trackLyrics("track").catch((error: unknown) => error);
     expect(failure).toBeInstanceOf(LyricsError);
     expect(failure).toMatchObject({ domain: "lyrics", code: "trackNotFound" });
+  });
+
+  it("throws IpcError when the meter subscription is refused", async () => {
+    const clients = TauriNative.clients(fakeCommands({ code: "unavailable" }));
+    const failure = await clients.meter.subscribe(() => {}).catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(IpcError);
   });
 
   it("throws IpcError when the reply has no string code", async () => {

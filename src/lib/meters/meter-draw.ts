@@ -1,8 +1,5 @@
 import { BALLISTICS, type LevelBar } from "./ballistics";
 
-/** The dB values with a tick on the shared axis. */
-export const AXIS_TICKS = [0, -20, -40, -60, -80] as const;
-
 const { floorDb } = BALLISTICS;
 
 /** Where `db` sits along a bar of `length`, from the floor (0) to full scale (`length`). */
@@ -20,7 +17,7 @@ type Orientation = "vertical" | "horizontal";
 
 function grid(c: CanvasRenderingContext2D, w: number, h: number, orientation: Orientation) {
   c.globalAlpha = GRID_ALPHA;
-  for (const db of AXIS_TICKS) {
+  for (const db of MeterDraw.axisTicks) {
     if (orientation === "vertical") {
       const y = h - along(db, h);
       c.fillRect(0, Math.min(h - 1, y), w, 1);
@@ -70,46 +67,52 @@ function begin(c: CanvasRenderingContext2D, w: number, h: number, color: string)
   c.fillStyle = color;
 }
 
-export function drawSpectrum(
-  c: CanvasRenderingContext2D,
-  w: number,
-  h: number,
-  color: string,
-  bands: readonly LevelBar[],
-) {
-  begin(c, w, h, color);
-  grid(c, w, h, "vertical");
-  const pitch = w / bands.length;
-  const thickness = Math.max(2, pitch * 0.3);
-  const offset = (pitch - thickness) / 2;
-  bands.forEach((band, i) =>
-    levelBar(c, "vertical", i * pitch + offset, thickness, h, band.level, band.peakCap),
-  );
-}
+/** Draws the Meters onto their canvases. */
+export class MeterDraw {
+  /** The dB values with a tick on the shared axis. */
+  public static readonly axisTicks = [0, -20, -40, -60, -80] as const;
 
-/** One channel of the Level meter: the RMS bar, with the peak above it and the held peak as the Peak cap. */
-export function drawLevel(
-  c: CanvasRenderingContext2D,
-  w: number,
-  h: number,
-  color: string,
-  peak: LevelBar,
-  rms: number,
-) {
-  const orientation: Orientation = w > h ? "horizontal" : "vertical";
-  const length = orientation === "horizontal" ? w : h;
-  const across = orientation === "horizontal" ? h : w;
-  begin(c, w, h, color);
-  grid(c, w, h, orientation);
-  const thickness = orientation === "horizontal" ? across * 0.4 : Math.min(across * 0.5, 14);
-  levelBar(
-    c,
-    orientation,
-    (across - thickness) / 2,
-    thickness,
-    length,
-    rms,
-    peak.peakCap,
-    peak.level,
-  );
+  public static drawSpectrum(
+    c: CanvasRenderingContext2D,
+    w: number,
+    h: number,
+    color: string,
+    bands: readonly LevelBar[],
+  ) {
+    begin(c, w, h, color);
+    grid(c, w, h, "vertical");
+    const pitch = w / bands.length;
+    const thickness = Math.max(2, pitch * 0.3);
+    const offset = (pitch - thickness) / 2;
+    bands.forEach((band, i) =>
+      levelBar(c, "vertical", i * pitch + offset, thickness, h, band.level, band.peakCap),
+    );
+  }
+
+  /** One channel of the Level meter: the RMS bar, with the peak above it and the held peak as the Peak cap. */
+  public static drawLevel(
+    c: CanvasRenderingContext2D,
+    w: number,
+    h: number,
+    color: string,
+    peak: LevelBar,
+    rms: number,
+  ) {
+    const orientation: Orientation = w > h ? "horizontal" : "vertical";
+    const length = orientation === "horizontal" ? w : h;
+    const across = orientation === "horizontal" ? h : w;
+    begin(c, w, h, color);
+    grid(c, w, h, orientation);
+    const thickness = orientation === "horizontal" ? across * 0.4 : Math.min(across * 0.5, 14);
+    levelBar(
+      c,
+      orientation,
+      (across - thickness) / 2,
+      thickness,
+      length,
+      rms,
+      peak.peakCap,
+      peak.level,
+    );
+  }
 }

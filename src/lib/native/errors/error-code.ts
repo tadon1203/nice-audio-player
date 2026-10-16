@@ -1,13 +1,3 @@
-export class NativeCommandError extends Error {
-  readonly code: string;
-
-  constructor(code: string, message: string) {
-    super(message);
-    this.code = code;
-    this.name = "NativeCommandError";
-  }
-}
-
 /** Reads the structured `{ code }` a backend command rejected with, if any. */
 export function nativeErrorCode(error: unknown): string | null {
   if (typeof error !== "object" || error === null || !("code" in error)) return null;

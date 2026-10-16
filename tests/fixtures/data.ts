@@ -246,7 +246,7 @@ export const emptyQueue: PlaybackQueueSnapshot = {
   canRestorePrevious: false,
 };
 
-/** A Meter frame as the backend sends it (35 little-endian 32-bit words, see `decodeMeterFrame`). */
+/** A Meter frame as the backend sends it (35 little-endian 32-bit words, see `MeterFrames.decode`). */
 export function meterFrameBytes({
   band = -90,
   peak = [-90, -90],

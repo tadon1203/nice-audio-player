@@ -52,7 +52,7 @@ Three layers, one direction of control. The terms are defined in [CONTEXT.md](./
 
 Communication: one path for requests, four for pushes.
 
-- **Renderer → Backend (1 path):** a command. The Renderer calls a Host command through the `native` adapter, and the Host calls the Backend. The answer is the command's return value. State answers are `Versioned`.
+- **Renderer → Backend (1 path):** a command. The Renderer calls a Host command through the `NativeClients` that `TauriNative` builds, and the Host calls the Backend. The answer is the command's return value. State answers are `Versioned`.
 - **Backend → Renderer (4 paths):**
   1. **State:** a topic's whole value with its revision, on the `connect` channel.
   2. **Occurrence:** a fact with its value, never merged, on the `connect` channel.

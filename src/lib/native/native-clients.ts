@@ -140,10 +140,25 @@ export interface LyricsClient {
   trackLyrics(trackId: string): Promise<LyricsResolution>;
 }
 
+export interface MeterClient {
+  /** Starts the Meter frames. Returns the function that ends them. */
+  subscribe(onFrame: (frame: ArrayBuffer) => void): Promise<() => Promise<void>>;
+}
+
+export interface WindowClient {
+  minimize(): Promise<void>;
+  toggleMaximize(): Promise<void>;
+  close(): Promise<void>;
+  /** Calls `listener` with the current state now and on each change. Returns the unsubscribe. */
+  onMaximizedChange(listener: (maximized: boolean) => void): () => void;
+}
+
 export interface NativeClients {
   readonly session: SessionClient;
   readonly playback: PlaybackClient;
   readonly appearance: AppearanceClient;
   readonly library: LibraryClient;
   readonly lyrics: LyricsClient;
+  readonly meter: MeterClient;
+  readonly window: WindowClient;
 }

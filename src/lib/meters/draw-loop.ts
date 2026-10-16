@@ -9,28 +9,32 @@ export type FrameScheduler = {
  * (0 on the first after a wake) and returns whether the display still moves; when it says no, the
  * loop stops asking for frames until `wake` (a new Meter frame arrived).
  */
-export function createDrawLoop(
-  step: (elapsedS: number) => boolean,
-  scheduler: FrameScheduler,
-): { wake: () => void; stop: () => void } {
-  let frameId: number | null = null;
-  let last: number | null = null;
+export class DrawLoop {
+  readonly #step: (elapsedS: number) => boolean;
+  readonly #scheduler: FrameScheduler;
+  #frameId: number | null = null;
+  #last: number | null = null;
 
-  const tick = (now: number) => {
-    const elapsed = last === null ? 0 : (now - last) / 1000;
-    last = now;
-    frameId = step(elapsed) ? scheduler.request(tick) : null;
-    if (frameId === null) last = null;
-  };
+  public constructor(step: (elapsedS: number) => boolean, scheduler: FrameScheduler) {
+    this.#step = step;
+    this.#scheduler = scheduler;
+  }
 
-  return {
-    wake() {
-      if (frameId === null) frameId = scheduler.request(tick);
-    },
-    stop() {
-      if (frameId !== null) scheduler.cancel(frameId);
-      frameId = null;
-      last = null;
-    },
+  /** Asks for a frame unless one is already coming. */
+  public wake() {
+    if (this.#frameId === null) this.#frameId = this.#scheduler.request(this.#tick);
+  }
+
+  public stop() {
+    if (this.#frameId !== null) this.#scheduler.cancel(this.#frameId);
+    this.#frameId = null;
+    this.#last = null;
+  }
+
+  #tick = (now: number) => {
+    const elapsed = this.#last === null ? 0 : (now - this.#last) / 1000;
+    this.#last = now;
+    this.#frameId = this.#step(elapsed) ? this.#scheduler.request(this.#tick) : null;
+    if (this.#frameId === null) this.#last = null;
   };
 }

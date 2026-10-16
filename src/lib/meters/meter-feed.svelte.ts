@@ -1,66 +1,63 @@
-import { requireNative } from "#lib/native";
-import { decodeMeterFrame, type MeterFrame } from "./frame";
+import type { MeterClient } from "#lib/native";
+import { MeterFrames, type MeterFrame } from "./meter-frames";
 
 /** Frames kept while nobody draws; older ones are dropped (a late frame has no meaning). */
 const MAX_PENDING = 64;
 
 /**
  * The Meter frames from the backend, for as long as `active()` is true: it subscribes when it
- * becomes true and unsubscribes when it turns false or the owner is destroyed. Call it
+ * becomes true and unsubscribes when it turns false or the owner is destroyed. Construct it
  * while a component initialises. Frames are not state: `drain` hands over those that arrived since
  * it was last called, and none is kept after that. `onFrame` runs for each frame that arrives (the
  * backend sends none while the sound is silent and unchanged).
  */
-export function createMeterFeed(
-  active: () => boolean,
-  onFrame?: () => void,
-): { drain: () => MeterFrame[] } {
-  let pending: MeterFrame[] = [];
+export class MeterFeed {
+  #pending: MeterFrame[] = [];
 
-  $effect(() => {
-    if (!active()) return;
-    pending = [];
-    let ended = false;
-    let subscription: number | null = null;
-    const native = requireNative();
+  public constructor(client: MeterClient, active: () => boolean, onFrame?: () => void) {
+    $effect(() => {
+      if (!active()) return;
+      this.#pending = [];
+      let ended = false;
+      let unsubscribe: (() => Promise<void>) | null = null;
 
-    native
-      .subscribeMeterFrames((message) => {
-        if (ended) return;
-        const frame = decodeMeterFrame(message);
-        if (frame === null) return;
-        // The app-level E2E build (`VITE_E2E=1`) counts the frames the app consumes, for
-        // `tests-app/` to read; a normal build drops this.
-        if (import.meta.env.VITE_E2E) {
-          const e2e = ((window as { __e2e?: { meterFrames: number } }).__e2e ??= {
-            meterFrames: 0,
-          });
-          e2e.meterFrames += 1;
-        }
-        pending.push(frame);
-        if (pending.length > MAX_PENDING) pending.shift();
-        onFrame?.();
-      })
-      .then(
-        (id) => {
-          if (ended) void native.unsubscribeMeterFrames(id).catch(() => {});
-          else subscription = id;
-        },
-        () => {},
-      );
+      client
+        .subscribe((message) => {
+          if (ended) return;
+          const frame = MeterFrames.decode(message);
+          if (frame === null) return;
+          // The app-level E2E build (`VITE_E2E=1`) counts the frames the app consumes, for
+          // `tests-app/` to read; a normal build drops this.
+          if (import.meta.env.VITE_E2E) {
+            const e2e = ((window as { __e2e?: { meterFrames: number } }).__e2e ??= {
+              meterFrames: 0,
+            });
+            e2e.meterFrames += 1;
+          }
+          this.#pending.push(frame);
+          if (this.#pending.length > MAX_PENDING) this.#pending.shift();
+          onFrame?.();
+        })
+        .then(
+          (stop) => {
+            if (ended) void stop().catch(() => {});
+            else unsubscribe = stop;
+          },
+          () => {},
+        );
 
-    return () => {
-      ended = true;
-      pending = [];
-      if (subscription !== null) void native.unsubscribeMeterFrames(subscription).catch(() => {});
-    };
-  });
+      return () => {
+        ended = true;
+        this.#pending = [];
+        if (unsubscribe !== null) void unsubscribe().catch(() => {});
+      };
+    });
+  }
 
-  return {
-    drain() {
-      const frames = pending;
-      pending = [];
-      return frames;
-    },
-  };
+  /** The frames that arrived since the last call. */
+  public drain(): MeterFrame[] {
+    const frames = this.#pending;
+    this.#pending = [];
+    return frames;
+  }
 }

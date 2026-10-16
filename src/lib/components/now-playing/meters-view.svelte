@@ -1,19 +1,13 @@
 <script lang="ts">
   import { Button } from "#lib/ui/shadcn/button";
   import type { Attachment } from "svelte/attachments";
-  import {
-    BALLISTICS,
-    BAND_COUNT,
-    clearClip,
-    initialDisplay,
-    stepDisplay,
-  } from "#lib/meters/ballistics";
-  import type { DisplayState } from "#lib/meters/ballistics";
-  import { createDrawLoop } from "#lib/meters/draw-loop";
-  import { reduceFrames } from "#lib/meters/frame";
-  import { AXIS_TICKS, drawLevel, drawSpectrum } from "#lib/meters/meter-draw";
-  import { createMeterFeed } from "#lib/meters/meter-feed.svelte";
-  import { formatHeldPeak } from "#lib/meters/readout";
+  import { BALLISTICS, BAND_COUNT } from "#lib/meters/ballistics";
+  import { DrawLoop } from "#lib/meters/draw-loop";
+  import { MeterDisplay } from "#lib/meters/meter-display";
+  import { MeterFrames } from "#lib/meters/meter-frames";
+  import { MeterDraw } from "#lib/meters/meter-draw";
+  import { MeterFeed } from "#lib/meters/meter-feed.svelte";
+  import { Readout } from "#lib/meters/readout";
   import { AppServices } from "#lib/shell/app-services.svelte";
   import { cn } from "#lib/utils/cn.js";
 
@@ -47,8 +41,7 @@
   const CHANNELS = [0, 1] as const;
   const TAGS = ["L", "R"] as const;
 
-  const playback = AppServices.current().playback;
-  const appearance = AppServices.current().appearance;
+  const { playback, appearance, meter } = AppServices.current();
 
   let layout = $state<"wide" | "narrow">("wide");
   const narrow = $derived(layout === "narrow");
@@ -66,12 +59,13 @@
   });
 
   let wake = () => {};
-  const feed = createMeterFeed(
+  const feed = new MeterFeed(
+    meter,
     () => active,
     () => wake(),
   );
 
-  const floorText = formatHeldPeak(BALLISTICS.floorDb);
+  const floorText = Readout.formatHeldPeak(BALLISTICS.floorDb);
   let readouts = $state<[string, string]>([floorText, floorText]);
   let clips = $state<[boolean, boolean]>([false, false]);
 
@@ -81,38 +75,27 @@
     left: null,
     right: null,
   };
-  let display: DisplayState = initialDisplay();
+  let display = MeterDisplay.initial();
   let color = "";
-
-  function isAtRest(state: DisplayState): boolean {
-    const floor = BALLISTICS.floorDb;
-    const resting = (bar: { level: number; peakCap: number }) =>
-      bar.level <= floor && bar.peakCap <= floor;
-    return (
-      state.bands.every(resting) &&
-      resting(state.peak[0]) &&
-      resting(state.peak[1]) &&
-      state.rms[0] <= floor &&
-      state.rms[1] <= floor &&
-      !state.clip[0] &&
-      !state.clip[1]
-    );
-  }
 
   function drawAll(ink: string) {
     const { spectrum, left, right } = surfaces;
-    if (spectrum) drawSpectrum(spectrum.ctx, spectrum.w, spectrum.h, ink, display.bands);
-    if (left) drawLevel(left.ctx, left.w, left.h, ink, display.peak[0], display.rms[0]);
-    if (right) drawLevel(right.ctx, right.w, right.h, ink, display.peak[1], display.rms[1]);
+    if (spectrum) MeterDraw.drawSpectrum(spectrum.ctx, spectrum.w, spectrum.h, ink, display.bands);
+    if (left) MeterDraw.drawLevel(left.ctx, left.w, left.h, ink, display.peak[0], display.rms[0]);
+    if (right)
+      MeterDraw.drawLevel(right.ctx, right.w, right.h, ink, display.peak[1], display.rms[1]);
   }
 
   function refreshReadouts() {
-    readouts = [formatHeldPeak(display.peak[0].peakCap), formatHeldPeak(display.peak[1].peakCap)];
+    readouts = [
+      Readout.formatHeldPeak(display.peak[0].peakCap),
+      Readout.formatHeldPeak(display.peak[1].peakCap),
+    ];
     clips = [display.clip[0], display.clip[1]];
   }
 
   function clear(channel: 0 | 1) {
-    display = clearClip(display, channel);
+    display = display.clearClip(channel);
     refreshReadouts();
   }
 
@@ -151,25 +134,25 @@
 
   $effect(() => {
     if (!active) return;
-    display = initialDisplay();
+    display = MeterDisplay.initial();
     refreshReadouts();
     const probe = surfaces.spectrum?.node ?? null;
     color = probe ? getComputedStyle(probe).color : color;
     // The loop sleeps once every Level bar and Peak cap is at the floor and wakes on the next frame.
-    const loop = createDrawLoop(
+    const loop = new DrawLoop(
       (elapsed) => {
         const input =
-          playback.status === "playing" ? reduceFrames(feed.drain()) : (feed.drain(), null);
-        display = stepDisplay(display, input, elapsed);
+          playback.status === "playing" ? MeterFrames.reduce(feed.drain()) : (feed.drain(), null);
+        display = display.step(input, elapsed);
         drawAll(color);
-        return !isAtRest(display);
+        return !display.isAtRest();
       },
       {
         request: (callback) => requestAnimationFrame(callback),
         cancel: (id) => cancelAnimationFrame(id),
       },
     );
-    wake = loop.wake;
+    wake = () => loop.wake();
     loop.wake();
     const interval = setInterval(refreshReadouts, READOUT_MS);
 
@@ -177,7 +160,7 @@
       wake = () => {};
       loop.stop();
       clearInterval(interval);
-      display = initialDisplay();
+      display = MeterDisplay.initial();
       refreshReadouts();
       drawAll(color || (probe ? getComputedStyle(probe).color : ""));
     };
@@ -234,7 +217,7 @@
     <div class="grid min-h-0 grid-rows-[1.75rem_minmax(0,1fr)_1.75rem]" aria-hidden="true">
       <span></span>
       <div class="relative min-h-0">
-        {#each AXIS_TICKS as db (db)}
+        {#each MeterDraw.axisTicks as db (db)}
           <span
             class="absolute right-0 -translate-y-1/2 text-sm text-faint-foreground"
             style:top="{(-db / -BALLISTICS.floorDb) * 100}%"

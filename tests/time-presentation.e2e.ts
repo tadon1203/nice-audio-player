@@ -36,12 +36,17 @@ test("both Queue views retain readable metadata and ordered time tones over brig
   const readingPast = await readableText(page, queue.getByText("Test track", { exact: true }));
   expect(readingPast.rgb).toEqual(past.rgb);
   await readableText(page, now.getByText("Test artist", { exact: true }));
-  const bounds = (await queue.boundingBox())!;
-  let farthest = now;
-  for (const row of await queue.getByRole("listitem").all()) {
-    const box = await row.boundingBox();
-    if (box && box.y >= bounds.y && box.y + box.height <= bounds.y + bounds.height) farthest = row;
-  }
+  // One round trip: asking each of the ~140 rows for its box in turn is slow under load.
+  const farthestIndex = await queue.evaluate((list) => {
+    const bounds = list.getBoundingClientRect();
+    let found = -1;
+    list.querySelectorAll('[role="listitem"], li').forEach((row, i) => {
+      const box = row.getBoundingClientRect();
+      if (box.height > 0 && box.top >= bounds.top && box.bottom <= bounds.bottom) found = i;
+    });
+    return found;
+  });
+  const farthest = farthestIndex < 0 ? now : queue.getByRole("listitem").nth(farthestIndex);
   await readableText(page, farthest.getByText("Test artist", { exact: true }));
   await readableText(page, farthest.locator("span.tabular-nums").last());
 });
@@ -72,6 +77,10 @@ test("lyrics retain artwork ink, readable Row index times and equal ink while re
   const dock = page.getByRole("contentinfo", { name: "Playback controls" });
   await dock.getByRole("button", { name: "Open Now Playing" }).click();
   await player.reportPosition(70_000);
+  // The renderer extrapolates the position while playing; a slow run would scroll past the line.
+  // The pause snapshot carries the script's position, so it freezes at 1:10.
+  await dock.getByRole("button", { name: "Pause", exact: true }).click();
+  await expect(dock.getByRole("button", { name: "Resume", exact: true })).toBeVisible();
   const current = page.locator('[aria-current="true"] [data-slot="time-ink"]');
   await expect(current).toContainText("歌詞 8");
   await readableText(page, current);

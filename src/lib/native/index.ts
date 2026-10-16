@@ -1,9 +1,7 @@
 export * from "./bindings";
-export * from "./native-api";
-export * from "./native-error";
-export * from "./native";
-export * from "./artwork-url";
 export * from "./native-clients";
+export { artworkUrl, type ArtworkLevel } from "./artwork-url";
+export { messageForCode, nativeErrorCode } from "./errors/error-code";
 export { AppError } from "./errors/app-error";
 export { AppearanceError } from "./errors/appearance-error";
 export { AudioDevicesError } from "./errors/audio-devices-error";
@@ -16,3 +14,4 @@ export { SessionError } from "./errors/session-error";
 export { SupersededError } from "./errors/superseded-error";
 export type { NativeDomain } from "./errors/native-command-error";
 export { Replica } from "./replica.svelte";
+export { TauriNative } from "./tauri-native";

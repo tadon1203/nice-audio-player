@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createDrawLoop, type FrameScheduler } from "./draw-loop";
+import { DrawLoop, type FrameScheduler } from "./draw-loop";
 
 function fakeFrames() {
   let next = 1;
@@ -22,17 +22,17 @@ function fakeFrames() {
   };
 }
 
-describe("createDrawLoop", () => {
+describe("DrawLoop", () => {
   it("asks for no frame until woken", () => {
     const frames = fakeFrames();
-    createDrawLoop(() => true, frames.scheduler);
+    new DrawLoop(() => true, frames.scheduler);
     expect(frames.pending()).toBe(0);
   });
 
   it("keeps asking while the display moves and stops once it rests", () => {
     const frames = fakeFrames();
     let moving = true;
-    const loop = createDrawLoop(() => moving, frames.scheduler);
+    const loop = new DrawLoop(() => moving, frames.scheduler);
     loop.wake();
     frames.frame(0);
     frames.frame(16);
@@ -46,7 +46,7 @@ describe("createDrawLoop", () => {
     const frames = fakeFrames();
     const elapsed: number[] = [];
     let moving = false;
-    const loop = createDrawLoop((s) => {
+    const loop = new DrawLoop((s) => {
       elapsed.push(s);
       return moving;
     }, frames.scheduler);
@@ -62,7 +62,7 @@ describe("createDrawLoop", () => {
 
   it("does not stack frames when woken while running, and stop cancels", () => {
     const frames = fakeFrames();
-    const loop = createDrawLoop(() => true, frames.scheduler);
+    const loop = new DrawLoop(() => true, frames.scheduler);
     loop.wake();
     loop.wake();
     expect(frames.pending()).toBe(1);

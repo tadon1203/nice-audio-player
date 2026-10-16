@@ -7,8 +7,13 @@ import { LibraryRootCommands } from "#lib/library/library-root-commands.svelte";
 import { LibraryTrackCommands } from "#lib/library/library-track-commands";
 import { LibraryViews } from "#lib/library/library-views.svelte";
 import { LyricsRepository } from "#lib/lyrics/lyrics-repository";
-import { NativeBridgeUnavailableError, type NativeClients } from "#lib/native";
-import { TauriNative } from "#lib/native/tauri-native";
+import {
+  NativeBridgeUnavailableError,
+  TauriNative,
+  type MeterClient,
+  type NativeClients,
+  type WindowClient,
+} from "#lib/native";
 import { AudioOutputDevices } from "#lib/playback/audio-output-devices.svelte";
 import { PlaybackClock } from "#lib/playback/playback-clock.svelte";
 import { Playback } from "#lib/playback/playback.svelte";
@@ -85,6 +90,10 @@ export class AppServices {
   /** The Library scan, as the Backend last reported it. */
   public readonly scan: ScanWatcher;
   public readonly lyrics: LyricsRepository;
+  /** The Meter frames from the Backend; the Meters view subscribes through it. */
+  public readonly meter: MeterClient;
+  /** The window chrome, which the renderer draws itself. */
+  public readonly window: WindowClient;
   public readonly history = new ShellHistory();
   public readonly queuePanel = new QueuePanel();
   public readonly scrollMemory = new ScrollMemory();
@@ -106,6 +115,8 @@ export class AppServices {
     this.libraryTracks = new LibraryTrackCommands(native.library);
     this.lyrics = new LyricsRepository(native.lyrics, queryClient);
     this.scan = new ScanWatcher(this.catalog, this.lyrics);
+    this.meter = native.meter;
+    this.window = native.window;
 
     const targets: SessionTargets = {
       playback: this.playback,
