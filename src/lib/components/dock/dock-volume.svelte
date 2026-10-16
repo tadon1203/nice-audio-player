@@ -3,7 +3,7 @@
   import Music2 from "@lucide/svelte/icons/music-2";
   import Volume2 from "@lucide/svelte/icons/volume-2";
   import VolumeX from "@lucide/svelte/icons/volume-x";
-  import { getPlayback } from "#lib/playback/context";
+  import { AppServices } from "#lib/shell/app-services.svelte";
   import {
     formatVolumeDb,
     sliderToVolume,
@@ -12,7 +12,6 @@
     volumeToSlider,
   } from "#lib/playback/volume-step";
   import { nowPlaying } from "#lib/shell/now-playing.svelte";
-  import { getMotionBudget } from "#lib/shell/motion-budget.svelte";
   import { springLinear } from "#lib/ui/motion/spring-curve";
   import { motionFor } from "#lib/ui/motion/svelte-motion";
   import { queuePanel } from "#lib/shell/queue-panel.svelte";
@@ -27,9 +26,8 @@
    * readout. The signal path hangs below this row, out of flow, so it never pulls the row off the
    * transport's centre line.
    */
-  const playback = getPlayback();
-  const budget = getMotionBudget();
-  const ready = $derived(playback.connection === "ready");
+  const { playback, session, motion: budget } = AppServices.current();
+  const ready = $derived(session.connection === "ready");
   const readout = $derived(formatVolumeDb(playback.volume, playback.muted));
 
   // Dragging the slider tracks the pointer 1:1; only the wheel and mute roll the readout.

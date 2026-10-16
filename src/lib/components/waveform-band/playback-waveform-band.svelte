@@ -6,9 +6,8 @@
 <script lang="ts">
   import { Button } from "#lib/ui/shadcn/button";
   import { onDestroy, onMount, tick } from "svelte";
-  import { getPlayback } from "#lib/playback/context";
   import { createPlaybackWaveform } from "#lib/playback/waveform.svelte";
-  import { getMotionBudget } from "#lib/shell/motion-budget.svelte";
+  import { AppServices } from "#lib/shell/app-services.svelte";
   import { lyricsWaveformLink } from "#lib/shell/lyrics-waveform-link.svelte";
   import RollingNumber from "#lib/ui/rolling-number/rolling-number.svelte";
   import { spinTurns } from "#lib/ui/rolling-number/rolling-model";
@@ -36,8 +35,7 @@
     timeClass?: string;
   } = $props();
 
-  const playback = getPlayback();
-  const budget = getMotionBudget();
+  const { playback, motion: budget } = AppServices.current();
   const trackKey = $derived(playback.item?.trackId ?? "none");
   const canSeek = $derived(playback.active && playback.durationMs !== null);
   const waveform = createPlaybackWaveform(() => (showWaveform ? playback.playbackId : null));

@@ -1,7 +1,7 @@
 <script lang="ts">
   import TrackTable from "#lib/components/track-table/track-table.svelte";
   import { createLibraryCatalog } from "#lib/library/catalog.svelte";
-  import { getPlayback } from "#lib/playback/context";
+  import { AppServices } from "#lib/shell/app-services.svelte";
   import { trackListContext } from "#lib/library/track-list";
   import { libraryViews } from "#lib/shell/library-views.svelte";
   import LibraryWorkspace from "../library-workspace.svelte";
@@ -16,7 +16,7 @@
 
   const view = libraryViews.tracks;
   const catalog = createLibraryCatalog(() => view.request);
-  const playback = getPlayback();
+  const playback = AppServices.current().playback;
 </script>
 
 <LibraryWorkspace

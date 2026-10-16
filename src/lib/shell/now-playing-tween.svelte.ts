@@ -1,6 +1,6 @@
 import { untrack } from "svelte";
 import { nowPlaying } from "./now-playing.svelte";
-import { getMotionBudget } from "./motion-budget.svelte";
+import { AppServices } from "./app-services.svelte";
 import { RetargetableSpring } from "#lib/ui/motion/retargetable-spring.svelte";
 import { nowPlayingDuration } from "./now-playing-motion";
 
@@ -13,7 +13,7 @@ const PRECISION_OF_SPAN = 0.002;
  * its velocity. Under reduced motion it jumps. Call during component initialization.
  */
 export function createNowPlayingTween(whenClosed: number, whenOpen: number) {
-  const budget = getMotionBudget();
+  const budget = AppServices.current().motion;
   const spring = new RetargetableSpring(
     untrack(() => (nowPlaying.isOpen ? whenOpen : whenClosed)),
     { precision: Math.abs(whenOpen - whenClosed) * PRECISION_OF_SPAN },

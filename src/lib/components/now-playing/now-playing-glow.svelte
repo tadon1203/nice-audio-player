@@ -1,10 +1,8 @@
 <script lang="ts">
-  import { getPlayback } from "#lib/playback/context";
+  import { AppServices } from "#lib/shell/app-services.svelte";
   import { glowBreath } from "#lib/playback/glow-breath";
   import { loudnessKeyframes } from "#lib/playback/loudness";
   import { createPlaybackWaveform } from "#lib/playback/waveform.svelte";
-  import { getAppearance } from "#lib/settings/context";
-  import { getMotionBudget } from "#lib/shell/motion-budget.svelte";
   import ArtworkGlow from "#lib/ui/artwork-glow/artwork-glow.svelte";
   import { breathingOpacity, GLOW } from "#lib/ui/artwork-glow/glow-model";
   import { motionFor } from "#lib/ui/motion/svelte-motion";
@@ -14,9 +12,9 @@
    * strength). It follows the playback clock through compositor keyframes, so nothing re-renders with time. The
    * breathing is off under calm or reduced motion, and then nothing here runs per frame.
    */
-  const playback = getPlayback();
-  const appearance = getAppearance();
-  const budget = getMotionBudget();
+  const playback = AppServices.current().playback;
+  const appearance = AppServices.current().appearance;
+  const budget = AppServices.current().motion;
 
   /** The level a paused Artwork glow rests at: neither dimmed nor at full. */
   const REST_LEVEL = 0.5;

@@ -2,7 +2,7 @@
   import Shuffle from "@lucide/svelte/icons/shuffle";
   import SkipBack from "@lucide/svelte/icons/skip-back";
   import SkipForward from "@lucide/svelte/icons/skip-forward";
-  import { getPlayback } from "#lib/playback/context";
+  import { AppServices } from "#lib/shell/app-services.svelte";
   import { nextRepeatMode } from "#lib/playback/snapshot";
   import PlayPauseIcon from "#lib/ui/play-pause-icon.svelte";
   import { Button } from "#lib/ui/shadcn/button";
@@ -10,9 +10,9 @@
   import RepeatIcon from "./repeat-icon.svelte";
 
   /** Shuffle, previous, play/pause, next, repeat. */
-  const playback = getPlayback();
+  const { playback, session } = AppServices.current();
   const playing = $derived(playback.status === "playing");
-  const ready = $derived(playback.connection === "ready");
+  const ready = $derived(session.connection === "ready");
   const failed = $derived(playback.failure !== null);
   const playLabel = $derived(
     playing ? "Pause" : failed ? "Retry" : playback.active ? "Resume" : "Play",

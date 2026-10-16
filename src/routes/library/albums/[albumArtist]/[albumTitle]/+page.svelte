@@ -10,7 +10,7 @@
   import { libraryCommandErrorMessage } from "#lib/library/library-errors";
   import { albumArtistHref, albumEditionOf } from "#lib/library/routes";
   import { albumTitleLabel, artistNameLabel, fromNameSegment } from "#lib/library/unknown-name";
-  import { getPlayback } from "#lib/playback/context";
+  import { AppServices } from "#lib/shell/app-services.svelte";
   import { createWorkspaceScroll } from "#lib/shell/workspace-scroll.svelte";
   import BackLink from "#lib/ui/back-link.svelte";
   import EmptyStatus from "#lib/ui/empty-status.svelte";
@@ -24,7 +24,7 @@
   import WorkspaceScroll from "#lib/ui/workspace-scroll.svelte";
   import { formatCount, formatDuration } from "#lib/utils/format";
 
-  const playback = getPlayback();
+  const playback = AppServices.current().playback;
 
   const albumArtist = $derived(fromNameSegment(page.params.albumArtist ?? ""));
   const albumTitle = $derived(fromNameSegment(page.params.albumTitle ?? ""));

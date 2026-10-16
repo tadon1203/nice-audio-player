@@ -5,15 +5,7 @@ import { commands } from "./bindings";
 import type { BackendMessage } from "./bindings";
 import type { TNativeAPI } from "./native-api";
 import { NativeCommandError } from "./native-error";
-
-export class NativeBridgeUnavailableError extends Error {
-  readonly code = "nativeBridgeUnavailable";
-
-  constructor() {
-    super("Native application bridge is unavailable");
-    this.name = "NativeBridgeUnavailableError";
-  }
-}
+import { NativeBridgeUnavailableError } from "./errors/native-bridge-unavailable-error";
 
 /** Backend commands reject with a structured `{ code }` object. */
 function toNativeError(error: unknown): NativeCommandError {

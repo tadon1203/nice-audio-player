@@ -4,14 +4,14 @@
   import { fade } from "svelte/transition";
   import { Tween } from "svelte/motion";
   import type { PlaybackRepeatMode } from "#lib/native";
-  import { getMotionBudget } from "#lib/shell/motion-budget.svelte";
+  import { AppServices } from "#lib/shell/app-services.svelte";
   import { motionFor } from "#lib/ui/motion/svelte-motion";
   import { slideTransition } from "#lib/ui/motion/svelte-slide";
 
   /** One turn of the icon per mode change; `one` drops a superscript 1 beside it. */
   let { mode }: { mode: PlaybackRepeatMode } = $props();
 
-  const budget = getMotionBudget();
+  const budget = AppServices.current().motion;
   const reduced = $derived(budget.current === "reduced");
   const motion = $derived(motionFor("move"));
 

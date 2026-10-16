@@ -1,7 +1,6 @@
 <script lang="ts">
   import { createArtworkAccent } from "#lib/library/detail.svelte";
-  import { getPlayback } from "#lib/playback/context";
-  import { getAppearance } from "#lib/settings/context";
+  import { AppServices } from "#lib/shell/app-services.svelte";
   import { readableAccent } from "#lib/ui/artwork-glow/glow-model";
 
   /**
@@ -11,8 +10,7 @@
    * decides when the artwork's color shows up. The color is lightened to stay readable over the brightest Artwork glow.
    * Follows the `Artwork backdrop` preference: with the backdrop off there is no artwork color.
    */
-  const playback = getPlayback();
-  const appearance = getAppearance();
+  const { playback, appearance } = AppServices.current();
   const artworkColor = createArtworkAccent(() => playback.item?.artwork);
   const accent = $derived(appearance.artworkBackdrop ? readableAccent(artworkColor.current) : null);
 

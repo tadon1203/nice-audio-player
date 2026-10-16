@@ -4,7 +4,7 @@
   import { isFilePresent, isTrackAvailable, trackLinks } from "#lib/library/tracks";
   import type { LibrarySortDirection, LibraryTrackSortKey } from "#lib/native";
   import { requireNative } from "#lib/native";
-  import { getPlayback } from "#lib/playback/context";
+  import { AppServices } from "#lib/shell/app-services.svelte";
   import ContextMenuContent from "#lib/ui/context-menu/context-menu-content.svelte";
   import ContextMenuItem from "#lib/ui/context-menu/context-menu-item.svelte";
   import {
@@ -64,7 +64,7 @@
 
   const columns = $derived(layout === "library" ? libraryTrackColumns : albumTrackColumns);
   const virtualized = $derived(scrollElement !== undefined);
-  const playback = getPlayback();
+  const playback = AppServices.current().playback;
 
   let propertiesFor = $state<string | null>(null);
   let menuRow = $state<TrackTableRow | null>(null);

@@ -1,6 +1,5 @@
 <script lang="ts">
-  import { getMotionBudget } from "#lib/shell/motion-budget.svelte";
-  import { getPlayback } from "#lib/playback/context";
+  import { AppServices } from "#lib/shell/app-services.svelte";
   import { createUpcomingItems } from "#lib/playback/upcoming-items.svelte";
   import { flipMotion } from "#lib/ui/motion/svelte-flip";
   import { delayOf } from "#lib/ui/motion/tokens";
@@ -26,7 +25,7 @@
     cascading: boolean;
   } = $props();
 
-  const playback = getPlayback();
+  const playback = AppServices.current().playback;
 
   const upcomingCount = $derived(playback.queue?.upcomingCount ?? 0);
   let list = $state<HTMLUListElement | null>(null);
@@ -62,7 +61,7 @@
     }),
   );
 
-  const budget = getMotionBudget();
+  const budget = AppServices.current().motion;
   const reduced = $derived(budget.current === "reduced");
 
   /** Which edge of row `index` shows the drop line for insertion `slot`, if any. */

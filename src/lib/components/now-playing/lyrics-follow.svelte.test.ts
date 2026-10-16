@@ -26,8 +26,8 @@ vi.mock("#lib/ui/motion/retargetable-spring.svelte", () => ({
     stop() {}
   },
 }));
-vi.mock("#lib/shell/motion-budget.svelte", () => ({
-  getMotionBudget: () => ({ current: "full" }),
+vi.mock("#lib/shell/app-services.svelte", () => ({
+  AppServices: { current: () => ({ motion: { current: "full" } }) },
 }));
 
 const LINE_COUNT = 40;

@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { getPlayback } from "#lib/playback/context";
+  import type { AppearancePatch } from "#lib/native";
+  import { nativeErrorCode } from "#lib/native";
   import { createAudioOutputDevices } from "#lib/playback/output-devices.svelte";
   import { createPlaybackSignalPath } from "#lib/components/signal-path/signal-path.svelte";
-  import { getAppearance } from "#lib/settings/context";
-  import type { AppearanceUpdate } from "#lib/settings/appearance.svelte";
+  import { AppServices } from "#lib/shell/app-services.svelte";
   import FlapText from "#lib/ui/rolling-number/flap-text.svelte";
   import SectionTitle from "#lib/ui/section-title.svelte";
   import * as Select from "#lib/ui/shadcn/select/index.js";
@@ -11,8 +11,7 @@
 
   const DEFAULT_DEVICE = "default";
 
-  const playback = getPlayback();
-  const appearance = getAppearance();
+  const { playback, session, appearance } = AppServices.current();
   const signalPath = createPlaybackSignalPath();
 
   let deviceMenuOpen = $state(false);
@@ -34,9 +33,20 @@
     );
   }
 
-  // The store rolls a failed change back and records the error, which is shown below.
-  function update(patch: AppearanceUpdate) {
-    void appearance.update(patch);
+  let saveError = $state<string | null>(null);
+
+  // The store rolls a failed change back; the error is shown below.
+  async function update(patch: AppearancePatch) {
+    saveError = null;
+    try {
+      await appearance.update(patch);
+    } catch (cause) {
+      const code = nativeErrorCode(cause);
+      saveError =
+        code === null
+          ? "The setting could not be saved."
+          : `The setting could not be saved. (${code})`;
+    }
   }
 </script>
 
@@ -66,7 +76,7 @@
           onValueChange={chooseDevice}
         >
           <Select.Trigger
-            disabled={playback.connection !== "ready"}
+            disabled={session.connection !== "ready"}
             aria-label={`Output device: ${outputLabel}`}
             appearance="inline-value"
           >
@@ -89,7 +99,7 @@
       label="Artwork backdrop"
       class="mt-5 border-y"
       checked={appearance.artworkBackdrop}
-      onChange={(checked) => update({ artworkBackdrop: checked })}
+      onChange={(checked) => void update({ artworkBackdrop: checked, calmMotion: null })}
     >
       Light the playback dock and Now Playing with the current track's artwork.
     </SettingsSwitchField>
@@ -98,14 +108,14 @@
       id="calm-motion"
       label="Calm motion"
       checked={appearance.calmMotion}
-      onChange={(checked) => update({ calmMotion: checked })}
+      onChange={(checked) => void update({ artworkBackdrop: null, calmMotion: checked })}
     >
       Only what marks the current position moves on its own: the Artwork glow stops breathing and
       lyric characters stop lifting.
     </SettingsSwitchField>
   {/if}
 
-  {#if appearance.error}
-    <p class="mt-3 text-sm text-destructive" role="alert">{appearance.error}</p>
+  {#if saveError}
+    <p class="mt-3 text-sm text-destructive" role="alert">{saveError}</p>
   {/if}
 </section>

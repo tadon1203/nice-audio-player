@@ -1,20 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import type { Appearance as AppearanceState, TNativeAPI, Versioned } from "#lib/native";
+import type { Appearance as AppearanceState, AppearanceClient, Versioned } from "#lib/native";
 import { Appearance } from "./appearance.svelte";
 
-function stubApi(overrides: Partial<Pick<TNativeAPI, "updateAppearance">> = {}) {
-  return {
-    updateAppearance: vi.fn(async (): Promise<Versioned<AppearanceState>> => ({
-      revision: 1,
-      value: { artworkBackdrop: true, calmMotion: false },
-    })),
-    ...overrides,
-  } as unknown as TNativeAPI & {
-    updateAppearance: ReturnType<typeof vi.fn>;
-  };
+function stubClient(update: AppearanceClient["update"]) {
+  return { update: vi.fn(update) };
 }
 
-const appearance: Versioned<AppearanceState> = {
+const saved: Versioned<AppearanceState> = {
   revision: 0,
   value: { artworkBackdrop: true, calmMotion: false },
 };
@@ -31,65 +23,52 @@ function deferred<T>() {
 
 describe("Appearance", () => {
   it("knows nothing until the backend's appearance is accepted, then holds it", () => {
-    const store = new Appearance(stubApi());
+    const store = new Appearance(stubClient(async () => saved));
     expect(store.artworkBackdrop).toBeNull();
     expect(store.calmMotion).toBeNull();
-    store.accept(appearance);
+    store.accept(saved);
     expect(store.artworkBackdrop).toBe(true);
     expect(store.calmMotion).toBe(false);
   });
 
-  it("holds the values it accepts", () => {
-    const store = new Appearance(stubApi());
-    store.accept({ revision: 1, value: { artworkBackdrop: false, calmMotion: true } });
-    expect(store.artworkBackdrop).toBe(false);
-    expect(store.calmMotion).toBe(true);
-  });
-
   it("keeps a value only if its revision is newer than the one it holds", () => {
-    const store = new Appearance(stubApi());
+    const store = new Appearance(stubClient(async () => saved));
     store.accept({ revision: 2, value: { artworkBackdrop: false, calmMotion: true } });
     store.accept({ revision: 1, value: { artworkBackdrop: true, calmMotion: false } });
     expect(store.artworkBackdrop).toBe(false);
     expect(store.calmMotion).toBe(true);
   });
 
-  it("records a failed connect instead of throwing", () => {
-    const store = new Appearance(stubApi());
-    store.initializeFailed(new Error("boom"));
-    expect(store.error).not.toBeNull();
-  });
-
-  it("applies an update before the backend answers, sending null for untouched fields", async () => {
+  it("shows an update before the backend answers, sending the untouched fields as null", async () => {
     const pending = deferred<Versioned<AppearanceState>>();
-    const api = stubApi({ updateAppearance: vi.fn(() => pending.promise) });
-    const store = new Appearance(api);
-    store.accept(appearance);
+    const client = stubClient(() => pending.promise);
+    const store = new Appearance(client);
+    store.accept(saved);
 
-    const result = store.update({ calmMotion: true });
+    const result = store.update({ artworkBackdrop: null, calmMotion: true });
     expect(store.calmMotion).toBe(true);
-    expect(api.updateAppearance).toHaveBeenCalledWith({
-      artworkBackdrop: null,
-      calmMotion: true,
-    });
+    expect(client.update).toHaveBeenCalledWith({ artworkBackdrop: null, calmMotion: true });
 
     pending.resolve({ revision: 1, value: { artworkBackdrop: true, calmMotion: true } });
-    expect(await result).toEqual({ ok: true });
+    await result;
     expect(store.calmMotion).toBe(true);
+    expect(store.artworkBackdrop).toBe(true);
   });
 
-  it("rolls back and reports a failed update", async () => {
-    const api = stubApi({
-      updateAppearance: vi.fn().mockRejectedValue({ code: "persistenceFailed" }),
-    });
-    const store = new Appearance(api);
-    store.accept(appearance);
+  it("rolls back its own change and throws when the save fails", async () => {
+    const failure = { code: "persistenceFailed" };
+    const store = new Appearance(stubClient(vi.fn().mockRejectedValue(failure)));
+    store.accept(saved);
 
-    const result = await store.update({ artworkBackdrop: false });
-
+    await expect(store.update({ artworkBackdrop: false, calmMotion: null })).rejects.toBe(failure);
     expect(store.artworkBackdrop).toBe(true);
-    expect(result.ok).toBe(false);
-    expect(store.error).toBe(result.ok ? null : result.error);
-    expect(store.error).toContain("persistenceFailed");
+  });
+
+  it("shows nothing optimistic before the first value, and throws on a failed save", async () => {
+    const failure = { code: "persistenceFailed" };
+    const store = new Appearance(stubClient(vi.fn().mockRejectedValue(failure)));
+
+    await expect(store.update({ artworkBackdrop: null, calmMotion: true })).rejects.toBe(failure);
+    expect(store.calmMotion).toBeNull();
   });
 });

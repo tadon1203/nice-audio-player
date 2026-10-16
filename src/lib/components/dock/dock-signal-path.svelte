@@ -6,7 +6,7 @@
   } from "#lib/ui/dropdown-menu";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import { createPlaybackSignalPath } from "#lib/components/signal-path/signal-path.svelte";
-  import { getPlayback } from "#lib/playback/context";
+  import { AppServices } from "#lib/shell/app-services.svelte";
   import { createAudioOutputDevices } from "#lib/playback/output-devices.svelte";
   import DropdownMenuContent from "#lib/ui/dropdown-menu/dropdown-menu-content.svelte";
   import DropdownMenuRadioItem from "#lib/ui/dropdown-menu/dropdown-menu-radio-item.svelte";
@@ -21,12 +21,12 @@
    */
   let { class: className }: { class?: string } = $props();
 
-  const playback = getPlayback();
+  const { playback, session } = AppServices.current();
   const path = createPlaybackSignalPath();
   let open = $state(false);
   const devices = createAudioOutputDevices(() => open);
 
-  const disabled = $derived(playback.connection !== "ready");
+  const disabled = $derived(session.connection !== "ready");
   const selected = $derived(playback.outputDeviceId ?? DEFAULT_DEVICE);
   const outputLabel = $derived(
     path.current?.output ?? (playback.outputDeviceId !== null ? "Output" : "System default"),

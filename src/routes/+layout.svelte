@@ -11,52 +11,37 @@
   import NowPlayingLayer from "#lib/components/now-playing/now-playing-layer.svelte";
   import QueuePanel from "#lib/components/queue-panel/queue-panel.svelte";
   import { setLibraryScan } from "#lib/library/context";
-  import { LibraryScanState } from "#lib/library/library-scan-state.svelte";
-  import { native } from "#lib/native";
-  import { setPlayback } from "#lib/playback/context";
-  import { createPlayback } from "#lib/playback/playback.svelte";
-  import { setAppearance } from "#lib/settings/context";
-  import { Appearance } from "#lib/settings/appearance.svelte";
-  import { createMotionBudget, setMotionBudget } from "#lib/shell/motion-budget.svelte";
+  import { AppServices } from "#lib/shell/app-services.svelte";
   import { nowPlaying } from "#lib/shell/now-playing.svelte";
   import { handlePlaybackShortcut } from "#lib/shell/playback-shortcuts";
-  import { queryClient } from "#lib/shell/query-client";
-  import { startNativeSession } from "#lib/shell/session";
   import { TooltipProvider } from "#lib/ui/shadcn/tooltip";
   import Navigation from "./navigation.svelte";
   import TitleBar from "./title-bar.svelte";
 
   let { children } = $props();
 
-  // Created once: the native bridge never changes while the renderer lives.
-  const playback = native ? createPlayback(native) : null;
-  const appearance = native ? new Appearance(native) : null;
-  const libraryScan = new LibraryScanState();
-  setLibraryScan(libraryScan);
-  if (playback !== null && appearance !== null) {
-    setPlayback(playback);
-    setAppearance(appearance);
-    setMotionBudget(createMotionBudget(appearance));
-  }
+  // Created once: the native bridge never changes while the renderer lives. Null without the bridge.
+  const services = AppServices.tryCreate();
+  if (services !== null) setLibraryScan(services.libraryScan);
 
-  onMount(() => {
-    if (playback === null || appearance === null) return;
-    startNativeSession({ playback, appearance, libraryScan, queryClient });
-  });
+  // The UI does not wait for the connection: the Dock shows its state, the rest fills in as it arrives.
+  onMount(() => services?.session.connect());
 
   $effect(() => applyCssMotion(document.documentElement, prefersReducedMotion.current));
 </script>
 
-<svelte:window onkeydown={(event) => playback && handlePlaybackShortcut(event, playback)} />
+<svelte:window
+  onkeydown={(event) => services && handlePlaybackShortcut(event, services.playback)}
+/>
 
-{#if playback === null}
+{#if services === null}
   <div class="flex h-full items-center justify-center bg-background p-8">
     <p role="alert" class="max-w-md text-center text-lg text-foreground">
       Native bridge unavailable
     </p>
   </div>
 {:else}
-  <QueryClientProvider client={queryClient}>
+  <QueryClientProvider client={services.queryClient}>
     <TooltipProvider>
       <div
         class="grid h-full min-h-0 min-w-0 grid-cols-[minmax(0,1fr)] grid-rows-[40px_minmax(0,1fr)_auto] bg-background md:grid-cols-[16rem_minmax(0,1fr)]"

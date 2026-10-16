@@ -6,7 +6,7 @@
   import { createAlbumArtist, createArtistAlbums } from "#lib/library/detail.svelte";
   import { libraryCommandErrorMessage } from "#lib/library/library-errors";
   import { artistNameLabel, fromNameSegment } from "#lib/library/unknown-name";
-  import { getPlayback } from "#lib/playback/context";
+  import { AppServices } from "#lib/shell/app-services.svelte";
   import { libraryViews } from "#lib/shell/library-views.svelte";
   import { createWorkspaceScroll } from "#lib/shell/workspace-scroll.svelte";
   import BackLink from "#lib/ui/back-link.svelte";
@@ -24,7 +24,7 @@
   import AlbumTile from "../../album-tile.svelte";
 
   const view = libraryViews.artistAlbums;
-  const playback = getPlayback();
+  const playback = AppServices.current().playback;
 
   const name = $derived(fromNameSegment(page.params.artistName ?? ""));
   const key = $derived({ name });

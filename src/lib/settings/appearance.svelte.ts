@@ -1,83 +1,61 @@
-import { nativeErrorCode } from "#lib/native";
-import type { Appearance as AppearanceState, TNativeAPI, Versioned } from "#lib/native";
-import { isNewerRevision } from "#lib/utils/revision";
-
-/** The appearance fields the renderer may change. */
-export type AppearanceUpdate = {
-  artworkBackdrop?: boolean;
-  calmMotion?: boolean;
-};
-
-export type AppearanceUpdateResult = { ok: true } | { ok: false; error: string };
+import {
+  Replica,
+  type Appearance as AppearanceState,
+  type AppearanceClient,
+  type AppearancePatch,
+  type Versioned,
+} from "#lib/native";
 
 /**
- * The renderer's mirror of the backend's appearance: one store for every field. Changes apply at
- * once and are saved by the backend; a failed save rolls back, so the UI never disagrees with
- * what is stored. The mirror keeps a value only if its revision is newer than the one it holds.
+ * The Renderer's copy of the Appearance. Changes apply at once; a failed save rolls back. The
+ * saved value sits in a replica, and the value of a save still in flight sits on top of it.
  */
 export class Appearance {
-  /** The last failed load or save, for display. Cleared by the next success. */
-  error = $state<string | null>(null);
+  readonly #client: AppearanceClient;
+  readonly #replica = new Replica<AppearanceState>();
+  // The value of the save in flight; `null` when none is. The backend owns the defaults.
+  #optimistic = $state.raw<AppearanceState | null>(null);
 
-  readonly #api: TNativeAPI;
-  // The backend owns the defaults; nothing is known until the first load.
-  #mirror = $state.raw<AppearanceState | null>(null);
-  #revision: number | null = null;
-
-  constructor(api: TNativeAPI) {
-    this.#api = api;
+  constructor(client: AppearanceClient) {
+    this.#client = client;
   }
 
   /** Artwork glow behind the library and Now Playing; `null` until the appearance has loaded. */
   get artworkBackdrop(): boolean | null {
-    return this.#mirror?.artworkBackdrop ?? null;
+    return this.#shown()?.artworkBackdrop ?? null;
   }
 
   /** Only what marks the position moves by itself; `null` until the appearance has loaded. */
   get calmMotion(): boolean | null {
-    return this.#mirror?.calmMotion ?? null;
+    return this.#shown()?.calmMotion ?? null;
   }
 
   /** Applies the value the backend holds, without writing it back: from `connect` or a pushed change. */
-  accept({ revision, value }: Versioned<AppearanceState>): void {
-    if (!isNewerRevision(revision, this.#revision)) return;
-    this.#revision = revision;
-    this.#mirror = value;
+  accept(incoming: Versioned<AppearanceState>): void {
+    this.#replica.accept(incoming);
   }
 
-  /** `connect` failed, so the appearance stays unknown. */
-  initializeFailed(cause: unknown): void {
-    this.error = describe(cause, "Settings could not be loaded.");
-  }
-
-  async update(patch: AppearanceUpdate): Promise<AppearanceUpdateResult> {
-    const previous = this.#mirror;
+  /**
+   * Saves `patch`; `null` fields stay as they are. Throws on failure, after it rolls back its own
+   * optimistic change.
+   */
+  async update(patch: AppearancePatch): Promise<void> {
+    const base = this.#shown();
     // Before the first load there is nothing to apply the change to; the saved answer is shown.
-    const optimistic = previous && {
-      ...previous,
-      ...(patch.artworkBackdrop === undefined ? {} : { artworkBackdrop: patch.artworkBackdrop }),
-      ...(patch.calmMotion === undefined ? {} : { calmMotion: patch.calmMotion }),
+    const optimistic = base && {
+      artworkBackdrop: patch.artworkBackdrop ?? base.artworkBackdrop,
+      calmMotion: patch.calmMotion ?? base.calmMotion,
     };
-    this.#mirror = optimistic;
+    this.#optimistic = optimistic;
     try {
-      const saved = await this.#api.updateAppearance({
-        artworkBackdrop: patch.artworkBackdrop ?? null,
-        calmMotion: patch.calmMotion ?? null,
-      });
-      this.accept(saved);
-      this.error = null;
-      return { ok: true };
-    } catch (cause) {
-      // Only undo our own write: an event may have replaced the mirror while the save was pending.
-      if (this.#mirror === optimistic) this.#mirror = previous;
-      const error = describe(cause, "The setting could not be saved.");
-      this.error = error;
-      return { ok: false, error };
+      this.accept(await this.#client.update(patch));
+    } finally {
+      // Only clear our own change: a newer save may have started while this one was pending.
+      if (this.#optimistic === optimistic) this.#optimistic = null;
     }
   }
-}
 
-function describe(cause: unknown, fallback: string): string {
-  const code = nativeErrorCode(cause);
-  return code === null ? fallback : `${fallback} (${code})`;
+  #shown(): AppearanceState | null {
+    return this.#optimistic ?? this.#replica.value;
+  }
 }

@@ -3,7 +3,7 @@
   import type { Attachment } from "svelte/attachments";
   import PlaybackWaveformBand from "#lib/components/waveform-band/playback-waveform-band.svelte";
   import { createTrackLyrics } from "#lib/lyrics/lyrics.svelte";
-  import { getPlayback } from "#lib/playback/context";
+  import { AppServices } from "#lib/shell/app-services.svelte";
   import { cn } from "#lib/utils/cn.js";
   import Identity from "./identity.svelte";
   import LyricsPanel from "./lyrics-panel.svelte";
@@ -31,7 +31,7 @@
    * shared-element motion from the dock; the text is not shared, it fades in behind the Sleeve.
    * Below `md` everything stacks. The waveform grows along the bottom edge when its data arrives.
    */
-  const playback = getPlayback();
+  const playback = AppServices.current().playback;
   const item = $derived(playback.item);
   const trackId = $derived(item?.trackId ?? null);
   const lyrics = createTrackLyrics(() => trackId);

@@ -1,6 +1,5 @@
 <script lang="ts">
-  import { getPlayback } from "#lib/playback/context";
-  import { getMotionBudget } from "#lib/shell/motion-budget.svelte";
+  import { AppServices } from "#lib/shell/app-services.svelte";
   import Artwork from "#lib/ui/artwork.svelte";
   import { slideTransition } from "#lib/ui/motion/svelte-slide";
   import { cn } from "#lib/utils/cn.js";
@@ -20,8 +19,8 @@
    */
   let { class: className }: { class?: string } = $props();
 
-  const playback = getPlayback();
-  const budget = getMotionBudget();
+  const playback = AppServices.current().playback;
+  const budget = AppServices.current().motion;
   let inLastSeconds = $state(false);
 
   $effect(() => {

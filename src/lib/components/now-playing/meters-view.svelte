@@ -14,8 +14,7 @@
   import { AXIS_TICKS, drawLevel, drawSpectrum } from "#lib/meters/meter-draw";
   import { createMeterFeed } from "#lib/meters/meter-feed.svelte";
   import { formatHeldPeak } from "#lib/meters/readout";
-  import { getPlayback } from "#lib/playback/context";
-  import { getAppearance } from "#lib/settings/context";
+  import { AppServices } from "#lib/shell/app-services.svelte";
   import { cn } from "#lib/utils/cn.js";
 
   /**
@@ -48,8 +47,8 @@
   const CHANNELS = [0, 1] as const;
   const TAGS = ["L", "R"] as const;
 
-  const playback = getPlayback();
-  const appearance = getAppearance();
+  const playback = AppServices.current().playback;
+  const appearance = AppServices.current().appearance;
 
   let layout = $state<"wide" | "narrow">("wide");
   const narrow = $derived(layout === "narrow");

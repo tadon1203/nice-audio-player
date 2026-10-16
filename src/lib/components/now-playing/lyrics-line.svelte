@@ -14,7 +14,7 @@
   import Play from "@lucide/svelte/icons/play";
   import type { Attachment } from "svelte/attachments";
   import type { LyricsTimedLine } from "#lib/native";
-  import { getPlayback } from "#lib/playback/context";
+  import { AppServices } from "#lib/shell/app-services.svelte";
   import { lyricsWaveformLink } from "#lib/shell/lyrics-waveform-link.svelte";
   import TimePresentation from "#lib/ui/time-presentation.svelte";
   import { cn } from "#lib/utils/cn.js";
@@ -43,7 +43,7 @@
     attach: Attachment<HTMLElement>;
   } = $props();
 
-  const playback = getPlayback();
+  const playback = AppServices.current().playback;
 
   const line = $derived(lines[index]!);
   const isInterval = $derived(line.text.trim() === "");

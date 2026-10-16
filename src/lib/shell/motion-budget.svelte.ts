@@ -1,4 +1,3 @@
-import { createContext } from "svelte";
 import { prefersReducedMotion } from "svelte/motion";
 import type { Appearance } from "#lib/settings/appearance.svelte";
 
@@ -10,19 +9,19 @@ import type { Appearance } from "#lib/settings/appearance.svelte";
  *   when something changes.
  * - `reduced`: the system asks for less motion; every movement is a crossfade.
  */
-export type MotionBudget = "full" | "calm" | "reduced";
+export type MotionLevel = "full" | "calm" | "reduced";
 
-export function createMotionBudget(appearance: Appearance): { readonly current: MotionBudget } {
-  const current = $derived<MotionBudget>(
-    prefersReducedMotion.current ? "reduced" : appearance.calmMotion ? "calm" : "full",
-  );
-  return {
-    get current() {
-      return current;
-    },
-  };
+/** The motion level the system setting and the Appearance give together. */
+export class MotionBudget {
+  readonly #appearance: Appearance;
+
+  constructor(appearance: Appearance) {
+    this.#appearance = appearance;
+  }
+
+  /** Reactive: reading it in a template or an effect follows both sources. */
+  get current(): MotionLevel {
+    if (prefersReducedMotion.current) return "reduced";
+    return this.#appearance.calmMotion ? "calm" : "full";
+  }
 }
-
-export const [getMotionBudget, setMotionBudget] = createContext<{
-  readonly current: MotionBudget;
-}>();

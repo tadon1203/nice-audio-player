@@ -1,5 +1,5 @@
 import { formatAudioPath } from "#lib/utils/format";
-import { getPlayback } from "#lib/playback/context";
+import { AppServices } from "#lib/shell/app-services.svelte";
 import {
   describeSignalPath,
   type PlaybackSignalPath,
@@ -11,7 +11,7 @@ import { snapshotSession } from "#lib/playback/snapshot";
  * initialization; read `current` where it is shown.
  */
 export function createPlaybackSignalPath() {
-  const playback = getPlayback();
+  const playback = AppServices.current().playback;
   const session = $derived(snapshotSession(playback.snapshot));
 
   const current = $derived.by<PlaybackSignalPath | null>(() => {

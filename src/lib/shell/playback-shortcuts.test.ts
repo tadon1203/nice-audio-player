@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import type { PlaybackSnapshot, TNativeAPI, Versioned } from "#lib/native";
+import type { PlaybackClient, PlaybackSnapshot, Versioned } from "#lib/native";
 import { createPlaybackClock } from "#lib/playback/clock";
-import { createPlayback } from "#lib/playback/playback.svelte";
+import { Playback } from "#lib/playback/playback.svelte";
 import { handlePlaybackShortcut } from "./playback-shortcuts";
 
 const playing = (positionMs: number): Versioned<PlaybackSnapshot> => ({
@@ -59,7 +59,7 @@ describe("global seek shortcut", () => {
       cancelFrame: () => undefined,
     });
     const seekPlayback = vi.fn(async (positionMs: number) => playing(positionMs));
-    const playback = createPlayback({ seekPlayback } as unknown as TNativeAPI, clock);
+    const playback = new Playback({ seek: seekPlayback } as unknown as PlaybackClient, clock);
     playback.acceptPlayback(playing(10_000));
     now = 1_000 + 250.37;
     expect(Number.isInteger(clock.estimate())).toBe(false);

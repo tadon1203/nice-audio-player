@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Attachment } from "svelte/attachments";
-  import { getPlayback } from "#lib/playback/context";
+  import { AppServices } from "#lib/shell/app-services.svelte";
   import { queuePanel } from "#lib/shell/queue-panel.svelte";
   import { Sheet, SheetContent, SheetHeader, SheetTitle } from "#lib/ui/shadcn/sheet";
   import QueueFooter from "./queue-footer.svelte";
@@ -8,7 +8,7 @@
   import { createShuffleCascade } from "./shuffle-cascade.svelte";
   import UpcomingList from "./upcoming-list.svelte";
 
-  const playback = getPlayback();
+  const playback = AppServices.current().playback;
 
   const queue = $derived(playback.queue);
   const history = $derived(queue?.history ?? []);

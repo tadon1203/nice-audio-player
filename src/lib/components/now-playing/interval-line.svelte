@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Attachment } from "svelte/attachments";
-  import { getPlayback } from "#lib/playback/context";
+  import { AppServices } from "#lib/shell/app-services.svelte";
   import { formatDuration } from "#lib/utils/format";
   import { gapProgress } from "./lyrics-lines";
 
@@ -12,7 +12,7 @@
   let { startMs, endMs, isCurrent }: { startMs: number; endMs: number | null; isCurrent: boolean } =
     $props();
 
-  const playback = getPlayback();
+  const playback = AppServices.current().playback;
 
   const label = $derived(
     endMs !== null ? `Instrumental, ${formatDuration(endMs - startMs)}` : "Instrumental",

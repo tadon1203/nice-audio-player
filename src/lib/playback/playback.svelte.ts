@@ -7,17 +7,14 @@ import type {
   PlaybackQueueSnapshot,
   PlaybackRepeatMode,
   PlaybackSnapshot,
-  TNativeAPI,
   Versioned,
 } from "#lib/native";
-import { nativeErrorCode } from "#lib/native";
+import { Replica, SupersededError, type PlaybackClient } from "#lib/native";
 import { createPlaybackClock, type PlaybackClock } from "./clock";
 import { playbackCommandErrorMessage } from "./playback-errors";
-import { isNewerRevision } from "#lib/utils/revision";
 import { clockReportOf, isActivePlayback, snapshotItem, snapshotSession } from "./snapshot";
 
 export type PlaybackNavigation = "next" | "previous";
-export type PlaybackConnection = "loading" | "ready" | "failed";
 export type TransportCommand =
   | "start"
   | "pause"
@@ -44,26 +41,21 @@ function navigationOf(session: ActiveSession | null): PlaybackNavigation {
 }
 
 /**
- * Mirrors the backend's playback state. Raw fields hold what the backend said; everything a
+ * Mirrors the backend's playback state. The replicas hold what the backend said; everything a
  * component shows is a primitive derived from them, so a component re-renders only for the
  * fact it reads. Position never lands here: position events feed the clock and nothing else,
  * and `item` keeps its identity while the same queue item plays.
  */
 export class Playback {
   readonly clock: PlaybackClock;
-  readonly #api: TNativeAPI;
+  readonly #client: PlaybackClient;
+  readonly #snapshot = new Replica<PlaybackSnapshot>();
+  readonly #queue = new Replica<PlaybackQueueSnapshot>();
 
-  snapshot = $state.raw<PlaybackSnapshot | null>(null);
-  /** The revision the held snapshot was published with. */
-  playbackRevision = $state.raw<number | null>(null);
-  queue = $state.raw<PlaybackQueueSnapshot | null>(null);
-  /** The revision the held queue was published with. */
-  queueRevision = $state.raw<number | null>(null);
   /** The loaded track, or the last one that played. Replaced only when the queue item changes. */
   item = $state.raw<PlaybackItem | null>(null);
   /** How the current item was reached: Next/Previous, or anything else (counts as "next"). */
   lastNavigation = $state.raw<PlaybackNavigation>("next");
-  connection = $state.raw<PlaybackConnection>("loading");
   transportPending = $state.raw<TransportCommand | null>(null);
   seekPending = $state.raw(false);
   volumePending = $state.raw(false);
@@ -83,6 +75,26 @@ export class Playback {
   #skippedTitles: string[] = [];
   #noticeTimer: ReturnType<typeof setTimeout> | null = null;
   #undoTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** The latest playback snapshot the backend sent, or null before the first one. */
+  get snapshot(): PlaybackSnapshot | null {
+    return this.#snapshot.value;
+  }
+
+  /** The revision the held snapshot was published with. */
+  get playbackRevision(): number | null {
+    return this.#snapshot.revision;
+  }
+
+  /** The latest queue snapshot the backend sent, or null before the first one. */
+  get queue(): PlaybackQueueSnapshot | null {
+    return this.#queue.value;
+  }
+
+  /** The revision the held queue was published with. */
+  get queueRevision(): number | null {
+    return this.#queue.revision;
+  }
 
   readonly #session = $derived(snapshotSession(this.snapshot));
   readonly status = $derived(this.snapshot?.status ?? ("stopped" as const));
@@ -109,34 +121,32 @@ export class Playback {
   /** Which library track is loaded, for highlighting track rows. */
   readonly activeTrackId = $derived(this.item?.trackId ?? null);
 
-  constructor(api: TNativeAPI, clock: PlaybackClock) {
-    this.#api = api;
+  constructor(client: PlaybackClient, clock: PlaybackClock = createPlaybackClock()) {
+    this.#client = client;
     this.clock = clock;
   }
 
   #setError(error: unknown) {
     // A request replaced by a newer one has nothing to report.
-    if (nativeErrorCode(error) === "superseded") return;
+    if (error instanceof SupersededError) return;
     this.error = error ? playbackCommandErrorMessage(error) : null;
   }
 
   /** Keeps the snapshot only if it is newer than the held one. Command responses come here too. */
-  acceptPlayback({ revision, value: snapshot }: Versioned<PlaybackSnapshot>) {
-    if (!isNewerRevision(revision, this.playbackRevision)) return;
-    const incoming = snapshotItem(snapshot);
-    const itemChanged = incoming?.queueItemId !== this.item?.queueItemId;
-    if (itemChanged) {
+  acceptPlayback(incoming: Versioned<PlaybackSnapshot>) {
+    const snapshot = incoming.value;
+    const incomingItem = snapshotItem(snapshot);
+    if (!this.#snapshot.accept(incoming)) return;
+    if (incomingItem?.queueItemId !== this.item?.queueItemId) {
       this.lastNavigation = navigationOf(snapshotSession(snapshot));
-      this.item = incoming;
+      this.item = incomingItem;
     }
-    this.playbackRevision = revision;
-    this.snapshot = snapshot;
     this.clock.accept(clockReportOf(snapshot));
   }
 
-  /** The backend skipped `item` by itself. Consecutive skips share one notice. */
-  acceptSkip(item: PlaybackItem | null) {
-    this.#skippedTitles.push(item?.title ?? "a track");
+  /** The backend skipped a track by itself: its title, or null when it had none. Consecutive skips share one notice. */
+  acceptSkip(title: string | null) {
+    this.#skippedTitles.push(title ?? "a track");
     const [first, ...others] = this.#skippedTitles;
     this.notice =
       others.length === 0
@@ -168,14 +178,12 @@ export class Playback {
   /** Puts back the queue the last replacement or "Clear upcoming" took away. */
   async undoQueueChange(): Promise<void> {
     this.dismissUndo();
-    await this.#runTransport("start", () => this.#api.restorePreviousQueue());
+    await this.#runTransport("start", () => this.#client.restorePreviousQueue());
   }
 
   /** Keeps the queue only if it is newer than the held one. Command responses come here too. */
-  acceptQueue({ revision, value }: Versioned<PlaybackQueueSnapshot>) {
-    if (!isNewerRevision(revision, this.queueRevision)) return;
-    this.queueRevision = revision;
-    this.queue = value;
+  acceptQueue(incoming: Versioned<PlaybackQueueSnapshot>) {
+    this.#queue.accept(incoming);
   }
 
   /**
@@ -251,7 +259,7 @@ export class Playback {
       while (this.#requestedVolume !== null) {
         const value = this.#requestedVolume;
         this.#requestedVolume = null;
-        this.acceptPlayback(await this.#api.setPlaybackVolume(value));
+        this.acceptPlayback(await this.#client.setVolume(value));
       }
       this.volumePreview = null;
     } catch (error) {
@@ -264,45 +272,31 @@ export class Playback {
     }
   }
 
-  /** Applies the playback and queue that `connect` returned: the first state the Renderer holds. */
-  initialize(snapshot: Versioned<PlaybackSnapshot>, queue: Versioned<PlaybackQueueSnapshot>) {
-    this.acceptPlayback(snapshot);
-    this.acceptQueue(queue);
-    this.connection = "ready";
-    this.error = null;
-  }
-
-  /** `connect` failed, so there is no playback state to show. */
-  initializeFailed(error: unknown) {
-    this.connection = "failed";
-    this.error = playbackCommandErrorMessage(error);
-  }
-
   /** Replaces the queue with `context` and plays from `startTrackId` (its first track if null). */
   async startPlayback(context: PlaybackContext, startTrackId: string | null): Promise<void> {
-    await this.#runTransport("start", () => this.#api.startPlayback(context, startTrackId));
+    await this.#runTransport("start", () => this.#client.start(context, startTrackId));
   }
 
   /** A slice of the upcoming list beyond what the queue snapshot carries. */
   fetchQueueWindow(offset: number, limit: number) {
-    return this.#api.getPlaybackQueueWindow(offset, limit);
+    return this.#client.queueWindow(offset, limit);
   }
 
   pause() {
-    return this.#runTransport("pause", () => this.#api.pausePlayback());
+    return this.#runTransport("pause", () => this.#client.pause());
   }
 
   /** Resumes a paused track; after a failure, retries the current item with the queue intact. */
   resume() {
-    return this.#runTransport("resume", () => this.#api.resumePlayback());
+    return this.#runTransport("resume", () => this.#client.resume());
   }
 
   previous() {
-    return this.#runTransport("previous", () => this.#api.previousPlayback());
+    return this.#runTransport("previous", () => this.#client.previous());
   }
 
   next() {
-    return this.#runTransport("next", () => this.#api.nextPlayback());
+    return this.#runTransport("next", () => this.#client.next());
   }
 
   /**
@@ -321,7 +315,7 @@ export class Playback {
       while (this.#requestedSeek !== null) {
         const value = this.#requestedSeek;
         this.#requestedSeek = null;
-        this.acceptPlayback(await this.#api.seekPlayback(value));
+        this.acceptPlayback(await this.#client.seek(value));
       }
     } catch (error) {
       this.#requestedSeek = null;
@@ -358,7 +352,7 @@ export class Playback {
     this.mutePending = true;
     this.error = null;
     try {
-      this.acceptPlayback(await this.#api.setPlaybackMuted(!this.muted));
+      this.acceptPlayback(await this.#client.setMuted(!this.muted));
     } catch (error) {
       this.#setError(error);
     } finally {
@@ -367,7 +361,7 @@ export class Playback {
   }
 
   setShuffle(enabled: boolean) {
-    return this.#runQueueCommand(() => this.#api.setPlaybackShuffle(enabled));
+    return this.#runQueueCommand(() => this.#client.setShuffle(enabled));
   }
 
   /** Turns the global shuffle on, then replaces the queue with `context`. Nothing starts if the shuffle cannot be turned on. */
@@ -377,43 +371,37 @@ export class Playback {
   }
 
   setRepeatMode(mode: PlaybackRepeatMode) {
-    return this.#runQueueCommand(() => this.#api.setPlaybackRepeatMode(mode));
+    return this.#runQueueCommand(() => this.#client.setRepeatMode(mode));
   }
 
   removeQueueItem(id: string) {
-    return this.#runQueueCommand(() => this.#api.removeQueueItem(id));
+    return this.#runQueueCommand(() => this.#client.removeQueueItem(id));
   }
 
   /** Moves an upcoming item to `to`, an index into the upcoming list (0 is next up). */
   moveQueueItem(id: string, to: number) {
-    return this.#runQueueCommand(() => this.#api.moveQueueItem(id, to));
+    return this.#runQueueCommand(() => this.#client.moveQueueItem(id, to));
   }
 
   async clearQueue() {
     const hadUpcoming = (this.queue?.upcomingCount ?? 0) > 0;
-    const cleared = await this.#runQueueCommand(() => this.#api.clearQueue());
+    const cleared = await this.#runQueueCommand(() => this.#client.clearQueue());
     if (cleared && hadUpcoming) this.#offerUndo("Upcoming cleared");
     return cleared;
   }
 
   /** Jumps to an upcoming item and plays it. */
   playQueueItem(id: string) {
-    return this.#runTransport("start", () => this.#api.playQueueItem(id));
+    return this.#runTransport("start", () => this.#client.playQueueItem(id));
   }
 
   /** Adds a library track right after the current one (`next`) or at the end. */
   enqueueTrack(trackId: string, next: boolean) {
-    return this.#runQueueCommand(() => this.#api.enqueueTrack(trackId, next));
+    return this.#runQueueCommand(() => this.#client.enqueueTrack(trackId, next));
   }
 
   /** A loaded track restarts on the new device at the same position. */
   setOutputSelection(selection: AudioOutputSelection) {
-    return this.#runTransport("outputSelection", () =>
-      this.#api.setAudioOutputSelection(selection),
-    );
+    return this.#runTransport("outputSelection", () => this.#client.setOutputSelection(selection));
   }
-}
-
-export function createPlayback(api: TNativeAPI, clock = createPlaybackClock()): Playback {
-  return new Playback(api, clock);
 }

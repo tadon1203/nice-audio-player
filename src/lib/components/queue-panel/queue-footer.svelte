@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { getPlayback } from "#lib/playback/context";
+  import { AppServices } from "#lib/shell/app-services.svelte";
   import { Button } from "#lib/ui/shadcn/button";
 
-  const playback = getPlayback();
+  const playback = AppServices.current().playback;
 
   const queue = $derived(playback.queue);
   const upcomingCount = $derived(queue?.upcomingCount ?? 0);

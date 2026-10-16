@@ -1,13 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type {
-  PlaybackItem,
-  PlaybackQueueItem,
-  PlaybackQueueSnapshot,
-  PlaybackSnapshot,
-  TNativeAPI,
-  Versioned,
+import {
+  SupersededError,
+  type PlaybackClient,
+  type PlaybackItem,
+  type PlaybackQueueItem,
+  type PlaybackQueueSnapshot,
+  type PlaybackSnapshot,
+  type Versioned,
 } from "#lib/native";
-import { createPlayback } from "./playback.svelte";
+import { Playback } from "./playback.svelte";
 
 const base = () => ({
   volume: 0.5,
@@ -98,12 +99,23 @@ const queueOf = (
 
 const queue = (revision: number) => queueOf(revision);
 
-const baseApi = (overrides: Partial<TNativeAPI> = {}) => overrides as unknown as TNativeAPI;
+/** A client whose methods are only the ones a test gives; the others are never called. */
+const fakeClient = (overrides: Partial<PlaybackClient> = {}) => overrides as PlaybackClient;
+
+/** What `connect` gives the Renderer: the first snapshot and queue, as the session routes them. */
+function load(
+  playback: Playback,
+  snapshot: Versioned<PlaybackSnapshot>,
+  queueSnapshot: Versioned<PlaybackQueueSnapshot>,
+) {
+  playback.acceptPlayback(snapshot);
+  playback.acceptQueue(queueSnapshot);
+}
 
 describe("playback session ordering", () => {
   it("rejects stale playback revisions", () => {
-    const playback = createPlayback(baseApi());
-    playback.initialize(stopped(1, "a"), queue(1));
+    const playback = new Playback(fakeClient());
+    load(playback, stopped(1, "a"), queue(1));
 
     playback.acceptPlayback(stopped(0, "stale"));
     playback.acceptPlayback(stopped(1, "a"));
@@ -114,7 +126,7 @@ describe("playback session ordering", () => {
   });
 
   it("accepts queue revisions independently from playback revisions", () => {
-    const playback = createPlayback(baseApi());
+    const playback = new Playback(fakeClient());
     playback.acceptPlayback(stopped(50, null));
     playback.acceptQueue(queueOf(2, { current: queueItem("track-1") }));
 
@@ -124,8 +136,8 @@ describe("playback session ordering", () => {
   });
 
   it("drops a command response older than the state it follows", async () => {
-    const playback = createPlayback(baseApi({ pausePlayback: vi.fn(async () => stopped(2, "a")) }));
-    playback.initialize(stopped(1, "a"), queue(1));
+    const playback = new Playback(fakeClient({ pause: vi.fn(async () => stopped(2, "a")) }));
+    load(playback, stopped(1, "a"), queue(1));
     playback.acceptPlayback(stopped(3, "b"));
 
     await playback.pause();
@@ -135,12 +147,12 @@ describe("playback session ordering", () => {
   });
 
   it("drops a queue command response older than the queue it follows", async () => {
-    const playback = createPlayback(
-      baseApi({
-        setPlaybackShuffle: vi.fn(async () => queueOf(2, { shuffleEnabled: false })),
+    const playback = new Playback(
+      fakeClient({
+        setShuffle: vi.fn(async () => queueOf(2, { shuffleEnabled: false })),
       }),
     );
-    playback.initialize(stopped(1, null), queueOf(3, { shuffleEnabled: true }));
+    load(playback, stopped(1, null), queueOf(3, { shuffleEnabled: true }));
 
     await playback.setShuffle(false);
 
@@ -148,30 +160,12 @@ describe("playback session ordering", () => {
     expect(playback.queueRevision).toBe(3);
   });
 
-  it("moves initialization from loading to ready", () => {
-    const playback = createPlayback(baseApi());
-
-    expect(playback.connection).toBe("loading");
-    playback.initialize(stopped(1, null), queue(1));
-
-    expect(playback.connection).toBe("ready");
-  });
-
-  it("moves initialization failures to failed instead of leaving loading", () => {
-    const playback = createPlayback(baseApi());
-
-    playback.initializeFailed({ code: "noOutputDevice" });
-
-    expect(playback.connection).toBe("failed");
-    expect(playback.error).toBe("No audio output device is available.");
-  });
-
   it("coalesces volume writes without blocking transport or seek", async () => {
     let releaseFirstVolume: (() => void) | undefined;
     const volumeCalls: number[] = [];
     let volumeRevision = 2;
-    const api = baseApi({
-      setPlaybackVolume: vi.fn(async (value: number) => {
+    const client = fakeClient({
+      setVolume: vi.fn(async (value: number) => {
         volumeCalls.push(value);
         if (volumeCalls.length === 1) {
           await new Promise<void>((resolve) => {
@@ -180,11 +174,11 @@ describe("playback session ordering", () => {
         }
         return stopped(volumeRevision++, null);
       }),
-      pausePlayback: vi.fn(async () => stopped(10, null)),
-      seekPlayback: vi.fn(async () => stopped(11, null)),
+      pause: vi.fn(async () => stopped(10, null)),
+      seek: vi.fn(async () => stopped(11, null)),
     });
-    const playback = createPlayback(api);
-    playback.initialize(stopped(1, null), queue(1));
+    const playback = new Playback(client);
+    load(playback, stopped(1, null), queue(1));
 
     playback.setVolume(0.2);
     playback.setVolume(0.8);
@@ -193,8 +187,8 @@ describe("playback session ordering", () => {
     expect(volumeCalls).toEqual([0.2]);
 
     await Promise.all([playback.pause(), playback.seek(1000)]);
-    expect(api.pausePlayback).toHaveBeenCalledTimes(1);
-    expect(api.seekPlayback).toHaveBeenCalledWith(1000);
+    expect(client.pause).toHaveBeenCalledTimes(1);
+    expect(client.seek).toHaveBeenCalledWith(1000);
 
     releaseFirstVolume?.();
     await vi.waitFor(() => expect(volumeCalls).toEqual([0.2, 0.8]));
@@ -203,57 +197,57 @@ describe("playback session ordering", () => {
 
   it("keeps only the latest transport command that arrives while one is in flight", async () => {
     let releasePause: (() => void) | undefined;
-    const api = baseApi({
-      pausePlayback: vi.fn(async () => {
+    const client = fakeClient({
+      pause: vi.fn(async () => {
         await new Promise<void>((resolve) => {
           releasePause = resolve;
         });
         return stopped(2, null);
       }),
-      resumePlayback: vi.fn(async () => stopped(3, null)),
-      nextPlayback: vi.fn(async () => stopped(4, null)),
+      resume: vi.fn(async () => stopped(3, null)),
+      next: vi.fn(async () => stopped(4, null)),
     });
-    const playback = createPlayback(api);
-    playback.initialize(stopped(1, null), queue(1));
+    const playback = new Playback(client);
+    load(playback, stopped(1, null), queue(1));
 
     const first = playback.pause();
     const replaced = playback.resume();
     const latest = playback.next();
     expect(playback.transportPending).toBe("pause");
     expect(await replaced).toBe(false);
-    expect(api.resumePlayback).not.toHaveBeenCalled();
-    expect(api.nextPlayback).not.toHaveBeenCalled();
+    expect(client.resume).not.toHaveBeenCalled();
+    expect(client.next).not.toHaveBeenCalled();
 
     releasePause?.();
     await first;
     expect(await latest).toBe(true);
-    expect(api.nextPlayback).toHaveBeenCalledTimes(1);
-    expect(api.resumePlayback).not.toHaveBeenCalled();
+    expect(client.next).toHaveBeenCalledTimes(1);
+    expect(client.resume).not.toHaveBeenCalled();
     expect(playback.transportPending).toBeNull();
   });
 
   it("does not delay a seek or a volume change behind a transport command", async () => {
     let releaseStart: (() => void) | undefined;
-    const api = baseApi({
-      startPlayback: vi.fn(async () => {
+    const client = fakeClient({
+      start: vi.fn(async () => {
         await new Promise<void>((resolve) => {
           releaseStart = resolve;
         });
         return playing(2, "a", 0);
       }),
-      seekPlayback: vi.fn(async () => playing(3, "a", 1_000)),
-      setPlaybackVolume: vi.fn(async () => playing(4, "a", 0)),
+      seek: vi.fn(async () => playing(3, "a", 1_000)),
+      setVolume: vi.fn(async () => playing(4, "a", 0)),
     });
-    const playback = createPlayback(api);
-    playback.initialize(stopped(1, null), queue(1));
+    const playback = new Playback(client);
+    load(playback, stopped(1, null), queue(1));
     playback.acceptPlayback(playing(1, "a", 0));
 
     const start = playback.startPlayback({ kind: "tracks" } as never, "a");
     void playback.seek(1_000);
     playback.setVolume(0.2);
 
-    await vi.waitFor(() => expect(api.seekPlayback).toHaveBeenCalledWith(1_000));
-    await vi.waitFor(() => expect(api.setPlaybackVolume).toHaveBeenCalledWith(0.2));
+    await vi.waitFor(() => expect(client.seek).toHaveBeenCalledWith(1_000));
+    await vi.waitFor(() => expect(client.setVolume).toHaveBeenCalledWith(0.2));
     releaseStart?.();
     await start;
   });
@@ -271,12 +265,12 @@ describe("undoing a queue change", () => {
 
   it("is offered after clearing upcoming, and goes away after a while", async () => {
     vi.useFakeTimers();
-    const playback = createPlayback(
-      baseApi({
+    const playback = new Playback(
+      fakeClient({
         clearQueue: vi.fn(async () => queue(2)),
       }),
     );
-    playback.initialize(stopped(1, null), withUpcoming(1));
+    load(playback, stopped(1, null), withUpcoming(1));
 
     await playback.clearQueue();
     expect(playback.undoOffer).toBe("Upcoming cleared");
@@ -288,13 +282,13 @@ describe("undoing a queue change", () => {
 
 describe("seeking", () => {
   it("rounds to whole milliseconds", async () => {
-    const seekPlayback = vi.fn(async () => playing(2, "a", 1_000));
-    const playback = createPlayback(baseApi({ seekPlayback }));
+    const seek = vi.fn(async () => playing(2, "a", 1_000));
+    const playback = new Playback(fakeClient({ seek }));
     playback.acceptPlayback(playing(1, "a", 0));
 
     await playback.seek(1_234.56);
 
-    expect(seekPlayback).toHaveBeenCalledWith(1_235);
+    expect(seek).toHaveBeenCalledWith(1_235);
   });
 });
 
@@ -312,8 +306,8 @@ describe("failures", () => {
   });
 
   it("exposes why playback stopped, and retries through resume", async () => {
-    const resumePlayback = vi.fn(async () => playing(3, "a", 0));
-    const playback = createPlayback(baseApi({ resumePlayback }));
+    const resume = vi.fn(async () => playing(3, "a", 0));
+    const playback = new Playback(fakeClient({ resume }));
     playback.acceptPlayback(failed(2, false));
 
     expect(playback.status).toBe("failed");
@@ -321,12 +315,12 @@ describe("failures", () => {
 
     await playback.resume();
 
-    expect(resumePlayback).toHaveBeenCalledTimes(1);
+    expect(resume).toHaveBeenCalledTimes(1);
     expect(playback.failure).toBeNull();
   });
 
   it("is not a stop while the player moves on by itself", () => {
-    const playback = createPlayback(baseApi());
+    const playback = new Playback(fakeClient());
 
     playback.acceptPlayback(failed(2, true));
 
@@ -338,22 +332,30 @@ describe("failures", () => {
 
     it("are told by the occurrence, and consecutive skips share the notice", () => {
       vi.useFakeTimers();
-      const playback = createPlayback(baseApi());
+      const playback = new Playback(fakeClient());
 
-      playback.acceptSkip(item("a"));
+      playback.acceptSkip("a");
       expect(playback.notice).toBe("Couldn't play a, skipped");
-      playback.acceptSkip(item("b"));
-      playback.acceptSkip(item("c"));
+      playback.acceptSkip("b");
+      playback.acceptSkip("c");
       expect(playback.notice).toBe("Couldn't play a and 2 more, skipped");
 
       vi.advanceTimersByTime(6_000);
       expect(playback.notice).toBeNull();
-      playback.acceptSkip(item("d"));
+      playback.acceptSkip("d");
       expect(playback.notice).toBe("Couldn't play d, skipped");
     });
 
+    it("names a track that had no title as a track", () => {
+      const playback = new Playback(fakeClient());
+
+      playback.acceptSkip(null);
+
+      expect(playback.notice).toBe("Couldn't play a track, skipped");
+    });
+
     it("is not told by the snapshot alone, which only says the player is moving on", () => {
-      const playback = createPlayback(baseApi());
+      const playback = new Playback(fakeClient());
 
       playback.acceptPlayback(failed(1, true, "a"));
 
@@ -370,13 +372,13 @@ describe("album shuffle", () => {
 
   it("turns the shuffle on, then starts", async () => {
     const order: string[] = [];
-    const playback = createPlayback(
-      baseApi({
-        setPlaybackShuffle: vi.fn(async () => {
+    const playback = new Playback(
+      fakeClient({
+        setShuffle: vi.fn(async () => {
           order.push("shuffle");
           return queueOf(2, { shuffleEnabled: true });
         }),
-        startPlayback: vi.fn(async () => {
+        start: vi.fn(async () => {
           order.push("start");
           return playing(2, "a", 0);
         }),
@@ -390,26 +392,26 @@ describe("album shuffle", () => {
   });
 
   it("does not start when the shuffle cannot be turned on, and says why", async () => {
-    const startPlayback = vi.fn(async () => playing(2, "a", 0));
-    const playback = createPlayback(
-      baseApi({
-        setPlaybackShuffle: async () => {
+    const start = vi.fn(async () => playing(2, "a", 0));
+    const playback = new Playback(
+      fakeClient({
+        setShuffle: async () => {
           throw { code: "workerUnavailable" };
         },
-        startPlayback,
+        start,
       }),
     );
 
     await playback.shuffleAndStart(context);
 
-    expect(startPlayback).not.toHaveBeenCalled();
+    expect(start).not.toHaveBeenCalled();
     expect(playback.error).toBe("The playback engine is unavailable.");
   });
 });
 
 describe("playback session derived state", () => {
   it("keeps the same item object while position ticks arrive", () => {
-    const playback = createPlayback(baseApi());
+    const playback = new Playback(fakeClient());
 
     playback.acceptPlayback(playing(1, "a", 0));
     const first = playback.item;
@@ -421,7 +423,7 @@ describe("playback session derived state", () => {
   });
 
   it("replaces the item when another queue item starts", () => {
-    const playback = createPlayback(baseApi());
+    const playback = new Playback(fakeClient());
 
     playback.acceptPlayback(playing(1, "a", 0));
     const first = playback.item;
@@ -432,7 +434,7 @@ describe("playback session derived state", () => {
   });
 
   it("keeps naming the last track while stopped and drops the session", () => {
-    const playback = createPlayback(baseApi());
+    const playback = new Playback(fakeClient());
 
     playback.acceptPlayback(playing(1, "a", 4_000));
     playback.acceptPlayback(stopped(2, "a"));
@@ -444,7 +446,7 @@ describe("playback session derived state", () => {
 
   it("feeds every accepted snapshot to the clock and ignores stale ones", () => {
     const accept = vi.fn();
-    const playback = createPlayback(baseApi(), { accept } as never);
+    const playback = new Playback(fakeClient(), { accept } as never);
 
     playback.acceptPlayback(playing(2, "a", 0));
     playback.acceptPlayback(playing(1, "a", 0));
@@ -462,7 +464,7 @@ describe("position messages", () => {
 
   it("feed the clock without touching the snapshot", () => {
     const accept = vi.fn();
-    const playback = createPlayback(baseApi(), { accept } as never);
+    const playback = new Playback(fakeClient(), { accept } as never);
     playback.acceptPlayback(playing(1, "a", 0));
     const snapshot = playback.snapshot;
     accept.mockClear();
@@ -478,7 +480,7 @@ describe("position messages", () => {
 
   it("keep the playing flag the snapshot reported", () => {
     const accept = vi.fn();
-    const playback = createPlayback(baseApi(), { accept } as never);
+    const playback = new Playback(fakeClient(), { accept } as never);
     playback.acceptPlayback(playing(1, "a", 0));
 
     playback.acceptPosition(position(250));
@@ -488,7 +490,7 @@ describe("position messages", () => {
 
   it("are ignored for another session or an older seek", () => {
     const accept = vi.fn();
-    const playback = createPlayback(baseApi(), { accept } as never);
+    const playback = new Playback(fakeClient(), { accept } as never);
     playback.acceptPlayback(playing(1, "a", 0, 1));
     accept.mockClear();
 
@@ -500,7 +502,7 @@ describe("position messages", () => {
 
   it("are ignored while paused, so a tick sent before the pause cannot move the clock back", () => {
     const accept = vi.fn();
-    const playback = createPlayback(baseApi(), { accept } as never);
+    const playback = new Playback(fakeClient(), { accept } as never);
     const paused = playing(1, "a", 1_100);
     playback.acceptPlayback({ ...paused, value: { ...paused.value, status: "paused" } } as never);
     accept.mockClear();
@@ -512,7 +514,7 @@ describe("position messages", () => {
 
   it("are ignored while nothing is loaded", () => {
     const accept = vi.fn();
-    const playback = createPlayback(baseApi(), { accept } as never);
+    const playback = new Playback(fakeClient(), { accept } as never);
     playback.acceptPlayback(stopped(1, "a"));
     accept.mockClear();
 
@@ -523,7 +525,7 @@ describe("position messages", () => {
 
   it("arrive as the Backend's position messages", () => {
     const accept = vi.fn();
-    const playback = createPlayback(baseApi(), { accept } as never);
+    const playback = new Playback(fakeClient(), { accept } as never);
     playback.acceptPlayback(playing(1, "a", 0));
     accept.mockClear();
 
@@ -535,9 +537,9 @@ describe("position messages", () => {
 
 describe("starting playback", () => {
   it("passes the context and the clicked track to the backend", async () => {
-    const startPlayback = vi.fn(async () => playing(2, "c", 0));
-    const playback = createPlayback(baseApi({ startPlayback }));
-    playback.initialize(stopped(1, null), queue(1));
+    const start = vi.fn(async () => playing(2, "c", 0));
+    const playback = new Playback(fakeClient({ start }));
+    load(playback, stopped(1, null), queue(1));
     const context = {
       kind: "album",
       key: { title: "Album", albumArtist: "Artist", albumEdition: "" },
@@ -545,19 +547,19 @@ describe("starting playback", () => {
 
     await playback.startPlayback(context, "c");
 
-    expect(startPlayback).toHaveBeenCalledWith(context, "c");
+    expect(start).toHaveBeenCalledWith(context, "c");
     expect(playback.item?.trackId).toBe("c");
   });
 
   it("does not report a request that a newer one replaced", async () => {
-    const playback = createPlayback(
-      baseApi({
-        startPlayback: async () => {
-          throw { code: "superseded" };
+    const playback = new Playback(
+      fakeClient({
+        start: async () => {
+          throw new SupersededError({ code: "superseded" });
         },
       }),
     );
-    playback.initialize(stopped(1, null), queue(1));
+    load(playback, stopped(1, null), queue(1));
 
     await playback.startPlayback(
       { kind: "album", key: { title: "A", albumArtist: "B", albumEdition: "" } },
@@ -569,14 +571,14 @@ describe("starting playback", () => {
   });
 
   it("reports a real failure", async () => {
-    const playback = createPlayback(
-      baseApi({
-        startPlayback: async () => {
+    const playback = new Playback(
+      fakeClient({
+        start: async () => {
           throw { code: "trackUnavailable" };
         },
       }),
     );
-    playback.initialize(stopped(1, null), queue(1));
+    load(playback, stopped(1, null), queue(1));
 
     await playback.startPlayback(
       { kind: "album", key: { title: "A", albumArtist: "B", albumEdition: "" } },
@@ -587,14 +589,14 @@ describe("starting playback", () => {
   });
 
   it("clears a reported failure on request", async () => {
-    const playback = createPlayback(
-      baseApi({
-        startPlayback: async () => {
+    const playback = new Playback(
+      fakeClient({
+        start: async () => {
           throw { code: "trackUnavailable" };
         },
       }),
     );
-    playback.initialize(stopped(1, null), queue(1));
+    load(playback, stopped(1, null), queue(1));
     await playback.startPlayback(
       { kind: "album", key: { title: "A", albumArtist: "B", albumEdition: "" } },
       "1",
@@ -603,7 +605,6 @@ describe("starting playback", () => {
 
     playback.clearError();
 
-    expect(playback.error).toBeNull();
     expect(playback.error).toBeNull();
   });
 });
@@ -615,42 +616,42 @@ describe("changing the volume", () => {
   });
 
   it("unmutes when the volume changes while muted", async () => {
-    const setPlaybackMuted = vi.fn(async () => stopped(3, null));
-    const playback = createPlayback(
-      baseApi({
-        setPlaybackVolume: vi.fn(async () => mutedSnapshot()),
-        setPlaybackMuted,
+    const setMuted = vi.fn(async () => stopped(3, null));
+    const playback = new Playback(
+      fakeClient({
+        setVolume: vi.fn(async () => mutedSnapshot()),
+        setMuted,
       }),
     );
-    playback.initialize(mutedSnapshot(), queue(1));
+    load(playback, mutedSnapshot(), queue(1));
 
     playback.changeVolume(0.4);
 
     expect(playback.volume).toBe(0.4);
-    expect(setPlaybackMuted).toHaveBeenCalledWith(false);
+    expect(setMuted).toHaveBeenCalledWith(false);
   });
 
   it("leaves mute alone when not muted", async () => {
-    const setPlaybackMuted = vi.fn(async () => stopped(3, null));
-    const playback = createPlayback(
-      baseApi({ setPlaybackVolume: async () => stopped(2, null), setPlaybackMuted }),
+    const setMuted = vi.fn(async () => stopped(3, null));
+    const playback = new Playback(
+      fakeClient({ setVolume: async () => stopped(2, null), setMuted }),
     );
-    playback.initialize(stopped(1, null), queue(1));
+    load(playback, stopped(1, null), queue(1));
 
     playback.changeVolume(0.4);
 
-    expect(setPlaybackMuted).not.toHaveBeenCalled();
+    expect(setMuted).not.toHaveBeenCalled();
   });
 });
 
 describe("last navigation", () => {
   it("takes the direction from the session's startedBy when the item changes", async () => {
-    const playback = createPlayback(
-      baseApi({
-        previousPlayback: async () => playing(2, "a", 0, 0, "previous"),
+    const playback = new Playback(
+      fakeClient({
+        previous: async () => playing(2, "a", 0, 0, "previous"),
       }),
     );
-    playback.initialize(playing(1, "b", 0), queue(1));
+    load(playback, playing(1, "b", 0), queue(1));
 
     expect(playback.lastNavigation).toBe("next");
     await playback.previous();
@@ -663,8 +664,8 @@ describe("last navigation", () => {
   });
 
   it("keeps the direction across a seek and goes forward for a jump", () => {
-    const playback = createPlayback(baseApi());
-    playback.initialize(playing(1, "a", 0, 0, "previous"), queue(1));
+    const playback = new Playback(fakeClient());
+    load(playback, playing(1, "a", 0, 0, "previous"), queue(1));
     expect(playback.lastNavigation).toBe("previous");
 
     playback.acceptPlayback(playing(2, "a", 5_000, 1, "previous"));
@@ -677,15 +678,15 @@ describe("last navigation", () => {
   it("does not let a Previous waiting behind a Next recolour the Next in flight", async () => {
     let finishNext: (() => void) | undefined;
     let finishPrevious: (() => void) | undefined;
-    const playback = createPlayback(
-      baseApi({
-        nextPlayback: async () => {
+    const playback = new Playback(
+      fakeClient({
+        next: async () => {
           await new Promise<void>((resolve) => {
             finishNext = resolve;
           });
           return playing(2, "b", 0, 0, "next");
         },
-        previousPlayback: async () => {
+        previous: async () => {
           await new Promise<void>((resolve) => {
             finishPrevious = resolve;
           });
@@ -693,7 +694,7 @@ describe("last navigation", () => {
         },
       }),
     );
-    playback.initialize(playing(1, "a", 0), queue(1));
+    load(playback, playing(1, "a", 0), queue(1));
 
     const next = playback.next();
     const previous = playback.previous();
@@ -709,14 +710,14 @@ describe("last navigation", () => {
   });
 
   it("does not let a failed Previous colour the next automatic change", async () => {
-    const playback = createPlayback(
-      baseApi({
-        previousPlayback: async () => {
+    const playback = new Playback(
+      fakeClient({
+        previous: async () => {
           throw { code: "trackUnavailable" };
         },
       }),
     );
-    playback.initialize(playing(1, "b", 0), queue(1));
+    load(playback, playing(1, "b", 0), queue(1));
 
     await playback.previous();
     playback.acceptPlayback(playing(2, "c", 0));

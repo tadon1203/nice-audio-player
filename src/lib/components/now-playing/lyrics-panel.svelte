@@ -2,7 +2,7 @@
   import ArrowDown from "@lucide/svelte/icons/arrow-down";
   import ArrowUp from "@lucide/svelte/icons/arrow-up";
   import { createTrackLyrics } from "#lib/lyrics/lyrics.svelte";
-  import { getPlayback } from "#lib/playback/context";
+  import { AppServices } from "#lib/shell/app-services.svelte";
   import { lyricsWaveformLink } from "#lib/shell/lyrics-waveform-link.svelte";
   import { Button } from "#lib/ui/shadcn/button";
   import { cn } from "#lib/utils/cn.js";
@@ -22,7 +22,7 @@
    */
   let { trackId, class: className }: { trackId: string | null; class?: string } = $props();
 
-  const playback = getPlayback();
+  const playback = AppServices.current().playback;
   const lyrics = createTrackLyrics(() => trackId);
   const resolution = $derived(lyrics.data?.status === "resolved" ? lyrics.data : null);
   const content = $derived(resolution?.document.content ?? null);

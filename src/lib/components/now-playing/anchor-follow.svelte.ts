@@ -1,5 +1,5 @@
 import type { Attachment } from "svelte/attachments";
-import { getMotionBudget } from "#lib/shell/motion-budget.svelte";
+import { AppServices } from "#lib/shell/app-services.svelte";
 import { RetargetableSpring } from "#lib/ui/motion/retargetable-spring.svelte";
 import { springLinear } from "#lib/ui/motion/spring-curve";
 import { crossfade, motionTokens } from "#lib/ui/motion/tokens";
@@ -23,7 +23,7 @@ const OWN_WRITES = 8;
  * clamping it). `isOwnScroll` tells a scroll event caused by its own writes from the reader's.
  */
 export function createAnchorFollow() {
-  const budget = getMotionBudget();
+  const budget = AppServices.current().motion;
   let container = $state.raw<HTMLElement | null>(null);
   let fade: Animation | null = null;
   // The scroll position as a spring. It is written to the container only while a glide is active.

@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
   import type { ArtworkRef } from "#lib/native";
-  import { getAppearance } from "#lib/settings/context";
+  import { AppServices } from "#lib/shell/app-services.svelte";
   import Artwork from "#lib/ui/artwork.svelte";
   import { sharedElement } from "#lib/ui/motion/shared-element";
   import ArtworkGlow from "#lib/ui/artwork-glow/artwork-glow.svelte";
@@ -27,7 +27,7 @@
     strip?: Snippet;
   } = $props();
 
-  const appearance = getAppearance();
+  const appearance = AppServices.current().appearance;
 </script>
 
 <!-- The header band of a detail view: artwork, title and facts over the Artwork glow. -->

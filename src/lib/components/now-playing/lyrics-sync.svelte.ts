@@ -1,6 +1,6 @@
 import { untrack } from "svelte";
 import type { LyricsTimedLine } from "#lib/native";
-import { getPlayback } from "#lib/playback/context";
+import { AppServices } from "#lib/shell/app-services.svelte";
 import { findCurrentLineIndex } from "./lyrics-lines";
 
 /**
@@ -9,7 +9,7 @@ import { findCurrentLineIndex } from "./lyrics-lines";
  * start, so readers rerun only when the line changes, never with the position. Call it while a component initialises.
  */
 export function createLyricsSync(lines: () => readonly LyricsTimedLine[] | null) {
-  const { clock } = getPlayback();
+  const { clock } = AppServices.current().playback;
 
   // Start from where the clock is now, so a panel opened mid-song does not begin at line 0.
   let index = $state.raw(
