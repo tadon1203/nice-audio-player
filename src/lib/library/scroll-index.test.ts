@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { labelAt, skipTo } from "./scroll-index";
+import { ScrollIndex } from "./scroll-index";
 
 const buckets = [
   { label: "#", count: 2 },
@@ -7,9 +7,9 @@ const buckets = [
   { label: "漢", count: 1 },
 ];
 
-describe("labelAt", () => {
+describe("ScrollIndex.labelAt", () => {
   it("files each position under the bucket that holds it, in list order", () => {
-    expect([0, 1, 2, 4, 5].map((position) => labelAt(buckets, position))).toEqual([
+    expect([0, 1, 2, 4, 5].map((position) => ScrollIndex.labelAt(buckets, position))).toEqual([
       "#",
       "#",
       "A",
@@ -19,19 +19,19 @@ describe("labelAt", () => {
   });
 
   it("has no label past the end or without an index", () => {
-    expect(labelAt(buckets, 6)).toBeNull();
-    expect(labelAt([], 0)).toBeNull();
+    expect(ScrollIndex.labelAt(buckets, 6)).toBeNull();
+    expect(ScrollIndex.labelAt([], 0)).toBeNull();
   });
 });
 
-describe("skipTo", () => {
+describe("ScrollIndex.skipTo", () => {
   it("counts the rows before a label", () => {
-    expect(skipTo(buckets, "#")).toBe(0);
-    expect(skipTo(buckets, "A")).toBe(2);
-    expect(skipTo(buckets, "漢")).toBe(5);
+    expect(ScrollIndex.skipTo(buckets, "#")).toBe(0);
+    expect(ScrollIndex.skipTo(buckets, "A")).toBe(2);
+    expect(ScrollIndex.skipTo(buckets, "漢")).toBe(5);
   });
 
   it("is null for a label the list does not have", () => {
-    expect(skipTo(buckets, "Z")).toBeNull();
+    expect(ScrollIndex.skipTo(buckets, "Z")).toBeNull();
   });
 });

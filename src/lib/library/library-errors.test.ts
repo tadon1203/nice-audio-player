@@ -1,43 +1,41 @@
 import { describe, expect, it } from "vitest";
-import {
-  libraryCommandErrorMessage,
-  libraryScanFailureMessage,
-  libraryStatusMessage,
-} from "./library-errors";
+import { LibraryErrors } from "./library-errors";
 
-describe("libraryCommandErrorMessage", () => {
+describe("LibraryErrors.commandMessage", () => {
   it("describes codes that used to fall through to the generic message", () => {
-    expect(libraryCommandErrorMessage({ code: "albumArtistNotFound" })).toBe(
+    expect(LibraryErrors.commandMessage({ code: "albumArtistNotFound" })).toBe(
       "That artist could not be found.",
     );
   });
 
   it("falls back for unknown codes and non-error values", () => {
-    expect(libraryCommandErrorMessage({ code: "somethingNew" })).toBe(
+    expect(LibraryErrors.commandMessage({ code: "somethingNew" })).toBe(
       "The library operation failed.",
     );
-    expect(libraryCommandErrorMessage(undefined)).toBe("The library operation failed.");
+    expect(LibraryErrors.commandMessage(undefined)).toBe("The library operation failed.");
   });
 });
 
-describe("libraryStatusMessage", () => {
+describe("LibraryErrors.statusMessage", () => {
   it("has no message while the library is ready", () => {
-    expect(libraryStatusMessage({ status: "ready" })).toBeNull();
+    expect(LibraryErrors.statusMessage({ status: "ready" })).toBeNull();
   });
 
   it("maps unavailable reasons", () => {
-    expect(libraryStatusMessage({ status: "unavailable", reason: "databaseCorrupt" })).toBe(
+    expect(LibraryErrors.statusMessage({ status: "unavailable", reason: "databaseCorrupt" })).toBe(
       "The library database is corrupt.",
     );
   });
 });
 
-describe("libraryScanFailureMessage", () => {
+describe("LibraryErrors.scanFailureMessage", () => {
   it("never exposes a raw failure code", () => {
-    expect(libraryScanFailureMessage("rootTraversalFailed")).toBe(
+    expect(LibraryErrors.scanFailureMessage("rootTraversalFailed")).toBe(
       "A library folder could not be read.",
     );
-    expect(libraryScanFailureMessage("unknownInternalCode")).toBe("The scan stopped unexpectedly.");
-    expect(libraryScanFailureMessage(null)).toBe("The scan stopped unexpectedly.");
+    expect(LibraryErrors.scanFailureMessage("unknownInternalCode")).toBe(
+      "The scan stopped unexpectedly.",
+    );
+    expect(LibraryErrors.scanFailureMessage(null)).toBe("The scan stopped unexpectedly.");
   });
 });

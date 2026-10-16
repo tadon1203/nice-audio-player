@@ -5,6 +5,24 @@ import type {
   AudioOutputSelection,
   BackendMessage,
   InitialState,
+  LibraryAlbumArtistKey,
+  LibraryAlbumArtistPage,
+  LibraryAlbumArtistSortKey,
+  LibraryAlbumArtistSummary,
+  LibraryAlbumDetails,
+  LibraryAlbumKey,
+  LibraryAlbumPage,
+  LibraryAlbumSortKey,
+  LibraryAlbumTrackPage,
+  LibraryArtistAlbumSortKey,
+  LibraryIndexBucket,
+  LibraryRoot,
+  LibrarySortDirection,
+  LibraryStatus,
+  LibraryTrackPage,
+  LibraryTrackProperties,
+  LibraryTrackSortKey,
+  LyricsResolution,
   PlaybackContext,
   PlaybackQueueSnapshot,
   PlaybackQueueWindow,
@@ -51,8 +69,81 @@ export interface AppearanceClient {
   update(patch: AppearancePatch): Promise<Versioned<Appearance>>;
 }
 
+/**
+ * The Library commands. List arguments are positional, as the generated bindings take them; the
+ * ID parameters keep their current types until the track and album ID tickets change them.
+ */
+export interface LibraryClient {
+  status(): Promise<LibraryStatus>;
+  roots(): Promise<LibraryRoot[]>;
+  /** Resolves null when the user closes the folder dialog. */
+  selectDirectory(): Promise<string | null>;
+  registerRoot(path: string): Promise<LibraryRoot>;
+  setRootEnabled(id: string, enabled: boolean): Promise<LibraryRoot>;
+  removeRoot(id: string): Promise<void>;
+  deleteMissing(): Promise<number>;
+  startScan(): Promise<void>;
+  cancelScan(): Promise<void>;
+  resetAndRescan(): Promise<void>;
+  openLogDirectory(): Promise<void>;
+  tracks(
+    cursor: string | null,
+    search: string | null,
+    sortKey: LibraryTrackSortKey,
+    direction: LibrarySortDirection,
+    skip: number,
+  ): Promise<LibraryTrackPage>;
+  albums(
+    cursor: string | null,
+    search: string | null,
+    sortKey: LibraryAlbumSortKey,
+    direction: LibrarySortDirection,
+    skip: number,
+  ): Promise<LibraryAlbumPage>;
+  albumArtists(
+    cursor: string | null,
+    search: string | null,
+    sortKey: LibraryAlbumArtistSortKey,
+    direction: LibrarySortDirection,
+    skip: number,
+  ): Promise<LibraryAlbumArtistPage>;
+  trackIndex(
+    search: string | null,
+    sortKey: LibraryTrackSortKey,
+    direction: LibrarySortDirection,
+  ): Promise<LibraryIndexBucket[]>;
+  albumIndex(
+    search: string | null,
+    sortKey: LibraryAlbumSortKey,
+    direction: LibrarySortDirection,
+  ): Promise<LibraryIndexBucket[]>;
+  albumArtistIndex(
+    search: string | null,
+    sortKey: LibraryAlbumArtistSortKey,
+    direction: LibrarySortDirection,
+  ): Promise<LibraryIndexBucket[]>;
+  album(albumKey: LibraryAlbumKey): Promise<LibraryAlbumDetails>;
+  albumTracks(albumKey: LibraryAlbumKey, cursor: string | null): Promise<LibraryAlbumTrackPage>;
+  albumArtist(artistKey: LibraryAlbumArtistKey): Promise<LibraryAlbumArtistSummary>;
+  artistAlbums(
+    artistKey: LibraryAlbumArtistKey,
+    cursor: string | null,
+    sortKey: LibraryArtistAlbumSortKey,
+    direction: LibrarySortDirection,
+  ): Promise<LibraryAlbumPage>;
+  trackProperties(trackId: string): Promise<LibraryTrackProperties | null>;
+  revealTrack(trackId: string): Promise<void>;
+  artworkAccent(contentHash: string): Promise<string | null>;
+}
+
+export interface LyricsClient {
+  trackLyrics(trackId: string): Promise<LyricsResolution>;
+}
+
 export interface NativeClients {
   readonly session: SessionClient;
   readonly playback: PlaybackClient;
   readonly appearance: AppearanceClient;
+  readonly library: LibraryClient;
+  readonly lyrics: LyricsClient;
 }

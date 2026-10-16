@@ -2,8 +2,7 @@
   import type { Snippet } from "svelte";
   import type { TransitionConfig } from "svelte/transition";
   import { AppServices } from "#lib/shell/app-services.svelte";
-  import { EXIT_SPEED } from "#lib/shell/now-playing-motion";
-  import { nowPlaying } from "#lib/shell/now-playing.svelte";
+  import { NowPlayingMotion } from "#lib/shell/now-playing-motion";
   import { motionFor } from "#lib/ui/motion/svelte-motion";
   import { LIFT_PX } from "./now-playing-layout";
 
@@ -17,14 +16,14 @@
    */
   let { children }: { children?: Snippet } = $props();
 
-  const budget = AppServices.current().motion;
+  const { motion: budget, history } = AppServices.current();
 
   function lift(opening: boolean) {
     return (_node: Element): TransitionConfig => {
       const reduced = budget.current === "reduced";
       const { duration, easing } = motionFor("large");
       return {
-        duration: opening || reduced ? duration : duration * EXIT_SPEED,
+        duration: opening || reduced ? duration : duration * NowPlayingMotion.EXIT_SPEED,
         easing,
         css: (t, u) => `opacity: ${t}; transform: translateY(${reduced ? 0 : LIFT_PX * u}px)`,
       };
@@ -34,7 +33,7 @@
   const liftOut = lift(false);
 </script>
 
-{#if nowPlaying.isOpen}
+{#if history.isNowPlayingOpen}
   <section
     aria-label="Now Playing"
     data-slot="now-playing"

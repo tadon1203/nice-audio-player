@@ -1,6 +1,6 @@
 <script lang="ts">
   import Check from "@lucide/svelte/icons/check";
-  import { libraryScanFailureMessage } from "#lib/library/library-errors";
+  import { LibraryErrors } from "#lib/library/library-errors";
   import type { LibraryScanSnapshot } from "#lib/native";
   import { formatNumber } from "#lib/utils/format";
 
@@ -14,7 +14,7 @@
 
 {#if scan.state === "failed"}
   <p class="mt-4 text-sm text-destructive" role="alert">
-    {libraryScanFailureMessage(scan.failureCode)}
+    {LibraryErrors.scanFailureMessage(scan.failureCode)}
   </p>
 {:else if scan.state === "completed"}
   <p class="mt-4 flex items-center gap-2 text-sm text-muted-foreground">

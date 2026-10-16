@@ -15,7 +15,6 @@
   import type { Attachment } from "svelte/attachments";
   import type { LyricsTimedLine } from "#lib/native";
   import { AppServices } from "#lib/shell/app-services.svelte";
-  import { lyricsWaveformLink } from "#lib/shell/lyrics-waveform-link.svelte";
   import TimePresentation from "#lib/ui/time-presentation.svelte";
   import { cn } from "#lib/utils/cn.js";
   import { formatDuration } from "#lib/utils/format";
@@ -43,7 +42,7 @@
     attach: Attachment<HTMLElement>;
   } = $props();
 
-  const { playback, actions } = AppServices.current();
+  const { playback, actions, lyricsWaveformLink } = AppServices.current();
 
   const line = $derived(lines[index]!);
   const isInterval = $derived(line.text.trim() === "");

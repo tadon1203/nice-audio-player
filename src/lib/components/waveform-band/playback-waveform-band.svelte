@@ -7,7 +7,6 @@
   import { Button } from "#lib/ui/shadcn/button";
   import { onDestroy, onMount, tick } from "svelte";
   import { AppServices } from "#lib/shell/app-services.svelte";
-  import { lyricsWaveformLink } from "#lib/shell/lyrics-waveform-link.svelte";
   import RollingNumber from "#lib/ui/rolling-number/rolling-number.svelte";
   import { spinTurns } from "#lib/ui/rolling-number/rolling-model";
   import WaveformSeek from "#lib/ui/waveform/waveform-seek.svelte";
@@ -34,7 +33,13 @@
     timeClass?: string;
   } = $props();
 
-  const { playback, motion: budget, actions, waveforms } = AppServices.current();
+  const {
+    playback,
+    motion: budget,
+    actions,
+    waveforms,
+    lyricsWaveformLink,
+  } = AppServices.current();
   const trackKey = $derived(playback.item?.trackId ?? "none");
   const canSeek = $derived(playback.isActive && playback.durationMs !== null);
   const waveform = $derived(showWaveform ? waveforms.forPlayback(playback.playbackId) : null);

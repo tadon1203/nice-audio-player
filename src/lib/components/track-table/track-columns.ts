@@ -3,7 +3,7 @@ import type {
   LibraryTrackSortKey,
   LibraryTrackSummary,
 } from "#lib/native";
-import { isTrackAvailable } from "#lib/library/tracks";
+import { Tracks } from "#lib/library/tracks";
 import { formatDuration, formatKilohertz, MISSING } from "#lib/utils/format";
 
 /** A track row shared by the Library and Album layouts; both DTOs satisfy it directly. */
@@ -190,7 +190,7 @@ export function trackRowState(
         ? { label: `Resume ${row.title}`, kind: "resume", persistent: true }
         : { label: `Play ${row.title}`, kind: "play", persistent: false };
   const clickIntent =
-    !isTrackAvailable(row) || playbackState === "playing"
+    !Tracks.isAvailable(row) || playbackState === "playing"
       ? null
       : playbackState === "paused"
         ? "resume"

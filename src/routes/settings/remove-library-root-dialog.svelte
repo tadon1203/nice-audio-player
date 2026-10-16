@@ -18,7 +18,7 @@
   }: {
     root: LibraryRoot | null;
     onOpenChange: (open: boolean) => void;
-    onConfirm: () => void;
+    onConfirm: (root: LibraryRoot) => void;
   } = $props();
 </script>
 
@@ -35,7 +35,9 @@
     </p>
     <AlertDialogFooter>
       <AlertDialogCancel>Cancel</AlertDialogCancel>
-      <AlertDialogAction variant="destructive" onclick={onConfirm}>Remove</AlertDialogAction>
+      <AlertDialogAction variant="destructive" onclick={() => root !== null && onConfirm(root)}
+        >Remove</AlertDialogAction
+      >
     </AlertDialogFooter>
   </AlertDialogContent>
 </AlertDialog>

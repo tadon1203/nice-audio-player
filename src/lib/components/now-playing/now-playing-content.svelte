@@ -2,7 +2,7 @@
   import { untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import PlaybackWaveformBand from "#lib/components/waveform-band/playback-waveform-band.svelte";
-  import { createTrackLyrics } from "#lib/lyrics/lyrics.svelte";
+  import { TrackLyrics } from "#lib/lyrics/track-lyrics.svelte";
   import { AppServices } from "#lib/shell/app-services.svelte";
   import { cn } from "#lib/utils/cn.js";
   import Identity from "./identity.svelte";
@@ -31,17 +31,17 @@
    * shared-element motion from the dock; the text is not shared, it fades in behind the Sleeve.
    * Below `md` everything stacks. The waveform grows along the bottom edge when its data arrives.
    */
-  const playback = AppServices.current().playback;
+  const { playback, lyrics: lyricsRepository } = AppServices.current();
   const item = $derived(playback.item);
   const trackId = $derived(item?.trackId ?? null);
-  const lyrics = createTrackLyrics(() => trackId);
-  const resolution = $derived(lyrics.data);
+  const lyrics = new TrackLyrics(lyricsRepository, () => trackId);
+  const resolution = $derived(lyrics.resolution);
 
   // While lyrics are loading keep the column the previous track had, so it does not flip twice
   // (they are also fetched ahead of time). The first ever render starts from what is cached.
   let showLyrics = $state(untrack(() => resolution?.status === "resolved"));
   $effect.pre(() => {
-    if (resolution !== undefined) showLyrics = resolution.status === "resolved";
+    if (resolution !== null) showLyrics = resolution.status === "resolved";
   });
 
   // The left column exists beside the queue rail when there are lyrics or the meters are chosen.

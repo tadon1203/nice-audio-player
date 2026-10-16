@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { createLibraryCatalog } from "#lib/library/catalog.svelte";
-  import { libraryViews } from "#lib/shell/library-views.svelte";
+  import { LibraryCatalog } from "#lib/library/library-catalog.svelte";
+  import { AppServices } from "#lib/shell/app-services.svelte";
   import VirtualMediaGrid from "#lib/ui/media-grid/virtual-media-grid.svelte";
   import ArtistTile from "../artist-tile.svelte";
   import LibraryWorkspace from "../library-workspace.svelte";
@@ -13,8 +13,9 @@
     searchPlaceholder: "Search album artists…",
   };
 
-  const view = libraryViews.albumArtists;
-  const catalog = createLibraryCatalog(() => view.request);
+  const services = AppServices.current();
+  const view = services.libraryViews.albumArtists;
+  const catalog = new LibraryCatalog(services.catalog, () => view.request);
 </script>
 
 <LibraryWorkspace

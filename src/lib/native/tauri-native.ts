@@ -1,20 +1,27 @@
 import { Channel, isTauri } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-dialog";
 import {
   commands,
   type AudioDeviceListError,
   type BackendMessage,
+  type LibraryCommandError,
+  type LyricsCommandError,
   type PlaybackContext,
   type PlaybackServiceError,
 } from "./bindings";
 import { AppearanceError } from "./errors/appearance-error";
 import { AudioDevicesError } from "./errors/audio-devices-error";
 import { IpcError } from "./errors/ipc-error";
+import { LibraryError } from "./errors/library-error";
+import { LyricsError } from "./errors/lyrics-error";
 import { NativeBridgeUnavailableError } from "./errors/native-bridge-unavailable-error";
 import { PlaybackError } from "./errors/playback-error";
 import { SessionError } from "./errors/session-error";
 import { SupersededError } from "./errors/superseded-error";
 import type {
   AppearanceClient,
+  LibraryClient,
+  LyricsClient,
   NativeClients,
   PlaybackClient,
   SessionClient,
@@ -152,6 +159,150 @@ class TauriAppearanceClient implements AppearanceClient {
   }
 }
 
+class TauriLibraryClient implements LibraryClient {
+  readonly #commands: Commands;
+
+  constructor(source: Commands) {
+    this.#commands = source;
+  }
+
+  status() {
+    return this.#call(() => this.#commands.getLibraryStatus());
+  }
+  roots() {
+    return this.#call(() => this.#commands.listLibraryRoots());
+  }
+  async selectDirectory() {
+    const selected = await open({ directory: true, multiple: false });
+    return typeof selected === "string" ? selected : null;
+  }
+  registerRoot(path: string) {
+    return this.#call(() => this.#commands.registerLibraryRoot(path));
+  }
+  setRootEnabled(id: string, enabled: boolean) {
+    return this.#call(() => this.#commands.setLibraryRootEnabled(id, enabled));
+  }
+  async removeRoot(id: string) {
+    await this.#call(() => this.#commands.removeLibraryRoot(id));
+  }
+  deleteMissing() {
+    return this.#call(() => this.#commands.deleteMissingLibraryTracks());
+  }
+  async startScan() {
+    await this.#call(() => this.#commands.startLibraryScan());
+  }
+  async cancelScan() {
+    await this.#call(() => this.#commands.cancelLibraryScan());
+  }
+  async resetAndRescan() {
+    await this.#call(() => this.#commands.resetLibraryAndRescan());
+  }
+  async openLogDirectory() {
+    await this.#call(() => this.#commands.openLogDirectory());
+  }
+  tracks(
+    cursor: string | null,
+    search: string | null,
+    sortKey: Parameters<Commands["listLibraryTracks"]>[2],
+    direction: Parameters<Commands["listLibraryTracks"]>[3],
+    skip: number,
+  ) {
+    return this.#call(() =>
+      this.#commands.listLibraryTracks(cursor, search, sortKey, direction, skip),
+    );
+  }
+  albums(
+    cursor: string | null,
+    search: string | null,
+    sortKey: Parameters<Commands["listLibraryAlbums"]>[2],
+    direction: Parameters<Commands["listLibraryAlbums"]>[3],
+    skip: number,
+  ) {
+    return this.#call(() =>
+      this.#commands.listLibraryAlbums(cursor, search, sortKey, direction, skip),
+    );
+  }
+  albumArtists(
+    cursor: string | null,
+    search: string | null,
+    sortKey: Parameters<Commands["listLibraryAlbumArtists"]>[2],
+    direction: Parameters<Commands["listLibraryAlbumArtists"]>[3],
+    skip: number,
+  ) {
+    return this.#call(() =>
+      this.#commands.listLibraryAlbumArtists(cursor, search, sortKey, direction, skip),
+    );
+  }
+  trackIndex(
+    search: string | null,
+    sortKey: Parameters<Commands["listLibraryTrackIndex"]>[1],
+    direction: Parameters<Commands["listLibraryTrackIndex"]>[2],
+  ) {
+    return this.#call(() => this.#commands.listLibraryTrackIndex(search, sortKey, direction));
+  }
+  albumIndex(
+    search: string | null,
+    sortKey: Parameters<Commands["listLibraryAlbumIndex"]>[1],
+    direction: Parameters<Commands["listLibraryAlbumIndex"]>[2],
+  ) {
+    return this.#call(() => this.#commands.listLibraryAlbumIndex(search, sortKey, direction));
+  }
+  albumArtistIndex(
+    search: string | null,
+    sortKey: Parameters<Commands["listLibraryAlbumArtistIndex"]>[1],
+    direction: Parameters<Commands["listLibraryAlbumArtistIndex"]>[2],
+  ) {
+    return this.#call(() => this.#commands.listLibraryAlbumArtistIndex(search, sortKey, direction));
+  }
+  album(albumKey: Parameters<Commands["getLibraryAlbumDetails"]>[0]) {
+    return this.#call(() => this.#commands.getLibraryAlbumDetails(albumKey));
+  }
+  albumTracks(albumKey: Parameters<Commands["listLibraryAlbumTracks"]>[0], cursor: string | null) {
+    return this.#call(() => this.#commands.listLibraryAlbumTracks(albumKey, cursor));
+  }
+  albumArtist(artistKey: Parameters<Commands["getLibraryAlbumArtist"]>[0]) {
+    return this.#call(() => this.#commands.getLibraryAlbumArtist(artistKey));
+  }
+  artistAlbums(
+    artistKey: Parameters<Commands["listLibraryArtistAlbums"]>[0],
+    cursor: string | null,
+    sortKey: Parameters<Commands["listLibraryArtistAlbums"]>[2],
+    direction: Parameters<Commands["listLibraryArtistAlbums"]>[3],
+  ) {
+    return this.#call(() =>
+      this.#commands.listLibraryArtistAlbums(artistKey, cursor, sortKey, direction),
+    );
+  }
+  trackProperties(trackId: string) {
+    return this.#call(() => this.#commands.getLibraryTrackProperties(trackId));
+  }
+  async revealTrack(trackId: string) {
+    await this.#call(() => this.#commands.revealLibraryTrack(trackId));
+  }
+  artworkAccent(contentHash: string) {
+    return this.#call(() => this.#commands.getArtworkAccent(contentHash));
+  }
+
+  #call<T>(run: () => Promise<T>): Promise<T> {
+    return callCommand(run, (error: LibraryCommandError) => new LibraryError(error));
+  }
+}
+
+class TauriLyricsClient implements LyricsClient {
+  readonly #commands: Commands;
+
+  constructor(source: Commands) {
+    this.#commands = source;
+  }
+
+  trackLyrics(trackId: string) {
+    return callCommand(
+      () => this.#commands.getTrackLyrics(trackId),
+      (error: LyricsCommandError) => new LyricsError(error),
+    );
+  }
+}
+
 /** The Tauri adapter: the only Renderer code that imports `@tauri-apps/*` for the native clients. */
 export class TauriNative {
   /**
@@ -167,6 +318,8 @@ export class TauriNative {
       session: new TauriSessionClient(commandSet),
       playback: new TauriPlaybackClient(commandSet),
       appearance: new TauriAppearanceClient(commandSet),
+      library: new TauriLibraryClient(commandSet),
+      lyrics: new TauriLyricsClient(commandSet),
     };
   }
 }

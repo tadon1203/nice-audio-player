@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { createNowPlayingTween } from "#lib/shell/now-playing-tween.svelte";
+  import { NowPlayingTween } from "#lib/shell/now-playing-tween.svelte";
   import { DOCK_HEIGHT_NOW_PLAYING_PX, DOCK_HEIGHT_PX } from "./dock-metrics";
   import PlaybackDock from "./playback-dock.svelte";
 
-  const height = createNowPlayingTween(DOCK_HEIGHT_PX, DOCK_HEIGHT_NOW_PLAYING_PX);
+  const height = new NowPlayingTween(DOCK_HEIGHT_PX, DOCK_HEIGHT_NOW_PLAYING_PX);
 </script>
 
 <!--

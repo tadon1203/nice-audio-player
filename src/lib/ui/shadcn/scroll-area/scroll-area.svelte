@@ -1,11 +1,13 @@
 <script lang="ts">
 	import { ScrollArea as ScrollAreaPrimitive } from "bits-ui";
+	import { createAttachmentKey, type Attachment } from "svelte/attachments";
 	import { cn, type WithoutChild } from "#lib/utils/cn.js";
 	import { Scrollbar } from "./index.js";
 
 	let {
 		ref = $bindable(null),
 		viewportRef = $bindable(null),
+		viewportAttachment,
 		class: className,
 		orientation = "vertical",
 		scrollbarXClasses = "",
@@ -17,7 +19,14 @@
 		scrollbarXClasses?: string | undefined;
 		scrollbarYClasses?: string | undefined;
 		viewportRef?: HTMLElement | null;
+		/** Runs on the viewport element, the one that scrolls. */
+		viewportAttachment?: Attachment<HTMLElement>;
 	} = $props();
+
+	const viewportAttachmentKey = createAttachmentKey();
+	const viewportAttachmentProps = $derived(
+		viewportAttachment ? { [viewportAttachmentKey]: viewportAttachment } : {},
+	);
 </script>
 
 <ScrollAreaPrimitive.Root
@@ -30,6 +39,7 @@
 		bind:ref={viewportRef}
 		data-slot="scroll-area-viewport"
 		class="size-full rounded-[inherit] transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1"
+		{...viewportAttachmentProps}
 	>
 		{@render children?.()}
 	</ScrollAreaPrimitive.Viewport>

@@ -16,7 +16,7 @@
 <script lang="ts">
   import { Button } from "#lib/ui/shadcn/button";
   import type { Attachment } from "svelte/attachments";
-  import { isTrackAvailable } from "#lib/library/tracks";
+  import { Tracks } from "#lib/library/tracks";
   import { prefersReducedMotion } from "svelte/motion";
   import type { TransitionConfig } from "svelte/transition";
   import { AppServices } from "#lib/shell/app-services.svelte";
@@ -74,7 +74,7 @@
   <div class="flex h-1 w-full gap-0.5" role="group" aria-label="Track lengths">
     {#each tracks as track, index (track.id)}
       {@const state = states[index]}
-      {@const playable = isTrackAvailable(track)}
+      {@const playable = Tracks.isAvailable(track)}
       <div class="group/segment relative h-full min-w-0.5" style:flex-grow={track.durationMs ?? 0}>
         <Tooltip>
           <!-- Pointer-only: the track table below is the keyboard path to the same tracks. -->

@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { motionTokens } from "#lib/ui/motion/tokens";
-import { nowPlayingDuration } from "./now-playing-motion";
+import { NowPlayingMotion } from "./now-playing-motion";
 
-describe("nowPlayingDuration", () => {
+describe("NowPlayingMotion.duration", () => {
   it("opens at the large token and closes quicker", () => {
-    expect(nowPlayingDuration(true)).toBe(motionTokens.large.duration);
-    expect(nowPlayingDuration(false)).toBeLessThan(nowPlayingDuration(true));
+    expect(NowPlayingMotion.duration(true)).toBe(motionTokens.large.duration);
+    expect(NowPlayingMotion.duration(false)).toBeLessThan(NowPlayingMotion.duration(true));
   });
 });

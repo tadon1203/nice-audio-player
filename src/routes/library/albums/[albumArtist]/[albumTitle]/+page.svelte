@@ -6,12 +6,13 @@
   import MediaDetailsHeader from "#lib/components/media-details/media-details-header.svelte";
   import TrackTable from "#lib/components/track-table/track-table.svelte";
   import { albumItemKey } from "#lib/library/album-key";
-  import { createAlbumDetails, createAlbumTracks } from "#lib/library/detail.svelte";
-  import { libraryCommandErrorMessage } from "#lib/library/library-errors";
+  import { LibraryErrors } from "#lib/library/library-errors";
+  import { PagedCollection } from "#lib/library/paged-collection.svelte";
+  import { QueryResult } from "#lib/library/query-result.svelte";
   import { albumArtistHref, albumEditionOf } from "#lib/library/routes";
   import { albumTitleLabel, artistNameLabel, fromNameSegment } from "#lib/library/unknown-name";
   import { AppServices } from "#lib/shell/app-services.svelte";
-  import { createWorkspaceScroll } from "#lib/shell/workspace-scroll.svelte";
+  import { WorkspaceScroll } from "#lib/shell/workspace-scroll.svelte";
   import BackLink from "#lib/ui/back-link.svelte";
   import EmptyStatus from "#lib/ui/empty-status.svelte";
   import ErrorAlert from "#lib/ui/error-alert.svelte";
@@ -21,10 +22,10 @@
   import PlayPauseIcon from "#lib/ui/play-pause-icon.svelte";
   import SectionTitle from "#lib/ui/section-title.svelte";
   import { Button } from "#lib/ui/shadcn/button/index.js";
-  import WorkspaceScroll from "#lib/ui/workspace-scroll.svelte";
+  import WorkspaceScrollRegion from "#lib/ui/workspace-scroll.svelte";
   import { formatCount, formatDuration } from "#lib/utils/format";
 
-  const { playback, actions } = AppServices.current();
+  const { actions, albums, history, playback, scrollMemory } = AppServices.current();
 
   const albumArtist = $derived(fromNameSegment(page.params.albumArtist ?? ""));
   const albumTitle = $derived(fromNameSegment(page.params.albumTitle ?? ""));
@@ -34,10 +35,10 @@
   const artist = $derived(artistNameLabel(albumArtist));
   const shared = $derived(albumItemKey(key));
   // Where the album was opened from, when that was an album artist's page.
-  const parentArtist = $derived(page.state.parentArtist);
+  const parentArtist = $derived(history.albumOrigin.parentArtist);
 
-  const details = createAlbumDetails(() => key);
-  const tracks = createAlbumTracks(() => key);
+  const details = new QueryResult(() => albums.detailsOptions(key));
+  const tracks = new PagedCollection(() => albums.tracksOptions(key));
 
   // The loaded track belongs to this album (the same key the album was opened with).
   const albumIsLoaded = $derived(playback.isAlbumLoaded(key));
@@ -49,18 +50,18 @@
 
   let viewport = $state<HTMLElement | null>(null);
 
-  const scroll = createWorkspaceScroll({
-    viewport: () => viewport,
+  const scroll = new WorkspaceScroll(scrollMemory, {
     ready: () => details.data !== undefined && !tracks.isPending && tracks.items.length > 0,
   });
 
-  export const snapshot = {
-    capture: () => scroll.capture(),
-    restore: (offset: number) => scroll.restore(offset),
-  };
+  export const snapshot = scrollMemory.detailSnapshot(scroll.capture, scroll.restore);
 </script>
 
-<WorkspaceScroll bind:viewportRef={viewport} contentClass="py-8 pb-16">
+<WorkspaceScrollRegion
+  bind:viewportRef={viewport}
+  viewportAttachment={scroll.attach}
+  contentClass="py-8 pb-16"
+>
   {#if parentArtist !== undefined}
     <BackLink href={albumArtistHref(parentArtist)}>{artistNameLabel(parentArtist)}</BackLink>
   {:else}
@@ -69,16 +70,21 @@
 
   {#if details.isError}
     <ErrorAlert
-      message={libraryCommandErrorMessage(details.error)}
+      message={LibraryErrors.commandMessage(details.error)}
       onRetry={() => void details.refetch()}
     />
   {:else if details.data === undefined || tracks.isPending}
     <!-- What the route and its history state already tell, so the page is not empty. -->
-    <MediaDetailsHeader {title} {artist} artwork={page.state.artwork ?? null} sharedKey={shared} />
+    <MediaDetailsHeader
+      {title}
+      {artist}
+      artwork={history.albumOrigin.artwork ?? null}
+      sharedKey={shared}
+    />
     <LoadingStatus>Reading album…</LoadingStatus>
   {:else if tracks.isError}
     <ErrorAlert
-      message={libraryCommandErrorMessage(tracks.error)}
+      message={LibraryErrors.commandMessage(tracks.error)}
       onRetry={() => void tracks.refetch()}
     />
   {:else}
@@ -149,4 +155,4 @@
       />
     {/if}
   {/if}
-</WorkspaceScroll>
+</WorkspaceScrollRegion>

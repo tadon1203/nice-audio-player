@@ -37,7 +37,7 @@ const artistAlbums = defineSortKeys<LibraryArtistAlbumSortKey>({
 });
 
 /** Track sorting is driven by table headers, so the labels double as column titles. */
-export const trackSortLabels = {
+const trackSortLabels = {
   title: "Title",
   artist: "Artist",
   album: "Album",
@@ -46,18 +46,26 @@ export const trackSortLabels = {
 
 const tracks = defineSortKeys<LibraryTrackSortKey>(trackSortLabels);
 
-export const albumSortKeys = albums.keys;
-export const albumSortOptions = albums.options;
-export const isAlbumSortKey = albums.isKey;
+/** The sort keys and options of each presentation, and the direction rule. */
+export class Sort {
+  public static readonly albumKeys = albums.keys;
+  public static readonly albumOptions = albums.options;
+  public static readonly albumArtistOptions = albumArtists.options;
+  public static readonly artistAlbumOptions = artistAlbums.options;
+  public static readonly trackKeys = tracks.keys;
+  public static readonly trackOptions = tracks.options;
+  /** The column titles of the track table, by sort key. */
+  public static readonly trackLabels = trackSortLabels;
 
-export const albumArtistSortOptions = albumArtists.options;
+  public static isAlbumKey(value: string): value is LibraryAlbumSortKey {
+    return albums.isKey(value);
+  }
 
-export const artistAlbumSortOptions = artistAlbums.options;
+  public static isTrackKey(value: string): value is LibraryTrackSortKey {
+    return tracks.isKey(value);
+  }
 
-export const trackSortKeys = tracks.keys;
-export const trackSortOptions = tracks.options;
-export const isTrackSortKey = tracks.isKey;
-
-export function toggleSortDirection(direction: LibrarySortDirection): LibrarySortDirection {
-  return direction === "ascending" ? "descending" : "ascending";
+  public static toggleDirection(direction: LibrarySortDirection): LibrarySortDirection {
+    return direction === "ascending" ? "descending" : "ascending";
+  }
 }

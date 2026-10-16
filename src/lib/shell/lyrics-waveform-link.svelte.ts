@@ -5,7 +5,7 @@ export type LyricsSpan = { startMs: number; endMs: number };
  * signal: the pointer moves often, and a reader that only wants `activeSpan` must not rerun
  * with it.
  */
-class LyricsWaveformLink {
+export class LyricsWaveformLink {
   /** The current lyric line's span, lit on the dock waveform. */
   activeSpan = $state.raw<LyricsSpan | null>(null);
   /** The span of the lyric line under the pointer, faintly marked on the waveform. */
@@ -25,5 +25,3 @@ class LyricsWaveformLink {
     this.hoveredWaveformMs = ms;
   }
 }
-
-export const lyricsWaveformLink = new LyricsWaveformLink();

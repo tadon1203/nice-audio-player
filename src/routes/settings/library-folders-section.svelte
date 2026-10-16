@@ -1,17 +1,9 @@
 <script lang="ts">
   import FolderPlus from "@lucide/svelte/icons/folder-plus";
-  import { getLibraryScan } from "#lib/library/context";
-  import { createLibraryRoots } from "#lib/library/detail.svelte";
-  import { libraryCommandErrorMessage } from "#lib/library/library-errors";
-  import {
-    createAddLibraryRoot,
-    createDeleteMissingTracks,
-    createOpenLogDirectory,
-    createRemoveLibraryRoot,
-    createResetLibrary,
-    createSetLibraryRootEnabled,
-  } from "#lib/library/mutations";
+  import { LibraryErrors } from "#lib/library/library-errors";
+  import { QueryResult } from "#lib/library/query-result.svelte";
   import type { LibraryRoot } from "#lib/native";
+  import { AppServices } from "#lib/shell/app-services.svelte";
   import EmptyStatus from "#lib/ui/empty-status.svelte";
   import ErrorAlert from "#lib/ui/error-alert.svelte";
   import LoadingStatus from "#lib/ui/loading-status.svelte";
@@ -27,7 +19,6 @@
     ItemGroup,
     ItemTitle,
   } from "#lib/ui/shadcn/item/index.js";
-  import { Spinner } from "#lib/ui/shadcn/spinner/index.js";
   import { formatNumber } from "#lib/utils/format";
   import DeleteMissingDialog from "./delete-missing-dialog.svelte";
   import RemoveLibraryRootDialog from "./remove-library-root-dialog.svelte";
@@ -36,16 +27,8 @@
   import ScanResult from "./scan-result.svelte";
   import ScanRunning from "./scan-running.svelte";
 
-  const rootsQuery = createLibraryRoots();
-  const scanState = getLibraryScan();
-  const addRoot = createAddLibraryRoot();
-  const setEnabled = createSetLibraryRootEnabled();
-  const removeRoot = createRemoveLibraryRoot();
-
-  const resetLibrary = createResetLibrary();
-
-  const deleteMissing = createDeleteMissingTracks();
-  const openLogDirectory = createOpenLogDirectory();
+  const { actions, catalog, libraryRoots, notices, scan: scanWatcher } = AppServices.current();
+  const rootsQuery = new QueryResult(() => catalog.rootsOptions());
   const scanTime = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
 
   let removeTarget = $state<LibraryRoot | null>(null);
@@ -54,34 +37,12 @@
 
   const roots = $derived(rootsQuery.data ?? []);
   const missingTotal = $derived(roots.reduce((n, r) => n + r.missingCount, 0));
-  const scan = $derived(scanState.snapshot);
+  const scan = $derived(scanWatcher.snapshot);
   const scanRunning = $derived(scan?.state === "running");
-
-  function confirmRemove() {
-    if (!removeTarget) return;
-    const target = removeTarget;
-    removeRoot.reset();
-    removeTarget = null;
-    removeRoot.mutate(target.id);
-  }
-
-  function rowPending(id: string): boolean {
-    return (
-      (setEnabled.isPending && setEnabled.variables?.id === id) ||
-      (removeRoot.isPending && removeRoot.variables === id)
-    );
-  }
-
-  function rowError(id: string): unknown {
-    if (setEnabled.error && setEnabled.variables?.id === id) return setEnabled.error;
-    if (removeRoot.error && removeRoot.variables === id) return removeRoot.error;
-    return null;
-  }
-
-  function setRootEnabled(id: string, enabled: boolean) {
-    setEnabled.reset();
-    setEnabled.mutate({ id, enabled });
-  }
+  /** A Library command is in flight: its controls wait for it, so one request is sent at a time. */
+  const busy = $derived(actions.isRunning("library"));
+  /** The last failed Library command, shown once for the whole section. */
+  const failure = $derived(notices.at("library")?.message ?? null);
 </script>
 
 <section aria-labelledby="library-heading" class="mt-8">
@@ -93,30 +54,22 @@
     <div class="flex max-w-sm flex-col items-end gap-2">
       <Button
         type="button"
-        onclick={() => {
-          addRoot.reset();
-          addRoot.mutate();
-        }}
-        disabled={scanRunning || addRoot.isPending}
+        onclick={() => actions.run(() => libraryRoots.add(), "library")}
+        disabled={scanRunning || busy}
       >
-        {#if addRoot.isPending}
-          <Spinner data-icon="inline-start" aria-hidden="true" role="presentation" />
-        {:else}
-          <FolderPlus data-icon="inline-start" aria-hidden="true" />
-        {/if}
+        <FolderPlus data-icon="inline-start" aria-hidden="true" />
         Add folder
       </Button>
-      {#if addRoot.error}
-        <p class="text-right text-sm text-destructive" role="alert">
-          {libraryCommandErrorMessage(addRoot.error)}
-        </p>
-      {/if}
     </div>
   </div>
 
+  {#if failure !== null}
+    <p class="mt-4 text-right text-sm text-destructive" role="alert">{failure}</p>
+  {/if}
+
   {#if rootsQuery.isError}
     <ErrorAlert
-      message={libraryCommandErrorMessage(rootsQuery.error)}
+      message={LibraryErrors.commandMessage(rootsQuery.error)}
       onRetry={() => void rootsQuery.refetch()}
     />
   {/if}
@@ -149,8 +102,6 @@
       aria-label="Library folders"
     >
       {#each roots as root (root.id)}
-        {@const pending = rowPending(root.id)}
-        {@const error = rowError(root.id)}
         <Item
           role="listitem"
           class="items-start gap-4 rounded-none border-0 px-0 py-4 sm:flex-nowrap sm:items-center"
@@ -174,19 +125,18 @@
                 <span class="ml-3">{formatNumber(root.missingCount)} missing</span>
               {/if}
             </ItemDescription>
-            {#if error}
-              <p class="mt-1 text-sm text-destructive" role="alert">
-                {libraryCommandErrorMessage(error)}
-              </p>
-            {/if}
           </ItemContent>
           <ItemActions class="w-full justify-end gap-3 sm:w-auto">
             <Field orientation="horizontal" class="gap-2 text-sm text-muted-foreground">
               <!-- Controlled by the stored value: a failed change leaves the box where it was. -->
               <Checkbox
                 id={`enabled-${root.id}`}
-                bind:checked={() => root.enabled, (checked) => setRootEnabled(root.id, checked)}
-                disabled={scanRunning || pending}
+                bind:checked={
+                  () => root.enabled,
+                  (checked) =>
+                    actions.run(() => libraryRoots.setEnabled(root.id, checked), "library")
+                }
+                disabled={scanRunning || busy}
               />
               <span class="text-muted-foreground max-sm:sr-only"
                 ><FieldLabel for={`enabled-${root.id}`}>
@@ -199,11 +149,8 @@
               variant="destructive"
               size="compact"
               aria-label={`Remove ${root.path} from library`}
-              disabled={scanRunning || pending}
-              onclick={() => {
-                removeRoot.reset();
-                removeTarget = root;
-              }}
+              disabled={scanRunning || busy}
+              onclick={() => (removeTarget = root)}
             >
               Remove
             </Button>
@@ -228,39 +175,21 @@
           type="button"
           variant="outline"
           size="compact"
-          disabled={scanRunning || deleteMissing.isPending || missingTotal === 0}
-          onclick={() => {
-            deleteMissing.reset();
-            deleteMissingOpen = true;
-          }}
+          disabled={scanRunning || busy || missingTotal === 0}
+          onclick={() => (deleteMissingOpen = true)}
         >
-          {#if deleteMissing.isPending}
-            <Spinner data-icon="inline-start" aria-hidden="true" role="presentation" />
-          {/if}
           Delete Missing
         </Button>
         <Button
           type="button"
           variant="outline"
           size="compact"
-          onclick={() => {
-            openLogDirectory.reset();
-            openLogDirectory.mutate();
-          }}
+          disabled={busy}
+          onclick={() => actions.run(() => libraryRoots.openLogDirectory(), "library")}
         >
           Open log folder
         </Button>
       </div>
-      {#if deleteMissing.error}
-        <p class="text-right text-sm text-destructive" role="alert">
-          {libraryCommandErrorMessage(deleteMissing.error)}
-        </p>
-      {/if}
-      {#if openLogDirectory.error}
-        <p class="text-right text-sm text-destructive" role="alert">
-          {libraryCommandErrorMessage(openLogDirectory.error)}
-        </p>
-      {/if}
     </div>
   </div>
 
@@ -273,42 +202,25 @@
         type="button"
         variant="outline"
         size="compact"
-        disabled={scanRunning || resetLibrary.isPending}
-        onclick={() => {
-          resetLibrary.reset();
-          resetOpen = true;
-        }}
+        disabled={scanRunning || busy}
+        onclick={() => (resetOpen = true)}
       >
-        {#if resetLibrary.isPending}
-          <Spinner data-icon="inline-start" aria-hidden="true" role="presentation" />
-        {/if}
         Reset library and rescan
       </Button>
-      {#if resetLibrary.error}
-        <p class="text-right text-sm text-destructive" role="alert">
-          {libraryCommandErrorMessage(resetLibrary.error)}
-        </p>
-      {/if}
     </div>
   </div>
 
   <ResetLibraryDialog
     open={resetOpen}
     onOpenChange={(open) => (resetOpen = open)}
-    onConfirm={() => {
-      resetOpen = false;
-      resetLibrary.mutate();
-    }}
+    onConfirm={() => actions.run(() => libraryRoots.resetAndRescan(), "library")}
   />
 
   <DeleteMissingDialog
     open={deleteMissingOpen}
     count={missingTotal}
     onOpenChange={(open) => (deleteMissingOpen = open)}
-    onConfirm={() => {
-      deleteMissingOpen = false;
-      deleteMissing.mutate();
-    }}
+    onConfirm={() => actions.run(() => libraryRoots.deleteMissing(), "library")}
   />
 
   <RemoveLibraryRootDialog
@@ -316,6 +228,6 @@
     onOpenChange={(open) => {
       if (!open) removeTarget = null;
     }}
-    onConfirm={confirmRemove}
+    onConfirm={(root) => actions.run(() => libraryRoots.remove(root.id), "library")}
   />
 </section>

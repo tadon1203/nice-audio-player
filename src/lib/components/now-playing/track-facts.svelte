@@ -3,7 +3,7 @@
   import type { LyricsResolution, PlaybackItem } from "#lib/native";
   import { SignalPath } from "#lib/components/signal-path/signal-path.svelte";
   import FactLine from "#lib/ui/fact-line.svelte";
-  import { trackLinks } from "#lib/library/tracks";
+  import { Tracks } from "#lib/library/tracks";
   import { lyricsState, trackFacts } from "./track-facts";
 
   /**
@@ -23,7 +23,7 @@
     "rounded-sm outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring";
 
   const signalPath = new SignalPath();
-  const links = $derived(item === null ? null : trackLinks(item));
+  const links = $derived(item === null ? null : Tracks.links(item));
   const artistHref = $derived(links?.artist?.href ?? null);
   const albumLinkHref = $derived(links?.album?.href ?? null);
   const lyrics = $derived(item === null ? null : lyricsState(resolution));

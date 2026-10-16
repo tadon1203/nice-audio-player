@@ -1,7 +1,6 @@
 <script lang="ts">
-  import { createQuery } from "@tanstack/svelte-query";
-  import { libraryQueryOptions } from "#lib/library/queries";
-  import { requireNative } from "#lib/native";
+  import { QueryResult } from "#lib/library/query-result.svelte";
+  import { AppServices } from "#lib/shell/app-services.svelte";
   import { Button } from "#lib/ui/shadcn/button/index.js";
   import {
     Sheet,
@@ -21,7 +20,8 @@
   /** Everything the library knows about one track: tags, audio format, and where the file is. */
   let { trackId, onclose }: { trackId: string | null; onclose: () => void } = $props();
 
-  const query = createQuery(() => libraryQueryOptions.trackProperties(trackId));
+  const { actions, catalog, libraryTracks } = AppServices.current();
+  const query = new QueryResult(() => catalog.trackPropertiesOptions(trackId));
   const properties = $derived(query.data);
 
   const orNull = <T,>(value: T | null, format: (value: T) => string) =>
@@ -102,7 +102,7 @@
                 type="button"
                 variant="quiet"
                 size="compact"
-                onclick={() => void requireNative().revealLibraryTrack(properties.id)}
+                onclick={() => actions.run(() => libraryTracks.reveal(properties.id))}
               >
                 Show in Explorer
               </Button>

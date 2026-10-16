@@ -1,11 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  MAX_WAIT_FRAMES,
-  recallScroll,
-  rememberScroll,
-  scrollWhenReachable,
-  type FrameScheduler,
-} from "./workspace-scroll-model";
+import { MAX_WAIT_FRAMES, WorkspaceScroll, type FrameScheduler } from "./workspace-scroll.svelte";
 
 /** A scroll region whose scrollTop is clamped to its content, as in a browser. */
 function region(contentHeight: number, clientHeight = 500) {
@@ -48,17 +42,7 @@ function manualFrames() {
   };
 }
 
-describe("scroll memory", () => {
-  it("recalls 0 for an unseen key and the last offset otherwise", () => {
-    expect(recallScroll("/library/never")).toBe(0);
-    rememberScroll("/library/albums", 120);
-    rememberScroll("/library/albums", 480);
-    expect(recallScroll("/library/albums")).toBe(480);
-    expect(recallScroll("/library/tracks")).toBe(0);
-  });
-});
-
-describe("scrollWhenReachable", () => {
+describe("WorkspaceScroll.scrollWhenReachable", () => {
   it("is clamped when set before the content has grown (the Album Artist restore)", () => {
     const short = region(600);
     short.scrollTop = 2000;
@@ -68,7 +52,7 @@ describe("scrollWhenReachable", () => {
   it("waits for the content to grow, then lands on the offset", () => {
     const content = region(600);
     const frames = manualFrames();
-    scrollWhenReachable(content, 2000, frames.scheduler);
+    WorkspaceScroll.scrollWhenReachable(content, 2000, frames.scheduler);
     expect(content.scrollTop).toBe(0);
     frames.tick();
     content.state.contentHeight = 4000;
@@ -79,14 +63,14 @@ describe("scrollWhenReachable", () => {
 
   it("applies at once when the offset is already reachable", () => {
     const content = region(4000);
-    scrollWhenReachable(content, 1500, manualFrames().scheduler);
+    WorkspaceScroll.scrollWhenReachable(content, 1500, manualFrames().scheduler);
     expect(content.scrollTop).toBe(1500);
   });
 
   it("settles for the end of the content after waiting long enough", () => {
     const content = region(600);
     const frames = manualFrames();
-    scrollWhenReachable(content, 2000, frames.scheduler);
+    WorkspaceScroll.scrollWhenReachable(content, 2000, frames.scheduler);
     for (let i = 0; i <= MAX_WAIT_FRAMES; i++) frames.tick();
     expect(content.scrollTop).toBe(100);
     expect(frames.waiting).toBe(0);
@@ -95,7 +79,7 @@ describe("scrollWhenReachable", () => {
   it("stops waiting when cancelled", () => {
     const content = region(600);
     const frames = manualFrames();
-    const cancel = scrollWhenReachable(content, 2000, frames.scheduler);
+    const cancel = WorkspaceScroll.scrollWhenReachable(content, 2000, frames.scheduler);
     cancel();
     content.state.contentHeight = 4000;
     frames.tick();

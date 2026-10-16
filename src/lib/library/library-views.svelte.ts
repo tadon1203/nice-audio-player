@@ -1,11 +1,3 @@
-import type { LibraryCatalogRequest } from "#lib/library/queries";
-import {
-  albumArtistSortOptions,
-  albumSortOptions,
-  artistAlbumSortOptions,
-  toggleSortDirection,
-  trackSortOptions,
-} from "#lib/library/sort";
 import type {
   LibraryAlbumArtistSortKey,
   LibraryAlbumSortKey,
@@ -14,6 +6,8 @@ import type {
   LibraryTrackSortKey,
 } from "#lib/native";
 import type { SortOption } from "#lib/ui/sort-option";
+import type { LibraryCatalogRequest } from "./catalog-repository";
+import { Sort } from "./sort";
 
 export type LibraryPresentation = "albums" | "albumArtists" | "tracks";
 
@@ -79,7 +73,7 @@ class LibraryView<Presentation extends LibraryPresentation> {
   };
 
   toggleDirection = (): void => {
-    this.direction = toggleSortDirection(this.direction);
+    this.direction = Sort.toggleDirection(this.direction);
     this.skip = 0;
   };
 
@@ -93,7 +87,7 @@ class LibraryView<Presentation extends LibraryPresentation> {
 class ArtistAlbumsView {
   sortKey: LibraryArtistAlbumSortKey = $state.raw("year");
   direction: LibrarySortDirection = $state("ascending");
-  readonly sortOptions = artistAlbumSortOptions;
+  readonly sortOptions = Sort.artistAlbumOptions;
 
   /** Identifies the sort alone, so a list can tell when its order changed. */
   get sortSignature(): string {
@@ -113,20 +107,14 @@ class ArtistAlbumsView {
   };
 
   toggleDirection = (): void => {
-    this.direction = toggleSortDirection(this.direction);
+    this.direction = Sort.toggleDirection(this.direction);
   };
 }
 
-class LibraryViews {
-  readonly albums = new LibraryView("albums", "title", albumSortOptions);
-  readonly albumArtists = new LibraryView("albumArtists", "artist", albumArtistSortOptions);
-  readonly tracks = new LibraryView("tracks", "title", trackSortOptions);
+/** The filter and sort of each library view, kept for the life of the window. */
+export class LibraryViews {
+  readonly albums = new LibraryView("albums", "title", Sort.albumOptions);
+  readonly albumArtists = new LibraryView("albumArtists", "artist", Sort.albumArtistOptions);
+  readonly tracks = new LibraryView("tracks", "title", Sort.trackOptions);
   readonly artistAlbums = new ArtistAlbumsView();
-}
-
-export const libraryViews = new LibraryViews();
-
-/** A fresh set, for tests that must not share the singleton's state. */
-export function createLibraryViews(): LibraryViews {
-  return new LibraryViews();
 }

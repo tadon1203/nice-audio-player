@@ -3,6 +3,8 @@ import type { commands } from "./bindings";
 import { AppearanceError } from "./errors/appearance-error";
 import { AudioDevicesError } from "./errors/audio-devices-error";
 import { IpcError } from "./errors/ipc-error";
+import { LibraryError } from "./errors/library-error";
+import { LyricsError } from "./errors/lyrics-error";
 import { PlaybackError } from "./errors/playback-error";
 import { SessionError } from "./errors/session-error";
 import { SupersededError } from "./errors/superseded-error";
@@ -18,6 +20,8 @@ function fakeCommands(reply: unknown) {
     updateAppearance: vi.fn(reject),
     listAudioOutputDevices: vi.fn(reject),
     getPlaybackWaveform: vi.fn(reject),
+    getLibraryStatus: vi.fn(reject),
+    getTrackLyrics: vi.fn(reject),
   } as unknown as typeof commands;
 }
 
@@ -71,6 +75,20 @@ describe("TauriNative", () => {
     const clients = TauriNative.clients(fakeCommands({ code: "libraryUnavailable" }));
     const failure = await clients.playback.waveform().catch((error: unknown) => error);
     expect(failure).toBeInstanceOf(PlaybackError);
+  });
+
+  it("throws a library error for a library command's coded reply", async () => {
+    const clients = TauriNative.clients(fakeCommands({ code: "libraryUnavailable" }));
+    const failure = await clients.library.status().catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(LibraryError);
+    expect(failure).toMatchObject({ domain: "library", code: "libraryUnavailable" });
+  });
+
+  it("throws a lyrics error for the lyrics command's coded reply", async () => {
+    const clients = TauriNative.clients(fakeCommands({ code: "trackNotFound" }));
+    const failure = await clients.lyrics.trackLyrics("track").catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(LyricsError);
+    expect(failure).toMatchObject({ domain: "lyrics", code: "trackNotFound" });
   });
 
   it("throws IpcError when the reply has no string code", async () => {

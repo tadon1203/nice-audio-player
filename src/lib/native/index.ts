@@ -8,6 +8,8 @@ export { AppError } from "./errors/app-error";
 export { AppearanceError } from "./errors/appearance-error";
 export { AudioDevicesError } from "./errors/audio-devices-error";
 export { IpcError } from "./errors/ipc-error";
+export { LibraryError } from "./errors/library-error";
+export { LyricsError } from "./errors/lyrics-error";
 export { NativeBridgeUnavailableError } from "./errors/native-bridge-unavailable-error";
 export { PlaybackError } from "./errors/playback-error";
 export { SessionError } from "./errors/session-error";

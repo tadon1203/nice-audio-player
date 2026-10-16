@@ -45,17 +45,20 @@ const scanFailureMessages = {
   panicked: "The scan stopped unexpectedly.",
 } as const satisfies Record<ScanFailure, string>;
 
-export function libraryStatusMessage(status: LibraryStatus): string | null {
-  return status.status === "ready"
-    ? null
-    : messageForCode(unavailableMessages, status.reason, commandMessages.libraryUnavailable);
-}
+/** The user-facing messages for Library failures. */
+export class LibraryErrors {
+  public static statusMessage(status: LibraryStatus): string | null {
+    return status.status === "ready"
+      ? null
+      : messageForCode(unavailableMessages, status.reason, commandMessages.libraryUnavailable);
+  }
 
-export function libraryCommandErrorMessage(error: unknown): string {
-  return messageForCode(commandMessages, nativeErrorCode(error), "The library operation failed.");
-}
+  public static commandMessage(error: unknown): string {
+    return messageForCode(commandMessages, nativeErrorCode(error), "The library operation failed.");
+  }
 
-/** Explains why a scan failed; the caller already shows that it failed. */
-export function libraryScanFailureMessage(failureCode: string | null): string {
-  return messageForCode(scanFailureMessages, failureCode, "The scan stopped unexpectedly.");
+  /** Explains why a scan failed; the caller already shows that it failed. */
+  public static scanFailureMessage(failureCode: string | null): string {
+    return messageForCode(scanFailureMessages, failureCode, "The scan stopped unexpectedly.");
+  }
 }

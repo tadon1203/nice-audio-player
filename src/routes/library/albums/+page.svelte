@@ -1,8 +1,7 @@
 <script lang="ts">
   import { albumItemKey } from "#lib/library/album-key";
-  import { createLibraryCatalog } from "#lib/library/catalog.svelte";
+  import { LibraryCatalog } from "#lib/library/library-catalog.svelte";
   import { AppServices } from "#lib/shell/app-services.svelte";
-  import { libraryViews } from "#lib/shell/library-views.svelte";
   import VirtualMediaGrid from "#lib/ui/media-grid/virtual-media-grid.svelte";
   import AlbumTile from "../album-tile.svelte";
   import LibraryWorkspace from "../library-workspace.svelte";
@@ -15,9 +14,10 @@
     searchPlaceholder: "Search albums…",
   };
 
+  const services = AppServices.current();
+  const { playback, actions, libraryViews } = services;
   const view = libraryViews.albums;
-  const catalog = createLibraryCatalog(() => view.request);
-  const { playback, actions } = AppServices.current();
+  const catalog = new LibraryCatalog(services.catalog, () => view.request);
 </script>
 
 <LibraryWorkspace

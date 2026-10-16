@@ -10,9 +10,7 @@
   import NowPlayingContent from "#lib/components/now-playing/now-playing-content.svelte";
   import NowPlayingLayer from "#lib/components/now-playing/now-playing-layer.svelte";
   import QueuePanel from "#lib/components/queue-panel/queue-panel.svelte";
-  import { setLibraryScan } from "#lib/library/context";
   import { AppServices } from "#lib/shell/app-services.svelte";
-  import { nowPlaying } from "#lib/shell/now-playing.svelte";
   import { PlaybackShortcuts } from "#lib/shell/playback-shortcuts";
   import { TooltipProvider } from "#lib/ui/shadcn/tooltip";
   import Navigation from "./navigation.svelte";
@@ -22,7 +20,6 @@
 
   // Created once: the native bridge never changes while the renderer lives. Null without the bridge.
   const services = AppServices.tryCreate();
-  if (services !== null) setLibraryScan(services.libraryScan);
 
   // The UI does not wait for the connection: the Dock shows its state, the rest fills in as it arrives.
   onMount(() => services?.session.connect());
@@ -32,7 +29,7 @@
 
 <svelte:window
   onkeydown={(event) =>
-    services && PlaybackShortcuts.handle(event, services.playback, services.actions)}
+    services && PlaybackShortcuts.handle(event, services.playback, services.actions, services)}
 />
 
 {#if services === null}
@@ -49,13 +46,13 @@
       >
         <TitleBar />
         <aside
-          inert={nowPlaying.isOpen}
+          inert={services.history.isNowPlayingOpen}
           class="col-start-1 row-start-2 hidden min-h-0 min-w-0 flex-col bg-sidebar text-sidebar-foreground md:flex"
         >
           <Navigation />
         </aside>
         <main
-          inert={nowPlaying.isOpen}
+          inert={services.history.isNowPlayingOpen}
           class="col-start-1 row-start-2 min-h-0 min-w-0 md:col-start-2"
           data-slot="app-main"
         >

@@ -1,9 +1,8 @@
 <script lang="ts">
   import { Root as ContextMenuRoot, Trigger as ContextMenuTrigger } from "#lib/ui/context-menu";
   import { goto } from "$app/navigation";
-  import { isFilePresent, isTrackAvailable, trackLinks } from "#lib/library/tracks";
+  import { Tracks } from "#lib/library/tracks";
   import type { LibrarySortDirection, LibraryTrackSortKey } from "#lib/native";
-  import { requireNative } from "#lib/native";
   import { AppServices } from "#lib/shell/app-services.svelte";
   import ContextMenuContent from "#lib/ui/context-menu/context-menu-content.svelte";
   import ContextMenuItem from "#lib/ui/context-menu/context-menu-item.svelte";
@@ -64,7 +63,7 @@
 
   const columns = $derived(layout === "library" ? libraryTrackColumns : albumTrackColumns);
   const virtualized = $derived(scrollElement !== undefined);
-  const { playback, actions } = AppServices.current();
+  const { playback, actions, libraryTracks } = AppServices.current();
 
   let propertiesFor = $state<string | null>(null);
   let menuRow = $state<TrackTableRow | null>(null);
@@ -199,7 +198,7 @@
                   playback.activeTrackId,
                   playback.status,
                 )}
-                {@const available = isTrackAvailable(row)}
+                {@const available = Tracks.isAvailable(row)}
                 {@const runAction = {
                   play: () => onplaytrack(row.id),
                   pause: () => actions.run(() => playback.pause()),
@@ -267,7 +266,7 @@
       <ContextMenuContent>
         {#if menuRow}
           {@const row = menuRow}
-          {#if isTrackAvailable(row)}
+          {#if Tracks.isAvailable(row)}
             <ContextMenuItem
               onSelect={() => actions.run(() => playback.enqueueTrack(row.id, true))}
             >
@@ -280,7 +279,7 @@
             </ContextMenuItem>
           {/if}
           {#if layout === "library"}
-            {@const links = trackLinks(row)}
+            {@const links = Tracks.links(row)}
             {#if links.album?.href}
               {@const href = links.album.href}
               <ContextMenuItem onSelect={() => goTo(href)}>Go to album</ContextMenuItem>
@@ -290,8 +289,8 @@
               <ContextMenuItem onSelect={() => goTo(href)}>Go to artist</ContextMenuItem>
             {/if}
           {/if}
-          {#if isFilePresent(row)}
-            <ContextMenuItem onSelect={() => void requireNative().revealLibraryTrack(row.id)}>
+          {#if Tracks.isFilePresent(row)}
+            <ContextMenuItem onSelect={() => actions.run(() => libraryTracks.reveal(row.id))}>
               Show in Explorer
             </ContextMenuItem>
           {/if}

@@ -4,7 +4,7 @@ import { PlaybackClock } from "#lib/playback/playback-clock.svelte";
 import { Playback } from "#lib/playback/playback.svelte";
 import { NoticeCenter } from "./notice-center.svelte";
 import { PlaybackShortcuts } from "./playback-shortcuts";
-import { UserActionRunner } from "./user-action-runner";
+import { UserActionRunner } from "./user-action-runner.svelte";
 
 const playing = (positionMs: number): Versioned<PlaybackSnapshot> => ({
   revision: 1,
@@ -71,6 +71,15 @@ describe("global seek shortcut", () => {
       new KeyboardEvent("keydown", { key: "ArrowRight" }),
       playback,
       new UserActionRunner(notices),
+      {
+        history: {
+          isNowPlayingOpen: false,
+          openNowPlaying: vi.fn(),
+          closeNowPlaying: vi.fn(),
+          toggleNowPlaying: vi.fn(),
+        },
+        queuePanel: { isOpen: false, toggle: vi.fn() },
+      },
     );
     await vi.waitFor(() => expect(seekPlayback).toHaveBeenCalledTimes(1));
 

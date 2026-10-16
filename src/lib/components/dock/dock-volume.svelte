@@ -5,10 +5,8 @@
   import VolumeX from "@lucide/svelte/icons/volume-x";
   import { AppServices } from "#lib/shell/app-services.svelte";
   import { VolumeStep } from "#lib/playback/volume-step";
-  import { nowPlaying } from "#lib/shell/now-playing.svelte";
   import { springLinear } from "#lib/ui/motion/spring-curve";
   import { motionFor } from "#lib/ui/motion/svelte-motion";
-  import { queuePanel } from "#lib/shell/queue-panel.svelte";
   import RollingNumber from "#lib/ui/rolling-number/rolling-number.svelte";
   import { Button } from "#lib/ui/shadcn/button";
   import { Slider } from "#lib/ui/shadcn/slider";
@@ -20,7 +18,7 @@
    * readout. The signal path hangs below this row, out of flow, so it never pulls the row off the
    * transport's centre line.
    */
-  const { playback, session, motion: budget, actions } = AppServices.current();
+  const { playback, session, motion: budget, actions, history, queuePanel } = AppServices.current();
   const ready = $derived(session.connection === "ready");
   const readout = $derived(VolumeStep.formatDb(playback.volume, playback.muted));
 
@@ -66,9 +64,9 @@
       variant="quiet"
       aria-label="Now Playing"
       title="Now Playing"
-      aria-pressed={nowPlaying.isOpen}
+      aria-pressed={history.isNowPlayingOpen}
       disabled={!playback.isActive}
-      onclick={() => nowPlaying.toggle()}
+      onclick={() => history.toggleNowPlaying()}
     >
       <Music2 aria-hidden="true" />
     </Button>

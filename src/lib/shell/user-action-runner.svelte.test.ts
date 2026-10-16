@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { PlaybackError, SupersededError } from "#lib/native";
 import { NoticeCenter } from "./notice-center.svelte";
-import { UserActionRunner } from "./user-action-runner";
+import { UserActionRunner } from "./user-action-runner.svelte";
 
 /** Waits until the runner has settled its action. */
 const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -25,6 +25,15 @@ describe("UserActionRunner", () => {
       message: "The playback queue is busy. Try again.",
     });
     expect(notices.at("dock")).toBeNull();
+  });
+
+  it("reports a place as busy from the run until its action settles", async () => {
+    const runner = new UserActionRunner(new NoticeCenter());
+    runner.run(() => Promise.resolve(), "library");
+    expect(runner.isRunning("library")).toBe(true);
+    expect(runner.isRunning("dock")).toBe(false);
+    await settled();
+    expect(runner.isRunning("library")).toBe(false);
   });
 
   it("clears the error at its place before the action runs", async () => {

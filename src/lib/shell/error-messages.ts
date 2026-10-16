@@ -1,11 +1,13 @@
 import {
   AppearanceError,
   AudioDevicesError,
+  LibraryError,
   PlaybackError,
   SessionError,
   messageForCode,
   nativeErrorCode,
 } from "#lib/native";
+import { LibraryErrors } from "#lib/library/library-errors";
 import { playbackErrorMessage } from "#lib/playback/playback-errors";
 import { PlaybackFailure } from "#lib/playback/playback-failure";
 
@@ -21,6 +23,7 @@ export class ErrorMessages {
     if (error instanceof PlaybackError) return playbackErrorMessage(error);
     if (error instanceof AudioDevicesError) return audioDevicesMessages[error.code];
     if (error instanceof AppearanceError) return "The setting could not be saved.";
+    if (error instanceof LibraryError) return LibraryErrors.commandMessage(error);
     // The connect command reports an output failure with its playback failure code.
     if (error instanceof SessionError) {
       return messageForCode(PlaybackFailure.messages, nativeErrorCode(error), generalMessage);

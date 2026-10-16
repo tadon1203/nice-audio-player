@@ -8,7 +8,6 @@
   import { Button } from "#lib/ui/shadcn/button";
   import Play from "@lucide/svelte/icons/play";
   import { AppServices } from "#lib/shell/app-services.svelte";
-  import { queuePanel } from "#lib/shell/queue-panel.svelte";
   import { flipMotion } from "#lib/ui/motion/svelte-flip";
   import Artwork from "#lib/ui/artwork.svelte";
   import { cn } from "#lib/utils/cn.js";
@@ -28,7 +27,7 @@
    */
   let { class: className }: { class?: string } = $props();
 
-  const { playback, actions } = AppServices.current();
+  const { playback, actions, queuePanel } = AppServices.current();
   const history = $derived(playback.queue?.history ?? []);
   const current = $derived(playback.queue?.current ?? null);
   const upcoming = $derived(playback.queue?.upcoming ?? []);

@@ -7,12 +7,15 @@ export type TrackListView = {
   direction: LibrarySortDirection;
 };
 
-/** The playback context that plays the tracks list as it is currently filtered and sorted. */
-export function trackListContext(view: TrackListView): PlaybackContext {
-  return {
-    kind: "tracks",
-    search: view.filter === "" ? null : view.filter,
-    sortKey: view.sortKey,
-    sortDirection: view.direction,
-  };
+/** The tracks list as a playback source. */
+export class TrackList {
+  /** The playback context that plays the tracks list as it is currently filtered and sorted. */
+  public static context(view: TrackListView): PlaybackContext {
+    return {
+      kind: "tracks",
+      search: view.filter === "" ? null : view.filter,
+      sortKey: view.sortKey,
+      sortDirection: view.direction,
+    };
+  }
 }

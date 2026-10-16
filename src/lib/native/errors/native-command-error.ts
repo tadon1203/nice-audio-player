@@ -1,7 +1,13 @@
 import { AppError } from "./app-error";
 
 /** The domains whose commands the Tauri adapter reports with their own error class. */
-export type NativeDomain = "session" | "playback" | "appearance" | "audioDevices";
+export type NativeDomain =
+  | "session"
+  | "playback"
+  | "appearance"
+  | "audioDevices"
+  | "library"
+  | "lyrics";
 
 /** A Backend command rejected with a structured `{ code }` reply, tagged with its domain. */
 export abstract class NativeCommandError<

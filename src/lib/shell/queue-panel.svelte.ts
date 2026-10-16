@@ -1,5 +1,5 @@
 /** The Queue panel's open state. A view preference, not domain state. */
-class QueuePanel {
+export class QueuePanel {
   isOpen = $state(false);
 
   open(): void {
@@ -14,5 +14,3 @@ class QueuePanel {
     this.isOpen = !this.isOpen;
   }
 }
-
-export const queuePanel = new QueuePanel();

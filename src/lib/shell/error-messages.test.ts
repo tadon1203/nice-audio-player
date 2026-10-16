@@ -1,8 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { AudioDevicesError, PlaybackError, SessionError } from "#lib/native";
+import { AudioDevicesError, LibraryError, PlaybackError, SessionError } from "#lib/native";
 import { ErrorMessages } from "./error-messages";
 
 describe("ErrorMessages.of", () => {
+  it("picks the library table for a library error", () => {
+    expect(ErrorMessages.of(new LibraryError({ code: "duplicateRoot" }))).toBe(
+      "That folder is already in the library.",
+    );
+  });
+
   it("picks the playback table for a playback error", () => {
     expect(ErrorMessages.of(new PlaybackError({ code: "decodeFailed" }))).toBe(
       "The audio file could not be decoded.",

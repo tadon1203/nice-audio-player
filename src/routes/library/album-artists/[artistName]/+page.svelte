@@ -3,12 +3,12 @@
   import { resolve } from "$app/paths";
   import MediaDetailsHeader from "#lib/components/media-details/media-details-header.svelte";
   import { albumItemKey } from "#lib/library/album-key";
-  import { createAlbumArtist, createArtistAlbums } from "#lib/library/detail.svelte";
-  import { libraryCommandErrorMessage } from "#lib/library/library-errors";
+  import { LibraryErrors } from "#lib/library/library-errors";
+  import { PagedCollection } from "#lib/library/paged-collection.svelte";
+  import { QueryResult } from "#lib/library/query-result.svelte";
   import { artistNameLabel, fromNameSegment } from "#lib/library/unknown-name";
   import { AppServices } from "#lib/shell/app-services.svelte";
-  import { libraryViews } from "#lib/shell/library-views.svelte";
-  import { createWorkspaceScroll } from "#lib/shell/workspace-scroll.svelte";
+  import { WorkspaceScroll } from "#lib/shell/workspace-scroll.svelte";
   import BackLink from "#lib/ui/back-link.svelte";
   import CollectionSortControl from "#lib/ui/collection-sort-control.svelte";
   import EmptyStatus from "#lib/ui/empty-status.svelte";
@@ -19,44 +19,42 @@
   import VirtualMediaGrid from "#lib/ui/media-grid/virtual-media-grid.svelte";
   import PageTitle from "#lib/ui/page-title.svelte";
   import SectionTitle from "#lib/ui/section-title.svelte";
-  import WorkspaceScroll from "#lib/ui/workspace-scroll.svelte";
+  import WorkspaceScrollRegion from "#lib/ui/workspace-scroll.svelte";
   import { formatCount } from "#lib/utils/format";
   import AlbumTile from "../../album-tile.svelte";
 
+  const { actions, artists, libraryViews, playback, scrollMemory } = AppServices.current();
   const view = libraryViews.artistAlbums;
-  const { playback, actions } = AppServices.current();
 
   const name = $derived(fromNameSegment(page.params.artistName ?? ""));
   const key = $derived({ name });
   const label = $derived(artistNameLabel(name));
 
-  const artistQuery = createAlbumArtist(() => key);
-  const albums = createArtistAlbums(
-    () => key,
-    () => view.sortKey,
-    () => view.direction,
+  const artistQuery = new QueryResult(() => artists.detailsOptions(key));
+  const albums = new PagedCollection(() =>
+    artists.albumsOptions({ key, sortKey: view.sortKey, direction: view.direction }),
   );
 
   let viewport = $state<HTMLElement | null>(null);
 
-  const scroll = createWorkspaceScroll({
-    viewport: () => viewport,
+  const scroll = new WorkspaceScroll(scrollMemory, {
     resetKey: () => view.stateKey,
     ready: () => artistQuery.data !== undefined && !albums.isPending && albums.items.length > 0,
   });
 
-  export const snapshot = {
-    capture: () => scroll.capture(),
-    restore: (offset: number) => scroll.restore(offset),
-  };
+  export const snapshot = scrollMemory.detailSnapshot(scroll.capture, scroll.restore);
 </script>
 
-<WorkspaceScroll bind:viewportRef={viewport} contentClass="py-8 pb-16">
+<WorkspaceScrollRegion
+  bind:viewportRef={viewport}
+  viewportAttachment={scroll.attach}
+  contentClass="py-8 pb-16"
+>
   <BackLink href={resolve("/library/album-artists")}>Album Artists</BackLink>
 
   {#if artistQuery.isError}
     <ErrorAlert
-      message={libraryCommandErrorMessage(artistQuery.error)}
+      message={LibraryErrors.commandMessage(artistQuery.error)}
       onRetry={() => void artistQuery.refetch()}
     />
   {:else if artistQuery.data === undefined || albums.isPending}
@@ -66,7 +64,7 @@
     <LoadingStatus>Reading artist…</LoadingStatus>
   {:else if albums.isError}
     <ErrorAlert
-      message={libraryCommandErrorMessage(albums.error)}
+      message={LibraryErrors.commandMessage(albums.error)}
       onRetry={() => void albums.refetch()}
     />
   {:else}
@@ -115,4 +113,4 @@
       {/if}
     </section>
   {/if}
-</WorkspaceScroll>
+</WorkspaceScrollRegion>

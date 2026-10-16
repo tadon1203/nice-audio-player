@@ -2,7 +2,6 @@
   import { untrack } from "svelte";
   import type { LyricsResolution, PlaybackItem } from "#lib/native";
   import { AppServices } from "#lib/shell/app-services.svelte";
-  import { nowPlaying } from "#lib/shell/now-playing.svelte";
   import Artwork from "#lib/ui/artwork.svelte";
   import KineticText from "#lib/ui/kinetic-text/kinetic-text.svelte";
   import { SLEEVE_RADIUS, sharedElement, sharedKey } from "#lib/ui/motion/shared-element";
@@ -22,7 +21,7 @@
     resolution: LyricsResolution | null;
   } = $props();
 
-  const playback = AppServices.current().playback;
+  const { playback, history } = AppServices.current();
   // The title wipes in on track changes, but not when Now Playing first opens.
   const openedOn = untrack(() => item?.queueItemId);
   const changedSinceOpen = $derived(item?.queueItemId !== openedOn);
@@ -33,7 +32,7 @@
     <!-- Attached only while open, so the departure is recorded the moment closing begins, not
     after the layer has finished fading out. -->
     <div
-      {@attach nowPlaying.isOpen ? sharedElement(sharedKey.sleeve) : undefined}
+      {@attach history.isNowPlayingOpen ? sharedElement(sharedKey.sleeve) : undefined}
       class="relative size-full overflow-hidden"
       style:border-radius={SLEEVE_RADIUS}
     >

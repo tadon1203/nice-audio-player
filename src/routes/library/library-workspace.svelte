@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  import type { LibraryViewState } from "#lib/library/catalog.svelte";
+  import type { LibraryViewState } from "#lib/library/library-catalog.svelte";
   import type { LibraryIndexBucket } from "#lib/native";
   import type { SortableView } from "#lib/ui/sort-option";
 
@@ -18,9 +18,10 @@
     ontopindexchange: (index: number) => void;
   };
 
-  /** What the workspace reads from `createLibraryCatalog`. */
+  /** What the workspace reads from `LibraryCatalog`. */
   export type WorkspaceCatalog<Item> = {
-    statusQuery: { error: unknown; refetch: () => unknown };
+    statusError: unknown;
+    refetchStatus: () => unknown;
     statusMessage: string | null;
     viewState: LibraryViewState;
     updating: boolean;
@@ -39,15 +40,16 @@
 <script lang="ts" generics="Item, Key extends string">
   import type { Snippet } from "svelte";
   import { resolve } from "$app/paths";
-  import { libraryCommandErrorMessage } from "#lib/library/library-errors";
-  import { labelAt, skipTo } from "#lib/library/scroll-index";
-  import { createWorkspaceScroll } from "#lib/shell/workspace-scroll.svelte";
+  import { LibraryErrors } from "#lib/library/library-errors";
+  import { ScrollIndex } from "#lib/library/scroll-index";
+  import { AppServices } from "#lib/shell/app-services.svelte";
+  import { WorkspaceScroll } from "#lib/shell/workspace-scroll.svelte";
   import EmptyStatus from "#lib/ui/empty-status.svelte";
   import ErrorAlert from "#lib/ui/error-alert.svelte";
   import LoadMoreSentinel from "#lib/ui/load-more-sentinel.svelte";
   import LoadingStatus from "#lib/ui/loading-status.svelte";
-  import ScrollIndex from "#lib/ui/scroll-index.svelte";
-  import WorkspaceScroll from "#lib/ui/workspace-scroll.svelte";
+  import ScrollIndexBadge from "#lib/ui/scroll-index-badge.svelte";
+  import WorkspaceScrollRegion from "#lib/ui/workspace-scroll.svelte";
   import IndexRail from "./index-rail.svelte";
   import LibraryToolbar from "./library-toolbar.svelte";
 
@@ -81,14 +83,13 @@
   let viewport = $state<HTMLElement | null>(null);
   let topIndex = $state(0);
 
-  const workspaceScroll = createWorkspaceScroll({
-    viewport: () => viewport,
+  const workspaceScroll = new WorkspaceScroll(AppServices.current().scrollMemory, {
     key: () => scrollKey,
     resetKey: () => stateKey,
     ready: () => catalog.items.length > 0,
   });
 
-  const scrollIndexLabel = $derived(labelAt(catalog.index, skip + topIndex));
+  const scrollIndexLabel = $derived(ScrollIndex.labelAt(catalog.index, skip + topIndex));
 
   const scroll = $derived<LibraryScroll>({
     viewport,
@@ -111,27 +112,31 @@
   />
 
   <div class="@container relative min-h-0">
-    <ScrollIndex label={scrollIndexLabel} visible={workspaceScroll.scrolling} />
+    <ScrollIndexBadge label={scrollIndexLabel} visible={workspaceScroll.scrolling} />
     {#if catalog.index.length > 1}
       <IndexRail
         buckets={catalog.index}
         current={scrollIndexLabel}
-        onselect={(label) => onjump(skipTo(catalog.index, label) ?? 0)}
+        onselect={(label) => onjump(ScrollIndex.skipTo(catalog.index, label) ?? 0)}
       />
     {/if}
-    <WorkspaceScroll bind:viewportRef={viewport} contentClass="pt-6 pb-16">
+    <WorkspaceScrollRegion
+      bind:viewportRef={viewport}
+      viewportAttachment={workspaceScroll.attach}
+      contentClass="pt-6 pb-16"
+    >
       {#if catalog.viewState === "loading"}
         <LoadingStatus>Loading library…</LoadingStatus>
       {:else if catalog.viewState === "statusError"}
         <ErrorAlert
-          message={libraryCommandErrorMessage(catalog.statusQuery.error)}
-          onRetry={() => void catalog.statusQuery.refetch()}
+          message={LibraryErrors.commandMessage(catalog.statusError)}
+          onRetry={() => void catalog.refetchStatus()}
         />
       {:else if catalog.viewState === "unavailable"}
         <ErrorAlert message={catalog.statusMessage ?? ""} />
       {:else if catalog.viewState === "catalogError"}
         <ErrorAlert
-          message={libraryCommandErrorMessage(catalog.error)}
+          message={LibraryErrors.commandMessage(catalog.error)}
           onRetry={() => void catalog.refetch()}
         />
       {:else if catalog.viewState === "empty"}
@@ -155,6 +160,6 @@
           />
         {/if}
       {/if}
-    </WorkspaceScroll>
+    </WorkspaceScrollRegion>
   </div>
 </div>

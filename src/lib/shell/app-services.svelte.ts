@@ -1,6 +1,12 @@
 import { QueryClient } from "@tanstack/svelte-query";
 import { createContext } from "svelte";
-import { LibraryScanState } from "#lib/library/library-scan-state.svelte";
+import { AlbumRepository } from "#lib/library/album-repository";
+import { ArtistRepository } from "#lib/library/artist-repository";
+import { CatalogRepository } from "#lib/library/catalog-repository";
+import { LibraryRootCommands } from "#lib/library/library-root-commands.svelte";
+import { LibraryTrackCommands } from "#lib/library/library-track-commands";
+import { LibraryViews } from "#lib/library/library-views.svelte";
+import { LyricsRepository } from "#lib/lyrics/lyrics-repository";
 import { NativeBridgeUnavailableError, type NativeClients } from "#lib/native";
 import { TauriNative } from "#lib/native/tauri-native";
 import { AudioOutputDevices } from "#lib/playback/audio-output-devices.svelte";
@@ -8,11 +14,15 @@ import { PlaybackClock } from "#lib/playback/playback-clock.svelte";
 import { Playback } from "#lib/playback/playback.svelte";
 import { WaveformRepository } from "#lib/playback/waveform-repository.svelte";
 import { Appearance } from "#lib/settings/appearance.svelte";
-import { createScanWatcher } from "./scan-finished";
 import { MotionBudget } from "./motion-budget.svelte";
 import { NativeSession, type SessionTargets } from "./native-session.svelte";
 import { NoticeCenter } from "./notice-center.svelte";
-import { UserActionRunner } from "./user-action-runner";
+import { QueuePanel } from "./queue-panel.svelte";
+import { ScanWatcher } from "./scan-watcher.svelte";
+import { ScrollMemory } from "./scroll-memory";
+import { ShellHistory } from "./shell-history.svelte";
+import { LyricsWaveformLink } from "./lyrics-waveform-link.svelte";
+import { UserActionRunner } from "./user-action-runner.svelte";
 
 const [getServices, setServices] = createContext<AppServices>();
 
@@ -55,8 +65,6 @@ export class AppServices {
   }
 
   public readonly queryClient: QueryClient;
-  /** The library scan state; the library context still provides it to the library pages. */
-  public readonly libraryScan = new LibraryScanState();
   /** Failures and short messages that the screens show. */
   public readonly notices = new NoticeCenter();
   /** Runs the user actions; each failure goes to `notices`. */
@@ -67,6 +75,20 @@ export class AppServices {
   public readonly outputDevices: AudioOutputDevices;
   public readonly waveforms: WaveformRepository;
   public readonly motion: MotionBudget;
+  /** The Library's catalog lists and scroll indexes. */
+  public readonly catalog: CatalogRepository;
+  public readonly albums: AlbumRepository;
+  public readonly artists: ArtistRepository;
+  public readonly libraryRoots: LibraryRootCommands;
+  public readonly libraryTracks: LibraryTrackCommands;
+  public readonly libraryViews = new LibraryViews();
+  /** The Library scan, as the Backend last reported it. */
+  public readonly scan: ScanWatcher;
+  public readonly lyrics: LyricsRepository;
+  public readonly history = new ShellHistory();
+  public readonly queuePanel = new QueuePanel();
+  public readonly scrollMemory = new ScrollMemory();
+  public readonly lyricsWaveformLink = new LyricsWaveformLink();
 
   public constructor(native: NativeClients, queryClient: QueryClient) {
     this.queryClient = queryClient;
@@ -77,11 +99,18 @@ export class AppServices {
     this.waveforms = new WaveformRepository(native.playback);
     this.motion = new MotionBudget(this.appearance);
 
-    const watchScan = createScanWatcher(queryClient, this.libraryScan);
+    this.catalog = new CatalogRepository(native.library, queryClient);
+    this.albums = new AlbumRepository(native.library, queryClient);
+    this.artists = new ArtistRepository(native.library);
+    this.libraryRoots = new LibraryRootCommands(native.library, this.catalog);
+    this.libraryTracks = new LibraryTrackCommands(native.library);
+    this.lyrics = new LyricsRepository(native.lyrics, queryClient);
+    this.scan = new ScanWatcher(this.catalog, this.lyrics);
+
     const targets: SessionTargets = {
       playback: this.playback,
       appearance: this.appearance,
-      scan: { accept: ({ value }) => watchScan(value) },
+      scan: this.scan,
       waveforms: this.waveforms,
       notices: this.notices,
     };

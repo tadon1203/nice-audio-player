@@ -2,11 +2,10 @@
   import { Root as ContextMenuRoot, Trigger as ContextMenuTrigger } from "#lib/ui/context-menu";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import { goto } from "$app/navigation";
-  import { trackLinks } from "#lib/library/tracks";
+  import { Tracks } from "#lib/library/tracks";
   import { PlaybackFailure } from "#lib/playback/playback-failure";
   import { AppServices } from "#lib/shell/app-services.svelte";
   import { ErrorMessages } from "#lib/shell/error-messages";
-  import { nowPlaying } from "#lib/shell/now-playing.svelte";
   import Artwork from "#lib/ui/artwork.svelte";
   import ContextMenuContent from "#lib/ui/context-menu/context-menu-content.svelte";
   import ContextMenuItem from "#lib/ui/context-menu/context-menu-item.svelte";
@@ -18,7 +17,7 @@
   /** Sliding distance for the artwork, title and artist. One value so they travel together. */
   const SLIDE_PX = 16;
 
-  const { playback, session, motion: budget, notices, actions } = AppServices.current();
+  const { playback, session, motion: budget, notices, actions, history } = AppServices.current();
   // A failed startup shows its reason here, since there is no playback state to report on.
   const notice = $derived(
     session.connection === "failed"
@@ -28,9 +27,9 @@
   const item = $derived(playback.item);
   const trackKey = $derived(item?.trackId ?? "none");
   const title = $derived(item?.title ?? "Nothing playing");
-  const nowPlayingOpen = $derived(nowPlaying.isOpen);
+  const nowPlayingOpen = $derived(history.isNowPlayingOpen);
   const hasTrack = $derived(item !== null);
-  const links = $derived(item === null ? null : trackLinks(item));
+  const links = $derived(item === null ? null : Tracks.links(item));
 
   /**
    * Next enters from the right and pushes the old track out to the left; previous mirrors it.
@@ -58,7 +57,7 @@
     <Button
       variant="quiet"
       aria-label="Close Now Playing"
-      onclick={() => nowPlaying.close()}
+      onclick={() => history.closeNowPlaying()}
       data-slot="sleeve-close"
       size="inline"
       class="size-16 rounded-lg p-0"
@@ -76,7 +75,7 @@
             type="button"
             aria-label="Open Now Playing"
             disabled={!hasTrack}
-            onclick={() => nowPlaying.open()}
+            onclick={() => history.openNowPlaying()}
             data-slot="sleeve"
             variant="bare"
             size="inline"
@@ -132,7 +131,7 @@
           <Button
             type="button"
             disabled={item === null}
-            onclick={() => nowPlaying.toggle()}
+            onclick={() => history.toggleNowPlaying()}
             {title}
             variant="bare"
             size="inline"

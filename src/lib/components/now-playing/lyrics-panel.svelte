@@ -1,9 +1,8 @@
 <script lang="ts">
   import ArrowDown from "@lucide/svelte/icons/arrow-down";
   import ArrowUp from "@lucide/svelte/icons/arrow-up";
-  import { createTrackLyrics } from "#lib/lyrics/lyrics.svelte";
+  import { TrackLyrics } from "#lib/lyrics/track-lyrics.svelte";
   import { AppServices } from "#lib/shell/app-services.svelte";
-  import { lyricsWaveformLink } from "#lib/shell/lyrics-waveform-link.svelte";
   import { Button } from "#lib/ui/shadcn/button";
   import { cn } from "#lib/utils/cn.js";
   import { EDGE_MASK } from "./anchor-column";
@@ -22,9 +21,9 @@
    */
   let { trackId, class: className }: { trackId: string | null; class?: string } = $props();
 
-  const playback = AppServices.current().playback;
-  const lyrics = createTrackLyrics(() => trackId);
-  const resolution = $derived(lyrics.data?.status === "resolved" ? lyrics.data : null);
+  const { playback, lyrics: lyricsRepository, lyricsWaveformLink } = AppServices.current();
+  const lyrics = new TrackLyrics(lyricsRepository, () => trackId);
+  const resolution = $derived(lyrics.resolution?.status === "resolved" ? lyrics.resolution : null);
   const content = $derived(resolution?.document.content ?? null);
   const rawLines = $derived(content?.kind === "timed" ? content.lines : null);
   const timedLines = $derived(rawLines === null ? null : withIntro(rawLines));

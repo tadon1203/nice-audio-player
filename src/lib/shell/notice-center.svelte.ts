@@ -1,5 +1,8 @@
-/** Where an error shows: the Dock, or the Playback section of the Settings screen. */
-export type NoticePlace = "dock" | "settings";
+/**
+ * Where an error shows: the Dock, the Playback section of the Settings screen, or the Library
+ * section of the Settings screen.
+ */
+export type NoticePlace = "dock" | "settings" | "library";
 
 export type Notice =
   | { readonly kind: "error"; readonly message: string }
@@ -22,7 +25,7 @@ export class NoticeCenter {
   public at(place: NoticePlace): Notice | null {
     const error = this.#errors[place];
     if (error !== undefined) return { kind: "error", message: error };
-    if (place === "settings") return null;
+    if (place !== "dock") return null;
     if (this.#undo !== null) return { kind: "undo", message: this.#undo };
     if (this.#skipped !== null) return { kind: "skipped", message: this.#skipped };
     return null;

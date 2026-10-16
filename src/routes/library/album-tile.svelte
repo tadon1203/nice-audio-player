@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { goto } from "$app/navigation";
   import type { LibraryAlbumSummary } from "#lib/native";
   import { albumItemKey } from "#lib/library/album-key";
   import { albumHref } from "#lib/library/routes";
   import { albumTitleLabel, artistNameLabel } from "#lib/library/unknown-name";
+  import { AppServices } from "#lib/shell/app-services.svelte";
   import Artwork from "#lib/ui/artwork.svelte";
   import { sharedElement } from "#lib/ui/motion/shared-element";
   import PlayPauseIcon from "#lib/ui/play-pause-icon.svelte";
@@ -24,6 +24,7 @@
     parentArtist?: string;
   } = $props();
 
+  const { history } = AppServices.current();
   const title = $derived(albumTitleLabel(album.key.title));
   const artist = $derived(artistNameLabel(album.key.albumArtist));
   const href = $derived(albumHref(album.key));
@@ -40,7 +41,7 @@
     )
       return;
     event.preventDefault();
-    void goto(href, { state: { parentArtist, artwork: album.artwork } });
+    void history.openAlbum(href, { parentArtist, artwork: album.artwork });
   }
 </script>
 

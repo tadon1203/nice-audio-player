@@ -1,9 +1,8 @@
 <script lang="ts">
   import TrackTable from "#lib/components/track-table/track-table.svelte";
-  import { createLibraryCatalog } from "#lib/library/catalog.svelte";
+  import { LibraryCatalog } from "#lib/library/library-catalog.svelte";
+  import { TrackList } from "#lib/library/track-list";
   import { AppServices } from "#lib/shell/app-services.svelte";
-  import { trackListContext } from "#lib/library/track-list";
-  import { libraryViews } from "#lib/shell/library-views.svelte";
   import LibraryWorkspace from "../library-workspace.svelte";
 
   const meta = {
@@ -14,9 +13,10 @@
     searchPlaceholder: "Search tracks…",
   };
 
+  const services = AppServices.current();
+  const { playback, actions, libraryViews } = services;
   const view = libraryViews.tracks;
-  const catalog = createLibraryCatalog(() => view.request);
-  const { playback, actions } = AppServices.current();
+  const catalog = new LibraryCatalog(services.catalog, () => view.request);
 </script>
 
 <LibraryWorkspace
@@ -38,7 +38,8 @@
       sortKey={view.sortKey}
       sortDirection={view.direction}
       onsortchange={(key, direction) => view.setSort(key, direction)}
-      onplaytrack={(id) => actions.run(() => playback.start(trackListContext(catalog.request), id))}
+      onplaytrack={(id) =>
+        actions.run(() => playback.start(TrackList.context(catalog.request), id))}
     />
   {/snippet}
 </LibraryWorkspace>
