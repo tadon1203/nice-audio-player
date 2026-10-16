@@ -1,5 +1,5 @@
 import { infiniteQueryOptions, queryOptions, skipToken } from "@tanstack/svelte-query";
-import { requireNative } from "$lib/native";
+import { requireNative } from "#lib/native";
 import type {
   LibraryAlbumArtistKey,
   LibraryAlbumArtistPage,
@@ -16,7 +16,7 @@ import type {
   LibraryTrackSortKey,
   LibraryTrackSummary,
   LibraryAlbumArtistSummary,
-} from "$lib/native";
+} from "#lib/native";
 
 /** An Album is its Album Artist, title, and folder, so all three are in its query keys. */
 const albumIdentity = (key: LibraryAlbumKey) =>

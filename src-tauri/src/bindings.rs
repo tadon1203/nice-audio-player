@@ -1,5 +1,5 @@
 use backend::messages::BackendMessage;
-use tauri_specta::{collect_commands, Builder, ErrorHandlingMode};
+use tauri_specta::{Builder, ErrorHandlingMode, collect_commands};
 
 use crate::commands;
 
@@ -78,4 +78,25 @@ pub fn render_typescript() -> Result<String, specta_typescript::Error> {
         .and_then(|()| Ok(std::fs::read_to_string(&scratch)?));
     let _ = std::fs::remove_file(&scratch);
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn committed_bindings_are_current() {
+        let path =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../src/lib/native/bindings.ts");
+        let generated = render_typescript()
+            .expect("render TypeScript bindings")
+            .replace("\r\n", "\n");
+        let committed = std::fs::read_to_string(&path)
+            .unwrap_or_default()
+            .replace("\r\n", "\n");
+        assert!(
+            committed == generated,
+            "src/lib/native/bindings.ts is stale; run `pnpm bindings`"
+        );
+    }
 }

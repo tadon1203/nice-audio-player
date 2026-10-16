@@ -1,7 +1,7 @@
 <script lang="ts">
   import { prefersReducedMotion } from "svelte/motion";
   import { fade, type TransitionConfig } from "svelte/transition";
-  import { motionFor } from "$lib/ui/motion/svelte-motion";
+  import { motionFor } from "#lib/ui/motion/svelte-motion";
 
   /**
    * Text that flips over like a split-flap card when its value changes; an unchanged value does

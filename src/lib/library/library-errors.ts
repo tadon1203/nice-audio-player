@@ -3,8 +3,8 @@ import type {
   LibraryStatus,
   LibraryUnavailableReason,
   ScanFailure,
-} from "$lib/native";
-import { messageForCode, nativeErrorCode } from "$lib/native";
+} from "#lib/native";
+import { messageForCode, nativeErrorCode } from "#lib/native";
 
 const commandMessages = {
   invalidRoot: "That folder reference is invalid.",

@@ -24,35 +24,35 @@
                 "message": "Layering: `native` must not import from `routes`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["$lib/components", "$lib/components/**"],
+                "group": ["#lib/components", "#lib/components/**"],
                 "message": "Layering: `native` must not import from `components`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["$lib/shell", "$lib/shell/**"],
+                "group": ["#lib/shell", "#lib/shell/**"],
                 "message": "Layering: `native` must not import from `shell`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["$lib/playback", "$lib/playback/**"],
+                "group": ["#lib/playback", "#lib/playback/**"],
                 "message": "Layering: `native` must not import from `playback`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["$lib/library", "$lib/library/**"],
+                "group": ["#lib/library", "#lib/library/**"],
                 "message": "Layering: `native` must not import from `library`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["$lib/lyrics", "$lib/lyrics/**"],
+                "group": ["#lib/lyrics", "#lib/lyrics/**"],
                 "message": "Layering: `native` must not import from `lyrics`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["$lib/settings", "$lib/settings/**"],
+                "group": ["#lib/settings", "#lib/settings/**"],
                 "message": "Layering: `native` must not import from `settings`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["$lib/ui", "$lib/ui/**"],
+                "group": ["#lib/ui", "#lib/ui/**"],
                 "message": "Layering: `native` must not import from `ui`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["$lib/utils", "$lib/utils/**"],
+                "group": ["#lib/utils", "#lib/utils/**"],
                 "message": "Layering: `native` must not import from `utils`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               }
             ]
@@ -72,35 +72,35 @@
                 "message": "Layering: `utils` must not import from `routes`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["$lib/components", "$lib/components/**"],
+                "group": ["#lib/components", "#lib/components/**"],
                 "message": "Layering: `utils` must not import from `components`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["$lib/shell", "$lib/shell/**"],
+                "group": ["#lib/shell", "#lib/shell/**"],
                 "message": "Layering: `utils` must not import from `shell`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["$lib/playback", "$lib/playback/**"],
+                "group": ["#lib/playback", "#lib/playback/**"],
                 "message": "Layering: `utils` must not import from `playback`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["$lib/library", "$lib/library/**"],
+                "group": ["#lib/library", "#lib/library/**"],
                 "message": "Layering: `utils` must not import from `library`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["$lib/lyrics", "$lib/lyrics/**"],
+                "group": ["#lib/lyrics", "#lib/lyrics/**"],
                 "message": "Layering: `utils` must not import from `lyrics`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["$lib/settings", "$lib/settings/**"],
+                "group": ["#lib/settings", "#lib/settings/**"],
                 "message": "Layering: `utils` must not import from `settings`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["$lib/ui", "$lib/ui/**"],
+                "group": ["#lib/ui", "#lib/ui/**"],
                 "message": "Layering: `utils` must not import from `ui`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["$lib/native", "$lib/native/**"],
+                "group": ["#lib/native", "#lib/native/**"],
                 "message": "Layering: `utils` must not import from `native`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
@@ -124,27 +124,27 @@
                 "message": "Layering: `ui` must not import from `routes`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["$lib/components", "$lib/components/**"],
+                "group": ["#lib/components", "#lib/components/**"],
                 "message": "Layering: `ui` must not import from `components`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["$lib/shell", "$lib/shell/**"],
+                "group": ["#lib/shell", "#lib/shell/**"],
                 "message": "Layering: `ui` must not import from `shell`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["$lib/playback", "$lib/playback/**"],
+                "group": ["#lib/playback", "#lib/playback/**"],
                 "message": "Layering: `ui` must not import from `playback`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["$lib/library", "$lib/library/**"],
+                "group": ["#lib/library", "#lib/library/**"],
                 "message": "Layering: `ui` must not import from `library`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["$lib/lyrics", "$lib/lyrics/**"],
+                "group": ["#lib/lyrics", "#lib/lyrics/**"],
                 "message": "Layering: `ui` must not import from `lyrics`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["$lib/settings", "$lib/settings/**"],
+                "group": ["#lib/settings", "#lib/settings/**"],
                 "message": "Layering: `ui` must not import from `settings`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
@@ -168,23 +168,23 @@
                 "message": "Layering: `playback` must not import from `routes`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["$lib/components", "$lib/components/**"],
+                "group": ["#lib/components", "#lib/components/**"],
                 "message": "Layering: `playback` must not import from `components`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["$lib/shell", "$lib/shell/**"],
+                "group": ["#lib/shell", "#lib/shell/**"],
                 "message": "Layering: `playback` must not import from `shell`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["$lib/library", "$lib/library/**"],
+                "group": ["#lib/library", "#lib/library/**"],
                 "message": "Layering: `playback` must not import from `library`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["$lib/lyrics", "$lib/lyrics/**"],
+                "group": ["#lib/lyrics", "#lib/lyrics/**"],
                 "message": "Layering: `playback` must not import from `lyrics`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["$lib/settings", "$lib/settings/**"],
+                "group": ["#lib/settings", "#lib/settings/**"],
                 "message": "Layering: `playback` must not import from `settings`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
@@ -208,23 +208,23 @@
                 "message": "Layering: `library` must not import from `routes`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["$lib/components", "$lib/components/**"],
+                "group": ["#lib/components", "#lib/components/**"],
                 "message": "Layering: `library` must not import from `components`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["$lib/shell", "$lib/shell/**"],
+                "group": ["#lib/shell", "#lib/shell/**"],
                 "message": "Layering: `library` must not import from `shell`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["$lib/playback", "$lib/playback/**"],
+                "group": ["#lib/playback", "#lib/playback/**"],
                 "message": "Layering: `library` must not import from `playback`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["$lib/lyrics", "$lib/lyrics/**"],
+                "group": ["#lib/lyrics", "#lib/lyrics/**"],
                 "message": "Layering: `library` must not import from `lyrics`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["$lib/settings", "$lib/settings/**"],
+                "group": ["#lib/settings", "#lib/settings/**"],
                 "message": "Layering: `library` must not import from `settings`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
@@ -248,23 +248,23 @@
                 "message": "Layering: `lyrics` must not import from `routes`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["$lib/components", "$lib/components/**"],
+                "group": ["#lib/components", "#lib/components/**"],
                 "message": "Layering: `lyrics` must not import from `components`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["$lib/shell", "$lib/shell/**"],
+                "group": ["#lib/shell", "#lib/shell/**"],
                 "message": "Layering: `lyrics` must not import from `shell`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["$lib/playback", "$lib/playback/**"],
+                "group": ["#lib/playback", "#lib/playback/**"],
                 "message": "Layering: `lyrics` must not import from `playback`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["$lib/library", "$lib/library/**"],
+                "group": ["#lib/library", "#lib/library/**"],
                 "message": "Layering: `lyrics` must not import from `library`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["$lib/settings", "$lib/settings/**"],
+                "group": ["#lib/settings", "#lib/settings/**"],
                 "message": "Layering: `lyrics` must not import from `settings`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
@@ -288,27 +288,27 @@
                 "message": "Layering: `meters` must not import from `routes`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["$lib/components", "$lib/components/**"],
+                "group": ["#lib/components", "#lib/components/**"],
                 "message": "Layering: `meters` must not import from `components`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["$lib/shell", "$lib/shell/**"],
+                "group": ["#lib/shell", "#lib/shell/**"],
                 "message": "Layering: `meters` must not import from `shell`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["$lib/playback", "$lib/playback/**"],
+                "group": ["#lib/playback", "#lib/playback/**"],
                 "message": "Layering: `meters` must not import from `playback`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["$lib/library", "$lib/library/**"],
+                "group": ["#lib/library", "#lib/library/**"],
                 "message": "Layering: `meters` must not import from `library`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["$lib/lyrics", "$lib/lyrics/**"],
+                "group": ["#lib/lyrics", "#lib/lyrics/**"],
                 "message": "Layering: `meters` must not import from `lyrics`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["$lib/settings", "$lib/settings/**"],
+                "group": ["#lib/settings", "#lib/settings/**"],
                 "message": "Layering: `meters` must not import from `settings`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
@@ -332,23 +332,23 @@
                 "message": "Layering: `settings` must not import from `routes`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["$lib/components", "$lib/components/**"],
+                "group": ["#lib/components", "#lib/components/**"],
                 "message": "Layering: `settings` must not import from `components`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["$lib/shell", "$lib/shell/**"],
+                "group": ["#lib/shell", "#lib/shell/**"],
                 "message": "Layering: `settings` must not import from `shell`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["$lib/playback", "$lib/playback/**"],
+                "group": ["#lib/playback", "#lib/playback/**"],
                 "message": "Layering: `settings` must not import from `playback`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["$lib/library", "$lib/library/**"],
+                "group": ["#lib/library", "#lib/library/**"],
                 "message": "Layering: `settings` must not import from `library`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["$lib/lyrics", "$lib/lyrics/**"],
+                "group": ["#lib/lyrics", "#lib/lyrics/**"],
                 "message": "Layering: `settings` must not import from `lyrics`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
@@ -372,7 +372,7 @@
                 "message": "Layering: `shell` must not import from `routes`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {
-                "group": ["$lib/components", "$lib/components/**"],
+                "group": ["#lib/components", "#lib/components/**"],
                 "message": "Layering: `shell` must not import from `components`. Dependencies point down: routes > components > shell > domains > ui/utils/native."
               },
               {

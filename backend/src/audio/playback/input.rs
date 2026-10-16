@@ -2,8 +2,8 @@
 //! and output threads arrive through one channel, so the worker sleeps until something happens.
 
 use std::fmt;
-use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::Arc;
+use std::sync::mpsc::{self, Receiver, Sender};
 
 use cpal::StreamInstant;
 

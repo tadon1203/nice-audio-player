@@ -7,7 +7,7 @@
     SheetContent,
     SheetTitle,
     SheetTrigger,
-  } from "$lib/ui/shadcn/sheet/index.js";
+  } from "#lib/ui/shadcn/sheet/index.js";
   import Navigation from "./navigation.svelte";
   import WindowControls from "./window-controls.svelte";
 

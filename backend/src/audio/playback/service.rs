@@ -2,8 +2,8 @@
 //! snapshots.
 
 use std::sync::{
-    mpsc::{self, SyncSender},
     Arc, Mutex, RwLock,
+    mpsc::{self, SyncSender},
 };
 use std::thread::{self, JoinHandle};
 
@@ -318,12 +318,11 @@ impl PlaybackService {
 
     pub fn shutdown(&self) {
         self.handle.inbox.send(WorkerInput::Shutdown);
-        if let Ok(mut worker) = self.worker.lock() {
-            if let Some(worker) = worker.take() {
-                if worker.join().is_err() {
-                    error!("playback.worker_panicked");
-                }
-            }
+        if let Ok(mut worker) = self.worker.lock()
+            && let Some(worker) = worker.take()
+            && worker.join().is_err()
+        {
+            error!("playback.worker_panicked");
         }
     }
 }

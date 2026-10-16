@@ -1,8 +1,8 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
-  import { Field, FieldLabel } from "$lib/ui/shadcn/field/index.js";
-  import { Switch } from "$lib/ui/shadcn/switch/index.js";
-  import { cn } from "$lib/utils/cn.js";
+  import { Field, FieldLabel } from "#lib/ui/shadcn/field/index.js";
+  import { Switch } from "#lib/ui/shadcn/switch/index.js";
+  import { cn } from "#lib/utils/cn.js";
 
   /**
    * A labelled switch row. The switch shows `checked` as the caller holds it, so a change the

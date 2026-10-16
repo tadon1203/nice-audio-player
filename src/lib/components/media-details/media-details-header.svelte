@@ -1,11 +1,11 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
-  import type { ArtworkRef } from "$lib/native";
-  import { getSettings } from "$lib/settings/context";
-  import Artwork from "$lib/ui/artwork.svelte";
-  import { sharedElement } from "$lib/ui/motion/shared-element";
-  import ArtworkGlow from "$lib/ui/artwork-glow/artwork-glow.svelte";
-  import PageTitle from "$lib/ui/page-title.svelte";
+  import type { ArtworkRef } from "#lib/native";
+  import { getSettings } from "#lib/settings/context";
+  import Artwork from "#lib/ui/artwork.svelte";
+  import { sharedElement } from "#lib/ui/motion/shared-element";
+  import ArtworkGlow from "#lib/ui/artwork-glow/artwork-glow.svelte";
+  import PageTitle from "#lib/ui/page-title.svelte";
 
   let {
     title,

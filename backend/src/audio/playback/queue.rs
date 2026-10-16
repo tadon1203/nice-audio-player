@@ -10,7 +10,7 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use rand::{seq::SliceRandom, Rng};
+use rand::{Rng, seq::SliceRandom};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, specta::Type, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -399,15 +399,15 @@ impl PlaybackQueue {
     /// Starts another pass. A shuffled queue is shuffled again, without repeating the item that
     /// just played back to back.
     fn wrap_to_start<R: Rng + ?Sized>(&mut self, rng: &mut R) {
-        if let Some(shuffled) = &mut self.shuffled {
-            if shuffled.len() > 1 {
-                let last_played = shuffled[self.current].id;
-                let order = Arc::make_mut(shuffled);
-                order.shuffle(rng);
-                if order[0].id == last_played {
-                    let other = rng.random_range(1..order.len());
-                    order.swap(0, other);
-                }
+        if let Some(shuffled) = &mut self.shuffled
+            && shuffled.len() > 1
+        {
+            let last_played = shuffled[self.current].id;
+            let order = Arc::make_mut(shuffled);
+            order.shuffle(rng);
+            if order[0].id == last_played {
+                let other = rng.random_range(1..order.len());
+                order.swap(0, other);
             }
         }
         self.current = 0;
@@ -432,7 +432,7 @@ impl PlaybackQueue {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rand::{rngs::StdRng, SeedableRng};
+    use rand::{SeedableRng, rngs::StdRng};
 
     fn ids(count: usize) -> Vec<String> {
         (0..count).map(|i| format!("t{i}")).collect()
@@ -556,9 +556,11 @@ mod tests {
     #[test]
     fn next_and_previous_stop_at_the_ends_unless_repeating_all() {
         let mut queue = queue_of(2, 0, PlaybackRepeatMode::Off, false);
-        assert!(queue
-            .advance(AdvanceReason::UserPrevious, &mut rng())
-            .is_none());
+        assert!(
+            queue
+                .advance(AdvanceReason::UserPrevious, &mut rng())
+                .is_none()
+        );
         assert_eq!(
             &*queue
                 .advance(AdvanceReason::UserNext, &mut rng())
@@ -719,10 +721,12 @@ mod tests {
         queue.remove_upcoming(&removed).unwrap();
         queue.set_shuffle(false, &mut rng());
         assert_eq!(queue.len(), 5);
-        assert!(queue
-            .arranged
-            .iter()
-            .all(|entry| entry.queue_item_id() != removed));
+        assert!(
+            queue
+                .arranged
+                .iter()
+                .all(|entry| entry.queue_item_id() != removed)
+        );
         assert_eq!(arranged(&queue)[0], "t0");
     }
 

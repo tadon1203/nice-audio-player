@@ -3,15 +3,15 @@
     Root as MenuRoot,
     Trigger as MenuTrigger,
     RadioGroup as MenuRadioGroup,
-  } from "$lib/ui/dropdown-menu";
+  } from "#lib/ui/dropdown-menu";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
-  import { createPlaybackSignalPath } from "$lib/components/signal-path/signal-path.svelte";
-  import { getPlayback } from "$lib/playback/context";
-  import { createAudioOutputDevices } from "$lib/playback/output-devices.svelte";
-  import DropdownMenuContent from "$lib/ui/dropdown-menu/dropdown-menu-content.svelte";
-  import DropdownMenuRadioItem from "$lib/ui/dropdown-menu/dropdown-menu-radio-item.svelte";
-  import FlapText from "$lib/ui/rolling-number/flap-text.svelte";
-  import { cn } from "$lib/utils/cn.js";
+  import { createPlaybackSignalPath } from "#lib/components/signal-path/signal-path.svelte";
+  import { getPlayback } from "#lib/playback/context";
+  import { createAudioOutputDevices } from "#lib/playback/output-devices.svelte";
+  import DropdownMenuContent from "#lib/ui/dropdown-menu/dropdown-menu-content.svelte";
+  import DropdownMenuRadioItem from "#lib/ui/dropdown-menu/dropdown-menu-radio-item.svelte";
+  import FlapText from "#lib/ui/rolling-number/flap-text.svelte";
+  import { cn } from "#lib/utils/cn.js";
 
   const DEFAULT_DEVICE = "default";
 

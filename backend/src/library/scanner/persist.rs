@@ -1,12 +1,12 @@
 //! The scanner's database work. Planning a batch only reads. Writing it is one short transaction
 //! that holds the write lock for the writes alone, never while files are being read.
 
-use rusqlite::{params, Connection, OptionalExtension, Transaction, TransactionBehavior};
+use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, params};
 
 use super::discover::DiscoveredFile;
 use super::inspect::{ArtworkOutcome, InspectedFile};
 use crate::library::database::DatabaseError;
-use crate::library::keys::{album_edition_of, SortTags, TrackKeys};
+use crate::library::keys::{SortTags, TrackKeys, album_edition_of};
 use crate::library::status::{ArtworkStatus, Availability, InspectionStatus, TagStatus};
 use crate::library::summary::{self, Touched};
 use crate::media::inspection::Undecodable;

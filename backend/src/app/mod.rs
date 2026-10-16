@@ -12,11 +12,11 @@ use crate::{
         waveform::{PlaybackWaveform, Waveform, WaveformService},
     },
     library::{
+        Library,
         error::{LibraryCommandError, StoreError},
         models::{LibraryScanSnapshot, LibraryStatus, LibraryUnavailableReason},
-        Library,
     },
-    lyrics::{model::LyricsTrackContext, LyricsCommandError, LyricsResolution, LyricsService},
+    lyrics::{LyricsCommandError, LyricsResolution, LyricsService, model::LyricsTrackContext},
     messages::{
         BackendMessage, InitialState, SharedMessageSink, StateMessage, StateTopic, StateValue,
         Versioned,

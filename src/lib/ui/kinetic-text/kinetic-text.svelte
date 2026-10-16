@@ -1,11 +1,11 @@
 <script lang="ts">
   import { prefersReducedMotion } from "svelte/motion";
   import type { Attachment } from "svelte/attachments";
-  import { motionFor } from "$lib/ui/motion/svelte-motion";
-  import { springLinear } from "$lib/ui/motion/spring-curve";
-  import { tweenNumber } from "$lib/ui/motion/tween-number";
+  import { motionFor } from "#lib/ui/motion/svelte-motion";
+  import { springLinear } from "#lib/ui/motion/spring-curve";
+  import { tweenNumber } from "#lib/ui/motion/tween-number";
   import { REVEAL_END_PERCENT, wipeMask } from "./wipe-mask";
-  import { cn } from "$lib/utils/cn.js";
+  import { cn } from "#lib/utils/cn.js";
 
   /**
    * Text that wipes in from left to right while it slides 8px from the side the track came from

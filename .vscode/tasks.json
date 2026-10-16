@@ -147,8 +147,8 @@
     {
       "label": "Nice Audio Player: check bindings",
       "type": "shell",
-      "command": "pnpm.cmd",
-      "args": ["bindings:check"],
+      "command": "cargo",
+      "args": ["test", "-p", "nice-audio-player", "committed_bindings_are_current"],
       "options": { "cwd": "${workspaceFolder}" },
       "problemMatcher": []
     },

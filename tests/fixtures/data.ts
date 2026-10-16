@@ -14,7 +14,7 @@ import type {
   PlaybackQueueItem,
   PlaybackQueueSnapshot,
   PlaybackSnapshot,
-} from "$lib/native";
+} from "#lib/native";
 
 /** Plain data the fake backend serves. No rule lives here: tests say what a page contains. */
 export type LibraryData = {

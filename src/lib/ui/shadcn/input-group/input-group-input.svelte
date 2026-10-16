@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { cn } from "$lib/utils/cn.js";
-	import { Input } from "$lib/ui/shadcn/input/index.js";
+  import { cn } from "#lib/utils/cn.js";
+	import { Input } from "#lib/ui/shadcn/input/index.js";
 	import type { ComponentProps } from "svelte";
 
 	let {

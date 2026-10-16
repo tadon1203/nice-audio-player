@@ -1,16 +1,16 @@
 <script lang="ts">
-  import { getPlayback } from "$lib/playback/context";
-  import { getSettings } from "$lib/settings/context";
-  import { nowPlaying } from "$lib/shell/now-playing.svelte";
-  import { createNowPlayingTween } from "$lib/shell/now-playing-tween.svelte";
-  import ArtworkGlow from "$lib/ui/artwork-glow/artwork-glow.svelte";
+  import { getPlayback } from "#lib/playback/context";
+  import { getSettings } from "#lib/settings/context";
+  import { nowPlaying } from "#lib/shell/now-playing.svelte";
+  import { createNowPlayingTween } from "#lib/shell/now-playing-tween.svelte";
+  import ArtworkGlow from "#lib/ui/artwork-glow/artwork-glow.svelte";
   import { EDGE_PX, ROW_PX, SLOT_PX } from "./dock-metrics";
   import DockIdentity from "./dock-identity.svelte";
   import DockTransport from "./dock-transport.svelte";
   import DockVolume from "./dock-volume.svelte";
   import PlaybackWaveformBand, {
     DOCK_SEEK_HEIGHT,
-  } from "$lib/components/waveform-band/playback-waveform-band.svelte";
+  } from "#lib/components/waveform-band/playback-waveform-band.svelte";
 
   /**
    * Two full-width rows: a plain progress line across the top, then identity, transport and

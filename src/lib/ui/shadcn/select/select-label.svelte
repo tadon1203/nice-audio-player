@@ -1,6 +1,6 @@
 <script lang="ts">
-  import type { PresentationProps } from "$lib/ui/presentation-props";
-	import { cn, type WithElementRef } from "$lib/utils/cn.js";
+  import type { PresentationProps } from "#lib/ui/presentation-props";
+	import { cn, type WithElementRef } from "#lib/utils/cn.js";
 	import type { HTMLAttributes } from "svelte/elements";
 
 	let {

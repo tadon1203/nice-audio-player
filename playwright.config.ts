@@ -3,7 +3,6 @@ import { defineConfig, devices } from "@playwright/test";
 export default defineConfig({
   testDir: "./tests",
   outputDir: "test-results/playwright",
-  globalSetup: "./tests/global-setup.ts",
   fullyParallel: true,
   // The default worker count (half of the CPU cores) overloads the machine: each worker runs a
   // browser, and the load makes tests time out. Override with `--workers=N`.

@@ -198,17 +198,17 @@ fn discard_output_prefix(samples: &mut Vec<f32>, remaining_samples: &mut usize) 
 
 #[cfg(test)]
 mod tests {
-    use super::{prebuffer_frames, DecodeTaskInput, DecodeWorker, Stop};
+    use super::{DecodeTaskInput, DecodeWorker, Stop, prebuffer_frames};
     use crate::audio::cancellation::Cancellation;
     use crate::audio::compressed_source::prepare_compressed_source;
     use crate::audio::output::PipelineId;
     use crate::audio::output_processing::{
         OutputPcmProcessor, OutputProcessingError, OutputProcessingPlan,
     };
-    use crate::audio::pcm_queue::{bounded_pcm_queue, PcmConsumer};
+    use crate::audio::pcm_queue::{PcmConsumer, bounded_pcm_queue};
     use crate::audio::playback::input::{Inbox, WorkerEvent, WorkerInput};
     use crate::media::validation::ValidatedAudioFile;
-    use crate::test_support::{write_pcm_i16_wav, TestDirectory};
+    use crate::test_support::{TestDirectory, write_pcm_i16_wav};
     use std::sync::mpsc::Receiver;
     use std::time::{Duration, Instant};
 

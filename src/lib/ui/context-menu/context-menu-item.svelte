@@ -1,7 +1,7 @@
 <script lang="ts">
-  import type { PresentationProps } from "$lib/ui/presentation-props";
+  import type { PresentationProps } from "#lib/ui/presentation-props";
   import { ContextMenu as ContextMenuPrimitive } from "bits-ui";
-  import { cn } from "$lib/utils/cn.js";
+  import { cn } from "#lib/utils/cn.js";
 
   let {
     ref = $bindable(null),

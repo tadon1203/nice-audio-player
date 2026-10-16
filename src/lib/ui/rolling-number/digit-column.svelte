@@ -1,7 +1,7 @@
 <script lang="ts">
   import { untrack } from "svelte";
   import { Tween } from "svelte/motion";
-  import { motionFor } from "$lib/ui/motion/svelte-motion";
+  import { motionFor } from "#lib/ui/motion/svelte-motion";
   import { COLUMN_HOME_LAP, COLUMN_LAPS, rollTarget, type RollDirection } from "./rolling-model";
 
   let {

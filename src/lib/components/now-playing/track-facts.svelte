@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { Button } from "$lib/ui/shadcn/button";
-  import type { LyricsResolution, PlaybackItem } from "$lib/native";
-  import { createPlaybackSignalPath } from "$lib/components/signal-path/signal-path.svelte";
-  import FactLine from "$lib/ui/fact-line.svelte";
-  import { trackLinks } from "$lib/library/tracks";
+  import { Button } from "#lib/ui/shadcn/button";
+  import type { LyricsResolution, PlaybackItem } from "#lib/native";
+  import { createPlaybackSignalPath } from "#lib/components/signal-path/signal-path.svelte";
+  import FactLine from "#lib/ui/fact-line.svelte";
+  import { trackLinks } from "#lib/library/tracks";
   import { lyricsState, trackFacts } from "./track-facts";
 
   /**

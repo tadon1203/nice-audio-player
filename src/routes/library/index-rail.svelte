@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { Button } from "$lib/ui/shadcn/button";
-  import type { LibraryIndexBucket } from "$lib/native";
+  import { Button } from "#lib/ui/shadcn/button";
+  import type { LibraryIndexBucket } from "#lib/native";
 
   let {
     buckets,

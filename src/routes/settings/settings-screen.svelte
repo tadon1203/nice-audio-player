@@ -1,5 +1,5 @@
 <script lang="ts">
-  import PageTitle from "$lib/ui/page-title.svelte";
+  import PageTitle from "#lib/ui/page-title.svelte";
   import LibraryFoldersSection from "./library-folders-section.svelte";
   import PlaybackSection from "./playback-section.svelte";
 </script>

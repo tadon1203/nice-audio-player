@@ -1,9 +1,9 @@
 <script lang="ts">
   import ArrowDown from "@lucide/svelte/icons/arrow-down";
   import ArrowUp from "@lucide/svelte/icons/arrow-up";
-  import { toggleSortDirection, trackSortLabels } from "$lib/library/sort";
-  import type { LibrarySortDirection, LibraryTrackSortKey } from "$lib/native";
-  import { Button } from "$lib/ui/shadcn/button/index.js";
+  import { toggleSortDirection, trackSortLabels } from "#lib/library/sort";
+  import type { LibrarySortDirection, LibraryTrackSortKey } from "#lib/native";
+  import { Button } from "#lib/ui/shadcn/button/index.js";
 
   let {
     header,

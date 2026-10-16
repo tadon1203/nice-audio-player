@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { ActiveSession, PlaybackItem, PlaybackSnapshot } from "$lib/native";
+import type { ActiveSession, PlaybackItem, PlaybackSnapshot } from "#lib/native";
 vi.mock("svelte/motion", () => ({ prefersReducedMotion: { current: false } }));
 
 import { createPlaybackClock } from "./clock";

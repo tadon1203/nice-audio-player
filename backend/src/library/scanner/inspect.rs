@@ -3,8 +3,8 @@
 
 use std::path::Path;
 use std::sync::{
-    atomic::{AtomicBool, AtomicUsize, Ordering},
     Mutex,
+    atomic::{AtomicBool, AtomicUsize, Ordering},
 };
 
 use super::discover::DiscoveredFile;
@@ -12,8 +12,8 @@ use crate::containment::contain;
 use crate::library::artwork::{self, StoredArtwork};
 use crate::library::status::{ArtworkStatus, TagStatus};
 use crate::media::{
-    inspection::{inspect_audio_file, InspectedAudioFile, Undecodable},
-    metadata::{read_source_metadata, ArtworkRead, SourceMetadata},
+    inspection::{InspectedAudioFile, Undecodable, inspect_audio_file},
+    metadata::{ArtworkRead, SourceMetadata, read_source_metadata},
 };
 
 const MAX_INSPECTION_THREADS: usize = 4;
@@ -134,18 +134,20 @@ pub(super) fn inspect_all(
         .min(files.len());
     std::thread::scope(|scope| {
         for _ in 0..workers {
-            scope.spawn(|| loop {
-                if cancel.load(Ordering::Acquire) {
-                    return;
+            scope.spawn(|| {
+                loop {
+                    if cancel.load(Ordering::Acquire) {
+                        return;
+                    }
+                    let index = next.fetch_add(1, Ordering::Relaxed);
+                    let Some(file) = files.get(index) else {
+                        return;
+                    };
+                    // A file that panics a parser is a file that cannot be read, not a dead scan.
+                    let result = contain("library.inspect", || inspect(file, data_dir))
+                        .unwrap_or(Err(Undecodable));
+                    *results[index].lock().expect("inspection result lock") = Some(result);
                 }
-                let index = next.fetch_add(1, Ordering::Relaxed);
-                let Some(file) = files.get(index) else {
-                    return;
-                };
-                // A file that panics a parser is a file that cannot be read, not a dead scan.
-                let result = contain("library.inspect", || inspect(file, data_dir))
-                    .unwrap_or(Err(Undecodable));
-                *results[index].lock().expect("inspection result lock") = Some(result);
             });
         }
     });

@@ -19,6 +19,10 @@ These are the rules for code and documentation that lint cannot check. Do not wr
 - Failures are typed exceptions. See [ADR 0007](adr/0007-failures-are-typed-exceptions-caught-in-three-places.md).
 - Import icons one by one (`@lucide/svelte/icons/x`). Never import from the `@lucide/svelte` barrel. The barrel slows `vite dev` and the E2E runs.
 
+## Dependencies
+
+- The app's dependency versions are locked by `Cargo.lock` and `pnpm-lock.yaml`. Use `=` only for a prerelease.
+
 ## Backend tests
 
 - A test of one small function stays in its file, in `#[cfg(test)] mod tests`.

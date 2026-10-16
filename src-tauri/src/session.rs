@@ -4,8 +4,8 @@
 use std::{
     collections::BTreeSet,
     sync::{
-        mpsc::{self, Receiver, Sender},
         Arc, Mutex,
+        mpsc::{self, Receiver, Sender},
     },
     thread,
 };
@@ -64,10 +64,10 @@ impl Subscriber {
     /// `connect` replaces the channel.
     fn send(&self, message: BackendMessage) {
         let channel = self.channel.lock().expect("subscriber lock");
-        if let Some(channel) = channel.as_ref() {
-            if let Err(error) = channel.send(message) {
-                log::debug!("ipc.channel_send_skipped error={error}");
-            }
+        if let Some(channel) = channel.as_ref()
+            && let Err(error) = channel.send(message)
+        {
+            log::debug!("ipc.channel_send_skipped error={error}");
         }
     }
 

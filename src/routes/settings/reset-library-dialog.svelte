@@ -8,7 +8,7 @@
     AlertDialogFooter,
     AlertDialogHeader,
     AlertDialogTitle,
-  } from "$lib/ui/shadcn/alert-dialog/index.js";
+  } from "#lib/ui/shadcn/alert-dialog/index.js";
 
   let {
     open,

@@ -1,7 +1,7 @@
 import { prefersReducedMotion } from "svelte/motion";
 import { fade } from "svelte/transition";
-import { motionFor } from "$lib/ui/motion/svelte-motion";
-import { delayOf } from "$lib/ui/motion/tokens";
+import { motionFor } from "#lib/ui/motion/svelte-motion";
+import { delayOf } from "#lib/ui/motion/tokens";
 
 /**
  * One Sleeve size for every state. Container units resolve against the grid area (the layer

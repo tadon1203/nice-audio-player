@@ -7,8 +7,8 @@ use cpal::StreamInstant;
 
 use super::devices::{AudioOutputDeviceIdentity, AudioOutputSelection, DeviceResolutionError};
 use super::output::{
-    make_queue, AudioOutputError, OutputBackend, OutputEvent, OutputEvents, OutputLinks,
-    OutputStream, PipelineId, PreparedOutput, PreparedOutputConfig, StreamFailureKind,
+    AudioOutputError, OutputBackend, OutputEvent, OutputEvents, OutputLinks, OutputStream,
+    PipelineId, PreparedOutput, PreparedOutputConfig, StreamFailureKind, make_queue,
 };
 use super::output_processing::OutputProcessingPlan;
 use super::pcm::PcmSpec;

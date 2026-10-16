@@ -1,5 +1,5 @@
 use std::{fs::File, path::Path};
-use symphonia::core::codecs::audio::{well_known::*, AudioCodecId, AudioDecoderOptions};
+use symphonia::core::codecs::audio::{AudioCodecId, AudioDecoderOptions, well_known::*};
 use symphonia::core::formats::probe::Hint;
 use symphonia::core::formats::{FormatOptions, Track, TrackType};
 use symphonia::core::io::{MediaSourceStream, MediaSourceStreamOptions};

@@ -10,15 +10,15 @@
 </script>
 
 <script lang="ts">
-  import { Button } from "$lib/ui/shadcn/button";
+  import { Button } from "#lib/ui/shadcn/button";
   import Play from "@lucide/svelte/icons/play";
   import type { Attachment } from "svelte/attachments";
-  import type { LyricsTimedLine } from "$lib/native";
-  import { getPlayback } from "$lib/playback/context";
-  import { lyricsWaveformLink } from "$lib/shell/lyrics-waveform-link.svelte";
-  import TimePresentation from "$lib/ui/time-presentation.svelte";
-  import { cn } from "$lib/utils/cn.js";
-  import { formatDuration } from "$lib/utils/format";
+  import type { LyricsTimedLine } from "#lib/native";
+  import { getPlayback } from "#lib/playback/context";
+  import { lyricsWaveformLink } from "#lib/shell/lyrics-waveform-link.svelte";
+  import TimePresentation from "#lib/ui/time-presentation.svelte";
+  import { cn } from "#lib/utils/cn.js";
+  import { formatDuration } from "#lib/utils/format";
   import IntervalLine from "./interval-line.svelte";
   import { lineSpan } from "./lyrics-lines";
 

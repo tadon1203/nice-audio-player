@@ -1,7 +1,7 @@
-import type { Playback } from "$lib/playback/playback.svelte";
-import { nextRepeatMode } from "$lib/playback/snapshot";
-import { stepVolumeDb } from "$lib/playback/volume-step";
-import { nextSeekPosition } from "$lib/ui/waveform/waveform-model";
+import type { Playback } from "#lib/playback/playback.svelte";
+import { nextRepeatMode } from "#lib/playback/snapshot";
+import { stepVolumeDb } from "#lib/playback/volume-step";
+import { nextSeekPosition } from "#lib/ui/waveform/waveform-model";
 import { nowPlaying } from "./now-playing.svelte";
 import { queuePanel } from "./queue-panel.svelte";
 

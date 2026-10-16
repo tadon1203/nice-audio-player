@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { getPlayback } from "$lib/playback/context";
-  import { Button } from "$lib/ui/shadcn/button";
+  import { getPlayback } from "#lib/playback/context";
+  import { Button } from "#lib/ui/shadcn/button";
 
   const playback = getPlayback();
 

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Button } from "$lib/ui/shadcn/button";
+  import { Button } from "#lib/ui/shadcn/button";
   import type { Attachment } from "svelte/attachments";
   import {
     BALLISTICS,
@@ -7,16 +7,16 @@
     clearClip,
     initialDisplay,
     stepDisplay,
-  } from "$lib/meters/ballistics";
-  import type { DisplayState } from "$lib/meters/ballistics";
-  import { createDrawLoop } from "$lib/meters/draw-loop";
-  import { reduceFrames } from "$lib/meters/frame";
-  import { AXIS_TICKS, drawLevel, drawSpectrum } from "$lib/meters/meter-draw";
-  import { createMeterFeed } from "$lib/meters/meter-feed.svelte";
-  import { formatHeldPeak } from "$lib/meters/readout";
-  import { getPlayback } from "$lib/playback/context";
-  import { getSettings } from "$lib/settings/context";
-  import { cn } from "$lib/utils/cn.js";
+  } from "#lib/meters/ballistics";
+  import type { DisplayState } from "#lib/meters/ballistics";
+  import { createDrawLoop } from "#lib/meters/draw-loop";
+  import { reduceFrames } from "#lib/meters/frame";
+  import { AXIS_TICKS, drawLevel, drawSpectrum } from "#lib/meters/meter-draw";
+  import { createMeterFeed } from "#lib/meters/meter-feed.svelte";
+  import { formatHeldPeak } from "#lib/meters/readout";
+  import { getPlayback } from "#lib/playback/context";
+  import { getSettings } from "#lib/settings/context";
+  import { cn } from "#lib/utils/cn.js";
 
   /**
    * Now Playing's Meters view: the Spectrum and the Level meter (L, R) as bare bars on the

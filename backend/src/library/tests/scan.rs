@@ -3,8 +3,8 @@
 use crate::library::database::Database;
 use crate::library::models::{LibraryScanSnapshot, LibraryScanState, ScanFailure};
 use crate::library::roots;
-use crate::messages::{null_message_sink, Notifier, StateTopic, Versioned};
-use crate::test_support::{write_pcm_i16_wav, TestDirectory};
+use crate::messages::{Notifier, StateTopic, Versioned, null_message_sink};
+use crate::test_support::{TestDirectory, write_pcm_i16_wav};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
@@ -74,8 +74,8 @@ fn run_versioned(
         Arc::new(AtomicBool::new(cancelled)),
         notifier(),
     );
-    let snapshot = state.lock().unwrap().clone();
-    snapshot
+
+    state.lock().unwrap().clone()
 }
 
 #[test]
@@ -94,14 +94,14 @@ fn files(fixture: &Fixture) -> Vec<(String, String, String, i64)> {
     let mut statement = c
         .prepare("SELECT relative_path,availability,inspection_status,source_revision FROM library_files ORDER BY relative_path")
         .unwrap();
-    let rows = statement
+
+    statement
         .query_map([], |row| {
             Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
         })
         .unwrap()
         .collect::<Result<Vec<_>, _>>()
-        .unwrap();
-    rows
+        .unwrap()
 }
 
 fn count(fixture: &Fixture, sql: &str) -> i64 {
@@ -354,7 +354,10 @@ fn a_file_that_stops_being_decodable_keeps_its_track_without_its_old_tags() {
     assert_eq!(files(&fixture)[0].2, "unsupported");
     assert_eq!(count(&fixture, "SELECT COUNT(*) FROM tracks"), 1);
     assert_eq!(
-        count(&fixture, "SELECT COUNT(*) FROM track_source_metadata WHERE duration_ms IS NULL AND source_revision = 2"),
+        count(
+            &fixture,
+            "SELECT COUNT(*) FROM track_source_metadata WHERE duration_ms IS NULL AND source_revision = 2"
+        ),
         1,
         "the tags of the earlier revision are cleared"
     );
@@ -402,12 +405,12 @@ fn track_ids_by_path(fixture: &Fixture) -> Vec<(String, i64)> {
     let mut statement = c
         .prepare("SELECT f.relative_path, t.id FROM tracks t JOIN library_files f ON f.id = t.file_id ORDER BY f.relative_path")
         .unwrap();
-    let rows = statement
+
+    statement
         .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
         .unwrap()
         .collect::<Result<Vec<_>, _>>()
-        .unwrap();
-    rows
+        .unwrap()
 }
 
 #[test]
@@ -622,14 +625,14 @@ fn albums(fixture: &Fixture) -> Vec<(String, String, String, i64)> {
              ORDER BY album_dir, album_artist_key",
         )
         .unwrap();
-    let rows = statement
+
+    statement
         .query_map([], |row| {
             Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
         })
         .unwrap()
         .collect::<Result<Vec<_>, _>>()
-        .unwrap();
-    rows
+        .unwrap()
 }
 
 #[test]

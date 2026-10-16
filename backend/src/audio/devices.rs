@@ -143,8 +143,8 @@ fn sort_output_devices(devices: &mut [AudioOutputDevice]) {
 #[cfg(test)]
 mod tests {
     use super::{
-        append_output_device, sort_output_devices, AudioOutputDevice, AudioOutputSelection,
-        DeviceResolutionError,
+        AudioOutputDevice, AudioOutputSelection, DeviceResolutionError, append_output_device,
+        sort_output_devices,
     };
 
     fn device(id: &str, name: &str, is_default: bool) -> AudioOutputDevice {

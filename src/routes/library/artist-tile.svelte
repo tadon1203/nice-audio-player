@@ -1,9 +1,9 @@
 <script lang="ts">
-  import type { LibraryAlbumArtistSummary } from "$lib/native";
-  import { albumArtistHref } from "$lib/library/routes";
-  import { artistNameLabel } from "$lib/library/unknown-name";
-  import Artwork from "$lib/ui/artwork.svelte";
-  import { formatCount } from "$lib/utils/format";
+  import type { LibraryAlbumArtistSummary } from "#lib/native";
+  import { albumArtistHref } from "#lib/library/routes";
+  import { artistNameLabel } from "#lib/library/unknown-name";
+  import Artwork from "#lib/ui/artwork.svelte";
+  import { formatCount } from "#lib/utils/format";
 
   let { artist }: { artist: LibraryAlbumArtistSummary } = $props();
 

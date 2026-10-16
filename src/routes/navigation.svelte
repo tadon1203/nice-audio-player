@@ -7,8 +7,8 @@
   import { crossfade, fade } from "svelte/transition";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
-  import { motionFor } from "$lib/ui/motion/svelte-motion";
-  import { Button } from "$lib/ui/shadcn/button/index.js";
+  import { motionFor } from "#lib/ui/motion/svelte-motion";
+  import { Button } from "#lib/ui/shadcn/button/index.js";
 
   type NavigationItem = {
     label: string;

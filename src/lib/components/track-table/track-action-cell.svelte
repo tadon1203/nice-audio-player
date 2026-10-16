@@ -1,8 +1,8 @@
 <script lang="ts">
-  import PlayPauseIcon from "$lib/ui/play-pause-icon.svelte";
-  import { Button } from "$lib/ui/shadcn/button/index.js";
-  import { cn } from "$lib/utils/cn.js";
-  import { MISSING } from "$lib/utils/format";
+  import PlayPauseIcon from "#lib/ui/play-pause-icon.svelte";
+  import { Button } from "#lib/ui/shadcn/button/index.js";
+  import { cn } from "#lib/utils/cn.js";
+  import { MISSING } from "#lib/utils/format";
   import type { TrackRowAction, TrackTableLayout, TrackTableRow } from "./track-columns";
 
   let {

@@ -1,4 +1,4 @@
-import type { LibraryAlbumKey } from "$lib/native";
+import type { LibraryAlbumKey } from "#lib/native";
 import { toNameSegment } from "./unknown-name";
 
 /*
@@ -14,6 +14,7 @@ export const albumHref = (key: LibraryAlbumKey) =>
   (key.albumEdition === "" ? "" : `?albumEdition=${encodeURIComponent(key.albumEdition)}`);
 
 /** The albumEdition an album URL names; none is the album of tracks without one. */
-export const albumEditionOf = (search: URLSearchParams) => search.get("albumEdition") ?? "";
+export const albumEditionOf = (search: Pick<URLSearchParams, "get">) =>
+  search.get("albumEdition") ?? "";
 
 export const albumArtistHref = (name: string) => `/library/album-artists/${segment(name)}`;

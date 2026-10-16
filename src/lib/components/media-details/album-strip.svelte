@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  import type { LibraryFileAvailability } from "$lib/native";
+  import type { LibraryFileAvailability } from "#lib/native";
 
   export type AlbumStripTrack = {
     id: string;
@@ -14,15 +14,15 @@
 </script>
 
 <script lang="ts">
-  import { Button } from "$lib/ui/shadcn/button";
+  import { Button } from "#lib/ui/shadcn/button";
   import type { Attachment } from "svelte/attachments";
-  import { isTrackAvailable } from "$lib/library/tracks";
+  import { isTrackAvailable } from "#lib/library/tracks";
   import { prefersReducedMotion } from "svelte/motion";
   import type { TransitionConfig } from "svelte/transition";
-  import { getPlayback } from "$lib/playback/context";
-  import { motionFor } from "$lib/ui/motion/svelte-motion";
-  import { Tooltip, TooltipContent, TooltipTrigger } from "$lib/ui/shadcn/tooltip";
-  import { cn } from "$lib/utils/cn.js";
+  import { getPlayback } from "#lib/playback/context";
+  import { motionFor } from "#lib/ui/motion/svelte-motion";
+  import { Tooltip, TooltipContent, TooltipTrigger } from "#lib/ui/shadcn/tooltip";
+  import { cn } from "#lib/utils/cn.js";
   import { segmentFill, segmentStarts, segmentStates } from "./album-strip-model";
 
   /**

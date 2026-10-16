@@ -1,7 +1,7 @@
 <script lang="ts">
   import { useQueryClient } from "@tanstack/svelte-query";
-  import { lyricsQueryOptions } from "$lib/lyrics/queries";
-  import { getPlayback } from "$lib/playback/context";
+  import { lyricsQueryOptions } from "#lib/lyrics/queries";
+  import { getPlayback } from "#lib/playback/context";
 
   /**
    * Fetches the lyrics of the playing track and the next one ahead of time, so Now Playing knows

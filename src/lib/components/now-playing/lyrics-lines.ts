@@ -1,4 +1,4 @@
-import type { LyricsTimedLine } from "$lib/native";
+import type { LyricsTimedLine } from "#lib/native";
 
 /**
  * The index of the current line: the last line whose `startMs` is at or before `positionMs`, or

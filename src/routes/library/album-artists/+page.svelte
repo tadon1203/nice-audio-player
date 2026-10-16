@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { createLibraryCatalog } from "$lib/library/catalog.svelte";
-  import { libraryViews } from "$lib/shell/library-views.svelte";
-  import VirtualMediaGrid from "$lib/ui/media-grid/virtual-media-grid.svelte";
+  import { createLibraryCatalog } from "#lib/library/catalog.svelte";
+  import { libraryViews } from "#lib/shell/library-views.svelte";
+  import VirtualMediaGrid from "#lib/ui/media-grid/virtual-media-grid.svelte";
   import ArtistTile from "../artist-tile.svelte";
   import LibraryWorkspace from "../library-workspace.svelte";
 

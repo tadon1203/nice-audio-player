@@ -3,22 +3,22 @@
   import Music2 from "@lucide/svelte/icons/music-2";
   import Volume2 from "@lucide/svelte/icons/volume-2";
   import VolumeX from "@lucide/svelte/icons/volume-x";
-  import { getPlayback } from "$lib/playback/context";
+  import { getPlayback } from "#lib/playback/context";
   import {
     formatVolumeDb,
     sliderToVolume,
     stepVolumeDb,
     VOLUME_SLIDER_MAX,
     volumeToSlider,
-  } from "$lib/playback/volume-step";
-  import { nowPlaying } from "$lib/shell/now-playing.svelte";
-  import { getMotionBudget } from "$lib/shell/motion-budget.svelte";
-  import { springLinear } from "$lib/ui/motion/spring-curve";
-  import { motionFor } from "$lib/ui/motion/svelte-motion";
-  import { queuePanel } from "$lib/shell/queue-panel.svelte";
-  import RollingNumber from "$lib/ui/rolling-number/rolling-number.svelte";
-  import { Button } from "$lib/ui/shadcn/button";
-  import { Slider } from "$lib/ui/shadcn/slider";
+  } from "#lib/playback/volume-step";
+  import { nowPlaying } from "#lib/shell/now-playing.svelte";
+  import { getMotionBudget } from "#lib/shell/motion-budget.svelte";
+  import { springLinear } from "#lib/ui/motion/spring-curve";
+  import { motionFor } from "#lib/ui/motion/svelte-motion";
+  import { queuePanel } from "#lib/shell/queue-panel.svelte";
+  import RollingNumber from "#lib/ui/rolling-number/rolling-number.svelte";
+  import { Button } from "#lib/ui/shadcn/button";
+  import { Slider } from "#lib/ui/shadcn/slider";
   import DockSignalPath from "./dock-signal-path.svelte";
   import NextTrackPreview from "./next-track-preview.svelte";
 

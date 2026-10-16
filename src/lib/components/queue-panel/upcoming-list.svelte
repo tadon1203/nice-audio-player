@@ -1,11 +1,11 @@
 <script lang="ts">
-  import { getMotionBudget } from "$lib/shell/motion-budget.svelte";
-  import { getPlayback } from "$lib/playback/context";
-  import { createUpcomingItems } from "$lib/playback/upcoming-items.svelte";
-  import { flipMotion } from "$lib/ui/motion/svelte-flip";
-  import { delayOf } from "$lib/ui/motion/tokens";
-  import { createVirtualRows } from "$lib/ui/virtual-rows.svelte";
-  import { cn } from "$lib/utils/cn.js";
+  import { getMotionBudget } from "#lib/shell/motion-budget.svelte";
+  import { getPlayback } from "#lib/playback/context";
+  import { createUpcomingItems } from "#lib/playback/upcoming-items.svelte";
+  import { flipMotion } from "#lib/ui/motion/svelte-flip";
+  import { delayOf } from "#lib/ui/motion/tokens";
+  import { createVirtualRows } from "#lib/ui/virtual-rows.svelte";
+  import { cn } from "#lib/utils/cn.js";
   import { QueueDrag } from "./queue-drag.svelte";
   import QueueRow, { QUEUE_ROW_PX } from "./queue-row.svelte";
 

@@ -365,11 +365,11 @@ fn map_decode_error(error: SymphoniaError) -> PcmDecodeError {
 
 #[cfg(test)]
 mod tests {
-    use super::{DamagedPackets, DecodeStep, SeekStep, MAX_CONSECUTIVE_DAMAGED_PACKETS};
+    use super::{DamagedPackets, DecodeStep, MAX_CONSECUTIVE_DAMAGED_PACKETS, SeekStep};
     use crate::audio::cancellation::Cancellation;
     use crate::audio::compressed_source::prepare_compressed_source;
     use crate::media::validation::ValidatedAudioFile;
-    use crate::test_support::{write_pcm_i16_wav, TestDirectory};
+    use crate::test_support::{TestDirectory, write_pcm_i16_wav};
 
     fn validated(path: &std::path::Path) -> ValidatedAudioFile {
         ValidatedAudioFile {

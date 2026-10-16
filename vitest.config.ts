@@ -1,8 +1,9 @@
 import { sveltekit } from "@sveltejs/kit/vite";
 import { defineConfig } from "vitest/config";
+import { svelteKitOptions } from "./vite.sveltekit.config.js";
 
 export default defineConfig({
-  plugins: [sveltekit()],
+  plugins: [sveltekit(svelteKitOptions)],
   resolve: { conditions: ["browser"] },
   test: {
     projects: [
@@ -10,10 +11,9 @@ export default defineConfig({
         extends: true,
         test: {
           name: "renderer",
-          environment: "jsdom",
+          environment: "happy-dom",
           include: ["src/**/*.test.ts"],
           exclude: ["src/lib/native/**"],
-          setupFiles: ["tests/renderer-setup.ts"],
         },
       },
       {

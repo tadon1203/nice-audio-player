@@ -4,7 +4,7 @@ import type {
   PlaybackPosition,
   PlaybackRepeatMode,
   PlaybackSnapshot,
-} from "$lib/native";
+} from "#lib/native";
 import type { ClockReport } from "./playback-clock-model";
 
 export type ActivePlaybackSnapshot = Extract<PlaybackSnapshot, { status: "playing" | "paused" }>;

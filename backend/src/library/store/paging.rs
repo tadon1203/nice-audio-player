@@ -11,9 +11,8 @@
 
 use super::super::{error::StoreError, models::LibrarySortDirection};
 use rusqlite::{
-    params_from_iter,
+    Connection, Row, ToSql, params_from_iter,
     types::{FromSql, FromSqlError, FromSqlResult, ToSqlOutput, Value, ValueRef},
-    Connection, Row, ToSql,
 };
 use serde::{Deserialize, Serialize};
 
@@ -196,7 +195,7 @@ impl PagedQuery {
                     return Ok(Page {
                         items: Vec::new(),
                         next_cursor: None,
-                    })
+                    });
                 }
             }
         }

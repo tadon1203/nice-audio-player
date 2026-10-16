@@ -1,14 +1,14 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
-  import type { LibraryAlbumSummary } from "$lib/native";
-  import { albumItemKey } from "$lib/library/album-key";
-  import { albumHref } from "$lib/library/routes";
-  import { albumTitleLabel, artistNameLabel } from "$lib/library/unknown-name";
-  import Artwork from "$lib/ui/artwork.svelte";
-  import { sharedElement } from "$lib/ui/motion/shared-element";
-  import PlayPauseIcon from "$lib/ui/play-pause-icon.svelte";
-  import { Button } from "$lib/ui/shadcn/button/index.js";
-  import { MISSING } from "$lib/utils/format";
+  import type { LibraryAlbumSummary } from "#lib/native";
+  import { albumItemKey } from "#lib/library/album-key";
+  import { albumHref } from "#lib/library/routes";
+  import { albumTitleLabel, artistNameLabel } from "#lib/library/unknown-name";
+  import Artwork from "#lib/ui/artwork.svelte";
+  import { sharedElement } from "#lib/ui/motion/shared-element";
+  import PlayPauseIcon from "#lib/ui/play-pause-icon.svelte";
+  import { Button } from "#lib/ui/shadcn/button/index.js";
+  import { MISSING } from "#lib/utils/format";
 
   let {
     album,

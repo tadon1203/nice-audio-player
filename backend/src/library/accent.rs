@@ -1,6 +1,6 @@
 use super::{artwork::ArtworkPath, database::Database, error::StoreError};
-use image::{imageops::FilterType, ImageReader};
-use rusqlite::{params, OptionalExtension};
+use image::{ImageReader, imageops::FilterType};
+use rusqlite::{OptionalExtension, params};
 use std::io::Cursor;
 
 const SAMPLE_EDGE: u32 = 32;
@@ -82,7 +82,7 @@ fn weighted_average(pixels: &[[u8; 3]]) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use image::{codecs::png::PngEncoder, ExtendedColorType, ImageEncoder};
+    use image::{ExtendedColorType, ImageEncoder, codecs::png::PngEncoder};
 
     fn png(width: u32, height: u32, fill: impl Fn(u32, u32) -> [u8; 3]) -> Vec<u8> {
         let mut raw = Vec::new();

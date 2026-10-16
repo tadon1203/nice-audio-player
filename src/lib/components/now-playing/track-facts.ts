@@ -1,4 +1,4 @@
-import type { LyricsResolution, PlaybackItem } from "$lib/native";
+import type { LyricsResolution, PlaybackItem } from "#lib/native";
 
 /**
  * `2019  Disc 2  Track 4 of 12  FLAC 24/96`: what the library knows, then what is really decoded

@@ -4,17 +4,17 @@
 </script>
 
 <script lang="ts">
-  import { Button } from "$lib/ui/shadcn/button";
+  import { Button } from "#lib/ui/shadcn/button";
   import { onDestroy, onMount, tick } from "svelte";
-  import { getPlayback } from "$lib/playback/context";
-  import { createPlaybackWaveform } from "$lib/playback/waveform.svelte";
-  import { getMotionBudget } from "$lib/shell/motion-budget.svelte";
-  import { lyricsWaveformLink } from "$lib/shell/lyrics-waveform-link.svelte";
-  import RollingNumber from "$lib/ui/rolling-number/rolling-number.svelte";
-  import { spinTurns } from "$lib/ui/rolling-number/rolling-model";
-  import WaveformSeek from "$lib/ui/waveform/waveform-seek.svelte";
-  import { cn } from "$lib/utils/cn.js";
-  import { formatDuration } from "$lib/utils/format";
+  import { getPlayback } from "#lib/playback/context";
+  import { createPlaybackWaveform } from "#lib/playback/waveform.svelte";
+  import { getMotionBudget } from "#lib/shell/motion-budget.svelte";
+  import { lyricsWaveformLink } from "#lib/shell/lyrics-waveform-link.svelte";
+  import RollingNumber from "#lib/ui/rolling-number/rolling-number.svelte";
+  import { spinTurns } from "#lib/ui/rolling-number/rolling-model";
+  import WaveformSeek from "#lib/ui/waveform/waveform-seek.svelte";
+  import { cn } from "#lib/utils/cn.js";
+  import { formatDuration } from "#lib/utils/format";
 
   /**
    * The seek bar and its elapsed/remaining labels in one line, used by both the dock (a plain

@@ -1,6 +1,6 @@
-use super::keys::{album_edition_of, SortTags, TrackKeys};
+use super::keys::{SortTags, TrackKeys, album_edition_of};
 use super::summary;
-use rusqlite::{params, Connection, Transaction};
+use rusqlite::{Connection, Transaction, params};
 
 pub const CURRENT_SCHEMA_VERSION: i32 = 4;
 

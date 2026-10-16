@@ -92,8 +92,8 @@ pub(super) mod testing {
     use super::*;
     use crate::media::validation::ValidatedAudioFile;
     use std::sync::{
-        atomic::{AtomicUsize, Ordering},
         Arc,
+        atomic::{AtomicUsize, Ordering},
     };
 
     /// A library of hand-made tracks that counts how often it is read.

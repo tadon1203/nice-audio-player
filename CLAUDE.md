@@ -33,7 +33,7 @@ There is no CI and there are no commit hooks. Run the checks before you commit.
 
 - All changes: `pnpm check` (format, type check, lint, fonts). Fix format with `pnpm format`.
 - Renderer logic: `pnpm test:renderer` or `pnpm test:shared`
-- Rust: `pnpm check:native` and `pnpm test:native`
+- Rust: `pnpm check:native` and `pnpm test:native` (`pnpm test:native` also checks that the bindings are current)
 - Tauri bindings: `pnpm bindings` (regenerate the TypeScript bindings)
 - IPC, startup, routing: `pnpm test:e2e`
 - Renderer and backend wiring: `pnpm test:e2e:app` (Windows)

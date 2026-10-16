@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { LyricsResolution, PlaybackItem } from "$lib/native";
+import type { LyricsResolution, PlaybackItem } from "#lib/native";
 import { lyricsState, trackFacts } from "./track-facts";
 
 const item: PlaybackItem = {

@@ -1,4 +1,4 @@
-import { motionTokens } from "$lib/ui/motion/tokens";
+import { motionTokens } from "#lib/ui/motion/tokens";
 
 /** Leaving is quicker than arriving. */
 export const EXIT_SPEED = 0.7;

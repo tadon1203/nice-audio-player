@@ -11,9 +11,9 @@
 </script>
 
 <script lang="ts">
-  import { floatingLayer } from "$lib/ui/floating-layer";
+  import { floatingLayer } from "#lib/ui/floating-layer";
   import { ContextMenu as ContextMenuPrimitive } from "bits-ui";
-  import { cn } from "$lib/utils/cn.js";
+  import { cn } from "#lib/utils/cn.js";
 
   /**
    * A floating menu. It sits on Acrylic (never Artwork glow) at layer 20 and opens where the pointer

@@ -13,8 +13,8 @@ mod relink;
 
 use std::path::{Path, PathBuf};
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
     Arc, Mutex,
+    atomic::{AtomicBool, Ordering},
 };
 use std::time::{Duration, Instant};
 
@@ -24,9 +24,9 @@ use super::database::Database;
 use super::error::parse_id;
 use super::models::{LibraryRoot, LibraryScanSnapshot, LibraryScanState, ScanFailure};
 use crate::messages::{Notifier, Versioned};
-use discover::{discover, relative_dir, scope, DiscoveredFile, Discovery};
+use discover::{DiscoveredFile, Discovery, discover, relative_dir, scope};
 use inspect::{inspect_all, read_artwork};
-use persist::{plan, LibraryWriter, Outcome, PersistError, Plan};
+use persist::{LibraryWriter, Outcome, PersistError, Plan, plan};
 
 /// Files inspected per transaction.
 const INSPECTIONS_PER_BATCH: usize = 100;
@@ -83,7 +83,7 @@ pub(crate) fn run(
         match scan_root(&database, &job, &cancel, &mut progress) {
             Ok(complete) => traversal_failed |= !complete,
             Err(Stop::Cancelled) => {
-                return finish(&state, LibraryScanState::Cancelled, None, &notify)
+                return finish(&state, LibraryScanState::Cancelled, None, &notify);
             }
             Err(Stop::Persistence) => {
                 return finish(
@@ -91,7 +91,7 @@ pub(crate) fn run(
                     LibraryScanState::Failed,
                     Some(ScanFailure::PersistenceFailed),
                     &notify,
-                )
+                );
             }
         }
     }

@@ -1,5 +1,5 @@
 import { queryOptions } from "@tanstack/svelte-query";
-import { requireNative } from "$lib/native";
+import { requireNative } from "#lib/native";
 
 /** Output devices, re-read every time the menu that shows them opens (`enabled`). */
 export function audioOutputDevicesQueryOptions(enabled: boolean) {

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Spinner } from "$lib/ui/shadcn/spinner/index.js";
+  import { Spinner } from "#lib/ui/shadcn/spinner/index.js";
 
   let {
     pending,

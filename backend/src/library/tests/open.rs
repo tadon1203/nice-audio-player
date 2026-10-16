@@ -1,6 +1,6 @@
 use crate::library::database::Database;
 use crate::library::models::LibraryUnavailableReason;
-use crate::library::{migrations, Library};
+use crate::library::{Library, migrations};
 use crate::messages::null_message_sink;
 use crate::test_support::TestDirectory;
 

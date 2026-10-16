@@ -1,5 +1,5 @@
-import type { PlaybackServiceError } from "$lib/native";
-import { messageForCode, nativeErrorCode } from "$lib/native";
+import type { PlaybackServiceError } from "#lib/native";
+import { messageForCode, nativeErrorCode } from "#lib/native";
 
 type PlaybackErrorCode = PlaybackServiceError["code"];
 

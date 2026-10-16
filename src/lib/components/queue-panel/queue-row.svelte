@@ -8,13 +8,13 @@
   import ChevronUp from "@lucide/svelte/icons/chevron-up";
   import GripVertical from "@lucide/svelte/icons/grip-vertical";
   import X from "@lucide/svelte/icons/x";
-  import type { ButtonProps } from "$lib/ui/shadcn/button";
-  import type { PlaybackQueueItem } from "$lib/native";
-  import Artwork from "$lib/ui/artwork.svelte";
-  import TimePresentation from "$lib/ui/time-presentation.svelte";
-  import { Button } from "$lib/ui/shadcn/button";
-  import { cn } from "$lib/utils/cn.js";
-  import { formatDuration } from "$lib/utils/format";
+  import type { ButtonProps } from "#lib/ui/shadcn/button";
+  import type { PlaybackQueueItem } from "#lib/native";
+  import Artwork from "#lib/ui/artwork.svelte";
+  import TimePresentation from "#lib/ui/time-presentation.svelte";
+  import { Button } from "#lib/ui/shadcn/button";
+  import { cn } from "#lib/utils/cn.js";
+  import { formatDuration } from "#lib/utils/format";
 
   let {
     item,

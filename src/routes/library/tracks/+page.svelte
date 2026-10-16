@@ -1,9 +1,9 @@
 <script lang="ts">
-  import TrackTable from "$lib/components/track-table/track-table.svelte";
-  import { createLibraryCatalog } from "$lib/library/catalog.svelte";
-  import { getPlayback } from "$lib/playback/context";
-  import { trackListContext } from "$lib/library/track-list";
-  import { libraryViews } from "$lib/shell/library-views.svelte";
+  import TrackTable from "#lib/components/track-table/track-table.svelte";
+  import { createLibraryCatalog } from "#lib/library/catalog.svelte";
+  import { getPlayback } from "#lib/playback/context";
+  import { trackListContext } from "#lib/library/track-list";
+  import { libraryViews } from "#lib/shell/library-views.svelte";
   import LibraryWorkspace from "../library-workspace.svelte";
 
   const meta = {

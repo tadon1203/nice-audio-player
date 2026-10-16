@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Attachment } from "svelte/attachments";
-  import { getPlayback } from "$lib/playback/context";
-  import { formatDuration } from "$lib/utils/format";
+  import { getPlayback } from "#lib/playback/context";
+  import { formatDuration } from "#lib/utils/format";
   import { gapProgress } from "./lyrics-lines";
 
   /**

@@ -278,11 +278,11 @@ impl State {
     /// Does what is due: retries watchers, starts a scan of the changed folders, collects garbage.
     fn advance(&mut self, now: Instant, effects: &mut Vec<Effect>) {
         for (id, watch) in &mut self.watches {
-            if let Watch::Failed { retry_at: Some(at) } = *watch {
-                if at <= now {
-                    *watch = Watch::Failed { retry_at: None };
-                    effects.push(Effect::Attach(*id));
-                }
+            if let Watch::Failed { retry_at: Some(at) } = *watch
+                && at <= now
+            {
+                *watch = Watch::Failed { retry_at: None };
+                effects.push(Effect::Attach(*id));
             }
         }
         if self.scanning() {

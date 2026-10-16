@@ -1,13 +1,13 @@
 <script lang="ts">
-  import { getPlayback } from "$lib/playback/context";
-  import { glowBreath } from "$lib/playback/glow-breath";
-  import { loudnessKeyframes } from "$lib/playback/loudness";
-  import { createPlaybackWaveform } from "$lib/playback/waveform.svelte";
-  import { getSettings } from "$lib/settings/context";
-  import { getMotionBudget } from "$lib/shell/motion-budget.svelte";
-  import ArtworkGlow from "$lib/ui/artwork-glow/artwork-glow.svelte";
-  import { breathingOpacity, GLOW } from "$lib/ui/artwork-glow/glow-model";
-  import { motionFor } from "$lib/ui/motion/svelte-motion";
+  import { getPlayback } from "#lib/playback/context";
+  import { glowBreath } from "#lib/playback/glow-breath";
+  import { loudnessKeyframes } from "#lib/playback/loudness";
+  import { createPlaybackWaveform } from "#lib/playback/waveform.svelte";
+  import { getSettings } from "#lib/settings/context";
+  import { getMotionBudget } from "#lib/shell/motion-budget.svelte";
+  import ArtworkGlow from "#lib/ui/artwork-glow/artwork-glow.svelte";
+  import { breathingOpacity, GLOW } from "#lib/ui/artwork-glow/glow-model";
+  import { motionFor } from "#lib/ui/motion/svelte-motion";
 
   /**
    * Now Playing's Artwork glow, which breathes with the track's loudness (never brighter than its

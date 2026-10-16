@@ -1,19 +1,19 @@
-import type { LibraryCatalogRequest } from "$lib/library/queries";
+import type { LibraryCatalogRequest } from "#lib/library/queries";
 import {
   albumArtistSortOptions,
   albumSortOptions,
   artistAlbumSortOptions,
   toggleSortDirection,
   trackSortOptions,
-} from "$lib/library/sort";
+} from "#lib/library/sort";
 import type {
   LibraryAlbumArtistSortKey,
   LibraryAlbumSortKey,
   LibraryArtistAlbumSortKey,
   LibrarySortDirection,
   LibraryTrackSortKey,
-} from "$lib/native";
-import type { SortOption } from "$lib/ui/sort-option";
+} from "#lib/native";
+import type { SortOption } from "#lib/ui/sort-option";
 
 export type LibraryPresentation = "albums" | "albumArtists" | "tracks";
 

@@ -4,15 +4,15 @@
 </script>
 
 <script lang="ts">
-  import { timeStateClass } from "$lib/ui/time-state";
-  import { Button } from "$lib/ui/shadcn/button";
+  import { timeStateClass } from "#lib/ui/time-state";
+  import { Button } from "#lib/ui/shadcn/button";
   import Play from "@lucide/svelte/icons/play";
-  import { getPlayback } from "$lib/playback/context";
-  import { queuePanel } from "$lib/shell/queue-panel.svelte";
-  import { flipMotion } from "$lib/ui/motion/svelte-flip";
-  import Artwork from "$lib/ui/artwork.svelte";
-  import { cn } from "$lib/utils/cn.js";
-  import { formatDuration } from "$lib/utils/format";
+  import { getPlayback } from "#lib/playback/context";
+  import { queuePanel } from "#lib/shell/queue-panel.svelte";
+  import { flipMotion } from "#lib/ui/motion/svelte-flip";
+  import Artwork from "#lib/ui/artwork.svelte";
+  import { cn } from "#lib/utils/cn.js";
+  import { formatDuration } from "#lib/utils/format";
   import { EDGE_MASK } from "./anchor-column";
   import { createAnchorPadding } from "./anchor-column.svelte";
   import { createAnchorFollow } from "./anchor-follow.svelte";

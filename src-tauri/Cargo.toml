@@ -3,9 +3,9 @@ name = "nice-audio-player"
 version = "0.0.1"
 description = "A local-first Windows desktop music player"
 authors = ["Nice Audio Player"]
-edition = "2021"
+edition = "2024"
 default-run = "nice-audio-player"
-rust-version = "1.98"
+rust-version = "1.99"
 
 [[bin]]
 name = "nice-audio-player"
@@ -17,11 +17,9 @@ path = "src/bin/export-bindings.rs"
 
 [lib]
 name = "nice_audio_player_lib"
-crate-type = ["staticlib", "cdylib", "rlib"]
+crate-type = ["rlib"]
 
 [features]
-default = ["custom-protocol"]
-custom-protocol = ["tauri/custom-protocol"]
 # The app-level E2E build (`tests-app/`): the WebdriverIO plugins, never in a shipped build.
 wdio = ["dep:tauri-plugin-wdio", "dep:tauri-plugin-wdio-webdriver"]
 

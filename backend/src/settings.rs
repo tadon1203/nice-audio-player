@@ -7,9 +7,9 @@
 use std::{
     path::PathBuf,
     sync::{
+        Mutex,
         atomic::{AtomicU64, Ordering},
         mpsc::{self, RecvTimeoutError, Sender},
-        Mutex,
     },
     thread::{self, JoinHandle},
     time::Duration,
@@ -173,10 +173,9 @@ impl SettingsService {
         }
         let settings = state.clone();
         drop(state);
-        if changed {
-            if let Some(writer) = self.writer.lock().expect("settings writer lock").as_ref() {
-                let _ = writer.send(settings.clone());
-            }
+        if changed && let Some(writer) = self.writer.lock().expect("settings writer lock").as_ref()
+        {
+            let _ = writer.send(settings.clone());
         }
         (settings, changed)
     }
@@ -189,10 +188,9 @@ impl SettingsService {
             .lock()
             .expect("settings thread lock")
             .take()
+            && thread.join().is_err()
         {
-            if thread.join().is_err() {
-                error!("settings.writer_panicked");
-            }
+            error!("settings.writer_panicked");
         }
     }
 }
@@ -250,10 +248,10 @@ fn write_loop(receiver: mpsc::Receiver<Settings>, path: PathBuf) {
 }
 
 fn flush(path: &std::path::Path, pending: &mut Option<Settings>) {
-    if let Some(settings) = pending.take() {
-        if let Err(error) = write(path, &settings) {
-            error!("settings.write_failed error={error}");
-        }
+    if let Some(settings) = pending.take()
+        && let Err(error) = write(path, &settings)
+    {
+        error!("settings.write_failed error={error}");
     }
 }
 

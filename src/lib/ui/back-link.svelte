@@ -1,8 +1,8 @@
 <script lang="ts">
-  import type { PresentationProps } from "$lib/ui/presentation-props";
+  import type { PresentationProps } from "#lib/ui/presentation-props";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import type { HTMLAnchorAttributes } from "svelte/elements";
-  import { cn } from "$lib/utils/cn.js";
+  import { cn } from "#lib/utils/cn.js";
 
   let { children, ...restProps }: PresentationProps<HTMLAnchorAttributes> = $props();
 </script>

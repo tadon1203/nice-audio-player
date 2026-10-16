@@ -1,4 +1,4 @@
-import type { PlaybackFailureCode } from "$lib/native";
+import type { PlaybackFailureCode } from "#lib/native";
 
 /** Why playback stopped by itself, as the dock tells the listener. */
 export const playbackFailureMessages = {

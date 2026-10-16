@@ -1,4 +1,4 @@
-import type { LibraryTrackSummary } from "$lib/native";
+import type { LibraryTrackSummary } from "#lib/native";
 import { albumArtistHref, albumHref } from "./routes";
 
 type Link = { text: string; href: string | null };

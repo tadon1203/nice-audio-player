@@ -1,4 +1,4 @@
-import { levelToUnit } from "$lib/ui/waveform/waveform-model";
+import { levelToUnit } from "#lib/ui/waveform/waveform-model";
 
 const cache = new WeakMap<readonly number[], Float32Array>();
 

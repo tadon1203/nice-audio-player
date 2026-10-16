@@ -10,8 +10,8 @@ use crate::audio::compressed_source::CompressedAudioSource;
 use crate::audio::decoding::{DecodeStep, PcmDecodeError, SeekStep, StreamingDecoder};
 use crate::audio::devices::AudioOutputSelection;
 use crate::audio::output::{
-    make_queue, AudioOutputError, OutputBackend, OutputLinks, OutputStreamId, PipelineId,
-    PreparedOutputConfig,
+    AudioOutputError, OutputBackend, OutputLinks, OutputStreamId, PipelineId, PreparedOutputConfig,
+    make_queue,
 };
 use crate::audio::output_processing::{OutputPcmProcessor, OutputProcessingPlan};
 use crate::audio::pcm_queue::{PcmConsumer, PcmProducer};
@@ -112,7 +112,7 @@ pub(super) fn open_pipeline(
             match decoder.decode_next(&mut first_packet) {
                 Ok(DecodeStep::Samples) => {}
                 Ok(DecodeStep::EndOfStream) | Err(_) => {
-                    return Err(PipelineError::FirstPacketDecode)
+                    return Err(PipelineError::FirstPacketDecode);
                 }
             }
             let prepared = backend
@@ -155,7 +155,7 @@ pub(super) fn open_pipeline(
             match decoder.decode_next(&mut first_packet) {
                 Ok(DecodeStep::Samples) => {}
                 Ok(DecodeStep::EndOfStream) | Err(_) => {
-                    return Err(PipelineError::FirstPacketDecode)
+                    return Err(PipelineError::FirstPacketDecode);
                 }
             }
             let (producer, consumer) =

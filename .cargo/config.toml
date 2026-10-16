@@ -1,0 +1,4 @@
+# Link with LLVM's lld-link instead of MSVC link.exe: linking is much faster on large builds.
+# Requires LLVM on PATH (https://releases.llvm.org/).
+[target.x86_64-pc-windows-msvc]
+linker = "lld-link"

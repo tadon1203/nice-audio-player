@@ -2,14 +2,14 @@
 //! selections are resolved.
 
 use super::{
+    LibraryStore, PlaybackSourceError,
     catalog::{album_artists_query, albums_query, artist_albums_query, tracks_query},
     paging::PAGE_SIZE,
-    LibraryStore, PlaybackSourceError,
 };
 use crate::library::{
     database::Database,
     error::StoreError,
-    keys::{album_edition_of, SortTags, TrackKeys},
+    keys::{SortTags, TrackKeys, album_edition_of},
     location::Unavailable,
     models::*,
     summary,

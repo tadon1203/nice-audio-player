@@ -1,8 +1,8 @@
 <script lang="ts">
   import FolderPlus from "@lucide/svelte/icons/folder-plus";
-  import { getLibraryScan } from "$lib/library/context";
-  import { createLibraryRoots } from "$lib/library/detail.svelte";
-  import { libraryCommandErrorMessage } from "$lib/library/library-errors";
+  import { getLibraryScan } from "#lib/library/context";
+  import { createLibraryRoots } from "#lib/library/detail.svelte";
+  import { libraryCommandErrorMessage } from "#lib/library/library-errors";
   import {
     createAddLibraryRoot,
     createDeleteMissingTracks,
@@ -10,15 +10,15 @@
     createRemoveLibraryRoot,
     createResetLibrary,
     createSetLibraryRootEnabled,
-  } from "$lib/library/mutations";
-  import type { LibraryRoot } from "$lib/native";
-  import EmptyStatus from "$lib/ui/empty-status.svelte";
-  import ErrorAlert from "$lib/ui/error-alert.svelte";
-  import LoadingStatus from "$lib/ui/loading-status.svelte";
-  import SectionTitle from "$lib/ui/section-title.svelte";
-  import { Button } from "$lib/ui/shadcn/button/index.js";
-  import { Checkbox } from "$lib/ui/shadcn/checkbox/index.js";
-  import { Field, FieldLabel } from "$lib/ui/shadcn/field/index.js";
+  } from "#lib/library/mutations";
+  import type { LibraryRoot } from "#lib/native";
+  import EmptyStatus from "#lib/ui/empty-status.svelte";
+  import ErrorAlert from "#lib/ui/error-alert.svelte";
+  import LoadingStatus from "#lib/ui/loading-status.svelte";
+  import SectionTitle from "#lib/ui/section-title.svelte";
+  import { Button } from "#lib/ui/shadcn/button/index.js";
+  import { Checkbox } from "#lib/ui/shadcn/checkbox/index.js";
+  import { Field, FieldLabel } from "#lib/ui/shadcn/field/index.js";
   import {
     Item,
     ItemActions,
@@ -26,9 +26,9 @@
     ItemDescription,
     ItemGroup,
     ItemTitle,
-  } from "$lib/ui/shadcn/item/index.js";
-  import { Spinner } from "$lib/ui/shadcn/spinner/index.js";
-  import { formatNumber } from "$lib/utils/format";
+  } from "#lib/ui/shadcn/item/index.js";
+  import { Spinner } from "#lib/ui/shadcn/spinner/index.js";
+  import { formatNumber } from "#lib/utils/format";
   import DeleteMissingDialog from "./delete-missing-dialog.svelte";
   import RemoveLibraryRootDialog from "./remove-library-root-dialog.svelte";
   import ResetLibraryDialog from "./reset-library-dialog.svelte";

@@ -1,19 +1,19 @@
 <script lang="ts">
-  import { Root as ContextMenuRoot, Trigger as ContextMenuTrigger } from "$lib/ui/context-menu";
+  import { Root as ContextMenuRoot, Trigger as ContextMenuTrigger } from "#lib/ui/context-menu";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import { goto } from "$app/navigation";
-  import { trackLinks } from "$lib/library/tracks";
-  import { getPlayback } from "$lib/playback/context";
-  import { playbackFailureMessage } from "$lib/playback/playback-failure";
-  import { nowPlaying } from "$lib/shell/now-playing.svelte";
-  import Artwork from "$lib/ui/artwork.svelte";
-  import ContextMenuContent from "$lib/ui/context-menu/context-menu-content.svelte";
-  import ContextMenuItem from "$lib/ui/context-menu/context-menu-item.svelte";
-  import { SLEEVE_RADIUS, sharedElement, sharedKey } from "$lib/ui/motion/shared-element";
-  import { getMotionBudget } from "$lib/shell/motion-budget.svelte";
-  import { slideTransition } from "$lib/ui/motion/svelte-slide";
-  import { Button } from "$lib/ui/shadcn/button";
-  import * as Tooltip from "$lib/ui/shadcn/tooltip";
+  import { trackLinks } from "#lib/library/tracks";
+  import { getPlayback } from "#lib/playback/context";
+  import { playbackFailureMessage } from "#lib/playback/playback-failure";
+  import { nowPlaying } from "#lib/shell/now-playing.svelte";
+  import Artwork from "#lib/ui/artwork.svelte";
+  import ContextMenuContent from "#lib/ui/context-menu/context-menu-content.svelte";
+  import ContextMenuItem from "#lib/ui/context-menu/context-menu-item.svelte";
+  import { SLEEVE_RADIUS, sharedElement, sharedKey } from "#lib/ui/motion/shared-element";
+  import { getMotionBudget } from "#lib/shell/motion-budget.svelte";
+  import { slideTransition } from "#lib/ui/motion/svelte-slide";
+  import { Button } from "#lib/ui/shadcn/button";
+  import * as Tooltip from "#lib/ui/shadcn/tooltip";
 
   /** Sliding distance for the artwork, title and artist. One value so they travel together. */
   const SLIDE_PX = 16;

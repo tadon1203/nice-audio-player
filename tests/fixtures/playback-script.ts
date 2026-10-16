@@ -4,7 +4,7 @@ import type {
   PlaybackQueueSnapshot,
   PlaybackSnapshot,
   Versioned,
-} from "$lib/native";
+} from "#lib/native";
 import type { Native } from "./native-api";
 import { playbackIdOf, playbackItemFor, playingSnapshot, queueItemFor } from "./data";
 

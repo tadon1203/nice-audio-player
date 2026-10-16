@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { albumItemKey } from "$lib/library/album-key";
-  import { createLibraryCatalog } from "$lib/library/catalog.svelte";
-  import { getPlayback } from "$lib/playback/context";
-  import { libraryViews } from "$lib/shell/library-views.svelte";
-  import VirtualMediaGrid from "$lib/ui/media-grid/virtual-media-grid.svelte";
+  import { albumItemKey } from "#lib/library/album-key";
+  import { createLibraryCatalog } from "#lib/library/catalog.svelte";
+  import { getPlayback } from "#lib/playback/context";
+  import { libraryViews } from "#lib/shell/library-views.svelte";
+  import VirtualMediaGrid from "#lib/ui/media-grid/virtual-media-grid.svelte";
   import AlbumTile from "../album-tile.svelte";
   import LibraryWorkspace from "../library-workspace.svelte";
 

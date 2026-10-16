@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { motionTokens } from "$lib/ui/motion/tokens";
+import { motionTokens } from "#lib/ui/motion/tokens";
 import { nowPlayingDuration } from "./now-playing-motion";
 
 describe("nowPlayingDuration", () => {

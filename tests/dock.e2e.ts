@@ -401,14 +401,19 @@ test("position ticks redraw neither the signal path nor the volume row", async (
 });
 
 test("consecutive skips share one notice", async ({ page, native, library }) => {
-  const [, second, third] = albumSequence(library);
+  const album = albumSequence(library);
+  const [, second] = album;
+  // The fixture album has two playable tracks, so the second skip comes from outside it.
+  const outside = library.tracks.find(
+    (track) => track.playable && !album.some((entry) => entry.id === track.id),
+  );
   const dock = await playFirstTrack(page);
   const first = playbackItemFor(second!);
 
   await native.occur({ type: "trackSkipped", item: first, error: "decodeFailed" });
   await native.occur({
     type: "trackSkipped",
-    item: playbackItemFor(third!),
+    item: playbackItemFor(outside!),
     error: "decodeFailed",
   });
 

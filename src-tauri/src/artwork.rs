@@ -2,8 +2,8 @@ use std::path::PathBuf;
 
 use backend::library::artwork::{self, ArtworkCache};
 use tauri::{
-    http::{header, Method, Response, StatusCode},
     Manager,
+    http::{Method, Response, StatusCode, header},
 };
 
 /// The data directory the artwork store lives in, decided once at startup.

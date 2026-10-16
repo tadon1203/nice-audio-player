@@ -1,8 +1,8 @@
 <script lang="ts">
   import type { Attachment } from "svelte/attachments";
-  import RollingNumber from "$lib/ui/rolling-number/rolling-number.svelte";
-  import { cn } from "$lib/utils/cn.js";
-  import { formatDuration } from "$lib/utils/format";
+  import RollingNumber from "#lib/ui/rolling-number/rolling-number.svelte";
+  import { cn } from "#lib/utils/cn.js";
+  import { formatDuration } from "#lib/utils/format";
   import { createPointerSeek } from "./pointer-seek.svelte";
   import WaveformBars from "./waveform-bars.svelte";
   import { barCountForWidth, resampleBars } from "./waveform-model";

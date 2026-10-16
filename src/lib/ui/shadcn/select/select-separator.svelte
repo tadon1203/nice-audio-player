@@ -1,7 +1,7 @@
 <script lang="ts">
-  import type { PresentationProps } from "$lib/ui/presentation-props";
-	import { Separator } from "$lib/ui/shadcn/separator/index.js";
-	import { cn } from "$lib/utils/cn.js";
+  import type { PresentationProps } from "#lib/ui/presentation-props";
+	import { Separator } from "#lib/ui/shadcn/separator/index.js";
+	import { cn } from "#lib/utils/cn.js";
 	import type { Separator as SeparatorPrimitive } from "bits-ui";
 
 	let {

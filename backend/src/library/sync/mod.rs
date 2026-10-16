@@ -9,7 +9,7 @@ mod step;
 
 use super::{
     database::Database,
-    error::{parse_id, LibraryCommandError, StoreError},
+    error::{LibraryCommandError, StoreError, parse_id},
     maintenance,
     models::{LibraryRoot, LibraryScanSnapshot, LibraryScanState},
     roots, scanner, watcher,
@@ -20,9 +20,9 @@ use notify::RecommendedWatcher;
 use std::{
     collections::{HashMap, VecDeque},
     sync::{
+        Arc, Mutex,
         atomic::{AtomicBool, Ordering},
         mpsc::{self, Receiver, RecvTimeoutError, Sender, SyncSender},
-        Arc, Mutex,
     },
     thread::{self, JoinHandle},
     time::Instant,
@@ -117,10 +117,10 @@ impl LibrarySync {
     pub fn shutdown(&self) {
         let _ = self.messages.send(Message::Shutdown);
         let thread = self.thread.lock().expect("sync thread lock").take();
-        if let Some(thread) = thread {
-            if thread.join().is_err() {
-                log::error!("library.sync.actor_panicked");
-            }
+        if let Some(thread) = thread
+            && thread.join().is_err()
+        {
+            log::error!("library.sync.actor_panicked");
         }
     }
 }
@@ -232,10 +232,10 @@ impl Actor {
             }
             Command::Remove(id, reply) => {
                 let result = self.while_idle(|actor| roots::remove(&actor.database, &id));
-                if result.is_ok() {
-                    if let Ok(id) = parse_id(&id) {
-                        self.feed(Input::Removed(id));
-                    }
+                if result.is_ok()
+                    && let Ok(id) = parse_id(&id)
+                {
+                    self.feed(Input::Removed(id));
                 }
                 let _ = reply.send(result);
             }
@@ -350,10 +350,10 @@ impl Actor {
     }
 
     fn reap_scanner(&mut self) {
-        if let Some(scanner) = self.scanner.take() {
-            if scanner.join().is_err() {
-                log::error!("library.scan.worker_panicked");
-            }
+        if let Some(scanner) = self.scanner.take()
+            && scanner.join().is_err()
+        {
+            log::error!("library.scan.worker_panicked");
         }
     }
 
@@ -443,7 +443,7 @@ fn root_id(root: &LibraryRoot) -> Option<RootId> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::messages::{null_message_sink, StateTopic};
+    use crate::messages::{StateTopic, null_message_sink};
 
     #[test]
     fn a_scan_thread_that_dies_ends_the_scan_as_failed() {

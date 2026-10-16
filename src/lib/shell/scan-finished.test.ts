@@ -1,9 +1,9 @@
 import { QueryClient } from "@tanstack/svelte-query";
 import { describe, expect, it, vi } from "vitest";
-import { libraryQueryKeys } from "$lib/library/queries";
-import { LibraryScanState } from "$lib/library/library-scan-state.svelte";
-import { lyricsQueryKeys } from "$lib/lyrics/queries";
-import type { LibraryScanSnapshot, LibraryScanState as ScanStateName } from "$lib/native";
+import { libraryQueryKeys } from "#lib/library/queries";
+import { LibraryScanState } from "#lib/library/library-scan-state.svelte";
+import { lyricsQueryKeys } from "#lib/lyrics/queries";
+import type { LibraryScanSnapshot, LibraryScanState as ScanStateName } from "#lib/native";
 import { createScanWatcher } from "./scan-finished";
 
 function scanSnapshot(

@@ -26,7 +26,7 @@
 </script>
 
 <script lang="ts">
-	import { cn, type WithElementRef } from "$lib/utils/cn.js";
+	import { cn, type WithElementRef } from "#lib/utils/cn.js";
 	import type { Snippet } from "svelte";
 	import type { HTMLAttributes } from "svelte/elements";
 

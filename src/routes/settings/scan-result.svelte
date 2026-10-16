@@ -1,8 +1,8 @@
 <script lang="ts">
   import Check from "@lucide/svelte/icons/check";
-  import { libraryScanFailureMessage } from "$lib/library/library-errors";
-  import type { LibraryScanSnapshot } from "$lib/native";
-  import { formatNumber } from "$lib/utils/format";
+  import { libraryScanFailureMessage } from "#lib/library/library-errors";
+  import type { LibraryScanSnapshot } from "#lib/native";
+  import { formatNumber } from "#lib/utils/format";
 
   /** What the last scan ended with: why it failed, or what it found. */
   let { scan }: { scan: LibraryScanSnapshot } = $props();

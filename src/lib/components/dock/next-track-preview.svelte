@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { getPlayback } from "$lib/playback/context";
-  import { getMotionBudget } from "$lib/shell/motion-budget.svelte";
-  import Artwork from "$lib/ui/artwork.svelte";
-  import { slideTransition } from "$lib/ui/motion/svelte-slide";
-  import { cn } from "$lib/utils/cn.js";
+  import { getPlayback } from "#lib/playback/context";
+  import { getMotionBudget } from "#lib/shell/motion-budget.svelte";
+  import Artwork from "#lib/ui/artwork.svelte";
+  import { slideTransition } from "#lib/ui/motion/svelte-slide";
+  import { cn } from "#lib/utils/cn.js";
 
   /** The next track's artwork shows this long before the current one ends. */
   const PREVIEW_MS = 3_000;

@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  import type { ArtworkRef } from "$lib/native";
+  import type { ArtworkRef } from "#lib/native";
 
   export type RovingTarget = {
     artwork: ArtworkRef | null;
@@ -16,7 +16,7 @@
 <script lang="ts">
   import { untrack } from "svelte";
   import { Tween } from "svelte/motion";
-  import { motionFor } from "$lib/ui/motion/svelte-motion";
+  import { motionFor } from "#lib/ui/motion/svelte-motion";
   import ArtworkGlow from "./artwork-glow.svelte";
 
   /**

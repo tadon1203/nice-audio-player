@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { AlertDialog as AlertDialogPrimitive } from "bits-ui";
-  import type { PresentationProps } from "$lib/ui/presentation-props";
+  import type { PresentationProps } from "#lib/ui/presentation-props";
 
 	let { ref = $bindable(null), ...restProps }: PresentationProps<AlertDialogPrimitive.TriggerProps> = $props();
 </script>

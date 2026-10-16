@@ -583,10 +583,11 @@ fn run_analysis(shared: &Shared, id: u32, mut sink: FrameSink) {
             continue;
         }
         analyzer.process(&buffer[..read], &mut |measurement| {
-            if let Some(frame) = batcher.push(measurement) {
-                if open && !sink(&frame) {
-                    open = false;
-                }
+            if let Some(frame) = batcher.push(measurement)
+                && open
+                && !sink(&frame)
+            {
+                open = false;
             }
         });
     }
@@ -632,10 +633,10 @@ impl MeterTap {
                 _ => None,
             };
             self.phase = (self.phase + 1) % self.channel_count;
-            if let Some(pair) = pair {
-                if self.producer.push_slice(&pair) < pair.len() {
-                    self.dropped.fetch_add(1, Ordering::Relaxed);
-                }
+            if let Some(pair) = pair
+                && self.producer.push_slice(&pair) < pair.len()
+            {
+                self.dropped.fetch_add(1, Ordering::Relaxed);
             }
         }
     }

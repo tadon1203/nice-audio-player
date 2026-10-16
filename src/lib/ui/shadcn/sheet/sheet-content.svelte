@@ -3,11 +3,11 @@
 </script>
 
 <script lang="ts">
-  import { floatingLayer } from "$lib/ui/floating-layer";
+  import { floatingLayer } from "#lib/ui/floating-layer";
   import { Dialog as SheetPrimitive } from "bits-ui";
   import XIcon from "@lucide/svelte/icons/x";
-  import { Button } from "$lib/ui/shadcn/button/index.js";
-  import { cn, type WithoutChildrenOrChild } from "$lib/utils/cn.js";
+  import { Button } from "#lib/ui/shadcn/button/index.js";
+  import { cn, type WithoutChildrenOrChild } from "#lib/utils/cn.js";
   import SheetOverlay from "./sheet-overlay.svelte";
   import SheetPortal from "./sheet-portal.svelte";
   import type { Snippet } from "svelte";

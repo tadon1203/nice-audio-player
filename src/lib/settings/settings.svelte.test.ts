@@ -1,15 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
-import type { Appearance, TNativeAPI } from "$lib/native";
+import type { Appearance, TNativeAPI } from "#lib/native";
 import { createSettings } from "./settings.svelte";
 
 function stubApi(overrides: Partial<Pick<TNativeAPI, "updateSettings">> = {}) {
   return {
-    updateSettings: vi.fn(
-      async (): Promise<Appearance> => ({
-        artworkBackdrop: true,
-        calmMotion: false,
-      }),
-    ),
+    updateSettings: vi.fn(async (): Promise<Appearance> => ({
+      artworkBackdrop: true,
+      calmMotion: false,
+    })),
     ...overrides,
   } as unknown as TNativeAPI & {
     updateSettings: ReturnType<typeof vi.fn>;

@@ -78,10 +78,10 @@ impl PlaybackWorker {
     /// Renders the transport as a new revision and tells listeners. The snapshot carries the
     /// newest position too, so a listener that joins here starts from the right place.
     pub(super) fn publish_state(&mut self) -> Versioned<PlaybackSnapshot> {
-        if let Transport::Loaded(loaded) = &mut self.transport {
-            if !loaded.paused {
-                loaded.position.frame = loaded.sample_position();
-            }
+        if let Transport::Loaded(loaded) = &mut self.transport
+            && !loaded.paused
+        {
+            loaded.position.frame = loaded.sample_position();
         }
         self.revision = self.revision.saturating_add(1);
         let published = self.playback_versioned();

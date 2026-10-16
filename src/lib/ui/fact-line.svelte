@@ -5,7 +5,7 @@
 </script>
 
 <script lang="ts">
-  import { cn } from "$lib/utils/cn.js";
+  import { cn } from "#lib/utils/cn.js";
   import CountUpText from "./count-up-text.svelte";
 
   /** A line of facts (year, track count, time). Items are separated by space, not middle dots. */

@@ -1,4 +1,4 @@
-import type { LibraryIndexBucket } from "$lib/native";
+import type { LibraryIndexBucket } from "#lib/native";
 
 /**
  * The label a list position is filed under, read from the list's own scroll index (buckets in

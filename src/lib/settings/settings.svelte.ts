@@ -1,5 +1,5 @@
-import { nativeErrorCode } from "$lib/native";
-import type { Appearance, TNativeAPI } from "$lib/native";
+import { nativeErrorCode } from "#lib/native";
+import type { Appearance, TNativeAPI } from "#lib/native";
 
 /** The appearance fields the renderer may change. */
 export type SettingsUpdate = {

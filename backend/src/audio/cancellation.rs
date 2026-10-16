@@ -1,5 +1,5 @@
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 /// A shared flag that tells background work (source loading, decoding) to stop.
 #[derive(Clone, Default)]

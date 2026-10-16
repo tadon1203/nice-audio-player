@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
-  import { Empty, EmptyDescription } from "$lib/ui/shadcn/empty/index.js";
-  import { Spinner } from "$lib/ui/shadcn/spinner/index.js";
+  import { Empty, EmptyDescription } from "#lib/ui/shadcn/empty/index.js";
+  import { Spinner } from "#lib/ui/shadcn/spinner/index.js";
 
   let { children }: { children: Snippet } = $props();
 </script>

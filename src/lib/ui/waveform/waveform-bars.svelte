@@ -1,10 +1,10 @@
 <script lang="ts">
   import { untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
-  import { springEasing } from "$lib/ui/motion/spring-curve";
-  import { delayOf, tokenDuration } from "$lib/ui/motion/tokens";
-  import { tweenNumber } from "$lib/ui/motion/tween-number";
-  import { cn } from "$lib/utils/cn.js";
+  import { springEasing } from "#lib/ui/motion/spring-curve";
+  import { delayOf, tokenDuration } from "#lib/ui/motion/tokens";
+  import { tweenNumber } from "#lib/ui/motion/tween-number";
+  import { cn } from "#lib/utils/cn.js";
   import { levelToUnit } from "./waveform-model";
 
   /** Height of the flat line the bars grow out of, in px. */

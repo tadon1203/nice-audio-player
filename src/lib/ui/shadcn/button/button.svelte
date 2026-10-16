@@ -1,6 +1,6 @@
 <script lang="ts" module>
   import type { HTMLAnchorAttributes, HTMLButtonAttributes, HTMLAttributes } from "svelte/elements";
-  import type { WithElementRef } from "$lib/utils/cn.js";
+  import type { WithElementRef } from "#lib/utils/cn.js";
   import type { ButtonVariant, ButtonSize } from "./control-styles";
   export type { ButtonVariant, ButtonSize } from "./control-styles";
   export type ButtonProps =
@@ -13,7 +13,7 @@
 </script>
 
 <script lang="ts">
-  import { cn } from "$lib/utils/cn.js";
+  import { cn } from "#lib/utils/cn.js";
   import { buttonVariants } from "./control-styles";
   let {
     variant = "neutral",

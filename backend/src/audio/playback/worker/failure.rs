@@ -25,11 +25,11 @@ impl PlaybackWorker {
             }
             PipelineOwner::Active => self.fail_active(code, FailureScope::Item, failure_error),
             PipelineOwner::Seek => {
-                if let Transport::Loaded(loaded) = &mut self.transport {
-                    if let Some(seek) = loaded.seek.take() {
-                        seek.pipeline.cancel();
-                        respond(seek.responder, Err(failure_error));
-                    }
+                if let Transport::Loaded(loaded) = &mut self.transport
+                    && let Some(seek) = loaded.seek.take()
+                {
+                    seek.pipeline.cancel();
+                    respond(seek.responder, Err(failure_error));
                 }
             }
             PipelineOwner::Prefetch => self.prefetch_unusable(),
@@ -95,11 +95,11 @@ impl PlaybackWorker {
         if skipping {
             self.occur_track_skipped(code);
         }
-        if scope == FailureScope::Item {
-            if let Some(item) = self.next_after_item_failure() {
-                let request = self.new_start(item, None, false);
-                self.begin_start(request);
-            }
+        if scope == FailureScope::Item
+            && let Some(item) = self.next_after_item_failure()
+        {
+            let request = self.new_start(item, None, false);
+            self.begin_start(request);
         }
     }
 

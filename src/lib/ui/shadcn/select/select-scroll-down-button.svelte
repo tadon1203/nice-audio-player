@@ -1,8 +1,8 @@
 <script lang="ts">
-  import type { PresentationProps } from "$lib/ui/presentation-props";
+  import type { PresentationProps } from "#lib/ui/presentation-props";
 	import { Select as SelectPrimitive } from "bits-ui";
 	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
-	import { cn, type WithoutChildrenOrChild } from "$lib/utils/cn.js";
+	import { cn, type WithoutChildrenOrChild } from "#lib/utils/cn.js";
 
 	let {
 		ref = $bindable(null),

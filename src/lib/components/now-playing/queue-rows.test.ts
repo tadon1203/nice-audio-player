@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { PlaybackQueueItem } from "$lib/native";
+import type { PlaybackQueueItem } from "#lib/native";
 import { buildQueueRows, hiddenUpcomingCount } from "./queue-rows";
 
 const item = (id: string): PlaybackQueueItem => ({

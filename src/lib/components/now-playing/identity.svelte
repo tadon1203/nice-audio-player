@@ -1,11 +1,11 @@
 <script lang="ts">
   import { untrack } from "svelte";
-  import type { LyricsResolution, PlaybackItem } from "$lib/native";
-  import { getPlayback } from "$lib/playback/context";
-  import { nowPlaying } from "$lib/shell/now-playing.svelte";
-  import Artwork from "$lib/ui/artwork.svelte";
-  import KineticText from "$lib/ui/kinetic-text/kinetic-text.svelte";
-  import { SLEEVE_RADIUS, sharedElement, sharedKey } from "$lib/ui/motion/shared-element";
+  import type { LyricsResolution, PlaybackItem } from "#lib/native";
+  import { getPlayback } from "#lib/playback/context";
+  import { nowPlaying } from "#lib/shell/now-playing.svelte";
+  import Artwork from "#lib/ui/artwork.svelte";
+  import KineticText from "#lib/ui/kinetic-text/kinetic-text.svelte";
+  import { SLEEVE_RADIUS, sharedElement, sharedKey } from "#lib/ui/motion/shared-element";
   import { contentFade } from "./now-playing-layout";
   import TrackFacts from "./track-facts.svelte";
 

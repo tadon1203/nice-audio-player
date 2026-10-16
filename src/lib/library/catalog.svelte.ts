@@ -4,7 +4,7 @@ import {
   type CreateInfiniteQueryResult,
   type InfiniteData,
 } from "@tanstack/svelte-query";
-import type { LibraryIndexBucket } from "$lib/native";
+import type { LibraryIndexBucket } from "#lib/native";
 import { libraryStatusMessage } from "./library-errors";
 import {
   flattenPages,

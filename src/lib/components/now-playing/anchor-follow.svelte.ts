@@ -1,8 +1,8 @@
 import type { Attachment } from "svelte/attachments";
-import { getMotionBudget } from "$lib/shell/motion-budget.svelte";
-import { RetargetableSpring } from "$lib/ui/motion/retargetable-spring.svelte";
-import { springLinear } from "$lib/ui/motion/spring-curve";
-import { crossfade, motionTokens } from "$lib/ui/motion/tokens";
+import { getMotionBudget } from "#lib/shell/motion-budget.svelte";
+import { RetargetableSpring } from "#lib/ui/motion/retargetable-spring.svelte";
+import { springLinear } from "#lib/ui/motion/spring-curve";
+import { crossfade, motionTokens } from "#lib/ui/motion/tokens";
 import { anchorScrollTop } from "./anchor-column";
 import type { ScrollHow } from "./lyrics-follow-model";
 

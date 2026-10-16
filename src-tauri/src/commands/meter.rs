@@ -1,4 +1,4 @@
-use specta::{datatype::DataType, Type, Types};
+use specta::{Type, Types, datatype::DataType};
 use tauri::ipc::{Channel, InvokeResponseBody, IpcResponse};
 
 use crate::AppState;

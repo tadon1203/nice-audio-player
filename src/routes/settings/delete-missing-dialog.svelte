@@ -8,8 +8,8 @@
     AlertDialogFooter,
     AlertDialogHeader,
     AlertDialogTitle,
-  } from "$lib/ui/shadcn/alert-dialog/index.js";
-  import { formatNumber } from "$lib/utils/format";
+  } from "#lib/ui/shadcn/alert-dialog/index.js";
+  import { formatNumber } from "#lib/utils/format";
 
   let {
     open,

@@ -153,19 +153,19 @@ pub(crate) fn apply_requested_reset(directory: &Path) {
     for suffix in ["", "-wal", "-shm"] {
         let from = directory.join(format!("{DATABASE_FILE}{suffix}"));
         let to = directory.join(format!("{DATABASE_FILE}{suffix}.bak"));
-        if from.exists() {
-            if let Err(cause) = std::fs::rename(&from, &to).or_else(|_| {
+        if from.exists()
+            && let Err(cause) = std::fs::rename(&from, &to).or_else(|_| {
                 let _ = std::fs::remove_file(&to);
                 std::fs::rename(&from, &to)
-            }) {
-                log::error!("library.database.reset_failed cause={cause}");
-                if suffix.is_empty() {
-                    // Nothing moved; the marker stays and the reset is tried again at next start.
-                    return;
-                }
-                // The database is already aside: a stale WAL left here must not meet the new one.
-                let _ = std::fs::remove_file(&from);
+            })
+        {
+            log::error!("library.database.reset_failed cause={cause}");
+            if suffix.is_empty() {
+                // Nothing moved; the marker stays and the reset is tried again at next start.
+                return;
             }
+            // The database is already aside: a stale WAL left here must not meet the new one.
+            let _ = std::fs::remove_file(&from);
         }
     }
     let _ = std::fs::remove_file(marker);
@@ -236,11 +236,13 @@ mod tests {
         let dir = directory.file("");
         Database::initialize(&dir).unwrap();
         Database::initialize(&dir).unwrap();
-        assert!(std::fs::read_dir(&dir).unwrap().all(|entry| !entry
-            .unwrap()
-            .file_name()
-            .to_string_lossy()
-            .ends_with(".bak")));
+        assert!(std::fs::read_dir(&dir).unwrap().all(|entry| {
+            !entry
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .ends_with(".bak")
+        }));
     }
 
     #[test]

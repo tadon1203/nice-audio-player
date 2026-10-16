@@ -9,6 +9,10 @@ A local-first Windows desktop music player focused on reliable playback and a ca
 
 ## Development
 
+Node is pinned by `.nvmrc`. With nvm-windows, run `nvm use` in the repo root before `pnpm install`.
+
+Rust links with LLVM's `lld-link` (set in `.cargo/config.toml`). Install [LLVM](https://releases.llvm.org/) and put its `bin` folder on `PATH`.
+
 ```text
 pnpm install
 pnpm dev

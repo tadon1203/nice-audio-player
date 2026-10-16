@@ -1,5 +1,5 @@
 import { createMutation, useQueryClient } from "@tanstack/svelte-query";
-import { requireNative } from "$lib/native";
+import { requireNative } from "#lib/native";
 import { libraryQueryKeys } from "./queries";
 
 // These call `useQueryClient`, so they run while a component initializes.

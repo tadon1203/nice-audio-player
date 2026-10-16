@@ -8,11 +8,11 @@ import type {
   PlaybackSnapshot,
   TNativeAPI,
   Versioned,
-} from "$lib/native";
-import { nativeErrorCode } from "$lib/native";
+} from "#lib/native";
+import { nativeErrorCode } from "#lib/native";
 import { createPlaybackClock, type PlaybackClock } from "./clock";
 import { playbackCommandErrorMessage } from "./playback-errors";
-import { isNewerRevision } from "$lib/utils/revision";
+import { isNewerRevision } from "#lib/utils/revision";
 import { clockReportOf, isActivePlayback, snapshotItem, snapshotSession } from "./snapshot";
 
 export type PlaybackNavigation = "next" | "previous";

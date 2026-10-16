@@ -1,6 +1,4 @@
-//! Writes or verifies `src/lib/native/bindings.ts`.
-//!
-//! `export-bindings` regenerates the file; `export-bindings --check` fails when it is stale.
+//! Writes `src/lib/native/bindings.ts`. `committed_bindings_are_current` (a test) checks it.
 
 use std::{fs, path::Path, process::ExitCode};
 
@@ -13,17 +11,6 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-
-    if std::env::args().any(|argument| argument == "--check") {
-        let current = fs::read_to_string(&path)
-            .unwrap_or_default()
-            .replace("\r\n", "\n");
-        if current == generated {
-            return ExitCode::SUCCESS;
-        }
-        eprintln!("src/lib/native/bindings.ts is stale; run `pnpm bindings`");
-        return ExitCode::FAILURE;
-    }
 
     if let Err(error) = fs::write(&path, generated) {
         eprintln!("failed to write {}: {error}", path.display());

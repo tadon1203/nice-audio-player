@@ -2,10 +2,10 @@
   import { untrack, type Snippet } from "svelte";
   import { prefersReducedMotion } from "svelte/motion";
   import type { TransitionConfig } from "svelte/transition";
-  import type { ArtworkRef } from "$lib/native";
-  import RovingGlow, { type RovingTarget } from "$lib/ui/artwork-glow/roving-glow.svelte";
-  import { motionFor } from "$lib/ui/motion/svelte-motion";
-  import { createVirtualRows } from "$lib/ui/virtual-rows.svelte";
+  import type { ArtworkRef } from "#lib/native";
+  import RovingGlow, { type RovingTarget } from "#lib/ui/artwork-glow/roving-glow.svelte";
+  import { motionFor } from "#lib/ui/motion/svelte-motion";
+  import { createVirtualRows } from "#lib/ui/virtual-rows.svelte";
   import { createSortMotion } from "./sort-motion.svelte";
   import {
     columnCount,

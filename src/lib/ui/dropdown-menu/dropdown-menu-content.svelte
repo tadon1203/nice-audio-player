@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { floatingLayer } from "$lib/ui/floating-layer";
+  import { floatingLayer } from "#lib/ui/floating-layer";
   import { DropdownMenu as DropdownMenuPrimitive } from "bits-ui";
-  import { cn } from "$lib/utils/cn.js";
+  import { cn } from "#lib/utils/cn.js";
 
   /** A floating menu opened from a button. Same surface as the context menu: Acrylic, layer 20. */
   let {

@@ -3,11 +3,11 @@
 
 use super::{
     database::Database,
-    error::{parse_id, LibraryCommandError, StoreError},
+    error::{LibraryCommandError, StoreError, parse_id},
     models::LibraryRoot,
     summary,
 };
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 use std::path::Path;
 
 pub(crate) fn list(connection: &Connection) -> Result<Vec<LibraryRoot>, StoreError> {

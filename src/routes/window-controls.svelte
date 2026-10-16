@@ -3,8 +3,8 @@
   import Minus from "@lucide/svelte/icons/minus";
   import Square from "@lucide/svelte/icons/square";
   import X from "@lucide/svelte/icons/x";
-  import { nativeWindow } from "$lib/native";
-  import { Button } from "$lib/ui/shadcn/button/index.js";
+  import { nativeWindow } from "#lib/native";
+  import { Button } from "#lib/ui/shadcn/button/index.js";
 
   const appWindow = nativeWindow;
   let maximized = $state(false);

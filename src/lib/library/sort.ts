@@ -4,8 +4,8 @@ import type {
   LibraryArtistAlbumSortKey,
   LibrarySortDirection,
   LibraryTrackSortKey,
-} from "$lib/native";
-import type { SortOption } from "$lib/ui/sort-option";
+} from "#lib/native";
+import type { SortOption } from "#lib/ui/sort-option";
 
 /**
  * Derives the ordered keys, select options, and type guard for one sort-key set

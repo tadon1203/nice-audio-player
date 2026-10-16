@@ -228,16 +228,16 @@ impl PlaybackWorker {
             pipeline,
             duration_ms,
         } = prebuffering;
-        if !request.start_paused {
-            if let Err(error) = output.stream.start() {
-                let code = output_failure_code(error);
-                pipeline.cancel();
-                self.fail_start(
-                    request,
-                    StartFailure::new(StartFailurePhase::StreamStart, code),
-                );
-                return;
-            }
+        if !request.start_paused
+            && let Err(error) = output.stream.start()
+        {
+            let code = output_failure_code(error);
+            pipeline.cancel();
+            self.fail_start(
+                request,
+                StartFailure::new(StartFailurePhase::StreamStart, code),
+            );
+            return;
         }
         let StartRequest {
             id,
@@ -293,12 +293,10 @@ impl PlaybackWorker {
             self.occur_track_skipped(failure.code);
         }
         let responder = request.responder;
-        if skips {
-            if let Some(item) = self.next_after_item_failure() {
-                let request = self.new_start(item, responder, false);
-                self.begin_start(request);
-                return;
-            }
+        if skips && let Some(item) = self.next_after_item_failure() {
+            let request = self.new_start(item, responder, false);
+            self.begin_start(request);
+            return;
         }
         respond(responder, Err(error));
     }
@@ -370,13 +368,12 @@ impl PlaybackWorker {
         reason: AdvanceReason,
         reply: Reply<Versioned<PlaybackSnapshot>>,
     ) {
-        if reason == AdvanceReason::UserPrevious {
-            if let Transport::Loaded(loaded) = &self.transport {
-                if previous_restarts_track(loaded.position_ms(), loaded.position.duration_ms) {
-                    self.begin_seek(0, Some(reply));
-                    return;
-                }
-            }
+        if reason == AdvanceReason::UserPrevious
+            && let Transport::Loaded(loaded) = &self.transport
+            && previous_restarts_track(loaded.position_ms(), loaded.position.duration_ms)
+        {
+            self.begin_seek(0, Some(reply));
+            return;
         }
         let paused = matches!(&self.transport, Transport::Loaded(loaded) if loaded.paused);
         self.skipped_in_a_row = 0;

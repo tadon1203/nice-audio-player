@@ -1,4 +1,4 @@
-import type { LibrarySortDirection } from "$lib/native";
+import type { LibrarySortDirection } from "#lib/native";
 
 export type SortOption<Key extends string = string> = {
   readonly key: Key;

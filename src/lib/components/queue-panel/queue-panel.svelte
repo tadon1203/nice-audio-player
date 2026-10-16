@@ -1,8 +1,8 @@
 <script lang="ts">
   import type { Attachment } from "svelte/attachments";
-  import { getPlayback } from "$lib/playback/context";
-  import { queuePanel } from "$lib/shell/queue-panel.svelte";
-  import { Sheet, SheetContent, SheetHeader, SheetTitle } from "$lib/ui/shadcn/sheet";
+  import { getPlayback } from "#lib/playback/context";
+  import { queuePanel } from "#lib/shell/queue-panel.svelte";
+  import { Sheet, SheetContent, SheetHeader, SheetTitle } from "#lib/ui/shadcn/sheet";
   import QueueFooter from "./queue-footer.svelte";
   import QueueRow from "./queue-row.svelte";
   import { createShuffleCascade } from "./shuffle-cascade.svelte";

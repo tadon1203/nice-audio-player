@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { applyWaveform, waveformQueryOptions } from "./waveform";
 
 const getPlaybackWaveform = vi.fn();
-vi.mock("$lib/native", () => ({ requireNative: () => ({ getPlaybackWaveform }) }));
+vi.mock("#lib/native", () => ({ requireNative: () => ({ getPlaybackWaveform }) }));
 
 const waveform = (playbackId: string, revision = 1, rms = [1]) => ({
   revision,

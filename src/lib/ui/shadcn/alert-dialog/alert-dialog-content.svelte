@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { floatingLayer } from "$lib/ui/floating-layer";
+  import { floatingLayer } from "#lib/ui/floating-layer";
   import { AlertDialog as AlertDialogPrimitive } from "bits-ui";
-  import { cn, type WithoutChild, type WithoutChildrenOrChild } from "$lib/utils/cn.js";
+  import { cn, type WithoutChild, type WithoutChildrenOrChild } from "#lib/utils/cn.js";
   import AlertDialogOverlay from "./alert-dialog-overlay.svelte";
   import AlertDialogPortal from "./alert-dialog-portal.svelte";
   import type { ComponentProps } from "svelte";

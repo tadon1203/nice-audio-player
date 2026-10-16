@@ -1,13 +1,13 @@
 //! Loads a track's compressed source off the worker thread and reports it as an event.
 
-use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::thread::{self, JoinHandle};
 
 use log::error;
 
 use super::input::{Inbox, SourceLoadId, WorkerEvent};
 use crate::audio::cancellation::Cancellation;
-use crate::audio::compressed_source::{prepare_compressed_source, CompressedSourceError};
+use crate::audio::compressed_source::{CompressedSourceError, prepare_compressed_source};
 use crate::media::validation::ValidatedAudioFile;
 
 pub(crate) struct SourceLoad {

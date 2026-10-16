@@ -1,7 +1,7 @@
 <script lang="ts">
-  import type { PresentationProps } from "$lib/ui/presentation-props";
+  import type { PresentationProps } from "#lib/ui/presentation-props";
   import type { HTMLAttributes } from "svelte/elements";
-  import { cn } from "$lib/utils/cn.js";
+  import { cn } from "#lib/utils/cn.js";
 
   let { children, ...restProps }: PresentationProps<HTMLAttributes<HTMLHeadingElement>> = $props();
 </script>

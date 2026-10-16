@@ -3,12 +3,12 @@
 use super::LibraryStore;
 use crate::library::{
     artwork::{ArtworkMimeType, ArtworkRef},
-    error::{parse_id, StoreError},
+    error::{StoreError, parse_id},
     location::TrackLocation,
     models::{LibraryAlbumKey, LibraryTrackProperties, LibraryTrackSummary},
     status::{Availability, InspectionStatus},
 };
-use rusqlite::{params, OptionalExtension, Row};
+use rusqlite::{OptionalExtension, Row, params};
 
 /// The columns `summary_from_row` reads, in its order.
 pub(super) const SUMMARY_COLUMNS: &str = "t.id, m.title_key, m.artist_key, m.album_key, m.album_artist, m.album_artist_key, m.duration_ms, a.content_hash, a.mime_type, a.relative_path, m.file_format, m.bit_depth, m.bitrate_kbps, f.availability, f.inspection_status, m.album_dir";

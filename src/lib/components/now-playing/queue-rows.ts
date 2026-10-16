@@ -1,4 +1,4 @@
-import type { PlaybackQueueItem } from "$lib/native";
+import type { PlaybackQueueItem } from "#lib/native";
 
 /** History (oldest first), the current track, then what is upcoming, in the order it plays. */
 export function buildQueueRows(

@@ -1,10 +1,10 @@
-import { formatAudioPath } from "$lib/utils/format";
-import { getPlayback } from "$lib/playback/context";
+import { formatAudioPath } from "#lib/utils/format";
+import { getPlayback } from "#lib/playback/context";
 import {
   describeSignalPath,
   type PlaybackSignalPath,
-} from "$lib/playback/playback-technical-status";
-import { snapshotSession } from "$lib/playback/snapshot";
+} from "#lib/playback/playback-technical-status";
+import { snapshotSession } from "#lib/playback/snapshot";
 
 /**
  * The signal path of the loaded track, or null when nothing is loaded. Call during component

@@ -1,8 +1,8 @@
 import type { QueryClient } from "@tanstack/svelte-query";
-import { refreshLibrary } from "$lib/library/events";
-import type { LibraryScanState } from "$lib/library/library-scan-state.svelte";
-import { refreshLyrics } from "$lib/lyrics/events";
-import type { LibraryScanSnapshot } from "$lib/native";
+import { refreshLibrary } from "#lib/library/events";
+import type { LibraryScanState } from "#lib/library/library-scan-state.svelte";
+import { refreshLyrics } from "#lib/lyrics/events";
+import type { LibraryScanSnapshot } from "#lib/native";
 
 /**
  * Keeps the scan state and refreshes what depends on the files when a scan has ended since the

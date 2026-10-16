@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { silentWav } from "./silent-wav.ts";
@@ -35,11 +36,12 @@ export const config: WebdriverIO.Config = {
     for (const name of ["First", "Second"]) {
       writeFileSync(join(musicDir, `${name}.wav`), silentWav(120, 8_000));
     }
+    // Run the Tauri CLI directly: no shell, so Node does not warn about args with `shell: true`.
+    const tauriCli = createRequire(import.meta.url).resolve("@tauri-apps/cli/tauri.js");
     const build = spawnSync(
-      "pnpm",
+      process.execPath,
       [
-        "exec",
-        "tauri",
+        tauriCli,
         "build",
         "--debug",
         "--no-bundle",
@@ -48,7 +50,7 @@ export const config: WebdriverIO.Config = {
         "--config",
         "src-tauri/tauri.e2e.conf.json",
       ],
-      { stdio: "inherit", shell: true, env: { ...process.env, VITE_E2E: "1" } },
+      { stdio: "inherit", env: { ...process.env, VITE_E2E: "1" } },
     );
     if (build.status !== 0) throw new Error("building the app failed");
   },

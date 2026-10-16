@@ -1,10 +1,10 @@
 <script lang="ts">
   import { untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
-  import PlaybackWaveformBand from "$lib/components/waveform-band/playback-waveform-band.svelte";
-  import { createTrackLyrics } from "$lib/lyrics/lyrics.svelte";
-  import { getPlayback } from "$lib/playback/context";
-  import { cn } from "$lib/utils/cn.js";
+  import PlaybackWaveformBand from "#lib/components/waveform-band/playback-waveform-band.svelte";
+  import { createTrackLyrics } from "#lib/lyrics/lyrics.svelte";
+  import { getPlayback } from "#lib/playback/context";
+  import { cn } from "#lib/utils/cn.js";
   import Identity from "./identity.svelte";
   import LyricsPanel from "./lyrics-panel.svelte";
   import MetersView from "./meters-view.svelte";
@@ -18,7 +18,7 @@
   import NowPlayingGlow from "./now-playing-glow.svelte";
   import QueueColumn from "./queue-column.svelte";
   import { rightColumn } from "./right-column.svelte";
-  import { Button } from "$lib/ui/shadcn/button";
+  import { Button } from "#lib/ui/shadcn/button";
 
   /**
    * Now Playing's content: one skeleton in every state. Left, the Sleeve and the track's info;

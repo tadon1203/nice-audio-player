@@ -1,9 +1,9 @@
 import type { QueryClient } from "@tanstack/svelte-query";
-import type { LibraryScanState } from "$lib/library/library-scan-state.svelte";
-import { requireNative, type BackendMessage } from "$lib/native";
-import type { Playback } from "$lib/playback/playback.svelte";
-import { applyWaveform } from "$lib/playback/waveform";
-import type { Settings } from "$lib/settings/settings.svelte";
+import type { LibraryScanState } from "#lib/library/library-scan-state.svelte";
+import { requireNative, type BackendMessage } from "#lib/native";
+import type { Playback } from "#lib/playback/playback.svelte";
+import { applyWaveform } from "#lib/playback/waveform";
+import type { Settings } from "#lib/settings/settings.svelte";
 import { countE2e } from "./e2e-counts";
 import { createScanWatcher } from "./scan-finished";
 

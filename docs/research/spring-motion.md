@@ -140,9 +140,9 @@ Durations are perceptual. Bounce is fixed at 0, so it is not a parameter.
 ```ts
 // tokens.ts — perceptual durations (Apple's meaning); the curve is always a critically damped spring.
 export const motionTokens = {
-  feedback: { duration: 75 },  // was 100ms ease-out; settles ≈ 89ms
-  move: { duration: 220 },     // was 300ms; settles ≈ 260ms
-  large: { duration: 310 },    // was 420ms; settles ≈ 366ms
+  feedback: { duration: 75 }, // was 100ms ease-out; settles ≈ 89ms
+  move: { duration: 220 }, // was 300ms; settles ≈ 260ms
+  large: { duration: 310 }, // was 420ms; settles ≈ 366ms
 } as const;
 export const crossfade = { duration: 100 } as const; // reduced motion: fixed length, same curve
 ```
@@ -153,8 +153,8 @@ export const crossfade = { duration: 100 } as const; // reduced motion: fixed le
 
 ```ts
 // spring-curve.ts (sketch, not applied)
-const REST = 0.005;            // residual at which the curve is cut off
-const U = 7.43;                // ωT where (1 + ωT)e^(−ωT) = REST
+const REST = 0.005; // residual at which the curve is cut off
+const U = 7.43; // ωT where (1 + ωT)e^(−ωT) = REST
 const END = 1 - (1 + U) * Math.exp(-U);
 const POINTS = 40;
 
@@ -189,15 +189,25 @@ Accept the refresh-rate drift, and set `precision` relative to the distance (for
 ```ts
 // spring-value.ts (sketch). Retargetable, velocity-preserving, frame-rate independent.
 export function springValue(initial: number, perceptualMs: number, onUpdate: (v: number) => void) {
-  const w = (2 * Math.PI) / perceptualMs;  // per ms
-  let target = initial, x0 = 0, v0 = 0, t0 = 0, frame = 0;
+  const w = (2 * Math.PI) / perceptualMs; // per ms
+  let target = initial,
+    x0 = 0,
+    v0 = 0,
+    t0 = 0,
+    frame = 0;
   const at = (now: number) => {
-    const t = now - t0, e = Math.exp(-w * t), b = v0 + w * x0;
+    const t = now - t0,
+      e = Math.exp(-w * t),
+      b = v0 + w * x0;
     return { x: (x0 + b * t) * e, v: (v0 - w * b * t) * e }; // offset from target, px/ms
   };
   const step = (now: number) => {
     const { x, v } = at(now);
-    if (Math.abs(x) < 0.25 && Math.abs(v) * 16 < 0.25) { onUpdate(target); frame = 0; return; }
+    if (Math.abs(x) < 0.25 && Math.abs(v) * 16 < 0.25) {
+      onUpdate(target);
+      frame = 0;
+      return;
+    }
     onUpdate(target + x);
     frame = requestAnimationFrame(step);
   };
@@ -206,10 +216,18 @@ export function springValue(initial: number, perceptualMs: number, onUpdate: (v:
       const now = performance.now();
       const { x, v } = frame ? at(now) : { x: 0, v: 0 };
       const current = target + x;
-      target = next; x0 = current - next; v0 = v; t0 = now;
+      target = next;
+      x0 = current - next;
+      v0 = v;
+      t0 = now;
       if (!frame) frame = requestAnimationFrame(step);
     },
-    jump(next: number) { cancelAnimationFrame(frame); frame = 0; target = next; onUpdate(next); },
+    jump(next: number) {
+      cancelAnimationFrame(frame);
+      frame = 0;
+      target = next;
+      onUpdate(next);
+    },
   };
 }
 ```

@@ -8,10 +8,9 @@
 //! (see `paging.rs`). Only the first page of a list says how long the list is.
 
 use super::{
-    is_normalized,
+    LibraryStore, SearchFilter, is_normalized,
     paging::{Ordering, Page, PagedQuery, Phase, Scope, View},
-    track::{artwork_ref, summary_from_row, SUMMARY_COLUMNS, SUMMARY_COLUMN_COUNT, SUMMARY_FROM},
-    LibraryStore, SearchFilter,
+    track::{SUMMARY_COLUMN_COUNT, SUMMARY_COLUMNS, SUMMARY_FROM, artwork_ref, summary_from_row},
 };
 use crate::library::{
     artwork::ArtworkRef,
@@ -20,7 +19,7 @@ use crate::library::{
     status::{Availability, InspectionStatus},
     text,
 };
-use rusqlite::{params, types::Value, Connection, OptionalExtension, Row};
+use rusqlite::{Connection, OptionalExtension, Row, params, types::Value};
 
 /// An album's tracks in playing order: by disc, then track, unnumbered ones last.
 pub(super) const ALBUM_ORDER: &str =
@@ -346,7 +345,10 @@ fn album_tracks_query(key: &LibraryAlbumKey) -> PagedQuery {
         Scope::new(
             View::AlbumTracks,
             "",
-            &format!("{}\u{1f}{}\u{1f}{}", key.album_artist, key.title, key.album_edition),
+            &format!(
+                "{}\u{1f}{}\u{1f}{}",
+                key.album_artist, key.title, key.album_edition
+            ),
             &"position",
             LibrarySortDirection::Ascending,
         ),

@@ -1,7 +1,7 @@
 import { untrack } from "svelte";
 import { nowPlaying } from "./now-playing.svelte";
 import { getMotionBudget } from "./motion-budget.svelte";
-import { RetargetableSpring } from "$lib/ui/motion/retargetable-spring.svelte";
+import { RetargetableSpring } from "#lib/ui/motion/retargetable-spring.svelte";
 import { nowPlayingDuration } from "./now-playing-motion";
 
 /** The spring counts as stopped within this share of the distance it travels. */

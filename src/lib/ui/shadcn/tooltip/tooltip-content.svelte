@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { floatingLayer } from "$lib/ui/floating-layer";
+  import { floatingLayer } from "#lib/ui/floating-layer";
   import { Tooltip as TooltipPrimitive } from "bits-ui";
-  import { cn } from "$lib/utils/cn.js";
-  import type { WithoutChildrenOrChild } from "$lib/utils/cn.js";
+  import { cn } from "#lib/utils/cn.js";
+  import type { WithoutChildrenOrChild } from "#lib/utils/cn.js";
   import TooltipPortal from "./tooltip-portal.svelte";
   import type { ComponentProps } from "svelte";
 

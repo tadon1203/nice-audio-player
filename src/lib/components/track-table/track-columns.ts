@@ -2,9 +2,9 @@ import type {
   LibraryAlbumTrackSummary,
   LibraryTrackSortKey,
   LibraryTrackSummary,
-} from "$lib/native";
-import { isTrackAvailable } from "$lib/library/tracks";
-import { formatDuration, formatKilohertz, MISSING } from "$lib/utils/format";
+} from "#lib/native";
+import { isTrackAvailable } from "#lib/library/tracks";
+import { formatDuration, formatKilohertz, MISSING } from "#lib/utils/format";
 
 /** A track row shared by the Library and Album layouts; both DTOs satisfy it directly. */
 export type TrackTableRow = Pick<

@@ -1,7 +1,7 @@
 use backend::{
     app::playback_context::PlaybackContext,
     audio::{
-        devices::{list_output_devices, AudioDeviceListError, AudioOutputSelection},
+        devices::{AudioDeviceListError, AudioOutputSelection, list_output_devices},
         playback::{
             PlaybackQueueSnapshot, PlaybackQueueWindow, PlaybackRepeatMode, PlaybackServiceError,
             PlaybackSnapshot,

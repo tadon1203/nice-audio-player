@@ -1,5 +1,5 @@
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
 
 pub(crate) const MIN_PLAYBACK_VOLUME: f32 = 0.0;
 pub(crate) const MAX_PLAYBACK_VOLUME: f32 = 1.0;
@@ -53,11 +53,7 @@ impl VolumeState {
     }
 
     pub(crate) fn effective_gain(self) -> f32 {
-        if self.muted {
-            0.0
-        } else {
-            self.volume()
-        }
+        if self.muted { 0.0 } else { self.volume() }
     }
 
     pub(crate) fn set_volume(&mut self, value: f32) -> Option<bool> {
@@ -114,7 +110,7 @@ pub(crate) fn process_sample(sample: f32, effective_gain: f32) -> f32 {
 
 #[cfg(test)]
 mod tests {
-    use super::{process_sample, AtomicEffectiveGain, NormalizedVolume, VolumeState};
+    use super::{AtomicEffectiveGain, NormalizedVolume, VolumeState, process_sample};
 
     #[test]
     fn accepts_only_finite_normalized_volume() {

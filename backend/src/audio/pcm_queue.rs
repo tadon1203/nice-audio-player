@@ -5,14 +5,14 @@
 //! again (capacity waiting). Neither needs a flag or a channel outside the queue.
 
 use std::sync::{
+    Arc,
     atomic::{AtomicBool, Ordering},
     mpsc::{self, Receiver, SyncSender},
-    Arc,
 };
 
 use ringbuf::{
-    traits::{Consumer, Observer, Producer, Split},
     HeapRb,
+    traits::{Consumer, Observer, Producer, Split},
 };
 
 use super::pcm::ChannelCount;
@@ -166,10 +166,10 @@ impl PcmConsumer {
 
 #[cfg(test)]
 mod tests {
-    use super::{bounded_pcm_queue, PcmQueueBuildError, WaitCancelled};
+    use super::{PcmQueueBuildError, WaitCancelled, bounded_pcm_queue};
     use crate::audio::pcm::ChannelCount;
-    use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
     use std::time::Duration;
 
     #[test]

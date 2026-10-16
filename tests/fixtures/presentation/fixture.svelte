@@ -1,11 +1,11 @@
 <script lang="ts">
   import { prefersReducedMotion } from "svelte/motion";
-  import { applyCssMotion } from "$lib/ui/motion/css-motion";
-  import { Button } from "$lib/ui/shadcn/button";
-  import * as Dialog from "$lib/ui/shadcn/alert-dialog";
-  import * as Select from "$lib/ui/shadcn/select";
-  import * as Menu from "$lib/ui/dropdown-menu";
-  import * as Tooltip from "$lib/ui/shadcn/tooltip";
+  import { applyCssMotion } from "#lib/ui/motion/css-motion";
+  import { Button } from "#lib/ui/shadcn/button";
+  import * as Dialog from "#lib/ui/shadcn/alert-dialog";
+  import * as Select from "#lib/ui/shadcn/select";
+  import * as Menu from "#lib/ui/dropdown-menu";
+  import * as Tooltip from "#lib/ui/shadcn/tooltip";
 
   let chosen = $state("first");
   let selected = $state("first");

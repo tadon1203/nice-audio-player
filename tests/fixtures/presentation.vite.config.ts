@@ -7,6 +7,6 @@ import { defineConfig } from "vite";
 export default defineConfig({
   root: fileURLToPath(new URL("./presentation", import.meta.url)),
   plugins: [svelte(), tailwindcss()],
-  resolve: { alias: { $lib: fileURLToPath(new URL("../../src/lib", import.meta.url)) } },
+  resolve: { alias: { "#lib": fileURLToPath(new URL("../../src/lib", import.meta.url)) } },
   server: { host: "127.0.0.1", port: 5174, strictPort: true },
 });

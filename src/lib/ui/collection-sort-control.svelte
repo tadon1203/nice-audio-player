@@ -1,9 +1,9 @@
 <script lang="ts" generics="Key extends string">
   import ArrowDown from "@lucide/svelte/icons/arrow-down";
   import ArrowUp from "@lucide/svelte/icons/arrow-up";
-  import { Button } from "$lib/ui/shadcn/button/index.js";
-  import { ButtonGroup } from "$lib/ui/shadcn/button-group/index.js";
-  import { Select, SelectContent, SelectItem, SelectTrigger } from "$lib/ui/shadcn/select/index.js";
+  import { Button } from "#lib/ui/shadcn/button/index.js";
+  import { ButtonGroup } from "#lib/ui/shadcn/button-group/index.js";
+  import { Select, SelectContent, SelectItem, SelectTrigger } from "#lib/ui/shadcn/select/index.js";
   import type { SortableView } from "./sort-option";
 
   let {

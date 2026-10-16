@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import type { PlaybackSnapshot, TNativeAPI, Versioned } from "$lib/native";
-import { createPlaybackClock } from "$lib/playback/clock";
-import { createPlayback } from "$lib/playback/playback.svelte";
+import type { PlaybackSnapshot, TNativeAPI, Versioned } from "#lib/native";
+import { createPlaybackClock } from "#lib/playback/clock";
+import { createPlayback } from "#lib/playback/playback.svelte";
 import { handlePlaybackShortcut } from "./playback-shortcuts";
 
 const playing = (positionMs: number): Versioned<PlaybackSnapshot> => ({

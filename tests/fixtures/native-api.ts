@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import type { BackendMessage, InitialState, Occurrence, commands } from "$lib/native";
+import type { BackendMessage, InitialState, Occurrence, commands } from "#lib/native";
 import { idleInitialState, idleResponses, libraryResponses, type LibraryData } from "./data";
 
 type Commands = typeof commands;

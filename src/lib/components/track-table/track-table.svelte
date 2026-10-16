@@ -1,12 +1,12 @@
 <script lang="ts">
-  import { Root as ContextMenuRoot, Trigger as ContextMenuTrigger } from "$lib/ui/context-menu";
+  import { Root as ContextMenuRoot, Trigger as ContextMenuTrigger } from "#lib/ui/context-menu";
   import { goto } from "$app/navigation";
-  import { isFilePresent, isTrackAvailable, trackLinks } from "$lib/library/tracks";
-  import type { LibrarySortDirection, LibraryTrackSortKey } from "$lib/native";
-  import { requireNative } from "$lib/native";
-  import { getPlayback } from "$lib/playback/context";
-  import ContextMenuContent from "$lib/ui/context-menu/context-menu-content.svelte";
-  import ContextMenuItem from "$lib/ui/context-menu/context-menu-item.svelte";
+  import { isFilePresent, isTrackAvailable, trackLinks } from "#lib/library/tracks";
+  import type { LibrarySortDirection, LibraryTrackSortKey } from "#lib/native";
+  import { requireNative } from "#lib/native";
+  import { getPlayback } from "#lib/playback/context";
+  import ContextMenuContent from "#lib/ui/context-menu/context-menu-content.svelte";
+  import ContextMenuItem from "#lib/ui/context-menu/context-menu-item.svelte";
   import {
     TableBody,
     TableCaption,
@@ -14,9 +14,9 @@
     TableHead,
     TableHeader,
     TableRow,
-  } from "$lib/ui/shadcn/table";
-  import { cn } from "$lib/utils/cn.js";
-  import { createVirtualRows } from "$lib/ui/virtual-rows.svelte";
+  } from "#lib/ui/shadcn/table";
+  import { cn } from "#lib/utils/cn.js";
+  import { createVirtualRows } from "#lib/ui/virtual-rows.svelte";
   import {
     columnText,
     albumTrackColumns,

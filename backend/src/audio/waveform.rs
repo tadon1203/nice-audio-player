@@ -21,7 +21,7 @@ use std::time::{Duration, Instant};
 use serde::Serialize;
 
 use super::cancellation::Cancellation;
-use super::decoding::{open_analysis_decoder, DecodeStep, PcmDecodeError, SeekStep};
+use super::decoding::{DecodeStep, PcmDecodeError, SeekStep, open_analysis_decoder};
 use crate::containment::contain;
 use crate::library::scanner::identity::content_hash;
 use crate::library::store::PlayableTrack;
@@ -650,7 +650,7 @@ mod tests {
     use super::*;
     use crate::media::validation::validate_audio_file;
     use crate::messages::testing::Sent;
-    use crate::test_support::{write_pcm_i16_wav, TestDirectory};
+    use crate::test_support::{TestDirectory, write_pcm_i16_wav};
 
     fn wav(directory: &TestDirectory, name: &str, samples: &[i16]) -> ValidatedAudioFile {
         let path = directory.file(name);

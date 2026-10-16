@@ -1,7 +1,7 @@
 //! Keeps one bad file from taking the app down: per-file work runs through [`contain`], so a
 //! panic in a parser or decoder becomes a failure of that file alone.
 
-use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 
 /// Runs `work`; `None` when it panicked. `what` names the work in the log.
 pub(crate) fn contain<T>(what: &str, work: impl FnOnce() -> T) -> Option<T> {

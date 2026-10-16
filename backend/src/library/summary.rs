@@ -7,7 +7,7 @@
 //! artist, and carry no Album Artist tag, are one album filed under Various Artists.
 
 use super::{keys, text};
-use rusqlite::{params, OptionalExtension, Transaction};
+use rusqlite::{OptionalExtension, Transaction, params};
 use std::collections::BTreeSet;
 
 /// The Album Artist compilations are filed under.

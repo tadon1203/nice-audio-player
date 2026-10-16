@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
-  import { cn } from "$lib/utils/cn.js";
-  import { ScrollArea } from "$lib/ui/shadcn/scroll-area/index.js";
+  import { cn } from "#lib/utils/cn.js";
+  import { ScrollArea } from "#lib/ui/shadcn/scroll-area/index.js";
   import WorkspaceContainer from "./workspace-container.svelte";
 
   let {

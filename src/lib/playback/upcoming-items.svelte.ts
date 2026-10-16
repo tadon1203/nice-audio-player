@@ -1,4 +1,4 @@
-import type { PlaybackQueueItem } from "$lib/native";
+import type { PlaybackQueueItem } from "#lib/native";
 import type { Playback } from "./playback.svelte";
 
 /** Upcoming items are read this many at a time from the backend. */
@@ -27,7 +27,7 @@ export function createUpcomingItems(
     const total = queue.upcomingCount;
     const { start, end } = visible;
     const first = Math.max(start, queue.upcoming.length);
-    for (let chunk = Math.floor(first / CHUNK); chunk * CHUNK < total && chunk * CHUNK <= end; ) {
+    for (let chunk = Math.floor(first / CHUNK); chunk * CHUNK < total && chunk * CHUNK <= end;) {
       const key = `${revision}:${chunk}`;
       const have = loaded.revision === revision && loaded.chunks.has(chunk);
       if (!have && !inFlight.has(key)) {

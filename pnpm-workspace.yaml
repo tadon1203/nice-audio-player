@@ -1,5 +1,6 @@
 packages:
   - .
+engineStrict: true
 allowBuilds:
   edgedriver: true
   esbuild: true

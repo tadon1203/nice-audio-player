@@ -1,4 +1,4 @@
-import type { LibraryScanState } from "$lib/native";
+import type { LibraryScanState } from "#lib/native";
 
 /**
  * How far a scan is, 0-100, when it can be known: a rescan finds about as many files as the

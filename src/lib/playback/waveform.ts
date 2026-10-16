@@ -1,7 +1,7 @@
 import { queryOptions, skipToken, type QueryClient } from "@tanstack/svelte-query";
-import { requireNative } from "$lib/native";
-import type { PlaybackWaveform, Versioned } from "$lib/native";
-import { isNewerRevision } from "$lib/utils/revision";
+import { requireNative } from "#lib/native";
+import type { PlaybackWaveform, Versioned } from "#lib/native";
+import { isNewerRevision } from "#lib/utils/revision";
 
 const waveformKeys = {
   playback: (playbackId: string | null) => ["waveform", playbackId] as const,

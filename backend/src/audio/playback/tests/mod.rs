@@ -20,7 +20,7 @@ use crate::audio::playback::input::{Inbox, WorkerEvent, WorkerInput};
 use crate::audio::playback::item::PlaybackItem;
 use crate::audio::playback::preferences::PlaybackPreferences;
 use crate::audio::playback::queue::{PlaybackQueue, PlaybackRepeatMode};
-use crate::audio::playback::resolver::testing::{resolver_of, track as library_track, FakeTracks};
+use crate::audio::playback::resolver::testing::{FakeTracks, resolver_of, track as library_track};
 use crate::audio::playback::resolver::{NoTracks, TrackResolver};
 use crate::audio::playback::service::{
     PlaybackCommand, PlaybackService, PlaybackServiceError, Reply,
@@ -34,10 +34,10 @@ use crate::audio::playback::worker::{PlaybackWorker, WorkerLinks};
 use crate::audio::volume::{AtomicEffectiveGain, VolumeState};
 use crate::library::store::PlayableTrack;
 use crate::media::validation::ValidatedAudioFile;
-use crate::messages::{testing::Sent, StateTopic, Versioned};
-use crate::test_support::{write_pcm_i16_wav, TestDirectory};
+use crate::messages::{StateTopic, Versioned, testing::Sent};
+use crate::test_support::{TestDirectory, write_pcm_i16_wav};
 use cpal::StreamInstant;
-use rand::{rngs::StdRng, SeedableRng};
+use rand::{SeedableRng, rngs::StdRng};
 use std::sync::mpsc::Receiver;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};

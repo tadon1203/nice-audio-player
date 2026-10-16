@@ -1,4 +1,4 @@
-import { requireNative } from "$lib/native";
+import { requireNative } from "#lib/native";
 import { decodeMeterFrame, type MeterFrame } from "./frame";
 
 /** Frames kept while nobody draws; older ones are dropped (a late frame has no meaning). */

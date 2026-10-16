@@ -1,4 +1,4 @@
-import type { ArtworkRef, LibraryAlbumSummary } from "$lib/native";
+import type { ArtworkRef, LibraryAlbumSummary } from "#lib/native";
 import { testAlbum, testLibrary } from "./fixtures/data";
 import { expect, test } from "./fixtures/test";
 

@@ -2,8 +2,8 @@
   import { untrack } from "svelte";
   import { fade } from "svelte/transition";
   import { prefersReducedMotion } from "svelte/motion";
-  import { motionFor } from "$lib/ui/motion/svelte-motion";
-  import { cn } from "$lib/utils/cn.js";
+  import { motionFor } from "#lib/ui/motion/svelte-motion";
+  import { cn } from "#lib/utils/cn.js";
   import DigitColumn from "./digit-column.svelte";
   import { resolveDirection, settleDelay, type RollDirection } from "./rolling-model";
 

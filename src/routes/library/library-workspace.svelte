@@ -1,7 +1,7 @@
 <script lang="ts" module>
-  import type { LibraryViewState } from "$lib/library/catalog.svelte";
-  import type { LibraryIndexBucket } from "$lib/native";
-  import type { SortableView } from "$lib/ui/sort-option";
+  import type { LibraryViewState } from "#lib/library/catalog.svelte";
+  import type { LibraryIndexBucket } from "#lib/native";
+  import type { SortableView } from "#lib/ui/sort-option";
 
   export type LibraryPresentationMeta = {
     title: string;
@@ -39,15 +39,15 @@
 <script lang="ts" generics="Item, Key extends string">
   import type { Snippet } from "svelte";
   import { resolve } from "$app/paths";
-  import { libraryCommandErrorMessage } from "$lib/library/library-errors";
-  import { labelAt, skipTo } from "$lib/library/scroll-index";
-  import { createWorkspaceScroll } from "$lib/shell/workspace-scroll.svelte";
-  import EmptyStatus from "$lib/ui/empty-status.svelte";
-  import ErrorAlert from "$lib/ui/error-alert.svelte";
-  import LoadMoreSentinel from "$lib/ui/load-more-sentinel.svelte";
-  import LoadingStatus from "$lib/ui/loading-status.svelte";
-  import ScrollIndex from "$lib/ui/scroll-index.svelte";
-  import WorkspaceScroll from "$lib/ui/workspace-scroll.svelte";
+  import { libraryCommandErrorMessage } from "#lib/library/library-errors";
+  import { labelAt, skipTo } from "#lib/library/scroll-index";
+  import { createWorkspaceScroll } from "#lib/shell/workspace-scroll.svelte";
+  import EmptyStatus from "#lib/ui/empty-status.svelte";
+  import ErrorAlert from "#lib/ui/error-alert.svelte";
+  import LoadMoreSentinel from "#lib/ui/load-more-sentinel.svelte";
+  import LoadingStatus from "#lib/ui/loading-status.svelte";
+  import ScrollIndex from "#lib/ui/scroll-index.svelte";
+  import WorkspaceScroll from "#lib/ui/workspace-scroll.svelte";
   import IndexRail from "./index-rail.svelte";
   import LibraryToolbar from "./library-toolbar.svelte";
 

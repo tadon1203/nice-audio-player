@@ -62,12 +62,16 @@ describe("the real app", () => {
     writeFileSync(join(shard, `${hash}.png`), ONE_PIXEL_PNG);
     // An image element, because a fetch from the app's origin to the scheme's is cross-origin.
     const loadedWidth = (path: string) =>
-      browser.executeAsync((url: string, done: (width: number) => void) => {
-        const image = new Image();
-        image.onload = () => done(image.naturalWidth);
-        image.onerror = () => done(0);
-        image.src = url;
-      }, `http://nice-artwork.localhost/artwork/ab/${path}`);
+      browser.execute(
+        (url: string) =>
+          new Promise<number>((resolve) => {
+            const image = new Image();
+            image.onload = () => resolve(image.naturalWidth);
+            image.onerror = () => resolve(0);
+            image.src = url;
+          }),
+        `http://nice-artwork.localhost/artwork/ab/${path}`,
+      );
 
     expect(await loadedWidth(`${hash}.png`)).toBe(1);
     // No thumbnail was stored for it: the original is served in its place.

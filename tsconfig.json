@@ -1,5 +1,5 @@
 {
-  "extends": "./.svelte-kit/tsconfig.json",
+  "extends": "$app/tsconfig",
   "compilerOptions": {
     "allowJs": true,
     "checkJs": true,
@@ -10,11 +10,13 @@
     "sourceMap": true,
     "strict": true,
     "moduleResolution": "bundler",
+    "paths": {
+      "#lib/*": ["./src/lib/*"]
+    },
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  // Path aliases live in svelte.config.js (`$lib` is built in).
   // `include` is copied from the generated config minus `tests/` (checked by tests/tsconfig.json).
   "include": [
     ".svelte-kit/ambient.d.ts",

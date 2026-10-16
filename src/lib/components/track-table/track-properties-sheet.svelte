@@ -1,22 +1,22 @@
 <script lang="ts">
   import { createQuery } from "@tanstack/svelte-query";
-  import { libraryQueryOptions } from "$lib/library/queries";
-  import { requireNative } from "$lib/native";
-  import { Button } from "$lib/ui/shadcn/button/index.js";
+  import { libraryQueryOptions } from "#lib/library/queries";
+  import { requireNative } from "#lib/native";
+  import { Button } from "#lib/ui/shadcn/button/index.js";
   import {
     Sheet,
     SheetContent,
     SheetDescription,
     SheetHeader,
     SheetTitle,
-  } from "$lib/ui/shadcn/sheet";
+  } from "#lib/ui/shadcn/sheet";
   import {
     formatAudioPath,
     formatDuration,
     formatOfTotal,
     formatSampleRate,
     MISSING,
-  } from "$lib/utils/format";
+  } from "#lib/utils/format";
 
   /** Everything the library knows about one track: tags, audio format, and where the file is. */
   let { trackId, onclose }: { trackId: string | null; onclose: () => void } = $props();

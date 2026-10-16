@@ -92,11 +92,11 @@ impl PlaybackWorker {
     }
 
     pub(super) fn cancel_seek(&mut self, error: PlaybackServiceError) {
-        if let Transport::Loaded(loaded) = &mut self.transport {
-            if let Some(seek) = loaded.seek.take() {
-                seek.pipeline.cancel();
-                respond(seek.responder, Err(error));
-            }
+        if let Transport::Loaded(loaded) = &mut self.transport
+            && let Some(seek) = loaded.seek.take()
+        {
+            seek.pipeline.cancel();
+            respond(seek.responder, Err(error));
         }
     }
 }

@@ -1,4 +1,5 @@
 use backend::library::{
+    Library,
     error::LibraryCommandError,
     models::{
         LibraryAlbumArtistKey, LibraryAlbumArtistPage, LibraryAlbumArtistSortKey,
@@ -7,13 +8,12 @@ use backend::library::{
         LibraryRoot, LibrarySortDirection, LibraryStatus, LibraryTrackPage, LibraryTrackProperties,
         LibraryTrackSortKey,
     },
-    Library,
 };
 
 use super::blocking;
 use crate::{
-    os::{open_in_file_manager, reveal_in_file_manager},
     AppState,
+    os::{open_in_file_manager, reveal_in_file_manager},
 };
 
 /// Runs `work` on a blocking thread with the Library.

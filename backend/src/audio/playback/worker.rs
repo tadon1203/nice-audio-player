@@ -6,7 +6,7 @@
 //! track.
 
 use std::collections::HashSet;
-use std::sync::{mpsc::Receiver, Arc, RwLock};
+use std::sync::{Arc, RwLock, mpsc::Receiver};
 use std::time::{Duration, Instant};
 
 use super::input::{
@@ -14,20 +14,19 @@ use super::input::{
 };
 use super::item::PlaybackItem;
 use super::pipeline::{
-    open_pipeline, OpenedOutput, OpenedPipeline, PipelineError, PipelineKind, PipelineRequest,
+    OpenedOutput, OpenedPipeline, PipelineError, PipelineKind, PipelineRequest, open_pipeline,
 };
 use super::preferences::{PlaybackPreferences, PreferencesObserver};
 use super::queue::{AdvanceReason, PlaybackQueue, QueueEntry, QueueError};
 use super::resolver::TrackResolver;
-use super::service::{respond, PlaybackCommand, PlaybackServiceError, Reply};
+use super::service::{PlaybackCommand, PlaybackServiceError, Reply, respond};
 use super::session::{
-    should_publish_position, LoadStage, Loaded, Loading, Position, Prebuffering, Prefetch,
-    PrefetchState, PrefetchedTrack, SeekInFlight, StartRequest, Transport,
-    POSITION_UPDATE_INTERVAL,
+    LoadStage, Loaded, Loading, POSITION_UPDATE_INTERVAL, Position, Prebuffering, Prefetch,
+    PrefetchState, PrefetchedTrack, SeekInFlight, StartRequest, Transport, should_publish_position,
 };
 use super::snapshot::{
-    ActiveSession, PlaybackFailureCode, PlaybackPosition, PlaybackProcessingInfo,
-    PlaybackQueueSnapshot, PlaybackSnapshot, SnapshotBase, HISTORY_IN_SNAPSHOT,
+    ActiveSession, HISTORY_IN_SNAPSHOT, PlaybackFailureCode, PlaybackPosition,
+    PlaybackProcessingInfo, PlaybackQueueSnapshot, PlaybackSnapshot, SnapshotBase,
     UPCOMING_IN_SNAPSHOT,
 };
 use super::source_loader::SourceLoad;
@@ -44,7 +43,7 @@ use crate::audio::volume::{AtomicEffectiveGain, VolumeState};
 use crate::audio::waveform::PrefetchObserver;
 use crate::messages::{Occurrence, SharedMessageSink, StateTopic, Versioned};
 use log::{error, info};
-use rand::{rngs::StdRng, SeedableRng};
+use rand::{SeedableRng, rngs::StdRng};
 
 mod failure;
 mod preferences;
@@ -383,10 +382,9 @@ impl PlaybackWorker {
                         state: PrefetchState::Ready(next),
                         ..
                     }) = &mut loaded.prefetch
+                        && next.pipeline.id == pipeline
                     {
-                        if next.pipeline.id == pipeline {
-                            next.completion_time = Some(end_time);
-                        }
+                        next.completion_time = Some(end_time);
                     }
                 }
             }

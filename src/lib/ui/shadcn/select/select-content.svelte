@@ -3,7 +3,7 @@
   import type {
     WithoutChild as WithoutChildType,
     WithoutChildrenOrChild as WithoutChildrenOrChildType,
-  } from "$lib/utils/cn.js";
+  } from "#lib/utils/cn.js";
   import type { ComponentProps as ComponentPropsType } from "svelte";
   export type SelectContentProps = Omit<
     WithoutChildType<SelectPrimitiveTypes.ContentProps>,
@@ -18,9 +18,9 @@
 </script>
 
 <script lang="ts">
-  import { floatingLayer } from "$lib/ui/floating-layer";
+  import { floatingLayer } from "#lib/ui/floating-layer";
   import { Select as SelectPrimitive } from "bits-ui";
-  import { cn } from "$lib/utils/cn.js";
+  import { cn } from "#lib/utils/cn.js";
   import SelectPortal from "./select-portal.svelte";
   import SelectScrollDownButton from "./select-scroll-down-button.svelte";
   import SelectScrollUpButton from "./select-scroll-up-button.svelte";

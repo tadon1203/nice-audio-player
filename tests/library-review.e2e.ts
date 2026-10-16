@@ -1,4 +1,4 @@
-import type { LibraryRoot, LibraryScanState } from "$lib/native";
+import type { LibraryRoot, LibraryScanState } from "#lib/native";
 import { pageOf, scanSnapshot, testRoot } from "./fixtures/data";
 import type { Native } from "./fixtures/native-api";
 import { expect, test } from "./fixtures/test";

@@ -1,8 +1,8 @@
 <script lang="ts">
-  import type { LibraryScanSnapshot } from "$lib/native";
-  import RollingNumber from "$lib/ui/rolling-number/rolling-number.svelte";
-  import { Progress } from "$lib/ui/shadcn/progress/index.js";
-  import { formatNumber } from "$lib/utils/format";
+  import type { LibraryScanSnapshot } from "#lib/native";
+  import RollingNumber from "#lib/ui/rolling-number/rolling-number.svelte";
+  import { Progress } from "#lib/ui/shadcn/progress/index.js";
+  import { formatNumber } from "#lib/utils/format";
   import { scanShare } from "./scan-status";
 
   /** The running scan's counters, progress bar and current folder. */

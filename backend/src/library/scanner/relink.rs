@@ -3,7 +3,7 @@
 //! its head and tail, else by the tags that make it the same recording. The match keeps the
 //! Missing track's id, so queues and links to it still resolve.
 
-use rusqlite::{params, Connection, TransactionBehavior};
+use rusqlite::{Connection, TransactionBehavior, params};
 
 /// What identifies a file's track beyond where the file is.
 #[derive(Debug, Clone)]

@@ -5,7 +5,7 @@ import type {
   LibraryAlbumKey,
   LibraryArtistAlbumSortKey,
   LibrarySortDirection,
-} from "$lib/native";
+} from "#lib/native";
 import { collectionOf } from "./catalog.svelte";
 import { libraryQueryOptions } from "./queries";
 

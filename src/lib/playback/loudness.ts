@@ -1,4 +1,4 @@
-import { trackEnergy } from "$lib/playback/track-energy";
+import { trackEnergy } from "#lib/playback/track-energy";
 
 /** Slow on purpose: the Artwork glow follows the passage (a chorus brightening it), not each beat. */
 export const ATTACK_MS = 700;

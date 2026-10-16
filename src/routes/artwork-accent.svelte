@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { createArtworkAccent } from "$lib/library/detail.svelte";
-  import { getPlayback } from "$lib/playback/context";
-  import { getSettings } from "$lib/settings/context";
-  import { readableAccent } from "$lib/ui/artwork-glow/glow-model";
+  import { createArtworkAccent } from "#lib/library/detail.svelte";
+  import { getPlayback } from "#lib/playback/context";
+  import { getSettings } from "#lib/settings/context";
+  import { readableAccent } from "#lib/ui/artwork-glow/glow-model";
 
   /**
    * Publishes the playing track's color as `--artwork-accent` on the document. Only the played

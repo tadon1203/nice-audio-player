@@ -2,19 +2,19 @@
 //! playback queue is built from, and reads those tracks back when they are needed.
 
 use super::{
-    catalog::{track_filter, track_ordering, validate_album_key, ALBUM_ORDER},
-    track::{artwork_ref, non_blank},
     LibraryStore,
+    catalog::{ALBUM_ORDER, track_filter, track_ordering, validate_album_key},
+    track::{artwork_ref, non_blank},
 };
 use crate::library::{
     artwork::ArtworkRef,
-    error::{parse_id, StoreError},
+    error::{StoreError, parse_id},
     location::TrackLocation,
     models::{LibraryAlbumKey, LibrarySortDirection, LibraryTrackSortKey},
     status::{Availability, InspectionStatus},
 };
-use crate::media::validation::{describe_audio_file, validate_audio_file, ValidatedAudioFile};
-use rusqlite::{params, Connection, Row};
+use crate::media::validation::{ValidatedAudioFile, describe_audio_file, validate_audio_file};
+use rusqlite::{Connection, Row, params};
 use std::collections::HashMap;
 
 /// A library track ready to be played, and the one track-metadata type of the whole playback

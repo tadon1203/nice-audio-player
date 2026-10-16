@@ -1,5 +1,5 @@
 // See https://svelte.dev/docs/kit/types#app.d.ts
-import type { ArtworkRef } from "$lib/native";
+import type { ArtworkRef } from "#lib/native";
 
 declare global {
   namespace App {

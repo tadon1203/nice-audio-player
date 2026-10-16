@@ -1,5 +1,5 @@
 import { queryOptions, skipToken } from "@tanstack/svelte-query";
-import { requireNative } from "$lib/native";
+import { requireNative } from "#lib/native";
 
 export const lyricsQueryKeys = {
   all: ["lyrics"] as const,

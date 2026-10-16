@@ -1,6 +1,6 @@
 import { untrack } from "svelte";
-import type { LyricsTimedLine } from "$lib/native";
-import { getPlayback } from "$lib/playback/context";
+import type { LyricsTimedLine } from "#lib/native";
+import { getPlayback } from "#lib/playback/context";
 import { findCurrentLineIndex } from "./lyrics-lines";
 
 /**

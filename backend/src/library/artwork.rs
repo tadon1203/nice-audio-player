@@ -2,7 +2,7 @@
 //! reference the catalog and playback items hand to the renderer.
 
 use super::status::sql_text_enum;
-use image::{codecs::jpeg::JpegEncoder, imageops::FilterType, ImageReader};
+use image::{ImageReader, codecs::jpeg::JpegEncoder, imageops::FilterType};
 use serde::Serialize;
 use std::{
     fs::{self, OpenOptions},

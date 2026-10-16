@@ -1,12 +1,12 @@
 <script lang="ts">
-  import { getPlayback } from "$lib/playback/context";
-  import { createAudioOutputDevices } from "$lib/playback/output-devices.svelte";
-  import { createPlaybackSignalPath } from "$lib/components/signal-path/signal-path.svelte";
-  import { getSettings } from "$lib/settings/context";
-  import type { SettingsUpdate } from "$lib/settings/settings.svelte";
-  import FlapText from "$lib/ui/rolling-number/flap-text.svelte";
-  import SectionTitle from "$lib/ui/section-title.svelte";
-  import * as Select from "$lib/ui/shadcn/select/index.js";
+  import { getPlayback } from "#lib/playback/context";
+  import { createAudioOutputDevices } from "#lib/playback/output-devices.svelte";
+  import { createPlaybackSignalPath } from "#lib/components/signal-path/signal-path.svelte";
+  import { getSettings } from "#lib/settings/context";
+  import type { SettingsUpdate } from "#lib/settings/settings.svelte";
+  import FlapText from "#lib/ui/rolling-number/flap-text.svelte";
+  import SectionTitle from "#lib/ui/section-title.svelte";
+  import * as Select from "#lib/ui/shadcn/select/index.js";
   import SettingsSwitchField from "./settings-switch-field.svelte";
 
   const DEFAULT_DEVICE = "default";

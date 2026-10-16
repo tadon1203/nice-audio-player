@@ -16,14 +16,14 @@ use cpal::{FromSample, Sample, SampleFormat, StreamConfig, StreamInstant, Suppor
 use log::{error, info, warn};
 
 use super::devices::{
-    resolve_output_selection, AudioOutputDeviceIdentity, AudioOutputSelection,
-    DeviceResolutionError, ResolvedAudioOutputDevice,
+    AudioOutputDeviceIdentity, AudioOutputSelection, DeviceResolutionError,
+    ResolvedAudioOutputDevice, resolve_output_selection,
 };
 use super::meter::{MeterHub, MeterTap};
 use super::output_processing::{OutputProcessingError, OutputProcessingPlan};
 use super::pcm::{ChannelCount, PcmSpec, SampleRate};
-use super::pcm_queue::{bounded_pcm_queue, PcmConsumer, PcmProducer};
-use super::volume::{process_sample, AtomicEffectiveGain};
+use super::pcm_queue::{PcmConsumer, PcmProducer, bounded_pcm_queue};
+use super::volume::{AtomicEffectiveGain, process_sample};
 
 /// Identifies one output stream, which lives as long as a session.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -285,10 +285,10 @@ impl OutputStream for CpalStream {
     }
 
     fn played_frame_position(&mut self, sample_rate: u32, max_frame_count: Option<u64>) -> u64 {
-        if let Some(update) = self.latest_position.take() {
-            if update.pipeline == self.pipeline {
-                self.latest_position_update = Some(update);
-            }
+        if let Some(update) = self.latest_position.take()
+            && update.pipeline == self.pipeline
+        {
+            self.latest_position_update = Some(update);
         }
 
         let position =
@@ -482,9 +482,15 @@ fn prepare_for_spec(
     });
     match classify_native_attempt(native_result) {
         NativeAttemptDecision::Success(prepared) => {
-            info!("audio.output.configured path=native source_rate={} source_channels={} output_rate={} output_channels={} conversion={:?} sample_format={:?}",
-                source_rate, source_channels, source_rate, source_channels,
-                prepared.config.processing_plan.channel_conversion(), native_sample_format);
+            info!(
+                "audio.output.configured path=native source_rate={} source_channels={} output_rate={} output_channels={} conversion={:?} sample_format={:?}",
+                source_rate,
+                source_channels,
+                source_rate,
+                source_channels,
+                prepared.config.processing_plan.channel_conversion(),
+                native_sample_format
+            );
             return Ok(prepared);
         }
         NativeAttemptDecision::Fallback => {
@@ -529,8 +535,15 @@ fn prepare_for_spec(
         first,
         links,
     ))?;
-    info!("audio.output.configured path=fallback source_rate={} source_channels={} output_rate={} output_channels={} conversion={:?} sample_format={:?}",
-        source_rate, source_channels, target_rate, target_channels, plan.channel_conversion(), fallback.sample_format());
+    info!(
+        "audio.output.configured path=fallback source_rate={} source_channels={} output_rate={} output_channels={} conversion={:?} sample_format={:?}",
+        source_rate,
+        source_channels,
+        target_rate,
+        target_channels,
+        plan.channel_conversion(),
+        fallback.sample_format()
+    );
     Ok(PreparedOutput {
         stream: Box::new(stream),
         producer,
@@ -714,16 +727,16 @@ impl CallbackState {
     /// Takes what the stream handed over since the last run: a queue that replaces the current
     /// one, and the queue that follows it.
     fn take_handoff(&mut self) {
-        if self.handoff.update() {
-            if let Some(next) = self.handoff.output_buffer_mut().take() {
-                *self.handoff.output_buffer_mut() = Some(Generation {
-                    consumer: std::mem::replace(&mut self.consumer, next.consumer),
-                    pipeline: std::mem::replace(&mut self.pipeline, next.pipeline),
-                });
-                self.position_frame = 0;
-                self.last_end_time = None;
-                self.completion = Completion::Pending;
-            }
+        if self.handoff.update()
+            && let Some(next) = self.handoff.output_buffer_mut().take()
+        {
+            *self.handoff.output_buffer_mut() = Some(Generation {
+                consumer: std::mem::replace(&mut self.consumer, next.consumer),
+                pipeline: std::mem::replace(&mut self.pipeline, next.pipeline),
+            });
+            self.position_frame = 0;
+            self.last_end_time = None;
+            self.completion = Completion::Pending;
         }
         if self.chain_slot.update() {
             self.chained = self.chain_slot.output_buffer_mut().take();
@@ -882,15 +895,15 @@ fn calculate_end_time(
 #[cfg(test)]
 mod tests {
     use super::{
+        AudioOutputError, CallbackState, Chain, Generation, LatestPosition, NativeAttemptDecision,
+        OutputEvent, OutputLinks, PipelineId, PositionUpdate, StreamFailureKind,
         calculate_end_time, classify_fallback_build, classify_native_attempt,
         classify_stream_error_kind, played_frame_position, sample_format_rank,
-        select_output_config, AudioOutputError, CallbackState, Chain, Generation, LatestPosition,
-        NativeAttemptDecision, OutputEvent, OutputLinks, PipelineId, PositionUpdate,
-        StreamFailureKind,
+        select_output_config,
     };
     use crate::audio::meter::MeterHub;
     use crate::audio::pcm::ChannelCount;
-    use crate::audio::pcm_queue::{bounded_pcm_queue, PcmProducer};
+    use crate::audio::pcm_queue::{PcmProducer, bounded_pcm_queue};
     use crate::audio::volume::AtomicEffectiveGain;
     use cpal::{
         Sample, SampleFormat, StreamInstant, SupportedBufferSize, SupportedStreamConfigRange,

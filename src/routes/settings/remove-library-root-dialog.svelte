@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { LibraryRoot } from "$lib/native";
+  import type { LibraryRoot } from "#lib/native";
   import {
     AlertDialog,
     AlertDialogAction,
@@ -9,7 +9,7 @@
     AlertDialogFooter,
     AlertDialogHeader,
     AlertDialogTitle,
-  } from "$lib/ui/shadcn/alert-dialog/index.js";
+  } from "#lib/ui/shadcn/alert-dialog/index.js";
 
   let {
     root,

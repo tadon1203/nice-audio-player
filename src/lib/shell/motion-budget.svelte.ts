@@ -1,6 +1,6 @@
 import { createContext } from "svelte";
 import { prefersReducedMotion } from "svelte/motion";
-import type { Settings } from "$lib/settings/settings.svelte";
+import type { Settings } from "#lib/settings/settings.svelte";
 
 /**
  * How much may move by itself (DESIGN.md, the attention budget).

@@ -6,7 +6,7 @@ import type {
   PlaybackSnapshot,
   TNativeAPI,
   Versioned,
-} from "$lib/native";
+} from "#lib/native";
 import { createPlayback } from "./playback.svelte";
 
 const base = () => ({

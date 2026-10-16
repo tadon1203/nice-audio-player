@@ -1,6 +1,6 @@
 <script lang="ts">
-  import FlapText from "$lib/ui/rolling-number/flap-text.svelte";
-  import RollingNumber from "$lib/ui/rolling-number/rolling-number.svelte";
+  import FlapText from "#lib/ui/rolling-number/flap-text.svelte";
+  import RollingNumber from "#lib/ui/rolling-number/rolling-number.svelte";
 
   let { label, visible }: { label: string | null; visible: boolean } = $props();
 </script>

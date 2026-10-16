@@ -1,5 +1,5 @@
 import type { Attachment } from "svelte/attachments";
-import { springLinear } from "$lib/ui/motion/spring-curve";
+import { springLinear } from "#lib/ui/motion/spring-curve";
 import type { DriveKeyframe, PlaybackClock } from "./clock";
 
 export type GlowBreathOptions = {

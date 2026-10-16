@@ -279,9 +279,10 @@ fn a_write_between_two_pages_neither_repeats_nor_skips_a_track() {
         seen.contains("1001"),
         "inserted after the cursor, so reached"
     );
-    assert!(rest
-        .iter()
-        .all(|track| track.title.to_lowercase() > last_of_first.to_lowercase()));
+    assert!(
+        rest.iter()
+            .all(|track| track.title.to_lowercase() > last_of_first.to_lowercase())
+    );
 }
 
 #[test]
@@ -540,7 +541,9 @@ fn the_scroll_index_follows_the_sort_order_for_mixed_scripts_in_both_directions(
         .collect();
     assert_eq!(
         ascending,
-        ["#", "A", "B", "E", "Z", "Д", "あ", "か", "た", "は", "や", "わ", "漢", "한"],
+        [
+            "#", "A", "B", "E", "Z", "Д", "あ", "か", "た", "は", "や", "わ", "漢", "한"
+        ],
         "symbols and digits, Latin, other scripts, kana rows, kanji as one bucket"
     );
     assert!(
@@ -602,10 +605,12 @@ fn the_scroll_index_of_albums_and_artists_counts_what_the_list_holds() {
         expected(&[("2001", 3), ("?", 2)]),
         "years, then the undated"
     );
-    assert!(store
-        .catalog_album_artist_index(None, LibraryAlbumArtistSortKey::TrackCount, ASC)
-        .unwrap()
-        .is_empty());
+    assert!(
+        store
+            .catalog_album_artist_index(None, LibraryAlbumArtistSortKey::TrackCount, ASC)
+            .unwrap()
+            .is_empty()
+    );
     let filtered = store.catalog_album_index(Some("ゆず"), TITLE, ASC).unwrap();
     assert_eq!(
         pairs(filtered),

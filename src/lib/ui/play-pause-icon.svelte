@@ -2,7 +2,7 @@
   import { untrack } from "svelte";
   import type { SVGAttributes } from "svelte/elements";
   import { Tween } from "svelte/motion";
-  import { motionFor } from "$lib/ui/motion/svelte-motion";
+  import { motionFor } from "#lib/ui/motion/svelte-motion";
 
   // Both glyphs are two four-point shapes with the same vertex order (top-left, top-right,
   // bottom-right, bottom-left) so one becomes the other by interpolating the points.

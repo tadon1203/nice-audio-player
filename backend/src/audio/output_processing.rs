@@ -419,17 +419,19 @@ mod tests {
         assert_eq!(output.len(), 1);
         assert!(output[0] > 0.0 && output[0] <= 1.0);
 
-        assert!(OutputProcessingPlan::new(
-            PcmSpec::new(
-                SampleRate::new(44_100).unwrap(),
-                ChannelCount::new(7).unwrap()
-            ),
-            PcmSpec::new(
-                SampleRate::new(44_100).unwrap(),
-                ChannelCount::new(2).unwrap()
-            ),
-        )
-        .is_err());
+        assert!(
+            OutputProcessingPlan::new(
+                PcmSpec::new(
+                    SampleRate::new(44_100).unwrap(),
+                    ChannelCount::new(7).unwrap()
+                ),
+                PcmSpec::new(
+                    SampleRate::new(44_100).unwrap(),
+                    ChannelCount::new(2).unwrap()
+                ),
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -455,10 +457,12 @@ mod tests {
 
         assert_eq!(whole_output.len(), 2_177);
         assert_eq!(split_output.len(), whole_output.len());
-        assert!(whole_output
-            .iter()
-            .zip(split_output)
-            .all(|(a, b)| (a - b).abs() < 1e-5));
+        assert!(
+            whole_output
+                .iter()
+                .zip(split_output)
+                .all(|(a, b)| (a - b).abs() < 1e-5)
+        );
         split.flush(&mut tail).unwrap();
         assert!(tail.is_empty());
     }
