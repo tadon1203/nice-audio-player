@@ -397,7 +397,7 @@ struct FileStamp {
     modified: Option<std::time::SystemTime>,
 }
 
-fn file_stamp(path: &str) -> Option<FileStamp> {
+fn file_stamp(path: &Path) -> Option<FileStamp> {
     let metadata = std::fs::metadata(path).ok()?;
     Some(FileStamp {
         length: metadata.len(),
@@ -408,7 +408,7 @@ fn file_stamp(path: &str) -> Option<FileStamp> {
 /// The single slot of waveform work: the job in flight and at most one newer request behind it.
 #[derive(Default)]
 struct Jobs {
-    running: Option<(String, Cancellation)>,
+    running: Option<(PathBuf, Cancellation)>,
     pending: Option<Request>,
     closed: bool,
 }
@@ -421,7 +421,7 @@ struct Request {
 
 struct Shared {
     directory: PathBuf,
-    ready: Mutex<HashMap<String, (FileStamp, Arc<Waveform>)>>,
+    ready: Mutex<HashMap<PathBuf, (FileStamp, Arc<Waveform>)>>,
     jobs: Mutex<Jobs>,
     wake: Condvar,
     messages: SharedMessageSink,
@@ -630,18 +630,18 @@ impl Shared {
 
     /// The waveform is stored before its revision moves, so a reader that sees the new revision
     /// also sees a value at least that new.
-    fn publish(&self, path: &str, stamp: FileStamp, waveform: Waveform) {
+    fn publish(&self, path: &Path, stamp: FileStamp, waveform: Waveform) {
         self.remember(path, stamp, waveform);
         self.rebuilds.fetch_add(1, Ordering::Release);
         self.messages.state_changed(StateTopic::Waveform);
     }
 
-    fn remember(&self, path: &str, stamp: FileStamp, waveform: Waveform) {
+    fn remember(&self, path: &Path, stamp: FileStamp, waveform: Waveform) {
         let mut ready = self.ready.lock().unwrap_or_else(PoisonError::into_inner);
         if ready.len() >= MEMORY_ENTRIES && !ready.contains_key(path) {
             ready.clear();
         }
-        ready.insert(path.to_owned(), (stamp, Arc::new(waveform)));
+        ready.insert(path.to_path_buf(), (stamp, Arc::new(waveform)));
     }
 }
 
@@ -655,7 +655,7 @@ mod tests {
     fn wav(directory: &TestDirectory, name: &str, samples: &[i16]) -> ValidatedAudioFile {
         let path = directory.file(name);
         write_pcm_i16_wav(&path, 8_000, 1, samples);
-        validate_audio_file(path.to_str().unwrap()).unwrap()
+        validate_audio_file(&path).unwrap()
     }
 
     fn track_of(file: &ValidatedAudioFile, hash: Option<&str>) -> PlayableTrack {
@@ -691,7 +691,7 @@ mod tests {
             .collect();
         let path = directory.file("varying.wav");
         write_pcm_i16_wav(&path, rate as u32, 1, &samples);
-        validate_audio_file(path.to_str().unwrap()).unwrap()
+        validate_audio_file(&path).unwrap()
     }
 
     #[test]
@@ -897,8 +897,12 @@ mod tests {
             length: 0,
             modified: None,
         };
-        service.shared.publish("a.wav", stamp(), rebuilt());
-        service.shared.publish("a.wav", stamp(), rebuilt());
+        service
+            .shared
+            .publish(Path::new("a.wav"), stamp(), rebuilt());
+        service
+            .shared
+            .publish(Path::new("a.wav"), stamp(), rebuilt());
 
         assert_eq!(service.revision(), 2);
         assert_eq!(recorder.sent(), vec![Sent::State(StateTopic::Waveform); 2]);
@@ -975,7 +979,7 @@ mod tests {
         std::fs::write(&garbage, vec![0x5Au8; 2_048]).unwrap();
 
         for path in [truncated, garbage] {
-            let file = validate_audio_file(path.to_str().unwrap()).unwrap();
+            let file = validate_audio_file(&path).unwrap();
             let outcome = contain("test", || analyze(&file, &Cancellation::default(), 1));
             assert!(outcome.is_some(), "{path:?} panicked the analysis");
         }

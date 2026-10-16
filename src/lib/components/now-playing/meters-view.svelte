@@ -15,7 +15,7 @@
   import { createMeterFeed } from "#lib/meters/meter-feed.svelte";
   import { formatHeldPeak } from "#lib/meters/readout";
   import { getPlayback } from "#lib/playback/context";
-  import { getSettings } from "#lib/settings/context";
+  import { getAppearance } from "#lib/settings/context";
   import { cn } from "#lib/utils/cn.js";
 
   /**
@@ -49,11 +49,11 @@
   const TAGS = ["L", "R"] as const;
 
   const playback = getPlayback();
-  const settings = getSettings();
+  const appearance = getAppearance();
 
   let layout = $state<"wide" | "narrow">("wide");
   const narrow = $derived(layout === "narrow");
-  const calm = $derived(settings.calmMotion === true);
+  const calm = $derived(appearance.calmMotion === true);
   let visible = $state(
     typeof document === "undefined" ? true : document.visibilityState === "visible",
   );

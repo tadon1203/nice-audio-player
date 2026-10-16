@@ -54,7 +54,7 @@ pub fn run() {
         .on_page_load(|webview, payload| {
             if matches!(payload.event(), tauri::webview::PageLoadEvent::Started) {
                 // Ending it waits for the analysis thread, so not on the main thread.
-                let meter = webview.state::<AppState>().backend.playback.meter();
+                let meter = webview.state::<AppState>().backend.meter();
                 tauri::async_runtime::spawn_blocking(move || meter.unsubscribe_all());
             }
         })

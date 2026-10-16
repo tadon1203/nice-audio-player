@@ -18,7 +18,7 @@ use super::snapshot::{
 use super::worker::{PlaybackWorker, WorkerLinks};
 use crate::audio::devices::AudioOutputSelection;
 use crate::audio::meter::MeterHub;
-use crate::audio::output::{CpalBackend, OutputBackend};
+use crate::audio::output::OutputBackend;
 use crate::audio::volume::{AtomicEffectiveGain, VolumeState};
 use crate::audio::waveform::PrefetchObserver;
 use crate::library::store::PlaybackSourceError;
@@ -210,27 +210,11 @@ pub struct PlaybackService {
 }
 
 impl PlaybackService {
-    /// Starts the worker with the saved preferences. `observer` hears about every later change
-    /// so the caller can persist them; `tracks` is where queue entries get their metadata;
-    /// `on_prefetch` hears about each track the moment it starts opening as the next one.
-    pub fn start(
-        messages: SharedMessageSink,
-        preferences: PlaybackPreferences,
-        observer: PreferencesObserver,
-        tracks: Arc<TrackResolver>,
-        on_prefetch: PrefetchObserver,
-    ) -> Result<Self, PlaybackServiceStartError> {
-        Self::start_with_backend(
-            messages,
-            preferences,
-            observer,
-            tracks,
-            on_prefetch,
-            Box::new(CpalBackend),
-        )
-    }
-
-    pub(super) fn start_with_backend(
+    /// Starts the worker with the saved preferences, on the audio output `backend` opens streams
+    /// on. `observer` hears about every later change so the caller can persist them; `tracks` is
+    /// where queue entries get their metadata; `on_prefetch` hears about each track the moment it
+    /// starts opening as the next one.
+    pub(crate) fn start_with_backend(
         messages: SharedMessageSink,
         preferences: PlaybackPreferences,
         observer: PreferencesObserver,
@@ -307,10 +291,6 @@ impl PlaybackService {
         self.handle.position()
     }
 
-    pub fn queue_snapshot(&self) -> PlaybackQueueSnapshot {
-        self.handle.queue_snapshot()
-    }
-
     /// The queue snapshot with the revision of its topic.
     pub fn versioned_queue_snapshot(&self) -> Versioned<PlaybackQueueSnapshot> {
         self.handle.versioned_queue_snapshot()
@@ -351,10 +331,6 @@ impl PlaybackServiceHandle {
             .read()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clone()
-    }
-
-    pub fn queue_snapshot(&self) -> PlaybackQueueSnapshot {
-        self.versioned_queue_snapshot().value
     }
 
     pub fn versioned_queue_snapshot(&self) -> Versioned<PlaybackQueueSnapshot> {

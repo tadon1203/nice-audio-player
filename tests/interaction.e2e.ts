@@ -166,6 +166,7 @@ test("clearing the upcoming tracks can be undone", async ({ page, native, player
     const value = playingSnapshot({
       status: "playing",
       item: playbackItemFor(library.tracks[0]!),
+      startedBy: "jump",
       positionMs: 12_000,
       seekRevision: 0,
       volume: 0.72,

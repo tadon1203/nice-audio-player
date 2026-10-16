@@ -1,4 +1,4 @@
 import { createContext } from "svelte";
-import type { Settings } from "./settings.svelte";
+import type { Appearance } from "./appearance.svelte";
 
-export const [getSettings, setSettings] = createContext<Settings>();
+export const [getAppearance, setAppearance] = createContext<Appearance>();

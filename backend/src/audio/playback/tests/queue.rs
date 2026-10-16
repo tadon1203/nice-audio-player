@@ -349,7 +349,7 @@ fn named_track(name: &str) -> PlayableTrack {
     library_track(
         name,
         ValidatedAudioFile {
-            path: format!("C:/music/{name}.flac"),
+            path: format!("C:/music/{name}.flac").into(),
             file_name: format!("{name}.flac"),
             extension: "flac".into(),
         },

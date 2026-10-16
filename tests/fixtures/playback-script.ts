@@ -3,6 +3,7 @@ import type {
   LibraryTrackSummary,
   PlaybackQueueSnapshot,
   PlaybackSnapshot,
+  SessionStartedBy,
   Versioned,
 } from "#lib/native";
 import type { Native } from "./native-api";
@@ -27,6 +28,7 @@ export function scriptPlayback(native: Native, initialSequence: LibraryTrackSumm
   let repeatMode: PlaybackQueueSnapshot["repeatMode"] = "off";
   let shuffleEnabled = false;
   let upcoming: LibraryTrackSummary[] = [];
+  let startedBy: SessionStartedBy = "jump";
   let waveformReady = false;
   let ticker: ReturnType<typeof setInterval> | null = null;
 
@@ -51,6 +53,7 @@ export function scriptPlayback(native: Native, initialSequence: LibraryTrackSumm
     playingSnapshot({
       status,
       item: playbackItemFor(current()),
+      startedBy,
       positionMs,
       seekRevision,
       volume,
@@ -73,8 +76,10 @@ export function scriptPlayback(native: Native, initialSequence: LibraryTrackSumm
     const revision = await native.publish("queue", value);
     return { revision, value };
   };
-  const moveTo = async (target: number) => {
+  /** A new session at `target`, started the way the backend would say it started. */
+  const moveTo = async (target: number, by: SessionStartedBy) => {
     index = target;
+    startedBy = by;
     positionMs = 12_000;
     upcoming = sequence.slice(index + 1);
     await commitQueue();
@@ -89,7 +94,7 @@ export function scriptPlayback(native: Native, initialSequence: LibraryTrackSumm
   native.respond("startPlayback", ({ startTrackId }) => {
     const start =
       startTrackId === null ? 0 : sequence.findIndex((track) => track.id === startTrackId);
-    return moveTo(Math.max(0, start));
+    return moveTo(Math.max(0, start), "jump");
   });
   native.respond("pausePlayback", () => {
     status = "paused";
@@ -99,14 +104,15 @@ export function scriptPlayback(native: Native, initialSequence: LibraryTrackSumm
     status = "playing";
     return commit();
   });
-  native.respond("previousPlayback", () => moveTo(Math.max(0, index - 1)));
-  native.respond("nextPlayback", () => moveTo(Math.min(sequence.length - 1, index + 1)));
+  native.respond("previousPlayback", () => moveTo(Math.max(0, index - 1), "previous"));
+  native.respond("nextPlayback", () => moveTo(Math.min(sequence.length - 1, index + 1), "next"));
   native.respond("playQueueItem", ({ id }) =>
     moveTo(
       Math.max(
         0,
         sequence.findIndex((track) => track.id === id),
       ),
+      "jump",
     ),
   );
   native.respond("seekPlayback", ({ positionMs: to }) => {
@@ -156,6 +162,8 @@ export function scriptPlayback(native: Native, initialSequence: LibraryTrackSumm
     },
     /** The queue as it stands, with `upcoming` replaced when a test expects an edit. */
     queue: commitQueue,
+    /** The loaded track ended and the backend moved on by itself (an automatic advance). */
+    finishTrack: () => moveTo(Math.min(sequence.length - 1, index + 1), "auto"),
     /** Reports the loaded track's position (and nothing else), as the backend's ticks do. */
     reportPosition: (to: number) => {
       positionMs = to;

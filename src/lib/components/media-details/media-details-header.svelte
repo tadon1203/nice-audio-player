@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
   import type { ArtworkRef } from "#lib/native";
-  import { getSettings } from "#lib/settings/context";
+  import { getAppearance } from "#lib/settings/context";
   import Artwork from "#lib/ui/artwork.svelte";
   import { sharedElement } from "#lib/ui/motion/shared-element";
   import ArtworkGlow from "#lib/ui/artwork-glow/artwork-glow.svelte";
@@ -27,12 +27,12 @@
     strip?: Snippet;
   } = $props();
 
-  const settings = getSettings();
+  const appearance = getAppearance();
 </script>
 
 <!-- The header band of a detail view: artwork, title and facts over the Artwork glow. -->
 <div class="@container relative -mx-6 mt-8 px-6 pt-6 pb-6 lg:-mx-10 lg:px-10">
-  {#if settings.artworkBackdrop}
+  {#if appearance.artworkBackdrop}
     <ArtworkGlow
       {artwork}
       strength="medium"

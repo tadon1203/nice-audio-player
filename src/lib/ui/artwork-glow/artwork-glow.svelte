@@ -68,6 +68,7 @@
     aria-hidden="true"
     data-slot="artwork-glow"
     data-strength={strength}
+    data-enter={enter}
     class={cn("artwork-glow pointer-events-none absolute inset-0 overflow-hidden", className)}
   >
     <div

@@ -92,6 +92,8 @@ The Renderer updates its caches and views from these.
 - The IPC contract is defined once, in the Backend. The Renderer's bindings are generated from it. Nobody edits them by hand.
 - A Host command that blocks does not run on the main thread.
 - Backend services know nothing about the Host or each other. They report through a message sink, and what each message carries is in [ADR 0008](./docs/adr/0008-backend-state-occurrences-and-measurements.md).
+- The Host reaches the Backend only through `BackendApp` and its public modules.
+- Settings are read and written through the IPC of the area that owns them. Appearance is read from `connect` and written with `updateAppearance`; playback preferences are read and written through the playback commands.
 - A state is its whole value with a revision. The Renderer keeps a value only if its revision is newer than the one it holds, whether it came on the channel or as a command answer.
 - An occurrence is a fact. It builds no state in the Renderer.
 - The Renderer subscribes, then fetches: `connect` registers the channel and returns the current values.

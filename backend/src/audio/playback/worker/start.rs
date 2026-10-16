@@ -15,7 +15,7 @@ impl PlaybackWorker {
             return;
         }
         self.skipped_in_a_row = 0;
-        self.start_current(Some(reply), false);
+        self.start_current(Some(reply), false, SessionStartedBy::Jump);
     }
 
     /// Replaces the queue, keeping the old one for one-step undo. Nothing is kept when nothing
@@ -51,7 +51,7 @@ impl PlaybackWorker {
             let snapshot = self.publish_state();
             let _ = reply.send(Ok(snapshot));
         } else {
-            self.start_current(Some(reply), false);
+            self.start_current(Some(reply), false, SessionStartedBy::Jump);
         }
     }
 
@@ -67,7 +67,7 @@ impl PlaybackWorker {
             return;
         }
         self.skipped_in_a_row = 0;
-        self.start_current(None, false);
+        self.start_current(None, false, SessionStartedBy::Jump);
         let _ = reply.send(Ok(self.queue_snapshot()));
     }
 
@@ -75,12 +75,14 @@ impl PlaybackWorker {
     pub(super) fn new_start(
         &mut self,
         item: PlaybackItem,
+        started_by: SessionStartedBy,
         responder: Option<Reply<Versioned<PlaybackSnapshot>>>,
         start_paused: bool,
     ) -> StartRequest {
         StartRequest {
             id: self.ids.next(),
             item,
+            started_by,
             responder,
             start_paused,
             resume_at_ms: None,
@@ -93,6 +95,7 @@ impl PlaybackWorker {
         &mut self,
         responder: Option<Reply<Versioned<PlaybackSnapshot>>>,
         start_paused: bool,
+        started_by: SessionStartedBy,
     ) {
         if self.queue.current().is_none() {
             respond(responder, Err(PlaybackServiceError::InvalidPlaybackState));
@@ -108,7 +111,7 @@ impl PlaybackWorker {
             return;
         };
         self.publish_queue();
-        let request = self.new_start(item, responder, start_paused);
+        let request = self.new_start(item, started_by, responder, start_paused);
         self.begin_start(request);
     }
 
@@ -242,6 +245,7 @@ impl PlaybackWorker {
         let StartRequest {
             id,
             item,
+            started_by,
             responder,
             start_paused,
             resume_at_ms,
@@ -256,6 +260,7 @@ impl PlaybackWorker {
         self.transport = Transport::Loaded(Loaded {
             id,
             item,
+            started_by,
             source,
             position: Position::from_start(output.sample_rate(), duration_ms),
             output,
@@ -294,7 +299,7 @@ impl PlaybackWorker {
         }
         let responder = request.responder;
         if skips && let Some(item) = self.next_after_item_failure() {
-            let request = self.new_start(item, responder, false);
+            let request = self.new_start(item, SessionStartedBy::Auto, responder, false);
             self.begin_start(request);
             return;
         }
@@ -381,7 +386,11 @@ impl PlaybackWorker {
             let _ = reply.send(Ok(self.playback_versioned()));
             return;
         }
-        self.start_current(Some(reply), paused);
+        let started_by = match reason {
+            AdvanceReason::UserPrevious => SessionStartedBy::Previous,
+            _ => SessionStartedBy::Next,
+        };
+        self.start_current(Some(reply), paused, started_by);
     }
 }
 

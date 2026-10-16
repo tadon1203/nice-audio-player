@@ -1,6 +1,9 @@
 use std::path::PathBuf;
 
-use backend::library::artwork::{self, ArtworkCache};
+use backend::{
+    app::BackendApp,
+    dto::{ArtworkCache, ServedArtwork},
+};
 use tauri::{
     Manager,
     http::{Method, Response, StatusCode, header},
@@ -28,7 +31,7 @@ fn not_found() -> Response<Vec<u8>> {
     response(StatusCode::NOT_FOUND, "text/plain", "no-cache", Vec::new())
 }
 
-fn found(served: artwork::ServedArtwork) -> Response<Vec<u8>> {
+fn found(served: ServedArtwork) -> Response<Vec<u8>> {
     let cache_control = match served.cache {
         ArtworkCache::Immutable => "public, max-age=31536000, immutable",
         ArtworkCache::Temporary => "no-cache",
@@ -58,6 +61,7 @@ pub fn serve_artwork(
         return;
     };
     tauri::async_runtime::spawn_blocking(move || {
-        responder.respond(artwork::serve(&data_dir, &relative).map_or_else(not_found, found))
+        responder
+            .respond(BackendApp::serve_artwork(&data_dir, &relative).map_or_else(not_found, found))
     });
 }

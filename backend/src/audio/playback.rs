@@ -15,15 +15,13 @@ mod source_loader;
 mod worker;
 
 pub use item::PlaybackItem;
-pub use preferences::{PlaybackPreferences, PreferencesObserver};
+pub use preferences::PlaybackPreferences;
 pub use queue::PlaybackRepeatMode;
 pub use resolver::{NoTracks, TrackResolver, TrackSource};
-pub use service::{
-    PlaybackService, PlaybackServiceError, PlaybackServiceHandle, PlaybackServiceStartError,
-};
+pub use service::{PlaybackService, PlaybackServiceError};
 pub use snapshot::{
-    ActiveSession, PlaybackChannelConversion, PlaybackFailureCode, PlaybackPosition,
-    PlaybackQueueItem, PlaybackQueueSnapshot, PlaybackQueueWindow, PlaybackSnapshot, SnapshotBase,
+    ActiveSession, PlaybackFailureCode, PlaybackPosition, PlaybackQueueItem, PlaybackQueueSnapshot,
+    PlaybackQueueWindow, PlaybackSnapshot, SessionStartedBy,
 };
 
 #[cfg(test)]

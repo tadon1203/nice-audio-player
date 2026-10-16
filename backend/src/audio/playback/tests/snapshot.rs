@@ -32,6 +32,7 @@ fn base() -> SnapshotBase {
 fn wire_session() -> ActiveSession {
     ActiveSession {
         item: test_item(),
+        started_by: SessionStartedBy::Jump,
         playback_id: "1".into(),
         position_ms: 1_000,
         seek_revision: 0,
@@ -81,6 +82,7 @@ fn base_json() -> serde_json::Value {
 fn session_json() -> serde_json::Value {
     serde_json::json!({
         "item": item_json(),
+        "startedBy": "jump",
         "playbackId": "1",
         "positionMs": 1_000,
         "seekRevision": 0,

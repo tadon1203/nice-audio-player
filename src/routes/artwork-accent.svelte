@@ -1,7 +1,7 @@
 <script lang="ts">
   import { createArtworkAccent } from "#lib/library/detail.svelte";
   import { getPlayback } from "#lib/playback/context";
-  import { getSettings } from "#lib/settings/context";
+  import { getAppearance } from "#lib/settings/context";
   import { readableAccent } from "#lib/ui/artwork-glow/glow-model";
 
   /**
@@ -12,9 +12,9 @@
    * Follows the `Artwork backdrop` preference: with the backdrop off there is no artwork color.
    */
   const playback = getPlayback();
-  const settings = getSettings();
+  const appearance = getAppearance();
   const artworkColor = createArtworkAccent(() => playback.item?.artwork);
-  const accent = $derived(settings.artworkBackdrop ? readableAccent(artworkColor.current) : null);
+  const accent = $derived(appearance.artworkBackdrop ? readableAccent(artworkColor.current) : null);
 
   $effect(() => {
     if (accent === null) return;

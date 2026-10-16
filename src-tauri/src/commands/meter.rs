@@ -30,7 +30,7 @@ pub async fn subscribe_meter_frames(
     frames: Channel<MeterFrameBytes>,
     state: tauri::State<'_, AppState>,
 ) -> Result<u32, ()> {
-    let meter = state.backend.playback.meter();
+    let meter = state.backend.meter();
     // Replacing a subscription waits for the old analysis thread to end.
     tauri::async_runtime::spawn_blocking(move || {
         meter.subscribe(Box::new(move |frame| {
@@ -51,7 +51,7 @@ pub async fn unsubscribe_meter_frames(
     subscription: u32,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), ()> {
-    let meter = state.backend.playback.meter();
+    let meter = state.backend.meter();
     tauri::async_runtime::spawn_blocking(move || meter.unsubscribe(subscription))
         .await
         .map_err(|_| ())

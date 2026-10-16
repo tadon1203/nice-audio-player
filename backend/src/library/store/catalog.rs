@@ -462,6 +462,7 @@ fn year_buckets(
 
 impl LibraryStore {
     /// A page of the list from its start (see [`Self::catalog_tracks_from`]).
+    #[cfg(test)]
     pub fn catalog_tracks(
         &self,
         cursor: Option<&str>,
@@ -515,6 +516,7 @@ impl LibraryStore {
     }
 
     /// A page of the list from its start (see [`Self::catalog_albums_from`]).
+    #[cfg(test)]
     pub fn catalog_albums(
         &self,
         cursor: Option<&str>,
@@ -579,6 +581,7 @@ impl LibraryStore {
     }
 
     /// A page of the list from its start (see [`Self::catalog_album_artists_from`]).
+    #[cfg(test)]
     pub fn catalog_album_artists(
         &self,
         cursor: Option<&str>,

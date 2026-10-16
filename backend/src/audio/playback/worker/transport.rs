@@ -74,7 +74,7 @@ impl PlaybackWorker {
     pub(super) fn resume_command(&mut self, reply: Reply<Versioned<PlaybackSnapshot>>) {
         if matches!(self.transport, Transport::Failed { .. }) {
             self.skipped_in_a_row = 0;
-            self.start_current(Some(reply), false);
+            self.start_current(Some(reply), false, SessionStartedBy::Jump);
             return;
         }
         let _ = reply.send(self.resume());
@@ -140,6 +140,7 @@ impl PlaybackWorker {
         let request = StartRequest {
             id: loaded.id,
             item: loaded.item.clone(),
+            started_by: loaded.started_by,
             responder: Some(reply),
             start_paused: loaded.paused,
             resume_at_ms: Some(loaded.position_ms()),

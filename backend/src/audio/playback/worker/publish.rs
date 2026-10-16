@@ -44,6 +44,7 @@ impl PlaybackWorker {
         let processing = PlaybackProcessingInfo::from_plan(config.processing_plan);
         ActiveSession {
             item: loaded.item.clone(),
+            started_by: loaded.started_by,
             playback_id: loaded.id.to_string(),
             position_ms: loaded.position_ms(),
             seek_revision: self.seek_revision,

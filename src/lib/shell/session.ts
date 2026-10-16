@@ -3,7 +3,7 @@ import type { LibraryScanState } from "#lib/library/library-scan-state.svelte";
 import { requireNative, type BackendMessage } from "#lib/native";
 import type { Playback } from "#lib/playback/playback.svelte";
 import { applyWaveform } from "#lib/playback/waveform";
-import type { Settings } from "#lib/settings/settings.svelte";
+import type { Appearance } from "#lib/settings/appearance.svelte";
 import { countE2e } from "./e2e-counts";
 import { createScanWatcher } from "./scan-finished";
 
@@ -14,12 +14,12 @@ import { createScanWatcher } from "./scan-finished";
  */
 export function startNativeSession({
   playback,
-  settings,
+  appearance,
   libraryScan,
   queryClient,
 }: {
   playback: Playback;
-  settings: Settings;
+  appearance: Appearance;
   libraryScan: LibraryScanState;
   queryClient: QueryClient;
 }): void {
@@ -48,7 +48,7 @@ export function startNativeSession({
         applyWaveform(queryClient, { revision: message.revision, value: message.value });
         return;
       case "appearance":
-        settings.accept(message.value);
+        appearance.accept({ revision: message.revision, value: message.value });
         return;
     }
   };
@@ -63,7 +63,7 @@ export function startNativeSession({
     .then(
       (initial) => {
         playback.initialize(initial.playback, initial.queue);
-        settings.accept(initial.appearance.value);
+        appearance.accept(initial.appearance);
         watchScan(initial.libraryScan.value);
         applyWaveform(queryClient, initial.waveform);
         for (const message of early ?? []) apply(message);
@@ -74,7 +74,7 @@ export function startNativeSession({
       (error: unknown) => {
         early = null;
         playback.initializeFailed(error);
-        settings.initializeFailed(error);
+        appearance.initializeFailed(error);
       },
     );
 }

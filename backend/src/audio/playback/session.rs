@@ -6,7 +6,7 @@ use super::decode_worker::DecodeWorker;
 use super::input::PlaybackId;
 use super::item::PlaybackItem;
 use super::service::Reply;
-use super::snapshot::{PlaybackFailureCode, PlaybackSnapshot};
+use super::snapshot::{PlaybackFailureCode, PlaybackSnapshot, SessionStartedBy};
 use super::source_loader::SourceLoad;
 use crate::audio::compressed_source::CompressedAudioSource;
 use crate::audio::devices::AudioOutputSelection;
@@ -38,6 +38,7 @@ pub(super) struct StartRequest {
     /// The playback this start belongs to. A device switch restarts the same playback.
     pub id: PlaybackId,
     pub item: PlaybackItem,
+    pub started_by: SessionStartedBy,
     /// `None` for starts the worker begins on its own (skipping on, the next track, a device switch).
     pub responder: Option<Reply<Versioned<PlaybackSnapshot>>>,
     pub start_paused: bool,
@@ -96,6 +97,7 @@ impl Pipeline {
 pub(super) struct Loaded {
     pub id: PlaybackId,
     pub item: PlaybackItem,
+    pub started_by: SessionStartedBy,
     pub source: CompressedAudioSource,
     pub output: Output,
     pub pipeline: Pipeline,

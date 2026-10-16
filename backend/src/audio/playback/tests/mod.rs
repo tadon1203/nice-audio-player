@@ -28,7 +28,7 @@ use crate::audio::playback::service::{
 use crate::audio::playback::session::POSITION_UPDATE_INTERVAL;
 use crate::audio::playback::snapshot::{
     ActiveSession, PlaybackChannelConversion, PlaybackFailureCode, PlaybackPosition,
-    PlaybackQueueSnapshot, PlaybackSnapshot, SnapshotBase, UPCOMING_IN_SNAPSHOT,
+    PlaybackQueueSnapshot, PlaybackSnapshot, SessionStartedBy, SnapshotBase, UPCOMING_IN_SNAPSHOT,
 };
 use crate::audio::playback::worker::{PlaybackWorker, WorkerLinks};
 use crate::audio::volume::{AtomicEffectiveGain, VolumeState};
@@ -130,7 +130,7 @@ impl Harness {
             ..library_track(
                 name,
                 ValidatedAudioFile {
-                    path: path.to_string_lossy().into_owned(),
+                    path,
                     file_name: format!("{name}.wav"),
                     extension: "wav".into(),
                 },
@@ -295,7 +295,7 @@ fn missing(count: usize) -> Vec<PlayableTrack> {
             library_track(
                 &format!("track-{i}"),
                 ValidatedAudioFile {
-                    path: format!("C:/missing/track-{i}.flac"),
+                    path: format!("C:/missing/track-{i}.flac").into(),
                     file_name: format!("track-{i}.flac"),
                     extension: "flac".into(),
                 },

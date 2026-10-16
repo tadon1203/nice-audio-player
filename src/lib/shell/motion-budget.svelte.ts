@@ -1,6 +1,6 @@
 import { createContext } from "svelte";
 import { prefersReducedMotion } from "svelte/motion";
-import type { Settings } from "#lib/settings/settings.svelte";
+import type { Appearance } from "#lib/settings/appearance.svelte";
 
 /**
  * How much may move by itself (DESIGN.md, the attention budget).
@@ -12,9 +12,9 @@ import type { Settings } from "#lib/settings/settings.svelte";
  */
 export type MotionBudget = "full" | "calm" | "reduced";
 
-export function createMotionBudget(settings: Settings): { readonly current: MotionBudget } {
+export function createMotionBudget(appearance: Appearance): { readonly current: MotionBudget } {
   const current = $derived<MotionBudget>(
-    prefersReducedMotion.current ? "reduced" : settings.calmMotion ? "calm" : "full",
+    prefersReducedMotion.current ? "reduced" : appearance.calmMotion ? "calm" : "full",
   );
   return {
     get current() {

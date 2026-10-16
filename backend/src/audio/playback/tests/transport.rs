@@ -62,7 +62,7 @@ fn a_start_through_a_service_thread_needs_no_poll() {
     library.add(library_track(
         "a",
         ValidatedAudioFile {
-            path: path.to_string_lossy().into_owned(),
+            path,
             file_name: "a.wav".into(),
             extension: "wav".into(),
         },
@@ -333,6 +333,46 @@ fn the_session_carries_the_source_format_of_the_loaded_track() {
 }
 
 #[test]
+fn started_by_names_what_started_each_session() {
+    let mut harness = Harness::new();
+    let tracks = vec![
+        harness.track("a", 5),
+        harness.track("b", 5),
+        harness.track("c", 5),
+    ];
+    let jumped = harness.start(tracks, 0).unwrap();
+    assert_eq!(session(&jumped).started_by, SessionStartedBy::Jump);
+
+    let next = harness.next().unwrap();
+    assert_eq!(session(&next).started_by, SessionStartedBy::Next);
+
+    let previous = harness
+        .call(|reply| PlaybackCommand::Previous { reply })
+        .unwrap()
+        .value;
+    assert_eq!(session(&previous).started_by, SessionStartedBy::Previous);
+}
+
+#[test]
+fn an_automatic_advance_is_auto_and_a_seek_keeps_the_start() {
+    let mut harness = Harness::new();
+    let tracks = vec![harness.track("a", 1), harness.track("b", 5)];
+    harness.start(tracks, 0).unwrap();
+
+    harness.output.finish_playback();
+    harness.deliver_pending();
+    harness.tick();
+    harness.pump_until(|harness| is_playing(&harness.snapshot(), "b"));
+    assert_eq!(
+        session(&harness.snapshot()).started_by,
+        SessionStartedBy::Auto
+    );
+
+    let sought = harness.seek(2_000).unwrap();
+    assert_eq!(session(&sought).started_by, SessionStartedBy::Auto);
+}
+
+#[test]
 fn pausing_while_a_track_loads_starts_it_paused() {
     let mut harness = Harness::new();
     let tracks = vec![harness.track("a", 1)];
@@ -393,6 +433,35 @@ fn navigation_availability_follows_the_queue_and_the_restart_rule() {
     harness.output.set_played_frames(4 * u64::from(SAMPLE_RATE));
     let late = harness.pause().unwrap();
     assert!(late.base().can_go_previous, "previous restarts the track");
+}
+
+/// A file whose name holds an unpaired UTF-16 surrogate: Windows allows it, UTF-8 cannot hold it.
+/// Its path must reach the file system as it is, or the file cannot be opened.
+#[cfg(windows)]
+#[test]
+fn a_file_whose_name_is_not_unicode_plays() {
+    use std::os::windows::ffi::OsStringExt;
+
+    let mut harness = Harness::new();
+    let name = std::ffi::OsString::from_wide(&[0x61, 0xD800, 0x2E, 0x77, 0x61, 0x76]);
+    let mut path = harness.files.file("placeholder.wav");
+    path.set_file_name(&name);
+    write_pcm_i16_wav(&path, SAMPLE_RATE, 1, &vec![0; SAMPLE_RATE as usize]);
+    let track = PlayableTrack {
+        title: "odd".into(),
+        ..library_track(
+            "odd",
+            ValidatedAudioFile {
+                path,
+                file_name: name.to_string_lossy().into_owned(),
+                extension: "wav".into(),
+            },
+        )
+    };
+
+    let snapshot = harness.start(vec![track], 0).unwrap();
+
+    assert!(is_playing(&snapshot, "odd"));
 }
 
 #[test]

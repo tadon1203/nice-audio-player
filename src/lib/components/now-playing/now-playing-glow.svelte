@@ -3,7 +3,7 @@
   import { glowBreath } from "#lib/playback/glow-breath";
   import { loudnessKeyframes } from "#lib/playback/loudness";
   import { createPlaybackWaveform } from "#lib/playback/waveform.svelte";
-  import { getSettings } from "#lib/settings/context";
+  import { getAppearance } from "#lib/settings/context";
   import { getMotionBudget } from "#lib/shell/motion-budget.svelte";
   import ArtworkGlow from "#lib/ui/artwork-glow/artwork-glow.svelte";
   import { breathingOpacity, GLOW } from "#lib/ui/artwork-glow/glow-model";
@@ -15,7 +15,7 @@
    * breathing is off under calm or reduced motion, and then nothing here runs per frame.
    */
   const playback = getPlayback();
-  const settings = getSettings();
+  const appearance = getAppearance();
   const budget = getMotionBudget();
 
   /** The level a paused Artwork glow rests at: neither dimmed nor at full. */
@@ -42,7 +42,7 @@
   });
 </script>
 
-{#if settings.artworkBackdrop}
+{#if appearance.artworkBackdrop}
   <ArtworkGlow
     artwork={item?.artwork ?? null}
     strength="max"

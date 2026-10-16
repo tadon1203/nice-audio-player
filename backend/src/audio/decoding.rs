@@ -373,7 +373,7 @@ mod tests {
 
     fn validated(path: &std::path::Path) -> ValidatedAudioFile {
         ValidatedAudioFile {
-            path: path.to_string_lossy().into_owned(),
+            path: path.to_path_buf(),
             file_name: path.file_name().unwrap().to_string_lossy().into_owned(),
             extension: "wav".to_owned(),
         }

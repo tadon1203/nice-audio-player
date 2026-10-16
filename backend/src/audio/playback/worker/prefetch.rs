@@ -188,6 +188,7 @@ impl PlaybackWorker {
             id: self.ids.next(),
             position: Position::from_start(loaded.output.sample_rate(), next.duration_ms),
             item: next.item,
+            started_by: SessionStartedBy::Auto,
             source: next.source,
             output: loaded.output,
             pipeline: next.pipeline,

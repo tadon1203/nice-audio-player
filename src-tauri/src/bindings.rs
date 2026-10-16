@@ -55,8 +55,7 @@ pub fn builder() -> Builder<tauri::Wry> {
             commands::meter::subscribe_meter_frames,
             commands::meter::unsubscribe_meter_frames,
             commands::session::connect,
-            commands::settings::get_settings,
-            commands::settings::update_settings,
+            commands::appearance::update_appearance,
         ])
         .typ::<BackendMessage>()
         .error_handling(ErrorHandlingMode::Throw)

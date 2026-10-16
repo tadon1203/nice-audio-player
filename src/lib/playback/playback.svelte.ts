@@ -1,4 +1,5 @@
 import type {
+  ActiveSession,
   AudioOutputSelection,
   PlaybackContext,
   PlaybackItem,
@@ -31,9 +32,16 @@ const NOTICE_MS = 6_000;
 type QueuedTransport = {
   command: TransportCommand;
   operation: () => Promise<Versioned<PlaybackSnapshot>>;
-  navigation: PlaybackNavigation | null;
   settle: (done: boolean) => void;
 };
+
+/**
+ * Which way a new session's start moves the Now Playing transition. The backend says why the
+ * session started: only Previous goes backward; every other start, or none, goes forward.
+ */
+function navigationOf(session: ActiveSession | null): PlaybackNavigation {
+  return session?.startedBy === "previous" ? "previous" : "next";
+}
 
 /**
  * Mirrors the backend's playback state. Raw fields hold what the backend said; everything a
@@ -70,9 +78,6 @@ export class Playback {
   #requestedVolume: number | null = null;
   #volumeWriteActive = false;
   #requestedSeek: number | null = null;
-  // Set when Next/Previous is pressed and consumed by the snapshot that changes the item, so
-  // the direction and the new item reach subscribers in the same update.
-  #pendingNavigation: PlaybackNavigation | null = null;
   // Latest wins, like the backend: one transport command waits for the one in flight.
   #queuedTransport: QueuedTransport | null = null;
   #skippedTitles: string[] = [];
@@ -121,8 +126,7 @@ export class Playback {
     const incoming = snapshotItem(snapshot);
     const itemChanged = incoming?.queueItemId !== this.item?.queueItemId;
     if (itemChanged) {
-      this.lastNavigation = this.#pendingNavigation ?? "next";
-      this.#pendingNavigation = null;
+      this.lastNavigation = navigationOf(snapshotSession(snapshot));
       this.item = incoming;
     }
     this.playbackRevision = revision;
@@ -193,24 +197,21 @@ export class Playback {
   #runTransport(
     command: TransportCommand,
     operation: () => Promise<Versioned<PlaybackSnapshot>>,
-    navigation: PlaybackNavigation | null = null,
   ): Promise<boolean> {
     if (this.transportPending === null) {
-      return this.#performTransport(command, operation, navigation);
+      return this.#performTransport(command, operation);
     }
     this.#queuedTransport?.settle(false);
     return new Promise((settle) => {
-      this.#queuedTransport = { command, operation, navigation, settle };
+      this.#queuedTransport = { command, operation, settle };
     });
   }
 
   async #performTransport(
     command: TransportCommand,
     operation: () => Promise<Versioned<PlaybackSnapshot>>,
-    navigation: PlaybackNavigation | null,
   ): Promise<boolean> {
     this.transportPending = command;
-    this.#pendingNavigation = navigation;
     this.error = null;
     try {
       this.acceptPlayback(await operation());
@@ -219,14 +220,11 @@ export class Playback {
       this.#setError(error);
       return false;
     } finally {
-      this.#pendingNavigation = null;
       this.transportPending = null;
       const queued = this.#queuedTransport;
       this.#queuedTransport = null;
       if (queued !== null) {
-        void this.#performTransport(queued.command, queued.operation, queued.navigation).then(
-          queued.settle,
-        );
+        void this.#performTransport(queued.command, queued.operation).then(queued.settle);
       }
     }
   }
@@ -300,11 +298,11 @@ export class Playback {
   }
 
   previous() {
-    return this.#runTransport("previous", () => this.#api.previousPlayback(), "previous");
+    return this.#runTransport("previous", () => this.#api.previousPlayback());
   }
 
   next() {
-    return this.#runTransport("next", () => this.#api.nextPlayback(), "next");
+    return this.#runTransport("next", () => this.#api.nextPlayback());
   }
 
   /**

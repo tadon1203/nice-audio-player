@@ -1,4 +1,5 @@
 import { type Page } from "@playwright/test";
+import { testLibrary } from "./fixtures/data";
 import type { Native } from "./fixtures/native-api";
 import { motionMs } from "./fixtures/motion";
 import { expect, test } from "./fixtures/test";
@@ -108,4 +109,27 @@ test("keeps the artist line in place while the title animates", async ({ page, n
     const box = (await artist.boundingBox())!;
     expect(box.y).toBeCloseTo(before.y, 0);
   }
+});
+
+test.describe("the artwork glow's direction", () => {
+  // The glow renders only with artwork.
+  test.use({ library: testLibrary({ artwork: true }) });
+
+  test("starts each Now Playing transition in the direction the backend reports", async ({
+    page,
+    native,
+    player,
+  }) => {
+    const layer = await openNowPlaying(page, native, SIZES[1], false);
+    const glow = layer.locator('[data-slot="artwork-glow"]').first();
+
+    // Starting the album is a jump, which moves forward.
+    await expect(glow).toHaveAttribute("data-enter", "wipe-next");
+    await page.keyboard.press("Control+ArrowRight");
+    await expect(glow).toHaveAttribute("data-enter", "wipe-next");
+    await page.keyboard.press("Control+ArrowLeft");
+    await expect(glow).toHaveAttribute("data-enter", "wipe-previous");
+    await player.finishTrack();
+    await expect(glow).toHaveAttribute("data-enter", "wipe-next");
+  });
 });

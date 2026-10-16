@@ -1,12 +1,13 @@
 use serde::Serialize;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 pub const SUPPORTED_EXTENSIONS: [&str; 5] = ["mp3", "flac", "wav", "aac", "m4a"];
 
-#[derive(Debug, Clone, Serialize, specta::Type, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
+/// An audio file the Backend can play. The path stays a `PathBuf` all the way to the file system,
+/// so a name the platform allows but Unicode cannot hold still opens.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ValidatedAudioFile {
-    pub path: String,
+    pub path: PathBuf,
     pub file_name: String,
     pub extension: String,
 }
@@ -26,12 +27,11 @@ pub fn is_supported_extension(extension: &str) -> bool {
 }
 
 /// Checks that `path` names an existing supported audio file.
-pub fn validate_audio_file(path: &str) -> Result<ValidatedAudioFile, AudioFileValidationError> {
-    if path.trim().is_empty() {
+pub fn validate_audio_file(path: &Path) -> Result<ValidatedAudioFile, AudioFileValidationError> {
+    if is_blank(path) {
         return Err(AudioFileValidationError::EmptyPath);
     }
-    let metadata =
-        std::fs::metadata(Path::new(path)).map_err(|_| AudioFileValidationError::NotFound)?;
+    let metadata = std::fs::metadata(path).map_err(|_| AudioFileValidationError::NotFound)?;
     if !metadata.is_file() {
         return Err(AudioFileValidationError::NotAFile);
     }
@@ -40,17 +40,16 @@ pub fn validate_audio_file(path: &str) -> Result<ValidatedAudioFile, AudioFileVa
 
 /// Names a supported audio file without touching the filesystem. Playback contexts describe
 /// thousands of library files at once; a file that vanished fails when it is loaded instead.
-pub fn describe_audio_file(path: &str) -> Result<ValidatedAudioFile, AudioFileValidationError> {
-    if path.trim().is_empty() {
+pub fn describe_audio_file(path: &Path) -> Result<ValidatedAudioFile, AudioFileValidationError> {
+    if is_blank(path) {
         return Err(AudioFileValidationError::EmptyPath);
     }
-    let file_path = Path::new(path);
-    let file_name = file_path
+    let file_name = path
         .file_name()
         .and_then(|name| name.to_str())
         .filter(|name| !name.is_empty())
         .ok_or(AudioFileValidationError::InvalidFileName)?;
-    let extension = file_path
+    let extension = path
         .extension()
         .and_then(|extension| extension.to_str())
         .map(str::to_ascii_lowercase);
@@ -59,8 +58,13 @@ pub fn describe_audio_file(path: &str) -> Result<ValidatedAudioFile, AudioFileVa
         extension => return Err(AudioFileValidationError::UnsupportedExtension { extension }),
     };
     Ok(ValidatedAudioFile {
-        path: path.to_owned(),
+        path: path.to_path_buf(),
         file_name: file_name.to_owned(),
         extension,
     })
+}
+
+/// Nothing to name: an empty path, or one that is only whitespace.
+fn is_blank(path: &Path) -> bool {
+    path.to_str().is_some_and(|text| text.trim().is_empty()) || path.as_os_str().is_empty()
 }

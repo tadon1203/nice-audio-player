@@ -1,14 +1,9 @@
 use backend::{
-    app::playback_context::PlaybackContext,
-    audio::{
-        devices::{AudioDeviceListError, AudioOutputSelection, list_output_devices},
-        playback::{
-            PlaybackQueueSnapshot, PlaybackQueueWindow, PlaybackRepeatMode, PlaybackServiceError,
-            PlaybackSnapshot,
-        },
-        waveform::PlaybackWaveform,
+    dto::{
+        AudioOutputDevice, AudioOutputSelection, PlaybackContext, PlaybackQueueSnapshot,
+        PlaybackQueueWindow, PlaybackRepeatMode, PlaybackSnapshot, PlaybackWaveform, Versioned,
     },
-    messages::Versioned,
+    errors::{AudioDeviceListError, PlaybackServiceError},
 };
 
 use super::blocking;
@@ -24,10 +19,7 @@ pub async fn get_playback_queue_window(
     state: tauri::State<'_, AppState>,
 ) -> Result<PlaybackQueueWindow, PlaybackServiceError> {
     blocking(&state, move |backend| {
-        Ok(backend
-            .playback
-            .handle()
-            .queue_window(offset as usize, limit as usize))
+        Ok(backend.queue_window(offset, limit))
     })
     .await
 }
@@ -52,7 +44,7 @@ pub async fn start_playback(
 pub async fn pause_playback(
     state: tauri::State<'_, AppState>,
 ) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
-    blocking(&state, move |backend| backend.playback.handle().pause()).await
+    blocking(&state, |backend| backend.pause()).await
 }
 
 #[tauri::command]
@@ -60,7 +52,7 @@ pub async fn pause_playback(
 pub async fn resume_playback(
     state: tauri::State<'_, AppState>,
 ) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
-    blocking(&state, move |backend| backend.playback.handle().resume()).await
+    blocking(&state, |backend| backend.resume()).await
 }
 
 #[tauri::command]
@@ -68,7 +60,7 @@ pub async fn resume_playback(
 pub async fn previous_playback(
     state: tauri::State<'_, AppState>,
 ) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
-    blocking(&state, move |backend| backend.playback.handle().previous()).await
+    blocking(&state, |backend| backend.previous()).await
 }
 
 #[tauri::command]
@@ -76,7 +68,7 @@ pub async fn previous_playback(
 pub async fn next_playback(
     state: tauri::State<'_, AppState>,
 ) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
-    blocking(&state, move |backend| backend.playback.handle().next()).await
+    blocking(&state, |backend| backend.next()).await
 }
 
 #[tauri::command]
@@ -90,11 +82,8 @@ pub async fn seek_playback(
     }
     // A position between milliseconds is rounded down; one outside the track is clamped by the
     // worker.
-    let position_ms = position_ms.clamp(0.0, 9_007_199_254_740_991.0).floor() as u64;
-    blocking(&state, move |backend| {
-        backend.playback.handle().seek(position_ms)
-    })
-    .await
+    let position_ms = position_ms.clamp(0.0, 9_007_199_254_740_991.0).floor();
+    blocking(&state, move |backend| backend.seek(position_ms)).await
 }
 
 #[tauri::command]
@@ -103,10 +92,7 @@ pub async fn set_playback_volume(
     volume: f64,
     state: tauri::State<'_, AppState>,
 ) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
-    blocking(&state, move |backend| {
-        backend.playback.handle().set_volume(volume as f32)
-    })
-    .await
+    blocking(&state, move |backend| backend.set_volume(volume as f32)).await
 }
 
 #[tauri::command]
@@ -115,23 +101,15 @@ pub async fn set_playback_muted(
     muted: bool,
     state: tauri::State<'_, AppState>,
 ) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
-    blocking(&state, move |backend| {
-        let handle = backend.playback.handle();
-        if muted {
-            handle.mute()
-        } else {
-            handle.unmute()
-        }
-    })
-    .await
+    blocking(&state, move |backend| backend.set_muted(muted)).await
 }
 
 #[tauri::command]
 #[specta::specta]
 pub async fn list_audio_output_devices(
     state: tauri::State<'_, AppState>,
-) -> Result<Vec<backend::audio::devices::AudioOutputDevice>, AudioDeviceListError> {
-    blocking(&state, |_| list_output_devices()).await
+) -> Result<Vec<AudioOutputDevice>, AudioDeviceListError> {
+    blocking(&state, |backend| backend.list_output_devices()).await
 }
 
 #[tauri::command]
@@ -140,10 +118,7 @@ pub async fn set_playback_repeat_mode(
     mode: PlaybackRepeatMode,
     state: tauri::State<'_, AppState>,
 ) -> Result<Versioned<PlaybackQueueSnapshot>, PlaybackServiceError> {
-    blocking(&state, move |backend| {
-        backend.playback.handle().set_repeat_mode(mode)
-    })
-    .await
+    blocking(&state, move |backend| backend.set_repeat_mode(mode)).await
 }
 
 #[tauri::command]
@@ -152,10 +127,7 @@ pub async fn set_playback_shuffle(
     enabled: bool,
     state: tauri::State<'_, AppState>,
 ) -> Result<Versioned<PlaybackQueueSnapshot>, PlaybackServiceError> {
-    blocking(&state, move |backend| {
-        backend.playback.handle().set_shuffle(enabled)
-    })
-    .await
+    blocking(&state, move |backend| backend.set_shuffle(enabled)).await
 }
 
 /// Switches the output device; a loaded track restarts on it at the same position.
@@ -166,7 +138,7 @@ pub async fn set_audio_output_selection(
     state: tauri::State<'_, AppState>,
 ) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
     blocking(&state, move |backend| {
-        backend.playback.handle().set_output_selection(selection)
+        backend.set_output_selection(selection)
     })
     .await
 }
@@ -177,10 +149,7 @@ pub async fn remove_queue_item(
     id: String,
     state: tauri::State<'_, AppState>,
 ) -> Result<Versioned<PlaybackQueueSnapshot>, PlaybackServiceError> {
-    blocking(&state, move |backend| {
-        backend.playback.handle().remove_queue_item(id)
-    })
-    .await
+    blocking(&state, move |backend| backend.remove_queue_item(id)).await
 }
 
 #[tauri::command]
@@ -190,10 +159,7 @@ pub async fn move_queue_item(
     to: usize,
     state: tauri::State<'_, AppState>,
 ) -> Result<Versioned<PlaybackQueueSnapshot>, PlaybackServiceError> {
-    blocking(&state, move |backend| {
-        backend.playback.handle().move_queue_item(id, to)
-    })
-    .await
+    blocking(&state, move |backend| backend.move_queue_item(id, to)).await
 }
 
 /// Makes an upcoming queue item current and plays it.
@@ -203,10 +169,7 @@ pub async fn play_queue_item(
     id: String,
     state: tauri::State<'_, AppState>,
 ) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
-    blocking(&state, move |backend| {
-        backend.playback.handle().play_queue_item(id)
-    })
-    .await
+    blocking(&state, move |backend| backend.play_queue_item(id)).await
 }
 
 /// Adds a library track to the queue: right after the current one (`next`) or at the end.
@@ -229,10 +192,7 @@ pub async fn enqueue_track(
 pub async fn clear_queue(
     state: tauri::State<'_, AppState>,
 ) -> Result<Versioned<PlaybackQueueSnapshot>, PlaybackServiceError> {
-    blocking(&state, move |backend| {
-        backend.playback.handle().clear_queue()
-    })
-    .await
+    blocking(&state, |backend| backend.clear_queue()).await
 }
 
 /// Puts back the queue the last replacement or Clear upcoming took away.
@@ -241,10 +201,7 @@ pub async fn clear_queue(
 pub async fn restore_previous_queue(
     state: tauri::State<'_, AppState>,
 ) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
-    blocking(&state, move |backend| {
-        backend.playback.handle().restore_previous_queue()
-    })
-    .await
+    blocking(&state, |backend| backend.restore_previous_queue()).await
 }
 
 /// Waveform of the loaded track, or `None` while it is analyzed, with the Waveform's revision; the
@@ -254,5 +211,5 @@ pub async fn restore_previous_queue(
 pub async fn get_playback_waveform(
     state: tauri::State<'_, AppState>,
 ) -> Result<Versioned<Option<PlaybackWaveform>>, PlaybackServiceError> {
-    blocking(&state, move |backend| Ok(backend.playback_waveform())).await
+    blocking(&state, |backend| Ok(backend.playback_waveform())).await
 }

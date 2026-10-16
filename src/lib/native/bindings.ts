@@ -114,15 +114,19 @@ export const commands = {
 	 *  older than the returned value, so the Renderer can order them by revision.
 	 */
 	connect: (channel: Channel<BackendMessage>) => __TAURI_INVOKE<InitialState>("connect", { channel }),
-	getSettings: () => __TAURI_INVOKE<Appearance>("get_settings"),
-	/**  Applies a partial update and returns the appearance settings as they are afterwards. */
-	updateSettings: (patch: SettingsPatch) => __TAURI_INVOKE<Appearance>("update_settings", { patch }),
+	/**
+	 *  Applies a partial update to the appearance and returns it as it is afterwards, with its
+	 *  revision.
+	 */
+	updateAppearance: (patch: AppearancePatch) => __TAURI_INVOKE<Versioned<Appearance>>("update_appearance", { patch }),
 };
 
 /* Types */
 /**  A loaded track: identity plus how it reaches the output device. */
 export type ActiveSession = {
 	item: PlaybackItem,
+	/**  What started this session. A seek or an output switch keeps it. */
+	startedBy: SessionStartedBy,
 	playbackId: string,
 	positionMs: number,
 	/**
@@ -156,6 +160,7 @@ export type Appearance = {
 	calmMotion: boolean,
 };
 
+/**  A partial update from the renderer; absent fields stay as they are. */
 export type AppearancePatch = {
 	artworkBackdrop: boolean | null,
 	calmMotion: boolean | null,
@@ -546,13 +551,12 @@ export type ScanFailure = "persistenceFailed" | "rootTraversalFailed" |
 /**  The scan thread died unexpectedly. */
 "panicked";
 
-/**
- *  A partial update from the renderer; absent fields stay as they are. Playback preferences are
- *  not here: the playback worker owns them and records every change itself.
- */
-export type SettingsPatch = {
-	appearance: AppearancePatch | null,
-};
+/**  Why the loaded session started. */
+export type SessionStartedBy = "next" | "previous" | 
+/**  The player moved on by itself: the track ended, or it skipped a track. */
+"auto" | 
+/**  Any other start: play a context, play a queue item, restore the queue. */
+"jump";
 
 /**  Fields every transport state carries. */
 export type SnapshotBase = {

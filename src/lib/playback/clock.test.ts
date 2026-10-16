@@ -23,6 +23,7 @@ const item = (id: string): PlaybackItem => ({
 
 const session = (id: string, positionMs: number, seekRevision = 0): ActiveSession => ({
   item: item(id),
+  startedBy: "jump",
   playbackId: "1",
   positionMs,
   seekRevision,

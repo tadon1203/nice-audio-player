@@ -33,11 +33,25 @@ impl SnapshotBase {
     }
 }
 
+/// Why the loaded session started.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum SessionStartedBy {
+    Next,
+    Previous,
+    /// The player moved on by itself: the track ended, or it skipped a track.
+    Auto,
+    /// Any other start: play a context, play a queue item, restore the queue.
+    Jump,
+}
+
 /// A loaded track: identity plus how it reaches the output device.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ActiveSession {
     pub item: PlaybackItem,
+    /// What started this session. A seek or an output switch keeps it.
+    pub started_by: SessionStartedBy,
     pub playback_id: String,
     pub position_ms: u64,
     /// Counts the seeks the player has completed. A change means the position jumped on

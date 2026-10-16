@@ -26,8 +26,8 @@ use super::session::{
 };
 use super::snapshot::{
     ActiveSession, HISTORY_IN_SNAPSHOT, PlaybackFailureCode, PlaybackPosition,
-    PlaybackProcessingInfo, PlaybackQueueSnapshot, PlaybackSnapshot, SnapshotBase,
-    UPCOMING_IN_SNAPSHOT,
+    PlaybackProcessingInfo, PlaybackQueueSnapshot, PlaybackSnapshot, SessionStartedBy,
+    SnapshotBase, UPCOMING_IN_SNAPSHOT,
 };
 use super::source_loader::SourceLoad;
 use crate::audio::compressed_source::{CompressedAudioSource, CompressedSourceError};
@@ -323,7 +323,7 @@ impl PlaybackWorker {
             PlaybackCommand::PlayQueueItem { id, reply } => {
                 self.skipped_in_a_row = 0;
                 match self.queue.jump_to(&id) {
-                    Ok(()) => self.start_current(Some(reply), false),
+                    Ok(()) => self.start_current(Some(reply), false, SessionStartedBy::Jump),
                     Err(_) => {
                         let _ = reply.send(Err(PlaybackServiceError::QueueItemNotFound));
                     }

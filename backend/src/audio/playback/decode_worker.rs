@@ -216,7 +216,7 @@ mod tests {
         let path = directory.file("decode-worker.wav");
         write_pcm_i16_wav(&path, 44_100, 1, &vec![0; sample_count]);
         ValidatedAudioFile {
-            path: path.to_string_lossy().into_owned(),
+            path,
             file_name: "decode-worker.wav".into(),
             extension: "wav".into(),
         }

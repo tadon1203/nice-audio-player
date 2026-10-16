@@ -98,7 +98,7 @@ impl PlaybackWorker {
         if scope == FailureScope::Item
             && let Some(item) = self.next_after_item_failure()
         {
-            let request = self.new_start(item, None, false);
+            let request = self.new_start(item, SessionStartedBy::Auto, None, false);
             self.begin_start(request);
         }
     }

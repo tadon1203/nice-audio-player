@@ -193,13 +193,12 @@ fn playable_track(
             .location
             .existing()
             .map_err(|_| PlaybackSourceError::TrackUnavailable)?;
-        validate_audio_file(&existing.path.to_string_lossy())
-            .map_err(|_| PlaybackSourceError::TrackUnavailable)?
+        validate_audio_file(&existing.path).map_err(|_| PlaybackSourceError::TrackUnavailable)?
     } else {
         let Ok(path) = row.location.path() else {
             return Ok(None);
         };
-        let Ok(file) = describe_audio_file(&path.to_string_lossy()) else {
+        let Ok(file) = describe_audio_file(&path) else {
             return Ok(None);
         };
         file

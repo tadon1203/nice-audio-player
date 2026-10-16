@@ -86,7 +86,7 @@ impl PlaybackWorker {
             Some(item) => {
                 self.skipped_in_a_row = 0;
                 self.publish_queue();
-                let request = self.new_start(item, responder, start_paused);
+                let request = self.new_start(item, SessionStartedBy::Auto, responder, start_paused);
                 self.begin_start(request);
             }
             None => {

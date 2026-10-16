@@ -3,6 +3,10 @@
 //! The file is independent of the library database, so settings survive a database that is
 //! unavailable. Writes are debounced on a background thread and replace the file atomically.
 //! Fields missing from the file take their defaults, so older files keep loading.
+//!
+//! The file holds the appearance the renderer edits and the playback preferences the playback
+//! worker records. Nothing outside this module sees the file's shape: the Host reads and writes
+//! appearance through `SettingsService`, and the playback service reads its preferences from it.
 
 use std::{
     path::PathBuf,
@@ -63,28 +67,21 @@ impl Default for Appearance {
     }
 }
 
-/// Everything saved in the settings file. The renderer sees only the appearance part.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", default)]
-pub struct Settings {
-    pub playback: PlaybackPreferences,
-    #[serde(deserialize_with = "appearance_from_file")]
-    pub appearance: Appearance,
-}
-
-/// A partial update from the renderer; absent fields stay as they are. Playback preferences are
-/// not here: the playback worker owns them and records every change itself.
-#[derive(Debug, Clone, Default, Deserialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
-pub struct SettingsPatch {
-    pub appearance: Option<AppearancePatch>,
-}
-
+/// A partial update from the renderer; absent fields stay as they are.
 #[derive(Debug, Clone, Default, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct AppearancePatch {
     pub artwork_backdrop: Option<bool>,
     pub calm_motion: Option<bool>,
+}
+
+/// Everything saved in the settings file.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+struct Settings {
+    playback: PlaybackPreferences,
+    #[serde(deserialize_with = "appearance_from_file")]
+    appearance: Appearance,
 }
 
 impl Settings {
@@ -93,14 +90,12 @@ impl Settings {
         self
     }
 
-    fn apply(&mut self, patch: &SettingsPatch) {
-        if let Some(appearance) = &patch.appearance {
-            if let Some(value) = appearance.artwork_backdrop {
-                self.appearance.artwork_backdrop = value;
-            }
-            if let Some(value) = appearance.calm_motion {
-                self.appearance.calm_motion = value;
-            }
+    fn apply_appearance(&mut self, patch: &AppearancePatch) {
+        if let Some(value) = patch.artwork_backdrop {
+            self.appearance.artwork_backdrop = value;
+        }
+        if let Some(value) = patch.calm_motion {
+            self.appearance.calm_motion = value;
         }
     }
 }
@@ -135,10 +130,6 @@ impl SettingsService {
         }
     }
 
-    pub fn get(&self) -> Settings {
-        self.state.lock().expect("settings lock").clone()
-    }
-
     /// The appearance the renderer reads, with the revision of its topic.
     pub fn appearance(&self) -> Versioned<Appearance> {
         let state = self.state.lock().expect("settings lock");
@@ -148,13 +139,19 @@ impl SettingsService {
         }
     }
 
-    /// Applies a renderer update and announces it when something changed.
-    pub fn update(&self, patch: &SettingsPatch) -> Appearance {
-        let (settings, changed) = self.modify(|settings| settings.apply(patch));
+    /// Applies a renderer update, announces it when something changed, and returns the appearance
+    /// as it is afterwards.
+    pub fn update_appearance(&self, patch: &AppearancePatch) -> Versioned<Appearance> {
+        let (appearance, changed) = self.modify(|settings| settings.apply_appearance(patch));
         if changed {
             self.messages.state_changed(StateTopic::Appearance);
         }
-        settings.appearance
+        appearance
+    }
+
+    /// The playback preferences the next start of the playback worker begins with.
+    pub fn playback_preferences(&self) -> PlaybackPreferences {
+        self.state.lock().expect("settings lock").playback.clone()
     }
 
     /// Remembers the playback preferences. They are persisted but not announced: the playback
@@ -163,7 +160,10 @@ impl SettingsService {
         self.modify(|settings| settings.playback = preferences);
     }
 
-    fn modify(&self, change: impl FnOnce(&mut Settings)) -> (Settings, bool) {
+    /// Applies `change` under the lock. Returns the appearance with its revision, and whether
+    /// anything changed. A change is queued for the writer while the lock is still held, so the
+    /// writer sees the changes in the order they were made.
+    fn modify(&self, change: impl FnOnce(&mut Settings)) -> (Versioned<Appearance>, bool) {
         let mut state = self.state.lock().expect("settings lock");
         let before = state.clone();
         change(&mut state);
@@ -171,13 +171,15 @@ impl SettingsService {
         if state.appearance != before.appearance {
             self.appearance_revision.fetch_add(1, Ordering::Release);
         }
-        let settings = state.clone();
-        drop(state);
+        let appearance = Versioned {
+            revision: self.appearance_revision.load(Ordering::Acquire),
+            value: state.appearance.clone(),
+        };
         if changed && let Some(writer) = self.writer.lock().expect("settings writer lock").as_ref()
         {
-            let _ = writer.send(settings.clone());
+            let _ = writer.send(state.clone());
         }
-        (settings, changed)
+        (appearance, changed)
     }
 
     /// Writes any pending change and stops the writer thread.
@@ -192,6 +194,11 @@ impl SettingsService {
         {
             error!("settings.writer_panicked");
         }
+    }
+
+    #[cfg(test)]
+    fn get(&self) -> Settings {
+        self.state.lock().expect("settings lock").clone()
     }
 }
 
@@ -285,11 +292,9 @@ mod tests {
     fn saved_changes_are_restored_on_the_next_start() {
         let (_guard, path) = directory();
         let service = SettingsService::load(path.clone(), null_message_sink());
-        service.update(&SettingsPatch {
-            appearance: Some(AppearancePatch {
-                artwork_backdrop: Some(false),
-                calm_motion: Some(true),
-            }),
+        service.update_appearance(&AppearancePatch {
+            artwork_backdrop: Some(false),
+            calm_motion: Some(true),
         });
         service.record_playback(PlaybackPreferences {
             volume: 0.4,
@@ -337,8 +342,7 @@ mod tests {
         std::fs::write(path.join(FILE_NAME), r#"{ "playback": { "volume": 7.0 } }"#).unwrap();
         assert_eq!(
             SettingsService::load(path.clone(), null_message_sink())
-                .get()
-                .playback
+                .playback_preferences()
                 .volume,
             1.0
         );
@@ -361,14 +365,12 @@ mod tests {
         });
         assert!(recorder.sent().is_empty());
 
-        let patch = SettingsPatch {
-            appearance: Some(AppearancePatch {
-                artwork_backdrop: Some(false),
-                calm_motion: None,
-            }),
+        let patch = AppearancePatch {
+            artwork_backdrop: Some(false),
+            calm_motion: None,
         };
-        service.update(&patch);
-        service.update(&patch);
+        service.update_appearance(&patch);
+        service.update_appearance(&patch);
         assert_eq!(recorder.sent(), vec![Sent::State(StateTopic::Appearance)]);
     }
 
@@ -384,16 +386,14 @@ mod tests {
         });
         assert_eq!(service.appearance().revision, 0);
 
-        let patch = SettingsPatch {
-            appearance: Some(AppearancePatch {
-                artwork_backdrop: Some(false),
-                calm_motion: None,
-            }),
+        let patch = AppearancePatch {
+            artwork_backdrop: Some(false),
+            calm_motion: None,
         };
-        service.update(&patch);
-        service.update(&patch);
-        let appearance = service.appearance();
-        assert_eq!(appearance.revision, 1);
-        assert!(!appearance.value.artwork_backdrop);
+        service.update_appearance(&patch);
+        let again = service.update_appearance(&patch);
+        assert_eq!(again.revision, 1);
+        assert!(!again.value.artwork_backdrop);
+        assert_eq!(service.appearance(), again);
     }
 }

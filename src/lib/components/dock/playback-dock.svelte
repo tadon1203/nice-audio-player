@@ -1,6 +1,6 @@
 <script lang="ts">
   import { getPlayback } from "#lib/playback/context";
-  import { getSettings } from "#lib/settings/context";
+  import { getAppearance } from "#lib/settings/context";
   import { nowPlaying } from "#lib/shell/now-playing.svelte";
   import { createNowPlayingTween } from "#lib/shell/now-playing-tween.svelte";
   import ArtworkGlow from "#lib/ui/artwork-glow/artwork-glow.svelte";
@@ -18,7 +18,7 @@
    * centre whatever the two sides hold.
    */
   const playback = getPlayback();
-  const settings = getSettings();
+  const appearance = getAppearance();
   // While Now Playing is open the waveform lives up there, so this slot animates shut.
   const slot = createNowPlayingTween(1, 0);
   const open = $derived(nowPlaying.isOpen);
@@ -29,7 +29,7 @@
   aria-label="Playback controls"
   data-slot="playback-dock"
 >
-  {#if settings.artworkBackdrop}
+  {#if appearance.artworkBackdrop}
     <ArtworkGlow
       artwork={playback.item?.artwork ?? null}
       strength="strong"

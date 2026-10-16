@@ -15,8 +15,8 @@
   import { native } from "#lib/native";
   import { setPlayback } from "#lib/playback/context";
   import { createPlayback } from "#lib/playback/playback.svelte";
-  import { setSettings } from "#lib/settings/context";
-  import { createSettings } from "#lib/settings/settings.svelte";
+  import { setAppearance } from "#lib/settings/context";
+  import { Appearance } from "#lib/settings/appearance.svelte";
   import { createMotionBudget, setMotionBudget } from "#lib/shell/motion-budget.svelte";
   import { nowPlaying } from "#lib/shell/now-playing.svelte";
   import { handlePlaybackShortcut } from "#lib/shell/playback-shortcuts";
@@ -30,18 +30,18 @@
 
   // Created once: the native bridge never changes while the renderer lives.
   const playback = native ? createPlayback(native) : null;
-  const settings = native ? createSettings(native) : null;
+  const appearance = native ? new Appearance(native) : null;
   const libraryScan = new LibraryScanState();
   setLibraryScan(libraryScan);
-  if (playback !== null && settings !== null) {
+  if (playback !== null && appearance !== null) {
     setPlayback(playback);
-    setSettings(settings);
-    setMotionBudget(createMotionBudget(settings));
+    setAppearance(appearance);
+    setMotionBudget(createMotionBudget(appearance));
   }
 
   onMount(() => {
-    if (playback === null || settings === null) return;
-    startNativeSession({ playback, settings, libraryScan, queryClient });
+    if (playback === null || appearance === null) return;
+    startNativeSession({ playback, appearance, libraryScan, queryClient });
   });
 
   $effect(() => applyCssMotion(document.documentElement, prefersReducedMotion.current));

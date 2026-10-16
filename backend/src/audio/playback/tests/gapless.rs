@@ -15,7 +15,7 @@ impl Harness {
             ..library_track(
                 name,
                 ValidatedAudioFile {
-                    path: path.to_string_lossy().into_owned(),
+                    path,
                     file_name: format!("{name}.wav"),
                     extension: "wav".into(),
                 },

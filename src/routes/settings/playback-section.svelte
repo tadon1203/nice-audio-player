@@ -2,8 +2,8 @@
   import { getPlayback } from "#lib/playback/context";
   import { createAudioOutputDevices } from "#lib/playback/output-devices.svelte";
   import { createPlaybackSignalPath } from "#lib/components/signal-path/signal-path.svelte";
-  import { getSettings } from "#lib/settings/context";
-  import type { SettingsUpdate } from "#lib/settings/settings.svelte";
+  import { getAppearance } from "#lib/settings/context";
+  import type { AppearanceUpdate } from "#lib/settings/appearance.svelte";
   import FlapText from "#lib/ui/rolling-number/flap-text.svelte";
   import SectionTitle from "#lib/ui/section-title.svelte";
   import * as Select from "#lib/ui/shadcn/select/index.js";
@@ -12,7 +12,7 @@
   const DEFAULT_DEVICE = "default";
 
   const playback = getPlayback();
-  const settings = getSettings();
+  const appearance = getAppearance();
   const signalPath = createPlaybackSignalPath();
 
   let deviceMenuOpen = $state(false);
@@ -35,8 +35,8 @@
   }
 
   // The store rolls a failed change back and records the error, which is shown below.
-  function update(patch: SettingsUpdate) {
-    void settings.update(patch);
+  function update(patch: AppearanceUpdate) {
+    void appearance.update(patch);
   }
 </script>
 
@@ -83,12 +83,12 @@
     </div>
   </dl>
 
-  {#if settings.artworkBackdrop !== null && settings.calmMotion !== null}
+  {#if appearance.artworkBackdrop !== null && appearance.calmMotion !== null}
     <SettingsSwitchField
       id="artwork-backdrop"
       label="Artwork backdrop"
       class="mt-5 border-y"
-      checked={settings.artworkBackdrop}
+      checked={appearance.artworkBackdrop}
       onChange={(checked) => update({ artworkBackdrop: checked })}
     >
       Light the playback dock and Now Playing with the current track's artwork.
@@ -97,7 +97,7 @@
     <SettingsSwitchField
       id="calm-motion"
       label="Calm motion"
-      checked={settings.calmMotion}
+      checked={appearance.calmMotion}
       onChange={(checked) => update({ calmMotion: checked })}
     >
       Only what marks the current position moves on its own: the Artwork glow stops breathing and
@@ -105,7 +105,7 @@
     </SettingsSwitchField>
   {/if}
 
-  {#if settings.error}
-    <p class="mt-3 text-sm text-destructive" role="alert">{settings.error}</p>
+  {#if appearance.error}
+    <p class="mt-3 text-sm text-destructive" role="alert">{appearance.error}</p>
   {/if}
 </section>

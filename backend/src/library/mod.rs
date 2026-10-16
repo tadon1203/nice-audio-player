@@ -5,19 +5,19 @@
 //! (`store`: catalog, playback selections, track lookups) and the write side (`sync`: folders,
 //! watchers, scanner), reached through the methods below.
 
-pub mod accent;
-pub mod artwork;
-pub mod database;
-pub mod error;
+pub(crate) mod accent;
+pub(crate) mod artwork;
+pub(crate) mod database;
+pub(crate) mod error;
 pub(crate) mod keys;
-pub mod location;
+pub(crate) mod location;
 pub(crate) mod maintenance;
-pub mod migrations;
-pub mod models;
+pub(crate) mod migrations;
+pub(crate) mod models;
 pub(crate) mod roots;
 pub(crate) mod scanner;
-pub mod status;
-pub mod store;
+pub(crate) mod status;
+pub(crate) mod store;
 pub(crate) mod summary;
 pub(crate) mod sync;
 #[cfg(test)]

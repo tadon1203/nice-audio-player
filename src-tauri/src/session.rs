@@ -135,7 +135,7 @@ fn batch_messages(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use backend::audio::playback::PlaybackFailureCode;
+    use backend::dto::PlaybackFailureCode;
 
     #[test]
     fn occurrences_are_sent_in_arrival_order_and_never_merged() {

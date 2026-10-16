@@ -2,6 +2,7 @@ import type {
   Appearance,
   AudioOutputSelection,
   InitialState,
+  SessionStartedBy,
   LibraryAlbumArtistSummary,
   LibraryAlbumDetails,
   LibraryAlbumSummary,
@@ -325,6 +326,7 @@ export function playbackItemFor(track: LibraryTrackSummary): PlaybackItem {
 type PlayingFields = {
   status: "playing" | "paused";
   item: PlaybackItem;
+  startedBy: SessionStartedBy;
   positionMs: number;
   seekRevision: number;
   volume: number;
@@ -354,6 +356,7 @@ export function playingSnapshot(fields: PlayingFields): PlaybackSnapshot {
     },
     session: {
       item: fields.item,
+      startedBy: fields.startedBy,
       playbackId: playbackIdOf(fields.item),
       positionMs: fields.positionMs,
       seekRevision: fields.seekRevision,

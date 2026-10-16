@@ -43,6 +43,7 @@ const playing = (
   id: string,
   positionMs: number,
   seekRevision = 0,
+  startedBy: "next" | "previous" | "auto" | "jump" = "jump",
 ): Versioned<PlaybackSnapshot> => ({
   revision,
   value: {
@@ -50,6 +51,7 @@ const playing = (
     base: base(),
     session: {
       item: item(id),
+      startedBy,
       playbackId: "1",
       positionMs,
       seekRevision,
@@ -642,10 +644,10 @@ describe("changing the volume", () => {
 });
 
 describe("last navigation", () => {
-  it("records previous only for the item change it caused", async () => {
+  it("takes the direction from the session's startedBy when the item changes", async () => {
     const playback = createPlayback(
       baseApi({
-        previousPlayback: async () => playing(2, "a", 0),
+        previousPlayback: async () => playing(2, "a", 0, 0, "previous"),
       }),
     );
     playback.initialize(playing(1, "b", 0), queue(1));
@@ -655,8 +657,20 @@ describe("last navigation", () => {
     expect(playback.item?.trackId).toBe("a");
     expect(playback.lastNavigation).toBe("previous");
 
-    // A change nobody asked for (auto-advance) goes forward again.
-    playback.acceptPlayback(playing(3, "c", 0));
+    // A change the player made by itself (auto-advance) goes forward again.
+    playback.acceptPlayback(playing(3, "c", 0, 0, "auto"));
+    expect(playback.lastNavigation).toBe("next");
+  });
+
+  it("keeps the direction across a seek and goes forward for a jump", () => {
+    const playback = createPlayback(baseApi());
+    playback.initialize(playing(1, "a", 0, 0, "previous"), queue(1));
+    expect(playback.lastNavigation).toBe("previous");
+
+    playback.acceptPlayback(playing(2, "a", 5_000, 1, "previous"));
+    expect(playback.lastNavigation).toBe("previous");
+
+    playback.acceptPlayback(playing(3, "d", 0, 0, "jump"));
     expect(playback.lastNavigation).toBe("next");
   });
 
@@ -669,13 +683,13 @@ describe("last navigation", () => {
           await new Promise<void>((resolve) => {
             finishNext = resolve;
           });
-          return playing(2, "b", 0);
+          return playing(2, "b", 0, 0, "next");
         },
         previousPlayback: async () => {
           await new Promise<void>((resolve) => {
             finishPrevious = resolve;
           });
-          return playing(3, "a", 0);
+          return playing(3, "a", 0, 0, "previous");
         },
       }),
     );
