@@ -5,7 +5,8 @@
   },
   "enabledPlugins": {
     "svelte@svelte": true,
-    "rust-analyzer-lsp@claude-plugins-official": true
+    "rust-analyzer-lsp@claude-plugins-official": true,
+    "typescript-lsp@claude-plugins-official": true
   },
   "extraKnownMarketplaces": {
     "svelte": {

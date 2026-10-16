@@ -15,7 +15,7 @@ Read `docs/agents/tickets.md` and `docs/agents/implementation-ready.md`. The inp
    - Pack the line of slices into tickets with the size rule. Number the tickets in the order of work.
    - Copy into each ticket the decisions, contracts, and seams from the spec that it needs. Put each change from the spec's Docs section into the ticket that implements that behavior.
    - If a ticket needs a What or a How that the spec does not give, it is an open decision. Write it down for step 3.
-3. Show the user the numbered list: title, what it delivers, size estimate with the files behind it, and the open decisions. Iterate until the user approves. Do not ask whether the granularity feels right. The size rule decides it.
+3. Show the user the numbered list: title, what it delivers, F, L, and the cost, with the files behind them, and the open decisions. Iterate until the user approves. Do not ask whether the granularity feels right. The size rule decides it.
 4. Write the tickets with the template in `docs/agents/tickets.md`. Keep the spec.
 
 ## Dependency rule
@@ -30,14 +30,23 @@ Bad: ticket 01 adds the `Foo` module and its tests, ticket 02 calls it. Ticket 0
 
 ## Size rule
 
-The agent reads, builds, checks, and reviews one ticket in one 200k-token context, without `/clear` or compaction.
+The agent reads, builds, checks, and reviews one ticket in one context of about 220k tokens, without `/clear` or compaction.
 
-Judge the size roughly. The harness takes 40k at the start of the session, so 160k is left for the work. Keep about a quarter of that for the check runs and the review with its fixes. The rest holds about 10,000 lines: a file read in full counts once, and a line written counts twice.
+The work budget is about 150k: 220k, minus about 40k for the session start, minus about 30k for the review and its fixes.
 
-Aim each ticket at 200k. Fill the tickets in order: add the next slice to the current ticket while it still fits, and start a new ticket only when the next slice does not fit. Slices that read the same files pack well together, because each file costs only once. Only the last ticket may be far under 200k.
+The cost of a slice is `3k × F + 12 × L`.
 
-A clean cut matters more than the limit. A ticket may go over 200k, up to about 240k (about 12,000 lines), when that gives a cleaner cut: the next slice belongs with the ones before it, or the cut at 200k would leave a small rest ticket. Never go over 240k.
+- F is the number of files that the slice creates, edits, deletes, or renames.
+- L is the current line count of the files that it edits, deletes, or renames. An edit needs the whole file read.
 
-If one slice alone is over 240k, split it where each part is still verifiable and still follows the dependency rule. If no such place exists, add a prefactoring ticket first.
+Measure F and L with git and `wc`. Do not guess. About 30 files fit one ticket. A file that a scripted replace changes costs about 0.3k, because the script does not read it. A generated file costs the same. Use the scripted cost only for one identical change in many files, and say in the ticket that it is scripted.
+
+The constants come from measured tickets. If an implemented ticket peaks over 250k, measure again and fix them.
+
+Aim each ticket at the budget. Fill the tickets in order: add the next slice to the current ticket while it still fits, and start a new ticket only when the next slice does not fit. Slices that read the same files pack well together, because each file costs only once. Only the last ticket may be far under the budget.
+
+A clean cut matters more than the limit. A ticket may go over the budget, up to the cost of a 250k context (a cost of about 180k, or about 40 files), when that gives a cleaner cut: the next slice belongs with the ones before it, or the cut at the budget would leave a small rest ticket. Never go over 250k.
+
+If one slice alone is over 250k, split it where each part is still verifiable and still follows the dependency rule. If no such place exists, add a prefactoring ticket first.
 
 A **wide refactor** (one mechanical change with call sites across the codebase) cannot be one vertical slice. Number it expand → migrate in batches → contract, so that each ticket leaves the old form working until the last one. The expand ticket also migrates the first batch, so that the new form has a user. The last batch also does the contract. Size each batch with the size rule.
