@@ -28,7 +28,7 @@
    */
   let { class: className }: { class?: string } = $props();
 
-  const playback = AppServices.current().playback;
+  const { playback, actions } = AppServices.current();
   const history = $derived(playback.queue?.history ?? []);
   const current = $derived(playback.queue?.current ?? null);
   const upcoming = $derived(playback.queue?.upcoming ?? []);
@@ -79,7 +79,7 @@
             type="button"
             disabled={isCurrent}
             aria-label="Play {item.title}"
-            onclick={() => void playback.playQueueItem(item.id)}
+            onclick={() => actions.run(() => playback.playQueueItem(item.id))}
             variant="bare"
             size="inline"
             class={cn(

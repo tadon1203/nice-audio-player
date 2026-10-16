@@ -1,22 +1,23 @@
 import { formatAudioPath } from "#lib/utils/format";
 import { AppServices } from "#lib/shell/app-services.svelte";
 import {
-  describeSignalPath,
+  PlaybackTechnicalStatus,
   type PlaybackSignalPath,
 } from "#lib/playback/playback-technical-status";
-import { snapshotSession } from "#lib/playback/snapshot";
+import { PlaybackSnapshots } from "#lib/playback/playback-snapshots";
 
 /**
- * The signal path of the loaded track, or null when nothing is loaded. Call during component
- * initialization; read `current` where it is shown.
+ * The signal path of the loaded track, or null when nothing is loaded. Construct it during
+ * component initialization; read `current` where it is shown.
  */
-export function createPlaybackSignalPath() {
-  const playback = AppServices.current().playback;
-  const session = $derived(snapshotSession(playback.snapshot));
+export class SignalPath {
+  readonly #playback = AppServices.current().playback;
+  readonly #session = $derived(PlaybackSnapshots.session(this.#playback.snapshot));
 
-  const current = $derived.by<PlaybackSignalPath | null>(() => {
+  readonly #current = $derived.by<PlaybackSignalPath | null>(() => {
+    const session = this.#session;
     if (session === null) return null;
-    return describeSignalPath(
+    return PlaybackTechnicalStatus.describe(
       {
         sourceLabel: formatAudioPath({
           format: session.sourceFormat,
@@ -29,13 +30,11 @@ export function createPlaybackSignalPath() {
         channelConversion: session.channelConversion,
         outputName: session.outputDevice.name,
       },
-      playback.snapshot?.base.outputSelection ?? null,
+      this.#playback.snapshot?.base.outputSelection ?? null,
     );
   });
 
-  return {
-    get current() {
-      return current;
-    },
-  };
+  public get current(): PlaybackSignalPath | null {
+    return this.#current;
+  }
 }

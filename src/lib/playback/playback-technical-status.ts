@@ -17,19 +17,22 @@ type SignalFacts = {
   outputName: string | null;
 };
 
-export function describeSignalPath(
-  facts: SignalFacts,
-  selection: AudioOutputSelection | null = null,
-): PlaybackSignalPath {
-  const steps: string[] = [];
-  if (facts.resamplingActive) steps.push(`${formatKilohertz(facts.outputSampleRate)} kHz`);
-  if (facts.channelConversion === "monoToStereo") steps.push("mono to stereo");
-  if (facts.channelConversion === "stereoToMono") steps.push("stereo to mono");
-  if (facts.channelConversion === "downmix") steps.push("surround downmix");
-  return {
-    source: facts.sourceLabel,
-    processing: steps.length > 0 ? steps.join(", ") : null,
-    output: facts.outputName || "Output",
-    selection,
-  };
+/** Describes the signal path of the loaded track. Pure: the facts in, the path out. */
+export class PlaybackTechnicalStatus {
+  public static describe(
+    facts: SignalFacts,
+    selection: AudioOutputSelection | null = null,
+  ): PlaybackSignalPath {
+    const steps: string[] = [];
+    if (facts.resamplingActive) steps.push(`${formatKilohertz(facts.outputSampleRate)} kHz`);
+    if (facts.channelConversion === "monoToStereo") steps.push("mono to stereo");
+    if (facts.channelConversion === "stereoToMono") steps.push("stereo to mono");
+    if (facts.channelConversion === "downmix") steps.push("surround downmix");
+    return {
+      source: facts.sourceLabel,
+      processing: steps.length > 0 ? steps.join(", ") : null,
+      output: facts.outputName || "Output",
+      selection,
+    };
+  }
 }

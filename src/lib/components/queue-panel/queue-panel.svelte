@@ -8,7 +8,7 @@
   import { createShuffleCascade } from "./shuffle-cascade.svelte";
   import UpcomingList from "./upcoming-list.svelte";
 
-  const playback = AppServices.current().playback;
+  const { playback, actions } = AppServices.current();
 
   const queue = $derived(playback.queue);
   const history = $derived(queue?.history ?? []);
@@ -49,7 +49,11 @@
     <div bind:this={scrollElement} class="min-h-0 flex-1 overflow-y-auto py-2">
       <div bind:this={content}>
         {#each history as item (item.id)}
-          <QueueRow {item} tone="past" onPlay={() => void playback.playQueueItem(item.id)} />
+          <QueueRow
+            {item}
+            tone="past"
+            onPlay={() => actions.run(() => playback.playQueueItem(item.id))}
+          />
         {/each}
         {#if queue?.current}
           <div {@attach showAtTop}>

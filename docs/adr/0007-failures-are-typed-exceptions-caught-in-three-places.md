@@ -10,4 +10,15 @@ Three places catch failures:
 
 An absent value is a value. A failure is an exception.
 
-Reason: each kind of failure has one known place to be handled. So the rules stay few.
+## Exception: reads of decorative state
+
+Some reads fill a view. The user cannot act on a failure of such a read. These reads are:
+
+- The Waveform of the loaded track.
+- The upcoming rows that are read in chunks beyond the queue snapshot.
+
+A failed read of this state is not reported. It is not shown as a notice. The Renderer keeps the empty value: no Waveform, or a blank row. The Renderer may retry a failed chunk read a few times first.
+
+This is a fallback, not a fourth place that catches failures. A read of state that the user acts on still uses one of the three places.
+
+Reason: a notice for a failure that the user cannot act on is noise. Silent fallback keeps the view usable, and the rules stay few.

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { AppServices } from "#lib/shell/app-services.svelte";
-  import { createUpcomingItems } from "#lib/playback/upcoming-items.svelte";
+  import { UpcomingItems } from "#lib/playback/upcoming-items.svelte";
   import { flipMotion } from "#lib/ui/motion/svelte-flip";
   import { delayOf } from "#lib/ui/motion/tokens";
   import { createVirtualRows } from "#lib/ui/virtual-rows.svelte";
@@ -25,13 +25,13 @@
     cascading: boolean;
   } = $props();
 
-  const playback = AppServices.current().playback;
+  const { playback, actions } = AppServices.current();
 
   const upcomingCount = $derived(playback.queue?.upcomingCount ?? 0);
   let list = $state<HTMLUListElement | null>(null);
 
   const queueDrag = new QueueDrag({
-    onMove: (id, to) => void playback.moveQueueItem(id, to),
+    onMove: (id, to) => actions.run(() => playback.moveQueueItem(id, to)),
     rowHeight: QUEUE_ROW_PX,
     count: () => upcomingCount,
     scrollElement: () => scrollElement,
@@ -50,7 +50,7 @@
 
   const firstRow = $derived(virtual.items[0]?.index);
   const lastRow = $derived(virtual.items.at(-1)?.index);
-  const itemAt = createUpcomingItems(playback, () =>
+  const itemAt = new UpcomingItems(playback, () =>
     firstRow === undefined || lastRow === undefined ? null : { start: firstRow, end: lastRow },
   );
   // Beyond what the snapshot carries, a row waits for its chunk to arrive.
@@ -105,12 +105,12 @@
           {item}
           tone="upcoming"
           dragHandlers={queueDrag.handlersFor(item.id, index)}
-          onMoveEarlier={() => void playback.moveQueueItem(item.id, index - 1)}
-          onMoveLater={() => void playback.moveQueueItem(item.id, index + 1)}
+          onMoveEarlier={() => actions.run(() => playback.moveQueueItem(item.id, index - 1))}
+          onMoveLater={() => actions.run(() => playback.moveQueueItem(item.id, index + 1))}
           canMoveEarlier={index > 0}
           canMoveLater={index < upcomingCount - 1}
-          onPlay={() => void playback.playQueueItem(item.id)}
-          onRemove={() => void playback.removeQueueItem(item.id)}
+          onPlay={() => actions.run(() => playback.playQueueItem(item.id))}
+          onRemove={() => actions.run(() => playback.removeQueueItem(item.id))}
         />
       {/if}
     </li>

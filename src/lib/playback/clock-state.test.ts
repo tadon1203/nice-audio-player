@@ -1,11 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  estimateClock,
-  initialClockState,
-  reduceClock,
-  type ClockReport,
-  type ClockState,
-} from "./playback-clock-model";
+import { ClockState, type ClockReport } from "./clock-state";
 
 const report = (overrides: Partial<ClockReport> = {}): ClockReport => ({
   itemId: "a",
@@ -18,30 +12,30 @@ const report = (overrides: Partial<ClockReport> = {}): ClockReport => ({
 
 /** Feeds reports in order, each at its own time, and collects the jumps. */
 function run(steps: [number, ClockReport | null][]) {
-  let state: ClockState = initialClockState;
+  let state = ClockState.initial;
   const jumps = [];
   for (const [at, next] of steps) {
-    const result = reduceClock(state, next, at);
+    const result = state.reduce(next, at);
     state = result.state;
     if (result.jump) jumps.push(result.jump);
   }
   return { state, jumps };
 }
 
-describe("estimateClock", () => {
+describe("ClockState.estimate", () => {
   it("advances while playing and holds while paused", () => {
     const { state } = run([[1_000, report()]]);
-    expect(estimateClock(state, 1_500)).toBe(10_500);
+    expect(state.estimate(1_500)).toBe(10_500);
     const paused = run([[1_000, report({ playing: false })]]).state;
-    expect(estimateClock(paused, 5_000)).toBe(10_000);
+    expect(paused.estimate(5_000)).toBe(10_000);
   });
 
   it("is 0 with nothing loaded", () => {
-    expect(estimateClock(initialClockState, 5_000)).toBe(0);
+    expect(ClockState.initial.estimate(5_000)).toBe(0);
   });
 });
 
-describe("reduceClock", () => {
+describe("ClockState.reduce", () => {
   it("announces nothing for the first report or for ordinary ticks", () => {
     const { jumps } = run([
       [0, report({ positionMs: 0 })],
@@ -83,7 +77,7 @@ describe("reduceClock", () => {
       [4_000, report({ positionMs: 11_000 })],
     ]);
     expect(jumps).toEqual([]);
-    expect(estimateClock(state, 4_000)).toBe(11_000);
+    expect(state.estimate(4_000)).toBe(11_000);
   });
 
   it("does not announce pausing, resuming or unloading", () => {
@@ -104,5 +98,11 @@ describe("reduceClock", () => {
       [30, report({ itemId: "b", seekRevision: 2 })],
     ]);
     expect(jumps.map((jump) => jump.id)).toEqual([1, 2, 3]);
+  });
+
+  it("leaves the state it reduced from unchanged", () => {
+    const before = ClockState.initial.reduce(report(), 0).state;
+    before.reduce(report({ seekRevision: 1 }), 10);
+    expect(before.jumps).toBe(0);
   });
 });

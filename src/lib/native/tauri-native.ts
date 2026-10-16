@@ -1,11 +1,13 @@
 import { Channel, isTauri } from "@tauri-apps/api/core";
 import {
   commands,
+  type AudioDeviceListError,
   type BackendMessage,
   type PlaybackContext,
   type PlaybackServiceError,
 } from "./bindings";
 import { AppearanceError } from "./errors/appearance-error";
+import { AudioDevicesError } from "./errors/audio-devices-error";
 import { IpcError } from "./errors/ipc-error";
 import { NativeBridgeUnavailableError } from "./errors/native-bridge-unavailable-error";
 import { PlaybackError } from "./errors/playback-error";
@@ -116,6 +118,15 @@ class TauriPlaybackClient implements PlaybackClient {
   }
   queueWindow(offset: number, limit: number) {
     return this.#call(() => this.#commands.getPlaybackQueueWindow(offset, limit));
+  }
+  waveform() {
+    return this.#call(() => this.#commands.getPlaybackWaveform());
+  }
+  listOutputDevices() {
+    return callCommand(
+      () => this.#commands.listAudioOutputDevices(),
+      (error: AudioDeviceListError) => new AudioDevicesError(error),
+    );
   }
 
   #call<T>(run: () => Promise<T>): Promise<T> {

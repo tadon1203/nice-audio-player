@@ -1,6 +1,7 @@
 import type {
   Appearance,
   AppearancePatch,
+  AudioOutputDevice,
   AudioOutputSelection,
   BackendMessage,
   InitialState,
@@ -9,6 +10,7 @@ import type {
   PlaybackQueueWindow,
   PlaybackRepeatMode,
   PlaybackSnapshot,
+  PlaybackWaveform,
   Versioned,
 } from "./bindings";
 
@@ -40,6 +42,9 @@ export interface PlaybackClient {
   clearQueue(): Promise<Versioned<PlaybackQueueSnapshot>>;
   restorePreviousQueue(): Promise<Versioned<PlaybackSnapshot>>;
   queueWindow(offset: number, limit: number): Promise<PlaybackQueueWindow>;
+  /** The loaded track's Waveform, or null while it is analyzed. Also queues the analysis. */
+  waveform(): Promise<Versioned<PlaybackWaveform | null>>;
+  listOutputDevices(): Promise<AudioOutputDevice[]>;
 }
 
 export interface AppearanceClient {

@@ -1,8 +1,10 @@
 <script lang="ts">
   import { AppServices } from "#lib/shell/app-services.svelte";
+  import { ClearUpcoming } from "#lib/shell/clear-upcoming.svelte";
   import { Button } from "#lib/ui/shadcn/button";
 
-  const playback = AppServices.current().playback;
+  const { playback, actions, notices } = AppServices.current();
+  const clearUpcoming = new ClearUpcoming(playback, notices);
 
   const queue = $derived(playback.queue);
   const upcomingCount = $derived(queue?.upcomingCount ?? 0);
@@ -14,7 +16,7 @@
       type="button"
       variant="quiet"
       size="compact"
-      onclick={() => void playback.clearQueue()}
+      onclick={() => actions.run(() => clearUpcoming.run())}
       class="w-full"
     >
       Clear upcoming

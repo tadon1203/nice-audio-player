@@ -1,5 +1,4 @@
-import type { PlaybackServiceError } from "#lib/native";
-import { messageForCode, nativeErrorCode } from "#lib/native";
+import type { PlaybackError, PlaybackServiceError } from "#lib/native";
 
 type PlaybackErrorCode = PlaybackServiceError["code"];
 
@@ -37,6 +36,7 @@ const messages = {
   taskFailed: "The playback request did not finish.",
 } as const satisfies Record<PlaybackErrorCode, string>;
 
-export function playbackCommandErrorMessage(error: unknown): string {
-  return messageForCode(messages, nativeErrorCode(error), "Playback could not be started.");
+/** The message for a playback command the Backend rejected. */
+export function playbackErrorMessage(error: PlaybackError): string {
+  return messages[error.code];
 }

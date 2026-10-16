@@ -3,9 +3,9 @@
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import { goto } from "$app/navigation";
   import { trackLinks } from "#lib/library/tracks";
-  import { playbackCommandErrorMessage } from "#lib/playback/playback-errors";
+  import { PlaybackFailure } from "#lib/playback/playback-failure";
   import { AppServices } from "#lib/shell/app-services.svelte";
-  import { playbackFailureMessage } from "#lib/playback/playback-failure";
+  import { ErrorMessages } from "#lib/shell/error-messages";
   import { nowPlaying } from "#lib/shell/now-playing.svelte";
   import Artwork from "#lib/ui/artwork.svelte";
   import ContextMenuContent from "#lib/ui/context-menu/context-menu-content.svelte";
@@ -18,12 +18,12 @@
   /** Sliding distance for the artwork, title and artist. One value so they travel together. */
   const SLIDE_PX = 16;
 
-  const { playback, session, motion: budget } = AppServices.current();
+  const { playback, session, motion: budget, notices, actions } = AppServices.current();
   // A failed startup shows its reason here, since there is no playback state to report on.
-  const error = $derived(
+  const notice = $derived(
     session.connection === "failed"
-      ? playbackCommandErrorMessage(session.startupError)
-      : playback.error,
+      ? { kind: "error" as const, message: ErrorMessages.of(session.startupError) }
+      : notices.at("dock"),
   );
   const item = $derived(playback.item);
   const trackKey = $derived(item?.trackId ?? "none");
@@ -37,7 +37,7 @@
    * Under reduced motion it is a plain crossfade.
    */
   function slide(_node: Element, { entering }: { entering: boolean }) {
-    const direction = playback.lastNavigation === "previous" ? -1 : 1;
+    const direction = playback.transitionDirection === "backward" ? -1 : 1;
     return slideTransition("move", budget.current === "reduced", {
       x: (entering ? direction : -direction) * SLIDE_PX,
     });
@@ -140,7 +140,7 @@
           >
             {title}
           </Button>
-          {#if error}
+          {#if notice?.kind === "error"}
             <div class="flex min-w-0 items-center gap-2">
               <Tooltip.Root bind:open={errorTooltipOpen}>
                 <Tooltip.Trigger>
@@ -154,15 +154,15 @@
                       onfocus={() => (errorTooltipOpen = true)}
                       onblur={() => (errorTooltipOpen = false)}
                     >
-                      {error}
+                      {notice.message}
                     </span>
                   {/snippet}
                 </Tooltip.Trigger>
-                <Tooltip.Content>{error}</Tooltip.Content>
+                <Tooltip.Content>{notice.message}</Tooltip.Content>
               </Tooltip.Root>
               <Button
                 type="button"
-                onclick={() => playback.clearError()}
+                onclick={() => notices.dismiss("dock", "error")}
                 variant="text"
                 size="inline"
                 class="font-normal"
@@ -171,14 +171,14 @@
               </Button>
             </div>
           {:else if playback.failure !== null}
-            {@const reason = playbackFailureMessage(playback.failure)}
+            {@const reason = PlaybackFailure.message(playback.failure)}
             <div class="flex min-w-0 items-center gap-2">
               <span class="block truncate text-sm text-destructive" role="alert" title={reason}>
                 {reason}
               </span>
               <Button
                 type="button"
-                onclick={() => void playback.resume()}
+                onclick={() => actions.run(() => playback.resume())}
                 variant="text"
                 size="inline"
                 class="font-normal"
@@ -186,15 +186,15 @@
                 Retry
               </Button>
             </div>
-          {:else if playback.undoOffer}
+          {:else if notice?.kind === "undo"}
             <div class="flex min-w-0 items-center gap-2">
               <span class="block truncate text-sm text-muted-foreground" role="status">
-                {playback.undoOffer}
+                {notice.message}
               </span>
               <span aria-hidden="true" class="shrink-0 text-sm text-muted-foreground">·</span>
               <Button
                 type="button"
-                onclick={() => void playback.undoQueueChange()}
+                onclick={() => actions.run(() => playback.undoQueueChange())}
                 variant="text"
                 size="inline"
                 class="font-normal"
@@ -202,14 +202,14 @@
                 Undo
               </Button>
             </div>
-          {:else if playback.notice}
+          {:else if notice?.kind === "skipped"}
             <div class="flex min-w-0 items-center gap-2">
               <span class="block truncate text-sm text-muted-foreground" role="status">
-                {playback.notice}
+                {notice.message}
               </span>
               <Button
                 type="button"
-                onclick={() => playback.dismissNotice()}
+                onclick={() => notices.dismiss("dock", "skipped")}
                 variant="text"
                 size="inline"
                 class="font-normal"

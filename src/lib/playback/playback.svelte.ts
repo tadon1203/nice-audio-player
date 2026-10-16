@@ -1,20 +1,23 @@
 import type {
   ActiveSession,
   AudioOutputSelection,
+  LibraryAlbumKey,
   PlaybackContext,
+  PlaybackFailureCode,
   PlaybackItem,
   PlaybackPosition,
   PlaybackQueueSnapshot,
   PlaybackRepeatMode,
   PlaybackSnapshot,
+  PlaybackClient,
+  PlaybackQueueWindow,
   Versioned,
 } from "#lib/native";
-import { Replica, SupersededError, type PlaybackClient } from "#lib/native";
-import { createPlaybackClock, type PlaybackClock } from "./clock";
-import { playbackCommandErrorMessage } from "./playback-errors";
-import { clockReportOf, isActivePlayback, snapshotItem, snapshotSession } from "./snapshot";
+import { Replica, SupersededError } from "#lib/native";
+import type { PlaybackClock } from "./playback-clock.svelte";
+import { PlaybackSnapshots } from "./playback-snapshots";
 
-export type PlaybackNavigation = "next" | "previous";
+export type TransitionDirection = "forward" | "backward";
 export type TransportCommand =
   | "start"
   | "pause"
@@ -23,166 +26,195 @@ export type TransportCommand =
   | "next"
   | "outputSelection";
 
-/** How long the notice about skipped tracks, or the offer to undo, stays. */
-const NOTICE_MS = 6_000;
-
 type QueuedTransport = {
   command: TransportCommand;
   operation: () => Promise<Versioned<PlaybackSnapshot>>;
-  settle: (done: boolean) => void;
+  resolve: () => void;
+  reject: (error: unknown) => void;
 };
 
 /**
  * Which way a new session's start moves the Now Playing transition. The backend says why the
  * session started: only Previous goes backward; every other start, or none, goes forward.
  */
-function navigationOf(session: ActiveSession | null): PlaybackNavigation {
-  return session?.startedBy === "previous" ? "previous" : "next";
+function directionOf(session: ActiveSession | null): TransitionDirection {
+  return session?.startedBy === "previous" ? "backward" : "forward";
 }
 
 /**
- * Mirrors the backend's playback state. The replicas hold what the backend said; everything a
- * component shows is a primitive derived from them, so a component re-renders only for the
- * fact it reads. Position never lands here: position events feed the clock and nothing else,
- * and `item` keeps its identity while the same queue item plays.
+ * Mirrors the backend's playback state. The replicas hold what the backend said, and every getter
+ * reads them. Commands throw their PlaybackError on failure, and a command a newer one replaced
+ * throws SupersededError; the caller decides where that shows (see UserActionRunner). Position never
+ * lands here: position events feed the clock and nothing else, and `item` keeps its identity while
+ * the same queue item plays.
  */
 export class Playback {
-  readonly clock: PlaybackClock;
   readonly #client: PlaybackClient;
+  readonly #clock: PlaybackClock;
   readonly #snapshot = new Replica<PlaybackSnapshot>();
   readonly #queue = new Replica<PlaybackQueueSnapshot>();
 
   /** The loaded track, or the last one that played. Replaced only when the queue item changes. */
-  item = $state.raw<PlaybackItem | null>(null);
-  /** How the current item was reached: Next/Previous, or anything else (counts as "next"). */
-  lastNavigation = $state.raw<PlaybackNavigation>("next");
-  transportPending = $state.raw<TransportCommand | null>(null);
-  seekPending = $state.raw(false);
-  volumePending = $state.raw(false);
-  mutePending = $state.raw(false);
-  volumePreview = $state.raw<number | null>(null);
-  error = $state.raw<string | null>(null);
-  /** What the player did by itself, e.g. skipped unplayable tracks. Clears after a while. */
-  notice = $state.raw<string | null>(null);
-  /** A queue change the listener can take back ("Queue replaced"). Clears after a while. */
-  undoOffer = $state.raw<string | null>(null);
+  #item = $state.raw<PlaybackItem | null>(null);
+  /** How the current item was reached: Next/Previous, or anything else (counts as forward). */
+  #transitionDirection = $state.raw<TransitionDirection>("forward");
+  #transportPending = $state.raw<TransportCommand | null>(null);
+  #seekPending = $state.raw(false);
+  #volumePending = $state.raw(false);
+  #mutePending = $state.raw(false);
+  #volumePreview = $state.raw<number | null>(null);
 
   #requestedVolume: number | null = null;
   #volumeWriteActive = false;
   #requestedSeek: number | null = null;
   // Latest wins, like the backend: one transport command waits for the one in flight.
   #queuedTransport: QueuedTransport | null = null;
-  #skippedTitles: string[] = [];
-  #noticeTimer: ReturnType<typeof setTimeout> | null = null;
-  #undoTimer: ReturnType<typeof setTimeout> | null = null;
+
+  public constructor(client: PlaybackClient, clock: PlaybackClock) {
+    this.#client = client;
+    this.#clock = clock;
+  }
 
   /** The latest playback snapshot the backend sent, or null before the first one. */
-  get snapshot(): PlaybackSnapshot | null {
+  public get snapshot(): PlaybackSnapshot | null {
     return this.#snapshot.value;
   }
 
-  /** The revision the held snapshot was published with. */
-  get playbackRevision(): number | null {
-    return this.#snapshot.revision;
-  }
-
   /** The latest queue snapshot the backend sent, or null before the first one. */
-  get queue(): PlaybackQueueSnapshot | null {
+  public get queue(): PlaybackQueueSnapshot | null {
     return this.#queue.value;
   }
 
   /** The revision the held queue was published with. */
-  get queueRevision(): number | null {
+  public get queueRevision(): number | null {
     return this.#queue.revision;
   }
 
-  readonly #session = $derived(snapshotSession(this.snapshot));
-  readonly status = $derived(this.snapshot?.status ?? ("stopped" as const));
-  /** Why playback stopped, until the listener retries or plays something else. */
-  readonly failure = $derived(
-    this.snapshot?.status === "failed" && !this.snapshot.skipping ? this.snapshot.error : null,
-  );
-  /** True while a track is loaded, whether it is playing or paused. */
-  readonly active = $derived(isActivePlayback(this.snapshot));
-  /** Identifies the loaded session; stable across seeks, new for every track that loads. */
-  readonly playbackId = $derived(this.#session?.playbackId ?? null);
-  readonly durationMs = $derived(this.#session?.durationMs ?? null);
-  readonly canGoPrevious = $derived(this.snapshot?.base.canGoPrevious ?? false);
-  readonly canGoNext = $derived(this.snapshot?.base.canGoNext ?? false);
-  readonly volume = $derived(this.volumePreview ?? this.snapshot?.base.volume ?? 1);
-  readonly muted = $derived(this.snapshot?.base.muted ?? false);
-  /** The chosen output device, or null for the system default. */
-  readonly outputDeviceId = $derived.by(() => {
-    const selection = this.snapshot?.base.outputSelection;
-    return selection?.kind === "device" ? selection.deviceId : null;
-  });
-  readonly repeatMode = $derived<PlaybackRepeatMode>(this.queue?.repeatMode ?? "off");
-  readonly shuffleEnabled = $derived(this.queue?.shuffleEnabled ?? false);
-  /** Which library track is loaded, for highlighting track rows. */
-  readonly activeTrackId = $derived(this.item?.trackId ?? null);
-
-  constructor(client: PlaybackClient, clock: PlaybackClock = createPlaybackClock()) {
-    this.#client = client;
-    this.clock = clock;
+  /** The clock that follows this playback's position. */
+  public get clock(): PlaybackClock {
+    return this.#clock;
   }
 
-  #setError(error: unknown) {
-    // A request replaced by a newer one has nothing to report.
-    if (error instanceof SupersededError) return;
-    this.error = error ? playbackCommandErrorMessage(error) : null;
+  /** The loaded track, or the last one that played. */
+  public get item(): PlaybackItem | null {
+    return this.#item;
+  }
+
+  public get status(): PlaybackSnapshot["status"] {
+    return this.snapshot?.status ?? "stopped";
+  }
+
+  /** True while a track is loaded, whether it is playing or paused. */
+  public get isActive(): boolean {
+    return PlaybackSnapshots.isActive(this.snapshot);
+  }
+
+  public get isPlaying(): boolean {
+    return this.status === "playing";
+  }
+
+  /** Why playback stopped on an output failure, until the listener retries or plays something else. */
+  public get failure(): PlaybackFailureCode | null {
+    return this.snapshot?.status === "failed" && !this.snapshot.skipping
+      ? this.snapshot.error
+      : null;
+  }
+
+  /** Identifies the loaded session; stable across seeks, new for every track that loads. */
+  public get playbackId(): string | null {
+    return this.#session()?.playbackId ?? null;
+  }
+
+  public get durationMs(): number | null {
+    return this.#session()?.durationMs ?? null;
+  }
+
+  public get transitionDirection(): TransitionDirection {
+    return this.#transitionDirection;
+  }
+
+  public get canGoPrevious(): boolean {
+    return this.snapshot?.base.canGoPrevious ?? false;
+  }
+
+  public get canGoNext(): boolean {
+    return this.snapshot?.base.canGoNext ?? false;
+  }
+
+  /** The volume the listener set, while it is being written; otherwise the backend's. */
+  public get volume(): number {
+    return this.#volumePreview ?? this.snapshot?.base.volume ?? 1;
+  }
+
+  public get muted(): boolean {
+    return this.snapshot?.base.muted ?? false;
+  }
+
+  /** The chosen output device, or null for the system default. */
+  public get outputDeviceId(): string | null {
+    const selection = this.snapshot?.base.outputSelection;
+    return selection?.kind === "device" ? selection.deviceId : null;
+  }
+
+  public get repeatMode(): PlaybackRepeatMode {
+    return this.queue?.repeatMode ?? "off";
+  }
+
+  public get shuffleEnabled(): boolean {
+    return this.queue?.shuffleEnabled ?? false;
+  }
+
+  /** Which library track is loaded, for highlighting track rows. */
+  public get activeTrackId(): string | null {
+    return this.#item?.trackId ?? null;
+  }
+
+  public get transportPending(): TransportCommand | null {
+    return this.#transportPending;
+  }
+
+  public get seekPending(): boolean {
+    return this.#seekPending;
+  }
+
+  public get volumePending(): boolean {
+    return this.#volumePending;
+  }
+
+  public get mutePending(): boolean {
+    return this.#mutePending;
+  }
+
+  /** True while the album's track is loaded and playing or paused. */
+  public isAlbumLoaded(albumKey: LibraryAlbumKey): boolean {
+    const loaded = this.#item?.albumKey;
+    return (
+      this.isActive &&
+      loaded?.title === albumKey.title &&
+      loaded.albumArtist === albumKey.albumArtist &&
+      loaded.albumEdition === albumKey.albumEdition
+    );
+  }
+
+  /** The seek waiting for the one in flight, if any: where repeated key presses continue from. */
+  public pendingSeekMs(): number | null {
+    return this.#requestedSeek;
   }
 
   /** Keeps the snapshot only if it is newer than the held one. Command responses come here too. */
-  acceptPlayback(incoming: Versioned<PlaybackSnapshot>) {
+  public acceptPlayback(incoming: Versioned<PlaybackSnapshot>): void {
     const snapshot = incoming.value;
-    const incomingItem = snapshotItem(snapshot);
+    const incomingItem = PlaybackSnapshots.item(snapshot);
     if (!this.#snapshot.accept(incoming)) return;
-    if (incomingItem?.queueItemId !== this.item?.queueItemId) {
-      this.lastNavigation = navigationOf(snapshotSession(snapshot));
-      this.item = incomingItem;
+    if (incomingItem?.queueItemId !== this.#item?.queueItemId) {
+      this.#transitionDirection = directionOf(PlaybackSnapshots.session(snapshot));
+      this.#item = incomingItem;
     }
-    this.clock.accept(clockReportOf(snapshot));
-  }
-
-  /** The backend skipped a track by itself: its title, or null when it had none. Consecutive skips share one notice. */
-  acceptSkip(title: string | null) {
-    this.#skippedTitles.push(title ?? "a track");
-    const [first, ...others] = this.#skippedTitles;
-    this.notice =
-      others.length === 0
-        ? `Couldn't play ${first}, skipped`
-        : `Couldn't play ${first} and ${others.length} more, skipped`;
-    if (this.#noticeTimer !== null) clearTimeout(this.#noticeTimer);
-    this.#noticeTimer = setTimeout(() => this.dismissNotice(), NOTICE_MS);
-  }
-
-  dismissNotice() {
-    if (this.#noticeTimer !== null) clearTimeout(this.#noticeTimer);
-    this.#noticeTimer = null;
-    this.#skippedTitles = [];
-    this.notice = null;
-  }
-
-  #offerUndo(message: string) {
-    this.undoOffer = message;
-    if (this.#undoTimer !== null) clearTimeout(this.#undoTimer);
-    this.#undoTimer = setTimeout(() => this.dismissUndo(), NOTICE_MS);
-  }
-
-  dismissUndo() {
-    if (this.#undoTimer !== null) clearTimeout(this.#undoTimer);
-    this.#undoTimer = null;
-    this.undoOffer = null;
-  }
-
-  /** Puts back the queue the last replacement or "Clear upcoming" took away. */
-  async undoQueueChange(): Promise<void> {
-    this.dismissUndo();
-    await this.#runTransport("start", () => this.#client.restorePreviousQueue());
+    this.#clock.accept(PlaybackSnapshots.clockReport(snapshot));
   }
 
   /** Keeps the queue only if it is newer than the held one. Command responses come here too. */
-  acceptQueue(incoming: Versioned<PlaybackQueueSnapshot>) {
+  public acceptQueue(incoming: Versioned<PlaybackQueueSnapshot>): void {
     this.#queue.accept(incoming);
   }
 
@@ -190,112 +222,39 @@ export class Playback {
    * Time only: a position for another session or seek than the snapshot's is stale. A paused
    * snapshot already holds the exact position, and a tick sent before the pause must not move it.
    */
-  acceptPosition(position: PlaybackPosition) {
-    const session = this.#session;
+  public acceptPosition(position: PlaybackPosition): void {
+    const session = this.#session();
     if (session === null || this.status !== "playing") return;
     if (position.playbackId !== session.playbackId) return;
     if (position.seekRevision !== session.seekRevision) return;
-    this.clock.accept(clockReportOf(this.snapshot, position));
-  }
-
-  /**
-   * Runs a transport command. One that arrives while another is in flight waits for it, and a
-   * newer one replaces it, so the latest press wins instead of being dropped.
-   */
-  #runTransport(
-    command: TransportCommand,
-    operation: () => Promise<Versioned<PlaybackSnapshot>>,
-  ): Promise<boolean> {
-    if (this.transportPending === null) {
-      return this.#performTransport(command, operation);
-    }
-    this.#queuedTransport?.settle(false);
-    return new Promise((settle) => {
-      this.#queuedTransport = { command, operation, settle };
-    });
-  }
-
-  async #performTransport(
-    command: TransportCommand,
-    operation: () => Promise<Versioned<PlaybackSnapshot>>,
-  ): Promise<boolean> {
-    this.transportPending = command;
-    this.error = null;
-    try {
-      this.acceptPlayback(await operation());
-      return true;
-    } catch (error) {
-      this.#setError(error);
-      return false;
-    } finally {
-      this.transportPending = null;
-      const queued = this.#queuedTransport;
-      this.#queuedTransport = null;
-      if (queued !== null) {
-        void this.#performTransport(queued.command, queued.operation).then(queued.settle);
-      }
-    }
-  }
-
-  async #runQueueCommand(
-    operation: () => Promise<Versioned<PlaybackQueueSnapshot>>,
-  ): Promise<boolean> {
-    this.error = null;
-    try {
-      this.acceptQueue(await operation());
-      return true;
-    } catch (error) {
-      this.#setError(error);
-      return false;
-    }
-  }
-
-  async #flushVolume() {
-    if (this.#volumeWriteActive) return;
-    this.#volumeWriteActive = true;
-    this.volumePending = true;
-    this.error = null;
-    try {
-      while (this.#requestedVolume !== null) {
-        const value = this.#requestedVolume;
-        this.#requestedVolume = null;
-        this.acceptPlayback(await this.#client.setVolume(value));
-      }
-      this.volumePreview = null;
-    } catch (error) {
-      this.#requestedVolume = null;
-      this.volumePreview = null;
-      this.#setError(error);
-    } finally {
-      this.#volumeWriteActive = false;
-      this.volumePending = false;
-    }
+    this.#clock.accept(PlaybackSnapshots.clockReport(this.snapshot, position));
   }
 
   /** Replaces the queue with `context` and plays from `startTrackId` (its first track if null). */
-  async startPlayback(context: PlaybackContext, startTrackId: string | null): Promise<void> {
-    await this.#runTransport("start", () => this.#client.start(context, startTrackId));
+  public start(context: PlaybackContext, startTrackId: string | null): Promise<void> {
+    return this.#runTransport("start", () => this.#client.start(context, startTrackId));
   }
 
-  /** A slice of the upcoming list beyond what the queue snapshot carries. */
-  fetchQueueWindow(offset: number, limit: number) {
-    return this.#client.queueWindow(offset, limit);
-  }
-
-  pause() {
+  public pause(): Promise<void> {
     return this.#runTransport("pause", () => this.#client.pause());
   }
 
   /** Resumes a paused track; after a failure, retries the current item with the queue intact. */
-  resume() {
+  public resume(): Promise<void> {
     return this.#runTransport("resume", () => this.#client.resume());
   }
 
-  previous() {
+  /** Plays the album from its first track if it is not loaded; otherwise pauses or resumes it. */
+  public togglePlayAlbum(albumKey: LibraryAlbumKey): Promise<void> {
+    if (!this.isAlbumLoaded(albumKey)) return this.start({ kind: "album", key: albumKey }, null);
+    return this.isPlaying ? this.pause() : this.resume();
+  }
+
+  public previous(): Promise<void> {
     return this.#runTransport("previous", () => this.#client.previous());
   }
 
-  next() {
+  public next(): Promise<void> {
     return this.#runTransport("next", () => this.#client.next());
   }
 
@@ -303,14 +262,13 @@ export class Playback {
    * Seeks. Requests made while one is in flight coalesce: only the latest is sent once the
    * first returns, so holding an arrow key keeps moving instead of dropping most presses.
    */
-  async seek(positionMs: number) {
+  public async seek(positionMs: number): Promise<void> {
     // The one place every seek passes: the backend takes whole milliseconds.
     const rounded = Math.round(positionMs);
     const duration = this.durationMs;
     this.#requestedSeek = duration === null ? rounded : Math.min(Math.max(rounded, 0), duration);
-    if (this.seekPending) return;
-    this.seekPending = true;
-    this.error = null;
+    if (this.#seekPending) return;
+    this.#seekPending = true;
     try {
       while (this.#requestedSeek !== null) {
         const value = this.#requestedSeek;
@@ -319,89 +277,156 @@ export class Playback {
       }
     } catch (error) {
       this.#requestedSeek = null;
-      this.#setError(error);
+      throw error;
     } finally {
-      this.seekPending = false;
+      this.#seekPending = false;
     }
   }
 
-  /** The seek waiting for the one in flight, if any: where repeated key presses continue from. */
-  pendingSeekMs() {
-    return this.#requestedSeek;
-  }
-
-  setVolume(value: number) {
+  /** Sets the volume. Requests made while one is being written coalesce, as seeks do. */
+  public setVolume(value: number): Promise<void> {
     this.#requestedVolume = Math.max(0, Math.min(1, value));
-    this.volumePreview = this.#requestedVolume;
-    void this.#flushVolume();
+    this.#volumePreview = this.#requestedVolume;
+    return this.#flushVolume();
   }
 
   /** Sets the volume; changing it while muted unmutes, so the change is audible. */
-  changeVolume(value: number) {
-    this.setVolume(value);
-    if (this.muted && !this.mutePending) void this.toggleMute();
+  public async changeVolume(value: number): Promise<void> {
+    const pending = [this.setVolume(value)];
+    if (this.muted && !this.mutePending) pending.push(this.toggleMute());
+    await Promise.all(pending);
   }
 
-  /** Dismisses the last reported failure. */
-  clearError() {
-    this.error = null;
-  }
-
-  async toggleMute() {
-    if (this.mutePending) return;
-    this.mutePending = true;
-    this.error = null;
+  public async toggleMute(): Promise<void> {
+    if (this.#mutePending) return;
+    this.#mutePending = true;
     try {
       this.acceptPlayback(await this.#client.setMuted(!this.muted));
-    } catch (error) {
-      this.#setError(error);
     } finally {
-      this.mutePending = false;
+      this.#mutePending = false;
     }
   }
 
-  setShuffle(enabled: boolean) {
+  public setShuffle(enabled: boolean): Promise<void> {
     return this.#runQueueCommand(() => this.#client.setShuffle(enabled));
   }
 
   /** Turns the global shuffle on, then replaces the queue with `context`. Nothing starts if the shuffle cannot be turned on. */
-  async shuffleAndStart(context: PlaybackContext) {
-    if (!(await this.setShuffle(true))) return;
-    await this.startPlayback(context, null);
+  public async shuffleAndStart(context: PlaybackContext): Promise<void> {
+    await this.setShuffle(true);
+    await this.start(context, null);
   }
 
-  setRepeatMode(mode: PlaybackRepeatMode) {
+  public setRepeatMode(mode: PlaybackRepeatMode): Promise<void> {
     return this.#runQueueCommand(() => this.#client.setRepeatMode(mode));
   }
 
-  removeQueueItem(id: string) {
+  public removeQueueItem(id: string): Promise<void> {
     return this.#runQueueCommand(() => this.#client.removeQueueItem(id));
   }
 
   /** Moves an upcoming item to `to`, an index into the upcoming list (0 is next up). */
-  moveQueueItem(id: string, to: number) {
+  public moveQueueItem(id: string, to: number): Promise<void> {
     return this.#runQueueCommand(() => this.#client.moveQueueItem(id, to));
   }
 
-  async clearQueue() {
+  /** Resolves true when upcoming items were removed (the caller offers an undo). */
+  public async clearQueue(): Promise<boolean> {
     const hadUpcoming = (this.queue?.upcomingCount ?? 0) > 0;
-    const cleared = await this.#runQueueCommand(() => this.#client.clearQueue());
-    if (cleared && hadUpcoming) this.#offerUndo("Upcoming cleared");
-    return cleared;
+    await this.#runQueueCommand(() => this.#client.clearQueue());
+    return hadUpcoming;
+  }
+
+  /** Puts back the queue the last replacement or "Clear upcoming" took away. */
+  public undoQueueChange(): Promise<void> {
+    return this.#runTransport("start", () => this.#client.restorePreviousQueue());
   }
 
   /** Jumps to an upcoming item and plays it. */
-  playQueueItem(id: string) {
+  public playQueueItem(id: string): Promise<void> {
     return this.#runTransport("start", () => this.#client.playQueueItem(id));
   }
 
   /** Adds a library track right after the current one (`next`) or at the end. */
-  enqueueTrack(trackId: string, next: boolean) {
+  public enqueueTrack(trackId: string, next: boolean): Promise<void> {
     return this.#runQueueCommand(() => this.#client.enqueueTrack(trackId, next));
   }
 
   /** A loaded track restarts on the new device at the same position. */
-  setOutputSelection(selection: AudioOutputSelection) {
+  public setOutputSelection(selection: AudioOutputSelection): Promise<void> {
     return this.#runTransport("outputSelection", () => this.#client.setOutputSelection(selection));
+  }
+
+  /** A slice of the upcoming list beyond what the queue snapshot carries. */
+  public fetchQueueWindow(offset: number, limit: number): Promise<PlaybackQueueWindow> {
+    return this.#client.queueWindow(offset, limit);
+  }
+
+  #session(): ActiveSession | null {
+    return PlaybackSnapshots.session(this.snapshot);
+  }
+
+  /**
+   * Runs a transport command. One that arrives while another is in flight waits for it, and a
+   * newer one replaces it: the replaced command rejects with SupersededError, so the latest press wins.
+   */
+  #runTransport(
+    command: TransportCommand,
+    operation: () => Promise<Versioned<PlaybackSnapshot>>,
+  ): Promise<void> {
+    if (this.#transportPending === null) {
+      return this.#performTransport(command, operation);
+    }
+    this.#queuedTransport?.reject(new SupersededError({ code: "superseded" }));
+    return new Promise((resolve, reject) => {
+      this.#queuedTransport = { command, operation, resolve, reject };
+    });
+  }
+
+  async #performTransport(
+    command: TransportCommand,
+    operation: () => Promise<Versioned<PlaybackSnapshot>>,
+  ): Promise<void> {
+    this.#transportPending = command;
+    try {
+      this.acceptPlayback(await operation());
+    } finally {
+      this.#transportPending = null;
+      const queued = this.#queuedTransport;
+      this.#queuedTransport = null;
+      if (queued !== null) {
+        void this.#performTransport(queued.command, queued.operation).then(
+          queued.resolve,
+          queued.reject,
+        );
+      }
+    }
+  }
+
+  async #runQueueCommand(
+    operation: () => Promise<Versioned<PlaybackQueueSnapshot>>,
+  ): Promise<void> {
+    this.acceptQueue(await operation());
+  }
+
+  async #flushVolume(): Promise<void> {
+    if (this.#volumeWriteActive) return;
+    this.#volumeWriteActive = true;
+    this.#volumePending = true;
+    try {
+      while (this.#requestedVolume !== null) {
+        const value = this.#requestedVolume;
+        this.#requestedVolume = null;
+        this.acceptPlayback(await this.#client.setVolume(value));
+      }
+      this.#volumePreview = null;
+    } catch (error) {
+      this.#requestedVolume = null;
+      this.#volumePreview = null;
+      throw error;
+    } finally {
+      this.#volumeWriteActive = false;
+      this.#volumePending = false;
+    }
   }
 }

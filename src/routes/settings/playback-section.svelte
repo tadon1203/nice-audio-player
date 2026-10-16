@@ -1,8 +1,6 @@
 <script lang="ts">
   import type { AppearancePatch } from "#lib/native";
-  import { nativeErrorCode } from "#lib/native";
-  import { createAudioOutputDevices } from "#lib/playback/output-devices.svelte";
-  import { createPlaybackSignalPath } from "#lib/components/signal-path/signal-path.svelte";
+  import { SignalPath } from "#lib/components/signal-path/signal-path.svelte";
   import { AppServices } from "#lib/shell/app-services.svelte";
   import FlapText from "#lib/ui/rolling-number/flap-text.svelte";
   import SectionTitle from "#lib/ui/section-title.svelte";
@@ -11,11 +9,10 @@
 
   const DEFAULT_DEVICE = "default";
 
-  const { playback, session, appearance } = AppServices.current();
-  const signalPath = createPlaybackSignalPath();
+  const { playback, session, appearance, actions, notices, outputDevices } = AppServices.current();
+  const signalPath = new SignalPath();
 
   let deviceMenuOpen = $state(false);
-  const devices = createAudioOutputDevices(() => deviceMenuOpen);
 
   const path = $derived(signalPath.current);
   const selected = $derived(playback.outputDeviceId ?? DEFAULT_DEVICE);
@@ -28,25 +25,27 @@
   ]);
 
   function chooseDevice(value: string) {
-    void playback.setOutputSelection(
-      value === DEFAULT_DEVICE ? { kind: "systemDefault" } : { kind: "device", deviceId: value },
+    actions.run(
+      () =>
+        playback.setOutputSelection(
+          value === DEFAULT_DEVICE
+            ? { kind: "systemDefault" }
+            : { kind: "device", deviceId: value },
+        ),
+      "settings",
     );
   }
 
-  let saveError = $state<string | null>(null);
+  // The device list is read each time the menu opens, so a device connected since is offered.
+  function listDevices(isOpen: boolean) {
+    if (isOpen) actions.run(() => outputDevices.refresh(), "settings");
+  }
 
-  // The store rolls a failed change back; the error is shown below.
-  async function update(patch: AppearancePatch) {
-    saveError = null;
-    try {
-      await appearance.update(patch);
-    } catch (cause) {
-      const code = nativeErrorCode(cause);
-      saveError =
-        code === null
-          ? "The setting could not be saved."
-          : `The setting could not be saved. (${code})`;
-    }
+  const saveError = $derived(notices.at("settings")?.message ?? null);
+
+  // The store rolls a failed change back; the error shows at the Settings place.
+  function update(patch: AppearancePatch) {
+    actions.run(() => appearance.update(patch), "settings");
   }
 </script>
 
@@ -74,6 +73,7 @@
           bind:open={deviceMenuOpen}
           value={selected}
           onValueChange={chooseDevice}
+          onOpenChange={listDevices}
         >
           <Select.Trigger
             disabled={session.connection !== "ready"}
@@ -84,7 +84,7 @@
           </Select.Trigger>
           <Select.Content align="start">
             <Select.Item value={DEFAULT_DEVICE} label="System default" />
-            {#each devices.data ?? [] as device (device.id)}
+            {#each outputDevices.devices as device (device.id)}
               <Select.Item value={device.id} label={device.name} />
             {/each}
           </Select.Content>

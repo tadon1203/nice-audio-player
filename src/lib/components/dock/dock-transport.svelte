@@ -3,19 +3,19 @@
   import SkipBack from "@lucide/svelte/icons/skip-back";
   import SkipForward from "@lucide/svelte/icons/skip-forward";
   import { AppServices } from "#lib/shell/app-services.svelte";
-  import { nextRepeatMode } from "#lib/playback/snapshot";
+  import { PlaybackSnapshots } from "#lib/playback/playback-snapshots";
   import PlayPauseIcon from "#lib/ui/play-pause-icon.svelte";
   import { Button } from "#lib/ui/shadcn/button";
   import DockToggleButton from "./dock-toggle-button.svelte";
   import RepeatIcon from "./repeat-icon.svelte";
 
   /** Shuffle, previous, play/pause, next, repeat. */
-  const { playback, session } = AppServices.current();
-  const playing = $derived(playback.status === "playing");
+  const { playback, session, actions } = AppServices.current();
+  const playing = $derived(playback.isPlaying);
   const ready = $derived(session.connection === "ready");
   const failed = $derived(playback.failure !== null);
   const playLabel = $derived(
-    playing ? "Pause" : failed ? "Retry" : playback.active ? "Resume" : "Play",
+    playing ? "Pause" : failed ? "Retry" : playback.isActive ? "Resume" : "Play",
   );
 </script>
 
@@ -30,7 +30,7 @@
       label="Shuffle"
       pressed={playback.shuffleEnabled}
       disabled={!ready}
-      onclick={() => void playback.setShuffle(!playback.shuffleEnabled)}
+      onclick={() => actions.run(() => playback.setShuffle(!playback.shuffleEnabled))}
     >
       <Shuffle aria-hidden="true" />
     </DockToggleButton>
@@ -41,7 +41,7 @@
     aria-label="Previous track"
     title="Previous track"
     disabled={!playback.canGoPrevious}
-    onclick={() => void playback.previous()}
+    onclick={() => actions.run(() => playback.previous())}
   >
     <SkipBack aria-hidden="true" />
   </Button>
@@ -50,8 +50,8 @@
     variant="primary"
     aria-label={playLabel}
     title={playLabel}
-    disabled={!playback.active && !failed}
-    onclick={() => void (playing ? playback.pause() : playback.resume())}
+    disabled={!playback.isActive && !failed}
+    onclick={() => actions.run(() => (playing ? playback.pause() : playback.resume()))}
     class="relative rounded-full hover:bg-primary active:translate-y-0 active:scale-[0.94] disabled:bg-secondary disabled:text-muted-foreground disabled:opacity-100"
   >
     <PlayPauseIcon {playing} />
@@ -62,7 +62,7 @@
     aria-label="Next track"
     title="Next track"
     disabled={!playback.canGoNext}
-    onclick={() => void playback.next()}
+    onclick={() => actions.run(() => playback.next())}
   >
     <SkipForward aria-hidden="true" />
   </Button>
@@ -71,7 +71,10 @@
       label="Repeat: {playback.repeatMode}"
       pressed={playback.repeatMode !== "off"}
       disabled={!ready}
-      onclick={() => void playback.setRepeatMode(nextRepeatMode(playback.repeatMode))}
+      onclick={() =>
+        actions.run(() =>
+          playback.setRepeatMode(PlaybackSnapshots.nextRepeatMode(playback.repeatMode)),
+        )}
     >
       <RepeatIcon mode={playback.repeatMode} />
     </DockToggleButton>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describeSignalPath } from "./playback-technical-status";
+import { PlaybackTechnicalStatus } from "./playback-technical-status";
 
 const direct = {
   sourceLabel: "FLAC 24/96",
@@ -9,9 +9,9 @@ const direct = {
   outputName: "Speakers",
 };
 
-describe("describeSignalPath", () => {
+describe("PlaybackTechnicalStatus.describe", () => {
   it("has no processing step when nothing touches the signal", () => {
-    expect(describeSignalPath(direct)).toMatchObject({
+    expect(PlaybackTechnicalStatus.describe(direct)).toMatchObject({
       source: "FLAC 24/96",
       processing: null,
       output: "Speakers",
@@ -19,7 +19,7 @@ describe("describeSignalPath", () => {
   });
 
   it("names the resampling target and channel conversion", () => {
-    const path = describeSignalPath({
+    const path = PlaybackTechnicalStatus.describe({
       ...direct,
       resamplingActive: true,
       outputSampleRate: 48_000,
@@ -29,7 +29,7 @@ describe("describeSignalPath", () => {
   });
 
   it("names a surround downmix", () => {
-    const path = describeSignalPath({ ...direct, channelConversion: "downmix" });
+    const path = PlaybackTechnicalStatus.describe({ ...direct, channelConversion: "downmix" });
     expect(path.processing).toBe("surround downmix");
   });
 });

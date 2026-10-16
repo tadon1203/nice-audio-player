@@ -16,7 +16,7 @@
 
   const view = libraryViews.tracks;
   const catalog = createLibraryCatalog(() => view.request);
-  const playback = AppServices.current().playback;
+  const { playback, actions } = AppServices.current();
 </script>
 
 <LibraryWorkspace
@@ -38,7 +38,7 @@
       sortKey={view.sortKey}
       sortDirection={view.direction}
       onsortchange={(key, direction) => view.setSort(key, direction)}
-      onplaytrack={(id) => void playback.startPlayback(trackListContext(catalog.request), id)}
+      onplaytrack={(id) => actions.run(() => playback.start(trackListContext(catalog.request), id))}
     />
   {/snippet}
 </LibraryWorkspace>

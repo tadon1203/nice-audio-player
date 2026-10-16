@@ -2,8 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import type { ActiveSession, PlaybackItem, PlaybackSnapshot } from "#lib/native";
 vi.mock("svelte/motion", () => ({ prefersReducedMotion: { current: false } }));
 
-import { createPlaybackClock } from "./clock";
-import { clockReportOf } from "./snapshot";
+import { PlaybackClock } from "./playback-clock.svelte";
+import { PlaybackSnapshots } from "./playback-snapshots";
 
 const item = (id: string): PlaybackItem => ({
   queueItemId: id,
@@ -80,7 +80,7 @@ function setup() {
   let timers: { at: number; callback: () => void; id: number }[] = [];
   let nextId = 1;
   const animations: FakeAnimation[] = [];
-  const clock = createPlaybackClock({
+  const clock = new PlaybackClock({
     now: () => now,
     requestFrame: (callback) => {
       frame = callback;
@@ -104,7 +104,7 @@ function setup() {
     },
     reducedMotion: () => false,
   });
-  const report = (next: PlaybackSnapshot) => clock.accept(clockReportOf(next));
+  const report = (next: PlaybackSnapshot) => clock.accept(PlaybackSnapshots.clockReport(next));
   /** Moves time forward, firing due timers in order. */
   const advance = (ms: number) => {
     const end = now + ms;

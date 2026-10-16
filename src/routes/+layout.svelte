@@ -13,7 +13,7 @@
   import { setLibraryScan } from "#lib/library/context";
   import { AppServices } from "#lib/shell/app-services.svelte";
   import { nowPlaying } from "#lib/shell/now-playing.svelte";
-  import { handlePlaybackShortcut } from "#lib/shell/playback-shortcuts";
+  import { PlaybackShortcuts } from "#lib/shell/playback-shortcuts";
   import { TooltipProvider } from "#lib/ui/shadcn/tooltip";
   import Navigation from "./navigation.svelte";
   import TitleBar from "./title-bar.svelte";
@@ -31,7 +31,8 @@
 </script>
 
 <svelte:window
-  onkeydown={(event) => services && handlePlaybackShortcut(event, services.playback)}
+  onkeydown={(event) =>
+    services && PlaybackShortcuts.handle(event, services.playback, services.actions)}
 />
 
 {#if services === null}

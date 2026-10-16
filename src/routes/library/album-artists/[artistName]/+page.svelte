@@ -24,7 +24,7 @@
   import AlbumTile from "../../album-tile.svelte";
 
   const view = libraryViews.artistAlbums;
-  const playback = AppServices.current().playback;
+  const { playback, actions } = AppServices.current();
 
   const name = $derived(fromNameSegment(page.params.artistName ?? ""));
   const key = $derived({ name });
@@ -99,7 +99,7 @@
               showArtist={false}
               parentArtist={name}
               onplay={(played) =>
-                void playback.startPlayback({ kind: "album", key: played.key }, null)}
+                actions.run(() => playback.start({ kind: "album", key: played.key }, null))}
             />
           {/snippet}
         </VirtualMediaGrid>

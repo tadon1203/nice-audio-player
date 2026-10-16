@@ -3,12 +3,16 @@ import { createContext } from "svelte";
 import { LibraryScanState } from "#lib/library/library-scan-state.svelte";
 import { NativeBridgeUnavailableError, type NativeClients } from "#lib/native";
 import { TauriNative } from "#lib/native/tauri-native";
+import { AudioOutputDevices } from "#lib/playback/audio-output-devices.svelte";
+import { PlaybackClock } from "#lib/playback/playback-clock.svelte";
 import { Playback } from "#lib/playback/playback.svelte";
-import { applyWaveform } from "#lib/playback/waveform";
+import { WaveformRepository } from "#lib/playback/waveform-repository.svelte";
 import { Appearance } from "#lib/settings/appearance.svelte";
 import { createScanWatcher } from "./scan-finished";
 import { MotionBudget } from "./motion-budget.svelte";
 import { NativeSession, type SessionTargets } from "./native-session.svelte";
+import { NoticeCenter } from "./notice-center.svelte";
+import { UserActionRunner } from "./user-action-runner";
 
 const [getServices, setServices] = createContext<AppServices>();
 
@@ -53,15 +57,24 @@ export class AppServices {
   public readonly queryClient: QueryClient;
   /** The library scan state; the library context still provides it to the library pages. */
   public readonly libraryScan = new LibraryScanState();
+  /** Failures and short messages that the screens show. */
+  public readonly notices = new NoticeCenter();
+  /** Runs the user actions; each failure goes to `notices`. */
+  public readonly actions: UserActionRunner;
   public readonly session: NativeSession;
   public readonly playback: Playback;
   public readonly appearance: Appearance;
+  public readonly outputDevices: AudioOutputDevices;
+  public readonly waveforms: WaveformRepository;
   public readonly motion: MotionBudget;
 
   public constructor(native: NativeClients, queryClient: QueryClient) {
     this.queryClient = queryClient;
-    this.playback = new Playback(native.playback);
+    this.actions = new UserActionRunner(this.notices);
+    this.playback = new Playback(native.playback, new PlaybackClock());
     this.appearance = new Appearance(native.appearance);
+    this.outputDevices = new AudioOutputDevices(native.playback);
+    this.waveforms = new WaveformRepository(native.playback);
     this.motion = new MotionBudget(this.appearance);
 
     const watchScan = createScanWatcher(queryClient, this.libraryScan);
@@ -69,8 +82,8 @@ export class AppServices {
       playback: this.playback,
       appearance: this.appearance,
       scan: { accept: ({ value }) => watchScan(value) },
-      waveforms: { accept: (waveform) => applyWaveform(queryClient, waveform) },
-      notices: { noteSkipped: (title) => this.playback.acceptSkip(title) },
+      waveforms: this.waveforms,
+      notices: this.notices,
     };
     this.session = new NativeSession(native.session, targets);
   }

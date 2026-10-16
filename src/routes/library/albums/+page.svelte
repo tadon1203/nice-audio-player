@@ -17,7 +17,7 @@
 
   const view = libraryViews.albums;
   const catalog = createLibraryCatalog(() => view.request);
-  const playback = AppServices.current().playback;
+  const { playback, actions } = AppServices.current();
 </script>
 
 <LibraryWorkspace
@@ -43,7 +43,8 @@
       {#snippet tile(album)}
         <AlbumTile
           {album}
-          onplay={(played) => void playback.startPlayback({ kind: "album", key: played.key }, null)}
+          onplay={(played) =>
+            actions.run(() => playback.start({ kind: "album", key: played.key }, null))}
         />
       {/snippet}
     </VirtualMediaGrid>

@@ -4,13 +4,7 @@
   import Volume2 from "@lucide/svelte/icons/volume-2";
   import VolumeX from "@lucide/svelte/icons/volume-x";
   import { AppServices } from "#lib/shell/app-services.svelte";
-  import {
-    formatVolumeDb,
-    sliderToVolume,
-    stepVolumeDb,
-    VOLUME_SLIDER_MAX,
-    volumeToSlider,
-  } from "#lib/playback/volume-step";
+  import { VolumeStep } from "#lib/playback/volume-step";
   import { nowPlaying } from "#lib/shell/now-playing.svelte";
   import { springLinear } from "#lib/ui/motion/spring-curve";
   import { motionFor } from "#lib/ui/motion/svelte-motion";
@@ -26,9 +20,9 @@
    * readout. The signal path hangs below this row, out of flow, so it never pulls the row off the
    * transport's centre line.
    */
-  const { playback, session, motion: budget } = AppServices.current();
+  const { playback, session, motion: budget, actions } = AppServices.current();
   const ready = $derived(session.connection === "ready");
-  const readout = $derived(formatVolumeDb(playback.volume, playback.muted));
+  const readout = $derived(VolumeStep.formatDb(playback.volume, playback.muted));
 
   // Dragging the slider tracks the pointer 1:1; only the wheel and mute roll the readout.
   let dragging = $state(false);
@@ -53,7 +47,8 @@
       );
       return;
     }
-    playback.changeVolume(stepVolumeDb(playback.volume, event.deltaY < 0 ? 1 : -1));
+    const volume = VolumeStep.step(playback.volume, event.deltaY < 0 ? 1 : -1);
+    actions.run(() => playback.changeVolume(volume));
   }
 </script>
 
@@ -72,7 +67,7 @@
       aria-label="Now Playing"
       title="Now Playing"
       aria-pressed={nowPlaying.isOpen}
-      disabled={!playback.active}
+      disabled={!playback.isActive}
       onclick={() => nowPlaying.toggle()}
     >
       <Music2 aria-hidden="true" />
@@ -95,7 +90,7 @@
     variant="quiet"
     aria-label={playback.muted ? "Unmute" : "Mute"}
     disabled={playback.mutePending || !ready}
-    onclick={() => void playback.toggleMute()}
+    onclick={() => actions.run(() => playback.toggleMute())}
   >
     {#if playback.muted}
       <VolumeX aria-hidden="true" />
@@ -113,15 +108,16 @@
     <Slider
       type="single"
       min={0}
-      max={VOLUME_SLIDER_MAX}
+      max={VolumeStep.SLIDER_MAX}
       step={1}
-      value={volumeToSlider(playback.volume)}
+      value={VolumeStep.toSlider(playback.volume)}
       disabled={!ready}
       thumbProps={{
         "aria-label": "Volume",
-        "aria-valuetext": playback.muted ? "Muted" : formatVolumeDb(playback.volume, false),
+        "aria-valuetext": playback.muted ? "Muted" : VolumeStep.formatDb(playback.volume, false),
       }}
-      onValueChange={(position) => playback.changeVolume(sliderToVolume(position))}
+      onValueChange={(position) =>
+        actions.run(() => playback.changeVolume(VolumeStep.fromSlider(position)))}
     />
   </div>
   <span

@@ -43,7 +43,7 @@
     attach: Attachment<HTMLElement>;
   } = $props();
 
-  const playback = AppServices.current().playback;
+  const { playback, actions } = AppServices.current();
 
   const line = $derived(lines[index]!);
   const isInterval = $derived(line.text.trim() === "");
@@ -62,7 +62,7 @@
     type="button"
     data-slot="lyrics-row-index"
     aria-label={`Seek to ${startLabel}`}
-    onclick={() => void playback.seek(line.startMs)}
+    onclick={() => actions.run(() => playback.seek(line.startMs))}
     onpointerenter={() => lyricsWaveformLink.setHoveredLineSpan(lineSpan(lines, index, durationMs))}
     onpointerleave={() => lyricsWaveformLink.setHoveredLineSpan(null)}
     variant="bare"

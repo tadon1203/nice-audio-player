@@ -64,7 +64,7 @@
 
   const columns = $derived(layout === "library" ? libraryTrackColumns : albumTrackColumns);
   const virtualized = $derived(scrollElement !== undefined);
-  const playback = AppServices.current().playback;
+  const { playback, actions } = AppServices.current();
 
   let propertiesFor = $state<string | null>(null);
   let menuRow = $state<TrackTableRow | null>(null);
@@ -112,7 +112,7 @@
   function activateRow(event: MouseEvent, row: TrackTableRow, intent: "play" | "resume" | null) {
     if (isInteractiveTarget(event)) return;
     if (intent === "play") onplaytrack(row.id);
-    else if (intent === "resume") void playback.resume();
+    else if (intent === "resume") actions.run(() => playback.resume());
   }
 
   /** Resolves the row under a right-click; the spacer rows have none, so no menu opens there. */
@@ -202,8 +202,8 @@
                 {@const available = isTrackAvailable(row)}
                 {@const runAction = {
                   play: () => onplaytrack(row.id),
-                  pause: () => void playback.pause(),
-                  resume: () => void playback.resume(),
+                  pause: () => actions.run(() => playback.pause()),
+                  resume: () => actions.run(() => playback.resume()),
                 }[action.kind]}
                 <!-- Clicking the row is a pointer shortcut; the action button is the keyboard path. -->
                 <tr
@@ -268,10 +268,14 @@
         {#if menuRow}
           {@const row = menuRow}
           {#if isTrackAvailable(row)}
-            <ContextMenuItem onSelect={() => void playback.enqueueTrack(row.id, true)}>
+            <ContextMenuItem
+              onSelect={() => actions.run(() => playback.enqueueTrack(row.id, true))}
+            >
               Play next
             </ContextMenuItem>
-            <ContextMenuItem onSelect={() => void playback.enqueueTrack(row.id, false)}>
+            <ContextMenuItem
+              onSelect={() => actions.run(() => playback.enqueueTrack(row.id, false))}
+            >
               Add to queue
             </ContextMenuItem>
           {/if}

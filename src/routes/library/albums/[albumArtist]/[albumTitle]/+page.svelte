@@ -24,7 +24,7 @@
   import WorkspaceScroll from "#lib/ui/workspace-scroll.svelte";
   import { formatCount, formatDuration } from "#lib/utils/format";
 
-  const playback = AppServices.current().playback;
+  const { playback, actions } = AppServices.current();
 
   const albumArtist = $derived(fromNameSegment(page.params.albumArtist ?? ""));
   const albumTitle = $derived(fromNameSegment(page.params.albumTitle ?? ""));
@@ -40,17 +40,12 @@
   const tracks = createAlbumTracks(() => key);
 
   // The loaded track belongs to this album (the same key the album was opened with).
-  const albumIsLoaded = $derived(
-    playback.item?.albumKey?.title === albumTitle &&
-      playback.item.albumKey.albumArtist === albumArtist &&
-      playback.item.albumKey.albumEdition === albumEdition &&
-      (playback.status === "playing" || playback.status === "paused"),
-  );
-  const albumIsPlaying = $derived(albumIsLoaded && playback.status === "playing");
+  const albumIsLoaded = $derived(playback.isAlbumLoaded(key));
+  const albumIsPlaying = $derived(albumIsLoaded && playback.isPlaying);
 
   // Playing a track continues through the rest of its album.
   const playTrack = (trackId: string) =>
-    void playback.startPlayback({ kind: "album", key }, trackId);
+    actions.run(() => playback.start({ kind: "album", key }, trackId));
 
   let viewport = $state<HTMLElement | null>(null);
 
@@ -114,11 +109,7 @@
         <Button
           type="button"
           disabled={album.firstPlayableTrackId === null}
-          onclick={() => {
-            if (!albumIsLoaded) void playback.startPlayback({ kind: "album", key }, null);
-            else if (albumIsPlaying) void playback.pause();
-            else void playback.resume();
-          }}
+          onclick={() => actions.run(() => playback.togglePlayAlbum(key))}
         >
           <PlayPauseIcon playing={albumIsPlaying} data-icon="inline-start" />
           {albumIsPlaying ? "Pause" : albumIsLoaded ? "Resume" : "Play album"}
@@ -127,7 +118,7 @@
           type="button"
           variant="outline"
           disabled={album.firstPlayableTrackId === null}
-          onclick={() => void playback.shuffleAndStart({ kind: "album", key })}
+          onclick={() => actions.run(() => playback.shuffleAndStart({ kind: "album", key }))}
         >
           <Shuffle data-icon="inline-start" aria-hidden="true" />
           Shuffle

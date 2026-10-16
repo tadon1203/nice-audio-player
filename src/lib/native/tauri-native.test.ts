@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { commands } from "./bindings";
 import { AppearanceError } from "./errors/appearance-error";
+import { AudioDevicesError } from "./errors/audio-devices-error";
 import { IpcError } from "./errors/ipc-error";
 import { PlaybackError } from "./errors/playback-error";
 import { SessionError } from "./errors/session-error";
@@ -15,6 +16,8 @@ function fakeCommands(reply: unknown) {
     pausePlayback: vi.fn(reject),
     setPlaybackMuted: vi.fn(reject),
     updateAppearance: vi.fn(reject),
+    listAudioOutputDevices: vi.fn(reject),
+    getPlaybackWaveform: vi.fn(reject),
   } as unknown as typeof commands;
 }
 
@@ -55,6 +58,19 @@ describe("TauriNative", () => {
       .catch((error: unknown) => error);
     expect(failure).toBeInstanceOf(AppearanceError);
     expect(failure).toMatchObject({ domain: "appearance", code: "persistenceFailed" });
+  });
+
+  it("throws an audio devices error for the device list's coded reply", async () => {
+    const clients = TauriNative.clients(fakeCommands({ code: "enumerationFailed" }));
+    const failure = await clients.playback.listOutputDevices().catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(AudioDevicesError);
+    expect(failure).toMatchObject({ domain: "audioDevices", code: "enumerationFailed" });
+  });
+
+  it("throws a playback error for the waveform command's coded reply", async () => {
+    const clients = TauriNative.clients(fakeCommands({ code: "libraryUnavailable" }));
+    const failure = await clients.playback.waveform().catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(PlaybackError);
   });
 
   it("throws IpcError when the reply has no string code", async () => {

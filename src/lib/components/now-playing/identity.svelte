@@ -55,7 +55,7 @@
         {#if item !== null && changedSinceOpen}
           <KineticText
             text={item.title}
-            direction={playback.lastNavigation === "previous" ? -1 : 1}
+            direction={playback.transitionDirection === "backward" ? -1 : 1}
           />
         {:else}
           {item?.title ?? "Nothing playing"}

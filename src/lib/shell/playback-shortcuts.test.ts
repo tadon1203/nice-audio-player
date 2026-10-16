@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import type { PlaybackClient, PlaybackSnapshot, Versioned } from "#lib/native";
-import { createPlaybackClock } from "#lib/playback/clock";
+import { PlaybackClock } from "#lib/playback/playback-clock.svelte";
 import { Playback } from "#lib/playback/playback.svelte";
-import { handlePlaybackShortcut } from "./playback-shortcuts";
+import { NoticeCenter } from "./notice-center.svelte";
+import { PlaybackShortcuts } from "./playback-shortcuts";
+import { UserActionRunner } from "./user-action-runner";
 
 const playing = (positionMs: number): Versioned<PlaybackSnapshot> => ({
   revision: 1,
@@ -53,7 +55,7 @@ const playingValue = (positionMs: number): PlaybackSnapshot => ({
 describe("global seek shortcut", () => {
   it("sends whole milliseconds even though the running clock is fractional", async () => {
     let now = 1_000;
-    const clock = createPlaybackClock({
+    const clock = new PlaybackClock({
       now: () => now,
       requestFrame: () => 0,
       cancelFrame: () => undefined,
@@ -64,12 +66,17 @@ describe("global seek shortcut", () => {
     now = 1_000 + 250.37;
     expect(Number.isInteger(clock.estimate())).toBe(false);
 
-    handlePlaybackShortcut(new KeyboardEvent("keydown", { key: "ArrowRight" }), playback);
+    const notices = new NoticeCenter();
+    PlaybackShortcuts.handle(
+      new KeyboardEvent("keydown", { key: "ArrowRight" }),
+      playback,
+      new UserActionRunner(notices),
+    );
     await vi.waitFor(() => expect(seekPlayback).toHaveBeenCalledTimes(1));
 
     const [sent] = seekPlayback.mock.calls[0]!;
     expect(Number.isInteger(sent)).toBe(true);
     expect(sent).toBeGreaterThan(10_000);
-    expect(playback.error).toBeNull();
+    expect(notices.at("dock")).toBeNull();
   });
 });

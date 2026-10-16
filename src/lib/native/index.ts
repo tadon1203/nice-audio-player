@@ -6,6 +6,7 @@ export * from "./artwork-url";
 export * from "./native-clients";
 export { AppError } from "./errors/app-error";
 export { AppearanceError } from "./errors/appearance-error";
+export { AudioDevicesError } from "./errors/audio-devices-error";
 export { IpcError } from "./errors/ipc-error";
 export { NativeBridgeUnavailableError } from "./errors/native-bridge-unavailable-error";
 export { PlaybackError } from "./errors/playback-error";

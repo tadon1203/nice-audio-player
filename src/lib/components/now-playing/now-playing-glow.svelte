@@ -1,8 +1,7 @@
 <script lang="ts">
   import { AppServices } from "#lib/shell/app-services.svelte";
-  import { glowBreath } from "#lib/playback/glow-breath";
-  import { loudnessKeyframes } from "#lib/playback/loudness";
-  import { createPlaybackWaveform } from "#lib/playback/waveform.svelte";
+  import { GlowBreath } from "#lib/playback/glow-breath";
+  import { Loudness } from "#lib/playback/loudness";
   import ArtworkGlow from "#lib/ui/artwork-glow/artwork-glow.svelte";
   import { breathingOpacity, GLOW } from "#lib/ui/artwork-glow/glow-model";
   import { motionFor } from "#lib/ui/motion/svelte-motion";
@@ -15,6 +14,7 @@
   const playback = AppServices.current().playback;
   const appearance = AppServices.current().appearance;
   const budget = AppServices.current().motion;
+  const waveforms = AppServices.current().waveforms;
 
   /** The level a paused Artwork glow rests at: neither dimmed nor at full. */
   const REST_LEVEL = 0.5;
@@ -22,16 +22,16 @@
   const item = $derived(playback.item);
   // The Artwork glow breathes by itself, so only the full budget allows it.
   const breathing = $derived(budget.current === "full");
-  const waveform = createPlaybackWaveform(() => playback.playbackId);
+  const waveform = $derived(waveforms.forPlayback(playback.playbackId));
 
   const motion = $derived(motionFor("large"));
   // The Artwork glow breathes along the track's smoothed loudness, drawn by the compositor from
   // keyframes computed once per waveform; nothing here runs per frame.
   const breathe = $derived.by(() => {
-    const loudness = loudnessKeyframes(waveform.current?.rms ?? null, playback.durationMs);
+    const loudness = Loudness.keyframes(waveform?.rms ?? null, playback.durationMs);
     if (!breathing || loudness.length === 0) return undefined;
-    const opacityOf = (level: number) => breathingOpacity("max", level) / GLOW.strength.max;
-    return glowBreath({
+    const opacityOf = (level: number): number => breathingOpacity("max", level) / GLOW.strength.max;
+    return GlowBreath.attach({
       clock: playback.clock,
       keyframes: loudness.map(({ atMs, level }) => ({ atMs, opacity: opacityOf(level) })),
       restOpacity: opacityOf(REST_LEVEL),
@@ -44,7 +44,7 @@
   <ArtworkGlow
     artwork={item?.artwork ?? null}
     strength="max"
-    enter={playback.lastNavigation === "previous" ? "wipe-previous" : "wipe-next"}
+    enter={playback.transitionDirection === "backward" ? "wipe-previous" : "wipe-next"}
     {breathe}
   />
 {/if}

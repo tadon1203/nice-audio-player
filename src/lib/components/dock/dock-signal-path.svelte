@@ -5,9 +5,8 @@
     RadioGroup as MenuRadioGroup,
   } from "#lib/ui/dropdown-menu";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
-  import { createPlaybackSignalPath } from "#lib/components/signal-path/signal-path.svelte";
+  import { SignalPath } from "#lib/components/signal-path/signal-path.svelte";
   import { AppServices } from "#lib/shell/app-services.svelte";
-  import { createAudioOutputDevices } from "#lib/playback/output-devices.svelte";
   import DropdownMenuContent from "#lib/ui/dropdown-menu/dropdown-menu-content.svelte";
   import DropdownMenuRadioItem from "#lib/ui/dropdown-menu/dropdown-menu-radio-item.svelte";
   import FlapText from "#lib/ui/rolling-number/flap-text.svelte";
@@ -21,10 +20,9 @@
    */
   let { class: className }: { class?: string } = $props();
 
-  const { playback, session } = AppServices.current();
-  const path = createPlaybackSignalPath();
+  const { playback, session, actions, outputDevices } = AppServices.current();
+  const path = new SignalPath();
   let open = $state(false);
-  const devices = createAudioOutputDevices(() => open);
 
   const disabled = $derived(session.connection !== "ready");
   const selected = $derived(playback.outputDeviceId ?? DEFAULT_DEVICE);
@@ -38,9 +36,16 @@
   );
 
   function select(value: string) {
-    void playback.setOutputSelection(
-      value === DEFAULT_DEVICE ? { kind: "systemDefault" } : { kind: "device", deviceId: value },
+    actions.run(() =>
+      playback.setOutputSelection(
+        value === DEFAULT_DEVICE ? { kind: "systemDefault" } : { kind: "device", deviceId: value },
+      ),
     );
+  }
+
+  // The device list is read each time the menu opens, so a device connected since is offered.
+  function listDevices(isOpen: boolean) {
+    if (isOpen) actions.run(() => outputDevices.refresh());
   }
 </script>
 
@@ -59,7 +64,7 @@
       <span aria-hidden="true">›</span>
     </span>
   {/each}
-  <MenuRoot bind:open>
+  <MenuRoot bind:open onOpenChange={listDevices}>
     <MenuTrigger {disabled} aria-label="Output device: {outputLabel}">
       <span class="truncate">{outputLabel}</span>
       <ChevronDown aria-hidden="true" class="size-3.5 shrink-0" />
@@ -67,7 +72,7 @@
     <DropdownMenuContent align="end">
       <MenuRadioGroup value={selected} onValueChange={select}>
         <DropdownMenuRadioItem value={DEFAULT_DEVICE}>System default</DropdownMenuRadioItem>
-        {#each devices.data ?? [] as device (device.id)}
+        {#each outputDevices.devices as device (device.id)}
           <DropdownMenuRadioItem value={device.id}>{device.name}</DropdownMenuRadioItem>
         {/each}
       </MenuRadioGroup>

@@ -6,7 +6,6 @@
 <script lang="ts">
   import { Button } from "#lib/ui/shadcn/button";
   import { onDestroy, onMount, tick } from "svelte";
-  import { createPlaybackWaveform } from "#lib/playback/waveform.svelte";
   import { AppServices } from "#lib/shell/app-services.svelte";
   import { lyricsWaveformLink } from "#lib/shell/lyrics-waveform-link.svelte";
   import RollingNumber from "#lib/ui/rolling-number/rolling-number.svelte";
@@ -35,10 +34,10 @@
     timeClass?: string;
   } = $props();
 
-  const { playback, motion: budget } = AppServices.current();
+  const { playback, motion: budget, actions, waveforms } = AppServices.current();
   const trackKey = $derived(playback.item?.trackId ?? "none");
-  const canSeek = $derived(playback.active && playback.durationMs !== null);
-  const waveform = createPlaybackWaveform(() => (showWaveform ? playback.playbackId : null));
+  const canSeek = $derived(playback.isActive && playback.durationMs !== null);
+  const waveform = $derived(showWaveform ? waveforms.forPlayback(playback.playbackId) : null);
 
   // The printed time and the announced value come from the same clock as the bar. They are
   // rounded down to the whole second, so they change once a second instead of every frame.
@@ -105,7 +104,7 @@
   {#key trackKey}
     <WaveformSeek
       {height}
-      rms={showWaveform ? (waveform.current?.rms ?? null) : null}
+      rms={showWaveform ? (waveform?.rms ?? null) : null}
       showPlayhead={showWaveform}
       valueMs={seekValue}
       durationMs={playback.durationMs}
@@ -125,10 +124,12 @@
       onCommit={(value) => {
         // Holds the committed position until the seek is reported, so the bar never falls back.
         holdAt(value);
-        void playback.seek(value).finally(() => {
-          letGo();
-          seekPreviewMs = null;
-        });
+        actions.run(() =>
+          playback.seek(value).finally(() => {
+            letGo();
+            seekPreviewMs = null;
+          }),
+        );
       }}
       activeSpan={lyricsWaveformLink.activeSpan}
       hoveredLineSpan={lyricsWaveformLink.hoveredLineSpan}
