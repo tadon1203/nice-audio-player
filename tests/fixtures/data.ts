@@ -49,9 +49,8 @@ export const secondAlbum: LibraryAlbumSummary = {
 };
 
 export const ARTWORK = {
-  contentHash: "ab".repeat(32),
+  hash: "ab".repeat(32),
   mimeType: "png",
-  relativePath: `artwork/ab/${"ab".repeat(32)}.png`,
 } as const;
 
 /** Track 1 is "Test track", track 5 is missing on disk, the rest are "Track 00N". */

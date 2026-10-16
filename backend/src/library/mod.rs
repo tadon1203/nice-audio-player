@@ -25,6 +25,7 @@ mod tests;
 pub(crate) mod text;
 pub(crate) mod watcher;
 
+use crate::ids::ArtworkHash;
 use crate::messages::{Notifier, SharedMessageSink, StateTopic, Versioned};
 use database::{Database, DatabaseError};
 use error::LibraryCommandError;
@@ -126,9 +127,9 @@ impl Library {
     /// The accent color of stored artwork, computed on first request and cached.
     pub fn artwork_accent(
         &self,
-        content_hash: &str,
+        hash: &ArtworkHash,
     ) -> Result<Option<String>, LibraryCommandError> {
-        Ok(accent::artwork_accent(&self.database, content_hash)?)
+        Ok(accent::artwork_accent(&self.database, hash)?)
     }
 
     /// Stops the watchers and any scan in progress, and waits for them.

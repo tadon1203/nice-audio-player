@@ -1,6 +1,7 @@
 //! One track: its summary, its properties and where its file is.
 
 use super::LibraryStore;
+use crate::ids::ArtworkHash;
 use crate::library::{
     artwork::{ArtworkMimeType, ArtworkRef},
     error::{StoreError, parse_id},
@@ -11,8 +12,8 @@ use crate::library::{
 use rusqlite::{OptionalExtension, Row, params};
 
 /// The columns `summary_from_row` reads, in its order.
-pub(super) const SUMMARY_COLUMNS: &str = "t.id, m.title_key, m.artist_key, m.album_key, m.album_artist, m.album_artist_key, m.duration_ms, a.content_hash, a.mime_type, a.relative_path, m.file_format, m.bit_depth, m.bitrate_kbps, f.availability, f.inspection_status, m.album_dir";
-pub(super) const SUMMARY_COLUMN_COUNT: usize = 16;
+pub(super) const SUMMARY_COLUMNS: &str = "t.id, m.title_key, m.artist_key, m.album_key, m.album_artist, m.album_artist_key, m.duration_ms, a.content_hash, a.mime_type, m.file_format, m.bit_depth, m.bitrate_kbps, f.availability, f.inspection_status, m.album_dir";
+pub(super) const SUMMARY_COLUMN_COUNT: usize = 15;
 
 /// What `SUMMARY_COLUMNS` are selected from.
 pub(super) const SUMMARY_FROM: &str = "FROM track_source_metadata m JOIN tracks t ON t.id = m.track_id JOIN library_files f ON f.id = t.file_id LEFT JOIN artwork_assets a ON a.id = m.artwork_id";
@@ -24,12 +25,10 @@ pub(super) fn non_blank(value: Option<String>) -> Option<String> {
 pub(super) fn artwork_ref(
     hash: Option<String>,
     mime_type: Option<ArtworkMimeType>,
-    path: Option<String>,
 ) -> Option<ArtworkRef> {
     Some(ArtworkRef {
-        content_hash: hash?,
+        hash: ArtworkHash::try_from(hash?).ok()?,
         mime_type: mime_type?,
-        relative_path: path?,
     })
 }
 
@@ -38,10 +37,10 @@ pub(super) fn summary_from_row(row: &Row<'_>) -> rusqlite::Result<LibraryTrackSu
     let album: String = row.get(3)?;
     let album_artist_key: String = row.get(5)?;
     let duration: Option<i64> = row.get(6)?;
-    let availability: Availability = row.get(13)?;
-    let inspection: InspectionStatus = row.get(14)?;
+    let availability: Availability = row.get(12)?;
+    let inspection: InspectionStatus = row.get(13)?;
     let artist: String = row.get(2)?;
-    let album_edition: String = row.get(15)?;
+    let album_edition: String = row.get(14)?;
     Ok(LibraryTrackSummary {
         id: id.to_string(),
         title: row.get(1)?,
@@ -53,11 +52,11 @@ pub(super) fn summary_from_row(row: &Row<'_>) -> rusqlite::Result<LibraryTrackSu
         }),
         album: (!album.is_empty()).then_some(album),
         album_artist: non_blank(row.get(4)?),
-        artwork: artwork_ref(row.get(7)?, row.get(8)?, row.get(9)?),
+        artwork: artwork_ref(row.get(7)?, row.get(8)?),
         duration_ms: duration.map(|value| value as u64),
-        file_format: non_blank(row.get(10)?),
-        bit_depth: row.get::<_, Option<i64>>(11)?.map(|value| value as u32),
-        bitrate_kbps: row.get::<_, Option<i64>>(12)?.map(|value| value as u64),
+        file_format: non_blank(row.get(9)?),
+        bit_depth: row.get::<_, Option<i64>>(10)?.map(|value| value as u32),
+        bitrate_kbps: row.get::<_, Option<i64>>(11)?.map(|value| value as u64),
         playable: availability == Availability::Available
             && inspection == InspectionStatus::Indexed,
         availability,

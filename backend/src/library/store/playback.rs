@@ -134,7 +134,7 @@ type AlbumCounts = HashMap<LibraryAlbumKey, u32>;
 
 /// The columns every playback query returns, in the order `playback_row` reads them, and what they
 /// are selected from.
-const PLAYBACK_COLUMNS: &str = "t.id, r.path, f.relative_path, f.availability, f.inspection_status, m.title_key, m.artist_key, m.album_key, m.album_artist, m.album_artist_key, m.duration_ms, a.content_hash, a.mime_type, a.relative_path, m.track_number, m.disc_number, m.year, m.file_format, m.bit_depth, m.bitrate_kbps, m.album_dir, f.content_hash";
+const PLAYBACK_COLUMNS: &str = "t.id, r.path, f.relative_path, f.availability, f.inspection_status, m.title_key, m.artist_key, m.album_key, m.album_artist, m.album_artist_key, m.duration_ms, a.content_hash, a.mime_type, m.track_number, m.disc_number, m.year, m.file_format, m.bit_depth, m.bitrate_kbps, m.album_dir, f.content_hash";
 const PLAYBACK_FROM: &str = "FROM track_source_metadata m JOIN tracks t ON t.id = m.track_id JOIN library_files f ON f.id = t.file_id JOIN library_roots r ON r.id = f.root_id LEFT JOIN artwork_assets a ON a.id = m.artwork_id";
 
 fn playback_row(row: &Row<'_>) -> rusqlite::Result<PlaybackRow> {
@@ -151,20 +151,20 @@ fn playback_row(row: &Row<'_>) -> rusqlite::Result<PlaybackRow> {
         album: row.get(7)?,
         album_artist: row.get(8)?,
         album_artist_key: row.get(9)?,
-        album_dir: row.get(20)?,
+        album_dir: row.get(19)?,
         duration_ms: row.get(10)?,
-        artwork: artwork_ref(row.get(11)?, row.get(12)?, row.get(13)?),
-        track_number: row.get(14)?,
-        disc_number: row.get(15)?,
-        year: row.get(16)?,
-        file_format: non_blank(row.get(17)?),
+        artwork: artwork_ref(row.get(11)?, row.get(12)?),
+        track_number: row.get(13)?,
+        disc_number: row.get(14)?,
+        year: row.get(15)?,
+        file_format: non_blank(row.get(16)?),
         bit_depth: row
-            .get::<_, Option<i64>>(18)?
+            .get::<_, Option<i64>>(17)?
             .and_then(|value| u32::try_from(value).ok()),
         bitrate_kbps: row
-            .get::<_, Option<i64>>(19)?
+            .get::<_, Option<i64>>(18)?
             .and_then(|value| u32::try_from(value).ok()),
-        content_hash: row.get(21)?,
+        content_hash: row.get(20)?,
     })
 }
 

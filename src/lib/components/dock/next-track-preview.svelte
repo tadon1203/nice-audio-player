@@ -47,7 +47,7 @@
     next !== null &&
       inLastSeconds &&
       playback.repeatMode !== "one" &&
-      next.artwork?.contentHash !== playback.item?.artwork?.contentHash,
+      next.artwork?.hash !== playback.item?.artwork?.hash,
   );
 
   const slideIn = (_node: Element) =>

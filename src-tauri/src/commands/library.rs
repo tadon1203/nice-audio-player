@@ -8,6 +8,7 @@ use backend::dto::{
     LibraryTrackSortKey,
 };
 use backend::errors::LibraryCommandError;
+use backend::ids::ArtworkHash;
 
 use super::blocking;
 use crate::{
@@ -300,8 +301,8 @@ pub async fn reveal_library_track(
 #[tauri::command]
 #[specta::specta]
 pub async fn get_artwork_accent(
-    content_hash: String,
+    hash: ArtworkHash,
     state: tauri::State<'_, AppState>,
 ) -> Result<Option<String>, LibraryCommandError> {
-    blocking(&state, move |backend| backend.artwork_accent(&content_hash)).await
+    blocking(&state, move |backend| backend.artwork_accent(&hash)).await
 }

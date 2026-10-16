@@ -8,7 +8,7 @@
   import { prefersReducedMotion } from "svelte/motion";
   import { fade } from "svelte/transition";
   import type { ArtworkRef } from "#lib/native";
-  import { artworkUrl } from "#lib/native";
+  import { ArtworkUrl } from "#lib/native";
   import { motionFor } from "#lib/ui/motion/svelte-motion";
   import { cn } from "#lib/utils/cn.js";
   import { GLOW, type GlowStrength } from "./glow-model";
@@ -40,7 +40,7 @@
     class?: string;
   } = $props();
 
-  const url = $derived(artworkUrl(artwork, "thumb"));
+  const url = $derived(ArtworkUrl.of(artwork, "thumb"));
   const motion = $derived(motionFor("large"));
   const wipeMotion = $derived(motionFor("move"));
   const wipe = $derived(!prefersReducedMotion.current && enter !== "fade" ? enter : null);

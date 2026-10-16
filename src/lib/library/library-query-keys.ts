@@ -1,4 +1,5 @@
 import type {
+  ArtworkHash,
   LibraryAlbumArtistKey,
   LibraryAlbumKey,
   LibraryArtistAlbumSortKey,
@@ -76,7 +77,7 @@ export class LibraryQueryKeys {
   }
 
   /** Content-addressed, so it is never invalidated with the catalog. */
-  public static accent(contentHash: string | null): readonly unknown[] {
-    return ["library", "accent", contentHash];
+  public static accent(hash: ArtworkHash | null): readonly unknown[] {
+    return ["library", "accent", hash];
   }
 }

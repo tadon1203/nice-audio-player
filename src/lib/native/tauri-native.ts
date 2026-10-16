@@ -3,6 +3,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
   commands,
+  type ArtworkHash,
   type AudioDeviceListError,
   type BackendMessage,
   type LibraryCommandError,
@@ -287,8 +288,8 @@ class TauriLibraryClient implements LibraryClient {
   async revealTrack(trackId: string) {
     await this.#call(() => this.#commands.revealLibraryTrack(trackId));
   }
-  artworkAccent(contentHash: string) {
-    return this.#call(() => this.#commands.getArtworkAccent(contentHash));
+  artworkAccent(hash: ArtworkHash) {
+    return this.#call(() => this.#commands.getArtworkAccent(hash));
   }
 
   #call<T>(run: () => Promise<T>): Promise<T> {

@@ -26,7 +26,7 @@ fn albums_keep_their_identity_and_take_the_cover_of_their_first_track_with_artwo
     assert_eq!(shared.key.album_artist, "Album Artist");
     let cover = shared.artwork.as_ref().expect("a cover");
     assert_eq!(
-        (cover.content_hash.as_str(), cover.mime_type),
+        (cover.hash.as_str(), cover.mime_type),
         (
             second.as_str(),
             crate::library::artwork::ArtworkMimeType::Png

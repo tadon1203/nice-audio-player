@@ -17,6 +17,7 @@ use crate::audio::{
     },
     waveform::{PlaybackWaveform, Waveform, WaveformService},
 };
+use crate::ids::ArtworkHash;
 use crate::library::{
     Library,
     artwork::{self, ServedArtwork},
@@ -390,9 +391,9 @@ impl BackendApp {
     /// The accent color of stored artwork, computed on first request and cached.
     pub fn artwork_accent(
         &self,
-        content_hash: &str,
+        hash: &ArtworkHash,
     ) -> Result<Option<String>, LibraryCommandError> {
-        self.library()?.artwork_accent(content_hash)
+        self.library()?.artwork_accent(hash)
     }
 
     // ---- lyrics ----

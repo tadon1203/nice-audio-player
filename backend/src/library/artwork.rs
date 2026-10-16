@@ -2,6 +2,7 @@
 //! reference the catalog and playback items hand to the renderer.
 
 use super::status::sql_text_enum;
+use crate::ids::{ArtworkHash, is_artwork_hash};
 use image::{ImageReader, codecs::jpeg::JpegEncoder, imageops::FilterType};
 use serde::Serialize;
 use std::{
@@ -48,9 +49,8 @@ impl ArtworkMimeType {
 #[derive(Debug, Clone, Serialize, specta::Type, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct ArtworkRef {
-    pub content_hash: String,
+    pub hash: ArtworkHash,
     pub mime_type: ArtworkMimeType,
-    pub relative_path: String,
 }
 
 /// Where an image lives below the data directory: `artwork/<first two hash digits>/<hash>.<ext>`.
@@ -78,7 +78,7 @@ impl ArtworkPath {
             hash: hash.to_owned(),
             mime_type: ArtworkMimeType::from_extension(extension)?,
         };
-        (is_hash(hash) && path.shard() == shard).then_some(path)
+        (is_artwork_hash(hash) && path.shard() == shard).then_some(path)
     }
 
     /// `relative` is the canonical path of exactly this hash and type.
@@ -105,7 +105,7 @@ pub fn thumbnail_path(hash: &str) -> String {
 pub fn thumbnail_hash(file_name: &str) -> Option<&str> {
     file_name
         .strip_suffix(".thumb.jpg")
-        .filter(|hash| is_hash(hash))
+        .filter(|hash| is_artwork_hash(hash))
 }
 
 impl std::fmt::Display for ArtworkPath {
@@ -118,14 +118,6 @@ impl std::fmt::Display for ArtworkPath {
             self.mime_type.extension()
         )
     }
-}
-
-/// A content hash is 64 lowercase hex digits. One spelling per file, so one cache entry per file.
-fn is_hash(value: &str) -> bool {
-    value.len() == 64
-        && value
-            .bytes()
-            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
 /// How long the renderer may keep a served image.

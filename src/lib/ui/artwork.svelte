@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { HTMLAttributes } from "svelte/elements";
   import type { ArtworkRef } from "#lib/native";
-  import { artworkUrl, type ArtworkLevel } from "#lib/native";
+  import { ArtworkUrl, type ArtworkLevel } from "#lib/native";
   import { cn } from "#lib/utils/cn.js";
 
   let {
@@ -22,7 +22,7 @@
     class?: string;
   } = $props();
 
-  const url = $derived(artworkUrl(artwork, level));
+  const url = $derived(ArtworkUrl.of(artwork, level));
   let failedUrl = $state<string | null>(null);
   const showImage = $derived(url !== null && failedUrl !== url);
 </script>

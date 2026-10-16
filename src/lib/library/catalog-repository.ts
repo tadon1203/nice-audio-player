@@ -6,6 +6,7 @@ import {
   type QueryClient,
 } from "@tanstack/svelte-query";
 import type {
+  ArtworkHash,
   LibraryAlbumArtistPage,
   LibraryAlbumPage,
   LibraryAlbumArtistSortKey,
@@ -111,10 +112,10 @@ export class CatalogRepository {
   }
 
   /** Representative artwork color as `#rrggbb`, for backgrounds only. */
-  public accentOptions(contentHash: string | null) {
+  public accentOptions(hash: ArtworkHash | null) {
     return queryOptions({
-      queryKey: LibraryQueryKeys.accent(contentHash),
-      queryFn: contentHash === null ? skipToken : () => this.#client.artworkAccent(contentHash),
+      queryKey: LibraryQueryKeys.accent(hash),
+      queryFn: hash === null ? skipToken : () => this.#client.artworkAccent(hash),
       staleTime: Infinity,
       gcTime: Infinity,
     });

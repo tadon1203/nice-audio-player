@@ -2,6 +2,7 @@ import type {
   Appearance,
   AppearancePatch,
   AudioOutputDevice,
+  ArtworkHash,
   AudioOutputSelection,
   BackendMessage,
   InitialState,
@@ -133,7 +134,7 @@ export interface LibraryClient {
   ): Promise<LibraryAlbumPage>;
   trackProperties(trackId: string): Promise<LibraryTrackProperties | null>;
   revealTrack(trackId: string): Promise<void>;
-  artworkAccent(contentHash: string): Promise<string | null>;
+  artworkAccent(hash: ArtworkHash): Promise<string | null>;
 }
 
 export interface LyricsClient {

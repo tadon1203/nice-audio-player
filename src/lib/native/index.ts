@@ -1,6 +1,6 @@
 export * from "./bindings";
 export * from "./native-clients";
-export { artworkUrl, type ArtworkLevel } from "./artwork-url";
+export { ArtworkUrl, type ArtworkLevel } from "./artwork-url";
 export { messageForCode, nativeErrorCode } from "./errors/error-code";
 export { AppError } from "./errors/app-error";
 export { AppearanceError } from "./errors/appearance-error";

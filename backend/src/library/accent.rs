@@ -1,4 +1,5 @@
 use super::{artwork::ArtworkPath, database::Database, error::StoreError};
+use crate::ids::ArtworkHash;
 use image::{ImageReader, imageops::FilterType};
 use rusqlite::{OptionalExtension, params};
 use std::io::Cursor;
@@ -9,16 +10,13 @@ const SAMPLE_EDGE: u32 = 32;
 /// only the one cached value, in its own short transaction.
 pub fn artwork_accent(
     database: &Database,
-    content_hash: &str,
+    hash: &ArtworkHash,
 ) -> Result<Option<String>, StoreError> {
-    if content_hash.len() != 64 || !content_hash.bytes().all(|b| b.is_ascii_hexdigit()) {
-        return Err(StoreError::InvalidId);
-    }
     let row: Option<(i64, String, Option<String>)> = database
         .read()?
         .query_row(
             "SELECT id, relative_path, accent FROM artwork_assets WHERE content_hash = ?1",
-            params![content_hash],
+            params![hash.as_str()],
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         )
         .optional()?;
@@ -132,8 +130,8 @@ mod tests {
     fn an_accent_is_computed_once_then_read_from_the_database() {
         let directory = crate::test_support::TestDirectory::new();
         let database = Database::initialize(&directory.file("data")).expect("database");
-        let hash = "d".repeat(64);
-        let relative = format!("artwork/dd/{hash}.png");
+        let hash = ArtworkHash::try_from("d".repeat(64)).unwrap();
+        let relative = format!("artwork/dd/{}.png", hash.as_str());
         std::fs::create_dir_all(database.data_dir().join("artwork/dd")).unwrap();
         std::fs::write(
             database.data_dir().join(&relative),
@@ -145,7 +143,7 @@ mod tests {
             .unwrap()
             .execute(
                 "INSERT INTO artwork_assets(id,content_hash,mime_type,relative_path,byte_length) VALUES(1,?1,'image/png',?2,1)",
-                params![hash, relative],
+                params![hash.as_str(), relative],
             )
             .unwrap();
 
@@ -159,10 +157,7 @@ mod tests {
             Some("#c82828"),
             "cached in the database"
         );
-        assert_eq!(artwork_accent(&database, &"e".repeat(64)).unwrap(), None);
-        assert_eq!(
-            artwork_accent(&database, "nope").err(),
-            Some(StoreError::InvalidId)
-        );
+        let unknown = ArtworkHash::try_from("e".repeat(64)).unwrap();
+        assert_eq!(artwork_accent(&database, &unknown).unwrap(), None);
     }
 }

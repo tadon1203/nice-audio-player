@@ -9,6 +9,7 @@
 pub mod app;
 pub mod dto;
 pub mod errors;
+pub mod ids;
 pub mod messages;
 pub mod tasks;
 

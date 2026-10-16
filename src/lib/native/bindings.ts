@@ -94,7 +94,7 @@ export const commands = {
 } | null>("get_library_track_properties", { trackId }),
 	/**  Shows the track's file in Explorer, selected. */
 	revealLibraryTrack: (trackId: string) => __TAURI_INVOKE<null>("reveal_library_track", { trackId }),
-	getArtworkAccent: (contentHash: string) => __TAURI_INVOKE<string | null>("get_artwork_accent", { contentHash }),
+	getArtworkAccent: (hash: ArtworkHash) => __TAURI_INVOKE<string | null>("get_artwork_accent", { hash }),
 	getTrackLyrics: (trackId: string) => __TAURI_INVOKE<LyricsResolution>("get_track_lyrics", { trackId }),
 	/**
 	 *  Starts streaming Meter frames to `frames` as binary messages (see `FRAME_BYTES` in the
@@ -166,13 +166,15 @@ export type AppearancePatch = {
 	calmMotion: boolean | null,
 };
 
+/**  Stored artwork: the 64-character blake3 hex of the image file. */
+export type ArtworkHash = string;
+
 export type ArtworkMimeType = "jpeg" | "png";
 
 /**  Stored artwork as the renderer addresses it. Shared by the library catalog and playback items. */
 export type ArtworkRef = {
-	contentHash: string,
+	hash: ArtworkHash,
 	mimeType: ArtworkMimeType,
-	relativePath: string,
 };
 
 export type AudioDeviceListError = { code: "enumerationFailed" };

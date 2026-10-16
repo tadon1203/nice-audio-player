@@ -132,8 +132,9 @@ fn year_phases(year: &str, album_sort: &str, rest: &[&str], unnamed: &[&str]) ->
 }
 
 /// The columns of an album row, in the order `album_summary` reads them, and what they come from.
-const ALBUM_COLUMNS: &str = "al.album_key, al.album_artist_key, al.album_dir, al.year, a.content_hash, a.mime_type, a.relative_path";
-const ALBUM_COLUMN_COUNT: usize = 7;
+const ALBUM_COLUMNS: &str =
+    "al.album_key, al.album_artist_key, al.album_dir, al.year, a.content_hash, a.mime_type";
+const ALBUM_COLUMN_COUNT: usize = 6;
 const ALBUM_FROM: &str = "FROM albums al LEFT JOIN artwork_assets a ON a.id = al.cover_artwork_id";
 
 fn album_summary(row: &Row<'_>) -> rusqlite::Result<LibraryAlbumSummary> {
@@ -144,14 +145,13 @@ fn album_summary(row: &Row<'_>) -> rusqlite::Result<LibraryAlbumSummary> {
             album_edition: row.get(2)?,
         },
         year: row.get(3)?,
-        artwork: artwork_ref(row.get(4)?, row.get(5)?, row.get(6)?),
+        artwork: artwork_ref(row.get(4)?, row.get(5)?),
     })
 }
 
 /// The columns of an Album Artist row, in the order `artist_summary` reads them.
-const ARTIST_COLUMNS: &str =
-    "ar.name, ar.album_count, ar.track_count, a.content_hash, a.mime_type, a.relative_path";
-const ARTIST_COLUMN_COUNT: usize = 6;
+const ARTIST_COLUMNS: &str = "ar.name, ar.album_count, ar.track_count, a.content_hash, a.mime_type";
+const ARTIST_COLUMN_COUNT: usize = 5;
 const ARTIST_FROM: &str =
     "FROM album_artists ar LEFT JOIN artwork_assets a ON a.id = ar.cover_artwork_id";
 
@@ -160,7 +160,7 @@ fn artist_summary(row: &Row<'_>) -> rusqlite::Result<LibraryAlbumArtistSummary> 
         key: LibraryAlbumArtistKey { name: row.get(0)? },
         album_count: row.get::<_, i64>(1)? as u64,
         track_count: row.get::<_, i64>(2)? as u64,
-        artwork: artwork_ref(row.get(3)?, row.get(4)?, row.get(5)?),
+        artwork: artwork_ref(row.get(3)?, row.get(4)?),
     })
 }
 
@@ -791,12 +791,12 @@ fn album_cover(
 ) -> Result<Option<ArtworkRef>, StoreError> {
     Ok(connection
         .prepare_cached(&format!(
-            "SELECT a.content_hash, a.mime_type, a.relative_path {ALBUM_FROM}
+            "SELECT a.content_hash, a.mime_type {ALBUM_FROM}
              WHERE al.album_artist_key = ?1 AND al.album_key = ?2 AND al.album_dir = ?3"
         ))?
         .query_row(
             params![key.album_artist, key.title, key.album_edition],
-            |row| Ok(artwork_ref(row.get(0)?, row.get(1)?, row.get(2)?)),
+            |row| Ok(artwork_ref(row.get(0)?, row.get(1)?)),
         )
         .optional()?
         .flatten())
