@@ -15,7 +15,7 @@ export type TrackTableRow = Pick<
   "id" | "title" | "artist" | "durationMs" | "availability" | "playable"
 > &
   Partial<
-    Pick<LibraryTrackSummary, "album" | "albumArtist" | "albumKey"> &
+    Pick<LibraryTrackSummary, "album" | "albumArtist" | "albumId" | "albumArtistId"> &
       Pick<
         LibraryAlbumTrackSummary,
         "trackNumber" | "discNumber" | "fileFormat" | "bitDepth" | "sampleRate"

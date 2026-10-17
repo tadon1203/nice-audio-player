@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { fromNameSegment, toNameSegment } from "./unknown-name";
+import { albumTitleLabel, artistNameLabel, UNKNOWN_ALBUM, UNKNOWN_ARTIST } from "./unknown-name";
 
-describe("name segments", () => {
-  it.each(["", "Artist", "~", "~tilde", "~~"])("round-trips %j", (name) => {
-    expect(fromNameSegment(toNameSegment(name))).toBe(name);
+describe("unknown names", () => {
+  it("labels an empty album title and artist name as unknown", () => {
+    expect(albumTitleLabel("")).toBe(UNKNOWN_ALBUM);
+    expect(artistNameLabel("")).toBe(UNKNOWN_ARTIST);
   });
 
-  it("never produces an empty segment", () => {
-    expect(toNameSegment("")).not.toBe("");
+  it("keeps a name that is there", () => {
+    expect(albumTitleLabel("Abbey Road")).toBe("Abbey Road");
+    expect(artistNameLabel("~tilde")).toBe("~tilde");
   });
 });

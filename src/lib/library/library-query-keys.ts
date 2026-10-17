@@ -2,8 +2,6 @@ import type {
   AlbumId,
   ArtistId,
   ArtworkHash,
-  LibraryAlbumArtistKey,
-  LibraryAlbumKey,
   LibraryArtistAlbumSortKey,
   LibrarySortDirection,
   TrackId,
@@ -16,17 +14,6 @@ export type ArtistAlbumsArguments = {
   readonly sortKey: LibraryArtistAlbumSortKey;
   readonly direction: LibrarySortDirection;
 };
-
-/** The same list for the old name route, which is keyed by the Album Artist's name. */
-export type AlbumArtistAlbumsArguments = {
-  readonly key: LibraryAlbumArtistKey;
-  readonly sortKey: LibraryArtistAlbumSortKey;
-  readonly direction: LibrarySortDirection;
-};
-
-/** An Album is its Album Artist, title, and folder, so all three are in its query keys. */
-const albumIdentity = (key: LibraryAlbumKey) =>
-  [key.title, key.albumArtist, key.albumEdition] as const;
 
 /** Where `LibraryQueryKeys.catalog` puts the request: after `data` and "catalog". */
 const CATALOG_REQUEST_INDEX = 3;
@@ -44,12 +31,6 @@ export class LibraryQueryKeys {
   public static readonly artistAlbumsPrefix = [
     ...LibraryQueryKeys.data,
     "artist",
-    "albums",
-  ] as const;
-  /** The prefix of every album list of the old name route, for reads across all of them. */
-  public static readonly albumArtistAlbumsPrefix = [
-    ...LibraryQueryKeys.data,
-    "albumArtist",
     "albums",
   ] as const;
 
@@ -77,15 +58,6 @@ export class LibraryQueryKeys {
     return [...LibraryQueryKeys.data, "album", "byId", "tracks", albumId];
   }
 
-  /** The old album route's album, by its key, until ticket 14 removes that route. */
-  public static albumByKey(key: LibraryAlbumKey): readonly unknown[] {
-    return [...LibraryQueryKeys.data, "album", "detail", ...albumIdentity(key)];
-  }
-
-  public static albumTracksByKey(key: LibraryAlbumKey): readonly unknown[] {
-    return [...LibraryQueryKeys.data, "album", "tracks", ...albumIdentity(key)];
-  }
-
   public static artist(artistId: ArtistId): readonly unknown[] {
     return [...LibraryQueryKeys.data, "artist", "detail", artistId];
   }
@@ -96,19 +68,6 @@ export class LibraryQueryKeys {
     direction,
   }: ArtistAlbumsArguments): readonly unknown[] {
     return [...LibraryQueryKeys.artistAlbumsPrefix, artistId, sortKey, direction];
-  }
-
-  /** The old name route's Album Artist, until that route is removed. */
-  public static albumArtist(key: LibraryAlbumArtistKey): readonly unknown[] {
-    return [...LibraryQueryKeys.data, "albumArtist", "detail", key.name];
-  }
-
-  public static albumArtistAlbums({
-    key,
-    sortKey,
-    direction,
-  }: AlbumArtistAlbumsArguments): readonly unknown[] {
-    return [...LibraryQueryKeys.albumArtistAlbumsPrefix, key.name, sortKey, direction];
   }
 
   public static trackProperties(trackId: TrackId | null): readonly unknown[] {

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { LibraryAlbumSummary } from "#lib/native";
+  import type { ArtistId, LibraryAlbumSummary } from "#lib/native";
   import { resolve } from "$app/paths";
   import { albumTitleLabel, artistNameLabel } from "#lib/library/unknown-name";
   import Artwork from "#lib/ui/artwork.svelte";
@@ -12,22 +12,26 @@
     album,
     onplay,
     showArtist = true,
-    fromArtist = false,
+    parentArtistId = null,
   }: {
     album: LibraryAlbumSummary;
     onplay?: (album: LibraryAlbumSummary) => void;
     /** False where the artist is already the context (an artist's own albums). */
     showArtist?: boolean;
-    /** True on an Album Artist's page, so the album's Back link returns there. */
-    fromArtist?: boolean;
+    /** Set on an Album Artist's page, so the album's Back link returns there. */
+    parentArtistId?: ArtistId | null;
   } = $props();
 
-  const title = $derived(albumTitleLabel(album.key.title));
-  const artist = $derived(artistNameLabel(album.key.albumArtist));
-  // The ID names the album; `from` (in the URL, so it survives a reload) returns to the artist.
+  const title = $derived(albumTitleLabel(album.title));
+  const artist = $derived(artistNameLabel(album.albumArtist.name));
+  // Opened from an Album Artist's page, the album is reached through that artist, so Back returns.
   const href = $derived(
-    resolve("/library/albums/[albumId=albumId]", { albumId: album.id }) +
-      (fromArtist ? "?from=artist" : ""),
+    parentArtistId === null
+      ? resolve("/library/albums/[albumId=albumId]", { albumId: album.id })
+      : resolve("/library/album-artists/[artistId=artistId]/albums/[albumId=albumId]", {
+          artistId: parentArtistId,
+          albumId: album.id,
+        }),
   );
 </script>
 

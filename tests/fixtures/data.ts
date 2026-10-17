@@ -81,6 +81,8 @@ export function makeTracks(count = 140, options: { artwork?: boolean } = {}) {
       album: "Test album",
       albumArtist: "Test artist",
       albumKey: testAlbum.key,
+      albumId: testAlbumId,
+      albumArtistId: testArtistId,
       artwork: options.artwork ? ARTWORK : null,
       durationMs: 120_000 + index * 1_000,
       fileFormat: "FLAC",
@@ -177,10 +179,7 @@ export function libraryResponses(library: LibraryData = testLibrary()) {
     listLibraryAlbumArtistIndex: [],
     getLibraryArtist: library.artists[0],
     listLibraryArtistAlbums: () => pageOf(library.albums.slice(0, 2), null),
-    getLibraryAlbumArtist: library.artists[0],
     listLibraryAlbumArtistAlbums: () => pageOf(library.albums.slice(0, 2), null),
-    getLibraryAlbumDetails: library.albumDetails,
-    listLibraryAlbumTracksByKey: library.albumTracks,
     getLibraryAlbum: library.albumDetails,
     listLibraryAlbumTracks: library.albumTracks,
     getLibraryTrackProperties: ({ trackId: id }: { trackId: number }) => {
@@ -347,6 +346,7 @@ export function playbackItemFor(track: LibraryTrackSummary): PlaybackItem {
     year: 2019,
     albumKey: track.albumKey,
     albumId: track.albumKey === null ? null : testAlbumId,
+    albumArtistId: track.albumKey === null ? null : testArtistId,
     albumTrackCount: null,
   };
 }

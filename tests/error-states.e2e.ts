@@ -1,3 +1,4 @@
+import { testAlbum } from "./fixtures/data";
 import { expect, test } from "./fixtures/test";
 
 test("shows playback initialization failure instead of remaining loading", async ({
@@ -42,16 +43,16 @@ test("does not present an artist album query failure as an empty artist", async 
 });
 
 test("shows an album summary query failure in the album workspace", async ({ page, native }) => {
-  native.fail("getLibraryAlbumDetails", "persistenceFailed");
-  await page.goto("/library/albums/Test%20artist/Test%20album");
+  native.fail("getLibraryAlbum", "persistenceFailed");
+  await page.goto(`/library/albums/${testAlbum.id}`);
 
   await expect(page.getByRole("alert")).toContainText("The library database could not be updated.");
   await expect(page.getByText("No tracks were indexed for this album.")).toHaveCount(0);
 });
 
 test("shows an artist summary query failure in the artist workspace", async ({ page, native }) => {
-  native.fail("getLibraryAlbumArtist", "persistenceFailed");
-  await page.goto("/library/album-artists/Test%20artist");
+  native.fail("getLibraryArtist", "persistenceFailed");
+  await page.goto(`/library/album-artists/${testAlbum.albumArtist.id}`);
 
   await expect(page.getByRole("alert")).toContainText("The library database could not be updated.");
   await expect(page.getByText("No albums were indexed for this artist.")).toHaveCount(0);

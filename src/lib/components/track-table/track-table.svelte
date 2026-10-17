@@ -126,7 +126,7 @@
     else event.stopPropagation();
   }
 
-  // Plain strings from routes.ts, not resolve(): see there.
+  // The links come from `Tracks.links`, which builds them with resolve().
   function goTo(href: string) {
     void goto(href);
   }

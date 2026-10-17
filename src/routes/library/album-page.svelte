@@ -1,17 +1,14 @@
 <script lang="ts">
-  import type { TrackId } from "#lib/native";
+  import type { AlbumId, ArtistId, TrackId } from "#lib/native";
   import Shuffle from "@lucide/svelte/icons/shuffle";
-  import { page } from "$app/state";
   import { resolve } from "$app/paths";
   import AlbumStrip from "#lib/components/media-details/album-strip.svelte";
   import MediaDetailsHeader from "#lib/components/media-details/media-details-header.svelte";
   import TrackTable from "#lib/components/track-table/track-table.svelte";
-  import { albumItemKey } from "#lib/library/album-key";
   import { LibraryErrors } from "#lib/library/library-errors";
   import { PagedCollection } from "#lib/library/paged-collection.svelte";
   import { QueryResult } from "#lib/library/query-result.svelte";
-  import { albumEditionOf, albumFromArtist } from "#lib/library/routes";
-  import { albumTitleLabel, artistNameLabel, fromNameSegment } from "#lib/library/unknown-name";
+  import { albumTitleLabel, artistNameLabel } from "#lib/library/unknown-name";
   import { AppServices } from "#lib/shell/app-services.svelte";
   import { WorkspaceScroll } from "#lib/shell/workspace-scroll.svelte";
   import BackLink from "#lib/ui/back-link.svelte";
@@ -27,27 +24,37 @@
   import { CountFormat } from "#lib/utils/count-format";
   import { DurationFormat } from "#lib/utils/duration-format";
 
+  /**
+   * One album page for both routes: the album by its ID, and the Album Artist it was opened from
+   * (null when it was opened from the Albums list). The parent is in the URL, so Back returns
+   * to it after a reload too.
+   */
+  let {
+    albumId,
+    parentArtistId,
+  }: {
+    readonly albumId: AlbumId;
+    /** The Album Artist page this album was opened from; Back returns there. */
+    readonly parentArtistId: ArtistId | null;
+  } = $props();
+
   const { actions, albums, playback, scrollMemory } = AppServices.current();
 
-  const albumArtist = $derived(fromNameSegment(page.params.albumArtist ?? ""));
-  const albumTitle = $derived(fromNameSegment(page.params.albumTitle ?? ""));
-  const albumEdition = $derived(albumEditionOf(page.url.searchParams));
-  const key = $derived({ albumArtist, title: albumTitle, albumEdition });
-  const title = $derived(albumTitleLabel(albumTitle));
-  const artist = $derived(artistNameLabel(albumArtist));
-  const shared = $derived(albumItemKey(key));
-  const fromArtist = $derived(albumFromArtist(page.url.searchParams));
+  const details = new QueryResult(() => albums.detailsOptions(albumId));
+  const tracks = new PagedCollection(() => albums.tracksOptions(albumId));
 
-  const details = new QueryResult(() => albums.detailsOptionsByKey(key));
-  const tracks = new PagedCollection(() => albums.tracksOptionsByKey(key));
+  // The list cache usually holds the album already, so the header can show it before the details.
+  const summary = $derived(details.data?.summary ?? albums.cachedSummary(albumId));
+  const title = $derived(summary === null ? "" : albumTitleLabel(summary.title));
+  const artist = $derived(summary === null ? "" : artistNameLabel(summary.albumArtist.name));
 
-  // The loaded track belongs to this album (the same key the album was opened with).
-  const albumIsLoaded = $derived(playback.isAlbumLoadedByKey(key));
+  // The loaded track belongs to this album (the same ID the album was opened with).
+  const albumIsLoaded = $derived(playback.isAlbumLoaded(albumId));
   const albumIsPlaying = $derived(albumIsLoaded && playback.isPlaying);
 
   // Playing a track continues through the rest of its album.
   const playTrack = (trackId: TrackId) =>
-    actions.run(() => playback.start({ kind: "albumByKey", albumKey: key }, trackId));
+    actions.run(() => playback.start({ kind: "album", albumId }, trackId));
 
   let viewport = $state<HTMLElement | null>(null);
 
@@ -63,14 +70,10 @@
   viewportAttachment={scroll.attach}
   contentClass="py-8 pb-16"
 >
-  {#if fromArtist}
-    <!-- The artist's ID comes from the album's details, so the link needs no history state. -->
+  {#if parentArtistId !== null}
     <BackLink
-      href={details.data === undefined
-        ? resolve("/library/album-artists")
-        : resolve("/library/album-artists/[artistId=artistId]", {
-            artistId: details.data.summary.albumArtist.id,
-          })}>{artist}</BackLink
+      href={resolve("/library/album-artists/[artistId=artistId]", { artistId: parentArtistId })}
+      >{artist}</BackLink
     >
   {:else}
     <BackLink href={resolve("/library/albums")}>Albums</BackLink>
@@ -82,13 +85,7 @@
       onRetry={() => void details.refetch()}
     />
   {:else if details.data === undefined || tracks.isPending}
-    <!-- What the cached lists already tell, so the page is not empty. -->
-    <MediaDetailsHeader
-      {title}
-      {artist}
-      artwork={albums.cachedSummary(key)?.artwork ?? null}
-      sharedKey={shared}
-    />
+    <MediaDetailsHeader {title} {artist} artwork={summary?.artwork ?? null} sharedKey={albumId} />
     <LoadingStatus>Reading album…</LoadingStatus>
   {:else if tracks.isError}
     <ErrorAlert
@@ -97,7 +94,7 @@
     />
   {:else}
     {@const album = details.data}
-    <MediaDetailsHeader {title} {artist} artwork={album.summary.artwork} sharedKey={shared}>
+    <MediaDetailsHeader {title} {artist} artwork={album.summary.artwork} sharedKey={albumId}>
       {#snippet strip()}
         {#if tracks.items.length > 0}
           <AlbumStrip
@@ -123,7 +120,7 @@
         <Button
           type="button"
           disabled={album.firstPlayableTrackId === null}
-          onclick={() => actions.run(() => playback.togglePlayAlbumByKey(key))}
+          onclick={() => actions.run(() => playback.togglePlayAlbum(albumId))}
         >
           <PlayPauseIcon playing={albumIsPlaying} data-icon="inline-start" />
           {albumIsPlaying ? "Pause" : albumIsLoaded ? "Resume" : "Play album"}
@@ -132,8 +129,7 @@
           type="button"
           variant="outline"
           disabled={album.firstPlayableTrackId === null}
-          onclick={() =>
-            actions.run(() => playback.shuffleAndStart({ kind: "albumByKey", albumKey: key }))}
+          onclick={() => actions.run(() => playback.shuffleAndStart({ kind: "album", albumId }))}
         >
           <Shuffle data-icon="inline-start" aria-hidden="true" />
           Shuffle

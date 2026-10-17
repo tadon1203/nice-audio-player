@@ -34,6 +34,21 @@ const albums: LibraryAlbumSummary[] = printings.map(({ id, edition, artwork }) =
   artwork,
 }));
 
+test("an album opened from its Album Artist page keeps that artist through a reload", async ({
+  page,
+}) => {
+  await page.goto("/library/album-artists");
+  await page.getByRole("link", { name: "Browse albums by Test artist" }).click();
+  await page.getByRole("link", { name: "Open album Test album" }).click();
+  const albumUrl = /\/library\/album-artists\/[0-9a-f]{32}\/albums\/[0-9a-f]{32}$/;
+  await expect(page).toHaveURL(albumUrl);
+  await page.reload();
+  await expect(page).toHaveURL(albumUrl);
+  await page.getByRole("link", { name: "Test artist", exact: true }).click();
+  await expect(page).toHaveURL(/\/library\/album-artists\/[0-9a-f]{32}$/);
+  await expect(page.getByRole("heading", { name: "Test artist" })).toBeVisible();
+});
+
 test("two albums with one title and Album Artist in two folders each open their own page", async ({
   page,
   native,

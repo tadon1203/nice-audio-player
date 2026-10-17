@@ -675,6 +675,7 @@ mod tests {
             year: None,
             album_key: None,
             album_id: None,
+            album_artist_id: None,
             album_track_count: None,
             file_format: None,
             bit_depth: None,

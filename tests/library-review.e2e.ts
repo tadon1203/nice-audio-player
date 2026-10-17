@@ -115,10 +115,23 @@ test("keeps an album artist's ID route after a reload", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Test artist" })).toBeVisible();
 });
 
-test("opens an album artist from its name route", async ({ page }) => {
-  await page.goto("/library/album-artists/Test%20artist");
-  await expect(page.getByRole("heading", { name: "Test artist" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Open album Test album" })).toBeVisible();
+test("shows an album's title before its details arrive, opened from a tile", async ({
+  page,
+  native,
+  library,
+}) => {
+  let release = () => {};
+  const details = new Promise<void>((resolve) => (release = resolve));
+  native.respond("getLibraryAlbum", async () => {
+    await details;
+    return library.albumDetails;
+  });
+  await page.goto("/library/albums");
+  await page.getByRole("link", { name: "Open album Test album by Test artist" }).click();
+  await expect(page.getByRole("heading", { name: "Test album" })).toBeVisible();
+  await expect(page.getByText("Reading album…")).toBeVisible();
+  release();
+  await expect(page.getByText("Reading album…")).toHaveCount(0);
 });
 
 test("returns from an album opened from Albums to the Albums presentation", async ({ page }) => {

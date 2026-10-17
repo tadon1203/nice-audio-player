@@ -1,6 +1,31 @@
 use super::*;
 
 #[test]
+fn a_playable_track_carries_the_album_and_album_artist_ids() {
+    let fixture = fixture();
+    fixture.touch_audio([1, 2]);
+    let mut filed = Seed::new(1, "Song", "Singer", "Record");
+    filed.album_artist = Some("Band");
+    fixture.add_all(&[filed, Seed::new(2, "Single", "Singer", "")]);
+    let store = &fixture.store;
+
+    let filed = store.playback_for_track(track_id_of(1)).unwrap();
+    let album_id = filed.album_id.unwrap();
+    assert_eq!(
+        store.catalog_album(album_id).unwrap().track_count,
+        1,
+        "the ID opens the album the playback names"
+    );
+    assert_eq!(filed.album_artist_id, Some(ArtistId::of("Band")));
+    let single = store.playback_for_track(track_id_of(2)).unwrap();
+    assert_eq!(single.album_id, None, "no album tag, no album ID");
+    assert_eq!(
+        single.album_artist_id, None,
+        "no album tag, no Album Artist ID"
+    );
+}
+
+#[test]
 fn a_track_without_a_title_is_named_after_its_file_in_playback_and_in_search() {
     let fixture = fixture();
     fixture.touch_audio([1]);

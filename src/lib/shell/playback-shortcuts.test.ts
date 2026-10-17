@@ -35,6 +35,7 @@ const playingValue = (positionMs: number): PlaybackSnapshot => ({
       year: null,
       albumKey: null,
       albumId: null,
+      albumArtistId: null,
       albumTrackCount: null,
     },
     startedBy: "jump",

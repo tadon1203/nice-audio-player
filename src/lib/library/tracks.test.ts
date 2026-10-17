@@ -1,34 +1,38 @@
 import { describe, expect, it } from "vitest";
+import type { AlbumId, ArtistId } from "#lib/native";
 import { Tracks } from "./tracks";
+
+const albumId = "0f0e0d0c0b0a09080706050403020100" as AlbumId;
+const albumArtistId = "5b3f2c1e0a9d8c7b6a5f4e3d2c1b0a99" as ArtistId;
 
 const track = {
   artist: "Artist",
   album: "Album",
-  albumArtist: "Tag Album Artist",
-  albumKey: { albumArtist: "Catalog Album Artist", title: "Catalog Album", albumEdition: "" },
+  albumId,
+  albumArtistId,
 };
 
 describe("Tracks.links", () => {
-  it("links the album the catalog files the track under, not the tags", () => {
+  it("links the album and the Album Artist by their IDs", () => {
     const links = Tracks.links(track);
     expect(links.album).toEqual({
       text: "Album",
-      href: "/library/albums/Catalog%20Album%20Artist/Catalog%20Album",
+      href: `/library/albums/${albumId}`,
     });
-    expect(links.artist?.href).toBe("/library/album-artists/Catalog%20Album%20Artist");
+    expect(links.artist).toEqual({
+      text: "Artist",
+      href: `/library/album-artists/${albumArtistId}`,
+    });
   });
 
-  it("falls back to the album artist tag, then the artist, without a catalog key", () => {
-    expect(Tracks.links({ ...track, albumKey: null }).artist?.href).toBe(
-      "/library/album-artists/Tag%20Album%20Artist",
-    );
-    const loose = Tracks.links({ ...track, albumKey: null, albumArtist: null });
-    expect(loose.artist?.href).toBe("/library/album-artists/Artist");
+  it("has no link for a track without an ID, and no guess from the names", () => {
+    const loose = Tracks.links({ ...track, albumId: null, albumArtistId: null });
     expect(loose.album?.href).toBeNull();
+    expect(loose.artist?.href).toBeNull();
   });
 
   it("has no link for a missing artist or album", () => {
-    expect(Tracks.links({ ...track, artist: null, albumKey: null }).artist).toBeNull();
+    expect(Tracks.links({ ...track, artist: null }).artist).toBeNull();
     expect(Tracks.links({ ...track, album: " " }).album).toBeNull();
   });
 });

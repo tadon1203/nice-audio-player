@@ -1,36 +1,45 @@
+import { resolve } from "$app/paths";
 import type { LibraryTrackSummary } from "#lib/native";
-import { albumArtistHref, albumHref } from "./routes";
 
 type Link = { text: string; href: string | null };
 
 /** What a track needs to say where its artist and album live. */
 type TrackLinkSource = Partial<
-  Pick<LibraryTrackSummary, "album" | "artist" | "albumArtist" | "albumKey">
+  Pick<LibraryTrackSummary, "album" | "artist" | "albumId" | "albumArtistId">
 >;
 
 /** Rules about a track as a row: its links and whether it can be used. */
 export class Tracks {
   /**
-   * Artist and album as shown, each with the page it links to (null when it has none). The album
-   * link is built from the catalog's own key, so it cannot drift from how the library files the
-   * track; the table, the dock and Now Playing all read their links from here.
+   * Artist and album as shown, each with the page it links to (null when it has none). The links
+   * are built from the track's IDs, so a track without an ID has no link; the table, the dock and
+   * Now Playing all read their links from here.
    */
   public static links(track: TrackLinkSource): { artist: Link | null; album: Link | null } {
     const album = track.album?.trim() ?? "";
     const artist = track.artist?.trim() ?? "";
-    const key = track.albumKey ?? null;
-    const albumArtist = key?.albumArtist || track.albumArtist?.trim() || artist;
+    const albumId = track.albumId ?? null;
+    const albumArtistId = track.albumArtistId ?? null;
     return {
       artist:
         artist === ""
           ? null
-          : { text: artist, href: albumArtist === "" ? null : albumArtistHref(albumArtist) },
+          : {
+              text: artist,
+              href:
+                albumArtistId === null
+                  ? null
+                  : resolve("/library/album-artists/[artistId=artistId]", {
+                      artistId: albumArtistId,
+                    }),
+            },
       album:
         album === ""
           ? null
           : {
               text: album,
-              href: key === null ? null : albumHref(key),
+              href:
+                albumId === null ? null : resolve("/library/albums/[albumId=albumId]", { albumId }),
             },
     };
   }

@@ -2,7 +2,6 @@
   import { page } from "$app/state";
   import { resolve } from "$app/paths";
   import MediaDetailsHeader from "#lib/components/media-details/media-details-header.svelte";
-  import { albumItemKey } from "#lib/library/album-key";
   import { LibraryErrors } from "#lib/library/library-errors";
   import { PagedCollection } from "#lib/library/paged-collection.svelte";
   import { QueryResult } from "#lib/library/query-result.svelte";
@@ -89,7 +88,7 @@
         <VirtualMediaGrid
           items={albums.items}
           scrollElement={viewport}
-          itemKey={(album) => albumItemKey(album.key)}
+          itemKey={(album) => album.id}
           artworkAt={(index) => albums.items[index]?.artwork}
           sortSignature={view.sortSignature}
         >
@@ -97,7 +96,7 @@
             <AlbumTile
               {album}
               showArtist={false}
-              fromArtist
+              parentArtistId={artistId}
               onplay={(played) =>
                 actions.run(() => playback.start({ kind: "album", albumId: played.id }, null))}
             />

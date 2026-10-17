@@ -1,7 +1,7 @@
 //! One track: its summary, its properties and where its file is.
 
 use super::LibraryStore;
-use crate::ids::{ArtworkHash, TrackId, track_id_column};
+use crate::ids::{ArtistId, ArtworkHash, TrackId, album_id_column, track_id_column};
 use crate::library::{
     artwork::{ArtworkMimeType, ArtworkRef},
     error::StoreError,
@@ -12,11 +12,11 @@ use crate::library::{
 use rusqlite::{OptionalExtension, Row, params};
 
 /// The columns `summary_from_row` reads, in its order.
-pub(super) const SUMMARY_COLUMNS: &str = "t.id, m.title, m.artist, m.album, m.tag_album_artist, m.album_artist, m.duration_ms, a.content_hash, a.mime_type, m.file_format, m.bit_depth, m.bitrate_kbps, f.availability, f.inspection_status, m.album_directory";
-pub(super) const SUMMARY_COLUMN_COUNT: usize = 15;
+pub(super) const SUMMARY_COLUMNS: &str = "t.id, m.title, m.artist, m.album, m.tag_album_artist, m.album_artist, m.duration_ms, a.content_hash, a.mime_type, m.file_format, m.bit_depth, m.bitrate_kbps, f.availability, f.inspection_status, m.album_directory, m.album_id, al.artist_id";
+pub(super) const SUMMARY_COLUMN_COUNT: usize = 17;
 
 /// What `SUMMARY_COLUMNS` are selected from.
-pub(super) const SUMMARY_FROM: &str = "FROM track_source_metadata m JOIN tracks t ON t.id = m.track_id JOIN library_files f ON f.id = t.file_id LEFT JOIN artwork_assets a ON a.id = m.artwork_id";
+pub(super) const SUMMARY_FROM: &str = "FROM track_source_metadata m JOIN tracks t ON t.id = m.track_id JOIN library_files f ON f.id = t.file_id LEFT JOIN artwork_assets a ON a.id = m.artwork_id LEFT JOIN albums al ON al.id = m.album_id";
 
 pub(super) fn non_blank(value: Option<String>) -> Option<String> {
     value.filter(|value| !value.trim().is_empty())
@@ -40,16 +40,24 @@ pub(super) fn summary_from_row(row: &Row<'_>) -> rusqlite::Result<LibraryTrackSu
     let inspection: InspectionStatus = row.get(13)?;
     let artist: String = row.get(2)?;
     let album_edition: String = row.get(14)?;
+    let has_album = !album.is_empty();
+    let album_id = has_album.then(|| album_id_column(row, 15)).transpose()?;
+    let album_artist_id = row
+        .get::<_, Option<String>>(16)?
+        .and_then(|hex| ArtistId::from_hex(&hex))
+        .filter(|_| has_album);
     Ok(LibraryTrackSummary {
         id: track_id_column(row, 0)?,
         title: row.get(1)?,
         artist: (!artist.is_empty()).then_some(artist),
-        album_key: (!album.is_empty()).then(|| LibraryAlbumKey {
+        album_key: has_album.then(|| LibraryAlbumKey {
             title: album.clone(),
             album_artist,
             album_edition,
         }),
-        album: (!album.is_empty()).then_some(album),
+        album_id,
+        album_artist_id,
+        album: has_album.then_some(album),
         album_artist: non_blank(row.get(4)?),
         artwork: artwork_ref(row.get(7)?, row.get(8)?),
         duration_ms: duration.map(|value| value as u64),

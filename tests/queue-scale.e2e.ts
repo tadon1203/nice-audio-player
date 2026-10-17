@@ -67,8 +67,11 @@ test.describe("a track's menu", () => {
 
     await table.getByRole("row", { name: /Track 010/ }).click({ button: "right" });
     await page.getByRole("menuitem", { name: "Go to album" }).click();
-    await expect(page).toHaveURL(
-      /\/library\/albums\/Test%20artist\/Test%20album|\/library\/albums\//,
-    );
+    await expect(page).toHaveURL(/\/library\/albums\/[0-9a-f]{32}$/);
+
+    await page.goto("/library/tracks");
+    await table.getByRole("row", { name: /Track 010/ }).click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Go to artist" }).click();
+    await expect(page).toHaveURL(/\/library\/album-artists\/[0-9a-f]{32}$/);
   });
 });

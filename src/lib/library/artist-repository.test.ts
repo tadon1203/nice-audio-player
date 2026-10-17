@@ -9,8 +9,6 @@ const fakeClient = () =>
   ({
     artist: vi.fn(async () => ({ id: artistId, name: "The Beatles" })),
     artistAlbums: vi.fn(async () => ({ items: [], totalCount: 0, nextCursor: null })),
-    albumArtist: vi.fn(async () => ({ id: artistId, name: "The Beatles" })),
-    albumArtistAlbums: vi.fn(async () => ({ items: [], totalCount: 0, nextCursor: null })),
   }) as unknown as LibraryClient & Record<string, ReturnType<typeof vi.fn>>;
 
 describe("ArtistRepository", () => {
@@ -21,21 +19,6 @@ describe("ArtistRepository", () => {
     expect(
       repository.albumsOptions({ artistId, sortKey: "year", direction: "ascending" }).queryKey,
     ).toEqual(LibraryQueryKeys.artistAlbums({ artistId, sortKey: "year", direction: "ascending" }));
-  });
-
-  it("keeps the name route's queries apart from the ID's", () => {
-    const repository = new ArtistRepository(fakeClient());
-    const key = { name: "The Beatles" };
-
-    expect(repository.albumArtistDetailsOptions(key).queryKey).not.toEqual(
-      repository.detailsOptions(artistId).queryKey,
-    );
-    expect(
-      repository.albumArtistAlbumsOptions({ key, sortKey: "year", direction: "ascending" })
-        .queryKey,
-    ).not.toEqual(
-      repository.albumsOptions({ artistId, sortKey: "year", direction: "ascending" }).queryKey,
-    );
   });
 
   it("fetches the detail by ID", async () => {

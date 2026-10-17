@@ -79,6 +79,10 @@ pub struct LibraryTrackSummary {
     pub album_artist: Option<String>,
     /// The key the catalog files the track's album under, `None` for a track with no album tag.
     pub album_key: Option<LibraryAlbumKey>,
+    /// The album's ID, `None` for a track with no album tag.
+    pub album_id: Option<AlbumId>,
+    /// The Album Artist's ID, `None` for a track with no album tag.
+    pub album_artist_id: Option<ArtistId>,
     pub artwork: Option<ArtworkRef>,
     pub duration_ms: Option<u64>,
     pub file_format: Option<String>,

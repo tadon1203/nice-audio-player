@@ -45,6 +45,44 @@ fn a_track_summary_carries_the_key_of_the_album_the_catalog_files_it_under() {
 }
 
 #[test]
+fn a_track_summary_carries_the_album_and_album_artist_ids() {
+    let fixture = fixture();
+    let mut filed = Seed::new(1, "Song", "Singer", " Record ");
+    filed.album_artist = Some(" Band ");
+    fixture.add_all(&[filed, Seed::new(2, "Single", "Singer", "")]);
+
+    let summary = |id: &str| {
+        fixture
+            .store
+            .catalog_tracks(
+                None,
+                None,
+                LibraryTrackSortKey::Title,
+                LibrarySortDirection::Ascending,
+            )
+            .unwrap()
+            .items
+            .into_iter()
+            .find(|track| track.id.rowid().to_string() == id)
+            .unwrap()
+    };
+
+    let album_id = summary("1").album_id.unwrap();
+    assert_eq!(
+        fixture.store.catalog_album(album_id).unwrap().track_count,
+        1,
+        "the ID opens the album the catalog lists"
+    );
+    assert_eq!(summary("1").album_artist_id, Some(ArtistId::of("Band")));
+    assert_eq!(summary("2").album_id, None, "no album tag, no album ID");
+    assert_eq!(
+        summary("2").album_artist_id,
+        None,
+        "no album tag, no Album Artist ID"
+    );
+}
+
+#[test]
 fn a_track_location_is_found_by_id_and_stays_inside_its_root() {
     let fixture = fixture();
     fixture.touch_audio([1]);

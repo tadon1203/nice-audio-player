@@ -146,7 +146,31 @@ test("opens Now Playing from the Sleeve and offers album and artist navigation",
 
   await dock.getByRole("button", { name: "Open Now Playing" }).click({ button: "right" });
   await page.getByRole("menuitem", { name: "Go to album" }).click();
-  await expect(page).toHaveURL(/\/library\/albums\/Test%20artist\/Test%20album/);
+  await expect(page).toHaveURL(/\/library\/albums\/[0-9a-f]{32}$/);
+
+  await dock.getByRole("button", { name: "Open Now Playing" }).click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Go to artist" }).click();
+  await expect(page).toHaveURL(/\/library\/album-artists\/[0-9a-f]{32}$/);
+});
+
+test("Now Playing links the Album Artist by its ID", async ({ page }) => {
+  const dock = await playFirstTrack(page);
+  await dock.getByRole("button", { name: "Open Now Playing" }).click();
+  await page
+    .getByRole("region", { name: "Now Playing" })
+    .getByRole("link", { name: "Test artist", exact: true })
+    .click();
+  await expect(page).toHaveURL(/\/library\/album-artists\/[0-9a-f]{32}$/);
+});
+
+test("Now Playing links the album by its ID", async ({ page }) => {
+  const dock = await playFirstTrack(page);
+  await dock.getByRole("button", { name: "Open Now Playing" }).click();
+  await page
+    .getByRole("region", { name: "Now Playing" })
+    .getByRole("link", { name: "Test album", exact: true })
+    .click();
+  await expect(page).toHaveURL(/\/library\/albums\/[0-9a-f]{32}$/);
 });
 
 test("Now Playing covers the workspace without moving the sidebar or the dock's bottom", async ({

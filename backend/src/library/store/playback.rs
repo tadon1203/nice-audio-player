@@ -6,7 +6,7 @@ use super::{
     catalog::{ALBUM_ORDER, album_id_of, track_filter, track_ordering, validate_album_key},
     track::{artwork_ref, non_blank},
 };
-use crate::ids::{AlbumId, TrackId, album_id_column, track_id_column};
+use crate::ids::{AlbumId, ArtistId, TrackId, album_id_column, track_id_column};
 use crate::library::{
     artwork::ArtworkRef,
     error::StoreError,
@@ -43,6 +43,8 @@ pub struct PlayableTrack {
     pub album_key: Option<LibraryAlbumKey>,
     /// The album's ID, `None` for a track with no album tag.
     pub album_id: Option<AlbumId>,
+    /// The Album Artist's ID, `None` for a track with no album tag.
+    pub album_artist_id: Option<ArtistId>,
     /// How many tracks the library holds for that album.
     pub album_track_count: Option<u32>,
     #[serde(skip)]
@@ -109,6 +111,7 @@ struct PlaybackRow {
     album_artist_name: String,
     album_directory: String,
     album_id: AlbumId,
+    album_artist_id: Option<ArtistId>,
     duration_ms: Option<i64>,
     artwork: Option<ArtworkRef>,
     track_number: Option<i64>,
@@ -139,8 +142,8 @@ type AlbumCounts = HashMap<String, u32>;
 
 /// The columns every playback query returns, in the order `playback_row` reads them, and what they
 /// are selected from.
-const PLAYBACK_COLUMNS: &str = "t.id, r.path, f.relative_path, f.availability, f.inspection_status, m.title, m.artist, m.album, m.tag_album_artist, m.album_artist, m.duration_ms, a.content_hash, a.mime_type, m.track_number, m.disc_number, m.year, m.file_format, m.bit_depth, m.bitrate_kbps, m.album_directory, f.content_hash, m.album_id";
-const PLAYBACK_FROM: &str = "FROM track_source_metadata m JOIN tracks t ON t.id = m.track_id JOIN library_files f ON f.id = t.file_id JOIN library_roots r ON r.id = f.root_id LEFT JOIN artwork_assets a ON a.id = m.artwork_id";
+const PLAYBACK_COLUMNS: &str = "t.id, r.path, f.relative_path, f.availability, f.inspection_status, m.title, m.artist, m.album, m.tag_album_artist, m.album_artist, m.duration_ms, a.content_hash, a.mime_type, m.track_number, m.disc_number, m.year, m.file_format, m.bit_depth, m.bitrate_kbps, m.album_directory, f.content_hash, m.album_id, al.artist_id";
+const PLAYBACK_FROM: &str = "FROM track_source_metadata m JOIN tracks t ON t.id = m.track_id JOIN library_files f ON f.id = t.file_id JOIN library_roots r ON r.id = f.root_id LEFT JOIN artwork_assets a ON a.id = m.artwork_id LEFT JOIN albums al ON al.id = m.album_id";
 
 fn playback_row(row: &Row<'_>) -> rusqlite::Result<PlaybackRow> {
     let root: String = row.get(1)?;
@@ -158,6 +161,9 @@ fn playback_row(row: &Row<'_>) -> rusqlite::Result<PlaybackRow> {
         album_artist_name: row.get(9)?,
         album_directory: row.get(19)?,
         album_id: album_id_column(row, 21)?,
+        album_artist_id: row
+            .get::<_, Option<String>>(22)?
+            .and_then(|hex| ArtistId::from_hex(&hex)),
         duration_ms: row.get(10)?,
         artwork: artwork_ref(row.get(11)?, row.get(12)?),
         track_number: row.get(13)?,
@@ -211,6 +217,7 @@ fn playable_track(
     };
     let album_key = row.album_key();
     let album_id = album_key.as_ref().map(|_| row.album_id);
+    let album_artist_id = album_key.as_ref().and(row.album_artist_id);
     let album_track_count = album_key
         .as_ref()
         .and_then(|_| counts.get(&row.album_id.to_hex()).copied());
@@ -228,6 +235,7 @@ fn playable_track(
         year: row.year,
         album_key,
         album_id,
+        album_artist_id,
         album_track_count,
         file_format: row.file_format,
         bit_depth: row.bit_depth,

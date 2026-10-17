@@ -430,6 +430,10 @@ export type LibraryTrackSummary = {
 	albumArtist: string | null,
 	/**  The key the catalog files the track's album under, `None` for a track with no album tag. */
 	albumKey: LibraryAlbumKey | null,
+	/**  The album's ID, `None` for a track with no album tag. */
+	albumId: AlbumId | null,
+	/**  The Album Artist's ID, `None` for a track with no album tag. */
+	albumArtistId: ArtistId | null,
 	artwork: ArtworkRef | null,
 	durationMs: number | null,
 	fileFormat: string | null,
@@ -491,6 +495,8 @@ export type PlayableTrack = {
 	albumKey: LibraryAlbumKey | null,
 	/**  The album's ID, `None` for a track with no album tag. */
 	albumId: AlbumId | null,
+	/**  The Album Artist's ID, `None` for a track with no album tag. */
+	albumArtistId: ArtistId | null,
 	/**  How many tracks the library holds for that album. */
 	albumTrackCount: number | null,
 };

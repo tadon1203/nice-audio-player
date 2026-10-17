@@ -37,6 +37,7 @@ const item = (id: TrackId): PlaybackItem => ({
   year: null,
   albumKey: null,
   albumId: null,
+  albumArtistId: null,
   albumTrackCount: null,
 });
 
@@ -345,8 +346,8 @@ describe("failures", () => {
 
 describe("album shuffle", () => {
   const context = {
-    kind: "albumByKey",
-    albumKey: { title: "A", albumArtist: "B", albumEdition: "" },
+    kind: "album",
+    albumId: "0f0e0d0c0b0a09080706050403020100",
   } as const;
 
   it("turns the shuffle on, then starts", async () => {
@@ -433,9 +434,8 @@ describe("playback session derived state", () => {
     expect(playback.isPlaying).toBe(false);
   });
 
-  it("knows whether the album's track is loaded, by its ID and by its key", () => {
+  it("knows whether the album's track is loaded, by its ID", () => {
     const playback = new Playback(fakeClient(), quietClock());
-    const key = { title: "A", albumArtist: "B", albumEdition: "" };
     const albumId = "0f0e0d0c0b0a09080706050403020100";
     const loaded = playing(1, 1, 0);
     playback.acceptPlayback({
@@ -444,15 +444,13 @@ describe("playback session derived state", () => {
         ...loaded.value,
         session: {
           ...(loaded.value as { session: object }).session,
-          item: { ...item(1), albumId, albumKey: key },
+          item: { ...item(1), albumId },
         },
       },
     } as never);
 
     expect(playback.isAlbumLoaded(albumId)).toBe(true);
     expect(playback.isAlbumLoaded("ffffffffffffffffffffffffffffffff")).toBe(false);
-    expect(playback.isAlbumLoadedByKey(key)).toBe(true);
-    expect(playback.isAlbumLoadedByKey({ ...key, albumEdition: "2" })).toBe(false);
   });
 
   it("feeds every accepted snapshot to the clock and ignores stale ones", () => {
@@ -546,8 +544,8 @@ describe("position messages", () => {
 
 describe("starting playback", () => {
   const albumContext = {
-    kind: "albumByKey",
-    albumKey: { title: "A", albumArtist: "B", albumEdition: "" },
+    kind: "album",
+    albumId: "0f0e0d0c0b0a09080706050403020100",
   } as const;
 
   it("passes the context and the clicked track to the backend", async () => {

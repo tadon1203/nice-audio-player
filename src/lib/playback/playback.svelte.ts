@@ -2,7 +2,6 @@ import type {
   ActiveSession,
   AlbumId,
   AudioOutputSelection,
-  LibraryAlbumKey,
   PlaybackContext,
   PlaybackFailureCode,
   PlaybackId,
@@ -194,17 +193,6 @@ export class Playback {
     return this.isActive && this.#item?.albumId === albumId;
   }
 
-  /** The key form, for the old album route until ticket 14 removes it. */
-  public isAlbumLoadedByKey(albumKey: LibraryAlbumKey): boolean {
-    const loaded = this.#item?.albumKey;
-    return (
-      this.isActive &&
-      loaded?.title === albumKey.title &&
-      loaded.albumArtist === albumKey.albumArtist &&
-      loaded.albumEdition === albumKey.albumEdition
-    );
-  }
-
   /** The seek waiting for the one in flight, if any: where repeated key presses continue from. */
   public pendingSeekMs(): number | null {
     return this.#requestedSeek;
@@ -256,14 +244,6 @@ export class Playback {
   /** Plays the album from its first track if it is not loaded; otherwise pauses or resumes it. */
   public togglePlayAlbum(albumId: AlbumId): Promise<void> {
     return this.#toggleAlbum(this.isAlbumLoaded(albumId), { kind: "album", albumId });
-  }
-
-  /** `togglePlayAlbum` for the old album route, which is keyed by the album's key. */
-  public togglePlayAlbumByKey(albumKey: LibraryAlbumKey): Promise<void> {
-    return this.#toggleAlbum(this.isAlbumLoadedByKey(albumKey), {
-      kind: "albumByKey",
-      albumKey,
-    });
   }
 
   #toggleAlbum(loaded: boolean, context: PlaybackContext): Promise<void> {

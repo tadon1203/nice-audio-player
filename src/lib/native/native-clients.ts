@@ -6,19 +6,16 @@ import type {
   AudioOutputSelection,
   BackendMessage,
   InitialState,
-  LibraryAlbumArtistKey,
   LibraryAlbumArtistPage,
   LibraryAlbumArtistSortKey,
   LibraryAlbumArtistSummary,
   LibraryAlbumDetails,
-  LibraryAlbumKey,
   LibraryAlbumPage,
   LibraryAlbumSortKey,
   LibraryAlbumTrackPage,
   AlbumId,
   ArtistAlbumsRequest,
   ArtistId,
-  LibraryArtistAlbumSortKey,
   LibraryIndexBucket,
   LibraryRoot,
   LibrarySortDirection,
@@ -76,8 +73,7 @@ export interface AppearanceClient {
 }
 
 /**
- * The Library commands. List arguments are positional, as the generated bindings take them; the
- * ID parameters keep their current types until the track and album ID tickets change them.
+ * The Library commands. List arguments are positional, as the generated bindings take them.
  */
 export interface LibraryClient {
   status(): Promise<LibraryStatus>;
@@ -130,19 +126,8 @@ export interface LibraryClient {
   ): Promise<LibraryIndexBucket[]>;
   albumById(albumId: AlbumId): Promise<LibraryAlbumDetails>;
   albumTracksById(albumId: AlbumId, cursor: string | null): Promise<LibraryAlbumTrackPage>;
-  /** The old album route, until ticket 14 removes it. */
-  album(albumKey: LibraryAlbumKey): Promise<LibraryAlbumDetails>;
-  albumTracks(albumKey: LibraryAlbumKey, cursor: string | null): Promise<LibraryAlbumTrackPage>;
   artist(artistId: ArtistId): Promise<LibraryAlbumArtistSummary>;
   artistAlbums(request: ArtistAlbumsRequest): Promise<LibraryAlbumPage>;
-  /** The old name route, until that route is removed. */
-  albumArtist(artistKey: LibraryAlbumArtistKey): Promise<LibraryAlbumArtistSummary>;
-  albumArtistAlbums(
-    artistKey: LibraryAlbumArtistKey,
-    cursor: string | null,
-    sortKey: LibraryArtistAlbumSortKey,
-    direction: LibrarySortDirection,
-  ): Promise<LibraryAlbumPage>;
   trackProperties(trackId: TrackId): Promise<LibraryTrackProperties | null>;
   revealTrack(trackId: TrackId): Promise<void>;
   artworkAccent(hash: ArtworkHash): Promise<string | null>;
