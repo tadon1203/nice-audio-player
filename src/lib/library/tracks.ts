@@ -1,25 +1,24 @@
 import { resolve } from "$app/paths";
-import type { LibraryTrackSummary } from "#lib/native";
+import type { LibraryTrackSummary, TrackAlbum } from "#lib/native";
 
 type Link = { text: string; href: string | null };
 
 /** What a track needs to say where its artist and album live. */
-type TrackLinkSource = Partial<
-  Pick<LibraryTrackSummary, "album" | "artist" | "albumId" | "albumArtistId">
->;
+type TrackLinkSource = Partial<Pick<LibraryTrackSummary, "artist">> & {
+  album?: TrackAlbum | null;
+};
 
 /** Rules about a track as a row: its links and whether it can be used. */
 export class Tracks {
   /**
    * Artist and album as shown, each with the page it links to (null when it has none). The links
-   * are built from the track's IDs, so a track without an ID has no link; the table, the dock and
+   * are built from the track's album, so a track without one has no link; the table, the dock and
    * Now Playing all read their links from here.
    */
   public static links(track: TrackLinkSource): { artist: Link | null; album: Link | null } {
-    const album = track.album?.trim() ?? "";
+    const album = track.album ?? null;
+    const albumTitle = album?.title.trim() ?? "";
     const artist = track.artist?.trim() ?? "";
-    const albumId = track.albumId ?? null;
-    const albumArtistId = track.albumArtistId ?? null;
     return {
       artist:
         artist === ""
@@ -27,19 +26,18 @@ export class Tracks {
           : {
               text: artist,
               href:
-                albumArtistId === null
+                album === null
                   ? null
                   : resolve("/library/album-artists/[artistId=artistId]", {
-                      artistId: albumArtistId,
+                      artistId: album.artistId,
                     }),
             },
       album:
-        album === ""
+        album === null || albumTitle === ""
           ? null
           : {
-              text: album,
-              href:
-                albumId === null ? null : resolve("/library/albums/[albumId=albumId]", { albumId }),
+              text: albumTitle,
+              href: resolve("/library/albums/[albumId=albumId]", { albumId: album.id }),
             },
     };
   }

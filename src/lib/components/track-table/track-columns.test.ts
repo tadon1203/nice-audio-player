@@ -17,7 +17,11 @@ const row: TrackTableRow = {
   id: 1,
   title: "Song",
   artist: "Artist",
-  album: "Album",
+  album: {
+    id: "0f0e0d0c0b0a09080706050403020100",
+    title: "Album",
+    artistId: "5b3f2c1e0a9d8c7b6a5f4e3d2c1b0a99",
+  },
   albumArtist: null,
   durationMs: 65_000,
   availability: "available",

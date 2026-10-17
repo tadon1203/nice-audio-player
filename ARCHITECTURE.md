@@ -99,6 +99,8 @@ The Renderer updates its caches and views from these.
 - The Renderer subscribes, then fetches: `connect` registers the channel and returns the current values.
 - Every state that the Library stores is a closed set of values. The code and the database enforce the same set.
 - One place decides how the Library files a track (its Album Artist and album). Reads use the stored result.
+- An Album is identified by its `AlbumId`; no query, command, or route identifies one by its title, Album Artist, or folder. A URL carries IDs, never a name or a folder.
+- A value goes in page state only if it cannot be in the URL, Back must undo it, and it belongs to the app frame. A modal that Back closes uses shallow routing, which SvelteKit describes.
 - One place builds the path of a track's file, and it keeps the path inside its Library folder.
 - The Backend never returns display strings. An unnamed album or artist is empty, and the Renderer labels it.
 - Renderer dependencies flow one way: routes, then components, then the Renderer shell, then the Renderer domains, then the shared layers (ui, utils, native). A Renderer domain does not import another Renderer domain.

@@ -27,12 +27,12 @@ fn album_pages_cover_every_album_once_and_refuse_a_foreign_cursor() {
         "only the first page counts the list"
     );
     assert!(second.next_cursor.is_none());
-    assert!(second.items[0].key.title > first.items[PAGE_SIZE - 1].key.title);
+    assert!(second.items[0].title > first.items[PAGE_SIZE - 1].title);
     let keys: HashSet<_> = first
         .items
         .iter()
         .chain(&second.items)
-        .map(|album| album.key.clone())
+        .map(|album| album.id)
         .collect();
     assert_eq!(keys.len(), 106, "every album exactly once");
 
@@ -124,7 +124,7 @@ fn tracks_page_through_every_sort_and_direction_with_unknown_values_last() {
                 .map(|track| match key {
                     LibraryTrackSortKey::Title => track.title.to_lowercase(),
                     LibraryTrackSortKey::Artist => track.artist.clone().unwrap().to_lowercase(),
-                    LibraryTrackSortKey::Album => track.album.clone().unwrap().to_lowercase(),
+                    LibraryTrackSortKey::Album => track.album.clone().unwrap().title.to_lowercase(),
                     LibraryTrackSortKey::Duration => format!("{:08}", track.duration_ms.unwrap()),
                 })
                 .collect();
@@ -154,7 +154,7 @@ fn albums_and_album_artists_page_through_every_sort_and_direction() {
                 let page = store.catalog_albums(cursor, None, key, direction).unwrap();
                 (page.items, page.next_cursor)
             });
-            let keys: HashSet<_> = albums.iter().map(|album| album.key.clone()).collect();
+            let keys: HashSet<_> = albums.iter().map(|album| album.id).collect();
             assert_eq!(albums.len() as u64, total_albums, "{key:?} {direction:?}");
             assert_eq!(
                 keys.len(),
@@ -201,10 +201,7 @@ fn albums_and_album_artists_page_through_every_sort_and_direction() {
                     .unwrap();
                 (page.items, page.next_cursor)
             });
-            let names: HashSet<_> = artists
-                .iter()
-                .map(|artist| artist.key.name.clone())
-                .collect();
+            let names: HashSet<_> = artists.iter().map(|artist| artist.name.clone()).collect();
             assert_eq!(
                 (artists.len() as u64, names.len()),
                 (total_artists, artists.len()),

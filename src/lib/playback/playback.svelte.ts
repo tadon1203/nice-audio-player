@@ -190,7 +190,7 @@ export class Playback {
 
   /** True while the album's track is loaded and playing or paused. */
   public isAlbumLoaded(albumId: AlbumId): boolean {
-    return this.isActive && this.#item?.albumId === albumId;
+    return this.isActive && this.#item?.album?.id === albumId;
   }
 
   /** The seek waiting for the one in flight, if any: where repeated key presses continue from. */

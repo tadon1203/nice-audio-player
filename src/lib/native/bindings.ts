@@ -67,13 +67,9 @@ export const commands = {
 	listLibraryAlbumIndex: (search: string | null, sortKey: LibraryAlbumSortKey, sortDirection: LibrarySortDirection) => __TAURI_INVOKE<LibraryIndexBucket[]>("list_library_album_index", { search, sortKey, sortDirection }),
 	listLibraryAlbumArtistIndex: (search: string | null, sortKey: LibraryAlbumArtistSortKey, sortDirection: LibrarySortDirection) => __TAURI_INVOKE<LibraryIndexBucket[]>("list_library_album_artist_index", { search, sortKey, sortDirection }),
 	getLibraryArtist: (artistId: ArtistId) => __TAURI_INVOKE<LibraryAlbumArtistSummary>("get_library_artist", { artistId }),
-	getLibraryAlbumArtist: (artistKey: LibraryAlbumArtistKey) => __TAURI_INVOKE<LibraryAlbumArtistSummary>("get_library_album_artist", { artistKey }),
 	listLibraryArtistAlbums: (request: ArtistAlbumsRequest) => __TAURI_INVOKE<LibraryAlbumPage>("list_library_artist_albums", { request }),
-	listLibraryAlbumArtistAlbums: (artistKey: LibraryAlbumArtistKey, cursor: string | null, sortKey: LibraryArtistAlbumSortKey, sortDirection: LibrarySortDirection) => __TAURI_INVOKE<LibraryAlbumPage>("list_library_album_artist_albums", { artistKey, cursor, sortKey, sortDirection }),
-	getLibraryAlbumDetails: (albumKey: LibraryAlbumKey) => __TAURI_INVOKE<LibraryAlbumDetails>("get_library_album_details", { albumKey }),
 	getLibraryAlbum: (albumId: AlbumId) => __TAURI_INVOKE<LibraryAlbumDetails>("get_library_album", { albumId }),
 	listLibraryAlbumTracks: (request: AlbumTracksRequest) => __TAURI_INVOKE<LibraryAlbumTrackPage>("list_library_album_tracks", { request }),
-	listLibraryAlbumTracksByKey: (albumKey: LibraryAlbumKey, cursor: string | null) => __TAURI_INVOKE<LibraryAlbumTrackPage>("list_library_album_tracks_by_key", { albumKey, cursor }),
 	getLibraryTrackProperties: (trackId: TrackId) => __TAURI_INVOKE<{
 	id: TrackId,
 	path: string,
@@ -249,10 +245,6 @@ export type InitialState = {
 	appearance: Versioned<Appearance>,
 };
 
-export type LibraryAlbumArtistKey = {
-	name: string,
-};
-
 export type LibraryAlbumArtistPage = {
 	items: LibraryAlbumArtistSummary[],
 	/**  How many rows the whole list has; only the first page (no cursor) says. */
@@ -265,7 +257,6 @@ export type LibraryAlbumArtistSortKey = "artist" | "albumCount" | "trackCount";
 export type LibraryAlbumArtistSummary = {
 	id: ArtistId,
 	name: string,
-	key: LibraryAlbumArtistKey,
 	artwork: ArtworkRef | null,
 	albumCount: number,
 	trackCount: number,
@@ -277,16 +268,6 @@ export type LibraryAlbumDetails = {
 	trackCount: number,
 	durationMs: number | null,
 	firstPlayableTrackId: TrackId | null,
-};
-
-export type LibraryAlbumKey = {
-	title: string,
-	albumArtist: string,
-	/**
-	 *  Which printing of the album: its folder. Two folders holding the same title and Album
-	 *  Artist are two albums. Opaque to the renderer, `""` for the album of tracks with no album.
-	 */
-	albumEdition: string,
 };
 
 export type LibraryAlbumPage = {
@@ -301,7 +282,6 @@ export type LibraryAlbumSortKey = "title" | "artist" | "year";
 export type LibraryAlbumSummary = {
 	id: AlbumId,
 	title: string,
-	key: LibraryAlbumKey,
 	albumArtist: ArtistRef,
 	artwork: ArtworkRef | null,
 	year: number | null,
@@ -332,7 +312,7 @@ export type LibraryArtistAlbumSortKey = "year" | "title";
 
 export type LibraryCommandError = { code: "invalidRoot" } | { code: "rootNotDirectory" } | { code: "canonicalizationFailed" } | { code: "duplicateRoot" } | { code: "overlappingRoot" } | 
 /**  The folder holds the app's own data directory, which a scan would read as music. */
-{ code: "rootContainsDataDirectory" } | { code: "scanInProgress" } | { code: "trackNotFound" } | { code: "trackUnavailable" } | { code: "albumNotFound" } | { code: "invalidCursor" } | { code: "invalidAlbumKey" } | { code: "invalidAlbumArtistKey" } | { code: "albumArtistNotFound" } | { code: "rootMissing" } | { code: "scanAlreadyRunning" } | { code: "noEnabledRoots" } | { code: "scanNotRunning" } | { code: "libraryUnavailable" } | { code: "persistenceFailed" } | { code: "taskFailed" };
+{ code: "rootContainsDataDirectory" } | { code: "scanInProgress" } | { code: "trackNotFound" } | { code: "trackUnavailable" } | { code: "albumNotFound" } | { code: "invalidCursor" } | { code: "albumArtistNotFound" } | { code: "rootMissing" } | { code: "scanAlreadyRunning" } | { code: "noEnabledRoots" } | { code: "scanNotRunning" } | { code: "libraryUnavailable" } | { code: "persistenceFailed" } | { code: "taskFailed" };
 
 export type LibraryFileAvailability = "available" | "missing";
 
@@ -426,14 +406,8 @@ export type LibraryTrackSummary = {
 	id: TrackId,
 	title: string,
 	artist: string | null,
-	album: string | null,
+	album: TrackAlbum | null,
 	albumArtist: string | null,
-	/**  The key the catalog files the track's album under, `None` for a track with no album tag. */
-	albumKey: LibraryAlbumKey | null,
-	/**  The album's ID, `None` for a track with no album tag. */
-	albumId: AlbumId | null,
-	/**  The Album Artist's ID, `None` for a track with no album tag. */
-	albumArtistId: ArtistId | null,
 	artwork: ArtworkRef | null,
 	durationMs: number | null,
 	fileFormat: string | null,
@@ -473,6 +447,11 @@ export type Occurrence =
 /**  The player could not play `item` and skipped it by itself. */
 { type: "trackSkipped"; item: PlaybackItem | null; error: PlaybackFailureCode };
 
+/**  The album of a playable track, and how many tracks the library holds for it. */
+export type PlayableAlbum = {
+	trackCount: number,
+} & TrackAlbum;
+
 /**
  *  A library track ready to be played, and the one track-metadata type of the whole playback
  *  path: the library reads it, the queue item wraps it, and the renderer sees it.
@@ -484,21 +463,13 @@ export type PlayableTrack = {
 	trackId: TrackId,
 	title: string,
 	artist: string | null,
-	album: string | null,
+	album: PlayableAlbum | null,
 	albumArtist: string | null,
 	artwork: ArtworkRef | null,
 	durationMs: number | null,
 	trackNumber: number | null,
 	discNumber: number | null,
 	year: number | null,
-	/**  The catalog's key for the album, `None` for a track with no album tag. */
-	albumKey: LibraryAlbumKey | null,
-	/**  The album's ID, `None` for a track with no album tag. */
-	albumId: AlbumId | null,
-	/**  The Album Artist's ID, `None` for a track with no album tag. */
-	albumArtistId: ArtistId | null,
-	/**  How many tracks the library holds for that album. */
-	albumTrackCount: number | null,
 };
 
 export type PlaybackChannelConversion = "none" | "monoToStereo" | "stereoToMono" | "downmix";
@@ -506,8 +477,6 @@ export type PlaybackChannelConversion = "none" | "monoToStereo" | "stereoToMono"
 export type PlaybackContext = 
 /**  An album in disc and track order, by its ID. */
 { kind: "album"; albumId: AlbumId } | 
-/**  An album in disc and track order, by its key. Removed by ticket 14. */
-{ kind: "albumByKey"; albumKey: LibraryAlbumKey } | 
 /**  The tracks list as currently filtered and sorted. */
 { kind: "tracks"; search: string | null; sortKey: LibraryTrackSortKey; sortDirection: LibrarySortDirection };
 
@@ -584,7 +553,7 @@ export type PlaybackRepeatMode = "off" | "all" | "one";
  */
 export type PlaybackServiceError = { code: "invalidArgument" } | { code: "workerUnavailable" } | 
 /**  A newer request replaced this one before it finished; the caller should not report it. */
-{ code: "superseded" } | { code: "queueItemNotFound" } | { code: "queueBusy" } | { code: "invalidVolume" } | { code: "invalidDeviceId" } | { code: "invalidPlaybackState" } | { code: "durationUnavailable" } | { code: "seekFailed" } | { code: "decodeFailed" } | { code: "noOutputDevice" } | { code: "outputDeviceUnavailable" } | { code: "unsupportedOutputConfiguration" } | { code: "outputStreamBuildFailed" } | { code: "outputStreamStartFailed" } | { code: "outputStreamPauseFailed" } | { code: "outputStreamResumeFailed" } | { code: "outputStreamRuntimeFailed" } | { code: "completionTimingFailed" } | { code: "sampleRateConversionFailed" } | { code: "invalidAlbumKey" } | { code: "invalidTrackId" } | { code: "albumNotFound" } | { code: "trackNotMember" } | { code: "trackUnavailable" } | { code: "trackNotPlayable" } | { code: "noPlayableTracks" } | { code: "libraryUnavailable" } | { code: "persistenceFailed" } | { code: "taskFailed" };
+{ code: "superseded" } | { code: "queueItemNotFound" } | { code: "queueBusy" } | { code: "invalidVolume" } | { code: "invalidDeviceId" } | { code: "invalidPlaybackState" } | { code: "durationUnavailable" } | { code: "seekFailed" } | { code: "decodeFailed" } | { code: "noOutputDevice" } | { code: "outputDeviceUnavailable" } | { code: "unsupportedOutputConfiguration" } | { code: "outputStreamBuildFailed" } | { code: "outputStreamStartFailed" } | { code: "outputStreamPauseFailed" } | { code: "outputStreamResumeFailed" } | { code: "outputStreamRuntimeFailed" } | { code: "completionTimingFailed" } | { code: "sampleRateConversionFailed" } | { code: "invalidTrackId" } | { code: "albumNotFound" } | { code: "trackNotMember" } | { code: "trackUnavailable" } | { code: "trackNotPlayable" } | { code: "noPlayableTracks" } | { code: "libraryUnavailable" } | { code: "persistenceFailed" } | { code: "taskFailed" };
 
 export type PlaybackSnapshot = 
 /**  `item` is the last track that played, kept so the UI can still say what it was. */
@@ -636,6 +605,17 @@ export type StateMessage = {
 
 /**  The whole value of one state topic. */
 export type StateValue = { topic: "playback"; value: PlaybackSnapshot } | { topic: "queue"; value: PlaybackQueueSnapshot } | { topic: "libraryScan"; value: LibraryScanSnapshot } | { topic: "waveform"; value: PlaybackWaveform | null } | { topic: "appearance"; value: Appearance };
+
+/**
+ *  The album a track is filed under, by ID (see `ids.rs`) and as titled. A track with no album tag
+ *  has none.
+ */
+export type TrackAlbum = {
+	id: AlbumId,
+	title: string,
+	/**  The album's Album Artist. */
+	artistId: ArtistId,
+};
 
 /**  A track: the `tracks` rowid. Above zero. On the IPC a number, which serde rejects below one. */
 export type TrackId = number;

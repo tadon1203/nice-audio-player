@@ -23,13 +23,13 @@ use crate::library::{
     artwork::{self, ServedArtwork},
     error::{LibraryCommandError, StoreError},
     models::{
-        AlbumTracksRequest, ArtistAlbumsRequest, LibraryAlbumArtistKey, LibraryAlbumArtistPage,
-        LibraryAlbumArtistSortKey, LibraryAlbumArtistSummary, LibraryAlbumDetails, LibraryAlbumKey,
-        LibraryAlbumPage, LibraryAlbumSortKey, LibraryAlbumTrackPage, LibraryArtistAlbumSortKey,
-        LibraryIndexBucket, LibraryRoot, LibrarySortDirection, LibraryStatus, LibraryTrackPage,
-        LibraryTrackProperties, LibraryTrackSortKey, LibraryUnavailableReason,
+        AlbumTracksRequest, ArtistAlbumsRequest, LibraryAlbumArtistPage, LibraryAlbumArtistSortKey,
+        LibraryAlbumArtistSummary, LibraryAlbumDetails, LibraryAlbumPage, LibraryAlbumSortKey,
+        LibraryAlbumTrackPage, LibraryIndexBucket, LibraryRoot, LibrarySortDirection,
+        LibraryStatus, LibraryTrackPage, LibraryTrackProperties, LibraryTrackSortKey,
+        LibraryUnavailableReason,
     },
-    store::{PlayableTrack, album_artist_id_of_key},
+    store::PlayableTrack,
 };
 use crate::lyrics::{
     LyricsCommandError, LyricsResolution, LyricsService, model::LyricsTrackContext,
@@ -331,24 +331,6 @@ impl BackendApp {
             .catalog_album_artist_index(search, sort_key, sort_direction)?)
     }
 
-    pub fn album(
-        &self,
-        album_key: LibraryAlbumKey,
-    ) -> Result<LibraryAlbumDetails, LibraryCommandError> {
-        Ok(self.library()?.store().catalog_album_details(album_key)?)
-    }
-
-    pub fn album_tracks(
-        &self,
-        album_key: LibraryAlbumKey,
-        cursor: Option<&str>,
-    ) -> Result<LibraryAlbumTrackPage, LibraryCommandError> {
-        Ok(self
-            .library()?
-            .store()
-            .catalog_album_tracks(album_key, cursor)?)
-    }
-
     pub fn album_by_id(
         &self,
         album_id: AlbumId,
@@ -382,31 +364,6 @@ impl BackendApp {
             request.cursor.as_deref(),
             request.sort_key,
             request.sort_direction,
-        )?)
-    }
-
-    /// The Album Artist a key names. The key-based commands are for the old name route.
-    pub fn album_artist(
-        &self,
-        artist_key: LibraryAlbumArtistKey,
-    ) -> Result<LibraryAlbumArtistSummary, LibraryCommandError> {
-        let artist_id = album_artist_id_of_key(&artist_key)?;
-        self.artist(artist_id)
-    }
-
-    pub fn album_artist_albums(
-        &self,
-        artist_key: LibraryAlbumArtistKey,
-        cursor: Option<&str>,
-        sort_key: LibraryArtistAlbumSortKey,
-        sort_direction: LibrarySortDirection,
-    ) -> Result<LibraryAlbumPage, LibraryCommandError> {
-        let artist_id = album_artist_id_of_key(&artist_key)?;
-        Ok(self.library()?.store().catalog_artist_albums(
-            artist_id,
-            cursor,
-            sort_key,
-            sort_direction,
         )?)
     }
 

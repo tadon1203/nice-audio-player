@@ -1,50 +1,6 @@
 use super::*;
 
 #[test]
-fn a_track_summary_carries_the_key_of_the_album_the_catalog_files_it_under() {
-    let fixture = fixture();
-    let mut filed = Seed::new(1, "Song", "Singer", " Record ");
-    filed.album_artist = Some(" Band ");
-    fixture.add_all(&[filed, Seed::new(2, "Single", "Singer", "")]);
-
-    let summary = |id: &str| {
-        fixture
-            .store
-            .catalog_tracks(
-                None,
-                None,
-                LibraryTrackSortKey::Title,
-                LibrarySortDirection::Ascending,
-            )
-            .unwrap()
-            .items
-            .into_iter()
-            .find(|track| track.id.rowid().to_string() == id)
-            .unwrap()
-    };
-
-    assert_eq!(
-        summary("1").album_key,
-        Some(LibraryAlbumKey {
-            title: "Record".into(),
-            album_artist: "Band".into(),
-            album_edition: "1/".into()
-        })
-    );
-    assert_eq!(summary("2").album_key, None, "no album tag, no album");
-    let key = summary("1").album_key.unwrap();
-    assert_eq!(
-        fixture
-            .store
-            .catalog_album_details(key)
-            .unwrap()
-            .track_count,
-        1,
-        "the key opens the album the catalog lists"
-    );
-}
-
-#[test]
 fn a_track_summary_carries_the_album_and_album_artist_ids() {
     let fixture = fixture();
     let mut filed = Seed::new(1, "Song", "Singer", " Record ");
@@ -67,19 +23,15 @@ fn a_track_summary_carries_the_album_and_album_artist_ids() {
             .unwrap()
     };
 
-    let album_id = summary("1").album_id.unwrap();
+    let album = summary("1").album.unwrap();
     assert_eq!(
-        fixture.store.catalog_album(album_id).unwrap().track_count,
+        fixture.store.catalog_album(album.id).unwrap().track_count,
         1,
         "the ID opens the album the catalog lists"
     );
-    assert_eq!(summary("1").album_artist_id, Some(ArtistId::of("Band")));
-    assert_eq!(summary("2").album_id, None, "no album tag, no album ID");
-    assert_eq!(
-        summary("2").album_artist_id,
-        None,
-        "no album tag, no Album Artist ID"
-    );
+    assert_eq!(album.title, "Record");
+    assert_eq!(album.artist_id, ArtistId::of("Band"));
+    assert_eq!(summary("2").album, None, "no album tag, no album");
 }
 
 #[test]

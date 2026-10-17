@@ -3,20 +3,29 @@
 
 use super::{
     LibraryStore,
-    catalog::{ALBUM_ORDER, album_id_of, track_filter, track_ordering, validate_album_key},
-    track::{artwork_ref, non_blank},
+    catalog::{ALBUM_ORDER, track_filter, track_ordering},
+    track::{artwork_ref, non_blank, track_album},
 };
 use crate::ids::{AlbumId, ArtistId, TrackId, album_id_column, track_id_column};
 use crate::library::{
     artwork::ArtworkRef,
     error::StoreError,
     location::TrackLocation,
-    models::{LibraryAlbumKey, LibrarySortDirection, LibraryTrackSortKey},
+    models::{LibrarySortDirection, LibraryTrackSortKey, TrackAlbum},
     status::{Availability, InspectionStatus},
 };
 use crate::media::validation::{ValidatedAudioFile, describe_audio_file, validate_audio_file};
 use rusqlite::{Connection, Row, params};
 use std::collections::HashMap;
+
+/// The album of a playable track, and how many tracks the library holds for it.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct PlayableAlbum {
+    #[serde(flatten)]
+    pub album: TrackAlbum,
+    pub track_count: u32,
+}
 
 /// A library track ready to be played, and the one track-metadata type of the whole playback
 /// path: the library reads it, the queue item wraps it, and the renderer sees it.
@@ -32,21 +41,13 @@ pub struct PlayableTrack {
     pub file: ValidatedAudioFile,
     pub title: String,
     pub artist: Option<String>,
-    pub album: Option<String>,
+    pub album: Option<PlayableAlbum>,
     pub album_artist: Option<String>,
     pub artwork: Option<ArtworkRef>,
     pub duration_ms: Option<u64>,
     pub track_number: Option<u32>,
     pub disc_number: Option<u32>,
     pub year: Option<i32>,
-    /// The catalog's key for the album, `None` for a track with no album tag.
-    pub album_key: Option<LibraryAlbumKey>,
-    /// The album's ID, `None` for a track with no album tag.
-    pub album_id: Option<AlbumId>,
-    /// The Album Artist's ID, `None` for a track with no album tag.
-    pub album_artist_id: Option<ArtistId>,
-    /// How many tracks the library holds for that album.
-    pub album_track_count: Option<u32>,
     #[serde(skip)]
     #[specta(skip)]
     pub file_format: Option<String>,
@@ -73,7 +74,6 @@ pub struct PlaybackSelection {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PlaybackSourceError {
-    InvalidAlbumKey,
     InvalidTrackId,
     AlbumNotFound,
     /// The requested start track is not part of the selection.
@@ -88,12 +88,10 @@ impl From<StoreError> for PlaybackSourceError {
     fn from(error: StoreError) -> Self {
         match error {
             StoreError::TrackNotFound => Self::InvalidTrackId,
-            StoreError::InvalidAlbumKey => Self::InvalidAlbumKey,
             StoreError::AlbumNotFound => Self::AlbumNotFound,
             StoreError::TrackUnavailable => Self::TrackUnavailable,
             // Playback never pages, and never asks for an Album Artist.
             StoreError::InvalidCursor
-            | StoreError::InvalidAlbumArtistKey
             | StoreError::AlbumArtistNotFound
             | StoreError::Persistence => Self::PersistenceFailed,
         }
@@ -108,8 +106,6 @@ struct PlaybackRow {
     artist: String,
     album: String,
     album_artist: Option<String>,
-    album_artist_name: String,
-    album_directory: String,
     album_id: AlbumId,
     album_artist_id: Option<ArtistId>,
     duration_ms: Option<i64>,
@@ -127,14 +123,6 @@ impl PlaybackRow {
     fn available(&self) -> bool {
         self.location.available()
     }
-
-    fn album_key(&self) -> Option<LibraryAlbumKey> {
-        (!self.album.is_empty()).then(|| LibraryAlbumKey {
-            title: self.album.clone(),
-            album_artist: self.album_artist_name.clone(),
-            album_edition: self.album_directory.clone(),
-        })
-    }
 }
 
 /// How many tracks each album has, by album ID.
@@ -142,7 +130,7 @@ type AlbumCounts = HashMap<String, u32>;
 
 /// The columns every playback query returns, in the order `playback_row` reads them, and what they
 /// are selected from.
-const PLAYBACK_COLUMNS: &str = "t.id, r.path, f.relative_path, f.availability, f.inspection_status, m.title, m.artist, m.album, m.tag_album_artist, m.album_artist, m.duration_ms, a.content_hash, a.mime_type, m.track_number, m.disc_number, m.year, m.file_format, m.bit_depth, m.bitrate_kbps, m.album_directory, f.content_hash, m.album_id, al.artist_id";
+const PLAYBACK_COLUMNS: &str = "t.id, r.path, f.relative_path, f.availability, f.inspection_status, m.title, m.artist, m.album, m.tag_album_artist, m.duration_ms, a.content_hash, a.mime_type, m.track_number, m.disc_number, m.year, m.file_format, m.bit_depth, m.bitrate_kbps, f.content_hash, m.album_id, al.artist_id";
 const PLAYBACK_FROM: &str = "FROM track_source_metadata m JOIN tracks t ON t.id = m.track_id JOIN library_files f ON f.id = t.file_id JOIN library_roots r ON r.id = f.root_id LEFT JOIN artwork_assets a ON a.id = m.artwork_id LEFT JOIN albums al ON al.id = m.album_id";
 
 fn playback_row(row: &Row<'_>) -> rusqlite::Result<PlaybackRow> {
@@ -158,25 +146,23 @@ fn playback_row(row: &Row<'_>) -> rusqlite::Result<PlaybackRow> {
         artist: row.get(6)?,
         album: row.get(7)?,
         album_artist: row.get(8)?,
-        album_artist_name: row.get(9)?,
-        album_directory: row.get(19)?,
-        album_id: album_id_column(row, 21)?,
+        album_id: album_id_column(row, 19)?,
         album_artist_id: row
-            .get::<_, Option<String>>(22)?
+            .get::<_, Option<String>>(20)?
             .and_then(|hex| ArtistId::from_hex(&hex)),
-        duration_ms: row.get(10)?,
-        artwork: artwork_ref(row.get(11)?, row.get(12)?),
-        track_number: row.get(13)?,
-        disc_number: row.get(14)?,
-        year: row.get(15)?,
-        file_format: non_blank(row.get(16)?),
+        duration_ms: row.get(9)?,
+        artwork: artwork_ref(row.get(10)?, row.get(11)?),
+        track_number: row.get(12)?,
+        disc_number: row.get(13)?,
+        year: row.get(14)?,
+        file_format: non_blank(row.get(15)?),
         bit_depth: row
-            .get::<_, Option<i64>>(17)?
+            .get::<_, Option<i64>>(16)?
             .and_then(|value| u32::try_from(value).ok()),
         bitrate_kbps: row
-            .get::<_, Option<i64>>(18)?
+            .get::<_, Option<i64>>(17)?
             .and_then(|value| u32::try_from(value).ok()),
-        content_hash: row.get(20)?,
+        content_hash: row.get(18)?,
     })
 }
 
@@ -215,28 +201,28 @@ fn playable_track(
         };
         file
     };
-    let album_key = row.album_key();
-    let album_id = album_key.as_ref().map(|_| row.album_id);
-    let album_artist_id = album_key.as_ref().and(row.album_artist_id);
-    let album_track_count = album_key
-        .as_ref()
-        .and_then(|_| counts.get(&row.album_id.to_hex()).copied());
+    // A track with no album tag has no album, so no album ID and no album count.
+    let album_track_count = counts
+        .get(&row.album_id.to_hex())
+        .copied()
+        .unwrap_or_default();
+    let album =
+        track_album(row.album, row.album_id, row.album_artist_id).map(|album| PlayableAlbum {
+            album,
+            track_count: album_track_count,
+        });
     Ok(Some(PlayableTrack {
         track_id: row.track_id,
         file,
         title: row.title,
         artist: non_blank(Some(row.artist)),
-        album: non_blank(Some(row.album)),
+        album,
         album_artist: non_blank(row.album_artist),
         artwork: row.artwork,
         duration_ms: row.duration_ms.map(|value| value as u64),
         track_number: row.track_number.and_then(|value| u32::try_from(value).ok()),
         disc_number: row.disc_number.and_then(|value| u32::try_from(value).ok()),
         year: row.year,
-        album_key,
-        album_id,
-        album_artist_id,
-        album_track_count,
         file_format: row.file_format,
         bit_depth: row.bit_depth,
         bitrate_kbps: row.bitrate_kbps,
@@ -303,18 +289,6 @@ fn selection_row(row: &Row<'_>) -> rusqlite::Result<SelectionRow> {
 const IDS_PER_QUERY: usize = 400;
 
 impl LibraryStore {
-    /// The album in disc and track order, from its key (the old album route, ticket 14).
-    pub fn playback_for_album(
-        &self,
-        key: &LibraryAlbumKey,
-        start_track_id: Option<TrackId>,
-    ) -> Result<PlaybackSelection, PlaybackSourceError> {
-        validate_album_key(key)?;
-        let connection = self.read()?;
-        let album_id = album_id_of(&connection, key)?;
-        Self::album_selection(&connection, album_id, start_track_id)
-    }
-
     /// The album in disc and track order, by its ID.
     pub fn playback_for_album_id(
         &self,

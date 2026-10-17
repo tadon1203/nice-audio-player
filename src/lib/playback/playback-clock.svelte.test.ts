@@ -18,10 +18,6 @@ const item = (id: TrackId): PlaybackItem => ({
   trackNumber: null,
   discNumber: null,
   year: null,
-  albumKey: null,
-  albumId: null,
-  albumArtistId: null,
-  albumTrackCount: null,
 });
 
 const session = (id: TrackId, positionMs: number, seekRevision = 0): ActiveSession => ({

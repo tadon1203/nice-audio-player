@@ -10,7 +10,6 @@ const artistId = "5b3f2c1e0a9d8c7b6a5f4e3d2c1b0a99";
 const summary = (year: number): LibraryAlbumSummary => ({
   id: albumId,
   title: "Abbey Road",
-  key: { title: "Abbey Road", albumArtist: "The Beatles", albumEdition: "" },
   albumArtist: { id: artistId, name: "The Beatles" },
   artwork: null,
   year,

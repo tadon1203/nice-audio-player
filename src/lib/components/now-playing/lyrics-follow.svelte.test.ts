@@ -100,7 +100,7 @@ function stubObserver(inView: boolean) {
   vi.stubGlobal(
     "IntersectionObserver",
     class {
-      constructor(private callback: (entries: Array<Record<string, unknown>>) => void) {}
+      constructor(private readonly callback: (entries: Array<Record<string, unknown>>) => void) {}
       observe() {
         this.callback([
           {

@@ -35,10 +35,6 @@ const item = (id: TrackId): PlaybackItem => ({
   trackNumber: null,
   discNumber: null,
   year: null,
-  albumKey: null,
-  albumId: null,
-  albumArtistId: null,
-  albumTrackCount: null,
 });
 
 const stopped = (revision: number, id: TrackId | null): Versioned<PlaybackSnapshot> => ({
@@ -444,7 +440,15 @@ describe("playback session derived state", () => {
         ...loaded.value,
         session: {
           ...(loaded.value as { session: object }).session,
-          item: { ...item(1), albumId },
+          item: {
+            ...item(1),
+            album: {
+              id: albumId,
+              title: "Album",
+              artistId: "5b3f2c1e0a9d8c7b6a5f4e3d2c1b0a99",
+              trackCount: 1,
+            },
+          },
         },
       },
     } as never);

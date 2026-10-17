@@ -55,7 +55,6 @@ pub enum PlaybackServiceError {
     CompletionTimingFailed,
     SampleRateConversionFailed,
     // Resolving what to play from the library.
-    InvalidAlbumKey,
     InvalidTrackId,
     AlbumNotFound,
     TrackNotMember,
@@ -90,7 +89,6 @@ impl From<PlaybackFailureCode> for PlaybackServiceError {
 impl From<PlaybackSourceError> for PlaybackServiceError {
     fn from(error: PlaybackSourceError) -> Self {
         match error {
-            PlaybackSourceError::InvalidAlbumKey => Self::InvalidAlbumKey,
             PlaybackSourceError::InvalidTrackId => Self::InvalidTrackId,
             PlaybackSourceError::AlbumNotFound => Self::AlbumNotFound,
             PlaybackSourceError::TrackNotMember => Self::TrackNotMember,

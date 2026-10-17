@@ -9,41 +9,22 @@
 //! list says how long the list is.
 
 use super::{
-    LibraryStore, SearchFilter, is_normalized,
+    LibraryStore, SearchFilter,
     paging::{Ordering, Page, PagedQuery, Phase, Scope, View},
     track::{SUMMARY_COLUMN_COUNT, SUMMARY_COLUMNS, SUMMARY_FROM, artwork_ref, summary_from_row},
 };
 use crate::ids::{AlbumId, ArtistId, TrackId, album_id_column, artist_id_column, track_id_column};
 use crate::library::{
     error::StoreError,
-    keys::absolute_directory,
     models::*,
     status::{Availability, InspectionStatus},
     text,
 };
 use rusqlite::{Connection, OptionalExtension, Row, params, types::Value};
-use std::ffi::OsStr;
 
 /// An album's tracks in playing order: by disc, then track, unnumbered ones last.
 pub(super) const ALBUM_ORDER: &str =
     "COALESCE(m.disc_number, 2147483647), COALESCE(m.track_number, 2147483647), m.track_id";
-
-pub(super) fn validate_album_key(key: &LibraryAlbumKey) -> Result<(), StoreError> {
-    if is_normalized(&key.title) && is_normalized(&key.album_artist) {
-        Ok(())
-    } else {
-        Err(StoreError::InvalidAlbumKey)
-    }
-}
-
-/// The ID of the Album Artist a key names (see `ids.rs`), for the commands that still take a key.
-pub fn album_artist_id_of_key(key: &LibraryAlbumArtistKey) -> Result<ArtistId, StoreError> {
-    if is_normalized(&key.name) {
-        Ok(ArtistId::of(&key.name))
-    } else {
-        Err(StoreError::InvalidAlbumArtistKey)
-    }
-}
 
 /// The tracks a search matches: by title, artist, album or Album Artist. Shared by the page and
 /// by playback, so "play what I see" cannot drift from the list.
@@ -135,25 +116,21 @@ fn year_phases(year: &str, album_sort: &str, rest: &[&str], unnamed: &[&str]) ->
 }
 
 /// The columns of an album row, in the order `album_summary` reads them, and what they come from.
-const ALBUM_COLUMNS: &str = "al.title, al.album_artist, al.album_directory, al.year, a.content_hash, a.mime_type, al.artist_id, al.id";
-const ALBUM_COLUMN_COUNT: usize = 8;
+const ALBUM_COLUMNS: &str =
+    "al.title, al.album_artist, al.year, a.content_hash, a.mime_type, al.artist_id, al.id";
+const ALBUM_COLUMN_COUNT: usize = 7;
 const ALBUM_FROM: &str = "FROM albums al LEFT JOIN artwork_assets a ON a.id = al.cover_artwork_id";
 
 fn album_summary(row: &Row<'_>) -> rusqlite::Result<LibraryAlbumSummary> {
     Ok(LibraryAlbumSummary {
-        id: album_id_column(row, 7)?,
+        id: album_id_column(row, 6)?,
         title: row.get(0)?,
-        key: LibraryAlbumKey {
-            title: row.get(0)?,
-            album_artist: row.get(1)?,
-            album_edition: row.get(2)?,
-        },
         album_artist: ArtistRef {
-            id: artist_id_column(row, 6)?,
+            id: artist_id_column(row, 5)?,
             name: row.get(1)?,
         },
-        year: row.get(3)?,
-        artwork: artwork_ref(row.get(4)?, row.get(5)?),
+        year: row.get(2)?,
+        artwork: artwork_ref(row.get(3)?, row.get(4)?),
     })
 }
 
@@ -168,7 +145,6 @@ fn artist_summary(row: &Row<'_>) -> rusqlite::Result<LibraryAlbumArtistSummary> 
     Ok(LibraryAlbumArtistSummary {
         id: artist_id_column(row, 0)?,
         name: row.get(1)?,
-        key: LibraryAlbumArtistKey { name: row.get(1)? },
         album_count: row.get::<_, i64>(2)? as u64,
         track_count: row.get::<_, i64>(3)? as u64,
         artwork: artwork_ref(row.get(4)?, row.get(5)?),
@@ -675,17 +651,6 @@ impl LibraryStore {
             .ok_or(StoreError::AlbumArtistNotFound)
     }
 
-    /// The details of an album by its key. The key form goes with the old album route (ticket 14).
-    pub fn catalog_album_details(
-        &self,
-        key: LibraryAlbumKey,
-    ) -> Result<LibraryAlbumDetails, StoreError> {
-        validate_album_key(&key)?;
-        let connection = self.read()?;
-        let album_id = album_id_of(&connection, &key)?;
-        Self::album_details(&connection, album_id)
-    }
-
     /// The details of an album by its ID.
     pub fn catalog_album(&self, album_id: AlbumId) -> Result<LibraryAlbumDetails, StoreError> {
         let connection = self.read()?;
@@ -755,18 +720,6 @@ impl LibraryStore {
         })
     }
 
-    /// A page of an album's tracks by its key (the old album route, ticket 14).
-    pub fn catalog_album_tracks(
-        &self,
-        key: LibraryAlbumKey,
-        cursor: Option<&str>,
-    ) -> Result<LibraryAlbumTrackPage, StoreError> {
-        validate_album_key(&key)?;
-        let connection = self.read()?;
-        let album_id = album_id_of(&connection, &key)?;
-        Self::album_tracks(&connection, album_id, cursor)
-    }
-
     /// A page of an album's tracks by its ID.
     pub fn catalog_album_tracks_by_id(
         &self,
@@ -825,38 +778,4 @@ fn first_page_total(
     cursor: Option<&str>,
 ) -> Result<Option<u64>, StoreError> {
     cursor.map_or_else(|| query.total(connection).map(Some), |_| Ok(None))
-}
-
-/// The ID of the album a key names (see `ids.rs`): its Album Artist, title and absolute album
-/// directory. The directory is the root's path, read here; a key whose root is gone gets a path
-/// that no album has, so it names no album. A track with no album has the ID of an empty title in
-/// an empty directory.
-pub(super) fn album_id_of(
-    connection: &Connection,
-    key: &LibraryAlbumKey,
-) -> Result<AlbumId, StoreError> {
-    let directory = if key.title.is_empty() {
-        String::new()
-    } else {
-        let root_id = key
-            .album_edition
-            .split_once('/')
-            .and_then(|(root, _)| root.parse::<i64>().ok());
-        let root_path: Option<String> = match root_id {
-            Some(root_id) => connection
-                .query_row(
-                    "SELECT path FROM library_roots WHERE id = ?1",
-                    params![root_id],
-                    |row| row.get(0),
-                )
-                .optional()?,
-            None => None,
-        };
-        absolute_directory(root_path.as_deref().unwrap_or(""), &key.album_edition)
-    };
-    Ok(AlbumId::of(
-        &key.album_artist,
-        &key.title,
-        OsStr::new(&directory),
-    ))
 }

@@ -69,20 +69,24 @@ pub enum LibraryTrackSortKey {
     Duration,
 }
 pub use super::artwork::ArtworkRef;
+/// The album a track is filed under, by ID (see `ids.rs`) and as titled. A track with no album tag
+/// has none.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TrackAlbum {
+    pub id: AlbumId,
+    pub title: String,
+    /// The album's Album Artist.
+    pub artist_id: ArtistId,
+}
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LibraryTrackSummary {
     pub id: TrackId,
     pub title: String,
     pub artist: Option<String>,
-    pub album: Option<String>,
+    pub album: Option<TrackAlbum>,
     pub album_artist: Option<String>,
-    /// The key the catalog files the track's album under, `None` for a track with no album tag.
-    pub album_key: Option<LibraryAlbumKey>,
-    /// The album's ID, `None` for a track with no album tag.
-    pub album_id: Option<AlbumId>,
-    /// The Album Artist's ID, `None` for a track with no album tag.
-    pub album_artist_id: Option<ArtistId>,
     pub artwork: Option<ArtworkRef>,
     pub duration_ms: Option<u64>,
     pub file_format: Option<String>,
@@ -124,16 +128,6 @@ pub struct LibraryTrackPage {
     pub total_count: Option<u64>,
     pub next_cursor: Option<String>,
 }
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, specta::Type, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LibraryAlbumKey {
-    pub title: String,
-    pub album_artist: String,
-    /// Which printing of the album: its folder. Two folders holding the same title and Album
-    /// Artist are two albums. Opaque to the renderer, `""` for the album of tracks with no album.
-    pub album_edition: String,
-}
-
 /// One entry of a list's scroll index: the label its names are filed under, and how many there
 /// are. Buckets come in the list's own order.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
@@ -141,11 +135,6 @@ pub struct LibraryAlbumKey {
 pub struct LibraryIndexBucket {
     pub label: String,
     pub count: u64,
-}
-#[derive(Debug, Clone, Serialize, specta::Type, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LibraryAlbumArtistKey {
-    pub name: String,
 }
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
@@ -158,7 +147,6 @@ pub struct ArtistRef {
 pub struct LibraryAlbumSummary {
     pub id: AlbumId,
     pub title: String,
-    pub key: LibraryAlbumKey,
     pub album_artist: ArtistRef,
     pub artwork: Option<ArtworkRef>,
     pub year: Option<i32>,
@@ -176,7 +164,6 @@ pub struct LibraryAlbumPage {
 pub struct LibraryAlbumArtistSummary {
     pub id: ArtistId,
     pub name: String,
-    pub key: LibraryAlbumArtistKey,
     pub artwork: Option<ArtworkRef>,
     pub album_count: u64,
     pub track_count: u64,

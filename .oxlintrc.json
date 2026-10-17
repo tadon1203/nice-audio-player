@@ -1,7 +1,7 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["typescript", "oxc"],
-  "ignorePatterns": ["**/skills/**"],
+  "ignorePatterns": ["**/skills/**", "src/lib/native/bindings.ts"],
   "options": { "typeAware": true },
   "rules": {
     "typescript/explicit-function-return-type": "warn",

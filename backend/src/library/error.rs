@@ -20,8 +20,6 @@ pub enum LibraryCommandError {
     TrackUnavailable,
     AlbumNotFound,
     InvalidCursor,
-    InvalidAlbumKey,
-    InvalidAlbumArtistKey,
     AlbumArtistNotFound,
     RootMissing,
     ScanAlreadyRunning,
@@ -35,8 +33,6 @@ pub enum LibraryCommandError {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StoreError {
     InvalidCursor,
-    InvalidAlbumKey,
-    InvalidAlbumArtistKey,
     TrackNotFound,
     TrackUnavailable,
     AlbumNotFound,
@@ -63,8 +59,6 @@ impl From<StoreError> for LibraryCommandError {
     fn from(error: StoreError) -> Self {
         match error {
             StoreError::InvalidCursor => Self::InvalidCursor,
-            StoreError::InvalidAlbumKey => Self::InvalidAlbumKey,
-            StoreError::InvalidAlbumArtistKey => Self::InvalidAlbumArtistKey,
             StoreError::TrackNotFound => Self::TrackNotFound,
             StoreError::TrackUnavailable => Self::TrackUnavailable,
             StoreError::AlbumNotFound => Self::AlbumNotFound,

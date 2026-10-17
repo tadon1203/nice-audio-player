@@ -22,7 +22,7 @@ export class RetargetableSpring {
   duration: number;
   #target = $state(0);
   #state: SpringState;
-  #precision: number;
+  readonly #precision: number;
   #frame = 0;
 
   constructor(
@@ -62,7 +62,7 @@ export class RetargetableSpring {
     this.#frame = 0;
   }
 
-  #tick = () => {
+  readonly #tick = () => {
     this.#frame = 0;
     const now = performance.now();
     if (isSpringSettled(this.#state, now, this.#precision)) {

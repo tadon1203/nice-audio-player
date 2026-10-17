@@ -12,8 +12,8 @@ export function trackFacts(
     item.year,
     item.discNumber !== null && item.discNumber > 1 ? `Disc ${item.discNumber}` : null,
     item.trackNumber !== null
-      ? item.albumTrackCount !== null && item.albumTrackCount >= item.trackNumber
-        ? `Track ${item.trackNumber} of ${item.albumTrackCount}`
+      ? item.album !== null && item.album.trackCount >= item.trackNumber
+        ? `Track ${item.trackNumber} of ${item.album.trackCount}`
         : `Track ${item.trackNumber}`
       : null,
     source,

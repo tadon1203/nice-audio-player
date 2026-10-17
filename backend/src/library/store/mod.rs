@@ -9,7 +9,6 @@ mod playback;
 mod tests;
 mod track;
 
-pub use catalog::album_artist_id_of_key;
 pub use playback::{PlayableTrack, PlaybackSelection, PlaybackSourceError};
 
 use super::{
@@ -74,9 +73,4 @@ impl SearchFilter {
     fn text(search: Option<&str>) -> String {
         text::search_text(search.unwrap_or_default())
     }
-}
-
-/// An unnamed album or artist is the empty string; a key with space around it is not one.
-fn is_normalized(value: &str) -> bool {
-    value.trim() == value
 }

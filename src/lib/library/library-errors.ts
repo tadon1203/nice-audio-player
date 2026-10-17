@@ -19,8 +19,6 @@ const commandMessages = {
   trackUnavailable: "That track is unavailable on disk.",
   albumNotFound: "That album could not be found.",
   invalidCursor: "The list position is no longer valid. Retry to reload it.",
-  invalidAlbumKey: "That album reference is invalid.",
-  invalidAlbumArtistKey: "That artist reference is invalid.",
   albumArtistNotFound: "That artist could not be found.",
   rootMissing: "A library folder is missing from disk.",
   scanAlreadyRunning: "A library scan is already running.",

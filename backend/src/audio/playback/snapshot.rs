@@ -223,7 +223,7 @@ impl PlaybackQueueItem {
             track_id: track.track_id,
             title: track.title.clone(),
             artist: track.artist.clone(),
-            album: track.album.clone(),
+            album: track.album.as_ref().map(|album| album.album.title.clone()),
             artwork: track.artwork.clone(),
             duration_ms: track.duration_ms,
         }

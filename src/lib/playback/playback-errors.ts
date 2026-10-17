@@ -24,7 +24,6 @@ const messages = {
   outputStreamRuntimeFailed: "The audio output stopped unexpectedly.",
   completionTimingFailed: "Playback completion could not be determined.",
   sampleRateConversionFailed: "The audio could not be converted.",
-  invalidAlbumKey: "That album reference is invalid.",
   invalidTrackId: "That track reference is invalid.",
   trackNotMember: "That track is not part of this album.",
   albumNotFound: "That album could not be found.",

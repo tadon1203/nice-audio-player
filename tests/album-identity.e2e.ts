@@ -15,22 +15,19 @@ const artworkOf = (pair: string): ArtworkRef => ({
 const printings = [
   {
     id: "a1".repeat(16),
-    edition: "1/Artist/Test album",
     artwork: artworkOf("ab"),
     track: "First printing track",
   },
   {
     id: "b2".repeat(16),
-    edition: "2/Artist/Test album",
     artwork: artworkOf("cd"),
     track: "Second printing track",
   },
 ];
 
-const albums: LibraryAlbumSummary[] = printings.map(({ id, edition, artwork }) => ({
+const albums: LibraryAlbumSummary[] = printings.map(({ id, artwork }) => ({
   ...testAlbum,
   id,
-  key: { ...testAlbum.key, albumEdition: edition },
   artwork,
 }));
 

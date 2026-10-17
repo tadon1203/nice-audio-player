@@ -31,7 +31,7 @@ export class DrawLoop {
     this.#last = null;
   }
 
-  #tick = (now: number) => {
+  readonly #tick = (now: number) => {
     const elapsed = this.#last === null ? 0 : (now - this.#last) / 1000;
     this.#last = now;
     this.#frameId = this.#step(elapsed) ? this.#scheduler.request(this.#tick) : null;

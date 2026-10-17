@@ -7,17 +7,18 @@ const item: PlaybackItem = {
   trackId: 1,
   title: "Song",
   artist: " Artist ",
-  album: "Album",
+  album: {
+    id: "7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a20",
+    title: "Album",
+    artistId: "5b3f2c1e0a9d8c7b6a5f4e3d2c1b0a99",
+    trackCount: 12,
+  },
   albumArtist: null,
   artwork: null,
   durationMs: 1000,
   trackNumber: 4,
   discNumber: 1,
   year: 2019,
-  albumKey: { albumArtist: "Album Artist", title: "Album", albumEdition: "" },
-  albumId: "7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a20",
-  albumArtistId: "5b3f2c1e0a9d8c7b6a5f4e3d2c1b0a99",
-  albumTrackCount: 12,
 };
 
 const resolved = (
@@ -40,8 +41,10 @@ describe("trackFacts", () => {
   });
 
   it("drops the total when it is unknown or smaller than the number", () => {
-    expect(trackFacts({ ...item, albumTrackCount: null }, null)[2]).toBe("Track 4");
-    expect(trackFacts({ ...item, albumTrackCount: 3 }, null)[2]).toBe("Track 4");
+    expect(trackFacts({ ...item, album: null }, null)[2]).toBe("Track 4");
+    expect(trackFacts({ ...item, album: { ...item.album!, trackCount: 3 } }, null)[2]).toBe(
+      "Track 4",
+    );
     expect(trackFacts({ ...item, trackNumber: null }, null)[2]).toBeNull();
   });
 });

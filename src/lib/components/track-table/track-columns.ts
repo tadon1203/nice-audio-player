@@ -15,7 +15,7 @@ export type TrackTableRow = Pick<
   "id" | "title" | "artist" | "durationMs" | "availability" | "playable"
 > &
   Partial<
-    Pick<LibraryTrackSummary, "album" | "albumArtist" | "albumId" | "albumArtistId"> &
+    Pick<LibraryTrackSummary, "album" | "albumArtist"> &
       Pick<
         LibraryAlbumTrackSummary,
         "trackNumber" | "discNumber" | "fileFormat" | "bitDepth" | "sampleRate"
@@ -94,7 +94,7 @@ export const libraryTrackColumns: readonly TrackColumn[] = [
     header: "Album",
     width: "w-32",
     sortKey: "album",
-    text: (row) => row.album,
+    text: (row) => row.album?.title,
   },
   timeColumn,
 ];

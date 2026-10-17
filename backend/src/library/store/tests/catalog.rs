@@ -21,9 +21,9 @@ fn albums_keep_their_identity_and_take_the_cover_of_their_first_track_with_artwo
     let shared = all
         .items
         .iter()
-        .find(|album| album.key.title == "Shared")
+        .find(|album| album.title == "Shared")
         .unwrap();
-    assert_eq!(shared.key.album_artist, "Album Artist");
+    assert_eq!(shared.album_artist.name, "Album Artist");
     let cover = shared.artwork.as_ref().expect("a cover");
     assert_eq!(
         (cover.hash.as_str(), cover.mime_type),
@@ -50,10 +50,10 @@ fn albums_keep_their_identity_and_take_the_cover_of_their_first_track_with_artwo
             1,
             "{literal:?} is searched for literally"
         );
-        assert_eq!(found.items[0].key.title, "Other %_\\ album");
+        assert_eq!(found.items[0].title, "Other %_\\ album");
     }
     let by_artist = all_albums(store, Some("Album Artist"));
-    assert_eq!(by_artist.items[0].key.album_artist, "Album Artist");
+    assert_eq!(by_artist.items[0].album_artist.name, "Album Artist");
 
     let artists = store
         .catalog_album_artists(None, None, LibraryAlbumArtistSortKey::Artist, ASC)
@@ -81,16 +81,12 @@ fn albums_keep_their_identity_and_take_the_cover_of_their_first_track_with_artwo
         ),
         (1, 1)
     );
-    assert_eq!(artist_albums.items[0].key.title, "Shared");
+    assert_eq!(artist_albums.items[0].title, "Shared");
 
-    let shared_key = LibraryAlbumKey {
-        title: "Shared".into(),
-        album_artist: "Album Artist".into(),
-        album_edition: "1/".into(),
-    };
-    let details = store.catalog_album_details(shared_key.clone()).unwrap();
+    let shared_id = shared.id;
+    let details = store.catalog_album(shared_id).unwrap();
     assert_eq!(details.track_count, 2);
-    let tracks = store.catalog_album_tracks(shared_key, None).unwrap();
+    let tracks = store.catalog_album_tracks_by_id(shared_id, None).unwrap();
     assert_eq!(
         (tracks.items.len(), tracks.total_count.unwrap_or(0)),
         (2, 2)
@@ -113,7 +109,7 @@ fn albums_keep_their_identity_and_take_the_cover_of_their_first_track_with_artwo
 }
 
 #[test]
-fn an_album_is_found_by_its_id_as_it_is_by_its_key() {
+fn an_album_is_found_and_played_by_its_id() {
     let fixture = fixture();
     fixture.touch_audio([1, 2, 3]);
     let mut one = Seed::new(1, "One", "Artist", "Shared");
@@ -125,21 +121,15 @@ fn an_album_is_found_by_its_id_as_it_is_by_its_key() {
     let album = all_albums(store, None)
         .items
         .into_iter()
-        .find(|album| album.key.title == "Shared")
+        .find(|album| album.title == "Shared")
         .unwrap();
     assert_eq!(album.title, "Shared");
 
     let details = store.catalog_album(album.id).unwrap();
     assert_eq!(details.summary.id, album.id);
-    assert_eq!(details.summary.key, album.key);
     assert_eq!(details.track_count, 2);
     let by_id = store.catalog_album_tracks_by_id(album.id, None).unwrap();
-    let by_key = store.catalog_album_tracks(album.key.clone(), None).unwrap();
-    assert_eq!(by_id.items.len(), by_key.items.len());
-    assert_eq!(
-        by_id.items.iter().map(|t| t.id).collect::<Vec<_>>(),
-        by_key.items.iter().map(|t| t.id).collect::<Vec<_>>()
-    );
+    assert_eq!(by_id.items.len(), 2);
     let selection = store.playback_for_album_id(album.id, None).unwrap();
     assert_eq!(selection.track_ids.len(), 2);
 
@@ -159,7 +149,7 @@ fn an_album_is_found_by_its_id_as_it_is_by_its_key() {
 }
 
 #[test]
-fn an_album_is_found_playable_and_reported_missing_by_its_key() {
+fn an_album_is_playable_and_reported_missing_by_its_id() {
     let fixture = fixture();
     fixture.touch_audio([1, 2, 3]);
     let mut one = Seed::new(1, "One", "Artist", "Shared");
@@ -168,46 +158,29 @@ fn an_album_is_found_playable_and_reported_missing_by_its_key() {
     two.album_artist = Some("Album Artist");
     fixture.add_all(&[one, two, Seed::new(3, "Three", "Other", "Elsewhere")]);
     let store = &fixture.store;
-    let shared = LibraryAlbumKey {
-        title: "Shared".into(),
-        album_artist: "Album Artist".into(),
-        album_edition: "1/".into(),
-    };
+    let shared = all_albums(store, None)
+        .items
+        .into_iter()
+        .find(|album| album.title == "Shared")
+        .unwrap()
+        .id;
 
-    let blank = LibraryAlbumKey {
-        title: " ".into(),
-        album_artist: "Album Artist".into(),
-        album_edition: "1/".into(),
-    };
-    assert_eq!(
-        store.playback_for_album(&blank, None).err(),
-        Some(PlaybackSourceError::InvalidAlbumKey)
-    );
     assert_eq!(
         store
-            .playback_for_album(&shared, Some(track_id_of(3)))
+            .playback_for_album_id(shared, Some(track_id_of(3)))
             .err(),
         Some(PlaybackSourceError::TrackNotMember)
-    );
-    let missing = LibraryAlbumKey {
-        title: "Nope".into(),
-        album_artist: "Nobody".into(),
-        album_edition: "1/".into(),
-    };
-    assert_eq!(
-        store.playback_for_album(&missing, None).err(),
-        Some(PlaybackSourceError::AlbumNotFound)
     );
 
     fixture.sql("UPDATE library_files SET availability='missing' WHERE id IN (1,2)");
     assert_eq!(
         store
-            .playback_for_album(&shared, Some(track_id_of(1)))
+            .playback_for_album_id(shared, Some(track_id_of(1)))
             .err(),
         Some(PlaybackSourceError::TrackUnavailable)
     );
     assert_eq!(
-        store.playback_for_album(&shared, None).err(),
+        store.playback_for_album_id(shared, None).err(),
         Some(PlaybackSourceError::NoPlayableTracks)
     );
 }
@@ -226,20 +199,19 @@ fn an_album_is_case_sensitive_and_a_missing_album_artist_is_the_artist() {
     let performer: Vec<_> = albums
         .items
         .iter()
-        .filter(|album| album.key.album_artist == "Performer")
-        .map(|album| album.key.title.as_str())
+        .filter(|album| album.album_artist.name == "Performer")
+        .map(|album| album.title.as_str())
         .collect();
     assert_eq!(performer, ["Case", "case"]);
     assert_eq!(albums.items.len(), 3);
     let tracks_of = |title: &str, artist: &str| {
-        store
-            .catalog_album_details(LibraryAlbumKey {
-                title: title.into(),
-                album_artist: artist.into(),
-                album_edition: "1/".into(),
-            })
+        let id = albums
+            .items
+            .iter()
+            .find(|album| album.title == title && album.album_artist.name == artist)
             .unwrap()
-            .track_count
+            .id;
+        store.catalog_album(id).unwrap().track_count
     };
     assert_eq!(tracks_of("Case", "Performer"), 1);
     assert_eq!(tracks_of("case", "Performer"), 1);
@@ -299,26 +271,20 @@ fn a_year_is_the_same_on_the_grid_the_details_header_and_in_playback() {
         dated(4, "12"),
     ]);
     let store = &fixture.store;
-    let key = |title: &str| LibraryAlbumKey {
-        title: title.into(),
-        album_artist: "Artist".into(),
-        album_edition: "1/".into(),
-    };
 
     let grid = all_albums(store, None);
-    let year_of = |title: &str| {
+    let album_of = |title: &str| {
         grid.items
             .iter()
-            .find(|album| album.key.title == title)
+            .find(|album| album.title == title)
             .unwrap()
-            .year
     };
-    assert_eq!(year_of("Dated"), Some(1999));
-    assert_eq!(year_of("Placeholder"), None, "0000 is no year");
-    assert_eq!(year_of("Odd"), None, "two digits are no year");
+    assert_eq!(album_of("Dated").year, Some(1999));
+    assert_eq!(album_of("Placeholder").year, None, "0000 is no year");
+    assert_eq!(album_of("Odd").year, None, "two digits are no year");
     assert_eq!(
         store
-            .catalog_album_details(key("Dated"))
+            .catalog_album(album_of("Dated").id)
             .unwrap()
             .summary
             .year,
@@ -326,13 +292,15 @@ fn a_year_is_the_same_on_the_grid_the_details_header_and_in_playback() {
     );
     assert_eq!(
         store
-            .catalog_album_details(key("Placeholder"))
+            .catalog_album(album_of("Placeholder").id)
             .unwrap()
             .summary
             .year,
         None
     );
-    let playback = store.playback_for_album(&key("Dated"), None).unwrap();
+    let playback = store
+        .playback_for_album_id(album_of("Dated").id, None)
+        .unwrap();
     let years: Vec<_> = store
         .playable_tracks(&playback.track_ids)
         .unwrap()
@@ -357,14 +325,10 @@ fn album_details_count_the_tracks_once_and_name_the_first_playable_one() {
     three.duration_ms = Some(500);
     fixture.add_all(&[one, two, three]);
     fixture.sql("UPDATE library_files SET availability='missing' WHERE id=1");
-    let key = LibraryAlbumKey {
-        title: "Album".into(),
-        album_artist: "Artist".into(),
-        album_edition: "1/".into(),
-    };
+    let id = all_albums(&fixture.store, None).items[0].id;
 
-    let details = fixture.store.catalog_album_details(key.clone()).unwrap();
-    let tracks = fixture.store.catalog_album_tracks(key, None).unwrap();
+    let details = fixture.store.catalog_album(id).unwrap();
+    let tracks = fixture.store.catalog_album_tracks_by_id(id, None).unwrap();
 
     assert_eq!(details.track_count, 3);
     assert_eq!(tracks.total_count.unwrap_or(0), 3);
@@ -416,12 +380,12 @@ fn a_filter_folds_kana_and_width_and_still_matches_wildcards_literally() {
         .catalog_albums(None, Some("ゆず"), TITLE, ASC)
         .unwrap();
     assert_eq!(albums.items.len(), 1);
-    assert_eq!(albums.items[0].key.title, "ユズ Best");
+    assert_eq!(albums.items[0].title, "ユズ Best");
     let artists = store
         .catalog_album_artists(None, Some("ﾕｽﾞ"), LibraryAlbumArtistSortKey::Artist, ASC)
         .unwrap();
     assert_eq!(artists.items.len(), 1);
-    assert_eq!(artists.items[0].key.name, "ゆず");
+    assert_eq!(artists.items[0].name, "ゆず");
     let none = store
         .catalog_album_artists(None, Some("%"), LibraryAlbumArtistSortKey::Artist, ASC)
         .unwrap();

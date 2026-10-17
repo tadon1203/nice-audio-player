@@ -46,7 +46,6 @@ const secondAlbumId = "6b2c3d4e5f60718293a4b5c6d7e8f9a0";
 export const testAlbum: LibraryAlbumSummary = {
   id: testAlbumId,
   title: "Test album",
-  key: { title: "Test album", albumArtist: "Test artist", albumEdition: "" },
   albumArtist: { id: testArtistId, name: "Test artist" },
   artwork: null,
   year: 2020,
@@ -54,7 +53,6 @@ export const testAlbum: LibraryAlbumSummary = {
 export const secondAlbum: LibraryAlbumSummary = {
   id: secondAlbumId,
   title: "Second album",
-  key: { title: "Second album", albumArtist: "Test artist", albumEdition: "" },
   albumArtist: { id: testArtistId, name: "Test artist" },
   artwork: null,
   year: 2024,
@@ -78,11 +76,8 @@ export function makeTracks(count = 140, options: { artwork?: boolean } = {}) {
             ? "Missing track"
             : `Track ${String(index + 1).padStart(3, "0")}`,
       artist: "Test artist",
-      album: "Test album",
+      album: { id: testAlbumId, title: "Test album", artistId: testArtistId },
       albumArtist: "Test artist",
-      albumKey: testAlbum.key,
-      albumId: testAlbumId,
-      albumArtistId: testArtistId,
       artwork: options.artwork ? ARTWORK : null,
       durationMs: 120_000 + index * 1_000,
       fileFormat: "FLAC",
@@ -116,11 +111,6 @@ export function testLibrary(
     (_, index): LibraryAlbumSummary => ({
       id: `e${String(index).padStart(31, "0")}`,
       title: `Extra album ${String(index).padStart(4, "0")}`,
-      key: {
-        title: `Extra album ${String(index).padStart(4, "0")}`,
-        albumArtist: "Extra artist",
-        albumEdition: "",
-      },
       albumArtist: { id: extraArtistId, name: "Extra artist" },
       artwork,
       year: 2000 + (index % 20),
@@ -134,7 +124,6 @@ export function testLibrary(
       {
         id: testArtistId,
         name: "Test artist",
-        key: { name: "Test artist" },
         artwork,
         albumCount: 2,
         trackCount: tracks.length,
@@ -179,7 +168,6 @@ export function libraryResponses(library: LibraryData = testLibrary()) {
     listLibraryAlbumArtistIndex: [],
     getLibraryArtist: library.artists[0],
     listLibraryArtistAlbums: () => pageOf(library.albums.slice(0, 2), null),
-    listLibraryAlbumArtistAlbums: () => pageOf(library.albums.slice(0, 2), null),
     getLibraryAlbum: library.albumDetails,
     listLibraryAlbumTracks: library.albumTracks,
     getLibraryTrackProperties: ({ trackId: id }: { trackId: number }) => {
@@ -191,7 +179,7 @@ export function libraryResponses(library: LibraryData = testLibrary()) {
         fileName: `${track.title}.flac`,
         title: track.title,
         artist: track.artist,
-        album: track.album,
+        album: track.album?.title ?? null,
         albumArtist: track.albumArtist,
         trackNumber: 3,
         trackTotal: 11,
@@ -330,7 +318,7 @@ export const queueItemFor = (track: LibraryTrackSummary): PlaybackQueueItem => (
   trackId: track.id,
   title: track.title,
   artist: track.artist,
-  album: track.album,
+  album: track.album?.title ?? null,
   artwork: track.artwork,
   durationMs: track.durationMs,
 });
@@ -340,14 +328,12 @@ export function playbackItemFor(track: LibraryTrackSummary): PlaybackItem {
   return {
     ...identity,
     queueItemId,
+    // A count of 0 is below every track number, so Now Playing shows "Track n" with no total.
+    album: track.album === null ? null : { ...track.album, trackCount: 0 },
     albumArtist: track.albumArtist,
     trackNumber: track.id % 12 || null,
     discNumber: null,
     year: 2019,
-    albumKey: track.albumKey,
-    albumId: track.albumKey === null ? null : testAlbumId,
-    albumArtistId: track.albumKey === null ? null : testArtistId,
-    albumTrackCount: null,
   };
 }
 

@@ -7,9 +7,7 @@ const albumArtistId = "5b3f2c1e0a9d8c7b6a5f4e3d2c1b0a99" as ArtistId;
 
 const track = {
   artist: "Artist",
-  album: "Album",
-  albumId,
-  albumArtistId,
+  album: { id: albumId, title: "Album", artistId: albumArtistId },
 };
 
 describe("Tracks.links", () => {
@@ -25,15 +23,15 @@ describe("Tracks.links", () => {
     });
   });
 
-  it("has no link for a track without an ID, and no guess from the names", () => {
-    const loose = Tracks.links({ ...track, albumId: null, albumArtistId: null });
-    expect(loose.album?.href).toBeNull();
+  it("has no album link and no artist link for a track without an album, and no guess from the names", () => {
+    const loose = Tracks.links({ ...track, album: null });
+    expect(loose.album).toBeNull();
     expect(loose.artist?.href).toBeNull();
   });
 
-  it("has no link for a missing artist or album", () => {
+  it("has no link for a missing artist or a blank album title", () => {
     expect(Tracks.links({ ...track, artist: null }).artist).toBeNull();
-    expect(Tracks.links({ ...track, album: " " }).album).toBeNull();
+    expect(Tracks.links({ ...track, album: { ...track.album, title: " " } }).album).toBeNull();
   });
 });
 
