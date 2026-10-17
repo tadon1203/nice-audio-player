@@ -1,8 +1,9 @@
-use super::keys::{SortTags, TrackKeys, album_edition_of};
-use super::summary;
-use rusqlite::{Connection, Transaction, params};
+mod legacy;
 
-pub const CURRENT_SCHEMA_VERSION: i32 = 4;
+use super::summary;
+use rusqlite::{Connection, Transaction};
+
+pub const CURRENT_SCHEMA_VERSION: i32 = 5;
 
 /// One step of a migration: a script, or Rust code for what SQL cannot compute.
 enum Step {
@@ -10,27 +11,64 @@ enum Step {
     Rust(fn(&Transaction) -> rusqlite::Result<()>),
 }
 
-const MIGRATIONS: [&[Step]; CURRENT_SCHEMA_VERSION as usize] = [
-    &[Step::Sql(include_str!("migrations/0001_library.sql"))],
-    &[
-        Step::Sql(include_str!("migrations/0002_catalog_keys.sql")),
-        Step::Rust(backfill_track_keys),
-        // After the backfill, so the indexes are built once instead of kept up to date per row.
-        Step::Sql(include_str!("migrations/0002_catalog_indexes.sql")),
-    ],
-    &[Step::Sql(include_str!("migrations/0003_file_identity.sql"))],
-    &[
-        Step::Sql(include_str!("migrations/0004_catalog_summaries.sql")),
-        Step::Rust(backfill_catalog_keys),
-        // After the backfill, so the indexes are built once instead of kept up to date per row.
-        Step::Sql(include_str!("migrations/0004_catalog_indexes.sql")),
-    ],
+/// One schema version: its steps run in one transaction, which also sets `user_version`.
+struct Migration {
+    /// Turns foreign keys off before the transaction and on after it, and runs
+    /// `PRAGMA foreign_key_check` before the commit (SQLite's table rebuild procedure).
+    foreign_keys_off: bool,
+    steps: &'static [Step],
+}
+
+/// Version N is `MIGRATIONS[N - 1]`. The scripts of a version are in `migrations/<version>/`,
+/// and their names give the order they run in.
+const MIGRATIONS: [Migration; CURRENT_SCHEMA_VERSION as usize] = [
+    Migration {
+        foreign_keys_off: false,
+        steps: &[Step::Sql(include_str!("migrations/0001/01_library.sql"))],
+    },
+    Migration {
+        foreign_keys_off: false,
+        steps: &[
+            Step::Sql(include_str!("migrations/0002/01_catalog_keys.sql")),
+            Step::Rust(legacy::backfill_track_keys),
+            // After the backfill, so the indexes are built once instead of kept up to date per row.
+            Step::Sql(include_str!("migrations/0002/02_catalog_indexes.sql")),
+        ],
+    },
+    Migration {
+        foreign_keys_off: false,
+        steps: &[Step::Sql(include_str!(
+            "migrations/0003/01_file_identity.sql"
+        ))],
+    },
+    Migration {
+        foreign_keys_off: false,
+        steps: &[
+            Step::Sql(include_str!("migrations/0004/01_catalog_summaries.sql")),
+            Step::Rust(legacy::backfill_catalog_keys),
+            // After the backfill, so the indexes are built once instead of kept up to date per row.
+            Step::Sql(include_str!("migrations/0004/02_catalog_indexes.sql")),
+        ],
+    },
+    Migration {
+        foreign_keys_off: true,
+        steps: &[
+            Step::Sql(include_str!("migrations/0005/01_tracks_autoincrement.sql")),
+            Step::Sql(include_str!("migrations/0005/02_catalog_ids.sql")),
+            // The same rebuild a rescan uses, so the migrated summaries are the ones it would make.
+            Step::Rust(summary::rebuild),
+            // After the rebuild, so the indexes are built once instead of kept up to date per row.
+            Step::Sql(include_str!("migrations/0005/03_catalog_indexes.sql")),
+        ],
+    },
 ];
 
 #[derive(Debug)]
 pub enum MigrationError {
     SchemaTooNew,
     Sql,
+    /// A migration that rebuilt tables left a row pointing at nothing.
+    ForeignKeys,
 }
 impl From<rusqlite::Error> for MigrationError {
     fn from(error: rusqlite::Error) -> Self {
@@ -43,152 +81,65 @@ pub fn apply(connection: &mut Connection) -> Result<(), MigrationError> {
     if version > CURRENT_SCHEMA_VERSION {
         return Err(MigrationError::SchemaTooNew);
     };
-    if version == CURRENT_SCHEMA_VERSION {
-        return Ok(());
-    };
+    for (index, migration) in MIGRATIONS.iter().enumerate().skip(version as usize) {
+        migrate(connection, migration, index as i32 + 1)?;
+    }
+    Ok(())
+}
+
+/// Runs one version. Foreign keys are switched off outside the transaction (SQLite ignores the
+/// switch inside one) and back on after it, even when it failed.
+fn migrate(
+    connection: &mut Connection,
+    migration: &Migration,
+    version: i32,
+) -> Result<(), MigrationError> {
+    if migration.foreign_keys_off {
+        connection.pragma_update(None, "foreign_keys", false)?;
+    }
+    let result = run_in_transaction(connection, migration, version);
+    if migration.foreign_keys_off {
+        connection.pragma_update(None, "foreign_keys", true)?;
+    }
+    result
+}
+
+fn run_in_transaction(
+    connection: &mut Connection,
+    migration: &Migration,
+    version: i32,
+) -> Result<(), MigrationError> {
     let transaction = connection.transaction()?;
-    for step in MIGRATIONS
-        .iter()
-        .skip(version as usize)
-        .flat_map(|steps| steps.iter())
-    {
+    for step in migration.steps {
         match step {
             Step::Sql(sql) => transaction.execute_batch(sql)?,
             Step::Rust(run) => run(&transaction)?,
         }
     }
-    transaction.pragma_update(None, "user_version", CURRENT_SCHEMA_VERSION)?;
+    if migration.foreign_keys_off {
+        let mut check = transaction.prepare("PRAGMA foreign_key_check")?;
+        if check.exists([])? {
+            log::error!("library.migration.foreign_key_check version={version}");
+            return Err(MigrationError::ForeignKeys);
+        }
+    }
+    transaction.pragma_update(None, "user_version", version)?;
     transaction.commit()?;
     Ok(())
-}
-
-/// Gives every existing track the keys the scanner now writes, from the tags it already has.
-fn backfill_track_keys(transaction: &Transaction) -> rusqlite::Result<()> {
-    type Row = (i64, [Option<String>; 5], String);
-    let rows: Vec<Row> = transaction
-        .prepare(
-            "SELECT m.track_id, m.title, m.artist, m.album, m.album_artist, m.date, f.file_name
-             FROM track_source_metadata m
-             JOIN tracks t ON t.id = m.track_id
-             JOIN library_files f ON f.id = t.file_id",
-        )?
-        .query_map([], |row| {
-            Ok((
-                row.get(0)?,
-                [
-                    row.get(1)?,
-                    row.get(2)?,
-                    row.get(3)?,
-                    row.get(4)?,
-                    row.get(5)?,
-                ],
-                row.get(6)?,
-            ))
-        })?
-        .collect::<Result<_, _>>()?;
-    let mut update = transaction.prepare(
-        "UPDATE track_source_metadata
-         SET title_key = ?2, artist_key = ?3, album_key = ?4, album_artist_key = ?5, year = ?6
-         WHERE track_id = ?1",
-    )?;
-    for (track_id, [title, artist, album, album_artist, date], file_name) in rows {
-        let keys = TrackKeys::new(
-            title.as_deref(),
-            artist.as_deref(),
-            album.as_deref(),
-            album_artist.as_deref(),
-            date.as_deref(),
-            &file_name,
-        );
-        update.execute(params![
-            track_id,
-            keys.title,
-            keys.artist,
-            keys.album,
-            keys.album_artist,
-            keys.year
-        ])?;
-    }
-    Ok(())
-}
-
-/// Gives every existing track the sort, search and album_edition keys from the tags it already has
-/// (SortOrder tags arrive with the rescan this migration asks for), settles compilations and
-/// fills the album and Album Artist summaries.
-fn backfill_catalog_keys(transaction: &Transaction) -> rusqlite::Result<()> {
-    type Row = (i64, [Option<String>; 5], String, i64, String);
-    let rows: Vec<Row> = transaction
-        .prepare(
-            "SELECT m.track_id, m.title, m.artist, m.album, m.album_artist, m.date, f.file_name,
-                    f.root_id, f.relative_path
-             FROM track_source_metadata m
-             JOIN tracks t ON t.id = m.track_id
-             JOIN library_files f ON f.id = t.file_id",
-        )?
-        .query_map([], |row| {
-            Ok((
-                row.get(0)?,
-                [
-                    row.get(1)?,
-                    row.get(2)?,
-                    row.get(3)?,
-                    row.get(4)?,
-                    row.get(5)?,
-                ],
-                row.get(6)?,
-                row.get(7)?,
-                row.get(8)?,
-            ))
-        })?
-        .collect::<Result<_, _>>()?;
-    let mut update = transaction.prepare(
-        "UPDATE track_source_metadata
-         SET title_key = ?2, artist_key = ?3, album_key = ?4, album_artist_key = ?5, year = ?6,
-             title_sort = ?7, artist_sort = ?8, album_sort = ?9, album_artist_sort = ?10,
-             search_key = ?11, album_dir = ?12
-         WHERE track_id = ?1",
-    )?;
-    for (track_id, [title, artist, album, album_artist, date], file_name, root_id, relative) in rows
-    {
-        let keys = TrackKeys::build(
-            [
-                title.as_deref(),
-                artist.as_deref(),
-                album.as_deref(),
-                album_artist.as_deref(),
-            ],
-            date.as_deref(),
-            &file_name,
-            SortTags::default(),
-            &album_edition_of(root_id, &relative),
-        );
-        update.execute(params![
-            track_id,
-            keys.title,
-            keys.artist,
-            keys.album,
-            keys.album_artist,
-            keys.year,
-            keys.title_sort,
-            keys.artist_sort,
-            keys.album_sort,
-            keys.album_artist_sort,
-            keys.search,
-            keys.album_folder,
-        ])?;
-    }
-    summary::rebuild(transaction)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ids::{AlbumId, register_sql_functions};
+    use std::ffi::OsStr;
 
     /// A database as the first release left it, holding one track.
     fn first_release() -> Connection {
         let connection = Connection::open_in_memory().unwrap();
+        register_sql_functions(&connection).unwrap();
         connection
-            .execute_batch(include_str!("migrations/0001_library.sql"))
+            .execute_batch(include_str!("migrations/0001/01_library.sql"))
             .unwrap();
         connection
             .execute_batch(
@@ -210,9 +161,17 @@ mod tests {
 
         let keys: (String, String, String, String, Option<i32>) = connection
             .query_row(
-                "SELECT title_key, artist_key, album_key, album_artist_key, year FROM track_source_metadata",
+                "SELECT title, artist, album, album_artist, year FROM track_source_metadata",
                 [],
-                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                    ))
+                },
             )
             .unwrap();
         assert_eq!(
@@ -255,7 +214,7 @@ mod tests {
 
         let keys: (String, String, String, String) = connection
             .query_row(
-                "SELECT title_sort, artist_sort, search_key, album_dir FROM track_source_metadata",
+                "SELECT title_sort, artist_sort, search_text, album_directory FROM track_source_metadata",
                 [],
                 |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
             )
@@ -269,9 +228,9 @@ mod tests {
                 "1/".into()
             )
         );
-        let album: (String, String, String, i64, Option<i64>) = connection
+        let album: (String, String, String, i64, Option<i64>, String) = connection
             .query_row(
-                "SELECT album_artist_key, album_key, album_sort, track_count, year FROM albums",
+                "SELECT album_artist, title, title_sort, track_count, year, id FROM albums",
                 [],
                 |row| {
                     Ok((
@@ -280,17 +239,25 @@ mod tests {
                         row.get(2)?,
                         row.get(3)?,
                         row.get(4)?,
+                        row.get(5)?,
                     ))
                 },
             )
             .unwrap();
         assert_eq!(
             album,
-            ("Singer".into(), "Record".into(), "record".into(), 1, None)
+            (
+                "Singer".into(),
+                "Record".into(),
+                "record".into(),
+                1,
+                None,
+                AlbumId::of("Singer", "Record", OsStr::new("C:/Music/")).to_hex(),
+            )
         );
         let artist: (String, i64, i64) = connection
             .query_row(
-                "SELECT name, album_count, track_count FROM album_artists",
+                "SELECT name, album_count, track_count FROM artists",
                 [],
                 |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
             )

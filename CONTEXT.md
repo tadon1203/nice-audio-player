@@ -18,7 +18,7 @@ The language of Nice Audio Player. Use these terms in code, docs, and tickets. D
 - **Library**: the indexed set of tracks from the registered music folders.
 - **Library scan**: discovering, inspecting, and indexing files in batches.
 - **Album Artist**: the artist an album is filed under.
-- **Album**: the tracks that share an Album Artist, a title, and a folder. A disc folder counts as the folder above it. Two printings of one album in two folders are two albums.
+- **Album**: the tracks that share an Album Artist, a title, and a directory. A disc directory counts as the directory above it. Two printings of one album in two directories are two albums.
 - **Compilation**: tracks that share a directory and an album title, but not an artist. They are one album, filed under Various Artists.
 - **Missing track**: a track whose file is gone. A new file with the same content is that track again (relinked, same `track_id`).
 - **Scroll index**: a list's names grouped by first character, counted in the list's own order. It backs the big letter shown while scrolling and the jump to a letter.

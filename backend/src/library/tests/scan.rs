@@ -9,17 +9,17 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 
-struct Fixture {
+pub(super) struct Fixture {
     _directory: TestDirectory,
-    music: PathBuf,
-    database: Database,
+    pub(super) music: PathBuf,
+    pub(super) database: Database,
 }
 
 fn notifier() -> Notifier {
     Notifier::new(null_message_sink(), StateTopic::LibraryScan)
 }
 
-fn fixture() -> Fixture {
+pub(super) fn fixture() -> Fixture {
     let directory = TestDirectory::new();
     let music = directory.file("music");
     std::fs::create_dir_all(&music).unwrap();
@@ -33,11 +33,11 @@ fn fixture() -> Fixture {
     }
 }
 
-fn write_tone(path: &Path, samples: usize) {
+pub(super) fn write_tone(path: &Path, samples: usize) {
     write_pcm_i16_wav(path, 8_000, 1, &vec![1_000i16; samples]);
 }
 
-fn run_scan(fixture: &Fixture, cancelled: bool) -> LibraryScanSnapshot {
+pub(super) fn run_scan(fixture: &Fixture, cancelled: bool) -> LibraryScanSnapshot {
     run_jobs(fixture, cancelled, None)
 }
 
@@ -321,9 +321,17 @@ fn a_scan_files_each_track_under_keys_derived_from_its_tags_and_file_name() {
         .read()
         .unwrap()
         .query_row(
-            "SELECT title_key, artist_key, album_key, album_artist_key, year FROM track_source_metadata",
+            "SELECT title, artist, album, album_artist, year FROM track_source_metadata",
             [],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                ))
+            },
         )
         .unwrap();
     assert_eq!(
@@ -400,7 +408,7 @@ fn a_folder_holding_the_data_directory_cannot_be_registered() {
     ));
 }
 
-fn track_ids_by_path(fixture: &Fixture) -> Vec<(String, i64)> {
+pub(super) fn track_ids_by_path(fixture: &Fixture) -> Vec<(String, i64)> {
     let c = fixture.database.read().unwrap();
     let mut statement = c
         .prepare("SELECT f.relative_path, t.id FROM tracks t JOIN library_files f ON f.id = t.file_id ORDER BY f.relative_path")
@@ -612,7 +620,7 @@ fn tag(path: &Path, fields: &[(lofty::tag::ItemKey, &str)]) {
         .expect("tag written");
 }
 
-fn tagged_tone(path: &Path, samples: usize, fields: &[(lofty::tag::ItemKey, &str)]) {
+pub(super) fn tagged_tone(path: &Path, samples: usize, fields: &[(lofty::tag::ItemKey, &str)]) {
     write_tone(path, samples);
     tag(path, fields);
 }
@@ -621,8 +629,8 @@ fn albums(fixture: &Fixture) -> Vec<(String, String, String, i64)> {
     let connection = fixture.database.read().unwrap();
     let mut statement = connection
         .prepare(
-            "SELECT album_artist_key, album_key, album_dir, track_count FROM albums
-             ORDER BY album_dir, album_artist_key",
+            "SELECT album_artist, title, album_directory, track_count FROM albums
+             ORDER BY album_directory, album_artist",
         )
         .unwrap();
 
@@ -681,7 +689,7 @@ fn tracks_of_one_folder_and_album_with_different_artists_are_a_compilation() {
         .database
         .read()
         .unwrap()
-        .prepare("SELECT name FROM album_artists ORDER BY name")
+        .prepare("SELECT name FROM artists ORDER BY name")
         .unwrap()
         .query_map([], |row| row.get(0))
         .unwrap()
@@ -723,7 +731,7 @@ fn sort_order_tags_win_over_derived_sort_keys() {
         .database
         .read()
         .unwrap()
-        .prepare("SELECT title_key, title_sort FROM track_source_metadata ORDER BY title_sort")
+        .prepare("SELECT title, title_sort FROM track_source_metadata ORDER BY title_sort")
         .unwrap()
         .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
         .unwrap()

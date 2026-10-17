@@ -42,16 +42,17 @@ const UPSERT_ARTWORK_ASSET: &str = "
 
 const UPSERT_SOURCE_METADATA: &str = "
     INSERT INTO track_source_metadata(
-        track_id, source_revision, title, artist, album, album_artist, track_number, track_total,
-        disc_number, disc_total, genre, date, duration_ms, file_format, codec, sample_rate,
-        channel_count, bit_depth, bitrate_kbps, tag_status, artwork_status, artwork_id,
-        title_key, artist_key, album_key, album_artist_key, year, title_sort, artist_sort,
-        album_sort, album_artist_sort, search_key, album_dir)
+        track_id, source_revision, tag_title, tag_artist, tag_album, tag_album_artist,
+        track_number, track_total, disc_number, disc_total, genre, date, duration_ms, file_format,
+        codec, sample_rate, channel_count, bit_depth, bitrate_kbps, tag_status, artwork_status,
+        artwork_id, title, artist, album, album_artist, year, title_sort, artist_sort, album_sort,
+        album_artist_sort, search_text, album_id, album_directory)
     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19,
-            ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33)
+            ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34)
     ON CONFLICT(track_id) DO UPDATE SET
-        source_revision = excluded.source_revision, title = excluded.title,
-        artist = excluded.artist, album = excluded.album, album_artist = excluded.album_artist,
+        source_revision = excluded.source_revision, tag_title = excluded.tag_title,
+        tag_artist = excluded.tag_artist, tag_album = excluded.tag_album,
+        tag_album_artist = excluded.tag_album_artist,
         track_number = excluded.track_number, track_total = excluded.track_total,
         disc_number = excluded.disc_number, disc_total = excluded.disc_total,
         genre = excluded.genre, date = excluded.date, duration_ms = excluded.duration_ms,
@@ -59,12 +60,13 @@ const UPSERT_SOURCE_METADATA: &str = "
         sample_rate = excluded.sample_rate, channel_count = excluded.channel_count,
         bit_depth = excluded.bit_depth, bitrate_kbps = excluded.bitrate_kbps,
         tag_status = excluded.tag_status, artwork_status = excluded.artwork_status,
-        artwork_id = excluded.artwork_id, title_key = excluded.title_key,
-        artist_key = excluded.artist_key, album_key = excluded.album_key,
-        album_artist_key = excluded.album_artist_key, year = excluded.year,
+        artwork_id = excluded.artwork_id, title = excluded.title,
+        artist = excluded.artist, album = excluded.album,
+        album_artist = excluded.album_artist, year = excluded.year,
         title_sort = excluded.title_sort, artist_sort = excluded.artist_sort,
         album_sort = excluded.album_sort, album_artist_sort = excluded.album_artist_sort,
-        search_key = excluded.search_key, album_dir = excluded.album_dir";
+        search_text = excluded.search_text, album_id = excluded.album_id,
+        album_directory = excluded.album_directory";
 
 /// Any database failure. The scan stops on it; the cause is logged where it is built and stays
 /// out of the IPC surface.
@@ -211,6 +213,11 @@ impl LibraryWriter {
         let transaction = self
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let root_path: String = transaction.query_row(
+            "SELECT path FROM library_roots WHERE id = ?1",
+            params![root_id],
+            |row| row.get(0),
+        )?;
         let mut touched = Touched::default();
         for outcome in outcomes {
             match outcome {
@@ -238,7 +245,7 @@ impl LibraryWriter {
                     store_file(
                         &transaction,
                         &mut touched,
-                        root_id,
+                        (root_id, &root_path),
                         generation,
                         *known,
                         file,
@@ -296,7 +303,7 @@ fn touch(transaction: &Transaction, file_id: i64, generation: i64) -> Persisted<
 fn store_file(
     transaction: &Transaction,
     touched: &mut Touched,
-    root_id: i64,
+    (root_id, root_path): (i64, &str),
     generation: i64,
     known: Option<(i64, i64)>,
     file: &DiscoveredFile,
@@ -353,7 +360,7 @@ fn store_file(
             touched,
             file_id,
             revision,
-            (root_id, file),
+            (root_id, root_path, file),
             inspected,
         ),
         Err(Undecodable) => clear_metadata(transaction, touched, file_id, revision, file),
@@ -365,7 +372,7 @@ fn store_inspected(
     touched: &mut Touched,
     file_id: i64,
     revision: i64,
-    (root_id, file): (i64, &DiscoveredFile),
+    (root_id, root_path, file): (i64, &str, &DiscoveredFile),
     inspected: &InspectedFile,
 ) -> Persisted<()> {
     transaction.execute(
@@ -396,13 +403,10 @@ fn store_inspected(
             album_artist: tags.album_artist_sort.as_deref(),
         },
         &album_edition_of(root_id, &file.relative),
+        root_path,
     );
     touched.stored_track(transaction, track_id)?;
-    touched.album((
-        keys.album_artist.clone(),
-        keys.album.clone(),
-        keys.album_folder.clone(),
-    ));
+    touched.album(keys.album_id.clone(), &keys.album_directory, &keys.album);
     transaction.execute(
         UPSERT_SOURCE_METADATA,
         params![
@@ -438,7 +442,8 @@ fn store_inspected(
             keys.album_sort,
             keys.album_artist_sort,
             keys.search,
-            keys.album_folder
+            keys.album_id,
+            keys.album_directory
         ],
     )?;
     Ok(())
@@ -466,14 +471,15 @@ fn clear_metadata(
     let keys = TrackKeys::new(None, None, None, None, None, &file.file_name);
     transaction.execute(
         "UPDATE track_source_metadata
-         SET source_revision = ?2, title = NULL, artist = NULL, album = NULL, album_artist = NULL,
+         SET source_revision = ?2, tag_title = NULL, tag_artist = NULL, tag_album = NULL,
+             tag_album_artist = NULL,
              track_number = NULL, track_total = NULL, disc_number = NULL, disc_total = NULL,
              genre = NULL, date = NULL, duration_ms = NULL, file_format = NULL, codec = NULL,
              sample_rate = NULL, channel_count = NULL, bit_depth = NULL, bitrate_kbps = NULL,
              tag_status = ?3, artwork_status = ?4, artwork_id = NULL,
-             title_key = ?5, artist_key = '', album_key = '', album_artist_key = '', year = NULL,
+             title = ?5, artist = '', album = '', album_artist = '', year = NULL,
              title_sort = ?6, artist_sort = '', album_sort = '', album_artist_sort = '',
-             search_key = ?7, album_dir = ''
+             search_text = ?7, album_id = ?8, album_directory = ''
          WHERE track_id = (SELECT id FROM tracks WHERE file_id = ?1)",
         params![
             file_id,
@@ -482,10 +488,11 @@ fn clear_metadata(
             ArtworkStatus::NotPresent,
             keys.title,
             keys.title_sort,
-            keys.search
+            keys.search,
+            keys.album_id
         ],
     )?;
-    touched.album((String::new(), String::new(), String::new()));
+    touched.album(keys.album_id, "", "");
     Ok(())
 }
 

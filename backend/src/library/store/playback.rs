@@ -3,7 +3,7 @@
 
 use super::{
     LibraryStore,
-    catalog::{ALBUM_ORDER, track_filter, track_ordering, validate_album_key},
+    catalog::{ALBUM_ORDER, album_id_of, track_filter, track_ordering, validate_album_key},
     track::{artwork_ref, non_blank},
 };
 use crate::library::{
@@ -103,8 +103,9 @@ struct PlaybackRow {
     artist: String,
     album: String,
     album_artist: Option<String>,
-    album_artist_key: String,
-    album_dir: String,
+    album_artist_name: String,
+    album_directory: String,
+    album_id: String,
     duration_ms: Option<i64>,
     artwork: Option<ArtworkRef>,
     track_number: Option<i64>,
@@ -124,17 +125,18 @@ impl PlaybackRow {
     fn album_key(&self) -> Option<LibraryAlbumKey> {
         (!self.album.is_empty()).then(|| LibraryAlbumKey {
             title: self.album.clone(),
-            album_artist: self.album_artist_key.clone(),
-            album_edition: self.album_dir.clone(),
+            album_artist: self.album_artist_name.clone(),
+            album_edition: self.album_directory.clone(),
         })
     }
 }
 
-type AlbumCounts = HashMap<LibraryAlbumKey, u32>;
+/// How many tracks each album has, by album ID.
+type AlbumCounts = HashMap<String, u32>;
 
 /// The columns every playback query returns, in the order `playback_row` reads them, and what they
 /// are selected from.
-const PLAYBACK_COLUMNS: &str = "t.id, r.path, f.relative_path, f.availability, f.inspection_status, m.title_key, m.artist_key, m.album_key, m.album_artist, m.album_artist_key, m.duration_ms, a.content_hash, a.mime_type, m.track_number, m.disc_number, m.year, m.file_format, m.bit_depth, m.bitrate_kbps, m.album_dir, f.content_hash";
+const PLAYBACK_COLUMNS: &str = "t.id, r.path, f.relative_path, f.availability, f.inspection_status, m.title, m.artist, m.album, m.tag_album_artist, m.album_artist, m.duration_ms, a.content_hash, a.mime_type, m.track_number, m.disc_number, m.year, m.file_format, m.bit_depth, m.bitrate_kbps, m.album_directory, f.content_hash, m.album_id";
 const PLAYBACK_FROM: &str = "FROM track_source_metadata m JOIN tracks t ON t.id = m.track_id JOIN library_files f ON f.id = t.file_id JOIN library_roots r ON r.id = f.root_id LEFT JOIN artwork_assets a ON a.id = m.artwork_id";
 
 fn playback_row(row: &Row<'_>) -> rusqlite::Result<PlaybackRow> {
@@ -150,8 +152,9 @@ fn playback_row(row: &Row<'_>) -> rusqlite::Result<PlaybackRow> {
         artist: row.get(6)?,
         album: row.get(7)?,
         album_artist: row.get(8)?,
-        album_artist_key: row.get(9)?,
-        album_dir: row.get(19)?,
+        album_artist_name: row.get(9)?,
+        album_directory: row.get(19)?,
+        album_id: row.get(21)?,
         duration_ms: row.get(10)?,
         artwork: artwork_ref(row.get(11)?, row.get(12)?),
         track_number: row.get(13)?,
@@ -204,7 +207,9 @@ fn playable_track(
         file
     };
     let album_key = row.album_key();
-    let album_track_count = album_key.as_ref().and_then(|key| counts.get(key).copied());
+    let album_track_count = album_key
+        .as_ref()
+        .and_then(|_| counts.get(&row.album_id).copied());
     Ok(Some(PlayableTrack {
         track_id: row.track_id.to_string(),
         file,
@@ -299,14 +304,15 @@ impl LibraryStore {
         validate_album_key(key)?;
         let start_track_id = parse_start_track(start_track_id)?;
         let connection = self.read()?;
+        let album_id = album_id_of(&connection, key)?;
         let rows = collect_selection(
             &connection,
             &format!(
                 "SELECT {SELECTION_COLUMNS} {SELECTION_FROM}
-                 WHERE m.album_artist_key = ?1 AND m.album_key = ?2 AND m.album_dir = ?3
+                 WHERE m.album_id = ?1
                  ORDER BY {ALBUM_ORDER}"
             ),
-            params![key.album_artist, key.title, key.album_edition],
+            params![album_id],
         )?;
         if rows.is_empty() {
             return Err(PlaybackSourceError::AlbumNotFound);
@@ -327,7 +333,7 @@ impl LibraryStore {
         let Some(row) = rows.into_iter().next() else {
             return Err(PlaybackSourceError::InvalidTrackId);
         };
-        let counts = album_counts(&connection, row.album_key())?;
+        let counts = album_counts(&connection, [row.album_id.clone()])?;
         playable_track(row, &counts, true)?.ok_or(PlaybackSourceError::NoPlayableTracks)
     }
 
@@ -350,7 +356,7 @@ impl LibraryStore {
                 &format!("SELECT {PLAYBACK_COLUMNS} {PLAYBACK_FROM} WHERE t.id IN ({marks})"),
                 rusqlite::params_from_iter(ids),
             )?;
-            let counts = album_counts(&connection, rows.iter().filter_map(PlaybackRow::album_key))?;
+            let counts = album_counts(&connection, rows.iter().map(|row| row.album_id.clone()))?;
             for row in rows {
                 let id = row.track_id;
                 if let Some(track) = playable_track(row, &counts, false)? {
@@ -388,49 +394,33 @@ impl LibraryStore {
     }
 }
 
-/// How many tracks the library holds for each of `keys` (and for no other album), in one query.
+/// How many tracks the library holds for each of `album_ids` (and for no other album), in one
+/// query per chunk.
 fn album_counts(
     connection: &Connection,
-    keys: impl IntoIterator<Item = LibraryAlbumKey>,
+    album_ids: impl IntoIterator<Item = String>,
 ) -> Result<AlbumCounts, PlaybackSourceError> {
-    let mut wanted: Vec<LibraryAlbumKey> = Vec::new();
-    for key in keys {
-        if !wanted.contains(&key) {
-            wanted.push(key);
-        }
-    }
+    let mut wanted: Vec<String> = album_ids.into_iter().collect();
+    wanted.sort();
+    wanted.dedup();
     let mut counts = AlbumCounts::new();
-    for chunk in wanted.chunks(IDS_PER_QUERY / 2) {
-        let pairs = vec!["(?,?,?)"; chunk.len()].join(",");
+    for chunk in wanted.chunks(IDS_PER_QUERY) {
+        let marks = vec!["?"; chunk.len()].join(",");
         let mut statement = connection
             .prepare(&format!(
-                "SELECT album_artist_key, album_key, album_dir, COUNT(*) FROM track_source_metadata
-                 WHERE (album_artist_key, album_key, album_dir) IN (VALUES {pairs})
-                 GROUP BY album_artist_key, album_key, album_dir"
+                "SELECT album_id, COUNT(*) FROM track_source_metadata
+                 WHERE album_id IN ({marks})
+                 GROUP BY album_id"
             ))
             .map_err(StoreError::from)?;
-        let params = chunk.iter().flat_map(|key| {
-            [
-                key.album_artist.as_str(),
-                key.title.as_str(),
-                key.album_edition.as_str(),
-            ]
-        });
         let rows = statement
-            .query_map(rusqlite::params_from_iter(params), |row| {
-                Ok((
-                    LibraryAlbumKey {
-                        album_artist: row.get(0)?,
-                        title: row.get(1)?,
-                        album_edition: row.get(2)?,
-                    },
-                    row.get::<_, u32>(3)?,
-                ))
+            .query_map(rusqlite::params_from_iter(chunk), |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, u32>(1)?))
             })
             .map_err(StoreError::from)?;
         for row in rows {
-            let (key, count) = row.map_err(StoreError::from)?;
-            counts.insert(key, count);
+            let (album_id, count) = row.map_err(StoreError::from)?;
+            counts.insert(album_id, count);
         }
     }
     Ok(counts)

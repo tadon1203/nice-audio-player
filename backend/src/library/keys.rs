@@ -5,6 +5,8 @@
 //! Unknown is the empty string: the backend never returns display strings (ARCHITECTURE).
 
 use super::text;
+use crate::ids::AlbumId;
+use std::ffi::OsStr;
 use std::path::Path;
 
 /// The SortOrder tags of a track (`TITLESORT`, `ARTISTSORT`, `ALBUMSORT`, `ALBUMARTISTSORT`).
@@ -31,8 +33,12 @@ pub(crate) struct TrackKeys {
     pub album_artist_sort: String,
     /// The folded names the filter looks in.
     pub search: String,
-    /// Which printing of the album the track is on, `""` for a track with no album.
-    pub album_folder: String,
+    /// Which printing of the album the track is on (see [`album_edition_of`]), `""` for a track
+    /// with no album.
+    pub album_directory: String,
+    /// The album the track is on (see `AlbumId`); a track with no album has the ID of an empty
+    /// title in an empty directory.
+    pub album_id: String,
 }
 
 impl TrackKeys {
@@ -50,17 +56,19 @@ impl TrackKeys {
             file_name,
             SortTags::default(),
             "",
+            "",
         )
     }
 
-    /// All the keys. `album_folder` is the album's folder (see [`album_edition_of`]), kept only
-    /// when the track has an album.
+    /// All the keys. `album_directory` is the album's edition (see [`album_edition_of`]) and
+    /// `root_path` the absolute path of its root. Both are kept only when the track has an album.
     pub fn build(
         [title, artist, album, album_artist]: [Option<&str>; 4],
         date: Option<&str>,
         file_name: &str,
         sort: SortTags<'_>,
-        album_folder: &str,
+        album_directory: &str,
+        root_path: &str,
     ) -> Self {
         let title_key = title_key(title, file_name);
         let artist_key = text_key(artist);
@@ -72,17 +80,25 @@ impl TrackKeys {
         } else {
             sort.album_artist
         };
+        let album_directory = if album_key.is_empty() {
+            String::new()
+        } else {
+            album_directory.to_owned()
+        };
+        let album_path = if album_key.is_empty() {
+            String::new()
+        } else {
+            absolute_directory(root_path, &album_directory)
+        };
+        let album_id = AlbumId::of(&album_artist_key, &album_key, OsStr::new(&album_path));
         Self {
             title_sort: text::sort_key(&title_key, sort.title),
             artist_sort: text::sort_key(&artist_key, sort.artist),
             album_sort: text::sort_key(&album_key, sort.album),
             album_artist_sort: text::sort_key(&album_artist_key, album_artist_sort_tag),
             search: track_search_key(&title_key, &artist_key, &album_key, &album_artist_key),
-            album_folder: if album_key.is_empty() {
-                String::new()
-            } else {
-                album_folder.to_owned()
-            },
+            album_directory,
+            album_id: album_id.to_hex(),
             title: title_key,
             artist: artist_key,
             album: album_key,
@@ -116,6 +132,16 @@ pub(crate) fn album_edition_of(root_id: i64, relative_path: &str) -> String {
         _ => directory,
     };
     format!("{root_id}/{directory}")
+}
+
+/// The absolute directory of an album edition: the root's path, `/`, then the directory below the
+/// root. `/` is written on every platform, so the text is the same in Rust and in SQL
+/// (`album_id()` joins them the same way).
+pub(crate) fn absolute_directory(root_path: &str, album_directory: &str) -> String {
+    let relative = album_directory
+        .split_once('/')
+        .map_or("", |(_, relative)| relative);
+    format!("{root_path}/{relative}")
 }
 
 fn is_disc_folder(name: &str) -> bool {
@@ -247,6 +273,7 @@ mod tests {
                 ..SortTags::default()
             },
             "1/d",
+            "C:/Music",
         );
         assert_eq!(keys.title_sort, "ゆず");
         assert_eq!(keys.artist_sort, "band, the");
@@ -255,7 +282,7 @@ mod tests {
             "the artist's order carries over"
         );
         assert_eq!(keys.album_sort, "");
-        assert_eq!(keys.album_folder, "", "no album, no album_folder");
+        assert_eq!(keys.album_directory, "", "no album, no album_directory");
         assert_eq!(keys.search, "ゆず\u{1f}the band\u{1f}\u{1f}the band");
     }
 

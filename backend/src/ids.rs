@@ -1,6 +1,10 @@
 //! Identifiers that are validated where they enter the Backend, so no later code checks them again.
 
+use crate::library::text;
+use rusqlite::functions::{Context, FunctionFlags};
+use rusqlite::types::{Type, ValueRef};
 use serde::{Deserialize, Serialize};
+use std::ffi::OsStr;
 
 /// Stored artwork: the 64-character blake3 hex of the image file.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
@@ -40,6 +44,99 @@ pub fn is_artwork_hash(value: &str) -> bool {
             .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
+/// An album: blake3 of its normalized Album Artist, normalized title, and absolute album
+/// directory. A track with no album hashes an empty directory.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct AlbumId([u8; 16]);
+
+/// An Album Artist: blake3 of the normalized name.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct ArtistId([u8; 16]);
+
+impl AlbumId {
+    pub fn of(album_artist: &str, title: &str, directory: &OsStr) -> Self {
+        Self::of_bytes(album_artist, title, directory.as_encoded_bytes())
+    }
+
+    /// The SQL function `album_id` takes the directory as the bytes SQLite holds, so it comes in
+    /// here as bytes. The same bytes give the same ID as [`AlbumId::of`].
+    fn of_bytes(album_artist: &str, title: &str, directory: &[u8]) -> Self {
+        Self(digest(&[
+            album_artist.as_bytes(),
+            title.as_bytes(),
+            directory,
+        ]))
+    }
+
+    /// 32 lowercase hex characters.
+    pub fn to_hex(self) -> String {
+        hex_of(&self.0)
+    }
+}
+
+impl ArtistId {
+    pub fn of(name: &str) -> Self {
+        Self(digest(&[name.as_bytes()]))
+    }
+
+    /// 32 lowercase hex characters.
+    pub fn to_hex(self) -> String {
+        hex_of(&self.0)
+    }
+}
+
+/// blake3 of the parts, each prefixed by its byte length, so no two different lists of parts
+/// hash the same input. The first 16 bytes are the ID.
+fn digest(parts: &[&[u8]]) -> [u8; 16] {
+    let mut hasher = blake3::Hasher::new();
+    for part in parts {
+        hasher.update(&(part.len() as u64).to_le_bytes());
+        hasher.update(part);
+    }
+    let mut id = [0; 16];
+    id.copy_from_slice(&hasher.finalize().as_bytes()[..16]);
+    id
+}
+
+fn hex_of(bytes: &[u8; 16]) -> String {
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+/// Registers the functions that compute IDs and search text in SQL, on a connection, so a
+/// migration and a query give the same values as Rust: `album_id(album_artist, title, directory)`,
+/// `artist_id(name)`, and `search_key(name, ...)` (the folded search text of the names).
+pub(crate) fn register_sql_functions(connection: &rusqlite::Connection) -> rusqlite::Result<()> {
+    let flags = FunctionFlags::SQLITE_UTF8 | FunctionFlags::SQLITE_DETERMINISTIC;
+    connection.create_scalar_function("album_id", 3, flags, |context| {
+        let album_artist: String = context.get(0)?;
+        let title: String = context.get(1)?;
+        let directory = bytes_argument(context, 2)?;
+        Ok(AlbumId::of_bytes(&album_artist, &title, &directory).to_hex())
+    })?;
+    connection.create_scalar_function("artist_id", 1, flags, |context| {
+        let name: String = context.get(0)?;
+        Ok(ArtistId::of(&name).to_hex())
+    })?;
+    connection.create_scalar_function("search_key", -1, flags, |context| {
+        let names = (0..context.len())
+            .map(|index| context.get::<String>(index))
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        let names: Vec<&str> = names.iter().map(String::as_str).collect();
+        Ok(text::search_key(&names))
+    })
+}
+
+/// A text or blob argument as its bytes.
+fn bytes_argument(context: &Context<'_>, index: usize) -> rusqlite::Result<Vec<u8>> {
+    match context.get_raw(index) {
+        ValueRef::Text(bytes) | ValueRef::Blob(bytes) => Ok(bytes.to_vec()),
+        _ => Err(rusqlite::Error::InvalidFunctionParameterType(
+            index,
+            Type::Null,
+        )),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -70,6 +167,82 @@ mod tests {
         assert_eq!(
             serde_json::to_value(&parsed).unwrap(),
             serde_json::json!(good)
+        );
+    }
+
+    fn connection() -> rusqlite::Connection {
+        let connection = rusqlite::Connection::open_in_memory().unwrap();
+        register_sql_functions(&connection).unwrap();
+        connection
+    }
+
+    fn sql_album_id(connection: &rusqlite::Connection, directory: &[u8]) -> String {
+        connection
+            .query_row(
+                "SELECT album_id(?1, ?2, ?3)",
+                rusqlite::params!["Band", "Album", directory],
+                |row| row.get(0),
+            )
+            .unwrap()
+    }
+
+    #[test]
+    fn sql_ids_are_the_rust_ids() {
+        let connection = connection();
+        let directory = r"C:\Music\Band\Album";
+
+        assert_eq!(
+            sql_album_id(&connection, directory.as_bytes()),
+            AlbumId::of("Band", "Album", OsStr::new(directory)).to_hex()
+        );
+        let artist: String = connection
+            .query_row("SELECT artist_id('Band')", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(artist, ArtistId::of("Band").to_hex());
+        let search: String = connection
+            .query_row("SELECT search_key('ユズ', 'Band')", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(search, text::search_key(&["ユズ", "Band"]));
+    }
+
+    #[test]
+    fn an_id_is_32_lowercase_hex_digits() {
+        let hex = AlbumId::of("a", "b", OsStr::new("c")).to_hex();
+        assert_eq!(hex.len(), 32);
+        assert!(
+            hex.bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        );
+    }
+
+    #[test]
+    fn the_length_prefix_keeps_different_parts_apart() {
+        let connection = connection();
+        let directory: &[u8] = b"dir";
+        let joined = connection
+            .query_row(
+                "SELECT album_id('ab', 'c', ?1) = album_id('a', 'bc', ?1)",
+                [directory],
+                |row| row.get::<_, bool>(0),
+            )
+            .unwrap();
+        assert!(!joined);
+        assert_ne!(
+            AlbumId::of("ab", "c", OsStr::new("dir")),
+            AlbumId::of("a", "bc", OsStr::new("dir"))
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_path_that_is_not_valid_utf_16_hashes_the_same_in_sql_and_rust() {
+        use std::os::windows::ffi::OsStringExt;
+        let connection = connection();
+        // An unpaired surrogate is no text, but its encoded bytes are stored and hashed as they are.
+        let path = std::ffi::OsString::from_wide(&[0xD800, b'x' as u16]);
+        assert_eq!(
+            sql_album_id(&connection, path.as_encoded_bytes()),
+            AlbumId::of("Band", "Album", &path).to_hex()
         );
     }
 }

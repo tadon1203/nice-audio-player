@@ -1,4 +1,5 @@
 use super::migrations::{self, MigrationError};
+use crate::ids::register_sql_functions;
 use rusqlite::{Connection, OpenFlags};
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
@@ -172,9 +173,11 @@ pub(crate) fn apply_requested_reset(directory: &Path) {
     log::info!("library.database.reset");
 }
 
+/// Every connection goes through here, and the SQL functions are registered before any migration
+/// runs, because a migration computes IDs with them.
 fn configure_common(connection: &Connection) -> rusqlite::Result<()> {
     connection.execute_batch("PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;")?;
-    Ok(())
+    register_sql_functions(connection)
 }
 fn verify_wal(connection: &Connection) -> rusqlite::Result<()> {
     let mode: String = connection.pragma_query_value(None, "journal_mode", |row| row.get(0))?;

@@ -1,25 +1,29 @@
 //! The catalog lists: Tracks, Albums, Album Artists, an Album Artist's albums and an album's
 //! tracks, plus the details of one album or Album Artist, and the scroll index of a list.
 //!
-//! Tracks are read from the key columns of `track_source_metadata` (see `library/keys.rs`);
+//! Tracks are read from the normalized columns of `track_source_metadata` (see `library/keys.rs`);
 //! Albums and Album Artists from their own summary tables (see `library/summary.rs`), so a page
-//! of either is an index range and no aggregate runs while paging. An album is its (Album Artist,
-//! album, folder) triple, unknown is the empty string and sorts last, and a list pages by keyset
-//! (see `paging.rs`). Only the first page of a list says how long the list is.
+//! of either is an index range and no aggregate runs while paging. An album is found by its ID,
+//! which is hashed from its (Album Artist, title, directory) (see `ids.rs`). Unknown is the empty
+//! string and sorts last, and a list pages by keyset (see `paging.rs`). Only the first page of a
+//! list says how long the list is.
 
 use super::{
     LibraryStore, SearchFilter, is_normalized,
     paging::{Ordering, Page, PagedQuery, Phase, Scope, View},
     track::{SUMMARY_COLUMN_COUNT, SUMMARY_COLUMNS, SUMMARY_FROM, artwork_ref, summary_from_row},
 };
+use crate::ids::{AlbumId, ArtistId};
 use crate::library::{
     artwork::ArtworkRef,
     error::StoreError,
+    keys::absolute_directory,
     models::*,
     status::{Availability, InspectionStatus},
     text,
 };
 use rusqlite::{Connection, OptionalExtension, Row, params, types::Value};
+use std::ffi::OsStr;
 
 /// An album's tracks in playing order: by disc, then track, unnumbered ones last.
 pub(super) const ALBUM_ORDER: &str =
@@ -44,7 +48,7 @@ fn validate_artist_key(key: &LibraryAlbumArtistKey) -> Result<(), StoreError> {
 /// The tracks a search matches: by title, artist, album or Album Artist. Shared by the page and
 /// by playback, so "play what I see" cannot drift from the list.
 pub(super) fn track_filter(search: Option<&str>) -> SearchFilter {
-    SearchFilter::new(search, "m.search_key")
+    SearchFilter::new(search, "m.search_text")
 }
 
 /// The sort key column a track sort order is by, when it has a scroll index.
@@ -64,19 +68,18 @@ pub(super) fn track_ordering(
     direction: LibrarySortDirection,
 ) -> Ordering {
     let phases = match key {
-        LibraryTrackSortKey::Title => vec![Phase::new(
-            "1",
-            &["m.title_sort", "m.title_key", "m.track_id"],
-        )],
+        LibraryTrackSortKey::Title => {
+            vec![Phase::new("1", &["m.title_sort", "m.title", "m.track_id"])]
+        }
         LibraryTrackSortKey::Artist => name_phases(
             "m.artist_sort",
-            &["m.artist_sort", "m.artist_key", "m.track_id"],
-            &["m.artist_key", "m.track_id"],
+            &["m.artist_sort", "m.artist", "m.track_id"],
+            &["m.artist", "m.track_id"],
         ),
         LibraryTrackSortKey::Album => name_phases(
             "m.album_sort",
-            &["m.album_sort", "m.album_key", "m.track_id"],
-            &["m.album_key", "m.track_id"],
+            &["m.album_sort", "m.album", "m.track_id"],
+            &["m.album", "m.track_id"],
         ),
         LibraryTrackSortKey::Duration => vec![
             Phase::new(
@@ -133,7 +136,7 @@ fn year_phases(year: &str, album_sort: &str, rest: &[&str], unnamed: &[&str]) ->
 
 /// The columns of an album row, in the order `album_summary` reads them, and what they come from.
 const ALBUM_COLUMNS: &str =
-    "al.album_key, al.album_artist_key, al.album_dir, al.year, a.content_hash, a.mime_type";
+    "al.title, al.album_artist, al.album_directory, al.year, a.content_hash, a.mime_type";
 const ALBUM_COLUMN_COUNT: usize = 6;
 const ALBUM_FROM: &str = "FROM albums al LEFT JOIN artwork_assets a ON a.id = al.cover_artwork_id";
 
@@ -153,7 +156,7 @@ fn album_summary(row: &Row<'_>) -> rusqlite::Result<LibraryAlbumSummary> {
 const ARTIST_COLUMNS: &str = "ar.name, ar.album_count, ar.track_count, a.content_hash, a.mime_type";
 const ARTIST_COLUMN_COUNT: usize = 5;
 const ARTIST_FROM: &str =
-    "FROM album_artists ar LEFT JOIN artwork_assets a ON a.id = ar.cover_artwork_id";
+    "FROM artists ar LEFT JOIN artwork_assets a ON a.id = ar.cover_artwork_id";
 
 fn artist_summary(row: &Row<'_>) -> rusqlite::Result<LibraryAlbumArtistSummary> {
     Ok(LibraryAlbumArtistSummary {
@@ -207,38 +210,38 @@ pub(super) fn tracks_query(
 fn album_ordering(sort_key: LibraryAlbumSortKey, direction: LibrarySortDirection) -> Ordering {
     let phases = match sort_key {
         LibraryAlbumSortKey::Title => name_phases(
-            "al.album_sort",
+            "al.title_sort",
             &[
-                "al.album_sort",
-                "al.album_key",
-                "al.artist_sort",
-                "al.album_artist_key",
-                "al.album_dir",
+                "al.title_sort",
+                "al.title",
+                "al.album_artist_sort",
+                "al.album_artist",
+                "al.id",
             ],
-            &["al.artist_sort", "al.album_artist_key", "al.album_dir"],
+            &["al.album_artist_sort", "al.album_artist", "al.id"],
         ),
         LibraryAlbumSortKey::Artist => name_phases(
-            "al.artist_sort",
+            "al.album_artist_sort",
             &[
-                "al.artist_sort",
-                "al.album_artist_key",
-                "al.album_sort",
-                "al.album_key",
-                "al.album_dir",
+                "al.album_artist_sort",
+                "al.album_artist",
+                "al.title_sort",
+                "al.title",
+                "al.id",
             ],
-            &["al.album_sort", "al.album_key", "al.album_dir"],
+            &["al.title_sort", "al.title", "al.id"],
         ),
         LibraryAlbumSortKey::Year => year_phases(
             "al.year",
-            "al.album_sort",
+            "al.title_sort",
             &[
-                "al.album_sort",
-                "al.album_key",
-                "al.artist_sort",
-                "al.album_artist_key",
-                "al.album_dir",
+                "al.title_sort",
+                "al.title",
+                "al.album_artist_sort",
+                "al.album_artist",
+                "al.id",
             ],
-            &["al.artist_sort", "al.album_artist_key", "al.album_dir"],
+            &["al.album_artist_sort", "al.album_artist", "al.id"],
         ),
     };
     Ordering { phases, direction }
@@ -261,7 +264,7 @@ pub(super) fn albums_query(
         album_ordering(sort_key, direction),
         (ALBUM_COLUMNS, ALBUM_COLUMN_COUNT),
         (ALBUM_FROM, "FROM albums al"),
-        SearchFilter::new(search, "al.search_key"),
+        SearchFilter::new(search, "al.search_text"),
     )
 }
 
@@ -271,15 +274,15 @@ fn album_artist_ordering(
 ) -> Ordering {
     let phases = match sort_key {
         LibraryAlbumArtistSortKey::Artist => {
-            name_phases("ar.sort_key", &["ar.sort_key", "ar.name"], &["ar.name"])
+            name_phases("ar.name_sort", &["ar.name_sort", "ar.name"], &["ar.name"])
         }
         LibraryAlbumArtistSortKey::AlbumCount => vec![Phase::new(
             "1",
-            &["ar.album_count", "ar.sort_key", "ar.name"],
+            &["ar.album_count", "ar.name_sort", "ar.name"],
         )],
         LibraryAlbumArtistSortKey::TrackCount => vec![Phase::new(
             "1",
-            &["ar.track_count", "ar.sort_key", "ar.name"],
+            &["ar.track_count", "ar.name_sort", "ar.name"],
         )],
     };
     Ordering { phases, direction }
@@ -301,8 +304,8 @@ pub(super) fn album_artists_query(
         ),
         album_artist_ordering(sort_key, direction),
         (ARTIST_COLUMNS, ARTIST_COLUMN_COUNT),
-        (ARTIST_FROM, "FROM album_artists ar"),
-        SearchFilter::new(search, "ar.search_key"),
+        (ARTIST_FROM, "FROM artists ar"),
+        SearchFilter::new(search, "ar.search_text"),
     )
 }
 
@@ -312,17 +315,18 @@ pub(super) fn artist_albums_query(
     sort_key: LibraryArtistAlbumSortKey,
     direction: LibrarySortDirection,
 ) -> PagedQuery {
+    let artist_id = ArtistId::of(&artist.name).to_hex();
     let phases = match sort_key {
         LibraryArtistAlbumSortKey::Title => name_phases(
-            "al.album_sort",
-            &["al.album_sort", "al.album_key", "al.album_dir"],
-            &["al.album_dir"],
+            "al.title_sort",
+            &["al.title_sort", "al.title", "al.id"],
+            &["al.id"],
         ),
         LibraryArtistAlbumSortKey::Year => year_phases(
             "al.year",
-            "al.album_sort",
-            &["al.album_sort", "al.album_key", "al.album_dir"],
-            &["al.album_dir"],
+            "al.title_sort",
+            &["al.title_sort", "al.title", "al.id"],
+            &["al.id"],
         ),
     };
     let mut query = build_query(
@@ -331,16 +335,16 @@ pub(super) fn artist_albums_query(
         (ALBUM_COLUMNS, ALBUM_COLUMN_COUNT),
         (ALBUM_FROM, "FROM albums al"),
         SearchFilter {
-            sql: "al.album_artist_key = ?1".into(),
-            params: vec![artist.name.clone().into()],
+            sql: "al.artist_id = ?1".into(),
+            params: vec![artist_id.clone().into()],
         },
     );
-    query.params = vec![artist.name.clone().into()];
+    query.params = vec![artist_id.into()];
     query
 }
 
-/// The tracks of one album, in playing order.
-fn album_tracks_query(key: &LibraryAlbumKey) -> PagedQuery {
+/// The tracks of one album, in playing order. `album_id` is the album `key` names.
+fn album_tracks_query(key: &LibraryAlbumKey, album_id: &str) -> PagedQuery {
     build_query(
         Scope::new(
             View::AlbumTracks,
@@ -364,7 +368,7 @@ fn album_tracks_query(key: &LibraryAlbumKey) -> PagedQuery {
             direction: LibrarySortDirection::Ascending,
         },
         (
-            "t.id, m.title_key, m.artist_key, m.track_number, m.disc_number, m.file_format, m.bit_depth, m.sample_rate, m.duration_ms, f.availability, f.inspection_status",
+            "t.id, m.title, m.artist, m.track_number, m.disc_number, m.file_format, m.bit_depth, m.sample_rate, m.duration_ms, f.availability, f.inspection_status",
             11,
         ),
         (
@@ -372,12 +376,8 @@ fn album_tracks_query(key: &LibraryAlbumKey) -> PagedQuery {
             "FROM track_source_metadata m",
         ),
         SearchFilter {
-            sql: "m.album_artist_key = ?1 AND m.album_key = ?2 AND m.album_dir = ?3".into(),
-            params: vec![
-                key.album_artist.clone().into(),
-                key.title.clone().into(),
-                key.album_edition.clone().into(),
-            ],
+            sql: "m.album_id = ?1".into(),
+            params: vec![album_id.to_owned().into()],
         },
     )
 }
@@ -561,14 +561,14 @@ impl LibraryStore {
                 &connection,
                 &query.count_from_where,
                 &query.params,
-                "al.album_sort",
+                "al.title_sort",
                 direction,
             ),
             LibraryAlbumSortKey::Artist => name_buckets(
                 &connection,
                 &query.count_from_where,
                 &query.params,
-                "al.artist_sort",
+                "al.album_artist_sort",
                 direction,
             ),
             LibraryAlbumSortKey::Year => year_buckets(
@@ -628,7 +628,7 @@ impl LibraryStore {
             &connection,
             &query.count_from_where,
             &query.params,
-            "ar.sort_key",
+            "ar.name_sort",
             direction,
         )
     }
@@ -663,8 +663,8 @@ impl LibraryStore {
         let connection = self.read()?;
         connection
             .query_row(
-                &format!("SELECT {ARTIST_COLUMNS} {ARTIST_FROM} WHERE ar.name = ?1"),
-                params![artist.name],
+                &format!("SELECT {ARTIST_COLUMNS} {ARTIST_FROM} WHERE ar.id = ?1"),
+                params![ArtistId::of(&artist.name).to_hex()],
                 artist_summary,
             )
             .optional()?
@@ -677,7 +677,8 @@ impl LibraryStore {
     ) -> Result<LibraryAlbumDetails, StoreError> {
         validate_album_key(&key)?;
         let connection = self.read()?;
-        let in_album = "m.album_artist_key = ?1 AND m.album_key = ?2 AND m.album_dir = ?4";
+        let album_id = album_id_of(&connection, &key)?;
+        let in_album = "m.album_id = ?1";
         let (count, duration, year, date, playable): (
             i64,
             Option<i64>,
@@ -695,17 +696,11 @@ impl LibraryStore {
                     (SELECT m.track_id FROM track_source_metadata m
                       JOIN tracks t ON t.id = m.track_id
                       JOIN library_files f ON f.id = t.file_id
-                      WHERE {in_album} AND f.availability = ?3 AND f.inspection_status = ?5
+                      WHERE {in_album} AND f.availability = ?2 AND f.inspection_status = ?3
                       ORDER BY {ALBUM_ORDER} LIMIT 1)
                  FROM track_source_metadata m WHERE {in_album}"
             ),
-            params![
-                key.album_artist,
-                key.title,
-                Availability::Available,
-                key.album_edition,
-                InspectionStatus::Indexed
-            ],
+            params![album_id, Availability::Available, InspectionStatus::Indexed],
             |row| {
                 Ok((
                     row.get(0)?,
@@ -721,7 +716,7 @@ impl LibraryStore {
         }
         Ok(LibraryAlbumDetails {
             summary: LibraryAlbumSummary {
-                artwork: album_cover(&connection, &key)?,
+                artwork: album_cover(&connection, &album_id)?,
                 key,
                 year,
             },
@@ -739,7 +734,8 @@ impl LibraryStore {
     ) -> Result<LibraryAlbumTrackPage, StoreError> {
         validate_album_key(&key)?;
         let connection = self.read()?;
-        let query = album_tracks_query(&key);
+        let album_id = album_id_of(&connection, &key)?;
+        let query = album_tracks_query(&key, &album_id);
         let total_count = first_page_total(&query, &connection, cursor)?;
         if total_count == Some(0) {
             return Err(StoreError::AlbumNotFound);
@@ -784,20 +780,45 @@ fn first_page_total(
     cursor.map_or_else(|| query.total(connection).map(Some), |_| Ok(None))
 }
 
-/// The cover of an album, from its summary row.
-fn album_cover(
+/// The ID of the album a key names (see `ids.rs`): its Album Artist, title and absolute album
+/// directory. The directory is the root's path, read here; a key whose root is gone gets a path
+/// that no album has, so it names no album. A track with no album has the ID of an empty title in
+/// an empty directory.
+pub(super) fn album_id_of(
     connection: &Connection,
     key: &LibraryAlbumKey,
-) -> Result<Option<ArtworkRef>, StoreError> {
+) -> Result<String, StoreError> {
+    let directory = if key.title.is_empty() {
+        String::new()
+    } else {
+        let root_id = key
+            .album_edition
+            .split_once('/')
+            .and_then(|(root, _)| root.parse::<i64>().ok());
+        let root_path: Option<String> = match root_id {
+            Some(root_id) => connection
+                .query_row(
+                    "SELECT path FROM library_roots WHERE id = ?1",
+                    params![root_id],
+                    |row| row.get(0),
+                )
+                .optional()?,
+            None => None,
+        };
+        absolute_directory(root_path.as_deref().unwrap_or(""), &key.album_edition)
+    };
+    Ok(AlbumId::of(&key.album_artist, &key.title, OsStr::new(&directory)).to_hex())
+}
+
+/// The cover of an album, from its summary row.
+fn album_cover(connection: &Connection, album_id: &str) -> Result<Option<ArtworkRef>, StoreError> {
     Ok(connection
         .prepare_cached(&format!(
-            "SELECT a.content_hash, a.mime_type {ALBUM_FROM}
-             WHERE al.album_artist_key = ?1 AND al.album_key = ?2 AND al.album_dir = ?3"
+            "SELECT a.content_hash, a.mime_type {ALBUM_FROM} WHERE al.id = ?1"
         ))?
-        .query_row(
-            params![key.album_artist, key.title, key.album_edition],
-            |row| Ok(artwork_ref(row.get(0)?, row.get(1)?)),
-        )
+        .query_row(params![album_id], |row| {
+            Ok(artwork_ref(row.get(0)?, row.get(1)?))
+        })
         .optional()?
         .flatten())
 }

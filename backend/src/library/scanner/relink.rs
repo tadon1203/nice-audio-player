@@ -27,7 +27,8 @@ pub(super) struct Fingerprint {
 }
 
 const IDENTITIES: &str = "
-    SELECT f.id, t.id, f.byte_length, f.content_hash, m.title, m.artist, m.album, m.track_number,
+    SELECT f.id, t.id, f.byte_length, f.content_hash, m.tag_title, m.tag_artist, m.tag_album,
+           m.track_number,
            m.duration_ms
     FROM library_files f
     JOIN tracks t ON t.file_id = f.id

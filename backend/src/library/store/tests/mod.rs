@@ -106,6 +106,7 @@ impl Fixture {
                 &file,
                 SortTags::default(),
                 &album_edition_of(1, &file),
+                &self.music.to_string_lossy(),
             );
             transaction
                 .execute(
@@ -121,7 +122,7 @@ impl Fixture {
                 .unwrap();
             transaction
                 .execute(
-                    "INSERT INTO track_source_metadata(track_id,source_revision,title,artist,album,album_artist,track_number,disc_number,date,duration_ms,tag_status,artwork_status,artwork_id,title_key,artist_key,album_key,album_artist_key,year,title_sort,artist_sort,album_sort,album_artist_sort,search_key,album_dir) VALUES(?1,1,?2,?3,?4,?5,?6,?7,?8,?9,'loaded','notPresent',?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21)",
+                    "INSERT INTO track_source_metadata(track_id,source_revision,tag_title,tag_artist,tag_album,tag_album_artist,track_number,disc_number,date,duration_ms,tag_status,artwork_status,artwork_id,title,artist,album,album_artist,year,title_sort,artist_sort,album_sort,album_artist_sort,search_text,album_id,album_directory) VALUES(?1,1,?2,?3,?4,?5,?6,?7,?8,?9,'loaded','notPresent',?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22)",
                     params![
                         seed.id,
                         seed.title,
@@ -143,7 +144,8 @@ impl Fixture {
                         keys.album_sort,
                         keys.album_artist_sort,
                         keys.search,
-                        keys.album_folder
+                        keys.album_id,
+                        keys.album_directory
                     ],
                 )
                 .unwrap();

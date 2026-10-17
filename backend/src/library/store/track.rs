@@ -12,7 +12,7 @@ use crate::library::{
 use rusqlite::{OptionalExtension, Row, params};
 
 /// The columns `summary_from_row` reads, in its order.
-pub(super) const SUMMARY_COLUMNS: &str = "t.id, m.title_key, m.artist_key, m.album_key, m.album_artist, m.album_artist_key, m.duration_ms, a.content_hash, a.mime_type, m.file_format, m.bit_depth, m.bitrate_kbps, f.availability, f.inspection_status, m.album_dir";
+pub(super) const SUMMARY_COLUMNS: &str = "t.id, m.title, m.artist, m.album, m.tag_album_artist, m.album_artist, m.duration_ms, a.content_hash, a.mime_type, m.file_format, m.bit_depth, m.bitrate_kbps, f.availability, f.inspection_status, m.album_directory";
 pub(super) const SUMMARY_COLUMN_COUNT: usize = 15;
 
 /// What `SUMMARY_COLUMNS` are selected from.
@@ -35,7 +35,7 @@ pub(super) fn artwork_ref(
 pub(super) fn summary_from_row(row: &Row<'_>) -> rusqlite::Result<LibraryTrackSummary> {
     let id: i64 = row.get(0)?;
     let album: String = row.get(3)?;
-    let album_artist_key: String = row.get(5)?;
+    let album_artist: String = row.get(5)?;
     let duration: Option<i64> = row.get(6)?;
     let availability: Availability = row.get(12)?;
     let inspection: InspectionStatus = row.get(13)?;
@@ -47,7 +47,7 @@ pub(super) fn summary_from_row(row: &Row<'_>) -> rusqlite::Result<LibraryTrackSu
         artist: (!artist.is_empty()).then_some(artist),
         album_key: (!album.is_empty()).then(|| LibraryAlbumKey {
             title: album.clone(),
-            album_artist: album_artist_key,
+            album_artist,
             album_edition,
         }),
         album: (!album.is_empty()).then_some(album),
@@ -98,7 +98,7 @@ impl LibraryStore {
         let connection = self.read()?;
         Ok(connection
             .query_row(
-                "SELECT f.file_name, m.title, m.artist, m.album, m.album_artist,
+                "SELECT f.file_name, m.tag_title, m.tag_artist, m.tag_album, m.tag_album_artist,
                         m.track_number, m.track_total, m.disc_number, m.disc_total, m.genre, m.date,
                         m.duration_ms, m.file_format, m.codec, m.sample_rate, m.channel_count,
                         m.bit_depth, m.bitrate_kbps

@@ -10,7 +10,7 @@ fn a_track_without_a_title_is_named_after_its_file_in_playback_and_in_search() {
     );
     // The scanner derives the title from the file name; do the same for this renamed file.
     fixture.sql(
-        "UPDATE track_source_metadata SET title_key='multi.part', title_sort='multi.part', search_key='multi.part'||char(31)||'artist'||char(31)||'album'||char(31)||'artist' WHERE track_id=1",
+        "UPDATE track_source_metadata SET title='multi.part', title_sort='multi.part', search_text='multi.part'||char(31)||'artist'||char(31)||'album'||char(31)||'artist' WHERE track_id=1",
     );
     let store = &fixture.store;
 

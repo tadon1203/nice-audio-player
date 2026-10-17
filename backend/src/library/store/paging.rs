@@ -5,7 +5,7 @@
 //! rows precede it and a write between two requests can neither repeat nor skip a row.
 //!
 //! Some orders put unknown values last in both directions. They are split into *phases*: runs of
-//! rows that share one condition (`artist_key <> ''`, then `artist_key = ''`) and inside which the
+//! rows that share one condition (`artist <> ''`, then `artist = ''`) and inside which the
 //! order is uniform, so each phase is a plain index range. A page continues into the next phase
 //! when the current one runs out.
 
