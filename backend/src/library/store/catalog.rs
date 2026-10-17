@@ -13,9 +13,8 @@ use super::{
     paging::{Ordering, Page, PagedQuery, Phase, Scope, View},
     track::{SUMMARY_COLUMN_COUNT, SUMMARY_COLUMNS, SUMMARY_FROM, artwork_ref, summary_from_row},
 };
-use crate::ids::{AlbumId, ArtistId, TrackId, artist_id_column, track_id_column};
+use crate::ids::{AlbumId, ArtistId, TrackId, album_id_column, artist_id_column, track_id_column};
 use crate::library::{
-    artwork::ArtworkRef,
     error::StoreError,
     keys::absolute_directory,
     models::*,
@@ -136,12 +135,14 @@ fn year_phases(year: &str, album_sort: &str, rest: &[&str], unnamed: &[&str]) ->
 }
 
 /// The columns of an album row, in the order `album_summary` reads them, and what they come from.
-const ALBUM_COLUMNS: &str = "al.title, al.album_artist, al.album_directory, al.year, a.content_hash, a.mime_type, al.artist_id";
-const ALBUM_COLUMN_COUNT: usize = 7;
+const ALBUM_COLUMNS: &str = "al.title, al.album_artist, al.album_directory, al.year, a.content_hash, a.mime_type, al.artist_id, al.id";
+const ALBUM_COLUMN_COUNT: usize = 8;
 const ALBUM_FROM: &str = "FROM albums al LEFT JOIN artwork_assets a ON a.id = al.cover_artwork_id";
 
 fn album_summary(row: &Row<'_>) -> rusqlite::Result<LibraryAlbumSummary> {
     Ok(LibraryAlbumSummary {
+        id: album_id_column(row, 7)?,
+        title: row.get(0)?,
         key: LibraryAlbumKey {
             title: row.get(0)?,
             album_artist: row.get(1)?,
@@ -350,16 +351,14 @@ pub(super) fn artist_albums_query(
     query
 }
 
-/// The tracks of one album, in playing order. `album_id` is the album `key` names.
-fn album_tracks_query(key: &LibraryAlbumKey, album_id: &str) -> PagedQuery {
+/// The tracks of one album, in playing order. `album_id` is the album's ID, which the cursor is
+/// scoped to as well.
+fn album_tracks_query(album_id: &str) -> PagedQuery {
     build_query(
         Scope::new(
             View::AlbumTracks,
             "",
-            &format!(
-                "{}\u{1f}{}\u{1f}{}",
-                key.album_artist, key.title, key.album_edition
-            ),
+            album_id,
             &"position",
             LibrarySortDirection::Ascending,
         ),
@@ -676,6 +675,7 @@ impl LibraryStore {
             .ok_or(StoreError::AlbumArtistNotFound)
     }
 
+    /// The details of an album by its key. The key form goes with the old album route (ticket 14).
     pub fn catalog_album_details(
         &self,
         key: LibraryAlbumKey,
@@ -683,6 +683,29 @@ impl LibraryStore {
         validate_album_key(&key)?;
         let connection = self.read()?;
         let album_id = album_id_of(&connection, &key)?;
+        Self::album_details(&connection, album_id)
+    }
+
+    /// The details of an album by its ID.
+    pub fn catalog_album(&self, album_id: AlbumId) -> Result<LibraryAlbumDetails, StoreError> {
+        let connection = self.read()?;
+        Self::album_details(&connection, album_id)
+    }
+
+    /// The details of an album: its summary row, and its tracks for the counts.
+    fn album_details(
+        connection: &Connection,
+        album_id: AlbumId,
+    ) -> Result<LibraryAlbumDetails, StoreError> {
+        let album_hex = album_id.to_hex();
+        let summary = connection
+            .query_row(
+                &format!("SELECT {ALBUM_COLUMNS} {ALBUM_FROM} WHERE al.id = ?1"),
+                params![album_hex],
+                album_summary,
+            )
+            .optional()?
+            .ok_or(StoreError::AlbumNotFound)?;
         let in_album = "m.album_id = ?1";
         let (count, duration, year, date, playable): (
             i64,
@@ -705,7 +728,11 @@ impl LibraryStore {
                       ORDER BY {ALBUM_ORDER} LIMIT 1)
                  FROM track_source_metadata m WHERE {in_album}"
             ),
-            params![album_id, Availability::Available, InspectionStatus::Indexed],
+            params![
+                album_hex,
+                Availability::Available,
+                InspectionStatus::Indexed
+            ],
             |row| {
                 Ok((
                     row.get(0)?,
@@ -720,15 +747,7 @@ impl LibraryStore {
             return Err(StoreError::AlbumNotFound);
         }
         Ok(LibraryAlbumDetails {
-            summary: LibraryAlbumSummary {
-                artwork: album_cover(&connection, &album_id)?,
-                album_artist: ArtistRef {
-                    id: ArtistId::of(&key.album_artist),
-                    name: key.album_artist.clone(),
-                },
-                key,
-                year,
-            },
+            summary: LibraryAlbumSummary { year, ..summary },
             date,
             track_count: count as u64,
             duration_ms: duration.map(|value| value as u64),
@@ -736,6 +755,7 @@ impl LibraryStore {
         })
     }
 
+    /// A page of an album's tracks by its key (the old album route, ticket 14).
     pub fn catalog_album_tracks(
         &self,
         key: LibraryAlbumKey,
@@ -744,12 +764,31 @@ impl LibraryStore {
         validate_album_key(&key)?;
         let connection = self.read()?;
         let album_id = album_id_of(&connection, &key)?;
-        let query = album_tracks_query(&key, &album_id);
-        let total_count = first_page_total(&query, &connection, cursor)?;
+        Self::album_tracks(&connection, album_id, cursor)
+    }
+
+    /// A page of an album's tracks by its ID.
+    pub fn catalog_album_tracks_by_id(
+        &self,
+        album_id: AlbumId,
+        cursor: Option<&str>,
+    ) -> Result<LibraryAlbumTrackPage, StoreError> {
+        let connection = self.read()?;
+        Self::album_tracks(&connection, album_id, cursor)
+    }
+
+    /// A page of an album's tracks in playing order.
+    fn album_tracks(
+        connection: &Connection,
+        album_id: AlbumId,
+        cursor: Option<&str>,
+    ) -> Result<LibraryAlbumTrackPage, StoreError> {
+        let query = album_tracks_query(&album_id.to_hex());
+        let total_count = first_page_total(&query, connection, cursor)?;
         if total_count == Some(0) {
             return Err(StoreError::AlbumNotFound);
         }
-        let Page { items, next_cursor } = query.fetch(&connection, cursor, 0, |row| {
+        let Page { items, next_cursor } = query.fetch(connection, cursor, 0, |row| {
             let artist: String = row.get(2)?;
             let number = |index: usize| -> rusqlite::Result<Option<u32>> {
                 Ok(row.get::<_, Option<i64>>(index)?.map(|value| value as u32))
@@ -795,7 +834,7 @@ fn first_page_total(
 pub(super) fn album_id_of(
     connection: &Connection,
     key: &LibraryAlbumKey,
-) -> Result<String, StoreError> {
+) -> Result<AlbumId, StoreError> {
     let directory = if key.title.is_empty() {
         String::new()
     } else {
@@ -815,18 +854,9 @@ pub(super) fn album_id_of(
         };
         absolute_directory(root_path.as_deref().unwrap_or(""), &key.album_edition)
     };
-    Ok(AlbumId::of(&key.album_artist, &key.title, OsStr::new(&directory)).to_hex())
-}
-
-/// The cover of an album, from its summary row.
-fn album_cover(connection: &Connection, album_id: &str) -> Result<Option<ArtworkRef>, StoreError> {
-    Ok(connection
-        .prepare_cached(&format!(
-            "SELECT a.content_hash, a.mime_type {ALBUM_FROM} WHERE al.id = ?1"
-        ))?
-        .query_row(params![album_id], |row| {
-            Ok(artwork_ref(row.get(0)?, row.get(1)?))
-        })
-        .optional()?
-        .flatten())
+    Ok(AlbumId::of(
+        &key.album_artist,
+        &key.title,
+        OsStr::new(&directory),
+    ))
 }

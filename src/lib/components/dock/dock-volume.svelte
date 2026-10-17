@@ -18,7 +18,14 @@
    * readout. The signal path hangs below this row, out of flow, so it never pulls the row off the
    * transport's centre line.
    */
-  const { playback, session, motion: budget, actions, history, queuePanel } = AppServices.current();
+  const {
+    playback,
+    session,
+    motion: budget,
+    actions,
+    nowPlaying,
+    queuePanel,
+  } = AppServices.current();
   const ready = $derived(session.connection === "ready");
   const readout = $derived(VolumeStep.formatDb(playback.volume, playback.muted));
 
@@ -64,9 +71,9 @@
       variant="quiet"
       aria-label="Now Playing"
       title="Now Playing"
-      aria-pressed={history.isNowPlayingOpen}
+      aria-pressed={nowPlaying.isOpen}
       disabled={!playback.isActive}
-      onclick={() => history.toggleNowPlaying()}
+      onclick={() => nowPlaying.toggle()}
     >
       <Music2 aria-hidden="true" />
     </Button>

@@ -16,7 +16,7 @@
    */
   let { children }: { children?: Snippet } = $props();
 
-  const { motion: budget, history } = AppServices.current();
+  const { motion: budget, nowPlaying } = AppServices.current();
 
   function lift(opening: boolean) {
     return (_node: Element): TransitionConfig => {
@@ -33,7 +33,7 @@
   const liftOut = lift(false);
 </script>
 
-{#if history.isNowPlayingOpen}
+{#if nowPlaying.isOpen}
   <section
     aria-label="Now Playing"
     data-slot="now-playing"

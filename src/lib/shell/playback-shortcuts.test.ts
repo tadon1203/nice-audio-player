@@ -34,6 +34,7 @@ const playingValue = (positionMs: number): PlaybackSnapshot => ({
       discNumber: null,
       year: null,
       albumKey: null,
+      albumId: null,
       albumTrackCount: null,
     },
     startedBy: "jump",
@@ -72,12 +73,7 @@ describe("global seek shortcut", () => {
       playback,
       new UserActionRunner(notices),
       {
-        history: {
-          isNowPlayingOpen: false,
-          openNowPlaying: vi.fn(),
-          closeNowPlaying: vi.fn(),
-          toggleNowPlaying: vi.fn(),
-        },
+        nowPlaying: { isOpen: false, open: vi.fn(), close: vi.fn(), toggle: vi.fn() },
         queuePanel: { isOpen: false, toggle: vi.fn() },
       },
     );

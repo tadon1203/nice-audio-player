@@ -21,7 +21,7 @@
     resolution: LyricsResolution | null;
   } = $props();
 
-  const { playback, history } = AppServices.current();
+  const { playback, nowPlaying } = AppServices.current();
   // The title wipes in on track changes, but not when Now Playing first opens.
   const openedOn = untrack(() => item?.queueItemId);
   const changedSinceOpen = $derived(item?.queueItemId !== openedOn);
@@ -32,7 +32,7 @@
     <!-- Attached only while open, so the departure is recorded the moment closing begins, not
     after the layer has finished fading out. -->
     <div
-      {@attach history.isNowPlayingOpen ? sharedElement(sharedKey.sleeve) : undefined}
+      {@attach nowPlaying.isOpen ? sharedElement(sharedKey.sleeve) : undefined}
       class="relative size-full overflow-hidden"
       style:border-radius={SLEEVE_RADIUS}
     >

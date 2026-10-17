@@ -1,5 +1,6 @@
 import type {
   ActiveSession,
+  AlbumId,
   AudioOutputSelection,
   LibraryAlbumKey,
   PlaybackContext,
@@ -189,7 +190,12 @@ export class Playback {
   }
 
   /** True while the album's track is loaded and playing or paused. */
-  public isAlbumLoaded(albumKey: LibraryAlbumKey): boolean {
+  public isAlbumLoaded(albumId: AlbumId): boolean {
+    return this.isActive && this.#item?.albumId === albumId;
+  }
+
+  /** The key form, for the old album route until ticket 14 removes it. */
+  public isAlbumLoadedByKey(albumKey: LibraryAlbumKey): boolean {
     const loaded = this.#item?.albumKey;
     return (
       this.isActive &&
@@ -248,8 +254,20 @@ export class Playback {
   }
 
   /** Plays the album from its first track if it is not loaded; otherwise pauses or resumes it. */
-  public togglePlayAlbum(albumKey: LibraryAlbumKey): Promise<void> {
-    if (!this.isAlbumLoaded(albumKey)) return this.start({ kind: "album", key: albumKey }, null);
+  public togglePlayAlbum(albumId: AlbumId): Promise<void> {
+    return this.#toggleAlbum(this.isAlbumLoaded(albumId), { kind: "album", albumId });
+  }
+
+  /** `togglePlayAlbum` for the old album route, which is keyed by the album's key. */
+  public togglePlayAlbumByKey(albumKey: LibraryAlbumKey): Promise<void> {
+    return this.#toggleAlbum(this.isAlbumLoadedByKey(albumKey), {
+      kind: "albumByKey",
+      albumKey,
+    });
+  }
+
+  #toggleAlbum(loaded: boolean, context: PlaybackContext): Promise<void> {
+    if (!loaded) return this.start(context, null);
     return this.isPlaying ? this.pause() : this.resume();
   }
 

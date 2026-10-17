@@ -17,7 +17,7 @@
   /** Sliding distance for the artwork, title and artist. One value so they travel together. */
   const SLIDE_PX = 16;
 
-  const { playback, session, motion: budget, notices, actions, history } = AppServices.current();
+  const { playback, session, motion: budget, notices, actions, nowPlaying } = AppServices.current();
   // A failed startup shows its reason here, since there is no playback state to report on.
   const notice = $derived(
     session.connection === "failed"
@@ -27,7 +27,7 @@
   const item = $derived(playback.item);
   const trackKey = $derived(item?.trackId ?? "none");
   const title = $derived(item?.title ?? "Nothing playing");
-  const nowPlayingOpen = $derived(history.isNowPlayingOpen);
+  const nowPlayingOpen = $derived(nowPlaying.isOpen);
   const hasTrack = $derived(item !== null);
   const links = $derived(item === null ? null : Tracks.links(item));
 
@@ -57,7 +57,7 @@
     <Button
       variant="quiet"
       aria-label="Close Now Playing"
-      onclick={() => history.closeNowPlaying()}
+      onclick={() => nowPlaying.close()}
       data-slot="sleeve-close"
       size="inline"
       class="size-16 rounded-lg p-0"
@@ -75,7 +75,7 @@
             type="button"
             aria-label="Open Now Playing"
             disabled={!hasTrack}
-            onclick={() => history.openNowPlaying()}
+            onclick={() => nowPlaying.open()}
             data-slot="sleeve"
             variant="bare"
             size="inline"
@@ -131,7 +131,7 @@
           <Button
             type="button"
             disabled={item === null}
-            onclick={() => history.toggleNowPlaying()}
+            onclick={() => nowPlaying.toggle()}
             {title}
             variant="bare"
             size="inline"

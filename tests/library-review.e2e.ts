@@ -95,6 +95,16 @@ test("returns from an album to its ID artist page after the album page reloads",
   await expect(page.getByRole("heading", { name: "Test artist" })).toBeVisible();
 });
 
+test("keeps an album's ID route after a reload", async ({ page }) => {
+  await page.goto("/library/albums");
+  await page.getByRole("link", { name: "Open album Test album by Test artist" }).click();
+  await expect(page.getByRole("heading", { name: "Test album" })).toBeVisible();
+  const url = page.url();
+  await page.reload();
+  await expect(page).toHaveURL(url);
+  await expect(page.getByRole("heading", { name: "Test album" })).toBeVisible();
+});
+
 test("keeps an album artist's ID route after a reload", async ({ page }) => {
   await page.goto("/library/album-artists");
   await page.getByRole("link", { name: "Browse albums by Test artist" }).click();

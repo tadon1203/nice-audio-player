@@ -25,7 +25,7 @@ import { NoticeCenter } from "./notice-center.svelte";
 import { QueuePanel } from "./queue-panel.svelte";
 import { ScanWatcher } from "./scan-watcher.svelte";
 import { ScrollMemory } from "./scroll-memory";
-import { ShellHistory } from "./shell-history.svelte";
+import { NowPlayingView } from "./now-playing-view.svelte";
 import { LyricsWaveformLink } from "./lyrics-waveform-link.svelte";
 import { UserActionRunner } from "./user-action-runner.svelte";
 
@@ -94,7 +94,7 @@ export class AppServices {
   public readonly meter: MeterClient;
   /** The window chrome, which the renderer draws itself. */
   public readonly window: WindowClient;
-  public readonly history = new ShellHistory();
+  public readonly nowPlaying = new NowPlayingView();
   public readonly queuePanel = new QueuePanel();
   public readonly scrollMemory = new ScrollMemory();
   public readonly lyricsWaveformLink = new LyricsWaveformLink();

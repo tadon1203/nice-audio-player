@@ -15,10 +15,10 @@
    * volume. The transport grid's side columns are equal, so the transport sits on the dock's true
    * centre whatever the two sides hold.
    */
-  const { playback, appearance, history } = AppServices.current();
+  const { playback, appearance, nowPlaying } = AppServices.current();
   // While Now Playing is open the waveform lives up there, so this slot animates shut.
   const slot = new NowPlayingTween(1, 0);
-  const open = $derived(history.isNowPlayingOpen);
+  const open = $derived(nowPlaying.isOpen);
 </script>
 
 <footer

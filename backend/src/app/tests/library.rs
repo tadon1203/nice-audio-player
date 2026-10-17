@@ -1,8 +1,8 @@
 use super::{Fixture, fixture};
 use crate::app::{BackendApp, PlaybackContext};
-use crate::dto::{LibrarySortDirection, LibraryStatus, LibraryTrackSortKey};
+use crate::dto::{AlbumTracksRequest, LibrarySortDirection, LibraryStatus, LibraryTrackSortKey};
 use crate::errors::{LibraryCommandError, LyricsCommandError, PlaybackServiceError};
-use crate::ids::{ArtistId, TrackId};
+use crate::ids::{AlbumId, ArtistId, TrackId};
 use crate::messages::testing::RecordingMessageSink;
 use crate::test_support::TestDirectory;
 
@@ -84,6 +84,38 @@ fn with_a_library_the_library_commands_answer() {
 
     assert!(matches!(backend.library_status(), LibraryStatus::Ready));
     assert!(backend.library_roots().expect("roots").is_empty());
+}
+
+#[test]
+fn an_album_by_id_that_the_library_does_not_hold_is_not_found() {
+    let fixture = fixture();
+    let album_id = AlbumId::of("Nobody", "Nope", std::ffi::OsStr::new(""));
+
+    let error = fixture.backend.album_by_id(album_id).err();
+
+    assert!(matches!(error, Some(LibraryCommandError::AlbumNotFound)));
+}
+
+#[test]
+fn an_album_by_id_that_the_library_does_not_hold_has_no_tracks_and_does_not_play() {
+    let fixture = fixture();
+    let album_id = AlbumId::of("Nobody", "Nope", std::ffi::OsStr::new(""));
+    let request = AlbumTracksRequest {
+        album_id,
+        cursor: None,
+    };
+
+    assert!(matches!(
+        fixture.backend.album_tracks_by_id(request).err(),
+        Some(LibraryCommandError::AlbumNotFound)
+    ));
+    assert_eq!(
+        fixture
+            .backend
+            .start_playback(&PlaybackContext::Album { album_id }, None)
+            .err(),
+        Some(PlaybackServiceError::AlbumNotFound)
+    );
 }
 
 #[test]

@@ -71,7 +71,9 @@ export const commands = {
 	listLibraryArtistAlbums: (request: ArtistAlbumsRequest) => __TAURI_INVOKE<LibraryAlbumPage>("list_library_artist_albums", { request }),
 	listLibraryAlbumArtistAlbums: (artistKey: LibraryAlbumArtistKey, cursor: string | null, sortKey: LibraryArtistAlbumSortKey, sortDirection: LibrarySortDirection) => __TAURI_INVOKE<LibraryAlbumPage>("list_library_album_artist_albums", { artistKey, cursor, sortKey, sortDirection }),
 	getLibraryAlbumDetails: (albumKey: LibraryAlbumKey) => __TAURI_INVOKE<LibraryAlbumDetails>("get_library_album_details", { albumKey }),
-	listLibraryAlbumTracks: (albumKey: LibraryAlbumKey, cursor: string | null) => __TAURI_INVOKE<LibraryAlbumTrackPage>("list_library_album_tracks", { albumKey, cursor }),
+	getLibraryAlbum: (albumId: AlbumId) => __TAURI_INVOKE<LibraryAlbumDetails>("get_library_album", { albumId }),
+	listLibraryAlbumTracks: (request: AlbumTracksRequest) => __TAURI_INVOKE<LibraryAlbumTrackPage>("list_library_album_tracks", { request }),
+	listLibraryAlbumTracksByKey: (albumKey: LibraryAlbumKey, cursor: string | null) => __TAURI_INVOKE<LibraryAlbumTrackPage>("list_library_album_tracks_by_key", { albumKey, cursor }),
 	getLibraryTrackProperties: (trackId: TrackId) => __TAURI_INVOKE<{
 	id: TrackId,
 	path: string,
@@ -149,6 +151,19 @@ export type ActiveSession = {
 	sourceSampleRate: number,
 	outputSampleRate: number,
 	resamplingActive: boolean,
+};
+
+/**
+ *  An album: blake3 of its normalized Album Artist, normalized title, and absolute album
+ *  directory. A track with no album hashes an empty directory. On the IPC 32 lowercase hex
+ *  characters.
+ */
+export type AlbumId = string;
+
+/**  The tracks of one album, by its ID (see `ids.rs`), from a page cursor. */
+export type AlbumTracksRequest = {
+	albumId: AlbumId,
+	cursor: string | null,
 };
 
 /**
@@ -284,6 +299,8 @@ export type LibraryAlbumPage = {
 export type LibraryAlbumSortKey = "title" | "artist" | "year";
 
 export type LibraryAlbumSummary = {
+	id: AlbumId,
+	title: string,
 	key: LibraryAlbumKey,
 	albumArtist: ArtistRef,
 	artwork: ArtworkRef | null,
@@ -472,6 +489,8 @@ export type PlayableTrack = {
 	year: number | null,
 	/**  The catalog's key for the album, `None` for a track with no album tag. */
 	albumKey: LibraryAlbumKey | null,
+	/**  The album's ID, `None` for a track with no album tag. */
+	albumId: AlbumId | null,
 	/**  How many tracks the library holds for that album. */
 	albumTrackCount: number | null,
 };
@@ -479,8 +498,10 @@ export type PlayableTrack = {
 export type PlaybackChannelConversion = "none" | "monoToStereo" | "stereoToMono" | "downmix";
 
 export type PlaybackContext = 
-/**  An album in disc and track order. */
-{ kind: "album"; key: LibraryAlbumKey } | 
+/**  An album in disc and track order, by its ID. */
+{ kind: "album"; albumId: AlbumId } | 
+/**  An album in disc and track order, by its key. Removed by ticket 14. */
+{ kind: "albumByKey"; albumKey: LibraryAlbumKey } | 
 /**  The tracks list as currently filtered and sorted. */
 { kind: "tracks"; search: string | null; sortKey: LibraryTrackSortKey; sortDirection: LibrarySortDirection };
 

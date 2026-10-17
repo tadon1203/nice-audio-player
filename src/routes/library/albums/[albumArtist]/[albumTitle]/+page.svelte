@@ -27,7 +27,7 @@
   import { CountFormat } from "#lib/utils/count-format";
   import { DurationFormat } from "#lib/utils/duration-format";
 
-  const { actions, albums, history, playback, scrollMemory } = AppServices.current();
+  const { actions, albums, playback, scrollMemory } = AppServices.current();
 
   const albumArtist = $derived(fromNameSegment(page.params.albumArtist ?? ""));
   const albumTitle = $derived(fromNameSegment(page.params.albumTitle ?? ""));
@@ -38,16 +38,16 @@
   const shared = $derived(albumItemKey(key));
   const fromArtist = $derived(albumFromArtist(page.url.searchParams));
 
-  const details = new QueryResult(() => albums.detailsOptions(key));
-  const tracks = new PagedCollection(() => albums.tracksOptions(key));
+  const details = new QueryResult(() => albums.detailsOptionsByKey(key));
+  const tracks = new PagedCollection(() => albums.tracksOptionsByKey(key));
 
   // The loaded track belongs to this album (the same key the album was opened with).
-  const albumIsLoaded = $derived(playback.isAlbumLoaded(key));
+  const albumIsLoaded = $derived(playback.isAlbumLoadedByKey(key));
   const albumIsPlaying = $derived(albumIsLoaded && playback.isPlaying);
 
   // Playing a track continues through the rest of its album.
   const playTrack = (trackId: TrackId) =>
-    actions.run(() => playback.start({ kind: "album", key }, trackId));
+    actions.run(() => playback.start({ kind: "albumByKey", albumKey: key }, trackId));
 
   let viewport = $state<HTMLElement | null>(null);
 
@@ -82,11 +82,11 @@
       onRetry={() => void details.refetch()}
     />
   {:else if details.data === undefined || tracks.isPending}
-    <!-- What the route and its history state already tell, so the page is not empty. -->
+    <!-- What the cached lists already tell, so the page is not empty. -->
     <MediaDetailsHeader
       {title}
       {artist}
-      artwork={history.albumOrigin.artwork ?? null}
+      artwork={albums.cachedSummary(key)?.artwork ?? null}
       sharedKey={shared}
     />
     <LoadingStatus>Reading album…</LoadingStatus>
@@ -123,7 +123,7 @@
         <Button
           type="button"
           disabled={album.firstPlayableTrackId === null}
-          onclick={() => actions.run(() => playback.togglePlayAlbum(key))}
+          onclick={() => actions.run(() => playback.togglePlayAlbumByKey(key))}
         >
           <PlayPauseIcon playing={albumIsPlaying} data-icon="inline-start" />
           {albumIsPlaying ? "Pause" : albumIsLoaded ? "Resume" : "Play album"}
@@ -132,7 +132,8 @@
           type="button"
           variant="outline"
           disabled={album.firstPlayableTrackId === null}
-          onclick={() => actions.run(() => playback.shuffleAndStart({ kind: "album", key }))}
+          onclick={() =>
+            actions.run(() => playback.shuffleAndStart({ kind: "albumByKey", albumKey: key }))}
         >
           <Shuffle data-icon="inline-start" aria-hidden="true" />
           Shuffle

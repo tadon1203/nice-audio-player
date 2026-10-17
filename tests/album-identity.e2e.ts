@@ -13,12 +13,23 @@ const artworkOf = (pair: string): ArtworkRef => ({
   mimeType: "png",
 });
 const printings = [
-  { edition: "1/Artist/Test album", artwork: artworkOf("ab"), track: "First printing track" },
-  { edition: "2/Artist/Test album", artwork: artworkOf("cd"), track: "Second printing track" },
+  {
+    id: "a1".repeat(16),
+    edition: "1/Artist/Test album",
+    artwork: artworkOf("ab"),
+    track: "First printing track",
+  },
+  {
+    id: "b2".repeat(16),
+    edition: "2/Artist/Test album",
+    artwork: artworkOf("cd"),
+    track: "Second printing track",
+  },
 ];
 
-const albums: LibraryAlbumSummary[] = printings.map(({ edition, artwork }) => ({
+const albums: LibraryAlbumSummary[] = printings.map(({ id, edition, artwork }) => ({
   ...testAlbum,
+  id,
   key: { ...testAlbum.key, albumEdition: edition },
   artwork,
 }));
@@ -33,21 +44,22 @@ test("two albums with one title and Album Artist in two folders each open their 
     requested.push(new URL(route.request().url()).pathname);
     return route.fulfill({ contentType: "image/png", body: PIXEL });
   });
-  const printingOf = (key: { albumEdition: string }) =>
-    printings.findIndex((entry) => entry.edition === key.albumEdition);
+  const printingOf = (albumId: string) => printings.findIndex((entry) => entry.id === albumId);
 
   native.respond("listLibraryAlbums", () => ({
     items: albums,
     totalCount: albums.length,
     nextCursor: null,
   }));
-  native.respond("getLibraryAlbumDetails", ({ albumKey }) => ({
+  native.respond("getLibraryAlbum", ({ albumId }) => ({
     ...base.albumDetails,
-    summary: albums[printingOf(albumKey)]!,
+    summary: albums[printingOf(albumId)]!,
   }));
-  native.respond("listLibraryAlbumTracks", ({ albumKey }) => ({
+  native.respond("listLibraryAlbumTracks", ({ request }) => ({
     ...base.albumTracks,
-    items: [{ ...base.albumTracks.items[0]!, title: printings[printingOf(albumKey)]!.track }],
+    items: [
+      { ...base.albumTracks.items[0]!, title: printings[printingOf(request.albumId)]!.track },
+    ],
     totalCount: 1,
   }));
 

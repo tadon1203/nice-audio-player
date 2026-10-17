@@ -113,6 +113,52 @@ fn albums_keep_their_identity_and_take_the_cover_of_their_first_track_with_artwo
 }
 
 #[test]
+fn an_album_is_found_by_its_id_as_it_is_by_its_key() {
+    let fixture = fixture();
+    fixture.touch_audio([1, 2, 3]);
+    let mut one = Seed::new(1, "One", "Artist", "Shared");
+    one.album_artist = Some("Album Artist");
+    let mut two = Seed::new(2, "Two", "Artist", "Shared");
+    two.album_artist = Some("Album Artist");
+    fixture.add_all(&[one, two]);
+    let store = &fixture.store;
+    let album = all_albums(store, None)
+        .items
+        .into_iter()
+        .find(|album| album.key.title == "Shared")
+        .unwrap();
+    assert_eq!(album.title, "Shared");
+
+    let details = store.catalog_album(album.id).unwrap();
+    assert_eq!(details.summary.id, album.id);
+    assert_eq!(details.summary.key, album.key);
+    assert_eq!(details.track_count, 2);
+    let by_id = store.catalog_album_tracks_by_id(album.id, None).unwrap();
+    let by_key = store.catalog_album_tracks(album.key.clone(), None).unwrap();
+    assert_eq!(by_id.items.len(), by_key.items.len());
+    assert_eq!(
+        by_id.items.iter().map(|t| t.id).collect::<Vec<_>>(),
+        by_key.items.iter().map(|t| t.id).collect::<Vec<_>>()
+    );
+    let selection = store.playback_for_album_id(album.id, None).unwrap();
+    assert_eq!(selection.track_ids.len(), 2);
+
+    let missing = AlbumId::of("Nobody", "Nope", std::ffi::OsStr::new(""));
+    assert_eq!(
+        store.catalog_album(missing).err(),
+        Some(StoreError::AlbumNotFound)
+    );
+    assert_eq!(
+        store.catalog_album_tracks_by_id(missing, None).err(),
+        Some(StoreError::AlbumNotFound)
+    );
+    assert_eq!(
+        store.playback_for_album_id(missing, None).err(),
+        Some(PlaybackSourceError::AlbumNotFound)
+    );
+}
+
+#[test]
 fn an_album_is_found_playable_and_reported_missing_by_its_key() {
     let fixture = fixture();
     fixture.touch_audio([1, 2, 3]);

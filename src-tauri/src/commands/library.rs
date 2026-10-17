@@ -1,14 +1,14 @@
 use std::path::PathBuf;
 
 use backend::dto::{
-    ArtistAlbumsRequest, LibraryAlbumArtistKey, LibraryAlbumArtistPage, LibraryAlbumArtistSortKey,
-    LibraryAlbumArtistSummary, LibraryAlbumDetails, LibraryAlbumKey, LibraryAlbumPage,
-    LibraryAlbumSortKey, LibraryAlbumTrackPage, LibraryArtistAlbumSortKey, LibraryIndexBucket,
-    LibraryRoot, LibrarySortDirection, LibraryStatus, LibraryTrackPage, LibraryTrackProperties,
-    LibraryTrackSortKey,
+    AlbumTracksRequest, ArtistAlbumsRequest, LibraryAlbumArtistKey, LibraryAlbumArtistPage,
+    LibraryAlbumArtistSortKey, LibraryAlbumArtistSummary, LibraryAlbumDetails, LibraryAlbumKey,
+    LibraryAlbumPage, LibraryAlbumSortKey, LibraryAlbumTrackPage, LibraryArtistAlbumSortKey,
+    LibraryIndexBucket, LibraryRoot, LibrarySortDirection, LibraryStatus, LibraryTrackPage,
+    LibraryTrackProperties, LibraryTrackSortKey,
 };
 use backend::errors::LibraryCommandError;
-use backend::ids::{ArtistId, ArtworkHash, RootId, TrackId};
+use backend::ids::{AlbumId, ArtistId, ArtworkHash, RootId, TrackId};
 
 use super::blocking;
 use crate::{
@@ -283,7 +283,25 @@ pub async fn get_library_album_details(
 
 #[tauri::command]
 #[specta::specta]
+pub async fn get_library_album(
+    album_id: AlbumId,
+    state: tauri::State<'_, AppState>,
+) -> Result<LibraryAlbumDetails, LibraryCommandError> {
+    blocking(&state, move |backend| backend.album_by_id(album_id)).await
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn list_library_album_tracks(
+    request: AlbumTracksRequest,
+    state: tauri::State<'_, AppState>,
+) -> Result<LibraryAlbumTrackPage, LibraryCommandError> {
+    blocking(&state, move |backend| backend.album_tracks_by_id(request)).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn list_library_album_tracks_by_key(
     album_key: LibraryAlbumKey,
     cursor: Option<String>,
     state: tauri::State<'_, AppState>,

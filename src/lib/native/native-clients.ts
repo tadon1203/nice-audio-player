@@ -15,6 +15,7 @@ import type {
   LibraryAlbumPage,
   LibraryAlbumSortKey,
   LibraryAlbumTrackPage,
+  AlbumId,
   ArtistAlbumsRequest,
   ArtistId,
   LibraryArtistAlbumSortKey,
@@ -127,6 +128,9 @@ export interface LibraryClient {
     sortKey: LibraryAlbumArtistSortKey,
     direction: LibrarySortDirection,
   ): Promise<LibraryIndexBucket[]>;
+  albumById(albumId: AlbumId): Promise<LibraryAlbumDetails>;
+  albumTracksById(albumId: AlbumId, cursor: string | null): Promise<LibraryAlbumTrackPage>;
+  /** The old album route, until ticket 14 removes it. */
   album(albumKey: LibraryAlbumKey): Promise<LibraryAlbumDetails>;
   albumTracks(albumKey: LibraryAlbumKey, cursor: string | null): Promise<LibraryAlbumTrackPage>;
   artist(artistId: ArtistId): Promise<LibraryAlbumArtistSummary>;

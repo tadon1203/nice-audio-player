@@ -19,6 +19,7 @@ const item = (id: TrackId): PlaybackItem => ({
   discNumber: null,
   year: null,
   albumKey: null,
+  albumId: null,
   albumTrackCount: null,
 });
 

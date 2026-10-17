@@ -2,16 +2,13 @@ import type { Playback } from "#lib/playback/playback.svelte";
 import { PlaybackSnapshots } from "#lib/playback/playback-snapshots";
 import { VolumeStep } from "#lib/playback/volume-step";
 import { nextSeekPosition } from "#lib/ui/waveform/waveform-model";
+import type { NowPlayingView } from "./now-playing-view.svelte";
 import type { QueuePanel } from "./queue-panel.svelte";
-import type { ShellHistory } from "./shell-history.svelte";
 import type { UserActionRunner } from "./user-action-runner.svelte";
 
 /** The shell surfaces the shortcuts open and close. */
 export type ShellSurfaces = {
-  readonly history: Pick<
-    ShellHistory,
-    "isNowPlayingOpen" | "openNowPlaying" | "closeNowPlaying" | "toggleNowPlaying"
-  >;
+  readonly nowPlaying: Pick<NowPlayingView, "isOpen" | "open" | "close" | "toggle">;
   readonly queuePanel: Pick<QueuePanel, "isOpen" | "toggle">;
 };
 
@@ -46,26 +43,26 @@ export class PlaybackShortcuts {
     shell: ShellSurfaces,
   ): void {
     if (event.defaultPrevented || isEditableTarget(event.target)) return;
-    const { history, queuePanel } = shell;
+    const { nowPlaying, queuePanel } = shell;
 
     if (event.key === "l" && event.ctrlKey) {
       event.preventDefault();
       // Like the dock button, it has nothing to open without a track (closing always works).
-      if (playback.isActive || history.isNowPlayingOpen) history.toggleNowPlaying();
+      if (playback.isActive || nowPlaying.isOpen) nowPlaying.toggle();
       return;
     }
 
-    if (event.key === "Escape" && !event.ctrlKey && !event.altKey && history.isNowPlayingOpen) {
+    if (event.key === "Escape" && !event.ctrlKey && !event.altKey && nowPlaying.isOpen) {
       // The queue panel and menus are above Now Playing and close first (they handle Escape).
       if (queuePanel.isOpen) return;
       event.preventDefault();
-      history.closeNowPlaying();
+      nowPlaying.close();
       return;
     }
 
     if ((event.key === "/" && !event.ctrlKey) || (event.key === "f" && event.ctrlKey)) {
       const filter = document.querySelector<HTMLInputElement>("[data-library-filter]");
-      if (filter === null || history.isNowPlayingOpen) return;
+      if (filter === null || nowPlaying.isOpen) return;
       event.preventDefault();
       filter.focus();
       filter.select();

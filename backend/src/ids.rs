@@ -174,8 +174,13 @@ impl From<TrackId> for i64 {
 }
 
 /// An album: blake3 of its normalized Album Artist, normalized title, and absolute album
-/// directory. A track with no album hashes an empty directory.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+/// directory. A track with no album hashes an empty directory. On the IPC 32 lowercase hex
+/// characters.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, specta::Type,
+)]
+#[serde(try_from = "String", into = "String")]
+#[specta(type = String)]
 pub struct AlbumId([u8; 16]);
 
 /// An Album Artist: blake3 of the normalized name. On the IPC 32 lowercase hex characters.
@@ -205,6 +210,25 @@ impl AlbumId {
     pub fn to_hex(self) -> String {
         hex_of(&self.0)
     }
+
+    /// The ID of its 32 lowercase hex characters, or `None` for any other text.
+    pub fn from_hex(value: &str) -> Option<Self> {
+        hex_id(value).map(Self)
+    }
+}
+
+impl TryFrom<String> for AlbumId {
+    type Error = &'static str;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::from_hex(&value).ok_or("an album ID is 32 lowercase hex digits")
+    }
+}
+
+impl From<AlbumId> for String {
+    fn from(id: AlbumId) -> Self {
+        id.to_hex()
+    }
 }
 
 impl ArtistId {
@@ -219,15 +243,7 @@ impl ArtistId {
 
     /// The ID of its 32 lowercase hex characters, or `None` for any other text.
     pub fn from_hex(value: &str) -> Option<Self> {
-        let bytes = value.as_bytes();
-        if bytes.len() != 32 {
-            return None;
-        }
-        let mut id = [0; 16];
-        for (index, byte) in id.iter_mut().enumerate() {
-            *byte = (hex_digit(bytes[2 * index])? << 4) | hex_digit(bytes[2 * index + 1])?;
-        }
-        Some(Self(id))
+        hex_id(value).map(Self)
     }
 }
 
@@ -245,12 +261,31 @@ impl From<ArtistId> for String {
     }
 }
 
+/// The 16 bytes of 32 lowercase hex characters, or `None` for any other text.
+fn hex_id(value: &str) -> Option<[u8; 16]> {
+    let bytes = value.as_bytes();
+    if bytes.len() != 32 {
+        return None;
+    }
+    let mut id = [0; 16];
+    for (index, byte) in id.iter_mut().enumerate() {
+        *byte = (hex_digit(bytes[2 * index])? << 4) | hex_digit(bytes[2 * index + 1])?;
+    }
+    Some(id)
+}
+
 fn hex_digit(byte: u8) -> Option<u8> {
     match byte {
         b'0'..=b'9' => Some(byte - b'0'),
         b'a'..=b'f' => Some(byte - b'a' + 10),
         _ => None,
     }
+}
+
+/// An `albums.id` read from a column. See [`track_id_column`].
+pub(crate) fn album_id_column(row: &Row<'_>, index: usize) -> rusqlite::Result<AlbumId> {
+    let hex: String = row.get(index)?;
+    AlbumId::from_hex(&hex).ok_or(rusqlite::Error::InvalidColumnType(index, hex, Type::Text))
 }
 
 /// An `albums.artist_id` read from a column. See [`track_id_column`].
@@ -427,6 +462,30 @@ mod tests {
 
         let good = ArtistId::of("Band");
         let parsed: ArtistId = serde_json::from_value(serde_json::json!(good.to_hex())).unwrap();
+        assert_eq!(parsed, good);
+        assert_eq!(
+            serde_json::to_value(parsed).unwrap(),
+            serde_json::json!(good.to_hex())
+        );
+    }
+
+    #[test]
+    fn a_command_argument_with_a_bad_album_id_is_rejected_at_deserialization() {
+        for bad in [
+            "ab".repeat(15),
+            "ab".repeat(17),
+            "AB".repeat(16),
+            format!("{}g", "a".repeat(31)),
+            String::new(),
+        ] {
+            assert!(
+                serde_json::from_value::<AlbumId>(serde_json::json!(bad)).is_err(),
+                "{bad}"
+            );
+        }
+
+        let good = AlbumId::of("Band", "Album", OsStr::new("dir"));
+        let parsed: AlbumId = serde_json::from_value(serde_json::json!(good.to_hex())).unwrap();
         assert_eq!(parsed, good);
         assert_eq!(
             serde_json::to_value(parsed).unwrap(),

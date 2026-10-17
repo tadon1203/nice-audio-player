@@ -265,11 +265,23 @@ class TauriLibraryClient implements LibraryClient {
   ) {
     return this.#call(() => this.#commands.listLibraryAlbumArtistIndex(search, sortKey, direction));
   }
+  albumById(albumId: Parameters<Commands["getLibraryAlbum"]>[0]) {
+    return this.#call(() => this.#commands.getLibraryAlbum(albumId));
+  }
+  albumTracksById(
+    albumId: Parameters<Commands["listLibraryAlbumTracks"]>[0]["albumId"],
+    cursor: string | null,
+  ) {
+    return this.#call(() => this.#commands.listLibraryAlbumTracks({ albumId, cursor }));
+  }
   album(albumKey: Parameters<Commands["getLibraryAlbumDetails"]>[0]) {
     return this.#call(() => this.#commands.getLibraryAlbumDetails(albumKey));
   }
-  albumTracks(albumKey: Parameters<Commands["listLibraryAlbumTracks"]>[0], cursor: string | null) {
-    return this.#call(() => this.#commands.listLibraryAlbumTracks(albumKey, cursor));
+  albumTracks(
+    albumKey: Parameters<Commands["listLibraryAlbumTracksByKey"]>[0],
+    cursor: string | null,
+  ) {
+    return this.#call(() => this.#commands.listLibraryAlbumTracksByKey(albumKey, cursor));
   }
   artist(artistId: Parameters<Commands["getLibraryArtist"]>[0]) {
     return this.#call(() => this.#commands.getLibraryArtist(artistId));

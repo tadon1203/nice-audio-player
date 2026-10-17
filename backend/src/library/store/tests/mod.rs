@@ -19,7 +19,7 @@ use rusqlite::params;
 use std::collections::HashSet;
 use std::path::PathBuf;
 
-use crate::ids::{ArtistId, TrackId};
+use crate::ids::{AlbumId, ArtistId, TrackId};
 
 /// The track with this rowid, for tests that name tracks by ID.
 fn track_id_of(rowid: i64) -> TrackId {

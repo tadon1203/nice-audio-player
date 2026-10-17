@@ -1,9 +1,7 @@
 <script lang="ts">
   import type { LibraryAlbumSummary } from "#lib/native";
-  import { albumItemKey } from "#lib/library/album-key";
-  import { albumHref } from "#lib/library/routes";
+  import { resolve } from "$app/paths";
   import { albumTitleLabel, artistNameLabel } from "#lib/library/unknown-name";
-  import { AppServices } from "#lib/shell/app-services.svelte";
   import Artwork from "#lib/ui/artwork.svelte";
   import { sharedElement } from "#lib/ui/motion/shared-element";
   import PlayPauseIcon from "#lib/ui/play-pause-icon.svelte";
@@ -24,39 +22,26 @@
     fromArtist?: boolean;
   } = $props();
 
-  const { history } = AppServices.current();
   const title = $derived(albumTitleLabel(album.key.title));
   const artist = $derived(artistNameLabel(album.key.albumArtist));
-  const href = $derived(albumHref(album.key, fromArtist));
-
-  // The artwork rides in history state, for the shared element while the album's details load.
-  function open(event: MouseEvent) {
-    if (
-      event.defaultPrevented ||
-      event.button !== 0 ||
-      event.metaKey ||
-      event.ctrlKey ||
-      event.shiftKey ||
-      event.altKey
-    )
-      return;
-    event.preventDefault();
-    void history.openAlbum(href, { artwork: album.artwork });
-  }
+  // The ID names the album; `from` (in the URL, so it survives a reload) returns to the artist.
+  const href = $derived(
+    resolve("/library/albums/[albumId=albumId]", { albumId: album.id }) +
+      (fromArtist ? "?from=artist" : ""),
+  );
 </script>
 
 <!-- An artwork-led album entry. Titles are not headings: tiles belong to a list. -->
 <div class="group/tile relative min-w-0">
   <a
     {href}
-    onclick={open}
     aria-label={showArtist ? `Open album ${title} by ${artist}` : `Open album ${title}`}
     class="group block min-w-0 rounded-lg outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
   >
     <Artwork
       artwork={album.artwork}
       alt="{title} artwork"
-      {@attach sharedElement(albumItemKey(album.key))}
+      {@attach sharedElement(album.id)}
       class="[&_img]:transition-transform group-hover:[&_img]:scale-[1.04]"
     />
     <div class="mt-3 min-w-0">

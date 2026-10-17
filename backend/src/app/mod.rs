@@ -17,13 +17,13 @@ use crate::audio::{
     },
     waveform::{PlaybackWaveform, Waveform, WaveformService},
 };
-use crate::ids::{ArtistId, ArtworkHash, QueueItemId, RootId, TrackId};
+use crate::ids::{AlbumId, ArtistId, ArtworkHash, QueueItemId, RootId, TrackId};
 use crate::library::{
     Library,
     artwork::{self, ServedArtwork},
     error::{LibraryCommandError, StoreError},
     models::{
-        ArtistAlbumsRequest, LibraryAlbumArtistKey, LibraryAlbumArtistPage,
+        AlbumTracksRequest, ArtistAlbumsRequest, LibraryAlbumArtistKey, LibraryAlbumArtistPage,
         LibraryAlbumArtistSortKey, LibraryAlbumArtistSummary, LibraryAlbumDetails, LibraryAlbumKey,
         LibraryAlbumPage, LibraryAlbumSortKey, LibraryAlbumTrackPage, LibraryArtistAlbumSortKey,
         LibraryIndexBucket, LibraryRoot, LibrarySortDirection, LibraryStatus, LibraryTrackPage,
@@ -349,6 +349,23 @@ impl BackendApp {
             .catalog_album_tracks(album_key, cursor)?)
     }
 
+    pub fn album_by_id(
+        &self,
+        album_id: AlbumId,
+    ) -> Result<LibraryAlbumDetails, LibraryCommandError> {
+        Ok(self.library()?.store().catalog_album(album_id)?)
+    }
+
+    pub fn album_tracks_by_id(
+        &self,
+        request: AlbumTracksRequest,
+    ) -> Result<LibraryAlbumTrackPage, LibraryCommandError> {
+        Ok(self
+            .library()?
+            .store()
+            .catalog_album_tracks_by_id(request.album_id, request.cursor.as_deref())?)
+    }
+
     pub fn artist(
         &self,
         artist_id: ArtistId,
@@ -658,10 +675,10 @@ impl BackendApp {
 }
 
 fn state(revision: u64, value: StateValue) -> BackendMessage {
-    BackendMessage::State(StateMessage {
+    BackendMessage::State(Box::new(StateMessage {
         revision,
         state: value,
-    })
+    }))
 }
 
 fn map_lyrics_context_error(error: StoreError) -> LyricsCommandError {

@@ -148,7 +148,7 @@ test("uses the album as the queue context when Play album starts playback", asyn
   await page.getByRole("button", { name: "Play album" }).click();
   await expect
     .poll(() => native.callsTo("startPlayback").map((call) => call.context))
-    .toEqual([{ kind: "album", key: library.albumDetails.summary.key }]);
+    .toEqual([{ kind: "album", albumId: library.albumDetails.summary.id }]);
 
   const dock = page.getByRole("contentinfo", { name: "Playback controls" });
   await expect(dock.getByText("Test track", { exact: true })).toBeVisible();

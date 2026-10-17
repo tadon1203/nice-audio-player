@@ -6,7 +6,7 @@ use super::{
     catalog::{ALBUM_ORDER, album_id_of, track_filter, track_ordering, validate_album_key},
     track::{artwork_ref, non_blank},
 };
-use crate::ids::{TrackId, track_id_column};
+use crate::ids::{AlbumId, TrackId, album_id_column, track_id_column};
 use crate::library::{
     artwork::ArtworkRef,
     error::StoreError,
@@ -41,6 +41,8 @@ pub struct PlayableTrack {
     pub year: Option<i32>,
     /// The catalog's key for the album, `None` for a track with no album tag.
     pub album_key: Option<LibraryAlbumKey>,
+    /// The album's ID, `None` for a track with no album tag.
+    pub album_id: Option<AlbumId>,
     /// How many tracks the library holds for that album.
     pub album_track_count: Option<u32>,
     #[serde(skip)]
@@ -106,7 +108,7 @@ struct PlaybackRow {
     album_artist: Option<String>,
     album_artist_name: String,
     album_directory: String,
-    album_id: String,
+    album_id: AlbumId,
     duration_ms: Option<i64>,
     artwork: Option<ArtworkRef>,
     track_number: Option<i64>,
@@ -155,7 +157,7 @@ fn playback_row(row: &Row<'_>) -> rusqlite::Result<PlaybackRow> {
         album_artist: row.get(8)?,
         album_artist_name: row.get(9)?,
         album_directory: row.get(19)?,
-        album_id: row.get(21)?,
+        album_id: album_id_column(row, 21)?,
         duration_ms: row.get(10)?,
         artwork: artwork_ref(row.get(11)?, row.get(12)?),
         track_number: row.get(13)?,
@@ -208,9 +210,10 @@ fn playable_track(
         file
     };
     let album_key = row.album_key();
+    let album_id = album_key.as_ref().map(|_| row.album_id);
     let album_track_count = album_key
         .as_ref()
-        .and_then(|_| counts.get(&row.album_id).copied());
+        .and_then(|_| counts.get(&row.album_id.to_hex()).copied());
     Ok(Some(PlayableTrack {
         track_id: row.track_id,
         file,
@@ -224,6 +227,7 @@ fn playable_track(
         disc_number: row.disc_number.and_then(|value| u32::try_from(value).ok()),
         year: row.year,
         album_key,
+        album_id,
         album_track_count,
         file_format: row.file_format,
         bit_depth: row.bit_depth,
@@ -291,7 +295,7 @@ fn selection_row(row: &Row<'_>) -> rusqlite::Result<SelectionRow> {
 const IDS_PER_QUERY: usize = 400;
 
 impl LibraryStore {
-    /// The album in disc and track order.
+    /// The album in disc and track order, from its key (the old album route, ticket 14).
     pub fn playback_for_album(
         &self,
         key: &LibraryAlbumKey,
@@ -300,14 +304,32 @@ impl LibraryStore {
         validate_album_key(key)?;
         let connection = self.read()?;
         let album_id = album_id_of(&connection, key)?;
+        Self::album_selection(&connection, album_id, start_track_id)
+    }
+
+    /// The album in disc and track order, by its ID.
+    pub fn playback_for_album_id(
+        &self,
+        album_id: AlbumId,
+        start_track_id: Option<TrackId>,
+    ) -> Result<PlaybackSelection, PlaybackSourceError> {
+        let connection = self.read()?;
+        Self::album_selection(&connection, album_id, start_track_id)
+    }
+
+    fn album_selection(
+        connection: &Connection,
+        album_id: AlbumId,
+        start_track_id: Option<TrackId>,
+    ) -> Result<PlaybackSelection, PlaybackSourceError> {
         let rows = collect_selection(
-            &connection,
+            connection,
             &format!(
                 "SELECT {SELECTION_COLUMNS} {SELECTION_FROM}
                  WHERE m.album_id = ?1
                  ORDER BY {ALBUM_ORDER}"
             ),
-            params![album_id],
+            params![album_id.to_hex()],
         )?;
         if rows.is_empty() {
             return Err(PlaybackSourceError::AlbumNotFound);
@@ -330,7 +352,7 @@ impl LibraryStore {
         let Some(row) = rows.into_iter().next() else {
             return Err(PlaybackSourceError::InvalidTrackId);
         };
-        let counts = album_counts(&connection, [row.album_id.clone()])?;
+        let counts = album_counts(&connection, [row.album_id.to_hex()])?;
         playable_track(row, &counts, true)?.ok_or(PlaybackSourceError::NoPlayableTracks)
     }
 
@@ -353,7 +375,7 @@ impl LibraryStore {
                 &format!("SELECT {PLAYBACK_COLUMNS} {PLAYBACK_FROM} WHERE t.id IN ({marks})"),
                 rusqlite::params_from_iter(ids),
             )?;
-            let counts = album_counts(&connection, rows.iter().map(|row| row.album_id.clone()))?;
+            let counts = album_counts(&connection, rows.iter().map(|row| row.album_id.to_hex()))?;
             for row in rows {
                 let id = row.track_id;
                 if let Some(track) = playable_track(row, &counts, false)? {

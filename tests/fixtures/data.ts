@@ -40,13 +40,20 @@ export const testRoot: LibraryRoot = {
 const testArtistId = "9f1c0e4b7a2d4c3e8b5a6f7e8d9c0b1a";
 const extraArtistId = "3d2c1b0a9f8e7d6c5b4a39281706f5e4";
 
+const testAlbumId = "5a1b2c3d4e5f60718293a4b5c6d7e8f9";
+const secondAlbumId = "6b2c3d4e5f60718293a4b5c6d7e8f9a0";
+
 export const testAlbum: LibraryAlbumSummary = {
+  id: testAlbumId,
+  title: "Test album",
   key: { title: "Test album", albumArtist: "Test artist", albumEdition: "" },
   albumArtist: { id: testArtistId, name: "Test artist" },
   artwork: null,
   year: 2020,
 };
 export const secondAlbum: LibraryAlbumSummary = {
+  id: secondAlbumId,
+  title: "Second album",
   key: { title: "Second album", albumArtist: "Test artist", albumEdition: "" },
   albumArtist: { id: testArtistId, name: "Test artist" },
   artwork: null,
@@ -105,6 +112,8 @@ export function testLibrary(
   const extra = Array.from(
     { length: options.extraAlbums ?? 0 },
     (_, index): LibraryAlbumSummary => ({
+      id: `e${String(index).padStart(31, "0")}`,
+      title: `Extra album ${String(index).padStart(4, "0")}`,
       key: {
         title: `Extra album ${String(index).padStart(4, "0")}`,
         albumArtist: "Extra artist",
@@ -171,6 +180,8 @@ export function libraryResponses(library: LibraryData = testLibrary()) {
     getLibraryAlbumArtist: library.artists[0],
     listLibraryAlbumArtistAlbums: () => pageOf(library.albums.slice(0, 2), null),
     getLibraryAlbumDetails: library.albumDetails,
+    listLibraryAlbumTracksByKey: library.albumTracks,
+    getLibraryAlbum: library.albumDetails,
     listLibraryAlbumTracks: library.albumTracks,
     getLibraryTrackProperties: ({ trackId: id }: { trackId: number }) => {
       const track = library.tracks.find((entry) => entry.id === id);
@@ -335,6 +346,7 @@ export function playbackItemFor(track: LibraryTrackSummary): PlaybackItem {
     discNumber: null,
     year: 2019,
     albumKey: track.albumKey,
+    albumId: track.albumKey === null ? null : testAlbumId,
     albumTrackCount: null,
   };
 }

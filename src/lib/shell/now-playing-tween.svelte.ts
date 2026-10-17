@@ -15,13 +15,13 @@ export class NowPlayingTween {
   readonly #spring: RetargetableSpring;
 
   public constructor(whenClosed: number, whenOpen: number) {
-    const { history, motion: budget } = AppServices.current();
+    const { nowPlaying, motion: budget } = AppServices.current();
     this.#spring = new RetargetableSpring(
-      untrack(() => (history.isNowPlayingOpen ? whenOpen : whenClosed)),
+      untrack(() => (nowPlaying.isOpen ? whenOpen : whenClosed)),
       { precision: Math.abs(whenOpen - whenClosed) * PRECISION_OF_SPAN },
     );
     $effect(() => {
-      const open = history.isNowPlayingOpen;
+      const open = nowPlaying.isOpen;
       const reduced = budget.current === "reduced";
       untrack(() => {
         this.#spring.duration = NowPlayingMotion.duration(open);

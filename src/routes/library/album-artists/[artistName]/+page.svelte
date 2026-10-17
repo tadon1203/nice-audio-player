@@ -100,7 +100,7 @@
               showArtist={false}
               fromArtist
               onplay={(played) =>
-                actions.run(() => playback.start({ kind: "album", key: played.key }, null))}
+                actions.run(() => playback.start({ kind: "album", albumId: played.id }, null))}
             />
           {/snippet}
         </VirtualMediaGrid>

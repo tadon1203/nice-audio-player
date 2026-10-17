@@ -12,11 +12,12 @@ pub use crate::audio::playback::{
 pub use crate::audio::waveform::PlaybackWaveform;
 pub use crate::library::artwork::{ArtworkCache, ArtworkRef, ServedArtwork};
 pub use crate::library::models::{
-    ArtistAlbumsRequest, ArtistRef, LibraryAlbumArtistKey, LibraryAlbumArtistPage,
-    LibraryAlbumArtistSortKey, LibraryAlbumArtistSummary, LibraryAlbumDetails, LibraryAlbumKey,
-    LibraryAlbumPage, LibraryAlbumSortKey, LibraryAlbumTrackPage, LibraryArtistAlbumSortKey,
-    LibraryIndexBucket, LibraryRoot, LibraryScanSnapshot, LibrarySortDirection, LibraryStatus,
-    LibraryTrackPage, LibraryTrackProperties, LibraryTrackSortKey, LibraryUnavailableReason,
+    AlbumTracksRequest, ArtistAlbumsRequest, ArtistRef, LibraryAlbumArtistKey,
+    LibraryAlbumArtistPage, LibraryAlbumArtistSortKey, LibraryAlbumArtistSummary,
+    LibraryAlbumDetails, LibraryAlbumKey, LibraryAlbumPage, LibraryAlbumSortKey,
+    LibraryAlbumTrackPage, LibraryArtistAlbumSortKey, LibraryIndexBucket, LibraryRoot,
+    LibraryScanSnapshot, LibrarySortDirection, LibraryStatus, LibraryTrackPage,
+    LibraryTrackProperties, LibraryTrackSortKey, LibraryUnavailableReason,
 };
 pub use crate::lyrics::LyricsResolution;
 pub use crate::messages::Versioned;

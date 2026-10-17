@@ -46,13 +46,13 @@
       >
         <TitleBar />
         <aside
-          inert={services.history.isNowPlayingOpen}
+          inert={services.nowPlaying.isOpen}
           class="col-start-1 row-start-2 hidden min-h-0 min-w-0 flex-col bg-sidebar text-sidebar-foreground md:flex"
         >
           <Navigation />
         </aside>
         <main
-          inert={services.history.isNowPlayingOpen}
+          inert={services.nowPlaying.isOpen}
           class="col-start-1 row-start-2 min-h-0 min-w-0 md:col-start-2"
           data-slot="app-main"
         >

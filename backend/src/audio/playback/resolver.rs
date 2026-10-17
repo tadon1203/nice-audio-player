@@ -146,6 +146,7 @@ pub(super) mod testing {
             disc_number: None,
             year: None,
             album_key: None,
+            album_id: None,
             album_track_count: None,
             file_format: None,
             bit_depth: None,

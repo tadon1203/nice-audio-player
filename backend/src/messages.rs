@@ -51,9 +51,9 @@ pub enum StateTopic {
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum BackendMessage {
     /// The fields of the message merge into one object: { kind: "state", revision, topic, value }.
-    State(StateMessage),
+    State(Box<StateMessage>),
     /// { kind: "occurrence", type: "...", ... }
-    Occurrence(Occurrence),
+    Occurrence(Box<Occurrence>),
     /// { kind: "position", playbackId, positionMs, seekRevision }
     Position(PlaybackPosition),
 }

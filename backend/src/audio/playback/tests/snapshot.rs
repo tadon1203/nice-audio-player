@@ -60,6 +60,7 @@ fn item_json() -> serde_json::Value {
         "discNumber": null,
         "year": null,
         "albumKey": null,
+        "albumId": null,
         "albumTrackCount": null,
         "title": "test.flac",
         "artist": null,

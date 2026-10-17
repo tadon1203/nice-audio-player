@@ -121,7 +121,7 @@ fn batch_messages(
             }
             Signal::Position => position_changed = true,
             Signal::Occurrence(occurrence) => {
-                messages.push(BackendMessage::Occurrence(*occurrence));
+                messages.push(BackendMessage::Occurrence(occurrence));
             }
         }
     }
@@ -154,7 +154,7 @@ mod tests {
         let sent: Vec<Occurrence> = messages
             .into_iter()
             .filter_map(|message| match message {
-                BackendMessage::Occurrence(occurrence) => Some(occurrence),
+                BackendMessage::Occurrence(occurrence) => Some(*occurrence),
                 _ => None,
             })
             .collect();

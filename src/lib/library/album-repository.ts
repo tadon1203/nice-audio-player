@@ -5,6 +5,7 @@ import {
   type QueryClient,
 } from "@tanstack/svelte-query";
 import type {
+  AlbumId,
   LibraryAlbumDetails,
   LibraryAlbumKey,
   LibraryAlbumPage,
@@ -31,17 +32,38 @@ export class AlbumRepository {
     this.#queryClient = queryClient;
   }
 
-  public detailsOptions(key: LibraryAlbumKey) {
+  public detailsOptions(albumId: AlbumId) {
     return queryOptions({
-      queryKey: LibraryQueryKeys.album(key),
+      queryKey: LibraryQueryKeys.album(albumId),
+      queryFn: (): Promise<LibraryAlbumDetails> => this.#client.albumById(albumId),
+      gcTime: Infinity,
+    });
+  }
+
+  public tracksOptions(albumId: AlbumId) {
+    return infiniteQueryOptions({
+      queryKey: LibraryQueryKeys.albumTracks(albumId),
+      initialPageParam: null as string | null,
+      queryFn: ({ pageParam }): Promise<LibraryAlbumTrackPage> =>
+        this.#client.albumTracksById(albumId, pageParam),
+      getNextPageParam: (page: LibraryAlbumTrackPage) => page.nextCursor ?? undefined,
+      gcTime: Infinity,
+    });
+  }
+
+  /** The old album route's details, by key, until ticket 14 removes that route. */
+  public detailsOptionsByKey(key: LibraryAlbumKey) {
+    return queryOptions({
+      queryKey: LibraryQueryKeys.albumByKey(key),
       queryFn: (): Promise<LibraryAlbumDetails> => this.#client.album(key),
       gcTime: Infinity,
     });
   }
 
-  public tracksOptions(key: LibraryAlbumKey) {
+  /** The old album route's tracks, by key, until ticket 14 removes that route. */
+  public tracksOptionsByKey(key: LibraryAlbumKey) {
     return infiniteQueryOptions({
-      queryKey: LibraryQueryKeys.albumTracks(key),
+      queryKey: LibraryQueryKeys.albumTracksByKey(key),
       initialPageParam: null as string | null,
       queryFn: ({ pageParam }): Promise<LibraryAlbumTrackPage> =>
         this.#client.albumTracks(key, pageParam),
@@ -56,6 +78,11 @@ export class AlbumRepository {
    */
   public cachedSummary(key: LibraryAlbumKey): LibraryAlbumSummary | null {
     return this.#albumSummaries().find((summary) => isSameAlbum(summary.key, key)) ?? null;
+  }
+
+  /** The album's summary from any cached list, by ID. Reads only, like `cachedSummary`. */
+  public cachedSummaryById(albumId: AlbumId): LibraryAlbumSummary | null {
+    return this.#albumSummaries().find((summary) => summary.id === albumId) ?? null;
   }
 
   #albumSummaries(): LibraryAlbumSummary[] {

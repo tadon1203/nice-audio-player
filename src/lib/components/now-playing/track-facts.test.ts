@@ -15,6 +15,7 @@ const item: PlaybackItem = {
   discNumber: 1,
   year: 2019,
   albumKey: { albumArtist: "Album Artist", title: "Album", albumEdition: "" },
+  albumId: "7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a20",
   albumTrackCount: 12,
 };
 

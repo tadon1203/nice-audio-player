@@ -1,4 +1,5 @@
 import type {
+  AlbumId,
   ArtistId,
   ArtworkHash,
   LibraryAlbumArtistKey,
@@ -67,11 +68,21 @@ export class LibraryQueryKeys {
     return [...LibraryQueryKeys.data, "catalogIndex", { ...request, skip: 0 }];
   }
 
-  public static album(key: LibraryAlbumKey): readonly unknown[] {
+  /** An album by its ID: one entry per album, however many share a title and Album Artist. */
+  public static album(albumId: AlbumId): readonly unknown[] {
+    return [...LibraryQueryKeys.data, "album", "byId", "detail", albumId];
+  }
+
+  public static albumTracks(albumId: AlbumId): readonly unknown[] {
+    return [...LibraryQueryKeys.data, "album", "byId", "tracks", albumId];
+  }
+
+  /** The old album route's album, by its key, until ticket 14 removes that route. */
+  public static albumByKey(key: LibraryAlbumKey): readonly unknown[] {
     return [...LibraryQueryKeys.data, "album", "detail", ...albumIdentity(key)];
   }
 
-  public static albumTracks(key: LibraryAlbumKey): readonly unknown[] {
+  public static albumTracksByKey(key: LibraryAlbumKey): readonly unknown[] {
     return [...LibraryQueryKeys.data, "album", "tracks", ...albumIdentity(key)];
   }
 
