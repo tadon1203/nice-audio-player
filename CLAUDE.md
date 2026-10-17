@@ -33,6 +33,7 @@ Read a document only when its trigger applies. Do not read them all up front.
 There is no CI and there are no commit hooks. Run the checks before you commit.
 
 - All changes: `pnpm check` (format, type check, lint, fonts). Fix format with `pnpm format`.
+- Do not ignore `pnpm lint` results. Fix every warning and error it reports. Do not suppress them with disable comments or lint config changes unless the user asks for it.
 - Renderer logic: `pnpm test:renderer` or `pnpm test:shared`
 - Rust: `pnpm check:native` and `pnpm test:native` (`pnpm test:native` also checks that the bindings are current)
 - Tauri bindings: `pnpm bindings` (regenerate the TypeScript bindings)
