@@ -1,4 +1,5 @@
 import type {
+  ArtistId,
   ArtworkHash,
   LibraryAlbumArtistKey,
   LibraryAlbumKey,
@@ -8,8 +9,15 @@ import type {
 } from "#lib/native";
 import type { LibraryCatalogRequest } from "./catalog-repository";
 
-/** The arguments of an artist's album list: which artist, and how its albums are ordered. */
+/** The arguments of an Album Artist's album list: which artist, and how its albums are ordered. */
 export type ArtistAlbumsArguments = {
+  readonly artistId: ArtistId;
+  readonly sortKey: LibraryArtistAlbumSortKey;
+  readonly direction: LibrarySortDirection;
+};
+
+/** The same list for the old name route, which is keyed by the Album Artist's name. */
+export type AlbumArtistAlbumsArguments = {
   readonly key: LibraryAlbumArtistKey;
   readonly sortKey: LibraryArtistAlbumSortKey;
   readonly direction: LibrarySortDirection;
@@ -31,10 +39,16 @@ export class LibraryQueryKeys {
   public static readonly catalogs = [...LibraryQueryKeys.data, "catalog"] as const;
   public static readonly status = ["library", "status"] as const;
   public static readonly roots = [...LibraryQueryKeys.data, "roots"] as const;
-  /** The prefix of every artist's album list, for reads across all of them. */
+  /** The prefix of every Album Artist's album list, by ID, for reads across all of them. */
   public static readonly artistAlbumsPrefix = [
     ...LibraryQueryKeys.data,
     "artist",
+    "albums",
+  ] as const;
+  /** The prefix of every album list of the old name route, for reads across all of them. */
+  public static readonly albumArtistAlbumsPrefix = [
+    ...LibraryQueryKeys.data,
+    "albumArtist",
     "albums",
   ] as const;
 
@@ -61,16 +75,29 @@ export class LibraryQueryKeys {
     return [...LibraryQueryKeys.data, "album", "tracks", ...albumIdentity(key)];
   }
 
-  public static albumArtist(key: LibraryAlbumArtistKey): readonly unknown[] {
-    return [...LibraryQueryKeys.data, "artist", "detail", key.name];
+  public static artist(artistId: ArtistId): readonly unknown[] {
+    return [...LibraryQueryKeys.data, "artist", "detail", artistId];
   }
 
   public static artistAlbums({
-    key,
+    artistId,
     sortKey,
     direction,
   }: ArtistAlbumsArguments): readonly unknown[] {
-    return [...LibraryQueryKeys.artistAlbumsPrefix, key.name, sortKey, direction];
+    return [...LibraryQueryKeys.artistAlbumsPrefix, artistId, sortKey, direction];
+  }
+
+  /** The old name route's Album Artist, until that route is removed. */
+  public static albumArtist(key: LibraryAlbumArtistKey): readonly unknown[] {
+    return [...LibraryQueryKeys.data, "albumArtist", "detail", key.name];
+  }
+
+  public static albumArtistAlbums({
+    key,
+    sortKey,
+    direction,
+  }: AlbumArtistAlbumsArguments): readonly unknown[] {
+    return [...LibraryQueryKeys.albumArtistAlbumsPrefix, key.name, sortKey, direction];
   }
 
   public static trackProperties(trackId: TrackId | null): readonly unknown[] {

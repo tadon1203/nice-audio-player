@@ -37,13 +37,18 @@ export const testRoot: LibraryRoot = {
   missingCount: 0,
 };
 
+const testArtistId = "9f1c0e4b7a2d4c3e8b5a6f7e8d9c0b1a";
+const extraArtistId = "3d2c1b0a9f8e7d6c5b4a39281706f5e4";
+
 export const testAlbum: LibraryAlbumSummary = {
   key: { title: "Test album", albumArtist: "Test artist", albumEdition: "" },
+  albumArtist: { id: testArtistId, name: "Test artist" },
   artwork: null,
   year: 2020,
 };
 export const secondAlbum: LibraryAlbumSummary = {
   key: { title: "Second album", albumArtist: "Test artist", albumEdition: "" },
+  albumArtist: { id: testArtistId, name: "Test artist" },
   artwork: null,
   year: 2024,
 };
@@ -105,6 +110,7 @@ export function testLibrary(
         albumArtist: "Extra artist",
         albumEdition: "",
       },
+      albumArtist: { id: extraArtistId, name: "Extra artist" },
       artwork,
       year: 2000 + (index % 20),
     }),
@@ -113,7 +119,16 @@ export function testLibrary(
     roots: [testRoot],
     tracks,
     albums: [albumOf(testAlbum), albumOf(secondAlbum), ...extra],
-    artists: [{ key: { name: "Test artist" }, artwork, albumCount: 2, trackCount: tracks.length }],
+    artists: [
+      {
+        id: testArtistId,
+        name: "Test artist",
+        key: { name: "Test artist" },
+        artwork,
+        albumCount: 2,
+        trackCount: tracks.length,
+      },
+    ],
     albumDetails: {
       summary: albumOf(testAlbum),
       date: "2020",
@@ -151,8 +166,10 @@ export function libraryResponses(library: LibraryData = testLibrary()) {
     listLibraryTrackIndex: [],
     listLibraryAlbumIndex: [],
     listLibraryAlbumArtistIndex: [],
-    getLibraryAlbumArtist: library.artists[0],
+    getLibraryArtist: library.artists[0],
     listLibraryArtistAlbums: () => pageOf(library.albums.slice(0, 2), null),
+    getLibraryAlbumArtist: library.artists[0],
+    listLibraryAlbumArtistAlbums: () => pageOf(library.albums.slice(0, 2), null),
     getLibraryAlbumDetails: library.albumDetails,
     listLibraryAlbumTracks: library.albumTracks,
     getLibraryTrackProperties: ({ trackId: id }: { trackId: number }) => {

@@ -66,8 +66,10 @@ export const commands = {
 	listLibraryTrackIndex: (search: string | null, sortKey: LibraryTrackSortKey, sortDirection: LibrarySortDirection) => __TAURI_INVOKE<LibraryIndexBucket[]>("list_library_track_index", { search, sortKey, sortDirection }),
 	listLibraryAlbumIndex: (search: string | null, sortKey: LibraryAlbumSortKey, sortDirection: LibrarySortDirection) => __TAURI_INVOKE<LibraryIndexBucket[]>("list_library_album_index", { search, sortKey, sortDirection }),
 	listLibraryAlbumArtistIndex: (search: string | null, sortKey: LibraryAlbumArtistSortKey, sortDirection: LibrarySortDirection) => __TAURI_INVOKE<LibraryIndexBucket[]>("list_library_album_artist_index", { search, sortKey, sortDirection }),
+	getLibraryArtist: (artistId: ArtistId) => __TAURI_INVOKE<LibraryAlbumArtistSummary>("get_library_artist", { artistId }),
 	getLibraryAlbumArtist: (artistKey: LibraryAlbumArtistKey) => __TAURI_INVOKE<LibraryAlbumArtistSummary>("get_library_album_artist", { artistKey }),
-	listLibraryArtistAlbums: (artistKey: LibraryAlbumArtistKey, cursor: string | null, sortKey: LibraryArtistAlbumSortKey, sortDirection: LibrarySortDirection) => __TAURI_INVOKE<LibraryAlbumPage>("list_library_artist_albums", { artistKey, cursor, sortKey, sortDirection }),
+	listLibraryArtistAlbums: (request: ArtistAlbumsRequest) => __TAURI_INVOKE<LibraryAlbumPage>("list_library_artist_albums", { request }),
+	listLibraryAlbumArtistAlbums: (artistKey: LibraryAlbumArtistKey, cursor: string | null, sortKey: LibraryArtistAlbumSortKey, sortDirection: LibrarySortDirection) => __TAURI_INVOKE<LibraryAlbumPage>("list_library_album_artist_albums", { artistKey, cursor, sortKey, sortDirection }),
 	getLibraryAlbumDetails: (albumKey: LibraryAlbumKey) => __TAURI_INVOKE<LibraryAlbumDetails>("get_library_album_details", { albumKey }),
 	listLibraryAlbumTracks: (albumKey: LibraryAlbumKey, cursor: string | null) => __TAURI_INVOKE<LibraryAlbumTrackPage>("list_library_album_tracks", { albumKey, cursor }),
 	getLibraryTrackProperties: (trackId: TrackId) => __TAURI_INVOKE<{
@@ -166,6 +168,22 @@ export type AppearancePatch = {
 	calmMotion: boolean | null,
 };
 
+/**  The albums of one Album Artist, by its ID (see `ids.rs`). */
+export type ArtistAlbumsRequest = {
+	artistId: ArtistId,
+	cursor: string | null,
+	sortKey: LibraryArtistAlbumSortKey,
+	sortDirection: LibrarySortDirection,
+};
+
+/**  An Album Artist: blake3 of the normalized name. On the IPC 32 lowercase hex characters. */
+export type ArtistId = string;
+
+export type ArtistRef = {
+	id: ArtistId,
+	name: string,
+};
+
 /**  Stored artwork: the 64-character blake3 hex of the image file. */
 export type ArtworkHash = string;
 
@@ -230,6 +248,8 @@ export type LibraryAlbumArtistPage = {
 export type LibraryAlbumArtistSortKey = "artist" | "albumCount" | "trackCount";
 
 export type LibraryAlbumArtistSummary = {
+	id: ArtistId,
+	name: string,
 	key: LibraryAlbumArtistKey,
 	artwork: ArtworkRef | null,
 	albumCount: number,
@@ -265,6 +285,7 @@ export type LibraryAlbumSortKey = "title" | "artist" | "year";
 
 export type LibraryAlbumSummary = {
 	key: LibraryAlbumKey,
+	albumArtist: ArtistRef,
 	artwork: ArtworkRef | null,
 	year: number | null,
 };

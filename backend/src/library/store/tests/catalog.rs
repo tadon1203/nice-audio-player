@@ -68,9 +68,7 @@ fn albums_keep_their_identity_and_take_the_cover_of_their_first_track_with_artwo
     );
     let artist_albums = store
         .catalog_artist_albums(
-            LibraryAlbumArtistKey {
-                name: "Album Artist".into(),
-            },
+            ArtistId::of("Album Artist"),
             None,
             LibraryArtistAlbumSortKey::Year,
             ASC,
@@ -201,9 +199,7 @@ fn an_album_is_case_sensitive_and_a_missing_album_artist_is_the_artist() {
     assert_eq!(tracks_of("case", "Performer"), 1);
     assert_eq!(tracks_of("Fallback album", "Fallback Artist"), 1);
     let artist = store
-        .catalog_artist(LibraryAlbumArtistKey {
-            name: "Fallback Artist".into(),
-        })
+        .catalog_artist(ArtistId::of("Fallback Artist"))
         .unwrap();
     assert_eq!((artist.album_count, artist.track_count), (1, 1));
 }
@@ -224,13 +220,16 @@ fn an_album_artist_shows_only_the_cover_of_its_first_album() {
 
     assert_eq!((artists.items.len(), artists.items[0].track_count), (1, 2));
     assert!(artists.items[0].artwork.is_none());
+    assert_eq!(artists.items[0].id, ArtistId::of("Artist"));
     let artist = fixture
         .store
-        .catalog_artist(LibraryAlbumArtistKey {
-            name: "Artist".into(),
-        })
+        .catalog_artist(ArtistId::of("Artist"))
         .unwrap();
     assert!(artist.artwork.is_none());
+    assert_eq!(
+        (artist.id, artist.name.as_str()),
+        (ArtistId::of("Artist"), "Artist")
+    );
 }
 
 #[test]

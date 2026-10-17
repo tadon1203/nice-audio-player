@@ -1,14 +1,16 @@
 <script lang="ts">
   import type { LibraryAlbumArtistSummary } from "#lib/native";
-  import { albumArtistHref } from "#lib/library/routes";
+  import { resolve } from "$app/paths";
   import { artistNameLabel } from "#lib/library/unknown-name";
   import Artwork from "#lib/ui/artwork.svelte";
   import { CountFormat } from "#lib/utils/count-format";
 
   let { artist }: { artist: LibraryAlbumArtistSummary } = $props();
 
-  const name = $derived(artistNameLabel(artist.key.name));
-  const href = $derived(albumArtistHref(artist.key.name));
+  const name = $derived(artistNameLabel(artist.name));
+  const href = $derived(
+    resolve("/library/album-artists/[artistId=artistId]", { artistId: artist.id }),
+  );
 </script>
 
 <!-- An artwork-led album artist entry. -->

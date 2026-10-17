@@ -1,4 +1,4 @@
-use crate::ids::{RootId, TrackId};
+use crate::ids::{ArtistId, RootId, TrackId};
 use serde::Deserialize;
 use serde::Serialize;
 #[derive(Debug, Clone, Serialize, specta::Type)]
@@ -145,8 +145,15 @@ pub struct LibraryAlbumArtistKey {
 }
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
+pub struct ArtistRef {
+    pub id: ArtistId,
+    pub name: String,
+}
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
 pub struct LibraryAlbumSummary {
     pub key: LibraryAlbumKey,
+    pub album_artist: ArtistRef,
     pub artwork: Option<ArtworkRef>,
     pub year: Option<i32>,
 }
@@ -161,10 +168,21 @@ pub struct LibraryAlbumPage {
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LibraryAlbumArtistSummary {
+    pub id: ArtistId,
+    pub name: String,
     pub key: LibraryAlbumArtistKey,
     pub artwork: Option<ArtworkRef>,
     pub album_count: u64,
     pub track_count: u64,
+}
+/// The albums of one Album Artist, by its ID (see `ids.rs`).
+#[derive(Debug, Clone, serde::Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtistAlbumsRequest {
+    pub artist_id: ArtistId,
+    pub cursor: Option<String>,
+    pub sort_key: LibraryArtistAlbumSortKey,
+    pub sort_direction: LibrarySortDirection,
 }
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]

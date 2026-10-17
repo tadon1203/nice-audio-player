@@ -2,9 +2,8 @@ import type { ArtworkRef } from "#lib/native";
 import { goto, pushState, replaceState } from "$app/navigation";
 import { page } from "$app/state";
 
-/** What the link that opened an album page tells it: where Back returns, and the artwork to show. */
+/** What the link that opened an album page tells it: the artwork to show while its details load. */
 export type AlbumOrigin = {
-  readonly parentArtist?: string;
   readonly artwork?: ArtworkRef | null;
 };
 
@@ -25,10 +24,10 @@ export class ShellHistory {
 
   /** The origin the current entry was opened with; empty when the entry is not an album's. */
   public get albumOrigin(): AlbumOrigin {
-    return { parentArtist: page.state.parentArtist, artwork: page.state.artwork };
+    return { artwork: page.state.artwork };
   }
 
-  /** Opens an album page with its origin in the new entry, so Back returns to where it came from. */
+  /** Opens an album page with its origin in the new entry. Where Back returns is in the URL. */
   public openAlbum(href: string, origin: AlbumOrigin): Promise<void> {
     return goto(href, { state: origin });
   }

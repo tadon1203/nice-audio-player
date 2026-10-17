@@ -30,9 +30,9 @@
   const key = $derived({ name });
   const label = $derived(artistNameLabel(name));
 
-  const artistQuery = new QueryResult(() => artists.detailsOptions(key));
+  const artistQuery = new QueryResult(() => artists.albumArtistDetailsOptions(key));
   const albums = new PagedCollection(() =>
-    artists.albumsOptions({ key, sortKey: view.sortKey, direction: view.direction }),
+    artists.albumArtistAlbumsOptions({ key, sortKey: view.sortKey, direction: view.direction }),
   );
 
   let viewport = $state<HTMLElement | null>(null);
@@ -98,7 +98,7 @@
             <AlbumTile
               {album}
               showArtist={false}
-              parentArtist={name}
+              fromArtist
               onplay={(played) =>
                 actions.run(() => playback.start({ kind: "album", key: played.key }, null))}
             />

@@ -55,7 +55,7 @@ fn album_pages_cover_every_album_once_and_refuse_a_foreign_cursor() {
         Some(StoreError::InvalidCursor),
         "another direction"
     );
-    let artist = |name: &str| LibraryAlbumArtistKey { name: name.into() };
+    let artist = ArtistId::of;
     let artist_page = store
         .catalog_artist_albums(
             artist("Artist"),
@@ -222,15 +222,13 @@ fn albums_and_album_artists_page_through_every_sort_and_direction() {
             LibraryArtistAlbumSortKey::Year,
         ] {
             for direction in [ASC, DESC] {
-                let name = LibraryAlbumArtistKey {
-                    name: artist.into(),
-                };
+                let name = ArtistId::of(artist);
                 let first = store
-                    .catalog_artist_albums(name.clone(), None, key, direction)
+                    .catalog_artist_albums(name, None, key, direction)
                     .unwrap();
                 let albums = walk(|cursor| {
                     let page = store
-                        .catalog_artist_albums(name.clone(), cursor, key, direction)
+                        .catalog_artist_albums(name, cursor, key, direction)
                         .unwrap();
                     (page.items, page.next_cursor)
                 });
@@ -348,13 +346,11 @@ fn the_name_sorted_lists_read_an_index_range_not_the_whole_table() {
             }
         }
     }
-    let artist = LibraryAlbumArtistKey {
-        name: "Artist".into(),
-    };
+    let artist = ArtistId::of("Artist");
     // An Album Artist's albums are few, so only their title order is held to an index range.
     for key in [LibraryArtistAlbumSortKey::Title] {
         for direction in [ASC, DESC] {
-            let query = artist_albums_query(&artist, key, direction);
+            let query = artist_albums_query(artist, key, direction);
             for after in [false, true] {
                 plans.push((
                     format!("artist albums {key:?} {direction:?} after {after}"),

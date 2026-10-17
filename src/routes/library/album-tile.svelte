@@ -14,22 +14,22 @@
     album,
     onplay,
     showArtist = true,
-    parentArtist,
+    fromArtist = false,
   }: {
     album: LibraryAlbumSummary;
     onplay?: (album: LibraryAlbumSummary) => void;
     /** False where the artist is already the context (an artist's own albums). */
     showArtist?: boolean;
-    /** The album artist whose page this tile is on, so the album's Back link returns there. */
-    parentArtist?: string;
+    /** True on an Album Artist's page, so the album's Back link returns there. */
+    fromArtist?: boolean;
   } = $props();
 
   const { history } = AppServices.current();
   const title = $derived(albumTitleLabel(album.key.title));
   const artist = $derived(artistNameLabel(album.key.albumArtist));
-  const href = $derived(albumHref(album.key));
+  const href = $derived(albumHref(album.key, fromArtist));
 
-  // Where the album was opened from rides in history state, for Back and the shared element.
+  // The artwork rides in history state, for the shared element while the album's details load.
   function open(event: MouseEvent) {
     if (
       event.defaultPrevented ||
@@ -41,7 +41,7 @@
     )
       return;
     event.preventDefault();
-    void history.openAlbum(href, { parentArtist, artwork: album.artwork });
+    void history.openAlbum(href, { artwork: album.artwork });
   }
 </script>
 

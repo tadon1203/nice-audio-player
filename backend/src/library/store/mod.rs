@@ -9,6 +9,7 @@ mod playback;
 mod tests;
 mod track;
 
+pub use catalog::album_artist_id_of_key;
 pub use playback::{PlayableTrack, PlaybackSelection, PlaybackSourceError};
 
 use super::{

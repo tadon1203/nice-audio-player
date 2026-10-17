@@ -15,6 +15,8 @@ import type {
   LibraryAlbumPage,
   LibraryAlbumSortKey,
   LibraryAlbumTrackPage,
+  ArtistAlbumsRequest,
+  ArtistId,
   LibraryArtistAlbumSortKey,
   LibraryIndexBucket,
   LibraryRoot,
@@ -127,8 +129,11 @@ export interface LibraryClient {
   ): Promise<LibraryIndexBucket[]>;
   album(albumKey: LibraryAlbumKey): Promise<LibraryAlbumDetails>;
   albumTracks(albumKey: LibraryAlbumKey, cursor: string | null): Promise<LibraryAlbumTrackPage>;
+  artist(artistId: ArtistId): Promise<LibraryAlbumArtistSummary>;
+  artistAlbums(request: ArtistAlbumsRequest): Promise<LibraryAlbumPage>;
+  /** The old name route, until that route is removed. */
   albumArtist(artistKey: LibraryAlbumArtistKey): Promise<LibraryAlbumArtistSummary>;
-  artistAlbums(
+  albumArtistAlbums(
     artistKey: LibraryAlbumArtistKey,
     cursor: string | null,
     sortKey: LibraryArtistAlbumSortKey,

@@ -178,8 +178,12 @@ impl From<TrackId> for i64 {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct AlbumId([u8; 16]);
 
-/// An Album Artist: blake3 of the normalized name.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+/// An Album Artist: blake3 of the normalized name. On the IPC 32 lowercase hex characters.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, specta::Type,
+)]
+#[serde(try_from = "String", into = "String")]
+#[specta(type = String)]
 pub struct ArtistId([u8; 16]);
 
 impl AlbumId {
@@ -212,6 +216,47 @@ impl ArtistId {
     pub fn to_hex(self) -> String {
         hex_of(&self.0)
     }
+
+    /// The ID of its 32 lowercase hex characters, or `None` for any other text.
+    pub fn from_hex(value: &str) -> Option<Self> {
+        let bytes = value.as_bytes();
+        if bytes.len() != 32 {
+            return None;
+        }
+        let mut id = [0; 16];
+        for (index, byte) in id.iter_mut().enumerate() {
+            *byte = (hex_digit(bytes[2 * index])? << 4) | hex_digit(bytes[2 * index + 1])?;
+        }
+        Some(Self(id))
+    }
+}
+
+impl TryFrom<String> for ArtistId {
+    type Error = &'static str;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::from_hex(&value).ok_or("an artist ID is 32 lowercase hex digits")
+    }
+}
+
+impl From<ArtistId> for String {
+    fn from(id: ArtistId) -> Self {
+        id.to_hex()
+    }
+}
+
+fn hex_digit(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        _ => None,
+    }
+}
+
+/// An `albums.artist_id` read from a column. See [`track_id_column`].
+pub(crate) fn artist_id_column(row: &Row<'_>, index: usize) -> rusqlite::Result<ArtistId> {
+    let hex: String = row.get(index)?;
+    ArtistId::from_hex(&hex).ok_or(rusqlite::Error::InvalidColumnType(index, hex, Type::Text))
 }
 
 /// blake3 of the parts, each prefixed by its byte length, so no two different lists of parts
@@ -363,6 +408,30 @@ mod tests {
         let parsed: TrackId = serde_json::from_value(serde_json::json!(7)).unwrap();
         assert_eq!(parsed.rowid(), 7);
         assert_eq!(serde_json::to_value(parsed).unwrap(), serde_json::json!(7));
+    }
+
+    #[test]
+    fn a_command_argument_with_a_bad_artist_id_is_rejected_at_deserialization() {
+        for bad in [
+            "ab".repeat(15),
+            "ab".repeat(17),
+            "AB".repeat(16),
+            format!("{}g", "a".repeat(31)),
+            String::new(),
+        ] {
+            assert!(
+                serde_json::from_value::<ArtistId>(serde_json::json!(bad)).is_err(),
+                "{bad}"
+            );
+        }
+
+        let good = ArtistId::of("Band");
+        let parsed: ArtistId = serde_json::from_value(serde_json::json!(good.to_hex())).unwrap();
+        assert_eq!(parsed, good);
+        assert_eq!(
+            serde_json::to_value(parsed).unwrap(),
+            serde_json::json!(good.to_hex())
+        );
     }
 
     fn connection() -> rusqlite::Connection {

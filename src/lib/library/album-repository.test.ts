@@ -13,6 +13,7 @@ const key: LibraryAlbumKey = { title: "Abbey Road", albumArtist: "The Beatles", 
 
 const summary = (albumKey: LibraryAlbumKey, year: number): LibraryAlbumSummary => ({
   key: albumKey,
+  albumArtist: { id: "5b3f2c1e0a9d8c7b6a5f4e3d2c1b0a99", name: albumKey.albumArtist },
   artwork: null,
   year,
 });
@@ -48,7 +49,7 @@ describe("AlbumRepository.cachedSummary", () => {
     const queryClient = new QueryClient();
     queryClient.setQueryData(
       LibraryQueryKeys.artistAlbums({
-        key: { name: "The Beatles" },
+        artistId: "5b3f2c1e0a9d8c7b6a5f4e3d2c1b0a99",
         sortKey: "year",
         direction: "ascending",
       }),

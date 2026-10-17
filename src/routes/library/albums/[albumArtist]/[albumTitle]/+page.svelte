@@ -10,7 +10,7 @@
   import { LibraryErrors } from "#lib/library/library-errors";
   import { PagedCollection } from "#lib/library/paged-collection.svelte";
   import { QueryResult } from "#lib/library/query-result.svelte";
-  import { albumArtistHref, albumEditionOf } from "#lib/library/routes";
+  import { albumEditionOf, albumFromArtist } from "#lib/library/routes";
   import { albumTitleLabel, artistNameLabel, fromNameSegment } from "#lib/library/unknown-name";
   import { AppServices } from "#lib/shell/app-services.svelte";
   import { WorkspaceScroll } from "#lib/shell/workspace-scroll.svelte";
@@ -36,8 +36,7 @@
   const title = $derived(albumTitleLabel(albumTitle));
   const artist = $derived(artistNameLabel(albumArtist));
   const shared = $derived(albumItemKey(key));
-  // Where the album was opened from, when that was an album artist's page.
-  const parentArtist = $derived(history.albumOrigin.parentArtist);
+  const fromArtist = $derived(albumFromArtist(page.url.searchParams));
 
   const details = new QueryResult(() => albums.detailsOptions(key));
   const tracks = new PagedCollection(() => albums.tracksOptions(key));
@@ -64,8 +63,15 @@
   viewportAttachment={scroll.attach}
   contentClass="py-8 pb-16"
 >
-  {#if parentArtist !== undefined}
-    <BackLink href={albumArtistHref(parentArtist)}>{artistNameLabel(parentArtist)}</BackLink>
+  {#if fromArtist}
+    <!-- The artist's ID comes from the album's details, so the link needs no history state. -->
+    <BackLink
+      href={details.data === undefined
+        ? resolve("/library/album-artists")
+        : resolve("/library/album-artists/[artistId=artistId]", {
+            artistId: details.data.summary.albumArtist.id,
+          })}>{artist}</BackLink
+    >
   {:else}
     <BackLink href={resolve("/library/albums")}>Albums</BackLink>
   {/if}

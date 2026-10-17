@@ -1,14 +1,14 @@
 use std::path::PathBuf;
 
 use backend::dto::{
-    LibraryAlbumArtistKey, LibraryAlbumArtistPage, LibraryAlbumArtistSortKey,
+    ArtistAlbumsRequest, LibraryAlbumArtistKey, LibraryAlbumArtistPage, LibraryAlbumArtistSortKey,
     LibraryAlbumArtistSummary, LibraryAlbumDetails, LibraryAlbumKey, LibraryAlbumPage,
     LibraryAlbumSortKey, LibraryAlbumTrackPage, LibraryArtistAlbumSortKey, LibraryIndexBucket,
     LibraryRoot, LibrarySortDirection, LibraryStatus, LibraryTrackPage, LibraryTrackProperties,
     LibraryTrackSortKey,
 };
 use backend::errors::LibraryCommandError;
-use backend::ids::{ArtworkHash, RootId, TrackId};
+use backend::ids::{ArtistId, ArtworkHash, RootId, TrackId};
 
 use super::blocking;
 use crate::{
@@ -232,16 +232,34 @@ pub async fn list_library_album_artist_index(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn get_library_album_artist(
-    artist_key: LibraryAlbumArtistKey,
+pub async fn get_library_artist(
+    artist_id: ArtistId,
     state: tauri::State<'_, AppState>,
 ) -> Result<LibraryAlbumArtistSummary, LibraryCommandError> {
-    blocking(&state, move |backend| backend.artist(artist_key)).await
+    blocking(&state, move |backend| backend.artist(artist_id)).await
 }
 
 #[tauri::command]
 #[specta::specta]
 pub async fn list_library_artist_albums(
+    request: ArtistAlbumsRequest,
+    state: tauri::State<'_, AppState>,
+) -> Result<LibraryAlbumPage, LibraryCommandError> {
+    blocking(&state, move |backend| backend.artist_albums(request)).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn get_library_album_artist(
+    artist_key: LibraryAlbumArtistKey,
+    state: tauri::State<'_, AppState>,
+) -> Result<LibraryAlbumArtistSummary, LibraryCommandError> {
+    blocking(&state, move |backend| backend.album_artist(artist_key)).await
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn list_library_album_artist_albums(
     artist_key: LibraryAlbumArtistKey,
     cursor: Option<String>,
     sort_key: LibraryArtistAlbumSortKey,
@@ -249,7 +267,7 @@ pub async fn list_library_artist_albums(
     state: tauri::State<'_, AppState>,
 ) -> Result<LibraryAlbumPage, LibraryCommandError> {
     blocking(&state, move |backend| {
-        backend.artist_albums(artist_key, cursor.as_deref(), sort_key, sort_direction)
+        backend.album_artist_albums(artist_key, cursor.as_deref(), sort_key, sort_direction)
     })
     .await
 }

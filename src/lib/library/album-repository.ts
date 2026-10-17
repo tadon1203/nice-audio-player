@@ -62,9 +62,12 @@ export class AlbumRepository {
     const albumLists = this.#queryClient.getQueriesData<InfiniteData<LibraryAlbumPage>>({
       queryKey: LibraryQueryKeys.catalogs,
     });
-    const artistLists = this.#queryClient.getQueriesData<InfiniteData<LibraryAlbumPage>>({
-      queryKey: LibraryQueryKeys.artistAlbumsPrefix,
-    });
+    const artistLists = [
+      LibraryQueryKeys.artistAlbumsPrefix,
+      LibraryQueryKeys.albumArtistAlbumsPrefix,
+    ].flatMap((queryKey) =>
+      this.#queryClient.getQueriesData<InfiniteData<LibraryAlbumPage>>({ queryKey }),
+    );
     const catalogAlbums = albumLists
       .filter(([queryKey]) => LibraryQueryKeys.requestOf(queryKey).presentation === "albums")
       .map(([, data]) => data);

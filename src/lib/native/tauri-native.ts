@@ -271,17 +271,23 @@ class TauriLibraryClient implements LibraryClient {
   albumTracks(albumKey: Parameters<Commands["listLibraryAlbumTracks"]>[0], cursor: string | null) {
     return this.#call(() => this.#commands.listLibraryAlbumTracks(albumKey, cursor));
   }
+  artist(artistId: Parameters<Commands["getLibraryArtist"]>[0]) {
+    return this.#call(() => this.#commands.getLibraryArtist(artistId));
+  }
+  artistAlbums(request: Parameters<Commands["listLibraryArtistAlbums"]>[0]) {
+    return this.#call(() => this.#commands.listLibraryArtistAlbums(request));
+  }
   albumArtist(artistKey: Parameters<Commands["getLibraryAlbumArtist"]>[0]) {
     return this.#call(() => this.#commands.getLibraryAlbumArtist(artistKey));
   }
-  artistAlbums(
-    artistKey: Parameters<Commands["listLibraryArtistAlbums"]>[0],
+  albumArtistAlbums(
+    artistKey: Parameters<Commands["listLibraryAlbumArtistAlbums"]>[0],
     cursor: string | null,
-    sortKey: Parameters<Commands["listLibraryArtistAlbums"]>[2],
-    direction: Parameters<Commands["listLibraryArtistAlbums"]>[3],
+    sortKey: Parameters<Commands["listLibraryAlbumArtistAlbums"]>[2],
+    direction: Parameters<Commands["listLibraryAlbumArtistAlbums"]>[3],
   ) {
     return this.#call(() =>
-      this.#commands.listLibraryArtistAlbums(artistKey, cursor, sortKey, direction),
+      this.#commands.listLibraryAlbumArtistAlbums(artistKey, cursor, sortKey, direction),
     );
   }
   trackProperties(trackId: TrackId) {

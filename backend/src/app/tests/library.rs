@@ -2,7 +2,7 @@ use super::{Fixture, fixture};
 use crate::app::{BackendApp, PlaybackContext};
 use crate::dto::{LibrarySortDirection, LibraryStatus, LibraryTrackSortKey};
 use crate::errors::{LibraryCommandError, LyricsCommandError, PlaybackServiceError};
-use crate::ids::TrackId;
+use crate::ids::{ArtistId, TrackId};
 use crate::messages::testing::RecordingMessageSink;
 use crate::test_support::TestDirectory;
 
@@ -84,4 +84,16 @@ fn with_a_library_the_library_commands_answer() {
 
     assert!(matches!(backend.library_status(), LibraryStatus::Ready));
     assert!(backend.library_roots().expect("roots").is_empty());
+}
+
+#[test]
+fn an_album_artist_by_id_that_the_library_does_not_hold_is_not_found() {
+    let fixture = fixture();
+
+    let error = fixture.backend.artist(ArtistId::of("Nobody")).err();
+
+    assert!(matches!(
+        error,
+        Some(LibraryCommandError::AlbumArtistNotFound)
+    ));
 }

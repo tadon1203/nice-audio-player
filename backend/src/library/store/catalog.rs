@@ -13,7 +13,7 @@ use super::{
     paging::{Ordering, Page, PagedQuery, Phase, Scope, View},
     track::{SUMMARY_COLUMN_COUNT, SUMMARY_COLUMNS, SUMMARY_FROM, artwork_ref, summary_from_row},
 };
-use crate::ids::{AlbumId, ArtistId, TrackId, track_id_column};
+use crate::ids::{AlbumId, ArtistId, TrackId, artist_id_column, track_id_column};
 use crate::library::{
     artwork::ArtworkRef,
     error::StoreError,
@@ -37,9 +37,10 @@ pub(super) fn validate_album_key(key: &LibraryAlbumKey) -> Result<(), StoreError
     }
 }
 
-fn validate_artist_key(key: &LibraryAlbumArtistKey) -> Result<(), StoreError> {
+/// The ID of the Album Artist a key names (see `ids.rs`), for the commands that still take a key.
+pub fn album_artist_id_of_key(key: &LibraryAlbumArtistKey) -> Result<ArtistId, StoreError> {
     if is_normalized(&key.name) {
-        Ok(())
+        Ok(ArtistId::of(&key.name))
     } else {
         Err(StoreError::InvalidAlbumArtistKey)
     }
@@ -135,9 +136,8 @@ fn year_phases(year: &str, album_sort: &str, rest: &[&str], unnamed: &[&str]) ->
 }
 
 /// The columns of an album row, in the order `album_summary` reads them, and what they come from.
-const ALBUM_COLUMNS: &str =
-    "al.title, al.album_artist, al.album_directory, al.year, a.content_hash, a.mime_type";
-const ALBUM_COLUMN_COUNT: usize = 6;
+const ALBUM_COLUMNS: &str = "al.title, al.album_artist, al.album_directory, al.year, a.content_hash, a.mime_type, al.artist_id";
+const ALBUM_COLUMN_COUNT: usize = 7;
 const ALBUM_FROM: &str = "FROM albums al LEFT JOIN artwork_assets a ON a.id = al.cover_artwork_id";
 
 fn album_summary(row: &Row<'_>) -> rusqlite::Result<LibraryAlbumSummary> {
@@ -147,23 +147,30 @@ fn album_summary(row: &Row<'_>) -> rusqlite::Result<LibraryAlbumSummary> {
             album_artist: row.get(1)?,
             album_edition: row.get(2)?,
         },
+        album_artist: ArtistRef {
+            id: artist_id_column(row, 6)?,
+            name: row.get(1)?,
+        },
         year: row.get(3)?,
         artwork: artwork_ref(row.get(4)?, row.get(5)?),
     })
 }
 
 /// The columns of an Album Artist row, in the order `artist_summary` reads them.
-const ARTIST_COLUMNS: &str = "ar.name, ar.album_count, ar.track_count, a.content_hash, a.mime_type";
-const ARTIST_COLUMN_COUNT: usize = 5;
+const ARTIST_COLUMNS: &str =
+    "ar.id, ar.name, ar.album_count, ar.track_count, a.content_hash, a.mime_type";
+const ARTIST_COLUMN_COUNT: usize = 6;
 const ARTIST_FROM: &str =
     "FROM artists ar LEFT JOIN artwork_assets a ON a.id = ar.cover_artwork_id";
 
 fn artist_summary(row: &Row<'_>) -> rusqlite::Result<LibraryAlbumArtistSummary> {
     Ok(LibraryAlbumArtistSummary {
-        key: LibraryAlbumArtistKey { name: row.get(0)? },
-        album_count: row.get::<_, i64>(1)? as u64,
-        track_count: row.get::<_, i64>(2)? as u64,
-        artwork: artwork_ref(row.get(3)?, row.get(4)?),
+        id: artist_id_column(row, 0)?,
+        name: row.get(1)?,
+        key: LibraryAlbumArtistKey { name: row.get(1)? },
+        album_count: row.get::<_, i64>(2)? as u64,
+        track_count: row.get::<_, i64>(3)? as u64,
+        artwork: artwork_ref(row.get(4)?, row.get(5)?),
     })
 }
 
@@ -311,11 +318,11 @@ pub(super) fn album_artists_query(
 
 /// The albums of one Album Artist.
 pub(super) fn artist_albums_query(
-    artist: &LibraryAlbumArtistKey,
+    artist: ArtistId,
     sort_key: LibraryArtistAlbumSortKey,
     direction: LibrarySortDirection,
 ) -> PagedQuery {
-    let artist_id = ArtistId::of(&artist.name).to_hex();
+    let artist_id = artist.to_hex();
     let phases = match sort_key {
         LibraryArtistAlbumSortKey::Title => name_phases(
             "al.title_sort",
@@ -330,7 +337,7 @@ pub(super) fn artist_albums_query(
         ),
     };
     let mut query = build_query(
-        Scope::new(View::ArtistAlbums, "", &artist.name, &sort_key, direction),
+        Scope::new(View::ArtistAlbums, "", &artist_id, &sort_key, direction),
         Ordering { phases, direction },
         (ALBUM_COLUMNS, ALBUM_COLUMN_COUNT),
         (ALBUM_FROM, "FROM albums al"),
@@ -635,14 +642,13 @@ impl LibraryStore {
 
     pub fn catalog_artist_albums(
         &self,
-        artist: LibraryAlbumArtistKey,
+        artist: ArtistId,
         cursor: Option<&str>,
         sort_key: LibraryArtistAlbumSortKey,
         direction: LibrarySortDirection,
     ) -> Result<LibraryAlbumPage, StoreError> {
-        validate_artist_key(&artist)?;
         let connection = self.read()?;
-        let query = artist_albums_query(&artist, sort_key, direction);
+        let query = artist_albums_query(artist, sort_key, direction);
         let total_count = first_page_total(&query, &connection, cursor)?;
         if total_count == Some(0) {
             return Err(StoreError::AlbumArtistNotFound);
@@ -657,14 +663,13 @@ impl LibraryStore {
 
     pub fn catalog_artist(
         &self,
-        artist: LibraryAlbumArtistKey,
+        artist: ArtistId,
     ) -> Result<LibraryAlbumArtistSummary, StoreError> {
-        validate_artist_key(&artist)?;
         let connection = self.read()?;
         connection
             .query_row(
                 &format!("SELECT {ARTIST_COLUMNS} {ARTIST_FROM} WHERE ar.id = ?1"),
-                params![ArtistId::of(&artist.name).to_hex()],
+                params![artist.to_hex()],
                 artist_summary,
             )
             .optional()?
@@ -717,6 +722,10 @@ impl LibraryStore {
         Ok(LibraryAlbumDetails {
             summary: LibraryAlbumSummary {
                 artwork: album_cover(&connection, &album_id)?,
+                album_artist: ArtistRef {
+                    id: ArtistId::of(&key.album_artist),
+                    name: key.album_artist.clone(),
+                },
                 key,
                 year,
             },
