@@ -16,7 +16,20 @@ import { playbackIdOf, playbackItemFor, playingSnapshot, queueItemFor } from "./
  * what a context contains, how a queue is edited, or what a search finds. Queue edits are
  * answered by the tests themselves with `queue({ ... })`.
  */
-export function scriptPlayback(native: Native, initialSequence: LibraryTrackSummary[]) {
+export function scriptPlayback(
+  native: Native,
+  initialSequence: LibraryTrackSummary[],
+): {
+  setSequence: (next: LibraryTrackSummary[]) => void;
+  queue: (patch?: {
+    upcoming?: LibraryTrackSummary[];
+  }) => Promise<Versioned<PlaybackQueueSnapshot>>;
+  finishTrack: () => Promise<Versioned<PlaybackSnapshot>>;
+  reportPosition: (to: number) => Promise<void>;
+  startTicks: () => void;
+  stopTicks: () => void;
+  publishWaveform: () => Promise<void>;
+} {
   let sequence = initialSequence;
   let index = -1;
   let status: "playing" | "paused" = "playing";
@@ -32,7 +45,7 @@ export function scriptPlayback(native: Native, initialSequence: LibraryTrackSumm
   let waveformReady = false;
   let ticker: ReturnType<typeof setInterval> | null = null;
 
-  const current = () => sequence[index]!;
+  const current = (): LibraryTrackSummary => sequence[index]!;
 
   const queue = (patch: { upcoming?: LibraryTrackSummary[] } = {}): PlaybackQueueSnapshot => {
     if (patch.upcoming !== undefined) upcoming = patch.upcoming;
@@ -77,7 +90,10 @@ export function scriptPlayback(native: Native, initialSequence: LibraryTrackSumm
     return { revision, value };
   };
   /** A new session at `target`, started the way the backend would say it started. */
-  const moveTo = async (target: number, by: SessionStartedBy) => {
+  const moveTo = async (
+    target: number,
+    by: SessionStartedBy,
+  ): Promise<Versioned<PlaybackSnapshot>> => {
     index = target;
     startedBy = by;
     positionMs = 12_000;
@@ -140,7 +156,7 @@ export function scriptPlayback(native: Native, initialSequence: LibraryTrackSumm
     shuffleEnabled = enabled;
     return commitQueue();
   });
-  const waveform = () => {
+  const waveform = (): { playbackId: number; peaks: number[]; rms: number[] } => {
     const peaks = Array.from({ length: 400 }, (_, bar) =>
       Math.round(40 + 200 * Math.abs(Math.sin(bar / 9))),
     );
@@ -157,15 +173,16 @@ export function scriptPlayback(native: Native, initialSequence: LibraryTrackSumm
 
   const player = {
     /** Changes what the next `startPlayback` plays: what the test expects its context to hold. */
-    setSequence: (next: LibraryTrackSummary[]) => {
+    setSequence: (next: LibraryTrackSummary[]): void => {
       sequence = next;
     },
     /** The queue as it stands, with `upcoming` replaced when a test expects an edit. */
     queue: commitQueue,
     /** The loaded track ended and the backend moved on by itself (an automatic advance). */
-    finishTrack: () => moveTo(Math.min(sequence.length - 1, index + 1), "auto"),
+    finishTrack: (): Promise<Versioned<PlaybackSnapshot>> =>
+      moveTo(Math.min(sequence.length - 1, index + 1), "auto"),
     /** Reports the loaded track's position (and nothing else), as the backend's ticks do. */
-    reportPosition: (to: number) => {
+    reportPosition: (to: number): Promise<void> => {
       positionMs = to;
       return native.send({
         kind: "position",
@@ -175,18 +192,18 @@ export function scriptPlayback(native: Native, initialSequence: LibraryTrackSumm
       });
     },
     /** Reports a position every 10 ms, 250 ms further each time, until stopped. */
-    startTicks: () => {
+    startTicks: (): void => {
       if (ticker !== null) return;
       ticker = setInterval(() => {
         if (status === "playing") void player.reportPosition(positionMs + 250).catch(() => {});
       }, 10);
     },
-    stopTicks: () => {
+    stopTicks: (): void => {
       if (ticker !== null) clearInterval(ticker);
       ticker = null;
     },
     /** Makes the waveform available and pushes it, as the backend does when analysis finishes. */
-    publishWaveform: async () => {
+    publishWaveform: async (): Promise<void> => {
       waveformReady = true;
       await native.publish("waveform", waveform());
     },

@@ -19,7 +19,11 @@ export class NowPlayingView {
   public open(): void {
     if (this.isOpen) return;
     this.#pushed = true;
-    void goto(page.url.href, { shallow: true, state: { nowPlaying: true }, persistState: true });
+    void goto(page.url.href, {
+      shallow: true,
+      state: { nowPlaying: true },
+      persistState: true,
+    }).catch(() => undefined);
   }
 
   public close(): void {
@@ -34,7 +38,7 @@ export class NowPlayingView {
         replace: true,
         state: { nowPlaying: false },
         persistState: true,
-      });
+      }).catch(() => undefined);
     }
   }
 

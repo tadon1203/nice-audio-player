@@ -1,10 +1,10 @@
 import { springEasing } from "./spring-curve";
 
-export type NumberTween = {
+export interface NumberTween {
   stop: () => void;
   /** Resolves when the tween ends, whether it finished or was stopped. */
   finished: Promise<void>;
-};
+}
 
 /**
  * Tweens a number outside of any component: for imperative animations that drive a callback
@@ -30,7 +30,7 @@ export function tweenNumber(
   let done: () => void;
   const finished = new Promise<void>((resolve) => (done = resolve));
   const start = performance.now();
-  const step = (now: number) => {
+  const step = (now: number): void => {
     const t = duration <= 0 ? 1 : Math.min((now - start) / duration, 1);
     onUpdate(from + (to - from) * easing(t));
     if (t < 1) {

@@ -13,6 +13,12 @@ import type {
   LibraryClient,
 } from "#lib/native";
 import { LibraryQueryKeys } from "./library-query-keys";
+import type {
+  CreateInfiniteQueryOptions,
+  CreateQueryOptions,
+  InitialDataFunction,
+  QueryKeyWithDataTag,
+} from "@tanstack/svelte-query";
 
 /** The album detail, track, and summary queries. */
 export class AlbumRepository {
@@ -24,7 +30,14 @@ export class AlbumRepository {
     this.#queryClient = queryClient;
   }
 
-  public detailsOptions(albumId: AlbumId) {
+  public detailsOptions(albumId: AlbumId): CreateQueryOptions<
+    LibraryAlbumDetails,
+    Error,
+    LibraryAlbumDetails,
+    readonly unknown[]
+  > & {
+    initialData?: LibraryAlbumDetails | InitialDataFunction<LibraryAlbumDetails> | undefined;
+  } & QueryKeyWithDataTag<readonly unknown[], LibraryAlbumDetails, Error> {
     return queryOptions({
       queryKey: LibraryQueryKeys.album(albumId),
       queryFn: (): Promise<LibraryAlbumDetails> => this.#client.albumById(albumId),
@@ -32,7 +45,18 @@ export class AlbumRepository {
     });
   }
 
-  public tracksOptions(albumId: AlbumId) {
+  public tracksOptions(albumId: AlbumId): CreateInfiniteQueryOptions<
+    LibraryAlbumTrackPage,
+    Error,
+    InfiniteData<LibraryAlbumTrackPage, unknown>,
+    readonly unknown[],
+    string | null
+  > & {
+    initialData?:
+      | InfiniteData<LibraryAlbumTrackPage, string | null>
+      | InitialDataFunction<InfiniteData<LibraryAlbumTrackPage, string | null>>
+      | undefined;
+  } & QueryKeyWithDataTag<readonly unknown[], InfiniteData<LibraryAlbumTrackPage, unknown>, Error> {
     return infiniteQueryOptions({
       queryKey: LibraryQueryKeys.albumTracks(albumId),
       initialPageParam: null as string | null,

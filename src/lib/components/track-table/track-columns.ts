@@ -50,7 +50,7 @@ export const TRACK_ROW_HEIGHT = 40;
  * One column: what it shows, how wide it is, below which container width it hides, and the
  * backend sort key a header click requests. The table never sorts or filters itself.
  */
-type ColumnBase = {
+interface ColumnBase {
   id: string;
   /** Header text; `null` leaves the header empty (the action slot). */
   header: string | null;
@@ -58,7 +58,7 @@ type ColumnBase = {
   width: string;
   hideBelow?: TrackTableBreakpoint;
   sortKey?: LibraryTrackSortKey;
-};
+}
 
 /** A column that shows a plain value; `text` returns `null` when the value is unknown. */
 export type TextColumn = ColumnBase & {
@@ -160,20 +160,20 @@ export function columnText(column: TextColumn, row: TrackTableRow): string {
   return column.text(row) ?? MISSING;
 }
 
-export type TrackRowAction = {
+export interface TrackRowAction {
   label: string;
   kind: "play" | "pause" | "resume";
   /** Stays visible (not only on hover) because the track is the active one. */
   persistent: boolean;
-};
+}
 
-export type TrackRowState = {
+export interface TrackRowState {
   action: TrackRowAction;
   /** What clicking the row itself does; nothing while unavailable or already playing. */
   clickIntent: "play" | "resume" | null;
   /** Set only for the active track while it is playing or paused. */
   playbackState: "playing" | "paused" | undefined;
-};
+}
 
 /**
  * What a row offers, decided once from whether it is the active track and the playback status:

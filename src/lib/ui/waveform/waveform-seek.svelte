@@ -7,7 +7,10 @@
   import WaveformBars from "./waveform-bars.svelte";
   import { barCountForWidth, resampleBars } from "./waveform-model";
 
-  type Span = { startMs: number; endMs: number };
+  interface Span {
+    startMs: number;
+    endMs: number;
+  }
 
   /**
    * The seek bar, shared by the dock and Now Playing at different `height`s (the same object,
@@ -117,12 +120,12 @@
   $effect(() => {
     if (!hasPeaks) return;
     const frame = requestAnimationFrame(() => (grown = true));
-    return () => cancelAnimationFrame(frame);
+    return (): void => cancelAnimationFrame(frame);
   });
 
   const bars = $derived(rms === null ? [] : resampleBars(rms, barCountForWidth(width)));
 
-  const spanStyle = (span: Span) =>
+  const spanStyle = (span: Span): string | undefined =>
     duration > 0
       ? `left: ${(Math.max(0, span.startMs) / duration) * 100}%; width: ${(Math.min(duration, span.endMs - span.startMs) / duration) * 100}%`
       : undefined;

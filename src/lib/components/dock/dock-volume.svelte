@@ -33,7 +33,7 @@
   let dragging = $state(false);
   let readoutNode = $state<HTMLElement | null>(null);
 
-  function onWheel(event: WheelEvent) {
+  function onWheel(event: WheelEvent): void {
     if (!ready || event.deltaY === 0) return;
     // Pushing past either end of the range nudges the readout instead of doing nothing.
     const atCeiling = event.deltaY < 0 && playback.volume >= 1 && !playback.muted;

@@ -22,7 +22,7 @@ const page = (items: LibraryAlbumSummary[]): LibraryAlbumPage => ({
 });
 
 /** `cachedSummary` never calls the client, so the fake has no methods. */
-const fakeClient = () => ({}) as LibraryClient;
+const fakeClient = (): LibraryClient => ({}) as LibraryClient;
 
 describe("AlbumRepository.cachedSummary", () => {
   it("reads the album by its ID from a cached album list", () => {

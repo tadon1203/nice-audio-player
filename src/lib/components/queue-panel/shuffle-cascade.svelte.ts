@@ -7,7 +7,10 @@ const CASCADE_WINDOW_MS = 1_000;
  * at once. The new order arrives a moment later, so the flag stays up for a second.
  * Call from component initialization.
  */
-export function createShuffleCascade(shuffleEnabled: () => boolean, isOpen: () => boolean) {
+export function createShuffleCascade(
+  shuffleEnabled: () => boolean,
+  isOpen: () => boolean,
+): { readonly current: boolean } {
   let cascading = $state(false);
   let seen = untrack(shuffleEnabled);
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -20,10 +23,10 @@ export function createShuffleCascade(shuffleEnabled: () => boolean, isOpen: () =
     cascading = untrack(isOpen);
     if (cascading) timer = setTimeout(() => (cascading = false), CASCADE_WINDOW_MS);
   });
-  $effect(() => () => clearTimeout(timer));
+  $effect(() => (): void => clearTimeout(timer));
 
   return {
-    get current() {
+    get current(): boolean {
       return cascading;
     },
   };

@@ -1,7 +1,7 @@
 import type { Attachment } from "svelte/attachments";
 import { nextSeekPosition, positionFromOffset, scrubGain, scrubPosition } from "./waveform-model";
 
-type PointerSeekOptions = {
+interface PointerSeekOptions {
   durationMs: number;
   seekable: boolean;
   valueMs: number;
@@ -9,7 +9,7 @@ type PointerSeekOptions = {
   onCommit: (positionMs: number) => void;
   onCancel?: () => void;
   onHoverPositionChange?: (positionMs: number | null) => void;
-};
+}
 
 /**
  * Pointer and keyboard interaction for the seek bar: press to jump, drag to scrub, hover to
@@ -18,7 +18,12 @@ type PointerSeekOptions = {
  * tracks can be set finely (`scrubGain`). `onInput` follows the drag; `onCommit` fires once on
  * release. Put `attach` on the bar element; `options` is read live.
  */
-export function createPointerSeek(options: () => PointerSeekOptions) {
+export function createPointerSeek(options: () => PointerSeekOptions): {
+  attach: Attachment<HTMLElement>;
+  readonly dragging: boolean;
+  readonly hoverX: number | null;
+  readonly hoverMs: number | null;
+} {
   let element: HTMLElement | null = null;
   let hoverX = $state.raw<number | null>(null);
   let dragging = $state.raw(false);
@@ -27,8 +32,8 @@ export function createPointerSeek(options: () => PointerSeekOptions) {
   let scrub = { positionMs: 0, lastX: 0 };
 
   // Measured live: a cached width can lag the element's actual box while a layout settles.
-  const liveWidth = () => element?.getBoundingClientRect().width ?? 0;
-  const offsetOf = (event: PointerEvent) =>
+  const liveWidth = (): number => element?.getBoundingClientRect().width ?? 0;
+  const offsetOf = (event: PointerEvent): number =>
     event.clientX - (element?.getBoundingClientRect().left ?? 0);
 
   /** Folds the pointer's travel since the last event into the scrubbed position. */
@@ -50,7 +55,7 @@ export function createPointerSeek(options: () => PointerSeekOptions) {
     return scrub.positionMs;
   }
 
-  function onPointerDown(event: PointerEvent) {
+  function onPointerDown(event: PointerEvent): void {
     const { seekable, durationMs, onInput } = options();
     if (!seekable || event.button !== 0 || element === null) return;
     element.setPointerCapture(event.pointerId);
@@ -62,7 +67,7 @@ export function createPointerSeek(options: () => PointerSeekOptions) {
     onInput(positionMs);
   }
 
-  function onPointerMove(event: PointerEvent) {
+  function onPointerMove(event: PointerEvent): void {
     const { durationMs, onInput, onHoverPositionChange } = options();
     const width = liveWidth();
     const nextHoverX = Math.min(width, Math.max(0, offsetOf(event)));
@@ -74,7 +79,7 @@ export function createPointerSeek(options: () => PointerSeekOptions) {
     onHoverPositionChange?.(positionFromOffset(nextHoverX, width, durationMs));
   }
 
-  function onPointerUp(event: PointerEvent) {
+  function onPointerUp(event: PointerEvent): void {
     if (!dragging) return;
     const positionMs = scrubTo(event);
     dragging = false;
@@ -82,18 +87,18 @@ export function createPointerSeek(options: () => PointerSeekOptions) {
     options().onCommit(positionMs);
   }
 
-  function onPointerCancel() {
+  function onPointerCancel(): void {
     dragging = false;
     scrubMs = null;
     options().onCancel?.();
   }
 
-  function onPointerLeave() {
+  function onPointerLeave(): void {
     hoverX = null;
     options().onHoverPositionChange?.(null);
   }
 
-  function onKeyDown(event: KeyboardEvent) {
+  function onKeyDown(event: KeyboardEvent): void {
     const { seekable, valueMs, durationMs, onInput, onCommit } = options();
     if (!seekable) return;
     const next = nextSeekPosition(event.key, valueMs, durationMs);
@@ -124,7 +129,7 @@ export function createPointerSeek(options: () => PointerSeekOptions) {
 
   return {
     attach,
-    get dragging() {
+    get dragging(): boolean {
       return dragging;
     },
     /** While dragging, where the scrub really is, not where the pointer is. */

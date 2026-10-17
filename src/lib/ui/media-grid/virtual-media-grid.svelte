@@ -125,7 +125,7 @@
   let target = $state<RovingTarget | null>(null);
   let targetTile: HTMLElement | null = null;
 
-  function follow(index: number, tile: HTMLElement) {
+  function follow(index: number, tile: HTMLElement): void {
     if (wrap === null || artworkAt === undefined) return;
     targetTile = tile;
     const box = tile.getBoundingClientRect();
@@ -138,17 +138,17 @@
     };
   }
 
-  function deactivateGlow() {
+  function deactivateGlow(): void {
     if (target !== null) target = { ...target, active: false };
     targetTile = null;
   }
 
   // Focus still in the grid, or the pointer still over it, keeps the Artwork glow on.
-  function pointerLeft() {
+  function pointerLeft(): void {
     if (!wrap?.matches(":focus-within")) deactivateGlow();
   }
 
-  function focusLeft(event: FocusEvent) {
+  function focusLeft(event: FocusEvent): void {
     const to = event.relatedTarget;
     if (to instanceof Node && wrap?.contains(to)) return;
     if (!wrap?.matches(":hover")) deactivateGlow();
@@ -166,11 +166,11 @@
   $effect(() => {
     const element = wrap;
     if (element === null) return;
-    const measure = () => (width = element.getBoundingClientRect().width);
+    const measure = (): number => (width = element.getBoundingClientRect().width);
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(element);
-    return () => observer.disconnect();
+    return (): void => observer.disconnect();
   });
 
   const virtual = createVirtualRows({
@@ -195,7 +195,7 @@
   let focusedIndex: number | null = null;
   let wanted: number | null = null;
 
-  function focusWanted() {
+  function focusWanted(): void {
     if (wanted === null) return;
     const element = list?.querySelector<HTMLElement>(`li[data-index="${wanted}"]`);
     if (!element) return;
@@ -208,7 +208,7 @@
     focusWanted();
   });
 
-  function onkeydown(event: KeyboardEvent) {
+  function onkeydown(event: KeyboardEvent): void {
     if (focusedIndex === null || event.ctrlKey || event.altKey || event.metaKey) return;
     const range = virtual.range;
     const next = keyTarget(event.key, {

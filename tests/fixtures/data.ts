@@ -18,14 +18,14 @@ import type {
 } from "#lib/native";
 
 /** Plain data the fake backend serves. No rule lives here: tests say what a page contains. */
-export type LibraryData = {
+export interface LibraryData {
   roots: LibraryRoot[];
   tracks: LibraryTrackSummary[];
   albums: LibraryAlbumSummary[];
   artists: LibraryAlbumArtistSummary[];
   albumDetails: LibraryAlbumDetails;
   albumTracks: LibraryAlbumTrackPage;
-};
+}
 
 export const testRoot: LibraryRoot = {
   id: "root-1",
@@ -64,7 +64,10 @@ export const ARTWORK = {
 } as const;
 
 /** Track 1 is "Test track", track 5 is missing on disk, the rest are "Track 00N". */
-export function makeTracks(count = 140, options: { artwork?: boolean } = {}) {
+export function makeTracks(
+  count = 140,
+  options: { artwork?: boolean } = {},
+): LibraryTrackSummary[] {
   return Array.from({ length: count }, (_, index): LibraryTrackSummary => {
     const missing = index === 4;
     return {
@@ -89,7 +92,11 @@ export function makeTracks(count = 140, options: { artwork?: boolean } = {}) {
   });
 }
 
-export function pageOf<T>(items: T[], cursor: string | null, size = 40) {
+export function pageOf<T>(
+  items: T[],
+  cursor: string | null,
+  size = 40,
+): { items: T[]; totalCount: number; nextCursor: string | null } {
   const start = cursor === null ? 0 : Number(cursor);
   const slice = items.slice(start, start + size);
   const next = start + slice.length;
@@ -157,20 +164,62 @@ export function testLibrary(
 }
 
 /** Pages exactly as given: a search or sort the test cares about replaces the command. */
-export function libraryResponses(library: LibraryData = testLibrary()) {
+export function libraryResponses(library: LibraryData = testLibrary()): Record<string, unknown> {
   return {
     listLibraryRoots: library.roots,
-    listLibraryTracks: ({ cursor }: { cursor: string | null }) => pageOf(library.tracks, cursor),
-    listLibraryAlbums: () => pageOf(library.albums, null, library.albums.length),
-    listLibraryAlbumArtists: () => pageOf(library.artists, null),
+    listLibraryTracks: ({
+      cursor,
+    }: {
+      cursor: string | null;
+    }): { items: LibraryTrackSummary[]; totalCount: number; nextCursor: string | null } =>
+      pageOf(library.tracks, cursor),
+    listLibraryAlbums: (): {
+      items: LibraryAlbumSummary[];
+      totalCount: number;
+      nextCursor: string | null;
+    } => pageOf(library.albums, null, library.albums.length),
+    listLibraryAlbumArtists: (): {
+      items: LibraryAlbumArtistSummary[];
+      totalCount: number;
+      nextCursor: string | null;
+    } => pageOf(library.artists, null),
     listLibraryTrackIndex: [],
     listLibraryAlbumIndex: [],
     listLibraryAlbumArtistIndex: [],
     getLibraryArtist: library.artists[0],
-    listLibraryArtistAlbums: () => pageOf(library.albums.slice(0, 2), null),
+    listLibraryArtistAlbums: (): {
+      items: LibraryAlbumSummary[];
+      totalCount: number;
+      nextCursor: string | null;
+    } => pageOf(library.albums.slice(0, 2), null),
     getLibraryAlbum: library.albumDetails,
     listLibraryAlbumTracks: library.albumTracks,
-    getLibraryTrackProperties: ({ trackId: id }: { trackId: number }) => {
+    getLibraryTrackProperties: ({
+      trackId: id,
+    }: {
+      trackId: number;
+    }): {
+      id: number;
+      path: string;
+      fileName: string;
+      title: string;
+      artist: string | null;
+      album: string | null;
+      albumArtist: string | null;
+      trackNumber: number;
+      trackTotal: number;
+      discNumber: null;
+      discTotal: null;
+      genre: string;
+      date: string;
+      durationMs: number | null;
+      fileFormat: string | null;
+      codec: string;
+      sampleRate: number;
+      channelCount: number;
+      bitDepth: number | null;
+      bitrateKbps: number | null;
+    } | null => {
       const track = library.tracks.find((entry) => entry.id === id);
       if (track === undefined) return null;
       return {
@@ -292,12 +341,29 @@ export function idleInitialState(): InitialState {
 }
 
 /** What an app answers before anything plays. */
-export function idleResponses() {
+export function idleResponses(): {
+  subscribeMeterFrames: () => number;
+  unsubscribeMeterFrames: null;
+  getPlaybackQueueWindow: ({ offset }: { offset: number }) => {
+    revision: number;
+    offset: number;
+    items: never[];
+  };
+  getPlaybackWaveform: { revision: number; value: null };
+  listAudioOutputDevices: { id: string; name: string; isDefault: boolean }[];
+  getLibraryStatus: { status: "ready" };
+  getTrackLyrics: ({ trackId }: { trackId: number }) => { status: "notFound"; trackId: number };
+  getArtworkAccent: null;
+} {
   let nextMeterSubscription = 1;
   return {
-    subscribeMeterFrames: () => nextMeterSubscription++,
+    subscribeMeterFrames: (): number => nextMeterSubscription++,
     unsubscribeMeterFrames: null,
-    getPlaybackQueueWindow: ({ offset }: { offset: number }) => ({
+    getPlaybackQueueWindow: ({
+      offset,
+    }: {
+      offset: number;
+    }): { revision: number; offset: number; items: never[] } => ({
       revision: 1,
       offset,
       items: [],
@@ -305,7 +371,11 @@ export function idleResponses() {
     getPlaybackWaveform: { revision: 0, value: null },
     listAudioOutputDevices: outputDevices,
     getLibraryStatus: { status: "ready" as const },
-    getTrackLyrics: ({ trackId }: { trackId: number }) => ({
+    getTrackLyrics: ({
+      trackId,
+    }: {
+      trackId: number;
+    }): { status: "notFound"; trackId: number } => ({
       status: "notFound" as const,
       trackId,
     }),
@@ -337,7 +407,7 @@ export function playbackItemFor(track: LibraryTrackSummary): PlaybackItem {
   };
 }
 
-type PlayingFields = {
+interface PlayingFields {
   status: "playing" | "paused";
   item: PlaybackItem;
   startedBy: SessionStartedBy;
@@ -348,7 +418,7 @@ type PlayingFields = {
   outputSelection: AudioOutputSelection;
   canGoPrevious: boolean;
   canGoNext: boolean;
-};
+}
 
 export const playbackIdOf = (item: PlaybackItem): number => item.trackId;
 

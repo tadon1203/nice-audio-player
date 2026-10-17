@@ -9,7 +9,7 @@ let scansEnded = 0;
  * The scan is in `state`: what the renderer reads now, and the event that announces it. Every
  * scan that ends has ended one more than the last and changed something, as a real one would.
  */
-async function publishScan(native: Native, state: LibraryScanState) {
+async function publishScan(native: Native, state: LibraryScanState): Promise<void> {
   if (state !== "running" && state !== "idle") scansEnded += 1;
   const snapshot = {
     ...scanSnapshot(state),
@@ -120,7 +120,7 @@ test("shows an album's title before its details arrive, opened from a tile", asy
   native,
   library,
 }) => {
-  let release = () => {};
+  let release = (): void => {};
   const details = new Promise<void>((resolve) => (release = resolve));
   native.respond("getLibraryAlbum", async () => {
     await details;
@@ -268,7 +268,7 @@ test("invalidates mounted library queries after terminal scan events and root ch
     pageOf(roots.some((root) => root.enabled) ? library.tracks : [], cursor),
   );
   await page.goto("/library/tracks");
-  const getCount = () => native.callsTo("listLibraryTracks").length;
+  const getCount = (): number => native.callsTo("listLibraryTracks").length;
   await expect.poll(getCount).toBeGreaterThan(0);
 
   let requestCount = getCount();

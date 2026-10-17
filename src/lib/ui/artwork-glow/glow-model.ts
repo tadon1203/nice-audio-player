@@ -15,7 +15,7 @@ export const GLOW = {
 
 export type GlowStrength = keyof typeof GLOW.strength;
 
-const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
+const clamp01 = (value: number): number => Math.min(1, Math.max(0, value));
 
 /**
  * The opacity of a breathing Artwork glow for a loudness `level` (0-1): it only ever dims from its
@@ -29,13 +29,13 @@ export function breathingOpacity(strength: GlowStrength, level: number): number 
 export const INK = { background: 0.145, one: 0.985, two: 0.708, three: 0.62 } as const;
 
 /** Neutral OKLCH grays have relative luminance Y = L^3. */
-export const grayLuminance = (oklchLightness: number) => oklchLightness ** 3;
+export const grayLuminance = (oklchLightness: number): number => oklchLightness ** 3;
 
-const toSrgb = (y: number) => (y <= 0.0031308 ? 12.92 * y : 1.055 * y ** (1 / 2.4) - 0.055);
-const fromSrgb = (c: number) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+const toSrgb = (y: number): number => (y <= 0.0031308 ? 12.92 * y : 1.055 * y ** (1 / 2.4) - 0.055);
+const fromSrgb = (c: number): number => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
 
 /** WCAG contrast ratio between two relative luminances. */
-export const contrastRatio = (a: number, b: number) =>
+export const contrastRatio = (a: number, b: number): number =>
   (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
 
 /** Luminance of the brightest possible Artwork glow (pure white artwork) after the veil. */
@@ -52,7 +52,7 @@ export function worstCaseSurfaceLuminance(): number {
 const MIN_CONTRAST = 4.5;
 const STEP = 0.01;
 
-const luminanceOf = ([r, g, b]: readonly [number, number, number]) =>
+const luminanceOf = ([r, g, b]: readonly [number, number, number]): number =>
   0.2126 * fromSrgb(r / 255) + 0.7152 * fromSrgb(g / 255) + 0.0722 * fromSrgb(b / 255);
 
 function parseHex(hex: string): [number, number, number] | null {
@@ -61,7 +61,7 @@ function parseHex(hex: string): [number, number, number] | null {
   return [parseInt(match[1]!, 16), parseInt(match[2]!, 16), parseInt(match[3]!, 16)];
 }
 
-const toHex = (rgb: readonly number[]) =>
+const toHex = (rgb: readonly number[]): string =>
   `#${rgb.map((channel) => Math.round(channel).toString(16).padStart(2, "0")).join("")}`;
 
 /**

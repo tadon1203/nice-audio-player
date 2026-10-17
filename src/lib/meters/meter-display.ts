@@ -4,7 +4,7 @@ const { floorDb, ceilingDb } = BALLISTICS;
 
 const emptyLevelBar = (): LevelBar => ({ level: floorDb, peakCap: floorDb, peakHoldLeft: 0 });
 
-const clampDb = (db: number) => Math.min(ceilingDb, Math.max(floorDb, db));
+const clampDb = (db: number): number => Math.min(ceilingDb, Math.max(floorDb, db));
 
 /** Instant rise, linear fall in dB. */
 function fall(level: number, target: number, rate: number, dt: number): number {
@@ -27,26 +27,26 @@ function stepLevelBar(bar: LevelBar, target: number, rate: number, dt: number): 
 }
 
 /** The fields of a MeterDisplay: what the display shows at one moment. */
-export type MeterDisplayState = {
+export interface MeterDisplayState {
   bands: readonly LevelBar[];
   peak: readonly [LevelBar, LevelBar];
   rms: readonly [number, number];
   clipLeft: readonly [number, number];
   clip: readonly [boolean, boolean];
-};
+}
 
 /** What the display shows at one moment. Each draw makes a new one; a value is never changed. */
 export class MeterDisplay {
   /** The Spectrum's bars. */
-  readonly bands: readonly LevelBar[];
+  public readonly bands: readonly LevelBar[];
   /** The Level meter's peak bars, left and right. */
-  readonly peak: readonly [LevelBar, LevelBar];
+  public readonly peak: readonly [LevelBar, LevelBar];
   /** The Level meter's RMS levels, left and right. */
-  readonly rms: readonly [number, number];
+  public readonly rms: readonly [number, number];
   /** Seconds of "Clip" left, per channel; 0 when not latched. */
-  readonly clipLeft: readonly [number, number];
+  public readonly clipLeft: readonly [number, number];
   /** Whether "Clip" is shown, per channel. */
-  readonly clip: readonly [boolean, boolean];
+  public readonly clip: readonly [boolean, boolean];
 
   public constructor(state: MeterDisplayState) {
     this.bands = state.bands;
@@ -109,7 +109,7 @@ export class MeterDisplay {
 
   /** Whether every bar and Peak cap is at the floor and no "Clip" shows: there is nothing to draw. */
   public isAtRest(): boolean {
-    const resting = (bar: LevelBar) => bar.level <= floorDb && bar.peakCap <= floorDb;
+    const resting = (bar: LevelBar): boolean => bar.level <= floorDb && bar.peakCap <= floorDb;
     return (
       this.bands.every(resting) &&
       resting(this.peak[0]) &&

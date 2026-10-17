@@ -12,7 +12,13 @@ import type { SortOption } from "#lib/ui/sort-option";
  * from a label record. Typing the record by the generated key union makes a key
  * added to or removed from the backend a compile error here.
  */
-function defineSortKeys<Key extends string>(labels: Readonly<Record<Key, string>>) {
+function defineSortKeys<Key extends string>(
+  labels: Readonly<Record<Key, string>>,
+): {
+  keys: [Key, ...Key[]];
+  options: readonly SortOption<Key>[];
+  isKey: (value: string) => value is Key;
+} {
   const keys = Object.keys(labels) as [Key, ...Key[]];
   const options: readonly SortOption<Key>[] = keys.map((key) => ({ key, label: labels[key] }));
   const isKey = (value: string): value is Key => Object.hasOwn(labels, value);

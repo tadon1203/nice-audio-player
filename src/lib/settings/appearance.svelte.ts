@@ -16,22 +16,22 @@ export class Appearance {
   // The value of the save in flight; `null` when none is. The backend owns the defaults.
   #optimistic = $state.raw<AppearanceState | null>(null);
 
-  constructor(client: AppearanceClient) {
+  public constructor(client: AppearanceClient) {
     this.#client = client;
   }
 
   /** Artwork glow behind the library and Now Playing; `null` until the appearance has loaded. */
-  get artworkBackdrop(): boolean | null {
+  public get artworkBackdrop(): boolean | null {
     return this.#shown()?.artworkBackdrop ?? null;
   }
 
   /** Only what marks the position moves by itself; `null` until the appearance has loaded. */
-  get calmMotion(): boolean | null {
+  public get calmMotion(): boolean | null {
     return this.#shown()?.calmMotion ?? null;
   }
 
   /** Applies the value the backend holds, without writing it back: from `connect` or a pushed change. */
-  accept(incoming: Versioned<AppearanceState>): void {
+  public accept(incoming: Versioned<AppearanceState>): void {
     this.#replica.accept(incoming);
   }
 
@@ -39,7 +39,7 @@ export class Appearance {
    * Saves `patch`; `null` fields stay as they are. Throws on failure, after it rolls back its own
    * optimistic change.
    */
-  async update(patch: AppearancePatch): Promise<void> {
+  public async update(patch: AppearancePatch): Promise<void> {
     const base = this.#shown();
     // Before the first load there is nothing to apply the change to; the saved answer is shown.
     const optimistic = base && {

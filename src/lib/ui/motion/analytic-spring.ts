@@ -11,7 +11,7 @@
  * Pure: the caller supplies the clock. The reactive wrapper is `retargetable-spring.svelte.ts`.
  */
 
-export type SpringState = {
+export interface SpringState {
   readonly target: number;
   /** Offset from the target when this run started. */
   readonly offset: number;
@@ -21,11 +21,14 @@ export type SpringState = {
   readonly omega: number;
   /** Start of this run, in ms. */
   readonly at: number;
-};
+}
 
-export type SpringSample = { value: number; velocity: number };
+export interface SpringSample {
+  value: number;
+  velocity: number;
+}
 
-const omegaOf = (perceptualMs: number) => (2 * Math.PI) / (perceptualMs / 1000);
+const omegaOf = (perceptualMs: number): number => (2 * Math.PI) / (perceptualMs / 1000);
 
 /** A spring at rest on `value`. */
 export function restingSpring(value: number, perceptualMs: number): SpringState {

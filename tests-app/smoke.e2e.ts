@@ -34,16 +34,16 @@ async function invoke<T>(command: string, args: Record<string, unknown> = {}): P
   return reply.value as T;
 }
 
-const position = async () => Number(await $(seek).getAttribute("aria-valuenow"));
+const position = async (): Promise<number> => Number(await $(seek).getAttribute("aria-valuenow"));
 
 /** Meter frames the renderer has consumed; the E2E build counts them (`meter-feed.svelte.ts`). */
-const meterFrames = async () =>
+const meterFrames = async (): Promise<number> =>
   (await browser.execute(
     () => (window as unknown as { __e2e?: { meterFrames: number } }).__e2e?.meterFrames,
   )) ?? 0;
 
 /** Connections and state messages the renderer has had; the E2E build counts them (`e2e-counts.ts`). */
-const e2eCounts = async () =>
+const e2eCounts = async (): Promise<{ connects: number; stateMessages: number }> =>
   browser.execute(
     () => (window as unknown as { __e2e: { connects: number; stateMessages: number } }).__e2e,
   );
@@ -61,13 +61,13 @@ describe("the real app", () => {
     mkdirSync(shard, { recursive: true });
     writeFileSync(join(shard, `${hash}.png`), ONE_PIXEL_PNG);
     // An image element, because a fetch from the app's origin to the scheme's is cross-origin.
-    const loadedWidth = (path: string) =>
+    const loadedWidth = (path: string): Promise<number> =>
       browser.execute(
         (url: string) =>
           new Promise<number>((resolve) => {
             const image = new Image();
-            image.onload = () => resolve(image.naturalWidth);
-            image.onerror = () => resolve(0);
+            image.onload = (): void => resolve(image.naturalWidth);
+            image.onerror = (): void => resolve(0);
             image.src = url;
           }),
         `http://nice-artwork.localhost/artwork/ab/${path}`,

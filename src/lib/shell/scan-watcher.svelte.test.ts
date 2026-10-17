@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, type Mock } from "vitest";
 import type { CatalogRepository } from "#lib/library/catalog-repository";
 import type { LyricsRepository } from "#lib/lyrics/lyrics-repository";
 import type { LibraryScanSnapshot, LibraryScanState as ScanStateName } from "#lib/native";
@@ -25,16 +25,23 @@ function scanSnapshot(
 
 /** Each accepted snapshot gets the next revision, so the replica keeps every one of them. */
 let revision = 0;
-const versioned = (value: LibraryScanSnapshot) => ({ revision: ++revision, value });
+const versioned = (
+  value: LibraryScanSnapshot,
+): { revision: number; value: LibraryScanSnapshot } => ({ revision: ++revision, value });
 
-function setup() {
+function setup(): {
+  catalog: { refresh: Mock };
+  lyrics: { refresh: Mock };
+  watcher: ScanWatcher;
+  accept: (value: LibraryScanSnapshot) => void;
+} {
   const catalog = { refresh: vi.fn() };
   const lyrics = { refresh: vi.fn() };
   const watcher = new ScanWatcher(
     catalog as unknown as CatalogRepository,
     lyrics as unknown as LyricsRepository,
   );
-  const accept = (value: LibraryScanSnapshot) => watcher.accept(versioned(value));
+  const accept = (value: LibraryScanSnapshot): void => watcher.accept(versioned(value));
   return { catalog, lyrics, watcher, accept };
 }
 

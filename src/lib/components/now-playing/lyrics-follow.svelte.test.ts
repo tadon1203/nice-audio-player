@@ -8,26 +8,28 @@ const glideTargets = vi.hoisted(() => [] as number[]);
 const springs = vi.hoisted(() => [] as Array<{ current: number }>);
 vi.mock("#lib/ui/motion/retargetable-spring.svelte", () => ({
   RetargetableSpring: class {
-    current = $state(0);
+    public current = $state(0);
     #target = 0;
-    constructor(value: number) {
+    public constructor(value: number) {
       this.current = value;
       this.#target = value;
       springs.push(this);
     }
-    get target() {
+    public get target(): number {
       return this.#target;
     }
-    set(value: number, options: { instant?: boolean } = {}) {
+    public set(value: number, options: { instant?: boolean } = {}): void {
       this.#target = value;
       if (options.instant) this.current = value;
       else glideTargets.push(value);
     }
-    stop() {}
+    public stop(): void {}
   },
 }));
 vi.mock("#lib/shell/app-services.svelte", () => ({
-  AppServices: { current: () => ({ motion: { current: "full" } }) },
+  AppServices: {
+    current: (): { motion: { current: string } } => ({ motion: { current: "full" } }),
+  },
 }));
 
 const LINE_COUNT = 40;
@@ -42,10 +44,10 @@ let stops: Array<() => void>;
 let fadeAnimation: ReturnType<typeof vi.fn>;
 let msToNextLine: number | null;
 
-function mount(start: number) {
+function mount(start: number): void {
   index = start;
   container = document.createElement("div");
-  fadeAnimation = vi.fn(() => ({ cancel: () => undefined }));
+  fadeAnimation = vi.fn((): { cancel: () => undefined } => ({ cancel: () => undefined }));
   Object.assign(container, { animate: fadeAnimation });
   Object.defineProperty(container, "clientHeight", { configurable: true, value: 400 });
   Object.defineProperty(container, "scrollHeight", {
@@ -77,31 +79,33 @@ function mount(start: number) {
   flushSync();
 }
 
-function show(next: number) {
+function show(next: number): void {
   index = next;
   flushSync();
 }
 
 /** The reader scrolls the list to `value`: a position none of our writes produced. */
-function userScroll(value = 500) {
+function userScroll(value = 500): void {
   scrollTops.push(value);
   follow.onscroll();
   flushSync();
 }
 
 /** Time passes; timers run and effects settle. */
-function elapse(ms: number) {
+function elapse(ms: number): void {
   vi.advanceTimersByTime(ms);
   flushSync();
 }
 
 /** The current line is reported in or out of view by the intersection observer. */
-function stubObserver(inView: boolean) {
+function stubObserver(inView: boolean): void {
   vi.stubGlobal(
     "IntersectionObserver",
     class {
-      constructor(private readonly callback: (entries: Array<Record<string, unknown>>) => void) {}
-      observe() {
+      public constructor(
+        private readonly callback: (entries: Array<Record<string, unknown>>) => void,
+      ) {}
+      public observe(): void {
         this.callback([
           {
             isIntersecting: inView,
@@ -111,13 +115,13 @@ function stubObserver(inView: boolean) {
           },
         ]);
       }
-      disconnect() {}
+      public disconnect(): void {}
     },
   );
 }
 
 /** How many times the list was animated to a position (as opposed to set at once). */
-function animatedScrolls() {
+function animatedScrolls(): number {
   return glideTargets.length;
 }
 
@@ -168,7 +172,7 @@ describe("createLyricsFollow", () => {
 
   describe("the glide", () => {
     /** One animation frame: the spring is at `value`. */
-    const frame = (value: number) => {
+    const frame = (value: number): void => {
       springs.at(-1)!.current = value;
       flushSync();
     };

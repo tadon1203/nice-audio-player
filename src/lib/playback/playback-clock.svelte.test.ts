@@ -55,57 +55,66 @@ const snapshot = (
 });
 
 class FakeAnimation {
-  currentTime: number | null = null;
-  running = false;
-  cancelled = false;
-  plays = 0;
-  constructor(readonly keyframes: Keyframe[]) {}
-  play() {
+  public currentTime: number | null = null;
+  public running = false;
+  public cancelled = false;
+  public plays = 0;
+  public constructor(public readonly keyframes: Keyframe[]) {}
+  public play(): void {
     this.running = true;
     this.plays += 1;
   }
-  pause() {
+  public pause(): void {
     this.running = false;
   }
-  cancel() {
+  public cancel(): void {
     this.cancelled = true;
   }
 }
 
 /** A clock on hand-turned time, frames, timers and animations, so a test decides what passes. */
-function setup() {
+function setup(): {
+  clock: PlaybackClock;
+  report: (next: PlaybackSnapshot) => void;
+  advance: (ms: number) => void;
+  nextFrame: (ms: number) => void;
+  drive: (keyframes?: { atMs: number }[]) => () => void;
+  animations: FakeAnimation[];
+  timers: () => number;
+} {
   let now = 0;
   let frame: (() => void) | null = null;
   let timers: { at: number; callback: () => void; id: number }[] = [];
   let nextId = 1;
   const animations: FakeAnimation[] = [];
   const clock = new PlaybackClock({
-    now: () => now,
-    requestFrame: (callback) => {
+    now: (): number => now,
+    requestFrame: (callback): number => {
       frame = callback;
       return 1;
     },
-    cancelFrame: () => {
+    cancelFrame: (): void => {
       frame = null;
     },
-    animate: (_node, keyframes) => {
+    animate: (_node, keyframes): FakeAnimation => {
       const animation = new FakeAnimation(keyframes);
       animations.push(animation);
       return animation;
     },
-    setTimer: (callback, ms) => {
+    setTimer: (callback, ms): NodeJS.Timeout => {
       const id = nextId++;
       timers.push({ at: now + ms, callback, id });
       return id as unknown as ReturnType<typeof setTimeout>;
     },
-    clearTimer: (handle) => {
+    clearTimer: (handle): void => {
       timers = timers.filter((timer) => timer.id !== (handle as unknown as number));
     },
-    reducedMotion: () => false,
+    reducedMotion: (): false => false,
   });
-  const report = (next: PlaybackSnapshot) => clock.accept(PlaybackSnapshots.clockReport(next));
+  const report = (next: PlaybackSnapshot): void =>
+    clock.accept(PlaybackSnapshots.clockReport(next));
   /** Moves time forward, firing due timers in order. */
-  const advance = (ms: number) => {
+  const advance = (ms: number): void => {
     const end = now + ms;
     for (;;) {
       const due = timers.filter((timer) => timer.at <= end).sort((a, b) => a.at - b.at)[0];
@@ -116,18 +125,26 @@ function setup() {
     }
     now = end;
   };
-  const nextFrame = (ms: number) => {
+  const nextFrame = (ms: number): void => {
     now += ms;
     const callback = frame;
     frame = null;
     callback?.();
   };
-  const drive = (keyframes = [{ atMs: 0 }, { atMs: 60_000 }]) =>
+  const drive = (keyframes = [{ atMs: 0 }, { atMs: 60_000 }]): (() => void) =>
     clock.drive(keyframes)({} as HTMLElement) as () => void;
-  return { clock, report, advance, nextFrame, drive, animations, timers: () => timers.length };
+  return {
+    clock,
+    report,
+    advance,
+    nextFrame,
+    drive,
+    animations,
+    timers: (): number => timers.length,
+  };
 }
 
-const wholeSecond = (positionMs: number) => Math.floor(positionMs / 1000 + 1) * 1000;
+const wholeSecond = (positionMs: number): number => Math.floor(positionMs / 1000 + 1) * 1000;
 
 describe("playback clock", () => {
   it("estimates the position from the last report, frozen while paused", () => {

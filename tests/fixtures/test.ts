@@ -3,25 +3,25 @@ import { testLibrary, type LibraryData } from "./data";
 import { installNativeApi, type Native } from "./native-api";
 import { scriptPlayback } from "./playback-script";
 
-type Fixtures = {
+interface Fixtures {
   /** What the Library holds; set with `test.use({ library })`. */
   library: LibraryData;
   /** The fake backend of this test: say what commands answer, emit events, read the calls. */
   native: Native;
   /** Transport answers for playing the whole Library (see `scriptPlayback`). */
   player: ReturnType<typeof scriptPlayback>;
-};
+}
 
 export const test = base.extend<Fixtures>({
   library: [testLibrary(), { option: true }],
   native: [
-    async ({ page, library }, use) => {
+    async ({ page, library }, use): Promise<void> => {
       await use(await installNativeApi(page, { library }));
     },
     { auto: true },
   ],
   player: [
-    async ({ native, library }, use) => {
+    async ({ native, library }, use): Promise<void> => {
       const player = scriptPlayback(
         native,
         library.tracks.filter((track) => track.playable),

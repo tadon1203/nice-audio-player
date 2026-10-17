@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { applyCssMotion } from "./css-motion";
 import { springLinear } from "./spring-curve";
 
-function publish(reduced: boolean) {
+function publish(reduced: boolean): { properties: Map<string, string>; remove: () => void } {
   const properties = new Map<string, string>();
   const root = {
     style: {

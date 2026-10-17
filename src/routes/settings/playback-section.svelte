@@ -24,7 +24,7 @@
     { label: "Processing", value: path?.processing ?? "None" },
   ]);
 
-  function chooseDevice(value: string) {
+  function chooseDevice(value: string): void {
     actions.run(
       () =>
         playback.setOutputSelection(
@@ -37,14 +37,14 @@
   }
 
   // The device list is read each time the menu opens, so a device connected since is offered.
-  function listDevices(isOpen: boolean) {
+  function listDevices(isOpen: boolean): void {
     if (isOpen) actions.run(() => outputDevices.refresh(), "settings");
   }
 
   const saveError = $derived(notices.at("settings")?.message ?? null);
 
   // The store rolls a failed change back; the error shows at the Settings place.
-  function update(patch: AppearancePatch) {
+  function update(patch: AppearancePatch): void {
     actions.run(() => appearance.update(patch), "settings");
   }
 </script>

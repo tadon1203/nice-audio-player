@@ -33,7 +33,7 @@
   } = $props();
 
   const GLYPH = "before:content-[attr(data-glyph)]";
-  const isDigit = (c: string) => c >= "0" && c <= "9";
+  const isDigit = (c: string): boolean => c >= "0" && c <= "9";
 
   // The value before this one, to tell which way a number moved.
   let previous = untrack(() => value);

@@ -3,12 +3,12 @@
  * advances from the last reported position between reports; this is that arithmetic.
  */
 
-export type PositionAnchor = {
+export interface PositionAnchor {
   /** The last reported position. */
   positionMs: number;
   /** `performance.now()` when it was reported. */
   atMs: number;
-};
+}
 
 /** Where playback is now, given the last report. Frozen while paused, clamped to the track. */
 export function estimatePosition(

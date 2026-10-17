@@ -3,7 +3,17 @@ import type { Locator, Page } from "@playwright/test";
 import { expect } from "@playwright/test";
 
 /** Actual foreground and composited background, independent of the app's palette model. */
-export async function readableText(page: Page, text: Locator) {
+export async function readableText(
+  page: Page,
+  text: Locator,
+): Promise<{
+  foreground: number[];
+  ratio: number;
+  rgb: number[];
+  opacity: number;
+  size: number;
+  weight: string;
+}> {
   await text.evaluate(async (element) => {
     const animations: Animation[] = [];
     for (let parent: Element | null = element; parent; parent = parent.parentElement) {
@@ -60,9 +70,9 @@ export async function readableText(page: Page, text: Locator) {
     }, previous);
   }
   const background = Array.from(pixel.data.subarray(0, 3));
-  const linear = (channel: number) =>
+  const linear = (channel: number): number =>
     channel / 255 <= 0.04045 ? channel / 255 / 12.92 : ((channel / 255 + 0.055) / 1.055) ** 2.4;
-  const luminance = (rgb: number[]) =>
+  const luminance = (rgb: number[]): number =>
     0.2126 * linear(rgb[0]!) + 0.7152 * linear(rgb[1]!) + 0.0722 * linear(rgb[2]!);
   const foreground = ink.rgb
     .slice(0, 3)

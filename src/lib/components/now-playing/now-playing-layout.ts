@@ -2,6 +2,7 @@ import { prefersReducedMotion } from "svelte/motion";
 import { fade } from "svelte/transition";
 import { motionFor } from "#lib/ui/motion/svelte-motion";
 import { delayOf } from "#lib/ui/motion/tokens";
+import type { TransitionConfig } from "svelte/transition";
 
 /**
  * One Sleeve size for every state. Container units resolve against the grid area (the layer
@@ -28,13 +29,13 @@ export function waveformHeightFor(layerHeightPx: number): number {
  * on the layer's own timeline, after a short delay so the Sleeve lands first. Use it with
  * `|global`, because the layer's transition is what plays when Now Playing opens.
  */
-export function contentFade(node: Element) {
+export function contentFade(node: Element): TransitionConfig {
   const reduced = prefersReducedMotion.current;
   return fade(node, { ...motionFor("large"), delay: reduced ? 0 : CONTENT_DELAY_MS });
 }
 
 /** A column that comes or goes while Now Playing is open (lyrics found or lost): a plain crossfade. */
-export function columnFade(node: Element) {
+export function columnFade(node: Element): TransitionConfig {
   return fade(node, motionFor("large"));
 }
 
@@ -50,12 +51,12 @@ const SWAP_PX = 12;
 export function lyricsSwap(
   _node: Element,
   { direction, leaving }: { direction: "next" | "previous"; leaving: boolean },
-) {
+): { css: (t: number, u: number) => string; duration: number; easing: (t: number) => number } {
   const motion = motionFor("move");
   const sign = (direction === "next" ? -1 : 1) * (leaving ? 1 : -1);
   const distance = prefersReducedMotion.current ? 0 : SWAP_PX;
   return {
     ...motion,
-    css: (t: number, u: number) => `opacity: ${t}; translate: ${sign * u * distance}px 0`,
+    css: (t: number, u: number): string => `opacity: ${t}; translate: ${sign * u * distance}px 0`,
   };
 }

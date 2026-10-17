@@ -8,7 +8,9 @@ test("compact settings buttons keep readable type and stable state weight", asyn
   await expect(remove).toBeVisible();
   await expect(deleteMissing).toBeDisabled();
 
-  const presentation = async (button: typeof remove) =>
+  const presentation = async (
+    button: typeof remove,
+  ): Promise<{ fontSize: string; fontWeight: string; height: number }> =>
     button.evaluate((element) => ({
       fontSize: getComputedStyle(element).fontSize,
       fontWeight: getComputedStyle(element).fontWeight,

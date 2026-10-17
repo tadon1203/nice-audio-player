@@ -1,8 +1,9 @@
 import { type Page } from "@playwright/test";
 import { testLibrary } from "./fixtures/data";
 import { expect, test } from "./fixtures/test";
+import type { Locator } from "@playwright/test";
 
-async function openQueue(page: Page) {
+async function openQueue(page: Page): Promise<{ dock: Locator; panel: Locator }> {
   await page.goto("/library/tracks");
   await page.getByRole("button", { name: "Play Test track" }).click();
   const dock = page.getByRole("contentinfo", { name: "Playback controls" });

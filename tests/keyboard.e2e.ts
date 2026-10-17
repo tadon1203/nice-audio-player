@@ -7,7 +7,7 @@ test.beforeEach(async ({ page }) => {
   await page.setViewportSize({ width: 1360, height: 900 });
 });
 
-const focusedTile = (page: import("@playwright/test").Page) =>
+const focusedTile = (page: import("@playwright/test").Page): Promise<string | null> =>
   page.evaluate(() => document.activeElement?.closest("li")?.dataset.index ?? null);
 
 test("arrow keys move focus between album tiles, and are not the seek keys", async ({ page }) => {

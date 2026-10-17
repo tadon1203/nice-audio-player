@@ -17,15 +17,15 @@ import { motionTokens } from "./tokens";
  */
 export class RetargetableSpring {
   /** The sampled value. */
-  current = $state(0);
+  public current = $state(0);
   /** Perceptual duration in ms; a change applies from the next `set`. */
-  duration: number;
+  public duration: number;
   #target = $state(0);
   #state: SpringState;
   readonly #precision: number;
   #frame = 0;
 
-  constructor(
+  public constructor(
     value: number,
     {
       precision = 0.01,
@@ -39,11 +39,11 @@ export class RetargetableSpring {
     this.#state = restingSpring(value, duration);
   }
 
-  get target() {
+  public get target(): number {
     return this.#target;
   }
 
-  set(target: number, options: { instant?: boolean } = {}) {
+  public set(target: number, options: { instant?: boolean } = {}): void {
     const now = performance.now();
     this.#target = target;
     if (options.instant || prefersReducedMotion.current) {
@@ -57,12 +57,12 @@ export class RetargetableSpring {
   }
 
   /** Stops following the target; `current` stays where it is. */
-  stop() {
+  public stop(): void {
     if (this.#frame !== 0) cancelAnimationFrame(this.#frame);
     this.#frame = 0;
   }
 
-  readonly #tick = () => {
+  readonly #tick = (): void => {
     this.#frame = 0;
     const now = performance.now();
     if (isSpringSettled(this.#state, now, this.#precision)) {

@@ -1,8 +1,8 @@
 /** What the draw loop needs from the page; injectable so the loop is testable without a browser. */
-export type FrameScheduler = {
+export interface FrameScheduler {
   request: (callback: (now: number) => void) => number;
   cancel: (id: number) => void;
-};
+}
 
 /**
  * A frame loop that sleeps. `step` runs once per frame with the seconds since the previous frame
@@ -21,17 +21,17 @@ export class DrawLoop {
   }
 
   /** Asks for a frame unless one is already coming. */
-  public wake() {
+  public wake(): void {
     if (this.#frameId === null) this.#frameId = this.#scheduler.request(this.#tick);
   }
 
-  public stop() {
+  public stop(): void {
     if (this.#frameId !== null) this.#scheduler.cancel(this.#frameId);
     this.#frameId = null;
     this.#last = null;
   }
 
-  readonly #tick = (now: number) => {
+  readonly #tick = (now: number): void => {
     const elapsed = this.#last === null ? 0 : (now - this.#last) / 1000;
     this.#last = now;
     this.#frameId = this.#step(elapsed) ? this.#scheduler.request(this.#tick) : null;

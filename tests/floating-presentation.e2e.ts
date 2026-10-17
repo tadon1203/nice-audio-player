@@ -1,7 +1,7 @@
 import { expect, test } from "./fixtures/test";
 import type { Locator } from "@playwright/test";
 
-async function floatingPresentation(surface: Locator, forcedColors = false) {
+async function floatingPresentation(surface: Locator, forcedColors = false): Promise<void> {
   await expect(surface).toBeVisible();
   const actual = await surface.evaluate((element) => {
     const style = getComputedStyle(element);

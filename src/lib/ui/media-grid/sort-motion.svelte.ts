@@ -12,7 +12,10 @@ const HOLD_MS = 800;
  * have nowhere to slide to: those fade in instead. `scrollElement` is where the grid scrolls.
  * Call it while a component initialises.
  */
-export function createSortMotion(signature: () => string, scrollElement: () => HTMLElement | null) {
+export function createSortMotion(
+  signature: () => string,
+  scrollElement: () => HTMLElement | null,
+): { readonly current: SortMotion } {
   let motion = $state<SortMotion>(null);
   let seen = untrack(signature);
 
@@ -24,11 +27,11 @@ export function createSortMotion(signature: () => string, scrollElement: () => H
     const scroller = untrack(scrollElement);
     motion = scroller !== null && scroller.scrollTop > 1 ? "fade" : "slide";
     const timer = setTimeout(() => (motion = null), HOLD_MS);
-    return () => clearTimeout(timer);
+    return (): void => clearTimeout(timer);
   });
 
   return {
-    get current() {
+    get current(): SortMotion {
       return motion;
     },
   };

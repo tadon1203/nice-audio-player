@@ -1,8 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Appearance as AppearanceState, AppearanceClient, Versioned } from "#lib/native";
 import { Appearance } from "./appearance.svelte";
+import type { Mock } from "vitest";
+import type { AppearancePatch } from "#lib/native";
 
-function stubClient(update: AppearanceClient["update"]) {
+function stubClient(update: AppearanceClient["update"]): {
+  update: Mock<(patch: AppearancePatch) => Promise<Versioned<AppearanceState>>>;
+} {
   return { update: vi.fn(update) };
 }
 
@@ -11,7 +15,11 @@ const saved: Versioned<AppearanceState> = {
   value: { artworkBackdrop: true, calmMotion: false },
 };
 
-function deferred<T>() {
+function deferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+  reject: (reason: unknown) => void;
+} {
   let resolve!: (value: T) => void;
   let reject!: (reason: unknown) => void;
   const promise = new Promise<T>((res, rej) => {

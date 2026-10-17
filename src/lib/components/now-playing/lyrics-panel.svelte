@@ -52,7 +52,7 @@
     lyricsWaveformLink.setActiveSpan(
       lines !== null && index >= 0 ? lineSpan(lines, index, durationMs) : null,
     );
-    return () => lyricsWaveformLink.setActiveSpan(null);
+    return (): void => lyricsWaveformLink.setActiveSpan(null);
   });
 </script>
 

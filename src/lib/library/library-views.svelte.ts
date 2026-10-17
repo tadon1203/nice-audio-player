@@ -11,27 +11,27 @@ import { Sort } from "./sort";
 
 export type LibraryPresentation = "albums" | "albumArtists" | "tracks";
 
-type SortKeyOf = {
+interface SortKeyOf {
   albums: LibraryAlbumSortKey;
   albumArtists: LibraryAlbumArtistSortKey;
   tracks: LibraryTrackSortKey;
-};
+}
 
 /**
  * One presentation's filter and sort. Kept in memory for the life of the window, so each view
  * keeps its own filter and sort while the user moves between them.
  */
 class LibraryView<Presentation extends LibraryPresentation> {
-  filter = $state("");
-  sortKey: SortKeyOf[Presentation];
-  direction: LibrarySortDirection = $state("ascending");
+  public filter = $state("");
+  public sortKey: SortKeyOf[Presentation];
+  public direction: LibrarySortDirection = $state("ascending");
   /** Rows the list starts after: 0, or where the scroll index jumped to. */
-  skip = $state(0);
+  public skip = $state(0);
 
   readonly #presentation: Presentation;
-  readonly sortOptions: readonly SortOption<SortKeyOf[Presentation]>[];
+  public readonly sortOptions: readonly SortOption<SortKeyOf[Presentation]>[];
 
-  constructor(
+  public constructor(
     presentation: Presentation,
     sortKey: SortKeyOf[Presentation],
     sortOptions: readonly SortOption<SortKeyOf[Presentation]>[],
@@ -41,7 +41,7 @@ class LibraryView<Presentation extends LibraryPresentation> {
     this.sortKey = $state.raw(sortKey);
   }
 
-  get request(): Extract<LibraryCatalogRequest, { presentation: Presentation }> {
+  public get request(): Extract<LibraryCatalogRequest, { presentation: Presentation }> {
     return {
       presentation: this.#presentation,
       filter: this.filter,
@@ -52,53 +52,56 @@ class LibraryView<Presentation extends LibraryPresentation> {
   }
 
   /** Identifies the sort alone, so a list can tell when its order changed. */
-  get sortSignature(): string {
+  public get sortSignature(): string {
     return `${this.sortKey}:${this.direction}`;
   }
 
   /** Identifies the filter and sort so views can reset scroll when it changes. */
-  get stateKey(): string {
+  public get stateKey(): string {
     return `${this.filter}\u0000${this.sortKey}\u0000${this.direction}\u0000${this.skip}`;
   }
 
-  setFilter = (next: string): void => {
+  public setFilter = (next: string): void => {
     this.filter = next;
     this.skip = 0;
   };
 
-  setSort = (key: SortKeyOf[Presentation], direction: LibrarySortDirection = "ascending"): void => {
+  public setSort = (
+    key: SortKeyOf[Presentation],
+    direction: LibrarySortDirection = "ascending",
+  ): void => {
     this.sortKey = key;
     this.direction = direction;
     this.skip = 0;
   };
 
-  toggleDirection = (): void => {
+  public toggleDirection = (): void => {
     this.direction = Sort.toggleDirection(this.direction);
     this.skip = 0;
   };
 
   /** Starts the list after `skip` rows (a letter of the scroll index); 0 is the top. */
-  jumpTo = (skip: number): void => {
+  public jumpTo = (skip: number): void => {
     this.skip = skip;
   };
 }
 
 /** An artist's albums have a sort but no filter. */
 class ArtistAlbumsView {
-  sortKey: LibraryArtistAlbumSortKey = $state.raw("year");
-  direction: LibrarySortDirection = $state("ascending");
-  readonly sortOptions = Sort.artistAlbumOptions;
+  public sortKey: LibraryArtistAlbumSortKey = $state.raw("year");
+  public direction: LibrarySortDirection = $state("ascending");
+  public readonly sortOptions = Sort.artistAlbumOptions;
 
   /** Identifies the sort alone, so a list can tell when its order changed. */
-  get sortSignature(): string {
+  public get sortSignature(): string {
     return `${this.sortKey}:${this.direction}`;
   }
 
-  get stateKey(): string {
+  public get stateKey(): string {
     return `${this.sortKey}\u0000${this.direction}`;
   }
 
-  setSort = (
+  public setSort = (
     key: LibraryArtistAlbumSortKey,
     direction: LibrarySortDirection = "ascending",
   ): void => {
@@ -106,15 +109,15 @@ class ArtistAlbumsView {
     this.direction = direction;
   };
 
-  toggleDirection = (): void => {
+  public toggleDirection = (): void => {
     this.direction = Sort.toggleDirection(this.direction);
   };
 }
 
 /** The filter and sort of each library view, kept for the life of the window. */
 export class LibraryViews {
-  readonly albums = new LibraryView("albums", "title", Sort.albumOptions);
-  readonly albumArtists = new LibraryView("albumArtists", "artist", Sort.albumArtistOptions);
-  readonly tracks = new LibraryView("tracks", "title", Sort.trackOptions);
-  readonly artistAlbums = new ArtistAlbumsView();
+  public readonly albums = new LibraryView("albums", "title", Sort.albumOptions);
+  public readonly albumArtists = new LibraryView("albumArtists", "artist", Sort.albumArtistOptions);
+  public readonly tracks = new LibraryView("tracks", "title", Sort.trackOptions);
+  public readonly artistAlbums = new ArtistAlbumsView();
 }

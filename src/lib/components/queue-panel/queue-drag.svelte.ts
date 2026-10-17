@@ -6,9 +6,13 @@ import { dropSlotForFixedRows, slotToIndex } from "./queue-drag";
 const EDGE_PX = 40;
 const EDGE_STEP_PX = 16;
 
-type DragState = { id: QueueItemId; from: number; slot: number };
+interface DragState {
+  id: QueueItemId;
+  from: number;
+  slot: number;
+}
 
-type QueueDragOptions = {
+interface QueueDragOptions {
   onMove: (id: QueueItemId, to: number) => void;
   rowHeight: number;
   /** How many rows the list has, mounted or not. */
@@ -16,7 +20,7 @@ type QueueDragOptions = {
   scrollElement: () => HTMLElement | null;
   /** The list whose top is where its first row would sit. */
   list: () => HTMLElement | null;
-};
+}
 
 /**
  * Pointer-driven reordering for the upcoming list. Dragging only chooses an insertion slot
@@ -26,19 +30,19 @@ type QueueDragOptions = {
  * scroll region a drag scrolls it.
  */
 export class QueueDrag {
-  drag = $state<DragState | null>(null);
+  public drag = $state<DragState | null>(null);
   readonly #options: QueueDragOptions;
 
-  constructor(options: QueueDragOptions) {
+  public constructor(options: QueueDragOptions) {
     this.#options = options;
   }
 
-  get rowHeight(): number {
+  public get rowHeight(): number {
     return this.#options.rowHeight;
   }
 
   /** The pointer handlers for the drag handle of upcoming item `id` at index `from`. */
-  handlersFor(
+  public handlersFor(
     id: QueueItemId,
     from: number,
   ): Pick<

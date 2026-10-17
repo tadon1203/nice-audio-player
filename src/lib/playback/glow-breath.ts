@@ -2,7 +2,7 @@ import type { Attachment } from "svelte/attachments";
 import { springLinear } from "#lib/ui/motion/spring-curve";
 import type { DriveKeyframe, PlaybackClock } from "./playback-clock.svelte";
 
-export type GlowBreathOptions = {
+export interface GlowBreathOptions {
   clock: Pick<PlaybackClock, "drive" | "estimate" | "playing" | "onJump" | "onBoundary">;
   /** Opacity keyframes over the track, in track ms (precomputed from the loudness). */
   keyframes: readonly (DriveKeyframe & { opacity: number })[];
@@ -10,7 +10,7 @@ export type GlowBreathOptions = {
   restOpacity: number;
   /** Length of an ease between two values (a seek, a pause, a resume). */
   durationMs: number;
-};
+}
 
 /** The Artwork glow's breathing: the curve over the track and how it eases between values. */
 export class GlowBreath {
@@ -69,7 +69,7 @@ export class GlowBreath {
           fill: "forwards",
         });
         ease = animation;
-        animation.onfinish = () => {
+        animation.onfinish = (): void => {
           if (ease !== animation) return;
           ease = null;
           node.style.opacity = String(to);

@@ -2,20 +2,20 @@ import type { AudioOutputSelection } from "#lib/native";
 import { AudioFormatText } from "#lib/utils/audio-format-text";
 
 /** The dock's signal path: `source › processing › output`. `processing` is null when bit-perfect. */
-export type PlaybackSignalPath = {
+export interface PlaybackSignalPath {
   readonly source: string;
   readonly processing: string | null;
   readonly output: string;
   readonly selection: AudioOutputSelection | null;
-};
+}
 
-type SignalFacts = {
+interface SignalFacts {
   sourceLabel: string;
   resamplingActive: boolean;
   outputSampleRate: number | null;
   channelConversion: "none" | "monoToStereo" | "stereoToMono" | "downmix" | null;
   outputName: string | null;
-};
+}
 
 /** Describes the signal path of the loaded track. Pure: the facts in, the path out. */
 export class PlaybackTechnicalStatus {

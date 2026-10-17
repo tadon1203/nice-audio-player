@@ -8,10 +8,10 @@ const INDEX_HOLD_MS = 800;
 /** How many frames to wait for the content to grow tall enough before settling for the maximum. */
 export const MAX_WAIT_FRAMES = 30;
 
-export type FrameScheduler = {
+export interface FrameScheduler {
   request: (callback: () => void) => number;
   cancel: (handle: number) => void;
-};
+}
 
 const browserFrames: FrameScheduler = {
   request: (callback) => requestAnimationFrame(callback),
@@ -20,14 +20,14 @@ const browserFrames: FrameScheduler = {
 
 type ScrollRegion = Pick<HTMLElement, "scrollHeight" | "clientHeight" | "scrollTop">;
 
-export type WorkspaceScrollOptions = {
+export interface WorkspaceScrollOptions {
   /** Whether the content is laid out enough to restore into. */
   ready?: () => boolean;
   /** A library view's path: offsets are remembered under it and restored once on mount. */
   key?: () => string;
   /** When this changes after the first run, the region returns to the top. */
   resetKey?: () => string;
-};
+}
 
 /**
  * One rule for a scroll region: remember the offset (under `key`), restore a pending offset once
@@ -55,7 +55,7 @@ export class WorkspaceScroll {
     $effect(() => {
       void this.#requests;
       const element = this.#viewport;
-      const isReady = (options.ready ?? (() => true))();
+      const isReady = (options.ready ?? ((): true => true))();
       if (this.#pending === null || element === null || !isReady) return;
       const offset = this.#pending;
       this.#pending = null;
@@ -79,14 +79,14 @@ export class WorkspaceScroll {
       });
     });
 
-    $effect(() => () => this.#cancel?.());
+    $effect(() => (): void | undefined => this.#cancel?.());
   }
 
   /** The viewport's attachment: it remembers the offset while the user scrolls. */
   public readonly attach: Attachment<HTMLElement> = (element) => {
     this.#viewport = element;
     let hold: ReturnType<typeof setTimeout> | undefined;
-    const onScroll = () => {
+    const onScroll = (): void => {
       const key = this.#options.key?.();
       if (key !== undefined) this.#memory.rememberList(key, element.scrollTop);
       this.#scrolling = true;
@@ -130,7 +130,7 @@ export class WorkspaceScroll {
   ): () => void {
     let waited = 0;
     let handle: number | null = null;
-    const step = () => {
+    const step = (): void => {
       handle = null;
       const reachable = region.scrollHeight - region.clientHeight >= offset;
       if (reachable || waited++ >= MAX_WAIT_FRAMES) region.scrollTop = offset;

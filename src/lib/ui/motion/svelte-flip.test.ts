@@ -5,7 +5,7 @@ vi.mock("svelte/motion", () => ({ prefersReducedMotion: reduced }));
 
 import { flipMotion } from "./svelte-flip";
 
-const rect = (x: number) => ({ left: x, top: 0, width: 10, height: 10 }) as DOMRect;
+const rect = (x: number): DOMRect => ({ left: x, top: 0, width: 10, height: 10 }) as DOMRect;
 const node = { clientWidth: 10, clientHeight: 10, parentElement: null } as unknown as Element;
 
 describe("flipMotion", () => {

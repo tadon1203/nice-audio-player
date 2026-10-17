@@ -28,7 +28,7 @@ afterEach(() => {
 });
 
 /** Runs frames every `step` ms for `ms`; calls `each` after every frame. */
-function run(ms: number, step: number, each: () => void = () => undefined) {
+function run(ms: number, step: number, each: () => void = (): undefined => undefined): void {
   const end = clock + ms;
   while (clock < end) {
     clock += step;
@@ -80,7 +80,7 @@ describe("RetargetableSpring", () => {
   });
 
   it("gives the same result at 60Hz and 144Hz", () => {
-    const at = (step: number) => {
+    const at = (step: number): number => {
       callbacks.clear();
       clock = 1000;
       const spring = new RetargetableSpring(0);

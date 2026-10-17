@@ -25,13 +25,17 @@ export const BALLISTICS = {
 export const BAND_COUNT = 30;
 
 /** What one draw is fed: the frames since the last draw, reduced (see `MeterFrames.reduce`). */
-export type MeterInput = {
+export interface MeterInput {
   bands: readonly number[];
   peak: readonly [number, number];
   rms: readonly [number, number];
   /** Per channel: a sample reached full scale. */
   clip: readonly [boolean, boolean];
-};
+}
 
 /** A Level bar with its Peak cap: `level` is the filled bar, `peakCap` the held peak (never below `level`). */
-export type LevelBar = { level: number; peakCap: number; peakHoldLeft: number };
+export interface LevelBar {
+  level: number;
+  peakCap: number;
+  peakHoldLeft: number;
+}

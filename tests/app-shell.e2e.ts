@@ -20,7 +20,7 @@ test("navigates between the three library presentations and Settings", async ({ 
       name: label === "Albums" ? "Tracks" : "Albums",
       exact: true,
     });
-    const color = (element: HTMLElement | SVGElement) => getComputedStyle(element).color;
+    const color = (element: HTMLElement | SVGElement): string => getComputedStyle(element).color;
     await expect.poll(() => link.evaluate(color)).not.toBe(await inactive.evaluate(color));
     await expect(page.getByRole("main")).toBeVisible();
   }
@@ -36,7 +36,7 @@ test("keeps search and navigation interaction states visually distinct", async (
 
   const albums = page.getByRole("link", { name: "Albums", exact: true });
   const albumArtists = page.getByRole("link", { name: "Album Artists", exact: true });
-  const background = (locator: typeof albums) =>
+  const background = (locator: typeof albums): Promise<string> =>
     locator.evaluate((element) => getComputedStyle(element).backgroundColor);
 
   const restBackground = await background(albumArtists);

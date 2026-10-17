@@ -2,6 +2,7 @@ import { type Page } from "@playwright/test";
 import { albumSequence } from "./fixtures/data";
 import { motionMs } from "./fixtures/motion";
 import { expect, test } from "./fixtures/test";
+import type { Locator } from "@playwright/test";
 
 // Real timing: the rest of the suite runs with reduced motion (see playwright.config.ts).
 // These tests check invariants sampled every frame, never screenshots of the motion.
@@ -12,7 +13,7 @@ test.beforeEach(async ({ page, player, library }) => {
   await page.setViewportSize({ width: 1360, height: 900 });
 });
 
-async function playAlbum(page: Page) {
+async function playAlbum(page: Page): Promise<Locator> {
   await page.goto("/library/albums");
   await page.getByRole("link", { name: "Open album Test album by Test artist" }).click();
   await page.getByRole("button", { name: "Play album" }).click();
@@ -30,17 +31,19 @@ async function sampleFrames<T>(
 ): Promise<T[]> {
   await page.evaluate(
     ([source]) => {
+      // The measure function travels to the page as source text, so it is rebuilt here.
+      // oxlint-disable-next-line typescript/no-implied-eval
       const fn = new Function(`return (${source})`)() as () => unknown;
       const samples: unknown[] = [];
       let running = true;
-      const loop = () => {
+      const loop = (): void => {
         if (!running) return;
         samples.push(fn());
         requestAnimationFrame(loop);
       };
       requestAnimationFrame(loop);
       (window as unknown as Record<string, unknown>).__frames = {
-        stop: () => {
+        stop: (): unknown[] => {
           running = false;
           return samples;
         },
@@ -59,7 +62,7 @@ test("the dock's bottom edge and transport never move while Now Playing opens an
   page,
 }) => {
   const dock = await playAlbum(page);
-  const measure = () => {
+  const measure = (): { bottom: number; core: number } => {
     const footer = document.querySelector('[data-slot="playback-dock"]')!.getBoundingClientRect();
     const core = document.querySelector('[data-region="playback-core"]')!.getBoundingClientRect();
     return { bottom: footer.bottom, core: core.top };
@@ -79,7 +82,7 @@ test("the dock's bottom edge and transport never move while Now Playing opens an
 
 test("the transport buttons keep their size while the dock changes height", async ({ page }) => {
   const dock = await playAlbum(page);
-  const measure = () => {
+  const measure = (): { height: number; scale: string } => {
     const button = document.querySelector('button[aria-label="Next track"]')!;
     const rect = button.getBoundingClientRect();
     const scale = getComputedStyle(
@@ -98,7 +101,7 @@ test("the transport buttons keep their size while the dock changes height", asyn
 
 test("changing track never leaves the dock without a visible title", async ({ page }) => {
   const dock = await playAlbum(page);
-  const measure = () => {
+  const measure = (): number => {
     const titles = [
       ...document.querySelectorAll<HTMLElement>('[data-region="playback-identity"] button[title]'),
     ];
@@ -118,7 +121,7 @@ test("changing track never leaves the dock without a visible title", async ({ pa
 test("the progress fill advances smoothly between position reports", async ({ page }) => {
   const dock = await playAlbum(page);
   // The mock sends no position events on its own, so every change here is the clock's animation.
-  const measure = () => {
+  const measure = (): number => {
     const layers = document.querySelectorAll<HTMLElement>(
       '[data-slot="playback-dock"] [data-region="seek"] > div[aria-hidden="true"]',
     );
@@ -141,7 +144,7 @@ test("an album's artwork moves from its tile to the details header", async ({ pa
   await page.goto("/library/albums");
   const tile = page.getByRole("link", { name: "Open album Test album by Test artist" });
   const tileBox = (await tile.locator('[data-slot="artwork"]').boundingBox())!;
-  const measure = () => {
+  const measure = (): { x: number; y: number } | null => {
     // The Sleeve in flight is a clone drawn over the page; once it lands, the header's own.
     const artwork =
       document.querySelector('[data-shared-element="flying"]') ??

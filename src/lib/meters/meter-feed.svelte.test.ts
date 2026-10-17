@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { MeterClient } from "#lib/native";
 import { BAND_COUNT } from "./ballistics";
 import { MeterFeed } from "./meter-feed.svelte";
+import type { Mock } from "vitest";
 
 const FRAME_BYTES = (BAND_COUNT + 5) * 4;
 
@@ -12,7 +13,12 @@ function wireFrame(peak: number): ArrayBuffer {
   return buffer;
 }
 
-function fakeClient() {
+function fakeClient(): {
+  client: MeterClient;
+  subscribe: Mock<(onFrame: (frame: ArrayBuffer) => void) => Promise<Mock<() => Promise<void>>>>;
+  stop: Mock<() => Promise<void>>;
+  push: (frame: ArrayBuffer) => void;
+} {
   const stop = vi.fn(() => Promise.resolve());
   let push: (frame: ArrayBuffer) => void = () => {};
   const subscribe = vi.fn((onFrame: (frame: ArrayBuffer) => void) => {
@@ -20,7 +26,7 @@ function fakeClient() {
     return Promise.resolve(stop);
   });
   const client: MeterClient = { subscribe };
-  return { client, subscribe, stop, push: (frame: ArrayBuffer) => push(frame) };
+  return { client, subscribe, stop, push: (frame: ArrayBuffer): void => push(frame) };
 }
 
 let cleanup: () => void;

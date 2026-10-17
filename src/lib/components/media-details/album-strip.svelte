@@ -1,13 +1,13 @@
 <script lang="ts" module>
   import type { LibraryFileAvailability, TrackId } from "#lib/native";
 
-  export type AlbumStripTrack = {
+  export interface AlbumStripTrack {
     id: TrackId;
     title: string;
     durationMs: number | null;
     playable: boolean;
     availability: LibraryFileAvailability;
-  };
+  }
 
   const PAST = "bg-foreground/60";
   const IDLE = "bg-foreground/25";

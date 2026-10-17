@@ -1,7 +1,8 @@
 import { createVirtualizer } from "@tanstack/svelte-virtual";
 import { fromStore, get } from "svelte/store";
+import type { VirtualItem } from "@tanstack/svelte-virtual";
 
-type VirtualRowsOptions = {
+interface VirtualRowsOptions {
   count: () => number;
   /** The region the rows scroll in (`null` while it is still mounting). */
   scrollElement: () => HTMLElement | null;
@@ -12,13 +13,20 @@ type VirtualRowsOptions = {
   container: () => HTMLElement | null;
   /** The element holding the rows; its top is where the first row sits. */
   body: () => HTMLElement | null;
-};
+}
 
 /**
  * Virtualizes fixed-height rows inside a scroll region: which rows to render, the spacer heights
  * above and below them. Call during component init.
  */
-export function createVirtualRows(options: VirtualRowsOptions) {
+export function createVirtualRows(options: VirtualRowsOptions): {
+  readonly items: VirtualItem[];
+  readonly topSpacer: number;
+  readonly bottomSpacer: number;
+  readonly topIndex: number;
+  readonly scrollMargin: number;
+  readonly range: { startIndex: number; endIndex: number } | null;
+} {
   const { rowHeight, overscan } = options;
   let scrollMargin = $state(0);
 
@@ -29,7 +37,7 @@ export function createVirtualRows(options: VirtualRowsOptions) {
     const scroller = options.scrollElement();
     const first = options.body();
     if (element === null || first === null) return;
-    const measure = () => {
+    const measure = (): void => {
       if (scroller !== null) {
         scrollMargin =
           first.getBoundingClientRect().top -
@@ -40,7 +48,7 @@ export function createVirtualRows(options: VirtualRowsOptions) {
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(element);
-    return () => observer.disconnect();
+    return (): void => observer.disconnect();
   });
 
   const virtualizer = createVirtualizer<HTMLElement, HTMLElement>({
@@ -87,23 +95,23 @@ export function createVirtualRows(options: VirtualRowsOptions) {
   });
 
   return {
-    get items() {
+    get items(): VirtualItem[] {
       return items;
     },
-    get topSpacer() {
+    get topSpacer(): number {
       return topSpacer;
     },
-    get bottomSpacer() {
+    get bottomSpacer(): number {
       return bottomSpacer;
     },
-    get topIndex() {
+    get topIndex(): number {
       return topIndex;
     },
-    get scrollMargin() {
+    get scrollMargin(): number {
       return scrollMargin;
     },
     /** The rows really in view (not the overscan), `null` before the first layout. */
-    get range() {
+    get range(): { startIndex: number; endIndex: number } | null {
       return range;
     },
   };

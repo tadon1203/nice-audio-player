@@ -29,12 +29,12 @@ export type TransportCommand =
   | "next"
   | "outputSelection";
 
-type QueuedTransport = {
+interface QueuedTransport {
   command: TransportCommand;
   operation: () => Promise<Versioned<PlaybackSnapshot>>;
   resolve: () => void;
   reject: (error: unknown) => void;
-};
+}
 
 /**
  * Which way a new session's start moves the Now Playing transition. The backend says why the

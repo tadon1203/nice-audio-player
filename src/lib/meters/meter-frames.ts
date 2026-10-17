@@ -1,13 +1,13 @@
 import { BAND_COUNT, type MeterInput } from "./ballistics";
 
 /** One Meter frame as the backend measured it (layout: `FRAME_BYTES` in `backend/src/audio/meter.rs`). */
-export type MeterFrame = {
+export interface MeterFrame {
   bands: readonly number[];
   peak: readonly [number, number];
   rms: readonly [number, number];
   /** A sample reached full scale in this frame. */
   fullScale: boolean;
-};
+}
 
 const FLOATS = BAND_COUNT + 4;
 const FRAME_BYTES = (FLOATS + 1) * 4;
@@ -21,7 +21,7 @@ export class MeterFrames {
   public static decode(buffer: ArrayBuffer): MeterFrame | null {
     if (buffer.byteLength !== FRAME_BYTES) return null;
     const view = new DataView(buffer);
-    const float = (index: number) => view.getFloat32(index * 4, true);
+    const float = (index: number): number => view.getFloat32(index * 4, true);
     return {
       bands: Array.from({ length: BAND_COUNT }, (_, i) => float(i)),
       peak: [float(BAND_COUNT), float(BAND_COUNT + 1)],

@@ -11,8 +11,8 @@ import { SupersededError } from "./errors/superseded-error";
 import { TauriNative } from "./tauri-native";
 
 /** Only the commands a test calls; each one rejects with the reply the test gives it. */
-function fakeCommands(reply: unknown) {
-  const reject = () => Promise.reject(reply);
+function fakeCommands(reply: unknown): typeof commands {
+  const reject = (): Promise<never> => Promise.reject(reply);
   return {
     connect: vi.fn(reject),
     pausePlayback: vi.fn(reject),

@@ -56,7 +56,8 @@ test("two albums with one title and Album Artist in two folders each open their 
     requested.push(new URL(route.request().url()).pathname);
     return route.fulfill({ contentType: "image/png", body: PIXEL });
   });
-  const printingOf = (albumId: string) => printings.findIndex((entry) => entry.id === albumId);
+  const printingOf = (albumId: string): number =>
+    printings.findIndex((entry) => entry.id === albumId);
 
   native.respond("listLibraryAlbums", () => ({
     items: albums,

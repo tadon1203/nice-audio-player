@@ -24,10 +24,10 @@ export type LibraryViewState =
 const FILTER_DEBOUNCE_MS = 120;
 
 /** The filter the query uses, with the presentation it was typed for. */
-type SettledFilter = {
+interface SettledFilter {
   readonly presentation: LibraryCatalogRequest["presentation"];
   readonly filter: string;
-};
+}
 
 /**
  * A presentation's list, its scroll index, and its one view state. Loads the list once the library
@@ -93,7 +93,9 @@ export class LibraryCatalog<TRequest extends LibraryCatalogRequest> {
     // keeps the buckets it was made from.
     this.#index = new QueryResult(() => ({
       ...catalog.indexOptions(this.#queryRequest, this.#ready),
-      placeholderData: (previous: LibraryIndexBucket[] | undefined) => previous,
+      placeholderData: (
+        previous: LibraryIndexBucket[] | undefined,
+      ): LibraryIndexBucket[] | undefined => previous,
     }));
 
     $effect(() => {
@@ -102,7 +104,7 @@ export class LibraryCatalog<TRequest extends LibraryCatalogRequest> {
         () => (this.#settled = { presentation, filter }),
         FILTER_DEBOUNCE_MS,
       );
-      return () => clearTimeout(timer);
+      return (): void => clearTimeout(timer);
     });
     // The request of the data on screen: it moves to the new request only when that data arrives.
     // An effect is needed because the value must remember the previous request.

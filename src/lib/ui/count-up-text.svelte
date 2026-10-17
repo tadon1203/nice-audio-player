@@ -12,7 +12,7 @@
   $effect(() => {
     const target = text;
     const timer = setTimeout(() => (shown = target), COUNT_UP_DELAY_MS);
-    return () => clearTimeout(timer);
+    return (): void => clearTimeout(timer);
   });
 </script>
 

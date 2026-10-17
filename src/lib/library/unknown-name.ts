@@ -6,5 +6,5 @@
 export const UNKNOWN_ALBUM = "Unknown album";
 export const UNKNOWN_ARTIST = "Unknown artist";
 
-export const albumTitleLabel = (title: string) => title || UNKNOWN_ALBUM;
-export const artistNameLabel = (name: string) => name || UNKNOWN_ARTIST;
+export const albumTitleLabel = (title: string): string => title || UNKNOWN_ALBUM;
+export const artistNameLabel = (name: string): string => name || UNKNOWN_ARTIST;

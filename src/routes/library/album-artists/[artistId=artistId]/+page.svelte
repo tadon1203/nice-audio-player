@@ -35,8 +35,9 @@
   let viewport = $state<HTMLElement | null>(null);
 
   const scroll = new WorkspaceScroll(scrollMemory, {
-    resetKey: () => view.stateKey,
-    ready: () => artistQuery.data !== undefined && !albums.isPending && albums.items.length > 0,
+    resetKey: (): string => view.stateKey,
+    ready: (): boolean =>
+      artistQuery.data !== undefined && !albums.isPending && albums.items.length > 0,
   });
 
   export const snapshot = scrollMemory.detailSnapshot(scroll.capture, scroll.restore);

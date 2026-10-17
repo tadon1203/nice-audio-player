@@ -8,7 +8,10 @@ import { findCurrentLineIndex } from "./lyrics-lines";
  * clock wakes it on every report (covers seeks, track changes, pauses) and at the next line's
  * start, so readers rerun only when the line changes, never with the position. Call it while a component initialises.
  */
-export function createLyricsSync(lines: () => readonly LyricsTimedLine[] | null) {
+export function createLyricsSync(lines: () => readonly LyricsTimedLine[] | null): {
+  readonly index: number;
+  msToNextLine(): number | null;
+} {
   const { clock } = AppServices.current().playback;
 
   // Start from where the clock is now, so a panel opened mid-song does not begin at line 0.
@@ -34,7 +37,7 @@ export function createLyricsSync(lines: () => readonly LyricsTimedLine[] | null)
   });
 
   return {
-    get index() {
+    get index(): number {
       return index;
     },
     /** Ms until the next line starts; null when there is none or the clock is not playing. */

@@ -22,7 +22,12 @@ const OWN_WRITES = 8;
  * A glide lets go when something else moves the list (the wheel, the scrollbar, the browser
  * clamping it). `isOwnScroll` tells a scroll event caused by its own writes from the reader's.
  */
-export function createAnchorFollow() {
+export function createAnchorFollow(): {
+  attach: Attachment<HTMLElement>;
+  stop: () => void;
+  isOwnScroll(scrollTop: number): boolean;
+  scrollToRow(row: HTMLElement, how: ScrollHow): void;
+} {
   const budget = AppServices.current().motion;
   let container = $state.raw<HTMLElement | null>(null);
   let fade: Animation | null = null;
@@ -37,13 +42,13 @@ export function createAnchorFollow() {
   /** The last few values the follower wrote to `scrollTop`. */
   const written: number[] = [];
 
-  const write = (element: HTMLElement, value: number) => {
+  const write = (element: HTMLElement, value: number): void => {
     element.scrollTop = value;
     written.push(value);
     if (written.length > OWN_WRITES) written.shift();
   };
 
-  const stop = () => {
+  const stop = (): void => {
     fade?.cancel();
     fade = null;
     glide.stop();
@@ -83,11 +88,11 @@ export function createAnchorFollow() {
     attach,
     stop,
     /** Whether a scroll position is one the follower wrote itself (so not the reader's doing). */
-    isOwnScroll(scrollTop: number) {
+    isOwnScroll(scrollTop: number): boolean {
       return written.some((value) => Math.abs(scrollTop - value) <= GLIDE_INTERRUPT_PX);
     },
     /** Brings `row` to the anchor line. Does nothing before the container is mounted. */
-    scrollToRow(row: HTMLElement, how: ScrollHow) {
+    scrollToRow(row: HTMLElement, how: ScrollHow): void {
       const element = container;
       if (element === null) return;
       stop();

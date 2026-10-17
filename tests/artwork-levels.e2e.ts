@@ -19,8 +19,8 @@ test("lists load thumbnails; the album header and Now Playing load the original"
     requested.push(new URL(route.request().url()).pathname);
     return route.fulfill({ contentType: "image/png", body: PIXEL });
   });
-  const thumbs = () => requested.filter((path) => path.endsWith(".thumb.jpg"));
-  const originals = () => requested.filter((path) => !path.endsWith(".thumb.jpg"));
+  const thumbs = (): string[] => requested.filter((path) => path.endsWith(".thumb.jpg"));
+  const originals = (): string[] => requested.filter((path) => !path.endsWith(".thumb.jpg"));
 
   await page.goto("/library/albums");
   await expect.poll(thumbs).not.toHaveLength(0);

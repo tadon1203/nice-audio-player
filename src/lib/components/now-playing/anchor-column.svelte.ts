@@ -6,7 +6,12 @@ import { anchorSpacers } from "./anchor-column";
  * line (40% from the top): `top` before the rows, `bottom` after them, in px. Put `attach` on the
  * container. Call during component initialization.
  */
-export function createAnchorPadding() {
+export function createAnchorPadding(): {
+  attach: Attachment<HTMLElement>;
+  readonly height: number;
+  readonly top: number;
+  readonly bottom: number;
+} {
   let height = $state(0);
   const spacers = $derived(anchorSpacers(height));
 
@@ -20,13 +25,13 @@ export function createAnchorPadding() {
   return {
     attach,
     /** The container's measured height in px (0 before the first measurement). */
-    get height() {
+    get height(): number {
       return height;
     },
-    get top() {
+    get top(): number {
       return spacers.top;
     },
-    get bottom() {
+    get bottom(): number {
       return spacers.bottom;
     },
   };

@@ -28,7 +28,7 @@
   const albumLinkHref = $derived(links?.album?.href ?? null);
   const lyrics = $derived(item === null ? null : lyricsState(resolution));
 
-  function copy(text: string) {
+  function copy(text: string): void {
     void navigator.clipboard?.writeText(text).catch(() => undefined);
   }
 </script>

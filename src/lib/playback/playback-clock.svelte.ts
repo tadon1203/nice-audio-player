@@ -3,17 +3,17 @@ import { prefersReducedMotion } from "svelte/motion";
 import { ClockState, type ClockJump, type ClockReport } from "./clock-state";
 
 /** The part of a Web Animation the clock uses; tests supply their own. */
-export type ClockAnimation = {
+export interface ClockAnimation {
   currentTime: number | null;
   play: () => void;
   pause: () => void;
   cancel: () => void;
-};
+}
 
 type TimerHandle = ReturnType<typeof setTimeout>;
 
 /** What the clock reads from its surroundings. The browser supplies it unless a test overrides it. */
-export type ClockEnvironment = {
+export interface ClockEnvironment {
   now: () => number;
   requestFrame: (callback: () => void) => number;
   cancelFrame: (handle: number) => void;
@@ -25,7 +25,7 @@ export type ClockEnvironment = {
   setTimer: (callback: () => void, ms: number) => TimerHandle;
   clearTimer: (handle: TimerHandle) => void;
   reducedMotion: () => boolean;
-};
+}
 
 const browserEnvironment: ClockEnvironment = {
   now: () => performance.now(),
@@ -52,27 +52,31 @@ const browserEnvironment: ClockEnvironment = {
 };
 
 /** One keyframe of a driven animation, at a position in the track. Transform and opacity only. */
-export type DriveKeyframe = { atMs: number; transform?: string; opacity?: number };
+export interface DriveKeyframe {
+  atMs: number;
+  transform?: string;
+  opacity?: number;
+}
 
 /** A seek eases the driven animations to the new place over this long. */
 export const GLIDE_MS = 300;
 /** A report moves a running animation only when it is further off than this. */
 const RESYNC_DRIFT_MS = 20;
 
-const easeOutCubic = (t: number) => 1 - (1 - t) ** 3;
+const easeOutCubic = (t: number): number => 1 - (1 - t) ** 3;
 
-type Driven = {
+interface Driven {
   node: HTMLElement;
   keyframes: readonly DriveKeyframe[];
   animation: ClockAnimation | null;
   /** False for an element that eases itself: holds and glides pass it by. */
   follows: boolean;
-};
-type Boundary = {
+}
+interface Boundary {
   nextBoundaryMs: (positionMs: number) => number | null;
   listener: (positionMs: number) => void;
   timer: TimerHandle | null;
-};
+}
 
 /**
  * The one clock for the playback position (ADR 0004). Nothing reads it frame by frame: a consumer
@@ -264,7 +268,7 @@ export class PlaybackClock {
     const begun = this.#environment.now();
     const current = { frame: 0 };
     this.#glide = current;
-    const step = () => {
+    const step = (): void => {
       if (this.#glide !== current) return;
       const t = Math.min(1, (this.#environment.now() - begun) / GLIDE_MS);
       const target = this.estimate();

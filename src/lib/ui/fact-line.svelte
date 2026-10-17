@@ -1,6 +1,9 @@
 <script lang="ts" module>
   /** A fact that counts up from zero when the line first appears (after the shared-element move). */
-  export type CountUpFact = { text: string; countUp: true };
+  export interface CountUpFact {
+    text: string;
+    countUp: true;
+  }
   export type Fact = string | number | null | undefined | CountUpFact;
 </script>
 

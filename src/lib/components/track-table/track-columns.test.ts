@@ -12,6 +12,7 @@ import {
   trackTableBreakpoints,
   type TrackTableRow,
 } from "./track-columns";
+import type { TrackRowAction } from "./track-columns";
 
 const row: TrackTableRow = {
   id: 1,
@@ -59,8 +60,10 @@ describe("track columns", () => {
 
 describe("track rows", () => {
   it("offer Pause or Resume only for the active track", () => {
-    const action = (id: TrackId | null, status: Parameters<typeof trackRowState>[2]) =>
-      trackRowState(row, id, status).action;
+    const action = (
+      id: TrackId | null,
+      status: Parameters<typeof trackRowState>[2],
+    ): TrackRowAction => trackRowState(row, id, status).action;
     expect(action(1, "playing")).toMatchObject({ kind: "pause", persistent: true });
     expect(action(1, "paused")).toMatchObject({ kind: "resume", persistent: true });
     expect(action(2, "playing")).toMatchObject({ kind: "play", persistent: false });
@@ -72,7 +75,7 @@ describe("track rows", () => {
       r: TrackTableRow,
       id: TrackId | null,
       status: "stopped" | "playing" | "paused",
-    ) => trackRowState(r, id, status).clickIntent;
+    ): ReturnType<typeof trackRowState>["clickIntent"] => trackRowState(r, id, status).clickIntent;
     expect(intent(row, null, "stopped")).toBe("play");
     expect(intent(row, 1, "playing")).toBeNull();
     expect(intent(row, 1, "paused")).toBe("resume");
@@ -112,7 +115,8 @@ describe("album track columns", () => {
 });
 
 describe("disc rows", () => {
-  const discs = (...numbers: (number | null)[]) => numbers.map((discNumber) => ({ discNumber }));
+  const discs = (...numbers: (number | null)[]): { discNumber: number | null }[] =>
+    numbers.map((discNumber) => ({ discNumber }));
 
   it("split an album on several discs where each disc begins", () => {
     const rows = discs(1, 1, 2, 2);

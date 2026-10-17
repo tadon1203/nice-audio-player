@@ -3,12 +3,13 @@ import { albumSequence, playbackItemFor, playingSnapshot, stoppedPlayback } from
 import { motionMs } from "./fixtures/motion";
 import { expect, test } from "./fixtures/test";
 import { workspaceViewport } from "./fixtures/locators";
+import type { Locator } from "@playwright/test";
 
 test.beforeEach(async ({ page }) => {
   await page.setViewportSize({ width: 1360, height: 900 });
 });
 
-async function playFirstTrack(page: Page, beforePlay?: () => void) {
+async function playFirstTrack(page: Page, beforePlay?: () => void): Promise<Locator> {
   await page.goto("/library/tracks");
   // Lyrics are fetched as soon as a track plays, so anything they should find is set first.
   beforePlay?.();
@@ -177,7 +178,10 @@ test("Now Playing covers the workspace without moving the sidebar or the dock's 
   page,
 }) => {
   const dock = await playFirstTrack(page);
-  const shell = async () => {
+  const shell = async (): Promise<{
+    dockBottom: number;
+    sidebar: { x: number; y: number; width: number };
+  }> => {
     const dockBox = (await dock.boundingBox())!;
     const sidebar = (await page.locator("aside").boundingBox())!;
     return {
@@ -355,7 +359,7 @@ test("the progress line and the elapsed time share one centre line", async ({ pa
   const line = (await seek.locator('[data-slot="waveform-baseline"]').first().boundingBox())!;
   const elapsed = (await dock.getByLabel("Elapsed time").boundingBox())!;
   const remaining = (await dock.getByRole("button", { name: "Time remaining" }).boundingBox())!;
-  const centre = (box: { y: number; height: number }) => box.y + box.height / 2;
+  const centre = (box: { y: number; height: number }): number => box.y + box.height / 2;
   expect(Math.abs(centre(line) - centre(elapsed))).toBeLessThanOrEqual(0.5);
   expect(Math.abs(centre(line) - centre(remaining))).toBeLessThanOrEqual(0.5);
 });

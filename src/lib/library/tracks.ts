@@ -1,7 +1,10 @@
 import { resolve } from "$app/paths";
 import type { LibraryTrackSummary, TrackAlbum } from "#lib/native";
 
-type Link = { text: string; href: string | null };
+interface Link {
+  text: string;
+  href: string | null;
+}
 
 /** What a track needs to say where its artist and album live. */
 type TrackLinkSource = Partial<Pick<LibraryTrackSummary, "artist">> & {

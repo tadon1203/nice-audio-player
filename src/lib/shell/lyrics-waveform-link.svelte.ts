@@ -1,4 +1,7 @@
-export type LyricsSpan = { startMs: number; endMs: number };
+export interface LyricsSpan {
+  startMs: number;
+  endMs: number;
+}
 
 /**
  * Shared state between the dock's waveform and Now Playing's lyrics panel. Each field is its own
@@ -7,21 +10,21 @@ export type LyricsSpan = { startMs: number; endMs: number };
  */
 export class LyricsWaveformLink {
   /** The current lyric line's span, lit on the dock waveform. */
-  activeSpan = $state.raw<LyricsSpan | null>(null);
+  public activeSpan = $state.raw<LyricsSpan | null>(null);
   /** The span of the lyric line under the pointer, faintly marked on the waveform. */
-  hoveredLineSpan = $state.raw<LyricsSpan | null>(null);
+  public hoveredLineSpan = $state.raw<LyricsSpan | null>(null);
   /** The position under the pointer while hovering the waveform, marking its lyric line. */
-  hoveredWaveformMs = $state.raw<number | null>(null);
+  public hoveredWaveformMs = $state.raw<number | null>(null);
 
-  setActiveSpan(span: LyricsSpan | null): void {
+  public setActiveSpan(span: LyricsSpan | null): void {
     this.activeSpan = span;
   }
 
-  setHoveredLineSpan(span: LyricsSpan | null): void {
+  public setHoveredLineSpan(span: LyricsSpan | null): void {
     this.hoveredLineSpan = span;
   }
 
-  setHoveredWaveformMs(ms: number | null): void {
+  public setHoveredWaveformMs(ms: number | null): void {
     this.hoveredWaveformMs = ms;
   }
 }

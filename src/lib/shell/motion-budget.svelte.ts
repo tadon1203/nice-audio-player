@@ -15,12 +15,12 @@ export type MotionLevel = "full" | "calm" | "reduced";
 export class MotionBudget {
   readonly #appearance: Appearance;
 
-  constructor(appearance: Appearance) {
+  public constructor(appearance: Appearance) {
     this.#appearance = appearance;
   }
 
   /** Reactive: reading it in a template or an effect follows both sources. */
-  get current(): MotionLevel {
+  public get current(): MotionLevel {
     if (prefersReducedMotion.current) return "reduced";
     return this.#appearance.calmMotion ? "calm" : "full";
   }

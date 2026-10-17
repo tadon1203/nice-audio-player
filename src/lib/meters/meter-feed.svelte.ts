@@ -46,7 +46,7 @@ export class MeterFeed {
           () => {},
         );
 
-      return () => {
+      return (): void => {
         ended = true;
         this.#pending = [];
         if (unsubscribe !== null) void unsubscribe().catch(() => {});

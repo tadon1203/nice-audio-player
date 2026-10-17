@@ -23,7 +23,7 @@
       { root: viewport, rootMargin: `0px 0px ${PREFETCH_MARGIN_PX}px 0px` },
     );
     observer.observe(element);
-    return () => observer.disconnect();
+    return (): void => observer.disconnect();
   });
 </script>
 

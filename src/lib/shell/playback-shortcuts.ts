@@ -7,10 +7,10 @@ import type { QueuePanel } from "./queue-panel.svelte";
 import type { UserActionRunner } from "./user-action-runner.svelte";
 
 /** The shell surfaces the shortcuts open and close. */
-export type ShellSurfaces = {
+export interface ShellSurfaces {
   readonly nowPlaying: Pick<NowPlayingView, "isOpen" | "open" | "close" | "toggle">;
   readonly queuePanel: Pick<QueuePanel, "isOpen" | "toggle">;
-};
+}
 
 const INTERACTIVE_TAGS = new Set(["BUTTON", "A", "INPUT", "TEXTAREA", "SELECT"]);
 

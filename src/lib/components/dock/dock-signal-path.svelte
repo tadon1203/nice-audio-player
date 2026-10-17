@@ -35,7 +35,7 @@
       : [path.current.source, path.current.processing].filter((step) => step !== null),
   );
 
-  function select(value: string) {
+  function select(value: string): void {
     actions.run(() =>
       playback.setOutputSelection(
         value === DEFAULT_DEVICE ? { kind: "systemDefault" } : { kind: "device", deviceId: value },
@@ -44,7 +44,7 @@
   }
 
   // The device list is read each time the menu opens, so a device connected since is offered.
-  function listDevices(isOpen: boolean) {
+  function listDevices(isOpen: boolean): void {
     if (isOpen) actions.run(() => outputDevices.refresh());
   }
 </script>

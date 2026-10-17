@@ -2,25 +2,25 @@ import type { QueueItemId } from "#lib/native";
 import { estimatePosition, type PositionAnchor } from "#lib/ui/motion/interpolate-position";
 
 /** What a playback snapshot says about time: everything the clock needs, and nothing else. */
-export type ClockReport = {
+export interface ClockReport {
   itemId: QueueItemId;
   positionMs: number;
   durationMs: number | null;
   playing: boolean;
   /** Counts the seeks the backend has completed (`ActiveSession.seekRevision`). */
   seekRevision: number;
-};
+}
 
 /**
  * The position moved on purpose. `kind` is a fact the backend reported (a seek completed, the
  * track changed), never a guess from how far the numbers moved.
  */
-export type ClockJump = {
+export interface ClockJump {
   id: number;
   kind: "seek" | "track";
   fromMs: number;
   toMs: number;
-};
+}
 
 /**
  * The clock's view of time: the last report, the anchor it was taken at, and how many jumps it

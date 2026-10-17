@@ -44,7 +44,8 @@
   /** Where the current track sits in `rows` (past rows are before it). */
   const currentIndex = $derived(history.length);
 
-  const currentRow = () => container?.querySelector<HTMLElement>('[aria-current="true"]') ?? null;
+  const currentRow = (): HTMLElement | null =>
+    container?.querySelector<HTMLElement>('[aria-current="true"]') ?? null;
 
   // The current row glides to the anchor when it changes, and only then; a column that has just
   // got rows, or was resized (it may also be shown again after being hidden), is set at once.

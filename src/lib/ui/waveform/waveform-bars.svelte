@@ -54,7 +54,7 @@
   };
 
   /** Paints every bar for the current `elapsed`: one fillRect each, nothing allocated. */
-  function draw() {
+  function draw(): void {
     const node = canvas;
     const ctx = node?.getContext("2d");
     if (!node || !ctx) return;
@@ -92,7 +92,7 @@
     if (node.parentElement) recolour.observe(node.parentElement, filter);
     // The root also carries `--artwork-accent` as inline style, set once the artwork is analyzed.
     recolour.observe(document.documentElement, { ...filter, attributeFilter: ["class", "style"] });
-    return () => {
+    return (): void => {
       resize.disconnect();
       recolour.disconnect();
     };
@@ -131,7 +131,7 @@
       },
       onComplete: () => (elapsed = Number.POSITIVE_INFINITY),
     });
-    return () => {
+    return (): void => {
       tween.stop();
       elapsed = Number.POSITIVE_INFINITY;
     };

@@ -116,7 +116,8 @@ describe("the caps", () => {
 
 describe("time", () => {
   it("gives the same level at the same moment at 60, 120 and 144 Hz", () => {
-    const signal = (t: number) => (t < 0.5 ? input({ bands: bandsAt(-10), peak: [-6, -6] }) : null);
+    const signal = (t: number): MeterInput | null =>
+      t < 0.5 ? input({ bands: bandsAt(-10), peak: [-6, -6] }) : null;
     const [first, ...others] = [60, 120, 144].map((hz) => {
       const state = run(MeterDisplay.initial(), signal, 2, hz);
       return [

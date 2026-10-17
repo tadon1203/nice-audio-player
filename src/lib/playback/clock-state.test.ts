@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ClockState, type ClockReport } from "./clock-state";
+import type { ClockJump } from "./clock-state";
 
 const report = (overrides: Partial<ClockReport> = {}): ClockReport => ({
   itemId: 1,
@@ -11,7 +12,7 @@ const report = (overrides: Partial<ClockReport> = {}): ClockReport => ({
 });
 
 /** Feeds reports in order, each at its own time, and collects the jumps. */
-function run(steps: [number, ClockReport | null][]) {
+function run(steps: [number, ClockReport | null][]): { state: ClockState; jumps: ClockJump[] } {
   let state = ClockState.initial;
   const jumps = [];
   for (const [at, next] of steps) {

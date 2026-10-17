@@ -28,7 +28,7 @@ export class NowPlayingTween {
         this.#spring.set(open ? whenOpen : whenClosed, { instant: reduced });
       });
     });
-    $effect(() => () => this.#spring.stop());
+    $effect(() => (): void => this.#spring.stop());
   }
 
   /** The current value of the tween. */

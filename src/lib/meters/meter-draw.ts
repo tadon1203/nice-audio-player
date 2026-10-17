@@ -3,7 +3,7 @@ import { BALLISTICS, type LevelBar } from "./ballistics";
 const { floorDb } = BALLISTICS;
 
 /** Where `db` sits along a bar of `length`, from the floor (0) to full scale (`length`). */
-const along = (db: number, length: number) =>
+const along = (db: number, length: number): number =>
   ((Math.min(0, Math.max(floorDb, db)) - floorDb) / -floorDb) * length;
 
 /** Opacity of each part, all of one foreground colour: the meter is white, never tinted. */
@@ -15,7 +15,7 @@ const PEAK_CAP_PX = 1.5;
 
 type Orientation = "vertical" | "horizontal";
 
-function grid(c: CanvasRenderingContext2D, w: number, h: number, orientation: Orientation) {
+function grid(c: CanvasRenderingContext2D, w: number, h: number, orientation: Orientation): void {
   c.globalAlpha = GRID_ALPHA;
   for (const db of MeterDraw.axisTicks) {
     if (orientation === "vertical") {
@@ -39,7 +39,7 @@ function levelBar(
   level: number,
   peakCap: number,
   extendTo?: number,
-) {
+): void {
   const rect = (from: number, to: number): [number, number, number, number] =>
     orientation === "vertical"
       ? [offset, length - to, thickness, to - from]
@@ -62,7 +62,7 @@ function levelBar(
 }
 
 /** Clears a canvas and sets the one colour everything is drawn in. */
-function begin(c: CanvasRenderingContext2D, w: number, h: number, color: string) {
+function begin(c: CanvasRenderingContext2D, w: number, h: number, color: string): void {
   c.clearRect(0, 0, w, h);
   c.fillStyle = color;
 }
@@ -78,7 +78,7 @@ export class MeterDraw {
     h: number,
     color: string,
     bands: readonly LevelBar[],
-  ) {
+  ): void {
     begin(c, w, h, color);
     grid(c, w, h, "vertical");
     const pitch = w / bands.length;
@@ -97,7 +97,7 @@ export class MeterDraw {
     color: string,
     peak: LevelBar,
     rms: number,
-  ) {
+  ): void {
     const orientation: Orientation = w > h ? "horizontal" : "vertical";
     const length = orientation === "horizontal" ? w : h;
     const across = orientation === "horizontal" ? h : w;

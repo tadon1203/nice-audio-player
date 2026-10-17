@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { DrawLoop, type FrameScheduler } from "./draw-loop";
 
-function fakeFrames() {
+function fakeFrames(): {
+  scheduler: FrameScheduler;
+  pending: () => number;
+  frame(now: number): void;
+} {
   let next = 1;
   const queued = new Map<number, (now: number) => void>();
   const scheduler: FrameScheduler = {
@@ -13,8 +17,8 @@ function fakeFrames() {
   };
   return {
     scheduler,
-    pending: () => queued.size,
-    frame(now: number) {
+    pending: (): number => queued.size,
+    frame(now: number): void {
       const callbacks = [...queued.values()];
       queued.clear();
       callbacks.forEach((callback) => callback(now));

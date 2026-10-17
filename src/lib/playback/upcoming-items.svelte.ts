@@ -7,7 +7,10 @@ const CHUNK = 100;
 const MAX_ATTEMPTS = 3;
 const RETRY_DELAY_MS = 1000;
 
-type Loaded = { revision: number | null; chunks: ReadonlyMap<number, PlaybackQueueItem[]> };
+interface Loaded {
+  revision: number | null;
+  chunks: ReadonlyMap<number, PlaybackQueueItem[]>;
+}
 
 /**
  * The upcoming queue as a lookup by index. The queue snapshot carries only the first part of a

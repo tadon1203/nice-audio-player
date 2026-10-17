@@ -7,11 +7,15 @@
  * is kept in `sessionStorage`, so a reload makes it grow instead of starting again. The other
  * counts are of the current page.
  */
-export type E2eCounts = { connects: number; stateMessages: number; meterFrames: number };
+export interface E2eCounts {
+  connects: number;
+  stateMessages: number;
+  meterFrames: number;
+}
 
 const CONNECTS_KEY = "e2e.connects";
 
-export function countE2e(key: keyof E2eCounts) {
+export function countE2e(key: keyof E2eCounts): void {
   if (!import.meta.env.VITE_E2E) return;
   const counts = ((window as { __e2e?: E2eCounts }).__e2e ??= {
     connects: Number(sessionStorage.getItem(CONNECTS_KEY) ?? 0),

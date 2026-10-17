@@ -7,6 +7,7 @@
   import { AppServices } from "#lib/shell/app-services.svelte";
   import { motionFor } from "#lib/ui/motion/svelte-motion";
   import { slideTransition } from "#lib/ui/motion/svelte-slide";
+  import type { TransitionConfig } from "svelte/transition";
 
   /** One turn of the icon per mode change; `one` drops a superscript 1 beside it. */
   let { mode }: { mode: PlaybackRepeatMode } = $props();
@@ -25,7 +26,7 @@
     untrack(() => void rotation.set(rotation.target + 360, motion));
   });
 
-  const drop = (_node: Element) => slideTransition("move", reduced, { y: -6 });
+  const drop = (_node: Element): TransitionConfig => slideTransition("move", reduced, { y: -6 });
 </script>
 
 <span class="flex" style:transform="rotate({rotation.current}deg)">

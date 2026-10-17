@@ -20,7 +20,8 @@ export class UserActionRunner {
   public run(action: () => Promise<unknown>, place: NoticePlace = "dock"): void {
     this.#notices.clearError(place);
     this.#count(place, 1);
-    void this.#settle(action, place);
+    // #settle catches every failure itself, so nothing reaches this handler.
+    void this.#settle(action, place).catch(() => undefined);
   }
 
   async #settle(action: () => Promise<unknown>, place: NoticePlace): Promise<void> {

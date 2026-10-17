@@ -9,7 +9,7 @@ const IMAGE_DECODE_MS = 2000;
 test.use({ reducedMotion: "no-preference" });
 
 function png(size: number): Buffer {
-  const crc = (buf: Buffer) => {
+  const crc = (buf: Buffer): number => {
     let c = ~0;
     for (const b of buf) {
       c ^= b;
@@ -17,7 +17,7 @@ function png(size: number): Buffer {
     }
     return ~c >>> 0;
   };
-  const chunk = (type: string, data: Buffer) => {
+  const chunk = (type: string, data: Buffer): Buffer<ArrayBuffer> => {
     const body = Buffer.concat([Buffer.from(type), data]);
     const out = Buffer.alloc(12 + data.length);
     out.writeUInt32BE(data.length, 0);
@@ -92,14 +92,14 @@ test("Now Playing stays cheap while a track plays", async ({ page, native, playe
 
   const cdp = await page.context().newCDPSession(page);
   await cdp.send("Performance.enable");
-  const read = async () => {
+  const read = async (): Promise<{ [k: string]: number }> => {
     const { metrics } = await cdp.send("Performance.getMetrics");
     return Object.fromEntries(metrics.map((metric) => [metric.name, metric.value]));
   };
   const before = await read();
   await page.waitForTimeout(4000);
   const after = await read();
-  const share = (name: string) => (((after[name] ?? 0) - (before[name] ?? 0)) / 4) * 100;
+  const share = (name: string): number => (((after[name] ?? 0) - (before[name] ?? 0)) / 4) * 100;
 
   expect(share("RecalcStyleDuration")).toBeLessThan(15);
 });

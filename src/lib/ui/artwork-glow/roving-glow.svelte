@@ -1,14 +1,14 @@
 <script lang="ts" module>
   import type { ArtworkRef } from "#lib/native";
 
-  export type RovingTarget = {
+  export interface RovingTarget {
     artwork: ArtworkRef | null;
     /** Centre of the hovered tile, relative to the light's container. */
     x: number;
     y: number;
     /** False once the pointer has left the grid: the light fades away. */
     active: boolean;
-  };
+  }
 
   const SIZE_PX = 448;
 </script>

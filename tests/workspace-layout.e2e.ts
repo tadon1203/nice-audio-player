@@ -1,13 +1,15 @@
 import { type Locator } from "@playwright/test";
 import { expect, test } from "./fixtures/test";
 
-async function boxOf(locator: Locator) {
+async function boxOf(
+  locator: Locator,
+): Promise<{ x: number; y: number; width: number; height: number }> {
   const box = await locator.boundingBox();
   expect(box).not.toBeNull();
   return box!;
 }
 
-async function leftOf(locator: Locator) {
+async function leftOf(locator: Locator): Promise<number> {
   return (await boxOf(locator)).x;
 }
 
@@ -107,7 +109,7 @@ test("shares one scroll region edge across views and aligns toolbar with content
   page,
 }) => {
   await page.setViewportSize({ width: 1360, height: 900 });
-  const right = async (locator: Locator) => {
+  const right = async (locator: Locator): Promise<number> => {
     await expect(locator).toBeVisible();
     const box = await boxOf(locator);
     return box.x + box.width;
@@ -127,7 +129,7 @@ test("shares one scroll region edge across views and aligns toolbar with content
   await expect(scrollbar).toHaveCSS("opacity", "1");
 
   // Routes swap their scroll region during navigation; poll until only the new one remains.
-  const expectViewportEdge = () =>
+  const expectViewportEdge = (): Promise<void> =>
     expect
       .poll(async () => {
         const box = await viewport.boundingBox().catch(() => null);

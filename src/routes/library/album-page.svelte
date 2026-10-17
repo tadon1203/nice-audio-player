@@ -53,13 +53,14 @@
   const albumIsPlaying = $derived(albumIsLoaded && playback.isPlaying);
 
   // Playing a track continues through the rest of its album.
-  const playTrack = (trackId: TrackId) =>
+  const playTrack = (trackId: TrackId): void =>
     actions.run(() => playback.start({ kind: "album", albumId }, trackId));
 
   let viewport = $state<HTMLElement | null>(null);
 
   const scroll = new WorkspaceScroll(scrollMemory, {
-    ready: () => details.data !== undefined && !tracks.isPending && tracks.items.length > 0,
+    ready: (): boolean =>
+      details.data !== undefined && !tracks.isPending && tracks.items.length > 0,
   });
 
   export const snapshot = scrollMemory.detailSnapshot(scroll.capture, scroll.restore);

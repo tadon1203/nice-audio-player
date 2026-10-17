@@ -2,12 +2,16 @@ import { type Page } from "@playwright/test";
 import { defaultSettings, meterFrameBytes } from "./fixtures/data";
 import type { Native } from "./fixtures/native-api";
 import { expect, test } from "./fixtures/test";
+import type { Locator } from "@playwright/test";
 
 const WIDE = { width: 1920, height: 1080 };
 const MEDIUM = { width: 1360, height: 900 };
 const NARROW = { width: 500, height: 800 };
 
-async function openNowPlaying(page: Page, size: { width: number; height: number }) {
+async function openNowPlaying(
+  page: Page,
+  size: { width: number; height: number },
+): Promise<{ layer: Locator; dock: Locator }> {
   await page.setViewportSize(size);
   await page.goto("/library/tracks");
   await page.getByRole("button", { name: "Play Test track" }).click();
@@ -19,11 +23,11 @@ async function openNowPlaying(page: Page, size: { width: number; height: number 
   return { layer, dock };
 }
 
-const choose = (layer: ReturnType<Page["getByRole"]>, view: "Queue" | "Meters") =>
+const choose = (layer: ReturnType<Page["getByRole"]>, view: "Queue" | "Meters"): Promise<void> =>
   layer.getByRole("button", { name: view, exact: true }).click();
 
-const subscribes = (native: Native) => native.callsTo("subscribeMeterFrames").length;
-const unsubscribes = (native: Native) => native.callsTo("unsubscribeMeterFrames").length;
+const subscribes = (native: Native): number => native.callsTo("subscribeMeterFrames").length;
+const unsubscribes = (native: Native): number => native.callsTo("unsubscribeMeterFrames").length;
 
 test("offers Meters as a third view and chooses it", async ({ page }) => {
   const { layer } = await openNowPlaying(page, MEDIUM);
@@ -132,7 +136,7 @@ test("unsubscribes while the window is hidden and resumes when it returns", asyn
   await choose(layer, "Meters");
   await expect.poll(() => subscribes(native)).toBe(1);
 
-  const setVisibility = (state: "hidden" | "visible") =>
+  const setVisibility = (state: "hidden" | "visible"): Promise<void> =>
     page.evaluate((value) => {
       Object.defineProperty(document, "visibilityState", { value, configurable: true });
       document.dispatchEvent(new Event("visibilitychange"));

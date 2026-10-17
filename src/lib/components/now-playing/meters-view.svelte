@@ -53,12 +53,12 @@
 
   // A hidden or minimized window stops the feed and the loop; coming back resumes them.
   $effect(() => {
-    const sync = () => (visible = document.visibilityState === "visible");
+    const sync = (): boolean => (visible = document.visibilityState === "visible");
     document.addEventListener("visibilitychange", sync);
-    return () => document.removeEventListener("visibilitychange", sync);
+    return (): void => document.removeEventListener("visibilitychange", sync);
   });
 
-  let wake = () => {};
+  let wake = (): void => {};
   const feed = new MeterFeed(
     meter,
     () => active,
@@ -69,7 +69,12 @@
   let readouts = $state<[string, string]>([floorText, floorText]);
   let clips = $state<[boolean, boolean]>([false, false]);
 
-  type Surface = { ctx: CanvasRenderingContext2D; w: number; h: number; node: HTMLCanvasElement };
+  interface Surface {
+    ctx: CanvasRenderingContext2D;
+    w: number;
+    h: number;
+    node: HTMLCanvasElement;
+  }
   const surfaces: { spectrum: Surface | null; left: Surface | null; right: Surface | null } = {
     spectrum: null,
     left: null,
@@ -78,7 +83,7 @@
   let display = MeterDisplay.initial();
   let color = "";
 
-  function drawAll(ink: string) {
+  function drawAll(ink: string): void {
     const { spectrum, left, right } = surfaces;
     if (spectrum) MeterDraw.drawSpectrum(spectrum.ctx, spectrum.w, spectrum.h, ink, display.bands);
     if (left) MeterDraw.drawLevel(left.ctx, left.w, left.h, ink, display.peak[0], display.rms[0]);
@@ -86,7 +91,7 @@
       MeterDraw.drawLevel(right.ctx, right.w, right.h, ink, display.peak[1], display.rms[1]);
   }
 
-  function refreshReadouts() {
+  function refreshReadouts(): void {
     readouts = [
       Readout.formatHeldPeak(display.peak[0].peakCap),
       Readout.formatHeldPeak(display.peak[1].peakCap),
@@ -94,7 +99,7 @@
     clips = [display.clip[0], display.clip[1]];
   }
 
-  function clear(channel: 0 | 1) {
+  function clear(channel: 0 | 1): void {
     display = display.clearClip(channel);
     refreshReadouts();
   }
@@ -102,7 +107,7 @@
   const fit =
     (key: "spectrum" | "left" | "right"): Attachment<HTMLCanvasElement> =>
     (node) => {
-      const refit = () => {
+      const refit = (): void => {
         const ratio = window.devicePixelRatio || 1;
         const w = node.clientWidth;
         const h = node.clientHeight;
@@ -148,16 +153,16 @@
         return !display.isAtRest();
       },
       {
-        request: (callback) => requestAnimationFrame(callback),
-        cancel: (id) => cancelAnimationFrame(id),
+        request: (callback): number => requestAnimationFrame(callback),
+        cancel: (id): void => cancelAnimationFrame(id),
       },
     );
-    wake = () => loop.wake();
+    wake = (): void => loop.wake();
     loop.wake();
     const interval = setInterval(refreshReadouts, READOUT_MS);
 
-    return () => {
-      wake = () => {};
+    return (): void => {
+      wake = (): void => {};
       loop.stop();
       clearInterval(interval);
       display = MeterDisplay.initial();

@@ -22,7 +22,7 @@
   const query = new QueryResult(() => catalog.trackPropertiesOptions(trackId));
   const properties = $derived(query.data);
 
-  const orNull = <T,>(value: T | null, format: (value: T) => string) =>
+  const orNull = <T,>(value: T | null, format: (value: T) => string): string | null =>
     value === null ? null : format(value);
 </script>
 

@@ -15,7 +15,13 @@ import { Playback } from "./playback.svelte";
 
 vi.mock("svelte/motion", () => ({ prefersReducedMotion: { current: false } }));
 
-const base = () => ({
+const base = (): {
+  volume: number;
+  muted: boolean;
+  outputSelection: { kind: "systemDefault" };
+  canGoPrevious: boolean;
+  canGoNext: boolean;
+} => ({
   volume: 0.5,
   muted: false,
   outputSelection: { kind: "systemDefault" as const },
@@ -100,20 +106,21 @@ const queueOf = (
   },
 });
 
-const queue = (revision: number) => queueOf(revision);
+const queue = (revision: number): Versioned<PlaybackQueueSnapshot> => queueOf(revision);
 
 /** A client whose methods are only the ones a test gives; the others are never called. */
-const fakeClient = (overrides: Partial<PlaybackClient> = {}) => overrides as PlaybackClient;
+const fakeClient = (overrides: Partial<PlaybackClient> = {}): PlaybackClient =>
+  overrides as PlaybackClient;
 
 /** A clock that is never asked about time; the tests that need one pass their own. */
-const quietClock = () => new PlaybackClock({ now: () => 0 });
+const quietClock = (): PlaybackClock => new PlaybackClock({ now: (): number => 0 });
 
 /** What `connect` gives the Renderer: the first snapshot and queue, as the session routes them. */
 function load(
   playback: Playback,
   snapshot: Versioned<PlaybackSnapshot>,
   queueSnapshot: Versioned<PlaybackQueueSnapshot>,
-) {
+): void {
   playback.acceptPlayback(snapshot);
   playback.acceptQueue(queueSnapshot);
 }
@@ -171,19 +178,18 @@ describe("playback session ordering", () => {
     let releaseFirstVolume: (() => void) | undefined;
     const volumeCalls: number[] = [];
     let volumeRevision = 2;
-    const client = fakeClient({
-      setVolume: vi.fn(async (value: number) => {
-        volumeCalls.push(value);
-        if (volumeCalls.length === 1) {
-          await new Promise<void>((resolve) => {
-            releaseFirstVolume = resolve;
-          });
-        }
-        return stopped(volumeRevision++, null);
-      }),
-      pause: vi.fn(async () => stopped(10, null)),
-      seek: vi.fn(async () => stopped(11, null)),
+    const setVolume = vi.fn(async (value: number) => {
+      volumeCalls.push(value);
+      if (volumeCalls.length === 1) {
+        await new Promise<void>((resolve) => {
+          releaseFirstVolume = resolve;
+        });
+      }
+      return stopped(volumeRevision++, null);
     });
+    const pause = vi.fn(async () => stopped(10, null));
+    const seek = vi.fn(async () => stopped(11, null));
+    const client = fakeClient({ setVolume, pause, seek });
     const playback = new Playback(client, quietClock());
     load(playback, stopped(1, null), queue(1));
 
@@ -194,8 +200,8 @@ describe("playback session ordering", () => {
     expect(volumeCalls).toEqual([0.2]);
 
     await Promise.all([playback.pause(), playback.seek(1000)]);
-    expect(client.pause).toHaveBeenCalledTimes(1);
-    expect(client.seek).toHaveBeenCalledWith(1000);
+    expect(pause).toHaveBeenCalledTimes(1);
+    expect(seek).toHaveBeenCalledWith(1000);
 
     releaseFirstVolume?.();
     await Promise.all([first, second]);
@@ -205,16 +211,15 @@ describe("playback session ordering", () => {
 
   it("replaces the transport command waiting behind one in flight with SupersededError", async () => {
     let releasePause: (() => void) | undefined;
-    const client = fakeClient({
-      pause: vi.fn(async () => {
-        await new Promise<void>((resolve) => {
-          releasePause = resolve;
-        });
-        return stopped(2, null);
-      }),
-      resume: vi.fn(async () => stopped(3, null)),
-      next: vi.fn(async () => stopped(4, null)),
+    const pause = vi.fn(async () => {
+      await new Promise<void>((resolve) => {
+        releasePause = resolve;
+      });
+      return stopped(2, null);
     });
+    const resume = vi.fn(async () => stopped(3, null));
+    const next = vi.fn(async () => stopped(4, null));
+    const client = fakeClient({ pause, resume, next });
     const playback = new Playback(client, quietClock());
     load(playback, stopped(1, null), queue(1));
 
@@ -223,46 +228,45 @@ describe("playback session ordering", () => {
     const latest = playback.next();
     expect(playback.transportPending).toBe("pause");
     await expect(replaced).rejects.toBeInstanceOf(SupersededError);
-    expect(client.resume).not.toHaveBeenCalled();
-    expect(client.next).not.toHaveBeenCalled();
+    expect(resume).not.toHaveBeenCalled();
+    expect(next).not.toHaveBeenCalled();
 
     releasePause?.();
     await first;
     await expect(latest).resolves.toBeUndefined();
-    expect(client.next).toHaveBeenCalledTimes(1);
-    expect(client.resume).not.toHaveBeenCalled();
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(resume).not.toHaveBeenCalled();
     expect(playback.transportPending).toBeNull();
   });
 
   it("does not delay a seek or a volume change behind a transport command", async () => {
     let releaseStart: (() => void) | undefined;
-    const client = fakeClient({
-      start: vi.fn(async () => {
-        await new Promise<void>((resolve) => {
-          releaseStart = resolve;
-        });
-        return playing(2, 1, 0);
-      }),
-      seek: vi.fn(async () => playing(3, 1, 1_000)),
-      setVolume: vi.fn(async () => playing(4, 1, 0)),
+    const startMock = vi.fn(async () => {
+      await new Promise<void>((resolve) => {
+        releaseStart = resolve;
+      });
+      return playing(2, 1, 0);
     });
+    const seek = vi.fn(async () => playing(3, 1, 1_000));
+    const setVolume = vi.fn(async () => playing(4, 1, 0));
+    const client = fakeClient({ start: startMock, seek, setVolume });
     const playback = new Playback(client, quietClock());
     load(playback, stopped(1, null), queue(1));
     playback.acceptPlayback(playing(1, 1, 0));
 
     const start = playback.start({ kind: "tracks" } as never, 1);
-    void playback.seek(1_000);
-    void playback.setVolume(0.2);
+    const seeking = playback.seek(1_000);
+    const volume = playback.setVolume(0.2);
 
-    await vi.waitFor(() => expect(client.seek).toHaveBeenCalledWith(1_000));
-    await vi.waitFor(() => expect(client.setVolume).toHaveBeenCalledWith(0.2));
+    await vi.waitFor(() => expect(seek).toHaveBeenCalledWith(1_000));
+    await vi.waitFor(() => expect(setVolume).toHaveBeenCalledWith(0.2));
     releaseStart?.();
-    await start;
+    await Promise.all([start, seeking, volume]);
   });
 });
 
 describe("clearing the queue", () => {
-  const withUpcoming = (revision: number) =>
+  const withUpcoming = (revision: number): Versioned<PlaybackQueueSnapshot> =>
     queueOf(revision, {
       current: queueItem(1),
       upcoming: [queueItem(2)],
@@ -469,7 +473,11 @@ describe("playback session derived state", () => {
 });
 
 describe("position messages", () => {
-  const position = (positionMs: number, seekRevision = 0, playbackId = 1) => ({
+  const position = (
+    positionMs: number,
+    seekRevision = 0,
+    playbackId = 1,
+  ): { playbackId: number; positionMs: number; seekRevision: number } => ({
     playbackId,
     positionMs,
     seekRevision,

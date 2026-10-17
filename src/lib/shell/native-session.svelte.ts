@@ -34,17 +34,17 @@ export class NativeSession {
   #connection = $state.raw<ConnectionState>("connecting");
   #startupError = $state.raw<unknown>(null);
 
-  constructor(client: SessionClient, targets: SessionTargets) {
+  public constructor(client: SessionClient, targets: SessionTargets) {
     this.#client = client;
     this.#targets = targets;
   }
 
-  get connection(): ConnectionState {
+  public get connection(): ConnectionState {
     return this.#connection;
   }
 
   /** Why the connection failed, while `connection` is `failed`; the Renderer shows it. */
-  get startupError(): unknown {
+  public get startupError(): unknown {
     return this.#startupError;
   }
 
@@ -52,19 +52,19 @@ export class NativeSession {
    * Starts the connection and routes every message. Returns the cleanup (for HMR and tests): a
    * message that arrives after it is dropped.
    */
-  connect(): () => void {
+  public connect(): () => void {
     let active = true;
     // A message that arrives before `connect` answers waits for it, so the initial state is never
     // applied over a newer message.
     let early: BackendMessage[] | null = [];
-    const receive = (message: BackendMessage) => {
+    const receive = (message: BackendMessage): void => {
       if (!active) return;
       if (message.kind === "state") countE2e("stateMessages");
       if (early === null) this.#route(message);
       else early.push(message);
     };
 
-    const fail = (error: unknown) => {
+    const fail = (error: unknown): void => {
       early = null;
       if (!active) return;
       this.#startupError = error;
@@ -93,7 +93,7 @@ export class NativeSession {
     };
   }
 
-  #applyInitial(initial: InitialState) {
+  #applyInitial(initial: InitialState): void {
     this.#targets.playback.acceptPlayback(initial.playback);
     this.#targets.playback.acceptQueue(initial.queue);
     this.#targets.scan.accept(initial.libraryScan);
@@ -101,7 +101,7 @@ export class NativeSession {
     this.#targets.appearance.accept(initial.appearance);
   }
 
-  #route(message: BackendMessage) {
+  #route(message: BackendMessage): void {
     if (message.kind === "position") {
       this.#targets.playback.acceptPosition(message);
       return;

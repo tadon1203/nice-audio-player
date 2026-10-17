@@ -21,9 +21,15 @@ export const sharedKey = {
 export const SLEEVE_RADIUS = "6px";
 
 /** A place on screen: viewport position and size in px, and the corner radius at that size. */
-export type Box = { x: number; y: number; width: number; height: number; radius: number };
+export interface Box {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  radius: number;
+}
 
-const lerp = (from: number, to: number, t: number) => from + (to - from) * t;
+const lerp = (from: number, to: number, t: number): number => from + (to - from) * t;
 
 export function lerpBox(from: Box, to: Box, t: number): Box {
   return {
@@ -101,20 +107,23 @@ function ancestorTranslation(node: Element): { dx: number; dy: number } {
   return { dx, dy };
 }
 
-type Flight = { box: () => Box; cancel: () => void };
+interface Flight {
+  box: () => Box;
+  cancel: () => void;
+}
 
 const departures = new Map<string, { box: Box; at: number }>();
 const flights = new Map<string, Flight>();
 
 /** Remembers where the element is: the clone if it is mid-flight, else the element's last box. */
-function leave(key: string, lastBox: Box) {
+function leave(key: string, lastBox: Box): void {
   const flight = flights.get(key);
   const box = flight ? flight.box() : lastBox;
   flight?.cancel();
   departures.set(key, { box, at: performance.now() });
 }
 
-function arrive(key: string, node: HTMLElement) {
+function arrive(key: string, node: HTMLElement): void {
   const departure = departures.get(key);
   departures.delete(key);
   if (!departure || !isFresh(departure.at, performance.now())) return;
@@ -160,7 +169,7 @@ function arrive(key: string, node: HTMLElement) {
     duration,
     fill: "forwards",
   });
-  const finish = () => {
+  const finish = (): void => {
     ghost.remove();
     node.style.visibility = "";
     flights.delete(key);
@@ -198,7 +207,7 @@ export function sharedElement(key: string): Attachment<HTMLElement> {
     // By the time this runs on destroy the element is already out of the document and has no
     // box, so keep the last one seen: refreshed before whatever starts a navigation.
     let lastBox = boxOf(node);
-    const refresh = () => {
+    const refresh = (): void => {
       if (node.isConnected) lastBox = boxOf(node);
     };
     const events = ["pointerdown", "keydown", "click"] as const;

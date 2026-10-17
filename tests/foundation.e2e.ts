@@ -1,7 +1,10 @@
 import { type Page } from "@playwright/test";
 import { expect, test } from "./fixtures/test";
 
-async function styleOfInjected(page: Page, className: string) {
+async function styleOfInjected(
+  page: Page,
+  className: string,
+): Promise<{ display: string; backgroundColor: string; backdropFilter: string }> {
   return page.evaluate((name) => {
     const element = document.createElement("div");
     element.className = name;
@@ -21,7 +24,7 @@ test("Ink-3 is defined as its own ink, distinct from Ink-2", async ({ page }) =>
   const inks = await page.evaluate(() => {
     const probe = document.createElement("span");
     document.body.append(probe);
-    const read = (name: string) => {
+    const read = (name: string): string => {
       probe.style.color = `var(${name})`;
       return getComputedStyle(probe).color;
     };

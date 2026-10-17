@@ -14,10 +14,10 @@ const RESIDUAL = 0.005;
 const LINEAR_POINTS = 41;
 
 /** The part of a move still left at `u = ωt`, for a spring from rest. */
-const remaining = (u: number) => (1 + u) * Math.exp(-u);
+const remaining = (u: number): number => (1 + u) * Math.exp(-u);
 
 /** `u = ωT` where the residual reaches `RESIDUAL` (bisection; `remaining` only falls). */
-const CUT_OFF = (() => {
+const CUT_OFF = ((): number => {
   let low = 0;
   let high = 50;
   for (let step = 0; step < 60; step += 1) {

@@ -2,9 +2,18 @@ import { QueryClient } from "@tanstack/svelte-query";
 import { describe, expect, it, vi } from "vitest";
 import type { LibraryClient } from "#lib/native";
 import { CatalogRepository, type LibraryCatalogRequest } from "./catalog-repository";
+import type { Mock } from "vitest";
 
 /** A fake client whose list methods resolve to empty pages. */
-function fakeClient() {
+function fakeClient(): {
+  albums: Mock<() => Promise<{ items: never[]; totalCount: number; nextCursor: null }>>;
+  albumArtists: Mock<() => Promise<{ items: never[]; totalCount: number; nextCursor: null }>>;
+  tracks: Mock<() => Promise<{ items: never[]; totalCount: number; nextCursor: null }>>;
+  albumIndex: Mock<() => Promise<never[]>>;
+  albumArtistIndex: Mock<() => Promise<never[]>>;
+  trackIndex: Mock<() => Promise<never[]>>;
+  status: Mock<() => Promise<{ status: "ready" }>>;
+} {
   const empty = { items: [], totalCount: 0, nextCursor: null };
   return {
     albums: vi.fn(async () => empty),
@@ -20,12 +29,12 @@ function fakeClient() {
 type Client = ReturnType<typeof fakeClient>;
 
 /** Runs the query function of a repository's options, as TanStack Query does. */
-async function runQuery(options: { queryFn?: unknown }, context: unknown = {}) {
+async function runQuery(options: { queryFn?: unknown }, context: unknown = {}): Promise<unknown> {
   const queryFn = options.queryFn as (context: unknown) => Promise<unknown>;
   return queryFn(context);
 }
 
-function repositoryWith(client: Client) {
+function repositoryWith(client: Client): CatalogRepository {
   return new CatalogRepository(client as unknown as LibraryClient, new QueryClient());
 }
 

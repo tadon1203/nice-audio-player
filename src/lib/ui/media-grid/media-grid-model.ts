@@ -1,10 +1,10 @@
 /** Tile and gap sizes in px. Tiles are a fixed size, so where a row is is plain arithmetic. */
-export type GridMetrics = {
+export interface GridMetrics {
   readonly tileWidth: number;
   readonly columnGap: number;
   readonly tileHeight: number;
   readonly rowGap: number;
-};
+}
 
 /** How many tiles fit across `width`, as `auto-fill` would place them (at least one). */
 export function columnCount(width: number, metrics: GridMetrics): number {
@@ -24,16 +24,19 @@ export function rowTop(
   return scrollMargin + Math.floor(index / columns) * (metrics.tileHeight + metrics.rowGap);
 }
 
-export type GridNavigation = {
+export interface GridNavigation {
   readonly from: number;
   readonly columns: number;
   readonly count: number;
   /** Rows in view, for PageUp and PageDown. */
   readonly pageRows: number;
-};
+}
 
 /** The tile a navigation key moves focus to, or null for a key the grid does not handle. */
-export function keyTarget(key: string, { from, columns, count, pageRows }: GridNavigation) {
+export function keyTarget(
+  key: string,
+  { from, columns, count, pageRows }: GridNavigation,
+): number | null {
   const target = {
     ArrowLeft: from - 1,
     ArrowRight: from + 1,

@@ -22,6 +22,6 @@
     if (accent === null) return;
     const root = document.documentElement;
     root.style.setProperty("--artwork-accent", accent);
-    return () => root.style.removeProperty("--artwork-accent");
+    return (): string => root.style.removeProperty("--artwork-accent");
   });
 </script>

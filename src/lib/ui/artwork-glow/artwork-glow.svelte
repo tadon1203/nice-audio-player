@@ -6,7 +6,7 @@
 <script lang="ts">
   import type { Attachment } from "svelte/attachments";
   import { prefersReducedMotion } from "svelte/motion";
-  import { fade } from "svelte/transition";
+  import { fade, type TransitionConfig } from "svelte/transition";
   import type { ArtworkRef } from "#lib/native";
   import { ArtworkUrl } from "#lib/native";
   import { motionFor } from "#lib/ui/motion/svelte-motion";
@@ -46,12 +46,12 @@
   const wipe = $derived(!prefersReducedMotion.current && enter !== "fade" ? enter : null);
 
   /** The incoming image: faded in, or clipped so that it grows from the edge it came from. */
-  function arrive(node: Element) {
+  function arrive(node: Element): TransitionConfig {
     if (wipe === null) return fade(node, motion);
     const from = wipe;
     return {
       ...wipeMotion,
-      css: (_t: number, u: number) =>
+      css: (_t: number, u: number): string =>
         from === "wipe-previous"
           ? `clip-path: inset(0 ${u * 100}% 0 0)`
           : `clip-path: inset(0 0 0 ${u * 100}%)`,
@@ -59,7 +59,7 @@
   }
 
   /** The outgoing image fades, or (under a wipe) stays until the new one has covered it (the wipe's own length). */
-  function leave(node: Element) {
+  function leave(node: Element): TransitionConfig {
     return wipe === null ? fade(node, motion) : { delay: wipeMotion.duration, duration: 0 };
   }
 </script>

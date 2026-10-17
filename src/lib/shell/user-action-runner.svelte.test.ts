@@ -4,7 +4,7 @@ import { NoticeCenter } from "./notice-center.svelte";
 import { UserActionRunner } from "./user-action-runner.svelte";
 
 /** Waits until the runner has settled its action. */
-const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
+const settled = (): Promise<unknown> => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe("UserActionRunner", () => {
   it("shows nothing for a superseded command", async () => {

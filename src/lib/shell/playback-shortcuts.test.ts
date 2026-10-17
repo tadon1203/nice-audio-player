@@ -54,9 +54,9 @@ describe("global seek shortcut", () => {
   it("sends whole milliseconds even though the running clock is fractional", async () => {
     let now = 1_000;
     const clock = new PlaybackClock({
-      now: () => now,
-      requestFrame: () => 0,
-      cancelFrame: () => undefined,
+      now: (): number => now,
+      requestFrame: (): number => 0,
+      cancelFrame: (): undefined => undefined,
     });
     const seekPlayback = vi.fn(async (positionMs: number) => playing(positionMs));
     const playback = new Playback({ seek: seekPlayback } as unknown as PlaybackClient, clock);

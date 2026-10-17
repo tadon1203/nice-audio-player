@@ -1,5 +1,8 @@
 import type { TrackId } from "#lib/native";
-export type StripTrack = { id: TrackId; durationMs: number | null };
+export interface StripTrack {
+  id: TrackId;
+  durationMs: number | null;
+}
 
 /** The time state of a segment relative to the playing track. */
 export type SegmentState = "past" | "current" | "future";

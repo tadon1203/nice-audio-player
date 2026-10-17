@@ -31,11 +31,11 @@
   let list = $state<HTMLUListElement | null>(null);
 
   const queueDrag = new QueueDrag({
-    onMove: (id, to) => actions.run(() => playback.moveQueueItem(id, to)),
+    onMove: (id, to): void => actions.run(() => playback.moveQueueItem(id, to)),
     rowHeight: QUEUE_ROW_PX,
-    count: () => upcomingCount,
-    scrollElement: () => scrollElement,
-    list: () => list,
+    count: (): number => upcomingCount,
+    scrollElement: (): HTMLElement | null => scrollElement,
+    list: (): HTMLUListElement | null => list,
   });
   const drag = $derived(queueDrag.drag);
 

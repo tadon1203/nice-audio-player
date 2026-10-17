@@ -2,6 +2,7 @@ import type { PlaybackId } from "#lib/native";
 import { describe, expect, it, vi } from "vitest";
 import type { PlaybackClient, PlaybackWaveform, Versioned } from "#lib/native";
 import { WaveformRepository } from "./waveform-repository.svelte";
+import type { Mock } from "vitest";
 
 const waveform = (playbackId: PlaybackId): PlaybackWaveform => ({
   playbackId,
@@ -10,7 +11,10 @@ const waveform = (playbackId: PlaybackId): PlaybackWaveform => ({
 });
 
 /** A client that answers only the waveform question; every other call would be a test bug. */
-function fakeClient(answer: () => Promise<Versioned<PlaybackWaveform | null>>) {
+function fakeClient(answer: () => Promise<Versioned<PlaybackWaveform | null>>): {
+  client: PlaybackClient;
+  waveformCall: Mock<() => Promise<Versioned<PlaybackWaveform | null>>>;
+} {
   const waveformCall = vi.fn(answer);
   const client = { waveform: waveformCall } as unknown as PlaybackClient;
   return { client, waveformCall };

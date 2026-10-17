@@ -3,6 +3,7 @@
   import Artwork from "#lib/ui/artwork.svelte";
   import { slideTransition } from "#lib/ui/motion/svelte-slide";
   import { cn } from "#lib/utils/cn.js";
+  import type { TransitionConfig } from "svelte/transition";
 
   /** The next track's artwork shows this long before the current one ends. */
   const PREVIEW_MS = 3_000;
@@ -36,7 +37,7 @@
         inLastSeconds = remaining > 0 && remaining <= PREVIEW_MS;
       },
     );
-    return () => {
+    return (): void => {
       stop();
       inLastSeconds = false;
     };
@@ -50,7 +51,7 @@
       next.artwork?.hash !== playback.item?.artwork?.hash,
   );
 
-  const slideIn = (_node: Element) =>
+  const slideIn = (_node: Element): TransitionConfig =>
     slideTransition("move", budget.current !== "full", {
       x: SLIDE_PX,
       opacity: SHOWN_OPACITY,

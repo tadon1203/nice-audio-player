@@ -2,7 +2,7 @@ import { springLinear } from "./spring-curve";
 import { tokenDuration, type MotionToken } from "./tokens";
 
 /** A token as the CSS duration of a transition. Under reduced motion it is the crossfade. */
-function cssDuration(token: MotionToken, reducedMotion: boolean) {
+function cssDuration(token: MotionToken, reducedMotion: boolean): string {
   return `${tokenDuration(token, reducedMotion)}ms`;
 }
 

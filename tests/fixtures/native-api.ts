@@ -29,7 +29,7 @@ declare global {
  * mapping are exercised. It holds no domain logic: every command is forwarded to Node, where the
  * test says what it answers. It runs in the page, so it uses only what it defines itself.
  */
-function installIpcBridge() {
+function installIpcBridge(): void {
   const callbacks = new Map<number, (data: unknown) => void>();
   const listeners = new Map<string, number[]>();
   let nextCallbackId = 1;
@@ -40,7 +40,7 @@ function installIpcBridge() {
       currentWebview: { windowLabel: "main", label: "main" },
     },
     callbacks,
-    transformCallback(callback?: (data: unknown) => void, once = false) {
+    transformCallback(callback?: (data: unknown) => void, once = false): number {
       const id = nextCallbackId++;
       callbacks.set(id, (data) => {
         if (once) callbacks.delete(id);
@@ -48,9 +48,9 @@ function installIpcBridge() {
       });
       return id;
     },
-    unregisterCallback: (id: number) => void callbacks.delete(id),
-    runCallback: (id: number, data: unknown) => callbacks.get(id)?.(data),
-    async invoke(command: string, args: Record<string, unknown> = {}) {
+    unregisterCallback: (id: number): undefined => void callbacks.delete(id),
+    runCallback: (id: number, data: unknown): void | undefined => callbacks.get(id)?.(data),
+    async invoke(command: string, args: Record<string, unknown> = {}): Promise<unknown> {
       if (command === "plugin:event|listen") {
         const event = args.event as string;
         const handler = args.handler as number;
@@ -81,17 +81,17 @@ function installIpcBridge() {
   Object.defineProperty(window, "isTauri", { value: true });
   // A Tauri channel numbers its messages so they are delivered in order.
   const channelIndexes = new Map<number, number>();
-  const deliver = (channelId: number, message: unknown) => {
+  const deliver = (channelId: number, message: unknown): void => {
     const index = channelIndexes.get(channelId) ?? 0;
     channelIndexes.set(channelId, index + 1);
     callbacks.get(channelId)?.({ index, message });
   };
-  window.__emitChannelMessage = (channelId, bytes) =>
+  window.__emitChannelMessage = (channelId, bytes): void =>
     deliver(channelId, new Uint8Array(bytes).buffer);
   window.__emitChannelValue = deliver;
 }
 
-const toCommandName = (name: string) =>
+const toCommandName = (name: string): string =>
   name.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
 
 type Responder = (args: CommandArgs) => unknown;
@@ -108,12 +108,12 @@ export class Native {
   /** The current value of every state topic, as the Backend holds it; `connect` answers with it. */
   #state: InitialState = idleInitialState();
 
-  constructor(page: Page) {
+  public constructor(page: Page) {
     this.#page = page;
   }
 
   /** Binds the Node side of the bridge and installs the page side before the app loads. */
-  async install() {
+  public async install(): Promise<void> {
     await this.#page.exposeFunction(
       "__nativeInvoke",
       async (command: string, args: CommandArgs): Promise<Reply> => {
@@ -133,22 +133,22 @@ export class Native {
   }
 
   /** Sets what a command answers: a value, or a function of the arguments it was sent. */
-  respond<Name extends CommandName>(name: Name, response: Response<Name>) {
+  public respond<Name extends CommandName>(name: Name, response: Response<Name>): void {
     this.#responders.set(
       toCommandName(name),
-      typeof response === "function" ? (response as Responder) : () => response,
+      typeof response === "function" ? (response as Responder) : (): unknown => response,
     );
   }
 
   /** Makes a command reject the way the backend does, with a structured `{ code }`. */
-  fail(name: CommandName, code: string) {
+  public fail(name: CommandName, code: string): void {
     this.#responders.set(toCommandName(name), () => {
       throw { code };
     });
   }
 
   /** Answers the folder picker. */
-  respondToFolderPicker(path: string | null) {
+  public respondToFolderPicker(path: string | null): void {
     this.#responders.set("plugin:dialog|open", () => path);
   }
 
@@ -157,7 +157,7 @@ export class Native {
    * becomes the topic's value, so a later `connect` answers with it. Before the page connects there
    * is no channel, so the message only updates that value.
    */
-  async send(message: BackendMessage) {
+  public async send(message: BackendMessage): Promise<void> {
     if (message.kind === "state") {
       this.#state = {
         ...this.#state,
@@ -173,7 +173,7 @@ export class Native {
   }
 
   /** Sends a fact the Backend reports with its value, such as a skipped track, on the channel. */
-  async occur(occurrence: Occurrence) {
+  public async occur(occurrence: Occurrence): Promise<void> {
     await this.send({ kind: "occurrence", ...occurrence });
   }
 
@@ -181,7 +181,7 @@ export class Native {
    * Publishes a new value of a state topic: the next revision of it, sent as a state message.
    * Returns that revision, so a command that answers with the same value can carry it.
    */
-  async publish<Topic extends keyof InitialState>(
+  public async publish<Topic extends keyof InitialState>(
     topic: Topic,
     value: InitialState[Topic]["value"],
   ): Promise<number> {
@@ -192,12 +192,16 @@ export class Native {
   }
 
   /** The revision of a state topic as the Backend last published it. */
-  revisionOf(topic: keyof InitialState): number {
+  public revisionOf(topic: keyof InitialState): number {
     return this.#state[topic].revision;
   }
 
   /** Sends one binary message down the channel the renderer passed to its latest call of `name`. */
-  async emitChannelMessage(name: CommandName, argument: string, bytes: number[]) {
+  public async emitChannelMessage(
+    name: CommandName,
+    argument: string,
+    bytes: number[],
+  ): Promise<void> {
     const id = this.#channelId(name, argument);
     if (id === undefined) throw new Error(`no channel was passed to ${name}`);
     await this.#page.evaluate(
@@ -216,19 +220,19 @@ export class Native {
   }
 
   /** Arguments of every call to a command, oldest first. */
-  callsTo(name: CommandName): CommandArgs[] {
+  public callsTo(name: CommandName): CommandArgs[] {
     const command = toCommandName(name);
     return this.#calls.filter((call) => call.command === command).map((call) => call.args);
   }
 }
 
-type InstallOptions = {
+interface InstallOptions {
   /** The Library the list commands answer from; the default is `testLibrary()`. */
   library?: LibraryData;
-};
+}
 
 /** Installs the fake backend: an idle app over the given Library, ready for the test to script. */
-export async function installNativeApi(page: Page, options: InstallOptions = {}) {
+export async function installNativeApi(page: Page, options: InstallOptions = {}): Promise<Native> {
   const native = new Native(page);
   await native.install();
   for (const [name, response] of Object.entries(idleResponses())) {

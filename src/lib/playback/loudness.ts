@@ -1,7 +1,10 @@
 import { TrackEnergy } from "#lib/playback/track-energy";
 
 /** The smoothed loudness (0-1) at a position in the track. */
-export type LoudnessKeyframe = { atMs: number; level: number };
+export interface LoudnessKeyframe {
+  atMs: number;
+  level: number;
+}
 
 /** The Artwork glow's loudness, smoothed over time. Pure: nothing is stored here. */
 export class Loudness {

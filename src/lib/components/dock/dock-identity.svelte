@@ -13,6 +13,7 @@
   import { slideTransition } from "#lib/ui/motion/svelte-slide";
   import { Button } from "#lib/ui/shadcn/button";
   import * as Tooltip from "#lib/ui/shadcn/tooltip";
+  import type { TransitionConfig } from "svelte/transition";
 
   /** Sliding distance for the artwork, title and artist. One value so they travel together. */
   const SLIDE_PX = 16;
@@ -35,7 +36,7 @@
    * Next enters from the right and pushes the old track out to the left; previous mirrors it.
    * Under reduced motion it is a plain crossfade.
    */
-  function slide(_node: Element, { entering }: { entering: boolean }) {
+  function slide(_node: Element, { entering }: { entering: boolean }): TransitionConfig {
     const direction = playback.transitionDirection === "backward" ? -1 : 1;
     return slideTransition("move", budget.current === "reduced", {
       x: (entering ? direction : -direction) * SLIDE_PX,
@@ -43,7 +44,7 @@
   }
 
   // The links come from `Tracks.links`, which builds them with resolve().
-  function goTo(href: string) {
+  function goTo(href: string): void {
     void goto(href);
   }
 

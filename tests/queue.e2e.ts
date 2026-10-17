@@ -1,10 +1,11 @@
 import { expect, test } from "./fixtures/test";
+import type { Locator } from "@playwright/test";
 
 test.beforeEach(async ({ page }) => {
   await page.setViewportSize({ width: 1360, height: 900 });
 });
 
-async function openQueue(page: import("@playwright/test").Page) {
+async function openQueue(page: import("@playwright/test").Page): Promise<Locator> {
   await page.goto("/library/tracks");
   await page.getByRole("button", { name: "Play Test track" }).click();
   const dock = page.getByRole("contentinfo", { name: "Playback controls" });
@@ -15,7 +16,7 @@ async function openQueue(page: import("@playwright/test").Page) {
   return panel;
 }
 
-const upcomingTitles = (panel: import("@playwright/test").Locator) =>
+const upcomingTitles = (panel: import("@playwright/test").Locator): Promise<string[]> =>
   panel.locator('[data-tone="upcoming"] [data-slot="queue-row-title"]').allTextContents();
 
 test("drags an upcoming track to any position", async ({ page, native, player, library }) => {

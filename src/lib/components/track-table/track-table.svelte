@@ -92,14 +92,14 @@
   const splitsDiscs = $derived(!virtualized && layout === "album" && hasSeveralDiscs(rows));
 
   /** Width (for `<col>` only) and breakpoint visibility from one column definition. */
-  function columnClass(column: TrackColumn, withWidth = false) {
+  function columnClass(column: TrackColumn, withWidth = false): string {
     return cn(
       withWidth && column.width,
       column.hideBelow && trackTableBreakpoints[column.hideBelow].hide,
     );
   }
 
-  function isInteractiveTarget(event: MouseEvent) {
+  function isInteractiveTarget(event: MouseEvent): boolean {
     const target = event.target;
     return (
       target instanceof Element &&
@@ -108,14 +108,18 @@
     );
   }
 
-  function activateRow(event: MouseEvent, row: TrackTableRow, intent: "play" | "resume" | null) {
+  function activateRow(
+    event: MouseEvent,
+    row: TrackTableRow,
+    intent: "play" | "resume" | null,
+  ): void {
     if (isInteractiveTarget(event)) return;
     if (intent === "play") onplaytrack(row.id);
     else if (intent === "resume") actions.run(() => playback.resume());
   }
 
   /** Resolves the row under a right-click; the spacer rows have none, so no menu opens there. */
-  function selectMenuRow(event: MouseEvent) {
+  function selectMenuRow(event: MouseEvent): void {
     const target = event.target;
     const id =
       target instanceof Element
@@ -127,7 +131,7 @@
   }
 
   // The links come from `Tracks.links`, which builds them with resolve().
-  function goTo(href: string) {
+  function goTo(href: string): void {
     void goto(href);
   }
 </script>

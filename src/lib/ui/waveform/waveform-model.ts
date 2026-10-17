@@ -73,7 +73,7 @@ export function positionFromOffset(offsetPx: number, widthPx: number, durationMs
 }
 
 export function nextSeekPosition(key: string, valueMs: number, durationMs: number): number | null {
-  const clamp = (value: number) => Math.min(durationMs, Math.max(0, value));
+  const clamp = (value: number): number => Math.min(durationMs, Math.max(0, value));
   switch (key) {
     case "ArrowLeft":
     case "ArrowDown":

@@ -1,16 +1,16 @@
 /** The Queue panel's open state. A view preference, not domain state. */
 export class QueuePanel {
-  isOpen = $state(false);
+  public isOpen = $state(false);
 
-  open(): void {
+  public open(): void {
     this.isOpen = true;
   }
 
-  close(): void {
+  public close(): void {
     this.isOpen = false;
   }
 
-  toggle(): void {
+  public toggle(): void {
     this.isOpen = !this.isOpen;
   }
 }

@@ -1,5 +1,5 @@
 import { redirect } from "@sveltejs/kit";
 
-export function load() {
+export function load(): void {
   redirect(307, "/library/albums");
 }

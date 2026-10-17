@@ -58,12 +58,12 @@
   let seekPreviewMs = $state<number | null>(null);
   // While dragging, the clock holds the bar at the preview position instead of playing on.
   let releaseHold: (() => void) | null = null;
-  const holdAt = (ms: number) => {
+  const holdAt = (ms: number): void => {
     const next = playback.clock.hold(ms);
     releaseHold?.();
     releaseHold = next;
   };
-  const letGo = () => {
+  const letGo = (): void => {
     releaseHold?.();
     releaseHold = null;
   };

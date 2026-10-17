@@ -2,12 +2,14 @@ import { type Page } from "@playwright/test";
 import { expect, test } from "./fixtures/test";
 import { workspaceViewport } from "./fixtures/locators";
 import { playbackItemFor, playingSnapshot } from "./fixtures/data";
+import type { Locator } from "@playwright/test";
+import type { LibraryTrackSummary } from "../src/lib/native";
 
 test.beforeEach(async ({ page }) => {
   await page.setViewportSize({ width: 1360, height: 900 });
 });
 
-async function playFirstTrack(page: Page) {
+async function playFirstTrack(page: Page): Promise<Locator> {
   await page.goto("/library/tracks");
   await page.getByRole("button", { name: "Play Test track" }).click();
   const dock = page.getByRole("contentinfo", { name: "Playback controls" });
@@ -15,7 +17,7 @@ async function playFirstTrack(page: Page) {
   return dock;
 }
 
-const upcomingTitles = (page: Page) =>
+const upcomingTitles = (page: Page): Promise<string[]> =>
   page
     .getByRole("dialog", { name: "Queue" })
     .locator('[data-tone="upcoming"] [data-slot="queue-row-title"]')
@@ -128,8 +130,9 @@ test("Play next and Add to queue put a track where they say", async ({
 }) => {
   // What the queue should hold once each command has run: the test states it.
   const rest = library.tracks.filter((track) => track.playable).slice(1);
-  const track = (title: string) => library.tracks.find((entry) => entry.title === title)!;
-  const without = (tracks: typeof rest, ...removed: typeof rest) =>
+  const track = (title: string): LibraryTrackSummary =>
+    library.tracks.find((entry) => entry.title === title)!;
+  const without = (tracks: typeof rest, ...removed: typeof rest): LibraryTrackSummary[] =>
     tracks.filter((entry) => !removed.some((gone) => gone.id === entry.id));
   const afterPlayNext = [track("Track 010"), ...without(rest, track("Track 010"))];
   native.respond("enqueueTrack", ({ next }) =>

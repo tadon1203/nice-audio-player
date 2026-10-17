@@ -3,23 +3,23 @@
   import type { LibraryIndexBucket } from "#lib/native";
   import type { SortableView } from "#lib/ui/sort-option";
 
-  export type LibraryPresentationMeta = {
+  export interface LibraryPresentationMeta {
     title: string;
     singular: string;
     plural: string;
     searchLabel: string;
     searchPlaceholder: string;
-  };
+  }
 
-  export type LibraryScroll = {
+  export interface LibraryScroll {
     /** `null` until the scroll region has mounted. */
     viewport: HTMLElement | null;
     /** The list reports the index of its first visible item here (for the scroll index). */
     ontopindexchange: (index: number) => void;
-  };
+  }
 
   /** What the workspace reads from `LibraryCatalog`. */
-  export type WorkspaceCatalog<Item> = {
+  export interface WorkspaceCatalog<Item> {
     statusError: unknown;
     refetchStatus: () => unknown;
     statusMessage: string | null;
@@ -34,7 +34,7 @@
     refetch: () => unknown;
     /** The scroll index of the list's order; empty when the sort has none. */
     index: readonly LibraryIndexBucket[];
-  };
+  }
 </script>
 
 <script lang="ts" generics="Item, Key extends string">
@@ -84,9 +84,9 @@
   let topIndex = $state(0);
 
   const workspaceScroll = new WorkspaceScroll(AppServices.current().scrollMemory, {
-    key: () => scrollKey,
-    resetKey: () => stateKey,
-    ready: () => catalog.items.length > 0,
+    key: (): string => scrollKey,
+    resetKey: (): string => stateKey,
+    ready: (): boolean => catalog.items.length > 0,
   });
 
   const scrollIndexLabel = $derived(ScrollIndex.labelAt(catalog.index, skip + topIndex));

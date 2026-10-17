@@ -2,15 +2,23 @@ import { describe, expect, it } from "vitest";
 import { MAX_WAIT_FRAMES, WorkspaceScroll, type FrameScheduler } from "./workspace-scroll.svelte";
 
 /** A scroll region whose scrollTop is clamped to its content, as in a browser. */
-function region(contentHeight: number, clientHeight = 500) {
+function region(
+  contentHeight: number,
+  clientHeight = 500,
+): {
+  state: { contentHeight: number; scrollTop: number };
+  readonly scrollHeight: number;
+  clientHeight: number;
+  scrollTop: number;
+} {
   const state = { contentHeight, scrollTop: 0 };
   return {
     state,
-    get scrollHeight() {
+    get scrollHeight(): number {
       return state.contentHeight;
     },
     clientHeight,
-    get scrollTop() {
+    get scrollTop(): number {
       return state.scrollTop;
     },
     set scrollTop(value: number) {
@@ -19,7 +27,7 @@ function region(contentHeight: number, clientHeight = 500) {
   };
 }
 
-function manualFrames() {
+function manualFrames(): { scheduler: FrameScheduler; readonly waiting: number; tick(): void } {
   const pending = new Map<number, () => void>();
   let next = 1;
   const scheduler: FrameScheduler = {
@@ -31,10 +39,10 @@ function manualFrames() {
   };
   return {
     scheduler,
-    get waiting() {
+    get waiting(): number {
       return pending.size;
     },
-    tick() {
+    tick(): void {
       const callbacks = [...pending.values()];
       pending.clear();
       callbacks.forEach((callback) => callback());

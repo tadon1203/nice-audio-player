@@ -3,6 +3,7 @@ import { testLibrary } from "./fixtures/data";
 import type { Native } from "./fixtures/native-api";
 import { motionMs } from "./fixtures/motion";
 import { expect, test } from "./fixtures/test";
+import type { Locator } from "@playwright/test";
 
 const SIZES = [
   { width: 1100, height: 680 },
@@ -32,7 +33,7 @@ async function openNowPlaying(
   native: Native,
   size: (typeof SIZES)[number],
   lyrics: boolean,
-) {
+): Promise<Locator> {
   await page.setViewportSize(size);
   await page.goto("/library/tracks");
   if (lyrics) {

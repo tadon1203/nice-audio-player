@@ -9,11 +9,11 @@ import type {
 import type { LibraryCatalogRequest } from "./catalog-repository";
 
 /** The arguments of an Album Artist's album list: which artist, and how its albums are ordered. */
-export type ArtistAlbumsArguments = {
+export interface ArtistAlbumsArguments {
   readonly artistId: ArtistId;
   readonly sortKey: LibraryArtistAlbumSortKey;
   readonly direction: LibrarySortDirection;
-};
+}
 
 /** Where `LibraryQueryKeys.catalog` puts the request: after `data` and "catalog". */
 const CATALOG_REQUEST_INDEX = 3;

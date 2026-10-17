@@ -10,11 +10,11 @@
   import { motionFor } from "#lib/ui/motion/svelte-motion";
   import { Button } from "#lib/ui/shadcn/button/index.js";
 
-  type NavigationItem = {
+  interface NavigationItem {
     label: string;
     to: "/library/albums" | "/library/album-artists" | "/library/tracks" | "/settings";
     icon: Component;
-  };
+  }
 
   let { onNavigate }: { onNavigate?: () => void } = $props();
 
@@ -25,7 +25,7 @@
   ];
   const settingsItem: NavigationItem = { label: "Settings", to: "/settings", icon: Settings2 };
 
-  function isActive(to: NavigationItem["to"]) {
+  function isActive(to: NavigationItem["to"]): boolean {
     const pathname = page.url.pathname;
     return to === "/settings" ? pathname === to : pathname === to || pathname.startsWith(`${to}/`);
   }

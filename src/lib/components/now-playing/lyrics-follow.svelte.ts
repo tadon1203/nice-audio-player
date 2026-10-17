@@ -28,7 +28,22 @@ import {
  * held while the pointer rests on the lyrics or text is selected. Selecting text while following
  * pauses auto-scroll without going free. Call it while a component initialises.
  */
-export function createLyricsFollow(currentIndex: () => number, msToNextLine: () => number | null) {
+export function createLyricsFollow(
+  currentIndex: () => number,
+  msToNextLine: () => number | null,
+): {
+  readonly mode: FollowMode;
+  readonly offscreen: OffscreenSide;
+  container: Attachment<HTMLElement>;
+  line(index: number): Attachment<HTMLElement>;
+  jumpToCurrent: () => void;
+  realign(): void;
+  onscroll: () => void;
+  onpointerenter(): void;
+  onpointermove(): void;
+  onpointerleave(): void;
+  onkeydown(event: KeyboardEvent): void;
+} {
   const lines = new Map<number, HTMLElement>();
   let mode = $state<FollowMode>("follow");
   let offscreen = $state.raw<OffscreenSide>(null);
@@ -41,13 +56,13 @@ export function createLyricsFollow(currentIndex: () => number, msToNextLine: () 
   let container = $state.raw<HTMLElement | null>(null);
   const mover = createAnchorFollow();
 
-  const scrollTo = (index: number, how: ScrollHow) => {
+  const scrollTo = (index: number, how: ScrollHow): void => {
     const line = lines.get(index);
     if (line !== undefined) mover.scrollToRow(line, how);
   };
 
   /** Where the list is scrolled to when `line` sits on the anchor. */
-  const anchorTarget = (element: HTMLElement, line: HTMLElement) =>
+  const anchorTarget = (element: HTMLElement, line: HTMLElement): number =>
     anchorScrollTop({
       rowTop: line.offsetTop,
       rowHeight: line.offsetHeight,
@@ -55,7 +70,7 @@ export function createLyricsFollow(currentIndex: () => number, msToNextLine: () 
       scrollHeight: element.scrollHeight,
     });
 
-  const currentWaitEnd = () =>
+  const currentWaitEnd = (): number =>
     waitEndsAt({
       idleSince,
       pointerResting: pointerInside || selecting,
@@ -63,7 +78,7 @@ export function createLyricsFollow(currentIndex: () => number, msToNextLine: () 
     });
 
   /** Back to the current line from free scrolling: a glide when it is near, else a fade. */
-  const returnToCurrent = () => {
+  const returnToCurrent = (): void => {
     mode = "follow";
     const index = untrack(currentIndex);
     const line = lines.get(index);
@@ -75,7 +90,7 @@ export function createLyricsFollow(currentIndex: () => number, msToNextLine: () 
     );
   };
 
-  const onscroll = () => {
+  const onscroll = (): void => {
     const element = container;
     if (element === null || mover.isOwnScroll(element.scrollTop)) return;
     mover.stop();
@@ -133,14 +148,14 @@ export function createLyricsFollow(currentIndex: () => number, msToNextLine: () 
       },
       Math.max(0, endsAt - Date.now()),
     );
-    return () => clearTimeout(timer);
+    return (): void => clearTimeout(timer);
   });
 
   // Whether text is selected in the lyrics; any selection change counts as activity.
   $effect(() => {
     const element = container;
     if (element === null) return;
-    const onChange = () => {
+    const onChange = (): void => {
       const selection = document.getSelection();
       const inside =
         selection !== null &&
@@ -152,7 +167,7 @@ export function createLyricsFollow(currentIndex: () => number, msToNextLine: () 
       selecting = inside;
     };
     document.addEventListener("selectionchange", onChange);
-    return () => {
+    return (): void => {
       document.removeEventListener("selectionchange", onChange);
       selecting = false;
     };
@@ -194,7 +209,7 @@ export function createLyricsFollow(currentIndex: () => number, msToNextLine: () 
       { root: element, threshold: 1 },
     );
     observer.observe(line);
-    return () => observer.disconnect();
+    return (): void => observer.disconnect();
   });
 
   /** The scroll container. */
@@ -208,10 +223,10 @@ export function createLyricsFollow(currentIndex: () => number, msToNextLine: () 
   };
 
   return {
-    get mode() {
+    get mode(): FollowMode {
       return mode;
     },
-    get offscreen() {
+    get offscreen(): OffscreenSide {
       return offscreen;
     },
     container: containerAttachment,
@@ -226,21 +241,21 @@ export function createLyricsFollow(currentIndex: () => number, msToNextLine: () 
     },
     jumpToCurrent: returnToCurrent,
     /** The spacers changed size: keep the present on the anchor (only while following). */
-    realign() {
+    realign(): void {
       if (untrack(() => mode) === "follow") scrollTo(untrack(currentIndex), "instant");
     },
     onscroll,
-    onpointerenter() {
+    onpointerenter(): void {
       pointerInside = true;
     },
-    onpointermove() {
+    onpointermove(): void {
       idleSince = Date.now();
     },
-    onpointerleave() {
+    onpointerleave(): void {
       pointerInside = false;
       idleSince = Date.now();
     },
-    onkeydown(event: KeyboardEvent) {
+    onkeydown(event: KeyboardEvent): void {
       if (event.key === "Escape" && mode === "free") {
         event.stopPropagation();
         returnToCurrent();
