@@ -23,6 +23,7 @@ use serde::Serialize;
 use super::cancellation::Cancellation;
 use super::decoding::{DecodeStep, PcmDecodeError, SeekStep, open_analysis_decoder};
 use crate::containment::contain;
+use crate::ids::PlaybackId;
 use crate::library::scanner::identity::content_hash;
 use crate::library::store::PlayableTrack;
 use crate::media::validation::ValidatedAudioFile;
@@ -50,7 +51,7 @@ pub struct Waveform {
 #[serde(rename_all = "camelCase")]
 pub struct PlaybackWaveform {
     /// The playback the waveform belongs to, so a late answer cannot be drawn for another track.
-    pub playback_id: String,
+    pub playback_id: PlaybackId,
     pub peaks: Vec<u8>,
     pub rms: Vec<u8>,
 }

@@ -628,7 +628,7 @@ impl BackendApp {
         let session = snapshot.session()?;
         let waveform = find(&session.item.track)?;
         Some(PlaybackWaveform {
-            playback_id: session.playback_id.clone(),
+            playback_id: session.playback_id,
             peaks: waveform.peaks.clone(),
             rms: waveform.rms.clone(),
         })

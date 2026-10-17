@@ -1,5 +1,5 @@
 use super::*;
-use crate::ids::QueueItemId;
+use crate::ids::{PlaybackId, QueueItemId};
 
 #[test]
 fn the_initial_snapshot_is_stopped_with_the_saved_volume() {
@@ -34,7 +34,7 @@ fn wire_session() -> ActiveSession {
     ActiveSession {
         item: test_item(),
         started_by: SessionStartedBy::Jump,
-        playback_id: "1".into(),
+        playback_id: PlaybackId::first(),
         position_ms: 1_000,
         seek_revision: 0,
         duration_ms: Some(60_000),
@@ -54,8 +54,8 @@ fn wire_session() -> ActiveSession {
 
 fn item_json() -> serde_json::Value {
     serde_json::json!({
-        "queueItemId": "queue-item-1",
-        "trackId": "7",
+        "queueItemId": 1,
+        "trackId": 7,
         "trackNumber": null,
         "discNumber": null,
         "year": null,
@@ -84,7 +84,7 @@ fn session_json() -> serde_json::Value {
     serde_json::json!({
         "item": item_json(),
         "startedBy": "jump",
-        "playbackId": "1",
+        "playbackId": 1,
         "positionMs": 1_000,
         "seekRevision": 0,
         "durationMs": 60_000,

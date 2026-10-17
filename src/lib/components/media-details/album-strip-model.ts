@@ -1,4 +1,5 @@
-export type StripTrack = { id: string; durationMs: number | null };
+import type { TrackId } from "#lib/native";
+export type StripTrack = { id: TrackId; durationMs: number | null };
 
 /** The time state of a segment relative to the playing track. */
 export type SegmentState = "past" | "current" | "future";
@@ -6,7 +7,7 @@ export type SegmentState = "past" | "current" | "future";
 /** Past / current / future for each track; all `future` when the playing track is not in this album. */
 export function segmentStates(
   tracks: readonly StripTrack[],
-  activeId: string | null,
+  activeId: TrackId | null,
 ): SegmentState[] {
   const active = tracks.findIndex((t) => t.id === activeId);
   return tracks.map((_, i) =>

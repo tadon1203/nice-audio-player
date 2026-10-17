@@ -1,3 +1,4 @@
+import type { TrackId } from "#lib/native";
 import { describe, expect, it } from "vitest";
 import {
   albumTrackColumns,
@@ -13,7 +14,7 @@ import {
 } from "./track-columns";
 
 const row: TrackTableRow = {
-  id: "t1",
+  id: 1,
   title: "Song",
   artist: "Artist",
   album: "Album",
@@ -54,32 +55,32 @@ describe("track columns", () => {
 
 describe("track rows", () => {
   it("offer Pause or Resume only for the active track", () => {
-    const action = (id: string | null, status: Parameters<typeof trackRowState>[2]) =>
+    const action = (id: TrackId | null, status: Parameters<typeof trackRowState>[2]) =>
       trackRowState(row, id, status).action;
-    expect(action("t1", "playing")).toMatchObject({ kind: "pause", persistent: true });
-    expect(action("t1", "paused")).toMatchObject({ kind: "resume", persistent: true });
-    expect(action("t2", "playing")).toMatchObject({ kind: "play", persistent: false });
-    expect(action("t1", "stopped")).toMatchObject({ kind: "play", label: "Play Song" });
+    expect(action(1, "playing")).toMatchObject({ kind: "pause", persistent: true });
+    expect(action(1, "paused")).toMatchObject({ kind: "resume", persistent: true });
+    expect(action(2, "playing")).toMatchObject({ kind: "play", persistent: false });
+    expect(action(1, "stopped")).toMatchObject({ kind: "play", label: "Play Song" });
   });
 
   it("decide what a row click does", () => {
     const intent = (
       r: TrackTableRow,
-      id: string | null,
+      id: TrackId | null,
       status: "stopped" | "playing" | "paused",
     ) => trackRowState(r, id, status).clickIntent;
     expect(intent(row, null, "stopped")).toBe("play");
-    expect(intent(row, "t1", "playing")).toBeNull();
-    expect(intent(row, "t1", "paused")).toBe("resume");
+    expect(intent(row, 1, "playing")).toBeNull();
+    expect(intent(row, 1, "paused")).toBe("resume");
     expect(intent({ ...row, availability: "missing" }, null, "stopped")).toBeNull();
     expect(intent({ ...row, playable: false }, null, "stopped")).toBeNull();
   });
 
   it("report the playback state only for the active track", () => {
-    expect(trackRowState(row, "t1", "playing").playbackState).toBe("playing");
-    expect(trackRowState(row, "t1", "paused").playbackState).toBe("paused");
-    expect(trackRowState(row, "t1", "stopped").playbackState).toBeUndefined();
-    expect(trackRowState(row, "t2", "playing").playbackState).toBeUndefined();
+    expect(trackRowState(row, 1, "playing").playbackState).toBe("playing");
+    expect(trackRowState(row, 1, "paused").playbackState).toBe("paused");
+    expect(trackRowState(row, 1, "stopped").playbackState).toBeUndefined();
+    expect(trackRowState(row, 2, "playing").playbackState).toBeUndefined();
   });
 });
 

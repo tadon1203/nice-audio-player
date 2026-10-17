@@ -63,7 +63,7 @@ const stateMessage = (revision: number): BackendMessage => ({
   value: "pushed" as never,
 });
 
-const position: PlaybackPosition = { playbackId: "1", positionMs: 250, seekRevision: 0 };
+const position: PlaybackPosition = { playbackId: 1, positionMs: 250, seekRevision: 0 };
 
 describe("NativeSession", () => {
   it("is connecting until the initial state is applied, then ready", async () => {

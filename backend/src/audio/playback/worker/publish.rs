@@ -31,7 +31,7 @@ impl PlaybackWorker {
                         .current()
                         .and_then(|entry| self.item_of(entry))
                         .or_else(|| self.last_item.clone()),
-                    playback_id: id.map(|id| id.to_string()),
+                    playback_id: *id,
                     error: code.clone(),
                     skipping: *skipping,
                 }
@@ -45,7 +45,7 @@ impl PlaybackWorker {
         ActiveSession {
             item: loaded.item.clone(),
             started_by: loaded.started_by,
-            playback_id: loaded.id.to_string(),
+            playback_id: loaded.id,
             position_ms: loaded.position_ms(),
             seek_revision: self.seek_revision,
             duration_ms: loaded.position.duration_ms,
@@ -101,7 +101,7 @@ impl PlaybackWorker {
             return;
         };
         self.store_position(Some(PlaybackPosition {
-            playback_id: loaded.id.to_string(),
+            playback_id: loaded.id,
             position_ms: loaded.position_ms(),
             seek_revision: self.seek_revision,
         }));

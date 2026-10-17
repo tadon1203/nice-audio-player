@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { TrackId } from "#lib/native";
   import { QueryResult } from "#lib/library/query-result.svelte";
   import { AppServices } from "#lib/shell/app-services.svelte";
   import { Button } from "#lib/ui/shadcn/button/index.js";
@@ -15,7 +16,7 @@
   import { MISSING } from "#lib/utils/missing";
 
   /** Everything the library knows about one track: tags, audio format, and where the file is. */
-  let { trackId, onclose }: { trackId: string | null; onclose: () => void } = $props();
+  let { trackId, onclose }: { trackId: TrackId | null; onclose: () => void } = $props();
 
   const { actions, catalog, libraryTracks } = AppServices.current();
   const query = new QueryResult(() => catalog.trackPropertiesOptions(trackId));

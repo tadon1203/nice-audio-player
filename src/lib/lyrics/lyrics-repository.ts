@@ -1,5 +1,5 @@
 import { queryOptions, skipToken, type QueryClient } from "@tanstack/svelte-query";
-import type { LyricsClient } from "#lib/native";
+import type { LyricsClient, TrackId } from "#lib/native";
 
 /** The lyrics queries. Lyrics come from local files, so they are read from the Backend once. */
 export class LyricsRepository {
@@ -13,7 +13,7 @@ export class LyricsRepository {
     this.#queryClient = queryClient;
   }
 
-  public trackOptions(trackId: string | null) {
+  public trackOptions(trackId: TrackId | null) {
     return queryOptions({
       queryKey: [...LyricsRepository.#all, trackId],
       queryFn: trackId === null ? skipToken : () => this.#client.trackLyrics(trackId),

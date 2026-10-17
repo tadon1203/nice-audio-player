@@ -87,7 +87,7 @@ describe("TauriNative", () => {
 
   it("throws a lyrics error for the lyrics command's coded reply", async () => {
     const clients = TauriNative.clients(fakeCommands({ code: "trackNotFound" }));
-    const failure = await clients.lyrics.trackLyrics("track").catch((error: unknown) => error);
+    const failure = await clients.lyrics.trackLyrics(1).catch((error: unknown) => error);
     expect(failure).toBeInstanceOf(LyricsError);
     expect(failure).toMatchObject({ domain: "lyrics", code: "trackNotFound" });
   });

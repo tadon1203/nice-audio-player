@@ -1,8 +1,8 @@
 <script lang="ts" module>
-  import type { LibraryFileAvailability } from "#lib/native";
+  import type { LibraryFileAvailability, TrackId } from "#lib/native";
 
   export type AlbumStripTrack = {
-    id: string;
+    id: TrackId;
     title: string;
     durationMs: number | null;
     playable: boolean;
@@ -35,8 +35,8 @@
     onplaytrack,
   }: {
     tracks: readonly AlbumStripTrack[];
-    activeTrackId: string | null;
-    onplaytrack: (id: string) => void;
+    activeTrackId: TrackId | null;
+    onplaytrack: (id: TrackId) => void;
   } = $props();
 
   const playback = AppServices.current().playback;

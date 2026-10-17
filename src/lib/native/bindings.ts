@@ -13,7 +13,7 @@ export const commands = {
 	 *  Replaces the queue with `context` and plays from `start_track_id`, or from the context's
 	 *  first track when it is `None`.
 	 */
-	startPlayback: (context: PlaybackContext, startTrackId: string | null) => __TAURI_INVOKE<Versioned<PlaybackSnapshot>>("start_playback", { context, startTrackId }),
+	startPlayback: (context: PlaybackContext, startTrackId: number | null) => __TAURI_INVOKE<Versioned<PlaybackSnapshot>>("start_playback", { context, startTrackId }),
 	pausePlayback: () => __TAURI_INVOKE<Versioned<PlaybackSnapshot>>("pause_playback"),
 	resumePlayback: () => __TAURI_INVOKE<Versioned<PlaybackSnapshot>>("resume_playback"),
 	previousPlayback: () => __TAURI_INVOKE<Versioned<PlaybackSnapshot>>("previous_playback"),
@@ -127,7 +127,7 @@ export type ActiveSession = {
 	item: PlaybackItem,
 	/**  What started this session. A seek or an output switch keeps it. */
 	startedBy: SessionStartedBy,
-	playbackId: string,
+	playbackId: PlaybackId,
 	positionMs: number,
 	/**
 	 *  Counts the seeks the player has completed. A change means the position jumped on
@@ -466,6 +466,12 @@ export type PlaybackContext =
 export type PlaybackFailureCode = "noOutputDevice" | "outputDeviceUnavailable" | "unsupportedOutputConfiguration" | "outputStreamBuildFailed" | "outputStreamStartFailed" | "outputStreamPauseFailed" | "outputStreamResumeFailed" | "outputStreamRuntimeFailed" | "completionTimingFailed" | "decodeFailed" | "sampleRateConversionFailed";
 
 /**
+ *  One playback session: a queue item being played, from the playback worker's counter, above
+ *  zero. On the IPC a number.
+ */
+export type PlaybackId = number;
+
+/**
  *  One entry of the playback queue and the identity of the loaded track: the queue's id for the
  *  entry and the track's metadata, shared with every other layer as one type.
  * 
@@ -481,7 +487,7 @@ export type PlaybackItem = {
  *  never carries (or re-renders) the rest of the playback state.
  */
 export type PlaybackPosition = {
-	playbackId: string,
+	playbackId: PlaybackId,
 	positionMs: number,
 	seekRevision: number,
 };
@@ -534,7 +540,7 @@ export type PlaybackServiceError = { code: "invalidArgument" } | { code: "worker
 
 export type PlaybackSnapshot = 
 /**  `item` is the last track that played, kept so the UI can still say what it was. */
-{ status: "stopped"; base: SnapshotBase; item: PlaybackItem | null } | { status: "playing"; base: SnapshotBase; session: ActiveSession } | { status: "paused"; base: SnapshotBase; session: ActiveSession } | { status: "failed"; base: SnapshotBase; item: PlaybackItem | null; playbackId: string | null; error: PlaybackFailureCode; 
+{ status: "stopped"; base: SnapshotBase; item: PlaybackItem | null } | { status: "playing"; base: SnapshotBase; session: ActiveSession } | { status: "paused"; base: SnapshotBase; session: ActiveSession } | { status: "failed"; base: SnapshotBase; item: PlaybackItem | null; playbackId: PlaybackId | null; error: PlaybackFailureCode; 
 /**
  *  The player is moving on to the next item by itself: a skip the listener is told
  *  about, not a stop that waits for Retry.
@@ -543,13 +549,13 @@ skipping: boolean };
 
 export type PlaybackWaveform = {
 	/**  The playback the waveform belongs to, so a late answer cannot be drawn for another track. */
-	playbackId: string,
+	playbackId: PlaybackId,
 	peaks: number[],
 	rms: number[],
 };
 
-/**  One entry of the playback queue: the queue's counter, above zero. On the IPC `queue-item-{n}`. */
-export type QueueItemId = string;
+/**  One entry of the playback queue: the queue's counter, above zero. On the IPC a number. */
+export type QueueItemId = number;
 
 /**  A library root: the `library_roots` rowid. Above zero. On the IPC a decimal string. */
 export type RootId = string;
@@ -583,8 +589,8 @@ export type StateMessage = {
 /**  The whole value of one state topic. */
 export type StateValue = { topic: "playback"; value: PlaybackSnapshot } | { topic: "queue"; value: PlaybackQueueSnapshot } | { topic: "libraryScan"; value: LibraryScanSnapshot } | { topic: "waveform"; value: PlaybackWaveform | null } | { topic: "appearance"; value: Appearance };
 
-/**  A track: the `tracks` rowid. Above zero. On the IPC a decimal string. */
-export type TrackId = string;
+/**  A track: the `tracks` rowid. Above zero. On the IPC a number, which serde rejects below one. */
+export type TrackId = number;
 
 /**  A value with the revision of its topic. Revisions only grow, per topic. */
 export type Versioned<T> = {

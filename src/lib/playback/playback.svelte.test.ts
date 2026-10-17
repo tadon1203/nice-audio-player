@@ -1,3 +1,4 @@
+import type { QueueItemId, TrackId } from "#lib/native";
 import { describe, expect, it, vi } from "vitest";
 import {
   PlaybackError,
@@ -22,10 +23,10 @@ const base = () => ({
   canGoNext: false,
 });
 
-const item = (id: string): PlaybackItem => ({
-  queueItemId: `queue-${id}`,
+const item = (id: TrackId): PlaybackItem => ({
+  queueItemId: id,
   trackId: id,
-  title: id,
+  title: String(id),
   artist: null,
   album: null,
   albumArtist: null,
@@ -38,14 +39,14 @@ const item = (id: string): PlaybackItem => ({
   albumTrackCount: null,
 });
 
-const stopped = (revision: number, id: string | null): Versioned<PlaybackSnapshot> => ({
+const stopped = (revision: number, id: TrackId | null): Versioned<PlaybackSnapshot> => ({
   revision,
   value: { status: "stopped", base: base(), item: id ? item(id) : null },
 });
 
 const playing = (
   revision: number,
-  id: string,
+  id: TrackId,
   positionMs: number,
   seekRevision = 0,
   startedBy: "next" | "previous" | "auto" | "jump" = "jump",
@@ -57,7 +58,7 @@ const playing = (
     session: {
       item: item(id),
       startedBy,
-      playbackId: "1",
+      playbackId: 1,
       positionMs,
       seekRevision,
       durationMs: 60_000,
@@ -73,7 +74,7 @@ const playing = (
   },
 });
 
-const queueItem = (id: string): PlaybackQueueItem => ({
+const queueItem = (id: QueueItemId): PlaybackQueueItem => ({
   id,
   trackId: id,
   title: "Current track",
@@ -122,19 +123,19 @@ function load(
 describe("playback session ordering", () => {
   it("rejects stale playback revisions", () => {
     const playback = new Playback(fakeClient(), quietClock());
-    load(playback, stopped(1, "a"), queue(1));
+    load(playback, stopped(1, 1), queue(1));
 
-    playback.acceptPlayback(stopped(0, "stale"));
-    playback.acceptPlayback(stopped(1, "a"));
-    playback.acceptPlayback(stopped(2, "b"));
+    playback.acceptPlayback(stopped(0, 9));
+    playback.acceptPlayback(stopped(1, 1));
+    playback.acceptPlayback(stopped(2, 2));
 
-    expect(playback.item?.trackId).toBe("b");
+    expect(playback.item?.trackId).toBe(2);
   });
 
   it("accepts queue revisions independently from playback revisions", () => {
     const playback = new Playback(fakeClient(), quietClock());
     playback.acceptPlayback(stopped(50, null));
-    playback.acceptQueue(queueOf(2, { current: queueItem("track-1") }));
+    playback.acceptQueue(queueOf(2, { current: queueItem(1) }));
 
     expect(playback.queueRevision).toBe(2);
     expect(playback.queue?.current?.title).toBe("Current track");
@@ -142,15 +143,15 @@ describe("playback session ordering", () => {
 
   it("drops a command response older than the state it follows", async () => {
     const playback = new Playback(
-      fakeClient({ pause: vi.fn(async () => stopped(2, "a")) }),
+      fakeClient({ pause: vi.fn(async () => stopped(2, 1)) }),
       quietClock(),
     );
-    load(playback, stopped(1, "a"), queue(1));
-    playback.acceptPlayback(stopped(3, "b"));
+    load(playback, stopped(1, 1), queue(1));
+    playback.acceptPlayback(stopped(3, 2));
 
     await playback.pause();
 
-    expect(playback.item?.trackId).toBe("b");
+    expect(playback.item?.trackId).toBe(2);
   });
 
   it("drops a queue command response older than the queue it follows", async () => {
@@ -242,16 +243,16 @@ describe("playback session ordering", () => {
         await new Promise<void>((resolve) => {
           releaseStart = resolve;
         });
-        return playing(2, "a", 0);
+        return playing(2, 1, 0);
       }),
-      seek: vi.fn(async () => playing(3, "a", 1_000)),
-      setVolume: vi.fn(async () => playing(4, "a", 0)),
+      seek: vi.fn(async () => playing(3, 1, 1_000)),
+      setVolume: vi.fn(async () => playing(4, 1, 0)),
     });
     const playback = new Playback(client, quietClock());
     load(playback, stopped(1, null), queue(1));
-    playback.acceptPlayback(playing(1, "a", 0));
+    playback.acceptPlayback(playing(1, 1, 0));
 
-    const start = playback.start({ kind: "tracks" } as never, "a");
+    const start = playback.start({ kind: "tracks" } as never, 1);
     void playback.seek(1_000);
     void playback.setVolume(0.2);
 
@@ -265,8 +266,8 @@ describe("playback session ordering", () => {
 describe("clearing the queue", () => {
   const withUpcoming = (revision: number) =>
     queueOf(revision, {
-      current: queueItem("a"),
-      upcoming: [queueItem("b")],
+      current: queueItem(1),
+      upcoming: [queueItem(2)],
       upcomingCount: 1,
     });
 
@@ -295,9 +296,9 @@ describe("clearing the queue", () => {
 
 describe("seeking", () => {
   it("rounds to whole milliseconds", async () => {
-    const seek = vi.fn(async () => playing(2, "a", 1_000));
+    const seek = vi.fn(async () => playing(2, 1, 1_000));
     const playback = new Playback(fakeClient({ seek }), quietClock());
-    playback.acceptPlayback(playing(1, "a", 0));
+    playback.acceptPlayback(playing(1, 1, 0));
 
     await playback.seek(1_234.56);
 
@@ -306,7 +307,7 @@ describe("seeking", () => {
 });
 
 describe("failures", () => {
-  const failed = (revision: number, skipping: boolean, id = "a"): Versioned<PlaybackSnapshot> => ({
+  const failed = (revision: number, skipping: boolean, id = 1): Versioned<PlaybackSnapshot> => ({
     revision,
     value: {
       status: "failed",
@@ -319,7 +320,7 @@ describe("failures", () => {
   });
 
   it("exposes why playback stopped, and retries through resume", async () => {
-    const resume = vi.fn(async () => playing(3, "a", 0));
+    const resume = vi.fn(async () => playing(3, 1, 0));
     const playback = new Playback(fakeClient({ resume }), quietClock());
     playback.acceptPlayback(failed(2, false));
 
@@ -357,7 +358,7 @@ describe("album shuffle", () => {
         }),
         start: vi.fn(async () => {
           order.push("start");
-          return playing(2, "a", 0);
+          return playing(2, 1, 0);
         }),
       }),
       quietClock(),
@@ -370,7 +371,7 @@ describe("album shuffle", () => {
   });
 
   it("does not start when the shuffle cannot be turned on, and throws why", async () => {
-    const start = vi.fn(async () => playing(2, "a", 0));
+    const start = vi.fn(async () => playing(2, 1, 0));
     const playback = new Playback(
       fakeClient({
         setShuffle: async () => {
@@ -390,10 +391,10 @@ describe("playback session derived state", () => {
   it("keeps the same item object while position ticks arrive", () => {
     const playback = new Playback(fakeClient(), quietClock());
 
-    playback.acceptPlayback(playing(1, "a", 0));
+    playback.acceptPlayback(playing(1, 1, 0));
     const first = playback.item;
-    playback.acceptPlayback(playing(2, "a", 250));
-    playback.acceptPlayback(playing(3, "a", 500));
+    playback.acceptPlayback(playing(2, 1, 250));
+    playback.acceptPlayback(playing(3, 1, 500));
 
     expect(playback.item).toBe(first);
     expect(playback.durationMs).toBe(60_000);
@@ -402,21 +403,21 @@ describe("playback session derived state", () => {
   it("replaces the item when another queue item starts", () => {
     const playback = new Playback(fakeClient(), quietClock());
 
-    playback.acceptPlayback(playing(1, "a", 0));
+    playback.acceptPlayback(playing(1, 1, 0));
     const first = playback.item;
-    playback.acceptPlayback(playing(2, "b", 0));
+    playback.acceptPlayback(playing(2, 2, 0));
 
     expect(playback.item).not.toBe(first);
-    expect(playback.item?.trackId).toBe("b");
+    expect(playback.item?.trackId).toBe(2);
   });
 
   it("keeps naming the last track while stopped and drops the session", () => {
     const playback = new Playback(fakeClient(), quietClock());
 
-    playback.acceptPlayback(playing(1, "a", 4_000));
-    playback.acceptPlayback(stopped(2, "a"));
+    playback.acceptPlayback(playing(1, 1, 4_000));
+    playback.acceptPlayback(stopped(2, 1));
 
-    expect(playback.item?.trackId).toBe("a");
+    expect(playback.item?.trackId).toBe(1);
     expect(playback.isActive).toBe(false);
     expect(playback.playbackId).toBeNull();
     expect(playback.durationMs).toBeNull();
@@ -424,7 +425,7 @@ describe("playback session derived state", () => {
 
   it("tells isActive and isPlaying apart: a paused track is active but not playing", () => {
     const playback = new Playback(fakeClient(), quietClock());
-    const paused = playing(1, "a", 0);
+    const paused = playing(1, 1, 0);
     playback.acceptPlayback({ ...paused, value: { ...paused.value, status: "paused" } } as never);
 
     expect(playback.isActive).toBe(true);
@@ -434,14 +435,14 @@ describe("playback session derived state", () => {
   it("knows whether the album's track is loaded", () => {
     const playback = new Playback(fakeClient(), quietClock());
     const key = { title: "A", albumArtist: "B", albumEdition: "" };
-    const loaded = playing(1, "a", 0);
+    const loaded = playing(1, 1, 0);
     playback.acceptPlayback({
       ...loaded,
       value: {
         ...loaded.value,
         session: {
           ...(loaded.value as { session: object }).session,
-          item: { ...item("a"), albumKey: key },
+          item: { ...item(1), albumKey: key },
         },
       },
     } as never);
@@ -454,15 +455,15 @@ describe("playback session derived state", () => {
     const accept = vi.fn();
     const playback = new Playback(fakeClient(), { accept } as never);
 
-    playback.acceptPlayback(playing(2, "a", 0));
-    playback.acceptPlayback(playing(1, "a", 0));
+    playback.acceptPlayback(playing(2, 1, 0));
+    playback.acceptPlayback(playing(1, 1, 0));
 
     expect(accept).toHaveBeenCalledTimes(1);
   });
 });
 
 describe("position messages", () => {
-  const position = (positionMs: number, seekRevision = 0, playbackId = "1") => ({
+  const position = (positionMs: number, seekRevision = 0, playbackId = 1) => ({
     playbackId,
     positionMs,
     seekRevision,
@@ -471,23 +472,21 @@ describe("position messages", () => {
   it("feed the clock without touching the snapshot", () => {
     const accept = vi.fn();
     const playback = new Playback(fakeClient(), { accept } as never);
-    playback.acceptPlayback(playing(1, "a", 0));
+    playback.acceptPlayback(playing(1, 1, 0));
     const snapshot = playback.snapshot;
     accept.mockClear();
 
     playback.acceptPosition(position(250));
 
     expect(accept).toHaveBeenCalledTimes(1);
-    expect(accept).toHaveBeenCalledWith(
-      expect.objectContaining({ itemId: "queue-a", positionMs: 250 }),
-    );
+    expect(accept).toHaveBeenCalledWith(expect.objectContaining({ itemId: 1, positionMs: 250 }));
     expect(playback.snapshot).toBe(snapshot);
   });
 
   it("keep the playing flag the snapshot reported", () => {
     const accept = vi.fn();
     const playback = new Playback(fakeClient(), { accept } as never);
-    playback.acceptPlayback(playing(1, "a", 0));
+    playback.acceptPlayback(playing(1, 1, 0));
 
     playback.acceptPosition(position(250));
 
@@ -497,11 +496,11 @@ describe("position messages", () => {
   it("are ignored for another session or an older seek", () => {
     const accept = vi.fn();
     const playback = new Playback(fakeClient(), { accept } as never);
-    playback.acceptPlayback(playing(1, "a", 0, 1));
+    playback.acceptPlayback(playing(1, 1, 0, 1));
     accept.mockClear();
 
     playback.acceptPosition(position(250, 0));
-    playback.acceptPosition(position(250, 1, "other"));
+    playback.acceptPosition(position(250, 1, 2));
 
     expect(accept).not.toHaveBeenCalled();
   });
@@ -509,7 +508,7 @@ describe("position messages", () => {
   it("are ignored while paused, so a tick sent before the pause cannot move the clock back", () => {
     const accept = vi.fn();
     const playback = new Playback(fakeClient(), { accept } as never);
-    const paused = playing(1, "a", 1_100);
+    const paused = playing(1, 1, 1_100);
     playback.acceptPlayback({ ...paused, value: { ...paused.value, status: "paused" } } as never);
     accept.mockClear();
 
@@ -521,7 +520,7 @@ describe("position messages", () => {
   it("are ignored while nothing is loaded", () => {
     const accept = vi.fn();
     const playback = new Playback(fakeClient(), { accept } as never);
-    playback.acceptPlayback(stopped(1, "a"));
+    playback.acceptPlayback(stopped(1, 1));
     accept.mockClear();
 
     playback.acceptPosition(position(250));
@@ -532,7 +531,7 @@ describe("position messages", () => {
   it("arrive as the Backend's position messages", () => {
     const accept = vi.fn();
     const playback = new Playback(fakeClient(), { accept } as never);
-    playback.acceptPlayback(playing(1, "a", 0));
+    playback.acceptPlayback(playing(1, 1, 0));
     accept.mockClear();
 
     playback.acceptPosition(position(500));
@@ -548,7 +547,7 @@ describe("starting playback", () => {
   } as const;
 
   it("passes the context and the clicked track to the backend", async () => {
-    const start = vi.fn(async () => playing(2, "c", 0));
+    const start = vi.fn(async () => playing(2, 3, 0));
     const playback = new Playback(fakeClient({ start }), quietClock());
     load(playback, stopped(1, null), queue(1));
     const context = {
@@ -556,10 +555,10 @@ describe("starting playback", () => {
       key: { title: "Album", albumArtist: "Artist", albumEdition: "" },
     } as const;
 
-    await playback.start(context, "c");
+    await playback.start(context, 3);
 
-    expect(start).toHaveBeenCalledWith(context, "c");
-    expect(playback.item?.trackId).toBe("c");
+    expect(start).toHaveBeenCalledWith(context, 3);
+    expect(playback.item?.trackId).toBe(3);
   });
 
   it("rejects with SupersededError when the backend replaced the request", async () => {
@@ -588,7 +587,7 @@ describe("starting playback", () => {
     );
     load(playback, stopped(1, null), queue(1));
 
-    await expect(playback.start(albumContext, "1")).rejects.toMatchObject({
+    await expect(playback.start(albumContext, 1)).rejects.toMatchObject({
       code: "trackUnavailable",
     });
   });
@@ -636,31 +635,31 @@ describe("transition direction", () => {
   it("takes the direction from the session's startedBy when the item changes", async () => {
     const playback = new Playback(
       fakeClient({
-        previous: async () => playing(2, "a", 0, 0, "previous"),
+        previous: async () => playing(2, 1, 0, 0, "previous"),
       }),
       quietClock(),
     );
-    load(playback, playing(1, "b", 0), queue(1));
+    load(playback, playing(1, 2, 0), queue(1));
 
     expect(playback.transitionDirection).toBe("forward");
     await playback.previous();
-    expect(playback.item?.trackId).toBe("a");
+    expect(playback.item?.trackId).toBe(1);
     expect(playback.transitionDirection).toBe("backward");
 
     // A change the player made by itself (auto-advance) goes forward again.
-    playback.acceptPlayback(playing(3, "c", 0, 0, "auto"));
+    playback.acceptPlayback(playing(3, 3, 0, 0, "auto"));
     expect(playback.transitionDirection).toBe("forward");
   });
 
   it("keeps the direction across a seek and goes forward for a jump", () => {
     const playback = new Playback(fakeClient(), quietClock());
-    load(playback, playing(1, "a", 0, 0, "previous"), queue(1));
+    load(playback, playing(1, 1, 0, 0, "previous"), queue(1));
     expect(playback.transitionDirection).toBe("backward");
 
-    playback.acceptPlayback(playing(2, "a", 5_000, 1, "previous"));
+    playback.acceptPlayback(playing(2, 1, 5_000, 1, "previous"));
     expect(playback.transitionDirection).toBe("backward");
 
-    playback.acceptPlayback(playing(3, "d", 0, 0, "jump"));
+    playback.acceptPlayback(playing(3, 4, 0, 0, "jump"));
     expect(playback.transitionDirection).toBe("forward");
   });
 
@@ -673,29 +672,29 @@ describe("transition direction", () => {
           await new Promise<void>((resolve) => {
             finishNext = resolve;
           });
-          return playing(2, "b", 0, 0, "next");
+          return playing(2, 2, 0, 0, "next");
         },
         previous: async () => {
           await new Promise<void>((resolve) => {
             finishPrevious = resolve;
           });
-          return playing(3, "a", 0, 0, "previous");
+          return playing(3, 1, 0, 0, "previous");
         },
       }),
       quietClock(),
     );
-    load(playback, playing(1, "a", 0), queue(1));
+    load(playback, playing(1, 1, 0), queue(1));
 
     const next = playback.next();
     const previous = playback.previous();
     finishNext?.();
     await next;
-    expect(playback.item?.trackId).toBe("b");
+    expect(playback.item?.trackId).toBe(2);
     expect(playback.transitionDirection).toBe("forward");
 
     finishPrevious?.();
     await previous;
-    expect(playback.item?.trackId).toBe("a");
+    expect(playback.item?.trackId).toBe(1);
     expect(playback.transitionDirection).toBe("backward");
   });
 
@@ -708,10 +707,10 @@ describe("transition direction", () => {
       }),
       quietClock(),
     );
-    load(playback, playing(1, "b", 0), queue(1));
+    load(playback, playing(1, 2, 0), queue(1));
 
     await expect(playback.previous()).rejects.toEqual({ code: "trackUnavailable" });
-    playback.acceptPlayback(playing(2, "c", 0));
+    playback.acceptPlayback(playing(2, 3, 0));
     expect(playback.transitionDirection).toBe("forward");
   });
 });

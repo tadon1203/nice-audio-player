@@ -460,6 +460,11 @@ mod tests {
             .id
     }
 
+    /// An item ID no queue holds.
+    fn unknown_item() -> QueueItemId {
+        serde_json::from_value(serde_json::json!(9999)).unwrap()
+    }
+
     fn queue_of(
         count: usize,
         start: usize,
@@ -690,7 +695,7 @@ mod tests {
             Err(QueueError::ItemNotUpcoming)
         );
         assert_eq!(
-            queue.remove_upcoming("queue-item-9999".parse().unwrap()),
+            queue.remove_upcoming(unknown_item()),
             Err(QueueError::ItemNotUpcoming)
         );
         let upcoming = queue.upcoming()[0].id;
@@ -865,7 +870,7 @@ mod tests {
         assert_eq!(queue.upcoming().len(), 3);
         assert_eq!(queue.jump_to(id), Err(QueueError::ItemNotUpcoming));
         assert_eq!(
-            queue.jump_to("queue-item-9999".parse().unwrap()),
+            queue.jump_to(unknown_item()),
             Err(QueueError::ItemNotUpcoming)
         );
     }

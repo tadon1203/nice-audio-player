@@ -12,7 +12,7 @@ const SIZES = [
 
 const timedLyrics = {
   status: "resolved",
-  trackId: "track-1",
+  trackId: 1,
   notice: null,
   document: {
     source: "sidecar",

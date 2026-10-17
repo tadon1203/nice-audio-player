@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { ClockState, type ClockReport } from "./clock-state";
 
 const report = (overrides: Partial<ClockReport> = {}): ClockReport => ({
-  itemId: "a",
+  itemId: 1,
   positionMs: 10_000,
   durationMs: 60_000,
   playing: true,
@@ -65,7 +65,7 @@ describe("ClockState.reduce", () => {
   it("announces a track change", () => {
     const { jumps } = run([
       [0, report({ positionMs: 59_000 })],
-      [900, report({ itemId: "b", positionMs: 0 })],
+      [900, report({ itemId: 2, positionMs: 0 })],
     ]);
     expect(jumps).toEqual([{ id: 1, kind: "track", fromMs: 59_900, toMs: 0 }]);
   });
@@ -95,7 +95,7 @@ describe("ClockState.reduce", () => {
       [0, report()],
       [10, report({ seekRevision: 1 })],
       [20, report({ seekRevision: 2 })],
-      [30, report({ itemId: "b", seekRevision: 2 })],
+      [30, report({ itemId: 2, seekRevision: 2 })],
     ]);
     expect(jumps.map((jump) => jump.id)).toEqual([1, 2, 3]);
   });

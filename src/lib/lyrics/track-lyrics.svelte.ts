@@ -1,12 +1,12 @@
 import { createQuery, type CreateQueryResult } from "@tanstack/svelte-query";
-import type { LyricsResolution } from "#lib/native";
+import type { LyricsResolution, TrackId } from "#lib/native";
 import type { LyricsRepository } from "./lyrics-repository";
 
 /** The lyrics of the track that is loaded. Construct during component initialization. */
 export class TrackLyrics {
   readonly #query: CreateQueryResult<LyricsResolution, Error>;
 
-  public constructor(lyrics: LyricsRepository, trackId: () => string | null) {
+  public constructor(lyrics: LyricsRepository, trackId: () => TrackId | null) {
     this.#query = createQuery(() => lyrics.trackOptions(trackId()));
   }
 

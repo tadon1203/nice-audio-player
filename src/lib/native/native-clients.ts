@@ -30,6 +30,8 @@ import type {
   PlaybackRepeatMode,
   PlaybackSnapshot,
   PlaybackWaveform,
+  QueueItemId,
+  TrackId,
   Versioned,
 } from "./bindings";
 
@@ -42,7 +44,7 @@ export interface SessionClient {
 export interface PlaybackClient {
   start(
     context: PlaybackContext,
-    startTrackId: string | null,
+    startTrackId: TrackId | null,
   ): Promise<Versioned<PlaybackSnapshot>>;
   pause(): Promise<Versioned<PlaybackSnapshot>>;
   resume(): Promise<Versioned<PlaybackSnapshot>>;
@@ -54,10 +56,10 @@ export interface PlaybackClient {
   setOutputSelection(selection: AudioOutputSelection): Promise<Versioned<PlaybackSnapshot>>;
   setRepeatMode(mode: PlaybackRepeatMode): Promise<Versioned<PlaybackQueueSnapshot>>;
   setShuffle(enabled: boolean): Promise<Versioned<PlaybackQueueSnapshot>>;
-  removeQueueItem(id: string): Promise<Versioned<PlaybackQueueSnapshot>>;
-  moveQueueItem(id: string, to: number): Promise<Versioned<PlaybackQueueSnapshot>>;
-  playQueueItem(id: string): Promise<Versioned<PlaybackSnapshot>>;
-  enqueueTrack(trackId: string, next: boolean): Promise<Versioned<PlaybackQueueSnapshot>>;
+  removeQueueItem(id: QueueItemId): Promise<Versioned<PlaybackQueueSnapshot>>;
+  moveQueueItem(id: QueueItemId, to: number): Promise<Versioned<PlaybackQueueSnapshot>>;
+  playQueueItem(id: QueueItemId): Promise<Versioned<PlaybackSnapshot>>;
+  enqueueTrack(trackId: TrackId, next: boolean): Promise<Versioned<PlaybackQueueSnapshot>>;
   clearQueue(): Promise<Versioned<PlaybackQueueSnapshot>>;
   restorePreviousQueue(): Promise<Versioned<PlaybackSnapshot>>;
   queueWindow(offset: number, limit: number): Promise<PlaybackQueueWindow>;
@@ -132,13 +134,13 @@ export interface LibraryClient {
     sortKey: LibraryArtistAlbumSortKey,
     direction: LibrarySortDirection,
   ): Promise<LibraryAlbumPage>;
-  trackProperties(trackId: string): Promise<LibraryTrackProperties | null>;
-  revealTrack(trackId: string): Promise<void>;
+  trackProperties(trackId: TrackId): Promise<LibraryTrackProperties | null>;
+  revealTrack(trackId: TrackId): Promise<void>;
   artworkAccent(hash: ArtworkHash): Promise<string | null>;
 }
 
 export interface LyricsClient {
-  trackLyrics(trackId: string): Promise<LyricsResolution>;
+  trackLyrics(trackId: TrackId): Promise<LyricsResolution>;
 }
 
 export interface MeterClient {

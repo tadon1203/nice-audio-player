@@ -1,4 +1,4 @@
-import type { LibraryClient } from "#lib/native";
+import type { LibraryClient, TrackId } from "#lib/native";
 
 /** The commands on one Library track that do not change the catalog. */
 export class LibraryTrackCommands {
@@ -8,7 +8,7 @@ export class LibraryTrackCommands {
     this.#client = client;
   }
 
-  public reveal(trackId: string): Promise<void> {
+  public reveal(trackId: TrackId): Promise<void> {
     return this.#client.revealTrack(trackId);
   }
 }

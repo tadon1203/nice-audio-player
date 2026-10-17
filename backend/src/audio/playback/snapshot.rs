@@ -6,7 +6,7 @@ use super::resolver::TrackResolver;
 use crate::audio::devices::{AudioOutputDeviceIdentity, AudioOutputSelection};
 use crate::audio::output_processing::{ChannelConversion, OutputProcessingPlan};
 use crate::audio::volume::VolumeState;
-use crate::ids::{QueueItemId, TrackId};
+use crate::ids::{PlaybackId, QueueItemId, TrackId};
 use crate::library::artwork::ArtworkRef;
 use crate::library::store::PlayableTrack;
 use std::sync::Arc;
@@ -53,7 +53,7 @@ pub struct ActiveSession {
     pub item: PlaybackItem,
     /// What started this session. A seek or an output switch keeps it.
     pub started_by: SessionStartedBy,
-    pub playback_id: String,
+    pub playback_id: PlaybackId,
     pub position_ms: u64,
     /// Counts the seeks the player has completed. A change means the position jumped on
     /// purpose, so a display can react to the jump instead of guessing it from the numbers.
@@ -76,7 +76,7 @@ pub struct ActiveSession {
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct PlaybackPosition {
-    pub playback_id: String,
+    pub playback_id: PlaybackId,
     pub position_ms: u64,
     pub seek_revision: u64,
 }
@@ -84,7 +84,7 @@ pub struct PlaybackPosition {
 impl ActiveSession {
     pub fn position(&self) -> PlaybackPosition {
         PlaybackPosition {
-            playback_id: self.playback_id.clone(),
+            playback_id: self.playback_id,
             position_ms: self.position_ms,
             seek_revision: self.seek_revision,
         }
@@ -114,7 +114,7 @@ pub enum PlaybackSnapshot {
     Failed {
         base: SnapshotBase,
         item: Option<PlaybackItem>,
-        playback_id: Option<String>,
+        playback_id: Option<PlaybackId>,
         error: PlaybackFailureCode,
         /// The player is moving on to the next item by itself: a skip the listener is told
         /// about, not a stop that waits for Retry.

@@ -4,6 +4,7 @@ import type {
   LibraryAlbumKey,
   PlaybackContext,
   PlaybackFailureCode,
+  PlaybackId,
   PlaybackItem,
   PlaybackPosition,
   PlaybackQueueSnapshot,
@@ -11,6 +12,8 @@ import type {
   PlaybackSnapshot,
   PlaybackClient,
   PlaybackQueueWindow,
+  QueueItemId,
+  TrackId,
   Versioned,
 } from "#lib/native";
 import { Replica, SupersededError } from "#lib/native";
@@ -121,7 +124,7 @@ export class Playback {
   }
 
   /** Identifies the loaded session; stable across seeks, new for every track that loads. */
-  public get playbackId(): string | null {
+  public get playbackId(): PlaybackId | null {
     return this.#session()?.playbackId ?? null;
   }
 
@@ -165,7 +168,7 @@ export class Playback {
   }
 
   /** Which library track is loaded, for highlighting track rows. */
-  public get activeTrackId(): string | null {
+  public get activeTrackId(): TrackId | null {
     return this.#item?.trackId ?? null;
   }
 
@@ -231,7 +234,7 @@ export class Playback {
   }
 
   /** Replaces the queue with `context` and plays from `startTrackId` (its first track if null). */
-  public start(context: PlaybackContext, startTrackId: string | null): Promise<void> {
+  public start(context: PlaybackContext, startTrackId: TrackId | null): Promise<void> {
     return this.#runTransport("start", () => this.#client.start(context, startTrackId));
   }
 
@@ -321,12 +324,12 @@ export class Playback {
     return this.#runQueueCommand(() => this.#client.setRepeatMode(mode));
   }
 
-  public removeQueueItem(id: string): Promise<void> {
+  public removeQueueItem(id: QueueItemId): Promise<void> {
     return this.#runQueueCommand(() => this.#client.removeQueueItem(id));
   }
 
   /** Moves an upcoming item to `to`, an index into the upcoming list (0 is next up). */
-  public moveQueueItem(id: string, to: number): Promise<void> {
+  public moveQueueItem(id: QueueItemId, to: number): Promise<void> {
     return this.#runQueueCommand(() => this.#client.moveQueueItem(id, to));
   }
 
@@ -343,12 +346,12 @@ export class Playback {
   }
 
   /** Jumps to an upcoming item and plays it. */
-  public playQueueItem(id: string): Promise<void> {
+  public playQueueItem(id: QueueItemId): Promise<void> {
     return this.#runTransport("start", () => this.#client.playQueueItem(id));
   }
 
   /** Adds a library track right after the current one (`next`) or at the end. */
-  public enqueueTrack(trackId: string, next: boolean): Promise<void> {
+  public enqueueTrack(trackId: TrackId, next: boolean): Promise<void> {
     return this.#runQueueCommand(() => this.#client.enqueueTrack(trackId, next));
   }
 

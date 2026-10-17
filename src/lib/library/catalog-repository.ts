@@ -19,6 +19,7 @@ import type {
   LibraryTrackPage,
   LibraryTrackSortKey,
   LibraryTrackSummary,
+  TrackId,
 } from "#lib/native";
 import { LibraryQueryKeys } from "./library-query-keys";
 
@@ -104,7 +105,7 @@ export class CatalogRepository {
     });
   }
 
-  public trackPropertiesOptions(trackId: string | null) {
+  public trackPropertiesOptions(trackId: TrackId | null) {
     return queryOptions({
       queryKey: LibraryQueryKeys.trackProperties(trackId),
       queryFn: trackId === null ? skipToken : () => this.#client.trackProperties(trackId),

@@ -2,18 +2,18 @@ import { describe, expect, it } from "vitest";
 import { segmentFill, segmentStarts, segmentStates } from "./album-strip-model";
 
 const tracks = [
-  { id: "a", durationMs: 100 },
-  { id: "b", durationMs: 300 },
-  { id: "c", durationMs: 100 },
+  { id: 1, durationMs: 100 },
+  { id: 2, durationMs: 300 },
+  { id: 3, durationMs: 100 },
 ];
 
 describe("segmentStates", () => {
   it("marks tracks before, at, and after the playing one", () => {
-    expect(segmentStates(tracks, "b")).toEqual(["past", "current", "future"]);
+    expect(segmentStates(tracks, 2)).toEqual(["past", "current", "future"]);
   });
 
   it("marks everything future when another album is playing", () => {
-    expect(segmentStates(tracks, "x")).toEqual(["future", "future", "future"]);
+    expect(segmentStates(tracks, 9)).toEqual(["future", "future", "future"]);
     expect(segmentStates(tracks, null)).toEqual(["future", "future", "future"]);
   });
 });

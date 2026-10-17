@@ -50,7 +50,7 @@ function png(size: number): Buffer {
 
 const lyrics = {
   status: "resolved",
-  trackId: "track-1",
+  trackId: 1,
   notice: null,
   document: {
     source: "sidecar",

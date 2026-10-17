@@ -1,8 +1,9 @@
+import type { QueueItemId } from "#lib/native";
 import { estimatePosition, type PositionAnchor } from "#lib/ui/motion/interpolate-position";
 
 /** What a playback snapshot says about time: everything the clock needs, and nothing else. */
 export type ClockReport = {
-  itemId: string;
+  itemId: QueueItemId;
   positionMs: number;
   durationMs: number | null;
   playing: boolean;

@@ -154,7 +154,7 @@ fn playing_what_the_list_shows_holds_for_every_sort_and_direction() {
                 .unwrap()
                 .items
                 .into_iter()
-                .map(|track| track.id.to_string())
+                .map(|track| track.id.rowid().to_string())
                 .collect();
             let played: Vec<String> = fixture
                 .store
@@ -162,7 +162,7 @@ fn playing_what_the_list_shows_holds_for_every_sort_and_direction() {
                 .unwrap()
                 .track_ids
                 .iter()
-                .map(TrackId::to_string)
+                .map(|id| id.rowid().to_string())
                 .collect();
             assert_eq!(played, listed, "{key:?} {direction:?}");
         }

@@ -101,7 +101,7 @@ fn albums_keep_their_identity_and_take_the_cover_of_their_first_track_with_artwo
         tracks
             .items
             .iter()
-            .map(|track| track.id.to_string())
+            .map(|track| track.id.rowid().to_string())
             .collect::<Vec<_>>(),
         ["2", "1"],
         "disc 1 first"

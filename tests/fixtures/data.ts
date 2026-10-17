@@ -58,7 +58,7 @@ export function makeTracks(count = 140, options: { artwork?: boolean } = {}) {
   return Array.from({ length: count }, (_, index): LibraryTrackSummary => {
     const missing = index === 4;
     return {
-      id: missing ? "track-missing" : `track-${index + 1}`,
+      id: index + 1,
       title:
         index === 0
           ? "Test track"
@@ -155,7 +155,7 @@ export function libraryResponses(library: LibraryData = testLibrary()) {
     listLibraryArtistAlbums: () => pageOf(library.albums.slice(0, 2), null),
     getLibraryAlbumDetails: library.albumDetails,
     listLibraryAlbumTracks: library.albumTracks,
-    getLibraryTrackProperties: ({ trackId: id }: { trackId: string }) => {
+    getLibraryTrackProperties: ({ trackId: id }: { trackId: number }) => {
       const track = library.tracks.find((entry) => entry.id === id);
       if (track === undefined) return null;
       return {
@@ -290,7 +290,7 @@ export function idleResponses() {
     getPlaybackWaveform: { revision: 0, value: null },
     listAudioOutputDevices: outputDevices,
     getLibraryStatus: { status: "ready" as const },
-    getTrackLyrics: ({ trackId }: { trackId: string }) => ({
+    getTrackLyrics: ({ trackId }: { trackId: number }) => ({
       status: "notFound" as const,
       trackId,
     }),
@@ -314,7 +314,7 @@ export function playbackItemFor(track: LibraryTrackSummary): PlaybackItem {
     ...identity,
     queueItemId,
     albumArtist: track.albumArtist,
-    trackNumber: Number(track.id.replace(/\D/g, "")) % 12 || null,
+    trackNumber: track.id % 12 || null,
     discNumber: null,
     year: 2019,
     albumKey: track.albumKey,
@@ -335,7 +335,7 @@ type PlayingFields = {
   canGoNext: boolean;
 };
 
-export const playbackIdOf = (item: PlaybackItem) => `playback-${item.trackId}`;
+export const playbackIdOf = (item: PlaybackItem): number => item.trackId;
 
 export function playingSnapshot(fields: PlayingFields): PlaybackSnapshot {
   const device =

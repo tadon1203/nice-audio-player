@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { TrackId } from "#lib/native";
   import Shuffle from "@lucide/svelte/icons/shuffle";
   import { page } from "$app/state";
   import { resolve } from "$app/paths";
@@ -46,7 +47,7 @@
   const albumIsPlaying = $derived(albumIsLoaded && playback.isPlaying);
 
   // Playing a track continues through the rest of its album.
-  const playTrack = (trackId: string) =>
+  const playTrack = (trackId: TrackId) =>
     actions.run(() => playback.start({ kind: "album", key }, trackId));
 
   let viewport = $state<HTMLElement | null>(null);

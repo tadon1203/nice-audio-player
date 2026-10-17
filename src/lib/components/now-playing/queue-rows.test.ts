@@ -1,11 +1,12 @@
+import type { QueueItemId } from "#lib/native";
 import { describe, expect, it } from "vitest";
 import type { PlaybackQueueItem } from "#lib/native";
 import { buildQueueRows, hiddenUpcomingCount } from "./queue-rows";
 
-const item = (id: string): PlaybackQueueItem => ({
+const item = (id: QueueItemId): PlaybackQueueItem => ({
   id,
   trackId: id,
-  title: id,
+  title: String(id),
   artist: "Artist",
   album: null,
   artwork: null,
@@ -14,12 +15,12 @@ const item = (id: string): PlaybackQueueItem => ({
 
 describe("buildQueueRows", () => {
   it("lists history, the current track, then upcoming, in queue order", () => {
-    const rows = buildQueueRows([item("a")], item("b"), [item("c"), item("d")]);
-    expect(rows.map((row) => row.id)).toEqual(["a", "b", "c", "d"]);
+    const rows = buildQueueRows([item(1)], item(2), [item(3), item(4)]);
+    expect(rows.map((row) => row.id)).toEqual([1, 2, 3, 4]);
   });
 
   it("leaves the current track out when nothing is current", () => {
-    expect(buildQueueRows([item("a")], null, [item("c")]).map((row) => row.id)).toEqual(["a", "c"]);
+    expect(buildQueueRows([item(1)], null, [item(3)]).map((row) => row.id)).toEqual([1, 3]);
   });
 });
 

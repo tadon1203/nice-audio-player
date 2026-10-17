@@ -1,4 +1,5 @@
 use super::*;
+use crate::ids::PlaybackId;
 
 #[test]
 fn a_start_plays_as_soon_as_the_prebuffer_is_ready() {
@@ -8,7 +9,7 @@ fn a_start_plays_as_soon_as_the_prebuffer_is_ready() {
     let snapshot = harness.start(tracks, 0).unwrap();
 
     assert!(is_playing(&snapshot, "a"));
-    assert_eq!(session(&snapshot).playback_id, "1");
+    assert_eq!(session(&snapshot).playback_id, PlaybackId::first());
     assert_eq!(session(&snapshot).duration_ms, Some(1_000));
     assert_eq!(session(&snapshot).output_device.name, "Fake speakers");
     assert!(harness.output.is_running());

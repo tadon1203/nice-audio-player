@@ -2,6 +2,7 @@ import type {
   LibraryAlbumTrackSummary,
   LibraryTrackSortKey,
   LibraryTrackSummary,
+  TrackId,
 } from "#lib/native";
 import { Tracks } from "#lib/library/tracks";
 import { AudioFormatText } from "#lib/utils/audio-format-text";
@@ -180,7 +181,7 @@ export type TrackRowState = {
  */
 export function trackRowState(
   row: Pick<TrackTableRow, "id" | "title" | "playable" | "availability">,
-  activeTrackId: string | null,
+  activeTrackId: TrackId | null,
   status: TrackPlaybackStatus,
 ): TrackRowState {
   const playbackState =

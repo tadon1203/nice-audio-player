@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { TrackId } from "#lib/native";
   import { untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import PlaybackWaveformBand from "#lib/components/waveform-band/playback-waveform-band.svelte";
@@ -50,7 +51,7 @@
   // Which way the track changed, for the lyrics to leave and arrive in: going back puts the track
   // we left first among the upcoming ones.
   let direction = $state<"next" | "previous">("next");
-  let lastTrackId: string | null = untrack(() => trackId);
+  let lastTrackId: TrackId | null = untrack(() => trackId);
   $effect.pre(() => {
     const id = trackId;
     if (id === lastTrackId) return;

@@ -3,8 +3,8 @@ import type { LyricsResolution, PlaybackItem } from "#lib/native";
 import { lyricsState, trackFacts } from "./track-facts";
 
 const item: PlaybackItem = {
-  queueItemId: "q1",
-  trackId: "t1",
+  queueItemId: 1,
+  trackId: 1,
   title: "Song",
   artist: " Artist ",
   album: "Album",
@@ -23,7 +23,7 @@ const resolved = (
   notice: "sidecarFailedUsingEmbedded" | null = null,
 ): LyricsResolution => ({
   status: "resolved",
-  trackId: "t1",
+  trackId: 1,
   notice,
   document: { source: "sidecar", language: null, content },
 });
@@ -51,9 +51,9 @@ describe("lyricsState", () => {
   });
 
   it("reports missing, unreadable, embedded fallback and unsynced lyrics", () => {
-    expect(lyricsState({ status: "notFound", trackId: "t1" })).toEqual({ kind: "notFound" });
+    expect(lyricsState({ status: "notFound", trackId: 1 })).toEqual({ kind: "notFound" });
     expect(
-      lyricsState({ status: "sourceFailed", trackId: "t1", sidecarFileName: "01 Song.lrc" }),
+      lyricsState({ status: "sourceFailed", trackId: 1, sidecarFileName: "01 Song.lrc" }),
     ).toEqual({ kind: "sourceFailed", fileName: "01 Song.lrc" });
     expect(
       lyricsState(resolved({ kind: "timed", lines: [] }, "sidecarFailedUsingEmbedded")),

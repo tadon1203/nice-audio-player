@@ -19,7 +19,7 @@ fn a_track_summary_carries_the_key_of_the_album_the_catalog_files_it_under() {
             .unwrap()
             .items
             .into_iter()
-            .find(|track| track.id.to_string() == id)
+            .find(|track| track.id.rowid().to_string() == id)
             .unwrap()
     };
 

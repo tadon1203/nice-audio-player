@@ -10,6 +10,8 @@ import {
   type LyricsCommandError,
   type PlaybackContext,
   type PlaybackServiceError,
+  type QueueItemId,
+  type TrackId,
 } from "./bindings";
 import { AppearanceError } from "./errors/appearance-error";
 import { AudioDevicesError } from "./errors/audio-devices-error";
@@ -81,7 +83,7 @@ class TauriPlaybackClient implements PlaybackClient {
     this.#commands = source;
   }
 
-  start(context: PlaybackContext, startTrackId: string | null) {
+  start(context: PlaybackContext, startTrackId: TrackId | null) {
     return this.#call(() => this.#commands.startPlayback(context, startTrackId));
   }
   pause() {
@@ -114,16 +116,16 @@ class TauriPlaybackClient implements PlaybackClient {
   setShuffle(enabled: boolean) {
     return this.#call(() => this.#commands.setPlaybackShuffle(enabled));
   }
-  removeQueueItem(id: string) {
+  removeQueueItem(id: QueueItemId) {
     return this.#call(() => this.#commands.removeQueueItem(id));
   }
-  moveQueueItem(id: string, to: number) {
+  moveQueueItem(id: QueueItemId, to: number) {
     return this.#call(() => this.#commands.moveQueueItem(id, to));
   }
-  playQueueItem(id: string) {
+  playQueueItem(id: QueueItemId) {
     return this.#call(() => this.#commands.playQueueItem(id));
   }
-  enqueueTrack(trackId: string, next: boolean) {
+  enqueueTrack(trackId: TrackId, next: boolean) {
     return this.#call(() => this.#commands.enqueueTrack(trackId, next));
   }
   clearQueue() {
@@ -282,10 +284,10 @@ class TauriLibraryClient implements LibraryClient {
       this.#commands.listLibraryArtistAlbums(artistKey, cursor, sortKey, direction),
     );
   }
-  trackProperties(trackId: string) {
+  trackProperties(trackId: TrackId) {
     return this.#call(() => this.#commands.getLibraryTrackProperties(trackId));
   }
-  async revealTrack(trackId: string) {
+  async revealTrack(trackId: TrackId) {
     await this.#call(() => this.#commands.revealLibraryTrack(trackId));
   }
   artworkAccent(hash: ArtworkHash) {
@@ -304,7 +306,7 @@ class TauriLyricsClient implements LyricsClient {
     this.#commands = source;
   }
 
-  trackLyrics(trackId: string) {
+  trackLyrics(trackId: TrackId) {
     return callCommand(
       () => this.#commands.getTrackLyrics(trackId),
       (error: LyricsCommandError) => new LyricsError(error),

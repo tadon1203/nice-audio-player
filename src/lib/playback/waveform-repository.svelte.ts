@@ -1,4 +1,10 @@
-import { Replica, type PlaybackClient, type PlaybackWaveform, type Versioned } from "#lib/native";
+import {
+  Replica,
+  type PlaybackClient,
+  type PlaybackId,
+  type PlaybackWaveform,
+  type Versioned,
+} from "#lib/native";
 
 /**
  * The Waveform of the loaded track. The backend pushes every Waveform it has (a quick approximation
@@ -9,7 +15,7 @@ export class WaveformRepository {
   readonly #client: PlaybackClient;
   readonly #replica = new Replica<PlaybackWaveform | null>();
   // The playback the Backend was last asked about. Asking once per playback keeps reads cheap.
-  #askedFor: string | null = null;
+  #askedFor: PlaybackId | null = null;
 
   public constructor(client: PlaybackClient) {
     this.#client = client;
@@ -24,7 +30,7 @@ export class WaveformRepository {
    * The Waveform of `playbackId`, or null while it is analyzed. Asks the Backend once for a
    * playback with no Waveform yet; the answer, or a later push, arrives through `accept`.
    */
-  public forPlayback(playbackId: string | null): PlaybackWaveform | null {
+  public forPlayback(playbackId: PlaybackId | null): PlaybackWaveform | null {
     if (playbackId === null) return null;
     const held = this.#replica.value;
     if (held?.playbackId === playbackId) return held;

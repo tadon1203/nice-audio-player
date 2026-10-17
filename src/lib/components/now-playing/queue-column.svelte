@@ -1,4 +1,5 @@
 <script lang="ts" module>
+  import type { QueueItemId } from "#lib/native";
   /** No transition: reduced motion gives everything a 100ms one, and the scroll target is measured right after the spacer changes. */
   const SPACER = "transition-none";
 </script>
@@ -47,7 +48,7 @@
 
   // The current row glides to the anchor when it changes, and only then; a column that has just
   // got rows, or was resized (it may also be shown again after being hidden), is set at once.
-  let anchoredId: string | null = null;
+  let anchoredId: QueueItemId | null = null;
   $effect(() => {
     const id = currentId;
     void hasRows;

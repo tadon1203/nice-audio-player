@@ -241,7 +241,7 @@ test("shows synced lyrics and follows the current line", async ({ page, native, 
   const dock = await playFirstTrack(page, () =>
     native.respond("getTrackLyrics", {
       status: "resolved",
-      trackId: "track-1",
+      trackId: 1,
       notice: null,
       document: {
         source: "sidecar",

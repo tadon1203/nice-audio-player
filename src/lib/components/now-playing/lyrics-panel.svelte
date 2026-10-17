@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { TrackId } from "#lib/native";
   import ArrowDown from "@lucide/svelte/icons/arrow-down";
   import ArrowUp from "@lucide/svelte/icons/arrow-up";
   import { TrackLyrics } from "#lib/lyrics/track-lyrics.svelte";
@@ -19,7 +20,7 @@
    * Only a change of the current line reaches the lines: only the gap bar of an instrumental line
    * follows the playback clock, through styles.
    */
-  let { trackId, class: className }: { trackId: string | null; class?: string } = $props();
+  let { trackId, class: className }: { trackId: TrackId | null; class?: string } = $props();
 
   const { playback, lyrics: lyricsRepository, lyricsWaveformLink } = AppServices.current();
   const lyrics = new TrackLyrics(lyricsRepository, () => trackId);

@@ -4,6 +4,7 @@ import type {
   LibraryAlbumKey,
   LibraryArtistAlbumSortKey,
   LibrarySortDirection,
+  TrackId,
 } from "#lib/native";
 import type { LibraryCatalogRequest } from "./catalog-repository";
 
@@ -72,7 +73,7 @@ export class LibraryQueryKeys {
     return [...LibraryQueryKeys.artistAlbumsPrefix, key.name, sortKey, direction];
   }
 
-  public static trackProperties(trackId: string | null): readonly unknown[] {
+  public static trackProperties(trackId: TrackId | null): readonly unknown[] {
     return [...LibraryQueryKeys.data, "track", "properties", trackId];
   }
 

@@ -2,7 +2,7 @@
   import { Root as ContextMenuRoot, Trigger as ContextMenuTrigger } from "#lib/ui/context-menu";
   import { goto } from "$app/navigation";
   import { Tracks } from "#lib/library/tracks";
-  import type { LibrarySortDirection, LibraryTrackSortKey } from "#lib/native";
+  import type { LibrarySortDirection, LibraryTrackSortKey, TrackId } from "#lib/native";
   import { AppServices } from "#lib/shell/app-services.svelte";
   import ContextMenuContent from "#lib/ui/context-menu/context-menu-content.svelte";
   import ContextMenuItem from "#lib/ui/context-menu/context-menu-item.svelte";
@@ -58,14 +58,14 @@
     sortDirection?: LibrarySortDirection;
     onsortchange?: (key: LibraryTrackSortKey, direction: LibrarySortDirection) => void;
     /** Starts playback of this track in the page's context; pause and resume go straight to playback. */
-    onplaytrack: (id: string) => void;
+    onplaytrack: (id: TrackId) => void;
   } = $props();
 
   const columns = $derived(layout === "library" ? libraryTrackColumns : albumTrackColumns);
   const virtualized = $derived(scrollElement !== undefined);
   const { playback, actions, libraryTracks } = AppServices.current();
 
-  let propertiesFor = $state<string | null>(null);
+  let propertiesFor = $state<TrackId | null>(null);
   let menuRow = $state<TrackTableRow | null>(null);
   let container = $state<HTMLElement | null>(null);
   let body = $state<HTMLElement | null>(null);
@@ -121,7 +121,7 @@
       target instanceof Element
         ? (target.closest<HTMLElement>("tr[data-row-id]")?.dataset.rowId ?? null)
         : null;
-    const row = id === null ? undefined : rows.find((candidate) => candidate.id === id);
+    const row = id === null ? undefined : rows.find((candidate) => String(candidate.id) === id);
     if (row) menuRow = row;
     else event.stopPropagation();
   }
@@ -180,7 +180,7 @@
                 >
               </tr>
             {/if}
-            {#each visibleIndexes as index (rows[index]?.id ?? index)}
+            {#each visibleIndexes as index (rows[index]?.id ?? `placeholder-${index}`)}
               {@const row = rows[index]}
               {#if row}
                 {#if splitsDiscs && startsDisc(rows, index)}

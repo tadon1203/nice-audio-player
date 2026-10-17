@@ -1,3 +1,4 @@
+import type { QueueItemId } from "#lib/native";
 import type { HTMLAttributes } from "svelte/elements";
 import { dropSlotForFixedRows, slotToIndex } from "./queue-drag";
 
@@ -5,10 +6,10 @@ import { dropSlotForFixedRows, slotToIndex } from "./queue-drag";
 const EDGE_PX = 40;
 const EDGE_STEP_PX = 16;
 
-type DragState = { id: string; from: number; slot: number };
+type DragState = { id: QueueItemId; from: number; slot: number };
 
 type QueueDragOptions = {
-  onMove: (id: string, to: number) => void;
+  onMove: (id: QueueItemId, to: number) => void;
   rowHeight: number;
   /** How many rows the list has, mounted or not. */
   count: () => number;
@@ -38,7 +39,7 @@ export class QueueDrag {
 
   /** The pointer handlers for the drag handle of upcoming item `id` at index `from`. */
   handlersFor(
-    id: string,
+    id: QueueItemId,
     from: number,
   ): Pick<
     HTMLAttributes<HTMLElement>,
