@@ -9,7 +9,7 @@ use serde::Deserialize;
 use crate::audio::playback::{PlaybackServiceError, TrackSource};
 use crate::ids::{AlbumId, TrackId};
 use crate::library::{
-    models::{LibrarySortDirection, LibraryTrackSortKey},
+    models::TrackQuery,
     store::{LibraryStore, PlayableTrack, PlaybackSelection},
 };
 
@@ -23,11 +23,7 @@ pub enum PlaybackContext {
     /// An album in disc and track order, by its ID.
     Album { album_id: AlbumId },
     /// The tracks list as currently filtered and sorted.
-    Tracks {
-        search: Option<String>,
-        sort_key: LibraryTrackSortKey,
-        sort_direction: LibrarySortDirection,
-    },
+    Tracks(TrackQuery),
 }
 
 /// Reads the ids of the context's playable tracks from the library, in playing order, and where
@@ -42,16 +38,7 @@ pub fn resolve(
         PlaybackContext::Album { album_id } => {
             library.playback_for_album_id(*album_id, start_track_id)
         }
-        PlaybackContext::Tracks {
-            search,
-            sort_key,
-            sort_direction,
-        } => library.playback_for_tracks(
-            search.as_deref(),
-            *sort_key,
-            *sort_direction,
-            start_track_id,
-        ),
+        PlaybackContext::Tracks(query) => library.playback_for_tracks(query, start_track_id),
     }?)
 }
 

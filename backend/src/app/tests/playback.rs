@@ -24,6 +24,16 @@ fn pause_needs_a_loaded_track() {
 }
 
 #[test]
+fn seeking_needs_a_loaded_track_whatever_the_position() {
+    let fixture = fixture();
+
+    assert_eq!(
+        fixture.backend.seek(u64::MAX).err(),
+        Some(PlaybackServiceError::InvalidPlaybackState)
+    );
+}
+
+#[test]
 fn volume_and_mute_are_reported_in_the_snapshot() {
     let fixture = fixture();
     let backend = &fixture.backend;

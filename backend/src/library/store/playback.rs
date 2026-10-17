@@ -11,10 +11,7 @@ use crate::library::{
     artwork::ArtworkRef,
     error::StoreError,
     location::TrackLocation,
-    models::{
-        LibrarySortDirection, LibraryTrackSortKey, NowPlayingAlbum, NowPlayingTrack, TrackCore,
-        TrackState,
-    },
+    models::{NowPlayingAlbum, NowPlayingTrack, TrackCore, TrackQuery, TrackState},
     status::{Availability, InspectionStatus},
 };
 use crate::media::validation::{ValidatedAudioFile, describe_audio_file, validate_audio_file};
@@ -372,19 +369,17 @@ impl LibraryStore {
     /// Every track the tracks page shows under `search`, in the page's sort order.
     pub fn playback_for_tracks(
         &self,
-        search: Option<&str>,
-        sort_key: LibraryTrackSortKey,
-        sort_direction: LibrarySortDirection,
+        query: &TrackQuery,
         start_track_id: Option<TrackId>,
     ) -> Result<PlaybackSelection, PlaybackSourceError> {
-        let filter = track_filter(search);
+        let filter = track_filter(query.search.as_deref());
         let connection = self.read()?;
         let rows = collect_selection(
             &connection,
             &format!(
                 "SELECT {SELECTION_COLUMNS} {SELECTION_FROM} WHERE {} ORDER BY {}",
                 filter.sql,
-                track_ordering(sort_key, sort_direction).order_by()
+                track_ordering(query.sort_key, query.sort_direction).order_by()
             ),
             rusqlite::params_from_iter(filter.params),
         )?;

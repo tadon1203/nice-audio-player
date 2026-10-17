@@ -1,6 +1,9 @@
 use super::{Fixture, fixture};
 use crate::app::{BackendApp, PlaybackContext};
-use crate::dto::{AlbumTracksRequest, LibrarySortDirection, LibraryStatus, LibraryTrackSortKey};
+use crate::dto::{
+    AlbumTracksRequest, LibrarySortDirection, LibraryStatus, LibraryTrackSortKey, TrackListRequest,
+    TrackQuery,
+};
 use crate::errors::{LibraryCommandError, LyricsCommandError, PlaybackServiceError};
 use crate::ids::{AlbumId, ArtistId, TrackId};
 use crate::messages::testing::RecordingMessageSink;
@@ -26,11 +29,50 @@ fn fixture_without_library() -> Fixture {
 }
 
 fn tracks_context() -> PlaybackContext {
-    PlaybackContext::Tracks {
+    PlaybackContext::Tracks(TrackQuery {
         search: None,
         sort_key: LibraryTrackSortKey::Title,
         sort_direction: LibrarySortDirection::Ascending,
-    }
+    })
+}
+
+#[test]
+fn the_tracks_context_is_a_track_query_beside_its_kind() {
+    let context: PlaybackContext = serde_json::from_value(serde_json::json!({
+        "kind": "tracks",
+        "search": "alp",
+        "sortKey": "title",
+        "sortDirection": "ascending",
+    }))
+    .expect("a tracks context");
+
+    let PlaybackContext::Tracks(query) = context else {
+        panic!("not the tracks context");
+    };
+    assert_eq!(query.search.as_deref(), Some("alp"));
+    assert_eq!(query.sort_key, LibraryTrackSortKey::Title);
+    assert_eq!(query.sort_direction, LibrarySortDirection::Ascending);
+}
+
+#[test]
+fn a_list_request_is_its_query_beside_the_cursor_and_skip() {
+    let request: TrackListRequest = serde_json::from_value(serde_json::json!({
+        "search": null,
+        "sortKey": "title",
+        "sortDirection": "descending",
+        "cursor": null,
+        "skip": 7,
+    }))
+    .expect("a list request");
+
+    assert_eq!(
+        request.query.sort_direction,
+        LibrarySortDirection::Descending
+    );
+    assert_eq!(request.skip, 7);
+    let fixture = fixture();
+    let page = fixture.backend.list_tracks(&request).expect("the page");
+    assert!(page.items.is_empty());
 }
 
 #[test]

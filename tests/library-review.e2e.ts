@@ -25,7 +25,7 @@ test("keeps each library filter and sort when switching peers and visiting Setti
   native,
   library,
 }) => {
-  native.respond("listLibraryAlbums", ({ search }) =>
+  native.respond("listLibraryAlbums", ({ request: { search } }) =>
     pageOf(search === "Test album" ? [library.albums[0]!] : library.albums, null, 100),
   );
   await page.goto("/library/albums");
@@ -264,7 +264,7 @@ test("invalidates mounted library queries after terminal scan events and root ch
     roots = roots.map((root) => (root.id === id ? { ...root, enabled } : root));
     return roots.find((root) => root.id === id)!;
   });
-  native.respond("listLibraryTracks", ({ cursor }) =>
+  native.respond("listLibraryTracks", ({ request: { cursor } }) =>
     pageOf(roots.some((root) => root.enabled) ? library.tracks : [], cursor),
   );
   await page.goto("/library/tracks");

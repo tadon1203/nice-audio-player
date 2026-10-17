@@ -450,24 +450,34 @@ impl LibraryStore {
         sort_key: LibraryTrackSortKey,
         direction: LibrarySortDirection,
     ) -> Result<LibraryTrackPage, StoreError> {
-        self.catalog_tracks_from(cursor, 0, search, sort_key, direction)
+        self.catalog_tracks_from(&TrackListRequest {
+            query: TrackQuery {
+                search: search.map(str::to_owned),
+                sort_key,
+                sort_direction: direction,
+            },
+            cursor: cursor.map(str::to_owned),
+            skip: 0,
+        })
     }
 
     /// A page of the list; with no cursor it starts after the first `skip` rows, which is how the
     /// scroll index jumps to a letter without paging through what precedes it.
     pub fn catalog_tracks_from(
         &self,
-        cursor: Option<&str>,
-        skip: u64,
-        search: Option<&str>,
-        sort_key: LibraryTrackSortKey,
-        direction: LibrarySortDirection,
+        request: &TrackListRequest,
     ) -> Result<LibraryTrackPage, StoreError> {
+        let TrackQuery {
+            search,
+            sort_key,
+            sort_direction,
+        } = &request.query;
+        let cursor = request.cursor.as_deref();
         let connection = self.read()?;
-        let query = tracks_query(search, sort_key, direction);
+        let query = tracks_query(search.as_deref(), *sort_key, *sort_direction);
         let total_count = first_page_total(&query, &connection, cursor)?;
         let Page { items, next_cursor } =
-            query.fetch(&connection, cursor, skip, summary_from_row)?;
+            query.fetch(&connection, cursor, request.skip, summary_from_row)?;
         Ok(LibraryTrackPage {
             items,
             total_count,
@@ -477,21 +487,23 @@ impl LibraryStore {
 
     pub fn catalog_track_index(
         &self,
-        search: Option<&str>,
-        sort_key: LibraryTrackSortKey,
-        direction: LibrarySortDirection,
+        query: &TrackQuery,
     ) -> Result<Vec<LibraryIndexBucket>, StoreError> {
-        let Some(column) = track_index_column(sort_key) else {
+        let Some(column) = track_index_column(query.sort_key) else {
             return Ok(Vec::new());
         };
-        let query = tracks_query(search, sort_key, direction);
+        let paged = tracks_query(
+            query.search.as_deref(),
+            query.sort_key,
+            query.sort_direction,
+        );
         let connection = self.read()?;
         name_buckets(
             &connection,
-            &query.count_from_where,
-            &query.params,
+            &paged.count_from_where,
+            &paged.params,
             column,
-            direction,
+            query.sort_direction,
         )
     }
 
@@ -504,23 +516,34 @@ impl LibraryStore {
         sort_key: LibraryAlbumSortKey,
         direction: LibrarySortDirection,
     ) -> Result<LibraryAlbumPage, StoreError> {
-        self.catalog_albums_from(cursor, 0, search, sort_key, direction)
+        self.catalog_albums_from(&AlbumListRequest {
+            query: AlbumQuery {
+                search: search.map(str::to_owned),
+                sort_key,
+                sort_direction: direction,
+            },
+            cursor: cursor.map(str::to_owned),
+            skip: 0,
+        })
     }
 
     /// A page of the list; with no cursor it starts after the first `skip` rows, which is how the
     /// scroll index jumps to a letter without paging through what precedes it.
     pub fn catalog_albums_from(
         &self,
-        cursor: Option<&str>,
-        skip: u64,
-        search: Option<&str>,
-        sort_key: LibraryAlbumSortKey,
-        direction: LibrarySortDirection,
+        request: &AlbumListRequest,
     ) -> Result<LibraryAlbumPage, StoreError> {
+        let AlbumQuery {
+            search,
+            sort_key,
+            sort_direction,
+        } = &request.query;
+        let cursor = request.cursor.as_deref();
         let connection = self.read()?;
-        let query = albums_query(search, sort_key, direction);
+        let query = albums_query(search.as_deref(), *sort_key, *sort_direction);
         let total_count = first_page_total(&query, &connection, cursor)?;
-        let Page { items, next_cursor } = query.fetch(&connection, cursor, skip, album_summary)?;
+        let Page { items, next_cursor } =
+            query.fetch(&connection, cursor, request.skip, album_summary)?;
         Ok(LibraryAlbumPage {
             items,
             total_count,
@@ -530,31 +553,30 @@ impl LibraryStore {
 
     pub fn catalog_album_index(
         &self,
-        search: Option<&str>,
-        sort_key: LibraryAlbumSortKey,
-        direction: LibrarySortDirection,
+        query: &AlbumQuery,
     ) -> Result<Vec<LibraryIndexBucket>, StoreError> {
-        let query = albums_query(search, sort_key, direction);
+        let direction = query.sort_direction;
+        let paged = albums_query(query.search.as_deref(), query.sort_key, direction);
         let connection = self.read()?;
-        match sort_key {
+        match query.sort_key {
             LibraryAlbumSortKey::Title => name_buckets(
                 &connection,
-                &query.count_from_where,
-                &query.params,
+                &paged.count_from_where,
+                &paged.params,
                 "al.title_sort",
                 direction,
             ),
             LibraryAlbumSortKey::Artist => name_buckets(
                 &connection,
-                &query.count_from_where,
-                &query.params,
+                &paged.count_from_where,
+                &paged.params,
                 "al.album_artist_sort",
                 direction,
             ),
             LibraryAlbumSortKey::Year => year_buckets(
                 &connection,
-                &query.count_from_where,
-                &query.params,
+                &paged.count_from_where,
+                &paged.params,
                 direction,
             ),
         }
@@ -569,23 +591,34 @@ impl LibraryStore {
         sort_key: LibraryAlbumArtistSortKey,
         direction: LibrarySortDirection,
     ) -> Result<LibraryAlbumArtistPage, StoreError> {
-        self.catalog_album_artists_from(cursor, 0, search, sort_key, direction)
+        self.catalog_album_artists_from(&AlbumArtistListRequest {
+            query: AlbumArtistQuery {
+                search: search.map(str::to_owned),
+                sort_key,
+                sort_direction: direction,
+            },
+            cursor: cursor.map(str::to_owned),
+            skip: 0,
+        })
     }
 
     /// A page of the list; with no cursor it starts after the first `skip` rows, which is how the
     /// scroll index jumps to a letter without paging through what precedes it.
     pub fn catalog_album_artists_from(
         &self,
-        cursor: Option<&str>,
-        skip: u64,
-        search: Option<&str>,
-        sort_key: LibraryAlbumArtistSortKey,
-        direction: LibrarySortDirection,
+        request: &AlbumArtistListRequest,
     ) -> Result<LibraryAlbumArtistPage, StoreError> {
+        let AlbumArtistQuery {
+            search,
+            sort_key,
+            sort_direction,
+        } = &request.query;
+        let cursor = request.cursor.as_deref();
         let connection = self.read()?;
-        let query = album_artists_query(search, sort_key, direction);
+        let query = album_artists_query(search.as_deref(), *sort_key, *sort_direction);
         let total_count = first_page_total(&query, &connection, cursor)?;
-        let Page { items, next_cursor } = query.fetch(&connection, cursor, skip, artist_summary)?;
+        let Page { items, next_cursor } =
+            query.fetch(&connection, cursor, request.skip, artist_summary)?;
         Ok(LibraryAlbumArtistPage {
             items,
             total_count,
@@ -595,21 +628,23 @@ impl LibraryStore {
 
     pub fn catalog_album_artist_index(
         &self,
-        search: Option<&str>,
-        sort_key: LibraryAlbumArtistSortKey,
-        direction: LibrarySortDirection,
+        query: &AlbumArtistQuery,
     ) -> Result<Vec<LibraryIndexBucket>, StoreError> {
-        if sort_key != LibraryAlbumArtistSortKey::Artist {
+        if query.sort_key != LibraryAlbumArtistSortKey::Artist {
             return Ok(Vec::new());
         }
-        let query = album_artists_query(search, sort_key, direction);
+        let paged = album_artists_query(
+            query.search.as_deref(),
+            query.sort_key,
+            query.sort_direction,
+        );
         let connection = self.read()?;
         name_buckets(
             &connection,
-            &query.count_from_where,
-            &query.params,
+            &paged.count_from_where,
+            &paged.params,
             "ar.name_sort",
-            direction,
+            query.sort_direction,
         )
     }
 

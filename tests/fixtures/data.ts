@@ -170,11 +170,11 @@ export function libraryResponses(library: LibraryData = testLibrary()): Record<s
   return {
     listLibraryRoots: library.roots,
     listLibraryTracks: ({
-      cursor,
+      request,
     }: {
-      cursor: string | null;
+      request: { cursor: string | null };
     }): { items: LibraryTrackSummary[]; totalCount: number; nextCursor: string | null } =>
-      pageOf(library.tracks, cursor),
+      pageOf(library.tracks, request.cursor),
     listLibraryAlbums: (): {
       items: LibraryAlbumSummary[];
       totalCount: number;

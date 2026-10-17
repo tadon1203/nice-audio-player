@@ -264,10 +264,9 @@ export class Playback {
    * first returns, so holding an arrow key keeps moving instead of dropping most presses.
    */
   public async seek(positionMs: number): Promise<void> {
-    // The one place every seek passes: the backend takes whole milliseconds.
-    const rounded = Math.round(positionMs);
-    const duration = this.durationMs;
-    this.#requestedSeek = duration === null ? rounded : Math.min(Math.max(rounded, 0), duration);
+    // The one place every seek passes: the backend takes whole, non-negative milliseconds and
+    // clamps them to the duration.
+    this.#requestedSeek = Math.max(Math.round(positionMs), 0);
     if (this.#seekPending) return;
     this.#seekPending = true;
     try {

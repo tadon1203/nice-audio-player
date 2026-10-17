@@ -177,6 +177,58 @@ pub struct LibraryAlbumArtistSummary {
     pub album_count: u64,
     pub track_count: u64,
 }
+/// How the Tracks list is filtered and sorted.
+#[derive(Debug, Clone, serde::Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TrackQuery {
+    pub search: Option<String>,
+    pub sort_key: LibraryTrackSortKey,
+    pub sort_direction: LibrarySortDirection,
+}
+/// How the Albums list is filtered and sorted.
+#[derive(Debug, Clone, serde::Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct AlbumQuery {
+    pub search: Option<String>,
+    pub sort_key: LibraryAlbumSortKey,
+    pub sort_direction: LibrarySortDirection,
+}
+/// How the Album Artists list is filtered and sorted.
+#[derive(Debug, Clone, serde::Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct AlbumArtistQuery {
+    pub search: Option<String>,
+    pub sort_key: LibraryAlbumArtistSortKey,
+    pub sort_direction: LibrarySortDirection,
+}
+/// A page of the Tracks list. With no `cursor` it starts after the first `skip` rows, which is
+/// how the scroll index jumps to a letter without paging through what precedes it.
+#[derive(Debug, Clone, serde::Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TrackListRequest {
+    #[serde(flatten)]
+    pub query: TrackQuery,
+    pub cursor: Option<String>,
+    pub skip: u64,
+}
+/// A page of the Albums list (see [`TrackListRequest`]).
+#[derive(Debug, Clone, serde::Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct AlbumListRequest {
+    #[serde(flatten)]
+    pub query: AlbumQuery,
+    pub cursor: Option<String>,
+    pub skip: u64,
+}
+/// A page of the Album Artists list (see [`TrackListRequest`]).
+#[derive(Debug, Clone, serde::Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct AlbumArtistListRequest {
+    #[serde(flatten)]
+    pub query: AlbumArtistQuery,
+    pub cursor: Option<String>,
+    pub skip: u64,
+}
 /// The albums of one Album Artist, by its ID (see `ids.rs`).
 #[derive(Debug, Clone, serde::Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]

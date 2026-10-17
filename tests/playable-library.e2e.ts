@@ -104,7 +104,7 @@ test("plays the list that shows, also right after the filter changes", async ({
   // A search answers only when the test lets it, so the old list stays on screen until then.
   let releaseSearch: () => void = () => {};
   const searchMayAnswer = new Promise<void>((resolve) => (releaseSearch = resolve));
-  native.respond("listLibraryTracks", async ({ cursor, search }) => {
+  native.respond("listLibraryTracks", async ({ request: { cursor, search } }) => {
     if (search === null) return pageOf(library.tracks, cursor);
     await searchMayAnswer;
     return pageOf(

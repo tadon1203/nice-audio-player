@@ -7,22 +7,22 @@ import type {
   BackendMessage,
   InitialState,
   LibraryAlbumArtistPage,
-  LibraryAlbumArtistSortKey,
   LibraryAlbumArtistSummary,
   LibraryAlbumDetails,
   LibraryAlbumPage,
-  LibraryAlbumSortKey,
   LibraryAlbumTrackPage,
+  AlbumArtistListRequest,
+  AlbumArtistQuery,
   AlbumId,
+  AlbumListRequest,
+  AlbumQuery,
   ArtistAlbumsRequest,
   ArtistId,
   LibraryIndexBucket,
   LibraryRoot,
-  LibrarySortDirection,
   LibraryStatus,
   LibraryTrackPage,
   LibraryTrackProperties,
-  LibraryTrackSortKey,
   LyricsResolution,
   PlaybackContext,
   PlaybackQueueSnapshot,
@@ -32,6 +32,8 @@ import type {
   PlaybackWaveform,
   QueueItemId,
   TrackId,
+  TrackListRequest,
+  TrackQuery,
   Versioned,
 } from "./bindings";
 
@@ -73,7 +75,8 @@ export interface AppearanceClient {
 }
 
 /**
- * The Library commands. List arguments are positional, as the generated bindings take them.
+ * The Library commands. A list or index command takes one request or query object, as the
+ * generated bindings do.
  */
 export interface LibraryClient {
   status(): Promise<LibraryStatus>;
@@ -88,42 +91,12 @@ export interface LibraryClient {
   cancelScan(): Promise<void>;
   resetAndRescan(): Promise<void>;
   openLogDirectory(): Promise<void>;
-  tracks(
-    cursor: string | null,
-    search: string | null,
-    sortKey: LibraryTrackSortKey,
-    direction: LibrarySortDirection,
-    skip: number,
-  ): Promise<LibraryTrackPage>;
-  albums(
-    cursor: string | null,
-    search: string | null,
-    sortKey: LibraryAlbumSortKey,
-    direction: LibrarySortDirection,
-    skip: number,
-  ): Promise<LibraryAlbumPage>;
-  albumArtists(
-    cursor: string | null,
-    search: string | null,
-    sortKey: LibraryAlbumArtistSortKey,
-    direction: LibrarySortDirection,
-    skip: number,
-  ): Promise<LibraryAlbumArtistPage>;
-  trackIndex(
-    search: string | null,
-    sortKey: LibraryTrackSortKey,
-    direction: LibrarySortDirection,
-  ): Promise<LibraryIndexBucket[]>;
-  albumIndex(
-    search: string | null,
-    sortKey: LibraryAlbumSortKey,
-    direction: LibrarySortDirection,
-  ): Promise<LibraryIndexBucket[]>;
-  albumArtistIndex(
-    search: string | null,
-    sortKey: LibraryAlbumArtistSortKey,
-    direction: LibrarySortDirection,
-  ): Promise<LibraryIndexBucket[]>;
+  tracks(request: TrackListRequest): Promise<LibraryTrackPage>;
+  albums(request: AlbumListRequest): Promise<LibraryAlbumPage>;
+  albumArtists(request: AlbumArtistListRequest): Promise<LibraryAlbumArtistPage>;
+  trackIndex(query: TrackQuery): Promise<LibraryIndexBucket[]>;
+  albumIndex(query: AlbumQuery): Promise<LibraryIndexBucket[]>;
+  albumArtistIndex(query: AlbumArtistQuery): Promise<LibraryIndexBucket[]>;
   albumById(albumId: AlbumId): Promise<LibraryAlbumDetails>;
   albumTracksById(albumId: AlbumId, cursor: string | null): Promise<LibraryAlbumTrackPage>;
   artist(artistId: ArtistId): Promise<LibraryAlbumArtistSummary>;

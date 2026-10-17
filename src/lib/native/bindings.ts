@@ -59,13 +59,13 @@ export const commands = {
 	openLogDirectory: () => __TAURI_INVOKE<null>("open_log_directory"),
 	startLibraryScan: () => __TAURI_INVOKE<null>("start_library_scan"),
 	cancelLibraryScan: () => __TAURI_INVOKE<null>("cancel_library_scan"),
-	listLibraryTracks: (cursor: string | null, search: string | null, sortKey: LibraryTrackSortKey, sortDirection: LibrarySortDirection, skip: number) => __TAURI_INVOKE<LibraryTrackPage>("list_library_tracks", { cursor, search, sortKey, sortDirection, skip }),
-	listLibraryAlbums: (cursor: string | null, search: string | null, sortKey: LibraryAlbumSortKey, sortDirection: LibrarySortDirection, skip: number) => __TAURI_INVOKE<LibraryAlbumPage>("list_library_albums", { cursor, search, sortKey, sortDirection, skip }),
-	listLibraryAlbumArtists: (cursor: string | null, search: string | null, sortKey: LibraryAlbumArtistSortKey, sortDirection: LibrarySortDirection, skip: number) => __TAURI_INVOKE<LibraryAlbumArtistPage>("list_library_album_artists", { cursor, search, sortKey, sortDirection, skip }),
+	listLibraryTracks: (request: TrackListRequest) => __TAURI_INVOKE<LibraryTrackPage>("list_library_tracks", { request }),
+	listLibraryAlbums: (request: AlbumListRequest) => __TAURI_INVOKE<LibraryAlbumPage>("list_library_albums", { request }),
+	listLibraryAlbumArtists: (request: AlbumArtistListRequest) => __TAURI_INVOKE<LibraryAlbumArtistPage>("list_library_album_artists", { request }),
 	/**  The scroll index of the Tracks list: how many names start under each label, in list order. */
-	listLibraryTrackIndex: (search: string | null, sortKey: LibraryTrackSortKey, sortDirection: LibrarySortDirection) => __TAURI_INVOKE<LibraryIndexBucket[]>("list_library_track_index", { search, sortKey, sortDirection }),
-	listLibraryAlbumIndex: (search: string | null, sortKey: LibraryAlbumSortKey, sortDirection: LibrarySortDirection) => __TAURI_INVOKE<LibraryIndexBucket[]>("list_library_album_index", { search, sortKey, sortDirection }),
-	listLibraryAlbumArtistIndex: (search: string | null, sortKey: LibraryAlbumArtistSortKey, sortDirection: LibrarySortDirection) => __TAURI_INVOKE<LibraryIndexBucket[]>("list_library_album_artist_index", { search, sortKey, sortDirection }),
+	listLibraryTrackIndex: (query: TrackQuery) => __TAURI_INVOKE<LibraryIndexBucket[]>("list_library_track_index", { query }),
+	listLibraryAlbumIndex: (query: AlbumQuery) => __TAURI_INVOKE<LibraryIndexBucket[]>("list_library_album_index", { query }),
+	listLibraryAlbumArtistIndex: (query: AlbumArtistQuery) => __TAURI_INVOKE<LibraryIndexBucket[]>("list_library_album_artist_index", { query }),
 	getLibraryArtist: (artistId: ArtistId) => __TAURI_INVOKE<LibraryAlbumArtistSummary>("get_library_artist", { artistId }),
 	listLibraryArtistAlbums: (request: ArtistAlbumsRequest) => __TAURI_INVOKE<LibraryAlbumPage>("list_library_artist_albums", { request }),
 	getLibraryAlbum: (albumId: AlbumId) => __TAURI_INVOKE<LibraryAlbumDetails>("get_library_album", { albumId }),
@@ -150,12 +150,38 @@ export type ActiveSession = {
 	resamplingActive: boolean,
 };
 
+/**  A page of the Album Artists list (see [`TrackListRequest`]). */
+export type AlbumArtistListRequest = {
+	cursor: string | null,
+	skip: number,
+} & AlbumArtistQuery;
+
+/**  How the Album Artists list is filtered and sorted. */
+export type AlbumArtistQuery = {
+	search: string | null,
+	sortKey: LibraryAlbumArtistSortKey,
+	sortDirection: LibrarySortDirection,
+};
+
 /**
  *  An album: blake3 of its normalized Album Artist, normalized title, and absolute album
  *  directory. A track with no album hashes an empty directory. On the IPC 32 lowercase hex
  *  characters.
  */
 export type AlbumId = string;
+
+/**  A page of the Albums list (see [`TrackListRequest`]). */
+export type AlbumListRequest = {
+	cursor: string | null,
+	skip: number,
+} & AlbumQuery;
+
+/**  How the Albums list is filtered and sorted. */
+export type AlbumQuery = {
+	search: string | null,
+	sortKey: LibraryAlbumSortKey,
+	sortDirection: LibrarySortDirection,
+};
 
 /**  The tracks of one album, by its ID (see `ids.rs`), from a page cursor. */
 export type AlbumTracksRequest = {
@@ -461,7 +487,9 @@ export type PlaybackContext =
 /**  An album in disc and track order, by its ID. */
 { kind: "album"; albumId: AlbumId } | 
 /**  The tracks list as currently filtered and sorted. */
-{ kind: "tracks"; search: string | null; sortKey: LibraryTrackSortKey; sortDirection: LibrarySortDirection };
+{
+	kind: "tracks",
+} & TrackQuery;
 
 export type PlaybackFailureCode = "noOutputDevice" | "outputDeviceUnavailable" | "unsupportedOutputConfiguration" | "outputStreamBuildFailed" | "outputStreamStartFailed" | "outputStreamPauseFailed" | "outputStreamResumeFailed" | "outputStreamRuntimeFailed" | "completionTimingFailed" | "decodeFailed" | "sampleRateConversionFailed";
 
@@ -606,6 +634,22 @@ export type TrackCore = {
 
 /**  A track: the `tracks` rowid. Above zero. On the IPC a number, which serde rejects below one. */
 export type TrackId = number;
+
+/**
+ *  A page of the Tracks list. With no `cursor` it starts after the first `skip` rows, which is
+ *  how the scroll index jumps to a letter without paging through what precedes it.
+ */
+export type TrackListRequest = {
+	cursor: string | null,
+	skip: number,
+} & TrackQuery;
+
+/**  How the Tracks list is filtered and sorted. */
+export type TrackQuery = {
+	search: string | null,
+	sortKey: LibraryTrackSortKey,
+	sortDirection: LibrarySortDirection,
+};
 
 /**
  *  Where a track stands: its file can play, its file is gone, or its file is there but cannot be

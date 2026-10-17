@@ -191,6 +191,42 @@ const TITLE: LibraryAlbumSortKey = LibraryAlbumSortKey::Title;
 const ASC: LibrarySortDirection = LibrarySortDirection::Ascending;
 const DESC: LibrarySortDirection = LibrarySortDirection::Descending;
 
+fn track_query(
+    search: Option<&str>,
+    sort_key: LibraryTrackSortKey,
+    sort_direction: LibrarySortDirection,
+) -> TrackQuery {
+    TrackQuery {
+        search: search.map(str::to_owned),
+        sort_key,
+        sort_direction,
+    }
+}
+
+fn album_query(
+    search: Option<&str>,
+    sort_key: LibraryAlbumSortKey,
+    sort_direction: LibrarySortDirection,
+) -> AlbumQuery {
+    AlbumQuery {
+        search: search.map(str::to_owned),
+        sort_key,
+        sort_direction,
+    }
+}
+
+fn album_artist_query(
+    search: Option<&str>,
+    sort_key: LibraryAlbumArtistSortKey,
+    sort_direction: LibrarySortDirection,
+) -> AlbumArtistQuery {
+    AlbumArtistQuery {
+        search: search.map(str::to_owned),
+        sort_key,
+        sort_direction,
+    }
+}
+
 fn all_albums(store: &LibraryStore, search: Option<&str>) -> LibraryAlbumPage {
     store.catalog_albums(None, search, TITLE, ASC).unwrap()
 }

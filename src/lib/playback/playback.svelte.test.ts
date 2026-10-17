@@ -305,6 +305,27 @@ describe("seeking", () => {
 
     expect(seek).toHaveBeenCalledWith(1_235);
   });
+
+  it("sends a position past the duration as it is, for the backend to clamp", async () => {
+    const seek = vi.fn(async () => playing(2, 1, 60_000));
+    const playback = new Playback(fakeClient({ seek }), quietClock());
+    playback.acceptPlayback(playing(1, 1, 0));
+    expect(playback.durationMs).toBe(60_000);
+
+    await playback.seek(90_000);
+
+    expect(seek).toHaveBeenCalledWith(90_000);
+  });
+
+  it("never sends a negative position", async () => {
+    const seek = vi.fn(async () => playing(2, 1, 0));
+    const playback = new Playback(fakeClient({ seek }), quietClock());
+    playback.acceptPlayback(playing(1, 1, 500));
+
+    await playback.seek(-300);
+
+    expect(seek).toHaveBeenCalledWith(0);
+  });
 });
 
 describe("failures", () => {

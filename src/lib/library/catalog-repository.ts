@@ -205,43 +205,45 @@ export class CatalogRepository {
 
   #listPage(request: LibraryCatalogRequest, cursor: string | null): Promise<CatalogPage> {
     const search = request.filter === "" ? null : request.filter;
+    const { direction: sortDirection, skip } = request;
     switch (request.presentation) {
       case "albums":
-        return this.#client.albums(
-          cursor,
+        return this.#client.albums({
           search,
-          request.sortKey,
-          request.direction,
-          request.skip,
-        );
+          sortKey: request.sortKey,
+          sortDirection,
+          cursor,
+          skip,
+        });
       case "albumArtists":
-        return this.#client.albumArtists(
-          cursor,
+        return this.#client.albumArtists({
           search,
-          request.sortKey,
-          request.direction,
-          request.skip,
-        );
+          sortKey: request.sortKey,
+          sortDirection,
+          cursor,
+          skip,
+        });
       case "tracks":
-        return this.#client.tracks(
-          cursor,
+        return this.#client.tracks({
           search,
-          request.sortKey,
-          request.direction,
-          request.skip,
-        );
+          sortKey: request.sortKey,
+          sortDirection,
+          cursor,
+          skip,
+        });
     }
   }
 
   #listIndex(request: LibraryCatalogRequest): Promise<LibraryIndexBucket[]> {
     const search = request.filter === "" ? null : request.filter;
+    const sortDirection = request.direction;
     switch (request.presentation) {
       case "albums":
-        return this.#client.albumIndex(search, request.sortKey, request.direction);
+        return this.#client.albumIndex({ search, sortKey: request.sortKey, sortDirection });
       case "albumArtists":
-        return this.#client.albumArtistIndex(search, request.sortKey, request.direction);
+        return this.#client.albumArtistIndex({ search, sortKey: request.sortKey, sortDirection });
       case "tracks":
-        return this.#client.trackIndex(search, request.sortKey, request.direction);
+        return this.#client.trackIndex({ search, sortKey: request.sortKey, sortDirection });
     }
   }
 }

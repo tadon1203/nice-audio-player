@@ -57,7 +57,13 @@ describe("CatalogRepository", () => {
       { pageParam: null },
     );
 
-    expect(client.albums).toHaveBeenCalledWith(null, "abbey", "year", "descending", 4);
+    expect(client.albums).toHaveBeenCalledWith({
+      search: "abbey",
+      sortKey: "year",
+      sortDirection: "descending",
+      cursor: null,
+      skip: 4,
+    });
   });
 
   it("lists album artists with the request's sort and an empty filter as no search", async () => {
@@ -78,7 +84,13 @@ describe("CatalogRepository", () => {
       { pageParam: null },
     );
 
-    expect(client.albumArtists).toHaveBeenCalledWith(null, null, "albumCount", "ascending", 0);
+    expect(client.albumArtists).toHaveBeenCalledWith({
+      search: null,
+      sortKey: "albumCount",
+      sortDirection: "ascending",
+      cursor: null,
+      skip: 0,
+    });
   });
 
   it("lists tracks, and reads the scroll index of the same list", async () => {
@@ -95,8 +107,18 @@ describe("CatalogRepository", () => {
     await runQuery(repository.pageOptions(request, true), { pageParam: null });
     await runQuery(repository.indexOptions(request, true));
 
-    expect(client.tracks).toHaveBeenCalledWith(null, null, "duration", "ascending", 10);
-    expect(client.trackIndex).toHaveBeenCalledWith(null, "duration", "ascending");
+    expect(client.tracks).toHaveBeenCalledWith({
+      search: null,
+      sortKey: "duration",
+      sortDirection: "ascending",
+      cursor: null,
+      skip: 10,
+    });
+    expect(client.trackIndex).toHaveBeenCalledWith({
+      search: null,
+      sortKey: "duration",
+      sortDirection: "ascending",
+    });
   });
 
   it("reads the index of albums and album artists from their own calls", async () => {
@@ -122,8 +144,16 @@ describe("CatalogRepository", () => {
       ),
     );
 
-    expect(client.albumIndex).toHaveBeenCalledWith("x", "year", "ascending");
-    expect(client.albumArtistIndex).toHaveBeenCalledWith(null, "artist", "descending");
+    expect(client.albumIndex).toHaveBeenCalledWith({
+      search: "x",
+      sortKey: "year",
+      sortDirection: "ascending",
+    });
+    expect(client.albumArtistIndex).toHaveBeenCalledWith({
+      search: null,
+      sortKey: "artist",
+      sortDirection: "descending",
+    });
   });
 
   it("starts every loaded list over from its first page on refresh", () => {

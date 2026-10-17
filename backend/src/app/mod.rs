@@ -23,11 +23,11 @@ use crate::library::{
     artwork::{self, ServedArtwork},
     error::{LibraryCommandError, StoreError},
     models::{
-        AlbumTracksRequest, ArtistAlbumsRequest, LibraryAlbumArtistPage, LibraryAlbumArtistSortKey,
-        LibraryAlbumArtistSummary, LibraryAlbumDetails, LibraryAlbumPage, LibraryAlbumSortKey,
-        LibraryAlbumTrackPage, LibraryIndexBucket, LibraryRoot, LibrarySortDirection,
-        LibraryStatus, LibraryTrackPage, LibraryTrackProperties, LibraryTrackSortKey,
-        LibraryUnavailableReason,
+        AlbumArtistListRequest, AlbumArtistQuery, AlbumListRequest, AlbumQuery, AlbumTracksRequest,
+        ArtistAlbumsRequest, LibraryAlbumArtistPage, LibraryAlbumArtistSummary,
+        LibraryAlbumDetails, LibraryAlbumPage, LibraryAlbumTrackPage, LibraryIndexBucket,
+        LibraryRoot, LibraryStatus, LibraryTrackPage, LibraryTrackProperties,
+        LibraryUnavailableReason, TrackListRequest, TrackQuery,
     },
     store::PlayableTrack,
 };
@@ -245,90 +245,48 @@ impl BackendApp {
 
     pub fn list_tracks(
         &self,
-        cursor: Option<&str>,
-        search: Option<&str>,
-        sort_key: LibraryTrackSortKey,
-        sort_direction: LibrarySortDirection,
-        skip: u64,
+        request: &TrackListRequest,
     ) -> Result<LibraryTrackPage, LibraryCommandError> {
-        Ok(self.library()?.store().catalog_tracks_from(
-            cursor,
-            skip,
-            search,
-            sort_key,
-            sort_direction,
-        )?)
+        Ok(self.library()?.store().catalog_tracks_from(request)?)
     }
 
     pub fn list_albums(
         &self,
-        cursor: Option<&str>,
-        search: Option<&str>,
-        sort_key: LibraryAlbumSortKey,
-        sort_direction: LibrarySortDirection,
-        skip: u64,
+        request: &AlbumListRequest,
     ) -> Result<LibraryAlbumPage, LibraryCommandError> {
-        Ok(self.library()?.store().catalog_albums_from(
-            cursor,
-            skip,
-            search,
-            sort_key,
-            sort_direction,
-        )?)
+        Ok(self.library()?.store().catalog_albums_from(request)?)
     }
 
     pub fn list_album_artists(
         &self,
-        cursor: Option<&str>,
-        search: Option<&str>,
-        sort_key: LibraryAlbumArtistSortKey,
-        sort_direction: LibrarySortDirection,
-        skip: u64,
+        request: &AlbumArtistListRequest,
     ) -> Result<LibraryAlbumArtistPage, LibraryCommandError> {
-        Ok(self.library()?.store().catalog_album_artists_from(
-            cursor,
-            skip,
-            search,
-            sort_key,
-            sort_direction,
-        )?)
+        Ok(self
+            .library()?
+            .store()
+            .catalog_album_artists_from(request)?)
     }
 
     /// The scroll index of the Tracks list: how many names start under each label, in list order.
     pub fn track_index(
         &self,
-        search: Option<&str>,
-        sort_key: LibraryTrackSortKey,
-        sort_direction: LibrarySortDirection,
+        query: &TrackQuery,
     ) -> Result<Vec<LibraryIndexBucket>, LibraryCommandError> {
-        Ok(self
-            .library()?
-            .store()
-            .catalog_track_index(search, sort_key, sort_direction)?)
+        Ok(self.library()?.store().catalog_track_index(query)?)
     }
 
     pub fn album_index(
         &self,
-        search: Option<&str>,
-        sort_key: LibraryAlbumSortKey,
-        sort_direction: LibrarySortDirection,
+        query: &AlbumQuery,
     ) -> Result<Vec<LibraryIndexBucket>, LibraryCommandError> {
-        Ok(self
-            .library()?
-            .store()
-            .catalog_album_index(search, sort_key, sort_direction)?)
+        Ok(self.library()?.store().catalog_album_index(query)?)
     }
 
     pub fn album_artist_index(
         &self,
-        search: Option<&str>,
-        sort_key: LibraryAlbumArtistSortKey,
-        sort_direction: LibrarySortDirection,
+        query: &AlbumArtistQuery,
     ) -> Result<Vec<LibraryIndexBucket>, LibraryCommandError> {
-        Ok(self
-            .library()?
-            .store()
-            .catalog_album_artist_index(search, sort_key, sort_direction)?)
+        Ok(self.library()?.store().catalog_album_artist_index(query)?)
     }
 
     pub fn album_by_id(
@@ -459,13 +417,18 @@ impl BackendApp {
         self.playback.handle().next()
     }
 
-    /// Seeks to `position_ms`, a whole number of milliseconds the caller has already clamped to
-    /// the track's range.
+    /// Clamps `position_ms` to the track's duration.
     pub fn seek(
         &self,
-        position_ms: f64,
+        position_ms: u64,
     ) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
-        self.playback.handle().seek(position_ms as u64)
+        let duration_ms = self
+            .playback
+            .snapshot()
+            .session()
+            .and_then(|session| session.duration_ms);
+        let position_ms = duration_ms.map_or(position_ms, |duration| position_ms.min(duration));
+        self.playback.handle().seek(position_ms)
     }
 
     pub fn set_volume(

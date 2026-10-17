@@ -75,15 +75,9 @@ pub async fn next_playback(
 #[tauri::command]
 #[specta::specta]
 pub async fn seek_playback(
-    position_ms: f64,
+    position_ms: u64,
     state: tauri::State<'_, AppState>,
 ) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
-    if !position_ms.is_finite() {
-        return Err(PlaybackServiceError::InvalidArgument);
-    }
-    // A position between milliseconds is rounded down; one outside the track is clamped by the
-    // worker.
-    let position_ms = position_ms.clamp(0.0, 9_007_199_254_740_991.0).floor();
     blocking(&state, move |backend| backend.seek(position_ms)).await
 }
 

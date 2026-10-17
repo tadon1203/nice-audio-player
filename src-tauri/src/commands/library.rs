@@ -1,10 +1,10 @@
 use std::path::PathBuf;
 
 use backend::dto::{
-    AlbumTracksRequest, ArtistAlbumsRequest, LibraryAlbumArtistPage, LibraryAlbumArtistSortKey,
-    LibraryAlbumArtistSummary, LibraryAlbumDetails, LibraryAlbumPage, LibraryAlbumSortKey,
-    LibraryAlbumTrackPage, LibraryIndexBucket, LibraryRoot, LibrarySortDirection, LibraryStatus,
-    LibraryTrackPage, LibraryTrackProperties, LibraryTrackSortKey,
+    AlbumArtistListRequest, AlbumArtistQuery, AlbumListRequest, AlbumQuery, AlbumTracksRequest,
+    ArtistAlbumsRequest, LibraryAlbumArtistPage, LibraryAlbumArtistSummary, LibraryAlbumDetails,
+    LibraryAlbumPage, LibraryAlbumTrackPage, LibraryIndexBucket, LibraryRoot, LibraryStatus,
+    LibraryTrackPage, LibraryTrackProperties, TrackListRequest, TrackQuery,
 };
 use backend::errors::LibraryCommandError;
 use backend::ids::{AlbumId, ArtistId, ArtworkHash, RootId, TrackId};
@@ -123,110 +123,56 @@ pub async fn cancel_library_scan(
 #[tauri::command]
 #[specta::specta]
 pub async fn list_library_tracks(
-    cursor: Option<String>,
-    search: Option<String>,
-    sort_key: LibraryTrackSortKey,
-    sort_direction: LibrarySortDirection,
-    skip: u64,
+    request: TrackListRequest,
     state: tauri::State<'_, AppState>,
 ) -> Result<LibraryTrackPage, LibraryCommandError> {
-    blocking(&state, move |backend| {
-        backend.list_tracks(
-            cursor.as_deref(),
-            search.as_deref(),
-            sort_key,
-            sort_direction,
-            skip,
-        )
-    })
-    .await
+    blocking(&state, move |backend| backend.list_tracks(&request)).await
 }
 
 #[tauri::command]
 #[specta::specta]
 pub async fn list_library_albums(
-    cursor: Option<String>,
-    search: Option<String>,
-    sort_key: LibraryAlbumSortKey,
-    sort_direction: LibrarySortDirection,
-    skip: u64,
+    request: AlbumListRequest,
     state: tauri::State<'_, AppState>,
 ) -> Result<LibraryAlbumPage, LibraryCommandError> {
-    blocking(&state, move |backend| {
-        backend.list_albums(
-            cursor.as_deref(),
-            search.as_deref(),
-            sort_key,
-            sort_direction,
-            skip,
-        )
-    })
-    .await
+    blocking(&state, move |backend| backend.list_albums(&request)).await
 }
 
 #[tauri::command]
 #[specta::specta]
 pub async fn list_library_album_artists(
-    cursor: Option<String>,
-    search: Option<String>,
-    sort_key: LibraryAlbumArtistSortKey,
-    sort_direction: LibrarySortDirection,
-    skip: u64,
+    request: AlbumArtistListRequest,
     state: tauri::State<'_, AppState>,
 ) -> Result<LibraryAlbumArtistPage, LibraryCommandError> {
-    blocking(&state, move |backend| {
-        backend.list_album_artists(
-            cursor.as_deref(),
-            search.as_deref(),
-            sort_key,
-            sort_direction,
-            skip,
-        )
-    })
-    .await
+    blocking(&state, move |backend| backend.list_album_artists(&request)).await
 }
 
 /// The scroll index of the Tracks list: how many names start under each label, in list order.
 #[tauri::command]
 #[specta::specta]
 pub async fn list_library_track_index(
-    search: Option<String>,
-    sort_key: LibraryTrackSortKey,
-    sort_direction: LibrarySortDirection,
+    query: TrackQuery,
     state: tauri::State<'_, AppState>,
 ) -> Result<Vec<LibraryIndexBucket>, LibraryCommandError> {
-    blocking(&state, move |backend| {
-        backend.track_index(search.as_deref(), sort_key, sort_direction)
-    })
-    .await
+    blocking(&state, move |backend| backend.track_index(&query)).await
 }
 
 #[tauri::command]
 #[specta::specta]
 pub async fn list_library_album_index(
-    search: Option<String>,
-    sort_key: LibraryAlbumSortKey,
-    sort_direction: LibrarySortDirection,
+    query: AlbumQuery,
     state: tauri::State<'_, AppState>,
 ) -> Result<Vec<LibraryIndexBucket>, LibraryCommandError> {
-    blocking(&state, move |backend| {
-        backend.album_index(search.as_deref(), sort_key, sort_direction)
-    })
-    .await
+    blocking(&state, move |backend| backend.album_index(&query)).await
 }
 
 #[tauri::command]
 #[specta::specta]
 pub async fn list_library_album_artist_index(
-    search: Option<String>,
-    sort_key: LibraryAlbumArtistSortKey,
-    sort_direction: LibrarySortDirection,
+    query: AlbumArtistQuery,
     state: tauri::State<'_, AppState>,
 ) -> Result<Vec<LibraryIndexBucket>, LibraryCommandError> {
-    blocking(&state, move |backend| {
-        backend.album_artist_index(search.as_deref(), sort_key, sort_direction)
-    })
-    .await
+    blocking(&state, move |backend| backend.album_artist_index(&query)).await
 }
 
 #[tauri::command]

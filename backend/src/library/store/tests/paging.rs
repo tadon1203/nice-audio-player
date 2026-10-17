@@ -395,7 +395,7 @@ fn starting_from_a_huge_tracks_list_costs_one_narrow_query() {
         let started = std::time::Instant::now();
         let selection = fixture
             .store
-            .playback_for_tracks(None, LibraryTrackSortKey::Title, ASC, None)
+            .playback_for_tracks(&track_query(None, LibraryTrackSortKey::Title, ASC), None)
             .unwrap();
         let ids_ms = started.elapsed().as_millis();
         let started = std::time::Instant::now();
@@ -495,7 +495,7 @@ fn the_scroll_index_follows_the_sort_order_for_mixed_scripts_in_both_directions(
     let store = &fixture.store;
     for direction in [ASC, DESC] {
         let buckets = store
-            .catalog_track_index(None, LibraryTrackSortKey::Title, direction)
+            .catalog_track_index(&track_query(None, LibraryTrackSortKey::Title, direction))
             .unwrap();
         let tracks = store
             .catalog_tracks(None, None, LibraryTrackSortKey::Title, direction)
@@ -526,7 +526,7 @@ fn the_scroll_index_follows_the_sort_order_for_mixed_scripts_in_both_directions(
         );
     }
     let ascending: Vec<String> = store
-        .catalog_track_index(None, LibraryTrackSortKey::Title, ASC)
+        .catalog_track_index(&track_query(None, LibraryTrackSortKey::Title, ASC))
         .unwrap()
         .into_iter()
         .map(|bucket| bucket.label)
@@ -540,7 +540,7 @@ fn the_scroll_index_follows_the_sort_order_for_mixed_scripts_in_both_directions(
     );
     assert!(
         store
-            .catalog_track_index(None, LibraryTrackSortKey::Duration, ASC)
+            .catalog_track_index(&track_query(None, LibraryTrackSortKey::Duration, ASC))
             .unwrap()
             .is_empty(),
         "a list ordered by length has no letters"
@@ -573,25 +573,37 @@ fn the_scroll_index_of_albums_and_artists_counts_what_the_list_holds() {
 
     let by_name = expected(&[("A", 2), ("あ", 1), ("や", 1), ("漢", 1)]);
     assert_eq!(
-        pairs(store.catalog_album_index(None, TITLE, ASC).unwrap()),
-        by_name
-    );
-    assert_eq!(
         pairs(
             store
-                .catalog_album_artist_index(None, LibraryAlbumArtistSortKey::Artist, ASC)
+                .catalog_album_index(&album_query(None, TITLE, ASC))
                 .unwrap()
         ),
         by_name
     );
     assert_eq!(
-        pairs(store.catalog_album_index(None, TITLE, DESC).unwrap()),
+        pairs(
+            store
+                .catalog_album_artist_index(&album_artist_query(
+                    None,
+                    LibraryAlbumArtistSortKey::Artist,
+                    ASC
+                ))
+                .unwrap()
+        ),
+        by_name
+    );
+    assert_eq!(
+        pairs(
+            store
+                .catalog_album_index(&album_query(None, TITLE, DESC))
+                .unwrap()
+        ),
         expected(&[("漢", 1), ("や", 1), ("あ", 1), ("A", 2)])
     );
     assert_eq!(
         pairs(
             store
-                .catalog_album_index(None, LibraryAlbumSortKey::Year, ASC)
+                .catalog_album_index(&album_query(None, LibraryAlbumSortKey::Year, ASC))
                 .unwrap()
         ),
         expected(&[("2001", 3), ("?", 2)]),
@@ -599,11 +611,17 @@ fn the_scroll_index_of_albums_and_artists_counts_what_the_list_holds() {
     );
     assert!(
         store
-            .catalog_album_artist_index(None, LibraryAlbumArtistSortKey::TrackCount, ASC)
+            .catalog_album_artist_index(&album_artist_query(
+                None,
+                LibraryAlbumArtistSortKey::TrackCount,
+                ASC
+            ))
             .unwrap()
             .is_empty()
     );
-    let filtered = store.catalog_album_index(Some("ゆず"), TITLE, ASC).unwrap();
+    let filtered = store
+        .catalog_album_index(&album_query(Some("ゆず"), TITLE, ASC))
+        .unwrap();
     assert_eq!(
         pairs(filtered),
         expected(&[("や", 1)]),
@@ -630,7 +648,7 @@ fn jumping_to_a_letter_in_a_huge_list_reads_only_the_target_region() {
     fixture.add_all(&seeds);
     let store = &fixture.store;
     let buckets = store
-        .catalog_track_index(None, LibraryTrackSortKey::Title, ASC)
+        .catalog_track_index(&track_query(None, LibraryTrackSortKey::Title, ASC))
         .unwrap();
     assert_eq!(
         buckets.iter().map(|bucket| bucket.count).sum::<u64>(),
@@ -646,7 +664,11 @@ fn jumping_to_a_letter_in_a_huge_list_reads_only_the_target_region() {
     let statements = statements_of(&fixture, || {
         page = Some(
             store
-                .catalog_tracks_from(None, skip, None, LibraryTrackSortKey::Title, ASC)
+                .catalog_tracks_from(&TrackListRequest {
+                    query: track_query(None, LibraryTrackSortKey::Title, ASC),
+                    cursor: None,
+                    skip,
+                })
                 .unwrap(),
         );
     });

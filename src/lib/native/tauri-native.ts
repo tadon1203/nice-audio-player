@@ -241,59 +241,31 @@ class TauriLibraryClient implements LibraryClient {
   public async openLogDirectory(): Promise<void> {
     await this.#call(() => this.#commands.openLogDirectory());
   }
-  public tracks(
-    cursor: string | null,
-    search: string | null,
-    sortKey: Parameters<Commands["listLibraryTracks"]>[2],
-    direction: Parameters<Commands["listLibraryTracks"]>[3],
-    skip: number,
-  ): Promise<LibraryTrackPage> {
-    return this.#call(() =>
-      this.#commands.listLibraryTracks(cursor, search, sortKey, direction, skip),
-    );
+  public tracks(request: Parameters<Commands["listLibraryTracks"]>[0]): Promise<LibraryTrackPage> {
+    return this.#call(() => this.#commands.listLibraryTracks(request));
   }
-  public albums(
-    cursor: string | null,
-    search: string | null,
-    sortKey: Parameters<Commands["listLibraryAlbums"]>[2],
-    direction: Parameters<Commands["listLibraryAlbums"]>[3],
-    skip: number,
-  ): Promise<LibraryAlbumPage> {
-    return this.#call(() =>
-      this.#commands.listLibraryAlbums(cursor, search, sortKey, direction, skip),
-    );
+  public albums(request: Parameters<Commands["listLibraryAlbums"]>[0]): Promise<LibraryAlbumPage> {
+    return this.#call(() => this.#commands.listLibraryAlbums(request));
   }
   public albumArtists(
-    cursor: string | null,
-    search: string | null,
-    sortKey: Parameters<Commands["listLibraryAlbumArtists"]>[2],
-    direction: Parameters<Commands["listLibraryAlbumArtists"]>[3],
-    skip: number,
+    request: Parameters<Commands["listLibraryAlbumArtists"]>[0],
   ): Promise<LibraryAlbumArtistPage> {
-    return this.#call(() =>
-      this.#commands.listLibraryAlbumArtists(cursor, search, sortKey, direction, skip),
-    );
+    return this.#call(() => this.#commands.listLibraryAlbumArtists(request));
   }
   public trackIndex(
-    search: string | null,
-    sortKey: Parameters<Commands["listLibraryTrackIndex"]>[1],
-    direction: Parameters<Commands["listLibraryTrackIndex"]>[2],
+    query: Parameters<Commands["listLibraryTrackIndex"]>[0],
   ): Promise<LibraryIndexBucket[]> {
-    return this.#call(() => this.#commands.listLibraryTrackIndex(search, sortKey, direction));
+    return this.#call(() => this.#commands.listLibraryTrackIndex(query));
   }
   public albumIndex(
-    search: string | null,
-    sortKey: Parameters<Commands["listLibraryAlbumIndex"]>[1],
-    direction: Parameters<Commands["listLibraryAlbumIndex"]>[2],
+    query: Parameters<Commands["listLibraryAlbumIndex"]>[0],
   ): Promise<LibraryIndexBucket[]> {
-    return this.#call(() => this.#commands.listLibraryAlbumIndex(search, sortKey, direction));
+    return this.#call(() => this.#commands.listLibraryAlbumIndex(query));
   }
   public albumArtistIndex(
-    search: string | null,
-    sortKey: Parameters<Commands["listLibraryAlbumArtistIndex"]>[1],
-    direction: Parameters<Commands["listLibraryAlbumArtistIndex"]>[2],
+    query: Parameters<Commands["listLibraryAlbumArtistIndex"]>[0],
   ): Promise<LibraryIndexBucket[]> {
-    return this.#call(() => this.#commands.listLibraryAlbumArtistIndex(search, sortKey, direction));
+    return this.#call(() => this.#commands.listLibraryAlbumArtistIndex(query));
   }
   public albumById(
     albumId: Parameters<Commands["getLibraryAlbum"]>[0],
