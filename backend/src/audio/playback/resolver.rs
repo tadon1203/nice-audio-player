@@ -59,7 +59,7 @@ impl TrackResolver {
         }
         for (index, track) in missing.into_iter().zip(read) {
             if let Some(track) = track {
-                cache.insert(track.track_id, track.clone());
+                cache.insert(track.id(), track.clone());
                 found[index] = Some(track);
             }
         }
@@ -106,7 +106,7 @@ pub(super) mod testing {
 
     impl FakeTracks {
         pub fn add(&self, track: PlayableTrack) {
-            self.tracks.lock().unwrap().insert(track.track_id, track);
+            self.tracks.lock().unwrap().insert(track.id(), track);
         }
 
         pub fn remove(&self, track_id: TrackId) {
@@ -133,22 +133,6 @@ pub(super) mod testing {
 
     /// A track that is only a name and a path.
     pub fn track(id: TrackId, file: ValidatedAudioFile) -> PlayableTrack {
-        PlayableTrack {
-            track_id: id,
-            title: file.file_name.clone(),
-            file,
-            artist: None,
-            album: None,
-            album_artist: None,
-            artwork: None,
-            duration_ms: None,
-            track_number: None,
-            disc_number: None,
-            year: None,
-            file_format: None,
-            bit_depth: None,
-            bitrate_kbps: None,
-            content_hash: None,
-        }
+        PlayableTrack::bare(id, file)
     }
 }

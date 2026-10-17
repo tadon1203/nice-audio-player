@@ -9,7 +9,7 @@ impl PlaybackWorker {
         match &self.transport {
             Transport::Idle | Transport::Loading(_) => PlaybackSnapshot::Stopped {
                 base,
-                item: self.last_item.clone(),
+                item: self.last_item.as_ref().map(|item| item.to_playback_item()),
             },
             Transport::Loaded(loaded) => {
                 base.can_go_previous = self.loaded_can_go_previous(loaded);
@@ -30,7 +30,8 @@ impl PlaybackWorker {
                         .queue
                         .current()
                         .and_then(|entry| self.item_of(entry))
-                        .or_else(|| self.last_item.clone()),
+                        .or_else(|| self.last_item.clone())
+                        .map(|item| item.to_playback_item()),
                     playback_id: *id,
                     error: code.clone(),
                     skipping: *skipping,
@@ -43,7 +44,7 @@ impl PlaybackWorker {
         let config = &loaded.output.config;
         let processing = PlaybackProcessingInfo::from_plan(config.processing_plan);
         ActiveSession {
-            item: loaded.item.clone(),
+            item: loaded.item.to_playback_item(),
             started_by: loaded.started_by,
             playback_id: loaded.id,
             position_ms: loaded.position_ms(),

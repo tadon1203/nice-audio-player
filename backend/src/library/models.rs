@@ -72,30 +72,36 @@ pub enum LibraryTrackSortKey {
     Duration,
 }
 pub use super::artwork::ArtworkRef;
-/// The album a track is filed under, by ID (see `ids.rs`) and as titled. A track with no album tag
-/// has none.
+/// The album a track is filed under, by ID (see `ids.rs`) and as titled, with its Album Artist. A
+/// track with no album tag has none.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct TrackAlbum {
     pub id: AlbumId,
     pub title: String,
-    /// The album's Album Artist.
-    pub artist_id: ArtistId,
+    pub artist: ArtistRef,
+}
+/// What the track DTOs share: the identity and the metadata a row shows.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TrackCore {
+    pub id: TrackId,
+    pub title: String,
+    pub artist: Option<String>,
+    pub duration_ms: Option<u64>,
+    pub artwork: Option<ArtworkRef>,
 }
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LibraryTrackSummary {
-    pub id: TrackId,
-    pub title: String,
-    pub artist: Option<String>,
+    #[serde(flatten)]
+    pub core: TrackCore,
+    pub state: TrackState,
+    /// `None` for a track with no album tag.
     pub album: Option<TrackAlbum>,
-    pub album_artist: Option<String>,
-    pub artwork: Option<ArtworkRef>,
-    pub duration_ms: Option<u64>,
     pub file_format: Option<String>,
     pub bit_depth: Option<u32>,
     pub bitrate_kbps: Option<u64>,
-    pub state: TrackState,
 }
 /// The tags, audio format and location of one track, as the Properties view lists them.
 #[derive(Debug, Clone, Serialize, specta::Type)]
@@ -139,7 +145,7 @@ pub struct LibraryIndexBucket {
     pub label: String,
     pub count: u64,
 }
-#[derive(Debug, Clone, Serialize, specta::Type)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ArtistRef {
     pub id: ArtistId,
@@ -207,16 +213,35 @@ pub struct LibraryAlbumDetails {
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LibraryAlbumTrackSummary {
-    pub id: TrackId,
-    pub title: String,
-    pub artist: Option<String>,
+    #[serde(flatten)]
+    pub core: TrackCore,
+    pub state: TrackState,
     pub track_number: Option<u32>,
     pub disc_number: Option<u32>,
     pub file_format: Option<String>,
     pub bit_depth: Option<u32>,
     pub sample_rate: Option<u32>,
-    pub duration_ms: Option<u64>,
-    pub state: TrackState,
+}
+/// The album of the loaded track: the album it is filed under and how many tracks the library
+/// holds for it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct NowPlayingAlbum {
+    #[serde(flatten)]
+    pub album: TrackAlbum,
+    pub track_count: u32,
+}
+/// The loaded track as the Renderer sees it. No file path: the playback worker holds the file. It
+/// has no state: only a playable track is ever loaded.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct NowPlayingTrack {
+    #[serde(flatten)]
+    pub core: TrackCore,
+    pub album: Option<NowPlayingAlbum>,
+    pub track_number: Option<u32>,
+    pub disc_number: Option<u32>,
+    pub year: Option<i32>,
 }
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]

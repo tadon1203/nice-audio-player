@@ -57,7 +57,7 @@
   const rows = $derived(
     virtual.items.map(({ index }) => {
       const item = itemAt.at(index);
-      return { index, item, key: item?.id ?? `waiting-${index}` };
+      return { index, item, key: item?.queueItemId ?? `waiting-${index}` };
     }),
   );
 
@@ -79,7 +79,7 @@
   style:padding-bottom="{virtual.bottomSpacer}px"
 >
   {#each rows as { index, item, key } (key)}
-    {@const dragging = item !== undefined && drag?.id === item.id}
+    {@const dragging = item !== undefined && drag?.id === item.queueItemId}
     <li
       animate:flipMotion={{
         delay: cascading && !reduced ? Math.min(index, CASCADE_ROWS) * CASCADE_STEP_MS : 0,
@@ -104,13 +104,14 @@
         <QueueRow
           {item}
           tone="upcoming"
-          dragHandlers={queueDrag.handlersFor(item.id, index)}
-          onMoveEarlier={() => actions.run(() => playback.moveQueueItem(item.id, index - 1))}
-          onMoveLater={() => actions.run(() => playback.moveQueueItem(item.id, index + 1))}
+          dragHandlers={queueDrag.handlersFor(item.queueItemId, index)}
+          onMoveEarlier={() =>
+            actions.run(() => playback.moveQueueItem(item.queueItemId, index - 1))}
+          onMoveLater={() => actions.run(() => playback.moveQueueItem(item.queueItemId, index + 1))}
           canMoveEarlier={index > 0}
           canMoveLater={index < upcomingCount - 1}
-          onPlay={() => actions.run(() => playback.playQueueItem(item.id))}
-          onRemove={() => actions.run(() => playback.removeQueueItem(item.id))}
+          onPlay={() => actions.run(() => playback.playQueueItem(item.queueItemId))}
+          onRemove={() => actions.run(() => playback.removeQueueItem(item.queueItemId))}
         />
       {/if}
     </li>

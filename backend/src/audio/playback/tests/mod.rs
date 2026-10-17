@@ -135,17 +135,16 @@ impl Harness {
             1,
             &vec![0; SAMPLE_RATE as usize * seconds],
         );
-        PlayableTrack {
-            title: name.into(),
-            ..library_track(
-                track_id_of(name),
-                ValidatedAudioFile {
-                    path,
-                    file_name: format!("{name}.wav"),
-                    extension: "wav".into(),
-                },
-            )
-        }
+        let mut track = library_track(
+            track_id_of(name),
+            ValidatedAudioFile {
+                path,
+                file_name: format!("{name}.wav"),
+                extension: "wav".into(),
+            },
+        );
+        track.track.core.title = name.into();
+        track
     }
 
     /// Makes the library know `tracks` and returns their ids, which is what a queue is made of.
@@ -153,7 +152,7 @@ impl Harness {
         tracks
             .into_iter()
             .map(|track| {
-                let id = track.track_id;
+                let id = track.id();
                 self.library.add(track);
                 id
             })
@@ -287,7 +286,7 @@ impl Harness {
             .current
             .into_iter()
             .chain(queue.upcoming)
-            .map(|item| item.title)
+            .map(|item| item.core.title)
             .collect()
     }
 }
@@ -319,7 +318,7 @@ fn session(snapshot: &PlaybackSnapshot) -> &ActiveSession {
 }
 
 fn is_playing(snapshot: &PlaybackSnapshot, title: &str) -> bool {
-    matches!(snapshot, PlaybackSnapshot::Playing { session, .. } if session.item.title == title)
+    matches!(snapshot, PlaybackSnapshot::Playing { session, .. } if session.item.track.core.title == title)
 }
 
 fn start_service() -> PlaybackService {

@@ -296,17 +296,13 @@ export type LibraryAlbumTrackPage = {
 };
 
 export type LibraryAlbumTrackSummary = {
-	id: TrackId,
-	title: string,
-	artist: string | null,
+	state: TrackState,
 	trackNumber: number | null,
 	discNumber: number | null,
 	fileFormat: string | null,
 	bitDepth: number | null,
 	sampleRate: number | null,
-	durationMs: number | null,
-	state: TrackState,
-};
+} & TrackCore;
 
 export type LibraryArtistAlbumSortKey = "year" | "title";
 
@@ -402,18 +398,13 @@ export type LibraryTrackProperties = {
 export type LibraryTrackSortKey = "title" | "artist" | "album" | "duration";
 
 export type LibraryTrackSummary = {
-	id: TrackId,
-	title: string,
-	artist: string | null,
+	state: TrackState,
+	/**  `None` for a track with no album tag. */
 	album: TrackAlbum | null,
-	albumArtist: string | null,
-	artwork: ArtworkRef | null,
-	durationMs: number | null,
 	fileFormat: string | null,
 	bitDepth: number | null,
 	bitrateKbps: number | null,
-	state: TrackState,
-};
+} & TrackCore;
 
 export type LibraryUnavailableReason = "databaseOpenFailed" | "migrationFailed" | "schemaTooNew" | "databaseCorrupt";
 
@@ -440,35 +431,29 @@ export type LyricsTimedLine = {
 	text: string,
 };
 
-/**  A fact that happened, with its value. */
-export type Occurrence = 
-/**  The player could not play `item` and skipped it by itself. */
-{ type: "trackSkipped"; item: PlaybackItem | null; error: PlaybackFailureCode };
-
-/**  The album of a playable track, and how many tracks the library holds for it. */
-export type PlayableAlbum = {
+/**
+ *  The album of the loaded track: the album it is filed under and how many tracks the library
+ *  holds for it.
+ */
+export type NowPlayingAlbum = {
 	trackCount: number,
 } & TrackAlbum;
 
 /**
- *  A library track ready to be played, and the one track-metadata type of the whole playback
- *  path: the library reads it, the queue item wraps it, and the renderer sees it.
- * 
- *  The file facts (`file`, `file_format`, `bit_depth`, `bitrate_kbps`) feed the signal path and
- *  stay in the backend. The file is a path on disk, and the renderer never receives one.
+ *  The loaded track as the Renderer sees it. No file path: the playback worker holds the file. It
+ *  has no state: only a playable track is ever loaded.
  */
-export type PlayableTrack = {
-	trackId: TrackId,
-	title: string,
-	artist: string | null,
-	album: PlayableAlbum | null,
-	albumArtist: string | null,
-	artwork: ArtworkRef | null,
-	durationMs: number | null,
+export type NowPlayingTrack = {
+	album: NowPlayingAlbum | null,
 	trackNumber: number | null,
 	discNumber: number | null,
 	year: number | null,
-};
+} & TrackCore;
+
+/**  A fact that happened, with its value. */
+export type Occurrence = 
+/**  The player could not play `item` and skipped it by itself. */
+{ type: "trackSkipped"; item: PlaybackItem | null; error: PlaybackFailureCode };
 
 export type PlaybackChannelConversion = "none" | "monoToStereo" | "stereoToMono" | "downmix";
 
@@ -487,15 +472,15 @@ export type PlaybackFailureCode = "noOutputDevice" | "outputDeviceUnavailable" |
 export type PlaybackId = number;
 
 /**
- *  One entry of the playback queue and the identity of the loaded track: the queue's id for the
- *  entry and the track's metadata, shared with every other layer as one type.
+ *  One entry of the playback queue and the identity of the loaded track, as the renderer sees
+ *  it: the queue's id for the entry and the track's metadata. It carries no file path.
  * 
- *  Everything a listener-facing feature needs about "what is playing" lives here, so history,
- *  system media controls, and the UI never have to look the track up again by path.
+ *  Everything a listener-facing feature needs about "what is playing" lives here, so history
+ *  and the UI can show it without reading the library again.
  */
 export type PlaybackItem = {
 	queueItemId: QueueItemId,
-} & PlayableTrack;
+} & NowPlayingTrack;
 
 /**
  *  Where the loaded track is. Sent on its own, far more often than the snapshot, so a tick
@@ -509,14 +494,10 @@ export type PlaybackPosition = {
 
 /**  A queue entry as the queue panel shows it; the file path stays in the backend. */
 export type PlaybackQueueItem = {
-	id: QueueItemId,
-	trackId: TrackId,
-	title: string,
-	artist: string | null,
+	/**  The queue's id for the entry. Named apart from the track's `id` it flattens with. */
+	queueItemId: QueueItemId,
 	album: string | null,
-	artwork: ArtworkRef | null,
-	durationMs: number | null,
-};
+} & TrackCore;
 
 /**
  *  The queue as the renderer mirrors it: the current item, the last few played, the first
@@ -605,14 +586,22 @@ export type StateMessage = {
 export type StateValue = { topic: "playback"; value: PlaybackSnapshot } | { topic: "queue"; value: PlaybackQueueSnapshot } | { topic: "libraryScan"; value: LibraryScanSnapshot } | { topic: "waveform"; value: PlaybackWaveform | null } | { topic: "appearance"; value: Appearance };
 
 /**
- *  The album a track is filed under, by ID (see `ids.rs`) and as titled. A track with no album tag
- *  has none.
+ *  The album a track is filed under, by ID (see `ids.rs`) and as titled, with its Album Artist. A
+ *  track with no album tag has none.
  */
 export type TrackAlbum = {
 	id: AlbumId,
 	title: string,
-	/**  The album's Album Artist. */
-	artistId: ArtistId,
+	artist: ArtistRef,
+};
+
+/**  What the track DTOs share: the identity and the metadata a row shows. */
+export type TrackCore = {
+	id: TrackId,
+	title: string,
+	artist: string | null,
+	durationMs: number | null,
+	artwork: ArtworkRef | null,
 };
 
 /**  A track: the `tracks` rowid. Above zero. On the IPC a number, which serde rejects below one. */

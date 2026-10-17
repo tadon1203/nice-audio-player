@@ -1,5 +1,5 @@
 import { resolve } from "$app/paths";
-import type { LibraryTrackSummary, TrackAlbum } from "#lib/native";
+import type { LibraryTrackSummary } from "#lib/native";
 
 interface Link {
   text: string;
@@ -7,9 +7,7 @@ interface Link {
 }
 
 /** What a track needs to say where its artist and album live. */
-type TrackLinkSource = Partial<Pick<LibraryTrackSummary, "artist">> & {
-  album?: TrackAlbum | null;
-};
+type TrackLinkSource = Partial<Pick<LibraryTrackSummary, "artist" | "album">>;
 
 /** Rules about a track as a row: its links and whether it can be used. */
 export class Tracks {
@@ -32,7 +30,7 @@ export class Tracks {
                 album === null
                   ? null
                   : resolve("/library/album-artists/[artistId=artistId]", {
-                      artistId: album.artistId,
+                      artistId: album.artist.id,
                     }),
             },
       album:

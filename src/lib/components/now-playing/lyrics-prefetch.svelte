@@ -9,8 +9,8 @@
    */
   const queryClient = useQueryClient();
   const { playback, lyrics } = AppServices.current();
-  const currentId = $derived(playback.item?.trackId ?? null);
-  const nextId = $derived(playback.queue?.upcoming[0]?.trackId ?? null);
+  const currentId = $derived(playback.item?.id ?? null);
+  const nextId = $derived(playback.queue?.upcoming[0]?.id ?? null);
 
   $effect(() => {
     for (const trackId of [currentId, nextId]) {

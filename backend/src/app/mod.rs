@@ -545,7 +545,7 @@ impl BackendApp {
     ) -> Result<Versioned<PlaybackQueueSnapshot>, PlaybackServiceError> {
         let library = self.playback_library()?;
         let track = playback_context::resolve_track(library.store(), track_id)?;
-        self.playback.handle().enqueue(vec![track.track_id], next)
+        self.playback.handle().enqueue(vec![track.id()], next)
     }
 
     pub fn clear_queue(&self) -> Result<Versioned<PlaybackQueueSnapshot>, PlaybackServiceError> {
@@ -622,7 +622,11 @@ impl BackendApp {
     ) -> Option<PlaybackWaveform> {
         let snapshot = self.playback.snapshot();
         let session = snapshot.session()?;
-        let waveform = find(&session.item.track)?;
+        // The renderer's item has no file, so the loaded track is read from the library.
+        let library = self.library.as_ref().ok()?;
+        let track =
+            playback_context::resolve_track(library.store(), session.item.track.core.id).ok()?;
+        let waveform = find(&track)?;
         Some(PlaybackWaveform {
             playback_id: session.playback_id,
             peaks: waveform.peaks.clone(),

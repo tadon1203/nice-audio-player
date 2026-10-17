@@ -22,8 +22,27 @@ fn test_item() -> PlaybackItem {
                 file_name: "test.flac".into(),
                 extension: "flac".into(),
             },
-        ),
+        )
+        .track,
     }
+}
+
+#[test]
+fn the_playback_item_serializes_its_track_and_no_file() {
+    let json = serde_json::to_value(test_item()).unwrap();
+    let keys: Vec<&str> = json
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect();
+    assert_eq!(json["title"], "test.flac");
+    assert!(keys.contains(&"queueItemId"));
+    assert!(
+        keys.iter()
+            .all(|key| !key.contains("path") && !key.contains("file")),
+        "the renderer never receives a file: {keys:?}"
+    );
 }
 
 fn base() -> SnapshotBase {
@@ -55,16 +74,15 @@ fn wire_session() -> ActiveSession {
 fn item_json() -> serde_json::Value {
     serde_json::json!({
         "queueItemId": 1,
-        "trackId": 7,
-        "trackNumber": null,
-        "discNumber": null,
-        "year": null,
+        "id": 7,
         "title": "test.flac",
         "artist": null,
-        "album": null,
-        "albumArtist": null,
         "artwork": null,
-        "durationMs": null
+        "durationMs": null,
+        "album": null,
+        "trackNumber": null,
+        "discNumber": null,
+        "year": null
     })
 }
 

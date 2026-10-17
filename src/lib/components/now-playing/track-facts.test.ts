@@ -1,19 +1,18 @@
 import { describe, expect, it } from "vitest";
-import type { LyricsResolution, PlaybackItem } from "#lib/native";
+import type { AlbumId, ArtistId, LyricsResolution, PlaybackItem } from "#lib/native";
 import { lyricsState, trackFacts } from "./track-facts";
 
 const item: PlaybackItem = {
   queueItemId: 1,
-  trackId: 1,
+  id: 1,
   title: "Song",
   artist: " Artist ",
   album: {
-    id: "7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a20",
+    id: "7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a20" as AlbumId,
     title: "Album",
-    artistId: "5b3f2c1e0a9d8c7b6a5f4e3d2c1b0a99",
+    artist: { id: "5b3f2c1e0a9d8c7b6a5f4e3d2c1b0a99" as ArtistId, name: "Band" },
     trackCount: 12,
   },
-  albumArtist: null,
   artwork: null,
   durationMs: 1000,
   trackNumber: 4,

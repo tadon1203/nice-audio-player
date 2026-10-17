@@ -77,7 +77,7 @@ fn enqueueing_on_an_empty_queue_starts_playback_inside_the_worker() {
         .unwrap()
         .value;
 
-    assert_eq!(queue.current.map(|item| item.title), Some("a".into()));
+    assert_eq!(queue.current.map(|item| item.core.title), Some("a".into()));
     assert_eq!(queue.upcoming_count, 1);
     harness.pump_until(|harness| is_playing(&harness.snapshot(), "a"));
 }
@@ -185,7 +185,7 @@ fn an_undone_queue_follows_the_shuffle_chosen_since() {
 
     let queue = harness.queue_snapshot();
     assert!(queue.shuffle_enabled);
-    assert_eq!(queue.current.map(|item| item.title), Some("a".into()));
+    assert_eq!(queue.current.map(|item| item.core.title), Some("a".into()));
     assert_eq!(queue.upcoming_count, 1);
 }
 
@@ -223,7 +223,7 @@ fn the_rows_further_down_a_long_queue_are_read_when_asked_for() {
 
     assert_eq!(window.offset, 500);
     assert_eq!(window.items.len(), 50);
-    assert_eq!(window.items[0].title, "t500.flac");
+    assert_eq!(window.items[0].core.title, "t500.flac");
     assert_eq!(harness.library.reads() - before, 50);
 }
 
@@ -312,7 +312,7 @@ fn a_window_leaves_out_a_track_that_has_left_the_library_since() {
         window
             .items
             .iter()
-            .all(|item| item.track_id != track_id_of("t4"))
+            .all(|item| item.core.id != track_id_of("t4"))
     );
 }
 
@@ -337,7 +337,7 @@ fn a_long_queue_snapshot_carries_a_prefix_and_serves_the_rest_in_windows() {
     assert_eq!(snapshot.history.len(), 50);
     assert_eq!(snapshot.history_count, 60);
     assert_eq!(
-        snapshot.history.last().map(|i| i.title.as_str()),
+        snapshot.history.last().map(|i| i.core.title.as_str()),
         Some("t59.flac")
     );
     assert_eq!(snapshot.upcoming.len(), UPCOMING_IN_SNAPSHOT);
@@ -347,7 +347,7 @@ fn a_long_queue_snapshot_carries_a_prefix_and_serves_the_rest_in_windows() {
     assert_eq!(window.revision, 7);
     assert_eq!(window.offset as usize, UPCOMING_IN_SNAPSHOT);
     assert_eq!(window.items.len(), 150);
-    assert_eq!(window.items[0].title, "t261.flac");
+    assert_eq!(window.items[0].core.title, "t261.flac");
     assert!(snapshot.window(7, total + 10, 5).items.is_empty());
 }
 

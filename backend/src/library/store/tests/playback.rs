@@ -10,15 +10,21 @@ fn a_playable_track_carries_the_album_and_album_artist_ids() {
     let store = &fixture.store;
 
     let filed = store.playback_for_track(track_id_of(1)).unwrap();
-    let album = filed.album.unwrap();
+    let album_id = filed.track.album.as_ref().unwrap().album.id;
     assert_eq!(
-        store.catalog_album(album.album.id).unwrap().track_count,
+        store.catalog_album(album_id).unwrap().track_count,
         1,
         "the ID opens the album the playback names"
     );
-    assert_eq!(album.album.artist_id, ArtistId::of("Band"));
+    assert_eq!(
+        filed.track.album.as_ref().unwrap().album.artist,
+        ArtistRef {
+            id: ArtistId::of("Band"),
+            name: "Band".to_owned()
+        }
+    );
     let single = store.playback_for_track(track_id_of(2)).unwrap();
-    assert_eq!(single.album, None, "no album tag, no album");
+    assert_eq!(single.track.album, None, "no album tag, no album");
 }
 
 #[test]
@@ -40,20 +46,23 @@ fn a_track_without_a_title_is_named_after_its_file_in_playback_and_in_search() {
         .unwrap();
     let tracks = store.playable_tracks(&selection.track_ids).unwrap();
     let track = tracks[selection.start_index].as_ref().unwrap();
-    assert_eq!(track.title, "multi.part");
+    assert_eq!(track.track.core.title, "multi.part");
     let album = track
+        .track
         .album
         .as_ref()
         .expect("a track with an album tag has an album");
-    assert_eq!(album.album.artist_id, ArtistId::of("Artist"));
+    assert_eq!(album.album.artist.id, ArtistId::of("Artist"));
     assert_eq!(album.track_count, 1);
     assert_eq!(
         store
             .playback_for_track(track_id_of(1))
             .unwrap()
+            .track
             .album
-            .map(|album| album.track_count),
-        Some(1)
+            .unwrap()
+            .track_count,
+        1
     );
     let restored = store
         .playable_tracks(&[track_id_of(1), track_id_of(999)])
@@ -71,7 +80,7 @@ fn a_track_without_a_title_is_named_after_its_file_in_playback_and_in_search() {
         (by_stem.items.len(), by_stem.total_count.unwrap_or(0)),
         (1, 1)
     );
-    assert_eq!(by_stem.items[0].title, "multi.part");
+    assert_eq!(by_stem.items[0].core.title, "multi.part");
     let by_extension = store
         .catalog_tracks(None, Some("flac"), LibraryTrackSortKey::Title, ASC)
         .unwrap();
@@ -108,7 +117,10 @@ fn track_playback_follows_the_list_order_and_skips_tracks_that_cannot_play() {
         .unwrap()
         .remove(0)
         .unwrap();
-    assert_eq!(first.album.unwrap().album.title, "Album");
+    assert_eq!(
+        first.track.album.map(|album| album.album.title).as_deref(),
+        Some("Album")
+    );
 
     let filtered = store
         .playback_for_tracks(Some("alp"), LibraryTrackSortKey::Title, ASC, None)
@@ -120,9 +132,11 @@ fn track_playback_follows_the_list_order_and_skips_tracks_that_cannot_play() {
             .unwrap()
             .remove(0)
             .unwrap()
+            .track
             .album
-            .map(|album| album.track_count),
-        Some(4),
+            .unwrap()
+            .track_count,
+        4,
         "an album is counted whole, whatever the filter shows of it"
     );
     assert_eq!(
@@ -174,7 +188,7 @@ fn playing_what_the_list_shows_holds_for_every_sort_and_direction() {
                 .unwrap()
                 .items
                 .into_iter()
-                .map(|track| track.id.rowid().to_string())
+                .map(|track| track.core.id.rowid().to_string())
                 .collect();
             let played: Vec<String> = fixture
                 .store

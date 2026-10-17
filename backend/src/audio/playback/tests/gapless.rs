@@ -10,17 +10,16 @@ impl Harness {
             channels,
             &vec![0; rate as usize * usize::from(channels) * seconds],
         );
-        PlayableTrack {
-            title: name.into(),
-            ..library_track(
-                track_id_of(name),
-                ValidatedAudioFile {
-                    path,
-                    file_name: format!("{name}.wav"),
-                    extension: "wav".into(),
-                },
-            )
-        }
+        let mut track = library_track(
+            track_id_of(name),
+            ValidatedAudioFile {
+                path,
+                file_name: format!("{name}.wav"),
+                extension: "wav".into(),
+            },
+        );
+        track.track.core.title = name.into();
+        track
     }
 
     /// Ticks until the next track is chained to the stream.
@@ -63,7 +62,7 @@ fn a_track_of_the_same_format_follows_on_the_same_stream() {
     assert_eq!(session(&snapshot).position_ms, 0);
     assert_eq!(harness.output.streams_opened(), 1, "the stream is kept");
     assert_eq!(harness.output.adoptions(), 1);
-    assert_eq!(harness.queue_snapshot().current.unwrap().title, "b");
+    assert_eq!(harness.queue_snapshot().current.unwrap().core.title, "b");
     assert!(harness.output.is_running());
 }
 
@@ -187,7 +186,7 @@ fn turning_shuffle_on_discards_the_prefetch() {
             reply,
         })
         .unwrap();
-    let next = harness.queue_snapshot().upcoming[0].title.clone();
+    let next = harness.queue_snapshot().upcoming[0].core.title.clone();
     harness.prefetch_next();
     harness.hear_the_end();
 
@@ -205,7 +204,7 @@ fn removing_the_next_track_discards_the_prefetch() {
     ];
     harness.start(tracks, 0).unwrap();
     harness.prefetch_next();
-    let next = harness.queue_snapshot().upcoming[0].id;
+    let next = harness.queue_snapshot().upcoming[0].queue_item_id;
 
     harness
         .call(|reply| PlaybackCommand::RemoveQueueItem { id: next, reply })
@@ -247,7 +246,7 @@ fn skipping_during_the_handover_window_plays_the_next_track() {
     harness.next().unwrap();
 
     assert!(is_playing(&harness.snapshot(), "b"));
-    assert_eq!(harness.queue_snapshot().current.unwrap().title, "b");
+    assert_eq!(harness.queue_snapshot().current.unwrap().core.title, "b");
 }
 
 #[test]

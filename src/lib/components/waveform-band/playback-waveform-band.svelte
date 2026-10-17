@@ -40,7 +40,7 @@
     waveforms,
     lyricsWaveformLink,
   } = AppServices.current();
-  const trackKey = $derived(playback.item?.trackId ?? "none");
+  const trackKey = $derived(playback.item?.id ?? "none");
   const canSeek = $derived(playback.isActive && playback.durationMs !== null);
   const waveform = $derived(showWaveform ? waveforms.forPlayback(playback.playbackId) : null);
 

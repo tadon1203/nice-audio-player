@@ -8,11 +8,10 @@ import { PlaybackSnapshots } from "./playback-snapshots";
 
 const item = (id: TrackId): PlaybackItem => ({
   queueItemId: id,
-  trackId: id,
+  id,
   title: String(id),
   artist: null,
   album: null,
-  albumArtist: null,
   artwork: null,
   durationMs: 60_000,
   trackNumber: null,

@@ -19,19 +19,54 @@ fn a_track_summary_carries_the_album_and_album_artist_ids() {
             .unwrap()
             .items
             .into_iter()
-            .find(|track| track.id.rowid().to_string() == id)
+            .find(|track| track.core.id.rowid().to_string() == id)
             .unwrap()
     };
 
-    let album = summary("1").album.unwrap();
+    let first = summary("1");
+    let album_id = first.album.as_ref().unwrap().id;
     assert_eq!(
-        fixture.store.catalog_album(album.id).unwrap().track_count,
+        fixture.store.catalog_album(album_id).unwrap().track_count,
         1,
         "the ID opens the album the catalog lists"
     );
+    let album = first.album.as_ref().unwrap();
     assert_eq!(album.title, "Record");
-    assert_eq!(album.artist_id, ArtistId::of("Band"));
+    assert_eq!(album.artist.id, ArtistId::of("Band"));
+    assert_eq!(album.artist.name, "Band");
     assert_eq!(summary("2").album, None, "no album tag, no album");
+}
+
+#[test]
+fn a_track_summary_serializes_its_core_fields_flat_and_no_path() {
+    let fixture = fixture();
+    fixture.add(Seed::new(1, "Song", "Singer", "Record"));
+
+    let summary = fixture
+        .store
+        .catalog_tracks(
+            None,
+            None,
+            LibraryTrackSortKey::Title,
+            LibrarySortDirection::Ascending,
+        )
+        .unwrap()
+        .items
+        .into_iter()
+        .next()
+        .unwrap();
+    let json = serde_json::to_value(summary).unwrap();
+
+    assert_eq!(json["title"], "Song");
+    assert_eq!(json["state"], "playable");
+    assert!(json.get("core").is_none(), "the core is flattened: {json}");
+    assert!(
+        json.as_object()
+            .unwrap()
+            .keys()
+            .all(|key| !key.contains("path") && key != "file"),
+        "a summary never carries a path: {json}"
+    );
 }
 
 #[test]
@@ -91,7 +126,7 @@ fn a_track_is_playable_missing_or_unsupported_by_its_file_alone() {
             .unwrap()
             .items
             .into_iter()
-            .find(|track| track.id == track_id_of(id))
+            .find(|track| track.core.id == track_id_of(id))
             .unwrap()
             .state
     };

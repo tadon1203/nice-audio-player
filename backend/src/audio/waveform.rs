@@ -662,21 +662,8 @@ mod tests {
 
     fn track_of(file: &ValidatedAudioFile, hash: Option<&str>) -> PlayableTrack {
         PlayableTrack {
-            track_id: TrackId::try_from_rowid(1).unwrap(),
-            title: file.file_name.clone(),
-            file: file.clone(),
-            artist: None,
-            album: None,
-            album_artist: None,
-            artwork: None,
-            duration_ms: None,
-            track_number: None,
-            disc_number: None,
-            year: None,
-            file_format: None,
-            bit_depth: None,
-            bitrate_kbps: None,
             content_hash: hash.map(str::to_owned),
+            ..PlayableTrack::bare(TrackId::try_from_rowid(1).unwrap(), file.clone())
         }
     }
 

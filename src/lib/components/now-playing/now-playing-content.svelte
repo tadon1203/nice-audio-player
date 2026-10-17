@@ -34,7 +34,7 @@
    */
   const { playback, lyrics: lyricsRepository } = AppServices.current();
   const item = $derived(playback.item);
-  const trackId = $derived(item?.trackId ?? null);
+  const trackId = $derived(item?.id ?? null);
   const lyrics = new TrackLyrics(lyricsRepository, () => trackId);
   const resolution = $derived(lyrics.resolution);
 
@@ -57,8 +57,7 @@
     if (id === lastTrackId) return;
     const left = lastTrackId;
     lastTrackId = id;
-    direction =
-      left !== null && playback.queue?.upcoming[0]?.trackId === left ? "previous" : "next";
+    direction = left !== null && playback.queue?.upcoming[0]?.id === left ? "previous" : "next";
   });
 
   // The band gives way to the content, so it needs to know how much room the layer has.

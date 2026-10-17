@@ -106,7 +106,11 @@ impl PlaybackWorker {
     /// Tells listeners that the current item could not be played and the worker moves on. Call it
     /// before the queue advances, so the current item is still the one that failed.
     pub(super) fn occur_track_skipped(&self, error: PlaybackFailureCode) {
-        let item = self.queue.current().and_then(|entry| self.item_of(entry));
+        let item = self
+            .queue
+            .current()
+            .and_then(|entry| self.item_of(entry))
+            .map(|item| item.to_playback_item());
         self.messages
             .occurred(Occurrence::TrackSkipped { item, error });
     }

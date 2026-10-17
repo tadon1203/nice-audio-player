@@ -79,8 +79,11 @@ export function makeTracks(
             ? "Missing track"
             : `Track ${String(index + 1).padStart(3, "0")}`,
       artist: "Test artist",
-      album: { id: testAlbumId, title: "Test album", artistId: testArtistId },
-      albumArtist: "Test artist",
+      album: {
+        id: testAlbumId,
+        title: "Test album",
+        artist: { id: testArtistId, name: "Test artist" },
+      },
       artwork: options.artwork ? ARTWORK : null,
       durationMs: 120_000 + index * 1_000,
       fileFormat: "FLAC",
@@ -147,6 +150,7 @@ export function testLibrary(
         id: track.id,
         title: track.title,
         artist: track.artist,
+        artwork: track.artwork,
         trackNumber: index + 1,
         discNumber: null,
         fileFormat: "FLAC",
@@ -227,7 +231,7 @@ export function libraryResponses(library: LibraryData = testLibrary()): Record<s
         title: track.title,
         artist: track.artist,
         album: track.album?.title ?? null,
-        albumArtist: track.albumArtist,
+        albumArtist: track.album?.artist.name ?? null,
         trackNumber: 3,
         trackTotal: 11,
         discNumber: null,
@@ -382,8 +386,8 @@ export function idleResponses(): {
 }
 
 export const queueItemFor = (track: LibraryTrackSummary): PlaybackQueueItem => ({
+  queueItemId: track.id,
   id: track.id,
-  trackId: track.id,
   title: track.title,
   artist: track.artist,
   album: track.album?.title ?? null,
@@ -392,13 +396,10 @@ export const queueItemFor = (track: LibraryTrackSummary): PlaybackQueueItem => (
 });
 
 export function playbackItemFor(track: LibraryTrackSummary): PlaybackItem {
-  const { id: queueItemId, ...identity } = queueItemFor(track);
   return {
-    ...identity,
-    queueItemId,
+    ...queueItemFor(track),
     // A count of 0 is below every track number, so Now Playing shows "Track n" with no total.
     album: track.album === null ? null : { ...track.album, trackCount: 0 },
-    albumArtist: track.albumArtist,
     trackNumber: track.id % 12 || null,
     discNumber: null,
     year: 2019,
@@ -418,7 +419,7 @@ interface PlayingFields {
   canGoNext: boolean;
 }
 
-export const playbackIdOf = (item: PlaybackItem): number => item.trackId;
+export const playbackIdOf = (item: PlaybackItem): number => item.id;
 
 export function playingSnapshot(fields: PlayingFields): PlaybackSnapshot {
   const device =

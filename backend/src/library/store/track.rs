@@ -6,7 +6,9 @@ use crate::library::{
     artwork::{ArtworkMimeType, ArtworkRef},
     error::StoreError,
     location::TrackLocation,
-    models::{LibraryTrackProperties, LibraryTrackSummary, TrackAlbum, TrackState},
+    models::{
+        ArtistRef, LibraryTrackProperties, LibraryTrackSummary, TrackAlbum, TrackCore, TrackState,
+    },
     status::{Availability, InspectionStatus},
 };
 use rusqlite::{OptionalExtension, Row, params};
@@ -32,7 +34,7 @@ pub(super) fn playable_file_condition() -> String {
 }
 
 /// The columns `summary_from_row` reads, in its order.
-pub(super) const SUMMARY_COLUMNS: &str = "t.id, m.title, m.artist, m.album, m.tag_album_artist, m.duration_ms, a.content_hash, a.mime_type, m.file_format, m.bit_depth, m.bitrate_kbps, f.availability, f.inspection_status, m.album_id, al.artist_id";
+pub(super) const SUMMARY_COLUMNS: &str = "t.id, m.title, m.artist, m.album, al.album_artist, m.duration_ms, a.content_hash, a.mime_type, m.file_format, m.bit_depth, m.bitrate_kbps, f.availability, f.inspection_status, m.album_id, al.artist_id";
 pub(super) const SUMMARY_COLUMN_COUNT: usize = 15;
 
 /// What `SUMMARY_COLUMNS` are selected from.
@@ -58,6 +60,7 @@ pub(super) fn track_album(
     title: String,
     id: AlbumId,
     artist_id: Option<ArtistId>,
+    artist_name: Option<String>,
 ) -> Option<TrackAlbum> {
     if title.is_empty() {
         return None;
@@ -65,7 +68,10 @@ pub(super) fn track_album(
     Some(TrackAlbum {
         id,
         title,
-        artist_id: artist_id?,
+        artist: ArtistRef {
+            id: artist_id?,
+            name: artist_name?,
+        },
     })
 }
 
@@ -74,28 +80,26 @@ pub(super) fn summary_from_row(row: &Row<'_>) -> rusqlite::Result<LibraryTrackSu
     let duration: Option<i64> = row.get(5)?;
     let state = track_state(row.get(11)?, row.get(12)?);
     let artist: String = row.get(2)?;
-    let album = if title.is_empty() {
-        None
-    } else {
-        track_album(
-            title,
-            album_id_column(row, 13)?,
-            row.get::<_, Option<String>>(14)?
-                .and_then(|hex| ArtistId::from_hex(&hex)),
-        )
-    };
+    let album = track_album(
+        title,
+        album_id_column(row, 13)?,
+        row.get::<_, Option<String>>(14)?
+            .and_then(|hex| ArtistId::from_hex(&hex)),
+        row.get(4)?,
+    );
     Ok(LibraryTrackSummary {
-        id: track_id_column(row, 0)?,
-        title: row.get(1)?,
-        artist: (!artist.is_empty()).then_some(artist),
+        core: TrackCore {
+            id: track_id_column(row, 0)?,
+            title: row.get(1)?,
+            artist: (!artist.is_empty()).then_some(artist),
+            duration_ms: duration.map(|value| value as u64),
+            artwork: artwork_ref(row.get(6)?, row.get(7)?),
+        },
+        state,
         album,
-        album_artist: non_blank(row.get(4)?),
-        artwork: artwork_ref(row.get(6)?, row.get(7)?),
-        duration_ms: duration.map(|value| value as u64),
         file_format: non_blank(row.get(8)?),
         bit_depth: row.get::<_, Option<i64>>(9)?.map(|value| value as u32),
         bitrate_kbps: row.get::<_, Option<i64>>(10)?.map(|value| value as u64),
-        state,
     })
 }
 

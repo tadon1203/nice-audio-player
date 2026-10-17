@@ -31,11 +31,10 @@ const base = (): {
 
 const item = (id: TrackId): PlaybackItem => ({
   queueItemId: id,
-  trackId: id,
+  id,
   title: String(id),
   artist: null,
   album: null,
-  albumArtist: null,
   artwork: null,
   durationMs: 60_000,
   trackNumber: null,
@@ -79,8 +78,8 @@ const playing = (
 });
 
 const queueItem = (id: QueueItemId): PlaybackQueueItem => ({
+  queueItemId: id,
   id,
-  trackId: id,
   title: "Current track",
   artist: "Artist",
   album: null,
@@ -134,7 +133,7 @@ describe("playback session ordering", () => {
     playback.acceptPlayback(stopped(1, 1));
     playback.acceptPlayback(stopped(2, 2));
 
-    expect(playback.item?.trackId).toBe(2);
+    expect(playback.item?.id).toBe(2);
   });
 
   it("accepts queue revisions independently from playback revisions", () => {
@@ -156,7 +155,7 @@ describe("playback session ordering", () => {
 
     await playback.pause();
 
-    expect(playback.item?.trackId).toBe(2);
+    expect(playback.item?.id).toBe(2);
   });
 
   it("drops a queue command response older than the queue it follows", async () => {
@@ -410,7 +409,7 @@ describe("playback session derived state", () => {
     playback.acceptPlayback(playing(2, 2, 0));
 
     expect(playback.item).not.toBe(first);
-    expect(playback.item?.trackId).toBe(2);
+    expect(playback.item?.id).toBe(2);
   });
 
   it("keeps naming the last track while stopped and drops the session", () => {
@@ -419,7 +418,7 @@ describe("playback session derived state", () => {
     playback.acceptPlayback(playing(1, 1, 4_000));
     playback.acceptPlayback(stopped(2, 1));
 
-    expect(playback.item?.trackId).toBe(1);
+    expect(playback.item?.id).toBe(1);
     expect(playback.isActive).toBe(false);
     expect(playback.playbackId).toBeNull();
     expect(playback.durationMs).toBeNull();
@@ -449,7 +448,7 @@ describe("playback session derived state", () => {
             album: {
               id: albumId,
               title: "Album",
-              artistId: "5b3f2c1e0a9d8c7b6a5f4e3d2c1b0a99",
+              artist: { id: "5b3f2c1e0a9d8c7b6a5f4e3d2c1b0a99", name: "Band" },
               trackCount: 1,
             },
           },
@@ -572,7 +571,7 @@ describe("starting playback", () => {
     await playback.start(context, 3);
 
     expect(start).toHaveBeenCalledWith(context, 3);
-    expect(playback.item?.trackId).toBe(3);
+    expect(playback.item?.id).toBe(3);
   });
 
   it("rejects with SupersededError when the backend replaced the request", async () => {
@@ -657,7 +656,7 @@ describe("transition direction", () => {
 
     expect(playback.transitionDirection).toBe("forward");
     await playback.previous();
-    expect(playback.item?.trackId).toBe(1);
+    expect(playback.item?.id).toBe(1);
     expect(playback.transitionDirection).toBe("backward");
 
     // A change the player made by itself (auto-advance) goes forward again.
@@ -703,12 +702,12 @@ describe("transition direction", () => {
     const previous = playback.previous();
     finishNext?.();
     await next;
-    expect(playback.item?.trackId).toBe(2);
+    expect(playback.item?.id).toBe(2);
     expect(playback.transitionDirection).toBe("forward");
 
     finishPrevious?.();
     await previous;
-    expect(playback.item?.trackId).toBe(1);
+    expect(playback.item?.id).toBe(1);
     expect(playback.transitionDirection).toBe("backward");
   });
 

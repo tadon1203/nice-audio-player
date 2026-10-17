@@ -11,56 +11,60 @@ use crate::library::{
     artwork::ArtworkRef,
     error::StoreError,
     location::TrackLocation,
-    models::{LibrarySortDirection, LibraryTrackSortKey, TrackAlbum, TrackState},
+    models::{
+        LibrarySortDirection, LibraryTrackSortKey, NowPlayingAlbum, NowPlayingTrack, TrackCore,
+        TrackState,
+    },
     status::{Availability, InspectionStatus},
 };
 use crate::media::validation::{ValidatedAudioFile, describe_audio_file, validate_audio_file};
 use rusqlite::{Connection, Row, params};
 use std::collections::HashMap;
 
-/// The album of a playable track, and how many tracks the library holds for it.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
-pub struct PlayableAlbum {
-    #[serde(flatten)]
-    pub album: TrackAlbum,
-    pub track_count: u32,
-}
-
-/// A library track ready to be played, and the one track-metadata type of the whole playback
-/// path: the library reads it, the queue item wraps it, and the renderer sees it.
+/// A library track ready to be played: the track the renderer sees, and the file facts the
+/// backend needs to play it. It is never serialized, so the file path cannot reach the renderer.
 ///
-/// The file facts (`file`, `file_format`, `bit_depth`, `bitrate_kbps`) feed the signal path and
-/// stay in the backend. The file is a path on disk, and the renderer never receives one.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
+/// The file facts (`file`, `file_format`, `bit_depth`, `bitrate_kbps`) feed the signal path.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PlayableTrack {
-    pub track_id: TrackId,
-    #[serde(skip)]
-    #[specta(skip)]
+    pub track: NowPlayingTrack,
     pub file: ValidatedAudioFile,
-    pub title: String,
-    pub artist: Option<String>,
-    pub album: Option<PlayableAlbum>,
-    pub album_artist: Option<String>,
-    pub artwork: Option<ArtworkRef>,
-    pub duration_ms: Option<u64>,
-    pub track_number: Option<u32>,
-    pub disc_number: Option<u32>,
-    pub year: Option<i32>,
-    #[serde(skip)]
-    #[specta(skip)]
     pub file_format: Option<String>,
-    #[serde(skip)]
-    #[specta(skip)]
     pub bit_depth: Option<u32>,
-    #[serde(skip)]
-    #[specta(skip)]
     pub bitrate_kbps: Option<u32>,
     /// The library's identity hash of the file, when the scan stored one.
-    #[serde(skip)]
-    #[specta(skip)]
     pub content_hash: Option<String>,
+}
+
+impl PlayableTrack {
+    pub fn id(&self) -> TrackId {
+        self.track.core.id
+    }
+
+    /// A track that is only an id, the file's name as its title, and the file.
+    #[cfg(test)]
+    pub(crate) fn bare(id: TrackId, file: ValidatedAudioFile) -> Self {
+        Self {
+            track: NowPlayingTrack {
+                core: TrackCore {
+                    id,
+                    title: file.file_name.clone(),
+                    artist: None,
+                    duration_ms: None,
+                    artwork: None,
+                },
+                album: None,
+                track_number: None,
+                disc_number: None,
+                year: None,
+            },
+            file,
+            file_format: None,
+            bit_depth: None,
+            bitrate_kbps: None,
+            content_hash: None,
+        }
+    }
 }
 
 /// The playable tracks of a selection by id, in playing order, and where to start. The tracks
@@ -124,7 +128,7 @@ type AlbumCounts = HashMap<String, u32>;
 
 /// The columns every playback query returns, in the order `playback_row` reads them, and what they
 /// are selected from.
-const PLAYBACK_COLUMNS: &str = "t.id, r.path, f.relative_path, f.availability, f.inspection_status, m.title, m.artist, m.album, m.tag_album_artist, m.duration_ms, a.content_hash, a.mime_type, m.track_number, m.disc_number, m.year, m.file_format, m.bit_depth, m.bitrate_kbps, f.content_hash, m.album_id, al.artist_id";
+const PLAYBACK_COLUMNS: &str = "t.id, r.path, f.relative_path, f.availability, f.inspection_status, m.title, m.artist, m.album, al.album_artist, m.duration_ms, a.content_hash, a.mime_type, m.track_number, m.disc_number, m.year, m.file_format, m.bit_depth, m.bitrate_kbps, f.content_hash, m.album_id, al.artist_id";
 const PLAYBACK_FROM: &str = "FROM track_source_metadata m JOIN tracks t ON t.id = m.track_id JOIN library_files f ON f.id = t.file_id JOIN library_roots r ON r.id = f.root_id LEFT JOIN artwork_assets a ON a.id = m.artwork_id LEFT JOIN albums al ON al.id = m.album_id";
 
 fn playback_row(row: &Row<'_>) -> rusqlite::Result<PlaybackRow> {
@@ -202,23 +206,31 @@ fn playable_track(
         .get(&row.album_id.to_hex())
         .copied()
         .unwrap_or_default();
-    let album =
-        track_album(row.album, row.album_id, row.album_artist_id).map(|album| PlayableAlbum {
-            album,
-            track_count: album_track_count,
-        });
-    Ok(Some(PlayableTrack {
-        track_id: row.track_id,
-        file,
-        title: row.title,
-        artist: non_blank(Some(row.artist)),
+    let album = track_album(
+        row.album,
+        row.album_id,
+        row.album_artist_id,
+        row.album_artist,
+    )
+    .map(|album| NowPlayingAlbum {
         album,
-        album_artist: non_blank(row.album_artist),
-        artwork: row.artwork,
-        duration_ms: row.duration_ms.map(|value| value as u64),
-        track_number: row.track_number.and_then(|value| u32::try_from(value).ok()),
-        disc_number: row.disc_number.and_then(|value| u32::try_from(value).ok()),
-        year: row.year,
+        track_count: album_track_count,
+    });
+    Ok(Some(PlayableTrack {
+        track: NowPlayingTrack {
+            core: TrackCore {
+                id: row.track_id,
+                title: row.title,
+                artist: non_blank(Some(row.artist)),
+                duration_ms: row.duration_ms.map(|value| value as u64),
+                artwork: row.artwork,
+            },
+            album,
+            track_number: row.track_number.and_then(|value| u32::try_from(value).ok()),
+            disc_number: row.disc_number.and_then(|value| u32::try_from(value).ok()),
+            year: row.year,
+        },
+        file,
         file_format: row.file_format,
         bit_depth: row.bit_depth,
         bitrate_kbps: row.bitrate_kbps,

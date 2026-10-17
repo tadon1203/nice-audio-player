@@ -47,11 +47,11 @@
     </div>
     <div bind:this={scrollElement} class="min-h-0 flex-1 overflow-y-auto py-2">
       <div bind:this={content}>
-        {#each history as item (item.id)}
+        {#each history as item (item.queueItemId)}
           <QueueRow
             {item}
             tone="past"
-            onPlay={() => actions.run(() => playback.playQueueItem(item.id))}
+            onPlay={() => actions.run(() => playback.playQueueItem(item.queueItemId))}
           />
         {/each}
         {#if queue?.current}

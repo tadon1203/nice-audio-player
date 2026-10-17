@@ -100,7 +100,7 @@ fn navigating_while_paused_starts_the_next_track_paused() {
     let snapshot = harness.next().unwrap();
 
     assert!(
-        matches!(&snapshot, PlaybackSnapshot::Paused { session, .. } if session.item.title == "b")
+        matches!(&snapshot, PlaybackSnapshot::Paused { session, .. } if session.item.track.core.title == "b")
     );
     assert!(!harness.output.is_running());
 }
@@ -273,7 +273,7 @@ fn a_finished_track_moves_on_to_the_next_one() {
     harness.tick();
     harness.pump_until(|harness| is_playing(&harness.snapshot(), "b"));
 
-    assert_eq!(harness.queue_snapshot().current.unwrap().title, "b");
+    assert_eq!(harness.queue_snapshot().current.unwrap().core.title, "b");
 }
 
 #[test]
@@ -289,7 +289,7 @@ fn the_last_track_finishing_stops_and_clears_the_queue() {
     let PlaybackSnapshot::Stopped { item, .. } = harness.snapshot() else {
         panic!("the player must stop");
     };
-    assert_eq!(item.unwrap().title, "a");
+    assert_eq!(item.unwrap().track.core.title, "a");
     assert!(harness.queue_snapshot().current.is_none());
 }
 
@@ -418,7 +418,7 @@ fn previous_restarts_a_track_that_has_played_for_a_while() {
         .value;
 
     assert!(
-        matches!(&restarted, PlaybackSnapshot::Paused { session, .. } if session.item.title == "b")
+        matches!(&restarted, PlaybackSnapshot::Paused { session, .. } if session.item.track.core.title == "b")
     );
     assert!(session(&restarted).position_ms < 100);
 }
@@ -448,17 +448,15 @@ fn a_file_whose_name_is_not_unicode_plays() {
     let mut path = harness.files.file("placeholder.wav");
     path.set_file_name(&name);
     write_pcm_i16_wav(&path, SAMPLE_RATE, 1, &vec![0; SAMPLE_RATE as usize]);
-    let track = PlayableTrack {
-        title: "odd".into(),
-        ..library_track(
-            track_id_of("odd"),
-            ValidatedAudioFile {
-                path,
-                file_name: name.to_string_lossy().into_owned(),
-                extension: "wav".into(),
-            },
-        )
-    };
+    let mut track = library_track(
+        track_id_of("odd"),
+        ValidatedAudioFile {
+            path,
+            file_name: name.to_string_lossy().into_owned(),
+            extension: "wav".into(),
+        },
+    );
+    track.track.core.title = "odd".into();
 
     let snapshot = harness.start(vec![track], 0).unwrap();
 

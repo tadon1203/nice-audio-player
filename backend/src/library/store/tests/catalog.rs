@@ -95,7 +95,7 @@ fn albums_keep_their_identity_and_take_the_cover_of_their_first_track_with_artwo
         tracks
             .items
             .iter()
-            .map(|track| track.id.rowid().to_string())
+            .map(|track| track.core.id.rowid().to_string())
             .collect::<Vec<_>>(),
         ["2", "1"],
         "disc 1 first"
@@ -305,7 +305,7 @@ fn a_year_is_the_same_on_the_grid_the_details_header_and_in_playback() {
         .playable_tracks(&playback.track_ids)
         .unwrap()
         .iter()
-        .map(|track| track.as_ref().unwrap().year)
+        .map(|track| track.as_ref().unwrap().track.year)
         .collect();
     assert_eq!(
         years,
@@ -357,7 +357,7 @@ fn a_filter_folds_kana_and_width_and_still_matches_wildcards_literally() {
             .unwrap()
             .items
             .into_iter()
-            .map(|track| track.title)
+            .map(|track| track.core.title)
             .collect::<Vec<_>>()
     };
 

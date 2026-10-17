@@ -23,11 +23,10 @@ const playingValue = (positionMs: number): PlaybackSnapshot => ({
   session: {
     item: {
       queueItemId: 1,
-      trackId: 1,
+      id: 1,
       title: "a",
       artist: null,
       album: null,
-      albumArtist: null,
       artwork: null,
       durationMs: 60_000,
       trackNumber: null,

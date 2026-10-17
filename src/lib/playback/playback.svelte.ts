@@ -169,7 +169,7 @@ export class Playback {
 
   /** Which library track is loaded, for highlighting track rows. */
   public get activeTrackId(): TrackId | null {
-    return this.#item?.trackId ?? null;
+    return this.#item?.id ?? null;
   }
 
   public get transportPending(): TransportCommand | null {

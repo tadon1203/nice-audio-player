@@ -102,7 +102,7 @@ fn tracks_page_through_every_sort_and_direction_with_unknown_values_last() {
                 );
                 (page.items, page.next_cursor)
             });
-            let ids: HashSet<_> = tracks.iter().map(|track| track.id).collect();
+            let ids: HashSet<_> = tracks.iter().map(|track| track.core.id).collect();
             assert_eq!(
                 (tracks.len(), ids.len()),
                 (330, 330),
@@ -110,9 +110,9 @@ fn tracks_page_through_every_sort_and_direction_with_unknown_values_last() {
             );
             let unknown = |track: &LibraryTrackSummary| match key {
                 LibraryTrackSortKey::Title => false,
-                LibraryTrackSortKey::Artist => track.artist.is_none(),
+                LibraryTrackSortKey::Artist => track.core.artist.is_none(),
                 LibraryTrackSortKey::Album => track.album.is_none(),
-                LibraryTrackSortKey::Duration => track.duration_ms.is_none(),
+                LibraryTrackSortKey::Duration => track.core.duration_ms.is_none(),
             };
             let first_unknown = tracks.iter().position(unknown).unwrap_or(tracks.len());
             assert!(
@@ -122,10 +122,14 @@ fn tracks_page_through_every_sort_and_direction_with_unknown_values_last() {
             let names: Vec<String> = tracks[..first_unknown]
                 .iter()
                 .map(|track| match key {
-                    LibraryTrackSortKey::Title => track.title.to_lowercase(),
-                    LibraryTrackSortKey::Artist => track.artist.clone().unwrap().to_lowercase(),
+                    LibraryTrackSortKey::Title => track.core.title.to_lowercase(),
+                    LibraryTrackSortKey::Artist => {
+                        track.core.artist.clone().unwrap().to_lowercase()
+                    }
                     LibraryTrackSortKey::Album => track.album.clone().unwrap().title.to_lowercase(),
-                    LibraryTrackSortKey::Duration => format!("{:08}", track.duration_ms.unwrap()),
+                    LibraryTrackSortKey::Duration => {
+                        format!("{:08}", track.core.duration_ms.unwrap())
+                    }
                 })
                 .collect();
             let mut sorted = names.clone();
@@ -247,7 +251,7 @@ fn a_write_between_two_pages_neither_repeats_nor_skips_a_track() {
     let first = store
         .catalog_tracks(None, None, LibraryTrackSortKey::Title, ASC)
         .unwrap();
-    let last_of_first = first.items.last().unwrap().title.clone();
+    let last_of_first = first.items.last().unwrap().core.title.clone();
 
     // A scan lands tracks before and after the page boundary while the listener scrolls.
     fixture.add(Seed::new(1_000, "A before everything", "New", "New"));
@@ -263,7 +267,7 @@ fn a_write_between_two_pages_neither_repeats_nor_skips_a_track() {
         .items
         .iter()
         .chain(&rest)
-        .map(|track| track.id)
+        .map(|track| track.core.id)
         .collect();
     assert_eq!(seen.len(), first.items.len() + rest.len(), "no track twice");
     assert!(
@@ -276,7 +280,7 @@ fn a_write_between_two_pages_neither_repeats_nor_skips_a_track() {
     );
     assert!(
         rest.iter()
-            .all(|track| track.title.to_lowercase() > last_of_first.to_lowercase())
+            .all(|track| track.core.title.to_lowercase() > last_of_first.to_lowercase())
     );
 }
 
@@ -506,7 +510,7 @@ fn the_scroll_index_follows_the_sort_order_for_mixed_scripts_in_both_directions(
             .iter()
             .map(|track| {
                 crate::library::text::index_label(&crate::library::text::sort_key(
-                    &track.title,
+                    &track.core.title,
                     None,
                 ))
             })
@@ -649,7 +653,7 @@ fn jumping_to_a_letter_in_a_huge_list_reads_only_the_target_region() {
     let page = page.unwrap();
 
     assert_eq!(page.items.len(), PAGE_SIZE);
-    assert_eq!(page.items[0].title, "M24001", "the first M");
+    assert_eq!(page.items[0].core.title, "M24001", "the first M");
     assert_eq!(page.total_count, Some(50_000));
     assert!(page.next_cursor.is_some());
     assert!(
@@ -664,5 +668,5 @@ fn jumping_to_a_letter_in_a_huge_list_reads_only_the_target_region() {
             ASC,
         )
         .unwrap();
-    assert_eq!(continued.items[0].title, "M24101");
+    assert_eq!(continued.items[0].core.title, "M24101");
 }

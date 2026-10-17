@@ -1,4 +1,4 @@
-import type { TrackId } from "#lib/native";
+import type { AlbumId, ArtistId, TrackId } from "#lib/native";
 import { describe, expect, it } from "vitest";
 import {
   albumTrackColumns,
@@ -19,11 +19,10 @@ const row: TrackTableRow = {
   title: "Song",
   artist: "Artist",
   album: {
-    id: "0f0e0d0c0b0a09080706050403020100",
+    id: "0f0e0d0c0b0a09080706050403020100" as AlbumId,
     title: "Album",
-    artistId: "5b3f2c1e0a9d8c7b6a5f4e3d2c1b0a99",
+    artist: { id: "5b3f2c1e0a9d8c7b6a5f4e3d2c1b0a99" as ArtistId, name: "Band" },
   },
-  albumArtist: null,
   durationMs: 65_000,
   state: "playable",
 };

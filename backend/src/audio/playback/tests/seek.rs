@@ -98,7 +98,7 @@ fn seeking_past_the_end_plays_the_next_track_like_a_natural_finish() {
     let snapshot = harness.seek(5_000).unwrap();
 
     assert!(is_playing(&snapshot, "b"));
-    assert_eq!(harness.queue_snapshot().current.unwrap().title, "b");
+    assert_eq!(harness.queue_snapshot().current.unwrap().core.title, "b");
 }
 
 #[test]

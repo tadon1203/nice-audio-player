@@ -74,7 +74,7 @@ impl PlaybackWorker {
     /// A start of `item` as a new playback.
     pub(super) fn new_start(
         &mut self,
-        item: PlaybackItem,
+        item: PlayableItem,
         started_by: SessionStartedBy,
         responder: Option<Reply<Versioned<PlaybackSnapshot>>>,
         start_paused: bool,
@@ -312,7 +312,7 @@ impl PlaybackWorker {
     }
 
     /// The item to try after the current one could not be played, if there is one to try.
-    pub(super) fn next_after_item_failure(&mut self) -> Option<PlaybackItem> {
+    pub(super) fn next_after_item_failure(&mut self) -> Option<PlayableItem> {
         self.skipped_in_a_row += 1;
         if self.skipped_in_a_row >= self.queue.len() {
             return None;
@@ -326,7 +326,7 @@ impl PlaybackWorker {
     /// The item the queue points at, read from the library. A track the library no longer has
     /// is dropped from the queue and the one after it is tried, so an entry that disappeared
     /// between starting and playing never stops the queue.
-    pub(super) fn resolve_current(&mut self) -> Option<PlaybackItem> {
+    pub(super) fn resolve_current(&mut self) -> Option<PlayableItem> {
         loop {
             let entry = self.queue.current()?.clone();
             if let Some(item) = self.item_of(&entry) {
@@ -337,8 +337,8 @@ impl PlaybackWorker {
     }
 
     /// The queue entry as a playable item, `None` when the library no longer has its track.
-    pub(super) fn item_of(&self, entry: &QueueEntry) -> Option<PlaybackItem> {
-        Some(PlaybackItem {
+    pub(super) fn item_of(&self, entry: &QueueEntry) -> Option<PlayableItem> {
+        Some(PlayableItem {
             queue_item_id: entry.id,
             track: self.tracks.resolve_one(entry.track_id)?,
         })

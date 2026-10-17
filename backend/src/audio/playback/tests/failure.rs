@@ -14,7 +14,7 @@ fn each_skipped_track_reaches_the_sink_as_an_occurrence_in_order() {
         .into_iter()
         .filter_map(|sent| match sent {
             Sent::Occurrence(occurrence) => match *occurrence {
-                Occurrence::TrackSkipped { item, .. } => item.map(|item| item.track_id),
+                Occurrence::TrackSkipped { item, .. } => item.map(|item| item.track.core.id),
             },
             _ => None,
         })
@@ -32,7 +32,7 @@ fn a_file_that_cannot_be_read_is_skipped_to_the_next_one() {
     let snapshot = harness.start(tracks, 0).unwrap();
 
     assert!(is_playing(&snapshot, "b"));
-    assert_eq!(harness.queue_snapshot().current.unwrap().title, "b");
+    assert_eq!(harness.queue_snapshot().current.unwrap().core.title, "b");
 }
 
 #[test]
@@ -45,7 +45,7 @@ fn when_every_file_fails_each_is_tried_once_and_the_queue_survives() {
     assert_eq!(harness.queue_snapshot().upcoming_count, 0);
     assert_eq!(harness.queue_snapshot().history_count, 2);
     assert_eq!(
-        harness.queue_snapshot().current.unwrap().title,
+        harness.queue_snapshot().current.unwrap().core.title,
         "track-2.flac"
     );
     let current = harness.snapshot();

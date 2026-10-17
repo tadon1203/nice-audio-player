@@ -348,11 +348,11 @@ fn album_tracks_query(album_id: &str) -> PagedQuery {
             direction: LibrarySortDirection::Ascending,
         },
         (
-            "t.id, m.title, m.artist, m.track_number, m.disc_number, m.file_format, m.bit_depth, m.sample_rate, m.duration_ms, f.availability, f.inspection_status",
-            11,
+            "t.id, m.title, m.artist, m.track_number, m.disc_number, m.file_format, m.bit_depth, m.sample_rate, m.duration_ms, f.availability, f.inspection_status, a.content_hash, a.mime_type",
+            13,
         ),
         (
-            "FROM track_source_metadata m JOIN tracks t ON t.id = m.track_id JOIN library_files f ON f.id = t.file_id",
+            "FROM track_source_metadata m JOIN tracks t ON t.id = m.track_id JOIN library_files f ON f.id = t.file_id LEFT JOIN artwork_assets a ON a.id = m.artwork_id",
             "FROM track_source_metadata m",
         ),
         SearchFilter {
@@ -742,16 +742,19 @@ impl LibraryStore {
                 Ok(row.get::<_, Option<i64>>(index)?.map(|value| value as u32))
             };
             Ok(LibraryAlbumTrackSummary {
-                id: track_id_column(row, 0)?,
-                title: row.get(1)?,
-                artist: (!artist.is_empty()).then_some(artist),
+                core: TrackCore {
+                    id: track_id_column(row, 0)?,
+                    title: row.get(1)?,
+                    artist: (!artist.is_empty()).then_some(artist),
+                    duration_ms: row.get::<_, Option<i64>>(8)?.map(|value| value as u64),
+                    artwork: artwork_ref(row.get(11)?, row.get(12)?),
+                },
+                state: track_state(row.get(9)?, row.get(10)?),
                 track_number: number(3)?,
                 disc_number: number(4)?,
                 file_format: super::track::non_blank(row.get(5)?),
                 bit_depth: number(6)?,
                 sample_rate: number(7)?,
-                duration_ms: row.get::<_, Option<i64>>(8)?.map(|value| value as u64),
-                state: track_state(row.get(9)?, row.get(10)?),
             })
         })?;
         Ok(LibraryAlbumTrackPage {

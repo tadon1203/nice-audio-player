@@ -10,7 +10,7 @@ use std::sync::{Arc, RwLock, mpsc::Receiver};
 use std::time::{Duration, Instant};
 
 use super::input::{Inbox, PlaybackIds, SourceLoadId, SourceLoadIds, WorkerEvent, WorkerInput};
-use super::item::PlaybackItem;
+use super::item::PlayableItem;
 use super::pipeline::{
     OpenedOutput, OpenedPipeline, PipelineError, PipelineKind, PipelineRequest, open_pipeline,
 };
@@ -163,7 +163,7 @@ pub(super) struct PlaybackWorker {
     /// Completed seeks; published with the session so the UI can tell a seek from a tick.
     seek_revision: u64,
     /// The last track that reached the output, kept so a stopped player can still name it.
-    last_item: Option<PlaybackItem>,
+    last_item: Option<PlayableItem>,
     queue: PlaybackQueue,
     /// The queue before the last replacement, for one-step undo. Not kept across restarts.
     previous_queue: Option<PlaybackQueue>,

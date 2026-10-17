@@ -7,7 +7,7 @@ const albumArtistId = "5b3f2c1e0a9d8c7b6a5f4e3d2c1b0a99" as ArtistId;
 
 const track = {
   artist: "Artist",
-  album: { id: albumId, title: "Album", artistId: albumArtistId },
+  album: { id: albumId, title: "Album", artist: { id: albumArtistId, name: "Band" } },
 };
 
 describe("Tracks.links", () => {

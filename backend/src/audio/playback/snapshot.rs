@@ -7,7 +7,7 @@ use crate::audio::devices::{AudioOutputDeviceIdentity, AudioOutputSelection};
 use crate::audio::output_processing::{ChannelConversion, OutputProcessingPlan};
 use crate::audio::volume::VolumeState;
 use crate::ids::{PlaybackId, QueueItemId, TrackId};
-use crate::library::artwork::ArtworkRef;
+use crate::library::models::TrackCore;
 use crate::library::store::PlayableTrack;
 use std::sync::Arc;
 
@@ -207,25 +207,23 @@ impl PlaybackProcessingInfo {
 #[derive(Debug, Clone, serde::Serialize, specta::Type, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct PlaybackQueueItem {
-    pub id: QueueItemId,
-    pub track_id: TrackId,
-    pub title: String,
-    pub artist: Option<String>,
+    /// The queue's id for the entry. Named apart from the track's `id` it flattens with.
+    pub queue_item_id: QueueItemId,
+    #[serde(flatten)]
+    pub core: TrackCore,
     pub album: Option<String>,
-    pub artwork: Option<ArtworkRef>,
-    pub duration_ms: Option<u64>,
 }
 
 impl PlaybackQueueItem {
     fn of(entry: &QueueEntry, track: &PlayableTrack) -> Self {
         Self {
-            id: entry.id,
-            track_id: track.track_id,
-            title: track.title.clone(),
-            artist: track.artist.clone(),
-            album: track.album.as_ref().map(|album| album.album.title.clone()),
-            artwork: track.artwork.clone(),
-            duration_ms: track.duration_ms,
+            queue_item_id: entry.id,
+            core: track.track.core.clone(),
+            album: track
+                .track
+                .album
+                .as_ref()
+                .map(|album| album.album.title.clone()),
         }
     }
 }

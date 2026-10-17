@@ -38,7 +38,7 @@
   const anchor = createAnchorPadding();
   const follow = createAnchorFollow();
   let container = $state<HTMLDivElement | null>(null);
-  const currentId = $derived(current?.id ?? null);
+  const currentId = $derived(current?.queueItemId ?? null);
   const hasRows = $derived(current !== null || history.length + upcoming.length > 0);
   const rows = $derived(buildQueueRows(history, current, upcoming));
   /** Where the current track sits in `rows` (past rows are before it). */
@@ -72,7 +72,7 @@
       class={cn("relative h-full overflow-y-auto", EDGE_MASK)}
     >
       <div aria-hidden="true" class={SPACER} style:height="{anchor.top}px"></div>
-      {#each rows as item, index (item.id)}
+      {#each rows as item, index (item.queueItemId)}
         {@const isCurrent = current !== null && index === currentIndex}
         {@const isPast = index < currentIndex}
         <div animate:flipMotion role="listitem" aria-current={isCurrent ? "true" : undefined}>
@@ -80,7 +80,7 @@
             type="button"
             disabled={isCurrent}
             aria-label="Play {item.title}"
-            onclick={() => actions.run(() => playback.playQueueItem(item.id))}
+            onclick={() => actions.run(() => playback.playQueueItem(item.queueItemId))}
             variant="bare"
             size="inline"
             class={cn(

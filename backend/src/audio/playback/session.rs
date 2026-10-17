@@ -3,7 +3,7 @@
 use std::time::{Duration, Instant};
 
 use super::decode_worker::DecodeWorker;
-use super::item::PlaybackItem;
+use super::item::PlayableItem;
 use super::service::Reply;
 use super::snapshot::{PlaybackFailureCode, PlaybackSnapshot, SessionStartedBy};
 use super::source_loader::SourceLoad;
@@ -37,7 +37,7 @@ pub(super) enum Transport {
 pub(super) struct StartRequest {
     /// The playback this start belongs to. A device switch restarts the same playback.
     pub id: PlaybackId,
-    pub item: PlaybackItem,
+    pub item: PlayableItem,
     pub started_by: SessionStartedBy,
     /// `None` for starts the worker begins on its own (skipping on, the next track, a device switch).
     pub responder: Option<Reply<Versioned<PlaybackSnapshot>>>,
@@ -96,7 +96,7 @@ impl Pipeline {
 /// A track that reached the output.
 pub(super) struct Loaded {
     pub id: PlaybackId,
-    pub item: PlaybackItem,
+    pub item: PlayableItem,
     pub started_by: SessionStartedBy,
     pub source: CompressedAudioSource,
     pub output: Output,
@@ -121,7 +121,7 @@ pub(super) enum PrefetchState {
     /// Reading the file.
     Source {
         load: SourceLoad,
-        item: PlaybackItem,
+        item: PlayableItem,
     },
     /// Decoding into a queue the stream plays right after the loaded track.
     Ready(PrefetchedTrack),
@@ -131,7 +131,7 @@ pub(super) enum PrefetchState {
 }
 
 pub(super) struct PrefetchedTrack {
-    pub item: PlaybackItem,
+    pub item: PlayableItem,
     pub source: CompressedAudioSource,
     pub pipeline: Pipeline,
     pub duration_ms: Option<u64>,
