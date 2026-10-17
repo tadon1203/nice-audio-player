@@ -445,7 +445,7 @@ mod tests {
         .unwrap();
 
         for path in [truncated, garbage] {
-            let outcome = std::panic::catch_unwind(|| {
+            let outcome = crate::containment::contain("test.decode", || {
                 let Ok(mut decoder) = super::open_analysis_decoder(&validated(&path)) else {
                     return;
                 };
@@ -454,7 +454,7 @@ mod tests {
                     buffer.clear();
                 }
             });
-            assert!(outcome.is_ok(), "{path:?} panicked the decoder");
+            assert!(outcome.is_some(), "{path:?} panicked the decoder");
         }
     }
 }
