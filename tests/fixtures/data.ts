@@ -86,8 +86,7 @@ export function makeTracks(
       fileFormat: "FLAC",
       bitDepth: 24,
       bitrateKbps: null,
-      availability: missing ? "missing" : "available",
-      playable: !missing,
+      state: missing ? "missing" : "playable",
     };
   });
 }
@@ -154,8 +153,7 @@ export function testLibrary(
         bitDepth: 24,
         sampleRate: 96_000,
         durationMs: track.durationMs,
-        availability: track.availability,
-        playable: track.playable,
+        state: track.state,
       })),
       totalCount: 3,
       nextCursor: null,
@@ -460,6 +458,6 @@ export function playingSnapshot(fields: PlayingFields): PlaybackSnapshot {
 /** The playable tracks of the library's one album, in order: what Play album should start. */
 export function albumSequence(library: LibraryData): LibraryTrackSummary[] {
   return library.albumTracks.items.flatMap((item) =>
-    library.tracks.filter((track) => track.id === item.id && track.playable),
+    library.tracks.filter((track) => track.id === item.id && track.state === "playable"),
   );
 }

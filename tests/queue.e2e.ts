@@ -20,7 +20,7 @@ const upcomingTitles = (panel: import("@playwright/test").Locator): Promise<stri
   panel.locator('[data-tone="upcoming"] [data-slot="queue-row-title"]').allTextContents();
 
 test("drags an upcoming track to any position", async ({ page, native, player, library }) => {
-  const upcoming = library.tracks.filter((track) => track.playable).slice(1);
+  const upcoming = library.tracks.filter((track) => track.state === "playable").slice(1);
   // Dropping the first row below the fourth: it is expected to land after it.
   native.respond("moveQueueItem", () =>
     player.queue({ upcoming: [...upcoming.slice(1, 4), upcoming[0]!, ...upcoming.slice(4)] }),

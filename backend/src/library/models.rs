@@ -28,11 +28,14 @@ pub struct LibraryRoot {
     /// Tracks whose file is gone (see **Missing** in CONTEXT.md).
     pub missing_count: u64,
 }
+/// Where a track stands: its file can play, its file is gone, or its file is there but cannot be
+/// decoded. Missing wins over unsupported.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
-pub enum LibraryFileAvailability {
-    Available,
+pub enum TrackState {
+    Playable,
     Missing,
+    Unsupported,
 }
 #[derive(Debug, Clone, Copy, Serialize, specta::Type, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -92,8 +95,7 @@ pub struct LibraryTrackSummary {
     pub file_format: Option<String>,
     pub bit_depth: Option<u32>,
     pub bitrate_kbps: Option<u64>,
-    pub availability: LibraryFileAvailability,
-    pub playable: bool,
+    pub state: TrackState,
 }
 /// The tags, audio format and location of one track, as the Properties view lists them.
 #[derive(Debug, Clone, Serialize, specta::Type)]
@@ -119,6 +121,7 @@ pub struct LibraryTrackProperties {
     pub channel_count: Option<u32>,
     pub bit_depth: Option<u32>,
     pub bitrate_kbps: Option<u32>,
+    pub state: TrackState,
 }
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
@@ -213,8 +216,7 @@ pub struct LibraryAlbumTrackSummary {
     pub bit_depth: Option<u32>,
     pub sample_rate: Option<u32>,
     pub duration_ms: Option<u64>,
-    pub availability: LibraryFileAvailability,
-    pub playable: bool,
+    pub state: TrackState,
 }
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]

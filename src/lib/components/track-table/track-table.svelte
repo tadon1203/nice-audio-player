@@ -202,7 +202,7 @@
                   playback.activeTrackId,
                   playback.status,
                 )}
-                {@const available = Tracks.isAvailable(row)}
+                {@const available = Tracks.isPlayable(row)}
                 {@const runAction = {
                   play: () => onplaytrack(row.id),
                   pause: () => actions.run(() => playback.pause()),
@@ -212,7 +212,7 @@
                 <tr
                   data-row-id={row.id}
                   data-playback-state={playbackState}
-                  data-availability={row.availability}
+                  data-track-state={row.state}
                   style:height="{TRACK_ROW_HEIGHT}px"
                   class={cn(
                     "group/track border-b border-border/70 text-foreground outline-none transition-colors hover:bg-accent/40 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-inset has-[:focus-visible]:ring-ring",
@@ -234,7 +234,7 @@
                         <div class="min-w-0 text-left">
                           <div class="flex min-w-0 items-center gap-2">
                             <span class="truncate" title={row.title}>{row.title}</span>
-                            {#if row.availability === "missing"}
+                            {#if row.state === "missing"}
                               <span class="shrink-0 text-sm text-muted-foreground">Missing</span>
                             {/if}
                           </div>
@@ -270,7 +270,7 @@
       <ContextMenuContent>
         {#if menuRow}
           {@const row = menuRow}
-          {#if Tracks.isAvailable(row)}
+          {#if Tracks.isPlayable(row)}
             <ContextMenuItem
               onSelect={() => actions.run(() => playback.enqueueTrack(row.id, true))}
             >

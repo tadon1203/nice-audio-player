@@ -6,10 +6,30 @@ use crate::library::{
     artwork::{ArtworkMimeType, ArtworkRef},
     error::StoreError,
     location::TrackLocation,
-    models::{LibraryTrackProperties, LibraryTrackSummary, TrackAlbum},
+    models::{LibraryTrackProperties, LibraryTrackSummary, TrackAlbum, TrackState},
     status::{Availability, InspectionStatus},
 };
 use rusqlite::{OptionalExtension, Row, params};
+
+/// The state of a track, from its file's availability and inspection. Every DTO's `state` comes
+/// from here, and so does the playback path's check that a track can play.
+pub(super) fn track_state(availability: Availability, inspection: InspectionStatus) -> TrackState {
+    match (availability, inspection) {
+        (Availability::Missing, _) => TrackState::Missing,
+        (Availability::Available, InspectionStatus::Indexed) => TrackState::Playable,
+        (Availability::Available, InspectionStatus::Unsupported) => TrackState::Unsupported,
+    }
+}
+
+/// The SQL condition, on the `f` alias of `library_files`, that holds for the files `track_state`
+/// calls playable.
+pub(super) fn playable_file_condition() -> String {
+    format!(
+        "f.availability = '{}' AND f.inspection_status = '{}'",
+        Availability::Available.as_str(),
+        InspectionStatus::Indexed.as_str()
+    )
+}
 
 /// The columns `summary_from_row` reads, in its order.
 pub(super) const SUMMARY_COLUMNS: &str = "t.id, m.title, m.artist, m.album, m.tag_album_artist, m.duration_ms, a.content_hash, a.mime_type, m.file_format, m.bit_depth, m.bitrate_kbps, f.availability, f.inspection_status, m.album_id, al.artist_id";
@@ -52,8 +72,7 @@ pub(super) fn track_album(
 pub(super) fn summary_from_row(row: &Row<'_>) -> rusqlite::Result<LibraryTrackSummary> {
     let title: String = row.get(3)?;
     let duration: Option<i64> = row.get(5)?;
-    let availability: Availability = row.get(11)?;
-    let inspection: InspectionStatus = row.get(12)?;
+    let state = track_state(row.get(11)?, row.get(12)?);
     let artist: String = row.get(2)?;
     let album = if title.is_empty() {
         None
@@ -76,9 +95,7 @@ pub(super) fn summary_from_row(row: &Row<'_>) -> rusqlite::Result<LibraryTrackSu
         file_format: non_blank(row.get(8)?),
         bit_depth: row.get::<_, Option<i64>>(9)?.map(|value| value as u32),
         bitrate_kbps: row.get::<_, Option<i64>>(10)?.map(|value| value as u64),
-        playable: availability == Availability::Available
-            && inspection == InspectionStatus::Indexed,
-        availability,
+        state,
     })
 }
 
@@ -122,7 +139,7 @@ impl LibraryStore {
                 "SELECT f.file_name, m.tag_title, m.tag_artist, m.tag_album, m.tag_album_artist,
                         m.track_number, m.track_total, m.disc_number, m.disc_total, m.genre, m.date,
                         m.duration_ms, m.file_format, m.codec, m.sample_rate, m.channel_count,
-                        m.bit_depth, m.bitrate_kbps
+                        m.bit_depth, m.bitrate_kbps, f.availability, f.inspection_status
                  FROM tracks t
                  JOIN library_files f ON f.id = t.file_id
                  JOIN track_source_metadata m ON m.track_id = t.id
@@ -157,6 +174,7 @@ impl LibraryStore {
                         channel_count: number(15)?,
                         bit_depth: number(16)?,
                         bitrate_kbps: number(17)?,
+                        state: track_state(row.get(18)?, row.get(19)?),
                     })
                 },
             )

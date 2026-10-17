@@ -16,7 +16,7 @@ pub use crate::library::models::{
     LibraryAlbumArtistSortKey, LibraryAlbumArtistSummary, LibraryAlbumDetails, LibraryAlbumPage,
     LibraryAlbumSortKey, LibraryAlbumTrackPage, LibraryArtistAlbumSortKey, LibraryIndexBucket,
     LibraryRoot, LibraryScanSnapshot, LibrarySortDirection, LibraryStatus, LibraryTrackPage,
-    LibraryTrackProperties, LibraryTrackSortKey, LibraryUnavailableReason,
+    LibraryTrackProperties, LibraryTrackSortKey, LibraryUnavailableReason, TrackState,
 };
 pub use crate::lyrics::LyricsResolution;
 pub use crate::messages::Versioned;

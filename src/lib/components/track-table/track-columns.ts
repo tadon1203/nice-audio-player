@@ -12,7 +12,7 @@ import { MISSING } from "#lib/utils/missing";
 /** A track row shared by the Library and Album layouts; both DTOs satisfy it directly. */
 export type TrackTableRow = Pick<
   LibraryTrackSummary,
-  "id" | "title" | "artist" | "durationMs" | "availability" | "playable"
+  "id" | "title" | "artist" | "durationMs" | "state"
 > &
   Partial<
     Pick<LibraryTrackSummary, "album" | "albumArtist"> &
@@ -180,7 +180,7 @@ export interface TrackRowState {
  * Pause/Resume for the active track, else Play.
  */
 export function trackRowState(
-  row: Pick<TrackTableRow, "id" | "title" | "playable" | "availability">,
+  row: Pick<TrackTableRow, "id" | "title" | "state">,
   activeTrackId: TrackId | null,
   status: TrackPlaybackStatus,
 ): TrackRowState {
@@ -193,7 +193,7 @@ export function trackRowState(
         ? { label: `Resume ${row.title}`, kind: "resume", persistent: true }
         : { label: `Play ${row.title}`, kind: "play", persistent: false };
   const clickIntent =
-    !Tracks.isAvailable(row) || playbackState === "playing"
+    !Tracks.isPlayable(row) || playbackState === "playing"
       ? null
       : playbackState === "paused"
         ? "resume"

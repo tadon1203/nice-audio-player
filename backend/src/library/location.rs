@@ -43,10 +43,6 @@ impl TrackLocation {
         }
     }
 
-    pub fn available(&self) -> bool {
-        self.available
-    }
-
     /// The file's path, without touching the filesystem: the root joined with a relative path that
     /// only descends. Cheap enough to take for every track of a playback context.
     pub fn path(&self) -> Result<PathBuf, Unavailable> {

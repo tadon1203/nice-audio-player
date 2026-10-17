@@ -46,14 +46,12 @@ export class Tracks {
   }
 
   /** Whether the file is on disk (it can be shown in Explorer). */
-  public static isFilePresent(track: Pick<LibraryTrackSummary, "availability">): boolean {
-    return track.availability === "available";
+  public static isFilePresent(track: Pick<LibraryTrackSummary, "state">): boolean {
+    return track.state !== "missing";
   }
 
   /** Whether the track can be played or queued now. */
-  public static isAvailable(
-    track: Pick<LibraryTrackSummary, "playable" | "availability">,
-  ): boolean {
-    return track.playable && Tracks.isFilePresent(track);
+  public static isPlayable(track: Pick<LibraryTrackSummary, "state">): boolean {
+    return track.state === "playable";
   }
 }

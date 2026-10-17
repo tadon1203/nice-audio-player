@@ -36,10 +36,11 @@ describe("Tracks.links", () => {
 });
 
 describe("Tracks availability", () => {
-  it("needs the file on disk and a playable track to play", () => {
-    expect(Tracks.isFilePresent({ availability: "missing" })).toBe(false);
-    expect(Tracks.isAvailable({ playable: true, availability: "available" })).toBe(true);
-    expect(Tracks.isAvailable({ playable: false, availability: "available" })).toBe(false);
-    expect(Tracks.isAvailable({ playable: true, availability: "missing" })).toBe(false);
+  it("needs a playable track to play, and a file on disk to show", () => {
+    expect(Tracks.isFilePresent({ state: "missing" })).toBe(false);
+    expect(Tracks.isFilePresent({ state: "unsupported" })).toBe(true);
+    expect(Tracks.isPlayable({ state: "playable" })).toBe(true);
+    expect(Tracks.isPlayable({ state: "unsupported" })).toBe(false);
+    expect(Tracks.isPlayable({ state: "missing" })).toBe(false);
   });
 });

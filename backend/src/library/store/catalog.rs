@@ -11,15 +11,13 @@
 use super::{
     LibraryStore, SearchFilter,
     paging::{Ordering, Page, PagedQuery, Phase, Scope, View},
-    track::{SUMMARY_COLUMN_COUNT, SUMMARY_COLUMNS, SUMMARY_FROM, artwork_ref, summary_from_row},
+    track::{
+        SUMMARY_COLUMN_COUNT, SUMMARY_COLUMNS, SUMMARY_FROM, artwork_ref, playable_file_condition,
+        summary_from_row, track_state,
+    },
 };
 use crate::ids::{AlbumId, ArtistId, TrackId, album_id_column, artist_id_column, track_id_column};
-use crate::library::{
-    error::StoreError,
-    models::*,
-    status::{Availability, InspectionStatus},
-    text,
-};
+use crate::library::{error::StoreError, models::*, text};
 use rusqlite::{Connection, OptionalExtension, Row, params, types::Value};
 
 /// An album's tracks in playing order: by disc, then track, unnumbered ones last.
@@ -672,6 +670,7 @@ impl LibraryStore {
             .optional()?
             .ok_or(StoreError::AlbumNotFound)?;
         let in_album = "m.album_id = ?1";
+        let playable_file = playable_file_condition();
         let (count, duration, year, date, playable): (
             i64,
             Option<i64>,
@@ -689,15 +688,11 @@ impl LibraryStore {
                     (SELECT m.track_id FROM track_source_metadata m
                       JOIN tracks t ON t.id = m.track_id
                       JOIN library_files f ON f.id = t.file_id
-                      WHERE {in_album} AND f.availability = ?2 AND f.inspection_status = ?3
+                      WHERE {in_album} AND {playable_file}
                       ORDER BY {ALBUM_ORDER} LIMIT 1)
                  FROM track_source_metadata m WHERE {in_album}"
             ),
-            params![
-                album_hex,
-                Availability::Available,
-                InspectionStatus::Indexed
-            ],
+            params![album_hex],
             |row| {
                 Ok((
                     row.get(0)?,
@@ -746,8 +741,6 @@ impl LibraryStore {
             let number = |index: usize| -> rusqlite::Result<Option<u32>> {
                 Ok(row.get::<_, Option<i64>>(index)?.map(|value| value as u32))
             };
-            let availability: Availability = row.get(9)?;
-            let inspection: InspectionStatus = row.get(10)?;
             Ok(LibraryAlbumTrackSummary {
                 id: track_id_column(row, 0)?,
                 title: row.get(1)?,
@@ -758,9 +751,7 @@ impl LibraryStore {
                 bit_depth: number(6)?,
                 sample_rate: number(7)?,
                 duration_ms: row.get::<_, Option<i64>>(8)?.map(|value| value as u64),
-                availability,
-                playable: availability == Availability::Available
-                    && inspection == InspectionStatus::Indexed,
+                state: track_state(row.get(9)?, row.get(10)?),
             })
         })?;
         Ok(LibraryAlbumTrackPage {

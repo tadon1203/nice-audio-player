@@ -25,8 +25,7 @@ const row: TrackTableRow = {
   },
   albumArtist: null,
   durationMs: 65_000,
-  availability: "available",
-  playable: true,
+  state: "playable",
 };
 
 describe("track columns", () => {
@@ -79,8 +78,8 @@ describe("track rows", () => {
     expect(intent(row, null, "stopped")).toBe("play");
     expect(intent(row, 1, "playing")).toBeNull();
     expect(intent(row, 1, "paused")).toBe("resume");
-    expect(intent({ ...row, availability: "missing" }, null, "stopped")).toBeNull();
-    expect(intent({ ...row, playable: false }, null, "stopped")).toBeNull();
+    expect(intent({ ...row, state: "missing" }, null, "stopped")).toBeNull();
+    expect(intent({ ...row, state: "unsupported" }, null, "stopped")).toBeNull();
   });
 
   it("report the playback state only for the active track", () => {

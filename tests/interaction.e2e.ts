@@ -129,7 +129,7 @@ test("Play next and Add to queue put a track where they say", async ({
   library,
 }) => {
   // What the queue should hold once each command has run: the test states it.
-  const rest = library.tracks.filter((track) => track.playable).slice(1);
+  const rest = library.tracks.filter((track) => track.state === "playable").slice(1);
   const track = (title: string): LibraryTrackSummary =>
     library.tracks.find((entry) => entry.title === title)!;
   const without = (tracks: typeof rest, ...removed: typeof rest): LibraryTrackSummary[] =>
@@ -162,7 +162,7 @@ test("Play next and Add to queue put a track where they say", async ({
 });
 
 test("clearing the upcoming tracks can be undone", async ({ page, native, player, library }) => {
-  const rest = library.tracks.filter((track) => track.playable).slice(1);
+  const rest = library.tracks.filter((track) => track.state === "playable").slice(1);
   native.respond("clearQueue", () => player.queue({ upcoming: [] }));
   native.respond("restorePreviousQueue", async () => {
     await player.queue({ upcoming: rest });

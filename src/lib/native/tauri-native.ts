@@ -50,6 +50,7 @@ import type {
   PlaybackQueueWindow,
   PlaybackSnapshot,
   PlaybackWaveform,
+  TrackState,
   Versioned,
 } from "./bindings";
 
@@ -336,6 +337,7 @@ class TauriLibraryClient implements LibraryClient {
     channelCount: number | null;
     bitDepth: number | null;
     bitrateKbps: number | null;
+    state: TrackState;
   } | null> {
     return this.#call(() => this.#commands.getLibraryTrackProperties(trackId));
   }

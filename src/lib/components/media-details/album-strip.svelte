@@ -1,12 +1,11 @@
 <script lang="ts" module>
-  import type { LibraryFileAvailability, TrackId } from "#lib/native";
+  import type { TrackId, TrackState } from "#lib/native";
 
   export interface AlbumStripTrack {
     id: TrackId;
     title: string;
     durationMs: number | null;
-    playable: boolean;
-    availability: LibraryFileAvailability;
+    state: TrackState;
   }
 
   const PAST = "bg-foreground/60";
@@ -74,7 +73,7 @@
   <div class="flex h-1 w-full gap-0.5" role="group" aria-label="Track lengths">
     {#each tracks as track, index (track.id)}
       {@const state = states[index]}
-      {@const playable = Tracks.isAvailable(track)}
+      {@const playable = Tracks.isPlayable(track)}
       <div class="group/segment relative h-full min-w-0.5" style:flex-grow={track.durationMs ?? 0}>
         <Tooltip>
           <!-- Pointer-only: the track table below is the keyboard path to the same tracks. -->

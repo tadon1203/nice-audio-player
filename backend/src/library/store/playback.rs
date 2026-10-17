@@ -4,14 +4,14 @@
 use super::{
     LibraryStore,
     catalog::{ALBUM_ORDER, track_filter, track_ordering},
-    track::{artwork_ref, non_blank, track_album},
+    track::{artwork_ref, non_blank, track_album, track_state},
 };
 use crate::ids::{AlbumId, ArtistId, TrackId, album_id_column, track_id_column};
 use crate::library::{
     artwork::ArtworkRef,
     error::StoreError,
     location::TrackLocation,
-    models::{LibrarySortDirection, LibraryTrackSortKey, TrackAlbum},
+    models::{LibrarySortDirection, LibraryTrackSortKey, TrackAlbum, TrackState},
     status::{Availability, InspectionStatus},
 };
 use crate::media::validation::{ValidatedAudioFile, describe_audio_file, validate_audio_file};
@@ -101,7 +101,7 @@ impl From<StoreError> for PlaybackSourceError {
 struct PlaybackRow {
     track_id: TrackId,
     location: TrackLocation,
-    indexed: bool,
+    state: TrackState,
     title: String,
     artist: String,
     album: String,
@@ -117,12 +117,6 @@ struct PlaybackRow {
     bit_depth: Option<u32>,
     bitrate_kbps: Option<u32>,
     content_hash: Option<String>,
-}
-
-impl PlaybackRow {
-    fn available(&self) -> bool {
-        self.location.available()
-    }
 }
 
 /// How many tracks each album has, by album ID.
@@ -141,7 +135,7 @@ fn playback_row(row: &Row<'_>) -> rusqlite::Result<PlaybackRow> {
     Ok(PlaybackRow {
         track_id: track_id_column(row, 0)?,
         location: TrackLocation::new(&root, &relative, availability == Availability::Available),
-        indexed: inspection == InspectionStatus::Indexed,
+        state: track_state(availability, inspection),
         title: row.get(5)?,
         artist: row.get(6)?,
         album: row.get(7)?,
@@ -166,6 +160,15 @@ fn playback_row(row: &Row<'_>) -> rusqlite::Result<PlaybackRow> {
     })
 }
 
+/// Why a track in this state cannot be played, or `Ok` when it can.
+fn ensure_playable(state: TrackState) -> Result<(), PlaybackSourceError> {
+    match state {
+        TrackState::Playable => Ok(()),
+        TrackState::Missing => Err(PlaybackSourceError::TrackUnavailable),
+        TrackState::Unsupported => Err(PlaybackSourceError::TrackNotPlayable),
+    }
+}
+
 /// Turns a row into a playable track. A track that is missing, not indexed or whose file path
 /// cannot be described yields `None`, except for the `requested` one, which is reported instead
 /// of quietly playing something else.
@@ -174,15 +177,8 @@ fn playable_track(
     counts: &AlbumCounts,
     requested: bool,
 ) -> Result<Option<PlayableTrack>, PlaybackSourceError> {
-    if !row.available() || !row.indexed {
-        if requested {
-            return Err(if row.available() {
-                PlaybackSourceError::TrackNotPlayable
-            } else {
-                PlaybackSourceError::TrackUnavailable
-            });
-        }
-        return Ok(None);
+    if let Err(error) = ensure_playable(row.state) {
+        return if requested { Err(error) } else { Ok(None) };
     }
     // A file that vanished since the scan fails when it is loaded, and the queue moves on.
     // The track the listener picked is checked now so they get a clear answer.
@@ -233,8 +229,7 @@ fn playable_track(
 /// One member of a selection: just enough to decide whether it plays.
 struct SelectionRow {
     track_id: TrackId,
-    available: bool,
-    indexed: bool,
+    state: TrackState,
 }
 
 /// Keeps the ids that can be played and locates the requested one among them.
@@ -246,16 +241,11 @@ fn select_playable(
         let Some(row) = rows.iter().find(|row| row.track_id == requested) else {
             return Err(PlaybackSourceError::TrackNotMember);
         };
-        if !row.available {
-            return Err(PlaybackSourceError::TrackUnavailable);
-        }
-        if !row.indexed {
-            return Err(PlaybackSourceError::TrackNotPlayable);
-        }
+        ensure_playable(row.state)?;
     }
     let mut track_ids = Vec::with_capacity(rows.len());
     let mut start_index = 0;
-    for row in rows.iter().filter(|row| row.available && row.indexed) {
+    for row in rows.iter().filter(|row| row.state == TrackState::Playable) {
         if start_track_id == Some(row.track_id) {
             start_index = track_ids.len();
         }
@@ -280,8 +270,7 @@ fn selection_row(row: &Row<'_>) -> rusqlite::Result<SelectionRow> {
     let inspection: InspectionStatus = row.get(2)?;
     Ok(SelectionRow {
         track_id: track_id_column(row, 0)?,
-        available: availability == Availability::Available,
-        indexed: inspection == InspectionStatus::Indexed,
+        state: track_state(availability, inspection),
     })
 }
 

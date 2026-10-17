@@ -68,6 +68,53 @@ fn a_track_location_is_found_by_id_and_stays_inside_its_root() {
 }
 
 #[test]
+fn a_track_is_playable_missing_or_unsupported_by_its_file_alone() {
+    let fixture = fixture();
+    fixture.touch_audio([1, 3]);
+    fixture.add_all(&[
+        Seed::new(1, "Playable", "Artist", "Album"),
+        Seed::new(2, "Missing", "Artist", "Album"),
+        Seed::new(3, "Unsupported", "Artist", "Album"),
+    ]);
+    fixture.sql("UPDATE library_files SET availability='missing' WHERE id=2");
+    fixture.sql("UPDATE library_files SET inspection_status='unsupported' WHERE id=3");
+    let store = &fixture.store;
+
+    let state_of = |id: i64| {
+        store
+            .catalog_tracks(
+                None,
+                None,
+                LibraryTrackSortKey::Title,
+                LibrarySortDirection::Ascending,
+            )
+            .unwrap()
+            .items
+            .into_iter()
+            .find(|track| track.id == track_id_of(id))
+            .unwrap()
+            .state
+    };
+    assert_eq!(state_of(1), TrackState::Playable);
+    assert_eq!(state_of(2), TrackState::Missing);
+    assert_eq!(state_of(3), TrackState::Unsupported);
+
+    assert_eq!(
+        store
+            .track_properties(track_id_of(2))
+            .unwrap()
+            .unwrap()
+            .state,
+        TrackState::Missing,
+        "the Properties view says the same"
+    );
+    assert!(
+        store.playback_for_track(track_id_of(1)).is_ok(),
+        "playback accepts the playable track"
+    );
+}
+
+#[test]
 fn track_properties_list_the_tags_and_the_files_path() {
     let fixture = fixture();
     let mut seed = Seed::new(1, "Song", "Singer", "Record");

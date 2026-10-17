@@ -434,7 +434,7 @@ test("consecutive skips share one notice", async ({ page, native, library }) => 
   const [, second] = album;
   // The fixture album has two playable tracks, so the second skip comes from outside it.
   const outside = library.tracks.find(
-    (track) => track.playable && !album.some((entry) => entry.id === track.id),
+    (track) => track.state === "playable" && !album.some((entry) => entry.id === track.id),
   );
   const dock = await playFirstTrack(page);
   const first = playbackItemFor(second!);

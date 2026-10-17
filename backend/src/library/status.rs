@@ -33,7 +33,13 @@ macro_rules! sql_text_enum {
 }
 pub(crate) use sql_text_enum;
 
-pub use super::models::LibraryFileAvailability as Availability;
+/// Whether a file is on disk where the library last saw it. Only the library reads it: the track
+/// DTOs carry the `TrackState` that it and the inspection status decide together.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Availability {
+    Available,
+    Missing,
+}
 
 sql_text_enum!(Availability {
     Available => "available",

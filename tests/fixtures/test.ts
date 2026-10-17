@@ -24,7 +24,7 @@ export const test = base.extend<Fixtures>({
     async ({ native, library }, use): Promise<void> => {
       const player = scriptPlayback(
         native,
-        library.tracks.filter((track) => track.playable),
+        library.tracks.filter((track) => track.state === "playable"),
       );
       await use(player);
       player.stopTicks();

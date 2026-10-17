@@ -91,6 +91,7 @@ export const commands = {
 	channelCount: number | null,
 	bitDepth: number | null,
 	bitrateKbps: number | null,
+	state: TrackState,
 } | null>("get_library_track_properties", { trackId }),
 	/**  Shows the track's file in Explorer, selected. */
 	revealLibraryTrack: (trackId: TrackId) => __TAURI_INVOKE<null>("reveal_library_track", { trackId }),
@@ -304,8 +305,7 @@ export type LibraryAlbumTrackSummary = {
 	bitDepth: number | null,
 	sampleRate: number | null,
 	durationMs: number | null,
-	availability: LibraryFileAvailability,
-	playable: boolean,
+	state: TrackState,
 };
 
 export type LibraryArtistAlbumSortKey = "year" | "title";
@@ -313,8 +313,6 @@ export type LibraryArtistAlbumSortKey = "year" | "title";
 export type LibraryCommandError = { code: "invalidRoot" } | { code: "rootNotDirectory" } | { code: "canonicalizationFailed" } | { code: "duplicateRoot" } | { code: "overlappingRoot" } | 
 /**  The folder holds the app's own data directory, which a scan would read as music. */
 { code: "rootContainsDataDirectory" } | { code: "scanInProgress" } | { code: "trackNotFound" } | { code: "trackUnavailable" } | { code: "albumNotFound" } | { code: "invalidCursor" } | { code: "albumArtistNotFound" } | { code: "rootMissing" } | { code: "scanAlreadyRunning" } | { code: "noEnabledRoots" } | { code: "scanNotRunning" } | { code: "libraryUnavailable" } | { code: "persistenceFailed" } | { code: "taskFailed" };
-
-export type LibraryFileAvailability = "available" | "missing";
 
 /**
  *  One entry of a list's scroll index: the label its names are filed under, and how many there
@@ -398,6 +396,7 @@ export type LibraryTrackProperties = {
 	channelCount: number | null,
 	bitDepth: number | null,
 	bitrateKbps: number | null,
+	state: TrackState,
 };
 
 export type LibraryTrackSortKey = "title" | "artist" | "album" | "duration";
@@ -413,8 +412,7 @@ export type LibraryTrackSummary = {
 	fileFormat: string | null,
 	bitDepth: number | null,
 	bitrateKbps: number | null,
-	availability: LibraryFileAvailability,
-	playable: boolean,
+	state: TrackState,
 };
 
 export type LibraryUnavailableReason = "databaseOpenFailed" | "migrationFailed" | "schemaTooNew" | "databaseCorrupt";
@@ -619,6 +617,12 @@ export type TrackAlbum = {
 
 /**  A track: the `tracks` rowid. Above zero. On the IPC a number, which serde rejects below one. */
 export type TrackId = number;
+
+/**
+ *  Where a track stands: its file can play, its file is gone, or its file is there but cannot be
+ *  decoded. Missing wins over unsupported.
+ */
+export type TrackState = "playable" | "missing" | "unsupported";
 
 /**  A value with the revision of its topic. Revisions only grow, per topic. */
 export type Versioned<T> = {
