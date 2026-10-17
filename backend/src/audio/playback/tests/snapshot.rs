@@ -1,4 +1,5 @@
 use super::*;
+use crate::ids::QueueItemId;
 
 #[test]
 fn the_initial_snapshot_is_stopped_with_the_saved_volume() {
@@ -13,9 +14,9 @@ fn the_initial_snapshot_is_stopped_with_the_saved_volume() {
 
 fn test_item() -> PlaybackItem {
     PlaybackItem {
-        queue_item_id: "queue-item-1".into(),
+        queue_item_id: QueueItemId::first(),
         track: library_track(
-            "7",
+            TrackId::try_from_rowid(7).unwrap(),
             ValidatedAudioFile {
                 path: "C:/test.flac".into(),
                 file_name: "test.flac".into(),

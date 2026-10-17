@@ -26,15 +26,15 @@ export const commands = {
 	setPlaybackShuffle: (enabled: boolean) => __TAURI_INVOKE<Versioned<PlaybackQueueSnapshot>>("set_playback_shuffle", { enabled }),
 	/**  Switches the output device; a loaded track restarts on it at the same position. */
 	setAudioOutputSelection: (selection: AudioOutputSelection) => __TAURI_INVOKE<Versioned<PlaybackSnapshot>>("set_audio_output_selection", { selection }),
-	removeQueueItem: (id: string) => __TAURI_INVOKE<Versioned<PlaybackQueueSnapshot>>("remove_queue_item", { id }),
-	moveQueueItem: (id: string, to: number) => __TAURI_INVOKE<Versioned<PlaybackQueueSnapshot>>("move_queue_item", { id, to }),
+	removeQueueItem: (id: QueueItemId) => __TAURI_INVOKE<Versioned<PlaybackQueueSnapshot>>("remove_queue_item", { id }),
+	moveQueueItem: (id: QueueItemId, to: number) => __TAURI_INVOKE<Versioned<PlaybackQueueSnapshot>>("move_queue_item", { id, to }),
 	/**  Makes an upcoming queue item current and plays it. */
-	playQueueItem: (id: string) => __TAURI_INVOKE<Versioned<PlaybackSnapshot>>("play_queue_item", { id }),
+	playQueueItem: (id: QueueItemId) => __TAURI_INVOKE<Versioned<PlaybackSnapshot>>("play_queue_item", { id }),
 	/**
 	 *  Adds a library track to the queue: right after the current one (`next`) or at the end.
 	 *  With nothing queued it starts playing.
 	 */
-	enqueueTrack: (trackId: string, next: boolean) => __TAURI_INVOKE<Versioned<PlaybackQueueSnapshot>>("enqueue_track", { trackId, next }),
+	enqueueTrack: (trackId: TrackId, next: boolean) => __TAURI_INVOKE<Versioned<PlaybackQueueSnapshot>>("enqueue_track", { trackId, next }),
 	clearQueue: () => __TAURI_INVOKE<Versioned<PlaybackQueueSnapshot>>("clear_queue"),
 	/**  Puts back the queue the last replacement or Clear upcoming took away. */
 	restorePreviousQueue: () => __TAURI_INVOKE<Versioned<PlaybackSnapshot>>("restore_previous_queue"),
@@ -439,7 +439,7 @@ export type Occurrence =
  *  stay in the backend. The file is a path on disk, and the renderer never receives one.
  */
 export type PlayableTrack = {
-	trackId: string,
+	trackId: TrackId,
 	title: string,
 	artist: string | null,
 	album: string | null,
@@ -473,7 +473,7 @@ export type PlaybackFailureCode = "noOutputDevice" | "outputDeviceUnavailable" |
  *  system media controls, and the UI never have to look the track up again by path.
  */
 export type PlaybackItem = {
-	queueItemId: string,
+	queueItemId: QueueItemId,
 } & PlayableTrack;
 
 /**
@@ -488,8 +488,8 @@ export type PlaybackPosition = {
 
 /**  A queue entry as the queue panel shows it; the file path stays in the backend. */
 export type PlaybackQueueItem = {
-	id: string,
-	trackId: string,
+	id: QueueItemId,
+	trackId: TrackId,
 	title: string,
 	artist: string | null,
 	album: string | null,
@@ -547,6 +547,9 @@ export type PlaybackWaveform = {
 	peaks: number[],
 	rms: number[],
 };
+
+/**  One entry of the playback queue: the queue's counter, above zero. On the IPC `queue-item-{n}`. */
+export type QueueItemId = string;
 
 /**  A library root: the `library_roots` rowid. Above zero. On the IPC a decimal string. */
 export type RootId = string;

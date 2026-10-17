@@ -21,6 +21,7 @@ use crate::audio::meter::MeterHub;
 use crate::audio::output::OutputBackend;
 use crate::audio::volume::{AtomicEffectiveGain, VolumeState};
 use crate::audio::waveform::PrefetchObserver;
+use crate::ids::{QueueItemId, TrackId};
 use crate::library::store::PlaybackSourceError;
 use crate::messages::{SharedMessageSink, Versioned};
 use crate::tasks::TaskError;
@@ -123,7 +124,7 @@ pub(super) fn respond<T>(reply: Option<Reply<T>>, result: Result<T, PlaybackServ
 
 pub(super) enum PlaybackCommand {
     Start {
-        track_ids: Vec<String>,
+        track_ids: Vec<TrackId>,
         start_index: usize,
         reply: Reply<Versioned<PlaybackSnapshot>>,
     },
@@ -166,11 +167,11 @@ pub(super) enum PlaybackCommand {
         reply: Reply<Versioned<PlaybackQueueSnapshot>>,
     },
     RemoveQueueItem {
-        id: String,
+        id: QueueItemId,
         reply: Reply<Versioned<PlaybackQueueSnapshot>>,
     },
     MoveQueueItem {
-        id: String,
+        id: QueueItemId,
         /// Position in the upcoming list, 0 being next up.
         to: usize,
         reply: Reply<Versioned<PlaybackQueueSnapshot>>,
@@ -184,11 +185,11 @@ pub(super) enum PlaybackCommand {
     },
     /// Makes an upcoming item current and plays it.
     PlayQueueItem {
-        id: String,
+        id: QueueItemId,
         reply: Reply<Versioned<PlaybackSnapshot>>,
     },
     Enqueue {
-        track_ids: Vec<String>,
+        track_ids: Vec<TrackId>,
         /// Right after the current item rather than at the end.
         next: bool,
         reply: Reply<Versioned<PlaybackQueueSnapshot>>,
@@ -352,7 +353,7 @@ impl PlaybackServiceHandle {
     /// `start_index`. Returns once that track is playing; the others are read when needed.
     pub fn start(
         &self,
-        track_ids: Vec<String>,
+        track_ids: Vec<TrackId>,
         start_index: usize,
     ) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
         self.request(|reply| PlaybackCommand::Start {
@@ -423,14 +424,14 @@ impl PlaybackServiceHandle {
 
     pub fn remove_queue_item(
         &self,
-        id: String,
+        id: QueueItemId,
     ) -> Result<Versioned<PlaybackQueueSnapshot>, PlaybackServiceError> {
         self.request(|reply| PlaybackCommand::RemoveQueueItem { id, reply })
     }
 
     pub fn move_queue_item(
         &self,
-        id: String,
+        id: QueueItemId,
         to: usize,
     ) -> Result<Versioned<PlaybackQueueSnapshot>, PlaybackServiceError> {
         self.request(|reply| PlaybackCommand::MoveQueueItem { id, to, reply })
@@ -438,7 +439,7 @@ impl PlaybackServiceHandle {
 
     pub fn play_queue_item(
         &self,
-        id: String,
+        id: QueueItemId,
     ) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
         self.request(|reply| PlaybackCommand::PlayQueueItem { id, reply })
     }
@@ -447,7 +448,7 @@ impl PlaybackServiceHandle {
     /// start playing instead; the worker decides, so the check cannot race a stop.
     pub fn enqueue(
         &self,
-        track_ids: Vec<String>,
+        track_ids: Vec<TrackId>,
         next: bool,
     ) -> Result<Versioned<PlaybackQueueSnapshot>, PlaybackServiceError> {
         self.request(|reply| PlaybackCommand::Enqueue {

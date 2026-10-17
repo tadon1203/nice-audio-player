@@ -288,9 +288,8 @@ fn a_year_is_the_same_on_the_grid_the_details_header_and_in_playback() {
         None
     );
     let playback = store.playback_for_album(&key("Dated"), None).unwrap();
-    let ids: Vec<&str> = playback.track_ids.iter().map(String::as_str).collect();
     let years: Vec<_> = store
-        .playable_tracks(&ids)
+        .playable_tracks(&playback.track_ids)
         .unwrap()
         .iter()
         .map(|track| track.as_ref().unwrap().year)

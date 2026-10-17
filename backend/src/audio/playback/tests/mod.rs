@@ -32,17 +32,27 @@ use crate::audio::playback::snapshot::{
 };
 use crate::audio::playback::worker::{PlaybackWorker, WorkerLinks};
 use crate::audio::volume::{AtomicEffectiveGain, VolumeState};
+use crate::ids::TrackId;
 use crate::library::store::PlayableTrack;
 use crate::media::validation::ValidatedAudioFile;
 use crate::messages::{StateTopic, Versioned, testing::Sent};
 use crate::test_support::{TestDirectory, write_pcm_i16_wav};
 use cpal::StreamInstant;
 use rand::{SeedableRng, rngs::StdRng};
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::sync::mpsc::Receiver;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
 const SAMPLE_RATE: u32 = 44_100;
+
+/// The track ID a test gives the track of this name: the same name always gives the same ID.
+fn track_id_of(name: &str) -> TrackId {
+    let mut hasher = DefaultHasher::new();
+    name.hash(&mut hasher);
+    TrackId::try_from_rowid(((hasher.finish() >> 1) as i64) | 1).unwrap()
+}
 
 // ---- the harness ----
 
@@ -128,7 +138,7 @@ impl Harness {
         PlayableTrack {
             title: name.into(),
             ..library_track(
-                name,
+                track_id_of(name),
                 ValidatedAudioFile {
                     path,
                     file_name: format!("{name}.wav"),
@@ -139,11 +149,11 @@ impl Harness {
     }
 
     /// Makes the library know `tracks` and returns their ids, which is what a queue is made of.
-    fn register(&self, tracks: Vec<PlayableTrack>) -> Vec<String> {
+    fn register(&self, tracks: Vec<PlayableTrack>) -> Vec<TrackId> {
         tracks
             .into_iter()
             .map(|track| {
-                let id = track.track_id.clone();
+                let id = track.track_id;
                 self.library.add(track);
                 id
             })
@@ -293,7 +303,7 @@ fn missing(count: usize) -> Vec<PlayableTrack> {
     (0..count)
         .map(|i| {
             library_track(
-                &format!("track-{i}"),
+                track_id_of(&format!("track-{i}")),
                 ValidatedAudioFile {
                     path: format!("C:/missing/track-{i}.flac").into(),
                     file_name: format!("track-{i}.flac"),

@@ -6,7 +6,7 @@ impl PlaybackWorker {
     /// Replaces the queue and starts its `start_index` item.
     pub(super) fn start_queue(
         &mut self,
-        track_ids: Vec<String>,
+        track_ids: Vec<TrackId>,
         start_index: usize,
         reply: Reply<Versioned<PlaybackSnapshot>>,
     ) {
@@ -22,7 +22,7 @@ impl PlaybackWorker {
     /// was queued, so an Undo never resurrects something older than what was just replaced.
     fn replace_queue(
         &mut self,
-        track_ids: Vec<String>,
+        track_ids: Vec<TrackId>,
         start_index: usize,
     ) -> Result<(), QueueError> {
         let before = self.queue.clone();
@@ -59,7 +59,7 @@ impl PlaybackWorker {
     /// as it stands without waiting for the track to load.
     pub(super) fn start_enqueued(
         &mut self,
-        track_ids: Vec<String>,
+        track_ids: Vec<TrackId>,
         reply: Reply<Versioned<PlaybackQueueSnapshot>>,
     ) {
         if self.replace_queue(track_ids, 0).is_err() {
@@ -339,8 +339,8 @@ impl PlaybackWorker {
     /// The queue entry as a playable item, `None` when the library no longer has its track.
     pub(super) fn item_of(&self, entry: &QueueEntry) -> Option<PlaybackItem> {
         Some(PlaybackItem {
-            queue_item_id: entry.queue_item_id(),
-            track: self.tracks.resolve_one(&entry.track_id)?,
+            queue_item_id: entry.id,
+            track: self.tracks.resolve_one(entry.track_id)?,
         })
     }
 
@@ -355,8 +355,8 @@ impl PlaybackWorker {
                 .iter()
                 .collect();
             shown.extend(&upcoming[..upcoming.len().min(UPCOMING_IN_SNAPSHOT)]);
-            let ids: Vec<&str> = shown.iter().map(|entry| &*entry.track_id).collect();
-            let gone: HashSet<u64> = shown
+            let ids: Vec<TrackId> = shown.iter().map(|entry| entry.track_id).collect();
+            let gone: HashSet<QueueItemId> = shown
                 .iter()
                 .zip(self.tracks.resolve(&ids))
                 .filter(|(_, track)| track.is_none())

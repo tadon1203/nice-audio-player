@@ -5,20 +5,21 @@
 use std::collections::HashMap;
 use std::sync::Mutex;
 
+use crate::ids::TrackId;
 use crate::library::store::PlayableTrack;
 
 /// The library, as far as playback is concerned.
 pub trait TrackSource: Send + Sync {
     /// The tracks with these ids, in the order asked: `None` for one that is gone or cannot be
     /// played any more.
-    fn tracks(&self, track_ids: &[&str]) -> Vec<Option<PlayableTrack>>;
+    fn tracks(&self, track_ids: &[TrackId]) -> Vec<Option<PlayableTrack>>;
 }
 
 /// A source that knows no tracks, for when the library is unavailable.
 pub struct NoTracks;
 
 impl TrackSource for NoTracks {
-    fn tracks(&self, track_ids: &[&str]) -> Vec<Option<PlayableTrack>> {
+    fn tracks(&self, track_ids: &[TrackId]) -> Vec<Option<PlayableTrack>> {
         vec![None; track_ids.len()]
     }
 }
@@ -29,7 +30,7 @@ const CACHE_LIMIT: usize = 2_048;
 
 pub struct TrackResolver {
     source: Box<dyn TrackSource>,
-    cache: Mutex<HashMap<String, PlayableTrack>>,
+    cache: Mutex<HashMap<TrackId, PlayableTrack>>,
 }
 
 impl TrackResolver {
@@ -41,16 +42,16 @@ impl TrackResolver {
     }
 
     /// The tracks with these ids, in the order asked; `None` where the library has none.
-    pub fn resolve(&self, track_ids: &[&str]) -> Vec<Option<PlayableTrack>> {
+    pub fn resolve(&self, track_ids: &[TrackId]) -> Vec<Option<PlayableTrack>> {
         let mut found: Vec<Option<PlayableTrack>> = {
             let cache = self.lock();
-            track_ids.iter().map(|id| cache.get(*id).cloned()).collect()
+            track_ids.iter().map(|id| cache.get(id).cloned()).collect()
         };
         let missing: Vec<usize> = (0..found.len()).filter(|i| found[*i].is_none()).collect();
         if missing.is_empty() {
             return found;
         }
-        let ids: Vec<&str> = missing.iter().map(|i| track_ids[*i]).collect();
+        let ids: Vec<TrackId> = missing.iter().map(|i| track_ids[*i]).collect();
         let read = self.source.tracks(&ids);
         let mut cache = self.lock();
         if cache.len() + read.len() > CACHE_LIMIT {
@@ -58,14 +59,14 @@ impl TrackResolver {
         }
         for (index, track) in missing.into_iter().zip(read) {
             if let Some(track) = track {
-                cache.insert(track.track_id.clone(), track.clone());
+                cache.insert(track.track_id, track.clone());
                 found[index] = Some(track);
             }
         }
         found
     }
 
-    pub fn resolve_one(&self, track_id: &str) -> Option<PlayableTrack> {
+    pub fn resolve_one(&self, track_id: TrackId) -> Option<PlayableTrack> {
         self.resolve(&[track_id]).pop().flatten()
     }
 
@@ -74,7 +75,7 @@ impl TrackResolver {
         self.lock().clear();
     }
 
-    fn lock(&self) -> std::sync::MutexGuard<'_, HashMap<String, PlayableTrack>> {
+    fn lock(&self) -> std::sync::MutexGuard<'_, HashMap<TrackId, PlayableTrack>> {
         self.cache
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -99,20 +100,17 @@ pub(super) mod testing {
     /// A library of hand-made tracks that counts how often it is read.
     #[derive(Default)]
     pub struct FakeTracks {
-        tracks: Mutex<HashMap<String, PlayableTrack>>,
+        tracks: Mutex<HashMap<TrackId, PlayableTrack>>,
         reads: AtomicUsize,
     }
 
     impl FakeTracks {
         pub fn add(&self, track: PlayableTrack) {
-            self.tracks
-                .lock()
-                .unwrap()
-                .insert(track.track_id.clone(), track);
+            self.tracks.lock().unwrap().insert(track.track_id, track);
         }
 
-        pub fn remove(&self, track_id: &str) {
-            self.tracks.lock().unwrap().remove(track_id);
+        pub fn remove(&self, track_id: TrackId) {
+            self.tracks.lock().unwrap().remove(&track_id);
         }
 
         /// How many ids the library was asked for.
@@ -122,13 +120,10 @@ pub(super) mod testing {
     }
 
     impl TrackSource for Arc<FakeTracks> {
-        fn tracks(&self, track_ids: &[&str]) -> Vec<Option<PlayableTrack>> {
+        fn tracks(&self, track_ids: &[TrackId]) -> Vec<Option<PlayableTrack>> {
             self.reads.fetch_add(track_ids.len(), Ordering::SeqCst);
             let tracks = self.tracks.lock().unwrap();
-            track_ids
-                .iter()
-                .map(|id| tracks.get(*id).cloned())
-                .collect()
+            track_ids.iter().map(|id| tracks.get(id).cloned()).collect()
         }
     }
 
@@ -137,9 +132,9 @@ pub(super) mod testing {
     }
 
     /// A track that is only a name and a path.
-    pub fn track(id: &str, file: ValidatedAudioFile) -> PlayableTrack {
+    pub fn track(id: TrackId, file: ValidatedAudioFile) -> PlayableTrack {
         PlayableTrack {
-            track_id: id.to_owned(),
+            track_id: id,
             title: file.file_name.clone(),
             file,
             artist: None,

@@ -6,6 +6,7 @@ use super::resolver::TrackResolver;
 use crate::audio::devices::{AudioOutputDeviceIdentity, AudioOutputSelection};
 use crate::audio::output_processing::{ChannelConversion, OutputProcessingPlan};
 use crate::audio::volume::VolumeState;
+use crate::ids::{QueueItemId, TrackId};
 use crate::library::artwork::ArtworkRef;
 use crate::library::store::PlayableTrack;
 use std::sync::Arc;
@@ -206,8 +207,8 @@ impl PlaybackProcessingInfo {
 #[derive(Debug, Clone, serde::Serialize, specta::Type, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct PlaybackQueueItem {
-    pub id: String,
-    pub track_id: String,
+    pub id: QueueItemId,
+    pub track_id: TrackId,
     pub title: String,
     pub artist: Option<String>,
     pub album: Option<String>,
@@ -218,8 +219,8 @@ pub struct PlaybackQueueItem {
 impl PlaybackQueueItem {
     fn of(entry: &QueueEntry, track: &PlayableTrack) -> Self {
         Self {
-            id: entry.queue_item_id(),
-            track_id: track.track_id.clone(),
+            id: entry.id,
+            track_id: track.track_id,
             title: track.title.clone(),
             artist: track.artist.clone(),
             album: track.album.clone(),
@@ -249,7 +250,7 @@ struct QueueList {
 impl QueueList {
     /// The rows for `entries`, read in one go: `None` where the library no longer has the track.
     fn rows(&self, entries: &[QueueEntry]) -> Vec<Option<PlaybackQueueItem>> {
-        let ids: Vec<&str> = entries.iter().map(|entry| &*entry.track_id).collect();
+        let ids: Vec<TrackId> = entries.iter().map(|entry| entry.track_id).collect();
         entries
             .iter()
             .zip(self.tracks.resolve(&ids))

@@ -13,7 +13,7 @@ impl Harness {
         PlayableTrack {
             title: name.into(),
             ..library_track(
-                name,
+                track_id_of(name),
                 ValidatedAudioFile {
                     path,
                     file_name: format!("{name}.wav"),
@@ -205,7 +205,7 @@ fn removing_the_next_track_discards_the_prefetch() {
     ];
     harness.start(tracks, 0).unwrap();
     harness.prefetch_next();
-    let next = harness.queue_snapshot().upcoming[0].id.clone();
+    let next = harness.queue_snapshot().upcoming[0].id;
 
     harness
         .call(|reply| PlaybackCommand::RemoveQueueItem { id: next, reply })

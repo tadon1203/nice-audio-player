@@ -9,17 +9,17 @@ fn each_skipped_track_reaches_the_sink_as_an_occurrence_in_order() {
 
     harness.start(tracks, 0).unwrap();
 
-    let skipped: Vec<String> = harness
+    let skipped: Vec<TrackId> = harness
         .sent()
         .into_iter()
         .filter_map(|sent| match sent {
             Sent::Occurrence(occurrence) => match *occurrence {
-                Occurrence::TrackSkipped { item, .. } => item.map(|item| item.track_id.clone()),
+                Occurrence::TrackSkipped { item, .. } => item.map(|item| item.track_id),
             },
             _ => None,
         })
         .collect();
-    assert_eq!(skipped, ["track-0", "track-1"]);
+    assert_eq!(skipped, [track_id_of("track-0"), track_id_of("track-1")]);
 }
 
 #[test]

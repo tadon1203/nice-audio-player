@@ -10,7 +10,7 @@ use crate::audio::playback::{PlaybackServiceError, TrackSource};
 use crate::ids::TrackId;
 use crate::library::{
     models::{LibraryAlbumKey, LibrarySortDirection, LibraryTrackSortKey},
-    store::{LibraryStore, PlayableTrack, PlaybackSelection, PlaybackSourceError},
+    store::{LibraryStore, PlayableTrack, PlaybackSelection},
 };
 
 #[derive(Debug, Clone, Deserialize, specta::Type)]
@@ -36,9 +36,8 @@ pub enum PlaybackContext {
 pub fn resolve(
     library: &LibraryStore,
     context: &PlaybackContext,
-    start_track_id: Option<&str>,
+    start_track_id: Option<TrackId>,
 ) -> Result<PlaybackSelection, PlaybackServiceError> {
-    let start_track_id = start_track_id.map(parse_track_id).transpose()?;
     Ok(match context {
         PlaybackContext::Album { key } => library.playback_for_album(key, start_track_id),
         PlaybackContext::Tracks {
@@ -57,23 +56,16 @@ pub fn resolve(
 /// Reads one library track, which must be playable. Blocking: call it off the async runtime.
 pub fn resolve_track(
     library: &LibraryStore,
-    track_id: &str,
+    track_id: TrackId,
 ) -> Result<PlayableTrack, PlaybackServiceError> {
-    Ok(library.playback_for_track(parse_track_id(track_id)?)?)
-}
-
-/// A track ID the Playback side received as a string: the Library's rule, with a playback error.
-fn parse_track_id(track_id: &str) -> Result<TrackId, PlaybackSourceError> {
-    track_id
-        .parse()
-        .map_err(|_| PlaybackSourceError::InvalidTrackId)
+    Ok(library.playback_for_track(track_id)?)
 }
 
 /// The library as the playback queue reads its tracks.
 pub struct LibraryTracks(pub LibraryStore);
 
 impl TrackSource for LibraryTracks {
-    fn tracks(&self, track_ids: &[&str]) -> Vec<Option<PlayableTrack>> {
+    fn tracks(&self, track_ids: &[TrackId]) -> Vec<Option<PlayableTrack>> {
         self.0.playable_tracks(track_ids).unwrap_or_else(|error| {
             log::error!("playback.tracks_unavailable error={error:?}");
             vec![None; track_ids.len()]

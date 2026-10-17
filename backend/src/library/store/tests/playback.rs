@@ -17,8 +17,7 @@ fn a_track_without_a_title_is_named_after_its_file_in_playback_and_in_search() {
     let selection = store
         .playback_for_tracks(None, LibraryTrackSortKey::Title, ASC, Some(track_id_of(1)))
         .unwrap();
-    let ids: Vec<&str> = selection.track_ids.iter().map(String::as_str).collect();
-    let tracks = store.playable_tracks(&ids).unwrap();
+    let tracks = store.playable_tracks(&selection.track_ids).unwrap();
     let track = tracks[selection.start_index].as_ref().unwrap();
     assert_eq!(track.title, "multi.part");
     assert_eq!(
@@ -37,10 +36,12 @@ fn a_track_without_a_title_is_named_after_its_file_in_playback_and_in_search() {
             .album_track_count,
         Some(1)
     );
-    let restored = store.playable_tracks(&["1", "999", "x"]).unwrap();
+    let restored = store
+        .playable_tracks(&[track_id_of(1), track_id_of(999)])
+        .unwrap();
     assert_eq!(
         restored.iter().map(Option::is_some).collect::<Vec<_>>(),
-        [true, false, false],
+        [true, false],
         "unknown ids come back as holes, in the order asked"
     );
 
@@ -79,20 +80,24 @@ fn track_playback_follows_the_list_order_and_skips_tracks_that_cannot_play() {
         .unwrap();
     assert_eq!(
         selection.track_ids,
-        ["3", "1", "2"],
+        [track_id_of(3), track_id_of(1), track_id_of(2)],
         "sorted as listed, missing skipped"
     );
-    assert_eq!(selection.track_ids[selection.start_index], "2");
-    let first = store.playable_tracks(&["3"]).unwrap().remove(0).unwrap();
+    assert_eq!(selection.track_ids[selection.start_index], track_id_of(2));
+    let first = store
+        .playable_tracks(&[track_id_of(3)])
+        .unwrap()
+        .remove(0)
+        .unwrap();
     assert_eq!(first.album.as_deref(), Some("Album"));
 
     let filtered = store
         .playback_for_tracks(Some("alp"), LibraryTrackSortKey::Title, ASC, None)
         .unwrap();
-    assert_eq!(filtered.track_ids, ["2"]);
+    assert_eq!(filtered.track_ids, [track_id_of(2)]);
     assert_eq!(
         store
-            .playable_tracks(&["2"])
+            .playable_tracks(&[track_id_of(2)])
             .unwrap()
             .remove(0)
             .unwrap()
@@ -155,7 +160,10 @@ fn playing_what_the_list_shows_holds_for_every_sort_and_direction() {
                 .store
                 .playback_for_tracks(None, key, direction, None)
                 .unwrap()
-                .track_ids;
+                .track_ids
+                .iter()
+                .map(TrackId::to_string)
+                .collect();
             assert_eq!(played, listed, "{key:?} {direction:?}");
         }
     }

@@ -234,7 +234,7 @@ fn a_track_that_left_the_library_after_the_start_is_dropped_where_it_is_read() {
     let mut tracks = vec![first];
     tracks.extend(["x", "gone", "y"].map(named_track));
     let track_ids = harness.register(tracks);
-    harness.library.remove("gone");
+    harness.library.remove(track_id_of("gone"));
 
     harness
         .call(|reply| PlaybackCommand::Start {
@@ -258,7 +258,7 @@ fn a_current_track_that_left_the_library_is_skipped() {
     let mut harness = Harness::new();
     let tracks = vec![named_track("gone"), harness.track("b", 1)];
     let track_ids = harness.register(tracks);
-    harness.library.remove("gone");
+    harness.library.remove(track_id_of("gone"));
 
     let snapshot = harness
         .call(|reply| PlaybackCommand::Start {
@@ -277,7 +277,7 @@ fn a_current_track_that_left_the_library_is_skipped() {
 fn when_every_track_has_left_the_library_the_start_is_refused() {
     let mut harness = Harness::new();
     let track_ids = harness.register(vec![named_track("gone")]);
-    harness.library.remove("gone");
+    harness.library.remove(track_id_of("gone"));
 
     let result = harness.call(|reply| PlaybackCommand::Start {
         track_ids,
@@ -293,22 +293,27 @@ fn when_every_track_has_left_the_library_the_start_is_refused() {
 fn a_window_leaves_out_a_track_that_has_left_the_library_since() {
     let library = Arc::new(FakeTracks::default());
     let tracks = resolver_of(&library);
-    let ids: Vec<String> = (0..10).map(|i| format!("t{i}")).collect();
-    for id in &ids {
-        library.add(named_track(id));
+    for i in 0..10 {
+        library.add(named_track(&format!("t{i}")));
     }
+    let ids: Vec<TrackId> = (0..10).map(|i| track_id_of(&format!("t{i}"))).collect();
     let mut queue = PlaybackQueue::new(PlaybackRepeatMode::Off, false);
     queue
         .replace(ids, 0, &mut StdRng::seed_from_u64(1))
         .unwrap();
     let snapshot = PlaybackQueueSnapshot::of(&queue, &tracks, false);
     tracks.forget();
-    library.remove("t4");
+    library.remove(track_id_of("t4"));
 
     let window = snapshot.window(1, 0, 20);
 
     assert_eq!(window.items.len(), 8, "nine upcoming, one of them gone");
-    assert!(window.items.iter().all(|item| item.track_id != "t4"));
+    assert!(
+        window
+            .items
+            .iter()
+            .all(|item| item.track_id != track_id_of("t4"))
+    );
 }
 
 #[test]
@@ -316,10 +321,12 @@ fn a_long_queue_snapshot_carries_a_prefix_and_serves_the_rest_in_windows() {
     let library = Arc::new(FakeTracks::default());
     let tracks = resolver_of(&library);
     let total = UPCOMING_IN_SNAPSHOT + 150;
-    let ids: Vec<String> = (0..total + 61).map(|i| format!("t{i}")).collect();
-    for id in &ids {
-        library.add(named_track(id));
+    for i in 0..total + 61 {
+        library.add(named_track(&format!("t{i}")));
     }
+    let ids: Vec<TrackId> = (0..total + 61)
+        .map(|i| track_id_of(&format!("t{i}")))
+        .collect();
     let mut queue = PlaybackQueue::new(PlaybackRepeatMode::Off, false);
     queue
         .replace(ids, 60, &mut StdRng::seed_from_u64(1))
@@ -347,7 +354,7 @@ fn a_long_queue_snapshot_carries_a_prefix_and_serves_the_rest_in_windows() {
 /// A track whose file does not exist: fine to queue and show, unplayable.
 fn named_track(name: &str) -> PlayableTrack {
     library_track(
-        name,
+        track_id_of(name),
         ValidatedAudioFile {
             path: format!("C:/music/{name}.flac").into(),
             file_name: format!("{name}.flac"),

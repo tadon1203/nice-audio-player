@@ -9,9 +9,7 @@ use std::collections::HashSet;
 use std::sync::{Arc, RwLock, mpsc::Receiver};
 use std::time::{Duration, Instant};
 
-use super::input::{
-    Inbox, PlaybackId, PlaybackIds, SourceLoadId, SourceLoadIds, WorkerEvent, WorkerInput,
-};
+use super::input::{Inbox, PlaybackIds, SourceLoadId, SourceLoadIds, WorkerEvent, WorkerInput};
 use super::item::PlaybackItem;
 use super::pipeline::{
     OpenedOutput, OpenedPipeline, PipelineError, PipelineKind, PipelineRequest, open_pipeline,
@@ -41,6 +39,7 @@ use crate::audio::output::{
 use crate::audio::timebase::millis_to_frame;
 use crate::audio::volume::{AtomicEffectiveGain, VolumeState};
 use crate::audio::waveform::PrefetchObserver;
+use crate::ids::{PlaybackId, QueueItemId, TrackId};
 use crate::messages::{Occurrence, SharedMessageSink, StateTopic, Versioned};
 use log::{error, info};
 use rand::{SeedableRng, rngs::StdRng};
@@ -313,16 +312,16 @@ impl PlaybackWorker {
                 let _ = reply.send(Ok(self.queue_changed(changed)));
             }
             PlaybackCommand::RemoveQueueItem { id, reply } => {
-                let result = self.edit_queue(|queue| queue.remove_upcoming(&id).map(|()| true));
+                let result = self.edit_queue(|queue| queue.remove_upcoming(id).map(|()| true));
                 let _ = reply.send(result.map(|changed| self.queue_changed(changed)));
             }
             PlaybackCommand::MoveQueueItem { id, to, reply } => {
-                let result = self.edit_queue(|queue| queue.move_upcoming(&id, to));
+                let result = self.edit_queue(|queue| queue.move_upcoming(id, to));
                 let _ = reply.send(result.map(|changed| self.queue_changed(changed)));
             }
             PlaybackCommand::PlayQueueItem { id, reply } => {
                 self.skipped_in_a_row = 0;
-                match self.queue.jump_to(&id) {
+                match self.queue.jump_to(id) {
                     Ok(()) => self.start_current(Some(reply), false, SessionStartedBy::Jump),
                     Err(_) => {
                         let _ = reply.send(Err(PlaybackServiceError::QueueItemNotFound));

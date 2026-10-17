@@ -60,7 +60,7 @@ fn a_start_through_a_service_thread_needs_no_poll() {
     let path = directory.file("a.wav");
     write_pcm_i16_wav(&path, SAMPLE_RATE, 1, &vec![0; SAMPLE_RATE as usize]);
     library.add(library_track(
-        "a",
+        track_id_of("a"),
         ValidatedAudioFile {
             path,
             file_name: "a.wav".into(),
@@ -80,7 +80,7 @@ fn a_start_through_a_service_thread_needs_no_poll() {
     // The worker sleeps in a blocking receive while idle; only an event can wake it for this.
     let snapshot = service
         .handle()
-        .start(vec!["a".to_owned()], 0)
+        .start(vec![track_id_of("a")], 0)
         .unwrap()
         .value;
 
@@ -450,7 +450,7 @@ fn a_file_whose_name_is_not_unicode_plays() {
     let track = PlayableTrack {
         title: "odd".into(),
         ..library_track(
-            "odd",
+            track_id_of("odd"),
             ValidatedAudioFile {
                 path,
                 file_name: name.to_string_lossy().into_owned(),

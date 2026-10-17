@@ -70,7 +70,9 @@ fn without_a_library_playing_from_it_says_it_is_unavailable() {
         Some(PlaybackServiceError::LibraryUnavailable)
     );
     assert_eq!(
-        backend.enqueue_track("1", true).err(),
+        backend
+            .enqueue_track(TrackId::try_from_rowid(1).unwrap(), true)
+            .err(),
         Some(PlaybackServiceError::LibraryUnavailable)
     );
 }

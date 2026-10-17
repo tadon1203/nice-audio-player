@@ -3,7 +3,6 @@
 use std::time::{Duration, Instant};
 
 use super::decode_worker::DecodeWorker;
-use super::input::PlaybackId;
 use super::item::PlaybackItem;
 use super::service::Reply;
 use super::snapshot::{PlaybackFailureCode, PlaybackSnapshot, SessionStartedBy};
@@ -13,6 +12,7 @@ use crate::audio::devices::AudioOutputSelection;
 use crate::audio::output::{OutputStream, OutputStreamId, PipelineId, PreparedOutputConfig};
 use crate::audio::pcm_queue::PcmConsumer;
 use crate::audio::timebase::{frame_to_millis, millis_to_frame};
+use crate::ids::{PlaybackId, QueueItemId};
 use crate::messages::Versioned;
 use cpal::StreamInstant;
 
@@ -113,7 +113,7 @@ pub(super) struct Loaded {
 /// cache keyed to the queue entry that plays next: whatever changes what plays next throws it
 /// away.
 pub(super) struct Prefetch {
-    pub entry_id: u64,
+    pub entry_id: QueueItemId,
     pub state: PrefetchState,
 }
 

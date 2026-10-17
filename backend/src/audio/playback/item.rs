@@ -1,5 +1,6 @@
 use std::ops::Deref;
 
+use crate::ids::QueueItemId;
 use crate::library::store::PlayableTrack;
 
 /// One entry of the playback queue and the identity of the loaded track: the queue's id for the
@@ -10,7 +11,7 @@ use crate::library::store::PlayableTrack;
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct PlaybackItem {
-    pub queue_item_id: String,
+    pub queue_item_id: QueueItemId,
     #[serde(flatten)]
     pub track: PlayableTrack,
 }

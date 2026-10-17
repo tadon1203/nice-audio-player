@@ -648,6 +648,7 @@ impl Shared {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ids::TrackId;
     use crate::media::validation::validate_audio_file;
     use crate::messages::testing::Sent;
     use crate::test_support::{TestDirectory, write_pcm_i16_wav};
@@ -660,7 +661,7 @@ mod tests {
 
     fn track_of(file: &ValidatedAudioFile, hash: Option<&str>) -> PlayableTrack {
         PlayableTrack {
-            track_id: "1".into(),
+            track_id: TrackId::try_from_rowid(1).unwrap(),
             title: file.file_name.clone(),
             file: file.clone(),
             artist: None,

@@ -66,6 +66,107 @@ impl TrackId {
     }
 }
 
+/// One entry of the playback queue: the queue's counter, above zero. On the IPC `queue-item-{n}`.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, specta::Type,
+)]
+#[serde(try_from = "String", into = "String")]
+#[specta(type = String)]
+pub struct QueueItemId(u64);
+
+impl QueueItemId {
+    /// The first ID of a queue's counter.
+    pub(crate) fn first() -> Self {
+        Self(1)
+    }
+
+    /// The ID after this one.
+    pub(crate) fn next(self) -> Self {
+        Self(self.0.saturating_add(1))
+    }
+}
+
+impl FromStr for QueueItemId {
+    type Err = &'static str;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        value
+            .strip_prefix("queue-item-")
+            .and_then(parse_positive_decimal)
+            .map(Self)
+            .ok_or("a queue item ID is `queue-item-` and a positive decimal integer")
+    }
+}
+
+impl fmt::Display for QueueItemId {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "queue-item-{}", self.0)
+    }
+}
+
+impl TryFrom<String> for QueueItemId {
+    type Error = &'static str;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        value.parse()
+    }
+}
+
+impl From<QueueItemId> for String {
+    fn from(id: QueueItemId) -> Self {
+        id.to_string()
+    }
+}
+
+/// One playback session: a queue item being played, from the playback worker's counter, above
+/// zero. On the IPC a decimal string.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
+#[serde(try_from = "String", into = "String")]
+#[specta(type = String)]
+pub struct PlaybackId(u64);
+
+impl PlaybackId {
+    /// The first ID of the worker's counter.
+    pub(crate) fn first() -> Self {
+        Self(1)
+    }
+
+    /// The ID after this one.
+    pub(crate) fn next(self) -> Self {
+        Self(self.0.saturating_add(1))
+    }
+}
+
+impl FromStr for PlaybackId {
+    type Err = &'static str;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        parse_positive_decimal(value)
+            .map(Self)
+            .ok_or("a playback ID is a positive decimal integer")
+    }
+}
+
+impl fmt::Display for PlaybackId {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "{}", self.0)
+    }
+}
+
+impl TryFrom<String> for PlaybackId {
+    type Error = &'static str;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        value.parse()
+    }
+}
+
+impl From<PlaybackId> for String {
+    fn from(id: PlaybackId) -> Self {
+        id.to_string()
+    }
+}
+
 /// A library root: the `library_roots` rowid. Above zero. On the IPC a decimal string.
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, specta::Type,
@@ -89,7 +190,7 @@ impl FromStr for RootId {
     type Err = &'static str;
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
-        parse_decimal_rowid(value)
+        parse_positive_decimal(value)
             .and_then(Self::try_from_rowid)
             .ok_or("a root ID is a positive decimal integer")
     }
@@ -115,12 +216,12 @@ impl From<RootId> for String {
     }
 }
 
-/// Decimal digits with no leading zero, above zero, as the renderer writes a row ID.
-fn parse_decimal_rowid(value: &str) -> Option<i64> {
+/// Decimal digits with no leading zero, above zero, as the renderer writes an ID.
+fn parse_positive_decimal<T: FromStr + Default + PartialOrd>(value: &str) -> Option<T> {
     if value.is_empty() || value.starts_with('0') || !value.bytes().all(|b| b.is_ascii_digit()) {
         return None;
     }
-    value.parse().ok().filter(|rowid| *rowid > 0)
+    value.parse().ok().filter(|number| *number > T::default())
 }
 
 impl FromStr for TrackId {
@@ -128,7 +229,7 @@ impl FromStr for TrackId {
 
     /// Positive decimal digits with no leading zero, as the renderer writes them.
     fn from_str(value: &str) -> Result<Self, Self::Err> {
-        parse_decimal_rowid(value)
+        parse_positive_decimal(value)
             .and_then(Self::try_from_rowid)
             .ok_or("a track ID is a positive decimal integer")
     }
@@ -291,6 +392,42 @@ mod tests {
             serde_json::to_value(&parsed).unwrap(),
             serde_json::json!(good)
         );
+    }
+
+    #[test]
+    fn a_queue_item_id_and_a_playback_id_round_trip_through_their_string_form() {
+        let item = QueueItemId::first().next();
+        assert_eq!(item.to_string(), "queue-item-2");
+        assert_eq!("queue-item-2".parse::<QueueItemId>(), Ok(item));
+        assert_eq!(
+            serde_json::to_value(item).unwrap(),
+            serde_json::json!("queue-item-2")
+        );
+
+        let playback = PlaybackId::first().next();
+        assert_eq!(playback.to_string(), "2");
+        assert_eq!("2".parse::<PlaybackId>(), Ok(playback));
+        assert_eq!(
+            serde_json::from_value::<PlaybackId>(serde_json::json!("2")).unwrap(),
+            playback
+        );
+    }
+
+    #[test]
+    fn a_malformed_queue_item_id_or_playback_id_is_rejected() {
+        for bad in [
+            "queue-item-",
+            "queue-item-0",
+            "queue-item-01",
+            "queue-item--1",
+            "12",
+            "queue-item-x",
+        ] {
+            assert!(bad.parse::<QueueItemId>().is_err(), "{bad}");
+        }
+        for bad in ["", "0", "-1", "07", "1a", "queue-item-1"] {
+            assert!(bad.parse::<PlaybackId>().is_err(), "{bad}");
+        }
     }
 
     #[test]

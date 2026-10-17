@@ -26,7 +26,7 @@ use std::collections::HashMap;
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct PlayableTrack {
-    pub track_id: String,
+    pub track_id: TrackId,
     #[serde(skip)]
     #[specta(skip)]
     pub file: ValidatedAudioFile,
@@ -63,7 +63,7 @@ pub struct PlayableTrack {
 /// narrow query however large the library is.
 #[derive(Debug, Clone)]
 pub struct PlaybackSelection {
-    pub track_ids: Vec<String>,
+    pub track_ids: Vec<TrackId>,
     pub start_index: usize,
 }
 
@@ -212,7 +212,7 @@ fn playable_track(
         .as_ref()
         .and_then(|_| counts.get(&row.album_id).copied());
     Ok(Some(PlayableTrack {
-        track_id: row.track_id.to_string(),
+        track_id: row.track_id,
         file,
         title: row.title,
         artist: non_blank(Some(row.artist)),
@@ -261,7 +261,7 @@ fn select_playable(
         if start_track_id == Some(row.track_id) {
             start_index = track_ids.len();
         }
-        track_ids.push(row.track_id.to_string());
+        track_ids.push(row.track_id);
     }
     if track_ids.is_empty() {
         return Err(PlaybackSourceError::NoPlayableTracks);
@@ -338,16 +338,12 @@ impl LibraryStore {
     /// indexed or no longer available. Album counts come from one query for the whole batch.
     pub fn playable_tracks(
         &self,
-        track_ids: &[&str],
+        track_ids: &[TrackId],
     ) -> Result<Vec<Option<PlayableTrack>>, PlaybackSourceError> {
         let connection = self.read()?;
         let mut found: HashMap<TrackId, PlayableTrack> = HashMap::with_capacity(track_ids.len());
         for chunk in track_ids.chunks(IDS_PER_QUERY) {
-            let ids: Vec<i64> = chunk
-                .iter()
-                .filter_map(|id| id.parse::<TrackId>().ok())
-                .map(TrackId::rowid)
-                .collect();
+            let ids: Vec<i64> = chunk.iter().map(|id| id.rowid()).collect();
             if ids.is_empty() {
                 continue;
             }
@@ -365,15 +361,7 @@ impl LibraryStore {
                 }
             }
         }
-        Ok(track_ids
-            .iter()
-            .map(|id| {
-                id.parse::<TrackId>()
-                    .ok()
-                    .and_then(|id| found.get(&id))
-                    .cloned()
-            })
-            .collect())
+        Ok(track_ids.iter().map(|id| found.get(id).cloned()).collect())
     }
 
     /// Every track the tracks page shows under `search`, in the page's sort order.

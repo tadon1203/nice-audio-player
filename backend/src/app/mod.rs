@@ -17,7 +17,7 @@ use crate::audio::{
     },
     waveform::{PlaybackWaveform, Waveform, WaveformService},
 };
-use crate::ids::{ArtworkHash, RootId, TrackId};
+use crate::ids::{ArtworkHash, QueueItemId, RootId, TrackId};
 use crate::library::{
     Library,
     artwork::{self, ServedArtwork},
@@ -433,7 +433,7 @@ impl BackendApp {
     pub fn start_playback(
         &self,
         context: &PlaybackContext,
-        start_track_id: Option<&str>,
+        start_track_id: Option<TrackId>,
     ) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
         let library = self.playback_library()?;
         let selection = playback_context::resolve(library.store(), context, start_track_id)?;
@@ -519,14 +519,14 @@ impl BackendApp {
 
     pub fn remove_queue_item(
         &self,
-        id: String,
+        id: QueueItemId,
     ) -> Result<Versioned<PlaybackQueueSnapshot>, PlaybackServiceError> {
         self.playback.handle().remove_queue_item(id)
     }
 
     pub fn move_queue_item(
         &self,
-        id: String,
+        id: QueueItemId,
         to: usize,
     ) -> Result<Versioned<PlaybackQueueSnapshot>, PlaybackServiceError> {
         self.playback.handle().move_queue_item(id, to)
@@ -535,7 +535,7 @@ impl BackendApp {
     /// Makes an upcoming queue item current and plays it.
     pub fn play_queue_item(
         &self,
-        id: String,
+        id: QueueItemId,
     ) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
         self.playback.handle().play_queue_item(id)
     }
@@ -544,7 +544,7 @@ impl BackendApp {
     /// Blocking, like `start_playback`.
     pub fn enqueue_track(
         &self,
-        track_id: &str,
+        track_id: TrackId,
         next: bool,
     ) -> Result<Versioned<PlaybackQueueSnapshot>, PlaybackServiceError> {
         let library = self.playback_library()?;

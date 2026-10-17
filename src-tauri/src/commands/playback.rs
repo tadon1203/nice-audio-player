@@ -4,6 +4,7 @@ use backend::{
         PlaybackQueueWindow, PlaybackRepeatMode, PlaybackSnapshot, PlaybackWaveform, Versioned,
     },
     errors::{AudioDeviceListError, PlaybackServiceError},
+    ids::{QueueItemId, TrackId},
 };
 
 use super::blocking;
@@ -30,11 +31,11 @@ pub async fn get_playback_queue_window(
 #[specta::specta]
 pub async fn start_playback(
     context: PlaybackContext,
-    start_track_id: Option<String>,
+    start_track_id: Option<TrackId>,
     state: tauri::State<'_, AppState>,
 ) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
     blocking(&state, move |backend| {
-        backend.start_playback(&context, start_track_id.as_deref())
+        backend.start_playback(&context, start_track_id)
     })
     .await
 }
@@ -146,7 +147,7 @@ pub async fn set_audio_output_selection(
 #[tauri::command]
 #[specta::specta]
 pub async fn remove_queue_item(
-    id: String,
+    id: QueueItemId,
     state: tauri::State<'_, AppState>,
 ) -> Result<Versioned<PlaybackQueueSnapshot>, PlaybackServiceError> {
     blocking(&state, move |backend| backend.remove_queue_item(id)).await
@@ -155,7 +156,7 @@ pub async fn remove_queue_item(
 #[tauri::command]
 #[specta::specta]
 pub async fn move_queue_item(
-    id: String,
+    id: QueueItemId,
     to: usize,
     state: tauri::State<'_, AppState>,
 ) -> Result<Versioned<PlaybackQueueSnapshot>, PlaybackServiceError> {
@@ -166,7 +167,7 @@ pub async fn move_queue_item(
 #[tauri::command]
 #[specta::specta]
 pub async fn play_queue_item(
-    id: String,
+    id: QueueItemId,
     state: tauri::State<'_, AppState>,
 ) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
     blocking(&state, move |backend| backend.play_queue_item(id)).await
@@ -177,14 +178,11 @@ pub async fn play_queue_item(
 #[tauri::command]
 #[specta::specta]
 pub async fn enqueue_track(
-    track_id: String,
+    track_id: TrackId,
     next: bool,
     state: tauri::State<'_, AppState>,
 ) -> Result<Versioned<PlaybackQueueSnapshot>, PlaybackServiceError> {
-    blocking(&state, move |backend| {
-        backend.enqueue_track(&track_id, next)
-    })
-    .await
+    blocking(&state, move |backend| backend.enqueue_track(track_id, next)).await
 }
 
 #[tauri::command]

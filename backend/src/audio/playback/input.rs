@@ -1,7 +1,6 @@
 //! What the worker thread receives. Commands from callers and events from the decode, source-load
 //! and output threads arrive through one channel, so the worker sleeps until something happens.
 
-use std::fmt;
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, Sender};
 
@@ -12,26 +11,24 @@ use crate::audio::compressed_source::{CompressedAudioSource, CompressedSourceErr
 use crate::audio::output::{
     OutputEvent, OutputEvents, OutputStreamId, PipelineId, StreamFailureKind,
 };
-
-/// Identifies one playback session. Only `PlaybackIds::next` makes one.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub(super) struct PlaybackId(u64);
-
-impl fmt::Display for PlaybackId {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0.fmt(formatter)
-    }
-}
+use crate::ids::PlaybackId;
 
 /// Counts the playbacks. A playback is one queue item being played; a seek or an output device
 /// switch keeps it.
-#[derive(Debug, Default)]
-pub(super) struct PlaybackIds(u64);
+#[derive(Debug)]
+pub(super) struct PlaybackIds(PlaybackId);
+
+impl Default for PlaybackIds {
+    fn default() -> Self {
+        Self(PlaybackId::first())
+    }
+}
 
 impl PlaybackIds {
     pub(super) fn next(&mut self) -> PlaybackId {
-        self.0 = self.0.wrapping_add(1);
-        PlaybackId(self.0)
+        let id = self.0;
+        self.0 = id.next();
+        id
     }
 }
 

@@ -402,12 +402,7 @@ fn starting_from_a_huge_tracks_list_costs_one_narrow_query() {
             .unwrap();
         let ids_ms = started.elapsed().as_millis();
         let started = std::time::Instant::now();
-        let ids: Vec<&str> = selection
-            .track_ids
-            .iter()
-            .take(251)
-            .map(String::as_str)
-            .collect();
+        let ids: Vec<TrackId> = selection.track_ids.iter().take(251).copied().collect();
         let _ = fixture.store.playable_tracks(&ids).unwrap();
         let first_ms = started.elapsed().as_millis();
         println!(
