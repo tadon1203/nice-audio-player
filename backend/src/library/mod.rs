@@ -25,7 +25,7 @@ mod tests;
 pub(crate) mod text;
 pub(crate) mod watcher;
 
-use crate::ids::ArtworkHash;
+use crate::ids::{ArtworkHash, RootId};
 use crate::messages::{Notifier, SharedMessageSink, StateTopic, Versioned};
 use database::{Database, DatabaseError};
 use error::LibraryCommandError;
@@ -101,13 +101,13 @@ impl Library {
 
     pub fn set_root_enabled(
         &self,
-        id: String,
+        id: RootId,
         enabled: bool,
     ) -> Result<LibraryRoot, LibraryCommandError> {
         self.sync.set_root_enabled(id, enabled)
     }
 
-    pub fn remove_root(&self, id: String) -> Result<(), LibraryCommandError> {
+    pub fn remove_root(&self, id: RootId) -> Result<(), LibraryCommandError> {
         self.sync.remove_root(id)
     }
 

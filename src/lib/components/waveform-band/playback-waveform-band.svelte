@@ -11,7 +11,7 @@
   import { spinTurns } from "#lib/ui/rolling-number/rolling-model";
   import WaveformSeek from "#lib/ui/waveform/waveform-seek.svelte";
   import { cn } from "#lib/utils/cn.js";
-  import { formatDuration } from "#lib/utils/format";
+  import { DurationFormat } from "#lib/utils/duration-format";
 
   /**
    * The seek bar and its elapsed/remaining labels in one line, used by both the dock (a plain
@@ -85,10 +85,10 @@
 
   const remainingOrLength = $derived(
     playback.durationMs === null
-      ? formatDuration(null)
+      ? DurationFormat.of(null)
       : showRemaining
-        ? `−${formatDuration(Math.max(0, playback.durationMs - seekValue))}`
-        : formatDuration(playback.durationMs),
+        ? `−${DurationFormat.of(Math.max(0, playback.durationMs - seekValue))}`
+        : DurationFormat.of(playback.durationMs),
   );
 </script>
 
@@ -166,7 +166,7 @@
   )}
 >
   <span class={cn("shrink-0", timeClass)} aria-label="Elapsed time">
-    {@render rolling(formatDuration(seekValue))}
+    {@render rolling(DurationFormat.of(seekValue))}
   </span>
   {@render seekBar()}
   <span class={cn("shrink-0", timeClass)}>{@render remainingButton()}</span>

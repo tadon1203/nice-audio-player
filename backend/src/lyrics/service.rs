@@ -2,6 +2,7 @@ use super::{
     lrc::{self, LrcParse},
     model::{LyricsDocument, LyricsResolution, LyricsSourceKind, LyricsTrackContext},
 };
+use crate::ids::TrackId;
 use crate::media::lyrics::read_embedded_lyrics;
 use std::{fs, path::PathBuf};
 
@@ -31,7 +32,7 @@ impl LyricsService {
 }
 
 fn resolve_local_sources(
-    track_id: String,
+    track_id: TrackId,
     sidecar_file_name: String,
     sidecar: LocalSource,
     embedded: LocalSource,
@@ -152,7 +153,7 @@ mod tests {
     #[test]
     fn prefers_a_valid_sidecar_over_embedded_lyrics() {
         let resolution = resolve_local_sources(
-            "1".to_string(),
+            TrackId::try_from_rowid(1).unwrap(),
             "song.lrc".to_string(),
             plain("sidecar"),
             plain("embedded"),
@@ -170,7 +171,7 @@ mod tests {
     #[test]
     fn falls_back_to_embedded_lyrics_when_the_sidecar_is_broken() {
         let resolution = resolve_local_sources(
-            "1".to_string(),
+            TrackId::try_from_rowid(1).unwrap(),
             "song.lrc".to_string(),
             LocalSource::Failed,
             plain("embedded"),
@@ -192,7 +193,7 @@ mod tests {
     fn distinguishes_missing_local_sources_from_failed_ones() {
         assert!(matches!(
             resolve_local_sources(
-                "1".to_string(),
+                TrackId::try_from_rowid(1).unwrap(),
                 "song.lrc".to_string(),
                 LocalSource::Missing,
                 LocalSource::Missing
@@ -201,7 +202,7 @@ mod tests {
         ));
         assert!(matches!(
             resolve_local_sources(
-                "1".to_string(),
+                TrackId::try_from_rowid(1).unwrap(),
                 "song.lrc".to_string(),
                 LocalSource::Failed,
                 LocalSource::Missing
@@ -267,7 +268,7 @@ mod tests {
         fs::write(&source, []).expect("write source placeholder");
         fs::write(directory.join("track.lrc"), b"[00:60]invalid").expect("write sidecar");
         let context = LyricsTrackContext {
-            track_id: "1".to_string(),
+            track_id: TrackId::try_from_rowid(1).unwrap(),
             source: dunce::canonicalize(source).expect("canonical source"),
             root: dunce::canonicalize(&directory).expect("canonical root"),
         };

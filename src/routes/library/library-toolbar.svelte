@@ -10,7 +10,7 @@
   } from "#lib/ui/shadcn/input-group/index.js";
   import type { SortableView } from "#lib/ui/sort-option";
   import WorkspaceContainer from "#lib/ui/workspace-container.svelte";
-  import { formatNumber } from "#lib/utils/format";
+  import { CountFormat } from "#lib/utils/count-format";
 
   let {
     title,
@@ -48,9 +48,9 @@
         <PageTitle>{title}</PageTitle>
         <span class="text-sm tabular-nums text-muted-foreground">
           {#if count === null}
-            {formatNumber(count)} {unit}
+            {CountFormat.number(count)} {unit}
           {:else}
-            <RollingNumber value={formatNumber(count)} settle="right-last" spin={1} />
+            <RollingNumber value={CountFormat.number(count)} settle="right-last" spin={1} />
             {unit}
           {/if}
         </span>

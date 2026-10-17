@@ -6,9 +6,10 @@ use super::{
     catalog::{ALBUM_ORDER, album_id_of, track_filter, track_ordering, validate_album_key},
     track::{artwork_ref, non_blank},
 };
+use crate::ids::{TrackId, track_id_column};
 use crate::library::{
     artwork::ArtworkRef,
-    error::{StoreError, parse_id},
+    error::StoreError,
     location::TrackLocation,
     models::{LibraryAlbumKey, LibrarySortDirection, LibraryTrackSortKey},
     status::{Availability, InspectionStatus},
@@ -82,7 +83,7 @@ pub enum PlaybackSourceError {
 impl From<StoreError> for PlaybackSourceError {
     fn from(error: StoreError) -> Self {
         match error {
-            StoreError::InvalidId | StoreError::TrackNotFound => Self::InvalidTrackId,
+            StoreError::TrackNotFound => Self::InvalidTrackId,
             StoreError::InvalidAlbumKey => Self::InvalidAlbumKey,
             StoreError::AlbumNotFound => Self::AlbumNotFound,
             StoreError::TrackUnavailable => Self::TrackUnavailable,
@@ -96,7 +97,7 @@ impl From<StoreError> for PlaybackSourceError {
 }
 
 struct PlaybackRow {
-    track_id: i64,
+    track_id: TrackId,
     location: TrackLocation,
     indexed: bool,
     title: String,
@@ -145,7 +146,7 @@ fn playback_row(row: &Row<'_>) -> rusqlite::Result<PlaybackRow> {
     let availability: Availability = row.get(3)?;
     let inspection: InspectionStatus = row.get(4)?;
     Ok(PlaybackRow {
-        track_id: row.get(0)?,
+        track_id: track_id_column(row, 0)?,
         location: TrackLocation::new(&root, &relative, availability == Availability::Available),
         indexed: inspection == InspectionStatus::Indexed,
         title: row.get(5)?,
@@ -233,7 +234,7 @@ fn playable_track(
 
 /// One member of a selection: just enough to decide whether it plays.
 struct SelectionRow {
-    track_id: i64,
+    track_id: TrackId,
     available: bool,
     indexed: bool,
 }
@@ -241,7 +242,7 @@ struct SelectionRow {
 /// Keeps the ids that can be played and locates the requested one among them.
 fn select_playable(
     rows: &[SelectionRow],
-    start_track_id: Option<i64>,
+    start_track_id: Option<TrackId>,
 ) -> Result<PlaybackSelection, PlaybackSourceError> {
     if let Some(requested) = start_track_id {
         let Some(row) = rows.iter().find(|row| row.track_id == requested) else {
@@ -271,11 +272,6 @@ fn select_playable(
     })
 }
 
-fn parse_start_track(id: Option<&str>) -> Result<Option<i64>, PlaybackSourceError> {
-    id.map(|id| parse_id(id).map_err(|_| PlaybackSourceError::InvalidTrackId))
-        .transpose()
-}
-
 /// The columns of a selection query, in the order `selection_row` reads them, and what they
 /// are selected from.
 const SELECTION_COLUMNS: &str = "t.id, f.availability, f.inspection_status";
@@ -285,7 +281,7 @@ fn selection_row(row: &Row<'_>) -> rusqlite::Result<SelectionRow> {
     let availability: Availability = row.get(1)?;
     let inspection: InspectionStatus = row.get(2)?;
     Ok(SelectionRow {
-        track_id: row.get(0)?,
+        track_id: track_id_column(row, 0)?,
         available: availability == Availability::Available,
         indexed: inspection == InspectionStatus::Indexed,
     })
@@ -299,10 +295,9 @@ impl LibraryStore {
     pub fn playback_for_album(
         &self,
         key: &LibraryAlbumKey,
-        start_track_id: Option<&str>,
+        start_track_id: Option<TrackId>,
     ) -> Result<PlaybackSelection, PlaybackSourceError> {
         validate_album_key(key)?;
-        let start_track_id = parse_start_track(start_track_id)?;
         let connection = self.read()?;
         let album_id = album_id_of(&connection, key)?;
         let rows = collect_selection(
@@ -322,13 +317,15 @@ impl LibraryStore {
 
     /// One track, for starting from it or adding it to a queue that is already playing. The
     /// track must be playable: anything else is reported.
-    pub fn playback_for_track(&self, track_id: &str) -> Result<PlayableTrack, PlaybackSourceError> {
-        let id = parse_id(track_id).map_err(|_| PlaybackSourceError::InvalidTrackId)?;
+    pub fn playback_for_track(
+        &self,
+        track_id: TrackId,
+    ) -> Result<PlayableTrack, PlaybackSourceError> {
         let connection = self.read()?;
         let rows = collect_rows(
             &connection,
             &format!("SELECT {PLAYBACK_COLUMNS} {PLAYBACK_FROM} WHERE t.id = ?1"),
-            params![id],
+            params![track_id.rowid()],
         )?;
         let Some(row) = rows.into_iter().next() else {
             return Err(PlaybackSourceError::InvalidTrackId);
@@ -344,9 +341,13 @@ impl LibraryStore {
         track_ids: &[&str],
     ) -> Result<Vec<Option<PlayableTrack>>, PlaybackSourceError> {
         let connection = self.read()?;
-        let mut found: HashMap<i64, PlayableTrack> = HashMap::with_capacity(track_ids.len());
+        let mut found: HashMap<TrackId, PlayableTrack> = HashMap::with_capacity(track_ids.len());
         for chunk in track_ids.chunks(IDS_PER_QUERY) {
-            let ids: Vec<i64> = chunk.iter().filter_map(|id| parse_id(id).ok()).collect();
+            let ids: Vec<i64> = chunk
+                .iter()
+                .filter_map(|id| id.parse::<TrackId>().ok())
+                .map(TrackId::rowid)
+                .collect();
             if ids.is_empty() {
                 continue;
             }
@@ -366,7 +367,12 @@ impl LibraryStore {
         }
         Ok(track_ids
             .iter()
-            .map(|id| parse_id(id).ok().and_then(|id| found.get(&id)).cloned())
+            .map(|id| {
+                id.parse::<TrackId>()
+                    .ok()
+                    .and_then(|id| found.get(&id))
+                    .cloned()
+            })
             .collect())
     }
 
@@ -376,9 +382,8 @@ impl LibraryStore {
         search: Option<&str>,
         sort_key: LibraryTrackSortKey,
         sort_direction: LibrarySortDirection,
-        start_track_id: Option<&str>,
+        start_track_id: Option<TrackId>,
     ) -> Result<PlaybackSelection, PlaybackSourceError> {
-        let start_track_id = parse_start_track(start_track_id)?;
         let filter = track_filter(search);
         let connection = self.read()?;
         let rows = collect_selection(

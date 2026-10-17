@@ -1,10 +1,13 @@
 //! Identifiers that are validated where they enter the Backend, so no later code checks them again.
 
 use crate::library::text;
+use rusqlite::Row;
 use rusqlite::functions::{Context, FunctionFlags};
 use rusqlite::types::{Type, ValueRef};
 use serde::{Deserialize, Serialize};
 use std::ffi::OsStr;
+use std::fmt;
+use std::str::FromStr;
 
 /// Stored artwork: the 64-character blake3 hex of the image file.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
@@ -42,6 +45,113 @@ pub fn is_artwork_hash(value: &str) -> bool {
         && value
             .bytes()
             .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+}
+
+/// A track: the `tracks` rowid. Above zero. On the IPC a decimal string.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, specta::Type,
+)]
+#[serde(try_from = "String", into = "String")]
+#[specta(type = String)]
+pub struct TrackId(i64);
+
+impl TrackId {
+    /// The ID of a rowid, or `None` for a rowid that is not above zero.
+    pub fn try_from_rowid(rowid: i64) -> Option<Self> {
+        (rowid > 0).then_some(Self(rowid))
+    }
+
+    pub fn rowid(self) -> i64 {
+        self.0
+    }
+}
+
+/// A library root: the `library_roots` rowid. Above zero. On the IPC a decimal string.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, specta::Type,
+)]
+#[serde(try_from = "String", into = "String")]
+#[specta(type = String)]
+pub struct RootId(i64);
+
+impl RootId {
+    /// The ID of a rowid, or `None` for a rowid that is not above zero.
+    pub fn try_from_rowid(rowid: i64) -> Option<Self> {
+        (rowid > 0).then_some(Self(rowid))
+    }
+
+    pub fn rowid(self) -> i64 {
+        self.0
+    }
+}
+
+impl FromStr for RootId {
+    type Err = &'static str;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        parse_decimal_rowid(value)
+            .and_then(Self::try_from_rowid)
+            .ok_or("a root ID is a positive decimal integer")
+    }
+}
+
+impl fmt::Display for RootId {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "{}", self.0)
+    }
+}
+
+impl TryFrom<String> for RootId {
+    type Error = &'static str;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        value.parse()
+    }
+}
+
+impl From<RootId> for String {
+    fn from(id: RootId) -> Self {
+        id.to_string()
+    }
+}
+
+/// Decimal digits with no leading zero, above zero, as the renderer writes a row ID.
+fn parse_decimal_rowid(value: &str) -> Option<i64> {
+    if value.is_empty() || value.starts_with('0') || !value.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    value.parse().ok().filter(|rowid| *rowid > 0)
+}
+
+impl FromStr for TrackId {
+    type Err = &'static str;
+
+    /// Positive decimal digits with no leading zero, as the renderer writes them.
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        parse_decimal_rowid(value)
+            .and_then(Self::try_from_rowid)
+            .ok_or("a track ID is a positive decimal integer")
+    }
+}
+
+impl fmt::Display for TrackId {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "{}", self.0)
+    }
+}
+
+impl TryFrom<String> for TrackId {
+    type Error = &'static str;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        value.parse()
+    }
+}
+
+impl From<TrackId> for String {
+    fn from(id: TrackId) -> Self {
+        id.to_string()
+    }
 }
 
 /// An album: blake3 of its normalized Album Artist, normalized title, and absolute album
@@ -126,6 +236,19 @@ pub(crate) fn register_sql_functions(connection: &rusqlite::Connection) -> rusql
     })
 }
 
+/// A `tracks` rowid read from a column. SQLite gives every rowid above zero, so a value that is
+/// not is a corrupt database.
+pub(crate) fn track_id_column(row: &Row<'_>, index: usize) -> rusqlite::Result<TrackId> {
+    let rowid: i64 = row.get(index)?;
+    TrackId::try_from_rowid(rowid).ok_or(rusqlite::Error::IntegralValueOutOfRange(index, rowid))
+}
+
+/// A `library_roots` rowid read from a column. See [`track_id_column`].
+pub(crate) fn root_id_column(row: &Row<'_>, index: usize) -> rusqlite::Result<RootId> {
+    let rowid: i64 = row.get(index)?;
+    RootId::try_from_rowid(rowid).ok_or(rusqlite::Error::IntegralValueOutOfRange(index, rowid))
+}
+
 /// A text or blob argument as its bytes.
 fn bytes_argument(context: &Context<'_>, index: usize) -> rusqlite::Result<Vec<u8>> {
     match context.get_raw(index) {
@@ -167,6 +290,21 @@ mod tests {
         assert_eq!(
             serde_json::to_value(&parsed).unwrap(),
             serde_json::json!(good)
+        );
+    }
+
+    #[test]
+    fn a_command_argument_with_a_bad_track_id_is_rejected_at_deserialization() {
+        for bad in ["0", "-3", "abc", ""] {
+            let value = serde_json::json!(bad);
+            assert!(serde_json::from_value::<TrackId>(value).is_err(), "{bad}");
+        }
+
+        let parsed: TrackId = serde_json::from_value(serde_json::json!("7")).unwrap();
+        assert_eq!(parsed.rowid(), 7);
+        assert_eq!(
+            serde_json::to_value(parsed).unwrap(),
+            serde_json::json!("7")
         );
     }
 

@@ -2,7 +2,7 @@
   import type { Attachment } from "svelte/attachments";
   import RollingNumber from "#lib/ui/rolling-number/rolling-number.svelte";
   import { cn } from "#lib/utils/cn.js";
-  import { formatDuration } from "#lib/utils/format";
+  import { DurationFormat } from "#lib/utils/duration-format";
   import { createPointerSeek } from "./pointer-seek.svelte";
   import WaveformBars from "./waveform-bars.svelte";
   import { barCountForWidth, resampleBars } from "./waveform-model";
@@ -142,7 +142,7 @@
   aria-valuemin={0}
   aria-valuemax={duration}
   aria-valuenow={Math.min(valueMs, duration)}
-  aria-valuetext="{formatDuration(valueMs)} of {formatDuration(durationMs)}"
+  aria-valuetext="{DurationFormat.of(valueMs)} of {DurationFormat.of(durationMs)}"
   aria-disabled={!seekable}
   data-region="seek"
   data-ready={hasPeaks ? "true" : "false"}
@@ -211,9 +211,9 @@
       style:left="{Math.min(width - 20, Math.max(20, pointer.hoverX))}px"
     >
       {#if pointer.dragging}
-        {formatDuration(pointer.hoverMs)}
+        {DurationFormat.of(pointer.hoverMs)}
       {:else}
-        <RollingNumber value={formatDuration(pointer.hoverMs)} />
+        <RollingNumber value={DurationFormat.of(pointer.hoverMs)} />
       {/if}
     </span>
   {/if}

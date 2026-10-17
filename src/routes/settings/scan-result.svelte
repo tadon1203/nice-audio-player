@@ -2,13 +2,13 @@
   import Check from "@lucide/svelte/icons/check";
   import { LibraryErrors } from "#lib/library/library-errors";
   import type { LibraryScanSnapshot } from "#lib/native";
-  import { formatNumber } from "#lib/utils/format";
+  import { CountFormat } from "#lib/utils/count-format";
 
   /** What the last scan ended with: why it failed, or what it found. */
   let { scan }: { scan: LibraryScanSnapshot } = $props();
 
   const summary = $derived(
-    `${formatNumber(scan.discoveredCount)} discovered, ${formatNumber(scan.inspectedCount)} inspected, ${formatNumber(scan.indexedCount)} indexed, ${formatNumber(scan.failedCount)} failed.`,
+    `${CountFormat.number(scan.discoveredCount)} discovered, ${CountFormat.number(scan.inspectedCount)} inspected, ${CountFormat.number(scan.indexedCount)} indexed, ${CountFormat.number(scan.failedCount)} failed.`,
   );
 </script>
 

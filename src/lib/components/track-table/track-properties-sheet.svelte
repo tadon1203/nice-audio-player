@@ -9,13 +9,10 @@
     SheetHeader,
     SheetTitle,
   } from "#lib/ui/shadcn/sheet";
-  import {
-    formatAudioPath,
-    formatDuration,
-    formatOfTotal,
-    formatSampleRate,
-    MISSING,
-  } from "#lib/utils/format";
+  import { AudioFormatText } from "#lib/utils/audio-format-text";
+  import { CountFormat } from "#lib/utils/count-format";
+  import { DurationFormat } from "#lib/utils/duration-format";
+  import { MISSING } from "#lib/utils/missing";
 
   /** Everything the library knows about one track: tags, audio format, and where the file is. */
   let { trackId, onclose }: { trackId: string | null; onclose: () => void } = $props();
@@ -61,14 +58,14 @@
           {@render row("Artist", properties.artist)}
           {@render row("Album", properties.album)}
           {@render row("Album artist", properties.albumArtist)}
-          {@render row("Track", formatOfTotal(properties.trackNumber, properties.trackTotal))}
-          {@render row("Disc", formatOfTotal(properties.discNumber, properties.discTotal))}
+          {@render row("Track", CountFormat.ofTotal(properties.trackNumber, properties.trackTotal))}
+          {@render row("Disc", CountFormat.ofTotal(properties.discNumber, properties.discTotal))}
           {@render row("Genre", properties.genre)}
           {@render row("Date", properties.date)}
-          {@render row("Duration", orNull(properties.durationMs, formatDuration))}
+          {@render row("Duration", orNull(properties.durationMs, DurationFormat.of))}
           {@render row(
             "Format",
-            formatAudioPath({
+            AudioFormatText.path({
               format: properties.fileFormat,
               bitDepth: properties.bitDepth,
               sampleRate: properties.sampleRate,
@@ -76,7 +73,7 @@
             }),
           )}
           {@render row("Codec", properties.codec)}
-          {@render row("Sample rate", orNull(properties.sampleRate, formatSampleRate))}
+          {@render row("Sample rate", orNull(properties.sampleRate, AudioFormatText.sampleRate))}
           {@render row("Channels", properties.channelCount)}
           {@render row(
             "Bit depth",

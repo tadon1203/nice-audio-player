@@ -1,5 +1,5 @@
 import type { AudioOutputSelection } from "#lib/native";
-import { formatKilohertz } from "#lib/utils/format";
+import { AudioFormatText } from "#lib/utils/audio-format-text";
 
 /** The dock's signal path: `source › processing › output`. `processing` is null when bit-perfect. */
 export type PlaybackSignalPath = {
@@ -24,7 +24,8 @@ export class PlaybackTechnicalStatus {
     selection: AudioOutputSelection | null = null,
   ): PlaybackSignalPath {
     const steps: string[] = [];
-    if (facts.resamplingActive) steps.push(`${formatKilohertz(facts.outputSampleRate)} kHz`);
+    if (facts.resamplingActive)
+      steps.push(`${AudioFormatText.kilohertz(facts.outputSampleRate)} kHz`);
     if (facts.channelConversion === "monoToStereo") steps.push("mono to stereo");
     if (facts.channelConversion === "stereoToMono") steps.push("stereo to mono");
     if (facts.channelConversion === "downmix") steps.push("surround downmix");

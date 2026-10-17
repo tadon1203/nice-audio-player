@@ -13,7 +13,7 @@ use super::{
     paging::{Ordering, Page, PagedQuery, Phase, Scope, View},
     track::{SUMMARY_COLUMN_COUNT, SUMMARY_COLUMNS, SUMMARY_FROM, artwork_ref, summary_from_row},
 };
-use crate::ids::{AlbumId, ArtistId};
+use crate::ids::{AlbumId, ArtistId, TrackId, track_id_column};
 use crate::library::{
     artwork::ArtworkRef,
     error::StoreError,
@@ -723,7 +723,7 @@ impl LibraryStore {
             date,
             track_count: count as u64,
             duration_ms: duration.map(|value| value as u64),
-            first_playable_track_id: playable.map(|id| id.to_string()),
+            first_playable_track_id: playable.and_then(TrackId::try_from_rowid),
         })
     }
 
@@ -741,7 +741,6 @@ impl LibraryStore {
             return Err(StoreError::AlbumNotFound);
         }
         let Page { items, next_cursor } = query.fetch(&connection, cursor, 0, |row| {
-            let id: i64 = row.get(0)?;
             let artist: String = row.get(2)?;
             let number = |index: usize| -> rusqlite::Result<Option<u32>> {
                 Ok(row.get::<_, Option<i64>>(index)?.map(|value| value as u32))
@@ -749,7 +748,7 @@ impl LibraryStore {
             let availability: Availability = row.get(9)?;
             let inspection: InspectionStatus = row.get(10)?;
             Ok(LibraryAlbumTrackSummary {
-                id: id.to_string(),
+                id: track_id_column(row, 0)?,
                 title: row.get(1)?,
                 artist: (!artist.is_empty()).then_some(artist),
                 track_number: number(3)?,

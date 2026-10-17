@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Attachment } from "svelte/attachments";
   import { AppServices } from "#lib/shell/app-services.svelte";
-  import { formatDuration } from "#lib/utils/format";
+  import { DurationFormat } from "#lib/utils/duration-format";
   import { gapProgress } from "./lyrics-lines";
 
   /**
@@ -15,7 +15,7 @@
   const playback = AppServices.current().playback;
 
   const label = $derived(
-    endMs !== null ? `Instrumental, ${formatDuration(endMs - startMs)}` : "Instrumental",
+    endMs !== null ? `Instrumental, ${DurationFormat.of(endMs - startMs)}` : "Instrumental",
   );
 
   const drawFill: Attachment<HTMLElement> = (node) => {

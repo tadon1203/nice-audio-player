@@ -154,10 +154,10 @@ fn removing_a_folder_drops_its_tracks() {
     write_tone(&harness.music.join("a.wav"));
     harness.wait_for_first_scan();
     assert_eq!(harness.track_count(), 1);
-    let id = harness.library.roots().expect("roots")[0].id.clone();
+    let id = harness.library.roots().expect("roots")[0].id;
 
     assert!(
-        wait_until(SETTLE, || harness.library.remove_root(id.clone()).is_ok()),
+        wait_until(SETTLE, || harness.library.remove_root(id).is_ok()),
         "a folder can be removed once no scan is running"
     );
 

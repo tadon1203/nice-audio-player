@@ -14,7 +14,7 @@
   import TimePresentation from "#lib/ui/time-presentation.svelte";
   import { Button } from "#lib/ui/shadcn/button";
   import { cn } from "#lib/utils/cn.js";
-  import { formatDuration } from "#lib/utils/format";
+  import { DurationFormat } from "#lib/utils/duration-format";
 
   let {
     item,
@@ -84,7 +84,7 @@
       {/if}
     </div>
     <span class="shrink-0 text-sm tabular-nums">
-      {formatDuration(item.durationMs ?? null)}
+      {DurationFormat.of(item.durationMs ?? null)}
     </span>
     {#if tone === "upcoming"}
       <div

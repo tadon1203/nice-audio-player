@@ -101,7 +101,7 @@ fn albums_keep_their_identity_and_take_the_cover_of_their_first_track_with_artwo
         tracks
             .items
             .iter()
-            .map(|track| track.id.as_str())
+            .map(|track| track.id.to_string())
             .collect::<Vec<_>>(),
         ["2", "1"],
         "disc 1 first"
@@ -140,12 +140,10 @@ fn an_album_is_found_playable_and_reported_missing_by_its_key() {
         Some(PlaybackSourceError::InvalidAlbumKey)
     );
     assert_eq!(
-        store.playback_for_album(&shared, Some("3")).err(),
+        store
+            .playback_for_album(&shared, Some(track_id_of(3)))
+            .err(),
         Some(PlaybackSourceError::TrackNotMember)
-    );
-    assert_eq!(
-        store.playback_for_album(&shared, Some("not-an-id")).err(),
-        Some(PlaybackSourceError::InvalidTrackId)
     );
     let missing = LibraryAlbumKey {
         title: "Nope".into(),
@@ -159,7 +157,9 @@ fn an_album_is_found_playable_and_reported_missing_by_its_key() {
 
     fixture.sql("UPDATE library_files SET availability='missing' WHERE id IN (1,2)");
     assert_eq!(
-        store.playback_for_album(&shared, Some("1")).err(),
+        store
+            .playback_for_album(&shared, Some(track_id_of(1)))
+            .err(),
         Some(PlaybackSourceError::TrackUnavailable)
     );
     assert_eq!(
@@ -326,8 +326,8 @@ fn album_details_count_the_tracks_once_and_name_the_first_playable_one() {
     assert_eq!(tracks.total_count.unwrap_or(0), 3);
     assert_eq!(details.duration_ms, Some(4_000));
     assert_eq!(
-        details.first_playable_track_id.as_deref(),
-        Some("2"),
+        details.first_playable_track_id,
+        Some(track_id_of(2)),
         "track 1 is missing"
     );
 }

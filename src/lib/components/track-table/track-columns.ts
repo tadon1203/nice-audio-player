@@ -4,7 +4,9 @@ import type {
   LibraryTrackSummary,
 } from "#lib/native";
 import { Tracks } from "#lib/library/tracks";
-import { formatDuration, formatKilohertz, MISSING } from "#lib/utils/format";
+import { AudioFormatText } from "#lib/utils/audio-format-text";
+import { DurationFormat } from "#lib/utils/duration-format";
+import { MISSING } from "#lib/utils/missing";
 
 /** A track row shared by the Library and Album layouts; both DTOs satisfy it directly. */
 export type TrackTableRow = Pick<
@@ -71,7 +73,7 @@ const timeColumn: TrackColumn = {
   header: "Time",
   width: "w-20",
   sortKey: "duration",
-  text: (row) => formatDuration(row.durationMs),
+  text: (row) => DurationFormat.of(row.durationMs),
 };
 
 export const libraryTrackColumns: readonly TrackColumn[] = [
@@ -134,8 +136,8 @@ export const albumTrackColumns: readonly TrackColumn[] = [
 export function trackQuality(row: Pick<TrackTableRow, "bitDepth" | "sampleRate">): string | null {
   if (!row.sampleRate) return null;
   return row.bitDepth
-    ? `${row.bitDepth}/${formatKilohertz(row.sampleRate)}`
-    : `${formatKilohertz(row.sampleRate)} kHz`;
+    ? `${row.bitDepth}/${AudioFormatText.kilohertz(row.sampleRate)}`
+    : `${AudioFormatText.kilohertz(row.sampleRate)} kHz`;
 }
 
 /** Whether the tracks are on more than one disc, which splits them by "Disc n" rows. */

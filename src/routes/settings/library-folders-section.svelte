@@ -19,7 +19,7 @@
     ItemGroup,
     ItemTitle,
   } from "#lib/ui/shadcn/item/index.js";
-  import { formatNumber } from "#lib/utils/format";
+  import { CountFormat } from "#lib/utils/count-format";
   import DeleteMissingDialog from "./delete-missing-dialog.svelte";
   import RemoveLibraryRootDialog from "./remove-library-root-dialog.svelte";
   import ResetLibraryDialog from "./reset-library-dialog.svelte";
@@ -118,11 +118,11 @@
                   : "Not scanned"}
               </span>
               <span class="ml-3">
-                {formatNumber(root.trackCount)}
+                {CountFormat.number(root.trackCount)}
                 {root.trackCount === 1 ? "track" : "tracks"}
               </span>
               {#if root.missingCount > 0}
-                <span class="ml-3">{formatNumber(root.missingCount)} missing</span>
+                <span class="ml-3">{CountFormat.number(root.missingCount)} missing</span>
               {/if}
             </ItemDescription>
           </ItemContent>
@@ -167,7 +167,7 @@
   <div class="mt-8 flex flex-wrap items-start justify-between gap-4 border-t border-border pt-6">
     <p class="max-w-prose text-sm leading-5 text-muted-foreground">
       Missing tracks are kept until you delete them. Deleting never touches your audio files.
-      <span class="ml-1 text-foreground">{formatNumber(missingTotal)} missing</span>
+      <span class="ml-1 text-foreground">{CountFormat.number(missingTotal)} missing</span>
     </p>
     <div class="flex max-w-sm flex-col items-end gap-2">
       <div class="flex flex-wrap justify-end gap-2">

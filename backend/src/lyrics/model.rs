@@ -1,3 +1,4 @@
+use crate::ids::TrackId;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, serde::Serialize, specta::Type)]
@@ -43,15 +44,15 @@ pub enum LyricsResolutionNotice {
 )]
 pub enum LyricsResolution {
     Resolved {
-        track_id: String,
+        track_id: TrackId,
         document: LyricsDocument,
         notice: Option<LyricsResolutionNotice>,
     },
     NotFound {
-        track_id: String,
+        track_id: TrackId,
     },
     SourceFailed {
-        track_id: String,
+        track_id: TrackId,
         /// The name of the sidecar file the track looks for, without its folder.
         sidecar_file_name: String,
     },
@@ -60,7 +61,6 @@ pub enum LyricsResolution {
 #[derive(Debug, Clone, serde::Serialize, specta::Type)]
 #[serde(tag = "code", rename_all = "camelCase")]
 pub enum LyricsCommandError {
-    InvalidId,
     TrackNotFound,
     TrackUnavailable,
     LibraryUnavailable,
@@ -76,7 +76,7 @@ impl crate::tasks::TaskError for LyricsCommandError {
 
 #[derive(Debug, Clone)]
 pub struct LyricsTrackContext {
-    pub track_id: String,
+    pub track_id: TrackId,
     pub source: PathBuf,
     pub root: PathBuf,
 }

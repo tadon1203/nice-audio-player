@@ -9,7 +9,7 @@
     AlertDialogHeader,
     AlertDialogTitle,
   } from "#lib/ui/shadcn/alert-dialog/index.js";
-  import { formatNumber } from "#lib/utils/format";
+  import { CountFormat } from "#lib/utils/count-format";
 
   let {
     open,
@@ -28,7 +28,7 @@
   <AlertDialogContent>
     <AlertDialogHeader>
       <AlertDialogTitle>
-        Delete {formatNumber(count)} Missing {count === 1 ? "track" : "tracks"}?
+        Delete {CountFormat.number(count)} Missing {count === 1 ? "track" : "tracks"}?
       </AlertDialogTitle>
       <AlertDialogDescription>
         These tracks' files are gone from your folders.

@@ -17,7 +17,7 @@
   import { AppServices } from "#lib/shell/app-services.svelte";
   import TimePresentation from "#lib/ui/time-presentation.svelte";
   import { cn } from "#lib/utils/cn.js";
-  import { formatDuration } from "#lib/utils/format";
+  import { DurationFormat } from "#lib/utils/duration-format";
   import IntervalLine from "./interval-line.svelte";
   import { lineSpan } from "./lyrics-lines";
 
@@ -49,7 +49,7 @@
   const isCurrent = $derived(index === currentIndex);
   const isPast = $derived(index < currentIndex);
   const isHovered = $derived(index === hoveredIndex);
-  const startLabel = $derived(formatDuration(line.startMs));
+  const startLabel = $derived(DurationFormat.of(line.startMs));
 </script>
 
 <div

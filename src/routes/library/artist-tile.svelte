@@ -3,7 +3,7 @@
   import { albumArtistHref } from "#lib/library/routes";
   import { artistNameLabel } from "#lib/library/unknown-name";
   import Artwork from "#lib/ui/artwork.svelte";
-  import { formatCount } from "#lib/utils/format";
+  import { CountFormat } from "#lib/utils/count-format";
 
   let { artist }: { artist: LibraryAlbumArtistSummary } = $props();
 
@@ -25,7 +25,7 @@
   />
   <p class="mt-3 truncate text-sm font-medium text-foreground" title={name}>{name}</p>
   <p class="mt-1 flex justify-center gap-x-4 text-sm text-muted-foreground tabular-nums">
-    <span>{formatCount(artist.albumCount, "album")}</span>
-    <span>{formatCount(artist.trackCount, "track")}</span>
+    <span>{CountFormat.count(artist.albumCount, "album")}</span>
+    <span>{CountFormat.count(artist.trackCount, "track")}</span>
   </p>
 </a>

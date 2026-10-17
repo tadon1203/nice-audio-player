@@ -14,7 +14,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-pub(super) type RootId = i64;
+pub(super) type RootNumber = i64;
 
 /// How long a folder must be quiet after a change before it is scanned, so copying an album
 /// starts one scan and not one per file.
@@ -26,13 +26,13 @@ pub(super) const WATCH_RETRY: Duration = Duration::from_secs(10);
 /// What a scan of one folder covers: all of it, or only the directories where something changed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct ScanTarget {
-    pub root: RootId,
+    pub root: RootNumber,
     /// `None` walks the whole folder.
     pub dirs: Option<Vec<PathBuf>>,
 }
 
 impl ScanTarget {
-    pub fn whole(root: RootId) -> Self {
+    pub fn whole(root: RootNumber) -> Self {
         Self { root, dirs: None }
     }
 }
@@ -72,32 +72,32 @@ pub(super) enum ScanOutcome {
 pub(super) enum Input {
     /// The actor started with these folders enabled.
     Started {
-        enabled: Vec<RootId>,
+        enabled: Vec<RootNumber>,
     },
-    Registered(RootId),
-    Enabled(RootId),
-    Disabled(RootId),
-    Removed(RootId),
+    Registered(RootNumber),
+    Enabled(RootNumber),
+    Disabled(RootNumber),
+    Removed(RootNumber),
     /// The listener deleted the Missing tracks; their artwork is nobody's now.
     MissingDeleted,
     /// The listener started a scan of these folders.
     ScanRequested {
-        roots: Vec<RootId>,
+        roots: Vec<RootNumber>,
     },
     CancelRequested,
     /// A watcher saw something change in this folder, somewhere it could not say.
-    FolderChanged(RootId),
+    FolderChanged(RootNumber),
     /// A watcher saw changes at these paths (files or directories) in this folder.
     PathsChanged {
-        root: RootId,
+        root: RootNumber,
         paths: Vec<PathBuf>,
     },
-    Attached(RootId),
-    AttachFailed(RootId),
+    Attached(RootNumber),
+    AttachFailed(RootNumber),
     ScanFinished(ScanOutcome),
     /// The artwork garbage collection found these folders' artwork missing and wants them rescanned.
     GcFinished {
-        rescan: Vec<RootId>,
+        rescan: Vec<RootNumber>,
     },
     /// Time passed. Carries no news: the state reacts to deadlines it reaches.
     Tick,
@@ -108,16 +108,16 @@ pub(super) enum Effect {
     StartScan(Vec<ScanTarget>),
     CancelScan,
     RunGc,
-    Attach(RootId),
-    Detach(RootId),
+    Attach(RootNumber),
+    Detach(RootNumber),
 }
 
 pub(super) struct State {
-    dirty: BTreeMap<RootId, Dirty>,
+    dirty: BTreeMap<RootNumber, Dirty>,
     debounce: Option<Instant>,
     gc_pending: bool,
     phase: Phase,
-    watches: BTreeMap<RootId, Watch>,
+    watches: BTreeMap<RootNumber, Watch>,
 }
 
 impl State {
@@ -258,17 +258,17 @@ impl State {
         effects
     }
 
-    fn mark_everything(&mut self, id: RootId) {
+    fn mark_everything(&mut self, id: RootNumber) {
         self.dirty.insert(id, Dirty::Everything);
     }
 
-    fn watch(&mut self, id: RootId, effects: &mut Vec<Effect>) {
+    fn watch(&mut self, id: RootNumber, effects: &mut Vec<Effect>) {
         self.watches.insert(id, Watch::Attaching);
         effects.push(Effect::Attach(id));
     }
 
     /// The listener took a folder out of the Library: drop its pending work and its watcher.
-    fn release(&mut self, id: RootId, effects: &mut Vec<Effect>) {
+    fn release(&mut self, id: RootNumber, effects: &mut Vec<Effect>) {
         self.dirty.remove(&id);
         if self.watches.remove(&id).is_some() {
             effects.push(Effect::Detach(id));
@@ -349,7 +349,7 @@ mod tests {
         }
 
         /// A folder that has been scanned once and is idle again.
-        fn idle(roots: &[RootId]) -> Self {
+        fn idle(roots: &[RootNumber]) -> Self {
             let mut clock = Self::new();
             clock.feed(Input::Started {
                 enabled: roots.to_vec(),
@@ -364,7 +364,7 @@ mod tests {
         }
     }
 
-    fn starts(effects: &[Effect]) -> Vec<Vec<RootId>> {
+    fn starts(effects: &[Effect]) -> Vec<Vec<RootNumber>> {
         effects
             .iter()
             .filter_map(|effect| match effect {
@@ -431,7 +431,7 @@ mod tests {
         let started = clock.feed(Input::Started {
             enabled: vec![1, 2],
         });
-        assert_eq!(starts(&started), Vec::<Vec<RootId>>::new());
+        assert_eq!(starts(&started), Vec::<Vec<RootNumber>>::new());
         assert!(started.contains(&Effect::Attach(1)) && started.contains(&Effect::Attach(2)));
 
         assert_eq!(starts(&clock.wait(STARTUP_DELAY)), vec![vec![1, 2]]);
@@ -445,7 +445,7 @@ mod tests {
 
         assert_eq!(
             starts(&clock.wait(DEBOUNCE - Duration::from_millis(1))),
-            Vec::<Vec<RootId>>::new()
+            Vec::<Vec<RootNumber>>::new()
         );
         assert_eq!(starts(&clock.wait(Duration::from_millis(1))), vec![vec![1]]);
     }
@@ -470,7 +470,10 @@ mod tests {
 
         clock.feed(Input::FolderChanged(7));
 
-        assert_eq!(starts(&clock.wait(DEBOUNCE * 2)), Vec::<Vec<RootId>>::new());
+        assert_eq!(
+            starts(&clock.wait(DEBOUNCE * 2)),
+            Vec::<Vec<RootNumber>>::new()
+        );
     }
 
     #[test]
@@ -481,7 +484,7 @@ mod tests {
         clock.feed(Input::FolderChanged(1));
         assert_eq!(
             starts(&clock.wait(DEBOUNCE * 2)),
-            Vec::<Vec<RootId>>::new(),
+            Vec::<Vec<RootNumber>>::new(),
             "one scan at a time"
         );
 
@@ -522,7 +525,10 @@ mod tests {
         clock.feed(Input::FolderChanged(1));
         clock.feed(Input::ScanFinished(ScanOutcome::Cancelled));
 
-        assert_eq!(starts(&clock.wait(DEBOUNCE * 4)), Vec::<Vec<RootId>>::new());
+        assert_eq!(
+            starts(&clock.wait(DEBOUNCE * 4)),
+            Vec::<Vec<RootNumber>>::new()
+        );
     }
 
     #[test]
@@ -536,7 +542,10 @@ mod tests {
 
         assert!(disabled.contains(&Effect::Detach(1)));
         assert!(removed.contains(&Effect::Detach(2)));
-        assert_eq!(starts(&clock.wait(DEBOUNCE * 2)), Vec::<Vec<RootId>>::new());
+        assert_eq!(
+            starts(&clock.wait(DEBOUNCE * 2)),
+            Vec::<Vec<RootNumber>>::new()
+        );
     }
 
     #[test]

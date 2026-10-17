@@ -450,8 +450,9 @@ fn a_moved_folder_and_a_renamed_file_keep_their_tracks_and_leave_nothing_missing
     assert_eq!(id_of(&after, "renamed.wav"), id_of(&before, "loose.wav"));
     // A queue entry holds the track id: it now resolves to the file's new place.
     let store = crate::library::store::LibraryStore::new(fixture.database.clone());
-    let queued = id_of(&before, "Old/one.wav").unwrap().to_string();
-    let location = store.track_location(&queued).unwrap().existing().unwrap();
+    let queued =
+        crate::ids::TrackId::try_from_rowid(id_of(&before, "Old/one.wav").unwrap()).unwrap();
+    let location = store.track_location(queued).unwrap().existing().unwrap();
     assert!(
         location.path.ends_with("New/one.wav"),
         "{:?}",

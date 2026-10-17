@@ -17,7 +17,7 @@ use crate::audio::{
     },
     waveform::{PlaybackWaveform, Waveform, WaveformService},
 };
-use crate::ids::ArtworkHash;
+use crate::ids::{ArtworkHash, RootId, TrackId};
 use crate::library::{
     Library,
     artwork::{self, ServedArtwork},
@@ -219,14 +219,14 @@ impl BackendApp {
 
     pub fn set_library_root_enabled(
         &self,
-        id: &str,
+        id: RootId,
         enabled: bool,
     ) -> Result<LibraryRoot, LibraryCommandError> {
-        self.library()?.set_root_enabled(id.to_owned(), enabled)
+        self.library()?.set_root_enabled(id, enabled)
     }
 
-    pub fn remove_library_root(&self, id: &str) -> Result<(), LibraryCommandError> {
-        self.library()?.remove_root(id.to_owned())
+    pub fn remove_library_root(&self, id: RootId) -> Result<(), LibraryCommandError> {
+        self.library()?.remove_root(id)
     }
 
     /// Deletes the Missing tracks from the Library and returns how many there were. Never touches a
@@ -373,13 +373,13 @@ impl BackendApp {
 
     pub fn track_properties(
         &self,
-        track_id: &str,
+        track_id: TrackId,
     ) -> Result<Option<LibraryTrackProperties>, LibraryCommandError> {
         Ok(self.library()?.store().track_properties(track_id)?)
     }
 
     /// The track's file, for the Host to show in Explorer.
-    pub fn track_file(&self, track_id: &str) -> Result<PathBuf, LibraryCommandError> {
+    pub fn track_file(&self, track_id: TrackId) -> Result<PathBuf, LibraryCommandError> {
         let file = self
             .library()?
             .store()
@@ -399,7 +399,7 @@ impl BackendApp {
     // ---- lyrics ----
 
     /// Blocking: the host runs it on a blocking thread.
-    pub fn track_lyrics(&self, track_id: &str) -> Result<LyricsResolution, LyricsCommandError> {
+    pub fn track_lyrics(&self, track_id: TrackId) -> Result<LyricsResolution, LyricsCommandError> {
         let library = self
             .library
             .as_ref()
@@ -412,7 +412,7 @@ impl BackendApp {
             .existing()
             .map_err(|_| LyricsCommandError::TrackUnavailable)?;
         Ok(self.lyrics.resolve(LyricsTrackContext {
-            track_id: track_id.to_owned(),
+            track_id,
             source: file.path,
             root: file.root,
         }))
@@ -644,7 +644,6 @@ fn state(revision: u64, value: StateValue) -> BackendMessage {
 
 fn map_lyrics_context_error(error: StoreError) -> LyricsCommandError {
     match error {
-        StoreError::InvalidId => LyricsCommandError::InvalidId,
         StoreError::TrackNotFound => LyricsCommandError::TrackNotFound,
         StoreError::TrackUnavailable => LyricsCommandError::TrackUnavailable,
         _ => LyricsCommandError::PersistenceFailed,

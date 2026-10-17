@@ -8,7 +8,7 @@ use backend::dto::{
     LibraryTrackSortKey,
 };
 use backend::errors::LibraryCommandError;
-use backend::ids::ArtworkHash;
+use backend::ids::{ArtworkHash, RootId, TrackId};
 
 use super::blocking;
 use crate::{
@@ -58,12 +58,12 @@ pub async fn register_library_root(
 #[tauri::command]
 #[specta::specta]
 pub async fn set_library_root_enabled(
-    id: String,
+    id: RootId,
     enabled: bool,
     state: tauri::State<'_, AppState>,
 ) -> Result<LibraryRoot, LibraryCommandError> {
     blocking(&state, move |backend| {
-        backend.set_library_root_enabled(&id, enabled)
+        backend.set_library_root_enabled(id, enabled)
     })
     .await
 }
@@ -71,10 +71,10 @@ pub async fn set_library_root_enabled(
 #[tauri::command]
 #[specta::specta]
 pub async fn remove_library_root(
-    id: String,
+    id: RootId,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), LibraryCommandError> {
-    blocking(&state, move |backend| backend.remove_library_root(&id)).await
+    blocking(&state, move |backend| backend.remove_library_root(id)).await
 }
 
 /// Deletes the Missing tracks from the Library and returns how many there were. Never touches a
@@ -279,20 +279,20 @@ pub async fn list_library_album_tracks(
 #[tauri::command]
 #[specta::specta]
 pub async fn get_library_track_properties(
-    track_id: String,
+    track_id: TrackId,
     state: tauri::State<'_, AppState>,
 ) -> Result<Option<LibraryTrackProperties>, LibraryCommandError> {
-    blocking(&state, move |backend| backend.track_properties(&track_id)).await
+    blocking(&state, move |backend| backend.track_properties(track_id)).await
 }
 
 /// Shows the track's file in Explorer, selected.
 #[tauri::command]
 #[specta::specta]
 pub async fn reveal_library_track(
-    track_id: String,
+    track_id: TrackId,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), LibraryCommandError> {
-    let path = blocking(&state, move |backend| backend.track_file(&track_id)).await?;
+    let path = blocking(&state, move |backend| backend.track_file(track_id)).await?;
     tauri::async_runtime::spawn_blocking(move || reveal_in_file_manager(&path))
         .await
         .map_err(|_| LibraryCommandError::TaskFailed)?

@@ -20,7 +20,7 @@
   import PageTitle from "#lib/ui/page-title.svelte";
   import SectionTitle from "#lib/ui/section-title.svelte";
   import WorkspaceScrollRegion from "#lib/ui/workspace-scroll.svelte";
-  import { formatCount } from "#lib/utils/format";
+  import { CountFormat } from "#lib/utils/count-format";
   import AlbumTile from "../../album-tile.svelte";
 
   const { actions, artists, libraryViews, playback, scrollMemory } = AppServices.current();
@@ -72,7 +72,10 @@
     <MediaDetailsHeader title={label} artwork={artist.artwork} round>
       <div class="mt-2">
         <FactLine
-          facts={[formatCount(artist.albumCount, "album"), formatCount(artist.trackCount, "track")]}
+          facts={[
+            CountFormat.count(artist.albumCount, "album"),
+            CountFormat.count(artist.trackCount, "track"),
+          ]}
         />
       </div>
     </MediaDetailsHeader>

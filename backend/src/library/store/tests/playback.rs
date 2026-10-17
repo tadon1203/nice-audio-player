@@ -15,7 +15,7 @@ fn a_track_without_a_title_is_named_after_its_file_in_playback_and_in_search() {
     let store = &fixture.store;
 
     let selection = store
-        .playback_for_tracks(None, LibraryTrackSortKey::Title, ASC, Some("1"))
+        .playback_for_tracks(None, LibraryTrackSortKey::Title, ASC, Some(track_id_of(1)))
         .unwrap();
     let ids: Vec<&str> = selection.track_ids.iter().map(String::as_str).collect();
     let tracks = store.playable_tracks(&ids).unwrap();
@@ -31,7 +31,10 @@ fn a_track_without_a_title_is_named_after_its_file_in_playback_and_in_search() {
     );
     assert_eq!(track.album_track_count, Some(1));
     assert_eq!(
-        store.playback_for_track("1").unwrap().album_track_count,
+        store
+            .playback_for_track(track_id_of(1))
+            .unwrap()
+            .album_track_count,
         Some(1)
     );
     let restored = store.playable_tracks(&["1", "999", "x"]).unwrap();
@@ -72,7 +75,7 @@ fn track_playback_follows_the_list_order_and_skips_tracks_that_cannot_play() {
     let store = &fixture.store;
 
     let selection = store
-        .playback_for_tracks(None, LibraryTrackSortKey::Title, DESC, Some("2"))
+        .playback_for_tracks(None, LibraryTrackSortKey::Title, DESC, Some(track_id_of(2)))
         .unwrap();
     assert_eq!(
         selection.track_ids,
@@ -99,13 +102,18 @@ fn track_playback_follows_the_list_order_and_skips_tracks_that_cannot_play() {
     );
     assert_eq!(
         store
-            .playback_for_tracks(Some("alp"), LibraryTrackSortKey::Title, ASC, Some("1"))
+            .playback_for_tracks(
+                Some("alp"),
+                LibraryTrackSortKey::Title,
+                ASC,
+                Some(track_id_of(1))
+            )
             .err(),
         Some(PlaybackSourceError::TrackNotMember)
     );
     assert_eq!(
         store
-            .playback_for_tracks(None, LibraryTrackSortKey::Title, ASC, Some("4"))
+            .playback_for_tracks(None, LibraryTrackSortKey::Title, ASC, Some(track_id_of(4)))
             .err(),
         Some(PlaybackSourceError::TrackUnavailable)
     );
@@ -141,7 +149,7 @@ fn playing_what_the_list_shows_holds_for_every_sort_and_direction() {
                 .unwrap()
                 .items
                 .into_iter()
-                .map(|track| track.id)
+                .map(|track| track.id.to_string())
                 .collect();
             let played: Vec<String> = fixture
                 .store
@@ -170,7 +178,7 @@ fn an_album_playback_sequence_is_complete_beyond_one_page() {
                 album_artist: "Artist".into(),
                 album_edition: "1/".into(),
             },
-            Some("101"),
+            Some(track_id_of(101)),
         )
         .unwrap();
 

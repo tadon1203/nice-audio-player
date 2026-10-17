@@ -1,4 +1,4 @@
-import { formatAudioPath } from "#lib/utils/format";
+import { AudioFormatText } from "#lib/utils/audio-format-text";
 import { AppServices } from "#lib/shell/app-services.svelte";
 import {
   PlaybackTechnicalStatus,
@@ -19,7 +19,7 @@ export class SignalPath {
     if (session === null) return null;
     return PlaybackTechnicalStatus.describe(
       {
-        sourceLabel: formatAudioPath({
+        sourceLabel: AudioFormatText.path({
           format: session.sourceFormat,
           bitDepth: session.sourceBitDepth,
           sampleRate: session.sourceSampleRate,

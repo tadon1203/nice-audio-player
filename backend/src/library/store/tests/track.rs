@@ -19,7 +19,7 @@ fn a_track_summary_carries_the_key_of_the_album_the_catalog_files_it_under() {
             .unwrap()
             .items
             .into_iter()
-            .find(|track| track.id == id)
+            .find(|track| track.id.to_string() == id)
             .unwrap()
     };
 
@@ -55,23 +55,26 @@ fn a_track_location_is_found_by_id_and_stays_inside_its_root() {
     std::fs::write(fixture.music.parent().unwrap().join("outside.wav"), []).unwrap();
     let store = &fixture.store;
 
-    let file = store.track_location("1").unwrap().existing().unwrap();
+    let file = store
+        .track_location(track_id_of(1))
+        .unwrap()
+        .existing()
+        .unwrap();
     assert!(file.path.ends_with("1.wav") && file.path.starts_with(&file.root));
     assert_eq!(
-        store.track_location("2").unwrap().existing(),
+        store.track_location(track_id_of(2)).unwrap().existing(),
         Err(Unavailable),
         "its file is gone"
     );
     assert_eq!(
-        store.track_location("3").unwrap().existing(),
+        store.track_location(track_id_of(3)).unwrap().existing(),
         Err(Unavailable),
         "it leaves the root"
     );
     assert_eq!(
-        store.track_location("99").err(),
+        store.track_location(track_id_of(99)).err(),
         Some(StoreError::TrackNotFound)
     );
-    assert_eq!(store.track_location("x").err(), Some(StoreError::InvalidId));
 }
 
 #[test]
@@ -83,12 +86,18 @@ fn track_properties_list_the_tags_and_the_files_path() {
 
     let properties = fixture
         .store
-        .track_properties("1")
+        .track_properties(track_id_of(1))
         .unwrap()
         .expect("properties");
 
     assert_eq!(properties.title.as_deref(), Some("Song"));
     assert_eq!(properties.date.as_deref(), Some("2001-02-03"));
     assert!(properties.path.ends_with("1.wav") && properties.path.contains("music"));
-    assert!(fixture.store.track_properties("99").unwrap().is_none());
+    assert!(
+        fixture
+            .store
+            .track_properties(track_id_of(99))
+            .unwrap()
+            .is_none()
+    );
 }

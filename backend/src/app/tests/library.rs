@@ -2,6 +2,7 @@ use super::{Fixture, fixture};
 use crate::app::{BackendApp, PlaybackContext};
 use crate::dto::{LibrarySortDirection, LibraryStatus, LibraryTrackSortKey};
 use crate::errors::{LibraryCommandError, LyricsCommandError, PlaybackServiceError};
+use crate::ids::TrackId;
 use crate::messages::testing::RecordingMessageSink;
 use crate::test_support::TestDirectory;
 
@@ -50,11 +51,11 @@ fn without_a_library_the_library_commands_say_it_is_unavailable() {
         Err(LibraryCommandError::LibraryUnavailable)
     ));
     assert!(matches!(
-        backend.track_file("1"),
+        backend.track_file(TrackId::try_from_rowid(1).unwrap()),
         Err(LibraryCommandError::LibraryUnavailable)
     ));
     assert!(matches!(
-        backend.track_lyrics("1"),
+        backend.track_lyrics(TrackId::try_from_rowid(1).unwrap()),
         Err(LyricsCommandError::LibraryUnavailable)
     ));
 }

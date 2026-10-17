@@ -1,10 +1,10 @@
 //! One track: its summary, its properties and where its file is.
 
 use super::LibraryStore;
-use crate::ids::ArtworkHash;
+use crate::ids::{ArtworkHash, TrackId, track_id_column};
 use crate::library::{
     artwork::{ArtworkMimeType, ArtworkRef},
-    error::{StoreError, parse_id},
+    error::StoreError,
     location::TrackLocation,
     models::{LibraryAlbumKey, LibraryTrackProperties, LibraryTrackSummary},
     status::{Availability, InspectionStatus},
@@ -33,7 +33,6 @@ pub(super) fn artwork_ref(
 }
 
 pub(super) fn summary_from_row(row: &Row<'_>) -> rusqlite::Result<LibraryTrackSummary> {
-    let id: i64 = row.get(0)?;
     let album: String = row.get(3)?;
     let album_artist: String = row.get(5)?;
     let duration: Option<i64> = row.get(6)?;
@@ -42,7 +41,7 @@ pub(super) fn summary_from_row(row: &Row<'_>) -> rusqlite::Result<LibraryTrackSu
     let artist: String = row.get(2)?;
     let album_edition: String = row.get(14)?;
     Ok(LibraryTrackSummary {
-        id: id.to_string(),
+        id: track_id_column(row, 0)?,
         title: row.get(1)?,
         artist: (!artist.is_empty()).then_some(artist),
         album_key: (!album.is_empty()).then(|| LibraryAlbumKey {
@@ -65,8 +64,7 @@ pub(super) fn summary_from_row(row: &Row<'_>) -> rusqlite::Result<LibraryTrackSu
 
 impl LibraryStore {
     /// Where the track's file is. The one query every consumer of a track's path goes through.
-    pub fn track_location(&self, id: &str) -> Result<TrackLocation, StoreError> {
-        let id = parse_id(id)?;
+    pub fn track_location(&self, id: TrackId) -> Result<TrackLocation, StoreError> {
         let connection = self.read()?;
         let (root, relative, availability): (String, String, Availability) = connection
             .query_row(
@@ -75,7 +73,7 @@ impl LibraryStore {
                  JOIN library_files f ON f.id = t.file_id
                  JOIN library_roots r ON r.id = f.root_id
                  WHERE t.id = ?1",
-                params![id],
+                params![id.rowid()],
                 |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
             )
             .optional()?
@@ -88,7 +86,10 @@ impl LibraryStore {
     }
 
     /// Tags, audio format and the file's path, or `None` for an unknown track.
-    pub fn track_properties(&self, id: &str) -> Result<Option<LibraryTrackProperties>, StoreError> {
+    pub fn track_properties(
+        &self,
+        id: TrackId,
+    ) -> Result<Option<LibraryTrackProperties>, StoreError> {
         let location = match self.track_location(id) {
             Ok(location) => location,
             Err(StoreError::TrackNotFound) => return Ok(None),
@@ -106,7 +107,7 @@ impl LibraryStore {
                  JOIN library_files f ON f.id = t.file_id
                  JOIN track_source_metadata m ON m.track_id = t.id
                  WHERE t.id = ?1",
-                params![parse_id(id)?],
+                params![id.rowid()],
                 |row| {
                     let number = |index: usize| -> rusqlite::Result<Option<u32>> {
                         Ok(row
@@ -114,7 +115,7 @@ impl LibraryStore {
                             .and_then(|value| u32::try_from(value).ok()))
                     };
                     Ok(LibraryTrackProperties {
-                        id: id.to_owned(),
+                        id,
                         path: path.clone(),
                         file_name: row.get(0)?,
                         title: non_blank(row.get(1)?),

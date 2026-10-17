@@ -3,10 +3,11 @@
 
 use super::{
     database::Database,
-    error::{LibraryCommandError, StoreError, parse_id},
+    error::{LibraryCommandError, StoreError},
     models::LibraryRoot,
     summary,
 };
+use crate::ids::{RootId, root_id_column};
 use rusqlite::{Connection, params};
 use std::path::Path;
 
@@ -21,7 +22,7 @@ pub(crate) fn list(connection: &Connection) -> Result<Vec<LibraryRoot>, StoreErr
     )?;
     let rows = statement.query_map([], |row| {
         Ok(LibraryRoot {
-            id: row.get::<_, i64>(0)?.to_string(),
+            id: root_id_column(row, 0)?,
             path: row.get(1)?,
             enabled: row.get(2)?,
             scan_generation: row.get::<_, i64>(3)? as u64,
@@ -74,7 +75,8 @@ pub(crate) fn register(
         )
         .map_err(StoreError::from)?;
     Ok(LibraryRoot {
-        id: connection.last_insert_rowid().to_string(),
+        id: RootId::try_from_rowid(connection.last_insert_rowid())
+            .ok_or(StoreError::Persistence)?,
         path,
         enabled: true,
         scan_generation: 0,
@@ -86,15 +88,14 @@ pub(crate) fn register(
 
 pub(crate) fn set_enabled(
     database: &Database,
-    id: &str,
+    id: RootId,
     enabled: bool,
 ) -> Result<LibraryRoot, LibraryCommandError> {
-    let id = parse_id(id)?;
     let connection = database.write().map_err(StoreError::from)?;
     let changed = connection
         .execute(
             "UPDATE library_roots SET enabled = ?2 WHERE id = ?1",
-            params![id, enabled],
+            params![id.rowid(), enabled],
         )
         .map_err(StoreError::from)?;
     if changed == 0 {
@@ -102,17 +103,19 @@ pub(crate) fn set_enabled(
     }
     list(&connection)?
         .into_iter()
-        .find(|root| root.id == id.to_string())
+        .find(|root| root.id == id)
         .ok_or(LibraryCommandError::RootMissing)
 }
 
 /// Removes the folder with its files, tracks and metadata (they cascade).
-pub(crate) fn remove(database: &Database, id: &str) -> Result<(), LibraryCommandError> {
-    let id = parse_id(id)?;
+pub(crate) fn remove(database: &Database, id: RootId) -> Result<(), LibraryCommandError> {
     let mut connection = database.write().map_err(StoreError::from)?;
     let transaction = connection.transaction().map_err(StoreError::from)?;
     let removed = transaction
-        .execute("DELETE FROM library_roots WHERE id = ?1", params![id])
+        .execute(
+            "DELETE FROM library_roots WHERE id = ?1",
+            params![id.rowid()],
+        )
         .map_err(StoreError::from)?;
     if removed == 0 {
         return Err(LibraryCommandError::RootMissing);

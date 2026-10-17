@@ -23,7 +23,8 @@
   import SectionTitle from "#lib/ui/section-title.svelte";
   import { Button } from "#lib/ui/shadcn/button/index.js";
   import WorkspaceScrollRegion from "#lib/ui/workspace-scroll.svelte";
-  import { formatCount, formatDuration } from "#lib/utils/format";
+  import { CountFormat } from "#lib/utils/count-format";
+  import { DurationFormat } from "#lib/utils/duration-format";
 
   const { actions, albums, history, playback, scrollMemory } = AppServices.current();
 
@@ -103,10 +104,10 @@
         facts={[
           album.date ?? album.summary.year,
           album.trackCount !== null
-            ? { text: formatCount(album.trackCount, "track"), countUp: true }
+            ? { text: CountFormat.count(album.trackCount, "track"), countUp: true }
             : null,
           album.durationMs !== null
-            ? { text: formatDuration(album.durationMs), countUp: true }
+            ? { text: DurationFormat.of(album.durationMs), countUp: true }
             : null,
         ]}
         fallback="Album details unavailable"

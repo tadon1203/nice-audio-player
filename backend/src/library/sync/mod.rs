@@ -9,11 +9,12 @@ mod step;
 
 use super::{
     database::Database,
-    error::{LibraryCommandError, StoreError, parse_id},
+    error::{LibraryCommandError, StoreError},
     maintenance,
     models::{LibraryRoot, LibraryScanSnapshot, LibraryScanState},
     roots, scanner, watcher,
 };
+use crate::ids::RootId;
 use crate::messages::{Notifier, Versioned};
 use log::{error, info, warn};
 use notify::RecommendedWatcher;
@@ -27,14 +28,14 @@ use std::{
     thread::{self, JoinHandle},
     time::Instant,
 };
-use step::{Effect, Input, RootId, ScanOutcome, ScanTarget, State};
+use step::{Effect, Input, RootNumber, ScanOutcome, ScanTarget, State};
 
 type Reply<T> = SyncSender<Result<T, LibraryCommandError>>;
 
 enum Command {
     Register(String, Reply<LibraryRoot>),
-    Enable(String, bool, Reply<LibraryRoot>),
-    Remove(String, Reply<()>),
+    Enable(RootId, bool, Reply<LibraryRoot>),
+    Remove(RootId, Reply<()>),
     DeleteMissing(Reply<u64>),
     Start(Reply<()>),
     Cancel(Reply<()>),
@@ -91,13 +92,13 @@ impl LibrarySync {
 
     pub fn set_root_enabled(
         &self,
-        id: String,
+        id: RootId,
         enabled: bool,
     ) -> Result<LibraryRoot, LibraryCommandError> {
         self.call(|reply| Command::Enable(id, enabled, reply))
     }
 
-    pub fn remove_root(&self, id: String) -> Result<(), LibraryCommandError> {
+    pub fn remove_root(&self, id: RootId) -> Result<(), LibraryCommandError> {
         self.call(|reply| Command::Remove(id, reply))
     }
 
@@ -139,7 +140,7 @@ struct Actor {
     messages: Sender<Message>,
     cancel: Arc<AtomicBool>,
     state: State,
-    watchers: HashMap<RootId, RecommendedWatcher>,
+    watchers: HashMap<RootNumber, RecommendedWatcher>,
     scanner: Option<JoinHandle<()>>,
     /// Inputs the actor's own effects produced, processed before it waits again.
     queue: VecDeque<Input>,
@@ -150,7 +151,7 @@ impl Actor {
         let enabled = self
             .enabled_roots_or_log()
             .iter()
-            .filter_map(root_id)
+            .map(root_number)
             .collect();
         self.feed(Input::Started { enabled });
         loop {
@@ -213,15 +214,15 @@ impl Actor {
         match command {
             Command::Register(path, reply) => {
                 let result = self.while_idle(|actor| roots::register(&actor.database, &path));
-                if let Some(id) = result.as_ref().ok().and_then(root_id) {
+                if let Some(id) = result.as_ref().ok().map(root_number) {
                     self.feed(Input::Registered(id));
                 }
                 let _ = reply.send(result);
             }
             Command::Enable(id, enabled, reply) => {
                 let result =
-                    self.while_idle(|actor| roots::set_enabled(&actor.database, &id, enabled));
-                if let Some(id) = result.as_ref().ok().and_then(root_id) {
+                    self.while_idle(|actor| roots::set_enabled(&actor.database, id, enabled));
+                if let Some(id) = result.as_ref().ok().map(root_number) {
                     self.feed(if enabled {
                         Input::Enabled(id)
                     } else {
@@ -231,11 +232,9 @@ impl Actor {
                 let _ = reply.send(result);
             }
             Command::Remove(id, reply) => {
-                let result = self.while_idle(|actor| roots::remove(&actor.database, &id));
-                if result.is_ok()
-                    && let Ok(id) = parse_id(&id)
-                {
-                    self.feed(Input::Removed(id));
+                let result = self.while_idle(|actor| roots::remove(&actor.database, id));
+                if result.is_ok() {
+                    self.feed(Input::Removed(id.rowid()));
                 }
                 let _ = reply.send(result);
             }
@@ -254,7 +253,7 @@ impl Actor {
                         if roots.is_empty() {
                             Err(LibraryCommandError::NoEnabledRoots)
                         } else {
-                            Ok(roots.iter().filter_map(root_id).collect())
+                            Ok(roots.iter().map(root_number).collect())
                         }
                     })
                 };
@@ -306,7 +305,7 @@ impl Actor {
             .enabled_roots_or_log()
             .into_iter()
             .filter_map(|root| {
-                let id = root_id(&root)?;
+                let id = root_number(&root);
                 let target = targets.iter().find(|target| target.root == id)?;
                 Some(scanner::ScanJob {
                     root,
@@ -357,11 +356,11 @@ impl Actor {
         }
     }
 
-    fn attach(&mut self, id: RootId) {
+    fn attach(&mut self, id: RootNumber) {
         let path = self
             .enabled_roots_or_log()
             .into_iter()
-            .find(|root| root_id(root) == Some(id))
+            .find(|root| root_number(root) == id)
             .map(|root| root.path);
         let messages = self.messages.clone();
         let attached = path.and_then(|path| {
@@ -436,8 +435,8 @@ impl Drop for ScanEnding {
     }
 }
 
-fn root_id(root: &LibraryRoot) -> Option<RootId> {
-    parse_id(&root.id).ok()
+fn root_number(root: &LibraryRoot) -> RootNumber {
+    root.id.rowid()
 }
 
 #[cfg(test)]

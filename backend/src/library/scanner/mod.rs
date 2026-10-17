@@ -21,7 +21,6 @@ use std::time::{Duration, Instant};
 use log::{error, info};
 
 use super::database::Database;
-use super::error::parse_id;
 use super::models::{LibraryRoot, LibraryScanSnapshot, LibraryScanState, ScanFailure};
 use crate::messages::{Notifier, Versioned};
 use discover::{DiscoveredFile, Discovery, discover, relative_dir, scope};
@@ -156,7 +155,7 @@ fn expected_files(database: &Database, jobs: &[ScanJob]) -> u64 {
     };
     jobs.iter()
         .filter(|job| job.dirs.is_none())
-        .filter_map(|job| parse_id(&job.root.id).ok())
+        .map(|job| job.root.id.rowid())
         .filter_map(|id| {
             connection
                 .query_row(
@@ -178,7 +177,7 @@ fn scan_root(
     progress: &mut Progress<'_>,
 ) -> Result<bool, Stop> {
     let root = &job.root;
-    let root_id = parse_id(&root.id).map_err(|_| Stop::Persistence)?;
+    let root_id = root.id.rowid();
     let reader = database.read().map_err(PersistError::from)?;
     let mut writer = LibraryWriter::new(database.write().map_err(PersistError::from)?);
     let generation = writer.begin_scan(root_id)?;

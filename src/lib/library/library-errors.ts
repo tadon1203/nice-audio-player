@@ -15,7 +15,6 @@ const commandMessages = {
   rootContainsDataDirectory:
     "That folder contains the app's own data, so it cannot be a library folder.",
   scanInProgress: "Library folders cannot be changed while a scan is running.",
-  invalidId: "That item reference is invalid.",
   trackNotFound: "That track could not be found.",
   trackUnavailable: "That track is unavailable on disk.",
   albumNotFound: "That album could not be found.",

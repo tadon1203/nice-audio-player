@@ -102,7 +102,7 @@ fn tracks_page_through_every_sort_and_direction_with_unknown_values_last() {
                 );
                 (page.items, page.next_cursor)
             });
-            let ids: HashSet<_> = tracks.iter().map(|track| track.id.clone()).collect();
+            let ids: HashSet<_> = tracks.iter().map(|track| track.id).collect();
             assert_eq!(
                 (tracks.len(), ids.len()),
                 (330, 330),
@@ -268,15 +268,15 @@ fn a_write_between_two_pages_neither_repeats_nor_skips_a_track() {
         .items
         .iter()
         .chain(&rest)
-        .map(|track| track.id.clone())
+        .map(|track| track.id)
         .collect();
     assert_eq!(seen.len(), first.items.len() + rest.len(), "no track twice");
     assert!(
-        !seen.contains("1000"),
+        !seen.contains(&track_id_of(1000)),
         "inserted before the cursor, so not in the pages after it"
     );
     assert!(
-        seen.contains("1001"),
+        seen.contains(&track_id_of(1001)),
         "inserted after the cursor, so reached"
     );
     assert!(

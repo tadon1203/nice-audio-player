@@ -48,8 +48,8 @@ export const commands = {
 	resetLibraryAndRescan: () => __TAURI_INVOKE<null>("reset_library_and_rescan"),
 	listLibraryRoots: () => __TAURI_INVOKE<LibraryRoot[]>("list_library_roots"),
 	registerLibraryRoot: (path: string) => __TAURI_INVOKE<LibraryRoot>("register_library_root", { path }),
-	setLibraryRootEnabled: (id: string, enabled: boolean) => __TAURI_INVOKE<LibraryRoot>("set_library_root_enabled", { id, enabled }),
-	removeLibraryRoot: (id: string) => __TAURI_INVOKE<null>("remove_library_root", { id }),
+	setLibraryRootEnabled: (id: RootId, enabled: boolean) => __TAURI_INVOKE<LibraryRoot>("set_library_root_enabled", { id, enabled }),
+	removeLibraryRoot: (id: RootId) => __TAURI_INVOKE<null>("remove_library_root", { id }),
 	/**
 	 *  Deletes the Missing tracks from the Library and returns how many there were. Never touches a
 	 *  source file.
@@ -70,8 +70,8 @@ export const commands = {
 	listLibraryArtistAlbums: (artistKey: LibraryAlbumArtistKey, cursor: string | null, sortKey: LibraryArtistAlbumSortKey, sortDirection: LibrarySortDirection) => __TAURI_INVOKE<LibraryAlbumPage>("list_library_artist_albums", { artistKey, cursor, sortKey, sortDirection }),
 	getLibraryAlbumDetails: (albumKey: LibraryAlbumKey) => __TAURI_INVOKE<LibraryAlbumDetails>("get_library_album_details", { albumKey }),
 	listLibraryAlbumTracks: (albumKey: LibraryAlbumKey, cursor: string | null) => __TAURI_INVOKE<LibraryAlbumTrackPage>("list_library_album_tracks", { albumKey, cursor }),
-	getLibraryTrackProperties: (trackId: string) => __TAURI_INVOKE<{
-	id: string,
+	getLibraryTrackProperties: (trackId: TrackId) => __TAURI_INVOKE<{
+	id: TrackId,
 	path: string,
 	fileName: string,
 	title: string | null,
@@ -93,9 +93,9 @@ export const commands = {
 	bitrateKbps: number | null,
 } | null>("get_library_track_properties", { trackId }),
 	/**  Shows the track's file in Explorer, selected. */
-	revealLibraryTrack: (trackId: string) => __TAURI_INVOKE<null>("reveal_library_track", { trackId }),
+	revealLibraryTrack: (trackId: TrackId) => __TAURI_INVOKE<null>("reveal_library_track", { trackId }),
 	getArtworkAccent: (hash: ArtworkHash) => __TAURI_INVOKE<string | null>("get_artwork_accent", { hash }),
-	getTrackLyrics: (trackId: string) => __TAURI_INVOKE<LyricsResolution>("get_track_lyrics", { trackId }),
+	getTrackLyrics: (trackId: TrackId) => __TAURI_INVOKE<LyricsResolution>("get_track_lyrics", { trackId }),
 	/**
 	 *  Starts streaming Meter frames to `frames` as binary messages (see `FRAME_BYTES` in the
 	 *  backend's `meter` module for the layout), replacing any earlier subscription the way `connect`
@@ -241,7 +241,7 @@ export type LibraryAlbumDetails = {
 	date: string | null,
 	trackCount: number,
 	durationMs: number | null,
-	firstPlayableTrackId: string | null,
+	firstPlayableTrackId: TrackId | null,
 };
 
 export type LibraryAlbumKey = {
@@ -277,7 +277,7 @@ export type LibraryAlbumTrackPage = {
 };
 
 export type LibraryAlbumTrackSummary = {
-	id: string,
+	id: TrackId,
 	title: string,
 	artist: string | null,
 	trackNumber: number | null,
@@ -294,7 +294,7 @@ export type LibraryArtistAlbumSortKey = "year" | "title";
 
 export type LibraryCommandError = { code: "invalidRoot" } | { code: "rootNotDirectory" } | { code: "canonicalizationFailed" } | { code: "duplicateRoot" } | { code: "overlappingRoot" } | 
 /**  The folder holds the app's own data directory, which a scan would read as music. */
-{ code: "rootContainsDataDirectory" } | { code: "scanInProgress" } | { code: "invalidId" } | { code: "trackNotFound" } | { code: "trackUnavailable" } | { code: "albumNotFound" } | { code: "invalidCursor" } | { code: "invalidAlbumKey" } | { code: "invalidAlbumArtistKey" } | { code: "albumArtistNotFound" } | { code: "rootMissing" } | { code: "scanAlreadyRunning" } | { code: "noEnabledRoots" } | { code: "scanNotRunning" } | { code: "libraryUnavailable" } | { code: "persistenceFailed" } | { code: "taskFailed" };
+{ code: "rootContainsDataDirectory" } | { code: "scanInProgress" } | { code: "trackNotFound" } | { code: "trackUnavailable" } | { code: "albumNotFound" } | { code: "invalidCursor" } | { code: "invalidAlbumKey" } | { code: "invalidAlbumArtistKey" } | { code: "albumArtistNotFound" } | { code: "rootMissing" } | { code: "scanAlreadyRunning" } | { code: "noEnabledRoots" } | { code: "scanNotRunning" } | { code: "libraryUnavailable" } | { code: "persistenceFailed" } | { code: "taskFailed" };
 
 export type LibraryFileAvailability = "available" | "missing";
 
@@ -308,7 +308,7 @@ export type LibraryIndexBucket = {
 };
 
 export type LibraryRoot = {
-	id: string,
+	id: RootId,
 	path: string,
 	enabled: boolean,
 	scanGeneration: number,
@@ -360,7 +360,7 @@ export type LibraryTrackPage = {
 
 /**  The tags, audio format and location of one track, as the Properties view lists them. */
 export type LibraryTrackProperties = {
-	id: string,
+	id: TrackId,
 	path: string,
 	fileName: string,
 	title: string | null,
@@ -385,7 +385,7 @@ export type LibraryTrackProperties = {
 export type LibraryTrackSortKey = "title" | "artist" | "album" | "duration";
 
 export type LibraryTrackSummary = {
-	id: string,
+	id: TrackId,
 	title: string,
 	artist: string | null,
 	album: string | null,
@@ -403,7 +403,7 @@ export type LibraryTrackSummary = {
 
 export type LibraryUnavailableReason = "databaseOpenFailed" | "migrationFailed" | "schemaTooNew" | "databaseCorrupt";
 
-export type LyricsCommandError = { code: "invalidId" } | { code: "trackNotFound" } | { code: "trackUnavailable" } | { code: "libraryUnavailable" } | { code: "persistenceFailed" } | { code: "taskFailed" };
+export type LyricsCommandError = { code: "trackNotFound" } | { code: "trackUnavailable" } | { code: "libraryUnavailable" } | { code: "persistenceFailed" } | { code: "taskFailed" };
 
 export type LyricsContent = { kind: "plain"; lines: string[] } | { kind: "timed"; lines: LyricsTimedLine[] };
 
@@ -413,7 +413,7 @@ export type LyricsDocument = {
 	content: LyricsContent,
 };
 
-export type LyricsResolution = { status: "resolved"; trackId: string; document: LyricsDocument; notice: LyricsResolutionNotice | null } | { status: "notFound"; trackId: string } | { status: "sourceFailed"; trackId: string; 
+export type LyricsResolution = { status: "resolved"; trackId: TrackId; document: LyricsDocument; notice: LyricsResolutionNotice | null } | { status: "notFound"; trackId: TrackId } | { status: "sourceFailed"; trackId: TrackId; 
 /**  The name of the sidecar file the track looks for, without its folder. */
 sidecarFileName: string };
 
@@ -548,6 +548,9 @@ export type PlaybackWaveform = {
 	rms: number[],
 };
 
+/**  A library root: the `library_roots` rowid. Above zero. On the IPC a decimal string. */
+export type RootId = string;
+
 /**  Why a scan stopped without finishing. */
 export type ScanFailure = "persistenceFailed" | "rootTraversalFailed" | 
 /**  The scan thread died unexpectedly. */
@@ -576,6 +579,9 @@ export type StateMessage = {
 
 /**  The whole value of one state topic. */
 export type StateValue = { topic: "playback"; value: PlaybackSnapshot } | { topic: "queue"; value: PlaybackQueueSnapshot } | { topic: "libraryScan"; value: LibraryScanSnapshot } | { topic: "waveform"; value: PlaybackWaveform | null } | { topic: "appearance"; value: Appearance };
+
+/**  A track: the `tracks` rowid. Above zero. On the IPC a decimal string. */
+export type TrackId = string;
 
 /**  A value with the revision of its topic. Revisions only grow, per topic. */
 export type Versioned<T> = {

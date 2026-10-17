@@ -1,3 +1,4 @@
+use crate::ids::{RootId, TrackId};
 use serde::Deserialize;
 use serde::Serialize;
 #[derive(Debug, Clone, Serialize, specta::Type)]
@@ -17,7 +18,7 @@ pub enum LibraryStatus {
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LibraryRoot {
-    pub id: String,
+    pub id: RootId,
     pub path: String,
     pub enabled: bool,
     pub scan_generation: u64,
@@ -71,7 +72,7 @@ pub use super::artwork::ArtworkRef;
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LibraryTrackSummary {
-    pub id: String,
+    pub id: TrackId,
     pub title: String,
     pub artist: Option<String>,
     pub album: Option<String>,
@@ -90,7 +91,7 @@ pub struct LibraryTrackSummary {
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LibraryTrackProperties {
-    pub id: String,
+    pub id: TrackId,
     pub path: String,
     pub file_name: String,
     pub title: Option<String>,
@@ -180,12 +181,12 @@ pub struct LibraryAlbumDetails {
     pub date: Option<String>,
     pub track_count: u64,
     pub duration_ms: Option<u64>,
-    pub first_playable_track_id: Option<String>,
+    pub first_playable_track_id: Option<TrackId>,
 }
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LibraryAlbumTrackSummary {
-    pub id: String,
+    pub id: TrackId,
     pub title: String,
     pub artist: Option<String>,
     pub track_number: Option<u32>,

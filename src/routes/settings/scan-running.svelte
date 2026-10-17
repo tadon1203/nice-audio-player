@@ -2,7 +2,7 @@
   import type { LibraryScanSnapshot } from "#lib/native";
   import RollingNumber from "#lib/ui/rolling-number/rolling-number.svelte";
   import { Progress } from "#lib/ui/shadcn/progress/index.js";
-  import { formatNumber } from "#lib/utils/format";
+  import { CountFormat } from "#lib/utils/count-format";
   import { scanShare } from "./scan-status";
 
   /** The running scan's counters, progress bar and current folder. */
@@ -23,7 +23,7 @@
     {#each counts as count (count.label)}
       <!-- A running scan's counter: the number rolls as files are found, inspected and indexed. -->
       <span class="tabular-nums">
-        <RollingNumber value={formatNumber(count.value)} />
+        <RollingNumber value={CountFormat.number(count.value)} />
         {count.label}
       </span>
     {/each}

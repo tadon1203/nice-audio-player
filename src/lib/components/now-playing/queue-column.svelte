@@ -11,7 +11,7 @@
   import { flipMotion } from "#lib/ui/motion/svelte-flip";
   import Artwork from "#lib/ui/artwork.svelte";
   import { cn } from "#lib/utils/cn.js";
-  import { formatDuration } from "#lib/utils/format";
+  import { DurationFormat } from "#lib/utils/duration-format";
   import { EDGE_MASK } from "./anchor-column";
   import { createAnchorPadding } from "./anchor-column.svelte";
   import { createAnchorFollow } from "./anchor-follow.svelte";
@@ -103,7 +103,7 @@
               </span>
               <span class="flex gap-3 text-sm">
                 <span class="min-w-0 flex-1 truncate">{item.artist}</span>
-                <span class="shrink-0 tabular-nums">{formatDuration(item.durationMs)}</span>
+                <span class="shrink-0 tabular-nums">{DurationFormat.of(item.durationMs)}</span>
               </span>
             </span>
           </Button>
