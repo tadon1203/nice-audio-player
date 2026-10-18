@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { TrackId } from "#lib/native";
+  import { LibraryErrors } from "#lib/library/library-errors";
   import { QueryResult } from "#lib/library/query-result.svelte";
   import { AppServices } from "#lib/shell/app-services.svelte";
   import { Button } from "#lib/ui/shadcn/button/index.js";
@@ -107,8 +108,8 @@
             </span>
           </dd>
         </dl>
-      {:else if !query.isPending}
-        <p class="text-sm text-muted-foreground">This track is no longer in the library.</p>
+      {:else if query.error}
+        <p class="text-sm text-muted-foreground">{LibraryErrors.commandMessage(query.error)}</p>
       {/if}
     </div>
   </SheetContent>

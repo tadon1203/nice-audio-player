@@ -111,7 +111,9 @@ fn an_unusable_output_is_rejected() {
         harness.select_output(AudioOutputSelection::Device {
             device_id: "unplugged".into()
         }),
-        Err(PlaybackServiceError::OutputDeviceUnavailable)
+        Err(PlaybackServiceError::from(
+            PlaybackFailureCode::OutputDeviceUnavailable,
+        ))
     );
 }
 

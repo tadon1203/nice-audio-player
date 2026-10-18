@@ -9,7 +9,7 @@ mod playback;
 mod tests;
 mod track;
 
-pub use playback::{PlayableTrack, PlaybackSelection, PlaybackSourceError};
+pub use playback::{PlayableTrack, PlaybackLookupError, PlaybackSelection, PlaybackSourceError};
 
 use super::{
     database::{Database, ReadConnection},

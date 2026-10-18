@@ -1,11 +1,13 @@
 import { testAlbum } from "./fixtures/data";
 import { expect, test } from "./fixtures/test";
 
+const persistenceFailure = { code: "common", error: { code: "persistenceFailed" } } as const;
+
 test("shows playback initialization failure instead of remaining loading", async ({
   page,
   native,
 }) => {
-  native.fail("connect", "noOutputDevice");
+  native.fail("connect", { code: "noOutputDevice" });
   await page.goto("/library/albums");
 
   const dock = page.getByRole("contentinfo", { name: "Playback controls" });
@@ -22,7 +24,7 @@ test("does not present an album track query failure as an empty album", async ({
   page,
   native,
 }) => {
-  native.fail("listLibraryAlbumTracks", "persistenceFailed");
+  native.fail("listLibraryAlbumTracks", persistenceFailure);
   await page.goto("/library/albums");
   await page.getByRole("link", { name: "Open album Test album by Test artist" }).click();
 
@@ -34,7 +36,7 @@ test("does not present an artist album query failure as an empty artist", async 
   page,
   native,
 }) => {
-  native.fail("listLibraryArtistAlbums", "persistenceFailed");
+  native.fail("listLibraryArtistAlbums", persistenceFailure);
   await page.goto("/library/album-artists");
   await page.getByRole("link", { name: "Browse albums by Test artist" }).click();
 
@@ -43,7 +45,7 @@ test("does not present an artist album query failure as an empty artist", async 
 });
 
 test("shows an album summary query failure in the album workspace", async ({ page, native }) => {
-  native.fail("getLibraryAlbum", "persistenceFailed");
+  native.fail("getLibraryAlbum", persistenceFailure);
   await page.goto(`/library/albums/${testAlbum.id}`);
 
   await expect(page.getByRole("alert")).toContainText("The library database could not be updated.");
@@ -51,11 +53,31 @@ test("shows an album summary query failure in the album workspace", async ({ pag
 });
 
 test("shows an artist summary query failure in the artist workspace", async ({ page, native }) => {
-  native.fail("getLibraryArtist", "persistenceFailed");
+  native.fail("getLibraryArtist", persistenceFailure);
   await page.goto(`/library/album-artists/${testAlbum.albumArtist.id}`);
 
   await expect(page.getByRole("alert")).toContainText("The library database could not be updated.");
   await expect(page.getByText("No albums were indexed for this artist.")).toHaveCount(0);
+});
+
+test("the properties sheet says a track the library does not hold is not found", async ({
+  page,
+  native,
+}) => {
+  native.fail("getLibraryTrackProperties", {
+    code: "common",
+    error: { code: "trackNotFound" },
+  });
+  await page.goto("/library/tracks");
+  await page
+    .getByRole("table", { name: "Library tracks" })
+    .getByRole("row", { name: /Track 010/ })
+    .click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Properties" }).click();
+
+  await expect(page.getByRole("dialog", { name: "Properties" })).toContainText(
+    "That track could not be found.",
+  );
 });
 
 test("shows the structured library unavailable reason", async ({ page, native }) => {

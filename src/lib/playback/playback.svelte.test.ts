@@ -614,7 +614,7 @@ describe("starting playback", () => {
     const playback = new Playback(
       fakeClient({
         start: async () => {
-          throw new PlaybackError({ code: "trackUnavailable" });
+          throw new PlaybackError({ code: "common", error: { code: "trackUnavailable" } });
         },
       }),
       quietClock(),
@@ -622,7 +622,7 @@ describe("starting playback", () => {
     load(playback, stopped(1, null), queue(1));
 
     await expect(playback.start(albumContext, 1)).rejects.toMatchObject({
-      code: "trackUnavailable",
+      code: "common",
     });
   });
 });
@@ -736,14 +736,17 @@ describe("transition direction", () => {
     const playback = new Playback(
       fakeClient({
         previous: async () => {
-          throw { code: "trackUnavailable" };
+          throw { code: "common", error: { code: "trackUnavailable" } };
         },
       }),
       quietClock(),
     );
     load(playback, playing(1, 2, 0), queue(1));
 
-    await expect(playback.previous()).rejects.toEqual({ code: "trackUnavailable" });
+    await expect(playback.previous()).rejects.toEqual({
+      code: "common",
+      error: { code: "trackUnavailable" },
+    });
     playback.acceptPlayback(playing(2, 3, 0));
     expect(playback.transitionDirection).toBe("forward");
   });

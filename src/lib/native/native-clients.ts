@@ -101,7 +101,7 @@ export interface LibraryClient {
   albumTracksById(albumId: AlbumId, cursor: string | null): Promise<LibraryAlbumTrackPage>;
   artist(artistId: ArtistId): Promise<LibraryAlbumArtistSummary>;
   artistAlbums(request: ArtistAlbumsRequest): Promise<LibraryAlbumPage>;
-  trackProperties(trackId: TrackId): Promise<LibraryTrackProperties | null>;
+  trackProperties(trackId: TrackId): Promise<LibraryTrackProperties>;
   revealTrack(trackId: TrackId): Promise<void>;
   artworkAccent(hash: ArtworkHash): Promise<string | null>;
 }

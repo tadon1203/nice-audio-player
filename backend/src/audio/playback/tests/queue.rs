@@ -285,7 +285,12 @@ fn when_every_track_has_left_the_library_the_start_is_refused() {
         reply,
     });
 
-    assert_eq!(result, Err(PlaybackServiceError::TrackUnavailable));
+    assert_eq!(
+        result,
+        Err(PlaybackServiceError::Common {
+            error: CommonError::TrackUnavailable,
+        })
+    );
     assert!(harness.queue_snapshot().current.is_none());
 }
 

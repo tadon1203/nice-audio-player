@@ -14,6 +14,7 @@ use super::{
     models::{LibraryRoot, LibraryScanSnapshot, LibraryScanState},
     roots, scanner, watcher,
 };
+use crate::errors::CommonError;
 use crate::ids::RootId;
 use crate::messages::{Notifier, Versioned};
 use log::{error, info, warn};
@@ -80,10 +81,13 @@ impl LibrarySync {
 
     fn call<T>(&self, command: impl FnOnce(Reply<T>) -> Command) -> Result<T, LibraryCommandError> {
         let (reply, answer) = mpsc::sync_channel(1);
+        let task_failed = || LibraryCommandError::Common {
+            error: CommonError::TaskFailed,
+        };
         self.messages
             .send(Message::Command(command(reply)))
-            .map_err(|_| LibraryCommandError::TaskFailed)?;
-        answer.recv().map_err(|_| LibraryCommandError::TaskFailed)?
+            .map_err(|_| task_failed())?;
+        answer.recv().map_err(|_| task_failed())?
     }
 
     pub fn register_root(&self, path: String) -> Result<LibraryRoot, LibraryCommandError> {

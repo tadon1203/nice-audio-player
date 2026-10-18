@@ -39,6 +39,7 @@ use crate::audio::output::{
 use crate::audio::timebase::millis_to_frame;
 use crate::audio::volume::{AtomicEffectiveGain, VolumeState};
 use crate::audio::waveform::PrefetchObserver;
+use crate::errors::CommonError;
 use crate::ids::{PlaybackId, QueueItemId, TrackId};
 use crate::messages::{Occurrence, SharedMessageSink, StateTopic, Versioned};
 use log::{error, info};
@@ -114,7 +115,6 @@ impl StartFailure {
     fn service_error(&self) -> PlaybackServiceError {
         match (self.phase, &self.code) {
             (StartFailurePhase::SourceWorker, _) => PlaybackServiceError::WorkerUnavailable,
-            (_, PlaybackFailureCode::DecodeFailed) => PlaybackServiceError::DecodeFailed,
             (_, code) => PlaybackServiceError::from(code.clone()),
         }
     }
@@ -499,7 +499,7 @@ fn resolution_error(error: DeviceResolutionError) -> PlaybackServiceError {
     match error {
         DeviceResolutionError::InvalidDeviceId => PlaybackServiceError::InvalidDeviceId,
         DeviceResolutionError::DeviceUnavailable | DeviceResolutionError::NoDefaultOutputDevice => {
-            PlaybackServiceError::OutputDeviceUnavailable
+            PlaybackServiceError::from(PlaybackFailureCode::OutputDeviceUnavailable)
         }
     }
 }

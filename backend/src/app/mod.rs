@@ -17,6 +17,7 @@ use crate::audio::{
     },
     waveform::{PlaybackWaveform, Waveform, WaveformService},
 };
+use crate::errors::CommonError;
 use crate::ids::{AlbumId, ArtistId, ArtworkHash, QueueItemId, RootId, TrackId};
 use crate::library::{
     Library,
@@ -199,7 +200,9 @@ impl BackendApp {
     pub fn request_library_reset(&self) -> Result<(), LibraryCommandError> {
         crate::library::database::request_reset(&self.data_dir).map_err(|cause| {
             log::error!("library.database.reset_request_failed cause={cause}");
-            LibraryCommandError::PersistenceFailed
+            LibraryCommandError::Common {
+                error: CommonError::PersistenceFailed,
+            }
         })
     }
 
@@ -328,7 +331,7 @@ impl BackendApp {
     pub fn track_properties(
         &self,
         track_id: TrackId,
-    ) -> Result<Option<LibraryTrackProperties>, LibraryCommandError> {
+    ) -> Result<LibraryTrackProperties, LibraryCommandError> {
         Ok(self.library()?.store().track_properties(track_id)?)
     }
 
@@ -357,14 +360,18 @@ impl BackendApp {
         let library = self
             .library
             .as_ref()
-            .map_err(|_| LyricsCommandError::LibraryUnavailable)?;
+            .map_err(|_| LyricsCommandError::Common {
+                error: CommonError::LibraryUnavailable,
+            })?;
         // The Library says where the file is; lyrics reads what is beside and inside it.
         let file = library
             .store()
             .track_location(track_id)
             .map_err(map_lyrics_context_error)?
             .existing()
-            .map_err(|_| LyricsCommandError::TrackUnavailable)?;
+            .map_err(|_| LyricsCommandError::Common {
+                error: CommonError::TrackUnavailable,
+            })?;
         Ok(self.lyrics.resolve(LyricsTrackContext {
             track_id,
             source: file.path,
@@ -546,13 +553,17 @@ impl BackendApp {
     fn library(&self) -> Result<&Library, LibraryCommandError> {
         self.library
             .as_ref()
-            .map_err(|_| LibraryCommandError::LibraryUnavailable)
+            .map_err(|_| LibraryCommandError::Common {
+                error: CommonError::LibraryUnavailable,
+            })
     }
 
     fn playback_library(&self) -> Result<&Library, PlaybackServiceError> {
         self.library
             .as_ref()
-            .map_err(|_| PlaybackServiceError::LibraryUnavailable)
+            .map_err(|_| PlaybackServiceError::Common {
+                error: CommonError::LibraryUnavailable,
+            })
     }
 
     fn library_scan(&self) -> Versioned<crate::library::models::LibraryScanSnapshot> {
@@ -606,9 +617,7 @@ fn state(revision: u64, value: StateValue) -> BackendMessage {
 }
 
 fn map_lyrics_context_error(error: StoreError) -> LyricsCommandError {
-    match error {
-        StoreError::TrackNotFound => LyricsCommandError::TrackNotFound,
-        StoreError::TrackUnavailable => LyricsCommandError::TrackUnavailable,
-        _ => LyricsCommandError::PersistenceFailed,
+    LyricsCommandError::Common {
+        error: error.into(),
     }
 }

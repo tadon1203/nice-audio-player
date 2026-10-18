@@ -21,8 +21,9 @@ use crate::audio::meter::MeterHub;
 use crate::audio::output::OutputBackend;
 use crate::audio::volume::{AtomicEffectiveGain, VolumeState};
 use crate::audio::waveform::PrefetchObserver;
+use crate::errors::CommonError;
 use crate::ids::{QueueItemId, TrackId};
-use crate::library::store::PlaybackSourceError;
+use crate::library::store::{PlaybackLookupError, PlaybackSourceError};
 use crate::messages::{SharedMessageSink, Versioned};
 use crate::tasks::TaskError;
 use log::error;
@@ -30,9 +31,23 @@ use log::error;
 /// Why a playback request failed: the one error vocabulary for every command that plays or
 /// queues, serialized as `{ "code": "<camelCase>" }`.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, specta::Type)]
-#[serde(tag = "code", rename_all = "camelCase")]
+#[serde(
+    tag = "code",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub enum PlaybackServiceError {
-    InvalidArgument,
+    Common {
+        error: CommonError,
+    },
+    /// The output or the decoder failed.
+    Output {
+        failure: PlaybackFailureCode,
+    },
+    /// The Library could not give the tracks to play.
+    Source {
+        error: PlaybackSourceError,
+    },
     WorkerUnavailable,
     /// A newer request replaced this one before it finished; the caller should not report it.
     Superseded,
@@ -43,66 +58,28 @@ pub enum PlaybackServiceError {
     InvalidPlaybackState,
     DurationUnavailable,
     SeekFailed,
-    DecodeFailed,
-    NoOutputDevice,
-    OutputDeviceUnavailable,
-    UnsupportedOutputConfiguration,
-    OutputStreamBuildFailed,
-    OutputStreamStartFailed,
-    OutputStreamPauseFailed,
-    OutputStreamResumeFailed,
-    OutputStreamRuntimeFailed,
-    CompletionTimingFailed,
-    SampleRateConversionFailed,
-    // Resolving what to play from the library.
-    InvalidTrackId,
-    AlbumNotFound,
-    TrackNotMember,
-    TrackUnavailable,
-    TrackNotPlayable,
-    NoPlayableTracks,
-    LibraryUnavailable,
-    PersistenceFailed,
-    TaskFailed,
 }
 
 impl From<PlaybackFailureCode> for PlaybackServiceError {
-    fn from(code: PlaybackFailureCode) -> Self {
-        match code {
-            PlaybackFailureCode::NoOutputDevice => Self::NoOutputDevice,
-            PlaybackFailureCode::OutputDeviceUnavailable => Self::OutputDeviceUnavailable,
-            PlaybackFailureCode::UnsupportedOutputConfiguration => {
-                Self::UnsupportedOutputConfiguration
-            }
-            PlaybackFailureCode::OutputStreamBuildFailed => Self::OutputStreamBuildFailed,
-            PlaybackFailureCode::OutputStreamStartFailed => Self::OutputStreamStartFailed,
-            PlaybackFailureCode::OutputStreamPauseFailed => Self::OutputStreamPauseFailed,
-            PlaybackFailureCode::OutputStreamResumeFailed => Self::OutputStreamResumeFailed,
-            PlaybackFailureCode::OutputStreamRuntimeFailed => Self::OutputStreamRuntimeFailed,
-            PlaybackFailureCode::CompletionTimingFailed => Self::CompletionTimingFailed,
-            PlaybackFailureCode::DecodeFailed => Self::DecodeFailed,
-            PlaybackFailureCode::SampleRateConversionFailed => Self::SampleRateConversionFailed,
-        }
+    fn from(failure: PlaybackFailureCode) -> Self {
+        Self::Output { failure }
     }
 }
 
-impl From<PlaybackSourceError> for PlaybackServiceError {
-    fn from(error: PlaybackSourceError) -> Self {
+impl From<PlaybackLookupError> for PlaybackServiceError {
+    fn from(error: PlaybackLookupError) -> Self {
         match error {
-            PlaybackSourceError::InvalidTrackId => Self::InvalidTrackId,
-            PlaybackSourceError::AlbumNotFound => Self::AlbumNotFound,
-            PlaybackSourceError::TrackNotMember => Self::TrackNotMember,
-            PlaybackSourceError::TrackUnavailable => Self::TrackUnavailable,
-            PlaybackSourceError::TrackNotPlayable => Self::TrackNotPlayable,
-            PlaybackSourceError::NoPlayableTracks => Self::NoPlayableTracks,
-            PlaybackSourceError::PersistenceFailed => Self::PersistenceFailed,
+            PlaybackLookupError::Common(error) => Self::Common { error },
+            PlaybackLookupError::Source(error) => Self::Source { error },
         }
     }
 }
 
 impl TaskError for PlaybackServiceError {
     fn task_failed() -> Self {
-        Self::TaskFailed
+        Self::Common {
+            error: CommonError::TaskFailed,
+        }
     }
 }
 

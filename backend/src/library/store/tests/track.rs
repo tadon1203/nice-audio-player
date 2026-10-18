@@ -135,11 +135,7 @@ fn a_track_is_playable_missing_or_unsupported_by_its_file_alone() {
     assert_eq!(state_of(3), TrackState::Unsupported);
 
     assert_eq!(
-        store
-            .track_properties(track_id_of(2))
-            .unwrap()
-            .unwrap()
-            .state,
+        store.track_properties(track_id_of(2)).unwrap().state,
         TrackState::Missing,
         "the Properties view says the same"
     );
@@ -159,17 +155,13 @@ fn track_properties_list_the_tags_and_the_files_path() {
     let properties = fixture
         .store
         .track_properties(track_id_of(1))
-        .unwrap()
         .expect("properties");
 
     assert_eq!(properties.title.as_deref(), Some("Song"));
     assert_eq!(properties.date.as_deref(), Some("2001-02-03"));
     assert!(properties.path.ends_with("1.wav") && properties.path.contains("music"));
-    assert!(
-        fixture
-            .store
-            .track_properties(track_id_of(99))
-            .unwrap()
-            .is_none()
+    assert_eq!(
+        fixture.store.track_properties(track_id_of(99)).err(),
+        Some(StoreError::TrackNotFound)
     );
 }

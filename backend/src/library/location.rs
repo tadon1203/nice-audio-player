@@ -3,6 +3,7 @@
 //! inside its root.
 
 use super::error::{LibraryCommandError, StoreError};
+use crate::errors::CommonError;
 use std::path::{Component, PathBuf};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -30,7 +31,9 @@ impl From<Unavailable> for StoreError {
 
 impl From<Unavailable> for LibraryCommandError {
     fn from(_: Unavailable) -> Self {
-        Self::TrackUnavailable
+        Self::Common {
+            error: CommonError::TrackUnavailable,
+        }
     }
 }
 

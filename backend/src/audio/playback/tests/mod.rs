@@ -32,6 +32,7 @@ use crate::audio::playback::snapshot::{
 };
 use crate::audio::playback::worker::{PlaybackWorker, WorkerLinks};
 use crate::audio::volume::{AtomicEffectiveGain, VolumeState};
+use crate::errors::CommonError;
 use crate::ids::TrackId;
 use crate::library::store::PlayableTrack;
 use crate::media::validation::ValidatedAudioFile;

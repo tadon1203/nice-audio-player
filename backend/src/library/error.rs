@@ -3,11 +3,19 @@
 //! `LibraryCommandError`, whose codes carry no implementation detail.
 
 use super::database::DatabaseError;
+use crate::errors::CommonError;
 use log::error;
 
 #[derive(Debug, Clone, serde::Serialize, specta::Type)]
-#[serde(tag = "code", rename_all = "camelCase")]
+#[serde(
+    tag = "code",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub enum LibraryCommandError {
+    Common {
+        error: CommonError,
+    },
     InvalidRoot,
     RootNotDirectory,
     CanonicalizationFailed,
@@ -16,8 +24,6 @@ pub enum LibraryCommandError {
     /// The folder holds the app's own data directory, which a scan would read as music.
     RootContainsDataDirectory,
     ScanInProgress,
-    TrackNotFound,
-    TrackUnavailable,
     AlbumNotFound,
     InvalidCursor,
     AlbumArtistNotFound,
@@ -25,9 +31,6 @@ pub enum LibraryCommandError {
     ScanAlreadyRunning,
     NoEnabledRoots,
     ScanNotRunning,
-    LibraryUnavailable,
-    PersistenceFailed,
-    TaskFailed,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -55,21 +58,44 @@ impl From<DatabaseError> for StoreError {
     }
 }
 
+/// The shared codes a store failure maps to. A failure that no shared code describes is reported as
+/// a persistence failure, which is how the lyrics and playback commands have always reported it.
+impl From<StoreError> for CommonError {
+    fn from(error: StoreError) -> Self {
+        match error {
+            StoreError::TrackNotFound => Self::TrackNotFound,
+            StoreError::TrackUnavailable => Self::TrackUnavailable,
+            StoreError::InvalidCursor
+            | StoreError::AlbumNotFound
+            | StoreError::AlbumArtistNotFound
+            | StoreError::Persistence => Self::PersistenceFailed,
+        }
+    }
+}
+
 impl From<StoreError> for LibraryCommandError {
     fn from(error: StoreError) -> Self {
         match error {
             StoreError::InvalidCursor => Self::InvalidCursor,
-            StoreError::TrackNotFound => Self::TrackNotFound,
-            StoreError::TrackUnavailable => Self::TrackUnavailable,
             StoreError::AlbumNotFound => Self::AlbumNotFound,
             StoreError::AlbumArtistNotFound => Self::AlbumArtistNotFound,
-            StoreError::Persistence => Self::PersistenceFailed,
+            StoreError::TrackNotFound => Self::Common {
+                error: CommonError::TrackNotFound,
+            },
+            StoreError::TrackUnavailable => Self::Common {
+                error: CommonError::TrackUnavailable,
+            },
+            StoreError::Persistence => Self::Common {
+                error: CommonError::PersistenceFailed,
+            },
         }
     }
 }
 
 impl crate::tasks::TaskError for LibraryCommandError {
     fn task_failed() -> Self {
-        Self::TaskFailed
+        Self::Common {
+            error: CommonError::TaskFailed,
+        }
     }
 }

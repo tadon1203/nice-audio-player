@@ -4,6 +4,7 @@ import {
   LibraryError,
   PlaybackError,
   SessionError,
+  commonErrorMessage,
 } from "#lib/native";
 import { messageForCode, nativeErrorCode } from "#lib/native";
 import { LibraryErrors } from "#lib/library/library-errors";
@@ -19,6 +20,8 @@ const generalMessage = "Something went wrong. Try again.";
 /** The message for a failure, picked by its error class. Unknown failures get the general message. */
 export class ErrorMessages {
   public static of(error: unknown): string {
+    const shared = commonErrorMessage(error);
+    if (shared !== null) return shared;
     if (error instanceof PlaybackError) return playbackErrorMessage(error);
     if (error instanceof AudioDevicesError) return audioDevicesMessages[error.code];
     if (error instanceof AppearanceError) return "The setting could not be saved.";

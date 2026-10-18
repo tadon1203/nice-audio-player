@@ -126,19 +126,12 @@ impl LibraryStore {
         ))
     }
 
-    /// Tags, audio format and the file's path, or `None` for an unknown track.
-    pub fn track_properties(
-        &self,
-        id: TrackId,
-    ) -> Result<Option<LibraryTrackProperties>, StoreError> {
-        let location = match self.track_location(id) {
-            Ok(location) => location,
-            Err(StoreError::TrackNotFound) => return Ok(None),
-            Err(error) => return Err(error),
-        };
+    /// Tags, audio format and the file's path, or `TrackNotFound` for an unknown track.
+    pub fn track_properties(&self, id: TrackId) -> Result<LibraryTrackProperties, StoreError> {
+        let location = self.track_location(id)?;
         let path = location.path()?.to_string_lossy().into_owned();
         let connection = self.read()?;
-        Ok(connection
+        connection
             .query_row(
                 "SELECT f.file_name, m.tag_title, m.tag_artist, m.tag_album, m.tag_album_artist,
                         m.track_number, m.track_total, m.disc_number, m.disc_total, m.genre, m.date,
@@ -182,6 +175,7 @@ impl LibraryStore {
                     })
                 },
             )
-            .optional()?)
+            .optional()?
+            .ok_or(StoreError::TrackNotFound)
     }
 }

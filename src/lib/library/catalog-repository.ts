@@ -147,23 +147,23 @@ export class CatalogRepository {
   }
 
   public trackPropertiesOptions(trackId: TrackId | null): CreateQueryOptions<
-    LibraryTrackProperties | null,
+    LibraryTrackProperties,
     Error,
-    LibraryTrackProperties | null,
+    LibraryTrackProperties,
     readonly unknown[]
   > & {
     initialData?:
       | LibraryTrackProperties
-      | InitialDataFunction<LibraryTrackProperties | null>
+      | InitialDataFunction<LibraryTrackProperties>
       | null
       | undefined;
-  } & QueryKeyWithDataTag<readonly unknown[], LibraryTrackProperties | null, Error> {
+  } & QueryKeyWithDataTag<readonly unknown[], LibraryTrackProperties, Error> {
     return queryOptions({
       queryKey: LibraryQueryKeys.trackProperties(trackId),
       queryFn:
         trackId === null
           ? skipToken
-          : (): Promise<LibraryTrackProperties | null> => this.#client.trackProperties(trackId),
+          : (): Promise<LibraryTrackProperties> => this.#client.trackProperties(trackId),
     });
   }
 

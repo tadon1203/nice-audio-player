@@ -221,9 +221,9 @@ export function libraryResponses(library: LibraryData = testLibrary()): Record<s
       channelCount: number;
       bitDepth: number | null;
       bitrateKbps: number | null;
-    } | null => {
+    } => {
       const track = library.tracks.find((entry) => entry.id === id);
-      if (track === undefined) return null;
+      if (track === undefined) throw { code: "common", error: { code: "trackNotFound" } };
       return {
         id,
         path: `C:/Music/${track.title}.flac`,

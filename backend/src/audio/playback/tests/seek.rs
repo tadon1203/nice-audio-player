@@ -160,7 +160,12 @@ fn a_seek_whose_decode_fails_keeps_the_session_and_its_stream() {
         pipeline: PipelineId(2),
     });
 
-    assert_eq!(seek.try_recv(), Ok(Err(PlaybackServiceError::DecodeFailed)));
+    assert_eq!(
+        seek.try_recv(),
+        Ok(Err(PlaybackServiceError::from(
+            PlaybackFailureCode::DecodeFailed
+        )))
+    );
     let snapshot = harness.snapshot();
     assert!(matches!(snapshot, PlaybackSnapshot::Playing { .. }));
     assert_eq!(

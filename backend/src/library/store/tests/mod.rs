@@ -2,10 +2,11 @@
 //! selections are resolved.
 
 use super::{
-    LibraryStore, PlaybackSourceError,
+    LibraryStore, PlaybackLookupError, PlaybackSourceError,
     catalog::{album_artists_query, albums_query, artist_albums_query, tracks_query},
     paging::PAGE_SIZE,
 };
+use crate::errors::CommonError;
 use crate::library::{
     database::Database,
     error::StoreError,

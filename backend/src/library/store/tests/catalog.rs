@@ -144,7 +144,9 @@ fn an_album_is_found_and_played_by_its_id() {
     );
     assert_eq!(
         store.playback_for_album_id(missing, None).err(),
-        Some(PlaybackSourceError::AlbumNotFound)
+        Some(PlaybackLookupError::Source(
+            PlaybackSourceError::AlbumNotFound
+        ))
     );
 }
 
@@ -169,7 +171,9 @@ fn an_album_is_playable_and_reported_missing_by_its_id() {
         store
             .playback_for_album_id(shared, Some(track_id_of(3)))
             .err(),
-        Some(PlaybackSourceError::TrackNotMember)
+        Some(PlaybackLookupError::Source(
+            PlaybackSourceError::TrackNotMember
+        ))
     );
 
     fixture.sql("UPDATE library_files SET availability='missing' WHERE id IN (1,2)");
@@ -177,11 +181,13 @@ fn an_album_is_playable_and_reported_missing_by_its_id() {
         store
             .playback_for_album_id(shared, Some(track_id_of(1)))
             .err(),
-        Some(PlaybackSourceError::TrackUnavailable)
+        Some(PlaybackLookupError::Common(CommonError::TrackUnavailable))
     );
     assert_eq!(
         store.playback_for_album_id(shared, None).err(),
-        Some(PlaybackSourceError::NoPlayableTracks)
+        Some(PlaybackLookupError::Source(
+            PlaybackSourceError::NoPlayablePlaybackTracks
+        ))
     );
 }
 

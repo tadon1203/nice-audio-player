@@ -8,6 +8,12 @@ describe("LibraryErrors.commandMessage", () => {
     );
   });
 
+  it("describes a shared failure nested under common", () => {
+    expect(LibraryErrors.commandMessage({ code: "common", error: { code: "trackNotFound" } })).toBe(
+      "That track could not be found.",
+    );
+  });
+
   it("falls back for unknown codes and non-error values", () => {
     expect(LibraryErrors.commandMessage({ code: "somethingNew" })).toBe(
       "The library operation failed.",

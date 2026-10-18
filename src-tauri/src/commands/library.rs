@@ -6,7 +6,7 @@ use backend::dto::{
     LibraryAlbumPage, LibraryAlbumTrackPage, LibraryIndexBucket, LibraryRoot, LibraryStatus,
     LibraryTrackPage, LibraryTrackProperties, TrackListRequest, TrackQuery,
 };
-use backend::errors::LibraryCommandError;
+use backend::errors::{CommonError, LibraryCommandError};
 use backend::ids::{AlbumId, ArtistId, ArtworkHash, RootId, TrackId};
 
 use super::blocking;
@@ -94,14 +94,20 @@ pub async fn open_log_directory(app: tauri::AppHandle) -> Result<(), LibraryComm
     let directory = app
         .path()
         .app_log_dir()
-        .map_err(|_| LibraryCommandError::TaskFailed)?;
+        .map_err(|_| LibraryCommandError::Common {
+            error: CommonError::TaskFailed,
+        })?;
     // The filesystem and a spawned process stay off the main thread.
     tauri::async_runtime::spawn_blocking(move || {
-        std::fs::create_dir_all(&directory).map_err(|_| LibraryCommandError::TaskFailed)?;
+        std::fs::create_dir_all(&directory).map_err(|_| LibraryCommandError::Common {
+            error: CommonError::TaskFailed,
+        })?;
         open_in_file_manager(&directory)
     })
     .await
-    .map_err(|_| LibraryCommandError::TaskFailed)?
+    .map_err(|_| LibraryCommandError::Common {
+        error: CommonError::TaskFailed,
+    })?
 }
 
 #[tauri::command]
@@ -216,7 +222,7 @@ pub async fn list_library_album_tracks(
 pub async fn get_library_track_properties(
     track_id: TrackId,
     state: tauri::State<'_, AppState>,
-) -> Result<Option<LibraryTrackProperties>, LibraryCommandError> {
+) -> Result<LibraryTrackProperties, LibraryCommandError> {
     blocking(&state, move |backend| backend.track_properties(track_id)).await
 }
 
@@ -230,7 +236,9 @@ pub async fn reveal_library_track(
     let path = blocking(&state, move |backend| backend.track_file(track_id)).await?;
     tauri::async_runtime::spawn_blocking(move || reveal_in_file_manager(&path))
         .await
-        .map_err(|_| LibraryCommandError::TaskFailed)?
+        .map_err(|_| LibraryCommandError::Common {
+            error: CommonError::TaskFailed,
+        })?
 }
 
 #[tauri::command]

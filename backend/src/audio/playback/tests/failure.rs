@@ -41,7 +41,12 @@ fn when_every_file_fails_each_is_tried_once_and_the_queue_survives() {
 
     let result = harness.start(missing(3), 0);
 
-    assert_eq!(result, Err(PlaybackServiceError::DecodeFailed));
+    assert_eq!(
+        result,
+        Err(PlaybackServiceError::from(
+            PlaybackFailureCode::DecodeFailed
+        ))
+    );
     assert_eq!(harness.queue_snapshot().upcoming_count, 0);
     assert_eq!(harness.queue_snapshot().history_count, 2);
     assert_eq!(
@@ -72,7 +77,12 @@ fn skipping_failed_files_is_bounded_even_when_the_queue_repeats() {
 
     let result = harness.start(missing(4), 1);
 
-    assert_eq!(result, Err(PlaybackServiceError::DecodeFailed));
+    assert_eq!(
+        result,
+        Err(PlaybackServiceError::from(
+            PlaybackFailureCode::DecodeFailed
+        ))
+    );
     let queue = harness.queue_snapshot();
     assert_eq!(queue.history_count + 1 + queue.upcoming_count, 4);
 }
@@ -86,7 +96,12 @@ fn navigating_onto_a_broken_file_reports_the_failure_and_keeps_the_queue() {
 
     let result = harness.next();
 
-    assert_eq!(result, Err(PlaybackServiceError::DecodeFailed));
+    assert_eq!(
+        result,
+        Err(PlaybackServiceError::from(
+            PlaybackFailureCode::DecodeFailed
+        ))
+    );
     let queue = harness.queue_snapshot();
     assert_eq!(queue.history_count + 1 + queue.upcoming_count, 2);
     assert!(matches!(

@@ -4,7 +4,13 @@ import type {
   LibraryUnavailableReason,
   ScanFailure,
 } from "#lib/native";
-import { messageForCode, nativeErrorCode } from "#lib/native";
+import {
+  albumNotFoundMessage,
+  commonErrorMessage,
+  commonErrorMessages,
+  messageForCode,
+  nativeErrorCode,
+} from "#lib/native";
 
 const commandMessages = {
   invalidRoot: "That folder reference is invalid.",
@@ -15,19 +21,14 @@ const commandMessages = {
   rootContainsDataDirectory:
     "That folder contains the app's own data, so it cannot be a library folder.",
   scanInProgress: "Library folders cannot be changed while a scan is running.",
-  trackNotFound: "That track could not be found.",
-  trackUnavailable: "That track is unavailable on disk.",
-  albumNotFound: "That album could not be found.",
+  albumNotFound: albumNotFoundMessage,
   invalidCursor: "The list position is no longer valid. Retry to reload it.",
   albumArtistNotFound: "That artist could not be found.",
   rootMissing: "A library folder is missing from disk.",
   scanAlreadyRunning: "A library scan is already running.",
   noEnabledRoots: "Enable at least one library folder before scanning.",
   scanNotRunning: "No library scan is running.",
-  libraryUnavailable: "The library is unavailable.",
-  persistenceFailed: "The library database could not be updated.",
-  taskFailed: "The library operation did not finish.",
-} as const satisfies Record<LibraryCommandError["code"], string>;
+} as const satisfies Record<Exclude<LibraryCommandError["code"], "common">, string>;
 
 const unavailableMessages = {
   databaseOpenFailed: "The library storage is unavailable.",
@@ -37,7 +38,7 @@ const unavailableMessages = {
 } as const satisfies Record<LibraryUnavailableReason, string>;
 
 const scanFailureMessages = {
-  persistenceFailed: "The library database could not be updated.",
+  persistenceFailed: commonErrorMessages.persistenceFailed,
   rootTraversalFailed: "A library folder could not be read.",
   panicked: "The scan stopped unexpectedly.",
 } as const satisfies Record<ScanFailure, string>;
@@ -47,11 +48,14 @@ export class LibraryErrors {
   public static statusMessage(status: LibraryStatus): string | null {
     return status.status === "ready"
       ? null
-      : messageForCode(unavailableMessages, status.reason, commandMessages.libraryUnavailable);
+      : messageForCode(unavailableMessages, status.reason, commonErrorMessages.libraryUnavailable);
   }
 
   public static commandMessage(error: unknown): string {
-    return messageForCode(commandMessages, nativeErrorCode(error), "The library operation failed.");
+    return (
+      commonErrorMessage(error) ??
+      messageForCode(commandMessages, nativeErrorCode(error), "The library operation failed.")
+    );
   }
 
   /** Explains why a scan failed; the caller already shows that it failed. */

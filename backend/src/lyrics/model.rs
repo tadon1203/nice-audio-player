@@ -1,3 +1,4 @@
+use crate::errors::CommonError;
 use crate::ids::TrackId;
 use std::path::PathBuf;
 
@@ -59,18 +60,20 @@ pub enum LyricsResolution {
 }
 
 #[derive(Debug, Clone, serde::Serialize, specta::Type)]
-#[serde(tag = "code", rename_all = "camelCase")]
+#[serde(
+    tag = "code",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub enum LyricsCommandError {
-    TrackNotFound,
-    TrackUnavailable,
-    LibraryUnavailable,
-    PersistenceFailed,
-    TaskFailed,
+    Common { error: CommonError },
 }
 
 impl crate::tasks::TaskError for LyricsCommandError {
     fn task_failed() -> Self {
-        Self::TaskFailed
+        Self::Common {
+            error: CommonError::TaskFailed,
+        }
     }
 }
 

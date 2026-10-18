@@ -140,10 +140,10 @@ export class Native {
     );
   }
 
-  /** Makes a command reject the way the backend does, with a structured `{ code }`. */
-  public fail(name: CommandName, code: string): void {
+  /** Makes a command reject the way the backend does, with its structured reply. */
+  public fail(name: CommandName, reply: { readonly code: string; readonly error?: unknown }): void {
     this.#responders.set(toCommandName(name), () => {
-      throw { code };
+      throw reply;
     });
   }
 

@@ -155,7 +155,9 @@ fn track_playback_follows_the_list_order_and_skips_tracks_that_cannot_play() {
                 Some(track_id_of(1))
             )
             .err(),
-        Some(PlaybackSourceError::TrackNotMember)
+        Some(PlaybackLookupError::Source(
+            PlaybackSourceError::TrackNotMember
+        ))
     );
     assert_eq!(
         store
@@ -164,7 +166,7 @@ fn track_playback_follows_the_list_order_and_skips_tracks_that_cannot_play() {
                 Some(track_id_of(4))
             )
             .err(),
-        Some(PlaybackSourceError::TrackUnavailable)
+        Some(PlaybackLookupError::Common(CommonError::TrackUnavailable))
     );
 }
 

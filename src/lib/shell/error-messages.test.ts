@@ -10,9 +10,18 @@ describe("ErrorMessages.of", () => {
   });
 
   it("picks the playback table for a playback error", () => {
-    expect(ErrorMessages.of(new PlaybackError({ code: "decodeFailed" }))).toBe(
-      "The audio file could not be decoded.",
+    expect(ErrorMessages.of(new PlaybackError({ code: "queueBusy" }))).toBe(
+      "The playback queue is busy. Try again.",
     );
+  });
+
+  it("picks the shared table for a failure every command nests under common", () => {
+    expect(
+      ErrorMessages.of(new PlaybackError({ code: "common", error: { code: "trackNotFound" } })),
+    ).toBe("That track could not be found.");
+    expect(
+      ErrorMessages.of(new LibraryError({ code: "common", error: { code: "persistenceFailed" } })),
+    ).toBe("The library database could not be updated.");
   });
 
   it("picks the audio devices table for an audio devices error", () => {

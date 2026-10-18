@@ -73,23 +73,29 @@ describe("TauriNative", () => {
   });
 
   it("throws a playback error for the waveform command's coded reply", async () => {
-    const clients = TauriNative.clients(fakeCommands({ code: "libraryUnavailable" }));
+    const clients = TauriNative.clients(
+      fakeCommands({ code: "common", error: { code: "libraryUnavailable" } }),
+    );
     const failure = await clients.playback.waveform().catch((error: unknown) => error);
     expect(failure).toBeInstanceOf(PlaybackError);
   });
 
   it("throws a library error for a library command's coded reply", async () => {
-    const clients = TauriNative.clients(fakeCommands({ code: "libraryUnavailable" }));
+    const clients = TauriNative.clients(
+      fakeCommands({ code: "common", error: { code: "libraryUnavailable" } }),
+    );
     const failure = await clients.library.status().catch((error: unknown) => error);
     expect(failure).toBeInstanceOf(LibraryError);
-    expect(failure).toMatchObject({ domain: "library", code: "libraryUnavailable" });
+    expect(failure).toMatchObject({ domain: "library", code: "common" });
   });
 
   it("throws a lyrics error for the lyrics command's coded reply", async () => {
-    const clients = TauriNative.clients(fakeCommands({ code: "trackNotFound" }));
+    const clients = TauriNative.clients(
+      fakeCommands({ code: "common", error: { code: "trackNotFound" } }),
+    );
     const failure = await clients.lyrics.trackLyrics(1).catch((error: unknown) => error);
     expect(failure).toBeInstanceOf(LyricsError);
-    expect(failure).toMatchObject({ domain: "lyrics", code: "trackNotFound" });
+    expect(failure).toMatchObject({ domain: "lyrics", code: "common" });
   });
 
   it("throws IpcError when the meter subscription is refused", async () => {

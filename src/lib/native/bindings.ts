@@ -70,29 +70,7 @@ export const commands = {
 	listLibraryArtistAlbums: (request: ArtistAlbumsRequest) => __TAURI_INVOKE<LibraryAlbumPage>("list_library_artist_albums", { request }),
 	getLibraryAlbum: (albumId: AlbumId) => __TAURI_INVOKE<LibraryAlbumDetails>("get_library_album", { albumId }),
 	listLibraryAlbumTracks: (request: AlbumTracksRequest) => __TAURI_INVOKE<LibraryAlbumTrackPage>("list_library_album_tracks", { request }),
-	getLibraryTrackProperties: (trackId: TrackId) => __TAURI_INVOKE<{
-	id: TrackId,
-	path: string,
-	fileName: string,
-	title: string | null,
-	artist: string | null,
-	album: string | null,
-	albumArtist: string | null,
-	trackNumber: number | null,
-	trackTotal: number | null,
-	discNumber: number | null,
-	discTotal: number | null,
-	genre: string | null,
-	date: string | null,
-	durationMs: number | null,
-	fileFormat: string | null,
-	codec: string | null,
-	sampleRate: number | null,
-	channelCount: number | null,
-	bitDepth: number | null,
-	bitrateKbps: number | null,
-	state: TrackState,
-} | null>("get_library_track_properties", { trackId }),
+	getLibraryTrackProperties: (trackId: TrackId) => __TAURI_INVOKE<LibraryTrackProperties>("get_library_track_properties", { trackId }),
 	/**  Shows the track's file in Explorer, selected. */
 	revealLibraryTrack: (trackId: TrackId) => __TAURI_INVOKE<null>("reveal_library_track", { trackId }),
 	getArtworkAccent: (hash: ArtworkHash) => __TAURI_INVOKE<string | null>("get_artwork_accent", { hash }),
@@ -263,6 +241,9 @@ export type BackendMessage =
 	kind: "position",
 } & PlaybackPosition;
 
+/**  The codes every command can answer with, so the Renderer shows each one the same way. */
+export type CommonError = { code: "trackNotFound" } | { code: "trackUnavailable" } | { code: "libraryUnavailable" } | { code: "persistenceFailed" } | { code: "taskFailed" };
+
 /**  The current value of every Backend state topic. `connect` returns it. */
 export type InitialState = {
 	playback: Versioned<PlaybackSnapshot>,
@@ -332,9 +313,9 @@ export type LibraryAlbumTrackSummary = {
 
 export type LibraryArtistAlbumSortKey = "year" | "title";
 
-export type LibraryCommandError = { code: "invalidRoot" } | { code: "rootNotDirectory" } | { code: "canonicalizationFailed" } | { code: "duplicateRoot" } | { code: "overlappingRoot" } | 
+export type LibraryCommandError = { code: "common"; error: CommonError } | { code: "invalidRoot" } | { code: "rootNotDirectory" } | { code: "canonicalizationFailed" } | { code: "duplicateRoot" } | { code: "overlappingRoot" } | 
 /**  The folder holds the app's own data directory, which a scan would read as music. */
-{ code: "rootContainsDataDirectory" } | { code: "scanInProgress" } | { code: "trackNotFound" } | { code: "trackUnavailable" } | { code: "albumNotFound" } | { code: "invalidCursor" } | { code: "albumArtistNotFound" } | { code: "rootMissing" } | { code: "scanAlreadyRunning" } | { code: "noEnabledRoots" } | { code: "scanNotRunning" } | { code: "libraryUnavailable" } | { code: "persistenceFailed" } | { code: "taskFailed" };
+{ code: "rootContainsDataDirectory" } | { code: "scanInProgress" } | { code: "albumNotFound" } | { code: "invalidCursor" } | { code: "albumArtistNotFound" } | { code: "rootMissing" } | { code: "scanAlreadyRunning" } | { code: "noEnabledRoots" } | { code: "scanNotRunning" };
 
 /**
  *  One entry of a list's scroll index: the label its names are filed under, and how many there
@@ -434,7 +415,7 @@ export type LibraryTrackSummary = {
 
 export type LibraryUnavailableReason = "databaseOpenFailed" | "migrationFailed" | "schemaTooNew" | "databaseCorrupt";
 
-export type LyricsCommandError = { code: "trackNotFound" } | { code: "trackUnavailable" } | { code: "libraryUnavailable" } | { code: "persistenceFailed" } | { code: "taskFailed" };
+export type LyricsCommandError = { code: "common"; error: CommonError };
 
 export type LyricsContent = { kind: "plain"; lines: string[] } | { kind: "timed"; lines: LyricsTimedLine[] };
 
@@ -558,9 +539,13 @@ export type PlaybackRepeatMode = "off" | "all" | "one";
  *  Why a playback request failed: the one error vocabulary for every command that plays or
  *  queues, serialized as `{ "code": "<camelCase>" }`.
  */
-export type PlaybackServiceError = { code: "invalidArgument" } | { code: "workerUnavailable" } | 
+export type PlaybackServiceError = { code: "common"; error: CommonError } | 
+/**  The output or the decoder failed. */
+{ code: "output"; failure: PlaybackFailureCode } | 
+/**  The Library could not give the tracks to play. */
+{ code: "source"; error: PlaybackSourceError } | { code: "workerUnavailable" } | 
 /**  A newer request replaced this one before it finished; the caller should not report it. */
-{ code: "superseded" } | { code: "queueItemNotFound" } | { code: "queueBusy" } | { code: "invalidVolume" } | { code: "invalidDeviceId" } | { code: "invalidPlaybackState" } | { code: "durationUnavailable" } | { code: "seekFailed" } | { code: "decodeFailed" } | { code: "noOutputDevice" } | { code: "outputDeviceUnavailable" } | { code: "unsupportedOutputConfiguration" } | { code: "outputStreamBuildFailed" } | { code: "outputStreamStartFailed" } | { code: "outputStreamPauseFailed" } | { code: "outputStreamResumeFailed" } | { code: "outputStreamRuntimeFailed" } | { code: "completionTimingFailed" } | { code: "sampleRateConversionFailed" } | { code: "invalidTrackId" } | { code: "albumNotFound" } | { code: "trackNotMember" } | { code: "trackUnavailable" } | { code: "trackNotPlayable" } | { code: "noPlayableTracks" } | { code: "libraryUnavailable" } | { code: "persistenceFailed" } | { code: "taskFailed" };
+{ code: "superseded" } | { code: "queueItemNotFound" } | { code: "queueBusy" } | { code: "invalidVolume" } | { code: "invalidDeviceId" } | { code: "invalidPlaybackState" } | { code: "durationUnavailable" } | { code: "seekFailed" };
 
 export type PlaybackSnapshot = 
 /**  `item` is the last track that played, kept so the UI can still say what it was. */
@@ -570,6 +555,11 @@ export type PlaybackSnapshot =
  *  about, not a stop that waits for Retry.
  */
 skipping: boolean };
+
+/**  Why the library cannot give playback a selection, for reasons of the selection itself. */
+export type PlaybackSourceError = { code: "albumNotFound" } | 
+/**  The requested start track is not part of the selection. */
+{ code: "trackNotMember" } | { code: "trackNotPlayable" } | { code: "noPlayablePlaybackTracks" };
 
 export type PlaybackWaveform = {
 	/**  The playback the waveform belongs to, so a late answer cannot be drawn for another track. */

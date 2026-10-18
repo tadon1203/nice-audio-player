@@ -107,7 +107,12 @@ impl PlaybackWorker {
             self.queue.clear();
             self.publish_queue();
             self.publish_state();
-            respond(responder, Err(PlaybackServiceError::TrackUnavailable));
+            respond(
+                responder,
+                Err(PlaybackServiceError::Common {
+                    error: CommonError::TrackUnavailable,
+                }),
+            );
             return;
         };
         self.publish_queue();

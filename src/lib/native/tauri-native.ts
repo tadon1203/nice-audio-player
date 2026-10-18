@@ -7,6 +7,7 @@ import {
   type AudioDeviceListError,
   type BackendMessage,
   type LibraryCommandError,
+  type LibraryTrackProperties,
   type LyricsCommandError,
   type PlaybackContext,
   type PlaybackServiceError,
@@ -50,7 +51,6 @@ import type {
   PlaybackQueueWindow,
   PlaybackSnapshot,
   PlaybackWaveform,
-  TrackState,
   Versioned,
 } from "./bindings";
 
@@ -288,29 +288,7 @@ class TauriLibraryClient implements LibraryClient {
   ): Promise<LibraryAlbumPage> {
     return this.#call(() => this.#commands.listLibraryArtistAlbums(request));
   }
-  public trackProperties(trackId: TrackId): Promise<{
-    id: TrackId;
-    path: string;
-    fileName: string;
-    title: string | null;
-    artist: string | null;
-    album: string | null;
-    albumArtist: string | null;
-    trackNumber: number | null;
-    trackTotal: number | null;
-    discNumber: number | null;
-    discTotal: number | null;
-    genre: string | null;
-    date: string | null;
-    durationMs: number | null;
-    fileFormat: string | null;
-    codec: string | null;
-    sampleRate: number | null;
-    channelCount: number | null;
-    bitDepth: number | null;
-    bitrateKbps: number | null;
-    state: TrackState;
-  } | null> {
+  public trackProperties(trackId: TrackId): Promise<LibraryTrackProperties> {
     return this.#call(() => this.#commands.getLibraryTrackProperties(trackId));
   }
   public async revealTrack(trackId: TrackId): Promise<void> {

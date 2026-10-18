@@ -112,6 +112,8 @@ fn seek_error(error: PipelineError) -> PlaybackServiceError {
         }
         PipelineError::DecoderOpen
         | PipelineError::SpecChanged
-        | PipelineError::FirstPacketDecode => PlaybackServiceError::DecodeFailed,
+        | PipelineError::FirstPacketDecode => {
+            PlaybackServiceError::from(PlaybackFailureCode::DecodeFailed)
+        }
     }
 }
