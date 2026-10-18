@@ -18,7 +18,7 @@ const browserFrames: FrameScheduler = {
   cancel: (handle) => cancelAnimationFrame(handle),
 };
 
-type ScrollRegion = Pick<HTMLElement, "scrollHeight" | "clientHeight" | "scrollTop">;
+type ScrollMetrics = Pick<HTMLElement, "scrollHeight" | "clientHeight" | "scrollTop">;
 
 export interface WorkspaceScrollOptions {
   /** Whether the content is laid out enough to restore into. */
@@ -124,7 +124,7 @@ export class WorkspaceScroll {
    * Returns a function that gives up.
    */
   public static scrollWhenReachable(
-    region: ScrollRegion,
+    region: ScrollMetrics,
     offset: number,
     frames: FrameScheduler = browserFrames,
   ): () => void {

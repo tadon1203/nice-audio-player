@@ -15,7 +15,7 @@
     TableRow,
   } from "#lib/ui/shadcn/table";
   import { cn } from "#lib/utils/cn.js";
-  import { createVirtualRows } from "#lib/ui/virtual-rows.svelte";
+  import { VirtualRows } from "#lib/ui/virtual-rows.svelte";
   import {
     columnText,
     albumTrackColumns,
@@ -37,7 +37,7 @@
     rows,
     caption,
     layout = "library",
-    scrollElement,
+    virtualized = false,
     ontopindexchange,
     sortKey,
     sortDirection = "ascending",
@@ -47,11 +47,8 @@
     rows: readonly TrackTableRow[];
     caption: string;
     layout?: TrackTableLayout;
-    /**
-     * The region the table scrolls in to virtualize its rows against (`null` while it is still
-     * mounting). Omit it to render every row.
-     */
-    scrollElement?: HTMLElement | null;
+    /** Mounts only the rows near the view, in the scroll view above. Off renders every row. */
+    virtualized?: boolean;
     /** Told the index of the first row in view, for the scroll index label. */
     ontopindexchange?: (index: number) => void;
     sortKey?: LibraryTrackSortKey;
@@ -62,21 +59,15 @@
   } = $props();
 
   const columns = $derived(layout === "library" ? libraryTrackColumns : albumTrackColumns);
-  const virtualized = $derived(scrollElement !== undefined);
   const { playback, actions, libraryTracks } = AppServices.current();
 
   let propertiesFor = $state<TrackId | null>(null);
   let menuRow = $state<TrackTableRow | null>(null);
-  let container = $state<HTMLElement | null>(null);
-  let body = $state<HTMLElement | null>(null);
 
-  const virtual = createVirtualRows({
-    count: () => rows.length,
-    scrollElement: () => scrollElement ?? null,
+  const virtual = new VirtualRows({
+    count: (): number => rows.length,
     rowHeight: TRACK_ROW_HEIGHT,
     overscan: 10,
-    container: () => container,
-    body: () => body,
   });
   $effect(() => {
     if (virtualized) ontopindexchange?.(virtual.topIndex);
@@ -136,7 +127,7 @@
   }
 </script>
 
-<div bind:this={container} class="@container/track-table min-w-0">
+<div class="@container/track-table min-w-0">
   <!-- Not the shadcn Table root: its overflow wrapper would break the sticky header. -->
   <table class="w-full table-fixed border-collapse text-sm">
     <colgroup>
@@ -174,7 +165,7 @@
     <ContextMenuRoot>
       <ContextMenuTrigger>
         {#snippet child({ props })}
-          <TableBody {...props} bind:ref={body} oncontextmenucapture={selectMenuRow}>
+          <TableBody {...props} {@attach virtual.attachBody} oncontextmenucapture={selectMenuRow}>
             <!-- Spacer heights must jump, never animate: the reduced-motion rule gives every element a
            transition, and a lagging spacer puts the rows in the wrong place. -->
             {#if topSpacer > 0}

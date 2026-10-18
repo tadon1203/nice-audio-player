@@ -2,24 +2,32 @@
   import type { Snippet } from "svelte";
   import { cn } from "#lib/utils/cn.js";
   import { ScrollArea } from "#lib/ui/shadcn/scroll-area/index.js";
+  import type { Attachment } from "svelte/attachments";
+  import { ScrollView } from "./scroll-view.svelte";
   import WorkspaceContainer from "./workspace-container.svelte";
 
-  import type { Attachment } from "svelte/attachments";
-
   let {
-    viewportRef = $bindable(null),
     viewportAttachment,
     class: className,
     contentClass,
     children,
   }: {
-    viewportRef?: HTMLElement | null;
     /** Runs on the scrolling viewport; the page's scroll rules attach here. */
     viewportAttachment?: Attachment<HTMLElement>;
     class?: string;
     contentClass?: string;
     children: Snippet;
   } = $props();
+
+  const scrollView = ScrollView.provide();
+  const attachViewport: Attachment<HTMLElement> = (node) => {
+    const stopViewport = scrollView.attachViewport(node);
+    const stopCaller = viewportAttachment?.(node);
+    return (): void => {
+      stopViewport?.();
+      stopCaller?.();
+    };
+  };
 </script>
 
 <!--
@@ -28,11 +36,10 @@
 -->
 <ScrollArea
   type="always"
-  bind:viewportRef
-  {viewportAttachment}
+  viewportAttachment={attachViewport}
   class={cn("h-full min-h-0 min-w-0", className)}
 >
-  <WorkspaceContainer class={contentClass}>
+  <WorkspaceContainer class={contentClass} {@attach scrollView.attachContent}>
     {@render children()}
   </WorkspaceContainer>
 </ScrollArea>

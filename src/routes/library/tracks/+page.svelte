@@ -33,7 +33,7 @@
     <TrackTable
       rows={tracks}
       caption="Library tracks"
-      scrollElement={scroll.viewport}
+      virtualized
       ontopindexchange={scroll.ontopindexchange}
       sortKey={view.sortKey}
       sortDirection={view.direction}

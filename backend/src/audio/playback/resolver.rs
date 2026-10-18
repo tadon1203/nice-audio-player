@@ -5,22 +5,29 @@
 use std::collections::HashMap;
 use std::sync::Mutex;
 
+use crate::audio::playback::PlaybackServiceError;
 use crate::ids::TrackId;
 use crate::library::store::PlayableTrack;
 
 /// The library, as far as playback is concerned.
 pub trait TrackSource: Send + Sync {
     /// The tracks with these ids, in the order asked: `None` for one that is gone or cannot be
-    /// played any more.
-    fn tracks(&self, track_ids: &[TrackId]) -> Vec<Option<PlayableTrack>>;
+    /// played any more. A failure to read the library is an error, not a missing track.
+    fn tracks(
+        &self,
+        track_ids: &[TrackId],
+    ) -> Result<Vec<Option<PlayableTrack>>, PlaybackServiceError>;
 }
 
 /// A source that knows no tracks, for when the library is unavailable.
 pub struct NoTracks;
 
 impl TrackSource for NoTracks {
-    fn tracks(&self, track_ids: &[TrackId]) -> Vec<Option<PlayableTrack>> {
-        vec![None; track_ids.len()]
+    fn tracks(
+        &self,
+        track_ids: &[TrackId],
+    ) -> Result<Vec<Option<PlayableTrack>>, PlaybackServiceError> {
+        Ok(vec![None; track_ids.len()])
     }
 }
 
@@ -41,18 +48,24 @@ impl TrackResolver {
         }
     }
 
-    /// The tracks with these ids, in the order asked; `None` where the library has none.
-    pub fn resolve(&self, track_ids: &[TrackId]) -> Vec<Option<PlayableTrack>> {
+    /// The tracks with these ids, in the order asked; `None` where the library has none. A failed
+    /// read is logged and returned, so the caller can tell it from a track that is gone.
+    pub fn resolve(
+        &self,
+        track_ids: &[TrackId],
+    ) -> Result<Vec<Option<PlayableTrack>>, PlaybackServiceError> {
         let mut found: Vec<Option<PlayableTrack>> = {
             let cache = self.lock();
             track_ids.iter().map(|id| cache.get(id).cloned()).collect()
         };
         let missing: Vec<usize> = (0..found.len()).filter(|i| found[*i].is_none()).collect();
         if missing.is_empty() {
-            return found;
+            return Ok(found);
         }
         let ids: Vec<TrackId> = missing.iter().map(|i| track_ids[*i]).collect();
-        let read = self.source.tracks(&ids);
+        let read = self.source.tracks(&ids).inspect_err(|error| {
+            log::error!("playback.tracks_unavailable error={error:?}");
+        })?;
         let mut cache = self.lock();
         if cache.len() + read.len() > CACHE_LIMIT {
             cache.clear();
@@ -63,11 +76,14 @@ impl TrackResolver {
                 found[index] = Some(track);
             }
         }
-        found
+        Ok(found)
     }
 
-    pub fn resolve_one(&self, track_id: TrackId) -> Option<PlayableTrack> {
-        self.resolve(&[track_id]).pop().flatten()
+    pub fn resolve_one(
+        &self,
+        track_id: TrackId,
+    ) -> Result<Option<PlayableTrack>, PlaybackServiceError> {
+        Ok(self.resolve(&[track_id])?.pop().flatten())
     }
 
     /// Forgets what was read, so the next read sees the library as it is then.
@@ -91,10 +107,11 @@ impl std::fmt::Debug for TrackResolver {
 #[cfg(test)]
 pub(super) mod testing {
     use super::*;
+    use crate::errors::CommonError;
     use crate::media::validation::ValidatedAudioFile;
     use std::sync::{
         Arc,
-        atomic::{AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
     };
 
     /// A library of hand-made tracks that counts how often it is read.
@@ -102,6 +119,7 @@ pub(super) mod testing {
     pub struct FakeTracks {
         tracks: Mutex<HashMap<TrackId, PlayableTrack>>,
         reads: AtomicUsize,
+        failing: AtomicBool,
     }
 
     impl FakeTracks {
@@ -113,6 +131,11 @@ pub(super) mod testing {
             self.tracks.lock().unwrap().remove(&track_id);
         }
 
+        /// Makes every read fail, as a database error would, until it is switched back.
+        pub fn fail_reads(&self, failing: bool) {
+            self.failing.store(failing, Ordering::SeqCst);
+        }
+
         /// How many ids the library was asked for.
         pub fn reads(&self) -> usize {
             self.reads.load(Ordering::SeqCst)
@@ -120,10 +143,18 @@ pub(super) mod testing {
     }
 
     impl TrackSource for Arc<FakeTracks> {
-        fn tracks(&self, track_ids: &[TrackId]) -> Vec<Option<PlayableTrack>> {
+        fn tracks(
+            &self,
+            track_ids: &[TrackId],
+        ) -> Result<Vec<Option<PlayableTrack>>, PlaybackServiceError> {
             self.reads.fetch_add(track_ids.len(), Ordering::SeqCst);
+            if self.failing.load(Ordering::SeqCst) {
+                return Err(PlaybackServiceError::Common {
+                    error: CommonError::PersistenceFailed,
+                });
+            }
             let tracks = self.tracks.lock().unwrap();
-            track_ids.iter().map(|id| tracks.get(id).cloned()).collect()
+            Ok(track_ids.iter().map(|id| tracks.get(id).cloned()).collect())
         }
     }
 

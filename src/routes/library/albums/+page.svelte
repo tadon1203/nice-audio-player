@@ -33,7 +33,6 @@
   {#snippet content(albums, scroll)}
     <VirtualMediaGrid
       items={albums}
-      scrollElement={scroll.viewport}
       itemKey={(album) => album.id}
       artworkAt={(index) => albums[index]?.artwork}
       sortSignature={view.sortSignature}

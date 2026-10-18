@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Attachment } from "svelte/attachments";
+  import { ScrollView } from "#lib/ui/scroll-view.svelte";
   import { AppServices } from "#lib/shell/app-services.svelte";
   import { Sheet, SheetContent, SheetHeader, SheetTitle } from "#lib/ui/shadcn/sheet";
   import QueueFooter from "./queue-footer.svelte";
@@ -16,8 +17,7 @@
     () => queuePanel.isOpen,
   );
 
-  let scrollElement = $state<HTMLDivElement | null>(null);
-  let content = $state<HTMLDivElement | null>(null);
+  const scrollView = ScrollView.provide();
 
   // Opening the panel shows the current track at the top, with what was played above it.
   const showAtTop: Attachment<HTMLElement> = (node) => {
@@ -45,8 +45,8 @@
         <SheetTitle>Queue</SheetTitle>
       </SheetHeader>
     </div>
-    <div bind:this={scrollElement} class="min-h-0 flex-1 overflow-y-auto py-2">
-      <div bind:this={content}>
+    <div {@attach scrollView.attachViewport} class="min-h-0 flex-1 overflow-y-auto py-2">
+      <div {@attach scrollView.attachContent}>
         {#each history as item (item.queueItemId)}
           <QueueRow
             {item}
@@ -62,7 +62,7 @@
           <p class="px-4 py-6 text-sm text-muted-foreground">Nothing playing.</p>
         {/if}
         {#if queue && queue.upcomingCount > 0}
-          <UpcomingList {scrollElement} {content} cascading={cascade.current} />
+          <UpcomingList cascading={cascade.current} />
         {/if}
       </div>
     </div>

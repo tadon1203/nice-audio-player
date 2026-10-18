@@ -12,8 +12,6 @@
   }
 
   export interface LibraryScroll {
-    /** `null` until the scroll region has mounted. */
-    viewport: HTMLElement | null;
     /** The list reports the index of its first visible item here (for the scroll index). */
     ontopindexchange: (index: number) => void;
   }
@@ -80,7 +78,6 @@
     content: Snippet<[readonly Item[], LibraryScroll]>;
   } = $props();
 
-  let viewport = $state<HTMLElement | null>(null);
   let topIndex = $state(0);
 
   const workspaceScroll = new WorkspaceScroll(AppServices.current().scrollMemory, {
@@ -92,7 +89,6 @@
   const scrollIndexLabel = $derived(ScrollIndex.labelAt(catalog.index, skip + topIndex));
 
   const scroll = $derived<LibraryScroll>({
-    viewport,
     ontopindexchange: (index) => (topIndex = index),
   });
 </script>
@@ -120,11 +116,7 @@
         onselect={(label) => onjump(ScrollIndex.skipTo(catalog.index, label) ?? 0)}
       />
     {/if}
-    <WorkspaceScrollRegion
-      bind:viewportRef={viewport}
-      viewportAttachment={workspaceScroll.attach}
-      contentClass="pt-6 pb-16"
-    >
+    <WorkspaceScrollRegion viewportAttachment={workspaceScroll.attach} contentClass="pt-6 pb-16">
       {#if catalog.viewState === "loading"}
         <LoadingStatus>Loading library…</LoadingStatus>
       {:else if catalog.viewState === "statusError"}
@@ -154,7 +146,6 @@
         {@render content(catalog.items, scroll)}
         {#if catalog.hasNextPage}
           <LoadMoreSentinel
-            {viewport}
             pending={catalog.isFetchingNextPage}
             onLoadMore={() => void catalog.fetchNextPage()}
           />

@@ -3,7 +3,7 @@
   import { UpcomingItems } from "#lib/playback/upcoming-items.svelte";
   import { flipMotion } from "#lib/ui/motion/svelte-flip";
   import { delayOf } from "#lib/ui/motion/tokens";
-  import { createVirtualRows } from "#lib/ui/virtual-rows.svelte";
+  import { VirtualRows } from "#lib/ui/virtual-rows.svelte";
   import { cn } from "#lib/utils/cn.js";
   import { QueueDrag } from "./queue-drag.svelte";
   import QueueRow, { QUEUE_ROW_PX } from "./queue-row.svelte";
@@ -13,14 +13,8 @@
   const CASCADE_ROWS = 12;
 
   let {
-    scrollElement,
-    content,
     cascading,
   }: {
-    /** The region the list scrolls in. */
-    scrollElement: HTMLElement | null;
-    /** Everything inside that region; its size changes move the list. */
-    content: HTMLElement | null;
     /** Rows settle top to bottom instead of all at once (right after shuffle changes). */
     cascading: boolean;
   } = $props();
@@ -28,24 +22,18 @@
   const { playback, actions } = AppServices.current();
 
   const upcomingCount = $derived(playback.queue?.upcomingCount ?? 0);
-  let list = $state<HTMLUListElement | null>(null);
 
   const queueDrag = new QueueDrag({
     onMove: (id, to): void => actions.run(() => playback.moveQueueItem(id, to)),
     rowHeight: QUEUE_ROW_PX,
     count: (): number => upcomingCount,
-    scrollElement: (): HTMLElement | null => scrollElement,
-    list: (): HTMLUListElement | null => list,
   });
   const drag = $derived(queueDrag.drag);
 
-  const virtual = createVirtualRows({
-    count: () => upcomingCount,
-    scrollElement: () => scrollElement,
+  const virtual = new VirtualRows({
+    count: (): number => upcomingCount,
     rowHeight: QUEUE_ROW_PX,
     overscan: 8,
-    container: () => content,
-    body: () => list,
   });
 
   const firstRow = $derived(virtual.items[0]?.index);
@@ -74,7 +62,8 @@
 </script>
 
 <ul
-  bind:this={list}
+  {@attach queueDrag.attachList}
+  {@attach virtual.attachBody}
   style:padding-top="{virtual.topSpacer}px"
   style:padding-bottom="{virtual.bottomSpacer}px"
 >

@@ -54,10 +54,10 @@ pub fn resolve_track(
 pub struct LibraryTracks(pub LibraryStore);
 
 impl TrackSource for LibraryTracks {
-    fn tracks(&self, track_ids: &[TrackId]) -> Vec<Option<PlayableTrack>> {
-        self.0.playable_tracks(track_ids).unwrap_or_else(|error| {
-            log::error!("playback.tracks_unavailable error={error:?}");
-            vec![None; track_ids.len()]
-        })
+    fn tracks(
+        &self,
+        track_ids: &[TrackId],
+    ) -> Result<Vec<Option<PlayableTrack>>, PlaybackServiceError> {
+        Ok(self.0.playable_tracks(track_ids)?)
     }
 }

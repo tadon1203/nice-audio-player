@@ -32,8 +32,6 @@
     artists.albumsOptions({ artistId, sortKey: view.sortKey, direction: view.direction }),
   );
 
-  let viewport = $state<HTMLElement | null>(null);
-
   const scroll = new WorkspaceScroll(scrollMemory, {
     resetKey: (): string => view.stateKey,
     ready: (): boolean =>
@@ -43,11 +41,7 @@
   export const snapshot = scrollMemory.detailSnapshot(scroll.capture, scroll.restore);
 </script>
 
-<WorkspaceScrollRegion
-  bind:viewportRef={viewport}
-  viewportAttachment={scroll.attach}
-  contentClass="py-8 pb-16"
->
+<WorkspaceScrollRegion viewportAttachment={scroll.attach} contentClass="py-8 pb-16">
   <BackLink href={resolve("/library/album-artists")}>Album Artists</BackLink>
 
   {#if artistQuery.isError}
@@ -88,7 +82,6 @@
       {#if albums.items.length > 0}
         <VirtualMediaGrid
           items={albums.items}
-          scrollElement={viewport}
           itemKey={(album) => album.id}
           artworkAt={(index) => albums.items[index]?.artwork}
           sortSignature={view.sortSignature}
@@ -105,7 +98,6 @@
         </VirtualMediaGrid>
         {#if albums.hasNextPage}
           <LoadMoreSentinel
-            {viewport}
             pending={albums.isFetchingNextPage}
             onLoadMore={() => void albums.fetchNextPage()}
           />

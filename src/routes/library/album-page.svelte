@@ -56,8 +56,6 @@
   const playTrack = (trackId: TrackId): void =>
     actions.run(() => playback.start({ kind: "album", albumId }, trackId));
 
-  let viewport = $state<HTMLElement | null>(null);
-
   const scroll = new WorkspaceScroll(scrollMemory, {
     ready: (): boolean =>
       details.data !== undefined && !tracks.isPending && tracks.items.length > 0,
@@ -66,11 +64,7 @@
   export const snapshot = scrollMemory.detailSnapshot(scroll.capture, scroll.restore);
 </script>
 
-<WorkspaceScrollRegion
-  bind:viewportRef={viewport}
-  viewportAttachment={scroll.attach}
-  contentClass="py-8 pb-16"
->
+<WorkspaceScrollRegion viewportAttachment={scroll.attach} contentClass="py-8 pb-16">
   {#if parentArtistId !== null}
     <BackLink
       href={resolve("/library/album-artists/[artistId=artistId]", { artistId: parentArtistId })}
@@ -155,7 +149,6 @@
     </section>
     {#if tracks.hasNextPage}
       <LoadMoreSentinel
-        {viewport}
         pending={tracks.isFetchingNextPage}
         onLoadMore={() => void tracks.fetchNextPage()}
       />

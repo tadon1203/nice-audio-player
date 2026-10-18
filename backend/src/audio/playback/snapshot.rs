@@ -246,12 +246,16 @@ struct QueueList {
 }
 
 impl QueueList {
-    /// The rows for `entries`, read in one go: `None` where the library no longer has the track.
+    /// The rows for `entries`, read in one go: `None` where the library no longer has the track,
+    /// or where the library could not be read (the rows are left out of this snapshot only).
     fn rows(&self, entries: &[QueueEntry]) -> Vec<Option<PlaybackQueueItem>> {
         let ids: Vec<TrackId> = entries.iter().map(|entry| entry.track_id).collect();
+        let Ok(tracks) = self.tracks.resolve(&ids) else {
+            return vec![None; entries.len()];
+        };
         entries
             .iter()
-            .zip(self.tracks.resolve(&ids))
+            .zip(tracks)
             .map(|(entry, track)| Some(PlaybackQueueItem::of(entry, &track?)))
             .collect()
     }

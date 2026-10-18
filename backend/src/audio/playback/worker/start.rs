@@ -101,19 +101,27 @@ impl PlaybackWorker {
             respond(responder, Err(PlaybackServiceError::InvalidPlaybackState));
             return;
         }
-        let Some(item) = self.resolve_current() else {
-            // Every track left in the queue has gone from the library.
-            self.discard_transport();
-            self.queue.clear();
-            self.publish_queue();
-            self.publish_state();
-            respond(
-                responder,
-                Err(PlaybackServiceError::Common {
-                    error: CommonError::TrackUnavailable,
-                }),
-            );
-            return;
+        let item = match self.resolve_current() {
+            Ok(Some(item)) => item,
+            Ok(None) => {
+                // Every track left in the queue has gone from the library.
+                self.discard_transport();
+                self.queue.clear();
+                self.publish_queue();
+                self.publish_state();
+                respond(
+                    responder,
+                    Err(PlaybackServiceError::Common {
+                        error: CommonError::TrackUnavailable,
+                    }),
+                );
+                return;
+            }
+            Err(error) => {
+                self.publish_queue();
+                respond(responder, Err(error));
+                return;
+            }
         };
         self.publish_queue();
         let request = self.new_start(item, started_by, responder, start_paused);
@@ -323,34 +331,44 @@ impl PlaybackWorker {
             return None;
         }
         self.queue.advance(AdvanceReason::UserNext, &mut self.rng)?;
-        let item = self.resolve_current()?;
+        let item = self.resolve_current().ok().flatten()?;
         self.publish_queue();
         Some(item)
     }
 
     /// The item the queue points at, read from the library. A track the library no longer has
     /// is dropped from the queue and the one after it is tried, so an entry that disappeared
-    /// between starting and playing never stops the queue.
-    pub(super) fn resolve_current(&mut self) -> Option<PlayableItem> {
+    /// between starting and playing never stops the queue. A failed read drops nothing and is
+    /// returned, so the queue stays whole.
+    pub(super) fn resolve_current(&mut self) -> Result<Option<PlayableItem>, PlaybackServiceError> {
         loop {
-            let entry = self.queue.current()?.clone();
-            if let Some(item) = self.item_of(&entry) {
-                return Some(item);
-            }
-            self.queue.remove_entries(&HashSet::from([entry.id]));
+            let Some(entry) = self.queue.current().cloned() else {
+                return Ok(None);
+            };
+            let Some(track) = self.tracks.resolve_one(entry.track_id)? else {
+                self.queue.remove_entries(&HashSet::from([entry.id]));
+                continue;
+            };
+            return Ok(Some(PlayableItem {
+                queue_item_id: entry.id,
+                track,
+            }));
         }
     }
 
-    /// The queue entry as a playable item, `None` when the library no longer has its track.
+    /// The queue entry as a playable item, `None` when the library no longer has its track or
+    /// could not be read (the resolver logs the failure).
     pub(super) fn item_of(&self, entry: &QueueEntry) -> Option<PlayableItem> {
+        let track = self.tracks.resolve_one(entry.track_id).ok()??;
         Some(PlayableItem {
             queue_item_id: entry.id,
-            track: self.tracks.resolve_one(entry.track_id)?,
+            track,
         })
     }
 
     /// Drops the queued items the library no longer has from the part of the queue that is about
     /// to be shown, so the counts and the rows agree. The current item is `resolve_current`'s.
+    /// When the library cannot be read, nothing is dropped.
     pub(super) fn prune_unavailable(&mut self) {
         loop {
             let history = self.queue.history();
@@ -361,9 +379,12 @@ impl PlaybackWorker {
                 .collect();
             shown.extend(&upcoming[..upcoming.len().min(UPCOMING_IN_SNAPSHOT)]);
             let ids: Vec<TrackId> = shown.iter().map(|entry| entry.track_id).collect();
+            let Ok(tracks) = self.tracks.resolve(&ids) else {
+                return;
+            };
             let gone: HashSet<QueueItemId> = shown
                 .iter()
-                .zip(self.tracks.resolve(&ids))
+                .zip(tracks)
                 .filter(|(_, track)| track.is_none())
                 .map(|(entry, _)| entry.id)
                 .collect();

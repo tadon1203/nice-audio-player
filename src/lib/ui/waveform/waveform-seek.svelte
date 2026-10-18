@@ -3,9 +3,9 @@
   import RollingNumber from "#lib/ui/rolling-number/rolling-number.svelte";
   import { cn } from "#lib/utils/cn.js";
   import { DurationFormat } from "#lib/utils/duration-format";
-  import { createPointerSeek } from "./pointer-seek.svelte";
+  import { PointerSeek } from "./pointer-seek.svelte";
   import WaveformBars from "./waveform-bars.svelte";
-  import { barCountForWidth, resampleBars } from "./waveform-model";
+  import { Waveform } from "./waveform-model";
 
   interface Span {
     startMs: number;
@@ -76,10 +76,9 @@
   } = $props();
 
   let width = $state(0);
-  let grown = $state(false);
   const duration = $derived(durationMs ?? 0);
   const seekable = $derived(!disabled && duration > 0);
-  const pointer = createPointerSeek(() => ({
+  const pointer = new PointerSeek(() => ({
     durationMs: duration,
     seekable,
     valueMs,
@@ -114,16 +113,9 @@
   );
 
   const hasPeaks = $derived(rms !== null && rms.length > 0);
-  // The bars mount flat on the baseline and grow one frame later, so the growth can transition.
-  // A refined waveform for the same track swaps the bars in place without growing again; the
-  // caller keys this component by track, so a new track starts flat.
-  $effect(() => {
-    if (!hasPeaks) return;
-    const frame = requestAnimationFrame(() => (grown = true));
-    return (): void => cancelAnimationFrame(frame);
-  });
-
-  const bars = $derived(rms === null ? [] : resampleBars(rms, barCountForWidth(width)));
+  const bars = $derived(
+    rms === null ? [] : Waveform.resampleBars(rms, Waveform.barCountForWidth(width)),
+  );
 
   const spanStyle = (span: Span): string | undefined =>
     duration > 0
@@ -132,7 +124,7 @@
 </script>
 
 {#snippet bar()}
-  <WaveformBars {bars} {height} {grown} sweep={sweepBars} centered={lineOnly} still={stillBars} />
+  <WaveformBars {bars} {height} sweep={sweepBars} centered={lineOnly} still={stillBars} />
 {/snippet}
 
 <div
@@ -214,9 +206,9 @@
       style:left="{Math.min(width - 20, Math.max(20, pointer.hoverX))}px"
     >
       {#if pointer.dragging}
-        {DurationFormat.of(pointer.hoverMs)}
+        {DurationFormat.of(pointer.previewMs)}
       {:else}
-        <RollingNumber value={DurationFormat.of(pointer.hoverMs)} />
+        <RollingNumber value={DurationFormat.of(pointer.previewMs)} />
       {/if}
     </span>
   {/if}

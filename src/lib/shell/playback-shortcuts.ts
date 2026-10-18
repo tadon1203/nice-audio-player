@@ -1,7 +1,7 @@
 import type { Playback } from "#lib/playback/playback.svelte";
 import { PlaybackSnapshots } from "#lib/playback/playback-snapshots";
 import { VolumeStep } from "#lib/playback/volume-step";
-import { nextSeekPosition } from "#lib/ui/waveform/waveform-model";
+import { Waveform } from "#lib/ui/waveform/waveform-model";
 import type { NowPlayingView } from "./now-playing-view.svelte";
 import type { QueuePanel } from "./queue-panel.svelte";
 import type { UserActionRunner } from "./user-action-runner.svelte";
@@ -109,7 +109,7 @@ export class PlaybackShortcuts {
       // Holding the key continues from the seek still waiting to be sent, not the stale position;
       // otherwise from where the clock is now.
       const from = playback.pendingSeekMs() ?? playback.clock.estimate();
-      const next = nextSeekPosition(event.key, from, durationMs ?? 0);
+      const next = Waveform.nextSeekPosition(event.key, from, durationMs ?? 0);
       if (next === null) return;
       event.preventDefault();
       actions.run(() => playback.seek(next));

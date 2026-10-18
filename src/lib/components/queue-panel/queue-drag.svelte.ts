@@ -1,8 +1,10 @@
+import type { Attachment } from "svelte/attachments";
 import type { QueueItemId } from "#lib/native";
 import type { HTMLAttributes } from "svelte/elements";
+import { ScrollView } from "#lib/ui/scroll-view.svelte";
 import { dropSlotForFixedRows, slotToIndex } from "./queue-drag";
 
-/** Within this distance of the scroll region's edge a drag scrolls it, this far per move. */
+/** Within this distance of the scroll view's edge a drag scrolls it, this far per move. */
 const EDGE_PX = 40;
 const EDGE_STEP_PX = 16;
 
@@ -17,9 +19,6 @@ interface QueueDragOptions {
   rowHeight: number;
   /** How many rows the list has, mounted or not. */
   count: () => number;
-  scrollElement: () => HTMLElement | null;
-  /** The list whose top is where its first row would sit. */
-  list: () => HTMLElement | null;
 }
 
 /**
@@ -27,15 +26,25 @@ interface QueueDragOptions {
  * (shown as a line); the move itself is one `onMove` call on release, and the rows then animate
  * into place from the queue update. Buttons remain for keyboard use. Rows have one height, so the
  * slot is arithmetic and works while most rows are not mounted; near the top or bottom of the
- * scroll region a drag scrolls it.
+ * scroll view a drag scrolls it.
  */
 export class QueueDrag {
   public drag = $state<DragState | null>(null);
   readonly #options: QueueDragOptions;
+  readonly #scrollView = ScrollView.current();
+  #list: HTMLElement | null = null;
 
   public constructor(options: QueueDragOptions) {
     this.#options = options;
   }
+
+  /** The list whose top is where its first row would sit. */
+  public readonly attachList: Attachment<HTMLElement> = (node) => {
+    this.#list = node;
+    return (): void => {
+      this.#list = null;
+    };
+  };
 
   public get rowHeight(): number {
     return this.#options.rowHeight;
@@ -58,8 +67,8 @@ export class QueueDrag {
       onpointermove: (event) => {
         const drag = this.drag;
         if (drag === null || drag.id !== id) return;
-        const { scrollElement, list, rowHeight, count } = this.#options;
-        const scroller = scrollElement();
+        const { rowHeight, count } = this.#options;
+        const scroller = this.#scrollView.viewport;
         if (scroller !== null) {
           const box = scroller.getBoundingClientRect();
           if (event.clientY < box.top + EDGE_PX) scroller.scrollTop -= EDGE_STEP_PX;
@@ -68,7 +77,7 @@ export class QueueDrag {
         // The list's box starts where its first row would, whichever rows are mounted (its
         // padding stands in for the ones that are not), and rows are measured where they rest, so
         // the shift that makes room does not move the slot under the pointer.
-        const listTop = list()?.getBoundingClientRect().top ?? 0;
+        const listTop = this.#list?.getBoundingClientRect().top ?? 0;
         this.drag = {
           ...drag,
           slot: dropSlotForFixedRows(event.clientY - listTop, rowHeight, count()),

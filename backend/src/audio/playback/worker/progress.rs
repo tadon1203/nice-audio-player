@@ -82,19 +82,32 @@ impl PlaybackWorker {
             .queue
             .advance(AdvanceReason::Natural, &mut self.rng)
             .is_some();
-        match advanced.then(|| self.resolve_current()).flatten() {
-            Some(item) => {
+        let next = if advanced {
+            self.resolve_current()
+        } else {
+            Ok(None)
+        };
+        match next {
+            Ok(Some(item)) => {
                 self.skipped_in_a_row = 0;
                 self.publish_queue();
                 let request = self.new_start(item, SessionStartedBy::Auto, responder, start_paused);
                 self.begin_start(request);
             }
-            None => {
+            Ok(None) => {
                 self.discard_transport();
                 self.queue.clear();
                 self.publish_queue();
                 let snapshot = self.publish_state();
                 respond(responder, Ok(snapshot));
+            }
+            Err(error) => {
+                // The library could not be read: the queue stays as it is, and playback stops
+                // on the track it advanced to, so a later play can try it again.
+                self.discard_transport();
+                self.publish_queue();
+                self.publish_state();
+                respond(responder, Err(error));
             }
         }
     }

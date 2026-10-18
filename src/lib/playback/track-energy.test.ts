@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { levelToUnit } from "#lib/ui/waveform/waveform-model";
+import { Waveform } from "#lib/ui/waveform/waveform-model";
 import { TrackEnergy } from "./track-energy";
 
 describe("TrackEnergy.of", () => {
@@ -7,7 +7,9 @@ describe("TrackEnergy.of", () => {
 
   it("puts every bucket on the waveform bars' dB scale", () => {
     const energy = TrackEnergy.of(rms)!;
-    expect(Array.from(energy)).toEqual(rms.map((level) => Math.fround(levelToUnit(level))));
+    expect(Array.from(energy)).toEqual(
+      rms.map((level) => Math.fround(Waveform.levelToUnit(level))),
+    );
     expect(energy[0]).toBe(0);
     expect(energy[3]).toBe(1);
   });

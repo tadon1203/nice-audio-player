@@ -295,6 +295,32 @@ fn when_every_track_has_left_the_library_the_start_is_refused() {
 }
 
 #[test]
+fn a_failed_library_read_during_the_queue_lookup_drops_no_queue_item() {
+    let mut harness = Harness::new();
+    harness.library.fail_reads(true);
+    let tracks = vec![
+        harness.track("a", 1),
+        harness.track("b", 1),
+        harness.track("c", 1),
+    ];
+
+    let result = harness.start(tracks, 0);
+    harness.library.fail_reads(false);
+
+    assert_eq!(
+        result,
+        Err(PlaybackServiceError::Common {
+            error: CommonError::PersistenceFailed,
+        })
+    );
+    assert_eq!(
+        harness.queue_snapshot().upcoming_count,
+        2,
+        "the two other tracks stay queued"
+    );
+}
+
+#[test]
 fn a_window_leaves_out_a_track_that_has_left_the_library_since() {
     let library = Arc::new(FakeTracks::default());
     let tracks = resolver_of(&library);
