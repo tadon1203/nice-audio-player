@@ -22,9 +22,9 @@ The behavior this ticket makes work. Use domain terms.
 
 ## How
 
-## Contracts
+The approach. Name the path of each new file or module. Do not list existing files.
 
-## Files
+## Contracts
 
 ## Tests
 

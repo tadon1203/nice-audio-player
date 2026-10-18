@@ -24,7 +24,7 @@ The solution, from the user's perspective.
 
 ## Decisions
 
-Decisions that apply to more than one change, then one subsection per module with its Files, Contracts, and Approach. For a decision whose solution was not obvious, give each rejected alternative and its reason in one line.
+Decisions that apply to more than one change, then one subsection per module with its Contracts and Approach. Name the path of each new file or module. For a decision whose solution was not obvious, give each rejected alternative and its reason in one line.
 
 ## Seams
 
