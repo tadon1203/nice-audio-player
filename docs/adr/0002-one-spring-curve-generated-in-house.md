@@ -10,7 +10,7 @@ Why not the earlier ease-out design (three durations, one ease-out curve, Svelte
 
 ## Consequences
 
-- `tokens.ts` stays the only definition; `applyCssMotion` publishes the curve and the settling lengths as CSS variables, and CSS declares no timing. Hand-written `element.animate` calls and the menus' enter/exit take the easing as well as the duration.
+- `tokens.ts` stays the only definition; `CssMotion.apply` publishes the curve and the settling lengths as CSS variables, and CSS declares no timing. Hand-written `element.animate` calls and the menus' enter/exit take the easing as well as the duration.
 - No movement has its own duration or curve. A sweep or a lyric line uses `move`.
 - Animations run about 1.18× their perceptual duration before they settle; outros, hand-tuned delays and E2E waits are derived from the tokens, never written as numbers.
 - `linear()` needs Chromium 113+; WebView2 Evergreen is assumed.

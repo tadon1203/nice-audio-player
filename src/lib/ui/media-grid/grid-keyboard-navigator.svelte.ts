@@ -1,4 +1,4 @@
-import { GridLayout, type GridMetrics } from "./media-grid-model";
+import { GridLayout, type GridMetrics } from "./grid-layout";
 
 export interface GridKeyboardNavigatorOptions {
   /** The list of tiles (`null` while it is still mounting). */

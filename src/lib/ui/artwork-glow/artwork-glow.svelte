@@ -9,9 +9,9 @@
   import { fade, type TransitionConfig } from "svelte/transition";
   import type { ArtworkRef } from "#lib/native";
   import { ArtworkUrl } from "#lib/native";
-  import { motionFor } from "#lib/ui/motion/svelte-motion";
+  import { SvelteMotion } from "#lib/ui/motion/svelte-motion";
   import { cn } from "#lib/utils/cn.js";
-  import { GLOW, type GlowStrength } from "./glow-model";
+  import { GLOW, type GlowStrength } from "./glow";
 
   /**
    * The artwork as the app's light source: a static blurred image under a veil. Place it as the
@@ -41,8 +41,8 @@
   } = $props();
 
   const url = $derived(ArtworkUrl.of(artwork, "thumb"));
-  const motion = $derived(motionFor("large"));
-  const wipeMotion = $derived(motionFor("move"));
+  const motion = $derived(SvelteMotion.of("large"));
+  const wipeMotion = $derived(SvelteMotion.of("move"));
   const wipe = $derived(!prefersReducedMotion.current && enter !== "fade" ? enter : null);
 
   /** The incoming image: faded in, or clipped so that it grows from the edge it came from. */

@@ -1,7 +1,7 @@
 import type { Playback } from "#lib/playback/playback.svelte";
 import { PlaybackSnapshots } from "#lib/playback/playback-snapshots";
 import { VolumeStep } from "#lib/playback/volume-step";
-import { Waveform } from "#lib/ui/waveform/waveform-model";
+import { Waveform } from "#lib/ui/waveform/waveform";
 import type { NowPlayingView } from "./now-playing-view.svelte";
 import type { QueuePanel } from "./queue-panel.svelte";
 import type { UserActionRunner } from "./user-action-runner.svelte";

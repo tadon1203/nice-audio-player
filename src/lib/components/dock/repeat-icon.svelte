@@ -5,8 +5,8 @@
   import { Tween } from "svelte/motion";
   import type { PlaybackRepeatMode } from "#lib/native";
   import { AppServices } from "#lib/shell/app-services.svelte";
-  import { motionFor } from "#lib/ui/motion/svelte-motion";
-  import { slideTransition } from "#lib/ui/motion/svelte-slide";
+  import { SvelteMotion } from "#lib/ui/motion/svelte-motion";
+  import { SvelteSlide } from "#lib/ui/motion/svelte-slide";
   import type { TransitionConfig } from "svelte/transition";
 
   /** One turn of the icon per mode change; `one` drops a superscript 1 beside it. */
@@ -14,7 +14,7 @@
 
   const budget = AppServices.current().motion;
   const reduced = $derived(budget.current === "reduced");
-  const motion = $derived(motionFor("move"));
+  const motion = $derived(SvelteMotion.of("move"));
 
   const rotation = new Tween(0);
   let shown = untrack(() => mode);
@@ -26,7 +26,8 @@
     untrack(() => void rotation.set(rotation.target + 360, motion));
   });
 
-  const drop = (_node: Element): TransitionConfig => slideTransition("move", reduced, { y: -6 });
+  const drop = (_node: Element): TransitionConfig =>
+    SvelteSlide.transition("move", reduced, { y: -6 });
 </script>
 
 <span class="flex" style:transform="rotate({rotation.current}deg)">

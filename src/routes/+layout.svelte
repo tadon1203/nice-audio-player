@@ -2,7 +2,7 @@
   import "../app.css";
   import { onMount } from "svelte";
   import { prefersReducedMotion } from "svelte/motion";
-  import { applyCssMotion } from "#lib/ui/motion/css-motion";
+  import { CssMotion } from "#lib/ui/motion/css-motion";
   import { QueryClientProvider } from "@tanstack/svelte-query";
   import ArtworkAccent from "./artwork-accent.svelte";
   import PlaybackRegion from "#lib/components/dock/playback-region.svelte";
@@ -24,7 +24,7 @@
   // The UI does not wait for the connection: the Dock shows its state, the rest fills in as it arrives.
   onMount(() => services?.session.connect());
 
-  $effect(() => applyCssMotion(document.documentElement, prefersReducedMotion.current));
+  $effect(() => CssMotion.apply(document.documentElement, prefersReducedMotion.current));
 </script>
 
 <svelte:window

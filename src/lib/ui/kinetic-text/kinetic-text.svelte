@@ -1,10 +1,10 @@
 <script lang="ts">
   import { prefersReducedMotion } from "svelte/motion";
   import type { Attachment } from "svelte/attachments";
-  import { motionFor } from "#lib/ui/motion/svelte-motion";
-  import { springLinear } from "#lib/ui/motion/spring-curve";
-  import { tweenNumber } from "#lib/ui/motion/tween-number";
-  import { REVEAL_END_PERCENT, wipeMask } from "./wipe-mask";
+  import { SvelteMotion } from "#lib/ui/motion/svelte-motion";
+  import { SpringCurve } from "#lib/ui/motion/spring-curve";
+  import { NumberTween } from "#lib/ui/motion/number-tween";
+  import { WipeMask } from "./wipe-mask";
   import { cn } from "#lib/utils/cn.js";
 
   /**
@@ -27,8 +27,8 @@
     class?: string;
   } = $props();
 
-  const { duration, easing } = motionFor("move");
-  const options = { duration, easing: springLinear };
+  const { duration, easing } = SvelteMotion.of("move");
+  const options = { duration, easing: SpringCurve.linear };
   const reduced = prefersReducedMotion.current;
 
   // Plays once per mount. The wipe ends past the text, so once it is done the mask clips nothing
@@ -42,15 +42,15 @@
       { transform: [`translateX(${8 * direction}px)`, "translateX(0)"] },
       { ...options, fill: "backwards" },
     );
-    const wipe = tweenNumber(0, REVEAL_END_PERCENT, {
+    const wipe = new NumberTween(0, WipeMask.REVEAL_END_PERCENT, {
       duration,
       easing,
-      onUpdate: (percent) => {
-        const mask = wipeMask(percent);
+      onUpdate: (percent): void => {
+        const mask = WipeMask.at(percent);
         node.style.maskImage = mask;
         node.style.webkitMaskImage = mask;
       },
-      onComplete: () => {
+      onComplete: (): void => {
         node.style.maskImage = "";
         node.style.webkitMaskImage = "";
       },
@@ -67,6 +67,6 @@
   {@attach play}
   class={cn("block", className)}
   style:opacity={reduced ? 0 : undefined}
-  style:mask-image={reduced ? undefined : wipeMask(0)}
-  style:-webkit-mask-image={reduced ? undefined : wipeMask(0)}>{text}</span
+  style:mask-image={reduced ? undefined : WipeMask.at(0)}
+  style:-webkit-mask-image={reduced ? undefined : WipeMask.at(0)}>{text}</span
 >

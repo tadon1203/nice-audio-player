@@ -28,25 +28,28 @@ const CUT_OFF = ((): number => {
   return high;
 })();
 
-/** The curve as a function of progress through its run, 0 to 1. Starts flat, ends exactly at 1. */
-export function springEasing(progress: number): number {
-  if (progress <= 0) return 0;
-  if (progress >= 1) return 1;
-  return (1 - remaining(CUT_OFF * progress)) / (1 - RESIDUAL);
-}
+/** The curve: calculations only. */
+export class SpringCurve {
+  /** The `linear()` string, the same curve as `easing`. */
+  public static readonly linear: string = (() => {
+    const points = Array.from({ length: LINEAR_POINTS }, (_, index) =>
+      Number(SpringCurve.easing(index / (LINEAR_POINTS - 1)).toFixed(4)),
+    );
+    return `linear(${points.join(", ")})`;
+  })();
 
-/**
- * How long the curve runs, in ms, for a perceptual duration (Apple's sense: about when the
- * spring looks done, which the residual cut makes about 1.18× longer).
- */
-export function settlingLength(perceptualMs: number): number {
-  return Math.round((perceptualMs * CUT_OFF) / (2 * Math.PI));
-}
+  /** The curve as a function of progress through its run, 0 to 1. Starts flat, ends exactly at 1. */
+  public static easing(progress: number): number {
+    if (progress <= 0) return 0;
+    if (progress >= 1) return 1;
+    return (1 - remaining(CUT_OFF * progress)) / (1 - RESIDUAL);
+  }
 
-/** The same curve as a CSS `linear()` easing. */
-export const springLinear: string = (() => {
-  const points = Array.from({ length: LINEAR_POINTS }, (_, index) =>
-    Number(springEasing(index / (LINEAR_POINTS - 1)).toFixed(4)),
-  );
-  return `linear(${points.join(", ")})`;
-})();
+  /**
+   * How long the curve runs, in ms, for a perceptual duration (Apple's sense: about when the
+   * spring looks done, which the residual cut makes about 1.18× longer).
+   */
+  public static settlingLength(perceptualMs: number): number {
+    return Math.round((perceptualMs * CUT_OFF) / (2 * Math.PI));
+  }
+}

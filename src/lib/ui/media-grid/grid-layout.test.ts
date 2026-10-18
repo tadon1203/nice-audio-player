@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { GridLayout } from "./media-grid-model";
+import { GridLayout } from "./grid-layout";
 
 const metrics = { tileWidth: 192, columnGap: 20, tileHeight: 248, rowGap: 32 };
 

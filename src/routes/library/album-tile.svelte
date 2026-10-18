@@ -3,7 +3,7 @@
   import { resolve } from "$app/paths";
   import { albumTitleLabel, artistNameLabel } from "#lib/library/unknown-name";
   import Artwork from "#lib/ui/artwork.svelte";
-  import { sharedElement } from "#lib/ui/motion/shared-element";
+  import { SharedElement } from "#lib/ui/motion/shared-element";
   import PlayPauseIcon from "#lib/ui/play-pause-icon.svelte";
   import { Button } from "#lib/ui/shadcn/button/index.js";
   import { MISSING } from "#lib/utils/missing";
@@ -45,7 +45,7 @@
     <Artwork
       artwork={album.artwork}
       alt="{title} artwork"
-      {@attach sharedElement(album.id)}
+      {@attach SharedElement.attach(album.id)}
       class="[&_img]:transition-transform group-hover:[&_img]:scale-[1.04]"
     />
     <div class="mt-3 min-w-0">

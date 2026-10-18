@@ -5,8 +5,8 @@
   import VolumeX from "@lucide/svelte/icons/volume-x";
   import { AppServices } from "#lib/shell/app-services.svelte";
   import { VolumeStep } from "#lib/playback/volume-step";
-  import { springLinear } from "#lib/ui/motion/spring-curve";
-  import { motionFor } from "#lib/ui/motion/svelte-motion";
+  import { SpringCurve } from "#lib/ui/motion/spring-curve";
+  import { SvelteMotion } from "#lib/ui/motion/svelte-motion";
   import RollingNumber from "#lib/ui/rolling-number/rolling-number.svelte";
   import { Button } from "#lib/ui/shadcn/button";
   import { Slider } from "#lib/ui/shadcn/slider";
@@ -48,7 +48,7 @@
           { transform: `translateX(${dx}px)` },
           { transform: "translateX(0)" },
         ],
-        { duration: motionFor("feedback").duration, easing: springLinear },
+        { duration: SvelteMotion.of("feedback").duration, easing: SpringCurve.linear },
       );
       return;
     }

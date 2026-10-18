@@ -8,7 +8,7 @@
   import { onDestroy, onMount, tick } from "svelte";
   import { AppServices } from "#lib/shell/app-services.svelte";
   import RollingNumber from "#lib/ui/rolling-number/rolling-number.svelte";
-  import { spinTurns } from "#lib/ui/rolling-number/rolling-model";
+  import { RollingMath } from "#lib/ui/rolling-number/rolling-math";
   import WaveformSeek from "#lib/ui/waveform/waveform-seek.svelte";
   import { cn } from "#lib/utils/cn.js";
   import { DurationFormat } from "#lib/utils/duration-format";
@@ -78,7 +78,7 @@
   onMount(() =>
     playback.clock.onJump((jump) => {
       if (jump.kind !== "seek" || dragging) return;
-      spin = spinTurns(jump.toMs - jump.fromMs);
+      spin = RollingMath.spinTurns(jump.toMs - jump.fromMs);
       void tick().then(() => (spin = 0));
     }),
   );

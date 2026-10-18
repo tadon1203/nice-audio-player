@@ -1,5 +1,5 @@
 import type { QueueItemId } from "#lib/native";
-import { estimatePosition, type PositionAnchor } from "#lib/ui/motion/interpolate-position";
+import { PositionEstimate, type PositionAnchor } from "#lib/ui/motion/position-estimate";
 
 /** What a playback snapshot says about time: everything the clock needs, and nothing else. */
 export interface ClockReport {
@@ -42,7 +42,7 @@ export class ClockState {
   /** Where playback is at `nowMs`, from the last report. Frozen while paused. */
   public estimate(nowMs: number): number {
     if (this.report === null) return 0;
-    return estimatePosition(this.anchor, nowMs, this.report.playing, this.report.durationMs);
+    return PositionEstimate.of(this.anchor, nowMs, this.report.playing, this.report.durationMs);
   }
 
   /**

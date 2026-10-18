@@ -3,7 +3,7 @@
   import type { TransitionConfig } from "svelte/transition";
   import { AppServices } from "#lib/shell/app-services.svelte";
   import { NowPlayingMotion } from "#lib/shell/now-playing-motion";
-  import { motionFor } from "#lib/ui/motion/svelte-motion";
+  import { SvelteMotion } from "#lib/ui/motion/svelte-motion";
   import { LIFT_PX } from "./now-playing-layout";
 
   /**
@@ -21,7 +21,7 @@
   function lift(opening: boolean) {
     return (_node: Element): TransitionConfig => {
       const reduced = budget.current === "reduced";
-      const { duration, easing } = motionFor("large");
+      const { duration, easing } = SvelteMotion.of("large");
       return {
         duration: opening || reduced ? duration : duration * NowPlayingMotion.EXIT_SPEED,
         easing,

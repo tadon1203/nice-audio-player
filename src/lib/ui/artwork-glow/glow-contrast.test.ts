@@ -1,17 +1,12 @@
 import { describe, expect, it } from "vitest";
-import {
-  breathingOpacity,
-  contrastRatio,
-  grayLuminance,
-  INK,
-  GLOW,
-  readableAccent,
-  worstCaseSurfaceLuminance,
-  type GlowStrength,
-} from "./glow-model";
+import { INK } from "./glow";
+import { GlowContrast } from "./glow-contrast";
 
-const luminance = grayLuminance;
-const contrast = contrastRatio;
+const luminance = (oklchLightness: number): number => GlowContrast.grayLuminance(oklchLightness);
+const contrastRatio = (a: number, b: number): number => GlowContrast.contrastRatio(a, b);
+const worstCaseSurfaceLuminance = (): number => GlowContrast.worstCaseSurfaceLuminance();
+const readableAccent = (hex: string | null | undefined): string | null =>
+  GlowContrast.readableAccent(hex);
 const background = INK.background;
 const ink = INK;
 
@@ -19,16 +14,16 @@ describe("artwork glow", () => {
   const surface = worstCaseSurfaceLuminance();
 
   it("keeps primary and secondary text at AA on the brightest artwork", () => {
-    expect(contrast(luminance(ink.one), surface)).toBeGreaterThanOrEqual(4.5);
-    expect(contrast(luminance(ink.two), surface)).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(luminance(ink.one), surface)).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(luminance(ink.two), surface)).toBeGreaterThanOrEqual(4.5);
   });
 
   it("keeps past lyrics and small metadata at AA on the brightest artwork", () => {
-    expect(contrast(luminance(ink.three), surface)).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(luminance(ink.three), surface)).toBeGreaterThanOrEqual(4.5);
   });
 
   it("keeps Ink-3 at AA on the plain workspace background", () => {
-    expect(contrast(luminance(ink.three), luminance(background))).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(luminance(ink.three), luminance(background))).toBeGreaterThanOrEqual(4.5);
   });
 
   it("keeps the three inks visibly distinct", () => {
@@ -51,7 +46,7 @@ describe("readable accent", () => {
     "keeps %s at AA over the brightest Artwork glow",
     (hex) => {
       const accent = readableAccent(hex)!;
-      expect(contrast(luminanceOf(accent), surface)).toBeGreaterThanOrEqual(4.5);
+      expect(contrastRatio(luminanceOf(accent), surface)).toBeGreaterThanOrEqual(4.5);
     },
   );
 
@@ -62,23 +57,5 @@ describe("readable accent", () => {
   it("rejects anything that is not #rrggbb", () => {
     expect(readableAccent("red")).toBeNull();
     expect(readableAccent(null)).toBeNull();
-  });
-});
-
-describe("breathing glow", () => {
-  it.each(Object.keys(GLOW.strength) as GlowStrength[])(
-    "never gets brighter than the %s strength, so the contrast caps still hold",
-    (strength) => {
-      for (const level of [-1, 0, 0.5, 1, 4]) {
-        expect(breathingOpacity(strength, level)).toBeLessThanOrEqual(GLOW.strength[strength]);
-      }
-      expect(breathingOpacity(strength, 1)).toBeCloseTo(GLOW.strength[strength]);
-      expect(breathingOpacity(strength, 0)).toBeCloseTo(GLOW.strength[strength] * 0.85);
-    },
-  );
-
-  it("keeps text readable over the faint glow used behind library tiles", () => {
-    // Faint is dimmer than max, so the max worst case (tested above) bounds it.
-    expect(GLOW.strength.faint).toBeLessThan(GLOW.strength.max);
   });
 });

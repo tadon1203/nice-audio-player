@@ -5,7 +5,7 @@ import { ScrollView } from "#lib/ui/scroll-view.svelte";
 import { VirtualRows } from "#lib/ui/virtual-rows.svelte";
 import { GridFlip } from "./grid-flip.svelte";
 import { GridKeyboardNavigator } from "./grid-keyboard-navigator.svelte";
-import { GridLayout, type GridMetrics } from "./media-grid-model";
+import { GridLayout, type GridMetrics } from "./grid-layout";
 import type { ArtworkLookup } from "./roving-glow-tracker.svelte";
 import { RovingGlowTracker } from "./roving-glow-tracker.svelte";
 import { SortMotion, type SortMotionMode } from "./sort-motion.svelte";

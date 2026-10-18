@@ -9,7 +9,9 @@
   import { Button } from "#lib/ui/shadcn/button";
   import Play from "@lucide/svelte/icons/play";
   import { AppServices } from "#lib/shell/app-services.svelte";
-  import { flipMotion } from "#lib/ui/motion/svelte-flip";
+  import { SvelteFlip } from "#lib/ui/motion/svelte-flip";
+  /** The `animate:` of a row: a directive takes a name, not a member. */
+  const flipRow = SvelteFlip.motion;
   import Artwork from "#lib/ui/artwork.svelte";
   import { cn } from "#lib/utils/cn.js";
   import { DurationFormat } from "#lib/utils/duration-format";
@@ -75,7 +77,7 @@
       {#each rows as item, index (item.queueItemId)}
         {@const isCurrent = current !== null && index === currentIndex}
         {@const isPast = index < currentIndex}
-        <div animate:flipMotion role="listitem" aria-current={isCurrent ? "true" : undefined}>
+        <div animate:flipRow role="listitem" aria-current={isCurrent ? "true" : undefined}>
           <Button
             type="button"
             disabled={isCurrent}

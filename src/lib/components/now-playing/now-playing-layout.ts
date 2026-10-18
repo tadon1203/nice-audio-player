@@ -1,7 +1,7 @@
 import { prefersReducedMotion } from "svelte/motion";
 import { fade } from "svelte/transition";
-import { motionFor } from "#lib/ui/motion/svelte-motion";
-import { delayOf } from "#lib/ui/motion/tokens";
+import { SvelteMotion } from "#lib/ui/motion/svelte-motion";
+import { TokenTiming } from "#lib/ui/motion/token-timing";
 import type { TransitionConfig } from "svelte/transition";
 
 /**
@@ -15,7 +15,7 @@ export const SLEEVE_SIZE = "max(10rem, min(calc(100cqh - 15rem), 38cqw, 40rem))"
 export const LIFT_PX = 24;
 
 /** Delay before the text and lyrics settle in, so the Sleeve lands first. */
-const CONTENT_DELAY_MS = delayOf("large", 0.4);
+const CONTENT_DELAY_MS = TokenTiming.delayOf("large", 0.4);
 
 /** The waveform band's height for the room the layer has: it gives way to the content. */
 export function waveformHeightFor(layerHeightPx: number): number {
@@ -31,12 +31,12 @@ export function waveformHeightFor(layerHeightPx: number): number {
  */
 export function contentFade(node: Element): TransitionConfig {
   const reduced = prefersReducedMotion.current;
-  return fade(node, { ...motionFor("large"), delay: reduced ? 0 : CONTENT_DELAY_MS });
+  return fade(node, { ...SvelteMotion.of("large"), delay: reduced ? 0 : CONTENT_DELAY_MS });
 }
 
 /** A column that comes or goes while Now Playing is open (lyrics found or lost): a plain crossfade. */
 export function columnFade(node: Element): TransitionConfig {
-  return fade(node, motionFor("large"));
+  return fade(node, SvelteMotion.of("large"));
 }
 
 /** How far lyrics travel while a track change swaps them, in px: a nudge, not a slide. */
@@ -52,7 +52,7 @@ export function lyricsSwap(
   _node: Element,
   { direction, leaving }: { direction: "next" | "previous"; leaving: boolean },
 ): { css: (t: number, u: number) => string; duration: number; easing: (t: number) => number } {
-  const motion = motionFor("move");
+  const motion = SvelteMotion.of("move");
   const sign = (direction === "next" ? -1 : 1) * (leaving ? 1 : -1);
   const distance = prefersReducedMotion.current ? 0 : SWAP_PX;
   return {

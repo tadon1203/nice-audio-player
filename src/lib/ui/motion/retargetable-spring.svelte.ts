@@ -1,17 +1,10 @@
 import { prefersReducedMotion } from "svelte/motion";
-import {
-  isSpringSettled,
-  jumpSpring,
-  restingSpring,
-  retargetSpring,
-  sampleSpring,
-  type SpringState,
-} from "./analytic-spring";
+import { SpringState } from "./spring-state";
 import { motionTokens } from "./tokens";
 
 /**
  * A number that follows a target on the one spring (ADR 0002) and keeps its velocity when the
- * target changes mid-flight. A reactive wrapper over `analytic-spring.ts`: it samples the closed
+ * target changes mid-flight. A reactive wrapper over `spring-state.ts`: it samples the closed
  * form on animation frames, so the result does not depend on the frame rate, and it stops its
  * own loop once settled. Under reduced motion, or with `instant`, it jumps.
  */
@@ -36,7 +29,7 @@ export class RetargetableSpring {
     this.#target = value;
     this.duration = duration;
     this.#precision = precision;
-    this.#state = restingSpring(value, duration);
+    this.#state = SpringState.resting(value, duration);
   }
 
   public get target(): number {
@@ -48,11 +41,11 @@ export class RetargetableSpring {
     this.#target = target;
     if (options.instant || prefersReducedMotion.current) {
       this.stop();
-      this.#state = jumpSpring(this.#state, target, now);
+      this.#state = this.#state.jump(target, now);
       this.current = target;
       return;
     }
-    this.#state = retargetSpring(this.#state, target, now, this.duration);
+    this.#state = this.#state.retarget(target, now, this.duration);
     if (this.#frame === 0) this.#frame = requestAnimationFrame(this.#tick);
   }
 
@@ -65,11 +58,11 @@ export class RetargetableSpring {
   readonly #tick = (): void => {
     this.#frame = 0;
     const now = performance.now();
-    if (isSpringSettled(this.#state, now, this.#precision)) {
+    if (this.#state.isSettled(now, this.#precision)) {
       this.current = this.#state.target;
       return;
     }
-    this.current = sampleSpring(this.#state, now).value;
+    this.current = this.#state.sample(now).value;
     this.#frame = requestAnimationFrame(this.#tick);
   };
 }

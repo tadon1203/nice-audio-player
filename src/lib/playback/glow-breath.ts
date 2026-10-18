@@ -1,5 +1,5 @@
 import type { Attachment } from "svelte/attachments";
-import { springLinear } from "#lib/ui/motion/spring-curve";
+import { SpringCurve } from "#lib/ui/motion/spring-curve";
 import type { DriveKeyframe, PlaybackClock } from "./playback-clock.svelte";
 
 export interface GlowBreathOptions {
@@ -65,7 +65,7 @@ export class GlowBreath {
         node.style.opacity = String(from);
         const animation = node.animate([{ opacity: from }, { opacity: to }], {
           duration: durationMs,
-          easing: springLinear,
+          easing: SpringCurve.linear,
           fill: "forwards",
         });
         ease = animation;

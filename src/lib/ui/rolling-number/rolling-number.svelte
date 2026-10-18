@@ -2,10 +2,10 @@
   import { untrack } from "svelte";
   import { fade } from "svelte/transition";
   import { prefersReducedMotion } from "svelte/motion";
-  import { motionFor } from "#lib/ui/motion/svelte-motion";
+  import { SvelteMotion } from "#lib/ui/motion/svelte-motion";
   import { cn } from "#lib/utils/cn.js";
   import DigitColumn from "./digit-column.svelte";
-  import { resolveDirection, settleDelay, type RollDirection } from "./rolling-model";
+  import { RollingMath, type RollDirection } from "./rolling-math";
 
   /**
    * Digits that roll like an odometer. Columns are keyed by their place from the right, so a
@@ -38,8 +38,10 @@
   // The value before this one, to tell which way a number moved.
   let previous = untrack(() => value);
   const resolved = $derived<RollDirection>(
-    direction === "auto" ? resolveDirection(previous, value) : direction,
+    direction === "auto" ? RollingMath.direction(previous, value) : direction,
   );
+  // Last resort: the value before this one is kept after each change, so the next change can tell
+  // its direction. Nothing else records a value's history.
   $effect(() => {
     previous = value;
   });
@@ -51,7 +53,7 @@
     }),
   );
   const reduced = $derived(prefersReducedMotion.current);
-  const feedback = $derived(motionFor("feedback"));
+  const feedback = $derived(SvelteMotion.of("feedback"));
 </script>
 
 <span class={cn("inline-flex", className)}>
@@ -81,7 +83,7 @@
             digit={Number(cell.char)}
             direction={resolved}
             {spin}
-            delay={settleDelay(cell.place, settle)}
+            delay={RollingMath.settleDelay(cell.place, settle)}
             {instant}
           />
         {/if}

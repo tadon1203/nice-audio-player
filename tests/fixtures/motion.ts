@@ -1,6 +1,6 @@
-import { settlingLength } from "../../src/lib/ui/motion/spring-curve";
+import { SpringCurve } from "../../src/lib/ui/motion/spring-curve";
 import { motionTokens, type MotionToken } from "../../src/lib/ui/motion/tokens";
 
 /** How long a token's movement runs, in ms: tests wait on this, never on a literal. */
 export const motionMs = (token: MotionToken): number =>
-  settlingLength(motionTokens[token].duration);
+  SpringCurve.settlingLength(motionTokens[token].duration);

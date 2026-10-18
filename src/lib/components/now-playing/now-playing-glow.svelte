@@ -3,8 +3,9 @@
   import { GlowBreath } from "#lib/playback/glow-breath";
   import { Loudness } from "#lib/playback/loudness";
   import ArtworkGlow from "#lib/ui/artwork-glow/artwork-glow.svelte";
-  import { breathingOpacity, GLOW } from "#lib/ui/artwork-glow/glow-model";
-  import { motionFor } from "#lib/ui/motion/svelte-motion";
+  import { GLOW } from "#lib/ui/artwork-glow/glow";
+  import { GlowOpacity } from "#lib/ui/artwork-glow/glow-opacity";
+  import { SvelteMotion } from "#lib/ui/motion/svelte-motion";
 
   /**
    * Now Playing's Artwork glow, which breathes with the track's loudness (never brighter than its
@@ -24,13 +25,14 @@
   const breathing = $derived(budget.current === "full");
   const waveform = $derived(waveforms.forPlayback(playback.playbackId));
 
-  const motion = $derived(motionFor("large"));
+  const motion = $derived(SvelteMotion.of("large"));
   // The Artwork glow breathes along the track's smoothed loudness, drawn by the compositor from
   // keyframes computed once per waveform; nothing here runs per frame.
   const breathe = $derived.by(() => {
     const loudness = Loudness.keyframes(waveform?.rms ?? null, playback.durationMs);
     if (!breathing || loudness.length === 0) return undefined;
-    const opacityOf = (level: number): number => breathingOpacity("max", level) / GLOW.strength.max;
+    const opacityOf = (level: number): number =>
+      GlowOpacity.breathing("max", level) / GLOW.strength.max;
     return GlowBreath.attach({
       clock: playback.clock,
       keyframes: loudness.map(({ atMs, level }) => ({ atMs, opacity: opacityOf(level) })),

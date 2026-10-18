@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Waveform } from "#lib/ui/waveform/waveform-model";
+import { Waveform } from "#lib/ui/waveform/waveform";
 import { TrackEnergy } from "./track-energy";
 
 describe("TrackEnergy.of", () => {

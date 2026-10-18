@@ -7,7 +7,7 @@
   import { crossfade, fade } from "svelte/transition";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
-  import { motionFor } from "#lib/ui/motion/svelte-motion";
+  import { SvelteMotion } from "#lib/ui/motion/svelte-motion";
   import { Button } from "#lib/ui/shadcn/button/index.js";
 
   interface NavigationItem {
@@ -34,9 +34,9 @@
   // `crossfade` is created per Navigation, because the sidebar and the mobile sheet can both be
   // mounted and must not trade pills.
   const [send, receive] = crossfade({
-    duration: () => motionFor("move").duration,
-    easing: (t) => motionFor("move").easing(t),
-    fallback: (node) => fade(node, { duration: motionFor("feedback").duration }),
+    duration: () => SvelteMotion.of("move").duration,
+    easing: (t) => SvelteMotion.of("move").easing(t),
+    fallback: (node) => fade(node, { duration: SvelteMotion.of("feedback").duration }),
   });
 </script>
 

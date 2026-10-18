@@ -2,7 +2,7 @@
   import { untrack } from "svelte";
   import type { SVGAttributes } from "svelte/elements";
   import { Tween } from "svelte/motion";
-  import { motionFor } from "#lib/ui/motion/svelte-motion";
+  import { SvelteMotion } from "#lib/ui/motion/svelte-motion";
 
   // Both glyphs are two four-point shapes with the same vertex order (top-left, top-right,
   // bottom-right, bottom-left) so one becomes the other by interpolating the points.
@@ -17,9 +17,10 @@
   let { playing, ...props }: { playing: boolean } & SVGAttributes<SVGSVGElement> = $props();
 
   const points = new Tween(untrack(() => (playing ? PAUSE : PLAY)));
+  // Last resort: a prop change starts a morph; no attachment or subscriber fits a prop.
   $effect(() => {
     const goal = playing ? PAUSE : PLAY;
-    const motion = motionFor("move");
+    const motion = SvelteMotion.of("move");
     untrack(() => void points.set(goal, motion));
   });
 

@@ -1,6 +1,6 @@
 import { untrack } from "svelte";
 import type { TransitionConfig } from "svelte/transition";
-import { motionFor } from "#lib/ui/motion/svelte-motion";
+import { SvelteMotion } from "#lib/ui/motion/svelte-motion";
 import type { SortMotionMode } from "./sort-motion.svelte";
 
 export interface GridFlipOptions {
@@ -56,7 +56,7 @@ export class GridFlip {
   /** The transition of a tile that mounts: a fade when the tiles fade, otherwise none. */
   public readonly fadeIn = (_node: Element): TransitionConfig => {
     if (this.#options.motion() !== "fade") return { duration: 0 };
-    const { duration, easing } = motionFor("move");
+    const { duration, easing } = SvelteMotion.of("move");
     return { duration, easing, css: (t) => `opacity: ${t}` };
   };
 
@@ -67,7 +67,7 @@ export class GridFlip {
     }
     const list = this.#options.list();
     if (this.#before.size === 0 || list === null) return;
-    const { duration, easing } = motionFor("move");
+    const { duration, easing } = SvelteMotion.of("move");
     const steps = 24;
     let moved = false;
     list.querySelectorAll<HTMLElement>("li[data-key]").forEach((element) => {

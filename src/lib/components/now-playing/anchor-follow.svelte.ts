@@ -1,7 +1,7 @@
 import type { Attachment } from "svelte/attachments";
 import { AppServices } from "#lib/shell/app-services.svelte";
 import { RetargetableSpring } from "#lib/ui/motion/retargetable-spring.svelte";
-import { springLinear } from "#lib/ui/motion/spring-curve";
+import { SpringCurve } from "#lib/ui/motion/spring-curve";
 import { crossfade, motionTokens } from "#lib/ui/motion/tokens";
 import { anchorScrollTop } from "./anchor-column";
 import type { ScrollHow } from "./lyrics-follow-model";
@@ -106,7 +106,10 @@ export function createAnchorFollow(): {
       if (reduced || how !== "animate") {
         write(element, target);
         if (how === "fade" && !reduced) {
-          fade = element.animate({ opacity: [0, 1] }, { duration: FADE_MS, easing: springLinear });
+          fade = element.animate(
+            { opacity: [0, 1] },
+            { duration: FADE_MS, easing: SpringCurve.linear },
+          );
         }
         return;
       }

@@ -27,6 +27,8 @@
   } = $props();
 
   const painter = new WaveformPainter();
+  // Last resort: the props are the input, and the canvas may not exist yet (no bars), so the
+  // painter is updated on every prop change rather than from an attachment on the canvas.
   $effect(() => painter.update({ bars, height, sweep, still }));
 </script>
 

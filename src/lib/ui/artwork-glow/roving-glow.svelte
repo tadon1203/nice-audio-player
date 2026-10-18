@@ -7,7 +7,7 @@
 <script lang="ts">
   import { untrack } from "svelte";
   import { Tween } from "svelte/motion";
-  import { motionFor } from "#lib/ui/motion/svelte-motion";
+  import { SvelteMotion } from "#lib/ui/motion/svelte-motion";
   import ArtworkGlow from "./artwork-glow.svelte";
 
   /**
@@ -22,18 +22,20 @@
   const y = new Tween(untrack(() => target.y - SIZE_PX / 2));
   const opacity = new Tween(0);
 
+  // Last resort: the hovered tile is a prop change, which starts an eased move.
   $effect(() => {
     const goal = { x: target.x - SIZE_PX / 2, y: target.y - SIZE_PX / 2 };
-    const move = motionFor("move");
+    const move = SvelteMotion.of("move");
     untrack(() => {
       void x.set(goal.x, move);
       void y.set(goal.y, move);
     });
   });
 
+  // Last resort: the active flag is a prop change, which starts a fade.
   $effect(() => {
     const goal = target.active ? 1 : 0;
-    const light = motionFor("large");
+    const light = SvelteMotion.of("large");
     untrack(() => void opacity.set(goal, light));
   });
 </script>

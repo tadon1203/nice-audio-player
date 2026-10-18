@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { applyCssMotion } from "./css-motion";
-import { springLinear } from "./spring-curve";
+import { CssMotion } from "./css-motion";
+import { SpringCurve } from "./spring-curve";
 
 function publish(reduced: boolean): { properties: Map<string, string>; remove: () => void } {
   const properties = new Map<string, string>();
@@ -10,14 +10,14 @@ function publish(reduced: boolean): { properties: Map<string, string>; remove: (
       removeProperty: (name: string) => void properties.delete(name),
     },
   } as unknown as HTMLElement;
-  const remove = applyCssMotion(root, reduced);
+  const remove = CssMotion.apply(root, reduced);
   return { properties, remove };
 }
 
-describe("applyCssMotion", () => {
+describe("CssMotion.apply", () => {
   it("publishes the curve and each token's settling length", () => {
     const { properties } = publish(false);
-    expect(properties.get("--motion-easing")).toBe(springLinear);
+    expect(properties.get("--motion-easing")).toBe(SpringCurve.linear);
     expect(properties.get("--motion-move-duration")).toBe("260ms");
     expect(properties.get("--default-transition-duration")).toBe("89ms");
   });

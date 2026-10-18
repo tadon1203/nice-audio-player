@@ -1,15 +1,17 @@
 <script lang="ts">
   import { AppServices } from "#lib/shell/app-services.svelte";
   import { UpcomingItems } from "#lib/playback/upcoming-items.svelte";
-  import { flipMotion } from "#lib/ui/motion/svelte-flip";
-  import { delayOf } from "#lib/ui/motion/tokens";
+  import { SvelteFlip } from "#lib/ui/motion/svelte-flip";
+  import { TokenTiming } from "#lib/ui/motion/token-timing";
   import { VirtualRows } from "#lib/ui/virtual-rows.svelte";
   import { cn } from "#lib/utils/cn.js";
   import { QueueDrag } from "./queue-drag.svelte";
   import QueueRow, { QUEUE_ROW_PX } from "./queue-row.svelte";
 
   /** Each row starts a little after the one above it. */
-  const CASCADE_STEP_MS = delayOf("feedback", 0.2);
+  const CASCADE_STEP_MS = TokenTiming.delayOf("feedback", 0.2);
+  /** The `animate:` of a row: a directive takes a name, not a member. */
+  const flipRow = SvelteFlip.motion;
   const CASCADE_ROWS = 12;
 
   let {
@@ -70,7 +72,7 @@
   {#each rows as { index, item, key } (key)}
     {@const dragging = item !== undefined && drag?.id === item.queueItemId}
     <li
-      animate:flipMotion={{
+      animate:flipRow={{
         delay: cascading && !reduced ? Math.min(index, CASCADE_ROWS) * CASCADE_STEP_MS : 0,
       }}
       aria-hidden={item === undefined ? "true" : undefined}

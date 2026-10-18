@@ -1,6 +1,6 @@
 <script lang="ts">
   import { prefersReducedMotion } from "svelte/motion";
-  import { applyCssMotion } from "#lib/ui/motion/css-motion";
+  import { CssMotion } from "#lib/ui/motion/css-motion";
   import { Button } from "#lib/ui/shadcn/button";
   import * as Dialog from "#lib/ui/shadcn/alert-dialog";
   import * as Select from "#lib/ui/shadcn/select";
@@ -9,7 +9,7 @@
 
   let chosen = $state("first");
   let selected = $state("first");
-  $effect(() => applyCssMotion(document.documentElement, prefersReducedMotion.current));
+  $effect(() => CssMotion.apply(document.documentElement, prefersReducedMotion.current));
 </script>
 
 <main class="bg-background text-foreground h-full p-8">

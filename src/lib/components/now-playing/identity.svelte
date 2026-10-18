@@ -4,7 +4,7 @@
   import { AppServices } from "#lib/shell/app-services.svelte";
   import Artwork from "#lib/ui/artwork.svelte";
   import KineticText from "#lib/ui/kinetic-text/kinetic-text.svelte";
-  import { SLEEVE_RADIUS, sharedElement, sharedKey } from "#lib/ui/motion/shared-element";
+  import { SLEEVE_RADIUS, SharedElement, sharedKey } from "#lib/ui/motion/shared-element";
   import { contentFade } from "./now-playing-layout";
   import TrackFacts from "./track-facts.svelte";
 
@@ -32,7 +32,7 @@
     <!-- Attached only while open, so the departure is recorded the moment closing begins, not
     after the layer has finished fading out. -->
     <div
-      {@attach nowPlaying.isOpen ? sharedElement(sharedKey.sleeve) : undefined}
+      {@attach nowPlaying.isOpen ? SharedElement.attach(sharedKey.sleeve) : undefined}
       class="relative size-full overflow-hidden"
       style:border-radius={SLEEVE_RADIUS}
     >

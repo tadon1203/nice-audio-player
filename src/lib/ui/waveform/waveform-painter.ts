@@ -1,15 +1,15 @@
 import type { Attachment } from "svelte/attachments";
-import { springEasing } from "#lib/ui/motion/spring-curve";
-import { delayOf, tokenDuration } from "#lib/ui/motion/tokens";
-import { tweenNumber } from "#lib/ui/motion/tween-number";
-import { Waveform } from "./waveform-model";
+import { SpringCurve } from "#lib/ui/motion/spring-curve";
+import { TokenTiming } from "#lib/ui/motion/token-timing";
+import { NumberTween } from "#lib/ui/motion/number-tween";
+import { Waveform } from "./waveform";
 
 /** Height of the flat line the bars grow out of, in px. */
 export const BASELINE_PX = 2;
 /** Total time for the growth to sweep from the first bar to the last. */
-const SWEEP_MS = delayOf("move", 1.45);
+const SWEEP_MS = TokenTiming.delayOf("move", 1.45);
 /** How long one bar takes to grow. */
-const MOVE_MS = tokenDuration("move", false);
+const MOVE_MS = TokenTiming.duration("move", false);
 
 /** What the painter draws. */
 export interface WaveformPaint {
@@ -77,14 +77,14 @@ export class WaveformPainter {
       return;
     }
     const total = MOVE_MS + (paint.sweep ? SWEEP_MS : 0);
-    tweenNumber(0, total, {
+    new NumberTween(0, total, {
       duration: total,
-      easing: (t) => t,
-      onUpdate: (value) => {
+      easing: (t: number): number => t,
+      onUpdate: (value): void => {
         this.#elapsed = value;
         this.#draw();
       },
-      onComplete: () => {
+      onComplete: (): void => {
         this.#elapsed = Number.POSITIVE_INFINITY;
       },
     });
@@ -112,7 +112,9 @@ export class WaveformPainter {
     for (let index = 0; index < count; index += 1) {
       const full = Math.max(BASELINE_PX, Waveform.levelToUnit(bars[index]!) * (height - 2));
       const delay = sweep ? (index / count) * SWEEP_MS : 0;
-      const progress = springEasing(Math.min(1, Math.max(0, (this.#elapsed - delay) / MOVE_MS)));
+      const progress = SpringCurve.easing(
+        Math.min(1, Math.max(0, (this.#elapsed - delay) / MOVE_MS)),
+      );
       const barHeight = BASELINE_PX + (full - BASELINE_PX) * progress;
       ctx.fillRect((index + 0.15) * unit, height - barHeight, 0.7 * unit, barHeight);
     }

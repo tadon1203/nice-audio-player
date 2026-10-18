@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Waveform } from "./waveform-model";
+import { Waveform } from "./waveform";
 
 describe("Waveform.resampleBars", () => {
   it("merges a span by the root of the mean of its squares", () => {

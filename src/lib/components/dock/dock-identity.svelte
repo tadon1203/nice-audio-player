@@ -9,8 +9,8 @@
   import Artwork from "#lib/ui/artwork.svelte";
   import ContextMenuContent from "#lib/ui/context-menu/context-menu-content.svelte";
   import ContextMenuItem from "#lib/ui/context-menu/context-menu-item.svelte";
-  import { SLEEVE_RADIUS, sharedElement, sharedKey } from "#lib/ui/motion/shared-element";
-  import { slideTransition } from "#lib/ui/motion/svelte-slide";
+  import { SLEEVE_RADIUS, SharedElement, sharedKey } from "#lib/ui/motion/shared-element";
+  import { SvelteSlide } from "#lib/ui/motion/svelte-slide";
   import { Button } from "#lib/ui/shadcn/button";
   import * as Tooltip from "#lib/ui/shadcn/tooltip";
   import type { TransitionConfig } from "svelte/transition";
@@ -38,7 +38,7 @@
    */
   function slide(_node: Element, { entering }: { entering: boolean }): TransitionConfig {
     const direction = playback.transitionDirection === "backward" ? -1 : 1;
-    return slideTransition("move", budget.current === "reduced", {
+    return SvelteSlide.transition("move", budget.current === "reduced", {
       x: (entering ? direction : -direction) * SLIDE_PX,
     });
   }
@@ -86,7 +86,7 @@
             The radius is set inline (not by class) so the flight's scale does not stretch the
             corners. -->
             <span
-              {@attach sharedElement(sharedKey.sleeve)}
+              {@attach SharedElement.attach(sharedKey.sleeve)}
               class="grid size-full overflow-hidden"
               style:border-radius={SLEEVE_RADIUS}
             >

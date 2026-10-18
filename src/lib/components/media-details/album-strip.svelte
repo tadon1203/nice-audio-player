@@ -19,7 +19,7 @@
   import { prefersReducedMotion } from "svelte/motion";
   import type { TransitionConfig } from "svelte/transition";
   import { AppServices } from "#lib/shell/app-services.svelte";
-  import { motionFor } from "#lib/ui/motion/svelte-motion";
+  import { SvelteMotion } from "#lib/ui/motion/svelte-motion";
   import { Tooltip, TooltipContent, TooltipTrigger } from "#lib/ui/shadcn/tooltip";
   import { cn } from "#lib/utils/cn.js";
   import { segmentFill, segmentStarts, segmentStates } from "./album-strip-model";
@@ -47,7 +47,7 @@
   /** Grows from the left edge, later the further into the album the segment starts. */
   function sweep(_node: Element, { start }: { start: number }): TransitionConfig {
     const reduced = prefersReducedMotion.current;
-    const { duration, easing } = motionFor("move");
+    const { duration, easing } = SvelteMotion.of("move");
     return {
       delay: reduced ? 0 : start * duration,
       duration,

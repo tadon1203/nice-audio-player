@@ -1,7 +1,7 @@
 <script lang="ts">
   import { AppServices } from "#lib/shell/app-services.svelte";
   import Artwork from "#lib/ui/artwork.svelte";
-  import { slideTransition } from "#lib/ui/motion/svelte-slide";
+  import { SvelteSlide } from "#lib/ui/motion/svelte-slide";
   import { cn } from "#lib/utils/cn.js";
   import type { TransitionConfig } from "svelte/transition";
 
@@ -52,7 +52,7 @@
   );
 
   const slideIn = (_node: Element): TransitionConfig =>
-    slideTransition("move", budget.current !== "full", {
+    SvelteSlide.transition("move", budget.current !== "full", {
       x: SLIDE_PX,
       opacity: SHOWN_OPACITY,
     });

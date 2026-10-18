@@ -5,7 +5,7 @@
   import { DurationFormat } from "#lib/utils/duration-format";
   import { PointerSeek } from "./pointer-seek.svelte";
   import WaveformBars from "./waveform-bars.svelte";
-  import { Waveform } from "./waveform-model";
+  import { Waveform } from "./waveform";
 
   interface Span {
     startMs: number;

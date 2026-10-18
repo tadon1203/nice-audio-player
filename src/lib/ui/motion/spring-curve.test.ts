@@ -1,17 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { settlingLength, springEasing, springLinear } from "./spring-curve";
+import { SpringCurve } from "./spring-curve";
 
-describe("springEasing", () => {
+describe("SpringCurve.easing", () => {
   it("starts at 0 with zero slope and ends exactly at 1", () => {
-    expect(springEasing(0)).toBe(0);
-    expect(springEasing(1)).toBe(1);
-    expect(springEasing(0.001)).toBeLessThan(1e-4);
+    expect(SpringCurve.easing(0)).toBe(0);
+    expect(SpringCurve.easing(1)).toBe(1);
+    expect(SpringCurve.easing(0.001)).toBeLessThan(1e-4);
   });
 
   it("rises monotonically and never exceeds 1", () => {
     let last = 0;
     for (let index = 1; index <= 1000; index += 1) {
-      const value = springEasing(index / 1000);
+      const value = SpringCurve.easing(index / 1000);
       expect(value).toBeGreaterThanOrEqual(last);
       expect(value).toBeLessThanOrEqual(1);
       last = value;
@@ -19,19 +19,19 @@ describe("springEasing", () => {
   });
 });
 
-describe("settlingLength", () => {
+describe("SpringCurve.settlingLength", () => {
   it("runs about 1.18 times the perceptual duration", () => {
-    expect(settlingLength(100)).toBe(118);
-    expect(settlingLength(300)).toBe(355);
+    expect(SpringCurve.settlingLength(100)).toBe(118);
+    expect(SpringCurve.settlingLength(300)).toBe(355);
   });
 });
 
-describe("springLinear", () => {
+describe("SpringCurve.linear", () => {
   it("is 41 evenly spaced points that agree with the easing", () => {
-    const points = springLinear.slice("linear(".length, -1).split(", ").map(Number);
+    const points = SpringCurve.linear.slice("linear(".length, -1).split(", ").map(Number);
     expect(points).toHaveLength(41);
     points.forEach((value, index) => {
-      expect(Math.abs(value - springEasing(index / 40))).toBeLessThan(1e-4);
+      expect(Math.abs(value - SpringCurve.easing(index / 40))).toBeLessThan(1e-4);
     });
     for (let index = 0; index < 400; index += 1) {
       const progress = index / 400;
@@ -39,7 +39,7 @@ describe("springLinear", () => {
       const low = Math.floor(at);
       const from = points[low]!;
       const to = points[low + 1] ?? from;
-      expect(Math.abs(from + (to - from) * (at - low) - springEasing(progress))).toBeLessThan(
+      expect(Math.abs(from + (to - from) * (at - low) - SpringCurve.easing(progress))).toBeLessThan(
         0.005,
       );
     }

@@ -1,5 +1,5 @@
 import type { Attachment } from "svelte/attachments";
-import { Waveform } from "./waveform-model";
+import { Waveform } from "./waveform";
 
 export interface PointerSeekOptions {
   durationMs: number;

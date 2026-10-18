@@ -1,7 +1,7 @@
 <script lang="ts">
   import { QueryResult } from "#lib/library/query-result.svelte";
   import { AppServices } from "#lib/shell/app-services.svelte";
-  import { readableAccent } from "#lib/ui/artwork-glow/glow-model";
+  import { GlowContrast } from "#lib/ui/artwork-glow/glow-contrast";
 
   /**
    * Publishes the playing track's color as `--artwork-accent` on the document. Only the played
@@ -15,7 +15,7 @@
     catalog.accentOptions(playback.item?.artwork?.hash ?? null),
   );
   const accent = $derived(
-    appearance.artworkBackdrop ? readableAccent(artworkColor.data ?? null) : null,
+    appearance.artworkBackdrop ? GlowContrast.readableAccent(artworkColor.data ?? null) : null,
   );
 
   $effect(() => {

@@ -3,7 +3,7 @@
   import type { ArtworkRef } from "#lib/native";
   import { AppServices } from "#lib/shell/app-services.svelte";
   import Artwork from "#lib/ui/artwork.svelte";
-  import { sharedElement } from "#lib/ui/motion/shared-element";
+  import { SharedElement } from "#lib/ui/motion/shared-element";
   import ArtworkGlow from "#lib/ui/artwork-glow/artwork-glow.svelte";
   import PageTitle from "#lib/ui/page-title.svelte";
 
@@ -49,7 +49,7 @@
       loading="eager"
       level="full"
       class="w-full max-w-56"
-      {@attach sharedKey === undefined ? undefined : sharedElement(sharedKey)}
+      {@attach sharedKey === undefined ? undefined : SharedElement.attach(sharedKey)}
     />
     <div class="min-w-0">
       <PageTitle>{title}</PageTitle>
