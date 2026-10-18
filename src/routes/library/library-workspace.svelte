@@ -1,43 +1,11 @@
-<script lang="ts" module>
-  import type { LibraryViewState } from "#lib/library/library-catalog.svelte";
-  import type { LibraryIndexBucket } from "#lib/native";
-  import type { SortableView } from "#lib/ui/sort-option";
-
-  export interface LibraryPresentationMeta {
-    title: string;
-    singular: string;
-    plural: string;
-    searchLabel: string;
-    searchPlaceholder: string;
-  }
-
-  export interface LibraryScroll {
-    /** The list reports the index of its first visible item here (for the scroll index). */
-    ontopindexchange: (index: number) => void;
-  }
-
-  /** What the workspace reads from `LibraryCatalog`. */
-  export interface WorkspaceCatalog<Item> {
-    statusError: unknown;
-    refetchStatus: () => unknown;
-    statusMessage: string | null;
-    viewState: LibraryViewState;
-    updating: boolean;
-    items: readonly Item[];
-    totalCount: number | null;
-    error: unknown;
-    hasNextPage: boolean;
-    isFetchingNextPage: boolean;
-    fetchNextPage: () => unknown;
-    refetch: () => unknown;
-    /** The scroll index of the list's order; empty when the sort has none. */
-    index: readonly LibraryIndexBucket[];
-  }
-</script>
-
 <script lang="ts" generics="Item, Key extends string">
   import type { Snippet } from "svelte";
   import { resolve } from "$app/paths";
+  import type {
+    LibraryPresentationMeta,
+    LibraryScroll,
+    WorkspaceCatalog,
+  } from "#lib/library/library-workspace";
   import { LibraryErrors } from "#lib/library/library-errors";
   import { ScrollIndex } from "#lib/library/scroll-index";
   import { AppServices } from "#lib/shell/app-services.svelte";
@@ -47,6 +15,7 @@
   import LoadMoreSentinel from "#lib/ui/load-more-sentinel.svelte";
   import LoadingStatus from "#lib/ui/loading-status.svelte";
   import ScrollIndexBadge from "#lib/ui/scroll-index-badge.svelte";
+  import type { SortableView } from "#lib/ui/sort-option";
   import WorkspaceScrollRegion from "#lib/ui/workspace-scroll.svelte";
   import IndexRail from "./index-rail.svelte";
   import LibraryToolbar from "./library-toolbar.svelte";
@@ -80,7 +49,9 @@
 
   let topIndex = $state(0);
 
-  const workspaceScroll = new WorkspaceScroll(AppServices.current().scrollMemory, {
+  const { actions, scrollMemory } = AppServices.current();
+
+  const workspaceScroll = new WorkspaceScroll(scrollMemory, {
     key: (): string => scrollKey,
     resetKey: (): string => stateKey,
     ready: (): boolean => catalog.items.length > 0,
@@ -122,14 +93,14 @@
       {:else if catalog.viewState === "statusError"}
         <ErrorAlert
           message={LibraryErrors.commandMessage(catalog.statusError)}
-          onRetry={() => void catalog.refetchStatus()}
+          onRetry={() => actions.run(() => catalog.refetchStatus(), "library")}
         />
       {:else if catalog.viewState === "unavailable"}
         <ErrorAlert message={catalog.statusMessage ?? ""} />
       {:else if catalog.viewState === "catalogError"}
         <ErrorAlert
           message={LibraryErrors.commandMessage(catalog.error)}
-          onRetry={() => void catalog.refetch()}
+          onRetry={() => actions.run(() => catalog.refetch(), "library")}
         />
       {:else if catalog.viewState === "empty"}
         <EmptyStatus>
@@ -147,7 +118,7 @@
         {#if catalog.hasNextPage}
           <LoadMoreSentinel
             pending={catalog.isFetchingNextPage}
-            onLoadMore={() => void catalog.fetchNextPage()}
+            onLoadMore={() => actions.run(() => catalog.fetchNextPage(), "library")}
           />
         {/if}
       {/if}

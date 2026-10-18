@@ -99,7 +99,7 @@
       label="Artwork backdrop"
       class="mt-5 border-y"
       checked={appearance.artworkBackdrop}
-      onChange={(checked) => void update({ artworkBackdrop: checked, calmMotion: null })}
+      onChange={(checked) => update({ artworkBackdrop: checked, calmMotion: null })}
     >
       Light the playback dock and Now Playing with the current track's artwork.
     </SettingsSwitchField>
@@ -108,7 +108,7 @@
       id="calm-motion"
       label="Calm motion"
       checked={appearance.calmMotion}
-      onChange={(checked) => void update({ artworkBackdrop: null, calmMotion: checked })}
+      onChange={(checked) => update({ artworkBackdrop: null, calmMotion: checked })}
     >
       Only what marks the current position moves on its own: the Artwork glow stops breathing and
       lyric characters stop lifting.

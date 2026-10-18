@@ -3,7 +3,7 @@
   import X from "@lucide/svelte/icons/x";
   import { AppServices } from "#lib/shell/app-services.svelte";
   import { Button } from "#lib/ui/shadcn/button/index.js";
-  import { scanLabel } from "./scan-status";
+  import { ScanStatus } from "./scan-status";
 
   /** The scan's state in words, and the button that starts or cancels it. */
   let { rootCount }: { rootCount: number } = $props();
@@ -16,7 +16,7 @@
 <div class="flex max-w-sm flex-col items-end gap-2">
   <div class="flex items-center gap-2">
     <span role="status" aria-live="polite" class="text-sm text-muted-foreground">
-      {scanLabel(scan?.state)}
+      {ScanStatus.label(scan?.state)}
     </span>
     {#if scan?.state === "running"}
       <Button

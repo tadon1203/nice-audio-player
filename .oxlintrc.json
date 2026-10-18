@@ -4,11 +4,11 @@
   "ignorePatterns": ["**/skills/**", "src/lib/native/bindings.ts"],
   "options": { "typeAware": true },
   "rules": {
-    "typescript/explicit-function-return-type": "warn",
-    "typescript/explicit-member-accessibility": "warn",
-    "typescript/consistent-type-definitions": ["warn", "interface"],
-    "typescript/no-floating-promises": ["warn", { "ignoreVoid": false }],
-    "typescript/prefer-readonly": "warn",
+    "typescript/explicit-function-return-type": "error",
+    "typescript/explicit-member-accessibility": "error",
+    "typescript/consistent-type-definitions": ["error", "interface"],
+    "typescript/no-floating-promises": ["error", { "ignoreVoid": false }],
+    "typescript/prefer-readonly": "error",
     "typescript/no-extraneous-class": "off"
   },
   "overrides": [

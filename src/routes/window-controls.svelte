@@ -6,7 +6,7 @@
   import { AppServices } from "#lib/shell/app-services.svelte";
   import { Button } from "#lib/ui/shadcn/button/index.js";
 
-  const appWindow = AppServices.current().window;
+  const { actions, window: appWindow } = AppServices.current();
   let maximized = $state(false);
 
   $effect(() =>
@@ -22,7 +22,7 @@
     variant="quiet"
     size="inline"
     aria-label="Minimize window"
-    onclick={() => void appWindow.minimize()}
+    onclick={() => actions.run(() => appWindow.minimize())}
     class="size-10 rounded-none"
   >
     <Minus aria-hidden="true" class="size-4" />
@@ -32,7 +32,7 @@
     variant="quiet"
     size="inline"
     aria-label={maximized ? "Restore window" : "Maximize window"}
-    onclick={() => void appWindow.toggleMaximize()}
+    onclick={() => actions.run(() => appWindow.toggleMaximize())}
     class="size-10 rounded-none"
   >
     {#if maximized}
@@ -46,7 +46,7 @@
     variant="bare"
     size="inline"
     aria-label="Close window"
-    onclick={() => void appWindow.close()}
+    onclick={() => actions.run(() => appWindow.close())}
     class="hover:bg-destructive hover:text-destructive-foreground size-10 rounded-none"
   >
     <X aria-hidden="true" class="size-4" />

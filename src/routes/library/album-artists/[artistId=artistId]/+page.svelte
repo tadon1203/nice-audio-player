@@ -47,7 +47,7 @@
   {#if artistQuery.isError}
     <ErrorAlert
       message={LibraryErrors.commandMessage(artistQuery.error)}
-      onRetry={() => void artistQuery.refetch()}
+      onRetry={() => actions.run(() => artistQuery.refetch(), "library")}
     />
   {:else if artistQuery.data === undefined || albums.isPending}
     <div class="mt-8">
@@ -57,7 +57,7 @@
   {:else if albums.isError}
     <ErrorAlert
       message={LibraryErrors.commandMessage(albums.error)}
-      onRetry={() => void albums.refetch()}
+      onRetry={() => actions.run(() => albums.refetch(), "library")}
     />
   {:else}
     {@const artist = artistQuery.data}
@@ -99,7 +99,7 @@
         {#if albums.hasNextPage}
           <LoadMoreSentinel
             pending={albums.isFetchingNextPage}
-            onLoadMore={() => void albums.fetchNextPage()}
+            onLoadMore={() => actions.run(() => albums.fetchNextPage(), "library")}
           />
         {/if}
       {:else}

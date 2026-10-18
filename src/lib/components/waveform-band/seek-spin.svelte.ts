@@ -18,7 +18,9 @@ export class SeekSpin {
       this.#playback.clock.onJump((jump) => {
         if (jump.kind !== "seek" || this.#dragging()) return;
         this.#turns = RollingMath.spinTurns(jump.toMs - jump.fromMs);
-        void tick().then(() => (this.#turns = 0));
+        void tick()
+          .then(() => (this.#turns = 0))
+          .catch(() => undefined);
       }),
     );
   }

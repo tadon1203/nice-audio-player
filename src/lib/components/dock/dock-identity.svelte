@@ -45,7 +45,7 @@
 
   // The links come from `Tracks.links`, which builds them with resolve().
   function goTo(href: string): void {
-    void goto(href);
+    actions.run(() => goto(href), "dock");
   }
 
   let errorTooltipOpen = $state(false);

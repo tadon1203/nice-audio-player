@@ -70,7 +70,7 @@
   {#if rootsQuery.isError}
     <ErrorAlert
       message={LibraryErrors.commandMessage(rootsQuery.error)}
-      onRetry={() => void rootsQuery.refetch()}
+      onRetry={() => actions.run(() => rootsQuery.refetch(), "library")}
     />
   {/if}
 

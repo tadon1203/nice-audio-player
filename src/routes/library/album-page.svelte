@@ -77,7 +77,7 @@
   {#if details.isError}
     <ErrorAlert
       message={LibraryErrors.commandMessage(details.error)}
-      onRetry={() => void details.refetch()}
+      onRetry={() => actions.run(() => details.refetch(), "library")}
     />
   {:else if details.data === undefined || tracks.isPending}
     <MediaDetailsHeader {title} {artist} artwork={summary?.artwork ?? null} sharedKey={albumId} />
@@ -85,7 +85,7 @@
   {:else if tracks.isError}
     <ErrorAlert
       message={LibraryErrors.commandMessage(tracks.error)}
-      onRetry={() => void tracks.refetch()}
+      onRetry={() => actions.run(() => tracks.refetch(), "library")}
     />
   {:else}
     {@const album = details.data}
@@ -150,7 +150,7 @@
     {#if tracks.hasNextPage}
       <LoadMoreSentinel
         pending={tracks.isFetchingNextPage}
-        onLoadMore={() => void tracks.fetchNextPage()}
+        onLoadMore={() => actions.run(() => tracks.fetchNextPage(), "library")}
       />
     {/if}
   {/if}
