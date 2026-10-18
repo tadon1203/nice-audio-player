@@ -4,7 +4,8 @@
   import { SignalPath } from "#lib/components/signal-path/signal-path.svelte";
   import FactLine from "#lib/ui/fact-line.svelte";
   import { Tracks } from "#lib/library/tracks";
-  import { lyricsState, trackFacts } from "./track-facts";
+  import { TrackFacts } from "./track-facts";
+  import { NowPlayingActions } from "./now-playing-actions.svelte";
 
   /**
    * Artist and album, each a link to its page (following one closes Now Playing: page state is
@@ -26,11 +27,8 @@
   const links = $derived(item === null ? null : Tracks.links(item));
   const artistHref = $derived(links?.artist?.href ?? null);
   const albumLinkHref = $derived(links?.album?.href ?? null);
-  const lyrics = $derived(item === null ? null : lyricsState(resolution));
-
-  function copy(text: string): void {
-    void navigator.clipboard?.writeText(text).catch(() => undefined);
-  }
+  const lyrics = $derived(item === null ? null : TrackFacts.lyricsState(resolution));
+  const actions = new NowPlayingActions();
 </script>
 
 {#if item !== null && links !== null}
@@ -53,14 +51,14 @@
     </p>
   {/if}
   <div class="mt-1 flex flex-wrap items-baseline gap-x-4 text-sm text-muted-foreground">
-    <FactLine facts={trackFacts(item, signalPath.current?.source)} />
+    <FactLine facts={TrackFacts.of(item, signalPath.current?.source)} />
     {#if lyrics?.kind === "notFound"}
       <span>No lyrics</span>
     {:else if lyrics?.kind === "sourceFailed"}
       <Button
         type="button"
         title="{lyrics.fileName} (click to copy)"
-        onclick={() => copy(lyrics.fileName)}
+        onclick={() => actions.copy(lyrics.fileName)}
         variant="text"
         size="inline"
         class="font-normal"

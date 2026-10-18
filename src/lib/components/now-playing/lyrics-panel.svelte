@@ -6,12 +6,12 @@
   import { AppServices } from "#lib/shell/app-services.svelte";
   import { Button } from "#lib/ui/shadcn/button";
   import { cn } from "#lib/utils/cn.js";
-  import { EDGE_MASK } from "./anchor-column";
-  import { createAnchorPadding } from "./anchor-column.svelte";
+  import { AnchorColumn } from "./anchor-column";
+  import { AnchorPadding } from "./anchor-padding.svelte";
   import LyricsLine, { LYRICS_TEXT } from "./lyrics-line.svelte";
-  import { createLyricsFollow } from "./lyrics-follow.svelte";
-  import { findCurrentLineIndex, lineSpan, withIntro } from "./lyrics-lines";
-  import { createLyricsSync } from "./lyrics-sync.svelte";
+  import { LyricsFollow } from "./lyrics-follow.svelte";
+  import { LyricsLines } from "./lyrics-lines";
+  import { LyricsSync } from "./lyrics-sync.svelte";
 
   /**
    * Local LRC lyrics: synced (Row index, auto-scroll, waveform link) or plain (static). Now Playing
@@ -27,16 +27,19 @@
   const resolution = $derived(lyrics.resolution?.status === "resolved" ? lyrics.resolution : null);
   const content = $derived(resolution?.document.content ?? null);
   const rawLines = $derived(content?.kind === "timed" ? content.lines : null);
-  const timedLines = $derived(rawLines === null ? null : withIntro(rawLines));
+  const timedLines = $derived(rawLines === null ? null : LyricsLines.withIntro(rawLines));
 
-  const sync = createLyricsSync(() => timedLines);
-  const follow = createLyricsFollow(() => sync.index, sync.msToNextLine);
-  const anchor = createAnchorPadding();
+  const sync = new LyricsSync(() => timedLines);
+  const follow = new LyricsFollow(
+    () => sync.index,
+    () => sync.msToNextLine(),
+  );
+  const anchor = new AnchorPadding();
 
   const hoveredIndex = $derived(
     lyricsWaveformLink.hoveredWaveformMs === null || timedLines === null
       ? -1
-      : findCurrentLineIndex(timedLines, lyricsWaveformLink.hoveredWaveformMs),
+      : LyricsLines.findCurrentLineIndex(timedLines, lyricsWaveformLink.hoveredWaveformMs),
   );
 
   // The spacers change size when the panel is measured or resized: keep the present on the anchor.
@@ -50,7 +53,7 @@
     const index = sync.index;
     const durationMs = playback.durationMs;
     lyricsWaveformLink.setActiveSpan(
-      lines !== null && index >= 0 ? lineSpan(lines, index, durationMs) : null,
+      lines !== null && index >= 0 ? LyricsLines.lineSpan(lines, index, durationMs) : null,
     );
     return (): void => lyricsWaveformLink.setActiveSpan(null);
   });
@@ -58,7 +61,7 @@
 
 {#if content?.kind === "plain"}
   <div class={cn("flex h-full min-h-0 flex-col", className)}>
-    <div class={cn("min-h-0 flex-1 overflow-y-auto pl-20", EDGE_MASK)}>
+    <div class={cn("min-h-0 flex-1 overflow-y-auto pl-20", AnchorColumn.edgeMask)}>
       {#each content.lines as line, index (index)}
         <p class={cn(LYRICS_TEXT, "text-foreground")}>{line.length > 0 ? line : " "}</p>
       {/each}
@@ -79,7 +82,7 @@
       onpointermove={follow.onpointermove}
       onpointerleave={follow.onpointerleave}
       onkeydown={follow.onkeydown}
-      class={cn("relative min-h-0 flex-1 overflow-y-auto outline-none", EDGE_MASK)}
+      class={cn("relative min-h-0 flex-1 overflow-y-auto outline-none", AnchorColumn.edgeMask)}
     >
       <div aria-hidden="true" class="transition-none" style:height="{anchor.top}px"></div>
       {#each timedLines as _line, index (index)}

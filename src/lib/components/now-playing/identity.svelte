@@ -5,7 +5,10 @@
   import Artwork from "#lib/ui/artwork.svelte";
   import KineticText from "#lib/ui/kinetic-text/kinetic-text.svelte";
   import { SLEEVE_RADIUS, SharedElement, sharedKey } from "#lib/ui/motion/shared-element";
-  import { contentFade } from "./now-playing-layout";
+  import { NowPlayingTransitions } from "./now-playing-transitions";
+
+  // A directive takes a name, not a member, so the transition gets a local alias.
+  const contentFade = NowPlayingTransitions.contentFade;
   import TrackFacts from "./track-facts.svelte";
 
   /**

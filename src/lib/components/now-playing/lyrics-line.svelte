@@ -19,7 +19,8 @@
   import { cn } from "#lib/utils/cn.js";
   import { DurationFormat } from "#lib/utils/duration-format";
   import IntervalLine from "./interval-line.svelte";
-  import { lineSpan } from "./lyrics-lines";
+  import { LyricsLines } from "./lyrics-lines";
+  import { NowPlayingActions } from "./now-playing-actions.svelte";
 
   /**
    * One lyric line. It gets the current index and derives its own state from it, so a line change
@@ -42,7 +43,8 @@
     attach: Attachment<HTMLElement>;
   } = $props();
 
-  const { playback, actions, lyricsWaveformLink } = AppServices.current();
+  const { lyricsWaveformLink } = AppServices.current();
+  const actions = new NowPlayingActions();
 
   const line = $derived(lines[index]!);
   const isInterval = $derived(line.text.trim() === "");
@@ -61,8 +63,9 @@
     type="button"
     data-slot="lyrics-row-index"
     aria-label={`Seek to ${startLabel}`}
-    onclick={() => actions.run(() => playback.seek(line.startMs))}
-    onpointerenter={() => lyricsWaveformLink.setHoveredLineSpan(lineSpan(lines, index, durationMs))}
+    onclick={() => actions.seek(line.startMs)}
+    onpointerenter={() =>
+      lyricsWaveformLink.setHoveredLineSpan(LyricsLines.lineSpan(lines, index, durationMs))}
     onpointerleave={() => lyricsWaveformLink.setHoveredLineSpan(null)}
     variant="bare"
     size="inline"
@@ -83,7 +86,7 @@
   {#if isInterval}
     <IntervalLine
       startMs={line.startMs}
-      endMs={lineSpan(lines, index, durationMs)?.endMs ?? null}
+      endMs={LyricsLines.lineSpan(lines, index, durationMs)?.endMs ?? null}
       {isCurrent}
     />
   {:else}

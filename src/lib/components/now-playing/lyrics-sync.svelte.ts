@@ -1,51 +1,54 @@
 import { untrack } from "svelte";
 import type { LyricsTimedLine } from "#lib/native";
 import { AppServices } from "#lib/shell/app-services.svelte";
-import { findCurrentLineIndex } from "./lyrics-lines";
+import { LyricsLines } from "./lyrics-lines";
 
 /**
  * Tracks the current lyric line index from the playback clock. It rides the clock's boundary: the
  * clock wakes it on every report (covers seeks, track changes, pauses) and at the next line's
- * start, so readers rerun only when the line changes, never with the position. Call it while a component initialises.
+ * start, so readers rerun only when the line changes, never with the position. Construct it
+ * while a component initialises.
  */
-export function createLyricsSync(lines: () => readonly LyricsTimedLine[] | null): {
-  readonly index: number;
-  msToNextLine(): number | null;
-} {
-  const { clock } = AppServices.current().playback;
+export class LyricsSync {
+  readonly #clock = AppServices.current().playback.clock;
+  readonly #lines: () => readonly LyricsTimedLine[] | null;
+  #index = $state.raw(-1);
 
-  // Start from where the clock is now, so a panel opened mid-song does not begin at line 0.
-  let index = $state.raw(
-    untrack(() => {
-      const current = lines();
+  public constructor(lines: () => readonly LyricsTimedLine[] | null) {
+    this.#lines = lines;
+    // Start from where the clock is now, so a panel opened mid-song does not begin at line 0.
+    this.#index = untrack(() => {
+      const current = this.#lines();
       return current === null || current.length === 0
         ? -1
-        : findCurrentLineIndex(current, clock.estimate());
-    }),
-  );
+        : LyricsLines.findCurrentLineIndex(current, this.#clock.estimate());
+    });
 
-  $effect(() => {
-    const current = lines();
-    if (current === null || current.length === 0) {
-      index = -1;
-      return;
-    }
-    return clock.onBoundary(
-      (positionMs) => current[findCurrentLineIndex(current, positionMs) + 1]?.startMs ?? null,
-      (positionMs) => (index = findCurrentLineIndex(current, positionMs)),
-    );
-  });
+    // The clock's boundary is an external source with a callback that writes `#index`, so it is an
+    // effect rather than a derived value.
+    $effect(() => {
+      const current = this.#lines();
+      if (current === null || current.length === 0) {
+        this.#index = -1;
+        return;
+      }
+      return this.#clock.onBoundary(
+        (positionMs) =>
+          current[LyricsLines.findCurrentLineIndex(current, positionMs) + 1]?.startMs ?? null,
+        (positionMs) => (this.#index = LyricsLines.findCurrentLineIndex(current, positionMs)),
+      );
+    });
+  }
 
-  return {
-    get index(): number {
-      return index;
-    },
-    /** Ms until the next line starts; null when there is none or the clock is not playing. */
-    msToNextLine(): number | null {
-      const current = lines();
-      if (current === null || !clock.playing()) return null;
-      const next = current[index + 1];
-      return next === undefined ? null : Math.max(0, next.startMs - clock.estimate());
-    },
-  };
+  public get index(): number {
+    return this.#index;
+  }
+
+  /** Ms until the next line starts; null when there is none or the clock is not playing. */
+  public msToNextLine(): number | null {
+    const current = this.#lines();
+    if (current === null || !this.#clock.playing()) return null;
+    const next = current[this.#index + 1];
+    return next === undefined ? null : Math.max(0, next.startMs - this.#clock.estimate());
+  }
 }

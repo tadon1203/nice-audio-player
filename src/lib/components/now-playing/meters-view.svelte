@@ -1,15 +1,9 @@
 <script lang="ts">
   import { Button } from "#lib/ui/shadcn/button";
-  import type { Attachment } from "svelte/attachments";
-  import { BALLISTICS, BAND_COUNT } from "#lib/meters/ballistics";
-  import { DrawLoop } from "#lib/meters/draw-loop";
-  import { MeterDisplay } from "#lib/meters/meter-display";
-  import { MeterFrames } from "#lib/meters/meter-frames";
+  import { BALLISTICS } from "#lib/meters/ballistics";
   import { MeterDraw } from "#lib/meters/meter-draw";
-  import { MeterFeed } from "#lib/meters/meter-feed.svelte";
-  import { Readout } from "#lib/meters/readout";
-  import { AppServices } from "#lib/shell/app-services.svelte";
   import { cn } from "#lib/utils/cn.js";
+  import { MeterView } from "./meter-view.svelte";
 
   /**
    * Now Playing's Meters view: the Spectrum and the Level meter (L, R) as bare bars on the
@@ -20,173 +14,27 @@
    */
   let { class: className }: { class?: string } = $props();
 
-  const NARROW_BELOW_PX = 512;
-  const READOUT_MS = 250;
-  const LABELLED: Record<number, string> = {
-    1: "31",
-    4: "63",
-    7: "125",
-    10: "250",
-    13: "500",
-    16: "1k",
-    19: "2k",
-    22: "4k",
-    25: "8k",
-    28: "16k",
-  };
-  const BAND_LABELS = Object.entries(LABELLED).map(([index, text]) => ({
-    text,
-    left: ((Number(index) + 0.5) / BAND_COUNT) * 100,
-  }));
   const CHANNELS = [0, 1] as const;
   const TAGS = ["L", "R"] as const;
 
-  const { playback, appearance, meter } = AppServices.current();
-
-  let layout = $state<"wide" | "narrow">("wide");
-  const narrow = $derived(layout === "narrow");
-  const calm = $derived(appearance.calmMotion === true);
-  let visible = $state(
-    typeof document === "undefined" ? true : document.visibilityState === "visible",
-  );
-  const active = $derived(!calm && visible);
-
-  // A hidden or minimized window stops the feed and the loop; coming back resumes them.
-  $effect(() => {
-    const sync = (): boolean => (visible = document.visibilityState === "visible");
-    document.addEventListener("visibilitychange", sync);
-    return (): void => document.removeEventListener("visibilitychange", sync);
-  });
-
-  let wake = (): void => {};
-  const feed = new MeterFeed(
-    meter,
-    () => active,
-    () => wake(),
-  );
-
-  const floorText = Readout.formatHeldPeak(BALLISTICS.floorDb);
-  let readouts = $state<[string, string]>([floorText, floorText]);
-  let clips = $state<[boolean, boolean]>([false, false]);
-
-  interface Surface {
-    ctx: CanvasRenderingContext2D;
-    w: number;
-    h: number;
-    node: HTMLCanvasElement;
-  }
-  const surfaces: { spectrum: Surface | null; left: Surface | null; right: Surface | null } = {
-    spectrum: null,
-    left: null,
-    right: null,
-  };
-  let display = MeterDisplay.initial();
-  let color = "";
-
-  function drawAll(ink: string): void {
-    const { spectrum, left, right } = surfaces;
-    if (spectrum) MeterDraw.drawSpectrum(spectrum.ctx, spectrum.w, spectrum.h, ink, display.bands);
-    if (left) MeterDraw.drawLevel(left.ctx, left.w, left.h, ink, display.peak[0], display.rms[0]);
-    if (right)
-      MeterDraw.drawLevel(right.ctx, right.w, right.h, ink, display.peak[1], display.rms[1]);
-  }
-
-  function refreshReadouts(): void {
-    readouts = [
-      Readout.formatHeldPeak(display.peak[0].peakCap),
-      Readout.formatHeldPeak(display.peak[1].peakCap),
-    ];
-    clips = [display.clip[0], display.clip[1]];
-  }
-
-  function clear(channel: 0 | 1): void {
-    display = display.clearClip(channel);
-    refreshReadouts();
-  }
-
-  const fit =
-    (key: "spectrum" | "left" | "right"): Attachment<HTMLCanvasElement> =>
-    (node) => {
-      const refit = (): void => {
-        const ratio = window.devicePixelRatio || 1;
-        const w = node.clientWidth;
-        const h = node.clientHeight;
-        node.width = Math.max(1, Math.round(w * ratio));
-        node.height = Math.max(1, Math.round(h * ratio));
-        const ctx = node.getContext("2d");
-        if (!ctx) return;
-        ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-        surfaces[key] = { ctx, w, h, node };
-        // Resizing clears the canvas: put the current state back.
-        drawAll(color || getComputedStyle(node).color);
-      };
-      const observer = new ResizeObserver(refit);
-      observer.observe(node);
-      refit();
-      return () => {
-        observer.disconnect();
-        surfaces[key] = null;
-      };
-    };
-
-  const observeLayout: Attachment<HTMLElement> = (node) => {
-    const observer = new ResizeObserver(([entry]) => {
-      if (entry) layout = entry.contentRect.width < NARROW_BELOW_PX ? "narrow" : "wide";
-    });
-    observer.observe(node);
-    return () => observer.disconnect();
-  };
-
-  $effect(() => {
-    if (!active) return;
-    display = MeterDisplay.initial();
-    refreshReadouts();
-    const probe = surfaces.spectrum?.node ?? null;
-    color = probe ? getComputedStyle(probe).color : color;
-    // The loop sleeps once every Level bar and Peak cap is at the floor and wakes on the next frame.
-    const loop = new DrawLoop(
-      (elapsed) => {
-        const input =
-          playback.status === "playing" ? MeterFrames.reduce(feed.drain()) : (feed.drain(), null);
-        display = display.step(input, elapsed);
-        drawAll(color);
-        return !display.isAtRest();
-      },
-      {
-        request: (callback): number => requestAnimationFrame(callback),
-        cancel: (id): void => cancelAnimationFrame(id),
-      },
-    );
-    wake = (): void => loop.wake();
-    loop.wake();
-    const interval = setInterval(refreshReadouts, READOUT_MS);
-
-    return (): void => {
-      wake = (): void => {};
-      loop.stop();
-      clearInterval(interval);
-      display = MeterDisplay.initial();
-      refreshReadouts();
-      drawAll(color || (probe ? getComputedStyle(probe).color : ""));
-    };
-  });
+  const view = new MeterView();
 </script>
 
 {#snippet readout(channel: 0 | 1)}
-  {#if calm}
+  {#if view.calm}
     <span
       class={cn(
         "self-center justify-self-start px-1 text-sm leading-[1.375rem] tabular-nums text-muted-foreground",
-        narrow ? "order-3" : "",
+        view.narrow ? "order-3" : "",
       )}
     >
-      {floorText}
+      {view.floorText}
     </span>
-  {:else if clips[channel]}
-    <span class={cn("self-center justify-self-start", narrow && "order-3")}>
+  {:else if view.clips[channel]}
+    <span class={cn("self-center justify-self-start", view.narrow && "order-3")}>
       <Button
         type="button"
-        onclick={() => clear(channel)}
+        onclick={() => view.clearClip(channel)}
         variant="primary"
         size="inline"
         class="h-auto min-w-8 p-0 tabular-nums font-normal"
@@ -198,27 +46,27 @@
     <span
       class={cn(
         "self-center justify-self-start px-1 text-sm leading-[1.375rem] tabular-nums text-muted-foreground",
-        narrow && "order-3",
+        view.narrow && "order-3",
       )}
     >
-      {readouts[channel]}
+      {view.readouts[channel]}
     </span>
   {/if}
 {/snippet}
 
 <section
-  {@attach observeLayout}
+  {@attach view.observeLayout}
   aria-label="Meters"
-  data-layout={layout}
+  data-layout={view.layout}
   class={cn(
     "grid h-full min-h-0 min-w-0 gap-x-2 tabular-nums",
-    narrow
+    view.narrow
       ? "grid-cols-1 grid-rows-[minmax(0,1fr)_auto_auto] gap-y-2"
       : "grid-cols-[2.5rem_3.5rem_3.5rem_minmax(0,1fr)]",
     className,
   )}
 >
-  {#if !narrow}
+  {#if !view.narrow}
     <div class="grid min-h-0 grid-rows-[1.75rem_minmax(0,1fr)_1.75rem]" aria-hidden="true">
       <span></span>
       <div class="relative min-h-0">
@@ -239,24 +87,24 @@
     <div
       class={cn(
         "grid min-h-0",
-        narrow
+        view.narrow
           ? "h-10 grid-cols-[1.5rem_minmax(0,1fr)_4.5rem]"
           : "grid-rows-[1.75rem_minmax(0,1fr)_1.75rem]",
-        narrow && (channel === 0 ? "order-2" : "order-3"),
+        view.narrow && (channel === 0 ? "order-2" : "order-3"),
       )}
     >
       {@render readout(channel)}
-      <div class={cn("relative min-h-0", narrow && "order-2")}>
+      <div class={cn("relative min-h-0", view.narrow && "order-2")}>
         <canvas
-          {@attach fit(channel === 0 ? "left" : "right")}
+          {@attach view.fit(channel === 0 ? "left" : "right")}
           aria-hidden="true"
-          class={cn("absolute inset-0 block size-full text-foreground", calm && "opacity-25")}
+          class={cn("absolute inset-0 block size-full text-foreground", view.calm && "opacity-25")}
         ></canvas>
       </div>
       <span
         class={cn(
           "self-center justify-self-start text-sm text-muted-foreground",
-          narrow && "order-1",
+          view.narrow && "order-1",
         )}
       >
         {TAGS[channel]}
@@ -267,21 +115,21 @@
   <div
     class={cn(
       "grid min-h-0",
-      narrow
+      view.narrow
         ? "order-1 grid-rows-[minmax(0,1fr)_1.75rem]"
         : "ml-6 grid-rows-[1.75rem_minmax(0,1fr)_1.75rem]",
     )}
   >
-    {#if !narrow}
+    {#if !view.narrow}
       <span></span>
     {/if}
     <div class="relative min-h-0">
       <canvas
-        {@attach fit("spectrum")}
+        {@attach view.fit("spectrum")}
         aria-hidden="true"
-        class={cn("absolute inset-0 block size-full text-foreground", calm && "opacity-25")}
+        class={cn("absolute inset-0 block size-full text-foreground", view.calm && "opacity-25")}
       ></canvas>
-      {#if calm}
+      {#if view.calm}
         <p
           role="status"
           class="absolute inset-0 grid place-items-center p-4 text-center text-muted-foreground"
@@ -291,7 +139,7 @@
       {/if}
     </div>
     <div class="relative" aria-hidden="true">
-      {#each BAND_LABELS as label (label.text)}
+      {#each MeterView.bandLabels as label (label.text)}
         <span
           class="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 text-sm whitespace-nowrap text-muted-foreground"
           style:left="{label.left}%"

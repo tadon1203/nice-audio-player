@@ -9,17 +9,17 @@
   import Identity from "./identity.svelte";
   import LyricsPanel from "./lyrics-panel.svelte";
   import MetersView from "./meters-view.svelte";
-  import {
-    SLEEVE_SIZE,
-    columnFade,
-    contentFade,
-    lyricsSwap,
-    waveformHeightFor,
-  } from "./now-playing-layout";
+  import { NowPlayingLayout } from "./now-playing-layout";
+  import { NowPlayingTransitions } from "./now-playing-transitions";
   import NowPlayingGlow from "./now-playing-glow.svelte";
   import QueueColumn from "./queue-column.svelte";
   import { rightColumn } from "./right-column.svelte";
   import { Button } from "#lib/ui/shadcn/button";
+
+  // A directive takes a name, not a member, so the transitions get local aliases.
+  const contentFade = NowPlayingTransitions.contentFade;
+  const columnFade = NowPlayingTransitions.columnFade;
+  const lyricsSwap = NowPlayingTransitions.lyricsSwap;
 
   /**
    * Now Playing's content: one skeleton in every state. Left, the Sleeve and the track's info;
@@ -77,7 +77,7 @@
   <div class="relative min-h-0 min-w-0 flex-1 [container-name:np] [container-type:size]">
     <div
       class="flex h-full min-h-0 min-w-0 flex-col md:grid md:grid-cols-[var(--np-sleeve)_minmax(0,1fr)] md:grid-rows-[minmax(0,1fr)] md:gap-12 md:p-8"
-      style:--np-sleeve={SLEEVE_SIZE}
+      style:--np-sleeve={NowPlayingLayout.sleeveSize}
     >
       <div class="flex min-h-0 min-w-0 flex-col gap-4 p-6 md:w-(--np-sleeve) md:p-0">
         <Identity {item} resolution={resolution ?? null} />
@@ -155,7 +155,7 @@
     </div>
   </div>
   <PlaybackWaveformBand
-    height={waveformHeightFor(layerHeight)}
+    height={NowPlayingLayout.waveformHeightFor(layerHeight)}
     class="relative shrink-0 border-t border-border/50 px-6 py-4"
     timeClass="text-sm"
   />

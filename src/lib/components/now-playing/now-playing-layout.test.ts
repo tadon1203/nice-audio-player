@@ -1,15 +1,12 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
+import { NowPlayingLayout } from "./now-playing-layout";
 
-// `svelte/motion` reads `matchMedia` as it loads, and this file only tests pure sizes.
-vi.mock("svelte/motion", () => ({ prefersReducedMotion: { current: false } }));
-import { waveformHeightFor } from "./now-playing-layout";
-
-describe("waveformHeightFor", () => {
+describe("NowPlayingLayout.waveformHeightFor", () => {
   it("gives way to the content as the layer gets shorter", () => {
-    expect(waveformHeightFor(900)).toBe(96);
-    expect(waveformHeightFor(640)).toBe(96);
-    expect(waveformHeightFor(639)).toBe(72);
-    expect(waveformHeightFor(480)).toBe(72);
-    expect(waveformHeightFor(479)).toBe(56);
+    expect(NowPlayingLayout.waveformHeightFor(900)).toBe(96);
+    expect(NowPlayingLayout.waveformHeightFor(640)).toBe(96);
+    expect(NowPlayingLayout.waveformHeightFor(639)).toBe(72);
+    expect(NowPlayingLayout.waveformHeightFor(480)).toBe(72);
+    expect(NowPlayingLayout.waveformHeightFor(479)).toBe(56);
   });
 });

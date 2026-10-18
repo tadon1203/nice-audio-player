@@ -2,7 +2,7 @@
   import type { Attachment } from "svelte/attachments";
   import { AppServices } from "#lib/shell/app-services.svelte";
   import { DurationFormat } from "#lib/utils/duration-format";
-  import { gapProgress } from "./lyrics-lines";
+  import { LyricsLines } from "./lyrics-lines";
 
   /**
    * An instrumental gap: a thin bar that fills over the gap's real span while it is the current
@@ -22,8 +22,8 @@
     if (!isCurrent || endMs === null || endMs <= startMs) return;
     return playback.clock.drive([
       { atMs: 0, transform: "scaleX(0)" },
-      { atMs: startMs, transform: `scaleX(${gapProgress(startMs, startMs, endMs)})` },
-      { atMs: endMs, transform: `scaleX(${gapProgress(endMs, startMs, endMs)})` },
+      { atMs: startMs, transform: `scaleX(${LyricsLines.gapProgress(startMs, startMs, endMs)})` },
+      { atMs: endMs, transform: `scaleX(${LyricsLines.gapProgress(endMs, startMs, endMs)})` },
     ])(node);
   };
 </script>

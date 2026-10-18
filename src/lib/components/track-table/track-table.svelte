@@ -1,6 +1,5 @@
 <script lang="ts">
   import { Root as ContextMenuRoot, Trigger as ContextMenuTrigger } from "#lib/ui/context-menu";
-  import { goto } from "$app/navigation";
   import { Tracks } from "#lib/library/tracks";
   import type { LibrarySortDirection, LibraryTrackSortKey, TrackId } from "#lib/native";
   import { AppServices } from "#lib/shell/app-services.svelte";
@@ -16,19 +15,10 @@
   } from "#lib/ui/shadcn/table";
   import { cn } from "#lib/utils/cn.js";
   import { VirtualRows } from "#lib/ui/virtual-rows.svelte";
-  import {
-    columnText,
-    albumTrackColumns,
-    libraryTrackColumns,
-    hasSeveralDiscs,
-    startsDisc,
-    trackRowState,
-    trackTableBreakpoints,
-    TRACK_ROW_HEIGHT,
-    type TrackColumn,
-    type TrackTableLayout,
-    type TrackTableRow,
-  } from "./track-columns";
+  import { TrackColumns, type TrackTableLayout, type TrackTableRow } from "./track-columns";
+  import { TrackDiscs } from "./track-discs";
+  import { TrackRowStates } from "./track-row-states";
+  import { TrackTableController } from "./track-table-controller.svelte";
   import TrackActionCell from "./track-action-cell.svelte";
   import TrackPropertiesSheet from "./track-properties-sheet.svelte";
   import TrackSortHeader from "./track-sort-header.svelte";
@@ -58,17 +48,24 @@
     onplaytrack: (id: TrackId) => void;
   } = $props();
 
-  const columns = $derived(layout === "library" ? libraryTrackColumns : albumTrackColumns);
-  const { playback, actions, libraryTracks } = AppServices.current();
+  const services = AppServices.current();
+  const { playback } = services;
+  const columns = $derived(TrackColumns.of(layout));
+  const controller = new TrackTableController(
+    services,
+    () => rows,
+    (id) => onplaytrack(id),
+  );
 
   let propertiesFor = $state<TrackId | null>(null);
-  let menuRow = $state<TrackTableRow | null>(null);
 
   const virtual = new VirtualRows({
     count: (): number => rows.length,
-    rowHeight: TRACK_ROW_HEIGHT,
+    rowHeight: TrackColumns.rowHeight,
     overscan: 10,
   });
+  // The scroll index label is told the top row as the virtual rows scroll. The callback belongs to
+  // the parent, so this stays an effect rather than an attachment.
   $effect(() => {
     if (virtualized) ontopindexchange?.(virtual.topIndex);
   });
@@ -80,51 +77,7 @@
   const bottomSpacer = $derived(virtualized ? virtual.bottomSpacer : 0);
   // An album on several discs is split by a "Disc n" row. Only in the plain (unvirtualized)
   // album layout, where every row has the same height.
-  const splitsDiscs = $derived(!virtualized && layout === "album" && hasSeveralDiscs(rows));
-
-  /** Width (for `<col>` only) and breakpoint visibility from one column definition. */
-  function columnClass(column: TrackColumn, withWidth = false): string {
-    return cn(
-      withWidth && column.width,
-      column.hideBelow && trackTableBreakpoints[column.hideBelow].hide,
-    );
-  }
-
-  function isInteractiveTarget(event: MouseEvent): boolean {
-    const target = event.target;
-    return (
-      target instanceof Element &&
-      target.closest("button, a, input, select, textarea, [role='button'], [data-row-action]") !==
-        null
-    );
-  }
-
-  function activateRow(
-    event: MouseEvent,
-    row: TrackTableRow,
-    intent: "play" | "resume" | null,
-  ): void {
-    if (isInteractiveTarget(event)) return;
-    if (intent === "play") onplaytrack(row.id);
-    else if (intent === "resume") actions.run(() => playback.resume());
-  }
-
-  /** Resolves the row under a right-click; the spacer rows have none, so no menu opens there. */
-  function selectMenuRow(event: MouseEvent): void {
-    const target = event.target;
-    const id =
-      target instanceof Element
-        ? (target.closest<HTMLElement>("tr[data-row-id]")?.dataset.rowId ?? null)
-        : null;
-    const row = id === null ? undefined : rows.find((candidate) => String(candidate.id) === id);
-    if (row) menuRow = row;
-    else event.stopPropagation();
-  }
-
-  // The links come from `Tracks.links`, which builds them with resolve().
-  function goTo(href: string): void {
-    void goto(href);
-  }
+  const splitsDiscs = $derived(!virtualized && layout === "album" && TrackDiscs.hasSeveral(rows));
 </script>
 
 <div class="@container/track-table min-w-0">
@@ -132,7 +85,7 @@
   <table class="w-full table-fixed border-collapse text-sm">
     <colgroup>
       {#each columns as column (column.id)}
-        <col class={columnClass(column, true)} />
+        <col class={TrackColumns.classFor(column, true)} />
       {/each}
     </colgroup>
     <TableCaption class="sr-only">{caption}</TableCaption>
@@ -144,7 +97,7 @@
           <TableHead
             scope="col"
             data-column-id={column.id}
-            class={cn("px-3 font-medium last:text-right", columnClass(column))}
+            class={cn("px-3 font-medium last:text-right", TrackColumns.classFor(column))}
             aria-sort={active ? sortDirection : undefined}
           >
             {#if key !== undefined && onsortchange}
@@ -165,7 +118,11 @@
     <ContextMenuRoot>
       <ContextMenuTrigger>
         {#snippet child({ props })}
-          <TableBody {...props} {@attach virtual.attachBody} oncontextmenucapture={selectMenuRow}>
+          <TableBody
+            {...props}
+            {@attach virtual.attachBody}
+            oncontextmenucapture={controller.onContextMenu}
+          >
             <!-- Spacer heights must jump, never animate: the reduced-motion rule gives every element a
            transition, and a lagging spacer puts the rows in the wrong place. -->
             {#if topSpacer > 0}
@@ -178,7 +135,7 @@
             {#each visibleIndexes as index (rows[index]?.id ?? `placeholder-${index}`)}
               {@const row = rows[index]}
               {#if row}
-                {#if splitsDiscs && startsDisc(rows, index)}
+                {#if splitsDiscs && TrackDiscs.starts(rows, index)}
                   <TableRow class="border-b border-border/70">
                     <TableCell
                       colspan={columns.length}
@@ -188,39 +145,43 @@
                     </TableCell>
                   </TableRow>
                 {/if}
-                {@const { action, clickIntent, playbackState } = trackRowState(
+                {@const { action, clickIntent, playbackState } = TrackRowStates.of(
                   row,
                   playback.activeTrackId,
                   playback.status,
                 )}
                 {@const available = Tracks.isPlayable(row)}
-                {@const runAction = {
-                  play: () => onplaytrack(row.id),
-                  pause: () => actions.run(() => playback.pause()),
-                  resume: () => actions.run(() => playback.resume()),
-                }[action.kind]}
-                <!-- Clicking the row is a pointer shortcut; the action button is the keyboard path. -->
+                <!-- Clicking the row is a pointer shortcut. The action button is the keyboard path; the row's
+                     Enter and Space handler only takes keys that reach the row itself. -->
+
                 <tr
                   data-row-id={row.id}
                   data-playback-state={playbackState}
                   data-track-state={row.state}
-                  style:height="{TRACK_ROW_HEIGHT}px"
+                  style:height="{TrackColumns.rowHeight}px"
                   class={cn(
                     "group/track border-b border-border/70 text-foreground outline-none transition-colors hover:bg-accent/40 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-inset has-[:focus-visible]:ring-ring",
                     clickIntent !== null && "cursor-pointer",
                   )}
-                  onclick={(event) => activateRow(event, row, clickIntent)}
+                  onclick={(event) => controller.onRowClick(event, row.id)}
+                  onkeydown={(event) => controller.onRowKeydown(event, row.id)}
                 >
                   {#each columns as column (column.id)}
                     <TableCell
                       data-column-id={column.id}
                       class={cn(
                         "truncate px-3 py-0 last:text-right tabular-nums",
-                        columnClass(column),
+                        TrackColumns.classFor(column),
                       )}
                     >
                       {#if column.kind === "action"}
-                        <TrackActionCell {row} {action} {available} {layout} run={runAction} />
+                        <TrackActionCell
+                          {row}
+                          {action}
+                          {available}
+                          {layout}
+                          run={() => controller.runAction(row)}
+                        />
                       {:else if column.kind === "title"}
                         <div class="min-w-0 text-left">
                           <div class="flex min-w-0 items-center gap-2">
@@ -233,14 +194,14 @@
                             <span
                               class={cn(
                                 "mt-0.5 hidden truncate text-sm text-muted-foreground",
-                                trackTableBreakpoints.compact.show,
+                                TrackColumns.breakpoints.compact.show,
                               )}
                               title={row.artist}>{row.artist}</span
                             >
                           {/if}
                         </div>
                       {:else if column.kind === "text"}
-                        {@const text = columnText(column, row)}
+                        {@const text = TrackColumns.columnText(column, row)}
                         <span title={text}>{text}</span>
                       {/if}
                     </TableCell>
@@ -259,40 +220,39 @@
         {/snippet}
       </ContextMenuTrigger>
       <ContextMenuContent>
-        {#if menuRow}
-          {@const row = menuRow}
+        {#if controller.menuTrack}
+          {@const row = controller.menuTrack}
           {#if Tracks.isPlayable(row)}
-            <ContextMenuItem
-              onSelect={() => actions.run(() => playback.enqueueTrack(row.id, true))}
-            >
-              Play next
-            </ContextMenuItem>
-            <ContextMenuItem
-              onSelect={() => actions.run(() => playback.enqueueTrack(row.id, false))}
-            >
-              Add to queue
-            </ContextMenuItem>
+            <ContextMenuItem onSelect={() => controller.playNext()}>Play next</ContextMenuItem>
+            <ContextMenuItem onSelect={() => controller.addToQueue()}>Add to queue</ContextMenuItem>
           {/if}
           {#if layout === "library"}
             {@const links = Tracks.links(row)}
             {#if links.album?.href}
               {@const href = links.album.href}
-              <ContextMenuItem onSelect={() => goTo(href)}>Go to album</ContextMenuItem>
+              <ContextMenuItem onSelect={() => controller.navigate(href)}
+                >Go to album</ContextMenuItem
+              >
             {/if}
             {#if links.artist?.href}
               {@const href = links.artist.href}
-              <ContextMenuItem onSelect={() => goTo(href)}>Go to artist</ContextMenuItem>
+              <ContextMenuItem onSelect={() => controller.navigate(href)}
+                >Go to artist</ContextMenuItem
+              >
             {/if}
           {/if}
           {#if Tracks.isFilePresent(row)}
-            <ContextMenuItem onSelect={() => actions.run(() => libraryTracks.reveal(row.id))}>
-              Show in Explorer
-            </ContextMenuItem>
+            <ContextMenuItem onSelect={() => controller.reveal()}>Show in Explorer</ContextMenuItem>
           {/if}
           <ContextMenuItem onSelect={() => (propertiesFor = row.id)}>Properties</ContextMenuItem>
         {/if}
       </ContextMenuContent>
     </ContextMenuRoot>
   </table>
-  <TrackPropertiesSheet trackId={propertiesFor} onclose={() => (propertiesFor = null)} />
+  <TrackPropertiesSheet
+    trackId={propertiesFor}
+    onclose={() => (propertiesFor = null)}
+    onreveal={controller.revealTrack}
+    oncopy={controller.copyPath}
+  />
 </div>

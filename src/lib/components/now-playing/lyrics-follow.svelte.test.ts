@@ -1,6 +1,6 @@
 import { flushSync } from "svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createLyricsFollow } from "./lyrics-follow.svelte";
+import { LyricsFollow } from "./lyrics-follow.svelte";
 
 // The spring is replaced by a recorder: a scroll is "animated" when the spring is given a target.
 // `current` is reactive so a test can move the spring by hand, as the animation frames would.
@@ -36,7 +36,7 @@ const LINE_COUNT = 40;
 const LINE_HEIGHT = 40;
 
 let index = $state(0);
-let follow: ReturnType<typeof createLyricsFollow>;
+let follow: LyricsFollow;
 let cleanup: () => void;
 let scrollTops: number[];
 let container: HTMLElement;
@@ -61,7 +61,7 @@ function mount(start: number): void {
   });
   document.body.append(container);
   cleanup = $effect.root(() => {
-    follow = createLyricsFollow(
+    follow = new LyricsFollow(
       () => index,
       () => msToNextLine,
     );
@@ -142,7 +142,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe("createLyricsFollow", () => {
+describe("LyricsFollow", () => {
   it("sets the position at once when it mounts", () => {
     mount(10);
     expect(animatedScrolls()).toBe(0);

@@ -15,10 +15,11 @@
   import Artwork from "#lib/ui/artwork.svelte";
   import { cn } from "#lib/utils/cn.js";
   import { DurationFormat } from "#lib/utils/duration-format";
-  import { EDGE_MASK } from "./anchor-column";
-  import { createAnchorPadding } from "./anchor-column.svelte";
-  import { createAnchorFollow } from "./anchor-follow.svelte";
-  import { buildQueueRows, hiddenUpcomingCount } from "./queue-rows";
+  import { AnchorColumn } from "./anchor-column";
+  import { AnchorFollow } from "./anchor-follow.svelte";
+  import { AnchorPadding } from "./anchor-padding.svelte";
+  import { NowPlayingActions } from "./now-playing-actions.svelte";
+  import { QueueRows } from "./queue-rows";
 
   /**
    * What really plays, in the order it plays: history (oldest first), the current track, then
@@ -30,19 +31,20 @@
    */
   let { class: className }: { class?: string } = $props();
 
-  const { playback, actions, queuePanel } = AppServices.current();
+  const { playback, queuePanel } = AppServices.current();
+  const actions = new NowPlayingActions();
   const history = $derived(playback.queue?.history ?? []);
   const current = $derived(playback.queue?.current ?? null);
   const upcoming = $derived(playback.queue?.upcoming ?? []);
   const upcomingCount = $derived(playback.queue?.upcomingCount ?? 0);
-  const hidden = $derived(hiddenUpcomingCount(upcomingCount, upcoming.length));
+  const hidden = $derived(QueueRows.hiddenUpcomingCount(upcomingCount, upcoming.length));
 
-  const anchor = createAnchorPadding();
-  const follow = createAnchorFollow();
+  const anchor = new AnchorPadding();
+  const follow = new AnchorFollow();
   let container = $state<HTMLDivElement | null>(null);
   const currentId = $derived(current?.queueItemId ?? null);
   const hasRows = $derived(current !== null || history.length + upcoming.length > 0);
-  const rows = $derived(buildQueueRows(history, current, upcoming));
+  const rows = $derived(QueueRows.build(history, current, upcoming));
   /** Where the current track sits in `rows` (past rows are before it). */
   const currentIndex = $derived(history.length);
 
@@ -71,7 +73,7 @@
       {@attach follow.attach}
       role="list"
       aria-label="Queue"
-      class={cn("relative h-full overflow-y-auto", EDGE_MASK)}
+      class={cn("relative h-full overflow-y-auto", AnchorColumn.edgeMask)}
     >
       <div aria-hidden="true" class={SPACER} style:height="{anchor.top}px"></div>
       {#each rows as item, index (item.queueItemId)}
@@ -82,7 +84,7 @@
             type="button"
             disabled={isCurrent}
             aria-label="Play {item.title}"
-            onclick={() => actions.run(() => playback.playQueueItem(item.queueItemId))}
+            onclick={() => actions.playQueueItem(item.queueItemId)}
             variant="bare"
             size="inline"
             class={cn(

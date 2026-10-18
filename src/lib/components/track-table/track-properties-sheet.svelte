@@ -17,9 +17,21 @@
   import { MISSING } from "#lib/utils/missing";
 
   /** Everything the library knows about one track: tags, audio format, and where the file is. */
-  let { trackId, onclose }: { trackId: TrackId | null; onclose: () => void } = $props();
+  let {
+    trackId,
+    onclose,
+    onreveal,
+    oncopy,
+  }: {
+    trackId: TrackId | null;
+    onclose: () => void;
+    /** Shows the track's file in Explorer. */
+    onreveal: (trackId: TrackId) => void;
+    /** Copies the track's file path to the clipboard. */
+    oncopy: (path: string) => void;
+  } = $props();
 
-  const { actions, catalog, libraryTracks } = AppServices.current();
+  const { catalog } = AppServices.current();
   const query = new QueryResult(() => catalog.trackPropertiesOptions(trackId));
   const properties = $derived(query.data);
 
@@ -55,6 +67,7 @@
     </div>
     <div class="min-h-0 flex-1 overflow-y-auto p-4">
       {#if properties}
+        {@const path = properties.path}
         <dl class="grid grid-cols-[7rem_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm">
           {@render row("Title", properties.title)}
           {@render row("Artist", properties.artist)}
@@ -89,19 +102,14 @@
           <dd class="min-w-0 tabular-nums">
             <span class="break-all">{properties.path}</span>
             <span class="mt-2 flex gap-2">
-              <Button
-                type="button"
-                variant="quiet"
-                size="compact"
-                onclick={() => void navigator.clipboard?.writeText(properties.path)}
-              >
+              <Button type="button" variant="quiet" size="compact" onclick={() => oncopy(path)}>
                 Copy path
               </Button>
               <Button
                 type="button"
                 variant="quiet"
                 size="compact"
-                onclick={() => actions.run(() => libraryTracks.reveal(properties.id))}
+                onclick={() => onreveal(properties.id)}
               >
                 Show in Explorer
               </Button>

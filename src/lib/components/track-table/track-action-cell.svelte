@@ -3,7 +3,8 @@
   import { Button } from "#lib/ui/shadcn/button/index.js";
   import { cn } from "#lib/utils/cn.js";
   import { MISSING } from "#lib/utils/missing";
-  import type { TrackRowAction, TrackTableLayout, TrackTableRow } from "./track-columns";
+  import type { TrackTableLayout, TrackTableRow } from "./track-columns";
+  import type { TrackRowAction } from "./track-row-states";
 
   let {
     row,

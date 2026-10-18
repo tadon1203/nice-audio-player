@@ -4,7 +4,7 @@
   import { AppServices } from "#lib/shell/app-services.svelte";
   import { NowPlayingMotion } from "#lib/shell/now-playing-motion";
   import { SvelteMotion } from "#lib/ui/motion/svelte-motion";
-  import { LIFT_PX } from "./now-playing-layout";
+  import { NowPlayingTransitions } from "./now-playing-transitions";
 
   /**
    * The Now Playing layer: full width (sidebar included), from below the title bar to the top of
@@ -25,7 +25,8 @@
       return {
         duration: opening || reduced ? duration : duration * NowPlayingMotion.EXIT_SPEED,
         easing,
-        css: (t, u) => `opacity: ${t}; transform: translateY(${reduced ? 0 : LIFT_PX * u}px)`,
+        css: (t, u) =>
+          `opacity: ${t}; transform: translateY(${reduced ? 0 : NowPlayingTransitions.liftPx * u}px)`,
       };
     };
   }
