@@ -24,6 +24,8 @@
   const budget = AppServices.current().motion;
   let inLastSeconds = $state(false);
 
+  // `$effect` stays: the clock boundary is torn down when the track or status changes, and the
+  // flag is reset in that same teardown.
   $effect(() => {
     const total = playback.durationMs;
     if (total === null || playback.status !== "playing") {

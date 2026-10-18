@@ -5,13 +5,13 @@
 
 <script lang="ts">
   import { Button } from "#lib/ui/shadcn/button";
-  import { onDestroy, onMount, tick } from "svelte";
   import { AppServices } from "#lib/shell/app-services.svelte";
   import RollingNumber from "#lib/ui/rolling-number/rolling-number.svelte";
-  import { RollingMath } from "#lib/ui/rolling-number/rolling-math";
   import WaveformSeek from "#lib/ui/waveform/waveform-seek.svelte";
   import { cn } from "#lib/utils/cn.js";
   import { DurationFormat } from "#lib/utils/duration-format";
+  import { SeekDrag } from "./seek-drag.svelte";
+  import { SeekSpin } from "./seek-spin.svelte";
 
   /**
    * The seek bar and its elapsed/remaining labels in one line, used by both the dock (a plain
@@ -46,6 +46,8 @@
 
   // The printed time and the announced value come from the same clock as the bar. They are
   // rounded down to the whole second, so they change once a second instead of every frame.
+  // `$effect` stays: `onBoundary` is a clock subscription whose teardown runs with the effect, and
+  // the value it sets is the one the time digits read.
   let clockMs = $state(Math.floor(playback.clock.estimate() / 1000) * 1000);
   $effect(() =>
     // Not the eased position: after a seek the digits go to the new time at once, and spin.
@@ -55,33 +57,10 @@
     ),
   );
 
-  let seekPreviewMs = $state<number | null>(null);
-  // While dragging, the clock holds the bar at the preview position instead of playing on.
-  let releaseHold: (() => void) | null = null;
-  const holdAt = (ms: number): void => {
-    const next = playback.clock.hold(ms);
-    releaseHold?.();
-    releaseHold = next;
-  };
-  const letGo = (): void => {
-    releaseHold?.();
-    releaseHold = null;
-  };
-  onDestroy(letGo);
+  const seekDrag = new SeekDrag();
   let showRemaining = $state(true);
-  const seekValue = $derived(seekPreviewMs ?? clockMs);
-  const dragging = $derived(seekPreviewMs !== null);
-
-  // A seek that just completed spins the time digits with its distance. Ordinary ticks, a new
-  // track and dragging (the digits follow the pointer) do not.
-  let spin = $state(0);
-  onMount(() =>
-    playback.clock.onJump((jump) => {
-      if (jump.kind !== "seek" || dragging) return;
-      spin = RollingMath.spinTurns(jump.toMs - jump.fromMs);
-      void tick().then(() => (spin = 0));
-    }),
-  );
+  const seekValue = $derived(seekDrag.preview ?? clockMs);
+  const spin = new SeekSpin(() => seekDrag.dragging);
 
   const remainingOrLength = $derived(
     playback.durationMs === null
@@ -96,11 +75,11 @@
   <!-- Dragging tracks the pointer 1:1. Otherwise the digits roll only for a jump (a seek); the
   ordinary tick of a second is a plain rewrite, so the time does not add a second thing that
   moves all the time. A new track does not spin back. -->
-  {#if dragging}
+  {#if seekDrag.dragging}
     {text}
   {:else}
     {#key trackKey}
-      <RollingNumber value={text} {spin} instant={spin === 0} />
+      <RollingNumber value={text} spin={spin.turns} instant={spin.turns === 0} />
     {/key}
   {/if}
 {/snippet}
@@ -118,24 +97,9 @@
       stillBars={budget.current !== "full"}
       lineOnly={!showWaveform}
       disabled={!canSeek}
-      onInput={(value) => {
-        seekPreviewMs = value;
-        holdAt(value);
-      }}
-      onCancel={() => {
-        letGo();
-        seekPreviewMs = null;
-      }}
-      onCommit={(value) => {
-        // Holds the committed position until the seek is reported, so the bar never falls back.
-        holdAt(value);
-        actions.run(() =>
-          playback.seek(value).finally(() => {
-            letGo();
-            seekPreviewMs = null;
-          }),
-        );
-      }}
+      onInput={seekDrag.input}
+      onCancel={seekDrag.cancel}
+      onCommit={(value) => actions.run(() => seekDrag.commit(value))}
       activeSpan={lyricsWaveformLink.activeSpan}
       hoveredLineSpan={lyricsWaveformLink.hoveredLineSpan}
       onHoverPositionChange={(ms) => lyricsWaveformLink.setHoveredWaveformMs(ms)}

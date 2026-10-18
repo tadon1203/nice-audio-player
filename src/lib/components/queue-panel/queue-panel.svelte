@@ -5,14 +5,14 @@
   import { Sheet, SheetContent, SheetHeader, SheetTitle } from "#lib/ui/shadcn/sheet";
   import QueueFooter from "./queue-footer.svelte";
   import QueueRow from "./queue-row.svelte";
-  import { createShuffleCascade } from "./shuffle-cascade.svelte";
+  import { ShuffleCascade } from "./shuffle-cascade.svelte";
   import UpcomingList from "./upcoming-list.svelte";
 
   const { playback, actions, queuePanel } = AppServices.current();
 
   const queue = $derived(playback.queue);
   const history = $derived(queue?.history ?? []);
-  const cascade = createShuffleCascade(
+  const cascade = new ShuffleCascade(
     () => playback.shuffleEnabled,
     () => queuePanel.isOpen,
   );

@@ -18,6 +18,8 @@
 
   const rotation = new Tween(0);
   let shown = untrack(() => mode);
+  // `$effect` stays: the turn starts when the `mode` prop changes, which no subscriber or
+  // attachment observes.
   $effect(() => {
     if (mode === shown) return;
     shown = mode;

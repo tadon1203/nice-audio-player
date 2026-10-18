@@ -22,7 +22,7 @@
   import { SvelteMotion } from "#lib/ui/motion/svelte-motion";
   import { Tooltip, TooltipContent, TooltipTrigger } from "#lib/ui/shadcn/tooltip";
   import { cn } from "#lib/utils/cn.js";
-  import { segmentFill, segmentStarts, segmentStates } from "./album-strip-model";
+  import { SegmentStrip } from "./segment-strip";
 
   /**
    * Segments proportional to each track's length. They grow in left to right on entry; for the
@@ -41,8 +41,8 @@
   const playback = AppServices.current().playback;
 
   const totalMs = $derived(tracks.reduce((sum, track) => sum + (track.durationMs ?? 0), 0));
-  const states = $derived(segmentStates(tracks, activeTrackId));
-  const starts = $derived(segmentStarts(tracks));
+  const states = $derived(SegmentStrip.states(tracks, activeTrackId));
+  const starts = $derived(SegmentStrip.starts(tracks));
 
   /** Grows from the left edge, later the further into the album the segment starts. */
   function sweep(_node: Element, { start }: { start: number }): TransitionConfig {
@@ -63,8 +63,8 @@
   const fill = (rowDurationMs: number | null): Attachment<HTMLElement> => {
     const total = playback.durationMs ?? rowDurationMs ?? 0;
     return playback.clock.drive([
-      { atMs: 0, transform: `scaleX(${segmentFill(0, total)})` },
-      { atMs: total, transform: `scaleX(${segmentFill(total, total)})` },
+      { atMs: 0, transform: `scaleX(${SegmentStrip.fill(0, total)})` },
+      { atMs: total, transform: `scaleX(${SegmentStrip.fill(total, total)})` },
     ]);
   };
 </script>

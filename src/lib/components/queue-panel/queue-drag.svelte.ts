@@ -2,7 +2,7 @@ import type { Attachment } from "svelte/attachments";
 import type { QueueItemId } from "#lib/native";
 import type { HTMLAttributes } from "svelte/elements";
 import { ScrollView } from "#lib/ui/scroll-view.svelte";
-import { dropSlotForFixedRows, slotToIndex } from "./queue-drag";
+import { DropSlot } from "./drop-slot";
 
 /** Within this distance of the scroll view's edge a drag scrolls it, this far per move. */
 const EDGE_PX = 40;
@@ -51,13 +51,13 @@ export class QueueDrag {
   }
 
   /** The pointer handlers for the drag handle of upcoming item `id` at index `from`. */
-  public handlersFor(
+  public readonly handlersFor = (
     id: QueueItemId,
     from: number,
   ): Pick<
     HTMLAttributes<HTMLElement>,
     "onpointerdown" | "onpointermove" | "onpointerup" | "onpointercancel"
-  > {
+  > => {
     return {
       onpointerdown: (event) => {
         if (event.button !== 0) return;
@@ -80,13 +80,13 @@ export class QueueDrag {
         const listTop = this.#list?.getBoundingClientRect().top ?? 0;
         this.drag = {
           ...drag,
-          slot: dropSlotForFixedRows(event.clientY - listTop, rowHeight, count()),
+          slot: DropSlot.ofFixedRows(event.clientY - listTop, rowHeight, count()),
         };
       },
       onpointerup: () => {
         const drag = this.drag;
         if (drag === null || drag.id !== id) return;
-        const to = slotToIndex(drag.slot, drag.from);
+        const to = DropSlot.toIndex(drag.slot, drag.from);
         this.drag = null;
         if (to !== drag.from) this.#options.onMove(id, to);
       },
@@ -94,5 +94,5 @@ export class QueueDrag {
         this.drag = null;
       },
     };
-  }
+  };
 }
