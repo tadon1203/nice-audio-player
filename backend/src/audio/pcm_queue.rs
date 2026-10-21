@@ -21,9 +21,11 @@ use super::pcm::ChannelCount;
 const WAKE_NUMERATOR: usize = 1;
 const WAKE_DENOMINATOR: usize = 2;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub(crate) enum PcmQueueBuildError {
+    #[error("the queue has no capacity")]
     ZeroCapacity,
+    #[error("the queue capacity overflows")]
     CapacityOverflow,
 }
 

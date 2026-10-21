@@ -1,6 +1,16 @@
 //! Rendering the transport and queue into snapshots and telling listeners.
 
-use super::*;
+use super::{ActiveSession, PlayableItem, previous_restarts_track};
+use super::{
+    AudioOutputDeviceIdentity, PlaybackQueue, PlaybackServiceError, PlaybackWorker, QueueError,
+    Transport,
+};
+use super::{
+    PlaybackPosition, PlaybackProcessingInfo, PlaybackQueueSnapshot, PlaybackSnapshot, SnapshotBase,
+};
+use crate::audio::playback::session::Loaded;
+use crate::diagnostics::logged;
+use crate::messages::{StateTopic, Versioned};
 use crate::sync;
 
 impl PlaybackWorker {
@@ -10,7 +20,7 @@ impl PlaybackWorker {
         match &self.transport {
             Transport::Idle | Transport::Loading(_) => PlaybackSnapshot::Stopped {
                 base,
-                item: self.last_item.as_ref().map(|item| item.to_playback_item()),
+                item: self.last_item.as_ref().map(PlayableItem::to_playback_item),
             },
             Transport::Loaded(loaded) => {
                 base.can_go_previous = self.loaded_can_go_previous(loaded);
@@ -161,6 +171,9 @@ impl PlaybackWorker {
         if matches!(self.transport, Transport::Loading(_)) {
             return Err(PlaybackServiceError::QueueBusy);
         }
-        edit(&mut self.queue).map_err(|_| PlaybackServiceError::QueueItemNotFound)
+        edit(&mut self.queue).map_err(logged(
+            PlaybackServiceError::QueueItemNotFound,
+            "playback.queue.edit_failed",
+        ))
     }
 }

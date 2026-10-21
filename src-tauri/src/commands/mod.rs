@@ -7,7 +7,7 @@ pub mod session;
 
 use std::sync::Arc;
 
-use backend::{app::BackendApp, tasks::TaskError};
+use backend::{app::BackendApp, diagnostics::logged, tasks::TaskError};
 
 use crate::AppState;
 
@@ -24,5 +24,5 @@ where
     let backend = Arc::clone(&state.backend);
     tauri::async_runtime::spawn_blocking(move || work(&backend))
         .await
-        .map_err(|_| E::task_failed())?
+        .map_err(logged(E::task_failed(), "host.task.failed"))?
 }

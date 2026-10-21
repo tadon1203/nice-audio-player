@@ -41,7 +41,7 @@ use crate::audio::timebase::millis_to_frame;
 use crate::audio::volume::{AtomicEffectiveGain, VolumeState};
 use crate::errors::CommonError;
 use crate::ids::{PlaybackId, QueueItemId, TrackId};
-use crate::messages::{Occurrence, SharedMessageSink, StateTopic, Versioned};
+use crate::messages::{Occurrence, SharedMessageSink, Versioned};
 use log::{error, info};
 use rand::{SeedableRng, rngs::StdRng};
 

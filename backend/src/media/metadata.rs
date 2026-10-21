@@ -1,4 +1,7 @@
 //! Metadata is deliberately best-effort: it can never change Symphonia playability.
+use std::borrow::Cow;
+
+use crate::diagnostics::logged;
 use crate::library::artwork::ArtworkMimeType;
 use lofty::{
     config::ParseOptions,
@@ -46,17 +49,23 @@ pub fn read_source_metadata(
     path: &std::path::Path,
 ) -> Result<Option<SourceMetadata>, MetadataReadError> {
     let tagged = Probe::open(path)
-        .map_err(|_| MetadataReadError::Read)?
+        .map_err(logged(
+            MetadataReadError::Read,
+            "media.metadata.open_failed",
+        ))?
         .options(ParseOptions::new().read_properties(false))
         .read()
-        .map_err(|_| MetadataReadError::Read)?;
+        .map_err(logged(
+            MetadataReadError::Read,
+            "media.metadata.read_failed",
+        ))?;
     let Some(tag) = tagged.primary_tag().or_else(|| tagged.first_tag()) else {
         return Ok(None);
     };
     Ok(Some(SourceMetadata {
-        title: tag.title().map(|v| v.into_owned()),
-        artist: tag.artist().map(|v| v.into_owned()),
-        album: tag.album().map(|v| v.into_owned()),
+        title: tag.title().map(Cow::into_owned),
+        artist: tag.artist().map(Cow::into_owned),
+        album: tag.album().map(Cow::into_owned),
         album_artist: tag.get_string(ItemKey::AlbumArtist).map(ToOwned::to_owned),
         title_sort: tag
             .get_string(ItemKey::TrackTitleSortOrder)
@@ -74,7 +83,7 @@ pub fn read_source_metadata(
         track_total: tag.track_total(),
         disc_number: tag.disk(),
         disc_total: tag.disk_total(),
-        genre: tag.genre().map(|v| v.into_owned()),
+        genre: tag.genre().map(Cow::into_owned),
         date: tag.date().map(|v| v.to_string()),
         artwork: select_artwork(&tagged, tag),
     }))

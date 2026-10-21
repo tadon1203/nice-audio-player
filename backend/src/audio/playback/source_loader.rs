@@ -6,6 +6,7 @@ use super::input::{Inbox, SourceLoadId, WorkerEvent};
 use crate::audio::cancellation::Cancellation;
 use crate::audio::compressed_source::{CompressedSourceError, prepare_compressed_source};
 use crate::containment::contain;
+use crate::diagnostics::logged;
 use crate::media::validation::ValidatedAudioFile;
 
 pub(crate) struct SourceLoad {
@@ -36,7 +37,7 @@ impl SourceLoad {
                 .unwrap_or(Err(CompressedSourceError::OpenFailed));
                 inbox.event(WorkerEvent::SourceLoaded { id, result });
             })
-            .map_err(|_| ())?;
+            .map_err(logged((), "playback.source_loader.thread_failed"))?;
         Ok(Self {
             id,
             cancellation,

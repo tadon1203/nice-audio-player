@@ -11,24 +11,40 @@ use symphonia::core::units::{Time, TimeBase, Timestamp};
 use symphonia::default::{get_codecs, get_probe};
 
 use super::pcm::{ChannelCount, PcmSpec, SampleRate};
+use crate::diagnostics::logged;
 use crate::media::validation::ValidatedAudioFile;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum PcmDecodeError {
+    #[error("decoding was cancelled")]
     Cancelled,
+    #[error("the file could not be opened")]
     FileOpenFailed,
+    #[error("the format is not supported")]
     UnsupportedFormat,
+    #[error("the file has no audio track")]
     MissingAudioTrack,
+    #[error("the audio track has no codec parameters")]
     MissingCodecParameters,
+    #[error("the codec is not supported")]
     UnsupportedCodec,
+    #[error("the sample rate is invalid")]
     InvalidSampleRate,
+    #[error("the channel count is invalid")]
     InvalidChannelCount,
+    #[error("the file could not be read")]
     ReadFailed,
+    #[error("the audio data is corrupted")]
     CorruptedAudioData,
+    #[error("the stream changed while decoding")]
     StreamChanged,
+    #[error("the decode buffer could not be allocated")]
     BufferAllocationFailed,
+    #[error("the audio stream is empty")]
     EmptyAudioStream,
+    #[error("the audio could not be decoded")]
     DecodeFailed,
+    #[error("the seek failed")]
     SeekFailed,
 }
 
@@ -89,7 +105,10 @@ pub(crate) struct StreamingDecoder {
 pub(crate) fn open_analysis_decoder(
     file: &ValidatedAudioFile,
 ) -> Result<StreamingDecoder, PcmDecodeError> {
-    let source = File::open(&file.path).map_err(|_| PcmDecodeError::FileOpenFailed)?;
+    let source = File::open(&file.path).map_err(logged(
+        PcmDecodeError::FileOpenFailed,
+        "audio.decode.open_failed",
+    ))?;
     open_decoder_from_source(Box::new(source), &file.extension)
 }
 
@@ -100,21 +119,21 @@ pub(crate) fn open_decoder_from_source(
     let media_source = MediaSourceStream::new(source, MediaSourceStreamOptions::default());
     let mut hint = Hint::new();
     hint.with_extension(extension);
-    open_decoder_from_media_source(media_source, hint)
+    open_decoder_from_media_source(media_source, &hint)
 }
 
 fn open_decoder_from_media_source(
     media_source: MediaSourceStream<'static>,
-    hint: Hint,
+    hint: &Hint,
 ) -> Result<StreamingDecoder, PcmDecodeError> {
     let format = get_probe()
         .probe(
-            &hint,
+            hint,
             media_source,
             FormatOptions::default(),
             MetadataOptions::default(),
         )
-        .map_err(map_probe_error)?;
+        .map_err(|error| map_probe_error(&error))?;
     let track = format
         .default_track(TrackType::Audio)
         .ok_or(PcmDecodeError::MissingAudioTrack)?;
@@ -151,7 +170,7 @@ fn open_decoder_from_media_source(
     let decoder_options = AudioDecoderOptions::default();
     let decoder = get_codecs()
         .make_audio_decoder(codec_params, &decoder_options)
-        .map_err(map_decoder_creation_error)?;
+        .map_err(|error| map_decoder_creation_error(&error))?;
     Ok(StreamingDecoder {
         format,
         decoder,
@@ -201,7 +220,10 @@ impl StreamingDecoder {
                     track_id: Some(self.track_id),
                 },
             )
-            .map_err(|_| PcmDecodeError::SeekFailed)?;
+            .map_err(logged(
+                PcmDecodeError::SeekFailed,
+                "audio.decode.seek_failed",
+            ))?;
         self.decoder.reset();
         self.finished = false;
 
@@ -246,7 +268,11 @@ impl StreamingDecoder {
         }
 
         loop {
-            let Some(packet) = self.format.next_packet().map_err(map_packet_error)? else {
+            let Some(packet) = self
+                .format
+                .next_packet()
+                .map_err(|error| map_packet_error(&error))?
+            else {
                 self.finished = true;
                 if self.damaged.skipped > 0 {
                     warn!(
@@ -272,7 +298,7 @@ impl StreamingDecoder {
                     );
                     return Err(PcmDecodeError::CorruptedAudioData);
                 }
-                Err(error) => return Err(map_decode_error(error)),
+                Err(error) => return Err(map_decode_error(&error)),
             };
             self.damaged.decoded();
             let packet_sample_count = decoded.samples_interleaved();
@@ -293,7 +319,10 @@ impl StreamingDecoder {
             destination.clear();
             destination
                 .try_reserve(packet_sample_count)
-                .map_err(|_| PcmDecodeError::BufferAllocationFailed)?;
+                .map_err(logged(
+                    PcmDecodeError::BufferAllocationFailed,
+                    "audio.decode.buffer_failed",
+                ))?;
             destination.resize(packet_sample_count, 0.0);
             decoded.copy_to_slice_interleaved(destination);
             return Ok(DecodeStep::Samples);
@@ -317,8 +346,10 @@ fn timestamp_delta_to_frames(
     if required < actual {
         return Err(PcmDecodeError::SeekFailed);
     }
-    let delta =
-        u128::try_from(required.get() - actual.get()).map_err(|_| PcmDecodeError::SeekFailed)?;
+    let delta = u128::try_from(required.get() - actual.get()).map_err(logged(
+        PcmDecodeError::SeekFailed,
+        "audio.decode.seek_delta_failed",
+    ))?;
     let numerator = delta
         .checked_mul(u128::from(time_base.numer.get()))
         .and_then(|value| value.checked_mul(u128::from(sample_rate)))
@@ -328,10 +359,13 @@ fn timestamp_delta_to_frames(
         .checked_add(denominator.saturating_sub(1))
         .and_then(|value| value.checked_div(denominator))
         .ok_or(PcmDecodeError::SeekFailed)?;
-    u64::try_from(frames).map_err(|_| PcmDecodeError::SeekFailed)
+    u64::try_from(frames).map_err(logged(
+        PcmDecodeError::SeekFailed,
+        "audio.decode.seek_frames_failed",
+    ))
 }
 
-fn map_probe_error(error: SymphoniaError) -> PcmDecodeError {
+fn map_probe_error(error: &SymphoniaError) -> PcmDecodeError {
     match error {
         SymphoniaError::Unsupported(_) => PcmDecodeError::UnsupportedFormat,
         SymphoniaError::IoError(_) => PcmDecodeError::ReadFailed,
@@ -339,7 +373,7 @@ fn map_probe_error(error: SymphoniaError) -> PcmDecodeError {
     }
 }
 
-fn map_decoder_creation_error(error: SymphoniaError) -> PcmDecodeError {
+fn map_decoder_creation_error(error: &SymphoniaError) -> PcmDecodeError {
     match error {
         SymphoniaError::Unsupported(_) => PcmDecodeError::UnsupportedCodec,
         SymphoniaError::IoError(_) => PcmDecodeError::ReadFailed,
@@ -347,7 +381,7 @@ fn map_decoder_creation_error(error: SymphoniaError) -> PcmDecodeError {
     }
 }
 
-fn map_packet_error(error: SymphoniaError) -> PcmDecodeError {
+fn map_packet_error(error: &SymphoniaError) -> PcmDecodeError {
     match error {
         SymphoniaError::ResetRequired => PcmDecodeError::StreamChanged,
         SymphoniaError::IoError(_) => PcmDecodeError::ReadFailed,
@@ -356,7 +390,7 @@ fn map_packet_error(error: SymphoniaError) -> PcmDecodeError {
     }
 }
 
-fn map_decode_error(error: SymphoniaError) -> PcmDecodeError {
+fn map_decode_error(error: &SymphoniaError) -> PcmDecodeError {
     match error {
         SymphoniaError::DecodeError(_) => PcmDecodeError::CorruptedAudioData,
         SymphoniaError::IoError(_) => PcmDecodeError::ReadFailed,

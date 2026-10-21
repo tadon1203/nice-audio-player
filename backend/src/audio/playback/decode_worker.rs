@@ -8,7 +8,7 @@ use crate::audio::cancellation::Cancellation;
 use crate::audio::decoding::{DecodeStep, StreamingDecoder};
 use crate::audio::output::PipelineId;
 use crate::audio::output_processing::{OutputPcmProcessor, OutputProcessingError};
-use crate::audio::pcm_queue::{PcmProducer, PcmWaker};
+use crate::audio::pcm_queue::{PcmProducer, PcmWaker, WaitCancelled};
 use crate::containment::contain;
 
 pub(crate) struct DecodeTaskInput {
@@ -175,7 +175,8 @@ impl DecodeTask {
                 || cancellation.is_cancelled(),
                 |queued| notify_prebuffer(inbox, pipeline, sent, queued >= frames),
             )
-            .map_err(|_| Stop::Cancelled)
+            // A cancelled wait is a normal stop, not a failure, so its cause is not logged.
+            .map_err(|WaitCancelled| Stop::Cancelled)
     }
 }
 

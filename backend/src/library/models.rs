@@ -1,12 +1,16 @@
 use crate::ids::{AlbumId, ArtistId, RootId, TrackId};
 use serde::Deserialize;
 use serde::Serialize;
-#[derive(Debug, Clone, Serialize, specta::Type)]
+#[derive(Debug, Clone, Serialize, specta::Type, thiserror::Error)]
 #[serde(rename_all = "camelCase")]
 pub enum LibraryUnavailableReason {
+    #[error("the database could not be opened")]
     DatabaseOpenFailed,
+    #[error("the database migration failed")]
     MigrationFailed,
+    #[error("the database schema is newer than this app")]
     SchemaTooNew,
+    #[error("the database is corrupt")]
     DatabaseCorrupt,
 }
 #[derive(Debug, Clone, Serialize, specta::Type)]

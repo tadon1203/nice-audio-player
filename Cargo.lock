@@ -2744,6 +2744,7 @@ dependencies = [
  "serde_json",
  "specta",
  "symphonia",
+ "thiserror 2.0.21",
  "triple_buffer",
  "unicode-normalization",
  "walkdir",

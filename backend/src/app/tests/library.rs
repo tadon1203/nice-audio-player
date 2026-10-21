@@ -174,7 +174,7 @@ fn an_album_by_id_that_the_library_does_not_hold_has_no_tracks_and_does_not_play
     };
 
     assert!(matches!(
-        fixture.backend.album_tracks_by_id(request).err(),
+        fixture.backend.album_tracks_by_id(&request).err(),
         Some(LibraryCommandError::AlbumNotFound)
     ));
     assert_eq!(

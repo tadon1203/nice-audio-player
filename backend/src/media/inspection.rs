@@ -1,11 +1,25 @@
 use std::{fs::File, path::Path};
-use symphonia::core::codecs::audio::{AudioCodecId, AudioDecoderOptions, well_known::*};
+use symphonia::core::audio::Channels;
+use symphonia::core::codecs::audio::well_known::{
+    CODEC_ID_AAC, CODEC_ID_ADPCM_G722, CODEC_ID_ADPCM_G726, CODEC_ID_ADPCM_G726LE,
+    CODEC_ID_ADPCM_IMA_QT, CODEC_ID_ADPCM_IMA_WAV, CODEC_ID_ADPCM_MS, CODEC_ID_ALAC, CODEC_ID_FLAC,
+    CODEC_ID_MP1, CODEC_ID_MP2, CODEC_ID_MP3, CODEC_ID_PCM_ALAW, CODEC_ID_PCM_F32LE,
+    CODEC_ID_PCM_F32LE_PLANAR, CODEC_ID_PCM_F64LE, CODEC_ID_PCM_F64LE_PLANAR, CODEC_ID_PCM_MULAW,
+    CODEC_ID_PCM_S8, CODEC_ID_PCM_S8_PLANAR, CODEC_ID_PCM_S16LE, CODEC_ID_PCM_S16LE_PLANAR,
+    CODEC_ID_PCM_S24LE, CODEC_ID_PCM_S24LE_PLANAR, CODEC_ID_PCM_S32LE, CODEC_ID_PCM_S32LE_PLANAR,
+    CODEC_ID_PCM_U8, CODEC_ID_PCM_U8_PLANAR, CODEC_ID_PCM_U16LE, CODEC_ID_PCM_U16LE_PLANAR,
+    CODEC_ID_PCM_U24LE, CODEC_ID_PCM_U24LE_PLANAR, CODEC_ID_PCM_U32LE, CODEC_ID_PCM_U32LE_PLANAR,
+    CODEC_ID_VORBIS,
+};
+use symphonia::core::codecs::audio::{AudioCodecId, AudioDecoderOptions};
 use symphonia::core::formats::probe::Hint;
 use symphonia::core::formats::{FormatOptions, Track, TrackType};
 use symphonia::core::io::{MediaSourceStream, MediaSourceStreamOptions};
 use symphonia::core::meta::MetadataOptions;
 use symphonia::core::units::Timestamp;
 use symphonia::default::{get_codecs, get_probe};
+
+use crate::diagnostics::logged;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AudioFileInfo {
@@ -39,7 +53,7 @@ pub struct InspectedAudioFile {
 
 /// What the decoder reports about the audio file at `path` (`extension` is its format hint).
 pub fn inspect_audio_file(path: &Path, extension: &str) -> Result<InspectedAudioFile, Undecodable> {
-    let source = File::open(path).map_err(|_| Undecodable)?;
+    let source = File::open(path).map_err(logged(Undecodable, "media.inspection.open_failed"))?;
     let stream = MediaSourceStream::new(Box::new(source), MediaSourceStreamOptions::default());
     let mut hint = Hint::new();
     hint.with_extension(extension);
@@ -50,7 +64,7 @@ pub fn inspect_audio_file(path: &Path, extension: &str) -> Result<InspectedAudio
             FormatOptions::default(),
             MetadataOptions::default(),
         )
-        .map_err(|_| Undecodable)?;
+        .map_err(logged(Undecodable, "media.inspection.probe_failed"))?;
     let track = format.default_track(TrackType::Audio).ok_or(Undecodable)?;
     let params = track
         .codec_params
@@ -61,7 +75,7 @@ pub fn inspect_audio_file(path: &Path, extension: &str) -> Result<InspectedAudio
     let codec = codec_from_id(params.codec);
     get_codecs()
         .make_audio_decoder(params, &AudioDecoderOptions::default())
-        .map_err(|_| Undecodable)?;
+        .map_err(logged(Undecodable, "media.inspection.decoder_failed"))?;
     let sample_rate = params
         .sample_rate
         .filter(|rate| *rate > 0)
@@ -69,10 +83,13 @@ pub fn inspect_audio_file(path: &Path, extension: &str) -> Result<InspectedAudio
     let count = params
         .channels
         .as_ref()
-        .map(|channels| channels.count())
+        .map(Channels::count)
         .filter(|count| *count > 0)
         .ok_or(Undecodable)?;
-    let channel_count = u16::try_from(count).map_err(|_| Undecodable)?;
+    let channel_count = u16::try_from(count).map_err(logged(
+        Undecodable,
+        "media.inspection.channels_out_of_range",
+    ))?;
     Ok(InspectedAudioFile {
         info: AudioFileInfo {
             codec,

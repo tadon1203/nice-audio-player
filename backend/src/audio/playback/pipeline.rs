@@ -16,6 +16,7 @@ use crate::audio::output::{
 use crate::audio::output_processing::{OutputPcmProcessor, OutputProcessingPlan};
 use crate::audio::pcm_queue::{PcmConsumer, PcmProducer};
 use crate::audio::timebase::{millis_to_frame, rescale_frame};
+use crate::diagnostics::logged;
 
 /// The queue a seek or the next track plays through: the stream already playing takes it over.
 pub(super) type QueueOutput = PcmConsumer;
@@ -77,14 +78,20 @@ pub(super) fn open_start(
     let mut decoder = request
         .source
         .open_decoder(request.extension)
-        .map_err(|_| PipelineError::DecoderOpen)?;
+        .map_err(logged(
+            PipelineError::DecoderOpen,
+            "pipeline.start.decoder_open",
+        ))?;
     let spec = decoder.spec();
     let first_packet = decode_first_packet(&mut decoder)?;
     let prepared = backend
         .prepare(selection, spec, request.pipeline_id, links)
         .map_err(PipelineError::OutputPrepare)?;
     let plan = prepared.config.processing_plan;
-    let processor = OutputPcmProcessor::new(plan).map_err(|_| PipelineError::ProcessorCreate)?;
+    let processor = OutputPcmProcessor::new(plan).map_err(logged(
+        PipelineError::ProcessorCreate,
+        "pipeline.start.processor",
+    ))?;
     let positioned = Positioned {
         duration_ms: decoder.duration_ms(),
         decoder,
@@ -119,11 +126,17 @@ pub(super) fn open_prefetch(
     config: &PreparedOutputConfig,
 ) -> Result<OpenedPipeline<QueueOutput>, PipelineError> {
     let plan = config.processing_plan;
-    let processor = OutputPcmProcessor::new(plan).map_err(|_| PipelineError::ProcessorCreate)?;
+    let processor = OutputPcmProcessor::new(plan).map_err(logged(
+        PipelineError::ProcessorCreate,
+        "pipeline.prefetch.processor",
+    ))?;
     let mut decoder = request
         .source
         .open_decoder(request.extension)
-        .map_err(|_| PipelineError::DecoderOpen)?;
+        .map_err(logged(
+            PipelineError::DecoderOpen,
+            "pipeline.prefetch.decoder_open",
+        ))?;
     if decoder.spec() != plan.source() {
         return Err(PipelineError::SpecChanged);
     }
@@ -161,11 +174,17 @@ pub(super) fn open_seek(
     let source_rate = plan.source().sample_rate().get();
     let output_rate = plan.output().sample_rate().get();
     let target_source_frame = millis_to_frame(target_ms, source_rate);
-    let processor = OutputPcmProcessor::new(plan).map_err(|_| PipelineError::ProcessorCreate)?;
+    let processor = OutputPcmProcessor::new(plan).map_err(logged(
+        PipelineError::ProcessorCreate,
+        "pipeline.seek.processor",
+    ))?;
     let mut decoder = request
         .source
         .open_decoder(request.extension)
-        .map_err(|_| PipelineError::DecoderOpen)?;
+        .map_err(logged(
+            PipelineError::DecoderOpen,
+            "pipeline.seek.decoder_open",
+        ))?;
     if decoder.spec() != plan.source() {
         return Err(PipelineError::SpecChanged);
     }

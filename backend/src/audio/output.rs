@@ -24,6 +24,7 @@ use super::output_processing::{OutputProcessingError, OutputProcessingPlan};
 use super::pcm::{ChannelCount, PcmSpec, SampleRate};
 use super::pcm_queue::{PcmConsumer, PcmProducer, bounded_pcm_queue};
 use super::volume::{AtomicEffectiveGain, process_sample};
+use crate::diagnostics::logged;
 use crate::sync;
 
 /// Identifies one output stream, which lives as long as a session.
@@ -238,8 +239,10 @@ enum NativeAttemptDecision<T> {
 fn classify_native_attempt<T>(result: Result<T, AudioOutputError>) -> NativeAttemptDecision<T> {
     match result {
         Ok(value) => NativeAttemptDecision::Success(value),
-        Err(AudioOutputError::UnsupportedConfiguration)
-        | Err(AudioOutputError::StreamConfigurationUnsupported) => NativeAttemptDecision::Fallback,
+        Err(
+            AudioOutputError::UnsupportedConfiguration
+            | AudioOutputError::StreamConfigurationUnsupported,
+        ) => NativeAttemptDecision::Fallback,
         Err(error) => NativeAttemptDecision::Failure(error),
     }
 }
@@ -251,7 +254,7 @@ fn classify_fallback_build<T>(result: Result<T, AudioOutputError>) -> Result<T, 
     })
 }
 
-fn map_stream_start_error(error: cpal::Error) -> AudioOutputError {
+fn map_stream_start_error(error: &cpal::Error) -> AudioOutputError {
     match error.kind() {
         cpal::ErrorKind::DeviceNotAvailable => AudioOutputError::DeviceUnavailable,
         _ => AudioOutputError::StreamStartFailed,
@@ -271,7 +274,9 @@ struct CpalStream {
 
 impl OutputStream for CpalStream {
     fn start(&self) -> Result<(), AudioOutputError> {
-        self.stream.play().map_err(map_stream_start_error)
+        self.stream
+            .play()
+            .map_err(|error| map_stream_start_error(&error))
     }
 
     fn pause(&self) -> Result<(), AudioOutputError> {
@@ -452,7 +457,7 @@ fn prepare_for_spec(
             _ => AudioOutputError::ConfigurationQueryFailed,
         })?
         .collect::<Vec<_>>();
-    let native = select_output_config(ranges.iter().cloned(), source_rate, source_channels);
+    let native = select_output_config(ranges.iter().copied(), source_rate, source_channels);
     let native_sample_format = native
         .as_ref()
         .ok()
@@ -460,8 +465,10 @@ fn prepare_for_spec(
     let native_result = native.and_then(|config| {
         let stream_config = config.config();
         let sample_format = config.sample_format();
-        let plan = OutputProcessingPlan::new(spec, spec)
-            .map_err(|_| AudioOutputError::UnsupportedConfiguration)?;
+        let plan = OutputProcessingPlan::new(spec, spec).map_err(logged(
+            AudioOutputError::UnsupportedConfiguration,
+            "audio.output.plan_failed",
+        ))?;
         let (producer, consumer) = make_queue(plan.output())?;
         let result = build_stream_for_config(
             &device,
@@ -500,6 +507,18 @@ fn prepare_for_spec(
         NativeAttemptDecision::Failure(error) => return Err(error),
     }
 
+    prepare_fallback(&device, spec, first, links, device_identity)
+}
+
+fn prepare_fallback(
+    device: &cpal::Device,
+    spec: PcmSpec,
+    first: PipelineId,
+    links: OutputLinks,
+    identity: AudioOutputDeviceIdentity,
+) -> Result<PreparedOutput, AudioOutputError> {
+    let source_rate = spec.sample_rate().get();
+    let source_channels = spec.channel_count().get();
     let fallback = device
         .default_output_config()
         .map_err(|error| match error.kind() {
@@ -529,7 +548,7 @@ fn prepare_for_spec(
     let (producer, consumer) = make_queue(target)?;
     let config = fallback.config();
     let stream = classify_fallback_build(build_stream_for_config(
-        &device,
+        device,
         config,
         fallback.sample_format(),
         consumer,
@@ -549,8 +568,8 @@ fn prepare_for_spec(
         stream: Box::new(stream),
         producer,
         config: PreparedOutputConfig {
-            device_id,
-            device_name,
+            device_id: identity.id,
+            device_name: identity.name,
             processing_plan: plan,
         },
     })
@@ -569,7 +588,10 @@ pub(crate) fn make_queue(spec: PcmSpec) -> Result<(PcmProducer, PcmConsumer), Au
         ChannelCount::new(usize::from(channels))
             .ok_or(AudioOutputError::UnsupportedConfiguration)?,
     )
-    .map_err(|_| AudioOutputError::UnsupportedConfiguration)
+    .map_err(logged(
+        AudioOutputError::UnsupportedConfiguration,
+        "audio.output.queue_failed",
+    ))
 }
 
 fn select_output_config(
@@ -796,20 +818,17 @@ impl CallbackState {
         if self.completion != Completion::Pending || !self.consumer.is_finished() {
             return;
         }
-        match self.last_end_time {
-            Some(end_time) => {
-                self.completion = Completion::Reported;
-                (self.links.events)(OutputEvent::FinalFrames {
-                    pipeline: self.pipeline,
-                    end_time,
-                });
-            }
-            None => {
-                self.completion = Completion::TimingFailed;
-                (self.links.events)(OutputEvent::Failed(
-                    StreamFailureKind::CompletionTimingFailed,
-                ));
-            }
+        if let Some(end_time) = self.last_end_time {
+            self.completion = Completion::Reported;
+            (self.links.events)(OutputEvent::FinalFrames {
+                pipeline: self.pipeline,
+                end_time,
+            });
+        } else {
+            self.completion = Completion::TimingFailed;
+            (self.links.events)(OutputEvent::Failed(
+                StreamFailureKind::CompletionTimingFailed,
+            ));
         }
     }
 }
@@ -839,8 +858,9 @@ where
         )
         .map_err(|error| {
             let error_kind = error.kind();
-            error!("audio.output.stream_build_failed kind={:?} sample_format={:?} sample_rate={} channels={} buffer_size={:?}",
-                error_kind, sample_format, config_sample_rate, config_channels, config_buffer_size);
+            error!(
+                "audio.output.stream_build_failed kind={error_kind:?} sample_format={sample_format:?} sample_rate={config_sample_rate} channels={config_channels} buffer_size={config_buffer_size:?}"
+            );
             match error_kind {
                 cpal::ErrorKind::DeviceNotAvailable => AudioOutputError::DeviceUnavailable,
                 cpal::ErrorKind::UnsupportedConfig => {

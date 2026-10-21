@@ -3,10 +3,12 @@
 //! inside its root.
 
 use super::error::{LibraryCommandError, StoreError};
+use crate::diagnostics::logged;
 use crate::errors::CommonError;
 use std::path::{Component, PathBuf};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error("the track's location is unavailable")]
 pub struct Unavailable;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -66,8 +68,14 @@ impl TrackLocation {
             return Err(Unavailable);
         }
         let path = self.path()?;
-        let root = dunce::canonicalize(&self.root).map_err(|_| Unavailable)?;
-        let path = dunce::canonicalize(path).map_err(|_| Unavailable)?;
+        let root = dunce::canonicalize(&self.root).map_err(logged(
+            Unavailable,
+            "library.location.root_canonicalize_failed",
+        ))?;
+        let path = dunce::canonicalize(path).map_err(logged(
+            Unavailable,
+            "library.location.path_canonicalize_failed",
+        ))?;
         if !path.starts_with(&root) || !path.is_file() {
             return Err(Unavailable);
         }

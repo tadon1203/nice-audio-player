@@ -1,6 +1,8 @@
 use cpal::traits::{DeviceTrait, HostTrait};
 use serde::{Deserialize, Serialize};
 
+use crate::diagnostics::logged;
+
 #[derive(Debug, Clone, Serialize, specta::Type, Deserialize, PartialEq, Eq)]
 #[serde(
     tag = "kind",
@@ -57,19 +59,23 @@ pub fn list_output_devices() -> Result<Vec<AudioOutputDevice>, AudioDeviceListEr
         .default_output_device()
         .and_then(|device| device.id().ok())
         .map(|id| id.to_string());
-    let devices = host
-        .output_devices()
-        .map_err(|_| AudioDeviceListError::EnumerationFailed)?;
+    let devices = host.output_devices().map_err(logged(
+        AudioDeviceListError::EnumerationFailed,
+        "audio.devices.enumerate_failed",
+    ))?;
 
     let mut output_devices = Vec::new();
     for device in devices {
         append_output_device(
             &mut output_devices,
-            device.id().map(|id| id.to_string()).map_err(|_| ()),
+            device
+                .id()
+                .map(|id| id.to_string())
+                .map_err(logged((), "audio.devices.id_failed")),
             device
                 .description()
                 .map(|description| description.name().to_owned())
-                .map_err(|_| ()),
+                .map_err(logged((), "audio.devices.name_failed")),
             default_device_id.as_deref(),
         );
     }
@@ -109,9 +115,10 @@ pub(crate) fn resolve_output_selection(
             if device_id.is_empty() {
                 return Err(DeviceResolutionError::InvalidDeviceId);
             }
-            let id = device_id
-                .parse::<cpal::DeviceId>()
-                .map_err(|_| DeviceResolutionError::InvalidDeviceId)?;
+            let id = device_id.parse::<cpal::DeviceId>().map_err(logged(
+                DeviceResolutionError::InvalidDeviceId,
+                "audio.devices.id_invalid",
+            ))?;
             host.device_by_id(&id)
                 .ok_or(DeviceResolutionError::DeviceUnavailable)?
         }
@@ -119,8 +126,10 @@ pub(crate) fn resolve_output_selection(
     if !device.supports_output() {
         return Err(DeviceResolutionError::DeviceUnavailable);
     }
-    let identity =
-        device_identity(&device).map_err(|_| DeviceResolutionError::DeviceUnavailable)?;
+    let identity = device_identity(&device).map_err(logged(
+        DeviceResolutionError::DeviceUnavailable,
+        "audio.devices.identity_failed",
+    ))?;
     Ok(ResolvedAudioOutputDevice { device, identity })
 }
 

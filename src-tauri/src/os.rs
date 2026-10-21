@@ -2,6 +2,7 @@
 
 use std::{ffi::OsString, path::Path};
 
+use backend::diagnostics::logged;
 use backend::errors::{CommonError, LibraryCommandError};
 
 /// Opens the folder at `path` in the file manager.
@@ -11,9 +12,12 @@ pub fn open_in_file_manager(path: &Path) -> Result<(), LibraryCommandError> {
         .arg(path)
         .spawn()
         .map(|_| ())
-        .map_err(|_| LibraryCommandError::Common {
-            error: CommonError::TaskFailed,
-        })
+        .map_err(logged(
+            LibraryCommandError::Common {
+                error: CommonError::TaskFailed,
+            },
+            "host.os.explorer_failed",
+        ))
 }
 
 #[cfg(not(windows))]
@@ -36,9 +40,12 @@ pub fn reveal_in_file_manager(path: &Path) -> Result<(), LibraryCommandError> {
         .raw_arg(argument)
         .spawn()
         .map(|_| ())
-        .map_err(|_| LibraryCommandError::Common {
-            error: CommonError::TaskFailed,
-        })
+        .map_err(logged(
+            LibraryCommandError::Common {
+                error: CommonError::TaskFailed,
+            },
+            "host.os.reveal_failed",
+        ))
 }
 
 #[cfg(not(windows))]

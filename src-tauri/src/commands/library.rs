@@ -1,5 +1,7 @@
 use std::path::PathBuf;
 
+use backend::app::BackendApp;
+use backend::diagnostics::logged;
 use backend::dto::{
     AlbumArtistListRequest, AlbumArtistQuery, AlbumListRequest, AlbumQuery, AlbumTracksRequest,
     ArtistAlbumsRequest, LibraryAlbumArtistPage, LibraryAlbumArtistSummary, LibraryAlbumDetails,
@@ -17,6 +19,10 @@ use crate::{
 
 #[tauri::command]
 #[specta::specta]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Tauri passes State and AppHandle by value"
+)]
 pub fn get_library_status(state: tauri::State<'_, AppState>) -> LibraryStatus {
     state.backend.library_status()
 }
@@ -28,7 +34,7 @@ pub async fn reset_library_and_rescan(
     app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), LibraryCommandError> {
-    blocking(&state, |backend| backend.request_library_reset()).await?;
+    blocking(&state, BackendApp::request_library_reset).await?;
     // `restart` skips the exit event, so close the database cleanly first.
     state.backend.shutdown();
     app.restart()
@@ -39,7 +45,7 @@ pub async fn reset_library_and_rescan(
 pub async fn list_library_roots(
     state: tauri::State<'_, AppState>,
 ) -> Result<Vec<LibraryRoot>, LibraryCommandError> {
-    blocking(&state, |backend| backend.library_roots()).await
+    blocking(&state, BackendApp::library_roots).await
 }
 
 #[tauri::command]
@@ -83,7 +89,7 @@ pub async fn remove_library_root(
 pub async fn delete_missing_library_tracks(
     state: tauri::State<'_, AppState>,
 ) -> Result<u64, LibraryCommandError> {
-    blocking(&state, |backend| backend.delete_missing_tracks()).await
+    blocking(&state, BackendApp::delete_missing_tracks).await
 }
 
 /// Opens the folder holding the log files in the file manager.
@@ -91,23 +97,29 @@ pub async fn delete_missing_library_tracks(
 #[specta::specta]
 pub async fn open_log_directory(app: tauri::AppHandle) -> Result<(), LibraryCommandError> {
     use tauri::Manager;
-    let directory = app
-        .path()
-        .app_log_dir()
-        .map_err(|_| LibraryCommandError::Common {
+    let directory = app.path().app_log_dir().map_err(logged(
+        LibraryCommandError::Common {
             error: CommonError::TaskFailed,
-        })?;
+        },
+        "host.library.log_dir_failed",
+    ))?;
     // The filesystem and a spawned process stay off the main thread.
     tauri::async_runtime::spawn_blocking(move || {
-        std::fs::create_dir_all(&directory).map_err(|_| LibraryCommandError::Common {
-            error: CommonError::TaskFailed,
-        })?;
+        std::fs::create_dir_all(&directory).map_err(logged(
+            LibraryCommandError::Common {
+                error: CommonError::TaskFailed,
+            },
+            "host.library.create_dir_failed",
+        ))?;
         open_in_file_manager(&directory)
     })
     .await
-    .map_err(|_| LibraryCommandError::Common {
-        error: CommonError::TaskFailed,
-    })?
+    .map_err(logged(
+        LibraryCommandError::Common {
+            error: CommonError::TaskFailed,
+        },
+        "host.library.task_failed",
+    ))?
 }
 
 #[tauri::command]
@@ -115,7 +127,7 @@ pub async fn open_log_directory(app: tauri::AppHandle) -> Result<(), LibraryComm
 pub async fn start_library_scan(
     state: tauri::State<'_, AppState>,
 ) -> Result<(), LibraryCommandError> {
-    blocking(&state, |backend| backend.start_scan()).await
+    blocking(&state, BackendApp::start_scan).await
 }
 
 #[tauri::command]
@@ -123,7 +135,7 @@ pub async fn start_library_scan(
 pub async fn cancel_library_scan(
     state: tauri::State<'_, AppState>,
 ) -> Result<(), LibraryCommandError> {
-    blocking(&state, |backend| backend.cancel_scan()).await
+    blocking(&state, BackendApp::cancel_scan).await
 }
 
 #[tauri::command]
@@ -196,7 +208,7 @@ pub async fn list_library_artist_albums(
     request: ArtistAlbumsRequest,
     state: tauri::State<'_, AppState>,
 ) -> Result<LibraryAlbumPage, LibraryCommandError> {
-    blocking(&state, move |backend| backend.artist_albums(request)).await
+    blocking(&state, move |backend| backend.artist_albums(&request)).await
 }
 
 #[tauri::command]
@@ -214,7 +226,7 @@ pub async fn list_library_album_tracks(
     request: AlbumTracksRequest,
     state: tauri::State<'_, AppState>,
 ) -> Result<LibraryAlbumTrackPage, LibraryCommandError> {
-    blocking(&state, move |backend| backend.album_tracks_by_id(request)).await
+    blocking(&state, move |backend| backend.album_tracks_by_id(&request)).await
 }
 
 #[tauri::command]
@@ -236,9 +248,12 @@ pub async fn reveal_library_track(
     let path = blocking(&state, move |backend| backend.track_file(track_id)).await?;
     tauri::async_runtime::spawn_blocking(move || reveal_in_file_manager(&path))
         .await
-        .map_err(|_| LibraryCommandError::Common {
-            error: CommonError::TaskFailed,
-        })?
+        .map_err(logged(
+            LibraryCommandError::Common {
+                error: CommonError::TaskFailed,
+            },
+            "host.library.reveal_task_failed",
+        ))?
 }
 
 #[tauri::command]

@@ -63,29 +63,29 @@ The Renderer updates its caches and views from these.
 
 ## Code map
 
-| Directory                | What it holds                                                                        |
-| ------------------------ | ------------------------------------------------------------------------------------ |
-| `src/routes`             | SvelteKit routes and the app frame.                                                  |
-| `src/lib/native`         | The only adapter to Tauri, with the generated bindings.                              |
-| `src/lib/playback`       | Renderer side of Playback and the Queue.                                             |
-| `src/lib/library`        | Renderer side of the Library.                                                        |
-| `src/lib/lyrics`         | Renderer side of lyrics.                                                             |
-| `src/lib/meters`         | Renderer side of the Spectrum and the Level meter.                                   |
-| `src/lib/settings`       | Renderer side of settings.                                                           |
-| `src/lib/shell`          | The Renderer shell: app state that spans Renderer domains.                           |
-| `src/lib/components`     | Product-specific compositions of Renderer domains, such as the Dock and Now Playing. |
-| `src/lib/ui`             | Shared controls, with the shadcn-svelte primitives.                                  |
-| `src/lib/utils`          | Small helpers with no domain knowledge.                                              |
-| `backend/src/app`        | The composition root. It joins the services and holds the cross-domain use cases.    |
-| `backend/src/audio`      | Playback, the Output stream, the Waveform, the Spectrum, and the Level meter.        |
-| `backend/src/library`    | The Library: its database, the Scan, and artwork.                                    |
-| `backend/src/lyrics`     | Lyrics parsing and service.                                                          |
-| `backend/src/media`      | Reading tags, embedded lyrics, and file checks.                                      |
-| `backend/src`            | Also holds the small modules that serve many domains (settings, messages, sync).     |
-| `src-tauri/src/commands` | Host commands, grouped by domain.                                                    |
-| `src-tauri/src`          | Also holds command registration, message delivery, and the artwork protocol.         |
-| `tests`                  | Renderer E2E tests (Playwright, with a scripted native API).                         |
-| `tests-app`              | App E2E tests (WebdriverIO, on the real app).                                        |
+| Directory                | What it holds                                                                                 |
+| ------------------------ | --------------------------------------------------------------------------------------------- |
+| `src/routes`             | SvelteKit routes and the app frame.                                                           |
+| `src/lib/native`         | The only adapter to Tauri, with the generated bindings.                                       |
+| `src/lib/playback`       | Renderer side of Playback and the Queue.                                                      |
+| `src/lib/library`        | Renderer side of the Library.                                                                 |
+| `src/lib/lyrics`         | Renderer side of lyrics.                                                                      |
+| `src/lib/meters`         | Renderer side of the Spectrum and the Level meter.                                            |
+| `src/lib/settings`       | Renderer side of settings.                                                                    |
+| `src/lib/shell`          | The Renderer shell: app state that spans Renderer domains.                                    |
+| `src/lib/components`     | Product-specific compositions of Renderer domains, such as the Dock and Now Playing.          |
+| `src/lib/ui`             | Shared controls, with the shadcn-svelte primitives.                                           |
+| `src/lib/utils`          | Small helpers with no domain knowledge.                                                       |
+| `backend/src/app`        | The composition root. It joins the services and holds the cross-domain use cases.             |
+| `backend/src/audio`      | Playback, the Output stream, the Waveform, the Spectrum, and the Level meter.                 |
+| `backend/src/library`    | The Library: its database, the Scan, and artwork.                                             |
+| `backend/src/lyrics`     | Lyrics parsing and service.                                                                   |
+| `backend/src/media`      | Reading tags, embedded lyrics, and file checks.                                               |
+| `backend/src`            | Also holds the small modules that serve many domains (settings, messages, sync, diagnostics). |
+| `src-tauri/src/commands` | Host commands, grouped by domain.                                                             |
+| `src-tauri/src`          | Also holds command registration, message delivery, and the artwork protocol.                  |
+| `tests`                  | Renderer E2E tests (Playwright, with a scripted native API).                                  |
+| `tests-app`              | App E2E tests (WebdriverIO, on the real app).                                                 |
 
 ## Invariants
 

@@ -70,6 +70,7 @@ Clippy enforces the no-panic rule. See [ADR 0010](adr/0010-backend-does-not-pani
 - Do not write `unreachable!`. Remove the impossible branch with the types: split the enum, or carry a validated value.
 - Make an invariant a type. Use a newtype with a checked constructor or a `NonZero*` type. Validate once at the boundary. Inside, pass the validated type.
 - Write an error as an enum with `#[derive(thiserror::Error)]`. Do not use `anyhow`.
+- Map an error cause with `logged`: `.map_err(logged(Code, "area.what"))`. It logs the cause at `warn` and returns the typed code.
 - Number conversions go through checked conversions, `From`, or `TryFrom`.
 - Index a slice with `.get()`, an iterator, `chunks_exact`, or `split_at_checked`. Use `checked_*` or `saturating_*` for arithmetic that can overflow.
 - Add a lint suppression only when the user agrees.

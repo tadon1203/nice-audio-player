@@ -30,11 +30,13 @@ pub enum AdvanceReason {
     UserPrevious,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum QueueError {
     /// `replace` needs at least one item and a start index inside them.
+    #[error("the queue start is outside its items")]
     InvalidStart,
     /// The id is unknown, or names the current or an already played item.
+    #[error("the item is not upcoming in the queue")]
     ItemNotUpcoming,
 }
 

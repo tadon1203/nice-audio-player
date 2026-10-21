@@ -6,6 +6,7 @@ use symphonia::core::io::MediaSource;
 
 use super::cancellation::Cancellation;
 use super::decoding::{PcmDecodeError, StreamingDecoder};
+use crate::diagnostics::logged;
 use crate::media::validation::ValidatedAudioFile;
 
 /// An open file that decoders read through positioned reads, so a track costs no memory beyond
@@ -30,10 +31,16 @@ pub(crate) fn prepare_compressed_source(
     if cancellation.is_cancelled() {
         return Err(CompressedSourceError::Cancelled);
     }
-    let source = File::open(&file.path).map_err(|_| CompressedSourceError::OpenFailed)?;
+    let source = File::open(&file.path).map_err(logged(
+        CompressedSourceError::OpenFailed,
+        "audio.source.open_failed",
+    ))?;
     let byte_len = source
         .metadata()
-        .map_err(|_| CompressedSourceError::MetadataFailed)?
+        .map_err(logged(
+            CompressedSourceError::MetadataFailed,
+            "audio.source.metadata_failed",
+        ))?
         .len();
     Ok(CompressedAudioSource {
         file: Arc::new(source),

@@ -2,14 +2,21 @@ use rubato::audioadapter_buffers::direct::InterleavedSlice;
 use rubato::{Fft, FixedSync, Indexing, Resampler};
 
 use super::pcm::PcmSpec;
+use crate::diagnostics::logged;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub(crate) enum OutputProcessingError {
+    #[error("the samples do not divide into whole frames")]
     MisalignedSamples,
+    #[error("the channel conversion is not supported")]
     UnsupportedChannelConversion,
+    #[error("the input samples are invalid")]
     InvalidInputSamples,
+    #[error("the resampler could not be built")]
     ResamplerConstructionFailed,
+    #[error("the resampler failed to process samples")]
     ResamplerProcessingFailed,
+    #[error("the resampler produced an invalid output")]
     InvalidResamplerOutput,
 }
 
@@ -110,7 +117,10 @@ impl HighQualityResampler {
             channels,
             FixedSync::Both,
         )
-        .map_err(|_| OutputProcessingError::ResamplerConstructionFailed)?;
+        .map_err(logged(
+            OutputProcessingError::ResamplerConstructionFailed,
+            "audio.processing.resampler_build",
+        ))?;
         let input_capacity_frames = resampler.input_frames_max();
         let output_frames = resampler.output_frames_max();
         let input_chunk_frames = resampler.input_frames_next();
@@ -148,18 +158,27 @@ impl HighQualityResampler {
     ) -> Result<usize, OutputProcessingError> {
         let input_frames = self.resampler.input_frames_next();
         let output_frames = self.resampler.output_frames_next();
-        let input = InterleavedSlice::new(&self.input, self.channels, input_frames)
-            .map_err(|_| OutputProcessingError::ResamplerProcessingFailed)?;
+        let input =
+            InterleavedSlice::new(&self.input, self.channels, input_frames).map_err(logged(
+                OutputProcessingError::ResamplerProcessingFailed,
+                "audio.processing.resampler_input",
+            ))?;
         let mut resampled = InterleavedSlice::new_mut(
             &mut self.output,
             self.channels,
             self.resampler.output_frames_max(),
         )
-        .map_err(|_| OutputProcessingError::ResamplerProcessingFailed)?;
+        .map_err(logged(
+            OutputProcessingError::ResamplerProcessingFailed,
+            "audio.processing.resampler_output",
+        ))?;
         let indexing = partial_len.map(|len| Indexing::new().partial_len(len));
         self.resampler
             .process_into_buffer(&input, &mut resampled, indexing.as_ref())
-            .map_err(|_| OutputProcessingError::ResamplerProcessingFailed)?;
+            .map_err(logged(
+                OutputProcessingError::ResamplerProcessingFailed,
+                "audio.processing.resample",
+            ))?;
         self.input_frames = 0;
         let mut emitted = 0;
         for frame in self.output[..output_frames * self.channels].chunks_exact(self.channels) {

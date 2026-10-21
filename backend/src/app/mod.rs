@@ -17,6 +17,7 @@ use crate::audio::{
     },
     waveform::Waveforms,
 };
+use crate::diagnostics::logged;
 use crate::errors::CommonError;
 use crate::ids::{AlbumId, ArtistId, ArtworkHash, QueueItemId, RootId, TrackId};
 use crate::library::{
@@ -45,8 +46,9 @@ use std::{
     sync::Arc,
 };
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum BackendError {
+    #[error("the playback service could not start")]
     PlaybackStartFailed,
 }
 
@@ -113,7 +115,10 @@ impl BackendApp {
             listener,
             output,
         )
-        .map_err(|_| BackendError::PlaybackStartFailed)?;
+        .map_err(logged(
+            BackendError::PlaybackStartFailed,
+            "app.playback.start_failed",
+        ))?;
         Ok(Self {
             playback,
             library,
@@ -226,7 +231,8 @@ impl BackendApp {
         let path = path
             .into_os_string()
             .into_string()
-            .map_err(|_| LibraryCommandError::InvalidRoot)?;
+            .ok()
+            .ok_or(LibraryCommandError::InvalidRoot)?;
         self.library()?.register_root(path)
     }
 
@@ -311,7 +317,7 @@ impl BackendApp {
 
     pub fn album_tracks_by_id(
         &self,
-        request: AlbumTracksRequest,
+        request: &AlbumTracksRequest,
     ) -> Result<LibraryAlbumTrackPage, LibraryCommandError> {
         Ok(self
             .library()?
@@ -328,7 +334,7 @@ impl BackendApp {
 
     pub fn artist_albums(
         &self,
-        request: ArtistAlbumsRequest,
+        request: &ArtistAlbumsRequest,
     ) -> Result<LibraryAlbumPage, LibraryCommandError> {
         Ok(self.library()?.store().catalog_artist_albums(
             request.artist_id,
@@ -367,21 +373,24 @@ impl BackendApp {
 
     /// Blocking: the host runs it on a blocking thread.
     pub fn track_lyrics(&self, track_id: TrackId) -> Result<LyricsResolution, LyricsCommandError> {
-        let library = self
-            .library
-            .as_ref()
-            .map_err(|_| LyricsCommandError::Common {
+        let library = self.library.as_ref().map_err(logged(
+            LyricsCommandError::Common {
                 error: CommonError::LibraryUnavailable,
-            })?;
+            },
+            "app.lyrics.library_unavailable",
+        ))?;
         // The Library says where the file is; lyrics reads what is beside and inside it.
         let file = library
             .store()
             .track_location(track_id)
             .map_err(map_lyrics_context_error)?
             .existing()
-            .map_err(|_| LyricsCommandError::Common {
-                error: CommonError::TrackUnavailable,
-            })?;
+            .map_err(logged(
+                LyricsCommandError::Common {
+                    error: CommonError::TrackUnavailable,
+                },
+                "app.lyrics.track_unavailable",
+            ))?;
         Ok(self.lyrics.resolve(LyricsTrackContext {
             track_id,
             source: file.path,
@@ -550,19 +559,21 @@ impl BackendApp {
     // ---- private helpers ----
 
     fn library(&self) -> Result<&Library, LibraryCommandError> {
-        self.library
-            .as_ref()
-            .map_err(|_| LibraryCommandError::Common {
+        self.library.as_ref().map_err(logged(
+            LibraryCommandError::Common {
                 error: CommonError::LibraryUnavailable,
-            })
+            },
+            "app.library.unavailable",
+        ))
     }
 
     fn playback_library(&self) -> Result<&Library, PlaybackServiceError> {
-        self.library
-            .as_ref()
-            .map_err(|_| PlaybackServiceError::Common {
+        self.library.as_ref().map_err(logged(
+            PlaybackServiceError::Common {
                 error: CommonError::LibraryUnavailable,
-            })
+            },
+            "app.playback.library_unavailable",
+        ))
     }
 
     fn library_scan(&self) -> Versioned<crate::library::models::LibraryScanSnapshot> {
