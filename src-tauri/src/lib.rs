@@ -7,6 +7,9 @@ use tauri::Manager;
 mod artwork;
 mod bindings;
 mod commands;
+// `tauri_plugin_wdio` installs its own logger in the E2E build.
+#[cfg(not(feature = "wdio"))]
+mod logging;
 mod os;
 mod session;
 
@@ -36,14 +39,7 @@ pub fn run() {
         .plugin(tauri_plugin_wdio_webdriver::init());
     // `tauri_plugin_wdio` installs its own logger, and a second one fails the build of the app.
     #[cfg(not(feature = "wdio"))]
-    let builder = builder.plugin(
-        tauri_plugin_log::Builder::new()
-            // The default keeps one 40 KB file: minutes of history. A failure is investigated
-            // after the fact, so keep a few megabytes.
-            .max_file_size(1_000_000)
-            .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepSome(5))
-            .build(),
-    );
+    let builder = builder.plugin(logging::plugin());
 
     let app = builder
         .register_asynchronous_uri_scheme_protocol("nice-artwork", |context, request, responder| {
