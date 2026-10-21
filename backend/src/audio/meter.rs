@@ -15,6 +15,7 @@ use std::time::Duration;
 use ringbuf::traits::{Consumer, Producer, Split};
 
 use crate::diagnostics::log_failed;
+use crate::slices::head;
 use crate::sync;
 use ringbuf::{HeapCons, HeapProd, HeapRb};
 
@@ -105,7 +106,8 @@ impl Biquad {
         let alpha = sin / (2.0 * q);
         let a0 = 1.0 + alpha;
         let (b0, b1, b2) = if high {
-            ((1.0 + cos) / 2.0, -(1.0 + cos), (1.0 + cos) / 2.0)
+            let half = f64::midpoint(1.0, cos);
+            (half, -(1.0 + cos), half)
         } else {
             ((1.0 - cos) / 2.0, 1.0 - cos, (1.0 - cos) / 2.0)
         };
@@ -190,7 +192,7 @@ type Complex = (f64, f64);
 
 fn csqrt((re, im): Complex) -> Complex {
     let r = re.hypot(im);
-    let root = ((r + re) / 2.0).max(0.0).sqrt();
+    let root = f64::midpoint(r, re).max(0.0).sqrt();
     let imag = ((r - re) / 2.0).max(0.0).sqrt();
     (root, if im < 0.0 { -imag } else { imag })
 }
@@ -211,8 +213,8 @@ fn butterworth_bandpass(lower: f64, upper: f64, centre: f64, rate: f64) -> Vec<B
         let root = csqrt((squared.0 - 4.0 * w0_squared, squared.1));
         for sign in [1.0, -1.0] {
             let s = (
-                (pole.0 + sign * root.0) / 2.0,
-                (pole.1 + sign * root.1) / 2.0,
+                f64::midpoint(pole.0, sign * root.0),
+                f64::midpoint(pole.1, sign * root.1),
             );
             if s.1 <= 0.0 {
                 continue;
@@ -330,15 +332,17 @@ impl Analyzer {
     /// every frame they complete.
     pub fn process(&mut self, samples: &[f32], emit: &mut impl FnMut(MeterFrame)) {
         for pair in samples.as_chunks::<2>().0 {
-            for (channel, &sample) in pair.iter().enumerate() {
+            for (((&sample, peak), sum_squares), (bands, channel_energy)) in pair
+                .iter()
+                .zip(&mut self.peak)
+                .zip(&mut self.sum_squares)
+                .zip(self.bands.iter_mut().zip(&mut self.energy))
+            {
                 let sample = if sample.is_finite() { sample } else { 0.0 };
-                self.peak[channel] = self.peak[channel].max(sample.abs());
+                *peak = peak.max(sample.abs());
                 let x = f64::from(sample);
-                self.sum_squares[channel] += x * x;
-                for (band, energy) in self.bands[channel]
-                    .iter_mut()
-                    .zip(&mut self.energy[channel])
-                {
+                *sum_squares += x * x;
+                for (band, energy) in bands.iter_mut().zip(channel_energy) {
                     if let Some(band) = band {
                         let y = band.process(x);
                         *energy += y * y;
@@ -355,14 +359,20 @@ impl Analyzer {
     fn finish_frame(&mut self) -> MeterFrame {
         let len = self.filled as f64;
         let mut frame = MeterFrame::silent();
-        for (band, level) in frame.bands.iter_mut().enumerate() {
-            let louder = self.energy[0][band].max(self.energy[1][band]);
+        let [left_energy, right_energy] = &self.energy;
+        for ((level, left), right) in frame.bands.iter_mut().zip(left_energy).zip(right_energy) {
+            let louder = left.max(*right);
             // A sine of amplitude A has mean square A^2 / 2.
             *level = to_db(2.0 * louder / len);
         }
-        for channel in 0..2 {
-            frame.peak[channel] = to_db(f64::from(self.peak[channel]).powi(2));
-            frame.rms[channel] = to_db(self.sum_squares[channel] / len);
+        for ((peak, rms), (&channel_peak, &sum_squares)) in frame
+            .peak
+            .iter_mut()
+            .zip(&mut frame.rms)
+            .zip(self.peak.iter().zip(&self.sum_squares))
+        {
+            *peak = to_db(f64::from(channel_peak).powi(2));
+            *rms = to_db(sum_squares / len);
         }
         frame.full_scale = self.peak.iter().any(|peak| *peak >= 1.0);
         self.filled = 0;
@@ -424,18 +434,19 @@ fn combine(frames: &[MeterFrame]) -> MeterFrame {
         for (slot, band) in out.bands.iter_mut().zip(&frame.bands) {
             *slot = slot.max(*band);
         }
-        for channel in 0..2 {
-            out.peak[channel] = out.peak[channel].max(frame.peak[channel]);
+        for (out_peak, peak) in out.peak.iter_mut().zip(frame.peak) {
+            *out_peak = out_peak.max(peak);
         }
         out.full_scale |= frame.full_scale;
     }
-    for channel in 0..2 {
-        let energy: f64 = frames
-            .iter()
-            .map(|frame| 10_f64.powf(f64::from(frame.rms[channel]) / 10.0))
-            .sum::<f64>()
-            / frames.len() as f64;
-        out.rms[channel] = to_db(energy);
+    let mut energy = [0.0_f64; 2];
+    for frame in frames {
+        for (sum, level) in energy.iter_mut().zip(frame.rms) {
+            *sum += 10_f64.powf(f64::from(level) / 10.0);
+        }
+    }
+    for (rms, sum) in out.rms.iter_mut().zip(energy) {
+        *rms = to_db(sum / frames.len() as f64);
     }
     out
 }
@@ -591,7 +602,7 @@ fn run_analysis(shared: &Shared, id: u32, mut sink: FrameSink) {
             thread::sleep(IDLE_SLEEP);
             continue;
         }
-        analyzer.process(&buffer[..read], &mut |measurement| {
+        analyzer.process(head(&buffer, read), &mut |measurement| {
             if let Some(frame) = batcher.push(measurement)
                 && open
                 && !sink(&frame)

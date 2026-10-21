@@ -3,6 +3,7 @@ use rubato::{Fft, FixedSync, Indexing, Resampler};
 
 use super::pcm::PcmSpec;
 use crate::diagnostics::logged;
+use crate::slices::head;
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub(crate) enum OutputProcessingError {
@@ -142,7 +143,10 @@ impl HighQualityResampler {
 
     fn push(&mut self, frame: &[f32], output: &mut Vec<f32>) -> Result<(), OutputProcessingError> {
         let start = self.input_frames * self.channels;
-        self.input[self.input_frames * self.channels..start + self.channels].copy_from_slice(frame);
+        let Some(slot) = self.input.get_mut(start..start + self.channels) else {
+            return Err(OutputProcessingError::ResamplerProcessingFailed);
+        };
+        write_front(slot, frame);
         self.input_frames += 1;
         self.total_source_frames += 1;
         if self.input_frames == self.resampler.input_frames_next() {
@@ -181,7 +185,7 @@ impl HighQualityResampler {
             ))?;
         self.input_frames = 0;
         let mut emitted = 0;
-        for frame in self.output[..output_frames * self.channels].chunks_exact(self.channels) {
+        for frame in head(&self.output, output_frames * self.channels).chunks_exact(self.channels) {
             if self.delay_remaining > 0 {
                 self.delay_remaining -= 1;
                 continue;
@@ -329,25 +333,20 @@ pub(crate) struct OutputPcmProcessor {
 /// and each side is scaled so full-scale input in every channel cannot exceed full scale.
 fn surround_weights(channels: usize) -> Option<(&'static [f32], &'static [f32])> {
     const C: f32 = std::f32::consts::FRAC_1_SQRT_2;
-    const fn scaled<const N: usize>(weights: [f32; N], sum: f32) -> [f32; N] {
-        let mut out = weights;
-        let mut i = 0;
-        while i < N {
-            out[i] /= sum;
-            i += 1;
-        }
-        out
-    }
-    const L3: [f32; 3] = scaled([1.0, 0.0, C], 1.0 + C);
-    const R3: [f32; 3] = scaled([0.0, 1.0, C], 1.0 + C);
-    const L4: [f32; 4] = scaled([1.0, 0.0, C, 0.0], 1.0 + C);
-    const R4: [f32; 4] = scaled([0.0, 1.0, 0.0, C], 1.0 + C);
-    const L5: [f32; 5] = scaled([1.0, 0.0, C, C, 0.0], 1.0 + 2.0 * C);
-    const R5: [f32; 5] = scaled([0.0, 1.0, C, 0.0, C], 1.0 + 2.0 * C);
-    const L6: [f32; 6] = scaled([1.0, 0.0, C, 0.0, C, 0.0], 1.0 + 2.0 * C);
-    const R6: [f32; 6] = scaled([0.0, 1.0, C, 0.0, 0.0, C], 1.0 + 2.0 * C);
-    const L8: [f32; 8] = scaled([1.0, 0.0, C, 0.0, C, 0.0, C, 0.0], 1.0 + 3.0 * C);
-    const R8: [f32; 8] = scaled([0.0, 1.0, C, 0.0, 0.0, C, 0.0, C], 1.0 + 3.0 * C);
+    // Each weight is divided by the sum of the weights of its side, so full scale cannot clip.
+    const S3: f32 = 1.0 + C;
+    const S5: f32 = 1.0 + 2.0 * C;
+    const S8: f32 = 1.0 + 3.0 * C;
+    const L3: [f32; 3] = [1.0 / S3, 0.0, C / S3];
+    const R3: [f32; 3] = [0.0, 1.0 / S3, C / S3];
+    const L4: [f32; 4] = [1.0 / S3, 0.0, C / S3, 0.0];
+    const R4: [f32; 4] = [0.0, 1.0 / S3, 0.0, C / S3];
+    const L5: [f32; 5] = [1.0 / S5, 0.0, C / S5, C / S5, 0.0];
+    const R5: [f32; 5] = [0.0, 1.0 / S5, C / S5, 0.0, C / S5];
+    const L6: [f32; 6] = [1.0 / S5, 0.0, C / S5, 0.0, C / S5, 0.0];
+    const R6: [f32; 6] = [0.0, 1.0 / S5, C / S5, 0.0, 0.0, C / S5];
+    const L8: [f32; 8] = [1.0 / S8, 0.0, C / S8, 0.0, C / S8, 0.0, C / S8, 0.0];
+    const R8: [f32; 8] = [0.0, 1.0 / S8, C / S8, 0.0, 0.0, C / S8, 0.0, C / S8];
     match channels {
         3 => Some((&L3, &R3)),
         4 => Some((&L4, &R4)),
@@ -358,11 +357,16 @@ fn surround_weights(channels: usize) -> Option<(&'static [f32], &'static [f32])>
     }
 }
 
+/// Converts one frame into `output`. The plan's channel counts make every frame carry the channels
+/// the conversion reads; a channel the frame does not carry reads as silence.
 fn convert_channels_into(conversion: ChannelConversion, frame: &[f32], output: &mut [f32]) {
+    let sample = |index: usize| frame.get(index).copied().unwrap_or_default();
     match conversion {
-        ChannelConversion::None => output.copy_from_slice(frame),
-        ChannelConversion::MonoToStereo => output.copy_from_slice(&[frame[0], frame[0]]),
-        ChannelConversion::StereoToMono => output[0] = (frame[0] + frame[1]) * 0.5,
+        ChannelConversion::None => write_front(output, frame),
+        ChannelConversion::MonoToStereo => write_front(output, &[sample(0), sample(0)]),
+        ChannelConversion::StereoToMono => {
+            write_front(output, &[f32::midpoint(sample(0), sample(1))]);
+        }
         ChannelConversion::Downmix {
             left,
             right,
@@ -371,11 +375,18 @@ fn convert_channels_into(conversion: ChannelConversion, frame: &[f32], output: &
             let fold = |weights: &[f32]| frame.iter().zip(weights).map(|(s, w)| s * w).sum::<f32>();
             let (left, right) = (fold(left), fold(right));
             if to_mono {
-                output[0] = (left + right) * 0.5;
+                write_front(output, &[f32::midpoint(left, right)]);
             } else {
-                output.copy_from_slice(&[left, right]);
+                write_front(output, &[left, right]);
             }
         }
+    }
+}
+
+/// Writes `values` at the front of `output`. A value past the end of `output` is dropped.
+fn write_front(output: &mut [f32], values: &[f32]) {
+    for (slot, value) in output.iter_mut().zip(values) {
+        *slot = *value;
     }
 }
 

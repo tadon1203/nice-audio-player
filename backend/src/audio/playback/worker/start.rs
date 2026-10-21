@@ -1,6 +1,7 @@
 //! Starting a playback: loading the source, prebuffering, and failing or skipping on.
 
 use super::*;
+use crate::slices::{head, tail_from};
 
 impl PlaybackWorker {
     /// Replaces the queue and starts its `start_index` item.
@@ -379,11 +380,11 @@ impl PlaybackWorker {
         loop {
             let history = self.queue.history();
             let upcoming = self.queue.upcoming();
-            let mut shown: Vec<&QueueEntry> = history
-                [history.len().saturating_sub(HISTORY_IN_SNAPSHOT)..]
-                .iter()
-                .collect();
-            shown.extend(&upcoming[..upcoming.len().min(UPCOMING_IN_SNAPSHOT)]);
+            let mut shown: Vec<&QueueEntry> =
+                tail_from(history, history.len().saturating_sub(HISTORY_IN_SNAPSHOT))
+                    .iter()
+                    .collect();
+            shown.extend(head(upcoming, UPCOMING_IN_SNAPSHOT));
             let ids: Vec<TrackId> = shown.iter().map(|entry| entry.track_id).collect();
             let Ok(tracks) = self.tracks.resolve(&ids) else {
                 return;

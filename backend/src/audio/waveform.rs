@@ -290,7 +290,7 @@ fn reduce(chunks: &[ChunkStats]) -> Waveform {
         let mut peak = 0.0f32;
         let mut square_sum = 0.0f64;
         let mut samples = 0u64;
-        for chunk in &chunks[start..end] {
+        for chunk in chunks.get(start..end).unwrap_or_default() {
             peak = peak.max(chunk.peak);
             square_sum += chunk.square_sum;
             samples += chunk.samples;
@@ -367,7 +367,9 @@ fn is_hash(value: &str) -> bool {
 }
 
 fn cache_path(directory: &Path, hash: &str) -> PathBuf {
-    directory.join(&hash[..2]).join(format!("{hash}.napw"))
+    directory
+        .join(hash.get(..2).unwrap_or_default())
+        .join(format!("{hash}.napw"))
 }
 
 fn encode(waveform: &Waveform) -> Vec<u8> {
@@ -381,14 +383,15 @@ fn encode(waveform: &Waveform) -> Vec<u8> {
 
 fn decode(bytes: &[u8]) -> Option<Waveform> {
     let body = bytes.strip_prefix(CACHE_MAGIC)?;
-    let count = usize::from(u16::from_le_bytes([*body.first()?, *body.get(1)?]));
-    let data = &body[2..];
+    let (count_bytes, data) = body.split_first_chunk::<2>()?;
+    let count = usize::from(u16::from_le_bytes(*count_bytes));
     if count == 0 || data.len() != count * 2 {
         return None;
     }
+    let (peaks, rms) = data.split_at_checked(count)?;
     Some(Waveform {
-        peaks: data[..count].to_vec(),
-        rms: data[count..].to_vec(),
+        peaks: peaks.to_vec(),
+        rms: rms.to_vec(),
     })
 }
 

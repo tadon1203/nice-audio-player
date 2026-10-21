@@ -13,6 +13,7 @@ use symphonia::default::{get_codecs, get_probe};
 use super::pcm::{ChannelCount, PcmSpec, SampleRate};
 use crate::diagnostics::logged;
 use crate::media::validation::ValidatedAudioFile;
+use crate::slices::tail_from;
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum PcmDecodeError {
@@ -252,7 +253,7 @@ impl StreamingDecoder {
                     return Ok(SeekStep::Samples(SeekResult {
                         preroll_source_frame,
                         confirmed_source_frame: target_source_frame,
-                        first_packet: packet[skip_samples..].to_vec(),
+                        first_packet: tail_from(&packet, skip_samples).to_vec(),
                     }));
                 }
             }

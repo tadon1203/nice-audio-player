@@ -26,6 +26,7 @@ pub(crate) mod library;
 pub(crate) mod lyrics;
 pub(crate) mod media;
 pub(crate) mod settings;
+pub(crate) mod slices;
 
 #[cfg(test)]
 #[path = "audio/test_support.rs"]

@@ -62,6 +62,14 @@ pub struct BackendApp {
     data_dir: PathBuf,
 }
 
+impl std::fmt::Debug for BackendApp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("BackendApp")
+            .field("data_dir", &self.data_dir)
+            .finish_non_exhaustive()
+    }
+}
+
 impl BackendApp {
     /// Starts every service with the platform's audio output. `messages` is how they tell the
     /// host that something changed.
@@ -88,12 +96,12 @@ impl BackendApp {
         messages: SharedMessageSink,
         output: Box<dyn OutputBackend>,
     ) -> Result<Self, BackendError> {
-        let settings = Arc::new(SettingsService::load(&data_dir, messages.clone()));
+        let settings = Arc::new(SettingsService::load(&data_dir, Arc::clone(&messages)));
         let waveforms = Arc::new(Waveforms::start(
             data_dir.join("waveforms"),
-            messages.clone(),
+            Arc::clone(&messages),
         ));
-        let library = Library::open(data_dir.clone(), messages.clone());
+        let library = Library::open(data_dir.clone(), Arc::clone(&messages));
         let remember = Arc::clone(&settings);
         let tracks: Box<dyn TrackSource> = match &library {
             Ok(library) => Box::new(LibraryTracks(library.store().clone())),

@@ -25,6 +25,7 @@ use super::pcm::{ChannelCount, PcmSpec, SampleRate};
 use super::pcm_queue::{PcmConsumer, PcmProducer, bounded_pcm_queue};
 use super::volume::{AtomicEffectiveGain, process_sample};
 use crate::diagnostics::logged;
+use crate::slices::{head, head_mut, tail_from_mut};
 use crate::sync;
 
 /// Identifies one output stream, which lives as long as a session.
@@ -708,7 +709,7 @@ impl CallbackState {
         let mut segment_samples = 0;
         let mut segment_time = playback_time;
         loop {
-            let popped = self.write_queue_samples(&mut output[written..], gain);
+            let popped = self.write_queue_samples(tail_from_mut(output, written), gain);
             written += popped;
             segment_samples += popped;
             if written == output.len() || self.chained.is_none() || !self.consumer.is_finished() {
@@ -726,7 +727,7 @@ impl CallbackState {
                 calculate_end_time(playback_time, written, self.channel_count, self.sample_rate)
                     .unwrap_or(playback_time);
         }
-        output[written..].fill(T::EQUILIBRIUM);
+        tail_from_mut(output, written).fill(T::EQUILIBRIUM);
         self.position_frame = self
             .position_frame
             .saturating_add((segment_samples / self.channel_count) as u64);
@@ -800,12 +801,14 @@ impl CallbackState {
         let mut chunk = [0.0_f32; FILL_CHUNK_SAMPLES];
         let mut consumed = 0;
         for destination in output.chunks_mut(FILL_CHUNK_SAMPLES) {
-            let popped = self.consumer.pop_samples(&mut chunk[..destination.len()]);
-            for (slot, sample) in destination.iter_mut().zip(&mut chunk[..popped]) {
+            let popped = self
+                .consumer
+                .pop_samples(head_mut(&mut chunk, destination.len()));
+            for (slot, sample) in destination.iter_mut().zip(head_mut(&mut chunk, popped)) {
                 *sample = process_sample(*sample, gain);
                 *slot = T::from_sample(*sample);
             }
-            self.meter.push(&chunk[..popped]);
+            self.meter.push(head(&chunk, popped));
             consumed += popped;
             if popped < destination.len() {
                 break;
