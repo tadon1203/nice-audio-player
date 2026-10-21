@@ -29,7 +29,6 @@ import type {
   PlaybackQueueWindow,
   PlaybackRepeatMode,
   PlaybackSnapshot,
-  PlaybackWaveform,
   QueueItemId,
   TrackId,
   TrackListRequest,
@@ -65,8 +64,6 @@ export interface PlaybackClient {
   clearQueue(): Promise<Versioned<PlaybackQueueSnapshot>>;
   restorePreviousQueue(): Promise<Versioned<PlaybackSnapshot>>;
   queueWindow(offset: number, limit: number): Promise<PlaybackQueueWindow>;
-  /** The loaded track's Waveform, or null while it is analyzed. Also queues the analysis. */
-  waveform(): Promise<Versioned<PlaybackWaveform | null>>;
   listOutputDevices(): Promise<AudioOutputDevice[]>;
 }
 

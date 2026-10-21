@@ -104,6 +104,22 @@ fn a_different_channel_count_reopens_the_stream_too() {
 }
 
 #[test]
+fn the_listener_hears_the_prefetch_as_upcoming_and_the_gapless_switch_as_a_load() {
+    let mut harness = Harness::new();
+    let tracks = vec![harness.track("a", 1), harness.track("b", 1)];
+    harness.start(tracks, 0).unwrap();
+
+    harness.prefetch_next();
+    harness.hear_the_end();
+
+    let heard = harness.heard();
+    assert_eq!(heard.len(), 3, "{heard:?}");
+    assert!(matches!(&heard[0], Heard::Loaded(_, title) if title == "a"));
+    assert_eq!(heard[1], Heard::Upcoming("b".into()));
+    assert!(matches!(&heard[2], Heard::Loaded(_, title) if title == "b"));
+}
+
+#[test]
 fn a_long_track_is_not_prefetched_until_its_last_ten_seconds() {
     let mut harness = Harness::new();
     let tracks = vec![harness.track("a", 30), harness.track("b", 1)];

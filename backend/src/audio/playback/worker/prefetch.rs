@@ -28,7 +28,7 @@ impl PlaybackWorker {
         let state = match self.item_of(&entry) {
             Some(item) => {
                 // Its waveform is analyzed now, in the background, so skipping ahead finds it.
-                (self.on_prefetch)(&item);
+                (self.listener.upcoming)(&item);
                 match SourceLoad::spawn(
                     item.file.clone(),
                     self.source_load_ids.next(),
@@ -182,10 +182,12 @@ impl PlaybackWorker {
         let _ = self.queue.advance(AdvanceReason::Natural, &mut self.rng);
         loaded.pipeline.cancel();
         loaded.output.stream.adopt_next(next.pipeline.id);
+        let id = self.ids.next();
+        (self.listener.loaded)(id, &next.item);
         self.last_item = Some(next.item.clone());
         self.skipped_in_a_row = 0;
         self.transport = Transport::Loaded(Loaded {
-            id: self.ids.next(),
+            id,
             position: Position::from_start(loaded.output.sample_rate(), next.duration_ms),
             item: next.item,
             started_by: SessionStartedBy::Auto,

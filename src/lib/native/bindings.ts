@@ -38,11 +38,6 @@ export const commands = {
 	clearQueue: () => __TAURI_INVOKE<Versioned<PlaybackQueueSnapshot>>("clear_queue"),
 	/**  Puts back the queue the last replacement or Clear upcoming took away. */
 	restorePreviousQueue: () => __TAURI_INVOKE<Versioned<PlaybackSnapshot>>("restore_previous_queue"),
-	/**
-	 *  Waveform of the loaded track, or `None` while it is analyzed, with the Waveform's revision; the
-	 *  channel carries each waveform the Backend has, as a state message.
-	 */
-	getPlaybackWaveform: () => __TAURI_INVOKE<Versioned<PlaybackWaveform | null>>("get_playback_waveform"),
 	getLibraryStatus: () => __TAURI_INVOKE<LibraryStatus>("get_library_status"),
 	/**  Moves the library database aside and restarts the app, which recreates it and rescans. */
 	resetLibraryAndRescan: () => __TAURI_INVOKE<null>("reset_library_and_rescan"),

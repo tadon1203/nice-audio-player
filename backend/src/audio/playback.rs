@@ -1,6 +1,11 @@
 //! Audio playback: one worker thread owns the queue and the output stream; the rest of the
 //! application talks to it through `PlaybackService` and reads published snapshots.
 
+use std::sync::Arc;
+
+use crate::ids::PlaybackId;
+use crate::library::store::PlayableTrack;
+
 mod decode_worker;
 mod input;
 mod item;
@@ -23,6 +28,19 @@ pub use snapshot::{
     ActiveSession, PlaybackFailureCode, PlaybackPosition, PlaybackQueueItem, PlaybackQueueSnapshot,
     PlaybackQueueWindow, PlaybackSnapshot, SessionStartedBy,
 };
+
+/// Hears that a track was loaded as the Playback with this id.
+pub type LoadObserver = Arc<dyn Fn(PlaybackId, &PlayableTrack) + Send + Sync>;
+
+/// Hears that a track is about to play next.
+pub type UpcomingObserver = Arc<dyn Fn(&PlayableTrack) + Send + Sync>;
+
+/// Hears what the Player does with tracks, without knowing who listens.
+pub struct TrackListener {
+    pub loaded: LoadObserver,
+    /// Its analysis may start now.
+    pub upcoming: UpcomingObserver,
+}
 
 #[cfg(test)]
 mod tests;

@@ -15,7 +15,6 @@
   const playback = AppServices.current().playback;
   const appearance = AppServices.current().appearance;
   const budget = AppServices.current().motion;
-  const waveforms = AppServices.current().waveforms;
 
   /** The level a paused Artwork glow rests at: neither dimmed nor at full. */
   const REST_LEVEL = 0.5;
@@ -23,7 +22,7 @@
   const item = $derived(playback.item);
   // The Artwork glow breathes by itself, so only the full budget allows it.
   const breathing = $derived(budget.current === "full");
-  const waveform = $derived(waveforms.forPlayback(playback.playbackId));
+  const waveform = $derived(playback.waveform);
 
   const motion = $derived(SvelteMotion.of("large"));
   // The Artwork glow breathes along the track's smoothed loudness, drawn by the compositor from

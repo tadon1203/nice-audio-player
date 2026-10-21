@@ -7,6 +7,7 @@ use std::sync::{
 };
 use std::thread::{self, JoinHandle};
 
+use super::TrackListener;
 use super::input::{Inbox, WorkerInput};
 use super::preferences::{PlaybackPreferences, PreferencesObserver};
 use super::queue::{PlaybackQueue, PlaybackRepeatMode};
@@ -20,7 +21,6 @@ use crate::audio::devices::AudioOutputSelection;
 use crate::audio::meter::MeterHub;
 use crate::audio::output::OutputBackend;
 use crate::audio::volume::{AtomicEffectiveGain, VolumeState};
-use crate::audio::waveform::PrefetchObserver;
 use crate::errors::CommonError;
 use crate::ids::{QueueItemId, TrackId};
 use crate::library::store::{PlaybackLookupError, PlaybackSourceError};
@@ -188,14 +188,14 @@ pub struct PlaybackService {
 impl PlaybackService {
     /// Starts the worker with the saved preferences, on the audio output `backend` opens streams
     /// on. `observer` hears about every later change so the caller can persist them; `tracks` is
-    /// where queue entries get their metadata; `on_prefetch` hears about each track the moment it
-    /// starts opening as the next one.
+    /// where queue entries get their metadata; `listener` hears about each track when it is loaded
+    /// and when it starts opening as the next one.
     pub(crate) fn start_with_backend(
         messages: SharedMessageSink,
         preferences: PlaybackPreferences,
         observer: PreferencesObserver,
         tracks: Arc<TrackResolver>,
-        on_prefetch: PrefetchObserver,
+        listener: TrackListener,
         backend: Box<dyn OutputBackend>,
     ) -> Result<Self, PlaybackServiceStartError> {
         let preferences = preferences.sanitized();
@@ -225,7 +225,7 @@ impl PlaybackService {
             observer,
             backend,
             tracks,
-            on_prefetch,
+            listener,
         };
         let worker = thread::Builder::new()
             .name("worker".into())

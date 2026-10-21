@@ -3,11 +3,7 @@
     "commit": "",
     "pr": ""
   },
-  "enabledPlugins": {
-    "svelte@svelte": true,
-    "rust-analyzer-lsp@claude-plugins-official": true,
-    "typescript-lsp@claude-plugins-official": true
-  },
+  "enabledPlugins": {},
   "extraKnownMarketplaces": {
     "svelte": {
       "source": {

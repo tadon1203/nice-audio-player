@@ -73,7 +73,7 @@ fn a_start_through_a_service_thread_needs_no_poll() {
         PlaybackPreferences::default(),
         Arc::new(|_| {}),
         resolver_of(&library),
-        Arc::new(|_| {}),
+        silent_listener(),
         Box::new(output.clone()),
     )
     .expect("worker should start");
@@ -421,6 +421,31 @@ fn previous_restarts_a_track_that_has_played_for_a_while() {
         matches!(&restarted, PlaybackSnapshot::Paused { session, .. } if session.item.track.core.title == "b")
     );
     assert!(session(&restarted).position_ms < 100);
+}
+
+#[test]
+fn the_listener_hears_each_load_as_a_new_playback_including_a_previous_one() {
+    let mut harness = Harness::new();
+    let tracks = vec![harness.track("a", 5), harness.track("b", 5)];
+    harness.start(tracks, 0).unwrap();
+    harness.next().unwrap();
+    harness
+        .call(|reply| PlaybackCommand::Previous { reply })
+        .unwrap();
+
+    let loads: Vec<(PlaybackId, String)> = harness
+        .heard()
+        .into_iter()
+        .filter_map(|heard| match heard {
+            Heard::Loaded(id, title) => Some((id, title)),
+            Heard::Upcoming(_) => None,
+        })
+        .collect();
+    let titles: Vec<&str> = loads.iter().map(|(_, title)| title.as_str()).collect();
+    assert_eq!(titles, ["a", "b", "a"]);
+    assert_ne!(loads[0].0, loads[1].0);
+    assert_ne!(loads[1].0, loads[2].0);
+    assert_ne!(loads[0].0, loads[2].0, "Previous is a new playback too");
 }
 
 #[test]

@@ -40,11 +40,11 @@ function fakeTargets(): {
     playback: {
       acceptPlayback,
       acceptQueue: vi.fn(),
+      acceptWaveform: vi.fn(),
       acceptPosition,
     },
     appearance: { accept: vi.fn() },
     scan: { accept: vi.fn() },
-    waveforms: { accept: vi.fn() },
     notices: { noteSkipped },
   } as unknown as SessionTargets;
   return { targets, acceptPlayback, acceptPosition, noteSkipped };

@@ -12,6 +12,7 @@ import type {
   PlaybackSnapshot,
   PlaybackClient,
   PlaybackQueueWindow,
+  PlaybackWaveform,
   QueueItemId,
   TrackId,
   Versioned,
@@ -56,6 +57,7 @@ export class Playback {
   readonly #clock: PlaybackClock;
   readonly #snapshot = new Replica<PlaybackSnapshot>();
   readonly #queue = new Replica<PlaybackQueueSnapshot>();
+  readonly #waveform = new Replica<PlaybackWaveform | null>();
 
   /** The loaded track, or the last one that played. Replaced only when the queue item changes. */
   #item = $state.raw<PlaybackItem | null>(null);
@@ -130,6 +132,12 @@ export class Playback {
 
   public get durationMs(): number | null {
     return this.#session()?.durationMs ?? null;
+  }
+
+  /** The loaded track's Waveform, or null while it is analyzed or it belongs to another playback. */
+  public get waveform(): PlaybackWaveform | null {
+    const held = this.#waveform.value;
+    return held !== null && held.playbackId === this.playbackId ? held : null;
   }
 
   public get transitionDirection(): TransitionDirection {
@@ -213,6 +221,11 @@ export class Playback {
   /** Keeps the queue only if it is newer than the held one. Command responses come here too. */
   public acceptQueue(incoming: Versioned<PlaybackQueueSnapshot>): void {
     this.#queue.accept(incoming);
+  }
+
+  /** Keeps the Waveform only if it is newer than the held one. Pushed states and the initial state come here. */
+  public acceptWaveform(incoming: Versioned<PlaybackWaveform | null>): void {
+    this.#waveform.accept(incoming);
   }
 
   /**

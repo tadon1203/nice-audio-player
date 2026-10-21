@@ -19,11 +19,11 @@ export interface SessionTargets {
   readonly playback: {
     acceptPlayback(incoming: Versioned<PlaybackSnapshot>): void;
     acceptQueue(incoming: Versioned<PlaybackQueueSnapshot>): void;
+    acceptWaveform(incoming: Versioned<PlaybackWaveform | null>): void;
     acceptPosition(position: PlaybackPosition): void;
   };
   readonly appearance: { accept(incoming: Versioned<AppearanceValue>): void };
   readonly scan: { accept(incoming: Versioned<LibraryScanSnapshot>): void };
-  readonly waveforms: { accept(incoming: Versioned<PlaybackWaveform | null>): void };
   readonly notices: { noteSkipped(title: string | null): void };
 }
 
@@ -97,7 +97,7 @@ export class NativeSession {
     this.#targets.playback.acceptPlayback(initial.playback);
     this.#targets.playback.acceptQueue(initial.queue);
     this.#targets.scan.accept(initial.libraryScan);
-    this.#targets.waveforms.accept(initial.waveform);
+    this.#targets.playback.acceptWaveform(initial.waveform);
     this.#targets.appearance.accept(initial.appearance);
   }
 
@@ -122,7 +122,7 @@ export class NativeSession {
         this.#targets.scan.accept({ revision: message.revision, value: message.value });
         return;
       case "waveform":
-        this.#targets.waveforms.accept({ revision: message.revision, value: message.value });
+        this.#targets.playback.acceptWaveform({ revision: message.revision, value: message.value });
         return;
       case "appearance":
         this.#targets.appearance.accept({ revision: message.revision, value: message.value });

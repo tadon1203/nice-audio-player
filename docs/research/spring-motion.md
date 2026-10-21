@@ -232,7 +232,7 @@ export function springValue(initial: number, perceptualMs: number, onUpdate: (v:
 }
 ```
 
-A `.svelte.ts` wrapper can expose `current` as `$state` (to be written through `svelte-file-editor`). With this in place, Svelte's `Spring` and its unit conversion leave the codebase, and "stiffness/damping" disappears from the vocabulary.
+A `.svelte.ts` wrapper can expose `current` as `$state`. With this in place, Svelte's `Spring` and its unit conversion leave the codebase, and "stiffness/damping" disappears from the vocabulary.
 
 ### Reduced motion and progress motion
 

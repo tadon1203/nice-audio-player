@@ -9,6 +9,7 @@ use std::collections::HashSet;
 use std::sync::{Arc, RwLock, mpsc::Receiver};
 use std::time::{Duration, Instant};
 
+use super::TrackListener;
 use super::input::{Inbox, PlaybackIds, SourceLoadId, SourceLoadIds, WorkerEvent, WorkerInput};
 use super::item::PlayableItem;
 use super::pipeline::{
@@ -38,7 +39,6 @@ use crate::audio::output::{
 };
 use crate::audio::timebase::millis_to_frame;
 use crate::audio::volume::{AtomicEffectiveGain, VolumeState};
-use crate::audio::waveform::PrefetchObserver;
 use crate::errors::CommonError;
 use crate::ids::{PlaybackId, QueueItemId, TrackId};
 use crate::messages::{Occurrence, SharedMessageSink, StateTopic, Versioned};
@@ -148,8 +148,9 @@ pub(super) struct WorkerLinks {
     pub backend: Box<dyn OutputBackend>,
     /// Where queue entries get their metadata.
     pub tracks: Arc<TrackResolver>,
-    /// Told of each track as it starts opening for gapless playback.
-    pub on_prefetch: PrefetchObserver,
+    /// Told of each track when it is loaded, and of each track as it starts opening for gapless
+    /// playback.
+    pub listener: TrackListener,
 }
 
 pub(super) struct PlaybackWorker {
@@ -168,7 +169,7 @@ pub(super) struct PlaybackWorker {
     /// The queue before the last replacement, for one-step undo. Not kept across restarts.
     previous_queue: Option<PlaybackQueue>,
     tracks: Arc<TrackResolver>,
-    on_prefetch: PrefetchObserver,
+    listener: TrackListener,
     rng: StdRng,
     /// Files skipped in a row after failing; bounds the skipping to one pass over the queue.
     skipped_in_a_row: usize,
@@ -205,7 +206,7 @@ impl PlaybackWorker {
             queue,
             previous_queue: None,
             tracks: links.tracks,
-            on_prefetch: links.on_prefetch,
+            listener: links.listener,
             rng: StdRng::from_rng(&mut rand::rng()),
             skipped_in_a_row: 0,
             volume_state,

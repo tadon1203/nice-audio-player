@@ -19,7 +19,6 @@ function fakeCommands(reply: unknown): typeof commands {
     setPlaybackMuted: vi.fn(reject),
     updateAppearance: vi.fn(reject),
     listAudioOutputDevices: vi.fn(reject),
-    getPlaybackWaveform: vi.fn(reject),
     getLibraryStatus: vi.fn(reject),
     getTrackLyrics: vi.fn(reject),
     subscribeMeterFrames: vi.fn(reject),
@@ -70,14 +69,6 @@ describe("TauriNative", () => {
     const failure = await clients.playback.listOutputDevices().catch((error: unknown) => error);
     expect(failure).toBeInstanceOf(AudioDevicesError);
     expect(failure).toMatchObject({ domain: "audioDevices", code: "enumerationFailed" });
-  });
-
-  it("throws a playback error for the waveform command's coded reply", async () => {
-    const clients = TauriNative.clients(
-      fakeCommands({ code: "common", error: { code: "libraryUnavailable" } }),
-    );
-    const failure = await clients.playback.waveform().catch((error: unknown) => error);
-    expect(failure).toBeInstanceOf(PlaybackError);
   });
 
   it("throws a library error for a library command's coded reply", async () => {

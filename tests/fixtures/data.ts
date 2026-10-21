@@ -351,7 +351,6 @@ export function idleResponses(): {
     offset: number;
     items: never[];
   };
-  getPlaybackWaveform: { revision: number; value: null };
   listAudioOutputDevices: { id: string; name: string; isDefault: boolean }[];
   getLibraryStatus: { status: "ready" };
   getTrackLyrics: ({ trackId }: { trackId: number }) => { status: "notFound"; trackId: number };
@@ -370,7 +369,6 @@ export function idleResponses(): {
       offset,
       items: [],
     }),
-    getPlaybackWaveform: { revision: 0, value: null },
     listAudioOutputDevices: outputDevices,
     getLibraryStatus: { status: "ready" as const },
     getTrackLyrics: ({

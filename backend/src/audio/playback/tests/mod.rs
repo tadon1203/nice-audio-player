@@ -16,6 +16,7 @@ use crate::audio::devices::AudioOutputSelection;
 use crate::audio::fake_output::FakeOutput;
 use crate::audio::meter::MeterHub;
 use crate::audio::output::{AudioOutputError, OutputStreamId, PipelineId, StreamFailureKind};
+use crate::audio::playback::TrackListener;
 use crate::audio::playback::input::{Inbox, WorkerEvent, WorkerInput};
 use crate::audio::playback::item::PlaybackItem;
 use crate::audio::playback::preferences::PlaybackPreferences;
@@ -33,7 +34,7 @@ use crate::audio::playback::snapshot::{
 use crate::audio::playback::worker::{PlaybackWorker, WorkerLinks};
 use crate::audio::volume::{AtomicEffectiveGain, VolumeState};
 use crate::errors::CommonError;
-use crate::ids::TrackId;
+use crate::ids::{PlaybackId, TrackId};
 use crate::library::store::PlayableTrack;
 use crate::media::validation::ValidatedAudioFile;
 use crate::messages::{StateTopic, Versioned, testing::Sent};
@@ -59,6 +60,14 @@ fn track_id_of(name: &str) -> TrackId {
 
 type Answer<T> = Result<T, PlaybackServiceError>;
 
+/// What the Player told its listener, in order: a track loaded as a playback, or a track about
+/// to play next.
+#[derive(Debug, Clone, PartialEq)]
+enum Heard {
+    Loaded(PlaybackId, String),
+    Upcoming(String),
+}
+
 struct Harness {
     worker: PlaybackWorker,
     inputs: Receiver<WorkerInput>,
@@ -69,6 +78,7 @@ struct Harness {
     gain: AtomicEffectiveGain,
     output: FakeOutput,
     preferences: Arc<Mutex<Vec<PlaybackPreferences>>>,
+    heard: Arc<Mutex<Vec<Heard>>>,
     files: TestDirectory,
     /// What the library knows; the queue reads its tracks from here.
     library: Arc<FakeTracks>,
@@ -94,6 +104,22 @@ impl Harness {
         let output = FakeOutput::new();
         let preferences = Arc::new(Mutex::new(Vec::new()));
         let observed = Arc::clone(&preferences);
+        let heard = Arc::new(Mutex::new(Vec::new()));
+        let loaded_heard = Arc::clone(&heard);
+        let upcoming_heard = Arc::clone(&heard);
+        let listener = TrackListener {
+            loaded: Arc::new(move |playback_id, track| {
+                let title = track.track.core.title.clone();
+                loaded_heard
+                    .lock()
+                    .unwrap()
+                    .push(Heard::Loaded(playback_id, title));
+            }),
+            upcoming: Arc::new(move |track| {
+                let title = track.track.core.title.clone();
+                upcoming_heard.lock().unwrap().push(Heard::Upcoming(title));
+            }),
+        };
         let worker = PlaybackWorker::new(
             WorkerLinks {
                 snapshot: Arc::clone(&snapshot),
@@ -106,7 +132,7 @@ impl Harness {
                 observer: Arc::new(move |preferences| observed.lock().unwrap().push(preferences)),
                 backend: Box::new(output.clone()),
                 tracks: resolver_of(&library),
-                on_prefetch: Arc::new(|_| {}),
+                listener,
             },
             queue,
             volume,
@@ -122,9 +148,14 @@ impl Harness {
             gain,
             output,
             preferences,
+            heard,
             files: TestDirectory::new(),
             library,
         }
+    }
+
+    fn heard(&self) -> Vec<Heard> {
+        self.heard.lock().unwrap().clone()
     }
 
     /// A real WAV of `seconds` of silence, which the decode thread reads as any other file.
@@ -322,13 +353,21 @@ fn is_playing(snapshot: &PlaybackSnapshot, title: &str) -> bool {
     matches!(snapshot, PlaybackSnapshot::Playing { session, .. } if session.item.track.core.title == title)
 }
 
+/// A listener that hears nothing, for tests that do not look at what it is told.
+fn silent_listener() -> TrackListener {
+    TrackListener {
+        loaded: Arc::new(|_, _| {}),
+        upcoming: Arc::new(|_| {}),
+    }
+}
+
 fn start_service() -> PlaybackService {
     PlaybackService::start_with_backend(
         crate::messages::null_message_sink(),
         PlaybackPreferences::default(),
         Arc::new(|_| {}),
         Arc::new(TrackResolver::new(Box::new(NoTracks))),
-        Arc::new(|_| {}),
+        silent_listener(),
         Box::new(FakeOutput::new()),
     )
     .expect("worker should start")

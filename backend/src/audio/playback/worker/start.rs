@@ -268,6 +268,7 @@ impl PlaybackWorker {
             self.output_selection = selection;
             self.preferences_changed();
         }
+        (self.listener.loaded)(id, &item);
         self.last_item = Some(item.clone());
         self.skipped_in_a_row = 0;
         self.transport = Transport::Loaded(Loaded {

@@ -13,9 +13,9 @@ use crate::audio::{
     output::{CpalBackend, OutputBackend},
     playback::{
         NoTracks, PlaybackQueueSnapshot, PlaybackQueueWindow, PlaybackRepeatMode, PlaybackService,
-        PlaybackServiceError, PlaybackSnapshot, TrackResolver, TrackSource,
+        PlaybackServiceError, PlaybackSnapshot, TrackListener, TrackResolver, TrackSource,
     },
-    waveform::{PlaybackWaveform, Waveform, WaveformService},
+    waveform::Waveforms,
 };
 use crate::errors::CommonError;
 use crate::ids::{AlbumId, ArtistId, ArtworkHash, QueueItemId, RootId, TrackId};
@@ -30,7 +30,6 @@ use crate::library::{
         LibraryRoot, LibraryStatus, LibraryTrackPage, LibraryTrackProperties,
         LibraryUnavailableReason, TrackListRequest, TrackQuery,
     },
-    store::PlayableTrack,
 };
 use crate::lyrics::{
     LyricsCommandError, LyricsResolution, LyricsService, model::LyricsTrackContext,
@@ -55,7 +54,7 @@ pub struct BackendApp {
     playback: PlaybackService,
     /// The Library, or why it is unavailable.
     library: Result<Library, LibraryUnavailableReason>,
-    waveforms: WaveformService,
+    waveforms: Arc<Waveforms>,
     settings: Arc<SettingsService>,
     lyrics: LyricsService,
     data_dir: PathBuf,
@@ -88,19 +87,30 @@ impl BackendApp {
         output: Box<dyn OutputBackend>,
     ) -> Result<Self, BackendError> {
         let settings = Arc::new(SettingsService::load(data_dir.clone(), messages.clone()));
-        let waveforms = WaveformService::start(data_dir.join("waveforms"), messages.clone());
+        let waveforms = Arc::new(Waveforms::start(
+            data_dir.join("waveforms"),
+            messages.clone(),
+        ));
         let library = Library::open(data_dir.clone(), messages.clone());
         let remember = Arc::clone(&settings);
         let tracks: Box<dyn TrackSource> = match &library {
             Ok(library) => Box::new(LibraryTracks(library.store().clone())),
             Err(_) => Box::new(NoTracks),
         };
+        let loaded_waveforms = Arc::clone(&waveforms);
+        let upcoming_waveforms = Arc::clone(&waveforms);
+        let listener = TrackListener {
+            loaded: Arc::new(move |playback_id, track| {
+                loaded_waveforms.loaded(playback_id, track);
+            }),
+            upcoming: Arc::new(move |track| upcoming_waveforms.upcoming(track)),
+        };
         let playback = PlaybackService::start_with_backend(
             messages,
             settings.playback_preferences(),
             Arc::new(move |preferences| remember.record_playback(preferences)),
             Arc::new(TrackResolver::new(tracks)),
-            waveforms.prefetcher(),
+            listener,
             output,
         )
         .map_err(|_| BackendError::PlaybackStartFailed)?;
@@ -130,7 +140,7 @@ impl BackendApp {
             playback: self.playback.versioned_snapshot(),
             queue: self.playback.versioned_queue_snapshot(),
             library_scan: self.library_scan(),
-            waveform: self.versioned_waveform(),
+            waveform: self.waveforms.state(),
             appearance: self.settings.appearance(),
         }
     }
@@ -154,7 +164,7 @@ impl BackendApp {
                 state(scan.revision, StateValue::LibraryScan(scan.value))
             }
             StateTopic::Waveform => {
-                let waveform = self.versioned_waveform();
+                let waveform = self.waveforms.state();
                 state(waveform.revision, StateValue::Waveform(waveform.value))
             }
             StateTopic::Appearance => {
@@ -537,17 +547,6 @@ impl BackendApp {
             .queue_window(offset as usize, limit as usize)
     }
 
-    /// Waveform of the track that is loaded right now, with the Waveform's revision; `None` while
-    /// it is still being analyzed (it is requested, and a Waveform message follows) or nothing is
-    /// loaded. The renderer never names a file, so it cannot make the backend read arbitrary ones.
-    pub fn playback_waveform(&self) -> Versioned<Option<PlaybackWaveform>> {
-        let revision = self.waveforms.revision();
-        Versioned {
-            revision,
-            value: self.loaded_waveform(|track| self.waveforms.get_or_queue(track)),
-        }
-    }
-
     // ---- private helpers ----
 
     fn library(&self) -> Result<&Library, LibraryCommandError> {
@@ -571,41 +570,6 @@ impl BackendApp {
             |_| Versioned::new(crate::library::models::LibraryScanSnapshot::idle()),
             Library::scan_state,
         )
-    }
-
-    /// The waveform of the loaded track, with the Waveform's revision. The revision is read first,
-    /// so the value is at least as new as the revision.
-    fn versioned_waveform(&self) -> Versioned<Option<PlaybackWaveform>> {
-        let revision = self.waveforms.revision();
-        Versioned {
-            revision,
-            value: self.ready_playback_waveform(),
-        }
-    }
-
-    /// Like [`Self::playback_waveform`], but only reports a waveform that is already there.
-    fn ready_playback_waveform(&self) -> Option<PlaybackWaveform> {
-        self.loaded_waveform(|track| self.waveforms.get(&track.file))
-    }
-
-    /// The waveform of the loaded track, always paired with that track's playback id from the
-    /// same snapshot, so the two cannot disagree.
-    fn loaded_waveform(
-        &self,
-        find: impl FnOnce(&PlayableTrack) -> Option<Arc<Waveform>>,
-    ) -> Option<PlaybackWaveform> {
-        let snapshot = self.playback.snapshot();
-        let session = snapshot.session()?;
-        // The renderer's item has no file, so the loaded track is read from the library.
-        let library = self.library.as_ref().ok()?;
-        let track =
-            playback_context::resolve_track(library.store(), session.item.track.core.id).ok()?;
-        let waveform = find(&track)?;
-        Some(PlaybackWaveform {
-            playback_id: session.playback_id,
-            peaks: waveform.peaks.clone(),
-            rms: waveform.rms.clone(),
-        })
     }
 }
 

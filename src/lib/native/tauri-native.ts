@@ -50,7 +50,6 @@ import type {
   PlaybackQueueSnapshot,
   PlaybackQueueWindow,
   PlaybackSnapshot,
-  PlaybackWaveform,
   Versioned,
 } from "./bindings";
 
@@ -164,9 +163,6 @@ class TauriPlaybackClient implements PlaybackClient {
   }
   public queueWindow(offset: number, limit: number): Promise<PlaybackQueueWindow> {
     return this.#call(() => this.#commands.getPlaybackQueueWindow(offset, limit));
-  }
-  public waveform(): Promise<Versioned<PlaybackWaveform | null>> {
-    return this.#call(() => this.#commands.getPlaybackWaveform());
   }
   public listOutputDevices(): Promise<AudioOutputDevice[]> {
     return callCommand(

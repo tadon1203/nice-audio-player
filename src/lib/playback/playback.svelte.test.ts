@@ -8,6 +8,7 @@ import {
   type PlaybackQueueItem,
   type PlaybackQueueSnapshot,
   type PlaybackSnapshot,
+  type PlaybackWaveform,
   type Versioned,
 } from "#lib/native";
 import { PlaybackClock } from "./playback-clock.svelte";
@@ -749,5 +750,37 @@ describe("transition direction", () => {
     });
     playback.acceptPlayback(playing(2, 3, 0));
     expect(playback.transitionDirection).toBe("forward");
+  });
+});
+
+describe("the waveform", () => {
+  const waveformOf = (
+    playbackId: number,
+    revision: number,
+    peak: number,
+  ): Versioned<PlaybackWaveform | null> => ({
+    revision,
+    value: { playbackId, peaks: [peak], rms: [peak] },
+  });
+
+  it("is shown only for the playback it belongs to", () => {
+    const playback = new Playback(fakeClient(), quietClock());
+    playback.acceptPlayback(playing(1, 1, 0));
+
+    playback.acceptWaveform(waveformOf(1, 1, 5));
+    expect(playback.waveform?.peaks).toEqual([5]);
+
+    playback.acceptWaveform(waveformOf(2, 2, 7));
+    expect(playback.waveform).toBeNull();
+  });
+
+  it("drops a waveform older than the one held", () => {
+    const playback = new Playback(fakeClient(), quietClock());
+    playback.acceptPlayback(playing(1, 1, 0));
+
+    playback.acceptWaveform(waveformOf(1, 5, 9));
+    playback.acceptWaveform(waveformOf(1, 4, 3));
+
+    expect(playback.waveform?.peaks).toEqual([9]);
   });
 });

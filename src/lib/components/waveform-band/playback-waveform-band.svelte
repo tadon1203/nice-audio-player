@@ -33,16 +33,10 @@
     timeClass?: string;
   } = $props();
 
-  const {
-    playback,
-    motion: budget,
-    actions,
-    waveforms,
-    lyricsWaveformLink,
-  } = AppServices.current();
+  const { playback, motion: budget, actions, lyricsWaveformLink } = AppServices.current();
   const trackKey = $derived(playback.item?.id ?? "none");
   const canSeek = $derived(playback.isActive && playback.durationMs !== null);
-  const waveform = $derived(showWaveform ? waveforms.forPlayback(playback.playbackId) : null);
+  const waveform = $derived(showWaveform ? playback.waveform : null);
 
   // The printed time and the announced value come from the same clock as the bar. They are
   // rounded down to the whole second, so they change once a second instead of every frame.

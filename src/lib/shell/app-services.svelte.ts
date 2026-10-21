@@ -17,7 +17,6 @@ import {
 import { AudioOutputDevices } from "#lib/playback/audio-output-devices.svelte";
 import { PlaybackClock } from "#lib/playback/playback-clock.svelte";
 import { Playback } from "#lib/playback/playback.svelte";
-import { WaveformRepository } from "#lib/playback/waveform-repository.svelte";
 import { Appearance } from "#lib/settings/appearance.svelte";
 import { MotionBudget } from "./motion-budget.svelte";
 import { NativeSession, type SessionTargets } from "./native-session.svelte";
@@ -78,7 +77,6 @@ export class AppServices {
   public readonly playback: Playback;
   public readonly appearance: Appearance;
   public readonly outputDevices: AudioOutputDevices;
-  public readonly waveforms: WaveformRepository;
   public readonly motion: MotionBudget;
   /** The Library's catalog lists and scroll indexes. */
   public readonly catalog: CatalogRepository;
@@ -105,7 +103,6 @@ export class AppServices {
     this.playback = new Playback(native.playback, new PlaybackClock());
     this.appearance = new Appearance(native.appearance);
     this.outputDevices = new AudioOutputDevices(native.playback);
-    this.waveforms = new WaveformRepository(native.playback);
     this.motion = new MotionBudget(this.appearance);
 
     this.catalog = new CatalogRepository(native.library, queryClient);
@@ -122,7 +119,6 @@ export class AppServices {
       playback: this.playback,
       appearance: this.appearance,
       scan: this.scan,
-      waveforms: this.waveforms,
       notices: this.notices,
     };
     this.session = new NativeSession(native.session, targets);

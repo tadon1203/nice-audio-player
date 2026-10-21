@@ -1,7 +1,7 @@
 use backend::{
     dto::{
         AudioOutputDevice, AudioOutputSelection, PlaybackContext, PlaybackQueueSnapshot,
-        PlaybackQueueWindow, PlaybackRepeatMode, PlaybackSnapshot, PlaybackWaveform, Versioned,
+        PlaybackQueueWindow, PlaybackRepeatMode, PlaybackSnapshot, Versioned,
     },
     errors::{AudioDeviceListError, PlaybackServiceError},
     ids::{QueueItemId, TrackId},
@@ -194,14 +194,4 @@ pub async fn restore_previous_queue(
     state: tauri::State<'_, AppState>,
 ) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
     blocking(&state, |backend| backend.restore_previous_queue()).await
-}
-
-/// Waveform of the loaded track, or `None` while it is analyzed, with the Waveform's revision; the
-/// channel carries each waveform the Backend has, as a state message.
-#[tauri::command]
-#[specta::specta]
-pub async fn get_playback_waveform(
-    state: tauri::State<'_, AppState>,
-) -> Result<Versioned<Option<PlaybackWaveform>>, PlaybackServiceError> {
-    blocking(&state, |backend| Ok(backend.playback_waveform())).await
 }

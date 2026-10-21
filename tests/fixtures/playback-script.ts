@@ -42,7 +42,6 @@ export function scriptPlayback(
   let shuffleEnabled = false;
   let upcoming: LibraryTrackSummary[] = [];
   let startedBy: SessionStartedBy = "jump";
-  let waveformReady = false;
   let ticker: ReturnType<typeof setInterval> | null = null;
 
   const current = (): LibraryTrackSummary => sequence[index]!;
@@ -166,10 +165,6 @@ export function scriptPlayback(
       rms: peaks.map((peak) => Math.round(peak * 0.6)),
     };
   };
-  native.respond("getPlaybackWaveform", () => ({
-    revision: native.revisionOf("waveform"),
-    value: waveformReady && index >= 0 ? waveform() : null,
-  }));
 
   const player = {
     /** Changes what the next `startPlayback` plays: what the test expects its context to hold. */
@@ -204,7 +199,6 @@ export function scriptPlayback(
     },
     /** Makes the waveform available and pushes it, as the backend does when analysis finishes. */
     publishWaveform: async (): Promise<void> => {
-      waveformReady = true;
       await native.publish("waveform", waveform());
     },
   };

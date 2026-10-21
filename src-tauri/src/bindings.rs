@@ -27,7 +27,6 @@ pub fn builder() -> Builder<tauri::Wry> {
             commands::playback::enqueue_track,
             commands::playback::clear_queue,
             commands::playback::restore_previous_queue,
-            commands::playback::get_playback_waveform,
             commands::library::get_library_status,
             commands::library::reset_library_and_rescan,
             commands::library::list_library_roots,
