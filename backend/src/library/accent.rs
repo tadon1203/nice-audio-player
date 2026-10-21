@@ -110,8 +110,13 @@ mod tests {
             |x, _| if x < 12 { [128, 128, 128] } else { [0, 0, 255] },
         );
         let color = representative_color(&bytes).expect("color");
-        let blue = u8::from_str_radix(&color[5..7], 16).expect("blue channel");
-        let red = u8::from_str_radix(&color[1..3], 16).expect("red channel");
+        let blue = u8::from_str_radix(
+            color.get(5..7).expect("a #rrggbb color has blue digits"),
+            16,
+        )
+        .expect("blue channel");
+        let red = u8::from_str_radix(color.get(1..3).expect("a #rrggbb color has red digits"), 16)
+            .expect("red channel");
         assert!(blue > red + 40, "{color} should lean blue");
     }
 

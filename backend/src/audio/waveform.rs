@@ -636,13 +636,13 @@ impl Shared {
         let hash = match stored_hash {
             // The cache path is cut from the hash, so a malformed stored one is not trusted.
             Some(hash) if is_hash(hash) => hash.to_owned(),
-            _ => match content_hash(Path::new(&file.path)) {
-                Ok(hash) => hash,
-                Err(_) => {
+            _ => {
+                let Ok(hash) = content_hash(Path::new(&file.path)) else {
                     log::warn!("waveform.hash_failed");
                     return;
-                }
-            },
+                };
+                hash
+            }
         };
         if let Some(cached) = read_cache(&self.directory, &hash) {
             self.publish(&file.path, stamp, cached);
@@ -750,8 +750,11 @@ mod tests {
         let hash = "ab".repeat(32);
         assert!(is_hash(&hash));
         assert!(!is_hash(&hash.to_uppercase()));
-        assert!(!is_hash(&hash[..63]));
-        assert!(!is_hash(&format!("{}g", &hash[..63])));
+        let short = hash
+            .get(..63)
+            .expect("a 64-digit hash has a 63-digit prefix");
+        assert!(!is_hash(short));
+        assert!(!is_hash(&format!("{short}g")));
     }
 
     #[test]

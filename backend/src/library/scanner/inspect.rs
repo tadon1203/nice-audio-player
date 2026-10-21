@@ -151,7 +151,9 @@ pub(super) fn inspect_all(
                     // A file that panics a parser is a file that cannot be read, not a dead scan.
                     let result = contain("library.inspect", || inspect(file, data_dir))
                         .unwrap_or(Err(Undecodable));
-                    *sync::lock(&results[index]) = Some(result);
+                    if let Some(slot) = results.get(index) {
+                        *sync::lock(slot) = Some(result);
+                    }
                 }
             });
         }

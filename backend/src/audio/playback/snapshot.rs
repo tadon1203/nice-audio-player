@@ -9,6 +9,7 @@ use crate::audio::volume::VolumeState;
 use crate::ids::{PlaybackId, QueueItemId, TrackId};
 use crate::library::models::TrackCore;
 use crate::library::store::PlayableTrack;
+use crate::slices::{head, tail_from};
 use std::sync::Arc;
 
 /// Fields every transport state carries.
@@ -269,7 +270,7 @@ impl std::fmt::Debug for QueueList {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("QueueList")
             .field("len", &self.entries.len())
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
@@ -340,9 +341,9 @@ impl PlaybackQueueSnapshot {
             tracks: Arc::clone(tracks),
         };
         let history = queue.history();
-        let shown_history = &history[history.len().saturating_sub(HISTORY_IN_SNAPSHOT)..];
+        let shown_history = tail_from(history, history.len().saturating_sub(HISTORY_IN_SNAPSHOT));
         let upcoming = queue.upcoming();
-        let shown_upcoming = &upcoming[..upcoming.len().min(UPCOMING_IN_SNAPSHOT)];
+        let shown_upcoming = head(upcoming, UPCOMING_IN_SNAPSHOT);
         let mut shown: Vec<QueueEntry> = shown_history.to_vec();
         shown.extend(queue.current().cloned());
         shown.extend_from_slice(shown_upcoming);
@@ -382,7 +383,7 @@ impl PlaybackQueueSnapshot {
             revision,
             offset: u32::try_from(start).unwrap_or(u32::MAX),
             items: list
-                .rows(&upcoming[start..end])
+                .rows(upcoming.get(start..end).unwrap_or_default())
                 .into_iter()
                 .flatten()
                 .collect(),

@@ -13,6 +13,7 @@ use std::sync::Arc;
 use rand::{Rng, seq::SliceRandom};
 
 use crate::ids::{QueueItemId, TrackId};
+use crate::slices::{head, tail_from};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, specta::Type, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -183,8 +184,10 @@ impl PlaybackQueue {
         let keep = self.current + 1;
         match &mut self.shuffled {
             Some(shuffled) => {
-                let dropped: HashSet<QueueItemId> =
-                    shuffled[keep..].iter().map(|entry| entry.id).collect();
+                let dropped: HashSet<QueueItemId> = tail_from(shuffled.as_slice(), keep)
+                    .iter()
+                    .map(|entry| entry.id)
+                    .collect();
                 Arc::make_mut(shuffled).truncate(keep);
                 Arc::make_mut(&mut self.arranged).retain(|entry| !dropped.contains(&entry.id));
             }
@@ -201,7 +204,7 @@ impl PlaybackQueue {
         if !order.iter().any(|entry| ids.contains(&entry.id)) {
             return false;
         }
-        let before = order[..self.current.min(order.len())]
+        let before = head(order.as_slice(), self.current)
             .iter()
             .filter(|entry| ids.contains(&entry.id))
             .count();
@@ -241,7 +244,11 @@ impl PlaybackQueue {
         let order = Arc::make_mut(self.play_order_mut());
         let entry = order.remove(index);
         order.insert(target, entry.clone());
-        let predecessor = order[target - 1].id;
+        // The entry before the moved one. `target` is at least 1, because `current + 1` is.
+        let predecessor = order
+            .get(target.saturating_sub(1))
+            .ok_or(QueueError::ItemNotUpcoming)?
+            .id;
         if self.shuffled.is_some() {
             let arranged = Arc::make_mut(&mut self.arranged);
             arranged.retain(|other| other.id != entry.id);
@@ -390,10 +397,10 @@ impl PlaybackQueue {
         if let Some(shuffled) = &mut self.shuffled
             && shuffled.len() > 1
         {
-            let last_played = shuffled[self.current].id;
+            let last_played = shuffled.get(self.current).map(|entry| entry.id);
             let order = Arc::make_mut(shuffled);
             order.shuffle(rng);
-            if order[0].id == last_played {
+            if order.first().map(|entry| entry.id) == last_played {
                 let other = rng.random_range(1..order.len());
                 order.swap(0, other);
             }

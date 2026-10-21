@@ -364,7 +364,7 @@ impl Actor {
                 .name("library-scanner".into())
                 .spawn(move || {
                     let mut ending = ScanEnding::new(messages, Arc::clone(&scan), notify.clone());
-                    let outcome = scanner::run(database, jobs, scan, cancel, notify);
+                    let outcome = scanner::run(&database, &jobs, &scan, &cancel, &notify);
                     ending.finish(match outcome {
                         LibraryScanState::Completed => ScanOutcome::Completed,
                         LibraryScanState::Cancelled => ScanOutcome::Cancelled,
@@ -404,15 +404,12 @@ impl Actor {
             })
             .ok()
         });
-        match attached {
-            Some(watcher) => {
-                self.watchers.insert(id, watcher);
-                self.queue.push_back(Input::Attached(id));
-            }
-            None => {
-                warn!("library.watcher.attach_failed root_id={id}");
-                self.queue.push_back(Input::AttachFailed(id));
-            }
+        if let Some(watcher) = attached {
+            self.watchers.insert(id, watcher);
+            self.queue.push_back(Input::Attached(id));
+        } else {
+            warn!("library.watcher.attach_failed root_id={id}");
+            self.queue.push_back(Input::AttachFailed(id));
         }
     }
 

@@ -59,11 +59,17 @@ impl TrackResolver {
             let cache = sync::lock(&self.cache);
             track_ids.iter().map(|id| cache.get(id).cloned()).collect()
         };
-        let missing: Vec<usize> = (0..found.len()).filter(|i| found[*i].is_none()).collect();
+        let (missing, ids): (Vec<usize>, Vec<TrackId>) = track_ids
+            .iter()
+            .copied()
+            .enumerate()
+            .zip(&found)
+            .filter(|(_, cached)| cached.is_none())
+            .map(|((index, id), _)| (index, id))
+            .unzip();
         if missing.is_empty() {
             return Ok(found);
         }
-        let ids: Vec<TrackId> = missing.iter().map(|i| track_ids[*i]).collect();
         let read = self.source.tracks(&ids).inspect_err(|error| {
             log::error!("playback.tracks_unavailable error={error:?}");
         })?;
@@ -74,7 +80,9 @@ impl TrackResolver {
         for (index, track) in missing.into_iter().zip(read) {
             if let Some(track) = track {
                 cache.insert(track.id(), track.clone());
-                found[index] = Some(track);
+                if let Some(slot) = found.get_mut(index) {
+                    *slot = Some(track);
+                }
             }
         }
         Ok(found)

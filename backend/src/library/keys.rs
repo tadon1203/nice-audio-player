@@ -154,7 +154,10 @@ fn is_disc_folder(name: &str) -> bool {
     };
     let rest = rest.trim_start_matches([' ', '_', '-', '.']);
     let digits = rest.chars().take_while(char::is_ascii_digit).count();
-    (1..=2).contains(&digits) && !rest[digits..].starts_with(char::is_alphanumeric)
+    (1..=2).contains(&digits)
+        && rest
+            .get(digits..)
+            .is_some_and(|tail| !tail.starts_with(char::is_alphanumeric))
 }
 
 /// A tag value with its surrounding space removed; unknown is `""`. Identity is
@@ -289,5 +292,11 @@ mod tests {
     #[test]
     fn identity_keeps_case() {
         assert_ne!(text_key(Some("Case")), text_key(Some("case")));
+    }
+
+    #[test]
+    fn a_disc_folder_with_a_multibyte_suffix_is_not_one_and_does_not_panic() {
+        assert!(!is_disc_folder("disc 1é"));
+        assert!(is_disc_folder("disc 1"));
     }
 }

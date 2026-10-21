@@ -57,60 +57,60 @@ impl From<PersistError> for Stop {
 /// Scans `jobs` in order, publishing progress through `state` and `notify`. Returns how the scan
 /// ended, which is also in `state`.
 pub(crate) fn run(
-    database: Database,
-    jobs: Vec<ScanJob>,
-    state: SharedScanState,
-    cancel: Arc<AtomicBool>,
-    notify: Notifier,
+    database: &Database,
+    jobs: &[ScanJob],
+    state: &SharedScanState,
+    cancel: &AtomicBool,
+    notify: &Notifier,
 ) -> LibraryScanState {
-    let expected = expected_files(&database, &jobs);
-    sync::lock(&state).update(|scan| scan.expected_count = expected);
-    let mut progress = Progress::new(&state, &notify);
+    let expected = expected_files(database, jobs);
+    sync::lock(state).update(|scan| scan.expected_count = expected);
+    let mut progress = Progress::new(state, notify);
     let mut traversal_failed = false;
     for job in jobs {
         let root = job.root.clone();
         if cancel.load(Ordering::Acquire) {
-            return finish(&state, LibraryScanState::Cancelled, None, &notify);
+            return finish(state, LibraryScanState::Cancelled, None, notify);
         }
-        sync::lock(&state).update(|scan| scan.current_root = Some(root.clone()));
+        sync::lock(state).update(|scan| scan.current_root = Some(root.clone()));
         notify.notify();
-        match scan_root(&database, &job, &cancel, &mut progress) {
+        match scan_root(database, job, cancel, &mut progress) {
             Ok(complete) => traversal_failed |= !complete,
             Err(Stop::Cancelled) => {
-                return finish(&state, LibraryScanState::Cancelled, None, &notify);
+                return finish(state, LibraryScanState::Cancelled, None, notify);
             }
             Err(Stop::Persistence) => {
                 return finish(
-                    &state,
+                    state,
                     LibraryScanState::Failed,
                     Some(ScanFailure::PersistenceFailed),
-                    &notify,
+                    notify,
                 );
             }
         }
     }
     if traversal_failed {
         return finish(
-            &state,
+            state,
             LibraryScanState::Failed,
             Some(ScanFailure::RootTraversalFailed),
-            &notify,
+            notify,
         );
     }
     // Only once every folder has been seen in full is a Missing track known to be missing, and so
     // a file that arrived known to be that track moved.
-    match relink_moved(&database) {
+    match relink_moved(database) {
         Ok(relinked) => progress.changed(relinked as u64),
         Err(_) => {
             return finish(
-                &state,
+                state,
                 LibraryScanState::Failed,
                 Some(ScanFailure::PersistenceFailed),
-                &notify,
+                notify,
             );
         }
     }
-    finish(&state, LibraryScanState::Completed, None, &notify)
+    finish(state, LibraryScanState::Completed, None, notify)
 }
 
 fn relink_moved(database: &Database) -> Result<usize, PersistError> {
@@ -351,7 +351,9 @@ impl<'a> Progress<'a> {
         Self {
             state,
             notify,
-            last_signal: Instant::now() - PROGRESS_SIGNAL_INTERVAL,
+            last_signal: Instant::now()
+                .checked_sub(PROGRESS_SIGNAL_INTERVAL)
+                .unwrap_or_else(Instant::now),
         }
     }
 

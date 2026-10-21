@@ -80,7 +80,7 @@ impl ArtworkPath {
             hash: hash.to_owned(),
             mime_type: ArtworkMimeType::from_extension(extension)?,
         };
-        (is_artwork_hash(hash) && path.shard() == shard).then_some(path)
+        (is_artwork_hash(hash) && path.shard() == Some(shard)).then_some(path)
     }
 
     /// `relative` is the canonical path of exactly this hash and type.
@@ -88,19 +88,23 @@ impl ArtworkPath {
         Self::parse(relative).is_some_and(|path| path.hash == hash && path.mime_type == mime_type)
     }
 
-    fn shard(&self) -> &str {
-        &self.hash[..2]
+    /// The first two hash digits, or `None` for a hash too short to have them.
+    fn shard(&self) -> Option<&str> {
+        self.hash.get(..2)
     }
 
-    /// The thumbnail of this image, stored next to it: `artwork/<shard>/<hash>.thumb.jpg`.
-    pub fn thumbnail(&self) -> String {
+    /// The thumbnail of this image, stored next to it: `artwork/<shard>/<hash>.thumb.jpg`, or
+    /// `None` for a hash too short to have a shard.
+    pub fn thumbnail(&self) -> Option<String> {
         thumbnail_path(&self.hash)
     }
 }
 
-/// Where the thumbnail of the artwork with this hash lives below the data directory.
-pub fn thumbnail_path(hash: &str) -> String {
-    format!("artwork/{}/{hash}.thumb.jpg", &hash[..2])
+/// Where the thumbnail of the artwork with this hash lives below the data directory, or `None`
+/// for a hash too short to have a shard.
+pub fn thumbnail_path(hash: &str) -> Option<String> {
+    let shard = hash.get(..2)?;
+    Some(format!("artwork/{shard}/{hash}.thumb.jpg"))
 }
 
 /// The hash of a thumbnail's file name (`<hash>.thumb.jpg`), when it is one.
@@ -112,10 +116,10 @@ pub fn thumbnail_hash(file_name: &str) -> Option<&str> {
 
 impl std::fmt::Display for ArtworkPath {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let shard = self.shard().ok_or(std::fmt::Error)?;
         write!(
             f,
-            "artwork/{}/{}.{}",
-            self.shard(),
+            "artwork/{shard}/{}.{}",
             self.hash,
             self.mime_type.extension()
         )
@@ -275,7 +279,10 @@ pub fn ensure_thumbnail(
     root: &Path,
     original: &ArtworkPath,
 ) -> Result<(), ArtworkMaterializeError> {
-    let final_path = root.join(original.thumbnail());
+    let Some(thumbnail) = original.thumbnail() else {
+        return Err(ArtworkMaterializeError::Io);
+    };
+    let final_path = root.join(thumbnail);
     if final_path.exists() {
         return Ok(());
     }
@@ -347,7 +354,7 @@ mod tests {
         ensure_thumbnail(&root, &original).unwrap();
         ensure_thumbnail(&root, &original).unwrap();
 
-        let thumb = image::open(root.join(original.thumbnail())).unwrap();
+        let thumb = image::open(root.join(original.thumbnail().unwrap())).unwrap();
         assert_eq!((thumb.width(), thumb.height()), (512, 341));
         assert_eq!(fs::read(root.join(&stored.relative_path)).unwrap(), bytes);
         assert_eq!(
@@ -363,7 +370,7 @@ mod tests {
         let stored = materialize(&root, &png(100, 100), ArtworkMimeType::Png).unwrap();
         let original = ArtworkPath::parse(&stored.relative_path).unwrap();
         ensure_thumbnail(&root, &original).unwrap();
-        let thumb = image::open(root.join(original.thumbnail())).unwrap();
+        let thumb = image::open(root.join(original.thumbnail().unwrap())).unwrap();
         assert_eq!((thumb.width(), thumb.height()), (100, 100));
         drop(fs::remove_dir_all(root));
     }
@@ -444,7 +451,11 @@ mod tests {
             format!("artwork/ab/{hash}.gif"),
             format!("artwork/ab/../{hash}.png"),
             format!("other/ab/{hash}.png"),
-            format!("artwork/ab/{}.png", &hash[..63]),
+            format!(
+                "artwork/ab/{}.png",
+                hash.get(..63)
+                    .expect("a 64-digit hash has a 63-digit prefix")
+            ),
             "artwork/ab/x.png".to_owned(),
         ] {
             assert_eq!(ArtworkPath::parse(&bad), None, "{bad}");

@@ -134,13 +134,15 @@ impl Ordering {
                 .iter()
                 .enumerate()
                 .map(|(index, phase)| format!("WHEN {} THEN {index} ", phase.predicate))
-                .collect();
+                .collect::<Vec<_>>()
+                .concat();
             parts.push(format!("CASE {arms}END"));
         }
         parts.extend(
-            self.phases[0]
-                .terms
-                .iter()
+            self.phases
+                .first()
+                .into_iter()
+                .flat_map(|phase| phase.terms.iter())
                 .map(|term| format!("{term} {direction}")),
         );
         parts.join(", ")
@@ -324,7 +326,8 @@ impl PagedQuery {
             .iter()
             .enumerate()
             .map(|(index, term)| format!(", {term} AS k{index}"))
-            .collect();
+            .collect::<Vec<_>>()
+            .concat();
         let mut condition = format!("({})", phase.predicate);
         if after {
             let first = self.params.len() + 1;
@@ -337,7 +340,7 @@ impl PagedQuery {
                 LibrarySortDirection::Ascending => ">",
                 LibrarySortDirection::Descending => "<",
             };
-            condition.push_str(&format!(" AND ({terms}) {comparison} ({marks})"));
+            condition = format!("{condition} AND ({terms}) {comparison} ({marks})");
         }
         let order = phase
             .terms
@@ -515,11 +518,11 @@ mod tests {
 
         let descending = query(LibrarySortDirection::Descending);
         for bad in [cursor.as_str(), "", "not json", r#"{"version":1}"#] {
-            let error =
-                match descending.fetch(&connection, Some(bad), 0, |row| row.get::<_, i64>(0)) {
-                    Err(error) => error,
-                    Ok(_) => panic!("{bad:?} was accepted"),
-                };
+            let Err(error) =
+                descending.fetch(&connection, Some(bad), 0, |row| row.get::<_, i64>(0))
+            else {
+                panic!("{bad:?} was accepted");
+            };
             assert_eq!(error, StoreError::InvalidCursor);
         }
     }

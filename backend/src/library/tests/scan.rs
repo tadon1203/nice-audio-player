@@ -57,7 +57,7 @@ fn run_versioned(
     dirs: Option<Vec<PathBuf>>,
 ) -> Versioned<LibraryScanSnapshot> {
     let roots = roots::list(&fixture.database.read().unwrap()).expect("roots");
-    let jobs = roots
+    let jobs: Vec<_> = roots
         .into_iter()
         .map(|root| crate::library::scanner::ScanJob {
             root,
@@ -69,11 +69,11 @@ fn run_versioned(
         ..LibraryScanSnapshot::idle()
     })));
     crate::library::scanner::run(
-        fixture.database.clone(),
-        jobs,
-        Arc::clone(&state),
-        Arc::new(AtomicBool::new(cancelled)),
-        notifier(),
+        &fixture.database,
+        &jobs,
+        &state,
+        &AtomicBool::new(cancelled),
+        &notifier(),
     );
 
     sync::lock(&state).clone()

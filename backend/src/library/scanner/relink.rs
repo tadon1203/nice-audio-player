@@ -70,44 +70,63 @@ fn identities(connection: &Connection, condition: &str) -> rusqlite::Result<Vec<
         .collect()
 }
 
-/// Pairs each arrived file (index) with the Missing track (index) it is: first by size and head
+/// Pairs each arrived file with the Missing track it is: first by size and head
 /// and tail hash, preferring the one with the same tags when several copies match; then, for what
 /// is left, by tags alone when exactly one Missing track carries them.
-pub(super) fn pair_moves(arrived: &[Identity], missing: &[Identity]) -> Vec<(usize, usize)> {
+pub(super) fn pair_moves<'a>(
+    arrived: &'a [Identity],
+    missing: &'a [Identity],
+) -> Vec<(&'a Identity, &'a Identity)> {
     let mut claimed = vec![false; missing.len()];
     let mut pairs = Vec::new();
     let mut unmatched = Vec::new();
-    for (index, file) in arrived.iter().enumerate() {
+    for file in arrived {
         let by_content = |candidate: &Identity| {
             file.content_hash.is_some()
                 && candidate.byte_length == file.byte_length
                 && candidate.content_hash == file.content_hash
         };
-        let candidates: Vec<usize> = (0..missing.len())
-            .filter(|&at| !claimed[at] && by_content(&missing[at]))
+        let candidates: Vec<(usize, &Identity)> = missing
+            .iter()
+            .zip(&claimed)
+            .enumerate()
+            .filter(|(_, (candidate, claimed))| !**claimed && by_content(candidate))
+            .map(|(at, (candidate, _))| (at, candidate))
             .collect();
         let chosen = candidates
             .iter()
-            .copied()
-            .find(|&at| file.fingerprint.is_some() && missing[at].fingerprint == file.fingerprint)
-            .or_else(|| candidates.first().copied());
+            .find(|(_, candidate)| {
+                file.fingerprint.is_some() && candidate.fingerprint == file.fingerprint
+            })
+            .or_else(|| candidates.first())
+            .copied();
         match chosen {
-            Some(at) => {
-                claimed[at] = true;
-                pairs.push((index, at));
+            Some((at, candidate)) => {
+                if let Some(slot) = claimed.get_mut(at) {
+                    *slot = true;
+                }
+                pairs.push((file, candidate));
             }
-            None => unmatched.push(index),
+            None => unmatched.push(file),
         }
     }
-    for index in unmatched {
-        let Some(fingerprint) = &arrived[index].fingerprint else {
+    for file in unmatched {
+        let Some(fingerprint) = &file.fingerprint else {
             continue;
         };
-        let mut same = (0..missing.len())
-            .filter(|&at| !claimed[at] && missing[at].fingerprint.as_ref() == Some(fingerprint));
-        if let (Some(only), None) = (same.next(), same.next()) {
-            claimed[only] = true;
-            pairs.push((index, only));
+        let mut same = missing
+            .iter()
+            .zip(&claimed)
+            .enumerate()
+            .filter(|(_, (candidate, claimed))| {
+                !**claimed && candidate.fingerprint.as_ref() == Some(fingerprint)
+            })
+            .map(|(at, (candidate, _))| (at, candidate));
+        if let (Some((only, candidate)), None) = (same.next(), same.next()) {
+            if let Some(slot) = claimed.get_mut(only) {
+                *slot = true;
+            }
+            pairs.push((file, candidate));
         }
     }
     pairs
@@ -128,7 +147,6 @@ pub(super) fn relink_moved(connection: &mut Connection) -> rusqlite::Result<usiz
     };
     let pairs = pair_moves(&arrived, &missing);
     for &(new, old) in &pairs {
-        let (new, old) = (&arrived[new], &missing[old]);
         // The old track takes over the new file and its freshly read tags; the new track, which
         // nothing refers to yet, and the old file row go.
         transaction.execute(
@@ -193,7 +211,7 @@ mod tests {
             identity(3, 10, Some("other"), None),
         ];
         let arrived = [identity(9, 10, Some("h"), Some(("two", 1)))];
-        assert_eq!(pair_moves(&arrived, &missing), vec![(0, 1)]);
+        assert_eq!(file_ids(&pair_moves(&arrived, &missing)), vec![(9, 2)]);
 
         let resized = [identity(9, 11, Some("h"), None)];
         assert!(pair_moves(&resized, &missing).is_empty(), "size differs");
@@ -203,7 +221,7 @@ mod tests {
     fn a_retagged_copy_is_found_by_its_tags_only_when_they_are_unambiguous() {
         let one = [identity(1, 10, Some("old"), Some(("song", 5)))];
         let arrived = [identity(9, 12, Some("new"), Some(("song", 5)))];
-        assert_eq!(pair_moves(&arrived, &one), vec![(0, 0)]);
+        assert_eq!(file_ids(&pair_moves(&arrived, &one)), vec![(9, 1)]);
 
         let two = [
             identity(1, 10, Some("old"), Some(("song", 5))),
@@ -221,6 +239,14 @@ mod tests {
             identity(8, 10, Some("h"), None),
             identity(9, 10, Some("h"), None),
         ];
-        assert_eq!(pair_moves(&arrived, &missing), vec![(0, 0)]);
+        assert_eq!(file_ids(&pair_moves(&arrived, &missing)), vec![(8, 1)]);
+    }
+
+    /// The (new, old) file IDs of each pair.
+    fn file_ids(pairs: &[(&Identity, &Identity)]) -> Vec<(i64, i64)> {
+        pairs
+            .iter()
+            .map(|(new, old)| (new.file_id, old.file_id))
+            .collect()
     }
 }

@@ -55,7 +55,9 @@ pub(crate) fn collect_source_artwork(database: &Database) -> Result<Vec<i64>, St
         for row in live {
             let (hash, mime_type, relative) = row?;
             if ArtworkPath::is_canonical(&hash, mime_type, &relative) {
-                live_paths.insert(artwork::thumbnail_path(&hash));
+                if let Some(thumbnail) = artwork::thumbnail_path(&hash) {
+                    live_paths.insert(thumbnail);
+                }
                 live_paths.insert(relative);
             }
         }
@@ -111,7 +113,10 @@ pub(crate) fn spawn_thumbnail_backfill(database: &Database) {
         .map(|rows| {
             rows.flatten()
                 .filter_map(|relative| ArtworkPath::parse(&relative))
-                .filter(|path| !data_dir.join(path.thumbnail()).exists())
+                .filter(|path| {
+                    path.thumbnail()
+                        .is_some_and(|thumbnail| !data_dir.join(thumbnail).exists())
+                })
                 .collect()
         })
         .unwrap_or_default();

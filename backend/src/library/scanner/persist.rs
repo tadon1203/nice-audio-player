@@ -289,7 +289,7 @@ impl LibraryWriter {
     }
 }
 
-fn touch(transaction: &Transaction, file_id: i64, generation: i64) -> Persisted<()> {
+fn touch(transaction: &Transaction<'_>, file_id: i64, generation: i64) -> Persisted<()> {
     transaction.prepare_cached(TOUCH_FILE)?.execute(params![
         file_id,
         generation,
@@ -301,7 +301,7 @@ fn touch(transaction: &Transaction, file_id: i64, generation: i64) -> Persisted<
 /// Stores a file that was read: it becomes playable (or, when it cannot be decoded, stays listed
 /// as unsupported), and its track keeps its identity across revisions.
 fn store_file(
-    transaction: &Transaction,
+    transaction: &Transaction<'_>,
     touched: &mut Touched,
     (root_id, root_path): (i64, &str),
     generation: i64,
@@ -317,42 +317,39 @@ fn store_file(
         .as_ref()
         .ok()
         .and_then(|inspected| inspected.content_hash.as_deref());
-    let (file_id, revision) = match known {
-        Some((file_id, revision)) => {
-            transaction.execute(
-                REVISE_FILE,
-                params![
-                    file_id,
-                    file.modification_key,
-                    revision,
-                    generation,
-                    Availability::Available,
-                    status,
-                    file.byte_length as i64,
-                    content_hash
-                ],
-            )?;
-            (file_id, revision)
-        }
-        None => {
-            transaction.execute(
-                INSERT_FILE,
-                params![
-                    root_id,
-                    file.relative,
-                    file.file_name,
-                    file.extension,
-                    file.modification_key,
-                    generation,
-                    Availability::Available,
-                    status,
-                    file.byte_length as i64,
-                    content_hash,
-                    result.is_ok()
-                ],
-            )?;
-            (transaction.last_insert_rowid(), 1)
-        }
+    let (file_id, revision) = if let Some((file_id, revision)) = known {
+        transaction.execute(
+            REVISE_FILE,
+            params![
+                file_id,
+                file.modification_key,
+                revision,
+                generation,
+                Availability::Available,
+                status,
+                file.byte_length as i64,
+                content_hash
+            ],
+        )?;
+        (file_id, revision)
+    } else {
+        transaction.execute(
+            INSERT_FILE,
+            params![
+                root_id,
+                file.relative,
+                file.file_name,
+                file.extension,
+                file.modification_key,
+                generation,
+                Availability::Available,
+                status,
+                file.byte_length as i64,
+                content_hash,
+                result.is_ok()
+            ],
+        )?;
+        (transaction.last_insert_rowid(), 1)
     };
     match result {
         Ok(inspected) => store_inspected(
@@ -368,7 +365,7 @@ fn store_file(
 }
 
 fn store_inspected(
-    transaction: &Transaction,
+    transaction: &Transaction<'_>,
     touched: &mut Touched,
     file_id: i64,
     revision: i64,
@@ -452,7 +449,7 @@ fn store_inspected(
 /// A file that was indexed and can no longer be decoded keeps its track, with the tags of its
 /// earlier revision cleared so they are not shown for the file it is now.
 fn clear_metadata(
-    transaction: &Transaction,
+    transaction: &Transaction<'_>,
     touched: &mut Touched,
     file_id: i64,
     revision: i64,
@@ -497,7 +494,7 @@ fn clear_metadata(
 }
 
 fn apply_artwork(
-    transaction: &Transaction,
+    transaction: &Transaction<'_>,
     touched: &mut Touched,
     file_id: i64,
     revision: i64,
@@ -520,7 +517,7 @@ fn apply_artwork(
 
 /// The database id of the stored artwork, if there is any. Identical images share one row.
 fn store_artwork_asset(
-    transaction: &Transaction,
+    transaction: &Transaction<'_>,
     artwork: &ArtworkOutcome,
 ) -> Persisted<Option<i64>> {
     match (&artwork.status, &artwork.stored) {

@@ -268,8 +268,9 @@ fn hex_id(value: &str) -> Option<[u8; 16]> {
         return None;
     }
     let mut id = [0; 16];
-    for (index, byte) in id.iter_mut().enumerate() {
-        *byte = (hex_digit(bytes[2 * index])? << 4) | hex_digit(bytes[2 * index + 1])?;
+    let (pairs, _) = bytes.as_chunks::<2>();
+    for (byte, &[high, low]) in id.iter_mut().zip(pairs) {
+        *byte = (hex_digit(high)? << 4) | hex_digit(low)?;
     }
     Some(id)
 }
@@ -308,7 +309,11 @@ fn digest(parts: &[&[u8]]) -> [u8; 16] {
 }
 
 fn hex_of(bytes: &[u8; 16]) -> String {
-    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+    bytes
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<Vec<_>>()
+        .concat()
 }
 
 /// Registers the functions that compute IDs and search text in SQL, on a connection, so a
@@ -410,6 +415,12 @@ mod tests {
             serde_json::from_value::<PlaybackId>(serde_json::json!(2)).unwrap(),
             playback
         );
+    }
+
+    #[test]
+    fn a_short_hex_id_is_rejected_without_panic() {
+        assert_eq!(AlbumId::from_hex(&"ab".repeat(15)), None);
+        assert_eq!(ArtistId::from_hex(&"ab".repeat(15)), None);
     }
 
     #[test]

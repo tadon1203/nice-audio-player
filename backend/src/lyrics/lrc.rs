@@ -20,9 +20,8 @@ pub fn parse(input: &str) -> LrcParse {
         return LrcParse::Empty;
     }
     let normalized = normalize_offset_tag(input);
-    let lyrics = match lrc_rs::SyncedLyrics::parse(&normalized) {
-        Ok(lyrics) => lyrics,
-        Err(_) => return LrcParse::Malformed,
+    let Ok(lyrics) = lrc_rs::SyncedLyrics::parse(&normalized) else {
+        return LrcParse::Malformed;
     };
     if lyrics.lines.is_empty() {
         return LrcParse::Empty;
@@ -45,14 +44,13 @@ pub fn parse(input: &str) -> LrcParse {
 fn line_has_malformed_timestamp(line: &str) -> bool {
     let mut rest = line.trim_start();
     while let Some(stripped) = rest.strip_prefix('[') {
-        let Some(end) = stripped.find(']') else {
+        let Some((token, after)) = stripped.split_once(']') else {
             return looks_like_timestamp(stripped);
         };
-        let token = &stripped[..end];
         if looks_like_timestamp(token) && parse_timestamp(token).is_none() {
             return true;
         }
-        rest = &stripped[end + 1..];
+        rest = after;
     }
     false
 }
@@ -166,5 +164,11 @@ mod tests {
         };
         assert_eq!(lines[0].start_ms, 1_000);
         assert_eq!(lines[0].text, "A B");
+    }
+
+    #[test]
+    fn a_multibyte_timestamp_token_is_malformed_without_panic() {
+        assert!(line_has_malformed_timestamp("[00:0é]"));
+        assert!(!line_has_malformed_timestamp("[ü] words"));
     }
 }
