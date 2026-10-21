@@ -286,7 +286,10 @@ fn record_statement(sql: &str) {
 }
 
 /// The statements `run` executes on the store's read connection.
-#[allow(deprecated)] // `trace_v2` takes a closure-less callback too, and this is all a test needs
+#[expect(
+    deprecated,
+    reason = "`trace_v2` takes a closure-less callback too, and this is all a test needs"
+)]
 fn statements_of(fixture: &Fixture, run: impl FnOnce()) -> Vec<String> {
     // The pool hands its idle connection to the next read, which is the store's.
     let mut connection = fixture.database.read().unwrap();

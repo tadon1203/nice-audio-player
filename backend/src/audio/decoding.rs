@@ -143,7 +143,10 @@ fn open_decoder_from_media_source(
     );
     let duration_ms = track_duration_ms(track);
     let time_base = track.time_base.unwrap_or_else(|| {
-        TimeBase::from_recip(std::num::NonZeroU32::new(expected_spec.sample_rate().get()).unwrap())
+        TimeBase::from_recip(
+            std::num::NonZeroU32::new(expected_spec.sample_rate().get())
+                .expect("SampleRate::new rejects zero, so the rate is never zero"),
+        )
     });
     let decoder_options = AudioDecoderOptions::default();
     let decoder = get_codecs()

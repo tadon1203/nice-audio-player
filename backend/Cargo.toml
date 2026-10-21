@@ -1,19 +1,22 @@
 [package]
 name = "nice-audio-player-backend"
 version = "0.1.0"
-edition = "2024"
-rust-version = "1.99"
+edition.workspace = true
+rust-version.workspace = true
 
 [lib]
 crate-type = ["rlib"]
 
+[lints]
+workspace = true
+
 [dependencies]
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-specta = { version = "=2.0.0-rc.25", features = ["derive"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+specta = { workspace = true }
 lrc_rs = "1.0"
 rand = "0.9"
-log = "0.4"
+log = { workspace = true }
 cpal = "0.18.1"
 ringbuf = "0.5"
 symphonia = { version = "0.6.0", features = ["all"] }

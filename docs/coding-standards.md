@@ -72,7 +72,7 @@ Clippy enforces the no-panic rule. See [ADR 0010](adr/0010-backend-does-not-pani
 - Write an error as an enum with `#[derive(thiserror::Error)]`. Do not use `anyhow`.
 - Number conversions go through the checked conversions in the numeric module, or `From` and `TryFrom`.
 - Index a slice with `.get()`, an iterator, `chunks_exact`, or `split_at_checked`. Use `checked_*` or `saturating_*` for arithmetic that can overflow.
-- The shared `Mutex` helper recovers from poison with `PoisonError::into_inner`.
+- Use `sync::lock` and `sync::wait`, not `Mutex::lock` and `Condvar::wait`. They recover from poison with `PoisonError::into_inner`.
 - Add a lint suppression only when the user agrees.
 - Every `allow` in `[workspace.lints]` has a comment that gives the reason.
 

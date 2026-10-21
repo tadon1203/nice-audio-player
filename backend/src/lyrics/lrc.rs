@@ -103,7 +103,7 @@ fn normalize_offset_tag(input: &str) -> String {
 pub fn parse_plain(input: &str) -> Option<(Option<String>, LyricsContent)> {
     let lines: Vec<String> = input
         .lines()
-        .map(|line| line.trim_end_matches('\r').to_string())
+        .map(|line| line.trim_end_matches('\r').to_owned())
         .collect();
     if lines.iter().any(|line| !line.trim().is_empty()) {
         Some((None, LyricsContent::Plain { lines }))

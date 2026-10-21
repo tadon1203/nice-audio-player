@@ -13,6 +13,7 @@ use std::{
 use backend::{
     app::BackendApp,
     messages::{BackendMessage, MessageSink, Occurrence, StateTopic},
+    sync,
 };
 use tauri::ipc::Channel;
 
@@ -57,13 +58,13 @@ pub struct Subscriber {
 
 impl Subscriber {
     pub fn replace(&self, channel: Channel<BackendMessage>) {
-        *self.channel.lock().expect("subscriber lock") = Some(channel);
+        *sync::lock(&self.channel) = Some(channel);
     }
 
     /// Without a Renderer on the channel the message is dropped, which is not an error: the next
     /// `connect` replaces the channel.
     fn send(&self, message: BackendMessage) {
-        let channel = self.channel.lock().expect("subscriber lock");
+        let channel = sync::lock(&self.channel);
         if let Some(channel) = channel.as_ref()
             && let Err(error) = channel.send(message)
         {
@@ -73,11 +74,7 @@ impl Subscriber {
 
     #[cfg(test)]
     fn channel_id(&self) -> Option<u32> {
-        self.channel
-            .lock()
-            .expect("subscriber lock")
-            .as_ref()
-            .map(Channel::id)
+        sync::lock(&self.channel).as_ref().map(Channel::id)
     }
 }
 
@@ -88,20 +85,23 @@ pub fn start_dispatcher(
     subscriber: Arc<Subscriber>,
     signals: Receiver<Signal>,
 ) {
-    thread::spawn(move || {
-        while let Ok(first) = signals.recv() {
-            let mut batch = vec![first];
-            batch.extend(signals.try_iter());
-            let messages = batch_messages(
-                batch,
-                |topic| backend.state_message(topic),
-                || backend.position_message(),
-            );
-            for message in messages {
-                subscriber.send(message);
+    thread::Builder::new()
+        .name("message-dispatcher".into())
+        .spawn(move || {
+            while let Ok(first) = signals.recv() {
+                let mut batch = vec![first];
+                batch.extend(signals.try_iter());
+                let messages = batch_messages(
+                    batch,
+                    |topic| backend.state_message(topic),
+                    || backend.position_message(),
+                );
+                for message in messages {
+                    subscriber.send(message);
+                }
             }
-        }
-    });
+        })
+        .expect("the OS starts a thread unless it is out of resources");
 }
 
 /// The messages one batch sends, in order: its occurrences as they arrived, then each changed

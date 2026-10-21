@@ -72,7 +72,10 @@ impl LibrarySync {
             scanner: None,
             queue: VecDeque::new(),
         };
-        let thread = thread::spawn(move || actor.run(receiver));
+        let thread = thread::Builder::new()
+            .name("library-actor".into())
+            .spawn(move || actor.run(receiver))
+            .expect("the OS starts a thread unless it is out of resources");
         Self {
             messages,
             thread: Mutex::new(Some(thread)),
@@ -341,15 +344,20 @@ impl Actor {
             self.notify.clone(),
         );
         let messages = self.messages.clone();
-        self.scanner = Some(thread::spawn(move || {
-            let mut ending = ScanEnding::new(messages, scan.clone(), notify.clone());
-            let outcome = scanner::run(database, jobs, scan, cancel, notify);
-            ending.finish(match outcome {
-                LibraryScanState::Completed => ScanOutcome::Completed,
-                LibraryScanState::Cancelled => ScanOutcome::Cancelled,
-                _ => ScanOutcome::Failed,
-            });
-        }));
+        self.scanner = Some(
+            thread::Builder::new()
+                .name("library-scanner".into())
+                .spawn(move || {
+                    let mut ending = ScanEnding::new(messages, scan.clone(), notify.clone());
+                    let outcome = scanner::run(database, jobs, scan, cancel, notify);
+                    ending.finish(match outcome {
+                        LibraryScanState::Completed => ScanOutcome::Completed,
+                        LibraryScanState::Cancelled => ScanOutcome::Cancelled,
+                        _ => ScanOutcome::Failed,
+                    });
+                })
+                .expect("the OS starts a thread unless it is out of resources"),
+        );
     }
 
     fn reap_scanner(&mut self) {
@@ -458,11 +466,14 @@ mod tests {
         let notify = Notifier::new(null_message_sink(), StateTopic::LibraryScan);
         let thread_scan = scan.clone();
 
-        let died = thread::spawn(move || {
-            let _ending = ScanEnding::new(messages, thread_scan, notify);
-            panic!("scanner bug");
-        })
-        .join();
+        let died = thread::Builder::new()
+            .name("scanner-bug-test".into())
+            .spawn(move || {
+                let _ending = ScanEnding::new(messages, thread_scan, notify);
+                panic!("scanner bug");
+            })
+            .unwrap()
+            .join();
 
         assert!(died.is_err());
         let snapshot = scan.lock().unwrap_or_else(|p| p.into_inner()).clone();

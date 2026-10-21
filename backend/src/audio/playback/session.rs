@@ -19,7 +19,10 @@ use cpal::StreamInstant;
 pub(super) const POSITION_UPDATE_INTERVAL: Duration = Duration::from_secs(1);
 
 /// The one state the worker is in. The published snapshot is rendered from it and never read back.
-#[allow(clippy::large_enum_variant)] // one value lives on the worker; boxing buys nothing
+#[expect(
+    clippy::large_enum_variant,
+    reason = "one value lives on the worker; boxing buys nothing"
+)]
 pub(super) enum Transport {
     /// Nothing is loaded or loading.
     Idle,

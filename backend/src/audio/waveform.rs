@@ -13,7 +13,7 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -27,6 +27,7 @@ use crate::library::scanner::identity::content_hash;
 use crate::library::store::PlayableTrack;
 use crate::media::validation::ValidatedAudioFile;
 use crate::messages::{SharedMessageSink, StateTopic, Versioned};
+use crate::sync;
 
 pub const WAVEFORM_BUCKETS: usize = 1000;
 const CHUNK_FRAMES: usize = 2048;
@@ -310,6 +311,7 @@ fn quantize(value: f32) -> u8 {
 /// Lowers the calling thread to Windows background mode (low CPU, I/O and memory priority), so
 /// analysis never competes with playback or other apps. It lasts for the life of the thread.
 #[cfg(windows)]
+#[expect(unsafe_code, reason = "Win32 FFI; windows-sys has no safe wrapper")]
 fn run_in_background() {
     use windows_sys::Win32::System::Threading::{
         GetCurrentThread, SetThreadPriority, THREAD_MODE_BACKGROUND_BEGIN,
@@ -457,11 +459,11 @@ struct Shared {
 
 impl Shared {
     fn jobs(&self) -> MutexGuard<'_, Jobs> {
-        self.jobs.lock().unwrap_or_else(PoisonError::into_inner)
+        sync::lock(&self.jobs)
     }
 
     fn current(&self) -> MutexGuard<'_, Current> {
-        self.current.lock().unwrap_or_else(PoisonError::into_inner)
+        sync::lock(&self.current)
     }
 
     /// Latest request wins: the job in flight is cancelled and an older queued request is dropped.
@@ -490,10 +492,7 @@ impl Shared {
         let Some(stamp) = file_stamp(&file.path) else {
             return;
         };
-        let ready = self
-            .ready
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
+        let ready = sync::lock(&self.ready)
             .get(&file.path)
             .is_some_and(|(remembered, _)| *remembered == stamp);
         let mut jobs = self.jobs();
@@ -524,7 +523,7 @@ impl Shared {
                 jobs.running = Some((request.file.path.clone(), cancellation.clone()));
                 return Some((request, cancellation));
             }
-            jobs = self.wake.wait(jobs).unwrap_or_else(PoisonError::into_inner);
+            jobs = sync::wait(&self.wake, jobs);
         }
     }
 }
@@ -596,11 +595,7 @@ impl Waveforms {
     /// The waveform if it is ready. Never starts an analysis.
     fn get(&self, file: &ValidatedAudioFile) -> Option<Arc<Waveform>> {
         let stamp = file_stamp(&file.path)?;
-        let ready = self
-            .shared
-            .ready
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner);
+        let ready = sync::lock(&self.shared.ready);
         let (remembered, waveform) = ready.get(&file.path)?;
         (*remembered == stamp).then(|| Arc::clone(waveform))
     }
@@ -684,7 +679,7 @@ impl Shared {
     }
 
     fn remember(&self, path: &Path, stamp: FileStamp, waveform: Waveform) {
-        let mut ready = self.ready.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut ready = sync::lock(&self.ready);
         if ready.len() >= MEMORY_ENTRIES && !ready.contains_key(path) {
             ready.clear();
         }
@@ -800,7 +795,7 @@ mod tests {
 
         shared.process(&file, Some(&stored), &Cancellation::default());
 
-        let ready = shared.ready.lock().unwrap();
+        let ready = sync::lock(&shared.ready);
         assert_eq!(*ready.get(&file.path).unwrap().1, marker);
     }
 

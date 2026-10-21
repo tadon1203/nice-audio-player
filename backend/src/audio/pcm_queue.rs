@@ -231,8 +231,10 @@ mod tests {
     fn a_full_queue_makes_the_producer_wait_until_the_consumer_pops() {
         let (mut producer, mut consumer) =
             bounded_pcm_queue(2, ChannelCount::new(1).unwrap()).unwrap();
-        let writer =
-            std::thread::spawn(move || producer.write_all(&[1.0, 2.0, 3.0, 4.0], || false, |_| {}));
+        let writer = std::thread::Builder::new()
+            .name("pcm-producer".into())
+            .spawn(move || producer.write_all(&[1.0, 2.0, 3.0, 4.0], || false, |_| {}))
+            .unwrap();
 
         std::thread::sleep(Duration::from_millis(20));
         let mut out = [0.0; 2];
@@ -252,22 +254,25 @@ mod tests {
         // A two second queue at 1 kHz, consumed in 10 ms callbacks for 4 s of audio.
         let (mut producer, mut consumer) =
             bounded_pcm_queue(2_000, ChannelCount::new(1).unwrap()).unwrap();
-        let writer = std::thread::spawn(move || {
-            let mut last = 0;
-            let mut refills = 0;
-            producer
-                .write_all(
-                    &vec![0.5; 4_000],
-                    || false,
-                    |queued| {
-                        if queued > last {
-                            refills += 1;
-                        }
-                        last = queued;
-                    },
-                )
-                .map(|()| refills)
-        });
+        let writer = std::thread::Builder::new()
+            .name("pcm-producer".into())
+            .spawn(move || {
+                let mut last = 0;
+                let mut refills = 0;
+                producer
+                    .write_all(
+                        &vec![0.5; 4_000],
+                        || false,
+                        |queued| {
+                            if queued > last {
+                                refills += 1;
+                            }
+                            last = queued;
+                        },
+                    )
+                    .map(|()| refills)
+            })
+            .unwrap();
 
         let mut out = [0.0; 10];
         let mut consumed = 0;
@@ -293,9 +298,10 @@ mod tests {
         let waker = producer.waker();
         let cancelled = Arc::new(AtomicBool::new(false));
         let flag = Arc::clone(&cancelled);
-        let writer = std::thread::spawn(move || {
-            producer.write_all(&[1.0, 2.0], || flag.load(Ordering::SeqCst), |_| {})
-        });
+        let writer = std::thread::Builder::new()
+            .name("pcm-producer".into())
+            .spawn(move || producer.write_all(&[1.0, 2.0], || flag.load(Ordering::SeqCst), |_| {}))
+            .unwrap();
 
         std::thread::sleep(Duration::from_millis(20));
         cancelled.store(true, Ordering::SeqCst);

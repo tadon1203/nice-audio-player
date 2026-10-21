@@ -1,5 +1,9 @@
 use std::env;
 
+#[expect(
+    clippy::print_stdout,
+    reason = "cargo reads build script directives from stdout"
+)]
 fn main() {
     tauri_build::build();
 

@@ -1,0 +1,11 @@
+avoid-breaking-exported-api = false
+
+allow-unwrap-in-tests = true
+allow-indexing-slicing-in-tests = true
+allow-panic-in-tests = true
+allow-print-in-tests = true
+allow-dbg-in-tests = true
+
+disallowed-methods = [
+    { path = "std::thread::spawn", reason = "threads are named; use `thread::Builder`" },
+]

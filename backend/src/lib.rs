@@ -4,6 +4,7 @@
 //! - `messages`: what the Backend sends and the sink the Host gives it.
 //! - `dto`: the IPC types the Backend's answers are made of.
 //! - `errors`: the IPC error types.
+//! - `sync`: the locks the Backend and the Host take, with poisoned locks recovered.
 //! - `tasks`: what a command's error type needs to run on a blocking thread.
 
 pub mod app;
@@ -11,6 +12,7 @@ pub mod dto;
 pub mod errors;
 pub mod ids;
 pub mod messages;
+pub mod sync;
 pub mod tasks;
 
 pub(crate) mod audio;
