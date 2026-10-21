@@ -17,9 +17,9 @@ These are the rules for code and documentation that lint cannot check. Do not wr
 - Construct a class that uses `$effect` during component initialization. Do not use `$effect.root`. See [ADR 0006](adr/0006-renderer-logic-in-classes-svelte-declarative.md).
 - State transitions are value objects. Calculations are static-only classes. See [ADR 0006](adr/0006-renderer-logic-in-classes-svelte-declarative.md).
 - Failures are typed exceptions. See [ADR 0007](adr/0007-failures-are-typed-exceptions-caught-in-three-places.md).
-- Import another module only through its `index.ts` (the barrel), for example `#lib/native`. Do not import its inner files, for example `#lib/native/artwork-url`. The barrel is the public surface of the module, so the inner files can move without a change in the callers.
+- Import another module only through its `index.ts` (the barrel). Do not import its inner files. The barrel is the public surface of the module, so the inner files can move without a change in the callers.
 - Inside a module, import the sibling files directly, with a relative path. Never import the module's own barrel. That causes a circular import.
-- Import icons one by one (`@lucide/svelte/icons/x`). Never import from the `@lucide/svelte` barrel. The barrel slows `vite dev` and the E2E runs.
+- Import icons one by one. Never import from the icon library barrel. The barrel slows the dev server and the E2E runs.
 
 ## Svelte 5 patterns
 
@@ -66,19 +66,18 @@ Clippy enforces the no-panic rule. See [ADR 0010](adr/0010-backend-does-not-pani
 
 ### Failures and invariants
 
-- Use `expect` only for an invariant that the types cannot show, or for a failure at start-up. The message says why the call cannot fail, for example `"validated by OutputProcessingPlan::new"`. A message such as `"lock"` is not a reason.
+- Use `expect` only for an invariant that the types cannot show, or for a failure at start-up. The message says why the call cannot fail. A message that only names the call is not a reason.
 - Do not write `unreachable!`. Remove the impossible branch with the types: split the enum, or carry a validated value.
-- Make an invariant a type. Use a newtype with a checked constructor (`ChannelCount`, `SampleRate`, `NormalizedVolume`) or a `NonZero*` type. Validate once at the boundary. Inside, pass the validated type.
+- Make an invariant a type. Use a newtype with a checked constructor or a `NonZero*` type. Validate once at the boundary. Inside, pass the validated type.
 - Write an error as an enum with `#[derive(thiserror::Error)]`. Do not use `anyhow`.
-- Number conversions go through the checked conversions in the numeric module, or `From` and `TryFrom`.
+- Number conversions go through checked conversions, `From`, or `TryFrom`.
 - Index a slice with `.get()`, an iterator, `chunks_exact`, or `split_at_checked`. Use `checked_*` or `saturating_*` for arithmetic that can overflow.
-- Answer a request through `respond`. Do not call `reply.send` directly. `respond` logs a caller that has gone away instead of discarding the result.
 - Add a lint suppression only when the user agrees.
 - Every `allow` in `[workspace.lints]` has a comment that gives the reason.
 
 ### Generics, memory, and borrows
 
-- Prefer a generic or a trait to `macro_rules!`. Write a macro only when a generic cannot do the job. `sql_text_enum` is such a case: it lists the variants of each enum.
+- Prefer a generic or a trait to `macro_rules!`. Write a macro only when a generic cannot do the job.
 - Use static dispatch. Use `dyn` only at a seam, such as an output callback or an event sink.
 - Show an allocation in the type. A fixed length is `Box<[T]>`, `Arc<[T]>`, or `[T; N]`. Use `Vec` only for a value that grows. Allocate with `with_capacity`.
 - A function that must not allocate takes `&mut [T]` from the caller and writes into it.
@@ -93,7 +92,6 @@ Clippy enforces the no-panic rule. See [ADR 0010](adr/0010-backend-does-not-pani
 
 - A test of one small function stays in its file, in `#[cfg(test)] mod tests`.
 - A test of a module's behavior goes in `<module dir>/tests/<behavior>.rs`. `<module dir>/tests/mod.rs` holds only shared helpers and the `mod` lines.
-- A test of the `BackendApp` public surface goes in `backend/src/app/tests/<behavior>.rs`.
 
 ## E2E tests (`tests-app/`)
 
