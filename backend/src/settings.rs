@@ -8,9 +8,10 @@
 //! worker records. Nothing outside this module sees the file's shape: the Host reads and writes
 //! appearance through `SettingsService`, and the playback service reads its preferences from it.
 
+use crate::diagnostics::log_failed;
 use crate::sync;
 use std::{
-    path::PathBuf,
+    path::Path,
     sync::{
         Mutex,
         atomic::{AtomicU64, Ordering},
@@ -113,13 +114,13 @@ pub struct SettingsService {
 impl SettingsService {
     /// Loads the saved settings from `directory`, or starts from defaults when there are none or
     /// the file is unusable (an unusable file is kept aside as `settings.json.bad`).
-    pub fn load(directory: PathBuf, messages: SharedMessageSink) -> Self {
+    pub fn load(directory: &Path, messages: SharedMessageSink) -> Self {
         let path = directory.join(FILE_NAME);
         let settings = read(&path);
         let (sender, receiver) = mpsc::channel();
         let writer_thread = thread::Builder::new()
             .name("settings-writer".into())
-            .spawn(move || write_loop(receiver, path))
+            .spawn(move || write_loop(&receiver, &path))
             .map_err(|error| error!("settings.writer_spawn_failed error={error}"))
             .ok();
         Self {
@@ -177,7 +178,7 @@ impl SettingsService {
             value: state.appearance.clone(),
         };
         if changed && let Some(writer) = sync::lock(&self.writer).as_ref() {
-            let _ = writer.send(state.clone());
+            log_failed(writer.send(state.clone()), "settings.writer_send_failed");
         }
         (appearance, changed)
     }
@@ -217,7 +218,10 @@ fn read(path: &std::path::Path) -> Settings {
         Ok(settings) => settings.sanitized(),
         Err(error) => {
             warn!("settings.file_unusable error={error}");
-            let _ = std::fs::rename(path, path.with_extension("json.bad"));
+            log_failed(
+                std::fs::rename(path, path.with_extension("json.bad")),
+                "settings.quarantine_failed",
+            );
             Settings::default()
         }
     }
@@ -231,26 +235,30 @@ fn write(path: &std::path::Path, settings: &Settings) -> std::io::Result<()> {
 }
 
 /// Collapses bursts of changes (a volume drag) into one write of the latest settings.
-fn write_loop(receiver: mpsc::Receiver<Settings>, path: PathBuf) {
+fn write_loop(receiver: &mpsc::Receiver<Settings>, path: &Path) {
     let mut pending: Option<Settings> = None;
     loop {
         let next = if pending.is_some() {
             receiver.recv_timeout(WRITE_DEBOUNCE)
         } else {
-            receiver.recv().map_err(|_| RecvTimeoutError::Disconnected)
+            receiver.recv().map_err(|cause| {
+                // Closing the channel is how a normal shutdown ends the writer, so it is `debug`.
+                log::debug!("settings.writer_closed cause={cause}");
+                RecvTimeoutError::Disconnected
+            })
         };
         match next {
             Ok(settings) => pending = Some(settings),
-            Err(RecvTimeoutError::Timeout) => flush(&path, &mut pending),
+            Err(RecvTimeoutError::Timeout) => flush(path, &mut pending),
             Err(RecvTimeoutError::Disconnected) => {
-                flush(&path, &mut pending);
+                flush(path, &mut pending);
                 return;
             }
         }
     }
 }
 
-fn flush(path: &std::path::Path, pending: &mut Option<Settings>) {
+fn flush(path: &Path, pending: &mut Option<Settings>) {
     if let Some(settings) = pending.take()
         && let Err(error) = write(path, &settings)
     {
@@ -268,6 +276,7 @@ mod tests {
         testing::{RecordingMessageSink, Sent},
     };
     use crate::test_support::TestDirectory;
+    use std::path::PathBuf;
 
     fn directory() -> (TestDirectory, PathBuf) {
         let directory = TestDirectory::new();
@@ -279,7 +288,7 @@ mod tests {
     #[test]
     fn starts_from_defaults_without_a_file() {
         let (_guard, path) = directory();
-        let service = SettingsService::load(path, null_message_sink());
+        let service = SettingsService::load(&path, null_message_sink());
         assert_eq!(service.get(), Settings::default());
         assert!(service.get().appearance.artwork_backdrop);
     }
@@ -287,7 +296,7 @@ mod tests {
     #[test]
     fn saved_changes_are_restored_on_the_next_start() {
         let (_guard, path) = directory();
-        let service = SettingsService::load(path.clone(), null_message_sink());
+        let service = SettingsService::load(&path, null_message_sink());
         service.update_appearance(&AppearancePatch {
             artwork_backdrop: Some(false),
             calm_motion: Some(true),
@@ -303,7 +312,7 @@ mod tests {
         });
         service.shutdown();
 
-        let restored = SettingsService::load(path, null_message_sink()).get();
+        let restored = SettingsService::load(&path, null_message_sink()).get();
         assert!(!restored.appearance.artwork_backdrop);
         assert!(restored.appearance.calm_motion);
         assert_eq!(restored.playback.volume, 0.4);
@@ -325,7 +334,7 @@ mod tests {
             r#"{ "playback": { "volume": 0.25 } }"#,
         )
         .unwrap();
-        let settings = SettingsService::load(path, null_message_sink()).get();
+        let settings = SettingsService::load(&path, null_message_sink()).get();
         assert_eq!(settings.playback.volume, 0.25);
         assert!(!settings.playback.muted);
         assert!(settings.appearance.artwork_backdrop);
@@ -337,14 +346,14 @@ mod tests {
         let (_guard, path) = directory();
         std::fs::write(path.join(FILE_NAME), r#"{ "playback": { "volume": 7.0 } }"#).unwrap();
         assert_eq!(
-            SettingsService::load(path.clone(), null_message_sink())
+            SettingsService::load(&path, null_message_sink())
                 .playback_preferences()
                 .volume,
             1.0
         );
 
         std::fs::write(path.join(FILE_NAME), "not json").unwrap();
-        let settings = SettingsService::load(path.clone(), null_message_sink()).get();
+        let settings = SettingsService::load(&path, null_message_sink()).get();
         assert_eq!(settings, Settings::default());
         assert!(path.join("settings.json.bad").exists());
     }
@@ -353,7 +362,7 @@ mod tests {
     fn only_renderer_visible_changes_are_announced() {
         let (_guard, path) = directory();
         let (recorder, sink) = RecordingMessageSink::shared();
-        let service = SettingsService::load(path, sink);
+        let service = SettingsService::load(&path, sink);
 
         service.record_playback(PlaybackPreferences {
             volume: 0.5,
@@ -373,7 +382,7 @@ mod tests {
     #[test]
     fn the_appearance_revision_counts_appearance_changes_only() {
         let (_guard, path) = directory();
-        let service = SettingsService::load(path, null_message_sink());
+        let service = SettingsService::load(&path, null_message_sink());
         assert_eq!(service.appearance().revision, 0);
 
         service.record_playback(PlaybackPreferences {

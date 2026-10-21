@@ -71,6 +71,10 @@ Clippy enforces the no-panic rule. See [ADR 0010](adr/0010-backend-does-not-pani
 - Make an invariant a type. Use a newtype with a checked constructor or a `NonZero*` type. Validate once at the boundary. Inside, pass the validated type.
 - Write an error as an enum with `#[derive(thiserror::Error)]`. Do not use `anyhow`.
 - Map an error cause with `logged`: `.map_err(logged(Code, "area.what"))`. It logs the cause at `warn` and returns the typed code.
+- Drop a `Result` that has no caller with `log_failed(result, "area.what")` (`diagnostics.rs`). It logs an error at `debug` and returns nothing. Do not write `let _ = <Result>`. A `try_send` into a full channel of capacity 1 is not an error, because a wake is already pending.
+- A cause with no `Display` (an IPC enum) is logged inline at `warn` with its `Debug` form, as in `library/store/playback.rs`. Code that runs in the audio callback does not log at all.
+- Remove a file on a best-effort basis with `remove_file_best_effort` (`cleanup.rs`). It logs at `debug` every error except `NotFound`.
+- A thread's `join` returns a panic payload, which has no `Display`. Check `join().is_err()` and log it at `debug`; `log_failed` cannot take it.
 - Number conversions go through checked conversions, `From`, or `TryFrom`.
 - Index a slice with `.get()`, an iterator, `chunks_exact`, or `split_at_checked`. Use `checked_*` or `saturating_*` for arithmetic that can overflow.
 - Add a lint suppression only when the user agrees.

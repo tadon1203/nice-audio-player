@@ -12,6 +12,7 @@ use std::{
 
 use backend::{
     app::BackendApp,
+    diagnostics::log_failed,
     messages::{BackendMessage, MessageSink, Occurrence, StateTopic},
     sync,
 };
@@ -33,15 +34,24 @@ pub struct HostMessageSink {
 
 impl MessageSink for HostMessageSink {
     fn state_changed(&self, topic: StateTopic) {
-        let _ = self.sender.send(Signal::State(topic));
+        log_failed(
+            self.sender.send(Signal::State(topic)),
+            "host.session.state_send_failed",
+        );
     }
 
     fn position_changed(&self) {
-        let _ = self.sender.send(Signal::Position);
+        log_failed(
+            self.sender.send(Signal::Position),
+            "host.session.position_send_failed",
+        );
     }
 
     fn occurred(&self, occurrence: Occurrence) {
-        let _ = self.sender.send(Signal::Occurrence(Box::new(occurrence)));
+        log_failed(
+            self.sender.send(Signal::Occurrence(Box::new(occurrence))),
+            "host.session.occurrence_send_failed",
+        );
     }
 }
 
@@ -54,6 +64,12 @@ pub fn message_channel() -> (Arc<HostMessageSink>, Receiver<Signal>) {
 #[derive(Default)]
 pub struct Subscriber {
     channel: Mutex<Option<Channel<BackendMessage>>>,
+}
+
+impl std::fmt::Debug for Subscriber {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Subscriber").finish_non_exhaustive()
+    }
 }
 
 impl Subscriber {

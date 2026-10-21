@@ -2,6 +2,8 @@
 //! reference the catalog and playback items hand to the renderer.
 
 use super::status::sql_text_enum;
+use crate::cleanup::remove_file_best_effort;
+use crate::diagnostics::logged;
 use crate::ids::{ArtworkHash, is_artwork_hash};
 use image::{ImageReader, codecs::jpeg::JpegEncoder, imageops::FilterType};
 use serde::Serialize;
@@ -189,8 +191,9 @@ pub struct StoredArtwork {
     pub byte_length: u64,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, thiserror::Error)]
 pub enum ArtworkMaterializeError {
+    #[error("the artwork file could not be read or written")]
     Io,
 }
 
@@ -210,7 +213,10 @@ pub fn materialize(
     };
     if final_path.exists() {
         let size = fs::metadata(&final_path)
-            .map_err(|_| ArtworkMaterializeError::Io)?
+            .map_err(logged(
+                ArtworkMaterializeError::Io,
+                "library.artwork.stat_failed",
+            ))?
             .len();
         if size != bytes.len() as u64 {
             return Err(ArtworkMaterializeError::Io);
@@ -218,7 +224,10 @@ pub fn materialize(
         return Ok(stored(size));
     }
     if let Some(parent) = final_path.parent() {
-        fs::create_dir_all(parent).map_err(|_| ArtworkMaterializeError::Io)?;
+        fs::create_dir_all(parent).map_err(logged(
+            ArtworkMaterializeError::Io,
+            "library.artwork.directory_failed",
+        ))?;
     }
     let temp_path = final_path.with_extension(format!(
         "{}.tmp-{}-{}",
@@ -231,13 +240,21 @@ pub fn materialize(
             .write(true)
             .create_new(true)
             .open(&temp_path)
-            .map_err(|_| ArtworkMaterializeError::Io)?;
-        file.write_all(bytes)
-            .map_err(|_| ArtworkMaterializeError::Io)?;
-        file.flush().map_err(|_| ArtworkMaterializeError::Io)
+            .map_err(logged(
+                ArtworkMaterializeError::Io,
+                "library.artwork.temp_create_failed",
+            ))?;
+        file.write_all(bytes).map_err(logged(
+            ArtworkMaterializeError::Io,
+            "library.artwork.write_failed",
+        ))?;
+        file.flush().map_err(logged(
+            ArtworkMaterializeError::Io,
+            "library.artwork.flush_failed",
+        ))
     })();
     if write_result.is_err() {
-        let _ = fs::remove_file(&temp_path);
+        remove_file_best_effort(&temp_path);
         return Err(ArtworkMaterializeError::Io);
     }
     if fs::rename(&temp_path, &final_path).is_err() {
@@ -245,7 +262,7 @@ pub fn materialize(
         let stored_by_another = fs::metadata(&final_path)
             .ok()
             .filter(|metadata| metadata.len() == bytes.len() as u64);
-        let _ = fs::remove_file(&temp_path);
+        remove_file_best_effort(&temp_path);
         return stored_by_another
             .map(|metadata| stored(metadata.len()))
             .ok_or(ArtworkMaterializeError::Io);
@@ -262,13 +279,21 @@ pub fn ensure_thumbnail(
     if final_path.exists() {
         return Ok(());
     }
-    let bytes =
-        fs::read(root.join(original.to_string())).map_err(|_| ArtworkMaterializeError::Io)?;
+    let bytes = fs::read(root.join(original.to_string())).map_err(logged(
+        ArtworkMaterializeError::Io,
+        "library.artwork.read_failed",
+    ))?;
     let decoded = ImageReader::new(Cursor::new(bytes))
         .with_guessed_format()
-        .map_err(|_| ArtworkMaterializeError::Io)?
+        .map_err(logged(
+            ArtworkMaterializeError::Io,
+            "library.artwork.format_failed",
+        ))?
         .decode()
-        .map_err(|_| ArtworkMaterializeError::Io)?;
+        .map_err(logged(
+            ArtworkMaterializeError::Io,
+            "library.artwork.decode_failed",
+        ))?;
     let decoded = if decoded.width() > THUMBNAIL_EDGE || decoded.height() > THUMBNAIL_EDGE {
         decoded.resize(THUMBNAIL_EDGE, THUMBNAIL_EDGE, FilterType::Lanczos3)
     } else {
@@ -277,7 +302,10 @@ pub fn ensure_thumbnail(
     let mut encoded = Vec::new();
     JpegEncoder::new_with_quality(&mut encoded, THUMBNAIL_QUALITY)
         .encode_image(&decoded.to_rgb8())
-        .map_err(|_| ArtworkMaterializeError::Io)?;
+        .map_err(logged(
+            ArtworkMaterializeError::Io,
+            "library.artwork.encode_failed",
+        ))?;
     let temp_path = final_path.with_extension(format!(
         "jpg.tmp-{}-{}",
         std::process::id(),
@@ -286,7 +314,7 @@ pub fn ensure_thumbnail(
     let written =
         fs::write(&temp_path, &encoded).and_then(|()| fs::rename(&temp_path, &final_path));
     if written.is_err() {
-        let _ = fs::remove_file(&temp_path);
+        remove_file_best_effort(&temp_path);
         // Another writer may have stored it first.
         return if final_path.exists() {
             Ok(())
@@ -326,7 +354,7 @@ mod tests {
             thumbnail_hash(&format!("{}.thumb.jpg", stored.hash)),
             Some(stored.hash.as_str())
         );
-        let _ = fs::remove_dir_all(root);
+        drop(fs::remove_dir_all(root));
     }
 
     #[test]
@@ -337,7 +365,7 @@ mod tests {
         ensure_thumbnail(&root, &original).unwrap();
         let thumb = image::open(root.join(original.thumbnail())).unwrap();
         assert_eq!((thumb.width(), thumb.height()), (100, 100));
-        let _ = fs::remove_dir_all(root);
+        drop(fs::remove_dir_all(root));
     }
 
     #[test]
@@ -380,7 +408,7 @@ mod tests {
 
         let full = serve(&dir, &format!("artwork/ab/{hash}.png")).unwrap();
         assert_eq!(full.cache, ArtworkCache::Immutable);
-        let _ = fs::remove_dir_all(dir);
+        drop(fs::remove_dir_all(dir));
     }
 
     #[test]
@@ -404,7 +432,7 @@ mod tests {
         ] {
             assert!(serve(&dir, &bad).is_none(), "{bad}");
         }
-        let _ = fs::remove_dir_all(dir);
+        drop(fs::remove_dir_all(dir));
     }
 
     #[test]

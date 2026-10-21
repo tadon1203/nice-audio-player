@@ -1,3 +1,4 @@
+use backend::cleanup::remove_file_best_effort;
 use backend::messages::BackendMessage;
 use tauri_specta::{Builder, ErrorHandlingMode, collect_commands};
 
@@ -74,7 +75,7 @@ pub fn render_typescript() -> Result<String, specta_typescript::Error> {
     let result = builder()
         .export(specta_typescript::Typescript::default(), &scratch)
         .and_then(|()| Ok(std::fs::read_to_string(&scratch)?));
-    let _ = std::fs::remove_file(&scratch);
+    remove_file_best_effort(&scratch);
     result
 }
 

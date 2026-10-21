@@ -10,6 +10,7 @@ use std::sync::{
 
 use super::discover::DiscoveredFile;
 use crate::containment::contain;
+use crate::diagnostics::log_failed;
 use crate::library::artwork::{self, StoredArtwork};
 use crate::library::status::{ArtworkStatus, TagStatus};
 use crate::media::{
@@ -35,7 +36,10 @@ impl ArtworkOutcome {
                     .inspect(|stored| {
                         if let Some(path) = artwork::ArtworkPath::parse(&stored.relative_path) {
                             // Best effort: until one exists the original is served.
-                            let _ = artwork::ensure_thumbnail(data_dir, &path);
+                            log_failed(
+                                artwork::ensure_thumbnail(data_dir, &path),
+                                "library.scanner.thumbnail_failed",
+                            );
                         }
                     })
             }

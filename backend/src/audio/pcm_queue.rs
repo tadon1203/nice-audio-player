@@ -7,7 +7,7 @@
 use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
-    mpsc::{self, Receiver, SyncSender},
+    mpsc::{self, Receiver, SyncSender, TrySendError},
 };
 
 use ringbuf::{
@@ -16,10 +16,19 @@ use ringbuf::{
 };
 
 use super::pcm::ChannelCount;
+use crate::diagnostics::log_failed;
 
 /// The consumer wakes a waiting producer when occupancy falls below this fraction (1/2).
 const WAKE_NUMERATOR: usize = 1;
 const WAKE_DENOMINATOR: usize = 2;
+
+/// A full wake channel already holds a pending wake, so only a closed one is a failure.
+fn ignore_full(result: Result<(), TrySendError<()>>) -> Result<(), TrySendError<()>> {
+    match result {
+        Err(TrySendError::Full(())) => Ok(()),
+        other => other,
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub(crate) enum PcmQueueBuildError {
@@ -53,7 +62,10 @@ pub(crate) struct PcmWaker(SyncSender<()>);
 
 impl PcmWaker {
     pub(crate) fn wake(&self) {
-        let _ = self.0.try_send(());
+        log_failed(
+            ignore_full(self.0.try_send(())),
+            "audio.pcm_queue.wake_failed",
+        );
     }
 }
 
@@ -148,7 +160,11 @@ impl PcmConsumer {
             let before = after + popped;
             let below = |occupied: usize| occupied * WAKE_DENOMINATOR < capacity * WAKE_NUMERATOR;
             if below(after) && !below(before) {
-                let _ = self.room.try_send(());
+                // This runs in the output callback, which does not log. A full channel has a wake
+                // pending, and a closed one means no producer is waiting for room.
+                match self.room.try_send(()) {
+                    Ok(()) | Err(TrySendError::Full(()) | TrySendError::Disconnected(())) => {}
+                }
             }
         }
         popped

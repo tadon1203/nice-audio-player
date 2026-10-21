@@ -27,7 +27,7 @@ impl TestDirectory {
 
 impl Drop for TestDirectory {
     fn drop(&mut self) {
-        let _ = remove_dir_all(&self.0);
+        drop(remove_dir_all(&self.0));
     }
 }
 

@@ -47,7 +47,10 @@ impl SourceLoad {
 
     /// Waits for a load that has already reported.
     pub(crate) fn join(self) {
-        let _ = self.join_handle.join();
+        // A panic payload has no `Display`, so `log_failed` cannot take the join result.
+        if self.join_handle.join().is_err() {
+            log::debug!("playback.source_loader.join_panicked");
+        }
     }
 
     /// Abandons the load without waiting for it: a stalled network path must not block the

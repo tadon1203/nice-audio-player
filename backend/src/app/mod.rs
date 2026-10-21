@@ -88,7 +88,7 @@ impl BackendApp {
         messages: SharedMessageSink,
         output: Box<dyn OutputBackend>,
     ) -> Result<Self, BackendError> {
-        let settings = Arc::new(SettingsService::load(data_dir.clone(), messages.clone()));
+        let settings = Arc::new(SettingsService::load(&data_dir, messages.clone()));
         let waveforms = Arc::new(Waveforms::start(
             data_dir.join("waveforms"),
             messages.clone(),

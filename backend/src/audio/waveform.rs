@@ -21,7 +21,9 @@ use serde::Serialize;
 
 use super::cancellation::Cancellation;
 use super::decoding::{DecodeStep, PcmDecodeError, SeekStep, open_analysis_decoder};
+use crate::cleanup::remove_file_best_effort;
 use crate::containment::contain;
+use crate::diagnostics::log_failed;
 use crate::ids::PlaybackId;
 use crate::library::scanner::identity::content_hash;
 use crate::library::store::PlayableTrack;
@@ -341,7 +343,7 @@ fn purge_stale_cache(directory: &Path) {
                 .is_some_and(|extension| extension == "napw")
                 && !has_current_magic(&path)
             {
-                let _ = std::fs::remove_file(path);
+                remove_file_best_effort(&path);
             }
         }
     }
@@ -546,19 +548,22 @@ impl Waveforms {
             current: Mutex::new(Current::default()),
         });
         let worker = Arc::clone(&shared);
-        let _ = thread::Builder::new()
-            .name("waveform".into())
-            .spawn(move || {
-                run_in_background();
-                purge_stale_cache(&cache_directory);
-                while let Some((request, cancellation)) = worker.next_job() {
-                    // A file that panics the analysis gets no waveform; the worker lives on.
-                    contain("waveform.process", || {
-                        worker.process(&request.file, request.hash.as_deref(), &cancellation);
-                    });
-                    worker.jobs().running = None;
-                }
-            });
+        log_failed(
+            thread::Builder::new()
+                .name("waveform".into())
+                .spawn(move || {
+                    run_in_background();
+                    purge_stale_cache(&cache_directory);
+                    while let Some((request, cancellation)) = worker.next_job() {
+                        // A file that panics the analysis gets no waveform; the worker lives on.
+                        contain("waveform.process", || {
+                            worker.process(&request.file, request.hash.as_deref(), &cancellation);
+                        });
+                        worker.jobs().running = None;
+                    }
+                }),
+            "audio.waveform.thread_failed",
+        );
         Self { shared }
     }
 

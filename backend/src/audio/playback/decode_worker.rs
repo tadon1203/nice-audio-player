@@ -100,7 +100,10 @@ impl DecodeWorker {
     pub(crate) fn cancel_and_join(self) {
         self.cancellation.cancel();
         self.waker.wake();
-        let _ = self.join_handle.join();
+        // A panic payload has no `Display`, so `log_failed` cannot take the join result.
+        if self.join_handle.join().is_err() {
+            log::debug!("playback.decode_worker.join_panicked");
+        }
     }
 }
 

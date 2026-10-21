@@ -7,6 +7,8 @@ use super::{
     error::StoreError,
     status::ArtworkStatus,
 };
+use crate::cleanup::remove_file_best_effort;
+use crate::diagnostics::log_failed;
 use rusqlite::params;
 use std::{collections::HashSet, fs, path::Path};
 
@@ -86,8 +88,7 @@ fn broken_assets(database: &Database, data_dir: &Path) -> Result<Vec<i64>, Store
             continue;
         }
         let valid = fs::metadata(data_dir.join(&relative))
-            .map(|metadata| metadata.is_file() && metadata.len() == length as u64)
-            .unwrap_or(false);
+            .is_ok_and(|metadata| metadata.is_file() && metadata.len() == length as u64);
         if !valid {
             broken.push(id);
         }
@@ -117,15 +118,18 @@ pub(crate) fn spawn_thumbnail_backfill(database: &Database) {
     if originals.is_empty() {
         return;
     }
-    let _ = std::thread::Builder::new()
-        .name("thumbnail-backfill".into())
-        .spawn(move || {
-            for original in originals {
-                let _ = crate::containment::contain("library.thumbnail", || {
-                    artwork::ensure_thumbnail(&data_dir, &original)
-                });
-            }
-        });
+    log_failed(
+        std::thread::Builder::new()
+            .name("thumbnail-backfill".into())
+            .spawn(move || {
+                for original in originals {
+                    crate::containment::contain("library.thumbnail", || {
+                        artwork::ensure_thumbnail(&data_dir, &original)
+                    });
+                }
+            }),
+        "library.maintenance.thread_failed",
+    );
 }
 
 fn remove_unowned_files(data_dir: &Path, live_paths: &HashSet<String>) {
@@ -146,7 +150,7 @@ fn remove_unowned_files(data_dir: &Path, live_paths: &HashSet<String>) {
             let owned_kind =
                 ArtworkPath::parse(&relative).is_some() || artwork::thumbnail_hash(name).is_some();
             if name.contains(".tmp-") || (owned_kind && !live_paths.contains(&relative)) {
-                let _ = fs::remove_file(path);
+                remove_file_best_effort(&path);
             }
         }
     }

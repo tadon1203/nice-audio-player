@@ -14,6 +14,7 @@ use std::time::Duration;
 
 use ringbuf::traits::{Consumer, Producer, Split};
 
+use crate::diagnostics::log_failed;
 use crate::sync;
 use ringbuf::{HeapCons, HeapProd, HeapRb};
 
@@ -471,6 +472,12 @@ pub struct MeterHub {
     shared: Arc<Shared>,
 }
 
+impl std::fmt::Debug for MeterHub {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MeterHub").finish_non_exhaustive()
+    }
+}
+
 impl Default for MeterHub {
     fn default() -> Self {
         Self::new()
@@ -552,11 +559,15 @@ impl MeterHub {
             return;
         }
         if let Some(old) = session.take() {
-            let _ =
+            log_failed(
                 self.shared
                     .active
-                    .compare_exchange(old.id, 0, Ordering::AcqRel, Ordering::Acquire);
-            let _ = old.thread.join();
+                    .compare_exchange(old.id, 0, Ordering::AcqRel, Ordering::Acquire),
+                "audio.meter.active_clear_failed",
+            );
+            if old.thread.join().is_err() {
+                log::debug!("audio.meter.analysis_panicked");
+            }
         }
     }
 }
@@ -596,9 +607,12 @@ fn run_analysis(shared: &Shared, id: u32, mut sink: FrameSink) {
             *slot = Some(source);
         }
     }
-    let _ = shared
-        .active
-        .compare_exchange(id, 0, Ordering::AcqRel, Ordering::Acquire);
+    log_failed(
+        shared
+            .active
+            .compare_exchange(id, 0, Ordering::AcqRel, Ordering::Acquire),
+        "audio.meter.active_clear_failed",
+    );
 }
 
 /// The output callback's end of the ring. Copies stereo samples while a subscriber exists and

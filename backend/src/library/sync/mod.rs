@@ -14,6 +14,7 @@ use super::{
     models::{LibraryRoot, LibraryScanSnapshot, LibraryScanState},
     roots, scanner, watcher,
 };
+use crate::diagnostics::{log_failed, logged};
 use crate::errors::CommonError;
 use crate::ids::RootId;
 use crate::messages::{Notifier, Versioned};
@@ -36,7 +37,7 @@ type Reply<T> = SyncSender<Result<T, LibraryCommandError>>;
 
 /// Answers a command, if its caller is still waiting. A caller that has gone away is logged, not
 /// an error.
-fn respond<T>(reply: Reply<T>, result: Result<T, LibraryCommandError>) {
+fn respond<T>(reply: &Reply<T>, result: Result<T, LibraryCommandError>) {
     if reply.send(result).is_err() {
         debug!("library.reply_closed");
     }
@@ -83,7 +84,7 @@ impl LibrarySync {
         };
         let thread = thread::Builder::new()
             .name("library-actor".into())
-            .spawn(move || actor.run(receiver))
+            .spawn(move || actor.run(&receiver))
             .expect("the OS starts a thread unless it is out of resources");
         Self {
             messages,
@@ -98,8 +99,10 @@ impl LibrarySync {
         };
         self.messages
             .send(Message::Command(command(reply)))
-            .map_err(|_| task_failed())?;
-        answer.recv().map_err(|_| task_failed())?
+            .map_err(logged(task_failed(), "library.sync.command_send_failed"))?;
+        answer
+            .recv()
+            .map_err(logged(task_failed(), "library.sync.reply_recv_failed"))?
     }
 
     pub fn register_root(&self, path: String) -> Result<LibraryRoot, LibraryCommandError> {
@@ -132,7 +135,10 @@ impl LibrarySync {
 
     /// Stops the actor, its watchers and the scan in progress, and waits for them.
     pub fn shutdown(&self) {
-        let _ = self.messages.send(Message::Shutdown);
+        log_failed(
+            self.messages.send(Message::Shutdown),
+            "library.sync.shutdown_send_failed",
+        );
         let thread = sync::lock(&self.thread).take();
         if let Some(thread) = thread
             && thread.join().is_err()
@@ -163,7 +169,7 @@ struct Actor {
 }
 
 impl Actor {
-    fn run(mut self, receiver: Receiver<Message>) {
+    fn run(mut self, receiver: &Receiver<Message>) {
         let enabled = self
             .enabled_roots_or_log()
             .iter()
@@ -209,7 +215,7 @@ impl Actor {
 
     fn execute(&mut self, effect: Effect) {
         match effect {
-            Effect::StartScan(targets) => self.start_scan(targets),
+            Effect::StartScan(targets) => self.start_scan(&targets),
             Effect::CancelScan => self.cancel.store(true, Ordering::Release),
             Effect::RunGc => {
                 let rescan = maintenance::collect_source_artwork(&self.database)
@@ -233,7 +239,7 @@ impl Actor {
                 if let Some(id) = result.as_ref().ok().map(root_number) {
                     self.feed(Input::Registered(id));
                 }
-                respond(reply, result);
+                respond(&reply, result);
             }
             Command::Enable(id, enabled, reply) => {
                 let result =
@@ -245,21 +251,21 @@ impl Actor {
                         Input::Disabled(id)
                     });
                 }
-                respond(reply, result);
+                respond(&reply, result);
             }
             Command::Remove(id, reply) => {
                 let result = self.while_idle(|actor| roots::remove(&actor.database, id));
                 if result.is_ok() {
                     self.feed(Input::Removed(id.rowid()));
                 }
-                respond(reply, result);
+                respond(&reply, result);
             }
             Command::DeleteMissing(reply) => {
                 let result = self.while_idle(|actor| roots::delete_missing(&actor.database));
                 if result.is_ok() {
                     self.feed(Input::MissingDeleted);
                 }
-                respond(reply, result);
+                respond(&reply, result);
             }
             Command::Start(reply) => {
                 let result = if self.state.scanning() {
@@ -274,7 +280,7 @@ impl Actor {
                     })
                 };
                 let result = result.map(|roots| self.feed(Input::ScanRequested { roots }));
-                respond(reply, result);
+                respond(&reply, result);
             }
             Command::Cancel(reply) => {
                 let result = if self.state.scanning() {
@@ -283,7 +289,7 @@ impl Actor {
                 } else {
                     Err(LibraryCommandError::ScanNotRunning)
                 };
-                respond(reply, result);
+                respond(&reply, result);
             }
         }
     }
@@ -316,7 +322,7 @@ impl Actor {
         })
     }
 
-    fn start_scan(&mut self, targets: Vec<ScanTarget>) {
+    fn start_scan(&mut self, targets: &[ScanTarget]) {
         let jobs: Vec<scanner::ScanJob> = self
             .enabled_roots_or_log()
             .into_iter()
@@ -348,8 +354,8 @@ impl Actor {
         self.notify.notify();
         let (database, scan, cancel, notify) = (
             self.database.clone(),
-            self.scan.clone(),
-            self.cancel.clone(),
+            Arc::clone(&self.scan),
+            Arc::clone(&self.cancel),
             self.notify.clone(),
         );
         let messages = self.messages.clone();
@@ -357,7 +363,7 @@ impl Actor {
             thread::Builder::new()
                 .name("library-scanner".into())
                 .spawn(move || {
-                    let mut ending = ScanEnding::new(messages, scan.clone(), notify.clone());
+                    let mut ending = ScanEnding::new(messages, Arc::clone(&scan), notify.clone());
                     let outcome = scanner::run(database, jobs, scan, cancel, notify);
                     ending.finish(match outcome {
                         LibraryScanState::Completed => ScanOutcome::Completed,
@@ -391,7 +397,10 @@ impl Actor {
                 } else {
                     Input::PathsChanged { root: id, paths }
                 };
-                let _ = messages.send(Message::Input(input));
+                log_failed(
+                    messages.send(Message::Input(input)),
+                    "library.watcher.input_send_failed",
+                );
             })
             .ok()
         });
@@ -439,19 +448,23 @@ impl ScanEnding {
 
     fn finish(&mut self, outcome: ScanOutcome) {
         self.finished = true;
-        let _ = self
-            .messages
-            .send(Message::Input(Input::ScanFinished(outcome)));
+        report_scan_finished(&self.messages, outcome);
     }
+}
+
+/// Sends the scan's end to the actor. The actor may already be gone, which is logged.
+fn report_scan_finished(messages: &Sender<Message>, outcome: ScanOutcome) {
+    log_failed(
+        messages.send(Message::Input(Input::ScanFinished(outcome))),
+        "library.sync.scan_finished_send_failed",
+    );
 }
 
 impl Drop for ScanEnding {
     fn drop(&mut self) {
         if !self.finished {
             scanner::fail(&self.scan, &self.notify);
-            let _ = self
-                .messages
-                .send(Message::Input(Input::ScanFinished(ScanOutcome::Failed)));
+            report_scan_finished(&self.messages, ScanOutcome::Failed);
         }
     }
 }
@@ -473,7 +486,7 @@ mod tests {
             ..LibraryScanSnapshot::idle()
         })));
         let notify = Notifier::new(null_message_sink(), StateTopic::LibraryScan);
-        let thread_scan = scan.clone();
+        let thread_scan = Arc::clone(&scan);
 
         let died = thread::Builder::new()
             .name("scanner-bug-test".into())

@@ -6,6 +6,7 @@ use super::{
     catalog::{ALBUM_ORDER, track_filter, track_ordering},
     track::{artwork_ref, non_blank, track_album, track_state},
 };
+use crate::diagnostics::logged;
 use crate::errors::CommonError;
 use crate::ids::{AlbumId, ArtistId, TrackId, album_id_column, track_id_column};
 use crate::library::{
@@ -193,11 +194,15 @@ fn playable_track(
     // A file that vanished since the scan fails when it is loaded, and the queue moves on.
     // The track the listener picked is checked now so they get a clear answer.
     let file = if requested {
-        let existing = row
-            .location
-            .existing()
-            .map_err(|_| StoreError::TrackUnavailable)?;
-        validate_audio_file(&existing.path).map_err(|_| StoreError::TrackUnavailable)?
+        let existing = row.location.existing().map_err(logged(
+            StoreError::TrackUnavailable,
+            "library.store.track_missing",
+        ))?;
+        // The cause is an IPC enum with no `Display`, so it is logged here with its `Debug` form.
+        validate_audio_file(&existing.path).map_err(|cause| {
+            log::warn!("library.store.track_invalid cause={cause:?}");
+            StoreError::TrackUnavailable
+        })?
     } else {
         let Ok(path) = row.location.path() else {
             return Ok(None);

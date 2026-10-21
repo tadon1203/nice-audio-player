@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use backend::app::BackendApp;
+use backend::diagnostics::{log_failed, logged};
 use session::Subscriber;
 use tauri::Manager;
 
@@ -21,6 +22,12 @@ pub struct AppState {
     pub subscriber: Arc<Subscriber>,
 }
 
+impl std::fmt::Debug for AppState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AppState").finish_non_exhaustive()
+    }
+}
+
 pub fn run() {
     let builder = tauri::Builder::default();
     // First, so a second launch exits before it opens anything. Not in the E2E build, which must
@@ -28,9 +35,9 @@ pub fn run() {
     #[cfg(not(feature = "wdio"))]
     let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
         if let Some(window) = app.get_webview_window("main") {
-            let _ = window.unminimize();
-            let _ = window.show();
-            let _ = window.set_focus();
+            log_failed(window.unminimize(), "host.window.unminimize_failed");
+            log_failed(window.show(), "host.window.show_failed");
+            log_failed(window.set_focus(), "host.window.focus_failed");
         }
     }));
     #[cfg(feature = "wdio")]
@@ -43,7 +50,7 @@ pub fn run() {
 
     let app = builder
         .register_asynchronous_uri_scheme_protocol("nice-artwork", |context, request, responder| {
-            artwork::serve_artwork(context.app_handle(), request, responder)
+            artwork::serve_artwork(context.app_handle(), request, responder);
         })
         // A reloaded page has lost its channel and cannot end its subscription; end it here so
         // nothing keeps measuring for nobody.
@@ -64,8 +71,10 @@ pub fn run() {
             };
             app.manage(artwork::ArtworkDir(data_dir.clone()));
             let (sink, signals) = session::message_channel();
-            let backend = BackendApp::initialize(data_dir, sink)
-                .map_err(|_| std::io::Error::other("backend startup failed"))?;
+            let backend = BackendApp::initialize(data_dir, sink).map_err(logged(
+                std::io::Error::other("backend startup failed"),
+                "host.backend.startup_failed",
+            ))?;
             let backend = Arc::new(backend);
             let subscriber = Arc::new(Subscriber::default());
             app.manage(AppState {

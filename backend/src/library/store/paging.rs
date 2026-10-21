@@ -10,6 +10,7 @@
 //! when the current one runs out.
 
 use super::super::{error::StoreError, models::LibrarySortDirection};
+use crate::diagnostics::logged;
 use rusqlite::{
     Connection, Row, ToSql, params_from_iter,
     types::{FromSql, FromSqlError, FromSqlResult, ToSqlOutput, Value, ValueRef},
@@ -352,7 +353,10 @@ impl PagedQuery {
     }
 
     fn decode(&self, raw: &str) -> Result<Cursor, StoreError> {
-        let cursor: Cursor = serde_json::from_str(raw).map_err(|_| StoreError::InvalidCursor)?;
+        let cursor: Cursor = serde_json::from_str(raw).map_err(logged(
+            StoreError::InvalidCursor,
+            "library.store.cursor_invalid",
+        ))?;
         if cursor.version != CURSOR_VERSION
             || cursor.scope != self.scope
             || cursor.phase >= self.ordering.phases.len()

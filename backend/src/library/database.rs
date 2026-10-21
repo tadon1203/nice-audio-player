@@ -1,4 +1,6 @@
 use super::migrations::{self, MigrationError};
+use crate::cleanup::remove_file_best_effort;
+use crate::diagnostics::logged;
 use crate::ids::register_sql_functions;
 use crate::sync;
 use rusqlite::{Connection, OpenFlags};
@@ -11,10 +13,13 @@ use std::sync::{Arc, Mutex};
 const MAX_IDLE_READERS: usize = 4;
 
 type ReaderPool = Arc<Mutex<Vec<Connection>>>;
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum DatabaseError {
+    #[error("the database could not be opened")]
     Open,
+    #[error("the database migration failed: {0}")]
     Migration(MigrationError),
+    #[error("the database file is corrupt")]
     Corrupt,
 }
 #[derive(Clone)]
@@ -66,14 +71,17 @@ impl Database {
 }
 impl Database {
     pub fn initialize(directory: &Path) -> Result<Self, DatabaseError> {
-        std::fs::create_dir_all(directory).map_err(|_| DatabaseError::Open)?;
+        std::fs::create_dir_all(directory).map_err(logged(
+            DatabaseError::Open,
+            "library.database.directory_failed",
+        ))?;
         let path = directory.join(DATABASE_FILE);
-        let mut connection = Connection::open(&path).map_err(map_error)?;
-        configure_common(&connection).map_err(map_error)?;
+        let mut connection = Connection::open(&path).map_err(DatabaseError::from)?;
+        configure_common(&connection).map_err(DatabaseError::from)?;
         connection
             .pragma_update(None, "journal_mode", "WAL")
-            .map_err(map_error)?;
-        verify_wal(&connection).map_err(map_error)?;
+            .map_err(DatabaseError::from)?;
+        verify_wal(&connection).map_err(DatabaseError::from)?;
         back_up_before_migration(&connection, directory)?;
         migrations::apply(&mut connection).map_err(DatabaseError::Migration)?;
         Ok(Self {
@@ -96,9 +104,9 @@ impl Database {
         self.open(OpenFlags::SQLITE_OPEN_READ_WRITE)
     }
     fn open(&self, flags: OpenFlags) -> Result<Connection, DatabaseError> {
-        let c = Connection::open_with_flags(&self.path, flags).map_err(map_error)?;
-        configure_common(&c).map_err(map_error)?;
-        verify_wal(&c).map_err(map_error)?;
+        let c = Connection::open_with_flags(&self.path, flags).map_err(DatabaseError::from)?;
+        configure_common(&c).map_err(DatabaseError::from)?;
+        verify_wal(&c).map_err(DatabaseError::from)?;
         Ok(c)
     }
 }
@@ -116,14 +124,14 @@ fn back_up_before_migration(
 ) -> Result<(), DatabaseError> {
     let version: i32 = connection
         .pragma_query_value(None, "user_version", |row| row.get(0))
-        .map_err(map_error)?;
+        .map_err(DatabaseError::from)?;
     if version == 0 || version >= migrations::CURRENT_SCHEMA_VERSION {
         return Ok(());
     }
     let backup = directory.join(format!("{DATABASE_FILE}.v{version}.bak"));
     // `VACUUM INTO` refuses to overwrite; a leftover is from an attempt that did not finish, and
     // this copy is the fresher one.
-    let _ = std::fs::remove_file(&backup);
+    remove_file_best_effort(&backup);
     connection
         .execute("VACUUM INTO ?1", [backup.to_string_lossy().as_ref()])
         .map(drop)
@@ -153,7 +161,7 @@ pub(crate) fn apply_requested_reset(directory: &Path) {
         let to = directory.join(format!("{DATABASE_FILE}{suffix}.bak"));
         if from.exists()
             && let Err(cause) = std::fs::rename(&from, &to).or_else(|_| {
-                let _ = std::fs::remove_file(&to);
+                remove_file_best_effort(&to);
                 std::fs::rename(&from, &to)
             })
         {
@@ -163,10 +171,10 @@ pub(crate) fn apply_requested_reset(directory: &Path) {
                 return;
             }
             // The database is already aside: a stale WAL left here must not meet the new one.
-            let _ = std::fs::remove_file(&from);
+            remove_file_best_effort(&from);
         }
     }
-    let _ = std::fs::remove_file(marker);
+    remove_file_best_effort(&marker);
     log::info!("library.database.reset");
 }
 
@@ -183,14 +191,16 @@ fn verify_wal(connection: &Connection) -> rusqlite::Result<()> {
     }
     Ok(())
 }
-fn map_error(error: rusqlite::Error) -> DatabaseError {
-    match error {
-        rusqlite::Error::SqliteFailure(ref failure, _)
-            if failure.code == rusqlite::ErrorCode::NotADatabase =>
-        {
-            DatabaseError::Corrupt
+impl From<rusqlite::Error> for DatabaseError {
+    fn from(error: rusqlite::Error) -> Self {
+        match error {
+            rusqlite::Error::SqliteFailure(failure, _)
+                if failure.code == rusqlite::ErrorCode::NotADatabase =>
+            {
+                DatabaseError::Corrupt
+            }
+            _ => DatabaseError::Open,
         }
-        _ => DatabaseError::Open,
     }
 }
 
@@ -219,7 +229,8 @@ mod tests {
             .pragma_update(None, "user_version", old)
             .unwrap();
 
-        let _ = Database::initialize(&dir);
+        // The faked version may not migrate; the backup is taken first, and that is what is checked.
+        drop(Database::initialize(&dir));
 
         let backup = dir.join(format!("{DATABASE_FILE}.v{old}.bak"));
         assert!(backup.exists(), "a backup exists after the migration ran");

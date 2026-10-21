@@ -63,11 +63,14 @@ const MIGRATIONS: [Migration; CURRENT_SCHEMA_VERSION as usize] = [
     },
 ];
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum MigrationError {
+    #[error("the database is from a newer version of the app")]
     SchemaTooNew,
+    #[error("a migration statement failed")]
     Sql,
     /// A migration that rebuilt tables left a row pointing at nothing.
+    #[error("a migration left a row pointing at nothing")]
     ForeignKeys,
 }
 impl From<rusqlite::Error> for MigrationError {
@@ -80,7 +83,7 @@ pub fn apply(connection: &mut Connection) -> Result<(), MigrationError> {
     let version: i32 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
     if version > CURRENT_SCHEMA_VERSION {
         return Err(MigrationError::SchemaTooNew);
-    };
+    }
     for (index, migration) in MIGRATIONS.iter().enumerate().skip(version as usize) {
         migrate(connection, migration, index as i32 + 1)?;
     }

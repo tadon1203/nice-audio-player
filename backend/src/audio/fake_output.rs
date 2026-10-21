@@ -5,6 +5,7 @@ use std::sync::{Arc, Mutex};
 
 use cpal::StreamInstant;
 
+use crate::diagnostics::logged;
 use crate::sync;
 
 use super::devices::{AudioOutputDeviceIdentity, AudioOutputSelection, DeviceResolutionError};
@@ -185,8 +186,10 @@ impl OutputBackend for FakeOutput {
         }
         let device = self.resolve(selection)?;
         self.shared().selections.push(selection.clone());
-        let plan = OutputProcessingPlan::new(spec, spec)
-            .map_err(|_| AudioOutputError::UnsupportedConfiguration)?;
+        let plan = OutputProcessingPlan::new(spec, spec).map_err(logged(
+            AudioOutputError::UnsupportedConfiguration,
+            "audio.fake_output.plan_failed",
+        ))?;
         let config = PreparedOutputConfig {
             device_id: device.id,
             device_name: device.name,

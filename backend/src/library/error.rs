@@ -53,7 +53,7 @@ impl From<rusqlite::Error> for StoreError {
 
 impl From<DatabaseError> for StoreError {
     fn from(cause: DatabaseError) -> Self {
-        error!("library.store.unavailable cause={cause:?}");
+        error!("library.store.unavailable cause={cause}");
         Self::Persistence
     }
 }

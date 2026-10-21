@@ -794,12 +794,12 @@ mod tests {
                     }
                     5 => {
                         if let Some(id) = queue.upcoming().first().map(|entry| entry.id) {
-                            let _ = queue.remove_upcoming(id);
+                            queue.remove_upcoming(id).unwrap();
                         }
                     }
                     6 => {
                         if let Some(id) = queue.upcoming().last().map(|entry| entry.id) {
-                            let _ = queue.move_upcoming(id, rng.random_range(0..4));
+                            queue.move_upcoming(id, rng.random_range(0..4)).unwrap();
                         }
                     }
                     7 => {

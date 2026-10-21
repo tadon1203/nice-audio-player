@@ -7,6 +7,7 @@ use super::{
     models::LibraryRoot,
     summary,
 };
+use crate::diagnostics::logged;
 use crate::ids::{RootId, root_id_column};
 use rusqlite::{Connection, params};
 use std::path::Path;
@@ -41,8 +42,10 @@ pub(crate) fn register(
     if input.trim().is_empty() {
         return Err(LibraryCommandError::InvalidRoot);
     }
-    let canonical =
-        dunce::canonicalize(input).map_err(|_| LibraryCommandError::CanonicalizationFailed)?;
+    let canonical = dunce::canonicalize(input).map_err(logged(
+        LibraryCommandError::CanonicalizationFailed,
+        "library.roots.canonicalize_failed",
+    ))?;
     if !canonical.is_dir() {
         return Err(LibraryCommandError::RootNotDirectory);
     }
