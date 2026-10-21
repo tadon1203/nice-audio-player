@@ -15,6 +15,7 @@ use crate::library::{
     models::*,
     summary,
 };
+use crate::sync;
 use crate::test_support::TestDirectory;
 use rusqlite::params;
 use std::collections::HashSet;
@@ -282,7 +283,7 @@ fn varied_library(fixture: &Fixture) {
 static STATEMENTS: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
 
 fn record_statement(sql: &str) {
-    STATEMENTS.lock().unwrap().push(sql.to_owned());
+    sync::lock(&STATEMENTS).push(sql.to_owned());
 }
 
 /// The statements `run` executes on the store's read connection.
@@ -295,12 +296,12 @@ fn statements_of(fixture: &Fixture, run: impl FnOnce()) -> Vec<String> {
     let mut connection = fixture.database.read().unwrap();
     connection.connection_mut().trace(Some(record_statement));
     drop(connection);
-    STATEMENTS.lock().unwrap().clear();
+    sync::lock(&STATEMENTS).clear();
     run();
     let mut connection = fixture.database.read().unwrap();
     connection.connection_mut().trace(None);
     drop(connection);
-    std::mem::take(&mut *STATEMENTS.lock().unwrap())
+    std::mem::take(&mut *sync::lock(&STATEMENTS))
 }
 
 fn leak(text: String) -> &'static str {

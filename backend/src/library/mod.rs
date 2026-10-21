@@ -88,7 +88,7 @@ impl Library {
 
     /// The scan state with the revision of its topic.
     pub fn scan_state(&self) -> Versioned<LibraryScanSnapshot> {
-        self.scan.lock().expect("scan state lock").clone()
+        crate::sync::lock(&self.scan).clone()
     }
 
     pub fn roots(&self) -> Result<Vec<LibraryRoot>, LibraryCommandError> {

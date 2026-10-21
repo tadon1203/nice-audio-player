@@ -1,6 +1,7 @@
 //! Rendering the transport and queue into snapshots and telling listeners.
 
 use super::*;
+use crate::sync;
 
 impl PlaybackWorker {
     /// What listeners see, drawn from the transport, the queue and the volume.
@@ -88,10 +89,7 @@ impl PlaybackWorker {
         self.revision = self.revision.saturating_add(1);
         let published = self.playback_versioned();
         self.store_position(published.value.session().map(ActiveSession::position));
-        *self
-            .snapshot
-            .write()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = published.clone();
+        *sync::write(&self.snapshot) = published.clone();
         self.messages.state_changed(StateTopic::Playback);
         published
     }
@@ -117,20 +115,12 @@ impl PlaybackWorker {
     }
 
     fn store_position(&self, position: Option<PlaybackPosition>) {
-        *self
-            .position
-            .write()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = position;
+        *sync::write(&self.position) = position;
     }
 
     /// Whether Previous is offered, as listeners last saw it.
     pub(super) fn published_can_go_previous(&self) -> bool {
-        self.snapshot
-            .read()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .value
-            .base()
-            .can_go_previous
+        sync::read(&self.snapshot).value.base().can_go_previous
     }
 
     pub(super) fn publish_queue(&mut self) -> Versioned<PlaybackQueueSnapshot> {
@@ -144,19 +134,13 @@ impl PlaybackWorker {
                 self.previous_queue.is_some(),
             ),
         };
-        *self
-            .queue_snapshot
-            .write()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = published.clone();
+        *sync::write(&self.queue_snapshot) = published.clone();
         self.messages.state_changed(StateTopic::Queue);
         published
     }
 
     pub(super) fn queue_snapshot(&self) -> Versioned<PlaybackQueueSnapshot> {
-        self.queue_snapshot
-            .read()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .clone()
+        sync::read(&self.queue_snapshot).clone()
     }
 
     /// Publishes a queue change, and refreshes the transport so previous/next availability

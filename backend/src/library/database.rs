@@ -1,9 +1,10 @@
 use super::migrations::{self, MigrationError};
 use crate::ids::register_sql_functions;
+use crate::sync;
 use rusqlite::{Connection, OpenFlags};
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Mutex};
 
 /// Read connections kept open for reuse. Opening one means a file open, pragmas, and a WAL
 /// check, which would otherwise happen for every catalog page and every lookup.
@@ -51,7 +52,7 @@ impl ReadConnection {
 impl Drop for ReadConnection {
     fn drop(&mut self) {
         if let Some(connection) = self.connection.take() {
-            let mut pool = self.pool.lock().unwrap_or_else(PoisonError::into_inner);
+            let mut pool = sync::lock(&self.pool);
             if pool.len() < MAX_IDLE_READERS {
                 pool.push(connection);
             }
@@ -81,11 +82,7 @@ impl Database {
         })
     }
     pub fn read(&self) -> Result<ReadConnection, DatabaseError> {
-        let idle = self
-            .readers
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .pop();
+        let idle = sync::lock(&self.readers).pop();
         let connection = match idle {
             Some(connection) => connection,
             None => self.open(OpenFlags::SQLITE_OPEN_READ_ONLY)?,
@@ -222,7 +219,7 @@ mod tests {
             .pragma_update(None, "user_version", old)
             .unwrap();
 
-        Database::initialize(&dir).ok();
+        let _ = Database::initialize(&dir);
 
         let backup = dir.join(format!("{DATABASE_FILE}.v{old}.bak"));
         assert!(backup.exists(), "a backup exists after the migration ran");

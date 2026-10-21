@@ -1,11 +1,12 @@
 use super::*;
+use crate::sync;
 
 #[test]
 fn shutdown_joins_the_worker_thread() {
     let service = start_service();
     service.shutdown();
 
-    assert!(service.worker.lock().unwrap().is_none());
+    assert!(sync::lock(&service.worker).is_none());
 }
 
 #[test]

@@ -4,6 +4,7 @@ use crate::library::database::Database;
 use crate::library::models::{LibraryScanSnapshot, LibraryScanState, ScanFailure};
 use crate::library::roots;
 use crate::messages::{Notifier, StateTopic, Versioned, null_message_sink};
+use crate::sync;
 use crate::test_support::{TestDirectory, write_pcm_i16_wav};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
@@ -75,7 +76,7 @@ fn run_versioned(
         notifier(),
     );
 
-    state.lock().unwrap().clone()
+    sync::lock(&state).clone()
 }
 
 #[test]

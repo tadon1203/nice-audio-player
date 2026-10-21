@@ -236,7 +236,7 @@ mod tests {
     fn search_keys_hold_every_name_folded() {
         assert_eq!(
             search_key(&["ユズ", "A", ""]),
-            "ゆず\u{1f}a\u{1f}".to_string()
+            "ゆず\u{1f}a\u{1f}".to_owned()
         );
         assert_eq!(search_text(" ﾕｽﾞ "), "ゆず");
     }

@@ -38,6 +38,7 @@ use crate::ids::{PlaybackId, TrackId};
 use crate::library::store::PlayableTrack;
 use crate::media::validation::ValidatedAudioFile;
 use crate::messages::{StateTopic, Versioned, testing::Sent};
+use crate::sync;
 use crate::test_support::{TestDirectory, write_pcm_i16_wav};
 use cpal::StreamInstant;
 use rand::{SeedableRng, rngs::StdRng};
@@ -110,14 +111,11 @@ impl Harness {
         let listener = TrackListener {
             loaded: Arc::new(move |playback_id, track| {
                 let title = track.track.core.title.clone();
-                loaded_heard
-                    .lock()
-                    .unwrap()
-                    .push(Heard::Loaded(playback_id, title));
+                sync::lock(&loaded_heard).push(Heard::Loaded(playback_id, title));
             }),
             upcoming: Arc::new(move |track| {
                 let title = track.track.core.title.clone();
-                upcoming_heard.lock().unwrap().push(Heard::Upcoming(title));
+                sync::lock(&upcoming_heard).push(Heard::Upcoming(title));
             }),
         };
         let worker = PlaybackWorker::new(
@@ -129,7 +127,7 @@ impl Harness {
                 meter: MeterHub::new(),
                 inbox,
                 messages,
-                observer: Arc::new(move |preferences| observed.lock().unwrap().push(preferences)),
+                observer: Arc::new(move |preferences| sync::lock(&observed).push(preferences)),
                 backend: Box::new(output.clone()),
                 tracks: resolver_of(&library),
                 listener,
@@ -155,7 +153,7 @@ impl Harness {
     }
 
     fn heard(&self) -> Vec<Heard> {
-        self.heard.lock().unwrap().clone()
+        sync::lock(&self.heard).clone()
     }
 
     /// A real WAV of `seconds` of silence, which the decode thread reads as any other file.
@@ -196,11 +194,11 @@ impl Harness {
     }
 
     fn versioned_snapshot(&self) -> Versioned<PlaybackSnapshot> {
-        self.snapshot.read().unwrap().clone()
+        sync::read(&self.snapshot).clone()
     }
 
     fn position(&self) -> Option<PlaybackPosition> {
-        self.position.read().unwrap().clone()
+        sync::read(&self.position).clone()
     }
 
     fn sent(&self) -> Vec<Sent> {
@@ -212,7 +210,7 @@ impl Harness {
     }
 
     fn versioned_queue_snapshot(&self) -> Versioned<PlaybackQueueSnapshot> {
-        self.queue_snapshot.read().unwrap().clone()
+        sync::read(&self.queue_snapshot).clone()
     }
 
     /// Sends a command without waiting for the answer.

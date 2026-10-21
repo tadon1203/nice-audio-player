@@ -6,7 +6,7 @@ Production Rust code does not panic. A failure is a `Result`, and `?` carries it
 
 An error that crosses the IPC boundary is a plain code enum: `Copy`, `Eq`, and serialized (see [ADR 0007](0007-failures-are-typed-exceptions-caught-in-three-places.md)). It carries no cause, because a cause such as `io::Error` is not `Clone` or `Eq`. The cause is logged where the code is made, and `map_err_ignore` forces that: use `map_err(logged(code, "context"))`, not `map_err(|_| code)`. An error that already carries a cause, or that the logs print as `{error}`, derives `thiserror::Error`. The crate does not use `anyhow`: it erases the type.
 
-Other lints enforce the rest of the rules. `as_conversions` bans `as` for numbers. `allow_attributes` and `allow_attributes_without_reason` force `#[expect(…, reason = "…")]`. `unsafe_code` is `deny`, with one `#[expect]` at the thread-priority call. `disallowed-methods` in `clippy.toml` bans `Mutex::lock` (use the shared helper, which holds the only `#[expect]`) and `thread::spawn` (use a named `thread::Builder`).
+Other lints enforce the rest of the rules. `as_conversions` bans `as` for numbers. `allow_attributes` and `allow_attributes_without_reason` force `#[expect(…, reason = "…")]`. `unsafe_code` is `deny`, with one `#[expect]` at the thread-priority call. `disallowed-methods` in `clippy.toml` bans `Mutex::lock` and `Condvar::wait` (use the shared helpers `sync::lock` and `sync::wait`, which hold the only `#[expect]`s) and `thread::spawn` (use a named `thread::Builder`).
 
 Reason: the Backend plays audio and holds the library. A panic on one thread must not stop the sound or take the other threads down. Lint is the only check that does not depend on a reviewer's attention, so the rule is in the lint configuration.
 

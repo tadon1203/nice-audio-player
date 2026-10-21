@@ -145,7 +145,7 @@ mod tests {
         LocalSource::Resolved((
             None,
             super::super::model::LyricsContent::Plain {
-                lines: vec![text.to_string()],
+                lines: vec![text.to_owned()],
             },
         ))
     }
@@ -154,7 +154,7 @@ mod tests {
     fn prefers_a_valid_sidecar_over_embedded_lyrics() {
         let resolution = resolve_local_sources(
             TrackId::try_from_rowid(1).unwrap(),
-            "song.lrc".to_string(),
+            "song.lrc".to_owned(),
             plain("sidecar"),
             plain("embedded"),
         );
@@ -172,7 +172,7 @@ mod tests {
     fn falls_back_to_embedded_lyrics_when_the_sidecar_is_broken() {
         let resolution = resolve_local_sources(
             TrackId::try_from_rowid(1).unwrap(),
-            "song.lrc".to_string(),
+            "song.lrc".to_owned(),
             LocalSource::Failed,
             plain("embedded"),
         );
@@ -194,7 +194,7 @@ mod tests {
         assert!(matches!(
             resolve_local_sources(
                 TrackId::try_from_rowid(1).unwrap(),
-                "song.lrc".to_string(),
+                "song.lrc".to_owned(),
                 LocalSource::Missing,
                 LocalSource::Missing
             ),
@@ -203,7 +203,7 @@ mod tests {
         assert!(matches!(
             resolve_local_sources(
                 TrackId::try_from_rowid(1).unwrap(),
-                "song.lrc".to_string(),
+                "song.lrc".to_owned(),
                 LocalSource::Failed,
                 LocalSource::Missing
             ),
@@ -239,14 +239,14 @@ mod tests {
         );
         fs::write(&legacy, &shift_jis).expect("write legacy sidecar");
 
-        assert_eq!(read_text(utf8), Some("[00:01]Hello".to_string()));
-        assert_eq!(read_text(utf16), Some("Hi".to_string()));
+        assert_eq!(read_text(utf8), Some("[00:01]Hello".to_owned()));
+        assert_eq!(read_text(utf16), Some("Hi".to_owned()));
         assert_eq!(
             read_text(legacy),
             Some(
                 "[00:01]こんにちは、世界
 [00:05]夜空の向こうへ"
-                    .to_string()
+                    .to_owned()
             )
         );
 

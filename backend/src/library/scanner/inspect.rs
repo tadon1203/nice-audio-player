@@ -1,9 +1,10 @@
 //! Phase two: read everything a file has to tell, without touching the database. Files are
 //! independent here, so a batch is inspected on several threads.
 
+use crate::sync;
 use std::path::Path;
 use std::sync::{
-    Mutex,
+    Mutex, PoisonError,
     atomic::{AtomicBool, AtomicUsize, Ordering},
 };
 
@@ -146,14 +147,14 @@ pub(super) fn inspect_all(
                     // A file that panics a parser is a file that cannot be read, not a dead scan.
                     let result = contain("library.inspect", || inspect(file, data_dir))
                         .unwrap_or(Err(Undecodable));
-                    *results[index].lock().expect("inspection result lock") = Some(result);
+                    *sync::lock(&results[index]) = Some(result);
                 }
             });
         }
     });
     results
         .into_iter()
-        .map(|slot| slot.into_inner().expect("inspection result lock"))
+        .map(|slot| slot.into_inner().unwrap_or_else(PoisonError::into_inner))
         .collect()
 }
 

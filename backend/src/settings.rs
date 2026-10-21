@@ -8,6 +8,7 @@
 //! worker records. Nothing outside this module sees the file's shape: the Host reads and writes
 //! appearance through `SettingsService`, and the playback service reads its preferences from it.
 
+use crate::sync;
 use std::{
     path::PathBuf,
     sync::{
@@ -132,7 +133,7 @@ impl SettingsService {
 
     /// The appearance the renderer reads, with the revision of its topic.
     pub fn appearance(&self) -> Versioned<Appearance> {
-        let state = self.state.lock().expect("settings lock");
+        let state = sync::lock(&self.state);
         Versioned {
             revision: self.appearance_revision.load(Ordering::Acquire),
             value: state.appearance.clone(),
@@ -151,7 +152,7 @@ impl SettingsService {
 
     /// The playback preferences the next start of the playback worker begins with.
     pub fn playback_preferences(&self) -> PlaybackPreferences {
-        self.state.lock().expect("settings lock").playback.clone()
+        sync::lock(&self.state).playback.clone()
     }
 
     /// Remembers the playback preferences. They are persisted but not announced: the playback
@@ -164,7 +165,7 @@ impl SettingsService {
     /// anything changed. A change is queued for the writer while the lock is still held, so the
     /// writer sees the changes in the order they were made.
     fn modify(&self, change: impl FnOnce(&mut Settings)) -> (Versioned<Appearance>, bool) {
-        let mut state = self.state.lock().expect("settings lock");
+        let mut state = sync::lock(&self.state);
         let before = state.clone();
         change(&mut state);
         let changed = *state != before;
@@ -175,8 +176,7 @@ impl SettingsService {
             revision: self.appearance_revision.load(Ordering::Acquire),
             value: state.appearance.clone(),
         };
-        if changed && let Some(writer) = self.writer.lock().expect("settings writer lock").as_ref()
-        {
+        if changed && let Some(writer) = sync::lock(&self.writer).as_ref() {
             let _ = writer.send(state.clone());
         }
         (appearance, changed)
@@ -184,12 +184,8 @@ impl SettingsService {
 
     /// Writes any pending change and stops the writer thread.
     pub fn shutdown(&self) {
-        drop(self.writer.lock().expect("settings writer lock").take());
-        if let Some(thread) = self
-            .writer_thread
-            .lock()
-            .expect("settings thread lock")
-            .take()
+        drop(sync::lock(&self.writer).take());
+        if let Some(thread) = sync::lock(&self.writer_thread).take()
             && thread.join().is_err()
         {
             error!("settings.writer_panicked");
@@ -198,7 +194,7 @@ impl SettingsService {
 
     #[cfg(test)]
     fn get(&self) -> Settings {
-        self.state.lock().expect("settings lock").clone()
+        sync::lock(&self.state).clone()
     }
 }
 

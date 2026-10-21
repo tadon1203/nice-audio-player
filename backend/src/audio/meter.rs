@@ -8,11 +8,13 @@
 //! unchanged. With no subscriber nothing is copied and nothing is analysed.
 
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use ringbuf::traits::{Consumer, Producer, Split};
+
+use crate::sync;
 use ringbuf::{HeapCons, HeapProd, HeapRb};
 
 /// One-third-octave bands, base 10, centred on `1000 Hz * 10^(n/10)` for n = -16..=13 (25 Hz to
@@ -491,7 +493,7 @@ impl MeterHub {
     /// The stream's ring replaces the previous stream's.
     pub(crate) fn tap(&self, sample_rate: u32, channel_count: usize) -> MeterTap {
         let (producer, consumer) = HeapRb::<f32>::new(RING_SAMPLES).split();
-        *lock(&self.shared.source) = Some(Source {
+        *sync::lock(&self.shared.source) = Some(Source {
             consumer,
             sample_rate,
         });
@@ -508,10 +510,10 @@ impl MeterHub {
     /// Starts measuring and sending frames to `sink`, replacing any earlier subscription. Returns
     /// its id. Joins the replaced analysis thread, which ends within a few milliseconds.
     pub fn subscribe(&self, sink: FrameSink) -> u32 {
-        let mut session = lock(&self.shared.session);
+        let mut session = sync::lock(&self.shared.session);
         self.stop(&mut session, None);
         // What the callback copied while nobody listened (a stream built since) is old.
-        if let Some(source) = lock(&self.shared.source).as_mut() {
+        if let Some(source) = sync::lock(&self.shared.source).as_mut() {
             source.consumer.clear();
         }
         let id = self.shared.next_id.fetch_add(1, Ordering::Relaxed);
@@ -530,13 +532,13 @@ impl MeterHub {
     /// Ends subscription `id`; a stale id (already replaced or ended) changes nothing. Joins the
     /// analysis thread, so it can wait a few milliseconds.
     pub fn unsubscribe(&self, id: u32) {
-        let mut session = lock(&self.shared.session);
+        let mut session = sync::lock(&self.shared.session);
         self.stop(&mut session, Some(id));
     }
 
     /// Ends whatever subscription there is, for a renderer that went away without saying so.
     pub fn unsubscribe_all(&self) {
-        let mut session = lock(&self.shared.session);
+        let mut session = sync::lock(&self.shared.session);
         self.stop(&mut session, None);
     }
 
@@ -559,17 +561,13 @@ impl MeterHub {
     }
 }
 
-fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
-    mutex.lock().unwrap_or_else(PoisonError::into_inner)
-}
-
 fn run_analysis(shared: &Shared, id: u32, mut sink: FrameSink) {
     let mut current: Option<(Source, Analyzer)> = None;
     let mut buffer = [0.0_f32; 2048];
     let mut batcher = FrameBatcher::new();
     let mut open = true;
     while open && shared.active.load(Ordering::Acquire) == id {
-        if let Some(fresh) = lock(&shared.source).take() {
+        if let Some(fresh) = sync::lock(&shared.source).take() {
             let analyzer = Analyzer::new(fresh.sample_rate);
             current = Some((fresh, analyzer));
         }
@@ -593,7 +591,7 @@ fn run_analysis(shared: &Shared, id: u32, mut sink: FrameSink) {
     }
     // Park the ring for the next subscription, unless a newer stream already brought its own.
     if let Some((source, _)) = current {
-        let mut slot = lock(&shared.source);
+        let mut slot = sync::lock(&shared.source);
         if slot.is_none() {
             *slot = Some(source);
         }
@@ -658,6 +656,10 @@ mod tests {
     use std::sync::mpsc;
 
     const RATE: u32 = 48_000;
+
+    fn is_floor(db: f32) -> bool {
+        (db - FLOOR_DB).abs() < 1e-6
+    }
 
     fn sine(freq: f64, amplitude: f64, frames: usize) -> Vec<f64> {
         (0..frames)
@@ -739,7 +741,7 @@ mod tests {
             first.get_or_insert(frame);
         });
         let frame = first.unwrap();
-        assert_eq!(frame.peak, [0.0, FLOOR_DB]);
+        assert!(frame.peak[0].abs() < 1e-6 && is_floor(frame.peak[1]));
         assert!(frame.full_scale);
         let quiet = measure(&interleave(
             &sine(1000.0, 0.5, 4_800),
@@ -762,12 +764,12 @@ mod tests {
         let band = band_of(1000.0);
 
         let left = measure(&interleave(&tone, &silence));
-        assert!(left.peak[0] > -7.0 && left.peak[1] == FLOOR_DB);
-        assert!(left.rms[1] == FLOOR_DB);
+        assert!(left.peak[0] > -7.0 && is_floor(left.peak[1]));
+        assert!(is_floor(left.rms[1]));
         assert!(left.bands[band] > -8.0);
 
         let right = measure(&interleave(&silence, &tone));
-        assert!(right.peak[1] > -7.0 && right.peak[0] == FLOOR_DB);
+        assert!(right.peak[1] > -7.0 && is_floor(right.peak[0]));
         assert!(right.bands[band] > -8.0);
     }
 
@@ -801,7 +803,7 @@ mod tests {
         let mut analyzer = Analyzer::new(22_050);
         let mut last = None;
         analyzer.process(&vec![0.5; 2 * 2_205], &mut |frame| last = Some(frame));
-        assert_eq!(last.unwrap().bands[BAND_COUNT - 1], FLOOR_DB);
+        assert!(is_floor(last.unwrap().bands[BAND_COUNT - 1]));
     }
 
     #[test]
@@ -917,7 +919,7 @@ mod tests {
         let mut mono = hub.tap(RATE, 1);
         hub.shared.active.store(1, Ordering::Release);
         mono.push(&[0.1, 0.2]);
-        let mut source = lock(&hub.shared.source).take().unwrap();
+        let mut source = sync::lock(&hub.shared.source).take().unwrap();
         let mut out = [0.0; 4];
         assert_eq!(source.consumer.pop_slice(&mut out), 4);
         assert_eq!(out, [0.1, 0.1, 0.2, 0.2]);
@@ -926,7 +928,7 @@ mod tests {
         // Chunks that end mid-frame must not shift the channels.
         surround.push(&[1.0, 2.0, 3.0, 4.0, 5.0]);
         surround.push(&[6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0]);
-        let mut source = lock(&hub.shared.source).take().unwrap();
+        let mut source = sync::lock(&hub.shared.source).take().unwrap();
         let mut out = [0.0; 4];
         assert_eq!(source.consumer.pop_slice(&mut out), 4);
         assert_eq!(out, [1.0, 2.0, 7.0, 8.0]);
@@ -939,7 +941,10 @@ mod tests {
         tap.push(&[0.5; 64]);
         assert_eq!(tap.vacant(), RING_SAMPLES, "nothing was copied");
         assert!(!hub.is_active());
-        assert!(lock(&hub.shared.session).is_none(), "no analysis thread");
+        assert!(
+            sync::lock(&hub.shared.session).is_none(),
+            "no analysis thread"
+        );
     }
 
     #[test]

@@ -8,6 +8,7 @@ use std::sync::Mutex;
 use crate::audio::playback::PlaybackServiceError;
 use crate::ids::TrackId;
 use crate::library::store::PlayableTrack;
+use crate::sync;
 
 /// The library, as far as playback is concerned.
 pub trait TrackSource: Send + Sync {
@@ -55,7 +56,7 @@ impl TrackResolver {
         track_ids: &[TrackId],
     ) -> Result<Vec<Option<PlayableTrack>>, PlaybackServiceError> {
         let mut found: Vec<Option<PlayableTrack>> = {
-            let cache = self.lock();
+            let cache = sync::lock(&self.cache);
             track_ids.iter().map(|id| cache.get(id).cloned()).collect()
         };
         let missing: Vec<usize> = (0..found.len()).filter(|i| found[*i].is_none()).collect();
@@ -66,7 +67,7 @@ impl TrackResolver {
         let read = self.source.tracks(&ids).inspect_err(|error| {
             log::error!("playback.tracks_unavailable error={error:?}");
         })?;
-        let mut cache = self.lock();
+        let mut cache = sync::lock(&self.cache);
         if cache.len() + read.len() > CACHE_LIMIT {
             cache.clear();
         }
@@ -88,13 +89,7 @@ impl TrackResolver {
 
     /// Forgets what was read, so the next read sees the library as it is then.
     pub fn forget(&self) {
-        self.lock().clear();
-    }
-
-    fn lock(&self) -> std::sync::MutexGuard<'_, HashMap<TrackId, PlayableTrack>> {
-        self.cache
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
+        sync::lock(&self.cache).clear();
     }
 }
 
@@ -109,6 +104,7 @@ pub(super) mod testing {
     use super::*;
     use crate::errors::CommonError;
     use crate::media::validation::ValidatedAudioFile;
+    use crate::sync;
     use std::sync::{
         Arc,
         atomic::{AtomicBool, AtomicUsize, Ordering},
@@ -124,11 +120,11 @@ pub(super) mod testing {
 
     impl FakeTracks {
         pub fn add(&self, track: PlayableTrack) {
-            self.tracks.lock().unwrap().insert(track.id(), track);
+            sync::lock(&self.tracks).insert(track.id(), track);
         }
 
         pub fn remove(&self, track_id: TrackId) {
-            self.tracks.lock().unwrap().remove(&track_id);
+            sync::lock(&self.tracks).remove(&track_id);
         }
 
         /// Makes every read fail, as a database error would, until it is switched back.
@@ -153,7 +149,7 @@ pub(super) mod testing {
                     error: CommonError::PersistenceFailed,
                 });
             }
-            let tracks = self.tracks.lock().unwrap();
+            let tracks = sync::lock(&self.tracks);
             Ok(track_ids.iter().map(|id| tracks.get(id).cloned()).collect())
         }
     }

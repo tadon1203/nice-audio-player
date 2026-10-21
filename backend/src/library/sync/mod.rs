@@ -17,6 +17,7 @@ use super::{
 use crate::errors::CommonError;
 use crate::ids::RootId;
 use crate::messages::{Notifier, Versioned};
+use crate::sync;
 use log::{error, info, warn};
 use notify::RecommendedWatcher;
 use std::{
@@ -124,7 +125,7 @@ impl LibrarySync {
     /// Stops the actor, its watchers and the scan in progress, and waits for them.
     pub fn shutdown(&self) {
         let _ = self.messages.send(Message::Shutdown);
-        let thread = self.thread.lock().expect("sync thread lock").take();
+        let thread = sync::lock(&self.thread).take();
         if let Some(thread) = thread
             && thread.join().is_err()
         {
@@ -327,7 +328,7 @@ impl Actor {
             return;
         }
         self.cancel.store(false, Ordering::Release);
-        self.scan.lock().expect("scan state lock").update(|scan| {
+        sync::lock(&self.scan).update(|scan| {
             *scan = LibraryScanSnapshot {
                 state: LibraryScanState::Running,
                 finished_count: scan.finished_count,
@@ -476,7 +477,7 @@ mod tests {
             .join();
 
         assert!(died.is_err());
-        let snapshot = scan.lock().unwrap_or_else(|p| p.into_inner()).clone();
+        let snapshot = sync::lock(&scan).clone();
         assert_eq!(snapshot.value.state, LibraryScanState::Failed);
         assert!(matches!(
             received.try_recv(),

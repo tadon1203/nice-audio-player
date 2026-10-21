@@ -25,6 +25,7 @@ use crate::errors::CommonError;
 use crate::ids::{QueueItemId, TrackId};
 use crate::library::store::{PlaybackLookupError, PlaybackSourceError};
 use crate::messages::{SharedMessageSink, Versioned};
+use crate::sync;
 use crate::tasks::TaskError;
 use log::error;
 
@@ -274,8 +275,7 @@ impl PlaybackService {
 
     pub fn shutdown(&self) {
         self.handle.inbox.send(WorkerInput::Shutdown);
-        if let Ok(mut worker) = self.worker.lock()
-            && let Some(worker) = worker.take()
+        if let Some(worker) = sync::lock(&self.worker).take()
             && worker.join().is_err()
         {
             error!("playback.worker_panicked");
@@ -295,25 +295,16 @@ impl PlaybackServiceHandle {
     }
 
     pub fn versioned_snapshot(&self) -> Versioned<PlaybackSnapshot> {
-        self.snapshot
-            .read()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .clone()
+        sync::read(&self.snapshot).clone()
     }
 
     /// The newest position of the loaded track, `None` when nothing is loaded.
     pub fn position(&self) -> Option<PlaybackPosition> {
-        self.position
-            .read()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .clone()
+        sync::read(&self.position).clone()
     }
 
     pub fn versioned_queue_snapshot(&self) -> Versioned<PlaybackQueueSnapshot> {
-        self.queue_snapshot
-            .read()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .clone()
+        sync::read(&self.queue_snapshot).clone()
     }
 
     /// Upcoming items from `offset`; a window of the queue the snapshot only starts. Reads the

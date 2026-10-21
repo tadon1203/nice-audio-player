@@ -163,6 +163,7 @@ mod tests {
 #[cfg(test)]
 pub(crate) mod testing {
     use super::*;
+    use crate::sync;
     use std::sync::Mutex;
 
     /// One call to a sink, in the order it was made.
@@ -186,30 +187,21 @@ pub(crate) mod testing {
         }
 
         pub(crate) fn sent(&self) -> Vec<Sent> {
-            self.sent.lock().expect("recorded messages").clone()
+            sync::lock(&self.sent).clone()
         }
     }
 
     impl MessageSink for RecordingMessageSink {
         fn state_changed(&self, topic: StateTopic) {
-            self.sent
-                .lock()
-                .expect("recorded messages")
-                .push(Sent::State(topic));
+            sync::lock(&self.sent).push(Sent::State(topic));
         }
 
         fn position_changed(&self) {
-            self.sent
-                .lock()
-                .expect("recorded messages")
-                .push(Sent::Position);
+            sync::lock(&self.sent).push(Sent::Position);
         }
 
         fn occurred(&self, occurrence: Occurrence) {
-            self.sent
-                .lock()
-                .expect("recorded messages")
-                .push(Sent::Occurrence(Box::new(occurrence)));
+            sync::lock(&self.sent).push(Sent::Occurrence(Box::new(occurrence)));
         }
     }
 }

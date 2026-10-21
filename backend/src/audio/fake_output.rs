@@ -1,9 +1,11 @@
 //! A fake output backend for tests: no device, no callback. Tests play the part of the device by
 //! setting how far the "speakers" got and by sending the events a real stream would.
 
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Mutex};
 
 use cpal::StreamInstant;
+
+use crate::sync;
 
 use super::devices::{AudioOutputDeviceIdentity, AudioOutputSelection, DeviceResolutionError};
 use super::output::{
@@ -64,7 +66,7 @@ impl FakeOutput {
     }
 
     fn shared(&self) -> std::sync::MutexGuard<'_, Shared> {
-        self.0.lock().unwrap_or_else(PoisonError::into_inner)
+        sync::lock(&self.0)
     }
 
     fn latest(&self) -> Arc<Mutex<StreamState>> {
@@ -83,17 +85,12 @@ impl FakeOutput {
 
     /// How many times the newest stream was handed a new queue.
     pub(crate) fn queue_switches(&self) -> usize {
-        self.latest()
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .queue_switches
+        sync::lock(&self.latest()).queue_switches
     }
 
     /// The pipeline chained to play after the current one on the newest stream, if any.
     pub(crate) fn chained_pipeline(&self) -> Option<PipelineId> {
-        self.latest()
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
+        sync::lock(&self.latest())
             .next
             .as_ref()
             .map(|(pipeline, _)| *pipeline)
@@ -101,10 +98,7 @@ impl FakeOutput {
 
     /// How many times the newest stream moved on to a chained queue.
     pub(crate) fn adoptions(&self) -> usize {
-        self.latest()
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .adoptions
+        sync::lock(&self.latest()).adoptions
     }
 
     /// The selections new sessions were prepared for, in order.
@@ -114,18 +108,12 @@ impl FakeOutput {
 
     /// Whether the newest stream is started and not paused.
     pub(crate) fn is_running(&self) -> bool {
-        self.latest()
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .running
+        sync::lock(&self.latest()).running
     }
 
     /// How far the speakers got on the newest stream.
     pub(crate) fn set_played_frames(&self, frames: u64) {
-        self.latest()
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .played_frames = frames;
+        sync::lock(&self.latest()).played_frames = frames;
     }
 
     pub(crate) fn fail_next_prepare(&self, error: AudioOutputError) {
@@ -139,17 +127,14 @@ impl FakeOutput {
 
     /// The newest stream's next `pause` fails.
     pub(crate) fn fail_next_pause(&self, error: AudioOutputError) {
-        self.latest()
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .fail_pause = Some(error);
+        sync::lock(&self.latest()).fail_pause = Some(error);
     }
 
     /// The newest stream hands its last frames to the device, due at the stream's current time.
     pub(crate) fn finish_playback(&self) {
         let stream = self.latest();
         let (events, now, pipeline) = {
-            let state = stream.lock().unwrap_or_else(PoisonError::into_inner);
+            let state = sync::lock(&stream);
             (Arc::clone(&state.events), state.now, state.pipeline)
         };
         events(OutputEvent::FinalFrames {
@@ -159,13 +144,7 @@ impl FakeOutput {
     }
 
     pub(crate) fn fail_stream(&self, kind: StreamFailureKind) {
-        let events = Arc::clone(
-            &self
-                .latest()
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .events,
-        );
+        let events = Arc::clone(&sync::lock(&self.latest()).events);
         events(OutputEvent::Failed(kind));
     }
 }
@@ -247,7 +226,7 @@ struct FakeStream {
 
 impl FakeStream {
     fn state(&self) -> std::sync::MutexGuard<'_, StreamState> {
-        self.state.lock().unwrap_or_else(PoisonError::into_inner)
+        sync::lock(&self.state)
     }
 }
 
