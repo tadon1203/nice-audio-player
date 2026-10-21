@@ -31,15 +31,12 @@ impl PlaybackWorker {
         let source = loaded.source.clone();
         let extension = loaded.item.file.extension.clone();
         let config = loaded.output.config.clone();
-        let opened = self.open_pipeline(
-            &source,
-            &extension,
-            PipelineKind::Seek { config, target_ms },
-        );
+        let pipeline_request = self.pipeline_request(&source, &extension);
+        let opened = open_seek(&self.inbox, &pipeline_request, &config, target_ms);
         match opened {
             Ok(OpenedPipeline {
                 pipeline,
-                output: OpenedOutput::Queue(queue),
+                sink: queue,
                 start_output_frame,
                 ..
             }) => {
@@ -58,9 +55,6 @@ impl PlaybackWorker {
                     duration_ms,
                     responder,
                 });
-            }
-            Ok(OpenedPipeline { pipeline, .. }) => {
-                unreachable!("a seek reuses the stream: {:?}", pipeline.id)
             }
             Err(error) => respond(responder, Err(seek_error(error))),
         }

@@ -77,7 +77,7 @@ impl PlaybackWorker {
             self.start_current(Some(reply), false, SessionStartedBy::Jump);
             return;
         }
-        let _ = reply.send(self.resume());
+        respond(reply, self.resume());
     }
 
     pub(super) fn resume(&mut self) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
@@ -122,19 +122,19 @@ impl PlaybackWorker {
         reply: Reply<Versioned<PlaybackSnapshot>>,
     ) {
         let Transport::Loaded(loaded) = &self.transport else {
-            let _ = reply.send(self.set_output_selection(selection));
+            respond(reply, self.set_output_selection(selection));
             return;
         };
         if loaded.seek.is_some() {
-            let _ = reply.send(Err(PlaybackServiceError::InvalidPlaybackState));
+            respond(reply, Err(PlaybackServiceError::InvalidPlaybackState));
             return;
         }
         if selection == self.output_selection {
-            let _ = reply.send(Ok(self.playback_versioned()));
+            respond(reply, Ok(self.playback_versioned()));
             return;
         }
         if let Err(error) = self.backend.resolve(&selection) {
-            let _ = reply.send(Err(resolution_error(error)));
+            respond(reply, Err(resolution_error(error)));
             return;
         }
         let request = StartRequest {

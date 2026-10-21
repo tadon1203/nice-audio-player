@@ -88,15 +88,15 @@ impl PlaybackWorker {
             loaded.prefetch = Some(unusable);
             return;
         };
-        let opened =
-            self.open_pipeline(&source, &item.file.extension, PipelineKind::Next { config });
+        let pipeline_request = self.pipeline_request(&source, &item.file.extension);
+        let opened = open_prefetch(&self.inbox, &pipeline_request, &config);
         let Transport::Loaded(loaded) = &mut self.transport else {
             return;
         };
         loaded.prefetch = Some(match opened {
             Ok(OpenedPipeline {
                 pipeline,
-                output: OpenedOutput::Queue(queue),
+                sink: queue,
                 duration_ms,
                 ..
             }) => {
@@ -111,10 +111,6 @@ impl PlaybackWorker {
                         completion_time: None,
                     }),
                 }
-            }
-            Ok(OpenedPipeline { pipeline, .. }) => {
-                pipeline.cancel();
-                unusable
             }
             // Another format is the expected reason: the stream is reopened for it later.
             Err(_) => unusable,

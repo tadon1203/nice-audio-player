@@ -177,7 +177,7 @@ impl From<ChannelConversion> for PlaybackChannelConversion {
             ChannelConversion::None => Self::None,
             ChannelConversion::MonoToStereo => Self::MonoToStereo,
             ChannelConversion::StereoToMono => Self::StereoToMono,
-            ChannelConversion::Downmix => Self::Downmix,
+            ChannelConversion::Downmix { .. } => Self::Downmix,
         }
     }
 }

@@ -13,7 +13,7 @@ use super::TrackListener;
 use super::input::{Inbox, PlaybackIds, SourceLoadId, SourceLoadIds, WorkerEvent, WorkerInput};
 use super::item::PlayableItem;
 use super::pipeline::{
-    OpenedOutput, OpenedPipeline, PipelineError, PipelineKind, PipelineRequest, open_pipeline,
+    OpenedPipeline, PipelineError, PipelineRequest, open_prefetch, open_seek, open_start,
 };
 use super::preferences::{PlaybackPreferences, PreferencesObserver};
 use super::queue::{AdvanceReason, PlaybackQueue, QueueEntry, QueueError};
@@ -278,7 +278,7 @@ impl PlaybackWorker {
             }
             PlaybackCommand::Next { reply } => self.navigate(AdvanceReason::UserNext, reply),
             PlaybackCommand::Pause { reply } => {
-                let _ = reply.send(self.pause());
+                respond(reply, self.pause());
             }
             PlaybackCommand::Resume { reply } => {
                 self.resume_command(reply);
@@ -287,13 +287,13 @@ impl PlaybackWorker {
                 self.begin_seek(position_ms, Some(reply));
             }
             PlaybackCommand::SetVolume { volume, reply } => {
-                let _ = reply.send(self.set_volume(volume));
+                respond(reply, self.set_volume(volume));
             }
             PlaybackCommand::Mute { reply } => {
-                let _ = reply.send(Ok(self.mute()));
+                respond(reply, Ok(self.mute()));
             }
             PlaybackCommand::Unmute { reply } => {
-                let _ = reply.send(Ok(self.unmute()));
+                respond(reply, Ok(self.unmute()));
             }
             PlaybackCommand::SetOutputSelection { selection, reply } => {
                 self.change_output_selection(selection, reply);
@@ -303,29 +303,29 @@ impl PlaybackWorker {
                 if changed {
                     self.preferences_changed();
                 }
-                let _ = reply.send(Ok(self.queue_changed(changed)));
+                respond(reply, Ok(self.queue_changed(changed)));
             }
             PlaybackCommand::SetShuffle { enabled, reply } => {
                 let changed = self.queue.set_shuffle(enabled, &mut self.rng);
                 if changed {
                     self.preferences_changed();
                 }
-                let _ = reply.send(Ok(self.queue_changed(changed)));
+                respond(reply, Ok(self.queue_changed(changed)));
             }
             PlaybackCommand::RemoveQueueItem { id, reply } => {
                 let result = self.edit_queue(|queue| queue.remove_upcoming(id).map(|()| true));
-                let _ = reply.send(result.map(|changed| self.queue_changed(changed)));
+                respond(reply, result.map(|changed| self.queue_changed(changed)));
             }
             PlaybackCommand::MoveQueueItem { id, to, reply } => {
                 let result = self.edit_queue(|queue| queue.move_upcoming(id, to));
-                let _ = reply.send(result.map(|changed| self.queue_changed(changed)));
+                respond(reply, result.map(|changed| self.queue_changed(changed)));
             }
             PlaybackCommand::PlayQueueItem { id, reply } => {
                 self.skipped_in_a_row = 0;
                 match self.queue.jump_to(id) {
                     Ok(()) => self.start_current(Some(reply), false, SessionStartedBy::Jump),
                     Err(_) => {
-                        let _ = reply.send(Err(PlaybackServiceError::QueueItemNotFound));
+                        respond(reply, Err(PlaybackServiceError::QueueItemNotFound));
                     }
                 }
             }
@@ -339,7 +339,7 @@ impl PlaybackWorker {
                     return;
                 }
                 let result = self.edit_queue(|queue| queue.enqueue(track_ids, next).map(|()| true));
-                let _ = reply.send(result.map(|changed| self.queue_changed(changed)));
+                respond(reply, result.map(|changed| self.queue_changed(changed)));
             }
             PlaybackCommand::ClearQueue { reply } => {
                 let before = self.queue.clone();
@@ -347,7 +347,7 @@ impl PlaybackWorker {
                 if changed {
                     self.previous_queue = Some(before);
                 }
-                let _ = reply.send(Ok(self.queue_changed(changed)));
+                respond(reply, Ok(self.queue_changed(changed)));
             }
             PlaybackCommand::RestorePreviousQueue { reply } => {
                 self.restore_previous_queue(reply);
@@ -425,34 +425,25 @@ impl PlaybackWorker {
         self.publish_state();
     }
 
-    fn open_pipeline(
+    /// The request for the next pipeline, under the next pipeline id.
+    fn pipeline_request<'a>(
         &mut self,
-        source: &CompressedAudioSource,
-        extension: &str,
-        kind: PipelineKind,
-    ) -> Result<OpenedPipeline, PipelineError> {
+        source: &'a CompressedAudioSource,
+        extension: &'a str,
+    ) -> PipelineRequest<'a> {
         self.next_pipeline_id = self.next_pipeline_id.wrapping_add(1);
-        open_pipeline(
-            self.backend.as_ref(),
-            &self.inbox,
-            PipelineRequest {
-                source,
-                extension,
-                kind,
-                pipeline_id: PipelineId(self.next_pipeline_id),
-            },
-        )
+        PipelineRequest {
+            source,
+            extension,
+            pipeline_id: PipelineId(self.next_pipeline_id),
+        }
     }
 
-    /// A start's kind of pipeline: a new stream on the device `selection` names.
-    fn start_kind(&mut self, selection: AudioOutputSelection) -> PipelineKind {
+    /// The id and the links of a new stream, for a start.
+    fn new_stream(&mut self) -> (OutputStreamId, OutputLinks) {
         self.next_stream_id = self.next_stream_id.wrapping_add(1);
         let stream_id = OutputStreamId(self.next_stream_id);
-        PipelineKind::Start {
-            selection,
-            stream_id,
-            links: self.output_links(stream_id),
-        }
+        (stream_id, self.output_links(stream_id))
     }
 
     fn output_links(&self, stream: OutputStreamId) -> OutputLinks {

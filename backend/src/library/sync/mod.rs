@@ -18,7 +18,7 @@ use crate::errors::CommonError;
 use crate::ids::RootId;
 use crate::messages::{Notifier, Versioned};
 use crate::sync;
-use log::{error, info, warn};
+use log::{debug, error, info, warn};
 use notify::RecommendedWatcher;
 use std::{
     collections::{HashMap, VecDeque},
@@ -33,6 +33,14 @@ use std::{
 use step::{Effect, Input, RootNumber, ScanOutcome, ScanTarget, State};
 
 type Reply<T> = SyncSender<Result<T, LibraryCommandError>>;
+
+/// Answers a command, if its caller is still waiting. A caller that has gone away is logged, not
+/// an error.
+fn respond<T>(reply: Reply<T>, result: Result<T, LibraryCommandError>) {
+    if reply.send(result).is_err() {
+        debug!("library.reply_closed");
+    }
+}
 
 enum Command {
     Register(String, Reply<LibraryRoot>),
@@ -225,7 +233,7 @@ impl Actor {
                 if let Some(id) = result.as_ref().ok().map(root_number) {
                     self.feed(Input::Registered(id));
                 }
-                let _ = reply.send(result);
+                respond(reply, result);
             }
             Command::Enable(id, enabled, reply) => {
                 let result =
@@ -237,21 +245,21 @@ impl Actor {
                         Input::Disabled(id)
                     });
                 }
-                let _ = reply.send(result);
+                respond(reply, result);
             }
             Command::Remove(id, reply) => {
                 let result = self.while_idle(|actor| roots::remove(&actor.database, id));
                 if result.is_ok() {
                     self.feed(Input::Removed(id.rowid()));
                 }
-                let _ = reply.send(result);
+                respond(reply, result);
             }
             Command::DeleteMissing(reply) => {
                 let result = self.while_idle(|actor| roots::delete_missing(&actor.database));
                 if result.is_ok() {
                     self.feed(Input::MissingDeleted);
                 }
-                let _ = reply.send(result);
+                respond(reply, result);
             }
             Command::Start(reply) => {
                 let result = if self.state.scanning() {
@@ -266,7 +274,7 @@ impl Actor {
                     })
                 };
                 let result = result.map(|roots| self.feed(Input::ScanRequested { roots }));
-                let _ = reply.send(result);
+                respond(reply, result);
             }
             Command::Cancel(reply) => {
                 let result = if self.state.scanning() {
@@ -275,7 +283,7 @@ impl Actor {
                 } else {
                     Err(LibraryCommandError::ScanNotRunning)
                 };
-                let _ = reply.send(result);
+                respond(reply, result);
             }
         }
     }

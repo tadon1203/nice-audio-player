@@ -13,13 +13,17 @@ pub(crate) enum OutputProcessingError {
     InvalidResamplerOutput,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub(crate) enum ChannelConversion {
     None,
     MonoToStereo,
     StereoToMono,
-    /// Surround (3, 4, 5, 6 or 8 channels) folded to stereo or mono.
-    Downmix,
+    /// Surround (3, 4, 5, 6 or 8 channels) folded to stereo, or to mono when `to_mono` is set.
+    Downmix {
+        left: &'static [f32],
+        right: &'static [f32],
+        to_mono: bool,
+    },
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -28,7 +32,7 @@ pub(crate) enum SampleRateConversion {
     HighQuality,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub(crate) struct OutputProcessingPlan {
     source: PcmSpec,
     output: PcmSpec,
@@ -44,8 +48,14 @@ impl OutputProcessingPlan {
             (source, output) if source == output => ChannelConversion::None,
             (1, 2) => ChannelConversion::MonoToStereo,
             (2, 1) => ChannelConversion::StereoToMono,
-            (source, 1 | 2) if surround_weights(usize::from(source)).is_some() => {
-                ChannelConversion::Downmix
+            (source, output @ (1 | 2)) => {
+                let (left, right) = surround_weights(usize::from(source))
+                    .ok_or(OutputProcessingError::UnsupportedChannelConversion)?;
+                ChannelConversion::Downmix {
+                    left,
+                    right,
+                    to_mono: output == 1,
+                }
             }
             _ => return Err(OutputProcessingError::UnsupportedChannelConversion),
         };
@@ -226,6 +236,7 @@ impl OutputPcmProcessor {
         };
         Ok(Self {
             channel_scratch: vec![0.0; target_channels],
+            channel_conversion: plan.channel_conversion(),
             resampler,
             source_channels,
             finished: false,
@@ -245,7 +256,7 @@ impl OutputPcmProcessor {
         }
         output.clear();
         for frame in input.chunks_exact(self.source_channels) {
-            convert_channels_into(frame, &mut self.channel_scratch);
+            convert_channels_into(self.channel_conversion, frame, &mut self.channel_scratch);
             if let Some(resampler) = self.resampler.as_mut() {
                 resampler.push(&self.channel_scratch, output)?;
             } else {
@@ -288,6 +299,7 @@ impl OutputPcmProcessor {
 
 pub(crate) struct OutputPcmProcessor {
     channel_scratch: Vec<f32>,
+    channel_conversion: ChannelConversion,
     resampler: Option<HighQualityResampler>,
     source_channels: usize,
     finished: bool,
@@ -327,23 +339,24 @@ fn surround_weights(channels: usize) -> Option<(&'static [f32], &'static [f32])>
     }
 }
 
-fn convert_channels_into(frame: &[f32], output: &mut [f32]) {
-    match (frame.len(), output.len()) {
-        (channels, target) if channels == target => output.copy_from_slice(frame),
-        (1, 2) => output.copy_from_slice(&[frame[0], frame[0]]),
-        (2, 1) => output[0] = (frame[0] + frame[1]) * 0.5,
-        (channels, target @ (1 | 2)) => {
-            let (left, right) = surround_weights(channels)
-                .expect("channel conversion was validated by OutputProcessingPlan::new");
+fn convert_channels_into(conversion: ChannelConversion, frame: &[f32], output: &mut [f32]) {
+    match conversion {
+        ChannelConversion::None => output.copy_from_slice(frame),
+        ChannelConversion::MonoToStereo => output.copy_from_slice(&[frame[0], frame[0]]),
+        ChannelConversion::StereoToMono => output[0] = (frame[0] + frame[1]) * 0.5,
+        ChannelConversion::Downmix {
+            left,
+            right,
+            to_mono,
+        } => {
             let fold = |weights: &[f32]| frame.iter().zip(weights).map(|(s, w)| s * w).sum::<f32>();
             let (left, right) = (fold(left), fold(right));
-            if target == 2 {
-                output.copy_from_slice(&[left, right]);
-            } else {
+            if to_mono {
                 output[0] = (left + right) * 0.5;
+            } else {
+                output.copy_from_slice(&[left, right]);
             }
         }
-        _ => unreachable!("channel conversion was validated by OutputProcessingPlan::new"),
     }
 }
 
@@ -398,7 +411,10 @@ mod tests {
         let mut output = Vec::new();
 
         let five_one = plan(44_100, 6, 44_100, 2);
-        assert_eq!(five_one.channel_conversion(), ChannelConversion::Downmix);
+        assert!(matches!(
+            five_one.channel_conversion(),
+            ChannelConversion::Downmix { to_mono: false, .. }
+        ));
         let mut processor = OutputPcmProcessor::new(five_one).unwrap();
         // Only the front-left channel: it reaches the left output alone.
         processor

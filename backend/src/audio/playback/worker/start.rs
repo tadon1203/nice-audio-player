@@ -11,7 +11,7 @@ impl PlaybackWorker {
         reply: Reply<Versioned<PlaybackSnapshot>>,
     ) {
         if self.replace_queue(track_ids, start_index).is_err() {
-            let _ = reply.send(Err(PlaybackServiceError::InvalidPlaybackState));
+            respond(reply, Err(PlaybackServiceError::InvalidPlaybackState));
             return;
         }
         self.skipped_in_a_row = 0;
@@ -37,7 +37,7 @@ impl PlaybackWorker {
     /// is still current, it keeps playing; otherwise the restored current item starts.
     pub(super) fn restore_previous_queue(&mut self, reply: Reply<Versioned<PlaybackSnapshot>>) {
         let Some(previous) = self.previous_queue.take() else {
-            let _ = reply.send(Err(PlaybackServiceError::InvalidPlaybackState));
+            respond(reply, Err(PlaybackServiceError::InvalidPlaybackState));
             return;
         };
         let same_current = matches!(
@@ -49,7 +49,7 @@ impl PlaybackWorker {
         if same_current {
             self.publish_queue();
             let snapshot = self.publish_state();
-            let _ = reply.send(Ok(snapshot));
+            respond(reply, Ok(snapshot));
         } else {
             self.start_current(Some(reply), false, SessionStartedBy::Jump);
         }
@@ -63,12 +63,12 @@ impl PlaybackWorker {
         reply: Reply<Versioned<PlaybackQueueSnapshot>>,
     ) {
         if self.replace_queue(track_ids, 0).is_err() {
-            let _ = reply.send(Err(PlaybackServiceError::InvalidPlaybackState));
+            respond(reply, Err(PlaybackServiceError::InvalidPlaybackState));
             return;
         }
         self.skipped_in_a_row = 0;
         self.start_current(None, false, SessionStartedBy::Jump);
-        let _ = reply.send(Ok(self.queue_snapshot()));
+        respond(reply, Ok(self.queue_snapshot()));
     }
 
     /// A start of `item` as a new playback.
@@ -202,12 +202,20 @@ impl PlaybackWorker {
             .selection
             .clone()
             .unwrap_or_else(|| self.output_selection.clone());
-        let kind = self.start_kind(selection);
-        let opened = self.open_pipeline(&source, &request.item.file.extension, kind);
+        let (stream_id, links) = self.new_stream();
+        let pipeline_request = self.pipeline_request(&source, &request.item.file.extension);
+        let opened = open_start(
+            self.backend.as_ref(),
+            &self.inbox,
+            &pipeline_request,
+            &selection,
+            stream_id,
+            links,
+        );
         match opened {
             Ok(OpenedPipeline {
                 pipeline,
-                output: OpenedOutput::Stream(output),
+                sink: output,
                 duration_ms,
                 ..
             }) => {
@@ -220,9 +228,6 @@ impl PlaybackWorker {
                         duration_ms,
                     }),
                 });
-            }
-            Ok(OpenedPipeline { pipeline, .. }) => {
-                unreachable!("a start opens a stream: {:?}", pipeline.id)
             }
             Err(error) => self.fail_start(request, start_failure(error)),
         }
@@ -410,7 +415,7 @@ impl PlaybackWorker {
         let paused = matches!(&self.transport, Transport::Loaded(loaded) if loaded.paused);
         self.skipped_in_a_row = 0;
         if self.queue.advance(reason, &mut self.rng).is_none() {
-            let _ = reply.send(Ok(self.playback_versioned()));
+            respond(reply, Ok(self.playback_versioned()));
             return;
         }
         let started_by = match reason {

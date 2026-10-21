@@ -27,7 +27,7 @@ use crate::library::store::{PlaybackLookupError, PlaybackSourceError};
 use crate::messages::{SharedMessageSink, Versioned};
 use crate::sync;
 use crate::tasks::TaskError;
-use log::error;
+use log::{debug, error};
 
 /// Why a playback request failed: the one error vocabulary for every command that plays or
 /// queues, serialized as `{ "code": "<camelCase>" }`.
@@ -91,10 +91,17 @@ pub enum PlaybackServiceStartError {
 
 pub(super) type Reply<T> = SyncSender<Result<T, PlaybackServiceError>>;
 
-/// Answers a request, if anyone is waiting for the answer.
-pub(super) fn respond<T>(reply: Option<Reply<T>>, result: Result<T, PlaybackServiceError>) {
-    if let Some(reply) = reply {
-        let _ = reply.send(result);
+/// Answers a request, if anyone is waiting for the answer. A caller that has gone away is logged,
+/// not an error.
+pub(super) fn respond<T>(
+    reply: impl Into<Option<Reply<T>>>,
+    result: Result<T, PlaybackServiceError>,
+) {
+    let reply: Option<Reply<T>> = reply.into();
+    if let Some(reply) = reply
+        && reply.send(result).is_err()
+    {
+        debug!("playback.reply_closed");
     }
 }
 
