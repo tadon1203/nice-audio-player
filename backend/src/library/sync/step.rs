@@ -32,7 +32,7 @@ pub(super) struct ScanTarget {
 }
 
 impl ScanTarget {
-    pub fn whole(root: RootNumber) -> Self {
+    pub(super) fn whole(root: RootNumber) -> Self {
         Self { root, dirs: None }
     }
 }
@@ -121,7 +121,7 @@ pub(super) struct State {
 }
 
 impl State {
-    pub fn new() -> Self {
+    pub(super) fn new() -> Self {
         Self {
             dirty: BTreeMap::new(),
             debounce: None,
@@ -131,12 +131,12 @@ impl State {
         }
     }
 
-    pub fn scanning(&self) -> bool {
+    pub(super) fn scanning(&self) -> bool {
         self.phase == Phase::Running
     }
 
     /// When the state next wants a `Tick`, if it is waiting for anything.
-    pub fn next_wakeup(&self) -> Option<Instant> {
+    pub(super) fn next_wakeup(&self) -> Option<Instant> {
         let retries = self.watches.values().filter_map(|watch| match watch {
             Watch::Failed {
                 retry_at: Some(at), ..
@@ -147,7 +147,7 @@ impl State {
         retries.chain(debounce).min()
     }
 
-    pub fn step(&mut self, input: Input, now: Instant) -> Vec<Effect> {
+    pub(super) fn step(&mut self, input: Input, now: Instant) -> Vec<Effect> {
         let mut effects = Vec::new();
         match input {
             Input::Started { enabled } => {
@@ -208,17 +208,7 @@ impl State {
                     self.debounce = Some(now + DEBOUNCE);
                 }
             }
-            Input::Attached(id) => match self.watches.get(&id) {
-                None => effects.push(Effect::Detach(id)),
-                Some(watch) => {
-                    // A watcher that had to be retried missed whatever changed meanwhile.
-                    if matches!(watch, Watch::Failed { .. }) {
-                        self.mark_everything(id);
-                        self.debounce = Some(now);
-                    }
-                    self.watches.insert(id, Watch::Attached);
-                }
-            },
+            Input::Attached(id) => self.attached(id, now, &mut effects),
             Input::AttachFailed(id) => {
                 if self.watches.contains_key(&id) {
                     self.watches.insert(
@@ -229,21 +219,7 @@ impl State {
                     );
                 }
             }
-            Input::ScanFinished(outcome) => {
-                self.phase = Phase::Idle;
-                match outcome {
-                    ScanOutcome::Completed => self.gc_pending = true,
-                    ScanOutcome::Cancelled => {
-                        self.dirty.clear();
-                        self.debounce = None;
-                    }
-                    ScanOutcome::Failed => {}
-                }
-                // Changes that came in during the scan are scanned next.
-                if !self.dirty.is_empty() && self.debounce.is_none() {
-                    self.debounce = Some(now);
-                }
-            }
+            Input::ScanFinished(outcome) => self.scan_finished(outcome, now),
             Input::GcFinished { rescan } => {
                 if !rescan.is_empty() {
                     for id in rescan {
@@ -256,6 +232,36 @@ impl State {
         }
         self.advance(now, &mut effects);
         effects
+    }
+
+    fn attached(&mut self, id: RootNumber, now: Instant, effects: &mut Vec<Effect>) {
+        match self.watches.get(&id) {
+            None => effects.push(Effect::Detach(id)),
+            Some(watch) => {
+                // A watcher that had to be retried missed whatever changed meanwhile.
+                if matches!(watch, Watch::Failed { .. }) {
+                    self.mark_everything(id);
+                    self.debounce = Some(now);
+                }
+                self.watches.insert(id, Watch::Attached);
+            }
+        }
+    }
+
+    fn scan_finished(&mut self, outcome: ScanOutcome, now: Instant) {
+        self.phase = Phase::Idle;
+        match outcome {
+            ScanOutcome::Completed => self.gc_pending = true,
+            ScanOutcome::Cancelled => {
+                self.dirty.clear();
+                self.debounce = None;
+            }
+            ScanOutcome::Failed => {}
+        }
+        // Changes that came in during the scan are scanned next.
+        if !self.dirty.is_empty() && self.debounce.is_none() {
+            self.debounce = Some(now);
+        }
     }
 
     fn mark_everything(&mut self, id: RootNumber) {
@@ -444,7 +450,7 @@ mod tests {
         clock.feed(Input::FolderChanged(1));
 
         assert_eq!(
-            starts(&clock.wait(DEBOUNCE - Duration::from_millis(1))),
+            starts(&clock.wait(DEBOUNCE.saturating_sub(Duration::from_millis(1)))),
             Vec::<Vec<RootNumber>>::new()
         );
         assert_eq!(starts(&clock.wait(Duration::from_millis(1))), vec![vec![1]]);
@@ -559,7 +565,7 @@ mod tests {
         assert!(finished.contains(&Effect::RunGc));
 
         // Not again until something asks for it.
-        assert!(clock.feed(Input::Tick).is_empty());
+        assert_eq!(clock.feed(Input::Tick).len(), 0);
         let removed = clock.feed(Input::Removed(1));
         assert!(
             removed.contains(&Effect::RunGc),
@@ -602,7 +608,7 @@ mod tests {
         clock.feed(Input::ScanFinished(ScanOutcome::Completed));
         clock.feed(Input::GcFinished { rescan: Vec::new() });
 
-        let retried = clock.wait(WATCH_RETRY - STARTUP_DELAY);
+        let retried = clock.wait(WATCH_RETRY.saturating_sub(STARTUP_DELAY));
         assert!(retried.contains(&Effect::Attach(1)));
         clock.feed(Input::AttachFailed(1));
 
@@ -622,7 +628,7 @@ mod tests {
         clock.feed(Input::Started { enabled: vec![1] });
         clock.feed(Input::AttachFailed(1));
 
-        let early = clock.wait(WATCH_RETRY - Duration::from_millis(1));
+        let early = clock.wait(WATCH_RETRY.saturating_sub(Duration::from_millis(1)));
 
         assert!(!early.contains(&Effect::Attach(1)));
     }

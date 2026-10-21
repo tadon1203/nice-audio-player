@@ -44,24 +44,24 @@ pub(super) fn run_scan(fixture: &Fixture, cancelled: bool) -> LibraryScanSnapsho
 
 /// A scan that follows changes: only the directories holding `changed` paths are walked.
 fn run_scan_of(fixture: &Fixture, changed: &[PathBuf]) -> LibraryScanSnapshot {
-    run_jobs(fixture, false, Some(changed.to_vec()))
+    run_jobs(fixture, false, Some(changed))
 }
 
-fn run_jobs(fixture: &Fixture, cancelled: bool, dirs: Option<Vec<PathBuf>>) -> LibraryScanSnapshot {
+fn run_jobs(fixture: &Fixture, cancelled: bool, dirs: Option<&[PathBuf]>) -> LibraryScanSnapshot {
     run_versioned(fixture, cancelled, dirs).value
 }
 
 fn run_versioned(
     fixture: &Fixture,
     cancelled: bool,
-    dirs: Option<Vec<PathBuf>>,
+    dirs: Option<&[PathBuf]>,
 ) -> Versioned<LibraryScanSnapshot> {
     let roots = roots::list(&fixture.database.read().unwrap()).expect("roots");
     let jobs: Vec<_> = roots
         .into_iter()
         .map(|root| crate::library::scanner::ScanJob {
             root,
-            dirs: dirs.clone(),
+            dirs: dirs.map(<[PathBuf]>::to_vec),
         })
         .collect();
     let state = Arc::new(Mutex::new(Versioned::new(LibraryScanSnapshot {
@@ -265,7 +265,7 @@ fn a_cancelled_scan_stops_and_changes_nothing() {
     let scan = run_scan(&fixture, true);
 
     assert_eq!(scan.state, LibraryScanState::Cancelled);
-    assert!(files(&fixture).is_empty());
+    assert_eq!(files(&fixture).len(), 0);
 }
 
 #[test]

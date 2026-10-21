@@ -75,7 +75,7 @@ pub enum LibraryTrackSortKey {
     Album,
     Duration,
 }
-pub use super::artwork::ArtworkRef;
+pub(crate) use super::artwork::ArtworkRef;
 /// The album a track is filed under, by ID (see `ids.rs`) and as titled, with its Album Artist. A
 /// track with no album tag has none.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]

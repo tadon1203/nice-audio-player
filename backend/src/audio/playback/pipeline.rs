@@ -38,6 +38,7 @@ pub(super) struct OpenedPipeline<Sink> {
     pub start_output_frame: u64,
 }
 
+#[derive(Clone, Copy)]
 pub(super) enum PipelineError {
     DecoderOpen,
     /// The file no longer has the format the output was prepared for.

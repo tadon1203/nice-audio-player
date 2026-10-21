@@ -7,7 +7,7 @@ use backend::errors::{CommonError, LibraryCommandError};
 
 /// Opens the folder at `path` in the file manager.
 #[cfg(windows)]
-pub fn open_in_file_manager(path: &Path) -> Result<(), LibraryCommandError> {
+pub(crate) fn open_in_file_manager(path: &Path) -> Result<(), LibraryCommandError> {
     std::process::Command::new("explorer.exe")
         .arg(path)
         .spawn()
@@ -29,7 +29,7 @@ pub fn open_in_file_manager(_path: &Path) -> Result<(), LibraryCommandError> {
 
 /// Shows the file at `path` in the file manager, selected.
 #[cfg(windows)]
-pub fn reveal_in_file_manager(path: &Path) -> Result<(), LibraryCommandError> {
+pub(crate) fn reveal_in_file_manager(path: &Path) -> Result<(), LibraryCommandError> {
     use std::os::windows::process::CommandExt;
     // Explorer parses its own command line: `/select,` and the quoted path go through verbatim.
     // The path is joined as an OS string, so a name Unicode cannot hold reaches Explorer whole.

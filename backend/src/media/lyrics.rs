@@ -6,14 +6,14 @@ use crate::lyrics::{
 use lofty::{config::ParseOptions, file::TaggedFileExt, probe::Probe, tag::ItemKey};
 
 #[derive(Debug, Clone, Copy)]
-pub enum EmbeddedLyricsError {
+pub(crate) enum EmbeddedLyricsError {
     Read,
     Malformed,
 }
 
 /// Converts Lofty tag data into the provider-neutral Lyrics domain.
 /// No Lofty frame or tag types leave this module.
-pub fn read_embedded_lyrics(
+pub(crate) fn read_embedded_lyrics(
     path: &std::path::Path,
 ) -> Result<Option<(Option<String>, LyricsContent)>, EmbeddedLyricsError> {
     let tagged = Probe::open(path)

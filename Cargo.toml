@@ -36,8 +36,27 @@ unsafe_op_in_unsafe_fn = "warn"
 unused_extern_crates = "warn"
 unused_lifetimes = "warn"
 explicit_outlives_requirements = "warn"
+unreachable_pub = "warn"
+elided_lifetimes_in_paths = "warn"
+missing_debug_implementations = "warn"
 
 [workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+# Errors and panics are documented where they matter; the rest of the pedantic docs add noise.
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+# `Result` and `Option` already warn when a value is dropped; `#[must_use]` on each helper is noise.
+must_use_candidate = "allow"
+# Names such as `PlaybackServiceError` are the names the Renderer sees, so the prefix stays.
+module_name_repetitions = "allow"
+# `as` is allowed for numbers (ADR 0010).
+cast_possible_truncation = "allow"
+cast_possible_wrap = "allow"
+cast_precision_loss = "allow"
+cast_sign_loss = "allow"
+cast_lossless = "allow"
+clone_on_ref_ptr = "warn"
+rc_buffer = "warn"
 unwrap_used = "warn"
 panic = "warn"
 todo = "warn"

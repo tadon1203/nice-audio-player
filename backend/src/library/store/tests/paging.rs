@@ -3,7 +3,7 @@ use super::*;
 #[test]
 fn album_pages_cover_every_album_once_and_refuse_a_foreign_cursor() {
     let fixture = fixture();
-    let mut seeds: Vec<Seed> = Vec::new();
+    let mut seeds: Vec<Seed<'_>> = Vec::new();
     let names: Vec<String> = (1..=105).map(|id| format!("Album {id:03}")).collect();
     for (index, name) in names.iter().enumerate() {
         seeds.push(Seed::new(index as i64 + 1, "Track", "Artist", name));
@@ -380,7 +380,7 @@ fn the_name_sorted_lists_read_an_index_range_not_the_whole_table() {
 fn starting_from_a_huge_tracks_list_costs_one_narrow_query() {
     for count in [5_000i64, 50_000] {
         let fixture = fixture();
-        let seeds: Vec<Seed> = (1..=count)
+        let seeds: Vec<Seed<'_>> = (1..=count)
             .map(|id| {
                 Seed::new(
                     id,
@@ -486,7 +486,7 @@ fn the_scroll_index_follows_the_sort_order_for_mixed_scripts_in_both_directions(
         "한글",
         "Дом",
     ];
-    let seeds: Vec<Seed> = titles
+    let seeds: Vec<Seed<'_>> = titles
         .into_iter()
         .enumerate()
         .map(|(index, title)| Seed::new(index as i64 + 1, title, "Artist", "Album"))
@@ -609,7 +609,7 @@ fn the_scroll_index_of_albums_and_artists_counts_what_the_list_holds() {
         expected(&[("2001", 3), ("?", 2)]),
         "years, then the undated"
     );
-    assert!(
+    assert_eq!(
         store
             .catalog_album_artist_index(&album_artist_query(
                 None,
@@ -617,7 +617,8 @@ fn the_scroll_index_of_albums_and_artists_counts_what_the_list_holds() {
                 ASC
             ))
             .unwrap()
-            .is_empty()
+            .len(),
+        0
     );
     let filtered = store
         .catalog_album_index(&album_query(Some("ゆず"), TITLE, ASC))
@@ -632,7 +633,7 @@ fn the_scroll_index_of_albums_and_artists_counts_what_the_list_holds() {
 #[test]
 fn jumping_to_a_letter_in_a_huge_list_reads_only_the_target_region() {
     let fixture = fixture();
-    let seeds: Vec<Seed> = (1..=50_000i64)
+    let seeds: Vec<Seed<'_>> = (1..=50_000i64)
         .map(|id| {
             let letter = (b'A' + ((id - 1) / 2_000) as u8) as char;
             let mut seed = Seed::new(

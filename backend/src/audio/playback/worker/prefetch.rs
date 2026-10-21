@@ -1,7 +1,11 @@
 //! Gapless playback: opening the next track while the loaded one plays, and moving on to it the
 //! moment the loaded one has been heard to its end.
 
-use super::*;
+use super::{
+    AdvanceReason, CompressedAudioSource, CompressedSourceError, Loaded, OpenedPipeline,
+    PlaybackWorker, Position, Prefetch, PrefetchState, PrefetchedTrack, SessionStartedBy,
+    SourceLoad, SourceLoadId, Transport, open_prefetch,
+};
 
 /// How long before the end of a track the next one is opened. A shorter track opens it right
 /// after it has loaded.

@@ -57,7 +57,7 @@ fn a_removed_directory_that_comes_back_gets_the_same_album_ids() {
     std::fs::remove_dir_all(fixture.music.join("Solo")).unwrap();
     run_scan(&fixture, false);
     roots::delete_missing(&fixture.database).unwrap();
-    assert!(album_ids(&fixture).is_empty());
+    assert_eq!(album_ids(&fixture).len(), 0);
     write_album(&fixture, "Record");
     run_scan(&fixture, false);
 

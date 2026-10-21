@@ -105,7 +105,7 @@ pub(super) fn summary_from_row(row: &Row<'_>) -> rusqlite::Result<LibraryTrackSu
 
 impl LibraryStore {
     /// Where the track's file is. The one query every consumer of a track's path goes through.
-    pub fn track_location(&self, id: TrackId) -> Result<TrackLocation, StoreError> {
+    pub(crate) fn track_location(&self, id: TrackId) -> Result<TrackLocation, StoreError> {
         let connection = self.read()?;
         let (root, relative, availability): (String, String, Availability) = connection
             .query_row(
@@ -127,7 +127,10 @@ impl LibraryStore {
     }
 
     /// Tags, audio format and the file's path, or `TrackNotFound` for an unknown track.
-    pub fn track_properties(&self, id: TrackId) -> Result<LibraryTrackProperties, StoreError> {
+    pub(crate) fn track_properties(
+        &self,
+        id: TrackId,
+    ) -> Result<LibraryTrackProperties, StoreError> {
         let location = self.track_location(id)?;
         let path = location.path()?.to_string_lossy().into_owned();
         let connection = self.read()?;

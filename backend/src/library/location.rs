@@ -12,7 +12,7 @@ use std::path::{Component, PathBuf};
 pub struct Unavailable;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TrackLocation {
+pub(crate) struct TrackLocation {
     root: PathBuf,
     relative: PathBuf,
     available: bool,
@@ -20,7 +20,7 @@ pub struct TrackLocation {
 
 /// A track's file as it is on disk right now. Both paths are canonical.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ExistingFile {
+pub(crate) struct ExistingFile {
     pub root: PathBuf,
     pub path: PathBuf,
 }
@@ -50,7 +50,7 @@ impl TrackLocation {
 
     /// The file's path, without touching the filesystem: the root joined with a relative path that
     /// only descends. Cheap enough to take for every track of a playback context.
-    pub fn path(&self) -> Result<PathBuf, Unavailable> {
+    pub(crate) fn path(&self) -> Result<PathBuf, Unavailable> {
         let descends = self
             .relative
             .components()
@@ -63,7 +63,7 @@ impl TrackLocation {
 
     /// The file itself: still marked available, still there, and (symbolic links resolved) still
     /// inside its root.
-    pub fn existing(&self) -> Result<ExistingFile, Unavailable> {
+    pub(crate) fn existing(&self) -> Result<ExistingFile, Unavailable> {
         if !self.available {
             return Err(Unavailable);
         }

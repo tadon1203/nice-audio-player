@@ -25,11 +25,11 @@ mod tests {
     struct Capture;
 
     impl log::Log for Capture {
-        fn enabled(&self, _metadata: &log::Metadata) -> bool {
+        fn enabled(&self, _metadata: &log::Metadata<'_>) -> bool {
             true
         }
 
-        fn log(&self, record: &log::Record) {
+        fn log(&self, record: &log::Record<'_>) {
             crate::sync::lock(&RECORDS).push(format!("{} {}", record.level(), record.args()));
         }
 

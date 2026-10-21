@@ -48,7 +48,7 @@ fn waveform_announcements(recorded: &RecordingMessageSink) -> usize {
 
 fn waveform_revision(backend: &BackendApp) -> u64 {
     match backend.state_message(StateTopic::Waveform) {
-        Some(BackendMessage::State(message)) => message.revision,
+        BackendMessage::State(message) => message.revision,
         other => panic!("the Waveform is not a state message: {other:?}"),
     }
 }
@@ -60,7 +60,7 @@ fn with_nothing_playing_there_is_no_waveform_and_no_queue() {
 
     assert!(backend.initial_state().waveform.value.is_none());
     let window = backend.queue_window(0, 10);
-    assert!(window.items.is_empty());
+    assert_eq!(window.items.len(), 0);
     assert_eq!(window.offset, 0);
 }
 
@@ -140,7 +140,7 @@ fn previous_back_to_a_track_that_played_before_shows_its_waveform() {
     let back = backend.previous().expect("previous");
 
     let session = back.value.session().expect("a track is playing");
-    let Some(BackendMessage::State(message)) = backend.state_message(StateTopic::Waveform) else {
+    let BackendMessage::State(message) = backend.state_message(StateTopic::Waveform) else {
         panic!("the Waveform is not a state message");
     };
     assert!(message.revision > before);

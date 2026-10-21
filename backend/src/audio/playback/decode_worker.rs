@@ -76,14 +76,17 @@ impl DecodeWorker {
             prebuffer_frames: prebuffer_frames(input.output_sample_rate),
             prebuffer_sent: false,
         };
-        let _join_handle = thread::Builder::new()
+        let join_handle = thread::Builder::new()
             .name("decode".into())
             .spawn(move || task.run_contained(decoder))
             .expect("decode thread spawns");
+        // Outside tests the thread is detached: dropping the handle does not stop it.
+        #[cfg(not(test))]
+        drop(join_handle);
         Self {
             cancellation,
             #[cfg(test)]
-            join_handle: _join_handle,
+            join_handle,
             waker,
         }
     }

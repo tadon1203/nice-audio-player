@@ -22,14 +22,14 @@ use symphonia::default::{get_codecs, get_probe};
 use crate::diagnostics::logged;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AudioFileInfo {
+pub(crate) struct AudioFileInfo {
     pub codec: AudioCodec,
     pub sample_rate: u32,
     pub channel_count: u16,
     pub duration_ms: Option<u64>,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum AudioCodec {
+pub(crate) enum AudioCodec {
     Aac,
     Adpcm,
     Alac,
@@ -43,16 +43,19 @@ pub enum AudioCodec {
 }
 /// The file cannot be decoded. Nothing downstream tells why, so there is one error.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Undecodable;
+pub(crate) struct Undecodable;
 
 #[derive(Debug, Clone)]
-pub struct InspectedAudioFile {
+pub(crate) struct InspectedAudioFile {
     pub info: AudioFileInfo,
     pub bit_depth: Option<u32>,
 }
 
 /// What the decoder reports about the audio file at `path` (`extension` is its format hint).
-pub fn inspect_audio_file(path: &Path, extension: &str) -> Result<InspectedAudioFile, Undecodable> {
+pub(crate) fn inspect_audio_file(
+    path: &Path,
+    extension: &str,
+) -> Result<InspectedAudioFile, Undecodable> {
     let source = File::open(path).map_err(logged(Undecodable, "media.inspection.open_failed"))?;
     let stream = MediaSourceStream::new(Box::new(source), MediaSourceStreamOptions::default());
     let mut hint = Hint::new();

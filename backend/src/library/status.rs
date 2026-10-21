@@ -7,7 +7,7 @@
 macro_rules! sql_text_enum {
     ($name:ident { $($variant:ident => $text:literal),+ $(,)? }) => {
         impl $name {
-            pub fn as_str(self) -> &'static str {
+            pub(crate) fn as_str(self) -> &'static str {
                 match self { $(Self::$variant => $text),+ }
             }
         }
@@ -36,7 +36,7 @@ pub(crate) use sql_text_enum;
 /// Whether a file is on disk where the library last saw it. Only the library reads it: the track
 /// DTOs carry the `TrackState` that it and the inspection status decide together.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Availability {
+pub(crate) enum Availability {
     Available,
     Missing,
 }
@@ -48,7 +48,7 @@ sql_text_enum!(Availability {
 
 /// Where a file stands once inspected: `Unsupported` when it cannot be decoded.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum InspectionStatus {
+pub(crate) enum InspectionStatus {
     Indexed,
     Unsupported,
 }
@@ -59,7 +59,7 @@ sql_text_enum!(InspectionStatus {
 });
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TagStatus {
+pub(crate) enum TagStatus {
     Loaded,
     Absent,
     Failed,
@@ -72,7 +72,7 @@ sql_text_enum!(TagStatus {
 });
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ArtworkStatus {
+pub(crate) enum ArtworkStatus {
     NotPresent,
     Unavailable,
     Invalid,

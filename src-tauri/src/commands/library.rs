@@ -23,14 +23,14 @@ use crate::{
     clippy::needless_pass_by_value,
     reason = "Tauri passes State and AppHandle by value"
 )]
-pub fn get_library_status(state: tauri::State<'_, AppState>) -> LibraryStatus {
+pub(crate) fn get_library_status(state: tauri::State<'_, AppState>) -> LibraryStatus {
     state.backend.library_status()
 }
 
 /// Moves the library database aside and restarts the app, which recreates it and rescans.
 #[tauri::command]
 #[specta::specta]
-pub async fn reset_library_and_rescan(
+pub(crate) async fn reset_library_and_rescan(
     app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), LibraryCommandError> {
@@ -42,7 +42,7 @@ pub async fn reset_library_and_rescan(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn list_library_roots(
+pub(crate) async fn list_library_roots(
     state: tauri::State<'_, AppState>,
 ) -> Result<Vec<LibraryRoot>, LibraryCommandError> {
     blocking(&state, BackendApp::library_roots).await
@@ -50,7 +50,7 @@ pub async fn list_library_roots(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn register_library_root(
+pub(crate) async fn register_library_root(
     path: String,
     state: tauri::State<'_, AppState>,
 ) -> Result<LibraryRoot, LibraryCommandError> {
@@ -62,7 +62,7 @@ pub async fn register_library_root(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn set_library_root_enabled(
+pub(crate) async fn set_library_root_enabled(
     id: RootId,
     enabled: bool,
     state: tauri::State<'_, AppState>,
@@ -75,7 +75,7 @@ pub async fn set_library_root_enabled(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn remove_library_root(
+pub(crate) async fn remove_library_root(
     id: RootId,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), LibraryCommandError> {
@@ -86,7 +86,7 @@ pub async fn remove_library_root(
 /// source file.
 #[tauri::command]
 #[specta::specta]
-pub async fn delete_missing_library_tracks(
+pub(crate) async fn delete_missing_library_tracks(
     state: tauri::State<'_, AppState>,
 ) -> Result<u64, LibraryCommandError> {
     blocking(&state, BackendApp::delete_missing_tracks).await
@@ -95,7 +95,7 @@ pub async fn delete_missing_library_tracks(
 /// Opens the folder holding the log files in the file manager.
 #[tauri::command]
 #[specta::specta]
-pub async fn open_log_directory(app: tauri::AppHandle) -> Result<(), LibraryCommandError> {
+pub(crate) async fn open_log_directory(app: tauri::AppHandle) -> Result<(), LibraryCommandError> {
     use tauri::Manager;
     let directory = app.path().app_log_dir().map_err(logged(
         LibraryCommandError::Common {
@@ -124,7 +124,7 @@ pub async fn open_log_directory(app: tauri::AppHandle) -> Result<(), LibraryComm
 
 #[tauri::command]
 #[specta::specta]
-pub async fn start_library_scan(
+pub(crate) async fn start_library_scan(
     state: tauri::State<'_, AppState>,
 ) -> Result<(), LibraryCommandError> {
     blocking(&state, BackendApp::start_scan).await
@@ -132,7 +132,7 @@ pub async fn start_library_scan(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn cancel_library_scan(
+pub(crate) async fn cancel_library_scan(
     state: tauri::State<'_, AppState>,
 ) -> Result<(), LibraryCommandError> {
     blocking(&state, BackendApp::cancel_scan).await
@@ -140,7 +140,7 @@ pub async fn cancel_library_scan(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn list_library_tracks(
+pub(crate) async fn list_library_tracks(
     request: TrackListRequest,
     state: tauri::State<'_, AppState>,
 ) -> Result<LibraryTrackPage, LibraryCommandError> {
@@ -149,7 +149,7 @@ pub async fn list_library_tracks(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn list_library_albums(
+pub(crate) async fn list_library_albums(
     request: AlbumListRequest,
     state: tauri::State<'_, AppState>,
 ) -> Result<LibraryAlbumPage, LibraryCommandError> {
@@ -158,7 +158,7 @@ pub async fn list_library_albums(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn list_library_album_artists(
+pub(crate) async fn list_library_album_artists(
     request: AlbumArtistListRequest,
     state: tauri::State<'_, AppState>,
 ) -> Result<LibraryAlbumArtistPage, LibraryCommandError> {
@@ -168,7 +168,7 @@ pub async fn list_library_album_artists(
 /// The scroll index of the Tracks list: how many names start under each label, in list order.
 #[tauri::command]
 #[specta::specta]
-pub async fn list_library_track_index(
+pub(crate) async fn list_library_track_index(
     query: TrackQuery,
     state: tauri::State<'_, AppState>,
 ) -> Result<Vec<LibraryIndexBucket>, LibraryCommandError> {
@@ -177,7 +177,7 @@ pub async fn list_library_track_index(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn list_library_album_index(
+pub(crate) async fn list_library_album_index(
     query: AlbumQuery,
     state: tauri::State<'_, AppState>,
 ) -> Result<Vec<LibraryIndexBucket>, LibraryCommandError> {
@@ -186,7 +186,7 @@ pub async fn list_library_album_index(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn list_library_album_artist_index(
+pub(crate) async fn list_library_album_artist_index(
     query: AlbumArtistQuery,
     state: tauri::State<'_, AppState>,
 ) -> Result<Vec<LibraryIndexBucket>, LibraryCommandError> {
@@ -195,7 +195,7 @@ pub async fn list_library_album_artist_index(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn get_library_artist(
+pub(crate) async fn get_library_artist(
     artist_id: ArtistId,
     state: tauri::State<'_, AppState>,
 ) -> Result<LibraryAlbumArtistSummary, LibraryCommandError> {
@@ -204,7 +204,7 @@ pub async fn get_library_artist(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn list_library_artist_albums(
+pub(crate) async fn list_library_artist_albums(
     request: ArtistAlbumsRequest,
     state: tauri::State<'_, AppState>,
 ) -> Result<LibraryAlbumPage, LibraryCommandError> {
@@ -213,7 +213,7 @@ pub async fn list_library_artist_albums(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn get_library_album(
+pub(crate) async fn get_library_album(
     album_id: AlbumId,
     state: tauri::State<'_, AppState>,
 ) -> Result<LibraryAlbumDetails, LibraryCommandError> {
@@ -222,7 +222,7 @@ pub async fn get_library_album(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn list_library_album_tracks(
+pub(crate) async fn list_library_album_tracks(
     request: AlbumTracksRequest,
     state: tauri::State<'_, AppState>,
 ) -> Result<LibraryAlbumTrackPage, LibraryCommandError> {
@@ -231,7 +231,7 @@ pub async fn list_library_album_tracks(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn get_library_track_properties(
+pub(crate) async fn get_library_track_properties(
     track_id: TrackId,
     state: tauri::State<'_, AppState>,
 ) -> Result<LibraryTrackProperties, LibraryCommandError> {
@@ -241,7 +241,7 @@ pub async fn get_library_track_properties(
 /// Shows the track's file in Explorer, selected.
 #[tauri::command]
 #[specta::specta]
-pub async fn reveal_library_track(
+pub(crate) async fn reveal_library_track(
     track_id: TrackId,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), LibraryCommandError> {
@@ -258,7 +258,7 @@ pub async fn reveal_library_track(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn get_artwork_accent(
+pub(crate) async fn get_artwork_accent(
     hash: ArtworkHash,
     state: tauri::State<'_, AppState>,
 ) -> Result<Option<String>, LibraryCommandError> {

@@ -28,7 +28,7 @@ pub(crate) enum Signal {
 
 /// The Backend's message sink. It only queues; `start_dispatcher` delivers, so a service never
 /// waits on the webview.
-pub struct HostMessageSink {
+pub(crate) struct HostMessageSink {
     sender: Sender<Signal>,
 }
 
@@ -55,7 +55,7 @@ impl MessageSink for HostMessageSink {
     }
 }
 
-pub fn message_channel() -> (Arc<HostMessageSink>, Receiver<Signal>) {
+pub(crate) fn message_channel() -> (Arc<HostMessageSink>, Receiver<Signal>) {
     let (sender, receiver) = mpsc::channel();
     (Arc::new(HostMessageSink { sender }), receiver)
 }
@@ -96,7 +96,7 @@ impl Subscriber {
 
 /// Delivers queued messages in three steps. First the occurrences, in arrival order. Then each
 /// changed state topic once, with its latest value. Then the position.
-pub fn start_dispatcher(
+pub(crate) fn start_dispatcher(
     backend: Arc<BackendApp>,
     subscriber: Arc<Subscriber>,
     signals: Receiver<Signal>,
@@ -124,7 +124,7 @@ pub fn start_dispatcher(
 /// state topic once with its latest value, then the position.
 fn batch_messages(
     batch: Vec<Signal>,
-    state: impl Fn(StateTopic) -> Option<BackendMessage>,
+    state: impl Fn(StateTopic) -> BackendMessage,
     position: impl Fn() -> Option<BackendMessage>,
 ) -> Vec<BackendMessage> {
     let mut messages = Vec::new();
@@ -141,7 +141,7 @@ fn batch_messages(
             }
         }
     }
-    messages.extend(topics.into_iter().filter_map(state));
+    messages.extend(topics.into_iter().map(state));
     if position_changed {
         messages.extend(position());
     }
@@ -151,7 +151,10 @@ fn batch_messages(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use backend::dto::PlaybackFailureCode;
+    use backend::{
+        dto::PlaybackFailureCode,
+        messages::{StateMessage, StateValue},
+    };
 
     #[test]
     fn occurrences_are_sent_in_arrival_order_and_never_merged() {
@@ -165,7 +168,14 @@ mod tests {
             Signal::Occurrence(Box::new(first.clone())),
         ];
 
-        let messages = batch_messages(batch, |_| None, || None);
+        let state = |_| {
+            BackendMessage::State(Box::new(StateMessage {
+                revision: 0,
+                state: StateValue::Waveform(None),
+            }))
+        };
+
+        let messages = batch_messages(batch, state, || None);
 
         let sent: Vec<Occurrence> = messages
             .into_iter()

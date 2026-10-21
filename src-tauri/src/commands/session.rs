@@ -8,7 +8,11 @@ use crate::AppState;
 /// older than the returned value, so the Renderer can order them by revision.
 #[tauri::command]
 #[specta::specta]
-pub fn connect(
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Tauri passes State and AppHandle by value"
+)]
+pub(crate) fn connect(
     channel: Channel<BackendMessage>,
     state: tauri::State<'_, AppState>,
 ) -> InitialState {

@@ -79,7 +79,7 @@ pub(super) struct Output {
 }
 
 impl Output {
-    pub fn sample_rate(&self) -> u32 {
+    pub(super) fn sample_rate(&self) -> u32 {
         self.config.processing_plan.output().sample_rate().get()
     }
 }
@@ -91,7 +91,7 @@ pub(super) struct Pipeline {
 }
 
 impl Pipeline {
-    pub fn cancel(self) {
+    pub(super) fn cancel(self) {
         self.decode.cancel();
     }
 }
@@ -144,7 +144,7 @@ pub(super) struct PrefetchedTrack {
 
 impl Prefetch {
     /// Stops whatever work the prefetch has going.
-    pub fn cancel(self) {
+    pub(super) fn cancel(self) {
         match self.state {
             PrefetchState::Source { load, .. } => load.cancel(),
             PrefetchState::Ready(track) => track.pipeline.cancel(),
@@ -155,7 +155,7 @@ impl Prefetch {
 
 impl Loaded {
     /// Throws the prefetch away and tells the stream not to play it.
-    pub fn cancel_prefetch(&mut self) {
+    pub(super) fn cancel_prefetch(&mut self) {
         if let Some(prefetch) = self.prefetch.take() {
             if matches!(prefetch.state, PrefetchState::Ready(_)) {
                 self.output.stream.clear_next();
@@ -164,12 +164,12 @@ impl Loaded {
         }
     }
 
-    pub fn position_ms(&self) -> u64 {
+    pub(super) fn position_ms(&self) -> u64 {
         frame_to_millis(self.position.frame, self.position.sample_rate)
     }
 
     /// Reads the newest position report from the output into the position.
-    pub fn sample_position(&mut self) -> u64 {
+    pub(super) fn sample_position(&mut self) -> u64 {
         let rate = self.position.sample_rate;
         let max_frames = self
             .position
@@ -192,7 +192,7 @@ pub(super) struct Position {
 }
 
 impl Position {
-    pub fn from_start(sample_rate: u32, duration_ms: Option<u64>) -> Self {
+    pub(super) fn from_start(sample_rate: u32, duration_ms: Option<u64>) -> Self {
         Self {
             sample_rate,
             duration_ms,
@@ -204,7 +204,7 @@ impl Position {
     }
 
     /// The frame `relative_frame` into the current stream, never past the end of the track.
-    pub fn absolute(&self, relative_frame: u64) -> u64 {
+    pub(super) fn absolute(&self, relative_frame: u64) -> u64 {
         self.base_frame.saturating_add(relative_frame).min(
             self.base_frame
                 .saturating_add(self.remaining_frames.unwrap_or(u64::MAX)),
@@ -238,7 +238,7 @@ mod tests {
     #[test]
     fn position_publication_requires_interval_and_a_changed_position() {
         assert!(!should_publish_position(
-            POSITION_UPDATE_INTERVAL - Duration::from_millis(1),
+            POSITION_UPDATE_INTERVAL.saturating_sub(Duration::from_millis(1)),
             true
         ));
         assert!(!should_publish_position(POSITION_UPDATE_INTERVAL, false));

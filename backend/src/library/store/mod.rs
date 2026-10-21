@@ -9,7 +9,9 @@ mod playback;
 mod tests;
 mod track;
 
-pub use playback::{PlayableTrack, PlaybackLookupError, PlaybackSelection, PlaybackSourceError};
+pub(crate) use playback::{
+    PlayableTrack, PlaybackLookupError, PlaybackSelection, PlaybackSourceError,
+};
 
 use super::{
     database::{Database, ReadConnection},
@@ -19,16 +21,16 @@ use super::{
 };
 
 #[derive(Clone)]
-pub struct LibraryStore {
+pub(crate) struct LibraryStore {
     database: Database,
 }
 
 impl LibraryStore {
-    pub fn new(database: Database) -> Self {
+    pub(crate) fn new(database: Database) -> Self {
         Self { database }
     }
 
-    pub fn roots(&self) -> Result<Vec<LibraryRoot>, StoreError> {
+    pub(crate) fn roots(&self) -> Result<Vec<LibraryRoot>, StoreError> {
         let connection = self.read()?;
         roots::list(&connection)
     }

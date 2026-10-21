@@ -26,7 +26,7 @@ pub(crate) struct PlayableItem {
 }
 
 impl PlayableItem {
-    pub fn to_playback_item(&self) -> PlaybackItem {
+    pub(super) fn to_playback_item(&self) -> PlaybackItem {
         PlaybackItem {
             queue_item_id: self.queue_item_id,
             track: self.track.track.clone(),

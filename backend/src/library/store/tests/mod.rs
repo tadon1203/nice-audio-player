@@ -260,7 +260,7 @@ fn varied_library(fixture: &Fixture) {
     let titles: Vec<String> = (1..=330)
         .map(|id| format!("Title {}", id * 7 % 330))
         .collect();
-    let seeds: Vec<Seed> = (1..=330)
+    let seeds: Vec<Seed<'_>> = (1..=330)
         .map(|id| {
             let mut seed = Seed::new(
                 id,
@@ -309,7 +309,7 @@ fn leak(text: String) -> &'static str {
 }
 
 fn many_albums(fixture: &Fixture) {
-    let seeds: Vec<Seed> = (1..=250)
+    let seeds: Vec<Seed<'_>> = (1..=250)
         .map(|id| {
             let artist = leak(format!("Artist {id:03}"));
             let mut seed = Seed::new(id, "Song", artist, leak(format!("Album {id:03}")));

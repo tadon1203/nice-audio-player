@@ -21,7 +21,7 @@ fn a_library_that_cannot_be_opened_says_why() {
         .unwrap();
 
     let reason = |directory: &TestDirectory| {
-        Library::open(directory.file(""), null_message_sink())
+        Library::open(&directory.file(""), null_message_sink())
             .err()
             .expect("an unavailable Library")
     };

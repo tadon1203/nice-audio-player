@@ -65,7 +65,7 @@ pub(crate) struct LibrarySync {
 }
 
 impl LibrarySync {
-    pub fn start(
+    pub(crate) fn start(
         database: Database,
         scan: Arc<Mutex<Versioned<LibraryScanSnapshot>>>,
         notify: Notifier,
@@ -105,11 +105,11 @@ impl LibrarySync {
             .map_err(logged(task_failed(), "library.sync.reply_recv_failed"))?
     }
 
-    pub fn register_root(&self, path: String) -> Result<LibraryRoot, LibraryCommandError> {
+    pub(crate) fn register_root(&self, path: String) -> Result<LibraryRoot, LibraryCommandError> {
         self.call(|reply| Command::Register(path, reply))
     }
 
-    pub fn set_root_enabled(
+    pub(crate) fn set_root_enabled(
         &self,
         id: RootId,
         enabled: bool,
@@ -117,24 +117,24 @@ impl LibrarySync {
         self.call(|reply| Command::Enable(id, enabled, reply))
     }
 
-    pub fn remove_root(&self, id: RootId) -> Result<(), LibraryCommandError> {
+    pub(crate) fn remove_root(&self, id: RootId) -> Result<(), LibraryCommandError> {
         self.call(|reply| Command::Remove(id, reply))
     }
 
-    pub fn delete_missing(&self) -> Result<u64, LibraryCommandError> {
+    pub(crate) fn delete_missing(&self) -> Result<u64, LibraryCommandError> {
         self.call(Command::DeleteMissing)
     }
 
-    pub fn start_scan(&self) -> Result<(), LibraryCommandError> {
+    pub(crate) fn start_scan(&self) -> Result<(), LibraryCommandError> {
         self.call(Command::Start)
     }
 
-    pub fn cancel_scan(&self) -> Result<(), LibraryCommandError> {
+    pub(crate) fn cancel_scan(&self) -> Result<(), LibraryCommandError> {
         self.call(Command::Cancel)
     }
 
     /// Stops the actor, its watchers and the scan in progress, and waits for them.
-    pub fn shutdown(&self) {
+    pub(crate) fn shutdown(&self) {
         log_failed(
             self.messages.send(Message::Shutdown),
             "library.sync.shutdown_send_failed",

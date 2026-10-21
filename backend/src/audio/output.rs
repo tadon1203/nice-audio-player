@@ -105,8 +105,8 @@ impl LatestPosition {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum AudioOutputError {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AudioOutputError {
     NoOutputDevice,
     ConfigurationQueryFailed,
     UnsupportedConfiguration,

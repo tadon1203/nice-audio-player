@@ -21,7 +21,8 @@ fn harness() -> Harness {
     let directory = TestDirectory::new();
     let music = directory.file("music");
     std::fs::create_dir_all(&music).unwrap();
-    let library = Library::open(directory.file("data"), null_message_sink()).expect("open library");
+    let library =
+        Library::open(&directory.file("data"), null_message_sink()).expect("open library");
     library
         .register_root(music.to_string_lossy().into_owned())
         .expect("register root");

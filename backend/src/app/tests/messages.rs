@@ -13,7 +13,7 @@ const TOPICS: [StateTopic; 5] = [
 
 fn revision_of(backend: &BackendApp, topic: StateTopic) -> u64 {
     match backend.state_message(topic) {
-        Some(BackendMessage::State(message)) => message.revision,
+        BackendMessage::State(message) => message.revision,
         other => panic!("{topic:?} is not a state message: {other:?}"),
     }
 }
@@ -37,7 +37,13 @@ fn initial_state_has_every_topic_at_its_starting_revision() {
     assert_eq!(initial.appearance.revision, 0);
     assert_eq!(initial.appearance.value, Appearance::default());
     for topic in TOPICS {
-        assert!(fixture.backend.state_message(topic).is_some(), "{topic:?}");
+        assert!(
+            matches!(
+                fixture.backend.state_message(topic),
+                BackendMessage::State(_)
+            ),
+            "{topic:?}"
+        );
     }
 }
 

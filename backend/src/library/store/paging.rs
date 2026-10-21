@@ -43,7 +43,7 @@ pub(super) struct Scope {
 }
 
 impl Scope {
-    pub fn new(
+    pub(super) fn new(
         view: View,
         search: &str,
         owner: &str,
@@ -103,7 +103,7 @@ pub(super) struct Phase {
 }
 
 impl Phase {
-    pub fn new(predicate: &str, terms: &[&str]) -> Self {
+    pub(super) fn new(predicate: &str, terms: &[&str]) -> Self {
         Self {
             predicate: predicate.to_owned(),
             terms: terms.iter().map(|term| (*term).to_owned()).collect(),
@@ -125,7 +125,7 @@ impl Ordering {
     }
 
     /// The whole order as one `ORDER BY` list, for a query that returns every row.
-    pub fn order_by(&self) -> String {
+    pub(super) fn order_by(&self) -> String {
         let direction = self.sql_direction();
         let mut parts = Vec::new();
         if self.phases.len() > 1 {
@@ -172,7 +172,7 @@ pub(super) struct PagedQuery {
 
 impl PagedQuery {
     /// How many rows the whole list has.
-    pub fn total(&self, connection: &Connection) -> Result<u64, StoreError> {
+    pub(super) fn total(&self, connection: &Connection) -> Result<u64, StoreError> {
         let total: i64 = connection.query_row(
             &format!("SELECT COUNT(*) {}", self.count_from_where),
             params_from_iter(self.params.clone()),
@@ -183,7 +183,7 @@ impl PagedQuery {
 
     /// A page: after the cursor's row, or from the start of the list, or, with no cursor and a
     /// `skip`, after the `skip` rows that lead the list (found without reading them).
-    pub fn fetch<T>(
+    pub(super) fn fetch<T>(
         &self,
         connection: &Connection,
         raw_cursor: Option<&str>,
@@ -302,7 +302,7 @@ impl PagedQuery {
     /// How SQLite runs a phase's query, one line per step. For checking that a list reads an
     /// index range instead of the whole table.
     #[cfg(test)]
-    pub fn plan(&self, connection: &Connection, phase: usize, after: bool) -> Vec<String> {
+    pub(super) fn plan(&self, connection: &Connection, phase: usize, after: bool) -> Vec<String> {
         let phase = &self.ordering.phases[phase];
         let sql = format!(
             "EXPLAIN QUERY PLAN {}",
@@ -601,8 +601,8 @@ mod skip_tests {
                     "{direction:?} {skip}"
                 );
             }
-            assert!(all(450).is_empty());
-            assert!(all(9_999).is_empty());
+            assert_eq!(all(450).len(), 0);
+            assert_eq!(all(9_999).len(), 0);
         }
     }
 }

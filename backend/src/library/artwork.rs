@@ -15,7 +15,7 @@ use std::{
 };
 
 /// The longest edge of a thumbnail, in pixels.
-pub const THUMBNAIL_EDGE: u32 = 512;
+pub(crate) const THUMBNAIL_EDGE: u32 = 512;
 const THUMBNAIL_QUALITY: u8 = 85;
 
 static TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
@@ -58,17 +58,17 @@ pub struct ArtworkRef {
 /// Where an image lives below the data directory: `artwork/<first two hash digits>/<hash>.<ext>`.
 /// The only way a path is formatted or recognized as canonical.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ArtworkPath {
+pub(crate) struct ArtworkPath {
     hash: String,
     mime_type: ArtworkMimeType,
 }
 
 impl ArtworkPath {
-    pub fn new(hash: String, mime_type: ArtworkMimeType) -> Self {
+    pub(crate) fn new(hash: String, mime_type: ArtworkMimeType) -> Self {
         Self { hash, mime_type }
     }
 
-    pub fn parse(relative: &str) -> Option<Self> {
+    pub(crate) fn parse(relative: &str) -> Option<Self> {
         let mut parts = relative.split('/');
         let (Some("artwork"), Some(shard), Some(file), None) =
             (parts.next(), parts.next(), parts.next(), parts.next())
@@ -84,7 +84,7 @@ impl ArtworkPath {
     }
 
     /// `relative` is the canonical path of exactly this hash and type.
-    pub fn is_canonical(hash: &str, mime_type: ArtworkMimeType, relative: &str) -> bool {
+    pub(crate) fn is_canonical(hash: &str, mime_type: ArtworkMimeType, relative: &str) -> bool {
         Self::parse(relative).is_some_and(|path| path.hash == hash && path.mime_type == mime_type)
     }
 
@@ -95,20 +95,20 @@ impl ArtworkPath {
 
     /// The thumbnail of this image, stored next to it: `artwork/<shard>/<hash>.thumb.jpg`, or
     /// `None` for a hash too short to have a shard.
-    pub fn thumbnail(&self) -> Option<String> {
+    pub(crate) fn thumbnail(&self) -> Option<String> {
         thumbnail_path(&self.hash)
     }
 }
 
 /// Where the thumbnail of the artwork with this hash lives below the data directory, or `None`
 /// for a hash too short to have a shard.
-pub fn thumbnail_path(hash: &str) -> Option<String> {
+pub(crate) fn thumbnail_path(hash: &str) -> Option<String> {
     let shard = hash.get(..2)?;
     Some(format!("artwork/{shard}/{hash}.thumb.jpg"))
 }
 
 /// The hash of a thumbnail's file name (`<hash>.thumb.jpg`), when it is one.
-pub fn thumbnail_hash(file_name: &str) -> Option<&str> {
+pub(crate) fn thumbnail_hash(file_name: &str) -> Option<&str> {
     file_name
         .strip_suffix(".thumb.jpg")
         .filter(|hash| is_artwork_hash(hash))
@@ -157,7 +157,7 @@ fn parse_thumbnail(relative: &str) -> Option<&str> {
 /// The image for a relative path below the data directory, or `None` when the path is not a
 /// canonical artwork path or no file exists. A thumbnail that does not exist yet falls back to
 /// its original.
-pub fn serve(data_dir: &Path, relative: &str) -> Option<ServedArtwork> {
+pub(crate) fn serve(data_dir: &Path, relative: &str) -> Option<ServedArtwork> {
     let read = |path: &str, mime_type, cache, kind| {
         let bytes = fs::read(data_dir.join(path)).ok()?;
         log::debug!("artwork.served kind={kind}");
@@ -188,7 +188,7 @@ pub fn serve(data_dir: &Path, relative: &str) -> Option<ServedArtwork> {
 }
 
 #[derive(Debug, Clone)]
-pub struct StoredArtwork {
+pub(crate) struct StoredArtwork {
     pub hash: String,
     pub mime_type: ArtworkMimeType,
     pub relative_path: String,
@@ -196,12 +196,12 @@ pub struct StoredArtwork {
 }
 
 #[derive(Debug, Clone, Copy, thiserror::Error)]
-pub enum ArtworkMaterializeError {
+pub(crate) enum ArtworkMaterializeError {
     #[error("the artwork file could not be read or written")]
     Io,
 }
 
-pub fn materialize(
+pub(crate) fn materialize(
     root: &Path,
     bytes: &[u8],
     mime_type: ArtworkMimeType,
@@ -275,7 +275,7 @@ pub fn materialize(
 }
 
 /// Writes the thumbnail of a stored image unless it exists. The original is never touched.
-pub fn ensure_thumbnail(
+pub(crate) fn ensure_thumbnail(
     root: &Path,
     original: &ArtworkPath,
 ) -> Result<(), ArtworkMaterializeError> {

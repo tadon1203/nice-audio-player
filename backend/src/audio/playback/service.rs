@@ -86,7 +86,7 @@ impl TaskError for PlaybackServiceError {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-pub enum PlaybackServiceStartError {
+pub(crate) enum PlaybackServiceStartError {
     #[error("the playback worker thread could not start")]
     WorkerStartFailed,
 }
@@ -182,7 +182,7 @@ pub(super) enum PlaybackCommand {
 }
 
 #[derive(Clone)]
-pub struct PlaybackServiceHandle {
+pub(crate) struct PlaybackServiceHandle {
     inbox: Inbox,
     snapshot: Arc<RwLock<Versioned<PlaybackSnapshot>>>,
     position: Arc<RwLock<Option<PlaybackPosition>>>,
@@ -190,7 +190,7 @@ pub struct PlaybackServiceHandle {
     meter: MeterHub,
 }
 
-pub struct PlaybackService {
+pub(crate) struct PlaybackService {
     handle: PlaybackServiceHandle,
     pub(super) worker: Mutex<Option<JoinHandle<()>>>,
 }
@@ -240,7 +240,7 @@ impl PlaybackService {
         let worker = thread::Builder::new()
             .name("worker".into())
             .spawn(move || {
-                PlaybackWorker::new(links, queue, volume_state, output_selection).run(inputs);
+                PlaybackWorker::new(links, queue, volume_state, output_selection).run(&inputs);
             })
             .map_err(logged(
                 PlaybackServiceStartError::WorkerStartFailed,
@@ -258,34 +258,34 @@ impl PlaybackService {
         })
     }
 
-    pub fn handle(&self) -> PlaybackServiceHandle {
+    pub(crate) fn handle(&self) -> PlaybackServiceHandle {
         self.handle.clone()
     }
 
     /// Where Meter frames are subscribed to; its taps belong to this service's output streams.
-    pub fn meter(&self) -> MeterHub {
+    pub(crate) fn meter(&self) -> MeterHub {
         self.handle.meter.clone()
     }
 
-    pub fn snapshot(&self) -> PlaybackSnapshot {
+    pub(crate) fn snapshot(&self) -> PlaybackSnapshot {
         self.handle.snapshot()
     }
 
     /// The transport snapshot with the revision of its topic.
-    pub fn versioned_snapshot(&self) -> Versioned<PlaybackSnapshot> {
+    pub(crate) fn versioned_snapshot(&self) -> Versioned<PlaybackSnapshot> {
         self.handle.versioned_snapshot()
     }
 
-    pub fn position(&self) -> Option<PlaybackPosition> {
+    pub(crate) fn position(&self) -> Option<PlaybackPosition> {
         self.handle.position()
     }
 
     /// The queue snapshot with the revision of its topic.
-    pub fn versioned_queue_snapshot(&self) -> Versioned<PlaybackQueueSnapshot> {
+    pub(crate) fn versioned_queue_snapshot(&self) -> Versioned<PlaybackQueueSnapshot> {
         self.handle.versioned_queue_snapshot()
     }
 
-    pub fn shutdown(&self) {
+    pub(crate) fn shutdown(&self) {
         self.handle.inbox.send(WorkerInput::Shutdown);
         if let Some(worker) = sync::lock(&self.worker).take()
             && worker.join().is_err()
@@ -302,26 +302,26 @@ impl Drop for PlaybackService {
 }
 
 impl PlaybackServiceHandle {
-    pub fn snapshot(&self) -> PlaybackSnapshot {
+    pub(crate) fn snapshot(&self) -> PlaybackSnapshot {
         self.versioned_snapshot().value
     }
 
-    pub fn versioned_snapshot(&self) -> Versioned<PlaybackSnapshot> {
+    pub(crate) fn versioned_snapshot(&self) -> Versioned<PlaybackSnapshot> {
         sync::read(&self.snapshot).clone()
     }
 
     /// The newest position of the loaded track, `None` when nothing is loaded.
-    pub fn position(&self) -> Option<PlaybackPosition> {
+    pub(crate) fn position(&self) -> Option<PlaybackPosition> {
         sync::read(&self.position).clone()
     }
 
-    pub fn versioned_queue_snapshot(&self) -> Versioned<PlaybackQueueSnapshot> {
+    pub(crate) fn versioned_queue_snapshot(&self) -> Versioned<PlaybackQueueSnapshot> {
         sync::read(&self.queue_snapshot).clone()
     }
 
     /// Upcoming items from `offset`; a window of the queue the snapshot only starts. Reads the
     /// library, so it blocks like the other requests.
-    pub fn queue_window(&self, offset: usize, limit: usize) -> PlaybackQueueWindow {
+    pub(crate) fn queue_window(&self, offset: usize, limit: usize) -> PlaybackQueueWindow {
         // Copy the snapshot out first: the library is read without holding the worker's lock.
         let queue = self.versioned_queue_snapshot();
         queue.value.window(queue.revision, offset, limit)
@@ -329,7 +329,7 @@ impl PlaybackServiceHandle {
 
     /// Replaces the queue with the tracks `track_ids` (in play order) and starts the one at
     /// `start_index`. Returns once that track is playing; the others are read when needed.
-    pub fn start(
+    pub(crate) fn start(
         &self,
         track_ids: Vec<TrackId>,
         start_index: usize,
@@ -341,73 +341,73 @@ impl PlaybackServiceHandle {
         })
     }
 
-    pub fn previous(&self) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
+    pub(crate) fn previous(&self) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
         self.request(|reply| PlaybackCommand::Previous { reply })
     }
 
-    pub fn next(&self) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
+    pub(crate) fn next(&self) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
         self.request(|reply| PlaybackCommand::Next { reply })
     }
 
-    pub fn pause(&self) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
+    pub(crate) fn pause(&self) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
         self.request(|reply| PlaybackCommand::Pause { reply })
     }
 
-    pub fn resume(&self) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
+    pub(crate) fn resume(&self) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
         self.request(|reply| PlaybackCommand::Resume { reply })
     }
 
-    pub fn seek(
+    pub(crate) fn seek(
         &self,
         position_ms: u64,
     ) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
         self.request(|reply| PlaybackCommand::Seek { position_ms, reply })
     }
 
-    pub fn set_volume(
+    pub(crate) fn set_volume(
         &self,
         volume: f32,
     ) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
         self.request(|reply| PlaybackCommand::SetVolume { volume, reply })
     }
 
-    pub fn mute(&self) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
+    pub(crate) fn mute(&self) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
         self.request(|reply| PlaybackCommand::Mute { reply })
     }
 
-    pub fn unmute(&self) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
+    pub(crate) fn unmute(&self) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
         self.request(|reply| PlaybackCommand::Unmute { reply })
     }
 
-    pub fn set_output_selection(
+    pub(crate) fn set_output_selection(
         &self,
         selection: AudioOutputSelection,
     ) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
         self.request(|reply| PlaybackCommand::SetOutputSelection { selection, reply })
     }
 
-    pub fn set_repeat_mode(
+    pub(crate) fn set_repeat_mode(
         &self,
         mode: PlaybackRepeatMode,
     ) -> Result<Versioned<PlaybackQueueSnapshot>, PlaybackServiceError> {
         self.request(|reply| PlaybackCommand::SetRepeatMode { mode, reply })
     }
 
-    pub fn set_shuffle(
+    pub(crate) fn set_shuffle(
         &self,
         enabled: bool,
     ) -> Result<Versioned<PlaybackQueueSnapshot>, PlaybackServiceError> {
         self.request(|reply| PlaybackCommand::SetShuffle { enabled, reply })
     }
 
-    pub fn remove_queue_item(
+    pub(crate) fn remove_queue_item(
         &self,
         id: QueueItemId,
     ) -> Result<Versioned<PlaybackQueueSnapshot>, PlaybackServiceError> {
         self.request(|reply| PlaybackCommand::RemoveQueueItem { id, reply })
     }
 
-    pub fn move_queue_item(
+    pub(crate) fn move_queue_item(
         &self,
         id: QueueItemId,
         to: usize,
@@ -415,7 +415,7 @@ impl PlaybackServiceHandle {
         self.request(|reply| PlaybackCommand::MoveQueueItem { id, to, reply })
     }
 
-    pub fn play_queue_item(
+    pub(crate) fn play_queue_item(
         &self,
         id: QueueItemId,
     ) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
@@ -424,7 +424,7 @@ impl PlaybackServiceHandle {
 
     /// Adds `items` after the current item (`next`) or at the end. With nothing queued they
     /// start playing instead; the worker decides, so the check cannot race a stop.
-    pub fn enqueue(
+    pub(crate) fn enqueue(
         &self,
         track_ids: Vec<TrackId>,
         next: bool,
@@ -436,12 +436,14 @@ impl PlaybackServiceHandle {
         })
     }
 
-    pub fn clear_queue(&self) -> Result<Versioned<PlaybackQueueSnapshot>, PlaybackServiceError> {
+    pub(crate) fn clear_queue(
+        &self,
+    ) -> Result<Versioned<PlaybackQueueSnapshot>, PlaybackServiceError> {
         self.request(|reply| PlaybackCommand::ClearQueue { reply })
     }
 
     /// Puts back the queue before the last replacement, playing the item that was current.
-    pub fn restore_previous_queue(
+    pub(crate) fn restore_previous_queue(
         &self,
     ) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
         self.request(|reply| PlaybackCommand::RestorePreviousQueue { reply })

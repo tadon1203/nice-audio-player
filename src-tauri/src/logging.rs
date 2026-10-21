@@ -10,7 +10,7 @@ use tauri_plugin_log::{
 
 /// Builds the log plugin. The colors are on the console only: the log file is read by tools and
 /// by people after the fact, and escape codes would make it hard to read.
-pub fn plugin<R: Runtime>() -> TauriPlugin<R> {
+pub(crate) fn plugin<R: Runtime>() -> TauriPlugin<R> {
     let console = Target::new(TargetKind::Stdout);
     // A pipe or a redirect is not a terminal, and `NO_COLOR` is the user's request for no color.
     let console = if std::io::stdout().is_terminal() && std::env::var_os("NO_COLOR").is_none() {

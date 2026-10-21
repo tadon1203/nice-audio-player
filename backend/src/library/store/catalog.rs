@@ -17,7 +17,18 @@ use super::{
     },
 };
 use crate::ids::{AlbumId, ArtistId, TrackId, album_id_column, artist_id_column, track_id_column};
-use crate::library::{error::StoreError, models::*, text};
+use crate::library::{
+    error::StoreError,
+    models::{
+        AlbumArtistListRequest, AlbumArtistQuery, AlbumListRequest, AlbumQuery, ArtistRef,
+        LibraryAlbumArtistPage, LibraryAlbumArtistSortKey, LibraryAlbumArtistSummary,
+        LibraryAlbumDetails, LibraryAlbumPage, LibraryAlbumSortKey, LibraryAlbumSummary,
+        LibraryAlbumTrackPage, LibraryAlbumTrackSummary, LibraryArtistAlbumSortKey,
+        LibraryIndexBucket, LibrarySortDirection, LibraryTrackPage, LibraryTrackSortKey, TrackCore,
+        TrackListRequest, TrackQuery,
+    },
+    text,
+};
 use rusqlite::{Connection, OptionalExtension, Row, params, types::Value};
 
 /// An album's tracks in playing order: by disc, then track, unnumbered ones last.
@@ -443,7 +454,7 @@ fn year_buckets(
 impl LibraryStore {
     /// A page of the list from its start (see [`Self::catalog_tracks_from`]).
     #[cfg(test)]
-    pub fn catalog_tracks(
+    pub(crate) fn catalog_tracks(
         &self,
         cursor: Option<&str>,
         search: Option<&str>,
@@ -463,7 +474,7 @@ impl LibraryStore {
 
     /// A page of the list; with no cursor it starts after the first `skip` rows, which is how the
     /// scroll index jumps to a letter without paging through what precedes it.
-    pub fn catalog_tracks_from(
+    pub(crate) fn catalog_tracks_from(
         &self,
         request: &TrackListRequest,
     ) -> Result<LibraryTrackPage, StoreError> {
@@ -485,7 +496,7 @@ impl LibraryStore {
         })
     }
 
-    pub fn catalog_track_index(
+    pub(crate) fn catalog_track_index(
         &self,
         query: &TrackQuery,
     ) -> Result<Vec<LibraryIndexBucket>, StoreError> {
@@ -509,7 +520,7 @@ impl LibraryStore {
 
     /// A page of the list from its start (see [`Self::catalog_albums_from`]).
     #[cfg(test)]
-    pub fn catalog_albums(
+    pub(crate) fn catalog_albums(
         &self,
         cursor: Option<&str>,
         search: Option<&str>,
@@ -529,7 +540,7 @@ impl LibraryStore {
 
     /// A page of the list; with no cursor it starts after the first `skip` rows, which is how the
     /// scroll index jumps to a letter without paging through what precedes it.
-    pub fn catalog_albums_from(
+    pub(crate) fn catalog_albums_from(
         &self,
         request: &AlbumListRequest,
     ) -> Result<LibraryAlbumPage, StoreError> {
@@ -551,7 +562,7 @@ impl LibraryStore {
         })
     }
 
-    pub fn catalog_album_index(
+    pub(crate) fn catalog_album_index(
         &self,
         query: &AlbumQuery,
     ) -> Result<Vec<LibraryIndexBucket>, StoreError> {
@@ -584,7 +595,7 @@ impl LibraryStore {
 
     /// A page of the list from its start (see [`Self::catalog_album_artists_from`]).
     #[cfg(test)]
-    pub fn catalog_album_artists(
+    pub(crate) fn catalog_album_artists(
         &self,
         cursor: Option<&str>,
         search: Option<&str>,
@@ -604,7 +615,7 @@ impl LibraryStore {
 
     /// A page of the list; with no cursor it starts after the first `skip` rows, which is how the
     /// scroll index jumps to a letter without paging through what precedes it.
-    pub fn catalog_album_artists_from(
+    pub(crate) fn catalog_album_artists_from(
         &self,
         request: &AlbumArtistListRequest,
     ) -> Result<LibraryAlbumArtistPage, StoreError> {
@@ -626,7 +637,7 @@ impl LibraryStore {
         })
     }
 
-    pub fn catalog_album_artist_index(
+    pub(crate) fn catalog_album_artist_index(
         &self,
         query: &AlbumArtistQuery,
     ) -> Result<Vec<LibraryIndexBucket>, StoreError> {
@@ -648,7 +659,7 @@ impl LibraryStore {
         )
     }
 
-    pub fn catalog_artist_albums(
+    pub(crate) fn catalog_artist_albums(
         &self,
         artist: ArtistId,
         cursor: Option<&str>,
@@ -669,7 +680,7 @@ impl LibraryStore {
         })
     }
 
-    pub fn catalog_artist(
+    pub(crate) fn catalog_artist(
         &self,
         artist: ArtistId,
     ) -> Result<LibraryAlbumArtistSummary, StoreError> {
@@ -685,7 +696,10 @@ impl LibraryStore {
     }
 
     /// The details of an album by its ID.
-    pub fn catalog_album(&self, album_id: AlbumId) -> Result<LibraryAlbumDetails, StoreError> {
+    pub(crate) fn catalog_album(
+        &self,
+        album_id: AlbumId,
+    ) -> Result<LibraryAlbumDetails, StoreError> {
         let connection = self.read()?;
         Self::album_details(&connection, album_id)
     }
@@ -751,7 +765,7 @@ impl LibraryStore {
     }
 
     /// A page of an album's tracks by its ID.
-    pub fn catalog_album_tracks_by_id(
+    pub(crate) fn catalog_album_tracks_by_id(
         &self,
         album_id: AlbumId,
         cursor: Option<&str>,

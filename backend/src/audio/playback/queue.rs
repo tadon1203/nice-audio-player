@@ -48,12 +48,23 @@ pub struct QueueEntry {
     pub track_id: TrackId,
 }
 
+/// Edits an order that snapshots may share: the order is copied, changed, and stored back.
+fn edit_order<R>(
+    order: &mut Arc<[QueueEntry]>,
+    change: impl FnOnce(&mut Vec<QueueEntry>) -> R,
+) -> R {
+    let mut entries = order.to_vec();
+    let result = change(&mut entries);
+    *order = entries.into();
+    result
+}
+
 #[derive(Debug, Clone)]
 pub struct PlaybackQueue {
     /// The order the entries were queued and arranged in. Shuffle never touches it.
-    arranged: Arc<Vec<QueueEntry>>,
+    arranged: Arc<[QueueEntry]>,
     /// While shuffle is on, the order the entries play in; the same entries as `arranged`.
-    shuffled: Option<Arc<Vec<QueueEntry>>>,
+    shuffled: Option<Arc<[QueueEntry]>>,
     /// The position of the current entry in the play order.
     current: usize,
     repeat: PlaybackRepeatMode,
@@ -90,7 +101,7 @@ impl PlaybackQueue {
     }
 
     /// The order the entries play in: the arranged order, or the shuffled one.
-    pub fn play_order(&self) -> &Arc<Vec<QueueEntry>> {
+    pub fn play_order(&self) -> &Arc<[QueueEntry]> {
         self.shuffled.as_ref().unwrap_or(&self.arranged)
     }
 
@@ -148,7 +159,7 @@ impl PlaybackQueue {
             .into_iter()
             .map(|track_id| self.new_entry(track_id))
             .collect();
-        self.arranged = Arc::new(entries);
+        self.arranged = entries.into();
         self.shuffled = None;
         self.current = start_index;
         if self.shuffle {
@@ -184,14 +195,16 @@ impl PlaybackQueue {
         let keep = self.current + 1;
         match &mut self.shuffled {
             Some(shuffled) => {
-                let dropped: HashSet<QueueItemId> = tail_from(shuffled.as_slice(), keep)
+                let dropped: HashSet<QueueItemId> = tail_from(shuffled, keep)
                     .iter()
                     .map(|entry| entry.id)
                     .collect();
-                Arc::make_mut(shuffled).truncate(keep);
-                Arc::make_mut(&mut self.arranged).retain(|entry| !dropped.contains(&entry.id));
+                edit_order(shuffled, |order| order.truncate(keep));
+                edit_order(&mut self.arranged, |arranged| {
+                    arranged.retain(|entry| !dropped.contains(&entry.id));
+                });
             }
-            None => Arc::make_mut(&mut self.arranged).truncate(keep),
+            None => edit_order(&mut self.arranged, |arranged| arranged.truncate(keep)),
         }
         true
     }
@@ -204,13 +217,17 @@ impl PlaybackQueue {
         if !order.iter().any(|entry| ids.contains(&entry.id)) {
             return false;
         }
-        let before = head(order.as_slice(), self.current)
+        let before = head(order, self.current)
             .iter()
             .filter(|entry| ids.contains(&entry.id))
             .count();
-        Arc::make_mut(&mut self.arranged).retain(|entry| !ids.contains(&entry.id));
+        edit_order(&mut self.arranged, |arranged| {
+            arranged.retain(|entry| !ids.contains(&entry.id));
+        });
         if let Some(shuffled) = &mut self.shuffled {
-            Arc::make_mut(shuffled).retain(|entry| !ids.contains(&entry.id));
+            edit_order(shuffled, |order| {
+                order.retain(|entry| !ids.contains(&entry.id));
+            });
         }
         self.current -= before;
         true
@@ -218,9 +235,11 @@ impl PlaybackQueue {
 
     pub fn remove_upcoming(&mut self, id: QueueItemId) -> Result<(), QueueError> {
         let index = self.upcoming_index(id)?;
-        let removed = Arc::make_mut(self.play_order_mut()).remove(index);
+        let removed = edit_order(self.play_order_mut(), |order| order.remove(index));
         if self.shuffled.is_some() {
-            Arc::make_mut(&mut self.arranged).retain(|entry| entry.id != removed.id);
+            edit_order(&mut self.arranged, |arranged| {
+                arranged.retain(|entry| entry.id != removed.id);
+            });
         }
         Ok(())
     }
@@ -241,22 +260,23 @@ impl PlaybackQueue {
         if target == index {
             return Ok(false);
         }
-        let order = Arc::make_mut(self.play_order_mut());
-        let entry = order.remove(index);
-        order.insert(target, entry.clone());
-        // The entry before the moved one. `target` is at least 1, because `current + 1` is.
-        let predecessor = order
-            .get(target.saturating_sub(1))
-            .ok_or(QueueError::ItemNotUpcoming)?
-            .id;
+        let (entry, predecessor) = edit_order(self.play_order_mut(), |order| {
+            let entry = order.remove(index);
+            order.insert(target, entry.clone());
+            // The entry before the moved one. `target` is at least 1, because `current + 1` is.
+            let predecessor = order.get(target.saturating_sub(1)).map(|entry| entry.id);
+            (entry, predecessor)
+        });
+        let predecessor = predecessor.ok_or(QueueError::ItemNotUpcoming)?;
         if self.shuffled.is_some() {
-            let arranged = Arc::make_mut(&mut self.arranged);
-            arranged.retain(|other| other.id != entry.id);
-            let after = arranged
-                .iter()
-                .position(|other| other.id == predecessor)
-                .map_or(arranged.len(), |position| position + 1);
-            arranged.insert(after, entry);
+            edit_order(&mut self.arranged, |arranged| {
+                arranged.retain(|other| other.id != entry.id);
+                let after = arranged
+                    .iter()
+                    .position(|other| other.id == predecessor)
+                    .map_or(arranged.len(), |position| position + 1);
+                arranged.insert(after, entry);
+            });
         }
         Ok(true)
     }
@@ -289,21 +309,24 @@ impl PlaybackQueue {
         let current_id = self.current().map(|entry| entry.id);
         let at = if next { self.current + 1 } else { self.len() };
         if self.shuffled.is_some() {
-            let arranged = Arc::make_mut(&mut self.arranged);
-            let arranged_at = match (next, current_id) {
-                (true, Some(current_id)) => arranged
-                    .iter()
-                    .position(|entry| entry.id == current_id)
-                    .map_or(arranged.len(), |position| position + 1),
-                _ => arranged.len(),
-            };
-            arranged.splice(arranged_at..arranged_at, entries.iter().cloned());
+            edit_order(&mut self.arranged, |arranged| {
+                let arranged_at = match (next, current_id) {
+                    (true, Some(current_id)) => arranged
+                        .iter()
+                        .position(|entry| entry.id == current_id)
+                        .map_or(arranged.len(), |position| position + 1),
+                    _ => arranged.len(),
+                };
+                arranged.splice(arranged_at..arranged_at, entries.iter().cloned());
+            });
         }
-        Arc::make_mut(self.play_order_mut()).splice(at..at, entries);
+        edit_order(self.play_order_mut(), |order| {
+            order.splice(at..at, entries);
+        });
         Ok(())
     }
 
-    fn play_order_mut(&mut self) -> &mut Arc<Vec<QueueEntry>> {
+    fn play_order_mut(&mut self) -> &mut Arc<[QueueEntry]> {
         self.shuffled.as_mut().unwrap_or(&mut self.arranged)
     }
 
@@ -398,12 +421,13 @@ impl PlaybackQueue {
             && shuffled.len() > 1
         {
             let last_played = shuffled.get(self.current).map(|entry| entry.id);
-            let order = Arc::make_mut(shuffled);
-            order.shuffle(rng);
-            if order.first().map(|entry| entry.id) == last_played {
-                let other = rng.random_range(1..order.len());
-                order.swap(0, other);
-            }
+            edit_order(shuffled, |order| {
+                order.shuffle(rng);
+                if order.first().map(|entry| entry.id) == last_played {
+                    let other = rng.random_range(1..order.len());
+                    order.swap(0, other);
+                }
+            });
         }
         self.current = 0;
     }
@@ -413,7 +437,7 @@ impl PlaybackQueue {
         let current = order.remove(self.current_arranged_index());
         order.shuffle(rng);
         order.insert(0, current);
-        self.shuffled = Some(Arc::new(order));
+        self.shuffled = Some(order.into());
         self.current = 0;
     }
 
@@ -525,8 +549,8 @@ mod tests {
         assert_eq!(queue.position(), 0);
         let mut sorted_before = before.clone();
         let mut sorted_after = after.clone();
-        sorted_before.sort();
-        sorted_after.sort();
+        sorted_before.sort_unstable();
+        sorted_after.sort_unstable();
         assert_eq!(sorted_before, sorted_after);
         assert_eq!(arranged(&queue), before, "the arranged order is untouched");
 
@@ -651,8 +675,8 @@ mod tests {
         assert_eq!(arranged(&queue), arranged_before);
         let mut a = first_pass;
         let mut b = second_pass;
-        a.sort();
-        b.sort();
+        a.sort_unstable();
+        b.sort_unstable();
         assert_eq!(a, b);
     }
 
@@ -946,7 +970,7 @@ mod tests {
         assert!(queue.shuffle());
         assert_eq!(current(&queue), 3, "the same item is current");
         let mut restored = order(&queue);
-        restored.sort();
+        restored.sort_unstable();
         assert_eq!(restored, [1, 2, 3, 4, 5]);
         queue.set_shuffle(false, &mut rng());
         assert_eq!(order(&queue), [1, 2, 3, 4, 5]);

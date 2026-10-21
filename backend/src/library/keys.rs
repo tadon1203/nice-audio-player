@@ -9,7 +9,7 @@ use crate::ids::AlbumId;
 use std::ffi::OsStr;
 use std::path::Path;
 
-/// The SortOrder tags of a track (`TITLESORT`, `ARTISTSORT`, `ALBUMSORT`, `ALBUMARTISTSORT`).
+/// The `SortOrder` tags of a track (`TITLESORT`, `ARTISTSORT`, `ALBUMSORT`, `ALBUMARTISTSORT`).
 #[derive(Debug, Clone, Copy, Default)]
 pub(crate) struct SortTags<'a> {
     pub title: Option<&'a str>,
@@ -42,7 +42,7 @@ pub(crate) struct TrackKeys {
 }
 
 impl TrackKeys {
-    pub fn new(
+    pub(crate) fn new(
         title: Option<&str>,
         artist: Option<&str>,
         album: Option<&str>,
@@ -62,7 +62,7 @@ impl TrackKeys {
 
     /// All the keys. `album_directory` is the album's edition (see [`album_edition_of`]) and
     /// `root_path` the absolute path of its root. Both are kept only when the track has an album.
-    pub fn build(
+    pub(crate) fn build(
         [title, artist, album, album_artist]: [Option<&str>; 4],
         date: Option<&str>,
         file_name: &str,

@@ -1,6 +1,6 @@
-pub mod lrc;
-pub mod model;
-pub mod service;
+pub(crate) mod lrc;
+pub(crate) mod model;
+pub(crate) mod service;
 
 pub use model::{LyricsCommandError, LyricsResolution};
-pub use service::LyricsService;
+pub(crate) use service::LyricsService;

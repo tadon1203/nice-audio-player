@@ -79,9 +79,8 @@ pub(super) fn discover<'a>(
         .into_iter()
         .flat_map(|start| walkdir::WalkDir::new(start).follow_links(false).into_iter())
         .filter_map(move |entry| {
-            let entry = match entry {
-                Ok(entry) => entry,
-                Err(_) => return Some(Discovery::WalkFailed),
+            let Ok(entry) = entry else {
+                return Some(Discovery::WalkFailed);
             };
             if !entry.file_type().is_file() {
                 return None;

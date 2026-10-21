@@ -59,7 +59,11 @@ pub(crate) struct Touched {
 
 impl Touched {
     /// A track as it is stored now, before it changes (a new track has none).
-    pub fn stored_track(&mut self, tx: &Transaction, track_id: i64) -> rusqlite::Result<()> {
+    pub(crate) fn stored_track(
+        &mut self,
+        tx: &Transaction<'_>,
+        track_id: i64,
+    ) -> rusqlite::Result<()> {
         let stored: Option<(String, String, String)> = tx
             .query_row(
                 "SELECT album_id, album_directory, album FROM track_source_metadata
@@ -75,7 +79,7 @@ impl Touched {
     }
 
     /// An album a track is on, now or before it changed.
-    pub fn album(&mut self, album_id: String, directory: &str, title: &str) {
+    pub(crate) fn album(&mut self, album_id: String, directory: &str, title: &str) {
         if !title.is_empty() {
             self.groups.insert((directory.to_owned(), title.to_owned()));
         }
@@ -84,7 +88,7 @@ impl Touched {
 }
 
 /// Makes the summaries and the compilations right for everything `touched`.
-pub(crate) fn settle(tx: &Transaction, mut touched: Touched) -> rusqlite::Result<()> {
+pub(crate) fn settle(tx: &Transaction<'_>, mut touched: Touched) -> rusqlite::Result<()> {
     for (directory, title) in std::mem::take(&mut touched.groups) {
         settle_compilation(tx, &directory, &title, &mut touched.albums)?;
     }
@@ -94,7 +98,7 @@ pub(crate) fn settle(tx: &Transaction, mut touched: Touched) -> rusqlite::Result
 
 /// Rebuilds every summary from the tracks: after a change too big to follow row by row (a directory
 /// removed, Missing tracks deleted, a migration).
-pub(crate) fn rebuild(tx: &Transaction) -> rusqlite::Result<()> {
+pub(crate) fn rebuild(tx: &Transaction<'_>) -> rusqlite::Result<()> {
     let groups: Vec<(String, String)> = tx
         .prepare(
             "SELECT DISTINCT album_directory, album FROM track_source_metadata
@@ -116,7 +120,7 @@ pub(crate) fn rebuild(tx: &Transaction) -> rusqlite::Result<()> {
 /// Files the untagged tracks of one album directory: under Various Artists when they have several
 /// artists, else each under its own. Albums that lose or gain tracks by it are added to `moved`.
 fn settle_compilation(
-    tx: &Transaction,
+    tx: &Transaction<'_>,
     directory: &str,
     title: &str,
     moved: &mut BTreeSet<String>,
@@ -190,7 +194,7 @@ fn settle_compilation(
 /// Rewrites the rows of the given albums and of their Album Artists. The artists are read before
 /// the album rows are replaced (an album that moved leaves its old artist) and after (the tracks
 /// say where the albums are now); both sets are refreshed.
-fn refresh(tx: &Transaction, albums: &[String]) -> rusqlite::Result<()> {
+fn refresh(tx: &Transaction<'_>, albums: &[String]) -> rusqlite::Result<()> {
     let mut artists = BTreeSet::new();
     for chunk in albums.chunks(CHUNK) {
         artists.extend(ids_of(
@@ -235,7 +239,7 @@ fn placeholders(count: usize) -> String {
 }
 
 /// The first column of `prefix (ids…)` as text.
-fn ids_of(tx: &Transaction, prefix: &str, ids: &[String]) -> rusqlite::Result<Vec<String>> {
+fn ids_of(tx: &Transaction<'_>, prefix: &str, ids: &[String]) -> rusqlite::Result<Vec<String>> {
     let sql = format!("{prefix} ({})", placeholders(ids.len()));
     tx.prepare_cached(&sql)?
         .query_map(params_from_iter(ids), |row| row.get(0))?
@@ -243,7 +247,7 @@ fn ids_of(tx: &Transaction, prefix: &str, ids: &[String]) -> rusqlite::Result<Ve
 }
 
 /// Removes the rows of `table` (`albums` or `artists`) with these IDs.
-fn delete_rows(tx: &Transaction, table: &str, ids: &[String]) -> rusqlite::Result<()> {
+fn delete_rows(tx: &Transaction<'_>, table: &str, ids: &[String]) -> rusqlite::Result<()> {
     tx.prepare_cached(&format!(
         "DELETE FROM {table} WHERE id IN ({})",
         placeholders(ids.len())
@@ -255,7 +259,7 @@ fn delete_rows(tx: &Transaction, table: &str, ids: &[String]) -> rusqlite::Resul
 /// Inserts the rows of `select` (`ALBUM_ROWS` or `ARTIST_ROWS`) that the `filter` column holds in
 /// `ids`, grouped as `group` says.
 fn insert_rows(
-    tx: &Transaction,
+    tx: &Transaction<'_>,
     select: &str,
     filter: &str,
     group: &str,

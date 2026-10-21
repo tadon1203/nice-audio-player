@@ -1,4 +1,4 @@
-pub mod inspection;
-pub mod lyrics;
-pub mod metadata;
-pub mod validation;
+pub(crate) mod inspection;
+pub(crate) mod lyrics;
+pub(crate) mod metadata;
+pub(crate) mod validation;

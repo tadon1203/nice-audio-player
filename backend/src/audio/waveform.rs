@@ -31,7 +31,7 @@ use crate::media::validation::ValidatedAudioFile;
 use crate::messages::{SharedMessageSink, StateTopic, Versioned};
 use crate::sync;
 
-pub const WAVEFORM_BUCKETS: usize = 1000;
+pub(crate) const WAVEFORM_BUCKETS: usize = 1000;
 const CHUNK_FRAMES: usize = 2048;
 const CACHE_MAGIC: &[u8; 5] = b"NAPW2";
 const MEMORY_ENTRIES: usize = 16;
@@ -44,7 +44,7 @@ const SAMPLE_BUDGET: Duration = Duration::from_millis(1_500);
 const MAX_ANALYSIS_THREADS: usize = 2;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Waveform {
+pub(crate) struct Waveform {
     pub peaks: Vec<u8>,
     pub rms: Vec<u8>,
 }
@@ -159,7 +159,7 @@ fn analyze_range(
 /// Decodes the whole file and reduces it to at most [`WAVEFORM_BUCKETS`] peak/RMS buckets.
 /// Long files are split into segments decoded on `threads` threads; the result is identical to
 /// a single-threaded pass.
-pub fn analyze(
+pub(crate) fn analyze(
     file: &ValidatedAudioFile,
     cancellation: &Cancellation,
     threads: usize,
@@ -236,7 +236,7 @@ fn stream_frames(file: &ValidatedAudioFile) -> Option<(u64, u32)> {
 
 /// A quick approximation: one packet decoded at the middle of each bucket. It reads a small part
 /// of the file, so the dock can show a waveform while the exact analysis is still running.
-pub fn sample(
+pub(crate) fn sample(
     file: &ValidatedAudioFile,
     cancellation: &Cancellation,
     budget: Duration,
@@ -535,12 +535,12 @@ impl Shared {
 
 /// Background waveform analysis, and the Waveform topic. One worker thread; only the latest
 /// request is worth finishing.
-pub struct Waveforms {
+pub(crate) struct Waveforms {
     shared: Arc<Shared>,
 }
 
 impl Waveforms {
-    pub fn start(directory: PathBuf, messages: SharedMessageSink) -> Self {
+    pub(crate) fn start(directory: PathBuf, messages: SharedMessageSink) -> Self {
         let cache_directory = directory.clone();
         let shared = Arc::new(Shared {
             directory,
@@ -571,13 +571,13 @@ impl Waveforms {
     }
 
     /// The Waveform topic: the waveform of the loaded Playback, or `None` while it is analyzed.
-    pub fn state(&self) -> Versioned<Option<PlaybackWaveform>> {
+    pub(crate) fn state(&self) -> Versioned<Option<PlaybackWaveform>> {
         self.shared.current().value.clone()
     }
 
     /// A track was loaded as the Playback `playback_id`. Its waveform is shown when it is in
     /// memory; otherwise it is analyzed, and the topic is announced again when it is ready.
-    pub fn loaded(&self, playback_id: PlaybackId, track: &PlayableTrack) {
+    pub(crate) fn loaded(&self, playback_id: PlaybackId, track: &PlayableTrack) {
         let mut current = self.shared.current();
         let ready = self.get(&track.file);
         let missing = ready.is_none();
@@ -595,7 +595,7 @@ impl Waveforms {
     }
 
     /// The track that plays next. Its analysis queues behind the work in flight.
-    pub fn upcoming(&self, track: &PlayableTrack) {
+    pub(crate) fn upcoming(&self, track: &PlayableTrack) {
         self.shared
             .request_ahead(&track.file, track.content_hash.as_deref());
     }

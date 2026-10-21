@@ -102,7 +102,7 @@ impl Settings {
     }
 }
 
-pub struct SettingsService {
+pub(crate) struct SettingsService {
     state: Mutex<Settings>,
     /// The appearance topic's revision. Changed only under the `state` lock, with the value.
     appearance_revision: AtomicU64,
@@ -114,7 +114,7 @@ pub struct SettingsService {
 impl SettingsService {
     /// Loads the saved settings from `directory`, or starts from defaults when there are none or
     /// the file is unusable (an unusable file is kept aside as `settings.json.bad`).
-    pub fn load(directory: &Path, messages: SharedMessageSink) -> Self {
+    pub(crate) fn load(directory: &Path, messages: SharedMessageSink) -> Self {
         let path = directory.join(FILE_NAME);
         let settings = read(&path);
         let (sender, receiver) = mpsc::channel();
@@ -133,7 +133,7 @@ impl SettingsService {
     }
 
     /// The appearance the renderer reads, with the revision of its topic.
-    pub fn appearance(&self) -> Versioned<Appearance> {
+    pub(crate) fn appearance(&self) -> Versioned<Appearance> {
         let state = sync::lock(&self.state);
         Versioned {
             revision: self.appearance_revision.load(Ordering::Acquire),
@@ -143,7 +143,7 @@ impl SettingsService {
 
     /// Applies a renderer update, announces it when something changed, and returns the appearance
     /// as it is afterwards.
-    pub fn update_appearance(&self, patch: &AppearancePatch) -> Versioned<Appearance> {
+    pub(crate) fn update_appearance(&self, patch: &AppearancePatch) -> Versioned<Appearance> {
         let (appearance, changed) = self.modify(|settings| settings.apply_appearance(patch));
         if changed {
             self.messages.state_changed(StateTopic::Appearance);
@@ -152,13 +152,13 @@ impl SettingsService {
     }
 
     /// The playback preferences the next start of the playback worker begins with.
-    pub fn playback_preferences(&self) -> PlaybackPreferences {
+    pub(crate) fn playback_preferences(&self) -> PlaybackPreferences {
         sync::lock(&self.state).playback.clone()
     }
 
     /// Remembers the playback preferences. They are persisted but not announced: the playback
     /// snapshot already tells the renderer.
-    pub fn record_playback(&self, preferences: PlaybackPreferences) {
+    pub(crate) fn record_playback(&self, preferences: PlaybackPreferences) {
         self.modify(|settings| settings.playback = preferences);
     }
 
@@ -184,7 +184,7 @@ impl SettingsService {
     }
 
     /// Writes any pending change and stops the writer thread.
-    pub fn shutdown(&self) {
+    pub(crate) fn shutdown(&self) {
         drop(sync::lock(&self.writer).take());
         if let Some(thread) = sync::lock(&self.writer_thread).take()
             && thread.join().is_err()
@@ -368,14 +368,14 @@ mod tests {
             volume: 0.5,
             ..PlaybackPreferences::default()
         });
-        assert!(recorder.sent().is_empty());
+        assert_eq!(recorder.sent().len(), 0);
 
-        let patch = AppearancePatch {
+        let change = AppearancePatch {
             artwork_backdrop: Some(false),
             calm_motion: None,
         };
-        service.update_appearance(&patch);
-        service.update_appearance(&patch);
+        service.update_appearance(&change);
+        service.update_appearance(&change);
         assert_eq!(recorder.sent(), vec![Sent::State(StateTopic::Appearance)]);
     }
 
@@ -391,12 +391,12 @@ mod tests {
         });
         assert_eq!(service.appearance().revision, 0);
 
-        let patch = AppearancePatch {
+        let change = AppearancePatch {
             artwork_backdrop: Some(false),
             calm_motion: None,
         };
-        service.update_appearance(&patch);
-        let again = service.update_appearance(&patch);
+        service.update_appearance(&change);
+        let again = service.update_appearance(&change);
         assert_eq!(again.revision, 1);
         assert!(!again.value.artwork_backdrop);
         assert_eq!(service.appearance(), again);

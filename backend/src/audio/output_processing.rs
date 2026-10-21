@@ -510,7 +510,7 @@ mod tests {
                 .all(|(a, b)| (a - b).abs() < 1e-5)
         );
         split.flush(&mut tail).unwrap();
-        assert!(tail.is_empty());
+        assert_eq!(tail.len(), 0);
     }
 
     #[test]

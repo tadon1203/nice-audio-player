@@ -1,12 +1,12 @@
 use super::model::{LyricsContent, LyricsTimedLine};
 
-pub enum LrcParse {
+pub(crate) enum LrcParse {
     Parsed(Option<String>, LyricsContent),
     Empty,
     Malformed,
 }
 
-pub fn parse(input: &str) -> LrcParse {
+pub(crate) fn parse(input: &str) -> LrcParse {
     if input.lines().any(line_has_malformed_timestamp) {
         return LrcParse::Malformed;
     }
@@ -98,7 +98,7 @@ fn normalize_offset_tag(input: &str) -> String {
         .join("\n")
 }
 
-pub fn parse_plain(input: &str) -> Option<(Option<String>, LyricsContent)> {
+pub(crate) fn parse_plain(input: &str) -> Option<(Option<String>, LyricsContent)> {
     let lines: Vec<String> = input
         .lines()
         .map(|line| line.trim_end_matches('\r').to_owned())

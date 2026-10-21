@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use crate::diagnostics::logged;
 
-pub const SUPPORTED_EXTENSIONS: [&str; 5] = ["mp3", "flac", "wav", "aac", "m4a"];
+pub(crate) const SUPPORTED_EXTENSIONS: [&str; 5] = ["mp3", "flac", "wav", "aac", "m4a"];
 
 /// An audio file the Backend can play. The path stays a `PathBuf` all the way to the file system,
 /// so a name the platform allows but Unicode cannot hold still opens.
@@ -16,7 +16,7 @@ pub struct ValidatedAudioFile {
 
 #[derive(Debug, Clone, Serialize, specta::Type, PartialEq, Eq)]
 #[serde(tag = "code", content = "details", rename_all = "camelCase")]
-pub enum AudioFileValidationError {
+pub(crate) enum AudioFileValidationError {
     EmptyPath,
     NotFound,
     NotAFile,
@@ -24,12 +24,14 @@ pub enum AudioFileValidationError {
     InvalidFileName,
 }
 
-pub fn is_supported_extension(extension: &str) -> bool {
+pub(crate) fn is_supported_extension(extension: &str) -> bool {
     SUPPORTED_EXTENSIONS.contains(&extension.to_ascii_lowercase().as_str())
 }
 
 /// Checks that `path` names an existing supported audio file.
-pub fn validate_audio_file(path: &Path) -> Result<ValidatedAudioFile, AudioFileValidationError> {
+pub(crate) fn validate_audio_file(
+    path: &Path,
+) -> Result<ValidatedAudioFile, AudioFileValidationError> {
     if is_blank(path) {
         return Err(AudioFileValidationError::EmptyPath);
     }
@@ -45,7 +47,9 @@ pub fn validate_audio_file(path: &Path) -> Result<ValidatedAudioFile, AudioFileV
 
 /// Names a supported audio file without touching the filesystem. Playback contexts describe
 /// thousands of library files at once; a file that vanished fails when it is loaded instead.
-pub fn describe_audio_file(path: &Path) -> Result<ValidatedAudioFile, AudioFileValidationError> {
+pub(crate) fn describe_audio_file(
+    path: &Path,
+) -> Result<ValidatedAudioFile, AudioFileValidationError> {
     if is_blank(path) {
         return Err(AudioFileValidationError::EmptyPath);
     }

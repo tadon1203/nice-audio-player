@@ -187,12 +187,12 @@ pub(super) struct LibraryWriter {
 }
 
 impl LibraryWriter {
-    pub fn new(connection: Connection) -> Self {
+    pub(super) fn new(connection: Connection) -> Self {
         Self { connection }
     }
 
     /// Starts a new pass over a root and returns its generation number.
-    pub fn begin_scan(&self, root_id: i64) -> Persisted<i64> {
+    pub(super) fn begin_scan(&self, root_id: i64) -> Persisted<i64> {
         Ok(self.connection.query_row(
             "UPDATE library_roots SET scan_generation = scan_generation + 1
              WHERE id = ?1 RETURNING scan_generation",
@@ -203,7 +203,7 @@ impl LibraryWriter {
 
     /// Writes a batch in one transaction, so a failure never leaves half of it behind. Returns
     /// how many of its files changed what the Library holds.
-    pub fn write_batch(
+    pub(super) fn write_batch(
         &mut self,
         root_id: i64,
         generation: i64,
@@ -263,7 +263,7 @@ impl LibraryWriter {
     /// After a complete pass: files not seen this generation are missing (kept, not deleted).
     /// A pass over only some directories (`within`, as `/`-terminated relative prefixes, `""`
     /// for the whole folder) marks only the files in them. Returns how many files became Missing.
-    pub fn finish_root(
+    pub(super) fn finish_root(
         &self,
         root_id: i64,
         generation: i64,

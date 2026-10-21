@@ -32,7 +32,7 @@ use error::LibraryCommandError;
 use log::error;
 use models::{LibraryRoot, LibraryScanSnapshot, LibraryUnavailableReason};
 use std::{
-    path::PathBuf,
+    path::Path,
     sync::{Arc, Mutex},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -40,7 +40,7 @@ use store::LibraryStore;
 use sync::LibrarySync;
 
 #[derive(Clone)]
-pub struct Library {
+pub(crate) struct Library {
     database: Database,
     store: LibraryStore,
     sync: Arc<LibrarySync>,
@@ -50,12 +50,12 @@ pub struct Library {
 impl Library {
     /// Opens the Library in `directory`: migrates its database, then starts watching and scanning
     /// the registered folders.
-    pub fn open(
-        directory: PathBuf,
+    pub(crate) fn open(
+        directory: &Path,
         messages: SharedMessageSink,
     ) -> Result<Self, LibraryUnavailableReason> {
-        database::apply_requested_reset(&directory);
-        let database = Database::initialize(&directory).map_err(|error| {
+        database::apply_requested_reset(directory);
+        let database = Database::initialize(directory).map_err(|error| {
             let reason = match error {
                 DatabaseError::Corrupt => LibraryUnavailableReason::DatabaseCorrupt,
                 DatabaseError::Migration(migrations::MigrationError::SchemaTooNew) => {
@@ -82,24 +82,24 @@ impl Library {
     }
 
     /// The read side.
-    pub fn store(&self) -> &LibraryStore {
+    pub(crate) fn store(&self) -> &LibraryStore {
         &self.store
     }
 
     /// The scan state with the revision of its topic.
-    pub fn scan_state(&self) -> Versioned<LibraryScanSnapshot> {
+    pub(crate) fn scan_state(&self) -> Versioned<LibraryScanSnapshot> {
         crate::sync::lock(&self.scan).clone()
     }
 
-    pub fn roots(&self) -> Result<Vec<LibraryRoot>, LibraryCommandError> {
+    pub(crate) fn roots(&self) -> Result<Vec<LibraryRoot>, LibraryCommandError> {
         Ok(self.store.roots()?)
     }
 
-    pub fn register_root(&self, path: String) -> Result<LibraryRoot, LibraryCommandError> {
+    pub(crate) fn register_root(&self, path: String) -> Result<LibraryRoot, LibraryCommandError> {
         self.sync.register_root(path)
     }
 
-    pub fn set_root_enabled(
+    pub(crate) fn set_root_enabled(
         &self,
         id: RootId,
         enabled: bool,
@@ -107,25 +107,25 @@ impl Library {
         self.sync.set_root_enabled(id, enabled)
     }
 
-    pub fn remove_root(&self, id: RootId) -> Result<(), LibraryCommandError> {
+    pub(crate) fn remove_root(&self, id: RootId) -> Result<(), LibraryCommandError> {
         self.sync.remove_root(id)
     }
 
     /// Deletes every Missing track from the Library. Source files are never touched.
-    pub fn delete_missing(&self) -> Result<u64, LibraryCommandError> {
+    pub(crate) fn delete_missing(&self) -> Result<u64, LibraryCommandError> {
         self.sync.delete_missing()
     }
 
-    pub fn start_scan(&self) -> Result<(), LibraryCommandError> {
+    pub(crate) fn start_scan(&self) -> Result<(), LibraryCommandError> {
         self.sync.start_scan()
     }
 
-    pub fn cancel_scan(&self) -> Result<(), LibraryCommandError> {
+    pub(crate) fn cancel_scan(&self) -> Result<(), LibraryCommandError> {
         self.sync.cancel_scan()
     }
 
     /// The accent color of stored artwork, computed on first request and cached.
-    pub fn artwork_accent(
+    pub(crate) fn artwork_accent(
         &self,
         hash: &ArtworkHash,
     ) -> Result<Option<String>, LibraryCommandError> {
@@ -133,7 +133,7 @@ impl Library {
     }
 
     /// Stops the watchers and any scan in progress, and waits for them.
-    pub fn shutdown(&self) {
+    pub(crate) fn shutdown(&self) {
         self.sync.shutdown();
     }
 }

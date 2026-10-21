@@ -191,7 +191,7 @@ pub(super) struct PlaybackProcessingInfo {
 }
 
 impl PlaybackProcessingInfo {
-    pub fn from_plan(plan: OutputProcessingPlan) -> Self {
+    pub(super) fn from_plan(plan: OutputProcessingPlan) -> Self {
         Self {
             channel_conversion: plan.channel_conversion().into(),
             source_sample_rate: plan.source().sample_rate().get(),
@@ -199,7 +199,7 @@ impl PlaybackProcessingInfo {
         }
     }
 
-    pub fn resampling_active(self) -> bool {
+    pub(super) fn resampling_active(self) -> bool {
         self.source_sample_rate != self.output_sample_rate
     }
 }
@@ -230,17 +230,17 @@ impl PlaybackQueueItem {
 }
 
 /// How many upcoming items a snapshot carries; the rest are read a window at a time.
-pub const UPCOMING_IN_SNAPSHOT: usize = 200;
+pub(super) const UPCOMING_IN_SNAPSHOT: usize = 200;
 /// How many already played items a snapshot carries (the most recent ones).
-pub const HISTORY_IN_SNAPSHOT: usize = 50;
+pub(super) const HISTORY_IN_SNAPSHOT: usize = 50;
 /// The most items one window read returns.
-pub const MAX_QUEUE_WINDOW: usize = 200;
+pub(super) const MAX_QUEUE_WINDOW: usize = 200;
 
 /// The queue's play order as ids, shared with the queue itself, and the means to read the
 /// tracks of any part of it: a snapshot copies no item, whatever the queue's length.
 #[derive(Clone)]
 struct QueueList {
-    entries: Arc<Vec<QueueEntry>>,
+    entries: Arc<[QueueEntry]>,
     /// Where the upcoming items start.
     upcoming_from: usize,
     tracks: Arc<TrackResolver>,

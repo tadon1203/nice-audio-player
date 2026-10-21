@@ -73,6 +73,9 @@ Clippy enforces the no-panic rule. See [ADR 0010](adr/0010-backend-does-not-pani
 - Map an error cause with `logged`: `.map_err(logged(Code, "area.what"))`. It logs the cause at `warn` and returns the typed code.
 - Drop a `Result` that has no caller with `log_failed(result, "area.what")` (`diagnostics.rs`). It logs an error at `debug` and returns nothing. Do not write `let _ = <Result>`. A `try_send` into a full channel of capacity 1 is not an error, because a wake is already pending.
 - A cause with no `Display` (an IPC enum) is logged inline at `warn` with its `Debug` form, as in `library/store/playback.rs`. Code that runs in the audio callback does not log at all.
+- Lock a `Mutex`, `RwLock`, or `Condvar` through `sync` (`sync::lock`, `sync::read`, `sync::write`, `sync::wait`), not through the `std` method. `clippy.toml` bans the `std` methods, and the helpers recover from poison.
+- Answer a playback request through `respond` (`audio/playback/service.rs`). It sends the reply, and logs at `debug` when the caller has gone.
+- Slice a buffer that a count can run past with the helpers in `slices` (`head`, `tail_from`, and their `_mut` forms). They clamp to the buffer instead of panicking.
 - Remove a file on a best-effort basis with `remove_file_best_effort` (`cleanup.rs`). It logs at `debug` every error except `NotFound`.
 - A thread's `join` returns a panic payload, which has no `Display`. Check `join().is_err()` and log it at `debug`; `log_failed` cannot take it.
 - `as` is allowed for a number. Use `From` or `TryFrom` where the value may not fit, so the conversion cannot silently change it. See [ADR 0010](adr/0010-backend-does-not-panic-errors-are-typed-with-thiserror.md).

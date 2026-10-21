@@ -50,7 +50,7 @@ pub fn run() {
 
     let app = builder
         .register_asynchronous_uri_scheme_protocol("nice-artwork", |context, request, responder| {
-            artwork::serve_artwork(context.app_handle(), request, responder);
+            artwork::serve_artwork(context.app_handle(), &request, responder);
         })
         // A reloaded page has lost its channel and cannot end its subscription; end it here so
         // nothing keeps measuring for nobody.

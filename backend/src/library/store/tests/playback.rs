@@ -173,7 +173,7 @@ fn track_playback_follows_the_list_order_and_skips_tracks_that_cannot_play() {
 #[test]
 fn playing_what_the_list_shows_holds_for_every_sort_and_direction() {
     let fixture = fixture();
-    let seeds: Vec<Seed> = (1..=40)
+    let seeds: Vec<Seed<'_>> = (1..=40)
         .map(|id| {
             let mut seed = Seed::new(
                 id,
@@ -219,7 +219,7 @@ fn playing_what_the_list_shows_holds_for_every_sort_and_direction() {
 fn an_album_playback_sequence_is_complete_beyond_one_page() {
     let fixture = fixture();
     fixture.touch_audio(1..=101);
-    let seeds: Vec<Seed> = (1..=101)
+    let seeds: Vec<Seed<'_>> = (1..=101)
         .map(|id| Seed::new(id, "Track", "Artist", "Long Album"))
         .collect();
     fixture.add_all(&seeds);

@@ -242,7 +242,10 @@ impl Harness {
             Ok(input) => {
                 self.worker.handle(input);
             }
-            Err(_) => panic!("the worker was left waiting for an input that never came"),
+            Err(
+                std::sync::mpsc::RecvTimeoutError::Timeout
+                | std::sync::mpsc::RecvTimeoutError::Disconnected,
+            ) => panic!("the worker was left waiting for an input that never came"),
         }
     }
 

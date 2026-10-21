@@ -3,12 +3,12 @@ mod legacy;
 use super::summary;
 use rusqlite::{Connection, Transaction};
 
-pub const CURRENT_SCHEMA_VERSION: i32 = 5;
+pub(crate) const CURRENT_SCHEMA_VERSION: i32 = 5;
 
 /// One step of a migration: a script, or Rust code for what SQL cannot compute.
 enum Step {
     Sql(&'static str),
-    Rust(fn(&Transaction) -> rusqlite::Result<()>),
+    Rust(fn(&Transaction<'_>) -> rusqlite::Result<()>),
 }
 
 /// One schema version: its steps run in one transaction, which also sets `user_version`.
@@ -79,7 +79,7 @@ impl From<rusqlite::Error> for MigrationError {
         Self::Sql
     }
 }
-pub fn apply(connection: &mut Connection) -> Result<(), MigrationError> {
+pub(crate) fn apply(connection: &mut Connection) -> Result<(), MigrationError> {
     let version: i32 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
     if version > CURRENT_SCHEMA_VERSION {
         return Err(MigrationError::SchemaTooNew);

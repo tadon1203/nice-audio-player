@@ -7,7 +7,7 @@ use crate::AppState;
 /// What a meter channel carries: one binary message per Meter frame, which the renderer
 /// receives as an `ArrayBuffer` (layout: `FRAME_BYTES` in the backend's `meter` module). Only
 /// the TypeScript contract is described here; the bytes are sent raw.
-pub struct MeterFrameBytes(Vec<u8>);
+pub(crate) struct MeterFrameBytes(Vec<u8>);
 
 impl IpcResponse for MeterFrameBytes {
     fn body(self) -> tauri::Result<InvokeResponseBody> {
@@ -27,7 +27,7 @@ impl Type for MeterFrameBytes {
 /// deliver are dropped; a channel that is gone ends the subscription.
 #[tauri::command]
 #[specta::specta]
-pub async fn subscribe_meter_frames(
+pub(crate) async fn subscribe_meter_frames(
     frames: Channel<MeterFrameBytes>,
     state: tauri::State<'_, AppState>,
 ) -> Result<u32, ()> {
@@ -48,7 +48,7 @@ pub async fn subscribe_meter_frames(
 /// alone.
 #[tauri::command]
 #[specta::specta]
-pub async fn unsubscribe_meter_frames(
+pub(crate) async fn unsubscribe_meter_frames(
     subscription: u32,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), ()> {

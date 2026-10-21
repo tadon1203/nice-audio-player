@@ -11,7 +11,7 @@ use crate::library::text;
 use rusqlite::{Transaction, params};
 
 /// Gives every existing track the keys the scanner wrote at version 2, from the tags it has.
-pub(super) fn backfill_track_keys(transaction: &Transaction) -> rusqlite::Result<()> {
+pub(super) fn backfill_track_keys(transaction: &Transaction<'_>) -> rusqlite::Result<()> {
     type Row = (i64, [Option<String>; 5], String);
     let rows: Vec<Row> = transaction
         .prepare(
@@ -60,9 +60,9 @@ pub(super) fn backfill_track_keys(transaction: &Transaction) -> rusqlite::Result
     Ok(())
 }
 
-/// Gives every existing track the sort, search and album_dir keys from the tags it already has
-/// (SortOrder tags arrive with the rescan this migration asks for), then settles the compilations.
-pub(super) fn backfill_catalog_keys(transaction: &Transaction) -> rusqlite::Result<()> {
+/// Gives every existing track the sort, search and `album_dir` keys from the tags it already has
+/// (`SortOrder` tags arrive with the rescan this migration asks for), then settles the compilations.
+pub(super) fn backfill_catalog_keys(transaction: &Transaction<'_>) -> rusqlite::Result<()> {
     type Row = (i64, [Option<String>; 5], String, String, String);
     let rows: Vec<Row> = transaction
         .prepare(
@@ -137,7 +137,7 @@ pub(super) fn backfill_catalog_keys(transaction: &Transaction) -> rusqlite::Resu
 
 /// Files the untagged tracks of every album directory: under Various Artists when they have several
 /// artists, else each under its own (CONTEXT.md, "Compilation").
-fn settle_compilations(transaction: &Transaction) -> rusqlite::Result<()> {
+fn settle_compilations(transaction: &Transaction<'_>) -> rusqlite::Result<()> {
     let groups: Vec<(String, String)> = transaction
         .prepare(
             "SELECT DISTINCT album_dir, album_key FROM track_source_metadata
@@ -152,7 +152,7 @@ fn settle_compilations(transaction: &Transaction) -> rusqlite::Result<()> {
 }
 
 fn settle_compilation(
-    transaction: &Transaction,
+    transaction: &Transaction<'_>,
     directory: &str,
     album: &str,
 ) -> rusqlite::Result<()> {

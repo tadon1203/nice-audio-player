@@ -6,7 +6,7 @@ use crate::commands;
 
 /// The single registry of IPC commands and shared types. Rust is authoritative;
 /// `bindings.ts` is generated from it and must not be edited by hand.
-pub fn builder() -> Builder<tauri::Wry> {
+pub(crate) fn builder() -> Builder<tauri::Wry> {
     Builder::<tauri::Wry>::new()
         .commands(collect_commands![
             commands::playback::get_playback_queue_window,

@@ -8,7 +8,7 @@ const SAMPLE_EDGE: u32 = 32;
 
 /// The accent color of stored artwork, computed on first request and cached in its row. Writes
 /// only the one cached value, in its own short transaction.
-pub fn artwork_accent(
+pub(crate) fn artwork_accent(
     database: &Database,
     hash: &ArtworkHash,
 ) -> Result<Option<String>, StoreError> {
@@ -45,7 +45,7 @@ pub fn artwork_accent(
 /// Picks a representative color for artwork as `#rrggbb`. The UI uses it for
 /// backgrounds only, so it favors saturated pixels over the plain average and
 /// falls back to the average for grayscale artwork.
-pub fn representative_color(bytes: &[u8]) -> Option<String> {
+pub(crate) fn representative_color(bytes: &[u8]) -> Option<String> {
     let decoded = ImageReader::new(Cursor::new(bytes))
         .with_guessed_format()
         .ok()?

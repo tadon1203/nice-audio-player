@@ -1,6 +1,11 @@
 //! Failed streams and decodes, and what the worker does about them.
 
-use super::*;
+use super::{
+    AudioOutputSelection, FailureScope, LoadStage, Occurrence, OutputStreamId, PipelineId,
+    PipelineOwner, PlaybackFailureCode, PlaybackServiceError, PlaybackWorker, SessionStartedBy,
+    StartFailure, StartFailurePhase, StreamFailureKind, StreamSignalAction, Transport, error, info,
+    respond, stream_signal_action,
+};
 
 impl PlaybackWorker {
     /// A decode thread stopped on its own: the file (or its conversion) cannot be played.

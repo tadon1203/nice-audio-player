@@ -6,7 +6,11 @@ use crate::AppState;
 /// revision.
 #[tauri::command]
 #[specta::specta]
-pub fn update_appearance(
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Tauri passes State by value, and the patch is only read"
+)]
+pub(crate) fn update_appearance(
     patch: AppearancePatch,
     state: tauri::State<'_, AppState>,
 ) -> Versioned<Appearance> {

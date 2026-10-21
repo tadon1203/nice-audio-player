@@ -12,12 +12,12 @@ use lofty::{
     tag::ItemKey,
 };
 #[derive(Debug, Clone, Default)]
-pub struct SourceMetadata {
+pub(crate) struct SourceMetadata {
     pub title: Option<String>,
     pub artist: Option<String>,
     pub album: Option<String>,
     pub album_artist: Option<String>,
-    /// The SortOrder tags: how the title, artist, album and Album Artist are to be sorted.
+    /// The `SortOrder` tags: how the title, artist, album and Album Artist are to be sorted.
     pub title_sort: Option<String>,
     pub artist_sort: Option<String>,
     pub album_sort: Option<String>,
@@ -31,7 +31,7 @@ pub struct SourceMetadata {
     pub artwork: ArtworkRead,
 }
 #[derive(Debug, Clone, Default)]
-pub enum ArtworkRead {
+pub(crate) enum ArtworkRead {
     #[default]
     NotPresent,
     Unavailable,
@@ -42,10 +42,10 @@ pub enum ArtworkRead {
     },
 }
 #[derive(Debug, Clone, Copy)]
-pub enum MetadataReadError {
+pub(crate) enum MetadataReadError {
     Read,
 }
-pub fn read_source_metadata(
+pub(crate) fn read_source_metadata(
     path: &std::path::Path,
 ) -> Result<Option<SourceMetadata>, MetadataReadError> {
     let tagged = Probe::open(path)

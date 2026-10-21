@@ -379,7 +379,7 @@ fn a_long_queue_snapshot_carries_a_prefix_and_serves_the_rest_in_windows() {
     assert_eq!(window.offset as usize, UPCOMING_IN_SNAPSHOT);
     assert_eq!(window.items.len(), 150);
     assert_eq!(window.items[0].core.title, "t261.flac");
-    assert!(snapshot.window(7, total + 10, 5).items.is_empty());
+    assert_eq!(snapshot.window(7, total + 10, 5).items.len(), 0);
 }
 
 /// A track whose file does not exist: fine to queue and show, unplayable.

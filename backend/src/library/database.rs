@@ -23,13 +23,13 @@ pub enum DatabaseError {
     Corrupt,
 }
 #[derive(Clone)]
-pub struct Database {
+pub(crate) struct Database {
     path: PathBuf,
     readers: ReaderPool,
 }
 
 /// A read-only connection on loan from the pool; it goes back when dropped.
-pub struct ReadConnection {
+pub(crate) struct ReadConnection {
     connection: Option<Connection>,
     pool: ReaderPool,
 }
@@ -65,12 +65,12 @@ impl Drop for ReadConnection {
     }
 }
 impl Database {
-    pub fn data_dir(&self) -> &Path {
+    pub(crate) fn data_dir(&self) -> &Path {
         self.path.parent().unwrap_or_else(|| Path::new("."))
     }
 }
 impl Database {
-    pub fn initialize(directory: &Path) -> Result<Self, DatabaseError> {
+    pub(crate) fn initialize(directory: &Path) -> Result<Self, DatabaseError> {
         std::fs::create_dir_all(directory).map_err(logged(
             DatabaseError::Open,
             "library.database.directory_failed",
@@ -89,7 +89,7 @@ impl Database {
             readers: ReaderPool::default(),
         })
     }
-    pub fn read(&self) -> Result<ReadConnection, DatabaseError> {
+    pub(crate) fn read(&self) -> Result<ReadConnection, DatabaseError> {
         let idle = sync::lock(&self.readers).pop();
         let connection = match idle {
             Some(connection) => connection,
@@ -100,7 +100,7 @@ impl Database {
             pool: Arc::clone(&self.readers),
         })
     }
-    pub fn write(&self) -> Result<Connection, DatabaseError> {
+    pub(crate) fn write(&self) -> Result<Connection, DatabaseError> {
         self.open(OpenFlags::SQLITE_OPEN_READ_WRITE)
     }
     fn open(&self, flags: OpenFlags) -> Result<Connection, DatabaseError> {
@@ -143,7 +143,7 @@ fn back_up_before_migration(
 
 /// Asks for the database to be moved aside and recreated at the next start. Done at start-up,
 /// before anything has it open, so it works even when the database cannot be opened at all.
-pub fn request_reset(directory: &Path) -> std::io::Result<()> {
+pub(crate) fn request_reset(directory: &Path) -> std::io::Result<()> {
     std::fs::create_dir_all(directory)?;
     std::fs::write(directory.join(RESET_MARKER), b"")
 }

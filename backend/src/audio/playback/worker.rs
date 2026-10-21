@@ -223,7 +223,7 @@ impl PlaybackWorker {
         }
     }
 
-    pub(super) fn run(mut self, inputs: Receiver<WorkerInput>) {
+    pub(super) fn run(mut self, inputs: &Receiver<WorkerInput>) {
         loop {
             let input = match self.next_deadline() {
                 Some(deadline) => {
@@ -274,7 +274,7 @@ impl PlaybackWorker {
                 reply,
             } => self.start_queue(track_ids, start_index, reply),
             PlaybackCommand::Previous { reply } => {
-                self.navigate(AdvanceReason::UserPrevious, reply)
+                self.navigate(AdvanceReason::UserPrevious, reply);
             }
             PlaybackCommand::Next { reply } => self.navigate(AdvanceReason::UserNext, reply),
             PlaybackCommand::Pause { reply } => {
@@ -571,7 +571,7 @@ mod tests {
             (E::StreamPauseFailed, C::OutputStreamPauseFailed),
             (E::StreamResumeFailed, C::OutputStreamResumeFailed),
         ] {
-            assert_eq!(output_failure_code(error.clone()), code, "{error:?}");
+            assert_eq!(output_failure_code(error), code, "{error:?}");
         }
     }
 

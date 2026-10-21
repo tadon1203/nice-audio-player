@@ -58,7 +58,6 @@ pub struct BackendApp {
     library: Result<Library, LibraryUnavailableReason>,
     waveforms: Arc<Waveforms>,
     settings: Arc<SettingsService>,
-    lyrics: LyricsService,
     data_dir: PathBuf,
 }
 
@@ -101,7 +100,7 @@ impl BackendApp {
             data_dir.join("waveforms"),
             Arc::clone(&messages),
         ));
-        let library = Library::open(data_dir.clone(), Arc::clone(&messages));
+        let library = Library::open(&data_dir, Arc::clone(&messages));
         let remember = Arc::clone(&settings);
         let tracks: Box<dyn TrackSource> = match &library {
             Ok(library) => Box::new(LibraryTracks(library.store().clone())),
@@ -132,7 +131,6 @@ impl BackendApp {
             library,
             waveforms,
             settings,
-            lyrics: LyricsService,
             data_dir,
         })
     }
@@ -159,8 +157,8 @@ impl BackendApp {
     }
 
     /// The message that carries the current value of `topic`.
-    pub fn state_message(&self, topic: StateTopic) -> Option<BackendMessage> {
-        Some(match topic {
+    pub fn state_message(&self, topic: StateTopic) -> BackendMessage {
+        match topic {
             StateTopic::Playback => {
                 let playback = self.playback.versioned_snapshot();
                 state(
@@ -187,7 +185,7 @@ impl BackendApp {
                     StateValue::Appearance(appearance.value),
                 )
             }
-        })
+        }
     }
 
     /// The message that carries the newest playing position, when a track is loaded.
@@ -399,7 +397,7 @@ impl BackendApp {
                 },
                 "app.lyrics.track_unavailable",
             ))?;
-        Ok(self.lyrics.resolve(LyricsTrackContext {
+        Ok(LyricsService::resolve(&LyricsTrackContext {
             track_id,
             source: file.path,
             root: file.root,
@@ -492,7 +490,7 @@ impl BackendApp {
     }
 
     /// The output devices the system has. Blocking: the device query waits on the audio host.
-    pub fn list_output_devices(&self) -> Result<Vec<AudioOutputDevice>, AudioDeviceListError> {
+    pub fn list_output_devices() -> Result<Vec<AudioOutputDevice>, AudioDeviceListError> {
         devices::list_output_devices()
     }
 

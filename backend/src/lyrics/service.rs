@@ -14,11 +14,10 @@ enum LocalSource {
     Resolved(ParsedLyrics),
 }
 
-#[derive(Clone, Copy)]
-pub struct LyricsService;
+pub(crate) struct LyricsService;
 impl LyricsService {
-    pub fn resolve(&self, context: LyricsTrackContext) -> LyricsResolution {
-        let sidecar = read_sidecar(&context);
+    pub(crate) fn resolve(context: &LyricsTrackContext) -> LyricsResolution {
+        let sidecar = read_sidecar(context);
         let embedded = match read_embedded_lyrics(&context.source) {
             Ok(Some(lyrics)) => LocalSource::Resolved(lyrics),
             Ok(None) => LocalSource::Missing,
@@ -89,11 +88,10 @@ fn read_sidecar(context: &LyricsTrackContext) -> LocalSource {
             .ok()
             .filter(|path| path.starts_with(&context.root))
             .and_then(read_text)
-            .map(|text| match lrc::parse(&text) {
-                LrcParse::Parsed(language, content) => LocalSource::Resolved((language, content)),
+            .map_or(LocalSource::Failed, |text| match lrc::parse(&text) {
+                LrcParse::Parsed(language, lyrics) => LocalSource::Resolved((language, lyrics)),
                 LrcParse::Empty | LrcParse::Malformed => LocalSource::Failed,
-            })
-            .unwrap_or(LocalSource::Failed),
+            }),
     }
 }
 fn sidecar_path(source: &std::path::Path) -> PathBuf {
@@ -104,7 +102,7 @@ fn read_text(path: PathBuf) -> Option<String> {
 }
 
 /// Decodes a sidecar file. A byte-order mark or valid UTF-8 is taken at its word; anything else
-/// is a legacy encoding (`.lrc` files for Japanese music are often Shift_JIS), which is detected
+/// is a legacy encoding (`.lrc` files for Japanese music are often `Shift_JIS`), which is detected
 /// from the bytes. Bytes that do not decode cleanly in the detected encoding fail the source.
 fn decode_text(bytes: &[u8]) -> Option<String> {
     if let Some(rest) = bytes.strip_prefix(&[0xef, 0xbb, 0xbf]) {

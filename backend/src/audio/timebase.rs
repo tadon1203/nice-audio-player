@@ -1,15 +1,15 @@
 //! Conversions between frames and milliseconds. All round down and saturate.
 
-pub fn frame_to_millis(frame: u64, sample_rate: u32) -> u64 {
+pub(crate) fn frame_to_millis(frame: u64, sample_rate: u32) -> u64 {
     scale(frame, 1_000, sample_rate)
 }
 
-pub fn millis_to_frame(millis: u64, sample_rate: u32) -> u64 {
+pub(crate) fn millis_to_frame(millis: u64, sample_rate: u32) -> u64 {
     scale(millis, sample_rate, 1_000)
 }
 
 /// Re-expresses a frame count at another sample rate.
-pub fn rescale_frame(frame: u64, to_rate: u32, from_rate: u32) -> u64 {
+pub(crate) fn rescale_frame(frame: u64, to_rate: u32, from_rate: u32) -> u64 {
     scale(frame, to_rate, from_rate)
 }
 

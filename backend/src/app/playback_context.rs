@@ -29,7 +29,7 @@ pub enum PlaybackContext {
 /// Reads the ids of the context's playable tracks from the library, in playing order, and where
 /// to start. The tracks themselves are read when the queue needs them. Blocking: call it off
 /// the async runtime.
-pub fn resolve(
+pub(super) fn resolve(
     library: &LibraryStore,
     context: &PlaybackContext,
     start_track_id: Option<TrackId>,
@@ -43,7 +43,7 @@ pub fn resolve(
 }
 
 /// Reads one library track, which must be playable. Blocking: call it off the async runtime.
-pub fn resolve_track(
+pub(super) fn resolve_track(
     library: &LibraryStore,
     track_id: TrackId,
 ) -> Result<PlayableTrack, PlaybackServiceError> {
@@ -51,7 +51,7 @@ pub fn resolve_track(
 }
 
 /// The library as the playback queue reads its tracks.
-pub struct LibraryTracks(pub LibraryStore);
+pub(super) struct LibraryTracks(pub LibraryStore);
 
 impl TrackSource for LibraryTracks {
     fn tracks(

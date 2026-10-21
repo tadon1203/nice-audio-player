@@ -21,16 +21,16 @@ use ringbuf::{HeapCons, HeapProd, HeapRb};
 
 /// One-third-octave bands, base 10, centred on `1000 Hz * 10^(n/10)` for n = -16..=13 (25 Hz to
 /// 20 kHz).
-pub const BAND_COUNT: usize = 30;
+pub(crate) const BAND_COUNT: usize = 30;
 /// Levels never go below this, in dBFS.
-pub const FLOOR_DB: f32 = -90.0;
+pub(crate) const FLOOR_DB: f32 = -90.0;
 /// Frames per second the analysis produces.
-pub const FRAMES_PER_SECOND: u32 = 120;
+pub(crate) const FRAMES_PER_SECOND: u32 = 120;
 /// Size of an encoded frame: 30 band levels, peak L/R, RMS L/R (f32), then a u32 of flags. All
 /// little endian.
-pub const FRAME_BYTES: usize = (BAND_COUNT + 4 + 1) * 4;
+pub(crate) const FRAME_BYTES: usize = (BAND_COUNT + 4 + 1) * 4;
 /// Set in the flags word when a sample reached full scale in the frame.
-pub const FLAG_FULL_SCALE: u32 = 1;
+pub(crate) const FLAG_FULL_SCALE: u32 = 1;
 
 /// Stereo samples the ring holds: a quarter second at 48 kHz.
 const RING_SAMPLES: usize = 24_000;
@@ -300,7 +300,7 @@ impl Band {
 
 /// Turns interleaved stereo samples into Meter frames, one per `sample_rate / 120` frames of
 /// audio, whatever the chunking of the input.
-pub struct Analyzer {
+pub(crate) struct Analyzer {
     /// `bands[channel][band]`; a band the sample rate cannot carry is `None` and reads the floor.
     bands: [Vec<Option<Band>>; 2],
     frame_len: usize,
@@ -311,7 +311,7 @@ pub struct Analyzer {
 }
 
 impl Analyzer {
-    pub fn new(sample_rate: u32) -> Self {
+    pub(crate) fn new(sample_rate: u32) -> Self {
         let rate = f64::from(sample_rate.max(1));
         let make = || {
             (0..BAND_COUNT)
@@ -330,7 +330,7 @@ impl Analyzer {
 
     /// Feeds interleaved stereo samples (a trailing half frame is ignored) and calls `emit` for
     /// every frame they complete.
-    pub fn process(&mut self, samples: &[f32], emit: &mut impl FnMut(MeterFrame)) {
+    pub(crate) fn process(&mut self, samples: &[f32], emit: &mut impl FnMut(MeterFrame)) {
         for pair in samples.as_chunks::<2>().0 {
             for (((&sample, peak), sum_squares), (bands, channel_energy)) in pair
                 .iter()
@@ -391,7 +391,7 @@ const MEASUREMENTS_PER_FRAME: usize = 2;
 
 /// Combines every two measurements into one Meter frame (bands and peaks by max, RMS by mean
 /// energy, clip by OR) and holds back frames while the sound is silent and unchanged.
-pub struct FrameBatcher {
+pub(crate) struct FrameBatcher {
     pending: Vec<MeterFrame>,
     last_sent_silent: bool,
 }
@@ -403,7 +403,7 @@ impl Default for FrameBatcher {
 }
 
 impl FrameBatcher {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             pending: Vec::with_capacity(MEASUREMENTS_PER_FRAME),
             // The renderer starts from the floor, so a silent first frame says nothing new.
@@ -412,7 +412,7 @@ impl FrameBatcher {
     }
 
     /// Takes one measurement; returns the frame to send, if one is due and worth sending.
-    pub fn push(&mut self, measurement: MeterFrame) -> Option<MeterFrame> {
+    pub(crate) fn push(&mut self, measurement: MeterFrame) -> Option<MeterFrame> {
         self.pending.push(measurement);
         if self.pending.len() < MEASUREMENTS_PER_FRAME {
             return None;
@@ -475,7 +475,7 @@ struct Session {
 
 /// Where Meter frames go. Returns `false` when nobody is listening any more, which ends the
 /// subscription.
-pub type FrameSink = Box<dyn FnMut(&MeterFrame) -> bool + Send>;
+pub(crate) type FrameSink = Box<dyn FnMut(&MeterFrame) -> bool + Send>;
 
 /// Hands out taps for output streams and runs the one subscription at a time.
 #[derive(Clone)]

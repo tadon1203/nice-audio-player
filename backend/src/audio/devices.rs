@@ -53,7 +53,7 @@ pub(crate) struct ResolvedAudioOutputDevice {
     pub(crate) identity: AudioOutputDeviceIdentity,
 }
 
-pub fn list_output_devices() -> Result<Vec<AudioOutputDevice>, AudioDeviceListError> {
+pub(crate) fn list_output_devices() -> Result<Vec<AudioOutputDevice>, AudioDeviceListError> {
     let host = cpal::default_host();
     let default_device_id = host
         .default_output_device()
@@ -196,7 +196,7 @@ mod tests {
 
         sort_output_devices(&mut devices);
 
-        assert!(devices.is_empty());
+        assert_eq!(devices.len(), 0);
     }
 
     #[test]

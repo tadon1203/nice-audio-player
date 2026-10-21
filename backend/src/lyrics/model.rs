@@ -78,7 +78,7 @@ impl crate::tasks::TaskError for LyricsCommandError {
 }
 
 #[derive(Debug, Clone)]
-pub struct LyricsTrackContext {
+pub(crate) struct LyricsTrackContext {
     pub track_id: TrackId,
     pub source: PathBuf,
     pub root: PathBuf,

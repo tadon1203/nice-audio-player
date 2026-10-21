@@ -13,30 +13,30 @@ mod pipeline;
 mod preferences;
 mod queue;
 mod resolver;
-mod service;
+pub(crate) mod service;
 mod session;
 mod snapshot;
 mod source_loader;
 mod worker;
 
 pub use item::PlaybackItem;
-pub use preferences::PlaybackPreferences;
+pub(crate) use preferences::PlaybackPreferences;
 pub use queue::PlaybackRepeatMode;
-pub use resolver::{NoTracks, TrackResolver, TrackSource};
-pub use service::{PlaybackService, PlaybackServiceError};
+pub(crate) use resolver::{NoTracks, TrackResolver, TrackSource};
+pub(crate) use service::{PlaybackService, PlaybackServiceError};
 pub use snapshot::{
     ActiveSession, PlaybackFailureCode, PlaybackPosition, PlaybackQueueItem, PlaybackQueueSnapshot,
     PlaybackQueueWindow, PlaybackSnapshot, SessionStartedBy,
 };
 
 /// Hears that a track was loaded as the Playback with this id.
-pub type LoadObserver = Arc<dyn Fn(PlaybackId, &PlayableTrack) + Send + Sync>;
+pub(crate) type LoadObserver = Arc<dyn Fn(PlaybackId, &PlayableTrack) + Send + Sync>;
 
 /// Hears that a track is about to play next.
-pub type UpcomingObserver = Arc<dyn Fn(&PlayableTrack) + Send + Sync>;
+pub(crate) type UpcomingObserver = Arc<dyn Fn(&PlayableTrack) + Send + Sync>;
 
 /// Hears what the Player does with tracks, without knowing who listens.
-pub struct TrackListener {
+pub(crate) struct TrackListener {
     pub loaded: LoadObserver,
     /// Its analysis may start now.
     pub upcoming: UpcomingObserver,

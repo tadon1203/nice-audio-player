@@ -295,10 +295,10 @@ mod tests {
             .unwrap();
 
         let mut out = [0.0; 10];
-        let mut consumed = 0;
-        while consumed < 4_000 {
+        let mut drained = 0;
+        while drained < 4_000 {
             let popped = consumer.pop_samples(&mut out);
-            consumed += popped;
+            drained += popped;
             if popped == 0 {
                 std::thread::yield_now();
             } else {

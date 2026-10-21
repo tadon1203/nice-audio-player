@@ -1,28 +1,28 @@
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub struct SampleRate(u32);
+pub(crate) struct SampleRate(u32);
 
 impl SampleRate {
-    pub fn new(value: u32) -> Option<Self> {
+    pub(crate) fn new(value: u32) -> Option<Self> {
         (value > 0).then_some(Self(value))
     }
 
-    pub const fn get(self) -> u32 {
+    pub(crate) const fn get(self) -> u32 {
         self.0
     }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub struct ChannelCount(u16);
+pub(crate) struct ChannelCount(u16);
 
 impl ChannelCount {
-    pub fn new(value: usize) -> Option<Self> {
+    pub(crate) fn new(value: usize) -> Option<Self> {
         u16::try_from(value)
             .ok()
             .filter(|value| *value > 0)
             .map(Self)
     }
 
-    pub const fn get(self) -> u16 {
+    pub(crate) const fn get(self) -> u16 {
         self.0
     }
 }

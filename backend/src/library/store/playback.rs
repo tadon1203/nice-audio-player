@@ -70,7 +70,7 @@ impl PlayableTrack {
 /// themselves are read when they are needed (`playable_tracks`), so a selection costs one
 /// narrow query however large the library is.
 #[derive(Debug, Clone)]
-pub struct PlaybackSelection {
+pub(crate) struct PlaybackSelection {
     pub track_ids: Vec<TrackId>,
     pub start_index: usize,
 }
@@ -302,7 +302,7 @@ const IDS_PER_QUERY: usize = 400;
 
 impl LibraryStore {
     /// The album in disc and track order, by its ID.
-    pub fn playback_for_album_id(
+    pub(crate) fn playback_for_album_id(
         &self,
         album_id: AlbumId,
         start_track_id: Option<TrackId>,
@@ -333,7 +333,7 @@ impl LibraryStore {
 
     /// One track, for starting from it or adding it to a queue that is already playing. The
     /// track must be playable: anything else is reported.
-    pub fn playback_for_track(
+    pub(crate) fn playback_for_track(
         &self,
         track_id: TrackId,
     ) -> Result<PlayableTrack, PlaybackLookupError> {
@@ -353,7 +353,7 @@ impl LibraryStore {
 
     /// The tracks with these ids, in the order given: `None` for an id that is unknown, not
     /// indexed or no longer available. Album counts come from one query for the whole batch.
-    pub fn playable_tracks(
+    pub(crate) fn playable_tracks(
         &self,
         track_ids: &[TrackId],
     ) -> Result<Vec<Option<PlayableTrack>>, PlaybackLookupError> {
@@ -382,7 +382,7 @@ impl LibraryStore {
     }
 
     /// Every track the tracks page shows under `search`, in the page's sort order.
-    pub fn playback_for_tracks(
+    pub(crate) fn playback_for_tracks(
         &self,
         query: &TrackQuery,
         start_track_id: Option<TrackId>,

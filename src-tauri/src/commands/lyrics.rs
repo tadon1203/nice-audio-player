@@ -5,7 +5,7 @@ use crate::AppState;
 
 #[tauri::command]
 #[specta::specta]
-pub async fn get_track_lyrics(
+pub(crate) async fn get_track_lyrics(
     track_id: TrackId,
     state: tauri::State<'_, AppState>,
 ) -> Result<LyricsResolution, LyricsCommandError> {

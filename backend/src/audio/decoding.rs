@@ -16,7 +16,7 @@ use crate::media::validation::ValidatedAudioFile;
 use crate::slices::tail_from;
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-pub enum PcmDecodeError {
+pub(crate) enum PcmDecodeError {
     #[error("decoding was cancelled")]
     Cancelled,
     #[error("the file could not be opened")]

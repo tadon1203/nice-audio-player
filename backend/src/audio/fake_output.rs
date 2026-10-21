@@ -33,7 +33,7 @@ struct StreamState {
     /// How many times the stream moved on to a chained queue.
     adoptions: usize,
     /// Keeps the queue alive like the real callback would.
-    _consumer: PcmConsumer,
+    consumer: PcmConsumer,
 }
 
 struct Shared {
@@ -208,7 +208,7 @@ impl OutputBackend for FakeOutput {
             queue_switches: 0,
             next: None,
             adoptions: 0,
-            _consumer: consumer,
+            consumer,
         }));
         self.shared().streams.push(Arc::clone(&state));
         Ok(PreparedOutput {
@@ -268,7 +268,7 @@ impl OutputStream for FakeStream {
     fn switch_queue(&mut self, consumer: PcmConsumer, pipeline: PipelineId) {
         self.last_position = 0;
         let mut state = self.state();
-        state._consumer = consumer;
+        state.consumer = consumer;
         state.pipeline = pipeline;
         state.played_frames = 0;
         state.queue_switches += 1;
@@ -287,7 +287,7 @@ impl OutputStream for FakeStream {
         self.last_position = 0;
         let mut state = self.state();
         if let Some((_, consumer)) = state.next.take() {
-            state._consumer = consumer;
+            state.consumer = consumer;
         }
         state.pipeline = pipeline;
         state.played_frames = 0;

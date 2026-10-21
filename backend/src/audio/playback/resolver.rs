@@ -21,7 +21,7 @@ pub trait TrackSource: Send + Sync {
 }
 
 /// A source that knows no tracks, for when the library is unavailable.
-pub struct NoTracks;
+pub(crate) struct NoTracks;
 
 impl TrackSource for NoTracks {
     fn tracks(
@@ -119,7 +119,7 @@ pub(super) mod testing {
     };
 
     /// A library of hand-made tracks that counts how often it is read.
-    #[derive(Default)]
+    #[derive(Debug, Default)]
     pub struct FakeTracks {
         tracks: Mutex<HashMap<TrackId, PlayableTrack>>,
         reads: AtomicUsize,
@@ -162,12 +162,12 @@ pub(super) mod testing {
         }
     }
 
-    pub fn resolver_of(tracks: &Arc<FakeTracks>) -> Arc<TrackResolver> {
+    pub(crate) fn resolver_of(tracks: &Arc<FakeTracks>) -> Arc<TrackResolver> {
         Arc::new(TrackResolver::new(Box::new(Arc::clone(tracks))))
     }
 
     /// A track that is only a name and a path.
-    pub fn track(id: TrackId, file: ValidatedAudioFile) -> PlayableTrack {
+    pub(crate) fn track(id: TrackId, file: ValidatedAudioFile) -> PlayableTrack {
         PlayableTrack::bare(id, file)
     }
 }

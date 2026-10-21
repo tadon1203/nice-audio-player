@@ -117,6 +117,7 @@ pub trait MessageSink: Send + Sync {
 pub type SharedMessageSink = Arc<dyn MessageSink>;
 
 /// Drops every message, for tests and headless use.
+#[derive(Debug)]
 pub struct NullMessageSink;
 
 impl MessageSink for NullMessageSink {
@@ -134,6 +135,15 @@ pub fn null_message_sink() -> SharedMessageSink {
 pub struct Notifier {
     sink: SharedMessageSink,
     topic: StateTopic,
+}
+
+impl std::fmt::Debug for Notifier {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // The sink is a trait object, so only the topic can be shown.
+        f.debug_struct("Notifier")
+            .field("topic", &self.topic)
+            .finish_non_exhaustive()
+    }
 }
 
 impl Notifier {

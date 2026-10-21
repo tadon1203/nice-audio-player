@@ -1,9 +1,9 @@
-pub mod appearance;
-pub mod library;
-pub mod lyrics;
-pub mod meter;
-pub mod playback;
-pub mod session;
+pub(crate) mod appearance;
+pub(crate) mod library;
+pub(crate) mod lyrics;
+pub(crate) mod meter;
+pub(crate) mod playback;
+pub(crate) mod session;
 
 use std::sync::Arc;
 

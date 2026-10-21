@@ -10,7 +10,7 @@ use tauri::{
 };
 
 /// The data directory the artwork store lives in, decided once at startup.
-pub struct ArtworkDir(pub PathBuf);
+pub(crate) struct ArtworkDir(pub PathBuf);
 
 fn response(
     status: StatusCode,
@@ -45,9 +45,9 @@ fn found(served: ServedArtwork) -> Response<Vec<u8>> {
 }
 
 /// Reads on the async runtime's blocking pool, never on the thread that dispatched the request.
-pub fn serve_artwork(
+pub(crate) fn serve_artwork(
     app_handle: &tauri::AppHandle,
-    request: tauri::http::Request<Vec<u8>>,
+    request: &tauri::http::Request<Vec<u8>>,
     responder: tauri::UriSchemeResponder,
 ) {
     let data_dir = app_handle
@@ -62,6 +62,6 @@ pub fn serve_artwork(
     };
     tauri::async_runtime::spawn_blocking(move || {
         responder
-            .respond(BackendApp::serve_artwork(&data_dir, &relative).map_or_else(not_found, found))
+            .respond(BackendApp::serve_artwork(&data_dir, &relative).map_or_else(not_found, found));
     });
 }

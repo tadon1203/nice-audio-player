@@ -3,7 +3,7 @@
 //!
 //! Every name is *folded*: NFKC (full-width and half-width forms become one), katakana become
 //! hiragana, letters lowercase, Latin accents drop. A name is sorted by its folded form (or the
-//! tag's SortOrder, folded), searched by it, and filed in the scroll index by its first character.
+//! tag's `SortOrder`, folded), searched by it, and filed in the scroll index by its first character.
 //! Kanji have no reading to sort by, so they sort by code point and share one index bucket.
 
 use unicode_normalization::UnicodeNormalization;
@@ -54,7 +54,7 @@ fn hiragana(c: char) -> char {
     }
 }
 
-/// What a name sorts by: its SortOrder tag when it has one, else the name, folded. An unknown
+/// What a name sorts by: its `SortOrder` tag when it has one, else the name, folded. An unknown
 /// name (`""`) has no sort key, whatever the tag says, and sorts last.
 pub(crate) fn sort_key(name: &str, sort_tag: Option<&str>) -> String {
     if name.trim().is_empty() {
