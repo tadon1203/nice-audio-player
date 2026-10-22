@@ -1,5 +1,7 @@
 # Coding standards
 
+General best practice for Rust, TypeScript, and Svelte 5 overrides this project's docs, ADRs, and code. If a rule here conflicts with general best practice, change the rule. Do not follow the conflicting rule.
+
 These are the rules for code and documentation that lint cannot check. Do not write a rule here if a lint or format tool enforces it. The tool configuration is the source of truth for those rules. The reasons are in the ADRs that each rule links.
 
 ## All code and documentation
@@ -8,100 +10,126 @@ These are the rules for code and documentation that lint cannot check. Do not wr
 - Use the terms in [CONTEXT.md](../CONTEXT.md), not synonyms.
 - Documentation is the single source of truth. Keep each fact in one file. Link; do not copy.
 
-## Renderer
+## Principles
 
-- Do not write `create…` factories. See [ADR 0006](adr/0006-renderer-logic-in-classes-svelte-declarative.md).
-- Do not use the `private` keyword. Use `#` for private members. See [ADR 0006](adr/0006-renderer-logic-in-classes-svelte-declarative.md).
-- Put one public class in each file. The file name is the class name in kebab-case. See [ADR 0006](adr/0006-renderer-logic-in-classes-svelte-declarative.md).
-- Pass members to the template directly only as arrow-function fields. See [ADR 0006](adr/0006-renderer-logic-in-classes-svelte-declarative.md).
-- Construct a class that uses `$effect` during component initialization. Do not use `$effect.root`. See [ADR 0006](adr/0006-renderer-logic-in-classes-svelte-declarative.md).
-- State transitions are value objects. Calculations are static-only classes. See [ADR 0006](adr/0006-renderer-logic-in-classes-svelte-declarative.md).
-- Failures are typed exceptions. See [ADR 0007](adr/0007-failures-are-typed-exceptions-caught-in-three-places.md).
-- Import another module only through its `index.ts` (the barrel). Do not import its inner files. The barrel is the public surface of the module, so the inner files can move without a change in the callers.
-- Inside a module, import the sibling files directly, with a relative path. Never import the module's own barrel. That causes a circular import.
-- Import icons one by one. Never import from the icon library barrel. The barrel slows the dev server and the E2E runs.
+- Remove a forwarding layer: a function, class, or module that only passes its arguments on.
+- Do not add a trait or interface with one real implementation. A seam is real only when something varies across it.
+- Do not add a seam that only tests use.
+- Put a class or file with one caller into its caller, unless it adds something that the caller does not have.
+- Do not write a static-only class. Write plain functions.
+- Do not write a wrapper type that only copies fields.
+- Do not write a mode or boolean argument that tells callers apart. Write one function for each case.
+- Do not validate data that the program itself produced. See [Errors and panics](#errors-and-panics).
+- Clamp a value in one place, not in several layers.
+- Do not write a fallback that hides a bug.
+- Do not retry a failure that a later user action recovers.
 
-## Svelte 5 patterns
+These user-facing robustness behaviors stay:
 
-### State
+- output device loss
+- native-format fallback
+- decode failure skips the track
+- lyrics encoding detection
+- a damaged settings file does not stop start-up
+- stale async results are dropped by id
 
-- Use `$state` only for a value that must update the UI, an effect, or a derived value. Use a plain variable for all other values.
-- Use `$state.raw` for a large object or array that you replace but do not mutate.
-- Use `$derived` to compute a value from state or from a prop. A prop can change, so a value that depends on it must be derived.
-- Use `$props` for component inputs. Do not use `export let`.
-- Use `$derived` instead of `$:`.
-- Do not mutate a prop.
+## Naming
 
-### Effects
+- Use plain nouns. Do not use these words in a name: `Service`, `Repository`, `Manager`, `Handle`, `Hub`, `Snapshot`, `Summary`, `Center`, `Runner`, `Base`, `Sink`, `Commands`.
+- Use `XxxState` only for Backend state.
+- Use `XxxWorker` only for a thread that owns a command loop.
+- One operation has one name in every layer: a Host command is `<area>_<method>`, a Backend method is `<method>` on the area object, and a Renderer method is `<method>` on the area class.
+- A read of many items is `list_<items>`. A read of one item is the noun. Do not use a `get_` prefix in Rust.
+- Command prefixes are `player`, `library`, `lyrics`, `meter`, `appearance`, and `app`.
+- A word has one meaning.
 
-- Do not update state in `$effect`. Use `$derived`, an event handler, or a function binding. See [ADR 0006](adr/0006-renderer-logic-in-classes-svelte-declarative.md).
-- Read every value that an effect must track before its first `await` or `setTimeout`. A value that is read later is not tracked.
-- Do not wrap the body of an effect in `if (browser)`. Effects do not run on the server.
-- Use `untrack` only when an effect must update state that it also reads, and no other option fits.
-- Use `$effect.pre` only when the code must run before the DOM update.
+## Files
 
-### Template and DOM
+- One file has one concept: one responsibility inside an area.
+- There is no line limit. About 1,000 production lines is a guide.
+- A file of about 150 lines or less with one caller goes into its caller.
+- Do not make a directory with one file, or with only `mod.rs`.
+- Rust modules use `foo.rs` next to `foo/`. Do not use `mod.rs`.
 
-- Read a `bind:this` value only in an effect or an event handler. It is `undefined` during component initialization.
-- Listen to `window` and `document` events with `<svelte:window>` and `<svelte:document>`. Do not use `onMount` or `$effect` for them.
-- Use `onclick={...}` attributes. Do not use the `on:click` directive.
-- Use keyed `{#each}` blocks.
-- Do not destructure an `{#each}` item if you bind to its fields. Bind to the item object.
-- Do not use `{#key}` to rerun the script of a child component. Compute the value with `$derived`. Use `{#key}` only for transitions and animations, because it unmounts its content.
-- Sanitize a value before you pass it to `{@html}`. Scoped styles do not apply to `{@html}` content.
-- Use `{#snippet}` and `{@render}` instead of `<slot>`.
-- Use `{@attach}` instead of `use:`. An attachment reruns when any state that it reads changes. If its setup is expensive, read the state in a child `$effect`.
+## Errors and panics
 
-### Shared state and styling
-
-- Share state between components with a class that has `$state` fields. Do not use a store. See [ADR 0006](adr/0006-renderer-logic-in-classes-svelte-declarative.md).
-- Use context to share state with one part of the app. Do not share state through a module, because it can leak between users during server-side rendering. Use `createContext`, not `setContext` and `getContext`.
-- Pass a style value to CSS with the `style:--name={value}` directive. A parent styles a child component with a CSS custom property.
-- Use `:global` only when a CSS custom property cannot reach the child component.
-- Use clsx-style values in `class`. Do not use the `class:` directive.
+- A failure that can happen is a `Result`. Examples: a missing file, a lost device, a corrupt database, bad input.
+- A bug panics. Examples: a broken invariant, an out-of-range index.
+- Use `expect("why")` for an invariant. Use plain indexing where an out-of-range index is a bug.
+- Do not add a type, a `Result` or `Option` return, an error variant, or a validation step only to express a failure that would be a bug.
+- Validate once where data enters the program: IPC input, files, the database, and the OS. Trust the data after that.
+- TypeScript follows the same rule. Do not write `null` returns, `?.` chains, or `??` defaults for a value that cannot be missing.
+- See [ADR 0010](adr/0010-failures-are-result-bugs-panic.md).
 
 ## Rust
 
-Clippy enforces the no-panic rule. See [ADR 0010](adr/0010-backend-does-not-panic-errors-are-typed-with-thiserror.md). The rules below are the ones that lint cannot check.
+The rules below are the ones that lint cannot check.
 
-### Failures and invariants
+### Failures and logging
 
 - Use `expect` only for an invariant that the types cannot show, or for a failure at start-up. The message says why the call cannot fail. A message that only names the call is not a reason.
 - Do not write `unreachable!`. Remove the impossible branch with the types: split the enum, or carry a validated value.
-- Make an invariant a type. Use a newtype with a checked constructor or a `NonZero*` type. Validate once at the boundary. Inside, pass the validated type.
-- Write an error as an enum with `#[derive(thiserror::Error)]`. Do not use `anyhow`.
+- Validate once at the boundary, and pass the validated type inside.
+- Write an error as an enum with `#[derive(thiserror::Error)]` when it carries a cause. Do not use `anyhow`.
 - Map an error cause with `logged`: `.map_err(logged(Code, "area.what"))`. It logs the cause at `warn` and returns the typed code.
 - Drop a `Result` that has no caller with `log_failed(result, "area.what")` (`diagnostics.rs`). It logs an error at `debug` and returns nothing. Do not write `let _ = <Result>`. A `try_send` into a full channel of capacity 1 is not an error, because a wake is already pending.
 - A cause with no `Display` (an IPC enum) is logged inline at `warn` with its `Debug` form, as in `library/store/playback.rs`. Code that runs in the audio callback does not log at all.
-- Lock a `Mutex`, `RwLock`, or `Condvar` through `sync` (`sync::lock`, `sync::read`, `sync::write`, `sync::wait`), not through the `std` method. `clippy.toml` bans the `std` methods, and the helpers recover from poison.
+- Lock a `Mutex`, `RwLock`, or `Condvar` with `parking_lot`. See [ADR 0010](adr/0010-failures-are-result-bugs-panic.md).
 - Answer a playback request through `respond` (`audio/playback/service.rs`). It sends the reply, and logs at `debug` when the caller has gone.
-- Slice a buffer that a count can run past with the helpers in `slices` (`head`, `tail_from`, and their `_mut` forms). They clamp to the buffer instead of panicking.
 - Remove a file on a best-effort basis with `remove_file_best_effort` (`cleanup.rs`). It logs at `debug` every error except `NotFound`.
 - A thread's `join` returns a panic payload, which has no `Display`. Check `join().is_err()` and log it at `debug`; `log_failed` cannot take it.
-- `as` is allowed for a number. Use `From` or `TryFrom` where the value may not fit, so the conversion cannot silently change it. See [ADR 0010](adr/0010-backend-does-not-panic-errors-are-typed-with-thiserror.md).
+- `as` is allowed for a number. Use `From` or `TryFrom` where the value may not fit, so the conversion cannot silently change it.
 - Use `checked_*` or `saturating_*` for arithmetic that can overflow.
 - Add a lint suppression only when the user agrees.
 - Every `allow` in `[workspace.lints]` has a comment that gives the reason.
 
 ### Generics, memory, and borrows
 
-- Prefer a generic or a trait to `macro_rules!`. Write a macro only when a generic cannot do the job.
-- Use static dispatch. Use `dyn` only at a seam, such as an output callback or an event sink.
-- Show an allocation in the type. A fixed length is `Box<[T]>`, `Arc<[T]>`, or `[T; N]`. Use `Vec` only for a value that grows. Allocate with `with_capacity`.
+- Use `dyn` only at a real seam, such as an output callback or an event listener.
 - A function that must not allocate takes `&mut [T]` from the caller and writes into it.
 - The audio callback does not allocate, lock, panic, or do I/O.
-- Write code that is easy for the borrow checker. A struct owns its data or holds an `Arc`; it does not hold a reference with a lifetime. Hold an ID, not a long-lived reference. Pass a value across a thread by `Arc` or by a channel. Keep a borrow short. Do not use `Rc<RefCell<…>>`. Take `&[T]` and `&str` as arguments.
+- Hold an ID, not a long-lived reference, across a thread boundary. Pass a value across a thread by `Arc` or by a channel.
 
 ## Dependencies
 
 - The app's dependency versions are locked by `Cargo.lock` and `pnpm-lock.yaml`. Use `=` only for a prerelease.
 
-## Backend tests
+## Renderer
+
+Design rules are in [ADR 0011](adr/0011-renderer-design.md):
+
+- The Renderer is object-oriented by default. A state with rules is a class with `$state` fields.
+- A pure calculation is a plain function.
+- A class gets its dependencies as constructor arguments. A component gets them with `App.current()`.
+- `ui/` never imports `app/`. Pass a value such as reduced motion as an argument.
+
+Other rules:
+
+- Do not write `create…` factories. See [ADR 0006](adr/0006-renderer-logic-in-classes-svelte-declarative.md).
+- Do not use the `private` keyword. Use `#` for private members. See [ADR 0006](adr/0006-renderer-logic-in-classes-svelte-declarative.md).
+- Put one public class in each file. The file name is the class name in kebab-case. See [ADR 0006](adr/0006-renderer-logic-in-classes-svelte-declarative.md).
+- Pass members to the template directly only as arrow-function fields. See [ADR 0006](adr/0006-renderer-logic-in-classes-svelte-declarative.md).
+- Construct a class that uses `$effect` during component initialization. Do not use `$effect.root`. See [ADR 0006](adr/0006-renderer-logic-in-classes-svelte-declarative.md).
+- Do not update state in `$effect`. Use `$derived`, an event handler, or a function binding. See [ADR 0006](adr/0006-renderer-logic-in-classes-svelte-declarative.md).
+- Failures are typed exceptions. See [ADR 0007](adr/0007-failures-are-typed-exceptions-caught-in-three-places.md).
+- Share state between components with a class that has `$state` fields. Do not use a store. See [ADR 0006](adr/0006-renderer-logic-in-classes-svelte-declarative.md).
+- Import another module only through its `index.ts` (the barrel). Do not import its inner files. The barrel is the public surface of the module, so the inner files can move without a change in the callers.
+- Inside a module, import the sibling files directly, with a relative path. Never import the module's own barrel. That causes a circular import.
+- Import icons one by one. Never import from the icon library barrel. The barrel slows the dev server and the E2E runs.
+
+## Tests
+
+- Test through the public interface. Do not test private members.
+- Replace a dependency only at a real seam: the generated bindings module in the Renderer (`vi.mock`), the `OutputStream` trait in the Backend, and globals (`requestAnimationFrame`, timers) through stubs and fake timers.
+- Do not replace an internal collaborator. Do not add a seam only so that a test can replace something. See [ADR 0011](adr/0011-renderer-design.md).
+- Keep unit tests of a pure function next to the function.
+
+### Backend tests
 
 - A test of one small function stays in its file, in `#[cfg(test)] mod tests`.
-- A test of a module's behavior goes in `<module dir>/tests/<behavior>.rs`. `<module dir>/tests/mod.rs` holds only shared helpers and the `mod` lines.
+- A test of a module's behavior goes in `<module>/tests.rs`, one file per seam. Split it into `<module>/tests/<behavior>.rs` only above about 1,000 lines.
 
-## E2E tests (`tests-app/`)
+### E2E tests (`tests-app/`)
 
 - Find regions by `aria-label` or role with CSS. Narrow from page to element: `$(scope).$(…)`.
 - Use a text selector only as the final step of a chain. Do not mix strategies in one selector string.

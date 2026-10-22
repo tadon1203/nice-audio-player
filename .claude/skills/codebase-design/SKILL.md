@@ -59,9 +59,9 @@ When designing an interface, ask:
 
 ## Principles
 
-- **Depth is a property of the interface, not the implementation.** A deep module can be internally composed of small, mockable, swappable parts; they just aren't part of the interface. A module can have **internal seams** (private to its implementation, used by its own tests) as well as the **external seam** at its interface.
+- **Depth is a property of the interface, not the implementation.** A deep module can be internally composed of small parts; they just aren't part of the interface. A module has one **external seam**, at its interface. Do not add internal seams for tests. See [ADR 0011](../../../docs/adr/0011-renderer-design.md).
 - **The interface is the test surface.** Callers and tests cross the same seam. If you want to test *past* the interface, the module is probably the wrong shape.
-- **One adapter means a hypothetical seam. Two adapters means a real one.** Don't introduce a seam unless something actually varies across it.
+- **One adapter means a hypothetical seam. Two adapters means a real one.** Don't introduce a seam unless something actually varies across it. A test double does not count as an adapter.
 
 ## Tests
 
@@ -75,15 +75,15 @@ Apply these to a module that is being designed and to a module that already exis
 
 ## Designing for testability
 
-Good interfaces make testing natural:
+Testability comes from the shape of the interface. Do not add a seam only so a test can reach or replace something. The rules for tests are in the `tdd` skill, and [ADR 0011](../../../docs/adr/0011-renderer-design.md) states the project rule.
 
-1. **Accept dependencies, don't create them.**
+1. **Accept what the app already supplies.** A dependency that the caller passes in is easy to replace at a real seam. A dependency that a function creates inside itself is not.
 
    ```typescript
-   // Testable
+   // Testable: the caller passes the real collaborator
    function processOrder(order, paymentGateway) {}
 
-   // Hard to test
+   // Hard to test: the function builds its own collaborator
    function processOrder(order) {
      const gateway = new StripeGateway();
    }
@@ -102,6 +102,8 @@ Good interfaces make testing natural:
    ```
 
 3. **Small surface area.** Fewer methods = fewer tests needed. Fewer params = simpler test setup.
+
+4. **A real second adapter is the only reason for a new seam.** Do not add an interface with one real implementation so that a test can swap it.
 
 ## Relationships
 

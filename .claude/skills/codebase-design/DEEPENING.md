@@ -12,22 +12,22 @@ Pure computation, in-memory state, no I/O. Always deepenable: merge the modules 
 
 ### 2. Local-substitutable
 
-Dependencies that have local test stand-ins (PGLite for Postgres, in-memory filesystem). Deepenable if the stand-in exists. The deepened module is tested with the stand-in running in the test suite. The seam is internal; no port at the module's external interface.
+Dependencies that have a real local substitute that the app also runs (PGLite for Postgres, in-memory filesystem). Deepenable if the substitute is real. The deepened module is tested with that dependency running in the test suite. No port at the module's external interface.
 
 ### 3. Remote but owned (Ports & Adapters)
 
-Your own services across a network boundary (microservices, internal APIs). Define a **port** (interface) at the seam. The deep module owns the logic; the transport is injected as an **adapter**. Tests use an in-memory adapter. Production uses an HTTP/gRPC/queue adapter.
+Your own services across a network boundary (microservices, internal APIs). Define a **port** (interface) at the seam only when a second real adapter exists or is planned. The deep module owns the logic; the transport is injected as an **adapter**. The app runs the real transport in production and in its tests.
 
-Recommendation shape: *"Define a port at the seam, implement an HTTP adapter for production and an in-memory adapter for testing, so the logic sits in one deep module even though it's deployed across a network."*
+Recommendation shape: *"Define a port at the seam, implement an HTTP adapter for production and a queue adapter for the batch job, so the logic sits in one deep module even though it's deployed across a network."*
 
 ### 4. True external (Mock)
 
-Third-party services (Stripe, Twilio, etc.) you don't control. The deepened module takes the external dependency as an injected port; tests provide a mock adapter.
+Third-party services (Stripe, Twilio, etc.) you don't control. The deepened module takes the external dependency as an injected port. Tests replace it only at the network edge, so the real client code still runs.
 
 ## Seam discipline
 
-- **One adapter means a hypothetical seam. Two adapters means a real one.** Don't introduce a port unless at least two adapters are justified (typically production + test). A single-adapter seam is just indirection.
-- **Internal seams vs external seams.** A deep module can have internal seams (private to its implementation, used by its own tests) as well as the external seam at its interface. Don't expose internal seams through the interface just because tests use them.
+- **One adapter means a hypothetical seam. Two adapters means a real one.** Don't introduce a port unless at least two real adapters are justified. A test double does not count. A single-adapter seam is just indirection. See [ADR 0011](../../../docs/adr/0011-renderer-design.md).
+- **One external seam.** A deep module has one seam, at its interface. Do not add internal seams for tests.
 
 ## Testing strategy: replace, don't layer
 

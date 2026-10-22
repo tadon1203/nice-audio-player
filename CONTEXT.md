@@ -7,17 +7,18 @@ The language of Nice Audio Player. Use these terms in code, docs, and tickets. D
 - **Renderer**: the part of the app that draws the UI in the window. It composes views and caches Backend state. It holds no second source of truth.
 - **Host**: the part of the app that connects the Backend to the window and the operating system. It registers commands, delivers the Backend's messages to the window, and serves artwork. It holds no domain rules.
 - **Backend**: the part of the app that owns the domain and the persistent state. It knows nothing about Tauri.
-- **Renderer domain**: the part of the Renderer that serves one Backend area (the Library, Playback, lyrics, settings, or the meters). It holds that area's cached state and logic. It never depends on another Renderer domain.
-- **Renderer shell**: the part of the Renderer that holds app state spanning several Renderer domains, such as Now Playing, the queue panel, and workspace scroll. It sits between the product compositions and the Renderer domains.
+- **Area**: one part of the domain (the Player, the Library, lyrics, the Appearance, or the meters). The Backend and the Renderer are split into the same Areas. A Renderer Area holds that Area's cached state and logic, and never depends on another Renderer Area.
+- **App**: the part of the Renderer that holds state spanning several Areas, such as Now Playing, the queue panel, and workspace scroll. It sits between the product compositions and the Areas. _Avoid_: shell.
 - **Backend state**: a value that the Backend owns and the Renderer mirrors, such as the Playback, the Queue, the Library scan, the Waveform, and the Appearance. It always reaches the Renderer whole, with its revision.
-- **Backend occurrence**: a fact about one moment that the Backend reports once, such as a skipped track. The Renderer shows it and builds no state from it.
+- **Backend event**: a fact about one moment that the Backend reports once, such as a skipped track. The Renderer shows it and builds no state from it. _Avoid_: occurrence.
 - **Measurement stream**: the frequent measurements that the Backend sends while audio plays: the playing position and the Meter frames. _Avoid_: Stream (an Output stream is a different thing).
 
 ## Library
 
-- **Library**: the indexed set of tracks from the registered music folders.
+- **Library**: the indexed set of tracks from the Library folders.
+- **Library folder**: a music folder the user added to the Library. It can be disabled without being removed. _Avoid_: root.
 - **Library scan**: discovering, inspecting, and indexing files in batches.
-- **Album Artist**: the artist an album is filed under.
+- **Album Artist**: the artist an album is filed under. In code it is called Artist, because the app files nothing under a track's own artist.
 - **Album**: the tracks that share an Album Artist, a title, and a directory. A disc directory counts as the directory above it. Two printings of one album in two directories are two albums.
 - **Compilation**: tracks that share a directory and an album title, but not an artist. They are one album, filed under Various Artists.
 - **Missing track**: a track whose file is gone. A new file with the same content is that track again (relinked, same `track_id`).
@@ -25,6 +26,7 @@ The language of Nice Audio Player. Use these terms in code, docs, and tickets. D
 
 ## Playback
 
+- **Player**: the object that plays the Queue, in the Backend and in the Renderer. Its state is the Playback state and the Queue state.
 - **Playback context**: the list the user picked a track from (an album, or the Tracks list as filtered and sorted). It is the source of the queue, not the queue itself.
 - **Queue**: the items to play, held as track ids. Its **arranged order** is the one source of truth. Shuffle is a separate **play order** over it.
 - **Playback**: one queue item being played. Every track that loads gets a new playback id. A seek or an output device switch keeps the same Playback.

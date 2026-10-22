@@ -1,59 +1,24 @@
-# When to Mock
+# Replacing Dependencies
 
-Mock at **system boundaries** only:
+Replace a dependency only at a **real seam**: a boundary that the app itself runs across. A seam is real when the production code uses it the same way the test does.
 
-- External APIs (payment, email, etc.)
-- Databases (sometimes - prefer test DB)
-- Time/randomness
-- File system (sometimes)
+This project has three real seams:
 
-Don't mock:
+- **The Renderer's generated bindings module.** Replace it with `vi.mock`. The bindings are the boundary to the Backend.
+- **The `OutputStream` trait in the Backend.** Write a test implementation of the trait, and pass it in where the app passes the real output.
+- **Globals.** Replace `requestAnimationFrame` and timers with stubs and fake timers.
 
-- Your own classes/modules
-- Internal collaborators
-- Anything you control
+Everything else runs for real. Do not mock:
 
-## Designing for Mockability
+- Your own classes or modules.
+- Internal collaborators, or anything the same module owns.
 
-At system boundaries, design interfaces that are easy to mock:
+## Do not add a seam for a test
 
-**1. Use dependency injection**
+Do not add an interface, a parameter, an export, or a constructor argument only so that a test can replace something. A seam that only tests use is a second path through the code, and the app does not run it. See [ADR 0011](../../../docs/adr/0011-renderer-design.md).
 
-Pass external dependencies in rather than creating them internally:
+If a dependency has one real implementation and no real second one, do not put an interface in front of it. Pass the real object. If the dependency is a third-party service, the test must still use the real code path. Use a real local stand-in if one exists, or accept the gap and say so in the ticket.
 
-```typescript
-// Easy to mock
-function processPayment(order, paymentClient) {
-  return paymentClient.charge(order.total);
-}
+## Do not patch internals
 
-// Hard to mock
-function processPayment(order) {
-  const client = new StripeClient(process.env.STRIPE_KEY);
-  return client.charge(order.total);
-}
-```
-
-**2. Prefer SDK-style interfaces over generic fetchers**
-
-Create specific functions for each external operation instead of one generic function with conditional logic:
-
-```typescript
-// GOOD: Each function is independently mockable
-const api = {
-  getUser: (id) => fetch(`/users/${id}`),
-  getOrders: (userId) => fetch(`/users/${userId}/orders`),
-  createOrder: (data) => fetch('/orders', { method: 'POST', body: data }),
-};
-
-// BAD: Mocking requires conditional logic inside the mock
-const api = {
-  fetch: (endpoint, options) => fetch(endpoint, options),
-};
-```
-
-The SDK approach means:
-- Each mock returns one specific shape
-- No conditional logic in test setup
-- Easier to see which endpoints a test exercises
-- Type safety per endpoint
+A test does not write to a private field or replace a method of a class under test. A class gets its dependencies as constructor arguments, so a test replaces a dependency by passing the same kind of value that the app passes, at one of the seams above.
