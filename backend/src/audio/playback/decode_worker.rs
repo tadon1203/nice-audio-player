@@ -4,12 +4,12 @@
 use std::thread;
 
 use super::input::{Inbox, WorkerEvent};
-use crate::audio::cancellation::Cancellation;
 use crate::audio::decoding::{DecodeStep, StreamingDecoder};
 use crate::audio::output::PipelineId;
 use crate::audio::output_processing::{OutputPcmProcessor, OutputProcessingError};
 use crate::audio::pcm_queue::{PcmProducer, PcmWaker, WaitCancelled};
 use crate::containment::contain;
+use crate::threads::Cancellation;
 
 pub(crate) struct DecodeTaskInput {
     pub(crate) decoder: StreamingDecoder,
@@ -206,7 +206,6 @@ fn discard_output_prefix(samples: &mut Vec<f32>, remaining_samples: &mut usize) 
 #[cfg(test)]
 mod tests {
     use super::{DecodeTaskInput, DecodeWorker, Stop, prebuffer_frames};
-    use crate::audio::cancellation::Cancellation;
     use crate::audio::compressed_source::prepare_compressed_source;
     use crate::audio::output::PipelineId;
     use crate::audio::output_processing::{
@@ -216,6 +215,7 @@ mod tests {
     use crate::audio::playback::input::{Inbox, WorkerEvent, WorkerInput};
     use crate::media::validation::ValidatedAudioFile;
     use crate::test_support::{TestDirectory, write_pcm_i16_wav};
+    use crate::threads::Cancellation;
     use std::sync::mpsc::Receiver;
     use std::time::{Duration, Instant};
 

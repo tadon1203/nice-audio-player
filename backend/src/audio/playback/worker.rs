@@ -5,8 +5,9 @@
 //! at its next deadline, to publish the position, start the prefetch and notice the end of the
 //! track.
 
+use parking_lot::RwLock;
 use std::collections::HashSet;
-use std::sync::{Arc, RwLock, mpsc::Receiver};
+use std::sync::{Arc, mpsc::Receiver};
 use std::time::{Duration, Instant};
 
 use super::TrackListener;

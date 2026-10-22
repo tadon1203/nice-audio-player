@@ -1,5 +1,4 @@
 use super::*;
-use crate::sync;
 
 #[test]
 fn a_device_change_on_the_system_default_keeps_playing() {
@@ -79,7 +78,7 @@ fn a_failed_device_switch_keeps_the_saved_selection_and_the_queue() {
         snapshot.base().output_selection,
         AudioOutputSelection::SystemDefault
     );
-    assert!(sync::lock(&harness.preferences).is_empty());
+    assert!(harness.preferences.lock().is_empty());
     assert_eq!(harness.queue_titles(), ["a", "b"]);
 }
 
@@ -93,9 +92,9 @@ fn the_output_can_be_chosen_while_stopped() {
     let snapshot = harness.select_output(selection.clone()).unwrap();
 
     assert_eq!(snapshot.base().output_selection, selection);
-    assert_eq!(sync::lock(&harness.preferences).len(), 1);
+    assert_eq!(harness.preferences.lock().len(), 1);
     assert_eq!(harness.select_output(selection).unwrap(), snapshot);
-    assert_eq!(sync::lock(&harness.preferences).len(), 1, "no change");
+    assert_eq!(harness.preferences.lock().len(), 1, "no change");
 }
 
 #[test]
@@ -162,7 +161,7 @@ fn switching_the_output_while_paused_resumes_the_position_on_the_new_device() {
     assert_eq!(session(&snapshot).output_device.name, "Other fake speakers");
     let position = session(&snapshot).position_ms;
     assert!((950..=1_050).contains(&position), "position {position}");
-    assert_eq!(sync::lock(&harness.preferences).len(), 1);
+    assert_eq!(harness.preferences.lock().len(), 1);
     assert_eq!(
         harness.output.prepared_selections().last(),
         Some(&AudioOutputSelection::Device {

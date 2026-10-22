@@ -25,15 +25,16 @@ mod tests;
 pub(crate) mod text;
 pub(crate) mod watcher;
 
-use crate::ids::{ArtworkHash, RootId};
+use crate::ids::{ArtworkHash, FolderId};
 use crate::messages::{Notifier, SharedMessageSink, StateTopic, Versioned};
 use database::{Database, DatabaseError};
 use error::LibraryCommandError;
 use log::error;
 use models::{LibraryRoot, LibraryScanSnapshot, LibraryUnavailableReason};
+use parking_lot::Mutex;
 use std::{
     path::Path,
-    sync::{Arc, Mutex},
+    sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
 };
 use store::LibraryStore;
@@ -88,7 +89,7 @@ impl Library {
 
     /// The scan state with the revision of its topic.
     pub(crate) fn scan_state(&self) -> Versioned<LibraryScanSnapshot> {
-        crate::sync::lock(&self.scan).clone()
+        self.scan.lock().clone()
     }
 
     pub(crate) fn roots(&self) -> Result<Vec<LibraryRoot>, LibraryCommandError> {
@@ -101,13 +102,13 @@ impl Library {
 
     pub(crate) fn set_root_enabled(
         &self,
-        id: RootId,
+        id: FolderId,
         enabled: bool,
     ) -> Result<LibraryRoot, LibraryCommandError> {
         self.sync.set_root_enabled(id, enabled)
     }
 
-    pub(crate) fn remove_root(&self, id: RootId) -> Result<(), LibraryCommandError> {
+    pub(crate) fn remove_root(&self, id: FolderId) -> Result<(), LibraryCommandError> {
         self.sync.remove_root(id)
     }
 

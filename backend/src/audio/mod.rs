@@ -1,4 +1,3 @@
-pub(crate) mod cancellation;
 mod compressed_source;
 pub(crate) mod decoding;
 pub(crate) mod devices;

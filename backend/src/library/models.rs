@@ -1,4 +1,4 @@
-use crate::ids::{AlbumId, ArtistId, RootId, TrackId};
+use crate::ids::{AlbumId, ArtistId, FolderId, TrackId};
 use serde::Deserialize;
 use serde::Serialize;
 #[derive(Debug, Clone, Serialize, specta::Type, thiserror::Error)]
@@ -22,7 +22,7 @@ pub enum LibraryStatus {
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LibraryRoot {
-    pub id: RootId,
+    pub id: FolderId,
     pub path: String,
     pub enabled: bool,
     pub scan_generation: u64,

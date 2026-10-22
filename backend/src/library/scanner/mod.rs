@@ -11,10 +11,10 @@ mod inspect;
 mod persist;
 mod relink;
 
-use crate::sync;
+use parking_lot::Mutex;
 use std::path::{Path, PathBuf};
 use std::sync::{
-    Arc, Mutex,
+    Arc,
     atomic::{AtomicBool, Ordering},
 };
 use std::time::{Duration, Instant};
@@ -64,7 +64,7 @@ pub(crate) fn run(
     notify: &Notifier,
 ) -> LibraryScanState {
     let expected = expected_files(database, jobs);
-    sync::lock(state).update(|scan| scan.expected_count = expected);
+    state.lock().update(|scan| scan.expected_count = expected);
     let mut progress = Progress::new(state, notify);
     let mut traversal_failed = false;
     for job in jobs {
@@ -72,7 +72,9 @@ pub(crate) fn run(
         if cancel.load(Ordering::Acquire) {
             return finish(state, LibraryScanState::Cancelled, None, notify);
         }
-        sync::lock(state).update(|scan| scan.current_root = Some(root.clone()));
+        state
+            .lock()
+            .update(|scan| scan.current_root = Some(root.clone()));
         notify.notify();
         match scan_root(database, job, cancel, &mut progress) {
             Ok(complete) => traversal_failed |= !complete,
@@ -125,7 +127,7 @@ fn relink_moved(database: &Database) -> Result<usize, PersistError> {
 /// Ends the scan as failed, for a scan thread that died before it could say how it ended.
 pub(crate) fn fail(state: &SharedScanState, notify: &Notifier) {
     // A panic can poison the lock; the snapshot is plain counters, so it is still good to use.
-    let mut scan = sync::lock(state);
+    let mut scan = state.lock();
     scan.update(|scan| {
         scan.state = LibraryScanState::Failed;
         scan.current_root = None;
@@ -310,7 +312,7 @@ fn finish(
     notify: &Notifier,
 ) -> LibraryScanState {
     let snapshot = {
-        let mut scan = sync::lock(state);
+        let mut scan = state.lock();
         scan.update(|scan| {
             scan.state = outcome;
             scan.current_root = None;
@@ -358,7 +360,7 @@ impl<'a> Progress<'a> {
     }
 
     fn count(&mut self, update: impl FnOnce(&mut LibraryScanSnapshot)) {
-        sync::lock(self.state).update(update);
+        self.state.lock().update(update);
         if self.last_signal.elapsed() >= PROGRESS_SIGNAL_INTERVAL {
             self.notify.notify();
             self.last_signal = Instant::now();

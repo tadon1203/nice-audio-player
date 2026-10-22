@@ -15,7 +15,6 @@ use crate::library::{
     models::*,
     summary,
 };
-use crate::sync;
 use crate::test_support::TestDirectory;
 use rusqlite::params;
 use std::collections::HashSet;
@@ -100,7 +99,7 @@ impl Fixture {
 
     /// Writes tracks the way the scanner does: the tags, and the keys computed from them.
     fn add_all(&self, seeds: &[Seed<'_>]) {
-        let mut connection = self.database.write().unwrap();
+        let mut connection = self.database.write();
         let transaction = connection.transaction().unwrap();
         for seed in seeds {
             let file = format!("{}.wav", seed.id);
@@ -178,7 +177,7 @@ impl Fixture {
     }
 
     fn sql(&self, sql: &str) {
-        self.database.write().unwrap().execute(sql, []).unwrap();
+        self.database.write().execute(sql, []).unwrap();
     }
 
     /// Creates the audio files of tracks 1..=`count` so playback can find them.
@@ -280,10 +279,10 @@ fn varied_library(fixture: &Fixture) {
     fixture.add_all(&seeds);
 }
 
-static STATEMENTS: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+static STATEMENTS: parking_lot::Mutex<Vec<String>> = parking_lot::Mutex::new(Vec::new());
 
 fn record_statement(sql: &str) {
-    sync::lock(&STATEMENTS).push(sql.to_owned());
+    STATEMENTS.lock().push(sql.to_owned());
 }
 
 /// The statements `run` executes on the store's read connection.
@@ -293,15 +292,15 @@ fn record_statement(sql: &str) {
 )]
 fn statements_of(fixture: &Fixture, run: impl FnOnce()) -> Vec<String> {
     // The pool hands its idle connection to the next read, which is the store's.
-    let mut connection = fixture.database.read().unwrap();
+    let mut connection = fixture.database.read();
     connection.connection_mut().trace(Some(record_statement));
     drop(connection);
-    sync::lock(&STATEMENTS).clear();
+    STATEMENTS.lock().clear();
     run();
-    let mut connection = fixture.database.read().unwrap();
+    let mut connection = fixture.database.read();
     connection.connection_mut().trace(None);
     drop(connection);
-    std::mem::take(&mut *sync::lock(&STATEMENTS))
+    std::mem::take(&mut *STATEMENTS.lock())
 }
 
 fn leak(text: String) -> &'static str {

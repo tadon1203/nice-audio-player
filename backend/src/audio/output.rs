@@ -8,7 +8,8 @@
 //! A session opens one stream. A seek builds a new queue and hands it to the running callback
 //! through a lock-free single-slot handoff; the callback switches to it at its next run.
 
-use std::sync::{Arc, Mutex};
+use parking_lot::Mutex;
+use std::sync::Arc;
 use std::time::Duration;
 
 use cpal::traits::{DeviceTrait, StreamTrait};
@@ -26,7 +27,6 @@ use super::pcm_queue::{PcmConsumer, PcmProducer, bounded_pcm_queue};
 use super::volume::{AtomicEffectiveGain, process_sample};
 use crate::diagnostics::logged;
 use crate::slices::{head, head_mut, tail_from_mut};
-use crate::sync;
 
 /// Identifies one output stream, which lives as long as a session.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -101,7 +101,7 @@ impl LatestPosition {
     }
 
     pub(crate) fn take(&self) -> Option<PositionUpdate> {
-        sync::lock(&self.0).take()
+        self.0.lock().take()
     }
 }
 
@@ -933,11 +933,11 @@ mod tests {
     use crate::audio::pcm::ChannelCount;
     use crate::audio::pcm_queue::{PcmProducer, bounded_pcm_queue};
     use crate::audio::volume::AtomicEffectiveGain;
-    use crate::sync;
     use cpal::{
         Sample, SampleFormat, StreamInstant, SupportedBufferSize, SupportedStreamConfigRange,
     };
-    use std::sync::{Arc, Mutex};
+    use parking_lot::Mutex;
+    use std::sync::Arc;
     use std::time::Duration;
 
     fn range(sample_format: SampleFormat, channels: u16) -> SupportedStreamConfigRange {
@@ -1203,7 +1203,7 @@ mod tests {
             100,
             OutputLinks {
                 gain: AtomicEffectiveGain::new(gain),
-                events: Arc::new(move |event| sync::lock(&sink).push(event)),
+                events: Arc::new(move |event| sink.lock().push(event)),
                 meter: meter.clone(),
             },
             position.clone(),
@@ -1293,15 +1293,12 @@ mod tests {
         let mut output = [0.0_f32; 3];
 
         callback.state.fill(&mut output, at(10));
-        assert!(
-            sync::lock(&callback.events).is_empty(),
-            "one sample is left"
-        );
+        assert!(callback.events.lock().is_empty(), "one sample is left");
 
         callback.state.fill(&mut output, at(11));
         callback.state.fill(&mut output, at(12));
 
-        let events = sync::lock(&callback.events).clone();
+        let events = callback.events.lock().clone();
         assert_eq!(
             events,
             [OutputEvent::FinalFrames {
@@ -1319,7 +1316,7 @@ mod tests {
 
         callback.state.fill(&mut output, at(10));
 
-        assert!(sync::lock(&callback.events).is_empty());
+        assert!(callback.events.lock().is_empty());
     }
 
     #[test]
@@ -1332,7 +1329,7 @@ mod tests {
         callback.state.fill(&mut output, at(11));
 
         assert_eq!(
-            sync::lock(&callback.events).clone(),
+            callback.events.lock().clone(),
             [OutputEvent::Failed(
                 StreamFailureKind::CompletionTimingFailed
             )]
@@ -1397,7 +1394,7 @@ mod tests {
         callback.state.fill(&mut output, at(11));
 
         assert_eq!(
-            sync::lock(&callback.events).clone(),
+            callback.events.lock().clone(),
             [OutputEvent::FinalFrames {
                 pipeline: PipelineId(2),
                 end_time: calculate_end_time(at(10), 2, 1, 100).unwrap()
@@ -1446,7 +1443,7 @@ mod tests {
         assert_eq!(update.pipeline, PipelineId(2));
         assert_eq!((update.start_frame, update.end_frame), (0, 3));
         assert_eq!(
-            sync::lock(&callback.events).clone(),
+            callback.events.lock().clone(),
             [OutputEvent::FinalFrames {
                 pipeline: PipelineId(1),
                 end_time: calculate_end_time(at(10), 3, 1, 100).unwrap()

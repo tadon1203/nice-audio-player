@@ -6,8 +6,104 @@ use rusqlite::functions::{Context, FunctionFlags};
 use rusqlite::types::{Type, ValueRef};
 use serde::{Deserialize, Serialize};
 use std::ffi::OsStr;
-use std::fmt;
-use std::str::FromStr;
+
+/// An ID that is a rowid: above zero. On the IPC a number, which serde rejects below one.
+macro_rules! rowid_id {
+    ($(#[$meta:meta])* $name:ident, $error:literal) => {
+        $(#[$meta])*
+        #[derive(
+            Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, specta::Type,
+        )]
+        #[serde(try_from = "i64", into = "i64")]
+        pub struct $name(i64);
+
+        impl $name {
+            /// The ID of a rowid, or `None` for a rowid that is not above zero.
+            pub fn try_from_rowid(rowid: i64) -> Option<Self> {
+                (rowid > 0).then_some(Self(rowid))
+            }
+
+            pub fn rowid(self) -> i64 {
+                self.0
+            }
+        }
+
+        impl TryFrom<i64> for $name {
+            type Error = &'static str;
+
+            fn try_from(rowid: i64) -> Result<Self, Self::Error> {
+                Self::try_from_rowid(rowid).ok_or($error)
+            }
+        }
+
+        impl From<$name> for i64 {
+            fn from(id: $name) -> Self {
+                id.0
+            }
+        }
+    };
+}
+
+/// An ID that is a 16-byte hash: on the IPC 32 lowercase hex characters.
+macro_rules! hex_id {
+    ($(#[$meta:meta])* $name:ident, $error:literal) => {
+        $(#[$meta])*
+        #[derive(
+            Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, specta::Type,
+        )]
+        #[serde(try_from = "String", into = "String")]
+        #[specta(type = String)]
+        pub struct $name([u8; 16]);
+
+        impl $name {
+            /// 32 lowercase hex characters.
+            pub fn to_hex(self) -> String {
+                hex_of(&self.0)
+            }
+
+            /// The ID of its 32 lowercase hex characters, or `None` for any other text.
+            pub fn from_hex(value: &str) -> Option<Self> {
+                parse_hex(value).map(Self)
+            }
+        }
+
+        impl TryFrom<String> for $name {
+            type Error = &'static str;
+
+            fn try_from(value: String) -> Result<Self, Self::Error> {
+                Self::from_hex(&value).ok_or($error)
+            }
+        }
+
+        impl From<$name> for String {
+            fn from(id: $name) -> Self {
+                id.to_hex()
+            }
+        }
+    };
+}
+
+/// An ID that a counter hands out: the counter's `u64`, from one. The caller adds serde derives
+/// when the ID crosses the IPC.
+macro_rules! counter_id {
+    ($(#[$meta:meta])* $vis:vis $name:ident) => {
+        $(#[$meta])*
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+        $vis struct $name(u64);
+
+        impl $name {
+            /// The first ID of a counter.
+            pub(crate) fn first() -> Self {
+                Self(1)
+            }
+
+            /// The ID after this one.
+            pub(crate) fn next(self) -> Self {
+                Self(self.0 + 1)
+            }
+        }
+    };
+}
 
 /// Stored artwork: the 64-character blake3 hex of the image file.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
@@ -47,149 +143,41 @@ pub fn is_artwork_hash(value: &str) -> bool {
             .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
-/// A track: the `tracks` rowid. Above zero. On the IPC a number, which serde rejects below one.
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, specta::Type,
-)]
-#[serde(try_from = "i64", into = "i64")]
-pub struct TrackId(i64);
-
-impl TrackId {
-    /// The ID of a rowid, or `None` for a rowid that is not above zero.
-    pub fn try_from_rowid(rowid: i64) -> Option<Self> {
-        (rowid > 0).then_some(Self(rowid))
-    }
-
-    pub fn rowid(self) -> i64 {
-        self.0
-    }
+rowid_id! {
+    /// A track: the `tracks` rowid. Above zero. On the IPC a number.
+    TrackId, "a track ID is a positive integer"
 }
 
-/// One entry of the playback queue: the queue's counter, above zero. On the IPC a number.
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, specta::Type,
-)]
-#[serde(transparent)]
-pub struct QueueItemId(u64);
-
-impl QueueItemId {
-    /// The first ID of a queue's counter.
-    pub(crate) fn first() -> Self {
-        Self(1)
-    }
-
-    /// The ID after this one.
-    pub(crate) fn next(self) -> Self {
-        Self(self.0.saturating_add(1))
-    }
+rowid_id! {
+    /// A library folder: the `library_roots` rowid. Above zero. On the IPC a number.
+    FolderId, "a folder ID is a positive integer"
 }
 
-/// One playback session: a queue item being played, from the playback worker's counter, above
-/// zero. On the IPC a number.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
-#[serde(transparent)]
-pub struct PlaybackId(u64);
-
-impl PlaybackId {
-    /// The first ID of the worker's counter.
-    pub(crate) fn first() -> Self {
-        Self(1)
-    }
-
-    /// The ID after this one.
-    pub(crate) fn next(self) -> Self {
-        Self(self.0.saturating_add(1))
-    }
+counter_id! {
+    /// One entry of the playback queue: the queue's counter. On the IPC a number.
+    #[derive(Serialize, Deserialize, specta::Type)]
+    #[serde(transparent)]
+    pub QueueItemId
 }
 
-/// A library root: the `library_roots` rowid. Above zero. On the IPC a decimal string.
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, specta::Type,
-)]
-#[serde(try_from = "String", into = "String")]
-#[specta(type = String)]
-pub struct RootId(i64);
-
-impl RootId {
-    /// The ID of a rowid, or `None` for a rowid that is not above zero.
-    pub fn try_from_rowid(rowid: i64) -> Option<Self> {
-        (rowid > 0).then_some(Self(rowid))
-    }
-
-    pub fn rowid(self) -> i64 {
-        self.0
-    }
+counter_id! {
+    /// One playback session: a queue item being played, from the playback worker's counter. On
+    /// the IPC a number.
+    #[derive(Serialize, Deserialize, specta::Type)]
+    #[serde(transparent)]
+    pub PlaybackId
 }
 
-impl FromStr for RootId {
-    type Err = &'static str;
-
-    fn from_str(value: &str) -> Result<Self, Self::Err> {
-        parse_positive_decimal(value)
-            .and_then(Self::try_from_rowid)
-            .ok_or("a root ID is a positive decimal integer")
-    }
+hex_id! {
+    /// An album: blake3 of its normalized Album Artist, normalized title, and absolute album
+    /// directory. A track with no album hashes an empty directory.
+    AlbumId, "an album ID is 32 lowercase hex digits"
 }
 
-impl fmt::Display for RootId {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(formatter, "{}", self.0)
-    }
+hex_id! {
+    /// An Album Artist: blake3 of the normalized name.
+    ArtistId, "an artist ID is 32 lowercase hex digits"
 }
-
-impl TryFrom<String> for RootId {
-    type Error = &'static str;
-
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        value.parse()
-    }
-}
-
-impl From<RootId> for String {
-    fn from(id: RootId) -> Self {
-        id.to_string()
-    }
-}
-
-/// Decimal digits with no leading zero, above zero, as the renderer writes an ID.
-fn parse_positive_decimal<T: FromStr + Default + PartialOrd>(value: &str) -> Option<T> {
-    if value.is_empty() || value.starts_with('0') || !value.bytes().all(|b| b.is_ascii_digit()) {
-        return None;
-    }
-    value.parse().ok().filter(|number| *number > T::default())
-}
-
-impl TryFrom<i64> for TrackId {
-    type Error = &'static str;
-
-    fn try_from(rowid: i64) -> Result<Self, Self::Error> {
-        Self::try_from_rowid(rowid).ok_or("a track ID is a positive integer")
-    }
-}
-
-impl From<TrackId> for i64 {
-    fn from(id: TrackId) -> Self {
-        id.0
-    }
-}
-
-/// An album: blake3 of its normalized Album Artist, normalized title, and absolute album
-/// directory. A track with no album hashes an empty directory. On the IPC 32 lowercase hex
-/// characters.
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, specta::Type,
-)]
-#[serde(try_from = "String", into = "String")]
-#[specta(type = String)]
-pub struct AlbumId([u8; 16]);
-
-/// An Album Artist: blake3 of the normalized name. On the IPC 32 lowercase hex characters.
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, specta::Type,
-)]
-#[serde(try_from = "String", into = "String")]
-#[specta(type = String)]
-pub struct ArtistId([u8; 16]);
 
 impl AlbumId {
     pub fn of(album_artist: &str, title: &str, directory: &OsStr) -> Self {
@@ -205,64 +193,16 @@ impl AlbumId {
             directory,
         ]))
     }
-
-    /// 32 lowercase hex characters.
-    pub fn to_hex(self) -> String {
-        hex_of(&self.0)
-    }
-
-    /// The ID of its 32 lowercase hex characters, or `None` for any other text.
-    pub fn from_hex(value: &str) -> Option<Self> {
-        hex_id(value).map(Self)
-    }
-}
-
-impl TryFrom<String> for AlbumId {
-    type Error = &'static str;
-
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        Self::from_hex(&value).ok_or("an album ID is 32 lowercase hex digits")
-    }
-}
-
-impl From<AlbumId> for String {
-    fn from(id: AlbumId) -> Self {
-        id.to_hex()
-    }
 }
 
 impl ArtistId {
     pub fn of(name: &str) -> Self {
         Self(digest(&[name.as_bytes()]))
     }
-
-    /// 32 lowercase hex characters.
-    pub fn to_hex(self) -> String {
-        hex_of(&self.0)
-    }
-
-    /// The ID of its 32 lowercase hex characters, or `None` for any other text.
-    pub fn from_hex(value: &str) -> Option<Self> {
-        hex_id(value).map(Self)
-    }
-}
-
-impl TryFrom<String> for ArtistId {
-    type Error = &'static str;
-
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        Self::from_hex(&value).ok_or("an artist ID is 32 lowercase hex digits")
-    }
-}
-
-impl From<ArtistId> for String {
-    fn from(id: ArtistId) -> Self {
-        id.to_hex()
-    }
 }
 
 /// The 16 bytes of 32 lowercase hex characters, or `None` for any other text.
-fn hex_id(value: &str) -> Option<[u8; 16]> {
+fn parse_hex(value: &str) -> Option<[u8; 16]> {
     let bytes = value.as_bytes();
     if bytes.len() != 32 {
         return None;
@@ -348,9 +288,9 @@ pub(crate) fn track_id_column(row: &Row<'_>, index: usize) -> rusqlite::Result<T
 }
 
 /// A `library_roots` rowid read from a column. See [`track_id_column`].
-pub(crate) fn root_id_column(row: &Row<'_>, index: usize) -> rusqlite::Result<RootId> {
+pub(crate) fn folder_id_column(row: &Row<'_>, index: usize) -> rusqlite::Result<FolderId> {
     let rowid: i64 = row.get(index)?;
-    RootId::try_from_rowid(rowid).ok_or(rusqlite::Error::IntegralValueOutOfRange(index, rowid))
+    FolderId::try_from_rowid(rowid).ok_or(rusqlite::Error::IntegralValueOutOfRange(index, rowid))
 }
 
 /// A text or blob argument as its bytes.
@@ -418,6 +358,15 @@ mod tests {
     }
 
     #[test]
+    fn a_hex_id_round_trips_through_its_32_hex_digits() {
+        let album = AlbumId::of("Band", "Album", OsStr::new("dir"));
+        assert_eq!(AlbumId::from_hex(&album.to_hex()), Some(album));
+
+        let artist = ArtistId::of("Band");
+        assert_eq!(ArtistId::from_hex(&artist.to_hex()), Some(artist));
+    }
+
+    #[test]
     fn a_short_hex_id_is_rejected_without_panic() {
         assert_eq!(AlbumId::from_hex(&"ab".repeat(15)), None);
         assert_eq!(ArtistId::from_hex(&"ab".repeat(15)), None);
@@ -452,6 +401,17 @@ mod tests {
         }
 
         let parsed: TrackId = serde_json::from_value(serde_json::json!(7)).unwrap();
+        assert_eq!(parsed.rowid(), 7);
+        assert_eq!(serde_json::to_value(parsed).unwrap(), serde_json::json!(7));
+    }
+
+    #[test]
+    fn a_folder_id_is_a_number_on_the_ipc_and_zero_or_negative_is_rejected() {
+        for bad in [serde_json::json!(0), serde_json::json!(-3)] {
+            assert!(serde_json::from_value::<FolderId>(bad).is_err());
+        }
+
+        let parsed: FolderId = serde_json::from_value(serde_json::json!(7)).unwrap();
         assert_eq!(parsed.rowid(), 7);
         assert_eq!(serde_json::to_value(parsed).unwrap(), serde_json::json!(7));
     }

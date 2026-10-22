@@ -23,6 +23,7 @@ rust-version = "1.99"
 # `=` on the specta family: it is a prerelease, and its crates must move together.
 [workspace.dependencies]
 log = "0.4"
+parking_lot = "0.12"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
@@ -36,9 +37,7 @@ unsafe_op_in_unsafe_fn = "warn"
 unused_extern_crates = "warn"
 unused_lifetimes = "warn"
 explicit_outlives_requirements = "warn"
-unreachable_pub = "warn"
 elided_lifetimes_in_paths = "warn"
-missing_debug_implementations = "warn"
 
 [workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }
@@ -47,7 +46,7 @@ missing_errors_doc = "allow"
 missing_panics_doc = "allow"
 # `Result` and `Option` already warn when a value is dropped; `#[must_use]` on each helper is noise.
 must_use_candidate = "allow"
-# Names such as `PlaybackServiceError` are the names the Renderer sees, so the prefix stays.
+# Names such as `CommandError` are the names the Renderer sees, so the prefix stays.
 module_name_repetitions = "allow"
 # `as` is allowed for numbers (ADR 0010).
 cast_possible_truncation = "allow"
@@ -55,25 +54,12 @@ cast_possible_wrap = "allow"
 cast_precision_loss = "allow"
 cast_sign_loss = "allow"
 cast_lossless = "allow"
-clone_on_ref_ptr = "warn"
-rc_buffer = "warn"
-unwrap_used = "warn"
-panic = "warn"
 todo = "warn"
 unimplemented = "warn"
 dbg_macro = "warn"
 print_stdout = "warn"
 print_stderr = "warn"
-str_to_string = "warn"
-get_unwrap = "warn"
-unwrap_in_result = "warn"
-unused_result_ok = "warn"
-mem_forget = "warn"
-float_cmp_const = "warn"
 allow_attributes = "warn"
 allow_attributes_without_reason = "warn"
 undocumented_unsafe_blocks = "warn"
-map_err_ignore = "warn"
-let_underscore_must_use = "warn"
-indexing_slicing = "warn"
-string_slice = "warn"
+mod_module_files = "warn"

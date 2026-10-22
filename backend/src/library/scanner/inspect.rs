@@ -1,12 +1,9 @@
 //! Phase two: read everything a file has to tell, without touching the database. Files are
 //! independent here, so a batch is inspected on several threads.
 
-use crate::sync;
+use parking_lot::Mutex;
 use std::path::Path;
-use std::sync::{
-    Mutex, PoisonError,
-    atomic::{AtomicBool, AtomicUsize, Ordering},
-};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use super::discover::DiscoveredFile;
 use crate::containment::contain;
@@ -152,16 +149,13 @@ pub(super) fn inspect_all(
                     let result = contain("library.inspect", || inspect(file, data_dir))
                         .unwrap_or(Err(Undecodable));
                     if let Some(slot) = results.get(index) {
-                        *sync::lock(slot) = Some(result);
+                        *slot.lock() = Some(result);
                     }
                 }
             });
         }
     });
-    results
-        .into_iter()
-        .map(|slot| slot.into_inner().unwrap_or_else(PoisonError::into_inner))
-        .collect()
+    results.into_iter().map(Mutex::into_inner).collect()
 }
 
 #[cfg(test)]

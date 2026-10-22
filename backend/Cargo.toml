@@ -17,6 +17,7 @@ specta = { workspace = true }
 lrc_rs = "1.0"
 rand = "0.9"
 log = { workspace = true }
+parking_lot = { workspace = true }
 thiserror = { workspace = true }
 cpal = "0.18.1"
 ringbuf = "0.5"

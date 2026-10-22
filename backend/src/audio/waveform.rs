@@ -9,17 +9,17 @@
 //! The cache key is the library's identity hash of the file; the hash is computed here only for a
 //! file the library has not stored one for.
 
+use parking_lot::{Condvar, Mutex, MutexGuard};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Condvar, Mutex, MutexGuard};
+use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
 
-use super::cancellation::Cancellation;
 use super::decoding::{DecodeStep, PcmDecodeError, SeekStep, open_analysis_decoder};
 use crate::cleanup::remove_file_best_effort;
 use crate::containment::contain;
@@ -29,7 +29,7 @@ use crate::library::scanner::identity::content_hash;
 use crate::library::store::PlayableTrack;
 use crate::media::validation::ValidatedAudioFile;
 use crate::messages::{SharedMessageSink, StateTopic, Versioned};
-use crate::sync;
+use crate::threads::{Cancellation, run_in_background};
 
 pub(crate) const WAVEFORM_BUCKETS: usize = 1000;
 const CHUNK_FRAMES: usize = 2048;
@@ -310,23 +310,6 @@ fn quantize(value: f32) -> u8 {
     (value.clamp(0.0, 1.0) * 255.0).round() as u8
 }
 
-/// Lowers the calling thread to Windows background mode (low CPU, I/O and memory priority), so
-/// analysis never competes with playback or other apps. It lasts for the life of the thread.
-#[cfg(windows)]
-#[expect(unsafe_code, reason = "Win32 FFI; windows-sys has no safe wrapper")]
-fn run_in_background() {
-    use windows_sys::Win32::System::Threading::{
-        GetCurrentThread, SetThreadPriority, THREAD_MODE_BACKGROUND_BEGIN,
-    };
-    // SAFETY: the pseudo handle of the current thread is always valid.
-    unsafe {
-        SetThreadPriority(GetCurrentThread(), THREAD_MODE_BACKGROUND_BEGIN);
-    }
-}
-
-#[cfg(not(windows))]
-fn run_in_background() {}
-
 /// Deletes cache files written under another format, silently; they are rebuilt on demand.
 fn purge_stale_cache(directory: &Path) {
     let Ok(buckets) = std::fs::read_dir(directory) else {
@@ -464,11 +447,11 @@ struct Shared {
 
 impl Shared {
     fn jobs(&self) -> MutexGuard<'_, Jobs> {
-        sync::lock(&self.jobs)
+        self.jobs.lock()
     }
 
     fn current(&self) -> MutexGuard<'_, Current> {
-        sync::lock(&self.current)
+        self.current.lock()
     }
 
     /// Latest request wins: the job in flight is cancelled and an older queued request is dropped.
@@ -497,7 +480,9 @@ impl Shared {
         let Some(stamp) = file_stamp(&file.path) else {
             return;
         };
-        let ready = sync::lock(&self.ready)
+        let ready = self
+            .ready
+            .lock()
             .get(&file.path)
             .is_some_and(|(remembered, _)| *remembered == stamp);
         let mut jobs = self.jobs();
@@ -528,7 +513,7 @@ impl Shared {
                 jobs.running = Some((request.file.path.clone(), cancellation.clone()));
                 return Some((request, cancellation));
             }
-            jobs = sync::wait(&self.wake, jobs);
+            self.wake.wait(&mut jobs);
         }
     }
 }
@@ -603,7 +588,7 @@ impl Waveforms {
     /// The waveform if it is ready. Never starts an analysis.
     fn get(&self, file: &ValidatedAudioFile) -> Option<Arc<Waveform>> {
         let stamp = file_stamp(&file.path)?;
-        let ready = sync::lock(&self.shared.ready);
+        let ready = self.shared.ready.lock();
         let (remembered, waveform) = ready.get(&file.path)?;
         (*remembered == stamp).then(|| Arc::clone(waveform))
     }
@@ -687,7 +672,7 @@ impl Shared {
     }
 
     fn remember(&self, path: &Path, stamp: FileStamp, waveform: Waveform) {
-        let mut ready = sync::lock(&self.ready);
+        let mut ready = self.ready.lock();
         if ready.len() >= MEMORY_ENTRIES && !ready.contains_key(path) {
             ready.clear();
         }
@@ -806,7 +791,7 @@ mod tests {
 
         shared.process(&file, Some(&stored), &Cancellation::default());
 
-        let ready = sync::lock(&shared.ready);
+        let ready = shared.ready.lock();
         assert_eq!(*ready.get(&file.path).unwrap().1, marker);
     }
 

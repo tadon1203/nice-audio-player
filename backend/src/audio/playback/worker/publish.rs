@@ -11,7 +11,6 @@ use super::{
 use crate::audio::playback::session::Loaded;
 use crate::diagnostics::logged;
 use crate::messages::{StateTopic, Versioned};
-use crate::sync;
 
 impl PlaybackWorker {
     /// What listeners see, drawn from the transport, the queue and the volume.
@@ -99,7 +98,7 @@ impl PlaybackWorker {
         self.revision = self.revision.saturating_add(1);
         let published = self.playback_versioned();
         self.store_position(published.value.session().map(ActiveSession::position));
-        *sync::write(&self.snapshot) = published.clone();
+        *self.snapshot.write() = published.clone();
         self.messages.state_changed(StateTopic::Playback);
         published
     }
@@ -125,12 +124,12 @@ impl PlaybackWorker {
     }
 
     fn store_position(&self, position: Option<PlaybackPosition>) {
-        *sync::write(&self.position) = position;
+        *self.position.write() = position;
     }
 
     /// Whether Previous is offered, as listeners last saw it.
     pub(super) fn published_can_go_previous(&self) -> bool {
-        sync::read(&self.snapshot).value.base().can_go_previous
+        self.snapshot.read().value.base().can_go_previous
     }
 
     pub(super) fn publish_queue(&mut self) -> Versioned<PlaybackQueueSnapshot> {
@@ -144,13 +143,13 @@ impl PlaybackWorker {
                 self.previous_queue.is_some(),
             ),
         };
-        *sync::write(&self.queue_snapshot) = published.clone();
+        *self.queue_snapshot.write() = published.clone();
         self.messages.state_changed(StateTopic::Queue);
         published
     }
 
     pub(super) fn queue_snapshot(&self) -> Versioned<PlaybackQueueSnapshot> {
-        sync::read(&self.queue_snapshot).clone()
+        self.queue_snapshot.read().clone()
     }
 
     /// Publishes a queue change, and refreshes the transport so previous/next availability

@@ -9,7 +9,7 @@ use backend::dto::{
     LibraryTrackPage, LibraryTrackProperties, TrackListRequest, TrackQuery,
 };
 use backend::errors::{CommonError, LibraryCommandError};
-use backend::ids::{AlbumId, ArtistId, ArtworkHash, RootId, TrackId};
+use backend::ids::{AlbumId, ArtistId, ArtworkHash, FolderId, TrackId};
 
 use super::blocking;
 use crate::{
@@ -63,7 +63,7 @@ pub(crate) async fn register_library_root(
 #[tauri::command]
 #[specta::specta]
 pub(crate) async fn set_library_root_enabled(
-    id: RootId,
+    id: FolderId,
     enabled: bool,
     state: tauri::State<'_, AppState>,
 ) -> Result<LibraryRoot, LibraryCommandError> {
@@ -76,7 +76,7 @@ pub(crate) async fn set_library_root_enabled(
 #[tauri::command]
 #[specta::specta]
 pub(crate) async fn remove_library_root(
-    id: RootId,
+    id: FolderId,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), LibraryCommandError> {
     blocking(&state, move |backend| backend.remove_library_root(id)).await

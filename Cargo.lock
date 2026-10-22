@@ -2707,6 +2707,7 @@ version = "0.0.1"
 dependencies = [
  "log",
  "nice-audio-player-backend",
+ "parking_lot",
  "serde",
  "serde_json",
  "specta",
@@ -2736,6 +2737,7 @@ dependencies = [
  "log",
  "lrc_rs",
  "notify",
+ "parking_lot",
  "rand",
  "ringbuf",
  "rubato",

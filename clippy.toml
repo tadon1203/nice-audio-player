@@ -1,15 +1,5 @@
-avoid-breaking-exported-api = false
-
 allow-unwrap-in-tests = true
 allow-indexing-slicing-in-tests = true
 allow-panic-in-tests = true
 allow-print-in-tests = true
 allow-dbg-in-tests = true
-
-disallowed-methods = [
-  { path = "std::thread::spawn", reason = "threads are named; use `thread::Builder`" },
-  { path = "std::sync::Mutex::lock", reason = "use `sync::lock`, which recovers from poison" },
-  { path = "std::sync::Condvar::wait", reason = "use `sync::wait`, which recovers from poison" },
-  { path = "std::sync::RwLock::read", reason = "use `sync::read`, which recovers from poison" },
-  { path = "std::sync::RwLock::write", reason = "use `sync::write`, which recovers from poison" },
-]

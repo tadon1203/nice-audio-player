@@ -147,7 +147,7 @@ impl PlaybackSnapshot {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, specta::Type)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub enum PlaybackFailureCode {
     NoOutputDevice,

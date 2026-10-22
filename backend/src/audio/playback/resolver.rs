@@ -2,13 +2,12 @@
 //! when something needs them (the item that plays, the rows on display), through a small cache
 //! so scrolling and republishing the same window never reads the library twice.
 
+use parking_lot::Mutex;
 use std::collections::HashMap;
-use std::sync::Mutex;
 
 use crate::audio::playback::PlaybackServiceError;
 use crate::ids::TrackId;
 use crate::library::store::PlayableTrack;
-use crate::sync;
 
 /// The library, as far as playback is concerned.
 pub trait TrackSource: Send + Sync {
@@ -56,7 +55,7 @@ impl TrackResolver {
         track_ids: &[TrackId],
     ) -> Result<Vec<Option<PlayableTrack>>, PlaybackServiceError> {
         let mut found: Vec<Option<PlayableTrack>> = {
-            let cache = sync::lock(&self.cache);
+            let cache = self.cache.lock();
             track_ids.iter().map(|id| cache.get(id).cloned()).collect()
         };
         let (missing, ids): (Vec<usize>, Vec<TrackId>) = track_ids
@@ -73,7 +72,7 @@ impl TrackResolver {
         let read = self.source.tracks(&ids).inspect_err(|error| {
             log::error!("playback.tracks_unavailable error={error:?}");
         })?;
-        let mut cache = sync::lock(&self.cache);
+        let mut cache = self.cache.lock();
         if cache.len() + read.len() > CACHE_LIMIT {
             cache.clear();
         }
@@ -97,13 +96,7 @@ impl TrackResolver {
 
     /// Forgets what was read, so the next read sees the library as it is then.
     pub fn forget(&self) {
-        sync::lock(&self.cache).clear();
-    }
-}
-
-impl std::fmt::Debug for TrackResolver {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("TrackResolver")
+        self.cache.lock().clear();
     }
 }
 
@@ -112,7 +105,6 @@ pub(super) mod testing {
     use super::*;
     use crate::errors::CommonError;
     use crate::media::validation::ValidatedAudioFile;
-    use crate::sync;
     use std::sync::{
         Arc,
         atomic::{AtomicBool, AtomicUsize, Ordering},
@@ -128,11 +120,11 @@ pub(super) mod testing {
 
     impl FakeTracks {
         pub fn add(&self, track: PlayableTrack) {
-            sync::lock(&self.tracks).insert(track.id(), track);
+            self.tracks.lock().insert(track.id(), track);
         }
 
         pub fn remove(&self, track_id: TrackId) {
-            sync::lock(&self.tracks).remove(&track_id);
+            self.tracks.lock().remove(&track_id);
         }
 
         /// Makes every read fail, as a database error would, until it is switched back.
@@ -157,7 +149,7 @@ pub(super) mod testing {
                     error: CommonError::PersistenceFailed,
                 });
             }
-            let tracks = sync::lock(&self.tracks);
+            let tracks = self.tracks.lock();
             Ok(track_ids.iter().map(|id| tracks.get(id).cloned()).collect())
         }
     }

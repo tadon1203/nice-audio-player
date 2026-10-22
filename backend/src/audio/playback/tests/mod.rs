@@ -38,14 +38,14 @@ use crate::ids::{PlaybackId, TrackId};
 use crate::library::store::PlayableTrack;
 use crate::media::validation::ValidatedAudioFile;
 use crate::messages::{StateTopic, Versioned, testing::Sent};
-use crate::sync;
 use crate::test_support::{TestDirectory, write_pcm_i16_wav};
 use cpal::StreamInstant;
+use parking_lot::{Mutex, RwLock};
 use rand::{SeedableRng, rngs::StdRng};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
+use std::sync::Arc;
 use std::sync::mpsc::Receiver;
-use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
 const SAMPLE_RATE: u32 = 44_100;
@@ -111,11 +111,11 @@ impl Harness {
         let listener = TrackListener {
             loaded: Arc::new(move |playback_id, track| {
                 let title = track.track.core.title.clone();
-                sync::lock(&loaded_heard).push(Heard::Loaded(playback_id, title));
+                loaded_heard.lock().push(Heard::Loaded(playback_id, title));
             }),
             upcoming: Arc::new(move |track| {
                 let title = track.track.core.title.clone();
-                sync::lock(&upcoming_heard).push(Heard::Upcoming(title));
+                upcoming_heard.lock().push(Heard::Upcoming(title));
             }),
         };
         let worker = PlaybackWorker::new(
@@ -127,7 +127,7 @@ impl Harness {
                 meter: MeterHub::new(),
                 inbox,
                 messages,
-                observer: Arc::new(move |preferences| sync::lock(&observed).push(preferences)),
+                observer: Arc::new(move |preferences| observed.lock().push(preferences)),
                 backend: Box::new(output.clone()),
                 tracks: resolver_of(&library),
                 listener,
@@ -153,7 +153,7 @@ impl Harness {
     }
 
     fn heard(&self) -> Vec<Heard> {
-        sync::lock(&self.heard).clone()
+        self.heard.lock().clone()
     }
 
     /// A real WAV of `seconds` of silence, which the decode thread reads as any other file.
@@ -194,11 +194,11 @@ impl Harness {
     }
 
     fn versioned_snapshot(&self) -> Versioned<PlaybackSnapshot> {
-        sync::read(&self.snapshot).clone()
+        self.snapshot.read().clone()
     }
 
     fn position(&self) -> Option<PlaybackPosition> {
-        sync::read(&self.position).clone()
+        self.position.read().clone()
     }
 
     fn sent(&self) -> Vec<Sent> {
@@ -210,7 +210,7 @@ impl Harness {
     }
 
     fn versioned_queue_snapshot(&self) -> Versioned<PlaybackQueueSnapshot> {
-        sync::read(&self.queue_snapshot).clone()
+        self.queue_snapshot.read().clone()
     }
 
     /// Sends a command without waiting for the answer.

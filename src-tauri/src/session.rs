@@ -1,10 +1,11 @@
 //! The Host's side of the Backend's messages: a sink that only queues, and the one channel to the
 //! Renderer that a dispatcher thread sends through.
 
+use parking_lot::Mutex;
 use std::{
     collections::BTreeSet,
     sync::{
-        Arc, Mutex,
+        Arc,
         mpsc::{self, Receiver, Sender},
     },
     thread,
@@ -66,21 +67,15 @@ pub struct Subscriber {
     channel: Mutex<Option<Channel<BackendMessage>>>,
 }
 
-impl std::fmt::Debug for Subscriber {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Subscriber").finish_non_exhaustive()
-    }
-}
-
 impl Subscriber {
     pub fn replace(&self, channel: Channel<BackendMessage>) {
-        *sync::lock(&self.channel) = Some(channel);
+        *self.channel.lock() = Some(channel);
     }
 
     /// Without a Renderer on the channel the message is dropped, which is not an error: the next
     /// `connect` replaces the channel.
     fn send(&self, message: BackendMessage) {
-        let channel = sync::lock(&self.channel);
+        let channel = self.channel.lock();
         if let Some(channel) = channel.as_ref()
             && let Err(error) = channel.send(message)
         {
@@ -90,7 +85,7 @@ impl Subscriber {
 
     #[cfg(test)]
     fn channel_id(&self) -> Option<u32> {
-        sync::lock(&self.channel).as_ref().map(Channel::id)
+        self.channel.lock().as_ref().map(Channel::id)
     }
 }
 

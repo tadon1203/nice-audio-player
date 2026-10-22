@@ -7,8 +7,9 @@
 //! one frame at 60 Hz for the subscriber's sink, and sends nothing while the sound is silent and
 //! unchanged. With no subscriber nothing is copied and nothing is analysed.
 
+use parking_lot::Mutex;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
@@ -16,7 +17,6 @@ use ringbuf::traits::{Consumer, Producer, Split};
 
 use crate::diagnostics::log_failed;
 use crate::slices::head;
-use crate::sync;
 use ringbuf::{HeapCons, HeapProd, HeapRb};
 
 /// One-third-octave bands, base 10, centred on `1000 Hz * 10^(n/10)` for n = -16..=13 (25 Hz to
@@ -483,12 +483,6 @@ pub struct MeterHub {
     shared: Arc<Shared>,
 }
 
-impl std::fmt::Debug for MeterHub {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("MeterHub").finish_non_exhaustive()
-    }
-}
-
 impl Default for MeterHub {
     fn default() -> Self {
         Self::new()
@@ -511,7 +505,7 @@ impl MeterHub {
     /// The stream's ring replaces the previous stream's.
     pub(crate) fn tap(&self, sample_rate: u32, channel_count: usize) -> MeterTap {
         let (producer, consumer) = HeapRb::<f32>::new(RING_SAMPLES).split();
-        *sync::lock(&self.shared.source) = Some(Source {
+        *self.shared.source.lock() = Some(Source {
             consumer,
             sample_rate,
         });
@@ -528,10 +522,10 @@ impl MeterHub {
     /// Starts measuring and sending frames to `sink`, replacing any earlier subscription. Returns
     /// its id. Joins the replaced analysis thread, which ends within a few milliseconds.
     pub fn subscribe(&self, sink: FrameSink) -> u32 {
-        let mut session = sync::lock(&self.shared.session);
+        let mut session = self.shared.session.lock();
         self.stop(&mut session, None);
         // What the callback copied while nobody listened (a stream built since) is old.
-        if let Some(source) = sync::lock(&self.shared.source).as_mut() {
+        if let Some(source) = self.shared.source.lock().as_mut() {
             source.consumer.clear();
         }
         let id = self.shared.next_id.fetch_add(1, Ordering::Relaxed);
@@ -550,13 +544,13 @@ impl MeterHub {
     /// Ends subscription `id`; a stale id (already replaced or ended) changes nothing. Joins the
     /// analysis thread, so it can wait a few milliseconds.
     pub fn unsubscribe(&self, id: u32) {
-        let mut session = sync::lock(&self.shared.session);
+        let mut session = self.shared.session.lock();
         self.stop(&mut session, Some(id));
     }
 
     /// Ends whatever subscription there is, for a renderer that went away without saying so.
     pub fn unsubscribe_all(&self) {
-        let mut session = sync::lock(&self.shared.session);
+        let mut session = self.shared.session.lock();
         self.stop(&mut session, None);
     }
 
@@ -589,7 +583,7 @@ fn run_analysis(shared: &Shared, id: u32, mut sink: FrameSink) {
     let mut batcher = FrameBatcher::new();
     let mut open = true;
     while open && shared.active.load(Ordering::Acquire) == id {
-        if let Some(fresh) = sync::lock(&shared.source).take() {
+        if let Some(fresh) = shared.source.lock().take() {
             let analyzer = Analyzer::new(fresh.sample_rate);
             current = Some((fresh, analyzer));
         }
@@ -613,7 +607,7 @@ fn run_analysis(shared: &Shared, id: u32, mut sink: FrameSink) {
     }
     // Park the ring for the next subscription, unless a newer stream already brought its own.
     if let Some((source, _)) = current {
-        let mut slot = sync::lock(&shared.source);
+        let mut slot = shared.source.lock();
         if slot.is_none() {
             *slot = Some(source);
         }
@@ -944,7 +938,7 @@ mod tests {
         let mut mono = hub.tap(RATE, 1);
         hub.shared.active.store(1, Ordering::Release);
         mono.push(&[0.1, 0.2]);
-        let mut source = sync::lock(&hub.shared.source).take().unwrap();
+        let mut source = hub.shared.source.lock().take().unwrap();
         let mut out = [0.0; 4];
         assert_eq!(source.consumer.pop_slice(&mut out), 4);
         assert_eq!(out, [0.1, 0.1, 0.2, 0.2]);
@@ -953,7 +947,7 @@ mod tests {
         // Chunks that end mid-frame must not shift the channels.
         surround.push(&[1.0, 2.0, 3.0, 4.0, 5.0]);
         surround.push(&[6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0]);
-        let mut source = sync::lock(&hub.shared.source).take().unwrap();
+        let mut source = hub.shared.source.lock().take().unwrap();
         let mut out = [0.0; 4];
         assert_eq!(source.consumer.pop_slice(&mut out), 4);
         assert_eq!(out, [1.0, 2.0, 7.0, 8.0]);
@@ -966,10 +960,7 @@ mod tests {
         tap.push(&[0.5; 64]);
         assert_eq!(tap.vacant(), RING_SAMPLES, "nothing was copied");
         assert!(!hub.is_active());
-        assert!(
-            sync::lock(&hub.shared.session).is_none(),
-            "no analysis thread"
-        );
+        assert!(hub.shared.session.lock().is_none(), "no analysis thread");
     }
 
     #[test]

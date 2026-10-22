@@ -19,7 +19,7 @@ use crate::audio::{
 };
 use crate::diagnostics::logged;
 use crate::errors::CommonError;
-use crate::ids::{AlbumId, ArtistId, ArtworkHash, QueueItemId, RootId, TrackId};
+use crate::ids::{AlbumId, ArtistId, ArtworkHash, FolderId, QueueItemId, TrackId};
 use crate::library::{
     Library,
     artwork::{self, ServedArtwork},
@@ -59,14 +59,6 @@ pub struct BackendApp {
     waveforms: Arc<Waveforms>,
     settings: Arc<SettingsService>,
     data_dir: PathBuf,
-}
-
-impl std::fmt::Debug for BackendApp {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("BackendApp")
-            .field("data_dir", &self.data_dir)
-            .finish_non_exhaustive()
-    }
 }
 
 impl BackendApp {
@@ -244,13 +236,13 @@ impl BackendApp {
 
     pub fn set_library_root_enabled(
         &self,
-        id: RootId,
+        id: FolderId,
         enabled: bool,
     ) -> Result<LibraryRoot, LibraryCommandError> {
         self.library()?.set_root_enabled(id, enabled)
     }
 
-    pub fn remove_library_root(&self, id: RootId) -> Result<(), LibraryCommandError> {
+    pub fn remove_library_root(&self, id: FolderId) -> Result<(), LibraryCommandError> {
         self.library()?.remove_root(id)
     }
 

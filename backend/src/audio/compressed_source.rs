@@ -4,10 +4,10 @@ use std::sync::Arc;
 
 use symphonia::core::io::MediaSource;
 
-use super::cancellation::Cancellation;
 use super::decoding::{PcmDecodeError, StreamingDecoder};
 use crate::diagnostics::logged;
 use crate::media::validation::ValidatedAudioFile;
+use crate::threads::Cancellation;
 
 /// An open file that decoders read through positioned reads, so a track costs no memory beyond
 /// what the decoder buffers, and the next track can be opened while this one plays.

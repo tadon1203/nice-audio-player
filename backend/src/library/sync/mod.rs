@@ -16,15 +16,15 @@ use super::{
 };
 use crate::diagnostics::{log_failed, logged};
 use crate::errors::CommonError;
-use crate::ids::RootId;
+use crate::ids::FolderId;
 use crate::messages::{Notifier, Versioned};
-use crate::sync;
 use log::{debug, error, info, warn};
 use notify::RecommendedWatcher;
+use parking_lot::Mutex;
 use std::{
     collections::{HashMap, VecDeque},
     sync::{
-        Arc, Mutex,
+        Arc,
         atomic::{AtomicBool, Ordering},
         mpsc::{self, Receiver, RecvTimeoutError, Sender, SyncSender},
     },
@@ -45,8 +45,8 @@ fn respond<T>(reply: &Reply<T>, result: Result<T, LibraryCommandError>) {
 
 enum Command {
     Register(String, Reply<LibraryRoot>),
-    Enable(RootId, bool, Reply<LibraryRoot>),
-    Remove(RootId, Reply<()>),
+    Enable(FolderId, bool, Reply<LibraryRoot>),
+    Remove(FolderId, Reply<()>),
     DeleteMissing(Reply<u64>),
     Start(Reply<()>),
     Cancel(Reply<()>),
@@ -111,13 +111,13 @@ impl LibrarySync {
 
     pub(crate) fn set_root_enabled(
         &self,
-        id: RootId,
+        id: FolderId,
         enabled: bool,
     ) -> Result<LibraryRoot, LibraryCommandError> {
         self.call(|reply| Command::Enable(id, enabled, reply))
     }
 
-    pub(crate) fn remove_root(&self, id: RootId) -> Result<(), LibraryCommandError> {
+    pub(crate) fn remove_root(&self, id: FolderId) -> Result<(), LibraryCommandError> {
         self.call(|reply| Command::Remove(id, reply))
     }
 
@@ -139,7 +139,7 @@ impl LibrarySync {
             self.messages.send(Message::Shutdown),
             "library.sync.shutdown_send_failed",
         );
-        let thread = sync::lock(&self.thread).take();
+        let thread = self.thread.lock().take();
         if let Some(thread) = thread
             && thread.join().is_err()
         {
@@ -342,7 +342,7 @@ impl Actor {
             return;
         }
         self.cancel.store(false, Ordering::Release);
-        sync::lock(&self.scan).update(|scan| {
+        self.scan.lock().update(|scan| {
             *scan = LibraryScanSnapshot {
                 state: LibraryScanState::Running,
                 finished_count: scan.finished_count,
@@ -495,7 +495,7 @@ mod tests {
             .join();
 
         assert!(died.is_err());
-        let snapshot = sync::lock(&scan).clone();
+        let snapshot = scan.lock().clone();
         assert_eq!(snapshot.value.state, LibraryScanState::Failed);
         assert!(matches!(
             received.try_recv(),

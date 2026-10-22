@@ -4,11 +4,11 @@ use crate::library::database::Database;
 use crate::library::models::{LibraryScanSnapshot, LibraryScanState, ScanFailure};
 use crate::library::roots;
 use crate::messages::{Notifier, StateTopic, Versioned, null_message_sink};
-use crate::sync;
 use crate::test_support::{TestDirectory, write_pcm_i16_wav};
+use parking_lot::Mutex;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
-use std::sync::{Arc, Mutex};
 
 pub(super) struct Fixture {
     _directory: TestDirectory,
@@ -56,7 +56,7 @@ fn run_versioned(
     cancelled: bool,
     dirs: Option<&[PathBuf]>,
 ) -> Versioned<LibraryScanSnapshot> {
-    let roots = roots::list(&fixture.database.read().unwrap()).expect("roots");
+    let roots = roots::list(&fixture.database.read()).expect("roots");
     let jobs: Vec<_> = roots
         .into_iter()
         .map(|root| crate::library::scanner::ScanJob {
@@ -76,7 +76,7 @@ fn run_versioned(
         &notifier(),
     );
 
-    sync::lock(&state).clone()
+    state.lock().clone()
 }
 
 #[test]
@@ -91,7 +91,7 @@ fn the_scan_revision_grows_with_each_change_of_the_scan() {
 }
 
 fn files(fixture: &Fixture) -> Vec<(String, String, String, i64)> {
-    let c = fixture.database.read().unwrap();
+    let c = fixture.database.read();
     let mut statement = c
         .prepare("SELECT relative_path,availability,inspection_status,source_revision FROM library_files ORDER BY relative_path")
         .unwrap();
@@ -106,7 +106,7 @@ fn files(fixture: &Fixture) -> Vec<(String, String, String, i64)> {
 }
 
 fn count(fixture: &Fixture, sql: &str) -> i64 {
-    let c = fixture.database.read().unwrap();
+    let c = fixture.database.read();
     c.query_row(sql, [], |row| row.get(0)).unwrap()
 }
 
@@ -410,7 +410,7 @@ fn a_folder_holding_the_data_directory_cannot_be_registered() {
 }
 
 pub(super) fn track_ids_by_path(fixture: &Fixture) -> Vec<(String, i64)> {
-    let c = fixture.database.read().unwrap();
+    let c = fixture.database.read();
     let mut statement = c
         .prepare("SELECT f.relative_path, t.id FROM tracks t JOIN library_files f ON f.id = t.file_id ORDER BY f.relative_path")
         .unwrap();
@@ -493,14 +493,14 @@ fn a_deleted_file_stays_missing_until_the_listener_deletes_it() {
     run_scan(&fixture, false);
     run_scan(&fixture, false);
 
-    let roots = roots::list(&fixture.database.read().unwrap()).unwrap();
+    let roots = roots::list(&fixture.database.read()).unwrap();
     assert_eq!((roots[0].track_count, roots[0].missing_count), (2, 1));
     assert_eq!(files(&fixture)[0].1, "missing", "gone.wav sorts first");
 
     let deleted = roots::delete_missing(&fixture.database).unwrap();
 
     assert_eq!(deleted, 1);
-    let roots = roots::list(&fixture.database.read().unwrap()).unwrap();
+    let roots = roots::list(&fixture.database.read()).unwrap();
     assert_eq!((roots[0].track_count, roots[0].missing_count), (2, 0));
     assert!(fixture.music.join("keep.wav").exists(), "source files stay");
     assert_eq!(count(&fixture, "SELECT COUNT(*) FROM tracks"), 2);
@@ -583,7 +583,7 @@ fn a_removed_directory_is_found_through_its_nearest_existing_parent() {
 
     run_scan_of(&fixture, &[gone]);
 
-    let roots = roots::list(&fixture.database.read().unwrap()).unwrap();
+    let roots = roots::list(&fixture.database.read()).unwrap();
     assert_eq!((roots[0].track_count, roots[0].missing_count), (1, 1));
 }
 
@@ -628,7 +628,7 @@ pub(super) fn tagged_tone(path: &Path, samples: usize, fields: &[(lofty::tag::It
 }
 
 fn albums(fixture: &Fixture) -> Vec<(String, String, String, i64)> {
-    let connection = fixture.database.read().unwrap();
+    let connection = fixture.database.read();
     let mut statement = connection
         .prepare(
             "SELECT album_artist, title, album_directory, track_count FROM albums

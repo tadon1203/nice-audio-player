@@ -137,15 +137,6 @@ pub struct Notifier {
     topic: StateTopic,
 }
 
-impl std::fmt::Debug for Notifier {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // The sink is a trait object, so only the topic can be shown.
-        f.debug_struct("Notifier")
-            .field("topic", &self.topic)
-            .finish_non_exhaustive()
-    }
-}
-
 impl Notifier {
     pub fn new(sink: SharedMessageSink, topic: StateTopic) -> Self {
         Self { sink, topic }
@@ -173,8 +164,7 @@ mod tests {
 #[cfg(test)]
 pub(crate) mod testing {
     use super::*;
-    use crate::sync;
-    use std::sync::Mutex;
+    use parking_lot::Mutex;
 
     /// One call to a sink, in the order it was made.
     #[derive(Debug, Clone, PartialEq)]
@@ -197,21 +187,23 @@ pub(crate) mod testing {
         }
 
         pub(crate) fn sent(&self) -> Vec<Sent> {
-            sync::lock(&self.sent).clone()
+            self.sent.lock().clone()
         }
     }
 
     impl MessageSink for RecordingMessageSink {
         fn state_changed(&self, topic: StateTopic) {
-            sync::lock(&self.sent).push(Sent::State(topic));
+            self.sent.lock().push(Sent::State(topic));
         }
 
         fn position_changed(&self) {
-            sync::lock(&self.sent).push(Sent::Position);
+            self.sent.lock().push(Sent::Position);
         }
 
         fn occurred(&self, occurrence: Occurrence) {
-            sync::lock(&self.sent).push(Sent::Occurrence(Box::new(occurrence)));
+            self.sent
+                .lock()
+                .push(Sent::Occurrence(Box::new(occurrence)));
         }
     }
 }

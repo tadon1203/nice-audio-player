@@ -8,7 +8,7 @@ use super::{
     summary,
 };
 use crate::diagnostics::logged;
-use crate::ids::{RootId, root_id_column};
+use crate::ids::{FolderId, folder_id_column};
 use rusqlite::{Connection, params};
 use std::path::Path;
 
@@ -23,7 +23,7 @@ pub(crate) fn list(connection: &Connection) -> Result<Vec<LibraryRoot>, StoreErr
     )?;
     let rows = statement.query_map([], |row| {
         Ok(LibraryRoot {
-            id: root_id_column(row, 0)?,
+            id: folder_id_column(row, 0)?,
             path: row.get(1)?,
             enabled: row.get(2)?,
             scan_generation: row.get::<_, i64>(3)? as u64,
@@ -78,7 +78,7 @@ pub(crate) fn register(
         )
         .map_err(StoreError::from)?;
     Ok(LibraryRoot {
-        id: RootId::try_from_rowid(connection.last_insert_rowid())
+        id: FolderId::try_from_rowid(connection.last_insert_rowid())
             .ok_or(StoreError::Persistence)?,
         path,
         enabled: true,
@@ -91,7 +91,7 @@ pub(crate) fn register(
 
 pub(crate) fn set_enabled(
     database: &Database,
-    id: RootId,
+    id: FolderId,
     enabled: bool,
 ) -> Result<LibraryRoot, LibraryCommandError> {
     let connection = database.write().map_err(StoreError::from)?;
@@ -111,7 +111,7 @@ pub(crate) fn set_enabled(
 }
 
 /// Removes the folder with its files, tracks and metadata (they cascade).
-pub(crate) fn remove(database: &Database, id: RootId) -> Result<(), LibraryCommandError> {
+pub(crate) fn remove(database: &Database, id: FolderId) -> Result<(), LibraryCommandError> {
     let mut connection = database.write().map_err(StoreError::from)?;
     let transaction = connection.transaction().map_err(StoreError::from)?;
     let removed = transaction
