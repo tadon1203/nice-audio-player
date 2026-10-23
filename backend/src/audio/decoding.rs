@@ -11,7 +11,6 @@ use symphonia::core::units::{Time, TimeBase, Timestamp};
 use symphonia::default::{get_codecs, get_probe};
 
 use super::pcm::{ChannelCount, PcmSpec, SampleRate};
-use crate::errors::logged;
 use crate::media::validation::ValidatedAudioFile;
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -105,10 +104,9 @@ pub(crate) struct StreamingDecoder {
 pub(crate) fn open_analysis_decoder(
     file: &ValidatedAudioFile,
 ) -> Result<StreamingDecoder, PcmDecodeError> {
-    let source = File::open(&file.path).map_err(logged(
-        PcmDecodeError::FileOpenFailed,
-        "audio.decode.open_failed",
-    ))?;
+    let source = File::open(&file.path)
+        .inspect_err(|cause| log::warn!("audio.decode.open_failed cause={cause}"))
+        .map_err(|_| PcmDecodeError::FileOpenFailed)?;
     open_decoder_from_source(Box::new(source), &file.extension)
 }
 
@@ -220,10 +218,8 @@ impl StreamingDecoder {
                     track_id: Some(self.track_id),
                 },
             )
-            .map_err(logged(
-                PcmDecodeError::SeekFailed,
-                "audio.decode.seek_failed",
-            ))?;
+            .inspect_err(|cause| log::warn!("audio.decode.seek_failed cause={cause}"))
+            .map_err(|_| PcmDecodeError::SeekFailed)?;
         self.decoder.reset();
         self.finished = false;
 
@@ -319,10 +315,8 @@ impl StreamingDecoder {
             destination.clear();
             destination
                 .try_reserve(packet_sample_count)
-                .map_err(logged(
-                    PcmDecodeError::BufferAllocationFailed,
-                    "audio.decode.buffer_failed",
-                ))?;
+                .inspect_err(|cause| log::warn!("audio.decode.buffer_failed cause={cause}"))
+                .map_err(|_| PcmDecodeError::BufferAllocationFailed)?;
             destination.resize(packet_sample_count, 0.0);
             decoded.copy_to_slice_interleaved(destination);
             return Ok(DecodeStep::Samples);
@@ -346,10 +340,9 @@ fn timestamp_delta_to_frames(
     if required < actual {
         return Err(PcmDecodeError::SeekFailed);
     }
-    let delta = u128::try_from(required.get() - actual.get()).map_err(logged(
-        PcmDecodeError::SeekFailed,
-        "audio.decode.seek_delta_failed",
-    ))?;
+    let delta = u128::try_from(required.get() - actual.get())
+        .inspect_err(|cause| log::warn!("audio.decode.seek_delta_failed cause={cause}"))
+        .map_err(|_| PcmDecodeError::SeekFailed)?;
     let numerator = delta
         .checked_mul(u128::from(time_base.numer.get()))
         .and_then(|value| value.checked_mul(u128::from(sample_rate)))
@@ -359,10 +352,9 @@ fn timestamp_delta_to_frames(
         .checked_add(denominator.saturating_sub(1))
         .and_then(|value| value.checked_div(denominator))
         .ok_or(PcmDecodeError::SeekFailed)?;
-    u64::try_from(frames).map_err(logged(
-        PcmDecodeError::SeekFailed,
-        "audio.decode.seek_frames_failed",
-    ))
+    u64::try_from(frames)
+        .inspect_err(|cause| log::warn!("audio.decode.seek_frames_failed cause={cause}"))
+        .map_err(|_| PcmDecodeError::SeekFailed)
 }
 
 fn map_probe_error(error: &SymphoniaError) -> PcmDecodeError {

@@ -15,7 +15,6 @@ use std::time::Duration;
 
 use ringbuf::traits::{Consumer, Producer, Split};
 
-use crate::errors::log_failed;
 use ringbuf::{HeapCons, HeapProd, HeapRb};
 
 /// One-third-octave bands, base 10, centred on `1000 Hz * 10^(n/10)` for n = -16..=13 (25 Hz to
@@ -563,12 +562,13 @@ impl MeterHub {
             return;
         }
         if let Some(old) = session.take() {
-            log_failed(
+            if let Err(cause) =
                 self.shared
                     .active
-                    .compare_exchange(old.id, 0, Ordering::AcqRel, Ordering::Acquire),
-                "audio.meter.active_clear_failed",
-            );
+                    .compare_exchange(old.id, 0, Ordering::AcqRel, Ordering::Acquire)
+            {
+                log::debug!("audio.meter.active_clear_failed cause={cause}");
+            }
             if old.thread.join().is_err() {
                 log::debug!("audio.meter.analysis_panicked");
             }
@@ -611,12 +611,12 @@ fn run_analysis(shared: &Shared, id: u32, mut sink: FrameSink) {
             *slot = Some(source);
         }
     }
-    log_failed(
-        shared
-            .active
-            .compare_exchange(id, 0, Ordering::AcqRel, Ordering::Acquire),
-        "audio.meter.active_clear_failed",
-    );
+    if let Err(cause) = shared
+        .active
+        .compare_exchange(id, 0, Ordering::AcqRel, Ordering::Acquire)
+    {
+        log::debug!("audio.meter.active_clear_failed cause={cause}");
+    }
 }
 
 /// The output callback's end of the ring. Copies stereo samples while a subscriber exists and

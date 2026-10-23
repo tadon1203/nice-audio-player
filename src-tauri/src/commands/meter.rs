@@ -1,4 +1,3 @@
-use backend::errors::logged;
 use specta::{Type, Types, datatype::DataType};
 use tauri::ipc::{Channel, InvokeResponseBody, IpcResponse};
 
@@ -41,7 +40,8 @@ pub(crate) async fn meter_start(
         }))
     })
     .await
-    .map_err(logged((), "host.meter.subscribe_failed"))
+    .inspect_err(|cause| log::warn!("host.meter.subscribe_failed cause={cause}"))
+    .map_err(|_| ())
 }
 
 /// Ends the subscription `subscription` names; one that was already replaced or ended is left
@@ -55,5 +55,6 @@ pub(crate) async fn meter_stop(
     let meter = state.backend.meter();
     tauri::async_runtime::spawn_blocking(move || meter.unsubscribe(subscription))
         .await
-        .map_err(logged((), "host.meter.unsubscribe_failed"))
+        .inspect_err(|cause| log::warn!("host.meter.unsubscribe_failed cause={cause}"))
+        .map_err(|_| ())
 }

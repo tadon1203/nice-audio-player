@@ -6,8 +6,6 @@ use std::sync::Arc;
 
 use cpal::StreamInstant;
 
-use crate::errors::logged;
-
 use super::devices::{AudioOutputDeviceIdentity, AudioOutputSelection, DeviceResolutionError};
 use super::output::{
     AudioOutputError, OutputBackend, OutputEvent, OutputEvents, OutputLinks, OutputStream,
@@ -187,10 +185,9 @@ impl OutputBackend for FakeOutput {
         }
         let device = self.resolve(selection)?;
         self.shared().selections.push(selection.clone());
-        let plan = OutputProcessingPlan::new(spec, spec).map_err(logged(
-            AudioOutputError::UnsupportedConfiguration,
-            "audio.fake_output.plan_failed",
-        ))?;
+        let plan = OutputProcessingPlan::new(spec, spec)
+            .inspect_err(|cause| log::warn!("audio.fake_output.plan_failed cause={cause}"))
+            .map_err(|_| AudioOutputError::UnsupportedConfiguration)?;
         let config = PreparedOutputConfig {
             device_id: device.id,
             device_name: device.name,

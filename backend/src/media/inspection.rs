@@ -19,8 +19,6 @@ use symphonia::core::meta::MetadataOptions;
 use symphonia::core::units::Timestamp;
 use symphonia::default::{get_codecs, get_probe};
 
-use crate::errors::logged;
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct AudioFileInfo {
     pub codec: AudioCodec,
@@ -56,7 +54,9 @@ pub(crate) fn inspect_audio_file(
     path: &Path,
     extension: &str,
 ) -> Result<InspectedAudioFile, Undecodable> {
-    let source = File::open(path).map_err(logged(Undecodable, "media.inspection.open_failed"))?;
+    let source = File::open(path)
+        .inspect_err(|cause| log::warn!("media.inspection.open_failed cause={cause}"))
+        .map_err(|_| Undecodable)?;
     let stream = MediaSourceStream::new(Box::new(source), MediaSourceStreamOptions::default());
     let mut hint = Hint::new();
     hint.with_extension(extension);
@@ -67,7 +67,8 @@ pub(crate) fn inspect_audio_file(
             FormatOptions::default(),
             MetadataOptions::default(),
         )
-        .map_err(logged(Undecodable, "media.inspection.probe_failed"))?;
+        .inspect_err(|cause| log::warn!("media.inspection.probe_failed cause={cause}"))
+        .map_err(|_| Undecodable)?;
     let track = format.default_track(TrackType::Audio).ok_or(Undecodable)?;
     let params = track
         .codec_params
@@ -78,7 +79,8 @@ pub(crate) fn inspect_audio_file(
     let codec = codec_from_id(params.codec);
     get_codecs()
         .make_audio_decoder(params, &AudioDecoderOptions::default())
-        .map_err(logged(Undecodable, "media.inspection.decoder_failed"))?;
+        .inspect_err(|cause| log::warn!("media.inspection.decoder_failed cause={cause}"))
+        .map_err(|_| Undecodable)?;
     let sample_rate = params
         .sample_rate
         .filter(|rate| *rate > 0)
@@ -89,10 +91,9 @@ pub(crate) fn inspect_audio_file(
         .map(Channels::count)
         .filter(|count| *count > 0)
         .ok_or(Undecodable)?;
-    let channel_count = u16::try_from(count).map_err(logged(
-        Undecodable,
-        "media.inspection.channels_out_of_range",
-    ))?;
+    let channel_count = u16::try_from(count)
+        .inspect_err(|cause| log::warn!("media.inspection.channels_out_of_range cause={cause}"))
+        .map_err(|_| Undecodable)?;
     Ok(InspectedAudioFile {
         info: AudioFileInfo {
             codec,

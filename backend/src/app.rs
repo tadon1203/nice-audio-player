@@ -34,7 +34,6 @@ use crate::audio::{
     waveform::Waveforms,
 };
 use crate::errors::CommandError;
-use crate::errors::logged;
 use crate::ids::{AlbumId, ArtistId, ArtworkHash, DirectoryId, QueueItemId, TrackId};
 use crate::library::{
     Library,
@@ -121,10 +120,8 @@ impl BackendApp {
             listener,
             output,
         )
-        .map_err(logged(
-            BackendError::PlaybackStartFailed,
-            "app.playback.start_failed",
-        ))?;
+        .inspect_err(|cause| log::warn!("app.playback.start_failed cause={cause}"))
+        .map_err(|_| BackendError::PlaybackStartFailed)?;
         Ok(Self {
             playback,
             library,
@@ -372,24 +369,23 @@ impl BackendApp {
 
     /// Blocking: the host runs it on a blocking thread.
     pub fn track_lyrics(&self, track_id: TrackId) -> Result<LyricsResolution, LyricsCommandError> {
-        let library = self.library.as_ref().map_err(logged(
-            LyricsCommandError::Common {
+        let library = self
+            .library
+            .as_ref()
+            .inspect_err(|cause| log::warn!("app.lyrics.library_unavailable cause={cause}"))
+            .map_err(|_| LyricsCommandError::Common {
                 error: CommandError::LibraryUnavailable,
-            },
-            "app.lyrics.library_unavailable",
-        ))?;
+            })?;
         // The Library says where the file is; lyrics reads what is beside and inside it.
         let file = library
             .store()
             .track_location(track_id)
             .map_err(map_lyrics_context_error)?
             .existing()
-            .map_err(logged(
-                LyricsCommandError::Common {
-                    error: CommandError::TrackUnavailable,
-                },
-                "app.lyrics.track_unavailable",
-            ))?;
+            .inspect_err(|cause| log::warn!("app.lyrics.track_unavailable cause={cause}"))
+            .map_err(|_| LyricsCommandError::Common {
+                error: CommandError::TrackUnavailable,
+            })?;
         Ok(LyricsService::resolve(&LyricsTrackContext {
             track_id,
             source: file.path,
@@ -558,21 +554,21 @@ impl BackendApp {
     // ---- private helpers ----
 
     fn library(&self) -> Result<&Library, LibraryCommandError> {
-        self.library.as_ref().map_err(logged(
-            LibraryCommandError::Common {
+        self.library
+            .as_ref()
+            .inspect_err(|cause| log::warn!("app.library.unavailable cause={cause}"))
+            .map_err(|_| LibraryCommandError::Common {
                 error: CommandError::LibraryUnavailable,
-            },
-            "app.library.unavailable",
-        ))
+            })
     }
 
     fn playback_library(&self) -> Result<&Library, PlaybackServiceError> {
-        self.library.as_ref().map_err(logged(
-            PlaybackServiceError::Common {
+        self.library
+            .as_ref()
+            .inspect_err(|cause| log::warn!("app.playback.library_unavailable cause={cause}"))
+            .map_err(|_| PlaybackServiceError::Common {
                 error: CommandError::LibraryUnavailable,
-            },
-            "app.playback.library_unavailable",
-        ))
+            })
     }
 
     fn library_scan(&self) -> Revisioned<crate::library::models::ScanState> {

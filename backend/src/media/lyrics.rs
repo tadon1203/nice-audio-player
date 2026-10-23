@@ -1,4 +1,3 @@
-use crate::errors::logged;
 use crate::lyrics::{
     lrc::{self, LrcParse},
     model::LyricsContent,
@@ -17,16 +16,12 @@ pub(crate) fn read_embedded_lyrics(
     path: &std::path::Path,
 ) -> Result<Option<(Option<String>, LyricsContent)>, EmbeddedLyricsError> {
     let tagged = Probe::open(path)
-        .map_err(logged(
-            EmbeddedLyricsError::Read,
-            "media.lyrics.open_failed",
-        ))?
+        .inspect_err(|cause| log::warn!("media.lyrics.open_failed cause={cause}"))
+        .map_err(|_| EmbeddedLyricsError::Read)?
         .options(ParseOptions::new().read_properties(false))
         .read()
-        .map_err(logged(
-            EmbeddedLyricsError::Read,
-            "media.lyrics.read_failed",
-        ))?;
+        .inspect_err(|cause| log::warn!("media.lyrics.read_failed cause={cause}"))
+        .map_err(|_| EmbeddedLyricsError::Read)?;
     let mut saw_lyrics = false;
     for tag in tagged.tags() {
         if let Some(value) = tag.get_string(ItemKey::Lyrics) {

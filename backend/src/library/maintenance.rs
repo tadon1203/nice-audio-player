@@ -7,8 +7,6 @@ use super::{
     error::StoreError,
     status::ArtworkStatus,
 };
-use crate::errors::log_failed;
-use crate::errors::remove_file_best_effort;
 use rusqlite::params;
 use std::{collections::HashSet, fs, path::Path};
 
@@ -123,21 +121,20 @@ pub(crate) fn spawn_thumbnail_backfill(database: &Database) {
     if originals.is_empty() {
         return;
     }
-    log_failed(
-        std::thread::Builder::new()
-            .name("thumbnail-backfill".into())
-            .spawn(move || {
-                for original in originals {
-                    log_failed(
-                        crate::errors::contain("library.thumbnail", || {
-                            artwork::ensure_thumbnail(&data_dir, &original)
-                        }),
-                        "library.thumbnail",
-                    );
+    if let Err(cause) = std::thread::Builder::new()
+        .name("thumbnail-backfill".into())
+        .spawn(move || {
+            for original in originals {
+                if let Err(cause) = crate::errors::contain("library.thumbnail", || {
+                    artwork::ensure_thumbnail(&data_dir, &original)
+                }) {
+                    log::debug!("library.thumbnail cause={cause}");
                 }
-            }),
-        "library.maintenance.thread_failed",
-    );
+            }
+        })
+    {
+        log::debug!("library.maintenance.thread_failed cause={cause}");
+    }
 }
 
 fn remove_unowned_files(data_dir: &Path, live_paths: &HashSet<String>) {
@@ -157,8 +154,11 @@ fn remove_unowned_files(data_dir: &Path, live_paths: &HashSet<String>) {
             let relative = format!("artwork/{}/{}", shard.file_name().to_string_lossy(), name);
             let owned_kind =
                 ArtworkPath::parse(&relative).is_some() || artwork::thumbnail_hash(name).is_some();
-            if name.contains(".tmp-") || (owned_kind && !live_paths.contains(&relative)) {
-                remove_file_best_effort(&path);
+            if (name.contains(".tmp-") || (owned_kind && !live_paths.contains(&relative)))
+                && let Err(cause) = std::fs::remove_file(&path)
+                && cause.kind() != std::io::ErrorKind::NotFound
+            {
+                log::debug!("cleanup.remove_file_failed cause={cause}");
             }
         }
     }

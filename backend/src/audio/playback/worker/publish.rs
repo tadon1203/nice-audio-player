@@ -9,7 +9,6 @@ use super::{
     PlaybackControls, PlaybackPosition, PlaybackProcessingInfo, PlaybackState, QueueState,
 };
 use crate::audio::playback::session::Loaded;
-use crate::errors::logged;
 use crate::messages::{Revisioned, StateTopic};
 
 impl PlaybackWorker {
@@ -166,9 +165,8 @@ impl PlaybackWorker {
         if matches!(self.transport, Transport::Loading(_)) {
             return Err(PlaybackServiceError::QueueBusy);
         }
-        edit(&mut self.queue).map_err(logged(
-            PlaybackServiceError::QueueItemNotFound,
-            "playback.queue.edit_failed",
-        ))
+        edit(&mut self.queue)
+            .inspect_err(|cause| log::warn!("playback.queue.edit_failed cause={cause}"))
+            .map_err(|_| PlaybackServiceError::QueueItemNotFound)
     }
 }

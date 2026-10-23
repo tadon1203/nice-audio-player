@@ -7,7 +7,6 @@ use backend::app::{
     LibraryAlbumTrackPage, LibraryDirectory, LibraryStatus, LibraryTrackPage, ScrollIndexBucket,
     TrackListRequest, TrackProperties, TrackQuery,
 };
-use backend::errors::logged;
 use backend::errors::{CommandError, LibraryCommandError};
 use backend::ids::{AlbumId, ArtistId, ArtworkHash, DirectoryId, TrackId};
 
@@ -99,29 +98,27 @@ pub(crate) async fn app_open_log_directory(
     app: tauri::AppHandle,
 ) -> Result<(), LibraryCommandError> {
     use tauri::Manager;
-    let directory = app.path().app_log_dir().map_err(logged(
-        LibraryCommandError::Common {
+    let directory = app
+        .path()
+        .app_log_dir()
+        .inspect_err(|cause| log::warn!("host.library.log_dir_failed cause={cause}"))
+        .map_err(|_| LibraryCommandError::Common {
             error: CommandError::TaskFailed,
-        },
-        "host.library.log_dir_failed",
-    ))?;
+        })?;
     // The filesystem and a spawned process stay off the main thread.
     tauri::async_runtime::spawn_blocking(move || {
-        std::fs::create_dir_all(&directory).map_err(logged(
-            LibraryCommandError::Common {
+        std::fs::create_dir_all(&directory)
+            .inspect_err(|cause| log::warn!("host.library.create_dir_failed cause={cause}"))
+            .map_err(|_| LibraryCommandError::Common {
                 error: CommandError::TaskFailed,
-            },
-            "host.library.create_dir_failed",
-        ))?;
+            })?;
         open_in_file_manager(&directory)
     })
     .await
-    .map_err(logged(
-        LibraryCommandError::Common {
-            error: CommandError::TaskFailed,
-        },
-        "host.library.task_failed",
-    ))?
+    .inspect_err(|cause| log::warn!("host.library.task_failed cause={cause}"))
+    .map_err(|_| LibraryCommandError::Common {
+        error: CommandError::TaskFailed,
+    })?
 }
 
 #[tauri::command]
@@ -250,12 +247,10 @@ pub(crate) async fn library_reveal_track(
     let path = blocking(&state, move |backend| backend.track_file(track_id)).await?;
     tauri::async_runtime::spawn_blocking(move || reveal_in_file_manager(&path))
         .await
-        .map_err(logged(
-            LibraryCommandError::Common {
-                error: CommandError::TaskFailed,
-            },
-            "host.library.reveal_task_failed",
-        ))?
+        .inspect_err(|cause| log::warn!("host.library.reveal_task_failed cause={cause}"))
+        .map_err(|_| LibraryCommandError::Common {
+            error: CommandError::TaskFailed,
+        })?
 }
 
 #[tauri::command]

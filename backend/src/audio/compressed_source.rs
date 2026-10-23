@@ -5,7 +5,6 @@ use std::sync::Arc;
 use symphonia::core::io::MediaSource;
 
 use super::decoding::{PcmDecodeError, StreamingDecoder};
-use crate::errors::logged;
 use crate::media::validation::ValidatedAudioFile;
 use crate::threads::Cancellation;
 
@@ -31,16 +30,13 @@ pub(crate) fn prepare_compressed_source(
     if cancellation.is_cancelled() {
         return Err(CompressedSourceError::Cancelled);
     }
-    let source = File::open(&file.path).map_err(logged(
-        CompressedSourceError::OpenFailed,
-        "audio.source.open_failed",
-    ))?;
+    let source = File::open(&file.path)
+        .inspect_err(|cause| log::warn!("audio.source.open_failed cause={cause}"))
+        .map_err(|_| CompressedSourceError::OpenFailed)?;
     let byte_len = source
         .metadata()
-        .map_err(logged(
-            CompressedSourceError::MetadataFailed,
-            "audio.source.metadata_failed",
-        ))?
+        .inspect_err(|cause| log::warn!("audio.source.metadata_failed cause={cause}"))
+        .map_err(|_| CompressedSourceError::MetadataFailed)?
         .len();
     Ok(CompressedAudioSource {
         file: Arc::new(source),

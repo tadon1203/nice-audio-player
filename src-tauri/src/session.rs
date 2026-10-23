@@ -13,7 +13,6 @@ use std::{
 
 use backend::{
     app::BackendApp,
-    errors::log_failed,
     messages::{BackendMessage, MessageListener, Occurrence, StateTopic},
 };
 use tauri::ipc::Channel;
@@ -34,24 +33,21 @@ pub(crate) struct HostMessageSink {
 
 impl MessageListener for HostMessageSink {
     fn state_changed(&self, topic: StateTopic) {
-        log_failed(
-            self.sender.send(Signal::State(topic)),
-            "host.session.state_send_failed",
-        );
+        if let Err(cause) = self.sender.send(Signal::State(topic)) {
+            log::debug!("host.session.state_send_failed cause={cause}");
+        }
     }
 
     fn position_changed(&self) {
-        log_failed(
-            self.sender.send(Signal::Position),
-            "host.session.position_send_failed",
-        );
+        if let Err(cause) = self.sender.send(Signal::Position) {
+            log::debug!("host.session.position_send_failed cause={cause}");
+        }
     }
 
     fn occurred(&self, occurrence: Occurrence) {
-        log_failed(
-            self.sender.send(Signal::Occurrence(Box::new(occurrence))),
-            "host.session.occurrence_send_failed",
-        );
+        if let Err(cause) = self.sender.send(Signal::Occurrence(Box::new(occurrence))) {
+            log::debug!("host.session.occurrence_send_failed cause={cause}");
+        }
     }
 }
 

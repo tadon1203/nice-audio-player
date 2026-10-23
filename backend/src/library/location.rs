@@ -4,7 +4,6 @@
 
 use super::error::{LibraryCommandError, StoreError};
 use crate::errors::CommandError;
-use crate::errors::logged;
 use std::path::{Component, PathBuf};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
@@ -68,14 +67,16 @@ impl TrackLocation {
             return Err(Unavailable);
         }
         let path = self.path()?;
-        let directory = dunce::canonicalize(&self.directory).map_err(logged(
-            Unavailable,
-            "library.location.directory_canonicalize_failed",
-        ))?;
-        let path = dunce::canonicalize(path).map_err(logged(
-            Unavailable,
-            "library.location.path_canonicalize_failed",
-        ))?;
+        let directory = dunce::canonicalize(&self.directory)
+            .inspect_err(|cause| {
+                log::warn!("library.location.directory_canonicalize_failed cause={cause}");
+            })
+            .map_err(|_| Unavailable)?;
+        let path = dunce::canonicalize(path)
+            .inspect_err(|cause| {
+                log::warn!("library.location.path_canonicalize_failed cause={cause}");
+            })
+            .map_err(|_| Unavailable)?;
         if !path.starts_with(&directory) || !path.is_file() {
             return Err(Unavailable);
         }

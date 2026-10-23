@@ -11,7 +11,7 @@ use backend::{
     app::BackendApp,
     errors::{
         AudioDeviceListError, CommandError, LibraryCommandError, LyricsCommandError,
-        PlaybackServiceError, logged,
+        PlaybackServiceError,
     },
 };
 
@@ -65,5 +65,6 @@ where
     let backend = Arc::clone(&state.backend);
     tauri::async_runtime::spawn_blocking(move || work(&backend))
         .await
-        .map_err(logged(E::task_failed(), "host.task.failed"))?
+        .inspect_err(|cause| log::warn!("host.task.failed cause={cause}"))
+        .map_err(|_| E::task_failed())?
 }

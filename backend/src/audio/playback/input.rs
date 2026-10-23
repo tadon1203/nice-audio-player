@@ -11,7 +11,6 @@ use crate::audio::compressed_source::{CompressedAudioSource, CompressedSourceErr
 use crate::audio::output::{
     OutputEvent, OutputEvents, OutputStreamId, PipelineId, StreamFailureKind,
 };
-use crate::errors::log_failed;
 use crate::ids::PlaybackId;
 
 /// Counts the playbacks. A playback is one queue item being played; a seek or an output device
@@ -93,10 +92,9 @@ impl Inbox {
     }
 
     pub(super) fn event(&self, event: WorkerEvent) {
-        log_failed(
-            self.0.send(WorkerInput::Event(event)),
-            "audio.playback.input_send_failed",
-        );
+        if let Err(cause) = self.0.send(WorkerInput::Event(event)) {
+            log::debug!("audio.playback.input_send_failed cause={cause}");
+        }
     }
 
     /// An output stream's way to report to the worker.

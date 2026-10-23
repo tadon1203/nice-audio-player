@@ -1,6 +1,4 @@
 use super::migrations::{self, MigrationError};
-use crate::errors::logged;
-use crate::errors::remove_file_best_effort;
 use crate::ids::register_sql_functions;
 use parking_lot::Mutex;
 use rusqlite::{Connection, OpenFlags};
@@ -71,10 +69,9 @@ impl Database {
 }
 impl Database {
     pub(crate) fn initialize(directory: &Path) -> Result<Self, DatabaseError> {
-        std::fs::create_dir_all(directory).map_err(logged(
-            DatabaseError::Open,
-            "library.database.directory_failed",
-        ))?;
+        std::fs::create_dir_all(directory)
+            .inspect_err(|cause| log::warn!("library.database.directory_failed cause={cause}"))
+            .map_err(|_| DatabaseError::Open)?;
         let path = directory.join(DATABASE_FILE);
         let mut connection = Connection::open(&path).map_err(DatabaseError::from)?;
         configure_common(&connection).map_err(DatabaseError::from)?;
@@ -131,7 +128,11 @@ fn back_up_before_migration(
     let backup = directory.join(format!("{DATABASE_FILE}.v{version}.bak"));
     // `VACUUM INTO` refuses to overwrite; a leftover is from an attempt that did not finish, and
     // this copy is the fresher one.
-    remove_file_best_effort(&backup);
+    if let Err(cause) = std::fs::remove_file(&backup)
+        && cause.kind() != std::io::ErrorKind::NotFound
+    {
+        log::debug!("cleanup.remove_file_failed cause={cause}");
+    }
     connection
         .execute("VACUUM INTO ?1", [backup.to_string_lossy().as_ref()])
         .map(drop)
@@ -161,7 +162,11 @@ pub(crate) fn apply_requested_reset(directory: &Path) {
         let to = directory.join(format!("{DATABASE_FILE}{suffix}.bak"));
         if from.exists()
             && let Err(cause) = std::fs::rename(&from, &to).or_else(|_| {
-                remove_file_best_effort(&to);
+                if let Err(cause) = std::fs::remove_file(&to)
+                    && cause.kind() != std::io::ErrorKind::NotFound
+                {
+                    log::debug!("cleanup.remove_file_failed cause={cause}");
+                }
                 std::fs::rename(&from, &to)
             })
         {
@@ -171,10 +176,18 @@ pub(crate) fn apply_requested_reset(directory: &Path) {
                 return;
             }
             // The database is already aside: a stale WAL left here must not meet the new one.
-            remove_file_best_effort(&from);
+            if let Err(cause) = std::fs::remove_file(&from)
+                && cause.kind() != std::io::ErrorKind::NotFound
+            {
+                log::debug!("cleanup.remove_file_failed cause={cause}");
+            }
         }
     }
-    remove_file_best_effort(&marker);
+    if let Err(cause) = std::fs::remove_file(&marker)
+        && cause.kind() != std::io::ErrorKind::NotFound
+    {
+        log::debug!("cleanup.remove_file_failed cause={cause}");
+    }
     log::info!("library.database.reset");
 }
 

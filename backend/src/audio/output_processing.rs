@@ -2,7 +2,6 @@ use rubato::audioadapter_buffers::direct::InterleavedSlice;
 use rubato::{Fft, FixedSync, Indexing, Resampler};
 
 use super::pcm::PcmSpec;
-use crate::errors::logged;
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub(crate) enum OutputProcessingError {
@@ -117,10 +116,8 @@ impl HighQualityResampler {
             channels,
             FixedSync::Both,
         )
-        .map_err(logged(
-            OutputProcessingError::ResamplerConstructionFailed,
-            "audio.processing.resampler_build",
-        ))?;
+        .inspect_err(|cause| log::warn!("audio.processing.resampler_build cause={cause}"))
+        .map_err(|_| OutputProcessingError::ResamplerConstructionFailed)?;
         let input_capacity_frames = resampler.input_frames_max();
         let output_frames = resampler.output_frames_max();
         let input_chunk_frames = resampler.input_frames_next();
@@ -161,27 +158,21 @@ impl HighQualityResampler {
     ) -> Result<usize, OutputProcessingError> {
         let input_frames = self.resampler.input_frames_next();
         let output_frames = self.resampler.output_frames_next();
-        let input =
-            InterleavedSlice::new(&self.input, self.channels, input_frames).map_err(logged(
-                OutputProcessingError::ResamplerProcessingFailed,
-                "audio.processing.resampler_input",
-            ))?;
+        let input = InterleavedSlice::new(&self.input, self.channels, input_frames)
+            .inspect_err(|cause| log::warn!("audio.processing.resampler_input cause={cause}"))
+            .map_err(|_| OutputProcessingError::ResamplerProcessingFailed)?;
         let mut resampled = InterleavedSlice::new_mut(
             &mut self.output,
             self.channels,
             self.resampler.output_frames_max(),
         )
-        .map_err(logged(
-            OutputProcessingError::ResamplerProcessingFailed,
-            "audio.processing.resampler_output",
-        ))?;
+        .inspect_err(|cause| log::warn!("audio.processing.resampler_output cause={cause}"))
+        .map_err(|_| OutputProcessingError::ResamplerProcessingFailed)?;
         let indexing = partial_len.map(|len| Indexing::new().partial_len(len));
         self.resampler
             .process_into_buffer(&input, &mut resampled, indexing.as_ref())
-            .map_err(logged(
-                OutputProcessingError::ResamplerProcessingFailed,
-                "audio.processing.resample",
-            ))?;
+            .inspect_err(|cause| log::warn!("audio.processing.resample cause={cause}"))
+            .map_err(|_| OutputProcessingError::ResamplerProcessingFailed)?;
         self.input_frames = 0;
         let mut emitted = 0;
         let frames = output_frames * self.channels;

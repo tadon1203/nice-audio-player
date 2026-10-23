@@ -1,4 +1,3 @@
-use backend::errors::remove_file_best_effort;
 use backend::messages::BackendMessage;
 use tauri_specta::{Builder, ErrorHandlingMode, collect_commands};
 
@@ -75,7 +74,11 @@ pub fn render_typescript() -> Result<String, specta_typescript::Error> {
     let result = builder()
         .export(specta_typescript::Typescript::default(), &scratch)
         .and_then(|()| Ok(std::fs::read_to_string(&scratch)?));
-    remove_file_best_effort(&scratch);
+    if let Err(cause) = std::fs::remove_file(&scratch)
+        && cause.kind() != std::io::ErrorKind::NotFound
+    {
+        log::debug!("cleanup.remove_file_failed cause={cause}");
+    }
     result
 }
 

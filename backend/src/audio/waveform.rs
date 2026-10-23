@@ -22,8 +22,6 @@ use serde::Serialize;
 
 use super::decoding::{DecodeStep, PcmDecodeError, SeekStep, open_analysis_decoder};
 use crate::errors::contain;
-use crate::errors::log_failed;
-use crate::errors::remove_file_best_effort;
 use crate::ids::PlaybackId;
 use crate::library::scanner::identity::content_hash;
 use crate::library::store::PlayableTrack;
@@ -325,8 +323,10 @@ fn purge_stale_cache(directory: &Path) {
                 .extension()
                 .is_some_and(|extension| extension == "napw")
                 && !has_current_magic(&path)
+                && let Err(cause) = std::fs::remove_file(&path)
+                && cause.kind() != std::io::ErrorKind::NotFound
             {
-                remove_file_best_effort(&path);
+                log::debug!("cleanup.remove_file_failed cause={cause}");
             }
         }
     }
@@ -536,32 +536,27 @@ impl Waveforms {
             current: Mutex::new(Current::default()),
         });
         let worker = Arc::clone(&shared);
-        log_failed(
-            thread::Builder::new()
-                .name("waveform".into())
-                .spawn(move || {
-                    run_in_background();
-                    purge_stale_cache(&cache_directory);
-                    while let Some((request, cancellation)) = worker.next_job() {
-                        // A file that panics the analysis gets no waveform; the worker lives on.
-                        log_failed(
-                            contain(
-                                "waveform.process",
-                                std::panic::AssertUnwindSafe(|| {
-                                    worker.process(
-                                        &request.file,
-                                        request.hash.as_deref(),
-                                        &cancellation,
-                                    );
-                                }),
-                            ),
-                            "waveform.process",
-                        );
-                        worker.jobs().running = None;
+        if let Err(cause) = thread::Builder::new()
+            .name("waveform".into())
+            .spawn(move || {
+                run_in_background();
+                purge_stale_cache(&cache_directory);
+                while let Some((request, cancellation)) = worker.next_job() {
+                    // A file that panics the analysis gets no waveform; the worker lives on.
+                    if let Err(cause) = contain(
+                        "waveform.process",
+                        std::panic::AssertUnwindSafe(|| {
+                            worker.process(&request.file, request.hash.as_deref(), &cancellation);
+                        }),
+                    ) {
+                        log::debug!("waveform.process cause={cause}");
                     }
-                }),
-            "audio.waveform.thread_failed",
-        );
+                    worker.jobs().running = None;
+                }
+            })
+        {
+            log::debug!("audio.waveform.thread_failed cause={cause}");
+        }
         Self { shared }
     }
 

@@ -8,7 +8,6 @@
 //! worker records. Nothing outside this module sees the file's shape: the Host reads and writes
 //! appearance through `SettingsService`, and the playback service reads its preferences from it.
 
-use crate::errors::log_failed;
 use parking_lot::Mutex;
 use std::{
     path::Path,
@@ -176,8 +175,11 @@ impl SettingsService {
             revision: self.appearance_revision.load(Ordering::Acquire),
             value: state.appearance.clone(),
         };
-        if changed && let Some(writer) = self.writer.lock().as_ref() {
-            log_failed(writer.send(state.clone()), "settings.writer_send_failed");
+        if changed
+            && let Some(writer) = self.writer.lock().as_ref()
+            && let Err(cause) = writer.send(state.clone())
+        {
+            log::debug!("settings.writer_send_failed cause={cause}");
         }
         (appearance, changed)
     }
@@ -217,10 +219,9 @@ fn read(path: &std::path::Path) -> Settings {
         Ok(settings) => settings.sanitized(),
         Err(error) => {
             warn!("settings.file_unusable error={error}");
-            log_failed(
-                std::fs::rename(path, path.with_extension("json.bad")),
-                "settings.quarantine_failed",
-            );
+            if let Err(cause) = std::fs::rename(path, path.with_extension("json.bad")) {
+                log::debug!("settings.quarantine_failed cause={cause}");
+            }
             Settings::default()
         }
     }

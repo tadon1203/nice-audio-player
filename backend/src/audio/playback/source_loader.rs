@@ -5,7 +5,6 @@ use std::thread::{self, JoinHandle};
 use super::input::{Inbox, SourceLoadId, WorkerEvent};
 use crate::audio::compressed_source::{CompressedSourceError, prepare_compressed_source};
 use crate::errors::contain;
-use crate::errors::logged;
 use crate::media::validation::ValidatedAudioFile;
 use crate::threads::Cancellation;
 
@@ -37,7 +36,8 @@ impl SourceLoad {
                 .unwrap_or(Err(CompressedSourceError::OpenFailed));
                 inbox.event(WorkerEvent::SourceLoaded { id, result });
             })
-            .map_err(logged((), "playback.source_loader.thread_failed"))?;
+            .inspect_err(|cause| log::warn!("playback.source_loader.thread_failed cause={cause}"))
+            .map_err(|_| ())?;
         Ok(Self {
             id,
             cancellation,
@@ -47,7 +47,7 @@ impl SourceLoad {
 
     /// Waits for a load that has already reported.
     pub(crate) fn join(self) {
-        // A panic payload has no `Display`, so `log_failed` cannot take the join result.
+        // A panic payload has no `Display`, so the join result is checked with `is_err`.
         if self.join_handle.join().is_err() {
             log::debug!("playback.source_loader.join_panicked");
         }

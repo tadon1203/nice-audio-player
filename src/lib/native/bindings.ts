@@ -280,7 +280,7 @@ export type CurrentPlayback = {
 /**  A library directory: the `library_roots` rowid. Above zero. On the IPC a number. */
 export type DirectoryId = number;
 
-/**  The current value of every Backend state topic. `connect` returns it. */
+/**  The current value of every Backend state topic. `app_connect` returns it. */
 export type InitialState = {
 	playback: Revisioned<PlaybackState>,
 	queue: Revisioned<QueueState>,

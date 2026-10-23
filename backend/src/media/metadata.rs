@@ -1,7 +1,6 @@
 //! Metadata is deliberately best-effort: it can never change Symphonia playability.
 use std::borrow::Cow;
 
-use crate::errors::logged;
 use crate::library::artwork::ArtworkMimeType;
 use lofty::{
     config::ParseOptions,
@@ -49,16 +48,12 @@ pub(crate) fn read_source_metadata(
     path: &std::path::Path,
 ) -> Result<Option<SourceMetadata>, MetadataReadError> {
     let tagged = Probe::open(path)
-        .map_err(logged(
-            MetadataReadError::Read,
-            "media.metadata.open_failed",
-        ))?
+        .inspect_err(|cause| log::warn!("media.metadata.open_failed cause={cause}"))
+        .map_err(|_| MetadataReadError::Read)?
         .options(ParseOptions::new().read_properties(false))
         .read()
-        .map_err(logged(
-            MetadataReadError::Read,
-            "media.metadata.read_failed",
-        ))?;
+        .inspect_err(|cause| log::warn!("media.metadata.read_failed cause={cause}"))
+        .map_err(|_| MetadataReadError::Read)?;
     let Some(tag) = tagged.primary_tag().or_else(|| tagged.first_tag()) else {
         return Ok(None);
     };

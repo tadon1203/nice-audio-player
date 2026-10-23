@@ -2,7 +2,6 @@
 
 use std::{ffi::OsString, path::Path};
 
-use backend::errors::logged;
 use backend::errors::{CommandError, LibraryCommandError};
 
 /// Opens the directory at `path` in the file manager.
@@ -12,12 +11,10 @@ pub(crate) fn open_in_file_manager(path: &Path) -> Result<(), LibraryCommandErro
         .arg(path)
         .spawn()
         .map(|_| ())
-        .map_err(logged(
-            LibraryCommandError::Common {
-                error: CommandError::TaskFailed,
-            },
-            "host.os.explorer_failed",
-        ))
+        .inspect_err(|cause| log::warn!("host.os.explorer_failed cause={cause}"))
+        .map_err(|_| LibraryCommandError::Common {
+            error: CommandError::TaskFailed,
+        })
 }
 
 #[cfg(not(windows))]
@@ -40,12 +37,10 @@ pub(crate) fn reveal_in_file_manager(path: &Path) -> Result<(), LibraryCommandEr
         .raw_arg(argument)
         .spawn()
         .map(|_| ())
-        .map_err(logged(
-            LibraryCommandError::Common {
-                error: CommandError::TaskFailed,
-            },
-            "host.os.reveal_failed",
-        ))
+        .inspect_err(|cause| log::warn!("host.os.reveal_failed cause={cause}"))
+        .map_err(|_| LibraryCommandError::Common {
+            error: CommandError::TaskFailed,
+        })
 }
 
 #[cfg(not(windows))]

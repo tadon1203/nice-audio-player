@@ -16,7 +16,6 @@ use ringbuf::{
 };
 
 use super::pcm::ChannelCount;
-use crate::errors::log_failed;
 
 /// The consumer wakes a waiting producer when occupancy falls below this fraction (1/2).
 const WAKE_NUMERATOR: usize = 1;
@@ -62,10 +61,9 @@ pub(crate) struct PcmWaker(SyncSender<()>);
 
 impl PcmWaker {
     pub(crate) fn wake(&self) {
-        log_failed(
-            ignore_full(self.0.try_send(())),
-            "audio.pcm_queue.wake_failed",
-        );
+        if let Err(cause) = ignore_full(self.0.try_send(())) {
+            log::debug!("audio.pcm_queue.wake_failed cause={cause}");
+        }
     }
 }
 

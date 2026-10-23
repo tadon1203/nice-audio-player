@@ -7,7 +7,6 @@ use super::{
     models::LibraryDirectory,
     summary,
 };
-use crate::errors::logged;
 use crate::ids::{DirectoryId, directory_id_column};
 use rusqlite::{Connection, params};
 use std::path::Path;
@@ -42,10 +41,9 @@ pub(crate) fn register(
     if input.trim().is_empty() {
         return Err(LibraryCommandError::InvalidDirectory);
     }
-    let canonical = dunce::canonicalize(input).map_err(logged(
-        LibraryCommandError::CanonicalizationFailed,
-        "library.directories.canonicalize_failed",
-    ))?;
+    let canonical = dunce::canonicalize(input)
+        .inspect_err(|cause| log::warn!("library.directories.canonicalize_failed cause={cause}"))
+        .map_err(|_| LibraryCommandError::CanonicalizationFailed)?;
     if !canonical.is_dir() {
         return Err(LibraryCommandError::DirectoryNotDirectory);
     }

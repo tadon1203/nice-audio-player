@@ -1,8 +1,6 @@
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 
-use crate::errors::logged;
-
 pub(crate) const SUPPORTED_EXTENSIONS: [&str; 5] = ["mp3", "flac", "wav", "aac", "m4a"];
 
 /// An audio file the Backend can play. The path stays a `PathBuf` all the way to the file system,
@@ -35,10 +33,9 @@ pub(crate) fn validate_audio_file(
     if is_blank(path) {
         return Err(AudioFileValidationError::EmptyPath);
     }
-    let metadata = std::fs::metadata(path).map_err(logged(
-        AudioFileValidationError::NotFound,
-        "media.validation.metadata_failed",
-    ))?;
+    let metadata = std::fs::metadata(path)
+        .inspect_err(|cause| log::warn!("media.validation.metadata_failed cause={cause}"))
+        .map_err(|_| AudioFileValidationError::NotFound)?;
     if !metadata.is_file() {
         return Err(AudioFileValidationError::NotAFile);
     }

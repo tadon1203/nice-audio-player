@@ -25,7 +25,6 @@ use super::output_processing::{OutputProcessingError, OutputProcessingPlan};
 use super::pcm::{ChannelCount, PcmSpec, SampleRate};
 use super::pcm_queue::{PcmConsumer, PcmProducer, bounded_pcm_queue};
 use super::volume::{AtomicEffectiveGain, process_sample};
-use crate::errors::logged;
 
 /// Identifies one output stream, which lives as long as a session.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -465,10 +464,9 @@ fn prepare_for_spec(
     let native_result = native.and_then(|config| {
         let stream_config = config.config();
         let sample_format = config.sample_format();
-        let plan = OutputProcessingPlan::new(spec, spec).map_err(logged(
-            AudioOutputError::UnsupportedConfiguration,
-            "audio.output.plan_failed",
-        ))?;
+        let plan = OutputProcessingPlan::new(spec, spec)
+            .inspect_err(|cause| log::warn!("audio.output.plan_failed cause={cause}"))
+            .map_err(|_| AudioOutputError::UnsupportedConfiguration)?;
         let (producer, consumer) = make_queue(plan.output())?;
         let result = build_stream_for_config(
             &device,
@@ -588,10 +586,8 @@ pub(crate) fn make_queue(spec: PcmSpec) -> Result<(PcmProducer, PcmConsumer), Au
         ChannelCount::new(usize::from(channels))
             .ok_or(AudioOutputError::UnsupportedConfiguration)?,
     )
-    .map_err(logged(
-        AudioOutputError::UnsupportedConfiguration,
-        "audio.output.queue_failed",
-    ))
+    .inspect_err(|cause| log::warn!("audio.output.queue_failed cause={cause}"))
+    .map_err(|_| AudioOutputError::UnsupportedConfiguration)
 }
 
 fn select_output_config(

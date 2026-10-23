@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use backend::app::BackendApp;
-use backend::errors::{log_failed, logged};
 use session::Subscriber;
 use tauri::Manager;
 
@@ -35,9 +34,15 @@ pub fn run() {
     #[cfg(not(feature = "wdio"))]
     let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
         if let Some(window) = app.get_webview_window("main") {
-            log_failed(window.unminimize(), "host.window.unminimize_failed");
-            log_failed(window.show(), "host.window.show_failed");
-            log_failed(window.set_focus(), "host.window.focus_failed");
+            if let Err(cause) = window.unminimize() {
+                log::debug!("host.window.unminimize_failed cause={cause}");
+            }
+            if let Err(cause) = window.show() {
+                log::debug!("host.window.show_failed cause={cause}");
+            }
+            if let Err(cause) = window.set_focus() {
+                log::debug!("host.window.focus_failed cause={cause}");
+            }
         }
     }));
     #[cfg(feature = "wdio")]
@@ -71,10 +76,9 @@ pub fn run() {
             };
             app.manage(artwork::ArtworkDir(data_dir.clone()));
             let (sink, signals) = session::message_channel();
-            let backend = BackendApp::initialize(data_dir, sink).map_err(logged(
-                std::io::Error::other("backend startup failed"),
-                "host.backend.startup_failed",
-            ))?;
+            let backend = BackendApp::initialize(data_dir, sink)
+                .inspect_err(|cause| log::warn!("host.backend.startup_failed cause={cause}"))
+                .map_err(|_| std::io::Error::other("backend startup failed"))?;
             let backend = Arc::new(backend);
             let subscriber = Arc::new(Subscriber::default());
             app.manage(AppState {

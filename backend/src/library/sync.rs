@@ -16,7 +16,6 @@ use super::{
     scanner, watcher,
 };
 use crate::errors::CommandError;
-use crate::errors::{log_failed, logged};
 use crate::ids::DirectoryId;
 use crate::messages::{Notifier, Revisioned};
 use log::{debug, error, info, warn};
@@ -100,10 +99,12 @@ impl LibrarySync {
         };
         self.messages
             .send(Message::Command(command(reply)))
-            .map_err(logged(task_failed(), "library.sync.command_send_failed"))?;
+            .inspect_err(|cause| log::warn!("library.sync.command_send_failed cause={cause}"))
+            .map_err(|_| task_failed())?;
         answer
             .recv()
-            .map_err(logged(task_failed(), "library.sync.reply_recv_failed"))?
+            .inspect_err(|cause| log::warn!("library.sync.reply_recv_failed cause={cause}"))
+            .map_err(|_| task_failed())?
     }
 
     pub(crate) fn register_directory(
@@ -139,10 +140,9 @@ impl LibrarySync {
 
     /// Stops the actor, its watchers and the scan in progress, and waits for them.
     pub(crate) fn shutdown(&self) {
-        log_failed(
-            self.messages.send(Message::Shutdown),
-            "library.sync.shutdown_send_failed",
-        );
+        if let Err(cause) = self.messages.send(Message::Shutdown) {
+            log::debug!("library.sync.shutdown_send_failed cause={cause}");
+        }
         let thread = self.thread.lock().take();
         if let Some(thread) = thread
             && thread.join().is_err()
@@ -405,10 +405,9 @@ impl Actor {
                         paths,
                     }
                 };
-                log_failed(
-                    messages.send(Message::Input(input)),
-                    "library.watcher.input_send_failed",
-                );
+                if let Err(cause) = messages.send(Message::Input(input)) {
+                    log::debug!("library.watcher.input_send_failed cause={cause}");
+                }
             })
             .ok()
         });
@@ -459,10 +458,9 @@ impl ScanEnding {
 
 /// Sends the scan's end to the actor. The actor may already be gone, which is logged.
 fn report_scan_finished(messages: &Sender<Message>, outcome: ScanOutcome) {
-    log_failed(
-        messages.send(Message::Input(Input::ScanFinished(outcome))),
-        "library.sync.scan_finished_send_failed",
-    );
+    if let Err(cause) = messages.send(Message::Input(Input::ScanFinished(outcome))) {
+        log::debug!("library.sync.scan_finished_send_failed cause={cause}");
+    }
 }
 
 impl Drop for ScanEnding {

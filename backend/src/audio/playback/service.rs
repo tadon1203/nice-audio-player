@@ -22,7 +22,6 @@ use crate::audio::meter::MeterHub;
 use crate::audio::output::OutputBackend;
 use crate::audio::volume::{AtomicEffectiveGain, VolumeState};
 use crate::errors::CommandError;
-use crate::errors::logged;
 use crate::ids::{QueueItemId, TrackId};
 use crate::library::store::{PlaybackLookupError, PlaybackSourceError};
 use crate::messages::{Revisioned, SharedMessageListener};
@@ -232,10 +231,8 @@ impl PlaybackService {
             .spawn(move || {
                 PlaybackWorker::new(links, queue, volume_state, output_selection).run(&inputs);
             })
-            .map_err(logged(
-                PlaybackServiceStartError::WorkerStartFailed,
-                "playback.worker.start_failed",
-            ))?;
+            .inspect_err(|cause| log::warn!("playback.worker.start_failed cause={cause}"))
+            .map_err(|_| PlaybackServiceStartError::WorkerStartFailed)?;
         Ok(Self {
             handle: PlaybackServiceHandle {
                 inbox,
@@ -447,9 +444,9 @@ impl PlaybackServiceHandle {
         if !self.inbox.send(WorkerInput::Command(make(reply_sender))) {
             return Err(PlaybackServiceError::WorkerUnavailable);
         }
-        reply_receiver.recv().map_err(logged(
-            PlaybackServiceError::WorkerUnavailable,
-            "playback.worker.reply_lost",
-        ))?
+        reply_receiver
+            .recv()
+            .inspect_err(|cause| log::warn!("playback.worker.reply_lost cause={cause}"))
+            .map_err(|_| PlaybackServiceError::WorkerUnavailable)?
     }
 }

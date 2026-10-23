@@ -2,8 +2,6 @@
 //! reference the catalog and playback items hand to the renderer.
 
 use super::status::sql_text_enum;
-use crate::errors::logged;
-use crate::errors::remove_file_best_effort;
 use crate::ids::{ArtworkHash, is_artwork_hash};
 use image::{ImageReader, codecs::jpeg::JpegEncoder, imageops::FilterType};
 use serde::Serialize;
@@ -217,10 +215,8 @@ pub(crate) fn materialize(
     };
     if final_path.exists() {
         let size = fs::metadata(&final_path)
-            .map_err(logged(
-                ArtworkMaterializeError::Io,
-                "library.artwork.stat_failed",
-            ))?
+            .inspect_err(|cause| log::warn!("library.artwork.stat_failed cause={cause}"))
+            .map_err(|_| ArtworkMaterializeError::Io)?
             .len();
         if size != bytes.len() as u64 {
             return Err(ArtworkMaterializeError::Io);
@@ -228,10 +224,9 @@ pub(crate) fn materialize(
         return Ok(stored(size));
     }
     if let Some(parent) = final_path.parent() {
-        fs::create_dir_all(parent).map_err(logged(
-            ArtworkMaterializeError::Io,
-            "library.artwork.directory_failed",
-        ))?;
+        fs::create_dir_all(parent)
+            .inspect_err(|cause| log::warn!("library.artwork.directory_failed cause={cause}"))
+            .map_err(|_| ArtworkMaterializeError::Io)?;
     }
     let temp_path = final_path.with_extension(format!(
         "{}.tmp-{}-{}",
@@ -244,21 +239,21 @@ pub(crate) fn materialize(
             .write(true)
             .create_new(true)
             .open(&temp_path)
-            .map_err(logged(
-                ArtworkMaterializeError::Io,
-                "library.artwork.temp_create_failed",
-            ))?;
-        file.write_all(bytes).map_err(logged(
-            ArtworkMaterializeError::Io,
-            "library.artwork.write_failed",
-        ))?;
-        file.flush().map_err(logged(
-            ArtworkMaterializeError::Io,
-            "library.artwork.flush_failed",
-        ))
+            .inspect_err(|cause| log::warn!("library.artwork.temp_create_failed cause={cause}"))
+            .map_err(|_| ArtworkMaterializeError::Io)?;
+        file.write_all(bytes)
+            .inspect_err(|cause| log::warn!("library.artwork.write_failed cause={cause}"))
+            .map_err(|_| ArtworkMaterializeError::Io)?;
+        file.flush()
+            .inspect_err(|cause| log::warn!("library.artwork.flush_failed cause={cause}"))
+            .map_err(|_| ArtworkMaterializeError::Io)
     })();
     if write_result.is_err() {
-        remove_file_best_effort(&temp_path);
+        if let Err(cause) = std::fs::remove_file(&temp_path)
+            && cause.kind() != std::io::ErrorKind::NotFound
+        {
+            log::debug!("cleanup.remove_file_failed cause={cause}");
+        }
         return Err(ArtworkMaterializeError::Io);
     }
     if fs::rename(&temp_path, &final_path).is_err() {
@@ -266,7 +261,11 @@ pub(crate) fn materialize(
         let stored_by_another = fs::metadata(&final_path)
             .ok()
             .filter(|metadata| metadata.len() == bytes.len() as u64);
-        remove_file_best_effort(&temp_path);
+        if let Err(cause) = std::fs::remove_file(&temp_path)
+            && cause.kind() != std::io::ErrorKind::NotFound
+        {
+            log::debug!("cleanup.remove_file_failed cause={cause}");
+        }
         return stored_by_another
             .map(|metadata| stored(metadata.len()))
             .ok_or(ArtworkMaterializeError::Io);
@@ -286,21 +285,16 @@ pub(crate) fn ensure_thumbnail(
     if final_path.exists() {
         return Ok(());
     }
-    let bytes = fs::read(directory.join(original.to_string())).map_err(logged(
-        ArtworkMaterializeError::Io,
-        "library.artwork.read_failed",
-    ))?;
+    let bytes = fs::read(directory.join(original.to_string()))
+        .inspect_err(|cause| log::warn!("library.artwork.read_failed cause={cause}"))
+        .map_err(|_| ArtworkMaterializeError::Io)?;
     let decoded = ImageReader::new(Cursor::new(bytes))
         .with_guessed_format()
-        .map_err(logged(
-            ArtworkMaterializeError::Io,
-            "library.artwork.format_failed",
-        ))?
+        .inspect_err(|cause| log::warn!("library.artwork.format_failed cause={cause}"))
+        .map_err(|_| ArtworkMaterializeError::Io)?
         .decode()
-        .map_err(logged(
-            ArtworkMaterializeError::Io,
-            "library.artwork.decode_failed",
-        ))?;
+        .inspect_err(|cause| log::warn!("library.artwork.decode_failed cause={cause}"))
+        .map_err(|_| ArtworkMaterializeError::Io)?;
     let decoded = if decoded.width() > THUMBNAIL_EDGE || decoded.height() > THUMBNAIL_EDGE {
         decoded.resize(THUMBNAIL_EDGE, THUMBNAIL_EDGE, FilterType::Lanczos3)
     } else {
@@ -309,10 +303,8 @@ pub(crate) fn ensure_thumbnail(
     let mut encoded = Vec::new();
     JpegEncoder::new_with_quality(&mut encoded, THUMBNAIL_QUALITY)
         .encode_image(&decoded.to_rgb8())
-        .map_err(logged(
-            ArtworkMaterializeError::Io,
-            "library.artwork.encode_failed",
-        ))?;
+        .inspect_err(|cause| log::warn!("library.artwork.encode_failed cause={cause}"))
+        .map_err(|_| ArtworkMaterializeError::Io)?;
     let temp_path = final_path.with_extension(format!(
         "jpg.tmp-{}-{}",
         std::process::id(),
@@ -321,7 +313,11 @@ pub(crate) fn ensure_thumbnail(
     let written =
         fs::write(&temp_path, &encoded).and_then(|()| fs::rename(&temp_path, &final_path));
     if written.is_err() {
-        remove_file_best_effort(&temp_path);
+        if let Err(cause) = std::fs::remove_file(&temp_path)
+            && cause.kind() != std::io::ErrorKind::NotFound
+        {
+            log::debug!("cleanup.remove_file_failed cause={cause}");
+        }
         // Another writer may have stored it first.
         return if final_path.exists() {
             Ok(())
