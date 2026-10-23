@@ -12,10 +12,10 @@ Read `docs/agents/tickets.md` and `docs/agents/implementation-ready.md`. The inp
 2. Draft the tickets:
    - List the slices. A slice is the smallest change that goes through every layer that it needs and is verifiable by itself. A prefactoring is a slice.
    - Put the slices in one line, so that each slice builds only on the slices before it. A prefactoring comes first. Apply the dependency rule.
-   - Pack the line of slices into tickets with the size rule. Number the tickets in the order of work.
+   - Cut the line of slices into tickets. The dependency rule and the order of work decide the cuts first. The size rule decides second. Number the tickets in the order of work.
    - Copy into each ticket the decisions, contracts, and seams from the spec that it needs. Put each change from the spec's Docs section into the ticket that implements that behavior.
    - If a ticket needs a What or a How that the spec does not give, it is an open decision. Write it down for step 3.
-3. Show the user the numbered list: title, what it delivers, F, L, and the cost, with the files behind them, and the open decisions. Iterate until the user approves. Do not ask whether the granularity feels right. The size rule decides it.
+3. Show the user the numbered list: title, what it delivers, F, L, and the cost, with the files behind them, and the open decisions. Iterate until the user approves. Do not ask whether the granularity feels right. The dependency rule and the size rule decide it.
 4. Write the tickets with the template in `docs/agents/tickets.md`. Keep the spec.
 
 ## Dependency rule
@@ -43,9 +43,9 @@ Measure F and L with git and `wc`. Do not guess. About 30 files fit one ticket. 
 
 The constants come from measured tickets. If an implemented ticket peaks over 250k, measure again and fix them.
 
-Aim each ticket at the budget. Fill the tickets in order: add the next slice to the current ticket while it still fits, and start a new ticket only when the next slice does not fit. Slices that read the same files pack well together, because each file costs only once. Only the last ticket may be far under the budget.
+The order and the dependencies come first. The size is second: it decides the cuts only where the dependency rule leaves a choice. Fill the tickets in order: add the next slice to the current ticket while it still fits, and start a new ticket only when the next slice does not fit. Slices that read the same files pack well together, because each file costs only once. Only the last ticket may be far under the budget.
 
-A clean cut matters more than the limit. A ticket may go over the budget, up to the cost of a 250k context (a cost of about 180k, or about 40 files), when that gives a cleaner cut: the next slice belongs with the ones before it, or the cut at the budget would leave a small rest ticket. Never go over 250k.
+The budget is a guide, not a wall. A ticket may go over the budget, up to the cost of a 250k context (a cost of about 180k, or about 40 files), when the dependencies ask for it: the next slice cannot be verified or used without the ones before it, or the cut at the budget would leave a small rest ticket. Never go over 250k.
 
 If one slice alone is over 250k, split it where each part is still verifiable and still follows the dependency rule. If no such place exists, add a prefactoring ticket first.
 
