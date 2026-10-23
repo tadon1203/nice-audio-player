@@ -1,11 +1,11 @@
-use backend::{dto::LyricsResolution, errors::LyricsCommandError, ids::TrackId};
+use backend::{app::LyricsResolution, errors::LyricsCommandError, ids::TrackId};
 
 use super::blocking;
 use crate::AppState;
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) async fn get_track_lyrics(
+pub(crate) async fn lyrics_track(
     track_id: TrackId,
     state: tauri::State<'_, AppState>,
 ) -> Result<LyricsResolution, LyricsCommandError> {

@@ -9,9 +9,9 @@ A local-first Windows desktop music player focused on reliable playback and a ca
 
 ## Development
 
-Node is pinned by `.nvmrc`. With nvm-windows, run `nvm use` in the repo root before `pnpm install`.
+Node is pinned by `.nvmrc`. With nvm-windows, run `nvm use` in the repo directory before `pnpm install`.
 
-Rust links with LLVM's `lld-link` (set in `.cargo/config.toml`). Install [LLVM](https://releases.llvm.org/) and put its `bin` folder on `PATH`.
+Rust links with LLVM's `lld-link` (set in `.cargo/config.toml`). Install [LLVM](https://releases.llvm.org/) and put its `bin` directory on `PATH`.
 
 ```text
 pnpm install
@@ -22,7 +22,7 @@ The checks to run are in [CLAUDE.md](./CLAUDE.md#commands).
 
 ## Stack
 
-- Renderer: SvelteKit (Svelte 5, `adapter-static`, SPA), built by Vite. Code is in `src/routes` and `src/lib`. The dependency rules between folders are in [ARCHITECTURE.md](./ARCHITECTURE.md).
+- Renderer: SvelteKit (Svelte 5, `adapter-static`, SPA), built by Vite. Code is in `src/routes` and `src/lib`. The dependency rules between directories are in [ARCHITECTURE.md](./ARCHITECTURE.md).
 - Host: Tauri 2 runs the Windows WebView and packages the app.
 - Backend: Rust owns playback, library, persistence, and native work.
 

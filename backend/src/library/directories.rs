@@ -1,18 +1,18 @@
-//! The registered music folders: listing them, and the writes that change them. The write side
+//! The registered music directories: listing them, and the writes that change them. The write side
 //! (the sync actor) is the only caller of `register`, `set_enabled` and `remove`.
 
 use super::{
     database::Database,
     error::{LibraryCommandError, StoreError},
-    models::LibraryRoot,
+    models::LibraryDirectory,
     summary,
 };
-use crate::diagnostics::logged;
-use crate::ids::{FolderId, folder_id_column};
+use crate::errors::logged;
+use crate::ids::{DirectoryId, directory_id_column};
 use rusqlite::{Connection, params};
 use std::path::Path;
 
-pub(crate) fn list(connection: &Connection) -> Result<Vec<LibraryRoot>, StoreError> {
+pub(crate) fn list(connection: &Connection) -> Result<Vec<LibraryDirectory>, StoreError> {
     let mut statement = connection.prepare(
         "SELECT r.id, r.path, r.enabled, r.scan_generation, r.last_successful_scan_at_ms,
                 (SELECT COUNT(*) FROM library_files f JOIN tracks t ON t.file_id = f.id
@@ -22,8 +22,8 @@ pub(crate) fn list(connection: &Connection) -> Result<Vec<LibraryRoot>, StoreErr
          FROM library_roots r ORDER BY r.id",
     )?;
     let rows = statement.query_map([], |row| {
-        Ok(LibraryRoot {
-            id: folder_id_column(row, 0)?,
+        Ok(LibraryDirectory {
+            id: directory_id_column(row, 0)?,
             path: row.get(1)?,
             enabled: row.get(2)?,
             scan_generation: row.get::<_, i64>(3)? as u64,
@@ -38,16 +38,16 @@ pub(crate) fn list(connection: &Connection) -> Result<Vec<LibraryRoot>, StoreErr
 pub(crate) fn register(
     database: &Database,
     input: &str,
-) -> Result<LibraryRoot, LibraryCommandError> {
+) -> Result<LibraryDirectory, LibraryCommandError> {
     if input.trim().is_empty() {
-        return Err(LibraryCommandError::InvalidRoot);
+        return Err(LibraryCommandError::InvalidDirectory);
     }
     let canonical = dunce::canonicalize(input).map_err(logged(
         LibraryCommandError::CanonicalizationFailed,
-        "library.roots.canonicalize_failed",
+        "library.directories.canonicalize_failed",
     ))?;
     if !canonical.is_dir() {
-        return Err(LibraryCommandError::RootNotDirectory);
+        return Err(LibraryCommandError::DirectoryNotDirectory);
     }
     let path = canonical
         .to_str()
@@ -57,16 +57,16 @@ pub(crate) fn register(
     let data_dir =
         dunce::canonicalize(database.data_dir()).unwrap_or_else(|_| database.data_dir().into());
     if data_dir.starts_with(&canonical) {
-        return Err(LibraryCommandError::RootContainsDataDirectory);
+        return Err(LibraryCommandError::DirectoryContainsDataDirectory);
     }
     let reader = database.read().map_err(StoreError::from)?;
-    for root in list(&reader)? {
-        let other = Path::new(&root.path);
+    for directory in list(&reader)? {
+        let other = Path::new(&directory.path);
         if other == canonical || canonical.starts_with(other) || other.starts_with(&canonical) {
             return Err(if other == canonical {
-                LibraryCommandError::DuplicateRoot
+                LibraryCommandError::DuplicateDirectory
             } else {
-                LibraryCommandError::OverlappingRoot
+                LibraryCommandError::OverlappingDirectory
             });
         }
     }
@@ -77,8 +77,8 @@ pub(crate) fn register(
             params![path],
         )
         .map_err(StoreError::from)?;
-    Ok(LibraryRoot {
-        id: FolderId::try_from_rowid(connection.last_insert_rowid())
+    Ok(LibraryDirectory {
+        id: DirectoryId::try_from_rowid(connection.last_insert_rowid())
             .ok_or(StoreError::Persistence)?,
         path,
         enabled: true,
@@ -91,9 +91,9 @@ pub(crate) fn register(
 
 pub(crate) fn set_enabled(
     database: &Database,
-    id: FolderId,
+    id: DirectoryId,
     enabled: bool,
-) -> Result<LibraryRoot, LibraryCommandError> {
+) -> Result<LibraryDirectory, LibraryCommandError> {
     let connection = database.write().map_err(StoreError::from)?;
     let changed = connection
         .execute(
@@ -102,16 +102,16 @@ pub(crate) fn set_enabled(
         )
         .map_err(StoreError::from)?;
     if changed == 0 {
-        return Err(LibraryCommandError::RootMissing);
+        return Err(LibraryCommandError::DirectoryMissing);
     }
     list(&connection)?
         .into_iter()
-        .find(|root| root.id == id)
-        .ok_or(LibraryCommandError::RootMissing)
+        .find(|directory| directory.id == id)
+        .ok_or(LibraryCommandError::DirectoryMissing)
 }
 
-/// Removes the folder with its files, tracks and metadata (they cascade).
-pub(crate) fn remove(database: &Database, id: FolderId) -> Result<(), LibraryCommandError> {
+/// Removes the directory with its files, tracks and metadata (they cascade).
+pub(crate) fn remove(database: &Database, id: DirectoryId) -> Result<(), LibraryCommandError> {
     let mut connection = database.write().map_err(StoreError::from)?;
     let transaction = connection.transaction().map_err(StoreError::from)?;
     let removed = transaction
@@ -121,7 +121,7 @@ pub(crate) fn remove(database: &Database, id: FolderId) -> Result<(), LibraryCom
         )
         .map_err(StoreError::from)?;
     if removed == 0 {
-        return Err(LibraryCommandError::RootMissing);
+        return Err(LibraryCommandError::DirectoryMissing);
     }
     summary::rebuild(&transaction).map_err(StoreError::from)?;
     transaction.commit().map_err(StoreError::from)?;

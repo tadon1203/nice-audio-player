@@ -1,13 +1,13 @@
 import { QueryClient } from "@tanstack/svelte-query";
 import { describe, expect, it } from "vitest";
-import type { AlbumId, LibraryAlbumPage, LibraryAlbumSummary, LibraryClient } from "#lib/native";
+import type { AlbumId, LibraryAlbumPage, AlbumRow, LibraryClient } from "#lib/native";
 import { AlbumRepository } from "./album-repository";
 import { LibraryQueryKeys } from "./library-query-keys";
 
 const albumId = "0f0e0d0c0b0a09080706050403020100" as AlbumId;
 const artistId = "5b3f2c1e0a9d8c7b6a5f4e3d2c1b0a99";
 
-const summary = (year: number): LibraryAlbumSummary => ({
+const summary = (year: number): AlbumRow => ({
   id: albumId,
   title: "Abbey Road",
   albumArtist: { id: artistId, name: "The Beatles" },
@@ -15,7 +15,7 @@ const summary = (year: number): LibraryAlbumSummary => ({
   year,
 });
 
-const page = (items: LibraryAlbumSummary[]): LibraryAlbumPage => ({
+const page = (items: AlbumRow[]): LibraryAlbumPage => ({
   items,
   totalCount: items.length,
   nextCursor: null,

@@ -1,5 +1,5 @@
 import type {
-  ActiveSession,
+  CurrentPlayback,
   AlbumId,
   AudioOutputSelection,
   PlaybackContext,
@@ -7,15 +7,15 @@ import type {
   PlaybackId,
   PlaybackItem,
   PlaybackPosition,
-  PlaybackQueueSnapshot,
-  PlaybackRepeatMode,
-  PlaybackSnapshot,
+  QueueState,
+  RepeatMode,
+  PlaybackState,
   PlaybackClient,
-  PlaybackQueueWindow,
+  QueueWindow,
   PlaybackWaveform,
   QueueItemId,
   TrackId,
-  Versioned,
+  Revisioned,
 } from "#lib/native";
 import { Replica, SupersededError } from "#lib/native";
 import type { PlaybackClock } from "./playback-clock.svelte";
@@ -32,7 +32,7 @@ export type TransportCommand =
 
 interface QueuedTransport {
   command: TransportCommand;
-  operation: () => Promise<Versioned<PlaybackSnapshot>>;
+  operation: () => Promise<Revisioned<PlaybackState>>;
   resolve: () => void;
   reject: (error: unknown) => void;
 }
@@ -41,7 +41,7 @@ interface QueuedTransport {
  * Which way a new session's start moves the Now Playing transition. The backend says why the
  * session started: only Previous goes backward; every other start, or none, goes forward.
  */
-function directionOf(session: ActiveSession | null): TransitionDirection {
+function directionOf(session: CurrentPlayback | null): TransitionDirection {
   return session?.startedBy === "previous" ? "backward" : "forward";
 }
 
@@ -55,8 +55,8 @@ function directionOf(session: ActiveSession | null): TransitionDirection {
 export class Playback {
   readonly #client: PlaybackClient;
   readonly #clock: PlaybackClock;
-  readonly #snapshot = new Replica<PlaybackSnapshot>();
-  readonly #queue = new Replica<PlaybackQueueSnapshot>();
+  readonly #snapshot = new Replica<PlaybackState>();
+  readonly #queue = new Replica<QueueState>();
   readonly #waveform = new Replica<PlaybackWaveform | null>();
 
   /** The loaded track, or the last one that played. Replaced only when the queue item changes. */
@@ -81,12 +81,12 @@ export class Playback {
   }
 
   /** The latest playback snapshot the backend sent, or null before the first one. */
-  public get snapshot(): PlaybackSnapshot | null {
+  public get snapshot(): PlaybackState | null {
     return this.#snapshot.value;
   }
 
   /** The latest queue snapshot the backend sent, or null before the first one. */
-  public get queue(): PlaybackQueueSnapshot | null {
+  public get queue(): QueueState | null {
     return this.#queue.value;
   }
 
@@ -105,7 +105,7 @@ export class Playback {
     return this.#item;
   }
 
-  public get status(): PlaybackSnapshot["status"] {
+  public get status(): PlaybackState["status"] {
     return this.snapshot?.status ?? "stopped";
   }
 
@@ -167,7 +167,7 @@ export class Playback {
     return selection?.kind === "device" ? selection.deviceId : null;
   }
 
-  public get repeatMode(): PlaybackRepeatMode {
+  public get repeatMode(): RepeatMode {
     return this.queue?.repeatMode ?? "off";
   }
 
@@ -207,7 +207,7 @@ export class Playback {
   }
 
   /** Keeps the snapshot only if it is newer than the held one. Command responses come here too. */
-  public acceptPlayback(incoming: Versioned<PlaybackSnapshot>): void {
+  public acceptPlayback(incoming: Revisioned<PlaybackState>): void {
     const snapshot = incoming.value;
     const incomingItem = PlaybackSnapshots.item(snapshot);
     if (!this.#snapshot.accept(incoming)) return;
@@ -219,12 +219,12 @@ export class Playback {
   }
 
   /** Keeps the queue only if it is newer than the held one. Command responses come here too. */
-  public acceptQueue(incoming: Versioned<PlaybackQueueSnapshot>): void {
+  public acceptQueue(incoming: Revisioned<QueueState>): void {
     this.#queue.accept(incoming);
   }
 
   /** Keeps the Waveform only if it is newer than the held one. Pushed states and the initial state come here. */
-  public acceptWaveform(incoming: Versioned<PlaybackWaveform | null>): void {
+  public acceptWaveform(incoming: Revisioned<PlaybackWaveform | null>): void {
     this.#waveform.accept(incoming);
   }
 
@@ -330,39 +330,39 @@ export class Playback {
     await this.start(context, null);
   }
 
-  public setRepeatMode(mode: PlaybackRepeatMode): Promise<void> {
+  public setRepeatMode(mode: RepeatMode): Promise<void> {
     return this.#runQueueCommand(() => this.#client.setRepeatMode(mode));
   }
 
-  public removeQueueItem(id: QueueItemId): Promise<void> {
-    return this.#runQueueCommand(() => this.#client.removeQueueItem(id));
+  public playerRemoveQueueItem(id: QueueItemId): Promise<void> {
+    return this.#runQueueCommand(() => this.#client.playerRemoveQueueItem(id));
   }
 
   /** Moves an upcoming item to `to`, an index into the upcoming list (0 is next up). */
-  public moveQueueItem(id: QueueItemId, to: number): Promise<void> {
-    return this.#runQueueCommand(() => this.#client.moveQueueItem(id, to));
+  public playerMoveQueueItem(id: QueueItemId, to: number): Promise<void> {
+    return this.#runQueueCommand(() => this.#client.playerMoveQueueItem(id, to));
   }
 
   /** Resolves true when upcoming items were removed (the caller offers an undo). */
-  public async clearQueue(): Promise<boolean> {
+  public async playerClearQueue(): Promise<boolean> {
     const hadUpcoming = (this.queue?.upcomingCount ?? 0) > 0;
-    await this.#runQueueCommand(() => this.#client.clearQueue());
+    await this.#runQueueCommand(() => this.#client.playerClearQueue());
     return hadUpcoming;
   }
 
   /** Puts back the queue the last replacement or "Clear upcoming" took away. */
   public undoQueueChange(): Promise<void> {
-    return this.#runTransport("start", () => this.#client.restorePreviousQueue());
+    return this.#runTransport("start", () => this.#client.playerRestorePreviousQueue());
   }
 
   /** Jumps to an upcoming item and plays it. */
-  public playQueueItem(id: QueueItemId): Promise<void> {
-    return this.#runTransport("start", () => this.#client.playQueueItem(id));
+  public playerPlayQueueItem(id: QueueItemId): Promise<void> {
+    return this.#runTransport("start", () => this.#client.playerPlayQueueItem(id));
   }
 
   /** Adds a library track right after the current one (`next`) or at the end. */
-  public enqueueTrack(trackId: TrackId, next: boolean): Promise<void> {
-    return this.#runQueueCommand(() => this.#client.enqueueTrack(trackId, next));
+  public playerEnqueueTrack(trackId: TrackId, next: boolean): Promise<void> {
+    return this.#runQueueCommand(() => this.#client.playerEnqueueTrack(trackId, next));
   }
 
   /** A loaded track restarts on the new device at the same position. */
@@ -371,11 +371,11 @@ export class Playback {
   }
 
   /** A slice of the upcoming list beyond what the queue snapshot carries. */
-  public fetchQueueWindow(offset: number, limit: number): Promise<PlaybackQueueWindow> {
+  public fetchQueueWindow(offset: number, limit: number): Promise<QueueWindow> {
     return this.#client.queueWindow(offset, limit);
   }
 
-  #session(): ActiveSession | null {
+  #session(): CurrentPlayback | null {
     return PlaybackSnapshots.session(this.snapshot);
   }
 
@@ -385,7 +385,7 @@ export class Playback {
    */
   #runTransport(
     command: TransportCommand,
-    operation: () => Promise<Versioned<PlaybackSnapshot>>,
+    operation: () => Promise<Revisioned<PlaybackState>>,
   ): Promise<void> {
     if (this.#transportPending === null) {
       return this.#performTransport(command, operation);
@@ -398,7 +398,7 @@ export class Playback {
 
   async #performTransport(
     command: TransportCommand,
-    operation: () => Promise<Versioned<PlaybackSnapshot>>,
+    operation: () => Promise<Revisioned<PlaybackState>>,
   ): Promise<void> {
     this.#transportPending = command;
     try {
@@ -416,9 +416,7 @@ export class Playback {
     }
   }
 
-  async #runQueueCommand(
-    operation: () => Promise<Versioned<PlaybackQueueSnapshot>>,
-  ): Promise<void> {
+  async #runQueueCommand(operation: () => Promise<Revisioned<QueueState>>): Promise<void> {
     this.acceptQueue(await operation());
   }
 

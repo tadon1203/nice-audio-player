@@ -109,7 +109,11 @@ pub(super) enum Plan {
 
 /// Compares a discovered file with the database. Read-only. A file is unchanged when its size
 /// and modification time both are.
-pub(super) fn plan(reader: &Connection, root_id: i64, file: DiscoveredFile) -> Persisted<Plan> {
+pub(super) fn plan(
+    reader: &Connection,
+    directory_id: i64,
+    file: DiscoveredFile,
+) -> Persisted<Plan> {
     type Existing = (
         i64,
         i64,
@@ -121,7 +125,7 @@ pub(super) fn plan(reader: &Connection, root_id: i64, file: DiscoveredFile) -> P
     );
     let existing: Option<Existing> = reader
         .prepare_cached(SELECT_EXISTING_FILE)?
-        .query_row(params![root_id, file.relative], |row| {
+        .query_row(params![directory_id, file.relative], |row| {
             Ok((
                 row.get(0)?,
                 row.get(1)?,
@@ -191,12 +195,12 @@ impl LibraryWriter {
         Self { connection }
     }
 
-    /// Starts a new pass over a root and returns its generation number.
-    pub(super) fn begin_scan(&self, root_id: i64) -> Persisted<i64> {
+    /// Starts a new pass over a directory and returns its generation number.
+    pub(super) fn begin_scan(&self, directory_id: i64) -> Persisted<i64> {
         Ok(self.connection.query_row(
             "UPDATE library_roots SET scan_generation = scan_generation + 1
              WHERE id = ?1 RETURNING scan_generation",
-            params![root_id],
+            params![directory_id],
             |row| row.get(0),
         )?)
     }
@@ -205,7 +209,7 @@ impl LibraryWriter {
     /// how many of its files changed what the Library holds.
     pub(super) fn write_batch(
         &mut self,
-        root_id: i64,
+        directory_id: i64,
         generation: i64,
         outcomes: &[Outcome],
     ) -> Persisted<u64> {
@@ -213,9 +217,9 @@ impl LibraryWriter {
         let transaction = self
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
-        let root_path: String = transaction.query_row(
+        let directory_path: String = transaction.query_row(
             "SELECT path FROM library_roots WHERE id = ?1",
-            params![root_id],
+            params![directory_id],
             |row| row.get(0),
         )?;
         let mut touched = Touched::default();
@@ -245,7 +249,7 @@ impl LibraryWriter {
                     store_file(
                         &transaction,
                         &mut touched,
-                        (root_id, &root_path),
+                        (directory_id, &directory_path),
                         generation,
                         *known,
                         file,
@@ -262,10 +266,10 @@ impl LibraryWriter {
 
     /// After a complete pass: files not seen this generation are missing (kept, not deleted).
     /// A pass over only some directories (`within`, as `/`-terminated relative prefixes, `""`
-    /// for the whole folder) marks only the files in them. Returns how many files became Missing.
-    pub(super) fn finish_root(
+    /// for the whole directory) marks only the files in them. Returns how many files became Missing.
+    pub(super) fn finish_directory(
         &self,
-        root_id: i64,
+        directory_id: i64,
         generation: i64,
         within: Option<&[String]>,
     ) -> Persisted<u64> {
@@ -276,13 +280,13 @@ impl LibraryWriter {
                 "UPDATE library_files SET availability = ?3
                  WHERE root_id = ?1 AND seen_generation < ?2 AND availability <> ?3
                    AND substr(relative_path, 1, length(?4)) = ?4",
-                params![root_id, generation, Availability::Missing, prefix],
+                params![directory_id, generation, Availability::Missing, prefix],
             )? as u64;
         }
         if within.is_none() {
             self.connection.execute(
                 "UPDATE library_roots SET last_successful_scan_at_ms = ?2 WHERE id = ?1",
-                params![root_id, crate::library::now_ms()],
+                params![directory_id, crate::library::now_ms()],
             )?;
         }
         Ok(gone)
@@ -303,7 +307,7 @@ fn touch(transaction: &Transaction<'_>, file_id: i64, generation: i64) -> Persis
 fn store_file(
     transaction: &Transaction<'_>,
     touched: &mut Touched,
-    (root_id, root_path): (i64, &str),
+    (directory_id, directory_path): (i64, &str),
     generation: i64,
     known: Option<(i64, i64)>,
     file: &DiscoveredFile,
@@ -336,7 +340,7 @@ fn store_file(
         transaction.execute(
             INSERT_FILE,
             params![
-                root_id,
+                directory_id,
                 file.relative,
                 file.file_name,
                 file.extension,
@@ -357,7 +361,7 @@ fn store_file(
             touched,
             file_id,
             revision,
-            (root_id, root_path, file),
+            (directory_id, directory_path, file),
             inspected,
         ),
         Err(Undecodable) => clear_metadata(transaction, touched, file_id, revision, file),
@@ -369,7 +373,7 @@ fn store_inspected(
     touched: &mut Touched,
     file_id: i64,
     revision: i64,
-    (root_id, root_path, file): (i64, &str, &DiscoveredFile),
+    (directory_id, directory_path, file): (i64, &str, &DiscoveredFile),
     inspected: &InspectedFile,
 ) -> Persisted<()> {
     transaction.execute(
@@ -399,8 +403,8 @@ fn store_inspected(
             album: tags.album_sort.as_deref(),
             album_artist: tags.album_artist_sort.as_deref(),
         },
-        &album_edition_of(root_id, &file.relative),
-        root_path,
+        &album_edition_of(directory_id, &file.relative),
+        directory_path,
     );
     touched.stored_track(transaction, track_id)?;
     touched.album(keys.album_id.clone(), &keys.album_directory, &keys.album);

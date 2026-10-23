@@ -113,7 +113,7 @@ export class TrackTableController {
     const row = this.#menuRow;
     if (row === null) return;
     const { actions, playback } = this.#services;
-    actions.run(() => playback.enqueueTrack(row.id, next));
+    actions.run(() => playback.playerEnqueueTrack(row.id, next));
   }
 
   #activate(trackId: TrackId): void {

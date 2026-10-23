@@ -1,6 +1,6 @@
 //! How backend services tell the host that something changed, and what the host sends.
 //!
-//! Services hold a `SharedMessageSink`. They report a state topic, a position, or an occurrence.
+//! Services hold a `SharedMessageListener`. They report a state topic, a position, or an occurrence.
 //! They do not know about Tauri or about each other.
 //!
 //! A state topic carries its whole value. The host reads the value when it sends, so several
@@ -10,20 +10,20 @@
 use std::sync::Arc;
 
 use crate::audio::playback::{
-    PlaybackFailureCode, PlaybackItem, PlaybackPosition, PlaybackQueueSnapshot, PlaybackSnapshot,
+    PlaybackFailureCode, PlaybackItem, PlaybackPosition, PlaybackState, QueueState,
 };
 use crate::audio::waveform::PlaybackWaveform;
-use crate::library::models::LibraryScanSnapshot;
+use crate::library::models::ScanState;
 use crate::settings::Appearance;
 
 /// A value with the revision of its topic. Revisions only grow, per topic.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, specta::Type)]
-pub struct Versioned<T> {
+pub struct Revisioned<T> {
     pub revision: u64,
     pub value: T,
 }
 
-impl<T> Versioned<T> {
+impl<T> Revisioned<T> {
     /// A value that has not changed yet: revision 0.
     pub fn new(value: T) -> Self {
         Self { revision: 0, value }
@@ -71,9 +71,9 @@ pub struct StateMessage {
 #[derive(Debug, Clone, serde::Serialize, specta::Type)]
 #[serde(tag = "topic", content = "value", rename_all = "camelCase")]
 pub enum StateValue {
-    Playback(Box<PlaybackSnapshot>),
-    Queue(PlaybackQueueSnapshot),
-    LibraryScan(LibraryScanSnapshot),
+    Playback(Box<PlaybackState>),
+    Queue(QueueState),
+    LibraryScan(ScanState),
     Waveform(Option<PlaybackWaveform>),
     Appearance(Appearance),
 }
@@ -93,19 +93,19 @@ pub enum Occurrence {
     },
 }
 
-/// The current value of every Backend state topic. `connect` returns it.
+/// The current value of every Backend state topic. `app_connect` returns it.
 #[derive(Debug, Clone, serde::Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct InitialState {
-    pub playback: Versioned<PlaybackSnapshot>,
-    pub queue: Versioned<PlaybackQueueSnapshot>,
-    pub library_scan: Versioned<LibraryScanSnapshot>,
-    pub waveform: Versioned<Option<PlaybackWaveform>>,
-    pub appearance: Versioned<Appearance>,
+    pub playback: Revisioned<PlaybackState>,
+    pub queue: Revisioned<QueueState>,
+    pub library_scan: Revisioned<ScanState>,
+    pub waveform: Revisioned<Option<PlaybackWaveform>>,
+    pub appearance: Revisioned<Appearance>,
 }
 
 /// Receives messages on whichever thread produced them, so it must return quickly.
-pub trait MessageSink: Send + Sync {
+pub trait MessageListener: Send + Sync {
     /// A state topic has a new value. The host reads the latest value when it sends.
     fn state_changed(&self, topic: StateTopic);
     /// The playing position moved.
@@ -114,31 +114,31 @@ pub trait MessageSink: Send + Sync {
     fn occurred(&self, occurrence: Occurrence);
 }
 
-pub type SharedMessageSink = Arc<dyn MessageSink>;
+pub type SharedMessageListener = Arc<dyn MessageListener>;
 
 /// Drops every message, for tests and headless use.
 #[derive(Debug)]
-pub struct NullMessageSink;
+pub struct NullMessageListener;
 
-impl MessageSink for NullMessageSink {
+impl MessageListener for NullMessageListener {
     fn state_changed(&self, _topic: StateTopic) {}
     fn position_changed(&self) {}
     fn occurred(&self, _occurrence: Occurrence) {}
 }
 
-pub fn null_message_sink() -> SharedMessageSink {
-    Arc::new(NullMessageSink)
+pub fn null_message_sink() -> SharedMessageListener {
+    Arc::new(NullMessageListener)
 }
 
 /// A sink bound to one state topic, for code that only ever announces "it changed".
 #[derive(Clone)]
 pub struct Notifier {
-    sink: SharedMessageSink,
+    sink: SharedMessageListener,
     topic: StateTopic,
 }
 
 impl Notifier {
-    pub fn new(sink: SharedMessageSink, topic: StateTopic) -> Self {
+    pub fn new(sink: SharedMessageListener, topic: StateTopic) -> Self {
         Self { sink, topic }
     }
 
@@ -153,7 +153,7 @@ mod tests {
 
     #[test]
     fn an_update_applies_the_change_and_counts_it() {
-        let mut topic = Versioned::new(10);
+        let mut topic = Revisioned::new(10);
         assert_eq!(topic.revision, 0);
         topic.update(|value| *value += 5);
         topic.update(|value| *value += 1);
@@ -181,7 +181,7 @@ pub(crate) mod testing {
     }
 
     impl RecordingMessageSink {
-        pub(crate) fn shared() -> (Arc<Self>, SharedMessageSink) {
+        pub(crate) fn shared() -> (Arc<Self>, SharedMessageListener) {
             let sink = Arc::new(Self::default());
             (Arc::clone(&sink), sink)
         }
@@ -191,7 +191,7 @@ pub(crate) mod testing {
         }
     }
 
-    impl MessageSink for RecordingMessageSink {
+    impl MessageListener for RecordingMessageSink {
         fn state_changed(&self, topic: StateTopic) {
             self.sent.lock().push(Sent::State(topic));
         }

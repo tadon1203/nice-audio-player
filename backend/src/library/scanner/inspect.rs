@@ -6,8 +6,8 @@ use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use super::discover::DiscoveredFile;
-use crate::containment::contain;
-use crate::diagnostics::log_failed;
+use crate::errors::contain;
+use crate::errors::log_failed;
 use crate::library::artwork::{self, StoredArtwork};
 use crate::library::status::{ArtworkStatus, TagStatus};
 use crate::media::{
@@ -56,9 +56,9 @@ impl ArtworkOutcome {
 /// Reads and stores only the artwork, for a file whose earlier attempt to store it failed.
 pub(super) fn read_artwork(path: &Path, data_dir: &Path) -> ArtworkOutcome {
     let read = match contain("library.read_artwork", || read_source_metadata(path)) {
-        Some(Ok(Some(metadata))) => metadata.artwork,
-        Some(Ok(None)) => ArtworkRead::NotPresent,
-        Some(Err(_)) | None => ArtworkRead::Unavailable,
+        Ok(Ok(Some(metadata))) => metadata.artwork,
+        Ok(Ok(None)) => ArtworkRead::NotPresent,
+        Ok(Err(_)) | Err(_) => ArtworkRead::Unavailable,
     };
     ArtworkOutcome::from_read(&read, data_dir)
 }

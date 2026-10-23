@@ -35,7 +35,7 @@ These user-facing robustness behaviors stay:
 
 ## Naming
 
-- Use plain nouns. Do not use these words in a name: `Service`, `Repository`, `Manager`, `Handle`, `Hub`, `Snapshot`, `Summary`, `Center`, `Runner`, `Base`, `Sink`, `Commands`.
+- Use plain nouns that say what the thing is. Do not use words such as `Service`, `Repository`, `Manager`, `Handle`, `Hub`, `Snapshot`, `Summary`, `Center`, `Runner`, `Base`, `Sink`, or `Commands` in a name. Each of them names a role, a pattern, a direction, or a group instead of the thing itself, so the name does not show what the thing is.
 - Use `XxxState` only for Backend state.
 - Use `XxxWorker` only for a thread that owns a command loop.
 - One operation has one name in every layer: a Host command is `<area>_<method>`, a Backend method is `<method>` on the area object, and a Renderer method is `<method>` on the area class.
@@ -72,11 +72,11 @@ The rules below are the ones that lint cannot check.
 - Validate once at the boundary, and pass the validated type inside.
 - Write an error as an enum with `#[derive(thiserror::Error)]` when it carries a cause. Do not use `anyhow`.
 - Map an error cause with `logged`: `.map_err(logged(Code, "area.what"))`. It logs the cause at `warn` and returns the typed code.
-- Drop a `Result` that has no caller with `log_failed(result, "area.what")` (`diagnostics.rs`). It logs an error at `debug` and returns nothing. Do not write `let _ = <Result>`. A `try_send` into a full channel of capacity 1 is not an error, because a wake is already pending.
+- Drop a `Result` that has no caller with `log_failed(result, "area.what")` (`errors.rs`). It logs an error at `debug` and returns nothing. Do not write `let _ = <Result>`. A `try_send` into a full channel of capacity 1 is not an error, because a wake is already pending.
 - A cause with no `Display` (an IPC enum) is logged inline at `warn` with its `Debug` form, as in `library/store/playback.rs`. Code that runs in the audio callback does not log at all.
 - Lock a `Mutex`, `RwLock`, or `Condvar` with `parking_lot`. See [ADR 0010](adr/0010-failures-are-result-bugs-panic.md).
 - Answer a playback request through `respond` (`audio/playback/service.rs`). It sends the reply, and logs at `debug` when the caller has gone.
-- Remove a file on a best-effort basis with `remove_file_best_effort` (`cleanup.rs`). It logs at `debug` every error except `NotFound`.
+- Remove a file on a best-effort basis with `remove_file_best_effort` (`errors.rs`). It logs at `debug` every error except `NotFound`.
 - A thread's `join` returns a panic payload, which has no `Display`. Check `join().is_err()` and log it at `debug`; `log_failed` cannot take it.
 - `as` is allowed for a number. Use `From` or `TryFrom` where the value may not fit, so the conversion cannot silently change it.
 - Use `checked_*` or `saturating_*` for arithmetic that can overflow.

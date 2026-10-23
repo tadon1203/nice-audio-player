@@ -1,6 +1,7 @@
 import {
   albumNotFoundMessage,
   commonErrorMessages,
+  messageForCode,
   type PlaybackError,
   type PlaybackServiceError,
   type PlaybackSourceError,
@@ -34,7 +35,7 @@ export function playbackErrorMessage(error: PlaybackError): string {
   const reply = error.error;
   switch (reply.code) {
     case "common":
-      return commonErrorMessages[reply.error.code];
+      return messageForCode(commonErrorMessages, reply.error.code, "The request did not finish.");
     case "output":
       return PlaybackFailure.message(reply.failure);
     case "source":

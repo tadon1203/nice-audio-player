@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use backend::{
     app::BackendApp,
-    dto::{ArtworkCache, ServedArtwork},
+    app::{ArtworkCache, ServedArtwork},
 };
 use tauri::{
     Manager,

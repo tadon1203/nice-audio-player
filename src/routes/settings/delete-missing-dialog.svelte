@@ -31,7 +31,7 @@
         Delete {CountFormat.number(count)} Missing {count === 1 ? "track" : "tracks"}?
       </AlertDialogTitle>
       <AlertDialogDescription>
-        These tracks' files are gone from your folders.
+        These tracks' files are gone from your directories.
       </AlertDialogDescription>
     </AlertDialogHeader>
     <p class="text-sm leading-5 text-muted-foreground">

@@ -43,7 +43,7 @@ fn a_track_without_a_title_is_named_after_its_file_in_playback_and_in_search() {
 
     let selection = store
         .playback_for_tracks(
-            &track_query(None, LibraryTrackSortKey::Title, ASC),
+            &track_query(None, TrackSortKey::Title, ASC),
             Some(track_id_of(1)),
         )
         .unwrap();
@@ -77,7 +77,7 @@ fn a_track_without_a_title_is_named_after_its_file_in_playback_and_in_search() {
     );
 
     let by_stem = store
-        .catalog_tracks(None, Some("multi.part"), LibraryTrackSortKey::Title, ASC)
+        .catalog_tracks(None, Some("multi.part"), TrackSortKey::Title, ASC)
         .unwrap();
     assert_eq!(
         (by_stem.items.len(), by_stem.total_count.unwrap_or(0)),
@@ -85,7 +85,7 @@ fn a_track_without_a_title_is_named_after_its_file_in_playback_and_in_search() {
     );
     assert_eq!(by_stem.items[0].core.title, "multi.part");
     let by_extension = store
-        .catalog_tracks(None, Some("flac"), LibraryTrackSortKey::Title, ASC)
+        .catalog_tracks(None, Some("flac"), TrackSortKey::Title, ASC)
         .unwrap();
     assert_eq!(
         (
@@ -108,7 +108,7 @@ fn track_playback_follows_the_list_order_and_skips_tracks_that_cannot_play() {
 
     let selection = store
         .playback_for_tracks(
-            &track_query(None, LibraryTrackSortKey::Title, DESC),
+            &track_query(None, TrackSortKey::Title, DESC),
             Some(track_id_of(2)),
         )
         .unwrap();
@@ -129,10 +129,7 @@ fn track_playback_follows_the_list_order_and_skips_tracks_that_cannot_play() {
     );
 
     let filtered = store
-        .playback_for_tracks(
-            &track_query(Some("alp"), LibraryTrackSortKey::Title, ASC),
-            None,
-        )
+        .playback_for_tracks(&track_query(Some("alp"), TrackSortKey::Title, ASC), None)
         .unwrap();
     assert_eq!(filtered.track_ids, [track_id_of(2)]);
     assert_eq!(
@@ -151,7 +148,7 @@ fn track_playback_follows_the_list_order_and_skips_tracks_that_cannot_play() {
     assert_eq!(
         store
             .playback_for_tracks(
-                &track_query(Some("alp"), LibraryTrackSortKey::Title, ASC),
+                &track_query(Some("alp"), TrackSortKey::Title, ASC),
                 Some(track_id_of(1))
             )
             .err(),
@@ -162,11 +159,11 @@ fn track_playback_follows_the_list_order_and_skips_tracks_that_cannot_play() {
     assert_eq!(
         store
             .playback_for_tracks(
-                &track_query(None, LibraryTrackSortKey::Title, ASC),
+                &track_query(None, TrackSortKey::Title, ASC),
                 Some(track_id_of(4))
             )
             .err(),
-        Some(PlaybackLookupError::Common(CommonError::TrackUnavailable))
+        Some(PlaybackLookupError::Common(CommandError::TrackUnavailable))
     );
 }
 
@@ -188,10 +185,10 @@ fn playing_what_the_list_shows_holds_for_every_sort_and_direction() {
     fixture.touch_audio(1..=40);
     fixture.add_all(&seeds);
     for key in [
-        LibraryTrackSortKey::Title,
-        LibraryTrackSortKey::Artist,
-        LibraryTrackSortKey::Album,
-        LibraryTrackSortKey::Duration,
+        TrackSortKey::Title,
+        TrackSortKey::Artist,
+        TrackSortKey::Album,
+        TrackSortKey::Duration,
     ] {
         for direction in [ASC, DESC] {
             let listed: Vec<String> = fixture

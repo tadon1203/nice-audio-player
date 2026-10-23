@@ -21,14 +21,14 @@ use std::time::{Duration, Instant};
 use serde::Serialize;
 
 use super::decoding::{DecodeStep, PcmDecodeError, SeekStep, open_analysis_decoder};
-use crate::cleanup::remove_file_best_effort;
-use crate::containment::contain;
-use crate::diagnostics::log_failed;
+use crate::errors::contain;
+use crate::errors::log_failed;
+use crate::errors::remove_file_best_effort;
 use crate::ids::PlaybackId;
 use crate::library::scanner::identity::content_hash;
 use crate::library::store::PlayableTrack;
 use crate::media::validation::ValidatedAudioFile;
-use crate::messages::{SharedMessageSink, StateTopic, Versioned};
+use crate::messages::{Revisioned, SharedMessageListener, StateTopic};
 use crate::threads::{Cancellation, run_in_background};
 
 pub(crate) const WAVEFORM_BUCKETS: usize = 1000;
@@ -423,7 +423,7 @@ struct Request {
 struct Current {
     playback_id: Option<PlaybackId>,
     file: Option<ValidatedAudioFile>,
-    value: Versioned<Option<PlaybackWaveform>>,
+    value: Revisioned<Option<PlaybackWaveform>>,
 }
 
 impl Default for Current {
@@ -431,7 +431,7 @@ impl Default for Current {
         Self {
             playback_id: None,
             file: None,
-            value: Versioned::new(None),
+            value: Revisioned::new(None),
         }
     }
 }
@@ -441,7 +441,7 @@ struct Shared {
     ready: Mutex<HashMap<PathBuf, (FileStamp, Arc<Waveform>)>>,
     jobs: Mutex<Jobs>,
     wake: Condvar,
-    messages: SharedMessageSink,
+    messages: SharedMessageListener,
     current: Mutex<Current>,
 }
 
@@ -525,7 +525,7 @@ pub(crate) struct Waveforms {
 }
 
 impl Waveforms {
-    pub(crate) fn start(directory: PathBuf, messages: SharedMessageSink) -> Self {
+    pub(crate) fn start(directory: PathBuf, messages: SharedMessageListener) -> Self {
         let cache_directory = directory.clone();
         let shared = Arc::new(Shared {
             directory,
@@ -544,9 +544,19 @@ impl Waveforms {
                     purge_stale_cache(&cache_directory);
                     while let Some((request, cancellation)) = worker.next_job() {
                         // A file that panics the analysis gets no waveform; the worker lives on.
-                        contain("waveform.process", || {
-                            worker.process(&request.file, request.hash.as_deref(), &cancellation);
-                        });
+                        log_failed(
+                            contain(
+                                "waveform.process",
+                                std::panic::AssertUnwindSafe(|| {
+                                    worker.process(
+                                        &request.file,
+                                        request.hash.as_deref(),
+                                        &cancellation,
+                                    );
+                                }),
+                            ),
+                            "waveform.process",
+                        );
                         worker.jobs().running = None;
                     }
                 }),
@@ -556,7 +566,7 @@ impl Waveforms {
     }
 
     /// The Waveform topic: the waveform of the loaded Playback, or `None` while it is analyzed.
-    pub(crate) fn state(&self) -> Versioned<Option<PlaybackWaveform>> {
+    pub(crate) fn state(&self) -> Revisioned<Option<PlaybackWaveform>> {
         self.shared.current().value.clone()
     }
 
@@ -1049,7 +1059,7 @@ mod tests {
         for path in [truncated, garbage] {
             let file = validate_audio_file(&path).unwrap();
             let outcome = contain("test", || analyze(&file, &Cancellation::default(), 1));
-            assert!(outcome.is_some(), "{path:?} panicked the analysis");
+            assert!(outcome.is_ok(), "{path:?} panicked the analysis");
         }
     }
 }

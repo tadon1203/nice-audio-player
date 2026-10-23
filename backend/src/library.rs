@@ -1,20 +1,20 @@
-//! The Library: the indexed set of tracks from the registered music folders.
+//! The Library: the indexed set of tracks from the registered music directories.
 //!
 //! `Library::open` yields a working Library or the reason it is unavailable, and the app holds
 //! that result. A working Library has two sides that meet only in the database: the read side
-//! (`store`: catalog, playback selections, track lookups) and the write side (`sync`: folders,
+//! (`store`: catalog, playback selections, track lookups) and the write side (`sync`: directories,
 //! watchers, scanner), reached through the methods below.
 
 pub(crate) mod accent;
 pub(crate) mod artwork;
 pub(crate) mod database;
+pub(crate) mod directories;
 pub(crate) mod error;
 pub(crate) mod keys;
 pub(crate) mod location;
 pub(crate) mod maintenance;
 pub(crate) mod migrations;
 pub(crate) mod models;
-pub(crate) mod roots;
 pub(crate) mod scanner;
 pub(crate) mod status;
 pub(crate) mod store;
@@ -25,12 +25,12 @@ mod tests;
 pub(crate) mod text;
 pub(crate) mod watcher;
 
-use crate::ids::{ArtworkHash, FolderId};
-use crate::messages::{Notifier, SharedMessageSink, StateTopic, Versioned};
+use crate::ids::{ArtworkHash, DirectoryId};
+use crate::messages::{Notifier, Revisioned, SharedMessageListener, StateTopic};
 use database::{Database, DatabaseError};
 use error::LibraryCommandError;
 use log::error;
-use models::{LibraryRoot, LibraryScanSnapshot, LibraryUnavailableReason};
+use models::{LibraryDirectory, LibraryUnavailableReason, ScanState};
 use parking_lot::Mutex;
 use std::{
     path::Path,
@@ -45,15 +45,15 @@ pub(crate) struct Library {
     database: Database,
     store: LibraryStore,
     sync: Arc<LibrarySync>,
-    scan: Arc<Mutex<Versioned<LibraryScanSnapshot>>>,
+    scan: Arc<Mutex<Revisioned<ScanState>>>,
 }
 
 impl Library {
     /// Opens the Library in `directory`: migrates its database, then starts watching and scanning
-    /// the registered folders.
+    /// the registered directories.
     pub(crate) fn open(
         directory: &Path,
-        messages: SharedMessageSink,
+        messages: SharedMessageListener,
     ) -> Result<Self, LibraryUnavailableReason> {
         database::apply_requested_reset(directory);
         let database = Database::initialize(directory).map_err(|error| {
@@ -68,7 +68,7 @@ impl Library {
             error!("library.database.unavailable reason={reason:?}");
             reason
         })?;
-        let scan = Arc::new(Mutex::new(Versioned::new(LibraryScanSnapshot::idle())));
+        let scan = Arc::new(Mutex::new(Revisioned::new(ScanState::idle())));
         let sync = LibrarySync::start(
             database.clone(),
             Arc::clone(&scan),
@@ -88,28 +88,31 @@ impl Library {
     }
 
     /// The scan state with the revision of its topic.
-    pub(crate) fn scan_state(&self) -> Versioned<LibraryScanSnapshot> {
+    pub(crate) fn scan_state(&self) -> Revisioned<ScanState> {
         self.scan.lock().clone()
     }
 
-    pub(crate) fn roots(&self) -> Result<Vec<LibraryRoot>, LibraryCommandError> {
-        Ok(self.store.roots()?)
+    pub(crate) fn directories(&self) -> Result<Vec<LibraryDirectory>, LibraryCommandError> {
+        Ok(self.store.directories()?)
     }
 
-    pub(crate) fn register_root(&self, path: String) -> Result<LibraryRoot, LibraryCommandError> {
-        self.sync.register_root(path)
-    }
-
-    pub(crate) fn set_root_enabled(
+    pub(crate) fn register_directory(
         &self,
-        id: FolderId,
-        enabled: bool,
-    ) -> Result<LibraryRoot, LibraryCommandError> {
-        self.sync.set_root_enabled(id, enabled)
+        path: String,
+    ) -> Result<LibraryDirectory, LibraryCommandError> {
+        self.sync.register_directory(path)
     }
 
-    pub(crate) fn remove_root(&self, id: FolderId) -> Result<(), LibraryCommandError> {
-        self.sync.remove_root(id)
+    pub(crate) fn set_directory_enabled(
+        &self,
+        id: DirectoryId,
+        enabled: bool,
+    ) -> Result<LibraryDirectory, LibraryCommandError> {
+        self.sync.set_directory_enabled(id, enabled)
+    }
+
+    pub(crate) fn remove_directory(&self, id: DirectoryId) -> Result<(), LibraryCommandError> {
+        self.sync.remove_directory(id)
     }
 
     /// Deletes every Missing track from the Library. Source files are never touched.

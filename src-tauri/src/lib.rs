@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use backend::app::BackendApp;
-use backend::diagnostics::{log_failed, logged};
+use backend::errors::{log_failed, logged};
 use session::Subscriber;
 use tauri::Manager;
 

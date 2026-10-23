@@ -51,7 +51,7 @@
           <QueueRow
             {item}
             tone="past"
-            onPlay={() => actions.run(() => playback.playQueueItem(item.queueItemId))}
+            onPlay={() => actions.run(() => playback.playerPlayQueueItem(item.queueItemId))}
           />
         {/each}
         {#if queue?.current}

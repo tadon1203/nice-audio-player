@@ -1,12 +1,12 @@
 <script lang="ts">
-  import type { LibraryScanSnapshot } from "#lib/native";
+  import type { ScanState } from "#lib/native";
   import RollingNumber from "#lib/ui/rolling-number/rolling-number.svelte";
   import { Progress } from "#lib/ui/shadcn/progress/index.js";
   import { CountFormat } from "#lib/utils/count-format";
   import { ScanStatus } from "./scan-status";
 
-  /** The running scan's counters, progress bar and current folder. */
-  let { scan }: { scan: LibraryScanSnapshot } = $props();
+  /** The running scan's counters, progress bar and current directory. */
+  let { scan }: { scan: ScanState } = $props();
 
   const counts = $derived([
     { value: scan.discoveredCount, label: "discovered" },
@@ -29,7 +29,7 @@
     {/each}
   </div>
   <Progress class="mt-3" value={ScanStatus.share(scan)} aria-label="Scan progress" />
-  {#if scan.currentRoot}
-    <p class="mt-2 truncate text-sm">Current folder: {scan.currentRoot.path}</p>
+  {#if scan.currentDirectory}
+    <p class="mt-2 truncate text-sm">Current directory: {scan.currentDirectory.path}</p>
   {/if}
 </div>

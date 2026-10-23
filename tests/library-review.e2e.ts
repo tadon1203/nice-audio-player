@@ -1,5 +1,5 @@
-import type { LibraryRoot, LibraryScanState } from "#lib/native";
-import { pageOf, scanSnapshot, testRoot } from "./fixtures/data";
+import type { LibraryDirectory, ScanStatus } from "#lib/native";
+import { pageOf, scanSnapshot, testDirectory } from "./fixtures/data";
 import type { Native } from "./fixtures/native-api";
 import { expect, test } from "./fixtures/test";
 
@@ -9,7 +9,7 @@ let scansEnded = 0;
  * The scan is in `state`: what the renderer reads now, and the event that announces it. Every
  * scan that ends has ended one more than the last and changed something, as a real one would.
  */
-async function publishScan(native: Native, state: LibraryScanState): Promise<void> {
+async function publishScan(native: Native, state: ScanStatus): Promise<void> {
   if (state !== "running" && state !== "idle") scansEnded += 1;
   const snapshot = {
     ...scanSnapshot(state),
@@ -25,7 +25,7 @@ test("keeps each library filter and sort when switching peers and visiting Setti
   native,
   library,
 }) => {
-  native.respond("listLibraryAlbums", ({ request: { search } }) =>
+  native.respond("libraryListAlbums", ({ request: { search } }) =>
     pageOf(search === "Test album" ? [library.albums[0]!] : library.albums, null, 100),
   );
   await page.goto("/library/albums");
@@ -122,7 +122,7 @@ test("shows an album's title before its details arrive, opened from a tile", asy
 }) => {
   let release = (): void => {};
   const details = new Promise<void>((resolve) => (release = resolve));
-  native.respond("getLibraryAlbum", async () => {
+  native.respond("libraryAlbum", async () => {
     await details;
     return library.albumDetails;
   });
@@ -194,33 +194,38 @@ test("restores the virtual track container after switching library presentations
     .toBeGreaterThan(1_000);
 });
 
-test("manages folders and shows scan progress and terminal states", async ({ page, native }) => {
-  const added: LibraryRoot = { ...testRoot, id: "root-2", path: "C:/More Music" };
-  let roots = [testRoot];
-  native.respond("listLibraryRoots", () => roots);
-  native.respond("registerLibraryRoot", () => {
-    roots = [...roots, added];
+test("manages directories and shows scan progress and terminal states", async ({
+  page,
+  native,
+}) => {
+  const added: LibraryDirectory = { ...testDirectory, id: 2, path: "C:/More Music" };
+  let directories = [testDirectory];
+  native.respond("libraryListDirectories", () => directories);
+  native.respond("libraryAddDirectory", () => {
+    directories = [...directories, added];
     return added;
   });
-  native.respond("setLibraryRootEnabled", ({ id, enabled }) => {
-    roots = roots.map((root) => (root.id === id ? { ...root, enabled } : root));
-    return roots.find((root) => root.id === id)!;
+  native.respond("librarySetDirectoryEnabled", ({ id, enabled }) => {
+    directories = directories.map((directory) =>
+      directory.id === id ? { ...directory, enabled } : directory,
+    );
+    return directories.find((directory) => directory.id === id)!;
   });
-  native.respond("removeLibraryRoot", ({ id }) => {
-    roots = roots.filter((root) => root.id !== id);
+  native.respond("libraryRemoveDirectory", ({ id }) => {
+    directories = directories.filter((directory) => directory.id !== id);
     return null;
   });
-  native.respond("startLibraryScan", async () => {
+  native.respond("libraryStartScan", async () => {
     await publishScan(native, "running");
     return null;
   });
-  native.respond("cancelLibraryScan", async () => {
+  native.respond("libraryCancelScan", async () => {
     await publishScan(native, "cancelled");
     return null;
   });
 
   await page.goto("/settings");
-  await page.getByRole("button", { name: "Add folder" }).click();
+  await page.getByRole("button", { name: "Add directory" }).click();
   await expect(page.getByTitle("C:/More Music", { exact: true })).toBeVisible();
 
   const include = page.getByRole("checkbox", { name: /Include C:\/Music in library/ }).first();
@@ -241,7 +246,7 @@ test("manages folders and shows scan progress and terminal states", async ({ pag
   await publishScan(native, "completed");
   await expect(page.getByText(/20 discovered, 20 inspected, 18 indexed, 0 failed/)).toBeVisible();
   await publishScan(native, "failed");
-  await expect(page.getByRole("alert")).toContainText("A library folder could not be read.");
+  await expect(page.getByRole("alert")).toContainText("A library directory could not be read.");
 
   await page.getByRole("button", { name: "Remove C:/More Music from library" }).click();
   const dialog = page.getByRole("alertdialog");
@@ -253,22 +258,24 @@ test("manages folders and shows scan progress and terminal states", async ({ pag
   await expect(page.getByTitle("C:/More Music", { exact: true })).toHaveCount(0);
 });
 
-test("invalidates mounted library queries after terminal scan events and root changes", async ({
+test("invalidates mounted library queries after terminal scan events and directory changes", async ({
   page,
   native,
   library,
 }) => {
-  let roots = [testRoot];
-  native.respond("listLibraryRoots", () => roots);
-  native.respond("setLibraryRootEnabled", ({ id, enabled }) => {
-    roots = roots.map((root) => (root.id === id ? { ...root, enabled } : root));
-    return roots.find((root) => root.id === id)!;
+  let directories = [testDirectory];
+  native.respond("libraryListDirectories", () => directories);
+  native.respond("librarySetDirectoryEnabled", ({ id, enabled }) => {
+    directories = directories.map((directory) =>
+      directory.id === id ? { ...directory, enabled } : directory,
+    );
+    return directories.find((directory) => directory.id === id)!;
   });
-  native.respond("listLibraryTracks", ({ request: { cursor } }) =>
-    pageOf(roots.some((root) => root.enabled) ? library.tracks : [], cursor),
+  native.respond("libraryListTracks", ({ request: { cursor } }) =>
+    pageOf(directories.some((directory) => directory.enabled) ? library.tracks : [], cursor),
   );
   await page.goto("/library/tracks");
-  const getCount = (): number => native.callsTo("listLibraryTracks").length;
+  const getCount = (): number => native.callsTo("libraryListTracks").length;
   await expect.poll(getCount).toBeGreaterThan(0);
 
   let requestCount = getCount();
@@ -285,9 +292,11 @@ test("invalidates mounted library queries after terminal scan events and root ch
   await page.getByRole("link", { name: "Settings", exact: true }).click();
   // The checkbox is controlled by the saved setting, so it flips after the round trip; assert on
   // that instead of `uncheck()`, which expects the state to change synchronously.
-  const includeRoot = page.getByRole("checkbox", { name: /Include C:\/Music in library/ }).first();
-  await includeRoot.click();
-  await expect(includeRoot).not.toBeChecked();
+  const includeDirectory = page
+    .getByRole("checkbox", { name: /Include C:\/Music in library/ })
+    .first();
+  await includeDirectory.click();
+  await expect(includeDirectory).not.toBeChecked();
   await page.getByRole("link", { name: "Tracks", exact: true }).click();
   await expect.poll(getCount).toBeGreaterThan(requestCount);
   await expect(page.getByText("0 tracks", { exact: true })).toBeVisible();

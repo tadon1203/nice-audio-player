@@ -1,4 +1,4 @@
-use crate::ids::{AlbumId, ArtistId, FolderId, TrackId};
+use crate::ids::{AlbumId, ArtistId, DirectoryId, TrackId};
 use serde::Deserialize;
 use serde::Serialize;
 #[derive(Debug, Clone, Serialize, specta::Type, thiserror::Error)]
@@ -21,8 +21,8 @@ pub enum LibraryStatus {
 }
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
-pub struct LibraryRoot {
-    pub id: FolderId,
+pub struct LibraryDirectory {
+    pub id: DirectoryId,
     pub path: String,
     pub enabled: bool,
     pub scan_generation: u64,
@@ -43,33 +43,33 @@ pub enum TrackState {
 }
 #[derive(Debug, Clone, Copy, Serialize, specta::Type, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub enum LibrarySortDirection {
+pub enum SortDirection {
     Ascending,
     Descending,
 }
 #[derive(Debug, Clone, Copy, Serialize, specta::Type, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub enum LibraryAlbumSortKey {
+pub enum AlbumSortKey {
     Title,
     Artist,
     Year,
 }
 #[derive(Debug, Clone, Copy, Serialize, specta::Type, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub enum LibraryAlbumArtistSortKey {
+pub enum ArtistSortKey {
     Artist,
     AlbumCount,
     TrackCount,
 }
 #[derive(Debug, Clone, Copy, Serialize, specta::Type, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub enum LibraryArtistAlbumSortKey {
+pub enum ArtistAlbumSortKey {
     Year,
     Title,
 }
 #[derive(Debug, Clone, Copy, Serialize, specta::Type, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub enum LibraryTrackSortKey {
+pub enum TrackSortKey {
     Title,
     Artist,
     Album,
@@ -97,7 +97,7 @@ pub struct TrackCore {
 }
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
-pub struct LibraryTrackSummary {
+pub struct TrackRow {
     #[serde(flatten)]
     pub core: TrackCore,
     pub state: TrackState,
@@ -110,7 +110,7 @@ pub struct LibraryTrackSummary {
 /// The tags, audio format and location of one track, as the Properties view lists them.
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
-pub struct LibraryTrackProperties {
+pub struct TrackProperties {
     pub id: TrackId,
     pub path: String,
     pub file_name: String,
@@ -136,7 +136,7 @@ pub struct LibraryTrackProperties {
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LibraryTrackPage {
-    pub items: Vec<LibraryTrackSummary>,
+    pub items: Vec<TrackRow>,
     /// How many rows the whole list has; only the first page (no cursor) says.
     pub total_count: Option<u64>,
     pub next_cursor: Option<String>,
@@ -145,7 +145,7 @@ pub struct LibraryTrackPage {
 /// are. Buckets come in the list's own order.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
-pub struct LibraryIndexBucket {
+pub struct ScrollIndexBucket {
     pub label: String,
     pub count: u64,
 }
@@ -157,7 +157,7 @@ pub struct ArtistRef {
 }
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
-pub struct LibraryAlbumSummary {
+pub struct AlbumRow {
     pub id: AlbumId,
     pub title: String,
     pub album_artist: ArtistRef,
@@ -167,14 +167,14 @@ pub struct LibraryAlbumSummary {
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LibraryAlbumPage {
-    pub items: Vec<LibraryAlbumSummary>,
+    pub items: Vec<AlbumRow>,
     /// How many rows the whole list has; only the first page (no cursor) says.
     pub total_count: Option<u64>,
     pub next_cursor: Option<String>,
 }
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
-pub struct LibraryAlbumArtistSummary {
+pub struct ArtistRow {
     pub id: ArtistId,
     pub name: String,
     pub artwork: Option<ArtworkRef>,
@@ -186,24 +186,24 @@ pub struct LibraryAlbumArtistSummary {
 #[serde(rename_all = "camelCase")]
 pub struct TrackQuery {
     pub search: Option<String>,
-    pub sort_key: LibraryTrackSortKey,
-    pub sort_direction: LibrarySortDirection,
+    pub sort_key: TrackSortKey,
+    pub sort_direction: SortDirection,
 }
 /// How the Albums list is filtered and sorted.
 #[derive(Debug, Clone, serde::Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct AlbumQuery {
     pub search: Option<String>,
-    pub sort_key: LibraryAlbumSortKey,
-    pub sort_direction: LibrarySortDirection,
+    pub sort_key: AlbumSortKey,
+    pub sort_direction: SortDirection,
 }
 /// How the Album Artists list is filtered and sorted.
 #[derive(Debug, Clone, serde::Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct AlbumArtistQuery {
     pub search: Option<String>,
-    pub sort_key: LibraryAlbumArtistSortKey,
-    pub sort_direction: LibrarySortDirection,
+    pub sort_key: ArtistSortKey,
+    pub sort_direction: SortDirection,
 }
 /// A page of the Tracks list. With no `cursor` it starts after the first `skip` rows, which is
 /// how the scroll index jumps to a letter without paging through what precedes it.
@@ -239,8 +239,8 @@ pub struct AlbumArtistListRequest {
 pub struct ArtistAlbumsRequest {
     pub artist_id: ArtistId,
     pub cursor: Option<String>,
-    pub sort_key: LibraryArtistAlbumSortKey,
-    pub sort_direction: LibrarySortDirection,
+    pub sort_key: ArtistAlbumSortKey,
+    pub sort_direction: SortDirection,
 }
 /// The tracks of one album, by its ID (see `ids.rs`), from a page cursor.
 #[derive(Debug, Clone, serde::Deserialize, specta::Type)]
@@ -252,15 +252,15 @@ pub struct AlbumTracksRequest {
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LibraryAlbumArtistPage {
-    pub items: Vec<LibraryAlbumArtistSummary>,
+    pub items: Vec<ArtistRow>,
     /// How many rows the whole list has; only the first page (no cursor) says.
     pub total_count: Option<u64>,
     pub next_cursor: Option<String>,
 }
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
-pub struct LibraryAlbumDetails {
-    pub summary: LibraryAlbumSummary,
+pub struct AlbumDetails {
+    pub summary: AlbumRow,
     pub date: Option<String>,
     pub track_count: u64,
     pub duration_ms: Option<u64>,
@@ -268,7 +268,7 @@ pub struct LibraryAlbumDetails {
 }
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
-pub struct LibraryAlbumTrackSummary {
+pub struct AlbumTrackRow {
     #[serde(flatten)]
     pub core: TrackCore,
     pub state: TrackState,
@@ -302,25 +302,25 @@ pub struct NowPlayingTrack {
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LibraryAlbumTrackPage {
-    pub items: Vec<LibraryAlbumTrackSummary>,
+    pub items: Vec<AlbumTrackRow>,
     /// How many rows the whole list has; only the first page (no cursor) says.
     pub total_count: Option<u64>,
     pub next_cursor: Option<String>,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
-pub enum LibraryScanState {
+pub enum ScanStatus {
     Idle,
     Running,
     Completed,
     Cancelled,
     Failed,
 }
-impl LibraryScanSnapshot {
+impl ScanState {
     pub fn idle() -> Self {
         Self {
-            state: LibraryScanState::Idle,
-            current_root: None,
+            state: ScanStatus::Idle,
+            current_directory: None,
             expected_count: 0,
             discovered_count: 0,
             inspected_count: 0,
@@ -338,17 +338,17 @@ impl LibraryScanSnapshot {
 #[serde(rename_all = "camelCase")]
 pub enum ScanFailure {
     PersistenceFailed,
-    RootTraversalFailed,
+    DirectoryTraversalFailed,
     /// The scan thread died unexpectedly.
     Panicked,
 }
 
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
-pub struct LibraryScanSnapshot {
-    pub state: LibraryScanState,
-    pub current_root: Option<LibraryRoot>,
-    /// How many files the previous scans left in the scanned folders: what a rescan can expect
+pub struct ScanState {
+    pub state: ScanStatus,
+    pub current_directory: Option<LibraryDirectory>,
+    /// How many files the previous scans left in the scanned directories: what a rescan can expect
     /// to find, so its progress can be shown as a share. 0 when there is no such history.
     pub expected_count: u64,
     pub discovered_count: u64,

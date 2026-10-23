@@ -1,4 +1,4 @@
-import type { ArtworkRef, LibraryAlbumSummary } from "#lib/native";
+import type { ArtworkRef, AlbumRow } from "#lib/native";
 import { testAlbum, testLibrary } from "./fixtures/data";
 import { expect, test } from "./fixtures/test";
 
@@ -25,7 +25,7 @@ const printings = [
   },
 ];
 
-const albums: LibraryAlbumSummary[] = printings.map(({ id, artwork }) => ({
+const albums: AlbumRow[] = printings.map(({ id, artwork }) => ({
   ...testAlbum,
   id,
   artwork,
@@ -46,7 +46,7 @@ test("an album opened from its Album Artist page keeps that artist through a rel
   await expect(page.getByRole("heading", { name: "Test artist" })).toBeVisible();
 });
 
-test("two albums with one title and Album Artist in two folders each open their own page", async ({
+test("two albums with one title and Album Artist in two directories each open their own page", async ({
   page,
   native,
 }) => {
@@ -59,16 +59,16 @@ test("two albums with one title and Album Artist in two folders each open their 
   const printingOf = (albumId: string): number =>
     printings.findIndex((entry) => entry.id === albumId);
 
-  native.respond("listLibraryAlbums", () => ({
+  native.respond("libraryListAlbums", () => ({
     items: albums,
     totalCount: albums.length,
     nextCursor: null,
   }));
-  native.respond("getLibraryAlbum", ({ albumId }) => ({
+  native.respond("libraryAlbum", ({ albumId }) => ({
     ...base.albumDetails,
     summary: albums[printingOf(albumId)]!,
   }));
-  native.respond("listLibraryAlbumTracks", ({ request }) => ({
+  native.respond("libraryListAlbumTracks", ({ request }) => ({
     ...base.albumTracks,
     items: [
       { ...base.albumTracks.items[0]!, title: printings[printingOf(request.albumId)]!.track },

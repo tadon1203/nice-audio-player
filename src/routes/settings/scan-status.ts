@@ -1,4 +1,4 @@
-import type { LibraryScanState } from "#lib/native";
+import type { ScanStatus as NativeScanStatus } from "#lib/native";
 
 /** The words and the share of a library scan that the settings screen shows. */
 export class ScanStatus {
@@ -17,7 +17,7 @@ export class ScanStatus {
     return scan.inspectedCount === 0 ? 0 : null;
   }
 
-  public static label(state: LibraryScanState | undefined): string {
+  public static label(state: NativeScanStatus | undefined): string {
     switch (state) {
       case "running":
         return "Scanning";

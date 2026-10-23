@@ -1,5 +1,5 @@
 import type { CreateInfiniteQueryOptions, InfiniteData } from "@tanstack/svelte-query";
-import type { LibraryIndexBucket, LibraryStatus } from "#lib/native";
+import type { ScrollIndexBucket, LibraryStatus } from "#lib/native";
 import {
   type CatalogRepository,
   type LibraryCatalogItem,
@@ -39,7 +39,7 @@ export class LibraryCatalog<TRequest extends LibraryCatalogRequest> {
   readonly #request: () => TRequest;
   readonly #status: QueryResult<LibraryStatus>;
   readonly #pages: PagedCollection<Page<LibraryCatalogItem<TRequest["presentation"]>>>;
-  readonly #index: QueryResult<LibraryIndexBucket[]>;
+  readonly #index: QueryResult<ScrollIndexBucket[]>;
   // Both start unset: until the debounce settles, the live request is the one in use.
   #settled = $state.raw<SettledFilter | null>(null);
   #shown = $state.raw<TRequest | null>(null);
@@ -94,8 +94,8 @@ export class LibraryCatalog<TRequest extends LibraryCatalogRequest> {
     this.#index = new QueryResult(() => ({
       ...catalog.indexOptions(this.#queryRequest, this.#ready),
       placeholderData: (
-        previous: LibraryIndexBucket[] | undefined,
-      ): LibraryIndexBucket[] | undefined => previous,
+        previous: ScrollIndexBucket[] | undefined,
+      ): ScrollIndexBucket[] | undefined => previous,
     }));
 
     $effect(() => {
@@ -150,7 +150,7 @@ export class LibraryCatalog<TRequest extends LibraryCatalogRequest> {
   }
 
   /** The list's scroll index: buckets of names in list order; empty when the sort has none. */
-  public get index(): readonly LibraryIndexBucket[] {
+  public get index(): readonly ScrollIndexBucket[] {
     return this.#index.data ?? [];
   }
 

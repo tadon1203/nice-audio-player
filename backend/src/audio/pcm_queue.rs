@@ -10,15 +10,13 @@ use std::sync::{
     mpsc::{self, Receiver, SyncSender, TrySendError},
 };
 
-use crate::slices::{head, tail_from};
-
 use ringbuf::{
     HeapRb,
     traits::{Consumer, Observer, Producer, Split},
 };
 
 use super::pcm::ChannelCount;
-use crate::diagnostics::log_failed;
+use crate::errors::log_failed;
 
 /// The consumer wakes a waiting producer when occupancy falls below this fraction (1/2).
 const WAKE_NUMERATOR: usize = 1;
@@ -113,7 +111,8 @@ impl PcmProducer {
         let complete = samples.len() - samples.len() % self.channel_count;
         let writable = self.producer.vacant_len().min(complete);
         let writable = writable - writable % self.channel_count;
-        self.producer.push_slice(head(samples, writable))
+        self.producer
+            .push_slice(&samples[..writable.min(samples.len())])
     }
 
     /// Writes every sample, waiting for the consumer to make room. `after_push` runs after each
@@ -129,7 +128,7 @@ impl PcmProducer {
             if is_cancelled() {
                 return Err(WaitCancelled);
             }
-            let pushed = self.push_samples(tail_from(samples, offset));
+            let pushed = self.push_samples(&samples[offset.min(samples.len())..]);
             offset += pushed;
             after_push(self.queued_frames());
             if pushed == 0 && self.room.recv().is_err() {

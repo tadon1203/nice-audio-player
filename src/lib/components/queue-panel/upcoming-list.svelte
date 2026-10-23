@@ -26,7 +26,7 @@
   const upcomingCount = $derived(playback.queue?.upcomingCount ?? 0);
 
   const queueDrag = new QueueDrag({
-    onMove: (id, to): void => actions.run(() => playback.moveQueueItem(id, to)),
+    onMove: (id, to): void => actions.run(() => playback.playerMoveQueueItem(id, to)),
     rowHeight: QUEUE_ROW_PX,
     count: (): number => upcomingCount,
   });
@@ -97,12 +97,13 @@
           tone="upcoming"
           dragHandlers={queueDrag.handlersFor(item.queueItemId, index)}
           onMoveEarlier={() =>
-            actions.run(() => playback.moveQueueItem(item.queueItemId, index - 1))}
-          onMoveLater={() => actions.run(() => playback.moveQueueItem(item.queueItemId, index + 1))}
+            actions.run(() => playback.playerMoveQueueItem(item.queueItemId, index - 1))}
+          onMoveLater={() =>
+            actions.run(() => playback.playerMoveQueueItem(item.queueItemId, index + 1))}
           canMoveEarlier={index > 0}
           canMoveLater={index < upcomingCount - 1}
-          onPlay={() => actions.run(() => playback.playQueueItem(item.queueItemId))}
-          onRemove={() => actions.run(() => playback.removeQueueItem(item.queueItemId))}
+          onPlay={() => actions.run(() => playback.playerPlayQueueItem(item.queueItemId))}
+          onRemove={() => actions.run(() => playback.playerRemoveQueueItem(item.queueItemId))}
         />
       {/if}
     </li>

@@ -18,9 +18,12 @@ const row: TrackTableRow = {
 function fakeServices(
   status: "stopped" | "paused" = "stopped",
   activeTrackId: TrackId | null = null,
-): { services: AppServices; calls: Record<"enqueueTrack" | "pause" | "resume" | "reveal", Mock> } {
+): {
+  services: AppServices;
+  calls: Record<"playerEnqueueTrack" | "pause" | "resume" | "reveal", Mock>;
+} {
   const calls = {
-    enqueueTrack: vi.fn(async (_id: TrackId, _next: boolean) => {}),
+    playerEnqueueTrack: vi.fn(async (_id: TrackId, _next: boolean) => {}),
     pause: vi.fn(async () => {}),
     resume: vi.fn(async () => {}),
     reveal: vi.fn(async (_id: TrackId) => {}),
@@ -30,7 +33,7 @@ function fakeServices(
     playback: {
       activeTrackId,
       status,
-      enqueueTrack: calls.enqueueTrack,
+      playerEnqueueTrack: calls.playerEnqueueTrack,
       pause: calls.pause,
       resume: calls.resume,
     },
@@ -125,8 +128,8 @@ describe("TrackTableController", () => {
 
     controller.playNext();
     controller.addToQueue();
-    expect(calls.enqueueTrack).toHaveBeenNthCalledWith(1, row.id, true);
-    expect(calls.enqueueTrack).toHaveBeenNthCalledWith(2, row.id, false);
+    expect(calls.playerEnqueueTrack).toHaveBeenNthCalledWith(1, row.id, true);
+    expect(calls.playerEnqueueTrack).toHaveBeenNthCalledWith(2, row.id, false);
     tr.remove();
   });
 });

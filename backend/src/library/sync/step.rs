@@ -4,9 +4,9 @@
 //! reads no clock, touches no disk and starts no thread, so every scheduling rule is tested here
 //! with made-up instants; the actor in `mod.rs` only feeds it inputs and executes its effects.
 //!
-//! The rules: a change in a watched folder starts a scan after the folder has been quiet for
+//! The rules: a change in a watched directory starts a scan after the directory has been quiet for
 //! `DEBOUNCE`; cancelling drops pending automatic work; the artwork garbage collection runs when
-//! nothing else is pending; a folder whose watcher cannot attach is retried.
+//! nothing else is pending; a directory whose watcher cannot attach is retried.
 
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -14,30 +14,33 @@ use std::{
     time::{Duration, Instant},
 };
 
-pub(super) type RootNumber = i64;
+pub(super) type DirectoryNumber = i64;
 
-/// How long a folder must be quiet after a change before it is scanned, so copying an album
+/// How long a directory must be quiet after a change before it is scanned, so copying an album
 /// starts one scan and not one per file.
 pub(super) const DEBOUNCE: Duration = Duration::from_millis(500);
-/// How long after start-up the folders are scanned, to let the window come up first.
+/// How long after start-up the directories are scanned, to let the window come up first.
 pub(super) const STARTUP_DELAY: Duration = Duration::from_millis(500);
 pub(super) const WATCH_RETRY: Duration = Duration::from_secs(10);
 
-/// What a scan of one folder covers: all of it, or only the directories where something changed.
+/// What a scan of one directory covers: all of it, or only the directories where something changed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct ScanTarget {
-    pub root: RootNumber,
-    /// `None` walks the whole folder.
+    pub directory: DirectoryNumber,
+    /// `None` walks the whole directory.
     pub dirs: Option<Vec<PathBuf>>,
 }
 
 impl ScanTarget {
-    pub(super) fn whole(root: RootNumber) -> Self {
-        Self { root, dirs: None }
+    pub(super) fn whole(directory: DirectoryNumber) -> Self {
+        Self {
+            directory,
+            dirs: None,
+        }
     }
 }
 
-/// What is waiting to be scanned in one folder.
+/// What is waiting to be scanned in one directory.
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Dirty {
     Everything,
@@ -70,34 +73,34 @@ pub(super) enum ScanOutcome {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum Input {
-    /// The actor started with these folders enabled.
+    /// The actor started with these directories enabled.
     Started {
-        enabled: Vec<RootNumber>,
+        enabled: Vec<DirectoryNumber>,
     },
-    Registered(RootNumber),
-    Enabled(RootNumber),
-    Disabled(RootNumber),
-    Removed(RootNumber),
+    Registered(DirectoryNumber),
+    Enabled(DirectoryNumber),
+    Disabled(DirectoryNumber),
+    Removed(DirectoryNumber),
     /// The listener deleted the Missing tracks; their artwork is nobody's now.
     MissingDeleted,
-    /// The listener started a scan of these folders.
+    /// The listener started a scan of these directories.
     ScanRequested {
-        roots: Vec<RootNumber>,
+        directories: Vec<DirectoryNumber>,
     },
     CancelRequested,
-    /// A watcher saw something change in this folder, somewhere it could not say.
-    FolderChanged(RootNumber),
-    /// A watcher saw changes at these paths (files or directories) in this folder.
+    /// A watcher saw something change in this directory, somewhere it could not say.
+    DirectoryChanged(DirectoryNumber),
+    /// A watcher saw changes at these paths (files or directories) in this directory.
     PathsChanged {
-        root: RootNumber,
+        directory: DirectoryNumber,
         paths: Vec<PathBuf>,
     },
-    Attached(RootNumber),
-    AttachFailed(RootNumber),
+    Attached(DirectoryNumber),
+    AttachFailed(DirectoryNumber),
     ScanFinished(ScanOutcome),
-    /// The artwork garbage collection found these folders' artwork missing and wants them rescanned.
+    /// The artwork garbage collection found these directories' artwork missing and wants them rescanned.
     GcFinished {
-        rescan: Vec<RootNumber>,
+        rescan: Vec<DirectoryNumber>,
     },
     /// Time passed. Carries no news: the state reacts to deadlines it reaches.
     Tick,
@@ -108,16 +111,16 @@ pub(super) enum Effect {
     StartScan(Vec<ScanTarget>),
     CancelScan,
     RunGc,
-    Attach(RootNumber),
-    Detach(RootNumber),
+    Attach(DirectoryNumber),
+    Detach(DirectoryNumber),
 }
 
 pub(super) struct State {
-    dirty: BTreeMap<RootNumber, Dirty>,
+    dirty: BTreeMap<DirectoryNumber, Dirty>,
     debounce: Option<Instant>,
     gc_pending: bool,
     phase: Phase,
-    watches: BTreeMap<RootNumber, Watch>,
+    watches: BTreeMap<DirectoryNumber, Watch>,
 }
 
 impl State {
@@ -172,13 +175,13 @@ impl State {
                 self.gc_pending = true;
             }
             Input::MissingDeleted => self.gc_pending = true,
-            Input::ScanRequested { roots } => {
+            Input::ScanRequested { directories } => {
                 if !self.scanning() {
                     self.dirty.clear();
                     self.debounce = None;
                     self.phase = Phase::Running;
                     effects.push(Effect::StartScan(
-                        roots.into_iter().map(ScanTarget::whole).collect(),
+                        directories.into_iter().map(ScanTarget::whole).collect(),
                     ));
                 }
             }
@@ -189,17 +192,17 @@ impl State {
                 self.dirty.clear();
                 self.debounce = None;
             }
-            Input::FolderChanged(id) => {
+            Input::DirectoryChanged(id) => {
                 if self.watches.contains_key(&id) {
                     self.mark_everything(id);
                     self.debounce = Some(now + DEBOUNCE);
                 }
             }
-            Input::PathsChanged { root, paths } => {
-                if self.watches.contains_key(&root) {
+            Input::PathsChanged { directory, paths } => {
+                if self.watches.contains_key(&directory) {
                     match self
                         .dirty
-                        .entry(root)
+                        .entry(directory)
                         .or_insert(Dirty::Dirs(BTreeSet::new()))
                     {
                         Dirty::Everything => {}
@@ -234,7 +237,7 @@ impl State {
         effects
     }
 
-    fn attached(&mut self, id: RootNumber, now: Instant, effects: &mut Vec<Effect>) {
+    fn attached(&mut self, id: DirectoryNumber, now: Instant, effects: &mut Vec<Effect>) {
         match self.watches.get(&id) {
             None => effects.push(Effect::Detach(id)),
             Some(watch) => {
@@ -264,24 +267,24 @@ impl State {
         }
     }
 
-    fn mark_everything(&mut self, id: RootNumber) {
+    fn mark_everything(&mut self, id: DirectoryNumber) {
         self.dirty.insert(id, Dirty::Everything);
     }
 
-    fn watch(&mut self, id: RootNumber, effects: &mut Vec<Effect>) {
+    fn watch(&mut self, id: DirectoryNumber, effects: &mut Vec<Effect>) {
         self.watches.insert(id, Watch::Attaching);
         effects.push(Effect::Attach(id));
     }
 
-    /// The listener took a folder out of the Library: drop its pending work and its watcher.
-    fn release(&mut self, id: RootNumber, effects: &mut Vec<Effect>) {
+    /// The listener took a directory out of the Library: drop its pending work and its watcher.
+    fn release(&mut self, id: DirectoryNumber, effects: &mut Vec<Effect>) {
         self.dirty.remove(&id);
         if self.watches.remove(&id).is_some() {
             effects.push(Effect::Detach(id));
         }
     }
 
-    /// Does what is due: retries watchers, starts a scan of the changed folders, collects garbage.
+    /// Does what is due: retries watchers, starts a scan of the changed directories, collects garbage.
     fn advance(&mut self, now: Instant, effects: &mut Vec<Effect>) {
         for (id, watch) in &mut self.watches {
             if let Watch::Failed { retry_at: Some(at) } = *watch
@@ -301,8 +304,8 @@ impl State {
                 effects.push(Effect::StartScan(
                     std::mem::take(&mut self.dirty)
                         .into_iter()
-                        .map(|(root, dirty)| ScanTarget {
-                            root,
+                        .map(|(directory, dirty)| ScanTarget {
+                            directory,
                             dirs: match dirty {
                                 Dirty::Everything => None,
                                 Dirty::Dirs(dirs) => Some(dirs.into_iter().collect()),
@@ -354,13 +357,13 @@ mod tests {
             effects
         }
 
-        /// A folder that has been scanned once and is idle again.
-        fn idle(roots: &[RootNumber]) -> Self {
+        /// A directory that has been scanned once and is idle again.
+        fn idle(directories: &[DirectoryNumber]) -> Self {
             let mut clock = Self::new();
             clock.feed(Input::Started {
-                enabled: roots.to_vec(),
+                enabled: directories.to_vec(),
             });
-            for id in roots {
+            for id in directories {
                 clock.feed(Input::Attached(*id));
             }
             clock.wait(STARTUP_DELAY);
@@ -370,13 +373,16 @@ mod tests {
         }
     }
 
-    fn starts(effects: &[Effect]) -> Vec<Vec<RootNumber>> {
+    fn starts(effects: &[Effect]) -> Vec<Vec<DirectoryNumber>> {
         effects
             .iter()
             .filter_map(|effect| match effect {
-                Effect::StartScan(targets) => {
-                    Some(targets.iter().map(|target| target.root).collect::<Vec<_>>())
-                }
+                Effect::StartScan(targets) => Some(
+                    targets
+                        .iter()
+                        .map(|target| target.directory)
+                        .collect::<Vec<_>>(),
+                ),
                 _ => None,
             })
             .collect()
@@ -398,11 +404,11 @@ mod tests {
         let mut clock = Clock::idle(&[1]);
         let (a, b) = (PathBuf::from("/m/a"), PathBuf::from("/m/b"));
         clock.feed(Input::PathsChanged {
-            root: 1,
+            directory: 1,
             paths: vec![a.clone()],
         });
         clock.feed(Input::PathsChanged {
-            root: 1,
+            directory: 1,
             paths: vec![b.clone(), a.clone()],
         });
 
@@ -411,19 +417,19 @@ mod tests {
         assert_eq!(
             targets(&started),
             vec![ScanTarget {
-                root: 1,
+                directory: 1,
                 dirs: Some(vec![a.clone(), b.clone()])
             }]
         );
         clock.feed(Input::ScanFinished(ScanOutcome::Completed));
 
         clock.feed(Input::PathsChanged {
-            root: 1,
+            directory: 1,
             paths: vec![a],
         });
-        clock.feed(Input::FolderChanged(1));
+        clock.feed(Input::DirectoryChanged(1));
         clock.feed(Input::PathsChanged {
-            root: 1,
+            directory: 1,
             paths: vec![b],
         });
         let started = clock.wait(DEBOUNCE);
@@ -431,27 +437,27 @@ mod tests {
     }
 
     #[test]
-    fn the_folders_are_scanned_shortly_after_start_up() {
+    fn the_directories_are_scanned_shortly_after_start_up() {
         let mut clock = Clock::new();
 
         let started = clock.feed(Input::Started {
             enabled: vec![1, 2],
         });
-        assert_eq!(starts(&started), Vec::<Vec<RootNumber>>::new());
+        assert_eq!(starts(&started), Vec::<Vec<DirectoryNumber>>::new());
         assert!(started.contains(&Effect::Attach(1)) && started.contains(&Effect::Attach(2)));
 
         assert_eq!(starts(&clock.wait(STARTUP_DELAY)), vec![vec![1, 2]]);
     }
 
     #[test]
-    fn a_change_while_idle_starts_a_scan_once_the_folder_is_quiet() {
+    fn a_change_while_idle_starts_a_scan_once_the_directory_is_quiet() {
         let mut clock = Clock::idle(&[1]);
 
-        clock.feed(Input::FolderChanged(1));
+        clock.feed(Input::DirectoryChanged(1));
 
         assert_eq!(
             starts(&clock.wait(DEBOUNCE.saturating_sub(Duration::from_millis(1)))),
-            Vec::<Vec<RootNumber>>::new()
+            Vec::<Vec<DirectoryNumber>>::new()
         );
         assert_eq!(starts(&clock.wait(Duration::from_millis(1))), vec![vec![1]]);
     }
@@ -462,7 +468,7 @@ mod tests {
 
         let mut started = Vec::new();
         for _ in 0..20 {
-            started.extend(clock.feed(Input::FolderChanged(1)));
+            started.extend(clock.feed(Input::DirectoryChanged(1)));
             started.extend(clock.wait(Duration::from_millis(100)));
         }
         started.extend(clock.wait(DEBOUNCE * 2));
@@ -471,26 +477,28 @@ mod tests {
     }
 
     #[test]
-    fn changes_in_a_folder_nobody_watches_are_ignored() {
+    fn changes_in_a_directory_nobody_watches_are_ignored() {
         let mut clock = Clock::idle(&[1]);
 
-        clock.feed(Input::FolderChanged(7));
+        clock.feed(Input::DirectoryChanged(7));
 
         assert_eq!(
             starts(&clock.wait(DEBOUNCE * 2)),
-            Vec::<Vec<RootNumber>>::new()
+            Vec::<Vec<DirectoryNumber>>::new()
         );
     }
 
     #[test]
     fn a_change_during_a_scan_is_scanned_after_it() {
         let mut clock = Clock::idle(&[1]);
-        clock.feed(Input::ScanRequested { roots: vec![1] });
+        clock.feed(Input::ScanRequested {
+            directories: vec![1],
+        });
 
-        clock.feed(Input::FolderChanged(1));
+        clock.feed(Input::DirectoryChanged(1));
         assert_eq!(
             starts(&clock.wait(DEBOUNCE * 2)),
-            Vec::<Vec<RootNumber>>::new(),
+            Vec::<Vec<DirectoryNumber>>::new(),
             "one scan at a time"
         );
 
@@ -499,7 +507,7 @@ mod tests {
     }
 
     #[test]
-    fn registering_a_folder_scans_it_at_once() {
+    fn registering_a_directory_scans_it_at_once() {
         let mut clock = Clock::idle(&[1]);
 
         let registered = clock.feed(Input::Registered(2));
@@ -509,12 +517,14 @@ mod tests {
     }
 
     #[test]
-    fn a_folder_change_after_a_failure_scans_again() {
+    fn a_directory_change_after_a_failure_scans_again() {
         let mut clock = Clock::idle(&[1]);
-        clock.feed(Input::ScanRequested { roots: vec![1] });
+        clock.feed(Input::ScanRequested {
+            directories: vec![1],
+        });
         clock.feed(Input::ScanFinished(ScanOutcome::Failed));
 
-        clock.feed(Input::FolderChanged(1));
+        clock.feed(Input::DirectoryChanged(1));
         let started = clock.wait(DEBOUNCE);
         assert_eq!(starts(&started), vec![vec![1]]);
     }
@@ -522,26 +532,28 @@ mod tests {
     #[test]
     fn cancelling_drops_the_automatic_work_that_was_waiting() {
         let mut clock = Clock::idle(&[1]);
-        clock.feed(Input::ScanRequested { roots: vec![1] });
-        clock.feed(Input::FolderChanged(1));
+        clock.feed(Input::ScanRequested {
+            directories: vec![1],
+        });
+        clock.feed(Input::DirectoryChanged(1));
 
         let cancelled = clock.feed(Input::CancelRequested);
         assert!(cancelled.contains(&Effect::CancelScan));
         // A change that lands before the scan notices the cancellation is dropped too.
-        clock.feed(Input::FolderChanged(1));
+        clock.feed(Input::DirectoryChanged(1));
         clock.feed(Input::ScanFinished(ScanOutcome::Cancelled));
 
         assert_eq!(
             starts(&clock.wait(DEBOUNCE * 4)),
-            Vec::<Vec<RootNumber>>::new()
+            Vec::<Vec<DirectoryNumber>>::new()
         );
     }
 
     #[test]
-    fn a_folder_that_is_disabled_or_removed_is_no_longer_scanned_or_watched() {
+    fn a_directory_that_is_disabled_or_removed_is_no_longer_scanned_or_watched() {
         let mut clock = Clock::idle(&[1, 2]);
-        clock.feed(Input::FolderChanged(1));
-        clock.feed(Input::FolderChanged(2));
+        clock.feed(Input::DirectoryChanged(1));
+        clock.feed(Input::DirectoryChanged(2));
 
         let disabled = clock.feed(Input::Disabled(1));
         let removed = clock.feed(Input::Removed(2));
@@ -550,7 +562,7 @@ mod tests {
         assert!(removed.contains(&Effect::Detach(2)));
         assert_eq!(
             starts(&clock.wait(DEBOUNCE * 2)),
-            Vec::<Vec<RootNumber>>::new()
+            Vec::<Vec<DirectoryNumber>>::new()
         );
     }
 
@@ -569,15 +581,17 @@ mod tests {
         let removed = clock.feed(Input::Removed(1));
         assert!(
             removed.contains(&Effect::RunGc),
-            "removing a folder frees its artwork"
+            "removing a directory frees its artwork"
         );
     }
 
     #[test]
     fn collection_waits_for_changes_that_are_pending() {
         let mut clock = Clock::idle(&[1]);
-        clock.feed(Input::ScanRequested { roots: vec![1] });
-        clock.feed(Input::FolderChanged(1));
+        clock.feed(Input::ScanRequested {
+            directories: vec![1],
+        });
+        clock.feed(Input::DirectoryChanged(1));
 
         let finished = clock.feed(Input::ScanFinished(ScanOutcome::Completed));
         assert!(!finished.contains(&Effect::RunGc));
@@ -589,7 +603,7 @@ mod tests {
     }
 
     #[test]
-    fn folders_whose_artwork_was_found_missing_are_rescanned() {
+    fn directories_whose_artwork_was_found_missing_are_rescanned() {
         let mut clock = Clock::idle(&[1]);
 
         let collected = clock.feed(Input::GcFinished { rescan: vec![1] });

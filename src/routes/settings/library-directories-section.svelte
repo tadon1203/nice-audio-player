@@ -2,7 +2,7 @@
   import FolderPlus from "@lucide/svelte/icons/folder-plus";
   import { LibraryErrors } from "#lib/library/library-errors";
   import { QueryResult } from "#lib/library/query-result.svelte";
-  import type { LibraryRoot } from "#lib/native";
+  import type { LibraryDirectory } from "#lib/native";
   import { AppServices } from "#lib/shell/app-services.svelte";
   import EmptyStatus from "#lib/ui/empty-status.svelte";
   import ErrorAlert from "#lib/ui/error-alert.svelte";
@@ -21,22 +21,28 @@
   } from "#lib/ui/shadcn/item/index.js";
   import { CountFormat } from "#lib/utils/count-format";
   import DeleteMissingDialog from "./delete-missing-dialog.svelte";
-  import RemoveLibraryRootDialog from "./remove-library-root-dialog.svelte";
+  import RemoveLibraryDirectoryDialog from "./remove-library-directory-dialog.svelte";
   import ResetLibraryDialog from "./reset-library-dialog.svelte";
   import ScanControls from "./scan-controls.svelte";
   import ScanResult from "./scan-result.svelte";
   import ScanRunning from "./scan-running.svelte";
 
-  const { actions, catalog, libraryRoots, notices, scan: scanWatcher } = AppServices.current();
-  const rootsQuery = new QueryResult(() => catalog.rootsOptions());
+  const {
+    actions,
+    catalog,
+    libraryDirectories,
+    notices,
+    scan: scanWatcher,
+  } = AppServices.current();
+  const directoriesQuery = new QueryResult(() => catalog.directoriesOptions());
   const scanTime = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
 
-  let removeTarget = $state<LibraryRoot | null>(null);
+  let removeTarget = $state<LibraryDirectory | null>(null);
   let resetOpen = $state(false);
   let deleteMissingOpen = $state(false);
 
-  const roots = $derived(rootsQuery.data ?? []);
-  const missingTotal = $derived(roots.reduce((n, r) => n + r.missingCount, 0));
+  const directories = $derived(directoriesQuery.data ?? []);
+  const missingTotal = $derived(directories.reduce((n, r) => n + r.missingCount, 0));
   const scan = $derived(scanWatcher.snapshot);
   const scanRunning = $derived(scan?.state === "running");
   /** A Library command is in flight: its controls wait for it, so one request is sent at a time. */
@@ -54,11 +60,11 @@
     <div class="flex max-w-sm flex-col items-end gap-2">
       <Button
         type="button"
-        onclick={() => actions.run(() => libraryRoots.add(), "library")}
+        onclick={() => actions.run(() => libraryDirectories.add(), "library")}
         disabled={scanRunning || busy}
       >
         <FolderPlus data-icon="inline-start" aria-hidden="true" />
-        Add folder
+        Add directory
       </Button>
     </div>
   </div>
@@ -67,62 +73,64 @@
     <p class="mt-4 text-right text-sm text-destructive" role="alert">{failure}</p>
   {/if}
 
-  {#if rootsQuery.isError}
+  {#if directoriesQuery.isError}
     <ErrorAlert
-      message={LibraryErrors.commandMessage(rootsQuery.error)}
-      onRetry={() => actions.run(() => rootsQuery.refetch(), "library")}
+      message={LibraryErrors.commandMessage(directoriesQuery.error)}
+      onRetry={() => actions.run(() => directoriesQuery.refetch(), "library")}
     />
   {/if}
 
   <div class="mt-6 flex flex-wrap items-start justify-between gap-4">
     <div>
-      <h3 id="library-folders-heading" class="text-base font-medium text-foreground">
-        Library folders
+      <h3 id="library-directories-heading" class="text-base font-medium text-foreground">
+        Library directories
       </h3>
       <p class="mt-1 text-sm leading-5 text-muted-foreground">
-        Enable a folder to include its audio files in the catalog.
+        Enable a directory to include its audio files in the catalog.
       </p>
     </div>
-    <ScanControls rootCount={roots.length} />
+    <ScanControls directoryCount={directories.length} />
   </div>
 
   {#if scan?.state === "running"}
     <ScanRunning {scan} />
   {/if}
 
-  {#if rootsQuery.isPending && roots.length === 0}
-    <LoadingStatus>Loading library folders…</LoadingStatus>
-  {:else if rootsQuery.isError}
+  {#if directoriesQuery.isPending && directories.length === 0}
+    <LoadingStatus>Loading library directories…</LoadingStatus>
+  {:else if directoriesQuery.isError}
     <!-- The error alert above owns this region. -->
-  {:else if roots.length === 0}
-    <EmptyStatus>No library folders yet. Add a folder to start building your library.</EmptyStatus>
+  {:else if directories.length === 0}
+    <EmptyStatus
+      >No library directories yet. Add a directory to start building your library.</EmptyStatus
+    >
   {:else}
     <ItemGroup
       class="mt-5 gap-0 divide-y divide-border border-y border-border"
-      aria-label="Library folders"
+      aria-label="Library directories"
     >
-      {#each roots as root (root.id)}
+      {#each directories as directory (directory.id)}
         <Item
           role="listitem"
           class="items-start gap-4 rounded-none border-0 px-0 py-4 sm:flex-nowrap sm:items-center"
         >
           <ItemContent>
-            <ItemTitle title={root.path} class="font-normal text-foreground">
-              {root.path}
+            <ItemTitle title={directory.path} class="font-normal text-foreground">
+              {directory.path}
             </ItemTitle>
             <ItemDescription class="mt-1 whitespace-normal">
-              {root.enabled ? "Included in library" : "Excluded from library"}
+              {directory.enabled ? "Included in library" : "Excluded from library"}
               <span class="ml-3">
-                {root.lastSuccessfulScanAtMs !== null
-                  ? `Scanned ${scanTime.format(root.lastSuccessfulScanAtMs)}`
+                {directory.lastSuccessfulScanAtMs !== null
+                  ? `Scanned ${scanTime.format(directory.lastSuccessfulScanAtMs)}`
                   : "Not scanned"}
               </span>
               <span class="ml-3">
-                {CountFormat.number(root.trackCount)}
-                {root.trackCount === 1 ? "track" : "tracks"}
+                {CountFormat.number(directory.trackCount)}
+                {directory.trackCount === 1 ? "track" : "tracks"}
               </span>
-              {#if root.missingCount > 0}
-                <span class="ml-3">{CountFormat.number(root.missingCount)} missing</span>
+              {#if directory.missingCount > 0}
+                <span class="ml-3">{CountFormat.number(directory.missingCount)} missing</span>
               {/if}
             </ItemDescription>
           </ItemContent>
@@ -130,17 +138,20 @@
             <Field orientation="horizontal" class="gap-2 text-sm text-muted-foreground">
               <!-- Controlled by the stored value: a failed change leaves the box where it was. -->
               <Checkbox
-                id={`enabled-${root.id}`}
+                id={`enabled-${directory.id}`}
                 bind:checked={
-                  () => root.enabled,
+                  () => directory.enabled,
                   (checked) =>
-                    actions.run(() => libraryRoots.setEnabled(root.id, checked), "library")
+                    actions.run(
+                      () => libraryDirectories.setEnabled(directory.id, checked),
+                      "library",
+                    )
                 }
                 disabled={scanRunning || busy}
               />
               <span class="text-muted-foreground max-sm:sr-only"
-                ><FieldLabel for={`enabled-${root.id}`}>
-                  Include <span class="sr-only">{root.path} </span>in library
+                ><FieldLabel for={`enabled-${directory.id}`}>
+                  Include <span class="sr-only">{directory.path} </span>in library
                 </FieldLabel></span
               >
             </Field>
@@ -148,9 +159,9 @@
               type="button"
               variant="destructive"
               size="compact"
-              aria-label={`Remove ${root.path} from library`}
+              aria-label={`Remove ${directory.path} from library`}
               disabled={scanRunning || busy}
-              onclick={() => (removeTarget = root)}
+              onclick={() => (removeTarget = directory)}
             >
               Remove
             </Button>
@@ -185,9 +196,9 @@
           variant="outline"
           size="compact"
           disabled={busy}
-          onclick={() => actions.run(() => libraryRoots.openLogDirectory(), "library")}
+          onclick={() => actions.run(() => libraryDirectories.appOpenLogDirectory(), "library")}
         >
-          Open log folder
+          Open log directory
         </Button>
       </div>
     </div>
@@ -213,21 +224,21 @@
   <ResetLibraryDialog
     open={resetOpen}
     onOpenChange={(open) => (resetOpen = open)}
-    onConfirm={() => actions.run(() => libraryRoots.resetAndRescan(), "library")}
+    onConfirm={() => actions.run(() => libraryDirectories.resetAndRescan(), "library")}
   />
 
   <DeleteMissingDialog
     open={deleteMissingOpen}
     count={missingTotal}
     onOpenChange={(open) => (deleteMissingOpen = open)}
-    onConfirm={() => actions.run(() => libraryRoots.deleteMissing(), "library")}
+    onConfirm={() => actions.run(() => libraryDirectories.deleteMissing(), "library")}
   />
 
-  <RemoveLibraryRootDialog
-    root={removeTarget}
+  <RemoveLibraryDirectoryDialog
+    directory={removeTarget}
     onOpenChange={(open) => {
       if (!open) removeTarget = null;
     }}
-    onConfirm={(root) => actions.run(() => libraryRoots.remove(root.id), "library")}
+    onConfirm={(directory) => actions.run(() => libraryDirectories.remove(directory.id), "library")}
   />
 </section>

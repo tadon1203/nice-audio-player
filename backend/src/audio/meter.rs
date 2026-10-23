@@ -15,8 +15,7 @@ use std::time::Duration;
 
 use ringbuf::traits::{Consumer, Producer, Split};
 
-use crate::diagnostics::log_failed;
-use crate::slices::head;
+use crate::errors::log_failed;
 use ringbuf::{HeapCons, HeapProd, HeapRb};
 
 /// One-third-octave bands, base 10, centred on `1000 Hz * 10^(n/10)` for n = -16..=13 (25 Hz to
@@ -596,7 +595,7 @@ fn run_analysis(shared: &Shared, id: u32, mut sink: FrameSink) {
             thread::sleep(IDLE_SLEEP);
             continue;
         }
-        analyzer.process(head(&buffer, read), &mut |measurement| {
+        analyzer.process(&buffer[..read.min(buffer.len())], &mut |measurement| {
             if let Some(frame) = batcher.push(measurement)
                 && open
                 && !sink(&frame)

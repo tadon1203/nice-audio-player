@@ -7,8 +7,8 @@ import type {
   BackendMessage,
   InitialState,
   LibraryAlbumArtistPage,
-  LibraryAlbumArtistSummary,
-  LibraryAlbumDetails,
+  ArtistRow,
+  AlbumDetails,
   LibraryAlbumPage,
   LibraryAlbumTrackPage,
   AlbumArtistListRequest,
@@ -18,22 +18,22 @@ import type {
   AlbumQuery,
   ArtistAlbumsRequest,
   ArtistId,
-  LibraryIndexBucket,
-  LibraryRoot,
+  ScrollIndexBucket,
+  LibraryDirectory,
   LibraryStatus,
   LibraryTrackPage,
-  LibraryTrackProperties,
+  TrackProperties,
   LyricsResolution,
   PlaybackContext,
-  PlaybackQueueSnapshot,
-  PlaybackQueueWindow,
-  PlaybackRepeatMode,
-  PlaybackSnapshot,
+  QueueState,
+  QueueWindow,
+  RepeatMode,
+  PlaybackState,
   QueueItemId,
   TrackId,
   TrackListRequest,
   TrackQuery,
-  Versioned,
+  Revisioned,
 } from "./bindings";
 
 /** The one channel to the Backend: subscribes, then fetches the current state. */
@@ -43,32 +43,29 @@ export interface SessionClient {
 }
 
 export interface PlaybackClient {
-  start(
-    context: PlaybackContext,
-    startTrackId: TrackId | null,
-  ): Promise<Versioned<PlaybackSnapshot>>;
-  pause(): Promise<Versioned<PlaybackSnapshot>>;
-  resume(): Promise<Versioned<PlaybackSnapshot>>;
-  previous(): Promise<Versioned<PlaybackSnapshot>>;
-  next(): Promise<Versioned<PlaybackSnapshot>>;
-  seek(positionMs: number): Promise<Versioned<PlaybackSnapshot>>;
-  setVolume(volume: number): Promise<Versioned<PlaybackSnapshot>>;
-  setMuted(muted: boolean): Promise<Versioned<PlaybackSnapshot>>;
-  setOutputSelection(selection: AudioOutputSelection): Promise<Versioned<PlaybackSnapshot>>;
-  setRepeatMode(mode: PlaybackRepeatMode): Promise<Versioned<PlaybackQueueSnapshot>>;
-  setShuffle(enabled: boolean): Promise<Versioned<PlaybackQueueSnapshot>>;
-  removeQueueItem(id: QueueItemId): Promise<Versioned<PlaybackQueueSnapshot>>;
-  moveQueueItem(id: QueueItemId, to: number): Promise<Versioned<PlaybackQueueSnapshot>>;
-  playQueueItem(id: QueueItemId): Promise<Versioned<PlaybackSnapshot>>;
-  enqueueTrack(trackId: TrackId, next: boolean): Promise<Versioned<PlaybackQueueSnapshot>>;
-  clearQueue(): Promise<Versioned<PlaybackQueueSnapshot>>;
-  restorePreviousQueue(): Promise<Versioned<PlaybackSnapshot>>;
-  queueWindow(offset: number, limit: number): Promise<PlaybackQueueWindow>;
+  start(context: PlaybackContext, startTrackId: TrackId | null): Promise<Revisioned<PlaybackState>>;
+  pause(): Promise<Revisioned<PlaybackState>>;
+  resume(): Promise<Revisioned<PlaybackState>>;
+  previous(): Promise<Revisioned<PlaybackState>>;
+  next(): Promise<Revisioned<PlaybackState>>;
+  seek(positionMs: number): Promise<Revisioned<PlaybackState>>;
+  setVolume(volume: number): Promise<Revisioned<PlaybackState>>;
+  setMuted(muted: boolean): Promise<Revisioned<PlaybackState>>;
+  setOutputSelection(selection: AudioOutputSelection): Promise<Revisioned<PlaybackState>>;
+  setRepeatMode(mode: RepeatMode): Promise<Revisioned<QueueState>>;
+  setShuffle(enabled: boolean): Promise<Revisioned<QueueState>>;
+  playerRemoveQueueItem(id: QueueItemId): Promise<Revisioned<QueueState>>;
+  playerMoveQueueItem(id: QueueItemId, to: number): Promise<Revisioned<QueueState>>;
+  playerPlayQueueItem(id: QueueItemId): Promise<Revisioned<PlaybackState>>;
+  playerEnqueueTrack(trackId: TrackId, next: boolean): Promise<Revisioned<QueueState>>;
+  playerClearQueue(): Promise<Revisioned<QueueState>>;
+  playerRestorePreviousQueue(): Promise<Revisioned<PlaybackState>>;
+  queueWindow(offset: number, limit: number): Promise<QueueWindow>;
   listOutputDevices(): Promise<AudioOutputDevice[]>;
 }
 
 export interface AppearanceClient {
-  update(patch: AppearancePatch): Promise<Versioned<Appearance>>;
+  update(patch: AppearancePatch): Promise<Revisioned<Appearance>>;
 }
 
 /**
@@ -77,28 +74,28 @@ export interface AppearanceClient {
  */
 export interface LibraryClient {
   status(): Promise<LibraryStatus>;
-  roots(): Promise<LibraryRoot[]>;
-  /** Resolves null when the user closes the folder dialog. */
+  directories(): Promise<LibraryDirectory[]>;
+  /** Resolves null when the user closes the directory dialog. */
   selectDirectory(): Promise<string | null>;
-  registerRoot(path: string): Promise<LibraryRoot>;
-  setRootEnabled(id: string, enabled: boolean): Promise<LibraryRoot>;
-  removeRoot(id: string): Promise<void>;
+  registerDirectory(path: string): Promise<LibraryDirectory>;
+  setDirectoryEnabled(id: number, enabled: boolean): Promise<LibraryDirectory>;
+  removeDirectory(id: number): Promise<void>;
   deleteMissing(): Promise<number>;
   startScan(): Promise<void>;
   cancelScan(): Promise<void>;
   resetAndRescan(): Promise<void>;
-  openLogDirectory(): Promise<void>;
+  appOpenLogDirectory(): Promise<void>;
   tracks(request: TrackListRequest): Promise<LibraryTrackPage>;
   albums(request: AlbumListRequest): Promise<LibraryAlbumPage>;
   albumArtists(request: AlbumArtistListRequest): Promise<LibraryAlbumArtistPage>;
-  trackIndex(query: TrackQuery): Promise<LibraryIndexBucket[]>;
-  albumIndex(query: AlbumQuery): Promise<LibraryIndexBucket[]>;
-  albumArtistIndex(query: AlbumArtistQuery): Promise<LibraryIndexBucket[]>;
-  albumById(albumId: AlbumId): Promise<LibraryAlbumDetails>;
+  trackIndex(query: TrackQuery): Promise<ScrollIndexBucket[]>;
+  albumIndex(query: AlbumQuery): Promise<ScrollIndexBucket[]>;
+  albumArtistIndex(query: AlbumArtistQuery): Promise<ScrollIndexBucket[]>;
+  albumById(albumId: AlbumId): Promise<AlbumDetails>;
   albumTracksById(albumId: AlbumId, cursor: string | null): Promise<LibraryAlbumTrackPage>;
-  artist(artistId: ArtistId): Promise<LibraryAlbumArtistSummary>;
+  artist(artistId: ArtistId): Promise<ArtistRow>;
   artistAlbums(request: ArtistAlbumsRequest): Promise<LibraryAlbumPage>;
-  trackProperties(trackId: TrackId): Promise<LibraryTrackProperties>;
+  trackProperties(trackId: TrackId): Promise<TrackProperties>;
   revealTrack(trackId: TrackId): Promise<void>;
   artworkAccent(hash: ArtworkHash): Promise<string | null>;
 }

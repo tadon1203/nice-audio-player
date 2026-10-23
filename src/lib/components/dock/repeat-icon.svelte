@@ -3,14 +3,14 @@
   import Repeat from "@lucide/svelte/icons/repeat";
   import { fade } from "svelte/transition";
   import { Tween } from "svelte/motion";
-  import type { PlaybackRepeatMode } from "#lib/native";
+  import type { RepeatMode } from "#lib/native";
   import { AppServices } from "#lib/shell/app-services.svelte";
   import { SvelteMotion } from "#lib/ui/motion/svelte-motion";
   import { SvelteSlide } from "#lib/ui/motion/svelte-slide";
   import type { TransitionConfig } from "svelte/transition";
 
   /** One turn of the icon per mode change; `one` drops a superscript 1 beside it. */
-  let { mode }: { mode: PlaybackRepeatMode } = $props();
+  let { mode }: { mode: RepeatMode } = $props();
 
   const budget = AppServices.current().motion;
   const reduced = $derived(budget.current === "reduced");

@@ -1,9 +1,9 @@
 import type {
-  LibraryAlbumArtistSortKey,
-  LibraryAlbumSortKey,
-  LibraryArtistAlbumSortKey,
-  LibrarySortDirection,
-  LibraryTrackSortKey,
+  ArtistSortKey,
+  AlbumSortKey,
+  ArtistAlbumSortKey,
+  SortDirection,
+  TrackSortKey,
 } from "#lib/native";
 import type { SortOption } from "#lib/ui/sort-option";
 
@@ -25,19 +25,19 @@ function defineSortKeys<Key extends string>(
   return { keys, options, isKey };
 }
 
-const albums = defineSortKeys<LibraryAlbumSortKey>({
+const albums = defineSortKeys<AlbumSortKey>({
   title: "Album title",
   artist: "Album artist",
   year: "Year",
 });
 
-const albumArtists = defineSortKeys<LibraryAlbumArtistSortKey>({
+const albumArtists = defineSortKeys<ArtistSortKey>({
   artist: "Artist",
   albumCount: "Album count",
   trackCount: "Track count",
 });
 
-const artistAlbums = defineSortKeys<LibraryArtistAlbumSortKey>({
+const artistAlbums = defineSortKeys<ArtistAlbumSortKey>({
   year: "Year",
   title: "Title",
 });
@@ -48,9 +48,9 @@ const trackSortLabels = {
   artist: "Artist",
   album: "Album",
   duration: "Time",
-} as const satisfies Record<LibraryTrackSortKey, string>;
+} as const satisfies Record<TrackSortKey, string>;
 
-const tracks = defineSortKeys<LibraryTrackSortKey>(trackSortLabels);
+const tracks = defineSortKeys<TrackSortKey>(trackSortLabels);
 
 /** The sort keys and options of each presentation, and the direction rule. */
 export class Sort {
@@ -63,15 +63,15 @@ export class Sort {
   /** The column titles of the track table, by sort key. */
   public static readonly trackLabels = trackSortLabels;
 
-  public static isAlbumKey(value: string): value is LibraryAlbumSortKey {
+  public static isAlbumKey(value: string): value is AlbumSortKey {
     return albums.isKey(value);
   }
 
-  public static isTrackKey(value: string): value is LibraryTrackSortKey {
+  public static isTrackKey(value: string): value is TrackSortKey {
     return tracks.isKey(value);
   }
 
-  public static toggleDirection(direction: LibrarySortDirection): LibrarySortDirection {
+  public static toggleDirection(direction: SortDirection): SortDirection {
     return direction === "ascending" ? "descending" : "ascending";
   }
 }

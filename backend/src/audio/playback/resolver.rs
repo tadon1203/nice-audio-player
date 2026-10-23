@@ -103,7 +103,7 @@ impl TrackResolver {
 #[cfg(test)]
 pub(super) mod testing {
     use super::*;
-    use crate::errors::CommonError;
+    use crate::errors::CommandError;
     use crate::media::validation::ValidatedAudioFile;
     use std::sync::{
         Arc,
@@ -146,7 +146,7 @@ pub(super) mod testing {
             self.reads.fetch_add(track_ids.len(), Ordering::SeqCst);
             if self.failing.load(Ordering::SeqCst) {
                 return Err(PlaybackServiceError::Common {
-                    error: CommonError::PersistenceFailed,
+                    error: CommandError::PersistenceFailed,
                 });
             }
             let tracks = self.tracks.lock();

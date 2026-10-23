@@ -1,6 +1,6 @@
 import type { CatalogRepository } from "#lib/library/catalog-repository";
 import type { LyricsRepository } from "#lib/lyrics/lyrics-repository";
-import { Replica, type LibraryScanSnapshot, type Versioned } from "#lib/native";
+import { Replica, type ScanState, type Revisioned } from "#lib/native";
 
 /**
  * The Library scan as the Backend last reported it. When a scan ends, it refreshes what depends on
@@ -10,7 +10,7 @@ import { Replica, type LibraryScanSnapshot, type Versioned } from "#lib/native";
  * "scan finished".
  */
 export class ScanWatcher {
-  readonly #replica = new Replica<LibraryScanSnapshot>();
+  readonly #replica = new Replica<ScanState>();
   readonly #catalog: CatalogRepository;
   readonly #lyrics: LyricsRepository;
   #finished = 0;
@@ -22,11 +22,11 @@ export class ScanWatcher {
   }
 
   /** The scan as the Backend last reported it; `null` until the first report arrives. */
-  public get snapshot(): LibraryScanSnapshot | null {
+  public get snapshot(): ScanState | null {
     return this.#replica.value;
   }
 
-  public accept(incoming: Versioned<LibraryScanSnapshot>): void {
+  public accept(incoming: Revisioned<ScanState>): void {
     if (!this.#replica.accept(incoming)) return;
     const snapshot = incoming.value;
     if (snapshot.finishedCount <= this.#finished) return;

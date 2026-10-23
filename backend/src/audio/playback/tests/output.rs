@@ -9,10 +9,7 @@ fn a_device_change_on_the_system_default_keeps_playing() {
     harness.output.fail_stream(StreamFailureKind::DeviceChanged);
     harness.deliver_pending();
 
-    assert!(matches!(
-        harness.snapshot(),
-        PlaybackSnapshot::Playing { .. }
-    ));
+    assert!(matches!(harness.snapshot(), PlaybackState::Playing { .. }));
 }
 
 #[test]
@@ -29,10 +26,7 @@ fn a_device_change_on_a_chosen_device_keeps_playing() {
     harness.output.fail_stream(StreamFailureKind::DeviceChanged);
     harness.deliver_pending();
 
-    assert!(matches!(
-        harness.snapshot(),
-        PlaybackSnapshot::Playing { .. }
-    ));
+    assert!(matches!(harness.snapshot(), PlaybackState::Playing { .. }));
 }
 
 #[test]
@@ -73,7 +67,7 @@ fn a_failed_device_switch_keeps_the_saved_selection_and_the_queue() {
         ))
     );
     let snapshot = harness.snapshot();
-    assert!(matches!(snapshot, PlaybackSnapshot::Failed { .. }));
+    assert!(matches!(snapshot, PlaybackState::Failed { .. }));
     assert_eq!(
         snapshot.base().output_selection,
         AudioOutputSelection::SystemDefault
@@ -155,9 +149,9 @@ fn switching_the_output_while_paused_resumes_the_position_on_the_new_device() {
             .is_some_and(|session| session.seek_revision == 1)
     });
 
-    assert!(matches!(restarted, PlaybackSnapshot::Paused { .. }));
+    assert!(matches!(restarted, PlaybackState::Paused { .. }));
     let snapshot = harness.snapshot();
-    assert!(matches!(snapshot, PlaybackSnapshot::Paused { .. }));
+    assert!(matches!(snapshot, PlaybackState::Paused { .. }));
     assert_eq!(session(&snapshot).output_device.name, "Other fake speakers");
     let position = session(&snapshot).position_ms;
     assert!((950..=1_050).contains(&position), "position {position}");

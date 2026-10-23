@@ -22,7 +22,7 @@ const upcomingTitles = (panel: import("@playwright/test").Locator): Promise<stri
 test("drags an upcoming track to any position", async ({ page, native, player, library }) => {
   const upcoming = library.tracks.filter((track) => track.state === "playable").slice(1);
   // Dropping the first row below the fourth: it is expected to land after it.
-  native.respond("moveQueueItem", () =>
+  native.respond("playerMoveQueueItem", () =>
     player.queue({ upcoming: [...upcoming.slice(1, 4), upcoming[0]!, ...upcoming.slice(4)] }),
   );
   const panel = await openQueue(page);
@@ -45,7 +45,7 @@ test("drags an upcoming track to any position", async ({ page, native, player, l
     .poll(() => upcomingTitles(panel))
     .toEqual([...before.slice(1, 4), before[0], ...before.slice(4)]);
   await expect(panel.locator("[data-drop]")).toHaveCount(0);
-  expect(native.callsTo("moveQueueItem")).toEqual([{ id: upcoming[0]!.id, to: 3 }]);
+  expect(native.callsTo("playerMoveQueueItem")).toEqual([{ id: upcoming[0]!.id, to: 3 }]);
 });
 
 test("a drag released where it started changes nothing", async ({ page }) => {

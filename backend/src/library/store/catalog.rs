@@ -20,12 +20,11 @@ use crate::ids::{AlbumId, ArtistId, TrackId, album_id_column, artist_id_column, 
 use crate::library::{
     error::StoreError,
     models::{
-        AlbumArtistListRequest, AlbumArtistQuery, AlbumListRequest, AlbumQuery, ArtistRef,
-        LibraryAlbumArtistPage, LibraryAlbumArtistSortKey, LibraryAlbumArtistSummary,
-        LibraryAlbumDetails, LibraryAlbumPage, LibraryAlbumSortKey, LibraryAlbumSummary,
-        LibraryAlbumTrackPage, LibraryAlbumTrackSummary, LibraryArtistAlbumSortKey,
-        LibraryIndexBucket, LibrarySortDirection, LibraryTrackPage, LibraryTrackSortKey, TrackCore,
-        TrackListRequest, TrackQuery,
+        AlbumArtistListRequest, AlbumArtistQuery, AlbumDetails, AlbumListRequest, AlbumQuery,
+        AlbumRow, AlbumSortKey, AlbumTrackRow, ArtistAlbumSortKey, ArtistRef, ArtistRow,
+        ArtistSortKey, LibraryAlbumArtistPage, LibraryAlbumPage, LibraryAlbumTrackPage,
+        LibraryTrackPage, ScrollIndexBucket, SortDirection, TrackCore, TrackListRequest,
+        TrackQuery, TrackSortKey,
     },
     text,
 };
@@ -42,36 +41,33 @@ pub(super) fn track_filter(search: Option<&str>) -> SearchFilter {
 }
 
 /// The sort key column a track sort order is by, when it has a scroll index.
-fn track_index_column(key: LibraryTrackSortKey) -> Option<&'static str> {
+fn track_index_column(key: TrackSortKey) -> Option<&'static str> {
     match key {
-        LibraryTrackSortKey::Title => Some("m.title_sort"),
-        LibraryTrackSortKey::Artist => Some("m.artist_sort"),
-        LibraryTrackSortKey::Album => Some("m.album_sort"),
-        LibraryTrackSortKey::Duration => None,
+        TrackSortKey::Title => Some("m.title_sort"),
+        TrackSortKey::Artist => Some("m.artist_sort"),
+        TrackSortKey::Album => Some("m.album_sort"),
+        TrackSortKey::Duration => None,
     }
 }
 
 /// The track sort orders. Titles are never unknown; artists, albums and durations may be, and
 /// those rows follow the known ones in both directions.
-pub(super) fn track_ordering(
-    key: LibraryTrackSortKey,
-    direction: LibrarySortDirection,
-) -> Ordering {
+pub(super) fn track_ordering(key: TrackSortKey, direction: SortDirection) -> Ordering {
     let phases = match key {
-        LibraryTrackSortKey::Title => {
+        TrackSortKey::Title => {
             vec![Phase::new("1", &["m.title_sort", "m.title", "m.track_id"])]
         }
-        LibraryTrackSortKey::Artist => name_phases(
+        TrackSortKey::Artist => name_phases(
             "m.artist_sort",
             &["m.artist_sort", "m.artist", "m.track_id"],
             &["m.artist", "m.track_id"],
         ),
-        LibraryTrackSortKey::Album => name_phases(
+        TrackSortKey::Album => name_phases(
             "m.album_sort",
             &["m.album_sort", "m.album", "m.track_id"],
             &["m.album", "m.track_id"],
         ),
-        LibraryTrackSortKey::Duration => vec![
+        TrackSortKey::Duration => vec![
             Phase::new(
                 "m.duration_ms IS NOT NULL",
                 &["m.duration_ms", "m.track_id"],
@@ -130,8 +126,8 @@ const ALBUM_COLUMNS: &str =
 const ALBUM_COLUMN_COUNT: usize = 7;
 const ALBUM_FROM: &str = "FROM albums al LEFT JOIN artwork_assets a ON a.id = al.cover_artwork_id";
 
-fn album_summary(row: &Row<'_>) -> rusqlite::Result<LibraryAlbumSummary> {
-    Ok(LibraryAlbumSummary {
+fn album_summary(row: &Row<'_>) -> rusqlite::Result<AlbumRow> {
+    Ok(AlbumRow {
         id: album_id_column(row, 6)?,
         title: row.get(0)?,
         album_artist: ArtistRef {
@@ -150,8 +146,8 @@ const ARTIST_COLUMN_COUNT: usize = 6;
 const ARTIST_FROM: &str =
     "FROM artists ar LEFT JOIN artwork_assets a ON a.id = ar.cover_artwork_id";
 
-fn artist_summary(row: &Row<'_>) -> rusqlite::Result<LibraryAlbumArtistSummary> {
-    Ok(LibraryAlbumArtistSummary {
+fn artist_summary(row: &Row<'_>) -> rusqlite::Result<ArtistRow> {
+    Ok(ArtistRow {
         id: artist_id_column(row, 0)?,
         name: row.get(1)?,
         album_count: row.get::<_, i64>(2)? as u64,
@@ -182,8 +178,8 @@ fn build_query(
 /// The Tracks list: every track, filtered by `search`, in `sort_key` order.
 pub(super) fn tracks_query(
     search: Option<&str>,
-    sort_key: LibraryTrackSortKey,
-    direction: LibrarySortDirection,
+    sort_key: TrackSortKey,
+    direction: SortDirection,
 ) -> PagedQuery {
     build_query(
         Scope::new(
@@ -200,9 +196,9 @@ pub(super) fn tracks_query(
     )
 }
 
-fn album_ordering(sort_key: LibraryAlbumSortKey, direction: LibrarySortDirection) -> Ordering {
+fn album_ordering(sort_key: AlbumSortKey, direction: SortDirection) -> Ordering {
     let phases = match sort_key {
-        LibraryAlbumSortKey::Title => name_phases(
+        AlbumSortKey::Title => name_phases(
             "al.title_sort",
             &[
                 "al.title_sort",
@@ -213,7 +209,7 @@ fn album_ordering(sort_key: LibraryAlbumSortKey, direction: LibrarySortDirection
             ],
             &["al.album_artist_sort", "al.album_artist", "al.id"],
         ),
-        LibraryAlbumSortKey::Artist => name_phases(
+        AlbumSortKey::Artist => name_phases(
             "al.album_artist_sort",
             &[
                 "al.album_artist_sort",
@@ -224,7 +220,7 @@ fn album_ordering(sort_key: LibraryAlbumSortKey, direction: LibrarySortDirection
             ],
             &["al.title_sort", "al.title", "al.id"],
         ),
-        LibraryAlbumSortKey::Year => year_phases(
+        AlbumSortKey::Year => year_phases(
             "al.year",
             "al.title_sort",
             &[
@@ -243,8 +239,8 @@ fn album_ordering(sort_key: LibraryAlbumSortKey, direction: LibrarySortDirection
 /// The Albums list: one row per album, filtered by `search`.
 pub(super) fn albums_query(
     search: Option<&str>,
-    sort_key: LibraryAlbumSortKey,
-    direction: LibrarySortDirection,
+    sort_key: AlbumSortKey,
+    direction: SortDirection,
 ) -> PagedQuery {
     build_query(
         Scope::new(
@@ -261,19 +257,16 @@ pub(super) fn albums_query(
     )
 }
 
-fn album_artist_ordering(
-    sort_key: LibraryAlbumArtistSortKey,
-    direction: LibrarySortDirection,
-) -> Ordering {
+fn album_artist_ordering(sort_key: ArtistSortKey, direction: SortDirection) -> Ordering {
     let phases = match sort_key {
-        LibraryAlbumArtistSortKey::Artist => {
+        ArtistSortKey::Artist => {
             name_phases("ar.name_sort", &["ar.name_sort", "ar.name"], &["ar.name"])
         }
-        LibraryAlbumArtistSortKey::AlbumCount => vec![Phase::new(
+        ArtistSortKey::AlbumCount => vec![Phase::new(
             "1",
             &["ar.album_count", "ar.name_sort", "ar.name"],
         )],
-        LibraryAlbumArtistSortKey::TrackCount => vec![Phase::new(
+        ArtistSortKey::TrackCount => vec![Phase::new(
             "1",
             &["ar.track_count", "ar.name_sort", "ar.name"],
         )],
@@ -284,8 +277,8 @@ fn album_artist_ordering(
 /// The Album Artists list: one row per Album Artist, filtered by `search`.
 pub(super) fn album_artists_query(
     search: Option<&str>,
-    sort_key: LibraryAlbumArtistSortKey,
-    direction: LibrarySortDirection,
+    sort_key: ArtistSortKey,
+    direction: SortDirection,
 ) -> PagedQuery {
     build_query(
         Scope::new(
@@ -305,17 +298,17 @@ pub(super) fn album_artists_query(
 /// The albums of one Album Artist.
 pub(super) fn artist_albums_query(
     artist: ArtistId,
-    sort_key: LibraryArtistAlbumSortKey,
-    direction: LibrarySortDirection,
+    sort_key: ArtistAlbumSortKey,
+    direction: SortDirection,
 ) -> PagedQuery {
     let artist_id = artist.to_hex();
     let phases = match sort_key {
-        LibraryArtistAlbumSortKey::Title => name_phases(
+        ArtistAlbumSortKey::Title => name_phases(
             "al.title_sort",
             &["al.title_sort", "al.title", "al.id"],
             &["al.id"],
         ),
-        LibraryArtistAlbumSortKey::Year => year_phases(
+        ArtistAlbumSortKey::Year => year_phases(
             "al.year",
             "al.title_sort",
             &["al.title_sort", "al.title", "al.id"],
@@ -345,7 +338,7 @@ fn album_tracks_query(album_id: &str) -> PagedQuery {
             "",
             album_id,
             &"position",
-            LibrarySortDirection::Ascending,
+            SortDirection::Ascending,
         ),
         Ordering {
             phases: vec![Phase::new(
@@ -356,7 +349,7 @@ fn album_tracks_query(album_id: &str) -> PagedQuery {
                     "m.track_id",
                 ],
             )],
-            direction: LibrarySortDirection::Ascending,
+            direction: SortDirection::Ascending,
         },
         (
             "t.id, m.title, m.artist, m.track_number, m.disc_number, m.file_format, m.bit_depth, m.sample_rate, m.duration_ms, f.availability, f.inspection_status, a.content_hash, a.mime_type",
@@ -380,11 +373,11 @@ fn name_buckets(
     from: &str,
     params: &[Value],
     column: &str,
-    direction: LibrarySortDirection,
-) -> Result<Vec<LibraryIndexBucket>, StoreError> {
+    direction: SortDirection,
+) -> Result<Vec<ScrollIndexBucket>, StoreError> {
     let order = match direction {
-        LibrarySortDirection::Ascending => "ASC",
-        LibrarySortDirection::Descending => "DESC",
+        SortDirection::Ascending => "ASC",
+        SortDirection::Descending => "DESC",
     };
     let mut statement = connection.prepare(&format!(
         "SELECT substr({column}, 1, 1) AS c, COUNT(*) {from} AND {column} > '' GROUP BY c ORDER BY c {order}"
@@ -392,13 +385,13 @@ fn name_buckets(
     let rows = statement.query_map(rusqlite::params_from_iter(params), |row| {
         Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)? as u64))
     })?;
-    let mut buckets: Vec<LibraryIndexBucket> = Vec::new();
+    let mut buckets: Vec<ScrollIndexBucket> = Vec::new();
     for row in rows {
         let (first, count) = row?;
         let label = text::index_label(&first);
         match buckets.last_mut() {
             Some(last) if last.label == label => last.count += count,
-            _ => buckets.push(LibraryIndexBucket { label, count }),
+            _ => buckets.push(ScrollIndexBucket { label, count }),
         }
     }
     let unknown: i64 = connection.query_row(
@@ -407,7 +400,7 @@ fn name_buckets(
         |row| row.get(0),
     )?;
     if unknown > 0 {
-        buckets.push(LibraryIndexBucket {
+        buckets.push(ScrollIndexBucket {
             label: text::UNKNOWN_LABEL.into(),
             count: unknown as u64,
         });
@@ -420,18 +413,18 @@ fn year_buckets(
     connection: &Connection,
     from: &str,
     params: &[Value],
-    direction: LibrarySortDirection,
-) -> Result<Vec<LibraryIndexBucket>, StoreError> {
+    direction: SortDirection,
+) -> Result<Vec<ScrollIndexBucket>, StoreError> {
     let order = match direction {
-        LibrarySortDirection::Ascending => "ASC",
-        LibrarySortDirection::Descending => "DESC",
+        SortDirection::Ascending => "ASC",
+        SortDirection::Descending => "DESC",
     };
     let mut statement = connection.prepare(&format!(
         "SELECT al.year, COUNT(*) {from} AND al.year IS NOT NULL GROUP BY al.year ORDER BY al.year {order}"
     ))?;
-    let mut buckets: Vec<LibraryIndexBucket> = statement
+    let mut buckets: Vec<ScrollIndexBucket> = statement
         .query_map(rusqlite::params_from_iter(params), |row| {
-            Ok(LibraryIndexBucket {
+            Ok(ScrollIndexBucket {
                 label: row.get::<_, i64>(0)?.to_string(),
                 count: row.get::<_, i64>(1)? as u64,
             })
@@ -443,7 +436,7 @@ fn year_buckets(
         |row| row.get(0),
     )?;
     if undated > 0 {
-        buckets.push(LibraryIndexBucket {
+        buckets.push(ScrollIndexBucket {
             label: text::UNKNOWN_LABEL.into(),
             count: undated as u64,
         });
@@ -458,8 +451,8 @@ impl LibraryStore {
         &self,
         cursor: Option<&str>,
         search: Option<&str>,
-        sort_key: LibraryTrackSortKey,
-        direction: LibrarySortDirection,
+        sort_key: TrackSortKey,
+        direction: SortDirection,
     ) -> Result<LibraryTrackPage, StoreError> {
         self.catalog_tracks_from(&TrackListRequest {
             query: TrackQuery {
@@ -499,7 +492,7 @@ impl LibraryStore {
     pub(crate) fn catalog_track_index(
         &self,
         query: &TrackQuery,
-    ) -> Result<Vec<LibraryIndexBucket>, StoreError> {
+    ) -> Result<Vec<ScrollIndexBucket>, StoreError> {
         let Some(column) = track_index_column(query.sort_key) else {
             return Ok(Vec::new());
         };
@@ -524,8 +517,8 @@ impl LibraryStore {
         &self,
         cursor: Option<&str>,
         search: Option<&str>,
-        sort_key: LibraryAlbumSortKey,
-        direction: LibrarySortDirection,
+        sort_key: AlbumSortKey,
+        direction: SortDirection,
     ) -> Result<LibraryAlbumPage, StoreError> {
         self.catalog_albums_from(&AlbumListRequest {
             query: AlbumQuery {
@@ -565,26 +558,26 @@ impl LibraryStore {
     pub(crate) fn catalog_album_index(
         &self,
         query: &AlbumQuery,
-    ) -> Result<Vec<LibraryIndexBucket>, StoreError> {
+    ) -> Result<Vec<ScrollIndexBucket>, StoreError> {
         let direction = query.sort_direction;
         let paged = albums_query(query.search.as_deref(), query.sort_key, direction);
         let connection = self.read()?;
         match query.sort_key {
-            LibraryAlbumSortKey::Title => name_buckets(
+            AlbumSortKey::Title => name_buckets(
                 &connection,
                 &paged.count_from_where,
                 &paged.params,
                 "al.title_sort",
                 direction,
             ),
-            LibraryAlbumSortKey::Artist => name_buckets(
+            AlbumSortKey::Artist => name_buckets(
                 &connection,
                 &paged.count_from_where,
                 &paged.params,
                 "al.album_artist_sort",
                 direction,
             ),
-            LibraryAlbumSortKey::Year => year_buckets(
+            AlbumSortKey::Year => year_buckets(
                 &connection,
                 &paged.count_from_where,
                 &paged.params,
@@ -599,8 +592,8 @@ impl LibraryStore {
         &self,
         cursor: Option<&str>,
         search: Option<&str>,
-        sort_key: LibraryAlbumArtistSortKey,
-        direction: LibrarySortDirection,
+        sort_key: ArtistSortKey,
+        direction: SortDirection,
     ) -> Result<LibraryAlbumArtistPage, StoreError> {
         self.catalog_album_artists_from(&AlbumArtistListRequest {
             query: AlbumArtistQuery {
@@ -640,8 +633,8 @@ impl LibraryStore {
     pub(crate) fn catalog_album_artist_index(
         &self,
         query: &AlbumArtistQuery,
-    ) -> Result<Vec<LibraryIndexBucket>, StoreError> {
-        if query.sort_key != LibraryAlbumArtistSortKey::Artist {
+    ) -> Result<Vec<ScrollIndexBucket>, StoreError> {
+        if query.sort_key != ArtistSortKey::Artist {
             return Ok(Vec::new());
         }
         let paged = album_artists_query(
@@ -663,8 +656,8 @@ impl LibraryStore {
         &self,
         artist: ArtistId,
         cursor: Option<&str>,
-        sort_key: LibraryArtistAlbumSortKey,
-        direction: LibrarySortDirection,
+        sort_key: ArtistAlbumSortKey,
+        direction: SortDirection,
     ) -> Result<LibraryAlbumPage, StoreError> {
         let connection = self.read()?;
         let query = artist_albums_query(artist, sort_key, direction);
@@ -680,10 +673,7 @@ impl LibraryStore {
         })
     }
 
-    pub(crate) fn catalog_artist(
-        &self,
-        artist: ArtistId,
-    ) -> Result<LibraryAlbumArtistSummary, StoreError> {
+    pub(crate) fn catalog_artist(&self, artist: ArtistId) -> Result<ArtistRow, StoreError> {
         let connection = self.read()?;
         connection
             .query_row(
@@ -696,10 +686,7 @@ impl LibraryStore {
     }
 
     /// The details of an album by its ID.
-    pub(crate) fn catalog_album(
-        &self,
-        album_id: AlbumId,
-    ) -> Result<LibraryAlbumDetails, StoreError> {
+    pub(crate) fn catalog_album(&self, album_id: AlbumId) -> Result<AlbumDetails, StoreError> {
         let connection = self.read()?;
         Self::album_details(&connection, album_id)
     }
@@ -708,7 +695,7 @@ impl LibraryStore {
     fn album_details(
         connection: &Connection,
         album_id: AlbumId,
-    ) -> Result<LibraryAlbumDetails, StoreError> {
+    ) -> Result<AlbumDetails, StoreError> {
         let album_hex = album_id.to_hex();
         let summary = connection
             .query_row(
@@ -755,8 +742,8 @@ impl LibraryStore {
         if count == 0 {
             return Err(StoreError::AlbumNotFound);
         }
-        Ok(LibraryAlbumDetails {
-            summary: LibraryAlbumSummary { year, ..summary },
+        Ok(AlbumDetails {
+            summary: AlbumRow { year, ..summary },
             date,
             track_count: count as u64,
             duration_ms: duration.map(|value| value as u64),
@@ -790,7 +777,7 @@ impl LibraryStore {
             let number = |index: usize| -> rusqlite::Result<Option<u32>> {
                 Ok(row.get::<_, Option<i64>>(index)?.map(|value| value as u32))
             };
-            Ok(LibraryAlbumTrackSummary {
+            Ok(AlbumTrackRow {
                 core: TrackCore {
                     id: track_id_column(row, 0)?,
                     title: row.get(1)?,

@@ -1,14 +1,12 @@
 //! Volume, mute and the saved playback preferences.
 
-use super::{
-    PlaybackPreferences, PlaybackServiceError, PlaybackSnapshot, PlaybackWorker, Versioned,
-};
+use super::{PlaybackPreferences, PlaybackServiceError, PlaybackState, PlaybackWorker, Revisioned};
 
 impl PlaybackWorker {
     pub(super) fn set_volume(
         &mut self,
         volume: f32,
-    ) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
+    ) -> Result<Revisioned<PlaybackState>, PlaybackServiceError> {
         let changed = self
             .volume_state
             .set_volume(volume)
@@ -16,17 +14,17 @@ impl PlaybackWorker {
         Ok(self.volume_changed(changed))
     }
 
-    pub(super) fn mute(&mut self) -> Versioned<PlaybackSnapshot> {
+    pub(super) fn mute(&mut self) -> Revisioned<PlaybackState> {
         let changed = self.volume_state.mute();
         self.volume_changed(changed)
     }
 
-    pub(super) fn unmute(&mut self) -> Versioned<PlaybackSnapshot> {
+    pub(super) fn unmute(&mut self) -> Revisioned<PlaybackState> {
         let changed = self.volume_state.unmute();
         self.volume_changed(changed)
     }
 
-    pub(super) fn volume_changed(&mut self, changed: bool) -> Versioned<PlaybackSnapshot> {
+    pub(super) fn volume_changed(&mut self, changed: bool) -> Revisioned<PlaybackState> {
         if !changed {
             return self.playback_versioned();
         }

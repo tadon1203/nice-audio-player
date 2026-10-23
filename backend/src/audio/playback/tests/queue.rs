@@ -6,7 +6,7 @@ fn queue_revisions_grow_on_each_queue_change() {
 
     let repeat = harness
         .call(|reply| PlaybackCommand::SetRepeatMode {
-            mode: PlaybackRepeatMode::All,
+            mode: RepeatMode::All,
             reply,
         })
         .unwrap();
@@ -95,7 +95,7 @@ fn enqueueing_nothing_on_an_empty_queue_is_refused() {
     assert_eq!(result, Err(PlaybackServiceError::InvalidPlaybackState));
 }
 
-fn restore(harness: &mut Harness) -> Answer<PlaybackSnapshot> {
+fn restore(harness: &mut Harness) -> Answer<PlaybackState> {
     harness
         .call(|reply| PlaybackCommand::RestorePreviousQueue { reply })
         .map(|versioned| versioned.value)
@@ -288,7 +288,7 @@ fn when_every_track_has_left_the_library_the_start_is_refused() {
     assert_eq!(
         result,
         Err(PlaybackServiceError::Common {
-            error: CommonError::TrackUnavailable,
+            error: CommandError::TrackUnavailable,
         })
     );
     assert!(harness.queue_snapshot().current.is_none());
@@ -310,7 +310,7 @@ fn a_failed_library_read_during_the_queue_lookup_drops_no_queue_item() {
     assert_eq!(
         result,
         Err(PlaybackServiceError::Common {
-            error: CommonError::PersistenceFailed,
+            error: CommandError::PersistenceFailed,
         })
     );
     assert_eq!(
@@ -328,11 +328,11 @@ fn a_window_leaves_out_a_track_that_has_left_the_library_since() {
         library.add(named_track(&format!("t{i}")));
     }
     let ids: Vec<TrackId> = (0..10).map(|i| track_id_of(&format!("t{i}"))).collect();
-    let mut queue = PlaybackQueue::new(PlaybackRepeatMode::Off, false);
+    let mut queue = PlaybackQueue::new(RepeatMode::Off, false);
     queue
         .replace(ids, 0, &mut StdRng::seed_from_u64(1))
         .unwrap();
-    let snapshot = PlaybackQueueSnapshot::of(&queue, &tracks, false);
+    let snapshot = QueueState::of(&queue, &tracks, false);
     tracks.forget();
     library.remove(track_id_of("t4"));
 
@@ -358,12 +358,12 @@ fn a_long_queue_snapshot_carries_a_prefix_and_serves_the_rest_in_windows() {
     let ids: Vec<TrackId> = (0..total + 61)
         .map(|i| track_id_of(&format!("t{i}")))
         .collect();
-    let mut queue = PlaybackQueue::new(PlaybackRepeatMode::Off, false);
+    let mut queue = PlaybackQueue::new(RepeatMode::Off, false);
     queue
         .replace(ids, 60, &mut StdRng::seed_from_u64(1))
         .unwrap();
 
-    let snapshot = PlaybackQueueSnapshot::of(&queue, &tracks, false);
+    let snapshot = QueueState::of(&queue, &tracks, false);
 
     assert_eq!(snapshot.history.len(), 50);
     assert_eq!(snapshot.history_count, 60);

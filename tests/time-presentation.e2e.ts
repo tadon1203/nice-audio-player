@@ -56,7 +56,7 @@ test("lyrics retain artwork ink, readable Row index times and equal ink while re
   native,
   player,
 }) => {
-  native.respond("getTrackLyrics", ({ trackId }) => ({
+  native.respond("lyricsTrack", ({ trackId }) => ({
     status: "resolved",
     trackId,
     notice: null,

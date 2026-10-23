@@ -7,7 +7,7 @@ test("shows playback initialization failure instead of remaining loading", async
   page,
   native,
 }) => {
-  native.fail("connect", { code: "noOutputDevice" });
+  native.fail("appConnect", { code: "noOutputDevice" });
   await page.goto("/library/albums");
 
   const dock = page.getByRole("contentinfo", { name: "Playback controls" });
@@ -24,7 +24,7 @@ test("does not present an album track query failure as an empty album", async ({
   page,
   native,
 }) => {
-  native.fail("listLibraryAlbumTracks", persistenceFailure);
+  native.fail("libraryListAlbumTracks", persistenceFailure);
   await page.goto("/library/albums");
   await page.getByRole("link", { name: "Open album Test album by Test artist" }).click();
 
@@ -36,7 +36,7 @@ test("does not present an artist album query failure as an empty artist", async 
   page,
   native,
 }) => {
-  native.fail("listLibraryArtistAlbums", persistenceFailure);
+  native.fail("libraryListArtistAlbums", persistenceFailure);
   await page.goto("/library/album-artists");
   await page.getByRole("link", { name: "Browse albums by Test artist" }).click();
 
@@ -45,7 +45,7 @@ test("does not present an artist album query failure as an empty artist", async 
 });
 
 test("shows an album summary query failure in the album workspace", async ({ page, native }) => {
-  native.fail("getLibraryAlbum", persistenceFailure);
+  native.fail("libraryAlbum", persistenceFailure);
   await page.goto(`/library/albums/${testAlbum.id}`);
 
   await expect(page.getByRole("alert")).toContainText("The library database could not be updated.");
@@ -53,7 +53,7 @@ test("shows an album summary query failure in the album workspace", async ({ pag
 });
 
 test("shows an artist summary query failure in the artist workspace", async ({ page, native }) => {
-  native.fail("getLibraryArtist", persistenceFailure);
+  native.fail("libraryArtist", persistenceFailure);
   await page.goto(`/library/album-artists/${testAlbum.albumArtist.id}`);
 
   await expect(page.getByRole("alert")).toContainText("The library database could not be updated.");
@@ -64,7 +64,7 @@ test("the properties sheet says a track the library does not hold is not found",
   page,
   native,
 }) => {
-  native.fail("getLibraryTrackProperties", {
+  native.fail("libraryTrackProperties", {
     code: "common",
     error: { code: "trackNotFound" },
   });
@@ -81,7 +81,7 @@ test("the properties sheet says a track the library does not hold is not found",
 });
 
 test("shows the structured library unavailable reason", async ({ page, native }) => {
-  native.respond("getLibraryStatus", { status: "unavailable", reason: "databaseCorrupt" });
+  native.respond("libraryStatus", { status: "unavailable", reason: "databaseCorrupt" });
   await page.goto("/library/albums");
 
   await expect(page.getByRole("alert")).toContainText("The library database is corrupt.");

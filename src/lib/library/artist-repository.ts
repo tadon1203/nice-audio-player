@@ -1,10 +1,5 @@
 import { infiniteQueryOptions, queryOptions } from "@tanstack/svelte-query";
-import type {
-  ArtistId,
-  LibraryAlbumArtistSummary,
-  LibraryAlbumPage,
-  LibraryClient,
-} from "#lib/native";
+import type { ArtistId, ArtistRow, LibraryAlbumPage, LibraryClient } from "#lib/native";
 import { LibraryQueryKeys, type ArtistAlbumsArguments } from "./library-query-keys";
 import type {
   CreateInfiniteQueryOptions,
@@ -23,19 +18,16 @@ export class ArtistRepository {
   }
 
   public detailsOptions(artistId: ArtistId): CreateQueryOptions<
-    LibraryAlbumArtistSummary,
+    ArtistRow,
     Error,
-    LibraryAlbumArtistSummary,
+    ArtistRow,
     readonly unknown[]
   > & {
-    initialData?:
-      | LibraryAlbumArtistSummary
-      | InitialDataFunction<LibraryAlbumArtistSummary>
-      | undefined;
-  } & QueryKeyWithDataTag<readonly unknown[], LibraryAlbumArtistSummary, Error> {
+    initialData?: ArtistRow | InitialDataFunction<ArtistRow> | undefined;
+  } & QueryKeyWithDataTag<readonly unknown[], ArtistRow, Error> {
     return queryOptions({
       queryKey: LibraryQueryKeys.artist(artistId),
-      queryFn: (): Promise<LibraryAlbumArtistSummary> => this.#client.artist(artistId),
+      queryFn: (): Promise<ArtistRow> => this.#client.artist(artistId),
       gcTime: Infinity,
     });
   }

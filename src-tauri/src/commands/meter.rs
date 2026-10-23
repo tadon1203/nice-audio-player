@@ -1,4 +1,4 @@
-use backend::diagnostics::logged;
+use backend::errors::logged;
 use specta::{Type, Types, datatype::DataType};
 use tauri::ipc::{Channel, InvokeResponseBody, IpcResponse};
 
@@ -27,7 +27,7 @@ impl Type for MeterFrameBytes {
 /// deliver are dropped; a channel that is gone ends the subscription.
 #[tauri::command]
 #[specta::specta]
-pub(crate) async fn subscribe_meter_frames(
+pub(crate) async fn meter_start(
     frames: Channel<MeterFrameBytes>,
     state: tauri::State<'_, AppState>,
 ) -> Result<u32, ()> {
@@ -48,7 +48,7 @@ pub(crate) async fn subscribe_meter_frames(
 /// alone.
 #[tauri::command]
 #[specta::specta]
-pub(crate) async fn unsubscribe_meter_frames(
+pub(crate) async fn meter_stop(
     subscription: u32,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), ()> {

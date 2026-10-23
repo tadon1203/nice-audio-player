@@ -8,121 +8,94 @@ export const commands = {
 	 *  Upcoming queue items from `offset` (at most `limit`), for the parts of a long queue the
 	 *  snapshot does not carry. Their tracks are read from the library now.
 	 */
-	getPlaybackQueueWindow: (offset: number, limit: number) => __TAURI_INVOKE<PlaybackQueueWindow>("get_playback_queue_window", { offset, limit }),
+	playerQueueWindow: (offset: number, limit: number) => __TAURI_INVOKE<QueueWindow>("player_queue_window", { offset, limit }),
 	/**
 	 *  Replaces the queue with `context` and plays from `start_track_id`, or from the context's
 	 *  first track when it is `None`.
 	 */
-	startPlayback: (context: PlaybackContext, startTrackId: number | null) => __TAURI_INVOKE<Versioned<PlaybackSnapshot>>("start_playback", { context, startTrackId }),
-	pausePlayback: () => __TAURI_INVOKE<Versioned<PlaybackSnapshot>>("pause_playback"),
-	resumePlayback: () => __TAURI_INVOKE<Versioned<PlaybackSnapshot>>("resume_playback"),
-	previousPlayback: () => __TAURI_INVOKE<Versioned<PlaybackSnapshot>>("previous_playback"),
-	nextPlayback: () => __TAURI_INVOKE<Versioned<PlaybackSnapshot>>("next_playback"),
-	seekPlayback: (positionMs: number) => __TAURI_INVOKE<Versioned<PlaybackSnapshot>>("seek_playback", { positionMs }),
-	setPlaybackVolume: (volume: number) => __TAURI_INVOKE<Versioned<PlaybackSnapshot>>("set_playback_volume", { volume }),
-	setPlaybackMuted: (muted: boolean) => __TAURI_INVOKE<Versioned<PlaybackSnapshot>>("set_playback_muted", { muted }),
-	listAudioOutputDevices: () => __TAURI_INVOKE<AudioOutputDevice[]>("list_audio_output_devices"),
-	setPlaybackRepeatMode: (mode: PlaybackRepeatMode) => __TAURI_INVOKE<Versioned<PlaybackQueueSnapshot>>("set_playback_repeat_mode", { mode }),
-	setPlaybackShuffle: (enabled: boolean) => __TAURI_INVOKE<Versioned<PlaybackQueueSnapshot>>("set_playback_shuffle", { enabled }),
+	playerPlay: (context: PlaybackContext, startTrackId: number | null) => __TAURI_INVOKE<Revisioned<PlaybackState>>("player_play", { context, startTrackId }),
+	playerPause: () => __TAURI_INVOKE<Revisioned<PlaybackState>>("player_pause"),
+	playerResume: () => __TAURI_INVOKE<Revisioned<PlaybackState>>("player_resume"),
+	playerPrevious: () => __TAURI_INVOKE<Revisioned<PlaybackState>>("player_previous"),
+	playerNext: () => __TAURI_INVOKE<Revisioned<PlaybackState>>("player_next"),
+	playerSeek: (positionMs: number) => __TAURI_INVOKE<Revisioned<PlaybackState>>("player_seek", { positionMs }),
+	playerSetVolume: (volume: number) => __TAURI_INVOKE<Revisioned<PlaybackState>>("player_set_volume", { volume }),
+	playerSetMuted: (muted: boolean) => __TAURI_INVOKE<Revisioned<PlaybackState>>("player_set_muted", { muted }),
+	playerListOutputDevices: () => __TAURI_INVOKE<AudioOutputDevice[]>("player_list_output_devices"),
+	playerSetRepeatMode: (mode: RepeatMode) => __TAURI_INVOKE<Revisioned<QueueState>>("player_set_repeat_mode", { mode }),
+	playerSetShuffle: (enabled: boolean) => __TAURI_INVOKE<Revisioned<QueueState>>("player_set_shuffle", { enabled }),
 	/**  Switches the output device; a loaded track restarts on it at the same position. */
-	setAudioOutputSelection: (selection: AudioOutputSelection) => __TAURI_INVOKE<Versioned<PlaybackSnapshot>>("set_audio_output_selection", { selection }),
-	removeQueueItem: (id: QueueItemId) => __TAURI_INVOKE<Versioned<PlaybackQueueSnapshot>>("remove_queue_item", { id }),
-	moveQueueItem: (id: QueueItemId, to: number) => __TAURI_INVOKE<Versioned<PlaybackQueueSnapshot>>("move_queue_item", { id, to }),
+	playerSetOutputSelection: (selection: AudioOutputSelection) => __TAURI_INVOKE<Revisioned<PlaybackState>>("player_set_output_selection", { selection }),
+	playerRemoveQueueItem: (id: QueueItemId) => __TAURI_INVOKE<Revisioned<QueueState>>("player_remove_queue_item", { id }),
+	playerMoveQueueItem: (id: QueueItemId, to: number) => __TAURI_INVOKE<Revisioned<QueueState>>("player_move_queue_item", { id, to }),
 	/**  Makes an upcoming queue item current and plays it. */
-	playQueueItem: (id: QueueItemId) => __TAURI_INVOKE<Versioned<PlaybackSnapshot>>("play_queue_item", { id }),
+	playerPlayQueueItem: (id: QueueItemId) => __TAURI_INVOKE<Revisioned<PlaybackState>>("player_play_queue_item", { id }),
 	/**
 	 *  Adds a library track to the queue: right after the current one (`next`) or at the end.
 	 *  With nothing queued it starts playing.
 	 */
-	enqueueTrack: (trackId: TrackId, next: boolean) => __TAURI_INVOKE<Versioned<PlaybackQueueSnapshot>>("enqueue_track", { trackId, next }),
-	clearQueue: () => __TAURI_INVOKE<Versioned<PlaybackQueueSnapshot>>("clear_queue"),
+	playerEnqueueTrack: (trackId: TrackId, next: boolean) => __TAURI_INVOKE<Revisioned<QueueState>>("player_enqueue_track", { trackId, next }),
+	playerClearQueue: () => __TAURI_INVOKE<Revisioned<QueueState>>("player_clear_queue"),
 	/**  Puts back the queue the last replacement or Clear upcoming took away. */
-	restorePreviousQueue: () => __TAURI_INVOKE<Versioned<PlaybackSnapshot>>("restore_previous_queue"),
-	getLibraryStatus: () => __TAURI_INVOKE<LibraryStatus>("get_library_status"),
+	playerRestorePreviousQueue: () => __TAURI_INVOKE<Revisioned<PlaybackState>>("player_restore_previous_queue"),
+	libraryStatus: () => __TAURI_INVOKE<LibraryStatus>("library_status"),
 	/**  Moves the library database aside and restarts the app, which recreates it and rescans. */
-	resetLibraryAndRescan: () => __TAURI_INVOKE<null>("reset_library_and_rescan"),
-	listLibraryRoots: () => __TAURI_INVOKE<LibraryRoot[]>("list_library_roots"),
-	registerLibraryRoot: (path: string) => __TAURI_INVOKE<LibraryRoot>("register_library_root", { path }),
-	setLibraryRootEnabled: (id: RootId, enabled: boolean) => __TAURI_INVOKE<LibraryRoot>("set_library_root_enabled", { id, enabled }),
-	removeLibraryRoot: (id: RootId) => __TAURI_INVOKE<null>("remove_library_root", { id }),
+	libraryReset: () => __TAURI_INVOKE<null>("library_reset"),
+	libraryListDirectories: () => __TAURI_INVOKE<LibraryDirectory[]>("library_list_directories"),
+	libraryAddDirectory: (path: string) => __TAURI_INVOKE<LibraryDirectory>("library_add_directory", { path }),
+	librarySetDirectoryEnabled: (id: DirectoryId, enabled: boolean) => __TAURI_INVOKE<LibraryDirectory>("library_set_directory_enabled", { id, enabled }),
+	libraryRemoveDirectory: (id: DirectoryId) => __TAURI_INVOKE<null>("library_remove_directory", { id }),
 	/**
 	 *  Deletes the Missing tracks from the Library and returns how many there were. Never touches a
 	 *  source file.
 	 */
-	deleteMissingLibraryTracks: () => __TAURI_INVOKE<number>("delete_missing_library_tracks"),
-	/**  Opens the folder holding the log files in the file manager. */
-	openLogDirectory: () => __TAURI_INVOKE<null>("open_log_directory"),
-	startLibraryScan: () => __TAURI_INVOKE<null>("start_library_scan"),
-	cancelLibraryScan: () => __TAURI_INVOKE<null>("cancel_library_scan"),
-	listLibraryTracks: (request: TrackListRequest) => __TAURI_INVOKE<LibraryTrackPage>("list_library_tracks", { request }),
-	listLibraryAlbums: (request: AlbumListRequest) => __TAURI_INVOKE<LibraryAlbumPage>("list_library_albums", { request }),
-	listLibraryAlbumArtists: (request: AlbumArtistListRequest) => __TAURI_INVOKE<LibraryAlbumArtistPage>("list_library_album_artists", { request }),
+	libraryDeleteMissingTracks: () => __TAURI_INVOKE<number>("library_delete_missing_tracks"),
+	/**  Opens the directory holding the log files in the file manager. */
+	appOpenLogDirectory: () => __TAURI_INVOKE<null>("app_open_log_directory"),
+	libraryStartScan: () => __TAURI_INVOKE<null>("library_start_scan"),
+	libraryCancelScan: () => __TAURI_INVOKE<null>("library_cancel_scan"),
+	libraryListTracks: (request: TrackListRequest) => __TAURI_INVOKE<LibraryTrackPage>("library_list_tracks", { request }),
+	libraryListAlbums: (request: AlbumListRequest) => __TAURI_INVOKE<LibraryAlbumPage>("library_list_albums", { request }),
+	libraryListArtists: (request: AlbumArtistListRequest) => __TAURI_INVOKE<LibraryAlbumArtistPage>("library_list_artists", { request }),
 	/**  The scroll index of the Tracks list: how many names start under each label, in list order. */
-	listLibraryTrackIndex: (query: TrackQuery) => __TAURI_INVOKE<LibraryIndexBucket[]>("list_library_track_index", { query }),
-	listLibraryAlbumIndex: (query: AlbumQuery) => __TAURI_INVOKE<LibraryIndexBucket[]>("list_library_album_index", { query }),
-	listLibraryAlbumArtistIndex: (query: AlbumArtistQuery) => __TAURI_INVOKE<LibraryIndexBucket[]>("list_library_album_artist_index", { query }),
-	getLibraryArtist: (artistId: ArtistId) => __TAURI_INVOKE<LibraryAlbumArtistSummary>("get_library_artist", { artistId }),
-	listLibraryArtistAlbums: (request: ArtistAlbumsRequest) => __TAURI_INVOKE<LibraryAlbumPage>("list_library_artist_albums", { request }),
-	getLibraryAlbum: (albumId: AlbumId) => __TAURI_INVOKE<LibraryAlbumDetails>("get_library_album", { albumId }),
-	listLibraryAlbumTracks: (request: AlbumTracksRequest) => __TAURI_INVOKE<LibraryAlbumTrackPage>("list_library_album_tracks", { request }),
-	getLibraryTrackProperties: (trackId: TrackId) => __TAURI_INVOKE<LibraryTrackProperties>("get_library_track_properties", { trackId }),
+	libraryTrackIndex: (query: TrackQuery) => __TAURI_INVOKE<ScrollIndexBucket[]>("library_track_index", { query }),
+	libraryAlbumIndex: (query: AlbumQuery) => __TAURI_INVOKE<ScrollIndexBucket[]>("library_album_index", { query }),
+	libraryArtistIndex: (query: AlbumArtistQuery) => __TAURI_INVOKE<ScrollIndexBucket[]>("library_artist_index", { query }),
+	libraryArtist: (artistId: ArtistId) => __TAURI_INVOKE<ArtistRow>("library_artist", { artistId }),
+	libraryListArtistAlbums: (request: ArtistAlbumsRequest) => __TAURI_INVOKE<LibraryAlbumPage>("library_list_artist_albums", { request }),
+	libraryAlbum: (albumId: AlbumId) => __TAURI_INVOKE<AlbumDetails>("library_album", { albumId }),
+	libraryListAlbumTracks: (request: AlbumTracksRequest) => __TAURI_INVOKE<LibraryAlbumTrackPage>("library_list_album_tracks", { request }),
+	libraryTrackProperties: (trackId: TrackId) => __TAURI_INVOKE<TrackProperties>("library_track_properties", { trackId }),
 	/**  Shows the track's file in Explorer, selected. */
-	revealLibraryTrack: (trackId: TrackId) => __TAURI_INVOKE<null>("reveal_library_track", { trackId }),
-	getArtworkAccent: (hash: ArtworkHash) => __TAURI_INVOKE<string | null>("get_artwork_accent", { hash }),
-	getTrackLyrics: (trackId: TrackId) => __TAURI_INVOKE<LyricsResolution>("get_track_lyrics", { trackId }),
+	libraryRevealTrack: (trackId: TrackId) => __TAURI_INVOKE<null>("library_reveal_track", { trackId }),
+	libraryArtworkAccent: (hash: ArtworkHash) => __TAURI_INVOKE<string | null>("library_artwork_accent", { hash }),
+	lyricsTrack: (trackId: TrackId) => __TAURI_INVOKE<LyricsResolution>("lyrics_track", { trackId }),
 	/**
 	 *  Starts streaming Meter frames to `frames` as binary messages (see `FRAME_BYTES` in the
 	 *  backend's `meter` module for the layout), replacing any earlier subscription the way `connect`
 	 *  replaces the Renderer's channel. Returns the id to end it with. Frames the channel cannot
 	 *  deliver are dropped; a channel that is gone ends the subscription.
 	 */
-	subscribeMeterFrames: (frames: Channel<ArrayBuffer>) => __TAURI_INVOKE<number>("subscribe_meter_frames", { frames }),
+	meterStart: (frames: Channel<ArrayBuffer>) => __TAURI_INVOKE<number>("meter_start", { frames }),
 	/**
 	 *  Ends the subscription `subscription` names; one that was already replaced or ended is left
 	 *  alone.
 	 */
-	unsubscribeMeterFrames: (subscription: number) => __TAURI_INVOKE<null>("unsubscribe_meter_frames", { subscription }),
+	meterStop: (subscription: number) => __TAURI_INVOKE<null>("meter_stop", { subscription }),
 	/**
 	 *  Registers `channel` as the one channel to the Renderer, replacing an earlier one. Returns the
 	 *  current value of every state topic. A message sent in between has a revision that is not
 	 *  older than the returned value, so the Renderer can order them by revision.
 	 */
-	connect: (channel: Channel<BackendMessage>) => __TAURI_INVOKE<InitialState>("connect", { channel }),
+	appConnect: (channel: Channel<BackendMessage>) => __TAURI_INVOKE<InitialState>("app_connect", { channel }),
 	/**
 	 *  Applies a partial update to the appearance and returns it as it is afterwards, with its
 	 *  revision.
 	 */
-	updateAppearance: (patch: AppearancePatch) => __TAURI_INVOKE<Versioned<Appearance>>("update_appearance", { patch }),
+	appearanceUpdate: (patch: AppearancePatch) => __TAURI_INVOKE<Revisioned<Appearance>>("appearance_update", { patch }),
 };
 
 /* Types */
-/**  A loaded track: identity plus how it reaches the output device. */
-export type ActiveSession = {
-	item: PlaybackItem,
-	/**  What started this session. A seek or an output switch keeps it. */
-	startedBy: SessionStartedBy,
-	playbackId: PlaybackId,
-	positionMs: number,
-	/**
-	 *  Counts the seeks the player has completed. A change means the position jumped on
-	 *  purpose, so a display can react to the jump instead of guessing it from the numbers.
-	 */
-	seekRevision: number,
-	durationMs: number | null,
-	outputDevice: AudioOutputDeviceIdentity,
-	channelConversion: PlaybackChannelConversion,
-	/**
-	 *  The loaded file's format (its extension when the library has none), bit depth and
-	 *  average bitrate: the start of the signal path.
-	 */
-	sourceFormat: string,
-	sourceBitDepth: number | null,
-	sourceBitrateKbps: number | null,
-	sourceSampleRate: number,
-	outputSampleRate: number,
-	resamplingActive: boolean,
-};
-
 /**  A page of the Album Artists list (see [`TrackListRequest`]). */
 export type AlbumArtistListRequest = {
 	cursor: string | null,
@@ -132,14 +105,21 @@ export type AlbumArtistListRequest = {
 /**  How the Album Artists list is filtered and sorted. */
 export type AlbumArtistQuery = {
 	search: string | null,
-	sortKey: LibraryAlbumArtistSortKey,
-	sortDirection: LibrarySortDirection,
+	sortKey: ArtistSortKey,
+	sortDirection: SortDirection,
+};
+
+export type AlbumDetails = {
+	summary: AlbumRow,
+	date: string | null,
+	trackCount: number,
+	durationMs: number | null,
+	firstPlayableTrackId: TrackId | null,
 };
 
 /**
  *  An album: blake3 of its normalized Album Artist, normalized title, and absolute album
- *  directory. A track with no album hashes an empty directory. On the IPC 32 lowercase hex
- *  characters.
+ *  directory. A track with no album hashes an empty directory.
  */
 export type AlbumId = string;
 
@@ -152,9 +132,28 @@ export type AlbumListRequest = {
 /**  How the Albums list is filtered and sorted. */
 export type AlbumQuery = {
 	search: string | null,
-	sortKey: LibraryAlbumSortKey,
-	sortDirection: LibrarySortDirection,
+	sortKey: AlbumSortKey,
+	sortDirection: SortDirection,
 };
+
+export type AlbumRow = {
+	id: AlbumId,
+	title: string,
+	albumArtist: ArtistRef,
+	artwork: ArtworkRef | null,
+	year: number | null,
+};
+
+export type AlbumSortKey = "title" | "artist" | "year";
+
+export type AlbumTrackRow = {
+	state: TrackState,
+	trackNumber: number | null,
+	discNumber: number | null,
+	fileFormat: string | null,
+	bitDepth: number | null,
+	sampleRate: number | null,
+} & TrackCore;
 
 /**  The tracks of one album, by its ID (see `ids.rs`), from a page cursor. */
 export type AlbumTracksRequest = {
@@ -179,21 +178,33 @@ export type AppearancePatch = {
 	calmMotion: boolean | null,
 };
 
+export type ArtistAlbumSortKey = "year" | "title";
+
 /**  The albums of one Album Artist, by its ID (see `ids.rs`). */
 export type ArtistAlbumsRequest = {
 	artistId: ArtistId,
 	cursor: string | null,
-	sortKey: LibraryArtistAlbumSortKey,
-	sortDirection: LibrarySortDirection,
+	sortKey: ArtistAlbumSortKey,
+	sortDirection: SortDirection,
 };
 
-/**  An Album Artist: blake3 of the normalized name. On the IPC 32 lowercase hex characters. */
+/**  An Album Artist: blake3 of the normalized name. */
 export type ArtistId = string;
 
 export type ArtistRef = {
 	id: ArtistId,
 	name: string,
 };
+
+export type ArtistRow = {
+	id: ArtistId,
+	name: string,
+	artwork: ArtworkRef | null,
+	albumCount: number,
+	trackCount: number,
+};
+
+export type ArtistSortKey = "artist" | "albumCount" | "trackCount";
 
 /**  Stored artwork: the 64-character blake3 hex of the image file. */
 export type ArtworkHash = string;
@@ -236,93 +247,75 @@ export type BackendMessage =
 	kind: "position",
 } & PlaybackPosition;
 
-/**  The codes every command can answer with, so the Renderer shows each one the same way. */
-export type CommonError = { code: "trackNotFound" } | { code: "trackUnavailable" } | { code: "libraryUnavailable" } | { code: "persistenceFailed" } | { code: "taskFailed" };
+/**  The codes a command can answer with, so the Renderer shows each one the same way. */
+export type CommandError = { code: "trackNotFound" } | { code: "trackUnavailable" } | { code: "libraryUnavailable" } | { code: "persistenceFailed" } | { code: "taskFailed" } | { code: "invalidDirectory" } | { code: "directoryNotDirectory" } | { code: "duplicateDirectory" } | { code: "overlappingDirectory" } | { code: "directoryContainsDataDirectory" } | { code: "directoryMissing" } | { code: "albumNotFound" } | { code: "artistNotFound" } | { code: "scanAlreadyRunning" } | { code: "scanNotRunning" } | { code: "noEnabledDirectories" } | { code: "output"; failure: PlaybackFailureCode } | { code: "superseded" } | { code: "queueItemNotFound" } | { code: "queueBusy" } | { code: "invalidVolume" } | { code: "invalidPlaybackState" } | { code: "durationUnavailable" } | { code: "seekFailed" } | { code: "deviceEnumerationFailed" };
+
+/**  A loaded track: identity plus how it reaches the output device. */
+export type CurrentPlayback = {
+	item: PlaybackItem,
+	/**  What started this session. A seek or an output switch keeps it. */
+	startedBy: StartedBy,
+	playbackId: PlaybackId,
+	positionMs: number,
+	/**
+	 *  Counts the seeks the player has completed. A change means the position jumped on
+	 *  purpose, so a display can react to the jump instead of guessing it from the numbers.
+	 */
+	seekRevision: number,
+	durationMs: number | null,
+	outputDevice: AudioOutputDeviceIdentity,
+	channelConversion: PlaybackChannelConversion,
+	/**
+	 *  The loaded file's format (its extension when the library has none), bit depth and
+	 *  average bitrate: the start of the signal path.
+	 */
+	sourceFormat: string,
+	sourceBitDepth: number | null,
+	sourceBitrateKbps: number | null,
+	sourceSampleRate: number,
+	outputSampleRate: number,
+	resamplingActive: boolean,
+};
+
+/**  A library directory: the `library_roots` rowid. Above zero. On the IPC a number. */
+export type DirectoryId = number;
 
 /**  The current value of every Backend state topic. `connect` returns it. */
 export type InitialState = {
-	playback: Versioned<PlaybackSnapshot>,
-	queue: Versioned<PlaybackQueueSnapshot>,
-	libraryScan: Versioned<LibraryScanSnapshot>,
-	waveform: Versioned<PlaybackWaveform | null>,
-	appearance: Versioned<Appearance>,
+	playback: Revisioned<PlaybackState>,
+	queue: Revisioned<QueueState>,
+	libraryScan: Revisioned<ScanState>,
+	waveform: Revisioned<PlaybackWaveform | null>,
+	appearance: Revisioned<Appearance>,
 };
 
 export type LibraryAlbumArtistPage = {
-	items: LibraryAlbumArtistSummary[],
+	items: ArtistRow[],
 	/**  How many rows the whole list has; only the first page (no cursor) says. */
 	totalCount: number | null,
 	nextCursor: string | null,
-};
-
-export type LibraryAlbumArtistSortKey = "artist" | "albumCount" | "trackCount";
-
-export type LibraryAlbumArtistSummary = {
-	id: ArtistId,
-	name: string,
-	artwork: ArtworkRef | null,
-	albumCount: number,
-	trackCount: number,
-};
-
-export type LibraryAlbumDetails = {
-	summary: LibraryAlbumSummary,
-	date: string | null,
-	trackCount: number,
-	durationMs: number | null,
-	firstPlayableTrackId: TrackId | null,
 };
 
 export type LibraryAlbumPage = {
-	items: LibraryAlbumSummary[],
+	items: AlbumRow[],
 	/**  How many rows the whole list has; only the first page (no cursor) says. */
 	totalCount: number | null,
 	nextCursor: string | null,
-};
-
-export type LibraryAlbumSortKey = "title" | "artist" | "year";
-
-export type LibraryAlbumSummary = {
-	id: AlbumId,
-	title: string,
-	albumArtist: ArtistRef,
-	artwork: ArtworkRef | null,
-	year: number | null,
 };
 
 export type LibraryAlbumTrackPage = {
-	items: LibraryAlbumTrackSummary[],
+	items: AlbumTrackRow[],
 	/**  How many rows the whole list has; only the first page (no cursor) says. */
 	totalCount: number | null,
 	nextCursor: string | null,
 };
 
-export type LibraryAlbumTrackSummary = {
-	state: TrackState,
-	trackNumber: number | null,
-	discNumber: number | null,
-	fileFormat: string | null,
-	bitDepth: number | null,
-	sampleRate: number | null,
-} & TrackCore;
+export type LibraryCommandError = { code: "common"; error: CommandError } | { code: "invalidDirectory" } | { code: "directoryNotDirectory" } | { code: "canonicalizationFailed" } | { code: "duplicateDirectory" } | { code: "overlappingDirectory" } | 
+/**  The directory holds the app's own data directory, which a scan would read as music. */
+{ code: "directoryContainsDataDirectory" } | { code: "scanInProgress" } | { code: "albumNotFound" } | { code: "invalidCursor" } | { code: "albumArtistNotFound" } | { code: "directoryMissing" } | { code: "scanAlreadyRunning" } | { code: "noEnabledDirectories" } | { code: "scanNotRunning" };
 
-export type LibraryArtistAlbumSortKey = "year" | "title";
-
-export type LibraryCommandError = { code: "common"; error: CommonError } | { code: "invalidRoot" } | { code: "rootNotDirectory" } | { code: "canonicalizationFailed" } | { code: "duplicateRoot" } | { code: "overlappingRoot" } | 
-/**  The folder holds the app's own data directory, which a scan would read as music. */
-{ code: "rootContainsDataDirectory" } | { code: "scanInProgress" } | { code: "albumNotFound" } | { code: "invalidCursor" } | { code: "albumArtistNotFound" } | { code: "rootMissing" } | { code: "scanAlreadyRunning" } | { code: "noEnabledRoots" } | { code: "scanNotRunning" };
-
-/**
- *  One entry of a list's scroll index: the label its names are filed under, and how many there
- *  are. Buckets come in the list's own order.
- */
-export type LibraryIndexBucket = {
-	label: string,
-	count: number,
-};
-
-export type LibraryRoot = {
-	id: RootId,
+export type LibraryDirectory = {
+	id: DirectoryId,
 	path: string,
 	enabled: boolean,
 	scanGeneration: number,
@@ -333,84 +326,18 @@ export type LibraryRoot = {
 	missingCount: number,
 };
 
-export type LibraryScanSnapshot = {
-	state: LibraryScanState,
-	currentRoot: LibraryRoot | null,
-	/**
-	 *  How many files the previous scans left in the scanned folders: what a rescan can expect
-	 *  to find, so its progress can be shown as a share. 0 when there is no such history.
-	 */
-	expectedCount: number,
-	discoveredCount: number,
-	inspectedCount: number,
-	indexedCount: number,
-	failedCount: number,
-	failureCode: ScanFailure | null,
-	/**
-	 *  How many scans have ended since the app started. Only ever grows, so a listener that saw
-	 *  the count change knows a scan ended, however many snapshots it missed in between.
-	 */
-	finishedCount: number,
-	/**
-	 *  How many files scans have added, changed, relinked, or found Missing or back since the app
-	 *  started. Only ever grows: a listener that sees it move since it last looked knows the
-	 *  catalog changed, and one that does not knows it did not.
-	 */
-	changedCount: number,
-};
-
-export type LibraryScanState = "idle" | "running" | "completed" | "cancelled" | "failed";
-
-export type LibrarySortDirection = "ascending" | "descending";
-
 export type LibraryStatus = { status: "ready" } | { status: "unavailable"; reason: LibraryUnavailableReason };
 
 export type LibraryTrackPage = {
-	items: LibraryTrackSummary[],
+	items: TrackRow[],
 	/**  How many rows the whole list has; only the first page (no cursor) says. */
 	totalCount: number | null,
 	nextCursor: string | null,
 };
 
-/**  The tags, audio format and location of one track, as the Properties view lists them. */
-export type LibraryTrackProperties = {
-	id: TrackId,
-	path: string,
-	fileName: string,
-	title: string | null,
-	artist: string | null,
-	album: string | null,
-	albumArtist: string | null,
-	trackNumber: number | null,
-	trackTotal: number | null,
-	discNumber: number | null,
-	discTotal: number | null,
-	genre: string | null,
-	date: string | null,
-	durationMs: number | null,
-	fileFormat: string | null,
-	codec: string | null,
-	sampleRate: number | null,
-	channelCount: number | null,
-	bitDepth: number | null,
-	bitrateKbps: number | null,
-	state: TrackState,
-};
-
-export type LibraryTrackSortKey = "title" | "artist" | "album" | "duration";
-
-export type LibraryTrackSummary = {
-	state: TrackState,
-	/**  `None` for a track with no album tag. */
-	album: TrackAlbum | null,
-	fileFormat: string | null,
-	bitDepth: number | null,
-	bitrateKbps: number | null,
-} & TrackCore;
-
 export type LibraryUnavailableReason = "databaseOpenFailed" | "migrationFailed" | "schemaTooNew" | "databaseCorrupt";
 
-export type LyricsCommandError = { code: "common"; error: CommonError };
+export type LyricsCommandError = { code: "common"; error: CommandError };
 
 export type LyricsContent = { kind: "plain"; lines: string[] } | { kind: "timed"; lines: LyricsTimedLine[] };
 
@@ -421,7 +348,7 @@ export type LyricsDocument = {
 };
 
 export type LyricsResolution = { status: "resolved"; trackId: TrackId; document: LyricsDocument; notice: LyricsResolutionNotice | null } | { status: "notFound"; trackId: TrackId } | { status: "sourceFailed"; trackId: TrackId; 
-/**  The name of the sidecar file the track looks for, without its folder. */
+/**  The name of the sidecar file the track looks for, without its directory. */
 sidecarFileName: string };
 
 export type LyricsResolutionNotice = "sidecarFailedUsingEmbedded";
@@ -467,11 +394,20 @@ export type PlaybackContext =
 	kind: "tracks",
 } & TrackQuery;
 
+/**  Fields every transport state carries. */
+export type PlaybackControls = {
+	volume: number,
+	muted: boolean,
+	outputSelection: AudioOutputSelection,
+	canGoPrevious: boolean,
+	canGoNext: boolean,
+};
+
 export type PlaybackFailureCode = "noOutputDevice" | "outputDeviceUnavailable" | "unsupportedOutputConfiguration" | "outputStreamBuildFailed" | "outputStreamStartFailed" | "outputStreamPauseFailed" | "outputStreamResumeFailed" | "outputStreamRuntimeFailed" | "completionTimingFailed" | "decodeFailed" | "sampleRateConversionFailed";
 
 /**
- *  One playback session: a queue item being played, from the playback worker's counter, above
- *  zero. On the IPC a number.
+ *  One playback session: a queue item being played, from the playback worker's counter. On
+ *  the IPC a number.
  */
 export type PlaybackId = number;
 
@@ -504,37 +440,10 @@ export type PlaybackQueueItem = {
 } & TrackCore;
 
 /**
- *  The queue as the renderer mirrors it: the current item, the last few played, the first
- *  upcoming ones, and how many there are in all. Longer queues are read with `window`, so a
- *  library-sized queue never crosses the IPC boundary in one piece.
- */
-export type PlaybackQueueSnapshot = {
-	current: PlaybackQueueItem | null,
-	/**  The most recently played items, oldest first. */
-	history: PlaybackQueueItem[],
-	historyCount: number,
-	upcoming: PlaybackQueueItem[],
-	upcomingCount: number,
-	repeatMode: PlaybackRepeatMode,
-	shuffleEnabled: boolean,
-	/**  The queue before the last replacement can be put back. */
-	canRestorePrevious: boolean,
-};
-
-/**  A slice of the upcoming list, tagged with the queue revision it was cut from. */
-export type PlaybackQueueWindow = {
-	revision: number,
-	offset: number,
-	items: PlaybackQueueItem[],
-};
-
-export type PlaybackRepeatMode = "off" | "all" | "one";
-
-/**
  *  Why a playback request failed: the one error vocabulary for every command that plays or
  *  queues, serialized as `{ "code": "<camelCase>" }`.
  */
-export type PlaybackServiceError = { code: "common"; error: CommonError } | 
+export type PlaybackServiceError = { code: "common"; error: CommandError } | 
 /**  The output or the decoder failed. */
 { code: "output"; failure: PlaybackFailureCode } | 
 /**  The Library could not give the tracks to play. */
@@ -542,19 +451,19 @@ export type PlaybackServiceError = { code: "common"; error: CommonError } |
 /**  A newer request replaced this one before it finished; the caller should not report it. */
 { code: "superseded" } | { code: "queueItemNotFound" } | { code: "queueBusy" } | { code: "invalidVolume" } | { code: "invalidDeviceId" } | { code: "invalidPlaybackState" } | { code: "durationUnavailable" } | { code: "seekFailed" };
 
-export type PlaybackSnapshot = 
+/**  Why the library cannot give playback a selection, for reasons of the selection itself. */
+export type PlaybackSourceError = { code: "albumNotFound" } | 
+/**  The requested start track is not part of the selection. */
+{ code: "trackNotMember" } | { code: "trackNotPlayable" } | { code: "noPlayablePlaybackTracks" };
+
+export type PlaybackState = 
 /**  `item` is the last track that played, kept so the UI can still say what it was. */
-{ status: "stopped"; base: SnapshotBase; item: PlaybackItem | null } | { status: "playing"; base: SnapshotBase; session: ActiveSession } | { status: "paused"; base: SnapshotBase; session: ActiveSession } | { status: "failed"; base: SnapshotBase; item: PlaybackItem | null; playbackId: PlaybackId | null; error: PlaybackFailureCode; 
+{ status: "stopped"; base: PlaybackControls; item: PlaybackItem | null } | { status: "playing"; base: PlaybackControls; session: CurrentPlayback } | { status: "paused"; base: PlaybackControls; session: CurrentPlayback } | { status: "failed"; base: PlaybackControls; item: PlaybackItem | null; playbackId: PlaybackId | null; error: PlaybackFailureCode; 
 /**
  *  The player is moving on to the next item by itself: a skip the listener is told
  *  about, not a stop that waits for Retry.
  */
 skipping: boolean };
-
-/**  Why the library cannot give playback a selection, for reasons of the selection itself. */
-export type PlaybackSourceError = { code: "albumNotFound" } | 
-/**  The requested start track is not part of the selection. */
-{ code: "trackNotMember" } | { code: "trackNotPlayable" } | { code: "noPlayablePlaybackTracks" };
 
 export type PlaybackWaveform = {
 	/**  The playback the waveform belongs to, so a late answer cannot be drawn for another track. */
@@ -563,32 +472,92 @@ export type PlaybackWaveform = {
 	rms: number[],
 };
 
-/**  One entry of the playback queue: the queue's counter, above zero. On the IPC a number. */
+/**  One entry of the playback queue: the queue's counter. On the IPC a number. */
 export type QueueItemId = number;
 
-/**  A library root: the `library_roots` rowid. Above zero. On the IPC a decimal string. */
-export type RootId = string;
+/**
+ *  The queue as the renderer mirrors it: the current item, the last few played, the first
+ *  upcoming ones, and how many there are in all. Longer queues are read with `window`, so a
+ *  library-sized queue never crosses the IPC boundary in one piece.
+ */
+export type QueueState = {
+	current: PlaybackQueueItem | null,
+	/**  The most recently played items, oldest first. */
+	history: PlaybackQueueItem[],
+	historyCount: number,
+	upcoming: PlaybackQueueItem[],
+	upcomingCount: number,
+	repeatMode: RepeatMode,
+	shuffleEnabled: boolean,
+	/**  The queue before the last replacement can be put back. */
+	canRestorePrevious: boolean,
+};
+
+/**  A slice of the upcoming list, tagged with the queue revision it was cut from. */
+export type QueueWindow = {
+	revision: number,
+	offset: number,
+	items: PlaybackQueueItem[],
+};
+
+export type RepeatMode = "off" | "all" | "one";
+
+/**  A value with the revision of its topic. Revisions only grow, per topic. */
+export type Revisioned<T> = {
+	revision: number,
+	value: T,
+};
 
 /**  Why a scan stopped without finishing. */
-export type ScanFailure = "persistenceFailed" | "rootTraversalFailed" | 
+export type ScanFailure = "persistenceFailed" | "directoryTraversalFailed" | 
 /**  The scan thread died unexpectedly. */
 "panicked";
 
+export type ScanState = {
+	state: ScanStatus,
+	currentDirectory: LibraryDirectory | null,
+	/**
+	 *  How many files the previous scans left in the scanned directories: what a rescan can expect
+	 *  to find, so its progress can be shown as a share. 0 when there is no such history.
+	 */
+	expectedCount: number,
+	discoveredCount: number,
+	inspectedCount: number,
+	indexedCount: number,
+	failedCount: number,
+	failureCode: ScanFailure | null,
+	/**
+	 *  How many scans have ended since the app started. Only ever grows, so a listener that saw
+	 *  the count change knows a scan ended, however many snapshots it missed in between.
+	 */
+	finishedCount: number,
+	/**
+	 *  How many files scans have added, changed, relinked, or found Missing or back since the app
+	 *  started. Only ever grows: a listener that sees it move since it last looked knows the
+	 *  catalog changed, and one that does not knows it did not.
+	 */
+	changedCount: number,
+};
+
+export type ScanStatus = "idle" | "running" | "completed" | "cancelled" | "failed";
+
+/**
+ *  One entry of a list's scroll index: the label its names are filed under, and how many there
+ *  are. Buckets come in the list's own order.
+ */
+export type ScrollIndexBucket = {
+	label: string,
+	count: number,
+};
+
+export type SortDirection = "ascending" | "descending";
+
 /**  Why the loaded session started. */
-export type SessionStartedBy = "next" | "previous" | 
+export type StartedBy = "next" | "previous" | 
 /**  The player moved on by itself: the track ended, or it skipped a track. */
 "auto" | 
 /**  Any other start: play a context, play a queue item, restore the queue. */
 "jump";
-
-/**  Fields every transport state carries. */
-export type SnapshotBase = {
-	volume: number,
-	muted: boolean,
-	outputSelection: AudioOutputSelection,
-	canGoPrevious: boolean,
-	canGoNext: boolean,
-};
 
 /**  One state topic's value with its revision. */
 export type StateMessage = {
@@ -596,7 +565,7 @@ export type StateMessage = {
 } & StateValue;
 
 /**  The whole value of one state topic. */
-export type StateValue = { topic: "playback"; value: PlaybackSnapshot } | { topic: "queue"; value: PlaybackQueueSnapshot } | { topic: "libraryScan"; value: LibraryScanSnapshot } | { topic: "waveform"; value: PlaybackWaveform | null } | { topic: "appearance"; value: Appearance };
+export type StateValue = { topic: "playback"; value: PlaybackState } | { topic: "queue"; value: QueueState } | { topic: "libraryScan"; value: ScanState } | { topic: "waveform"; value: PlaybackWaveform | null } | { topic: "appearance"; value: Appearance };
 
 /**
  *  The album a track is filed under, by ID (see `ids.rs`) and as titled, with its Album Artist. A
@@ -617,7 +586,7 @@ export type TrackCore = {
 	artwork: ArtworkRef | null,
 };
 
-/**  A track: the `tracks` rowid. Above zero. On the IPC a number, which serde rejects below one. */
+/**  A track: the `tracks` rowid. Above zero. On the IPC a number. */
 export type TrackId = number;
 
 /**
@@ -629,22 +598,52 @@ export type TrackListRequest = {
 	skip: number,
 } & TrackQuery;
 
+/**  The tags, audio format and location of one track, as the Properties view lists them. */
+export type TrackProperties = {
+	id: TrackId,
+	path: string,
+	fileName: string,
+	title: string | null,
+	artist: string | null,
+	album: string | null,
+	albumArtist: string | null,
+	trackNumber: number | null,
+	trackTotal: number | null,
+	discNumber: number | null,
+	discTotal: number | null,
+	genre: string | null,
+	date: string | null,
+	durationMs: number | null,
+	fileFormat: string | null,
+	codec: string | null,
+	sampleRate: number | null,
+	channelCount: number | null,
+	bitDepth: number | null,
+	bitrateKbps: number | null,
+	state: TrackState,
+};
+
 /**  How the Tracks list is filtered and sorted. */
 export type TrackQuery = {
 	search: string | null,
-	sortKey: LibraryTrackSortKey,
-	sortDirection: LibrarySortDirection,
+	sortKey: TrackSortKey,
+	sortDirection: SortDirection,
 };
+
+export type TrackRow = {
+	state: TrackState,
+	/**  `None` for a track with no album tag. */
+	album: TrackAlbum | null,
+	fileFormat: string | null,
+	bitDepth: number | null,
+	bitrateKbps: number | null,
+} & TrackCore;
+
+export type TrackSortKey = "title" | "artist" | "album" | "duration";
 
 /**
  *  Where a track stands: its file can play, its file is gone, or its file is there but cannot be
  *  decoded. Missing wins over unsupported.
  */
 export type TrackState = "playable" | "missing" | "unsupported";
-
-/**  A value with the revision of its topic. Revisions only grow, per topic. */
-export type Versioned<T> = {
-	revision: number,
-	value: T,
-};
 

@@ -1,10 +1,10 @@
 import type {
   AudioOutputSelection,
-  LibraryTrackSummary,
-  PlaybackQueueSnapshot,
-  PlaybackSnapshot,
-  SessionStartedBy,
-  Versioned,
+  TrackRow,
+  QueueState,
+  PlaybackState,
+  StartedBy,
+  Revisioned,
 } from "#lib/native";
 import type { Native } from "./native-api";
 import { playbackIdOf, playbackItemFor, playingSnapshot, queueItemFor } from "./data";
@@ -18,13 +18,11 @@ import { playbackIdOf, playbackItemFor, playingSnapshot, queueItemFor } from "./
  */
 export function scriptPlayback(
   native: Native,
-  initialSequence: LibraryTrackSummary[],
+  initialSequence: TrackRow[],
 ): {
-  setSequence: (next: LibraryTrackSummary[]) => void;
-  queue: (patch?: {
-    upcoming?: LibraryTrackSummary[];
-  }) => Promise<Versioned<PlaybackQueueSnapshot>>;
-  finishTrack: () => Promise<Versioned<PlaybackSnapshot>>;
+  setSequence: (next: TrackRow[]) => void;
+  queue: (patch?: { upcoming?: TrackRow[] }) => Promise<Revisioned<QueueState>>;
+  finishTrack: () => Promise<Revisioned<PlaybackState>>;
   reportPosition: (to: number) => Promise<void>;
   startTicks: () => void;
   stopTicks: () => void;
@@ -38,15 +36,15 @@ export function scriptPlayback(
   let volume = 0.72;
   let muted = false;
   let outputSelection: AudioOutputSelection = { kind: "systemDefault" };
-  let repeatMode: PlaybackQueueSnapshot["repeatMode"] = "off";
+  let repeatMode: QueueState["repeatMode"] = "off";
   let shuffleEnabled = false;
-  let upcoming: LibraryTrackSummary[] = [];
-  let startedBy: SessionStartedBy = "jump";
+  let upcoming: TrackRow[] = [];
+  let startedBy: StartedBy = "jump";
   let ticker: ReturnType<typeof setInterval> | null = null;
 
-  const current = (): LibraryTrackSummary => sequence[index]!;
+  const current = (): TrackRow => sequence[index]!;
 
-  const queue = (patch: { upcoming?: LibraryTrackSummary[] } = {}): PlaybackQueueSnapshot => {
+  const queue = (patch: { upcoming?: TrackRow[] } = {}): QueueState => {
     if (patch.upcoming !== undefined) upcoming = patch.upcoming;
     const played = sequence.slice(0, Math.max(index, 0));
     return {
@@ -61,7 +59,7 @@ export function scriptPlayback(
     };
   };
 
-  const snapshot = (): PlaybackSnapshot =>
+  const snapshot = (): PlaybackState =>
     playingSnapshot({
       status,
       item: playbackItemFor(current()),
@@ -76,23 +74,20 @@ export function scriptPlayback(
     });
 
   /** A playback change, published as a new revision the way the backend does; the answer carries it. */
-  const commit = async (): Promise<Versioned<PlaybackSnapshot>> => {
+  const commit = async (): Promise<Revisioned<PlaybackState>> => {
     const value = snapshot();
     const revision = await native.publish("playback", value);
     return { revision, value };
   };
   const commitQueue = async (patch?: {
-    upcoming?: LibraryTrackSummary[];
-  }): Promise<Versioned<PlaybackQueueSnapshot>> => {
+    upcoming?: TrackRow[];
+  }): Promise<Revisioned<QueueState>> => {
     const value = queue(patch);
     const revision = await native.publish("queue", value);
     return { revision, value };
   };
   /** A new session at `target`, started the way the backend would say it started. */
-  const moveTo = async (
-    target: number,
-    by: SessionStartedBy,
-  ): Promise<Versioned<PlaybackSnapshot>> => {
+  const moveTo = async (target: number, by: StartedBy): Promise<Revisioned<PlaybackState>> => {
     index = target;
     startedBy = by;
     positionMs = 12_000;
@@ -101,27 +96,27 @@ export function scriptPlayback(
     return commit();
   };
 
-  native.respond("getPlaybackQueueWindow", ({ offset, limit }) => ({
+  native.respond("playerQueueWindow", ({ offset, limit }) => ({
     revision: native.revisionOf("queue"),
     offset,
     items: upcoming.slice(offset, offset + Math.min(limit, 200)).map(queueItemFor),
   }));
-  native.respond("startPlayback", ({ startTrackId }) => {
+  native.respond("playerPlay", ({ startTrackId }) => {
     const start =
       startTrackId === null ? 0 : sequence.findIndex((track) => track.id === startTrackId);
     return moveTo(Math.max(0, start), "jump");
   });
-  native.respond("pausePlayback", () => {
+  native.respond("playerPause", () => {
     status = "paused";
     return commit();
   });
-  native.respond("resumePlayback", () => {
+  native.respond("playerResume", () => {
     status = "playing";
     return commit();
   });
-  native.respond("previousPlayback", () => moveTo(Math.max(0, index - 1), "previous"));
-  native.respond("nextPlayback", () => moveTo(Math.min(sequence.length - 1, index + 1), "next"));
-  native.respond("playQueueItem", ({ id }) =>
+  native.respond("playerPrevious", () => moveTo(Math.max(0, index - 1), "previous"));
+  native.respond("playerNext", () => moveTo(Math.min(sequence.length - 1, index + 1), "next"));
+  native.respond("playerPlayQueueItem", ({ id }) =>
     moveTo(
       Math.max(
         0,
@@ -130,28 +125,28 @@ export function scriptPlayback(
       "jump",
     ),
   );
-  native.respond("seekPlayback", ({ positionMs: to }) => {
+  native.respond("playerSeek", ({ positionMs: to }) => {
     positionMs = to;
     seekRevision += 1;
     return commit();
   });
-  native.respond("setPlaybackVolume", ({ volume: to }) => {
+  native.respond("playerSetVolume", ({ volume: to }) => {
     volume = to;
     return commit();
   });
-  native.respond("setPlaybackMuted", ({ muted: to }) => {
+  native.respond("playerSetMuted", ({ muted: to }) => {
     muted = to;
     return commit();
   });
-  native.respond("setAudioOutputSelection", ({ selection }) => {
+  native.respond("playerSetOutputSelection", ({ selection }) => {
     outputSelection = selection;
     return commit();
   });
-  native.respond("setPlaybackRepeatMode", ({ mode }) => {
+  native.respond("playerSetRepeatMode", ({ mode }) => {
     repeatMode = mode;
     return commitQueue();
   });
-  native.respond("setPlaybackShuffle", ({ enabled }) => {
+  native.respond("playerSetShuffle", ({ enabled }) => {
     shuffleEnabled = enabled;
     return commitQueue();
   });
@@ -167,14 +162,14 @@ export function scriptPlayback(
   };
 
   const player = {
-    /** Changes what the next `startPlayback` plays: what the test expects its context to hold. */
-    setSequence: (next: LibraryTrackSummary[]): void => {
+    /** Changes what the next `playerPlay` plays: what the test expects its context to hold. */
+    setSequence: (next: TrackRow[]): void => {
       sequence = next;
     },
     /** The queue as it stands, with `upcoming` replaced when a test expects an edit. */
     queue: commitQueue,
     /** The loaded track ended and the backend moved on by itself (an automatic advance). */
-    finishTrack: (): Promise<Versioned<PlaybackSnapshot>> =>
+    finishTrack: (): Promise<Revisioned<PlaybackState>> =>
       moveTo(Math.min(sequence.length - 1, index + 1), "auto"),
     /** Reports the loaded track's position (and nothing else), as the backend's ticks do. */
     reportPosition: (to: number): Promise<void> => {

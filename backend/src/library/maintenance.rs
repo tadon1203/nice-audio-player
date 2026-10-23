@@ -7,30 +7,30 @@ use super::{
     error::StoreError,
     status::ArtworkStatus,
 };
-use crate::cleanup::remove_file_best_effort;
-use crate::diagnostics::log_failed;
+use crate::errors::log_failed;
+use crate::errors::remove_file_best_effort;
 use rusqlite::params;
 use std::{collections::HashSet, fs, path::Path};
 
-/// Collects the artwork store's garbage and returns the folders whose artwork was found missing,
+/// Collects the artwork store's garbage and returns the directories whose artwork was found missing,
 /// so they can be scanned again to store it.
 pub(crate) fn collect_source_artwork(database: &Database) -> Result<Vec<i64>, StoreError> {
     let data_dir = database.data_dir().to_path_buf();
     let broken = broken_assets(database, &data_dir)?;
-    let mut retry_roots = HashSet::new();
+    let mut retry_directories = HashSet::new();
     let mut live_paths = HashSet::new();
     {
         let mut connection = database.write()?;
         let transaction = connection.transaction()?;
         for asset_id in broken {
-            let mut roots = transaction.prepare(
+            let mut directories = transaction.prepare(
                 "SELECT DISTINCT f.root_id FROM track_source_metadata m
                  JOIN tracks t ON t.id = m.track_id
                  JOIN library_files f ON f.id = t.file_id
                  WHERE m.artwork_id = ?1",
             )?;
-            for id in roots.query_map(params![asset_id], |row| row.get::<_, i64>(0))? {
-                retry_roots.insert(id?);
+            for id in directories.query_map(params![asset_id], |row| row.get::<_, i64>(0))? {
+                retry_directories.insert(id?);
             }
             transaction.execute(
                 "UPDATE track_source_metadata SET artwork_id = NULL, artwork_status = ?2
@@ -65,7 +65,7 @@ pub(crate) fn collect_source_artwork(database: &Database) -> Result<Vec<i64>, St
         transaction.commit()?;
     }
     remove_unowned_files(&data_dir, &live_paths);
-    Ok(retry_roots.into_iter().collect())
+    Ok(retry_directories.into_iter().collect())
 }
 
 /// The assets whose file is missing or has the wrong size.
@@ -128,9 +128,12 @@ pub(crate) fn spawn_thumbnail_backfill(database: &Database) {
             .name("thumbnail-backfill".into())
             .spawn(move || {
                 for original in originals {
-                    crate::containment::contain("library.thumbnail", || {
-                        artwork::ensure_thumbnail(&data_dir, &original)
-                    });
+                    log_failed(
+                        crate::errors::contain("library.thumbnail", || {
+                            artwork::ensure_thumbnail(&data_dir, &original)
+                        }),
+                        "library.thumbnail",
+                    );
                 }
             }),
         "library.maintenance.thread_failed",
@@ -138,8 +141,8 @@ pub(crate) fn spawn_thumbnail_backfill(database: &Database) {
 }
 
 fn remove_unowned_files(data_dir: &Path, live_paths: &HashSet<String>) {
-    let root = data_dir.join("artwork");
-    let Ok(shards) = fs::read_dir(root) else {
+    let directory = data_dir.join("artwork");
+    let Ok(shards) = fs::read_dir(directory) else {
         return;
     };
     for shard in shards.flatten() {

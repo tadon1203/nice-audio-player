@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 use super::decode_worker::DecodeWorker;
 use super::item::PlayableItem;
 use super::service::Reply;
-use super::snapshot::{PlaybackFailureCode, PlaybackSnapshot, SessionStartedBy};
+use super::snapshot::{PlaybackFailureCode, PlaybackState, StartedBy};
 use super::source_loader::SourceLoad;
 use crate::audio::compressed_source::CompressedAudioSource;
 use crate::audio::devices::AudioOutputSelection;
@@ -13,7 +13,7 @@ use crate::audio::output::{OutputStream, OutputStreamId, PipelineId, PreparedOut
 use crate::audio::pcm_queue::PcmConsumer;
 use crate::audio::timebase::{frame_to_millis, millis_to_frame};
 use crate::ids::{PlaybackId, QueueItemId};
-use crate::messages::Versioned;
+use crate::messages::Revisioned;
 use cpal::StreamInstant;
 
 pub(super) const POSITION_UPDATE_INTERVAL: Duration = Duration::from_secs(1);
@@ -41,9 +41,9 @@ pub(super) struct StartRequest {
     /// The playback this start belongs to. A device switch restarts the same playback.
     pub id: PlaybackId,
     pub item: PlayableItem,
-    pub started_by: SessionStartedBy,
+    pub started_by: StartedBy,
     /// `None` for starts the worker begins on its own (skipping on, the next track, a device switch).
-    pub responder: Option<Reply<Versioned<PlaybackSnapshot>>>,
+    pub responder: Option<Reply<Revisioned<PlaybackState>>>,
     pub start_paused: bool,
     /// Where to seek to once playing, after a device switch restarted the track.
     pub resume_at_ms: Option<u64>,
@@ -100,7 +100,7 @@ impl Pipeline {
 pub(super) struct Loaded {
     pub id: PlaybackId,
     pub item: PlayableItem,
-    pub started_by: SessionStartedBy,
+    pub started_by: StartedBy,
     pub source: CompressedAudioSource,
     pub output: Output,
     pub pipeline: Pipeline,
@@ -220,7 +220,7 @@ pub(super) struct SeekInFlight {
     pub output_base_frame: u64,
     pub remaining_frames: u64,
     pub duration_ms: u64,
-    pub responder: Option<Reply<Versioned<PlaybackSnapshot>>>,
+    pub responder: Option<Reply<Revisioned<PlaybackState>>>,
 }
 
 pub(super) fn should_publish_position(

@@ -6,9 +6,9 @@
   import { ScanStatus } from "./scan-status";
 
   /** The scan's state in words, and the button that starts or cancels it. */
-  let { rootCount }: { rootCount: number } = $props();
+  let { directoryCount }: { directoryCount: number } = $props();
 
-  const { actions, libraryRoots, scan: scanWatcher } = AppServices.current();
+  const { actions, libraryDirectories, scan: scanWatcher } = AppServices.current();
 
   const scan = $derived(scanWatcher.snapshot);
 </script>
@@ -22,7 +22,7 @@
       <Button
         type="button"
         variant="outline"
-        onclick={() => actions.run(() => libraryRoots.cancelScan(), "library")}
+        onclick={() => actions.run(() => libraryDirectories.cancelScan(), "library")}
       >
         <X data-icon="inline-start" aria-hidden="true" />
         Cancel scan
@@ -31,8 +31,8 @@
       <Button
         type="button"
         variant="outline"
-        onclick={() => actions.run(() => libraryRoots.startScan(), "library")}
-        disabled={scan === null || rootCount === 0 || actions.isRunning("library")}
+        onclick={() => actions.run(() => libraryDirectories.startScan(), "library")}
+        disabled={scan === null || directoryCount === 0 || actions.isRunning("library")}
       >
         <RefreshCw data-icon="inline-start" aria-hidden="true" />
         Rescan

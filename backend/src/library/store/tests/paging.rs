@@ -45,7 +45,7 @@ fn album_pages_cover_every_album_once_and_refuse_a_foreign_cursor() {
     );
     assert_eq!(
         store
-            .catalog_albums(Some(&cursor), None, LibraryAlbumSortKey::Artist, ASC)
+            .catalog_albums(Some(&cursor), None, AlbumSortKey::Artist, ASC)
             .err(),
         Some(StoreError::InvalidCursor),
         "another sort"
@@ -57,12 +57,7 @@ fn album_pages_cover_every_album_once_and_refuse_a_foreign_cursor() {
     );
     let artist = ArtistId::of;
     let artist_page = store
-        .catalog_artist_albums(
-            artist("Artist"),
-            None,
-            LibraryArtistAlbumSortKey::Title,
-            ASC,
-        )
+        .catalog_artist_albums(artist("Artist"), None, ArtistAlbumSortKey::Title, ASC)
         .unwrap();
     let artist_cursor = artist_page.next_cursor.expect("artist continuation");
     assert_eq!(
@@ -70,7 +65,7 @@ fn album_pages_cover_every_album_once_and_refuse_a_foreign_cursor() {
             .catalog_artist_albums(
                 artist("Other artist"),
                 Some(&artist_cursor),
-                LibraryArtistAlbumSortKey::Title,
+                ArtistAlbumSortKey::Title,
                 ASC
             )
             .err(),
@@ -87,10 +82,10 @@ fn tracks_page_through_every_sort_and_direction_with_unknown_values_last() {
     varied_library(&fixture);
     let store = &fixture.store;
     for key in [
-        LibraryTrackSortKey::Title,
-        LibraryTrackSortKey::Artist,
-        LibraryTrackSortKey::Album,
-        LibraryTrackSortKey::Duration,
+        TrackSortKey::Title,
+        TrackSortKey::Artist,
+        TrackSortKey::Album,
+        TrackSortKey::Duration,
     ] {
         for direction in [ASC, DESC] {
             let tracks = walk(|cursor| {
@@ -108,11 +103,11 @@ fn tracks_page_through_every_sort_and_direction_with_unknown_values_last() {
                 (330, 330),
                 "{key:?} {direction:?}: every track once"
             );
-            let unknown = |track: &LibraryTrackSummary| match key {
-                LibraryTrackSortKey::Title => false,
-                LibraryTrackSortKey::Artist => track.core.artist.is_none(),
-                LibraryTrackSortKey::Album => track.album.is_none(),
-                LibraryTrackSortKey::Duration => track.core.duration_ms.is_none(),
+            let unknown = |track: &TrackRow| match key {
+                TrackSortKey::Title => false,
+                TrackSortKey::Artist => track.core.artist.is_none(),
+                TrackSortKey::Album => track.album.is_none(),
+                TrackSortKey::Duration => track.core.duration_ms.is_none(),
             };
             let first_unknown = tracks.iter().position(unknown).unwrap_or(tracks.len());
             assert!(
@@ -122,12 +117,10 @@ fn tracks_page_through_every_sort_and_direction_with_unknown_values_last() {
             let names: Vec<String> = tracks[..first_unknown]
                 .iter()
                 .map(|track| match key {
-                    LibraryTrackSortKey::Title => track.core.title.to_lowercase(),
-                    LibraryTrackSortKey::Artist => {
-                        track.core.artist.clone().unwrap().to_lowercase()
-                    }
-                    LibraryTrackSortKey::Album => track.album.clone().unwrap().title.to_lowercase(),
-                    LibraryTrackSortKey::Duration => {
+                    TrackSortKey::Title => track.core.title.to_lowercase(),
+                    TrackSortKey::Artist => track.core.artist.clone().unwrap().to_lowercase(),
+                    TrackSortKey::Album => track.album.clone().unwrap().title.to_lowercase(),
+                    TrackSortKey::Duration => {
                         format!("{:08}", track.core.duration_ms.unwrap())
                     }
                 })
@@ -149,9 +142,9 @@ fn albums_and_album_artists_page_through_every_sort_and_direction() {
     let store = &fixture.store;
     let total_albums = all_albums(store, None).total_count.unwrap_or(0);
     for key in [
-        LibraryAlbumSortKey::Title,
-        LibraryAlbumSortKey::Artist,
-        LibraryAlbumSortKey::Year,
+        AlbumSortKey::Title,
+        AlbumSortKey::Artist,
+        AlbumSortKey::Year,
     ] {
         for direction in [ASC, DESC] {
             let albums = walk(|cursor| {
@@ -165,7 +158,7 @@ fn albums_and_album_artists_page_through_every_sort_and_direction() {
                 albums.len(),
                 "{key:?} {direction:?}: every album once"
             );
-            if key == LibraryAlbumSortKey::Year {
+            if key == AlbumSortKey::Year {
                 let first_without = albums
                     .iter()
                     .position(|album| album.year.is_none())
@@ -189,14 +182,14 @@ fn albums_and_album_artists_page_through_every_sort_and_direction() {
         }
     }
     let total_artists = store
-        .catalog_album_artists(None, None, LibraryAlbumArtistSortKey::Artist, ASC)
+        .catalog_album_artists(None, None, ArtistSortKey::Artist, ASC)
         .unwrap()
         .total_count
         .unwrap_or(0);
     for key in [
-        LibraryAlbumArtistSortKey::Artist,
-        LibraryAlbumArtistSortKey::AlbumCount,
-        LibraryAlbumArtistSortKey::TrackCount,
+        ArtistSortKey::Artist,
+        ArtistSortKey::AlbumCount,
+        ArtistSortKey::TrackCount,
     ] {
         for direction in [ASC, DESC] {
             let artists = walk(|cursor| {
@@ -218,10 +211,7 @@ fn albums_and_album_artists_page_through_every_sort_and_direction() {
         }
     }
     for artist in ["beta", "Gamma", ""] {
-        for key in [
-            LibraryArtistAlbumSortKey::Title,
-            LibraryArtistAlbumSortKey::Year,
-        ] {
+        for key in [ArtistAlbumSortKey::Title, ArtistAlbumSortKey::Year] {
             for direction in [ASC, DESC] {
                 let name = ArtistId::of(artist);
                 let first = store
@@ -249,7 +239,7 @@ fn a_write_between_two_pages_neither_repeats_nor_skips_a_track() {
     varied_library(&fixture);
     let store = &fixture.store;
     let first = store
-        .catalog_tracks(None, None, LibraryTrackSortKey::Title, ASC)
+        .catalog_tracks(None, None, TrackSortKey::Title, ASC)
         .unwrap();
     let last_of_first = first.items.last().unwrap().core.title.clone();
 
@@ -258,7 +248,7 @@ fn a_write_between_two_pages_neither_repeats_nor_skips_a_track() {
     fixture.add(Seed::new(1_001, "zz after everything", "New", "New"));
     let rest = walk_from(first.next_cursor.clone(), |cursor| {
         let page = store
-            .catalog_tracks(cursor, None, LibraryTrackSortKey::Title, ASC)
+            .catalog_tracks(cursor, None, TrackSortKey::Title, ASC)
             .unwrap();
         (page.items, page.next_cursor)
     });
@@ -291,10 +281,10 @@ fn the_name_sorted_lists_read_an_index_range_not_the_whole_table() {
     let connection = fixture.database.read().unwrap();
     let mut plans: Vec<(String, Vec<String>)> = Vec::new();
     for key in [
-        LibraryTrackSortKey::Title,
-        LibraryTrackSortKey::Artist,
-        LibraryTrackSortKey::Album,
-        LibraryTrackSortKey::Duration,
+        TrackSortKey::Title,
+        TrackSortKey::Artist,
+        TrackSortKey::Album,
+        TrackSortKey::Duration,
     ] {
         for direction in [ASC, DESC] {
             let query = tracks_query(None, key, direction);
@@ -311,13 +301,13 @@ fn the_name_sorted_lists_read_an_index_range_not_the_whole_table() {
     // The named half of each list reads an index range. (The few unnamed albums that follow are
     // sorted; there is one per Album Artist at most.)
     for key in [
-        LibraryAlbumSortKey::Title,
-        LibraryAlbumSortKey::Artist,
-        LibraryAlbumSortKey::Year,
+        AlbumSortKey::Title,
+        AlbumSortKey::Artist,
+        AlbumSortKey::Year,
     ] {
         for direction in [ASC, DESC] {
             let query = albums_query(None, key, direction);
-            let named: &[usize] = if key == LibraryAlbumSortKey::Year {
+            let named: &[usize] = if key == AlbumSortKey::Year {
                 &[0, 2]
             } else {
                 &[0]
@@ -333,9 +323,9 @@ fn the_name_sorted_lists_read_an_index_range_not_the_whole_table() {
         }
     }
     for key in [
-        LibraryAlbumArtistSortKey::Artist,
-        LibraryAlbumArtistSortKey::AlbumCount,
-        LibraryAlbumArtistSortKey::TrackCount,
+        ArtistSortKey::Artist,
+        ArtistSortKey::AlbumCount,
+        ArtistSortKey::TrackCount,
     ] {
         for direction in [ASC, DESC] {
             let query = album_artists_query(None, key, direction);
@@ -349,7 +339,7 @@ fn the_name_sorted_lists_read_an_index_range_not_the_whole_table() {
     }
     let artist = ArtistId::of("Artist");
     // An Album Artist's albums are few, so only their title order is held to an index range.
-    for key in [LibraryArtistAlbumSortKey::Title] {
+    for key in [ArtistAlbumSortKey::Title] {
         for direction in [ASC, DESC] {
             let query = artist_albums_query(artist, key, direction);
             for after in [false, true] {
@@ -395,7 +385,7 @@ fn starting_from_a_huge_tracks_list_costs_one_narrow_query() {
         let started = std::time::Instant::now();
         let selection = fixture
             .store
-            .playback_for_tracks(&track_query(None, LibraryTrackSortKey::Title, ASC), None)
+            .playback_for_tracks(&track_query(None, TrackSortKey::Title, ASC), None)
             .unwrap();
         let ids_ms = started.elapsed().as_millis();
         let started = std::time::Instant::now();
@@ -434,7 +424,7 @@ fn later_pages_count_nothing_and_album_pages_read_summaries_not_tracks() {
             );
         }
     };
-    for key in [LibraryAlbumSortKey::Title, LibraryAlbumSortKey::Year] {
+    for key in [AlbumSortKey::Title, AlbumSortKey::Year] {
         check(&format!("albums {key:?}"), false, &|cursor| {
             store
                 .catalog_albums(cursor, None, key, ASC)
@@ -443,9 +433,9 @@ fn later_pages_count_nothing_and_album_pages_read_summaries_not_tracks() {
         });
     }
     for key in [
-        LibraryAlbumArtistSortKey::Artist,
-        LibraryAlbumArtistSortKey::AlbumCount,
-        LibraryAlbumArtistSortKey::TrackCount,
+        ArtistSortKey::Artist,
+        ArtistSortKey::AlbumCount,
+        ArtistSortKey::TrackCount,
     ] {
         check(&format!("artists {key:?}"), false, &|cursor| {
             store
@@ -456,7 +446,7 @@ fn later_pages_count_nothing_and_album_pages_read_summaries_not_tracks() {
     }
     check("tracks", true, &|cursor| {
         store
-            .catalog_tracks(cursor, None, LibraryTrackSortKey::Title, ASC)
+            .catalog_tracks(cursor, None, TrackSortKey::Title, ASC)
             .unwrap()
             .next_cursor
     });
@@ -495,10 +485,10 @@ fn the_scroll_index_follows_the_sort_order_for_mixed_scripts_in_both_directions(
     let store = &fixture.store;
     for direction in [ASC, DESC] {
         let buckets = store
-            .catalog_track_index(&track_query(None, LibraryTrackSortKey::Title, direction))
+            .catalog_track_index(&track_query(None, TrackSortKey::Title, direction))
             .unwrap();
         let tracks = store
-            .catalog_tracks(None, None, LibraryTrackSortKey::Title, direction)
+            .catalog_tracks(None, None, TrackSortKey::Title, direction)
             .unwrap()
             .items;
         // Expanding the buckets gives each row's label, in the list's order.
@@ -526,7 +516,7 @@ fn the_scroll_index_follows_the_sort_order_for_mixed_scripts_in_both_directions(
         );
     }
     let ascending: Vec<String> = store
-        .catalog_track_index(&track_query(None, LibraryTrackSortKey::Title, ASC))
+        .catalog_track_index(&track_query(None, TrackSortKey::Title, ASC))
         .unwrap()
         .into_iter()
         .map(|bucket| bucket.label)
@@ -540,7 +530,7 @@ fn the_scroll_index_follows_the_sort_order_for_mixed_scripts_in_both_directions(
     );
     assert!(
         store
-            .catalog_track_index(&track_query(None, LibraryTrackSortKey::Duration, ASC))
+            .catalog_track_index(&track_query(None, TrackSortKey::Duration, ASC))
             .unwrap()
             .is_empty(),
         "a list ordered by length has no letters"
@@ -558,7 +548,7 @@ fn the_scroll_index_of_albums_and_artists_counts_what_the_list_holds() {
     }
     fixture.add_all(&seeds);
     let store = &fixture.store;
-    let pairs = |buckets: Vec<LibraryIndexBucket>| {
+    let pairs = |buckets: Vec<ScrollIndexBucket>| {
         buckets
             .into_iter()
             .map(|bucket| (bucket.label, bucket.count))
@@ -583,11 +573,7 @@ fn the_scroll_index_of_albums_and_artists_counts_what_the_list_holds() {
     assert_eq!(
         pairs(
             store
-                .catalog_album_artist_index(&album_artist_query(
-                    None,
-                    LibraryAlbumArtistSortKey::Artist,
-                    ASC
-                ))
+                .catalog_album_artist_index(&album_artist_query(None, ArtistSortKey::Artist, ASC))
                 .unwrap()
         ),
         by_name
@@ -603,7 +589,7 @@ fn the_scroll_index_of_albums_and_artists_counts_what_the_list_holds() {
     assert_eq!(
         pairs(
             store
-                .catalog_album_index(&album_query(None, LibraryAlbumSortKey::Year, ASC))
+                .catalog_album_index(&album_query(None, AlbumSortKey::Year, ASC))
                 .unwrap()
         ),
         expected(&[("2001", 3), ("?", 2)]),
@@ -611,11 +597,7 @@ fn the_scroll_index_of_albums_and_artists_counts_what_the_list_holds() {
     );
     assert_eq!(
         store
-            .catalog_album_artist_index(&album_artist_query(
-                None,
-                LibraryAlbumArtistSortKey::TrackCount,
-                ASC
-            ))
+            .catalog_album_artist_index(&album_artist_query(None, ArtistSortKey::TrackCount, ASC))
             .unwrap()
             .len(),
         0
@@ -649,7 +631,7 @@ fn jumping_to_a_letter_in_a_huge_list_reads_only_the_target_region() {
     fixture.add_all(&seeds);
     let store = &fixture.store;
     let buckets = store
-        .catalog_track_index(&track_query(None, LibraryTrackSortKey::Title, ASC))
+        .catalog_track_index(&track_query(None, TrackSortKey::Title, ASC))
         .unwrap();
     assert_eq!(
         buckets.iter().map(|bucket| bucket.count).sum::<u64>(),
@@ -666,7 +648,7 @@ fn jumping_to_a_letter_in_a_huge_list_reads_only_the_target_region() {
         page = Some(
             store
                 .catalog_tracks_from(&TrackListRequest {
-                    query: track_query(None, LibraryTrackSortKey::Title, ASC),
+                    query: track_query(None, TrackSortKey::Title, ASC),
                     cursor: None,
                     skip,
                 })
@@ -684,12 +666,7 @@ fn jumping_to_a_letter_in_a_huge_list_reads_only_the_target_region() {
         "count, the row before, the page: {statements:?}"
     );
     let continued = store
-        .catalog_tracks(
-            page.next_cursor.as_deref(),
-            None,
-            LibraryTrackSortKey::Title,
-            ASC,
-        )
+        .catalog_tracks(page.next_cursor.as_deref(), None, TrackSortKey::Title, ASC)
         .unwrap();
     assert_eq!(continued.items[0].core.title, "M24101");
 }

@@ -1,7 +1,7 @@
 use super::fixture;
 use crate::app::BackendApp;
-use crate::dto::{Appearance, AppearancePatch};
 use crate::messages::{BackendMessage, StateTopic, testing::Sent};
+use crate::settings::{Appearance, AppearancePatch};
 
 const TOPICS: [StateTopic; 5] = [
     StateTopic::Playback,
@@ -52,7 +52,7 @@ fn each_topic_counts_only_its_own_changes() {
     let fixture = fixture();
     let backend = &fixture.backend;
 
-    let changed = backend.update_appearance(&artwork_backdrop(false));
+    let changed = backend.appearance_update(&artwork_backdrop(false));
     assert_eq!(changed.revision, 1);
     assert_eq!(revision_of(backend, StateTopic::Appearance), 1);
     assert_eq!(revision_of(backend, StateTopic::Playback), 0);
@@ -72,8 +72,8 @@ fn an_appearance_change_that_changes_nothing_keeps_its_revision() {
     let fixture = fixture();
     let backend = &fixture.backend;
 
-    backend.update_appearance(&artwork_backdrop(false));
-    let again = backend.update_appearance(&artwork_backdrop(false));
+    backend.appearance_update(&artwork_backdrop(false));
+    let again = backend.appearance_update(&artwork_backdrop(false));
 
     assert_eq!(again.revision, 1);
     assert_eq!(revision_of(backend, StateTopic::Appearance), 1);
@@ -83,7 +83,7 @@ fn an_appearance_change_that_changes_nothing_keeps_its_revision() {
 fn changes_reach_the_sink_in_the_order_they_are_made() {
     let fixture = fixture();
 
-    fixture.backend.update_appearance(&artwork_backdrop(false));
+    fixture.backend.appearance_update(&artwork_backdrop(false));
     fixture.backend.set_volume(0.5).expect("volume");
 
     let topics: Vec<Sent> = fixture

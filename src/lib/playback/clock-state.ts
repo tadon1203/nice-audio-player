@@ -7,7 +7,7 @@ export interface ClockReport {
   positionMs: number;
   durationMs: number | null;
   playing: boolean;
-  /** Counts the seeks the backend has completed (`ActiveSession.seekRevision`). */
+  /** Counts the seeks the backend has completed (`CurrentPlayback.seekRevision`). */
   seekRevision: number;
 }
 

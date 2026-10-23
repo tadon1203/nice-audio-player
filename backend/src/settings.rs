@@ -8,7 +8,7 @@
 //! worker records. Nothing outside this module sees the file's shape: the Host reads and writes
 //! appearance through `SettingsService`, and the playback service reads its preferences from it.
 
-use crate::diagnostics::log_failed;
+use crate::errors::log_failed;
 use parking_lot::Mutex;
 use std::{
     path::Path,
@@ -24,7 +24,7 @@ use log::{error, warn};
 use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::audio::playback::PlaybackPreferences;
-use crate::messages::{SharedMessageSink, StateTopic, Versioned};
+use crate::messages::{Revisioned, SharedMessageListener, StateTopic};
 
 const FILE_NAME: &str = "settings.json";
 const WRITE_DEBOUNCE: Duration = Duration::from_millis(400);
@@ -105,7 +105,7 @@ pub(crate) struct SettingsService {
     state: Mutex<Settings>,
     /// The appearance topic's revision. Changed only under the `state` lock, with the value.
     appearance_revision: AtomicU64,
-    messages: SharedMessageSink,
+    messages: SharedMessageListener,
     writer: Mutex<Option<Sender<Settings>>>,
     writer_thread: Mutex<Option<JoinHandle<()>>>,
 }
@@ -113,7 +113,7 @@ pub(crate) struct SettingsService {
 impl SettingsService {
     /// Loads the saved settings from `directory`, or starts from defaults when there are none or
     /// the file is unusable (an unusable file is kept aside as `settings.json.bad`).
-    pub(crate) fn load(directory: &Path, messages: SharedMessageSink) -> Self {
+    pub(crate) fn load(directory: &Path, messages: SharedMessageListener) -> Self {
         let path = directory.join(FILE_NAME);
         let settings = read(&path);
         let (sender, receiver) = mpsc::channel();
@@ -132,9 +132,9 @@ impl SettingsService {
     }
 
     /// The appearance the renderer reads, with the revision of its topic.
-    pub(crate) fn appearance(&self) -> Versioned<Appearance> {
+    pub(crate) fn appearance(&self) -> Revisioned<Appearance> {
         let state = self.state.lock();
-        Versioned {
+        Revisioned {
             revision: self.appearance_revision.load(Ordering::Acquire),
             value: state.appearance.clone(),
         }
@@ -142,7 +142,7 @@ impl SettingsService {
 
     /// Applies a renderer update, announces it when something changed, and returns the appearance
     /// as it is afterwards.
-    pub(crate) fn update_appearance(&self, patch: &AppearancePatch) -> Versioned<Appearance> {
+    pub(crate) fn appearance_update(&self, patch: &AppearancePatch) -> Revisioned<Appearance> {
         let (appearance, changed) = self.modify(|settings| settings.apply_appearance(patch));
         if changed {
             self.messages.state_changed(StateTopic::Appearance);
@@ -164,7 +164,7 @@ impl SettingsService {
     /// Applies `change` under the lock. Returns the appearance with its revision, and whether
     /// anything changed. A change is queued for the writer while the lock is still held, so the
     /// writer sees the changes in the order they were made.
-    fn modify(&self, change: impl FnOnce(&mut Settings)) -> (Versioned<Appearance>, bool) {
+    fn modify(&self, change: impl FnOnce(&mut Settings)) -> (Revisioned<Appearance>, bool) {
         let mut state = self.state.lock();
         let before = state.clone();
         change(&mut state);
@@ -172,7 +172,7 @@ impl SettingsService {
         if state.appearance != before.appearance {
             self.appearance_revision.fetch_add(1, Ordering::Release);
         }
-        let appearance = Versioned {
+        let appearance = Revisioned {
             revision: self.appearance_revision.load(Ordering::Acquire),
             value: state.appearance.clone(),
         };
@@ -269,7 +269,7 @@ fn flush(path: &Path, pending: &mut Option<Settings>) {
 mod tests {
     use super::*;
     use crate::audio::devices::AudioOutputSelection;
-    use crate::audio::playback::PlaybackRepeatMode;
+    use crate::audio::playback::RepeatMode;
     use crate::messages::{
         null_message_sink,
         testing::{RecordingMessageSink, Sent},
@@ -296,7 +296,7 @@ mod tests {
     fn saved_changes_are_restored_on_the_next_start() {
         let (_guard, path) = directory();
         let service = SettingsService::load(&path, null_message_sink());
-        service.update_appearance(&AppearancePatch {
+        service.appearance_update(&AppearancePatch {
             artwork_backdrop: Some(false),
             calm_motion: Some(true),
         });
@@ -306,7 +306,7 @@ mod tests {
             output_selection: AudioOutputSelection::Device {
                 device_id: "dac".into(),
             },
-            repeat_mode: PlaybackRepeatMode::All,
+            repeat_mode: RepeatMode::All,
             shuffle_enabled: true,
         });
         service.shutdown();
@@ -316,7 +316,7 @@ mod tests {
         assert!(restored.appearance.calm_motion);
         assert_eq!(restored.playback.volume, 0.4);
         assert!(restored.playback.muted && restored.playback.shuffle_enabled);
-        assert_eq!(restored.playback.repeat_mode, PlaybackRepeatMode::All);
+        assert_eq!(restored.playback.repeat_mode, RepeatMode::All);
         assert_eq!(
             restored.playback.output_selection,
             AudioOutputSelection::Device {
@@ -373,8 +373,8 @@ mod tests {
             artwork_backdrop: Some(false),
             calm_motion: None,
         };
-        service.update_appearance(&change);
-        service.update_appearance(&change);
+        service.appearance_update(&change);
+        service.appearance_update(&change);
         assert_eq!(recorder.sent(), vec![Sent::State(StateTopic::Appearance)]);
     }
 
@@ -394,8 +394,8 @@ mod tests {
             artwork_backdrop: Some(false),
             calm_motion: None,
         };
-        service.update_appearance(&change);
-        let again = service.update_appearance(&change);
+        service.appearance_update(&change);
+        let again = service.appearance_update(&change);
         assert_eq!(again.revision, 1);
         assert!(!again.value.artwork_backdrop);
         assert_eq!(service.appearance(), again);

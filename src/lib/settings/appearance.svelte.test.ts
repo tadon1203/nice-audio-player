@@ -1,16 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
-import type { Appearance as AppearanceState, AppearanceClient, Versioned } from "#lib/native";
+import type { Appearance as AppearanceState, AppearanceClient, Revisioned } from "#lib/native";
 import { Appearance } from "./appearance.svelte";
 import type { Mock } from "vitest";
 import type { AppearancePatch } from "#lib/native";
 
 function stubClient(update: AppearanceClient["update"]): {
-  update: Mock<(patch: AppearancePatch) => Promise<Versioned<AppearanceState>>>;
+  update: Mock<(patch: AppearancePatch) => Promise<Revisioned<AppearanceState>>>;
 } {
   return { update: vi.fn(update) };
 }
 
-const saved: Versioned<AppearanceState> = {
+const saved: Revisioned<AppearanceState> = {
   revision: 0,
   value: { artworkBackdrop: true, calmMotion: false },
 };
@@ -48,7 +48,7 @@ describe("Appearance", () => {
   });
 
   it("shows an update before the backend answers, sending the untouched fields as null", async () => {
-    const pending = deferred<Versioned<AppearanceState>>();
+    const pending = deferred<Revisioned<AppearanceState>>();
     const client = stubClient(() => pending.promise);
     const store = new Appearance(client);
     store.accept(saved);

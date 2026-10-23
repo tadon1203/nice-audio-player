@@ -2,8 +2,8 @@
 //! reference the catalog and playback items hand to the renderer.
 
 use super::status::sql_text_enum;
-use crate::cleanup::remove_file_best_effort;
-use crate::diagnostics::logged;
+use crate::errors::logged;
+use crate::errors::remove_file_best_effort;
 use crate::ids::{ArtworkHash, is_artwork_hash};
 use image::{ImageReader, codecs::jpeg::JpegEncoder, imageops::FilterType};
 use serde::Serialize;
@@ -202,13 +202,13 @@ pub(crate) enum ArtworkMaterializeError {
 }
 
 pub(crate) fn materialize(
-    root: &Path,
+    directory: &Path,
     bytes: &[u8],
     mime_type: ArtworkMimeType,
 ) -> Result<StoredArtwork, ArtworkMaterializeError> {
     let hash = blake3::hash(bytes).to_hex().to_string();
     let relative_path = ArtworkPath::new(hash.clone(), mime_type).to_string();
-    let final_path = root.join(&relative_path);
+    let final_path = directory.join(&relative_path);
     let stored = |byte_length| StoredArtwork {
         hash: hash.clone(),
         mime_type,
@@ -276,17 +276,17 @@ pub(crate) fn materialize(
 
 /// Writes the thumbnail of a stored image unless it exists. The original is never touched.
 pub(crate) fn ensure_thumbnail(
-    root: &Path,
+    directory: &Path,
     original: &ArtworkPath,
 ) -> Result<(), ArtworkMaterializeError> {
     let Some(thumbnail) = original.thumbnail() else {
         return Err(ArtworkMaterializeError::Io);
     };
-    let final_path = root.join(thumbnail);
+    let final_path = directory.join(thumbnail);
     if final_path.exists() {
         return Ok(());
     }
-    let bytes = fs::read(root.join(original.to_string())).map_err(logged(
+    let bytes = fs::read(directory.join(original.to_string())).map_err(logged(
         ArtworkMaterializeError::Io,
         "library.artwork.read_failed",
     ))?;
@@ -346,33 +346,37 @@ mod tests {
 
     #[test]
     fn a_thumbnail_is_made_next_to_an_untouched_original() {
-        let root = std::env::temp_dir().join(format!("nap-thumb-{}", std::process::id()));
+        let directory = std::env::temp_dir().join(format!("nap-thumb-{}", std::process::id()));
         let bytes = png(1200, 800);
-        let stored = materialize(&root, &bytes, ArtworkMimeType::Png).unwrap();
+        let stored = materialize(&directory, &bytes, ArtworkMimeType::Png).unwrap();
         let original = ArtworkPath::parse(&stored.relative_path).unwrap();
 
-        ensure_thumbnail(&root, &original).unwrap();
-        ensure_thumbnail(&root, &original).unwrap();
+        ensure_thumbnail(&directory, &original).unwrap();
+        ensure_thumbnail(&directory, &original).unwrap();
 
-        let thumb = image::open(root.join(original.thumbnail().unwrap())).unwrap();
+        let thumb = image::open(directory.join(original.thumbnail().unwrap())).unwrap();
         assert_eq!((thumb.width(), thumb.height()), (512, 341));
-        assert_eq!(fs::read(root.join(&stored.relative_path)).unwrap(), bytes);
+        assert_eq!(
+            fs::read(directory.join(&stored.relative_path)).unwrap(),
+            bytes
+        );
         assert_eq!(
             thumbnail_hash(&format!("{}.thumb.jpg", stored.hash)),
             Some(stored.hash.as_str())
         );
-        drop(fs::remove_dir_all(root));
+        drop(fs::remove_dir_all(directory));
     }
 
     #[test]
     fn a_small_image_is_not_enlarged() {
-        let root = std::env::temp_dir().join(format!("nap-thumb-small-{}", std::process::id()));
-        let stored = materialize(&root, &png(100, 100), ArtworkMimeType::Png).unwrap();
+        let directory =
+            std::env::temp_dir().join(format!("nap-thumb-small-{}", std::process::id()));
+        let stored = materialize(&directory, &png(100, 100), ArtworkMimeType::Png).unwrap();
         let original = ArtworkPath::parse(&stored.relative_path).unwrap();
-        ensure_thumbnail(&root, &original).unwrap();
-        let thumb = image::open(root.join(original.thumbnail().unwrap())).unwrap();
+        ensure_thumbnail(&directory, &original).unwrap();
+        let thumb = image::open(directory.join(original.thumbnail().unwrap())).unwrap();
         assert_eq!((thumb.width(), thumb.height()), (100, 100));
-        drop(fs::remove_dir_all(root));
+        drop(fs::remove_dir_all(directory));
     }
 
     #[test]

@@ -1,10 +1,10 @@
-//! Where a track's file is: a root and a path below it. Every consumer (playback, properties,
+//! Where a track's file is: a directory and a path below it. Every consumer (playback, properties,
 //! Show in Explorer, lyrics) builds the file's path here, so none can skip the check that it stays
-//! inside its root.
+//! inside its directory.
 
 use super::error::{LibraryCommandError, StoreError};
-use crate::diagnostics::logged;
-use crate::errors::CommonError;
+use crate::errors::CommandError;
+use crate::errors::logged;
 use std::path::{Component, PathBuf};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
@@ -13,7 +13,7 @@ pub struct Unavailable;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct TrackLocation {
-    root: PathBuf,
+    directory: PathBuf,
     relative: PathBuf,
     available: bool,
 }
@@ -21,7 +21,7 @@ pub(crate) struct TrackLocation {
 /// A track's file as it is on disk right now. Both paths are canonical.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ExistingFile {
-    pub root: PathBuf,
+    pub directory: PathBuf,
     pub path: PathBuf,
 }
 
@@ -34,21 +34,21 @@ impl From<Unavailable> for StoreError {
 impl From<Unavailable> for LibraryCommandError {
     fn from(_: Unavailable) -> Self {
         Self::Common {
-            error: CommonError::TrackUnavailable,
+            error: CommandError::TrackUnavailable,
         }
     }
 }
 
 impl TrackLocation {
-    pub(crate) fn new(root: &str, relative: &str, available: bool) -> Self {
+    pub(crate) fn new(directory: &str, relative: &str, available: bool) -> Self {
         Self {
-            root: PathBuf::from(root),
+            directory: PathBuf::from(directory),
             relative: PathBuf::from(relative),
             available,
         }
     }
 
-    /// The file's path, without touching the filesystem: the root joined with a relative path that
+    /// The file's path, without touching the filesystem: the directory joined with a relative path that
     /// only descends. Cheap enough to take for every track of a playback context.
     pub(crate) fn path(&self) -> Result<PathBuf, Unavailable> {
         let descends = self
@@ -58,28 +58,28 @@ impl TrackLocation {
         if !descends || self.relative.as_os_str().is_empty() {
             return Err(Unavailable);
         }
-        Ok(self.root.join(&self.relative))
+        Ok(self.directory.join(&self.relative))
     }
 
     /// The file itself: still marked available, still there, and (symbolic links resolved) still
-    /// inside its root.
+    /// inside its directory.
     pub(crate) fn existing(&self) -> Result<ExistingFile, Unavailable> {
         if !self.available {
             return Err(Unavailable);
         }
         let path = self.path()?;
-        let root = dunce::canonicalize(&self.root).map_err(logged(
+        let directory = dunce::canonicalize(&self.directory).map_err(logged(
             Unavailable,
-            "library.location.root_canonicalize_failed",
+            "library.location.directory_canonicalize_failed",
         ))?;
         let path = dunce::canonicalize(path).map_err(logged(
             Unavailable,
             "library.location.path_canonicalize_failed",
         ))?;
-        if !path.starts_with(&root) || !path.is_file() {
+        if !path.starts_with(&directory) || !path.is_file() {
             return Err(Unavailable);
         }
-        Ok(ExistingFile { root, path })
+        Ok(ExistingFile { directory, path })
     }
 }
 
@@ -93,19 +93,19 @@ mod tests {
     }
 
     #[test]
-    fn a_file_inside_its_root_exists() {
+    fn a_file_inside_its_directory_exists() {
         let directory = TestDirectory::new();
         std::fs::create_dir_all(directory.file("music/Artist")).unwrap();
         std::fs::write(directory.file("music/Artist/a.wav"), []).unwrap();
 
         let existing = location(&directory, "Artist/a.wav").existing().unwrap();
 
-        assert!(existing.path.starts_with(&existing.root));
+        assert!(existing.path.starts_with(&existing.directory));
         assert!(existing.path.ends_with("a.wav"));
     }
 
     #[test]
-    fn a_path_that_leaves_its_root_is_unavailable() {
+    fn a_path_that_leaves_its_directory_is_unavailable() {
         let directory = TestDirectory::new();
         std::fs::create_dir_all(directory.file("music")).unwrap();
         std::fs::write(directory.file("outside.wav"), []).unwrap();

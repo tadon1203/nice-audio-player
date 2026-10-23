@@ -57,16 +57,16 @@ MP3, FLAC, WAV, AAC, M4A. A file counts as supported only if it can actually be 
 
 ## Library
 
-- Register local music folders. Run a Library scan to index them, and pick up file changes while idle.
+- Register local music directories. Run a Library scan to index them, and pick up file changes while idle.
   - A burst of changes is one scan.
   - Long scans show progress and can be cancelled.
   - A cancelled or failed scan never leaves a half-written batch.
   - A failed scan stays flagged until a scan succeeds.
 - Missing files are shown as missing. The app never deletes them automatically.
   - A moved or renamed file is found again by its size and the hash of its head and tail. If that fails, it is found by its tags, when exactly one Missing track carries them. It is the same track, so queues still resolve.
-  - Settings shows each folder's last scan, track count and Missing track count.
+  - Settings shows each directory's last scan, track count and Missing track count.
   - Settings offers "Delete Missing", with confirmation. Source files are never touched.
-  - Settings offers a way to open the log folder.
+  - Settings offers a way to open the log directory.
 - Browse as Albums, Album Artists, or Tracks; Album Artists drill into their Albums
 - Each view keeps its own filter and scroll position across view switches and Library/Settings round trips
 - Back returns to the semantic parent (Album Artist → Album → Album Artist)
@@ -84,7 +84,7 @@ MP3, FLAC, WAV, AAC, M4A. A file counts as supported only if it can actually be 
   - Kana are filed under the head of their row (か for が). All kanji are one "漢".
   - Choosing a letter starts the list there, without loading what precedes it.
   - Choosing the first letter, or changing the sort or filter, starts the list from the top.
-- Albums are filed by Album Artist, title and folder. See Album and Compilation in [CONTEXT.md](../CONTEXT.md). A disc folder ("CD1", "Disc 2") belongs to the album folder above it.
+- Albums are filed by Album Artist, title and directory. See Album and Compilation in [CONTEXT.md](../CONTEXT.md). A disc directory ("CD1", "Disc 2") belongs to the album directory above it.
 
 ## Lyrics
 

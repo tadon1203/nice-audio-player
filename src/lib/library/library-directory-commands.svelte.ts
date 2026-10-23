@@ -1,11 +1,11 @@
-import type { LibraryClient, LibraryRoot } from "#lib/native";
+import type { LibraryClient, LibraryDirectory } from "#lib/native";
 import type { CatalogRepository } from "./catalog-repository";
 
 /**
- * The Library's folder and scan commands. Each awaits the client, then refreshes the catalog where
+ * The Library's directory and scan commands. Each awaits the client, then refreshes the catalog where
  * the change alters what the catalog lists.
  */
-export class LibraryRootCommands {
+export class LibraryDirectoryCommands {
   readonly #client: LibraryClient;
   readonly #catalog: CatalogRepository;
 
@@ -14,22 +14,22 @@ export class LibraryRootCommands {
     this.#catalog = catalog;
   }
 
-  /** Resolves null when the user closes the folder dialog. */
-  public async add(): Promise<LibraryRoot | null> {
+  /** Resolves null when the user closes the directory dialog. */
+  public async add(): Promise<LibraryDirectory | null> {
     const path = await this.#client.selectDirectory();
     if (path === null) return null;
-    const root = await this.#client.registerRoot(path);
+    const directory = await this.#client.registerDirectory(path);
     this.#catalog.refresh();
-    return root;
+    return directory;
   }
 
-  public async setEnabled(id: string, enabled: boolean): Promise<void> {
-    await this.#client.setRootEnabled(id, enabled);
+  public async setEnabled(id: number, enabled: boolean): Promise<void> {
+    await this.#client.setDirectoryEnabled(id, enabled);
     this.#catalog.refresh();
   }
 
-  public async remove(id: string): Promise<void> {
-    await this.#client.removeRoot(id);
+  public async remove(id: number): Promise<void> {
+    await this.#client.removeDirectory(id);
     this.#catalog.refresh();
   }
 
@@ -53,7 +53,7 @@ export class LibraryRootCommands {
     return this.#client.resetAndRescan();
   }
 
-  public openLogDirectory(): Promise<void> {
-    return this.#client.openLogDirectory();
+  public appOpenLogDirectory(): Promise<void> {
+    return this.#client.appOpenLogDirectory();
   }
 }

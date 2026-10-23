@@ -1,6 +1,6 @@
 use super::migrations::{self, MigrationError};
-use crate::cleanup::remove_file_best_effort;
-use crate::diagnostics::logged;
+use crate::errors::logged;
+use crate::errors::remove_file_best_effort;
 use crate::ids::register_sql_functions;
 use parking_lot::Mutex;
 use rusqlite::{Connection, OpenFlags};
@@ -278,12 +278,12 @@ mod tests {
 
         assert!(dir.join(format!("{DATABASE_FILE}.bak")).exists());
         assert!(!dir.join(RESET_MARKER).exists());
-        let roots: i64 = fresh
+        let directories: i64 = fresh
             .read()
             .unwrap()
             .query_row("SELECT COUNT(*) FROM library_roots", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(roots, 0);
+        assert_eq!(directories, 0);
     }
 
     #[test]

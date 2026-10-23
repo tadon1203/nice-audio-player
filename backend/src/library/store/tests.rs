@@ -6,7 +6,7 @@ use super::{
     catalog::{album_artists_query, albums_query, artist_albums_query, tracks_query},
     paging::PAGE_SIZE,
 };
-use crate::errors::CommonError;
+use crate::errors::CommandError;
 use crate::library::{
     database::Database,
     error::StoreError,
@@ -99,7 +99,7 @@ impl Fixture {
 
     /// Writes tracks the way the scanner does: the tags, and the keys computed from them.
     fn add_all(&self, seeds: &[Seed<'_>]) {
-        let mut connection = self.database.write();
+        let mut connection = self.database.write().unwrap();
         let transaction = connection.transaction().unwrap();
         for seed in seeds {
             let file = format!("{}.wav", seed.id);
@@ -177,7 +177,7 @@ impl Fixture {
     }
 
     fn sql(&self, sql: &str) {
-        self.database.write().execute(sql, []).unwrap();
+        self.database.write().unwrap().execute(sql, []).unwrap();
     }
 
     /// Creates the audio files of tracks 1..=`count` so playback can find them.
@@ -188,14 +188,14 @@ impl Fixture {
     }
 }
 
-const TITLE: LibraryAlbumSortKey = LibraryAlbumSortKey::Title;
-const ASC: LibrarySortDirection = LibrarySortDirection::Ascending;
-const DESC: LibrarySortDirection = LibrarySortDirection::Descending;
+const TITLE: AlbumSortKey = AlbumSortKey::Title;
+const ASC: SortDirection = SortDirection::Ascending;
+const DESC: SortDirection = SortDirection::Descending;
 
 fn track_query(
     search: Option<&str>,
-    sort_key: LibraryTrackSortKey,
-    sort_direction: LibrarySortDirection,
+    sort_key: TrackSortKey,
+    sort_direction: SortDirection,
 ) -> TrackQuery {
     TrackQuery {
         search: search.map(str::to_owned),
@@ -206,8 +206,8 @@ fn track_query(
 
 fn album_query(
     search: Option<&str>,
-    sort_key: LibraryAlbumSortKey,
-    sort_direction: LibrarySortDirection,
+    sort_key: AlbumSortKey,
+    sort_direction: SortDirection,
 ) -> AlbumQuery {
     AlbumQuery {
         search: search.map(str::to_owned),
@@ -218,8 +218,8 @@ fn album_query(
 
 fn album_artist_query(
     search: Option<&str>,
-    sort_key: LibraryAlbumArtistSortKey,
-    sort_direction: LibrarySortDirection,
+    sort_key: ArtistSortKey,
+    sort_direction: SortDirection,
 ) -> AlbumArtistQuery {
     AlbumArtistQuery {
         search: search.map(str::to_owned),
@@ -292,12 +292,12 @@ fn record_statement(sql: &str) {
 )]
 fn statements_of(fixture: &Fixture, run: impl FnOnce()) -> Vec<String> {
     // The pool hands its idle connection to the next read, which is the store's.
-    let mut connection = fixture.database.read();
+    let mut connection = fixture.database.read().unwrap();
     connection.connection_mut().trace(Some(record_statement));
     drop(connection);
     STATEMENTS.lock().clear();
     run();
-    let mut connection = fixture.database.read();
+    let mut connection = fixture.database.read().unwrap();
     connection.connection_mut().trace(None);
     drop(connection);
     std::mem::take(&mut *STATEMENTS.lock())

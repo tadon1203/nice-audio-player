@@ -1,9 +1,9 @@
 //! The Library keeping itself in step with the disk, through the handle the commands use: a
-//! change in a registered folder is picked up while idle, and a failed scan is reported until a
+//! change in a registered directory is picked up while idle, and a failed scan is reported until a
 //! scan succeeds.
 
 use crate::library::Library;
-use crate::library::models::{LibraryScanState, LibrarySortDirection, LibraryTrackSortKey};
+use crate::library::models::{ScanStatus, SortDirection, TrackSortKey};
 use crate::messages::null_message_sink;
 use crate::test_support::{TestDirectory, write_pcm_i16_wav};
 use std::path::{Path, PathBuf};
@@ -24,8 +24,8 @@ fn harness() -> Harness {
     let library =
         Library::open(&directory.file("data"), null_message_sink()).expect("open library");
     library
-        .register_root(music.to_string_lossy().into_owned())
-        .expect("register root");
+        .register_directory(music.to_string_lossy().into_owned())
+        .expect("register directory");
     Harness {
         _directory: directory,
         music,
@@ -52,29 +52,24 @@ impl Harness {
     fn track_count(&self) -> u64 {
         self.library
             .store()
-            .catalog_tracks(
-                None,
-                None,
-                LibraryTrackSortKey::Title,
-                LibrarySortDirection::Ascending,
-            )
+            .catalog_tracks(None, None, TrackSortKey::Title, SortDirection::Ascending)
             .map_or(0, |page| page.total_count.unwrap_or(0))
     }
 
-    /// How many scans have covered the folder: each one bumps its generation.
+    /// How many scans have covered the directory: each one bumps its generation.
     fn scans_done(&self) -> u64 {
-        self.library.roots().expect("roots")[0].scan_generation
+        self.library.directories().expect("directories")[0].scan_generation
     }
 
-    fn scan_state(&self) -> LibraryScanState {
+    fn scan_state(&self) -> ScanStatus {
         self.library.scan_state().value.state
     }
 
     fn wait_for_first_scan(&self) {
         assert!(
             wait_until(SETTLE, || self.scans_done() == 1
-                && self.scan_state() == LibraryScanState::Completed),
-            "registering a folder scans it"
+                && self.scan_state() == ScanStatus::Completed),
+            "registering a directory scans it"
         );
     }
 
@@ -96,7 +91,7 @@ fn a_file_added_while_idle_is_picked_up() {
 
     assert!(
         wait_until(SETTLE, || harness.track_count() == 1),
-        "the Library follows the folder without a manual scan"
+        "the Library follows the directory without a manual scan"
     );
 }
 
@@ -128,13 +123,13 @@ fn a_failed_scan_is_reported_until_a_scan_succeeds() {
 
     harness.scan_by_hand();
     assert!(
-        wait_until(SETTLE, || harness.scan_state() == LibraryScanState::Failed),
-        "an unreadable folder fails the scan"
+        wait_until(SETTLE, || harness.scan_state() == ScanStatus::Failed),
+        "an unreadable directory fails the scan"
     );
     for _ in 0..8 {
         assert_eq!(
             harness.scan_state(),
-            LibraryScanState::Failed,
+            ScanStatus::Failed,
             "the failure is still reported"
         );
         std::thread::sleep(Duration::from_millis(100));
@@ -143,25 +138,30 @@ fn a_failed_scan_is_reported_until_a_scan_succeeds() {
     std::fs::create_dir_all(&harness.music).unwrap();
     harness.scan_by_hand();
     assert!(
-        wait_until(SETTLE, || harness.scan_state()
-            == LibraryScanState::Completed),
+        wait_until(SETTLE, || harness.scan_state() == ScanStatus::Completed),
         "the next successful scan completes"
     );
 }
 
 #[test]
-fn removing_a_folder_drops_its_tracks() {
+fn removing_a_directory_drops_its_tracks() {
     let harness = harness();
     write_tone(&harness.music.join("a.wav"));
     harness.wait_for_first_scan();
     assert_eq!(harness.track_count(), 1);
-    let id = harness.library.roots().expect("roots")[0].id;
+    let id = harness.library.directories().expect("directories")[0].id;
 
     assert!(
-        wait_until(SETTLE, || harness.library.remove_root(id).is_ok()),
-        "a folder can be removed once no scan is running"
+        wait_until(SETTLE, || harness.library.remove_directory(id).is_ok()),
+        "a directory can be removed once no scan is running"
     );
 
     assert_eq!(harness.track_count(), 0);
-    assert!(harness.library.roots().expect("roots").is_empty());
+    assert!(
+        harness
+            .library
+            .directories()
+            .expect("directories")
+            .is_empty()
+    );
 }

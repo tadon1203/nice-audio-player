@@ -13,20 +13,20 @@ import {
 } from "#lib/native";
 
 const commandMessages = {
-  invalidRoot: "That folder reference is invalid.",
-  rootNotDirectory: "The selected path is not a folder.",
-  canonicalizationFailed: "The selected folder could not be resolved.",
-  duplicateRoot: "That folder is already in the library.",
-  overlappingRoot: "That folder overlaps an existing library folder.",
-  rootContainsDataDirectory:
-    "That folder contains the app's own data, so it cannot be a library folder.",
-  scanInProgress: "Library folders cannot be changed while a scan is running.",
+  invalidDirectory: "That directory reference is invalid.",
+  directoryNotDirectory: "The selected path is not a directory.",
+  canonicalizationFailed: "The selected directory could not be resolved.",
+  duplicateDirectory: "That directory is already in the library.",
+  overlappingDirectory: "That directory overlaps an existing library directory.",
+  directoryContainsDataDirectory:
+    "That directory contains the app's own data, so it cannot be a library directory.",
+  scanInProgress: "Library directories cannot be changed while a scan is running.",
   albumNotFound: albumNotFoundMessage,
   invalidCursor: "The list position is no longer valid. Retry to reload it.",
   albumArtistNotFound: "That artist could not be found.",
-  rootMissing: "A library folder is missing from disk.",
+  directoryMissing: "A library directory is missing from disk.",
   scanAlreadyRunning: "A library scan is already running.",
-  noEnabledRoots: "Enable at least one library folder before scanning.",
+  noEnabledDirectories: "Enable at least one library directory before scanning.",
   scanNotRunning: "No library scan is running.",
 } as const satisfies Record<Exclude<LibraryCommandError["code"], "common">, string>;
 
@@ -39,7 +39,7 @@ const unavailableMessages = {
 
 const scanFailureMessages = {
   persistenceFailed: commonErrorMessages.persistenceFailed,
-  rootTraversalFailed: "A library folder could not be read.",
+  directoryTraversalFailed: "A library directory could not be read.",
   panicked: "The scan stopped unexpectedly.",
 } as const satisfies Record<ScanFailure, string>;
 

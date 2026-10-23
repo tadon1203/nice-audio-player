@@ -6,7 +6,7 @@ mod messages;
 mod playback;
 
 use crate::app::BackendApp;
-use crate::messages::{SharedMessageSink, testing::RecordingMessageSink};
+use crate::messages::{SharedMessageListener, testing::RecordingMessageSink};
 use crate::test_support::TestDirectory;
 use std::sync::Arc;
 
@@ -22,7 +22,7 @@ fn fixture() -> Fixture {
     let directory = TestDirectory::new();
     let data_dir = directory.file("data");
     std::fs::create_dir_all(&data_dir).expect("data directory");
-    let (recorded, sink): (Arc<RecordingMessageSink>, SharedMessageSink) =
+    let (recorded, sink): (Arc<RecordingMessageSink>, SharedMessageListener) =
         RecordingMessageSink::shared();
     let backend = BackendApp::initialize_for_tests(data_dir, sink);
     Fixture {

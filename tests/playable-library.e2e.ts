@@ -104,7 +104,7 @@ test("plays the list that shows, also right after the filter changes", async ({
   // A search answers only when the test lets it, so the old list stays on screen until then.
   let releaseSearch: () => void = () => {};
   const searchMayAnswer = new Promise<void>((resolve) => (releaseSearch = resolve));
-  native.respond("listLibraryTracks", async ({ request: { cursor, search } }) => {
+  native.respond("libraryListTracks", async ({ request: { cursor, search } }) => {
     if (search === null) return pageOf(library.tracks, cursor);
     await searchMayAnswer;
     return pageOf(
@@ -118,10 +118,10 @@ test("plays the list that shows, also right after the filter changes", async ({
 
   await page.getByRole("searchbox", { name: "Search tracks" }).fill("Track 002");
   // The search request is sent once the filter has settled; the old list still shows.
-  await expect.poll(() => native.callsTo("listLibraryTracks").length).toBe(2);
+  await expect.poll(() => native.callsTo("libraryListTracks").length).toBe(2);
   await page.getByRole("button", { name: "Play Test track" }).click();
-  await expect.poll(() => native.callsTo("startPlayback").length).toBe(1);
-  expect(native.callsTo("startPlayback")[0]!.context).toMatchObject({
+  await expect.poll(() => native.callsTo("playerPlay").length).toBe(1);
+  expect(native.callsTo("playerPlay")[0]!.context).toMatchObject({
     kind: "tracks",
     search: null,
   });
@@ -129,8 +129,8 @@ test("plays the list that shows, also right after the filter changes", async ({
   releaseSearch();
   await expect(table.getByRole("row", { name: /Test track/ })).toHaveCount(0);
   await page.getByRole("button", { name: "Play Track 002" }).click();
-  await expect.poll(() => native.callsTo("startPlayback").length).toBe(2);
-  expect(native.callsTo("startPlayback")[1]!.context).toMatchObject({
+  await expect.poll(() => native.callsTo("playerPlay").length).toBe(2);
+  expect(native.callsTo("playerPlay")[1]!.context).toMatchObject({
     kind: "tracks",
     search: "Track 002",
   });
@@ -147,7 +147,7 @@ test("uses the album as the queue context when Play album starts playback", asyn
   await page.getByRole("link", { name: "Open album Test album by Test artist" }).click();
   await page.getByRole("button", { name: "Play album" }).click();
   await expect
-    .poll(() => native.callsTo("startPlayback").map((call) => call.context))
+    .poll(() => native.callsTo("playerPlay").map((call) => call.context))
     .toEqual([{ kind: "album", albumId: library.albumDetails.summary.id }]);
 
   const dock = page.getByRole("contentinfo", { name: "Playback controls" });

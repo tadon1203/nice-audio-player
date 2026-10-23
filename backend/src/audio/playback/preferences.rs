@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use super::queue::PlaybackRepeatMode;
+use super::queue::RepeatMode;
 use crate::audio::devices::AudioOutputSelection;
 use crate::audio::volume::DEFAULT_PLAYBACK_VOLUME;
 
@@ -11,7 +11,7 @@ pub(crate) struct PlaybackPreferences {
     pub volume: f32,
     pub muted: bool,
     pub output_selection: AudioOutputSelection,
-    pub repeat_mode: PlaybackRepeatMode,
+    pub repeat_mode: RepeatMode,
     pub shuffle_enabled: bool,
 }
 
@@ -21,7 +21,7 @@ impl Default for PlaybackPreferences {
             volume: DEFAULT_PLAYBACK_VOLUME,
             muted: false,
             output_selection: AudioOutputSelection::SystemDefault,
-            repeat_mode: PlaybackRepeatMode::Off,
+            repeat_mode: RepeatMode::Off,
             shuffle_enabled: false,
         }
     }

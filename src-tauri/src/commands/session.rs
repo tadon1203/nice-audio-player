@@ -12,7 +12,7 @@ use crate::AppState;
     clippy::needless_pass_by_value,
     reason = "Tauri passes State and AppHandle by value"
 )]
-pub(crate) fn connect(
+pub(crate) fn app_connect(
     channel: Channel<BackendMessage>,
     state: tauri::State<'_, AppState>,
 ) -> InitialState {

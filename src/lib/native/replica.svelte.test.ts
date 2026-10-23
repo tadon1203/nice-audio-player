@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { Versioned } from "./bindings";
+import type { Revisioned } from "./bindings";
 import { Replica } from "./replica.svelte";
 
-const versioned = (revision: number, value: string): Versioned<string> => ({ revision, value });
+const versioned = (revision: number, value: string): Revisioned<string> => ({ revision, value });
 
 describe("Replica", () => {
   it("knows nothing until the first value is accepted, and keeps the first value", () => {

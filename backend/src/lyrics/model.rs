@@ -1,4 +1,4 @@
-use crate::errors::CommonError;
+use crate::errors::CommandError;
 use crate::ids::TrackId;
 use std::path::PathBuf;
 
@@ -54,7 +54,7 @@ pub enum LyricsResolution {
     },
     SourceFailed {
         track_id: TrackId,
-        /// The name of the sidecar file the track looks for, without its folder.
+        /// The name of the sidecar file the track looks for, without its directory.
         sidecar_file_name: String,
     },
 }
@@ -66,20 +66,12 @@ pub enum LyricsResolution {
     rename_all_fields = "camelCase"
 )]
 pub enum LyricsCommandError {
-    Common { error: CommonError },
-}
-
-impl crate::tasks::TaskError for LyricsCommandError {
-    fn task_failed() -> Self {
-        Self::Common {
-            error: CommonError::TaskFailed,
-        }
-    }
+    Common { error: CommandError },
 }
 
 #[derive(Debug, Clone)]
 pub(crate) struct LyricsTrackContext {
     pub track_id: TrackId,
     pub source: PathBuf,
-    pub root: PathBuf,
+    pub directory: PathBuf,
 }

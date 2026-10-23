@@ -1,9 +1,9 @@
 //! End-to-end scans of real (tiny) audio files against a real database.
 
 use crate::library::database::Database;
-use crate::library::models::{LibraryScanSnapshot, LibraryScanState, ScanFailure};
-use crate::library::roots;
-use crate::messages::{Notifier, StateTopic, Versioned, null_message_sink};
+use crate::library::directories;
+use crate::library::models::{ScanFailure, ScanState, ScanStatus};
+use crate::messages::{Notifier, Revisioned, StateTopic, null_message_sink};
 use crate::test_support::{TestDirectory, write_pcm_i16_wav};
 use parking_lot::Mutex;
 use std::path::{Path, PathBuf};
@@ -26,7 +26,7 @@ pub(super) fn fixture() -> Fixture {
     std::fs::create_dir_all(&music).unwrap();
     let data = directory.file("data");
     let database = Database::initialize(&data).expect("database");
-    roots::register(&database, &music.to_string_lossy()).expect("register root");
+    directories::register(&database, &music.to_string_lossy()).expect("register directory");
     Fixture {
         _directory: directory,
         music,
@@ -38,16 +38,16 @@ pub(super) fn write_tone(path: &Path, samples: usize) {
     write_pcm_i16_wav(path, 8_000, 1, &vec![1_000i16; samples]);
 }
 
-pub(super) fn run_scan(fixture: &Fixture, cancelled: bool) -> LibraryScanSnapshot {
+pub(super) fn run_scan(fixture: &Fixture, cancelled: bool) -> ScanState {
     run_jobs(fixture, cancelled, None)
 }
 
 /// A scan that follows changes: only the directories holding `changed` paths are walked.
-fn run_scan_of(fixture: &Fixture, changed: &[PathBuf]) -> LibraryScanSnapshot {
+fn run_scan_of(fixture: &Fixture, changed: &[PathBuf]) -> ScanState {
     run_jobs(fixture, false, Some(changed))
 }
 
-fn run_jobs(fixture: &Fixture, cancelled: bool, dirs: Option<&[PathBuf]>) -> LibraryScanSnapshot {
+fn run_jobs(fixture: &Fixture, cancelled: bool, dirs: Option<&[PathBuf]>) -> ScanState {
     run_versioned(fixture, cancelled, dirs).value
 }
 
@@ -55,18 +55,18 @@ fn run_versioned(
     fixture: &Fixture,
     cancelled: bool,
     dirs: Option<&[PathBuf]>,
-) -> Versioned<LibraryScanSnapshot> {
-    let roots = roots::list(&fixture.database.read()).expect("roots");
-    let jobs: Vec<_> = roots
+) -> Revisioned<ScanState> {
+    let directories = directories::list(&fixture.database.read().unwrap()).expect("directories");
+    let jobs: Vec<_> = directories
         .into_iter()
-        .map(|root| crate::library::scanner::ScanJob {
-            root,
+        .map(|directory| crate::library::scanner::ScanJob {
+            directory,
             dirs: dirs.map(<[PathBuf]>::to_vec),
         })
         .collect();
-    let state = Arc::new(Mutex::new(Versioned::new(LibraryScanSnapshot {
-        state: LibraryScanState::Running,
-        ..LibraryScanSnapshot::idle()
+    let state = Arc::new(Mutex::new(Revisioned::new(ScanState {
+        state: ScanStatus::Running,
+        ..ScanState::idle()
     })));
     crate::library::scanner::run(
         &fixture.database,
@@ -84,14 +84,14 @@ fn the_scan_revision_grows_with_each_change_of_the_scan() {
     let fixture = fixture();
     write_tone(&fixture.music.join("a.wav"), 16_000);
     let scan = run_versioned(&fixture, false, None);
-    // The scan sets the expected count and the root, counts the file it finds, and ends: each is
+    // The scan sets the expected count and the directory, counts the file it finds, and ends: each is
     // a change, so the revision is at least four.
-    assert_eq!(scan.value.state, LibraryScanState::Completed);
+    assert_eq!(scan.value.state, ScanStatus::Completed);
     assert!(scan.revision >= 4, "revision {}", scan.revision);
 }
 
 fn files(fixture: &Fixture) -> Vec<(String, String, String, i64)> {
-    let c = fixture.database.read();
+    let c = fixture.database.read().unwrap();
     let mut statement = c
         .prepare("SELECT relative_path,availability,inspection_status,source_revision FROM library_files ORDER BY relative_path")
         .unwrap();
@@ -106,7 +106,7 @@ fn files(fixture: &Fixture) -> Vec<(String, String, String, i64)> {
 }
 
 fn count(fixture: &Fixture, sql: &str) -> i64 {
-    let c = fixture.database.read();
+    let c = fixture.database.read().unwrap();
     c.query_row(sql, [], |row| row.get(0)).unwrap()
 }
 
@@ -119,7 +119,7 @@ fn indexes_supported_files_and_ignores_the_rest() {
 
     let scan = run_scan(&fixture, false);
 
-    assert_eq!(scan.state, LibraryScanState::Completed);
+    assert_eq!(scan.state, ScanStatus::Completed);
     assert_eq!(
         (
             scan.discovered_count,
@@ -147,7 +147,7 @@ fn indexes_supported_files_and_ignores_the_rest() {
 }
 
 #[test]
-fn files_in_subfolders_keep_their_relative_path() {
+fn files_in_subdirectories_keep_their_relative_path() {
     let fixture = fixture();
     std::fs::create_dir_all(fixture.music.join("Artist").join("Album")).unwrap();
     write_tone(
@@ -172,7 +172,7 @@ fn a_second_scan_does_not_inspect_unchanged_files() {
 
     let second = run_scan(&fixture, false);
 
-    assert_eq!(second.state, LibraryScanState::Completed);
+    assert_eq!(second.state, ScanStatus::Completed);
     assert_eq!(
         second.expected_count, 1,
         "a rescan expects what was found before"
@@ -223,7 +223,7 @@ fn a_removed_file_is_marked_missing_and_its_track_is_kept() {
     std::fs::remove_file(fixture.music.join("b.wav")).unwrap();
     let second = run_scan(&fixture, false);
 
-    assert_eq!(second.state, LibraryScanState::Completed);
+    assert_eq!(second.state, ScanStatus::Completed);
     let files = files(&fixture);
     assert_eq!(files[0].1, "available");
     assert_eq!(files[1].1, "missing");
@@ -238,7 +238,7 @@ fn a_file_that_cannot_be_decoded_is_marked_unsupported_without_stopping_the_scan
 
     let scan = run_scan(&fixture, false);
 
-    assert_eq!(scan.state, LibraryScanState::Completed);
+    assert_eq!(scan.state, ScanStatus::Completed);
     assert_eq!((scan.indexed_count, scan.failed_count), (1, 1));
     let files = files(&fixture);
     assert_eq!(
@@ -264,7 +264,7 @@ fn a_cancelled_scan_stops_and_changes_nothing() {
 
     let scan = run_scan(&fixture, true);
 
-    assert_eq!(scan.state, LibraryScanState::Cancelled);
+    assert_eq!(scan.state, ScanStatus::Cancelled);
     assert_eq!(files(&fixture).len(), 0);
 }
 
@@ -277,7 +277,7 @@ fn a_scan_covers_more_files_than_fit_in_one_batch() {
 
     let scan = run_scan(&fixture, false);
 
-    assert_eq!(scan.state, LibraryScanState::Completed);
+    assert_eq!(scan.state, ScanStatus::Completed);
     assert_eq!(
         (scan.discovered_count, scan.indexed_count, scan.failed_count),
         (230, 230, 0)
@@ -293,7 +293,7 @@ fn a_scan_covers_more_files_than_fit_in_one_batch() {
 }
 
 #[test]
-fn an_unreadable_root_fails_the_scan_but_keeps_other_roots_files_available() {
+fn an_unreadable_directory_fails_the_scan_but_keeps_other_directories_files_available() {
     let fixture = fixture();
     write_tone(&fixture.music.join("a.wav"), 8_000);
     run_scan(&fixture, false);
@@ -301,12 +301,15 @@ fn an_unreadable_root_fails_the_scan_but_keeps_other_roots_files_available() {
 
     let scan = run_scan(&fixture, false);
 
-    assert_eq!(scan.state, LibraryScanState::Failed);
-    assert_eq!(scan.failure_code, Some(ScanFailure::RootTraversalFailed));
+    assert_eq!(scan.state, ScanStatus::Failed);
+    assert_eq!(
+        scan.failure_code,
+        Some(ScanFailure::DirectoryTraversalFailed)
+    );
     assert_eq!(
         files(&fixture)[0].1,
         "available",
-        "an unreadable root is not a deleted library"
+        "an unreadable directory is not a deleted library"
     );
 }
 
@@ -359,7 +362,7 @@ fn a_file_that_stops_being_decodable_keeps_its_track_without_its_old_tags() {
     std::fs::write(&path, b"not audio any more").unwrap();
     let scan = run_scan(&fixture, false);
 
-    assert_eq!(scan.state, LibraryScanState::Completed);
+    assert_eq!(scan.state, ScanStatus::Completed);
     assert_eq!(files(&fixture)[0].2, "unsupported");
     assert_eq!(count(&fixture, "SELECT COUNT(*) FROM tracks"), 1);
     assert_eq!(
@@ -390,27 +393,27 @@ fn truncated_and_garbage_files_are_reported_failed_and_the_scan_completes() {
 
     let scan = run_scan(&fixture, false);
 
-    assert_eq!(scan.state, LibraryScanState::Completed);
+    assert_eq!(scan.state, ScanStatus::Completed);
     assert_eq!(scan.discovered_count, 7);
     assert_eq!(scan.inspected_count, 7);
     assert!(scan.indexed_count >= 2, "the good files are indexed");
 }
 
 #[test]
-fn a_folder_holding_the_data_directory_cannot_be_registered() {
+fn a_directory_holding_the_data_directory_cannot_be_registered() {
     let fixture = fixture();
     let parent = fixture.music.parent().unwrap();
 
-    let refused = roots::register(&fixture.database, &parent.to_string_lossy());
+    let refused = directories::register(&fixture.database, &parent.to_string_lossy());
 
     assert!(matches!(
         refused,
-        Err(crate::library::error::LibraryCommandError::RootContainsDataDirectory)
+        Err(crate::library::error::LibraryCommandError::DirectoryContainsDataDirectory)
     ));
 }
 
 pub(super) fn track_ids_by_path(fixture: &Fixture) -> Vec<(String, i64)> {
-    let c = fixture.database.read();
+    let c = fixture.database.read().unwrap();
     let mut statement = c
         .prepare("SELECT f.relative_path, t.id FROM tracks t JOIN library_files f ON f.id = t.file_id ORDER BY f.relative_path")
         .unwrap();
@@ -423,7 +426,7 @@ pub(super) fn track_ids_by_path(fixture: &Fixture) -> Vec<(String, i64)> {
 }
 
 #[test]
-fn a_moved_folder_and_a_renamed_file_keep_their_tracks_and_leave_nothing_missing() {
+fn a_moved_directory_and_a_renamed_file_keep_their_tracks_and_leave_nothing_missing() {
     let fixture = fixture();
     std::fs::create_dir_all(fixture.music.join("Old")).unwrap();
     write_tone(&fixture.music.join("Old").join("one.wav"), 8_000);
@@ -443,7 +446,7 @@ fn a_moved_folder_and_a_renamed_file_keep_their_tracks_and_leave_nothing_missing
     .unwrap();
     let scan = run_scan(&fixture, false);
 
-    assert_eq!(scan.state, LibraryScanState::Completed);
+    assert_eq!(scan.state, ScanStatus::Completed);
     let after = track_ids_by_path(&fixture);
     assert_eq!(after.len(), 3, "no duplicates: {after:?}");
     assert_eq!(id_of(&after, "New/one.wav"), id_of(&before, "Old/one.wav"));
@@ -493,15 +496,21 @@ fn a_deleted_file_stays_missing_until_the_listener_deletes_it() {
     run_scan(&fixture, false);
     run_scan(&fixture, false);
 
-    let roots = roots::list(&fixture.database.read()).unwrap();
-    assert_eq!((roots[0].track_count, roots[0].missing_count), (2, 1));
+    let directories = directories::list(&fixture.database.read().unwrap()).unwrap();
+    assert_eq!(
+        (directories[0].track_count, directories[0].missing_count),
+        (2, 1)
+    );
     assert_eq!(files(&fixture)[0].1, "missing", "gone.wav sorts first");
 
-    let deleted = roots::delete_missing(&fixture.database).unwrap();
+    let deleted = directories::delete_missing(&fixture.database).unwrap();
 
     assert_eq!(deleted, 1);
-    let roots = roots::list(&fixture.database.read()).unwrap();
-    assert_eq!((roots[0].track_count, roots[0].missing_count), (2, 0));
+    let directories = directories::list(&fixture.database.read().unwrap()).unwrap();
+    assert_eq!(
+        (directories[0].track_count, directories[0].missing_count),
+        (2, 0)
+    );
     assert!(fixture.music.join("keep.wav").exists(), "source files stay");
     assert_eq!(count(&fixture, "SELECT COUNT(*) FROM tracks"), 2);
 }
@@ -546,7 +555,7 @@ fn a_scan_that_follows_a_change_walks_only_that_directory() {
 
     let scan = run_scan_of(&fixture, &[fixture.music.join("B").join("new.wav")]);
 
-    assert_eq!(scan.state, LibraryScanState::Completed);
+    assert_eq!(scan.state, ScanStatus::Completed);
     assert_eq!(scan.discovered_count, 4, "B's four files, nothing else");
     assert_eq!((scan.inspected_count, scan.changed_count), (1, 1));
     assert_eq!(
@@ -583,8 +592,11 @@ fn a_removed_directory_is_found_through_its_nearest_existing_parent() {
 
     run_scan_of(&fixture, &[gone]);
 
-    let roots = roots::list(&fixture.database.read()).unwrap();
-    assert_eq!((roots[0].track_count, roots[0].missing_count), (1, 1));
+    let directories = directories::list(&fixture.database.read().unwrap()).unwrap();
+    assert_eq!(
+        (directories[0].track_count, directories[0].missing_count),
+        (1, 1)
+    );
 }
 
 #[test]
@@ -628,7 +640,7 @@ pub(super) fn tagged_tone(path: &Path, samples: usize, fields: &[(lofty::tag::It
 }
 
 fn albums(fixture: &Fixture) -> Vec<(String, String, String, i64)> {
-    let connection = fixture.database.read();
+    let connection = fixture.database.read().unwrap();
     let mut statement = connection
         .prepare(
             "SELECT album_artist, title, album_directory, track_count FROM albums
@@ -646,28 +658,28 @@ fn albums(fixture: &Fixture) -> Vec<(String, String, String, i64)> {
 }
 
 #[test]
-fn tracks_of_one_folder_and_album_with_different_artists_are_a_compilation() {
+fn tracks_of_one_directory_and_album_with_different_artists_are_a_compilation() {
     use lofty::tag::ItemKey::{AlbumTitle, TrackArtist, TrackTitle};
     let fixture = fixture();
-    for (folder, files) in [
+    for (directory, files) in [
         ("Hits", vec![("1", "A"), ("2", "B"), ("3", "C")]),
         ("Solo", vec![("1", "X"), ("2", "X")]),
         ("Solo Remaster", vec![("1", "X")]),
         ("Multi/CD1", vec![("1", "Y")]),
         ("Multi/CD2", vec![("1", "Y")]),
     ] {
-        std::fs::create_dir_all(fixture.music.join(folder)).unwrap();
+        std::fs::create_dir_all(fixture.music.join(directory)).unwrap();
         for (index, (number, artist)) in files.into_iter().enumerate() {
-            let album = match folder {
+            let album = match directory {
                 "Hits" => "Hits",
                 "Solo" | "Solo Remaster" => "Record",
                 _ => "Double",
             };
             tagged_tone(
-                &fixture.music.join(folder).join(format!("{number}.wav")),
-                800 + index * 40 + folder.len(),
+                &fixture.music.join(directory).join(format!("{number}.wav")),
+                800 + index * 40 + directory.len(),
                 &[
-                    (TrackTitle, &format!("{folder} {number}")),
+                    (TrackTitle, &format!("{directory} {number}")),
                     (TrackArtist, artist),
                     (AlbumTitle, album),
                 ],
@@ -704,7 +716,7 @@ fn tracks_of_one_folder_and_album_with_different_artists_are_a_compilation() {
     std::fs::remove_file(fixture.music.join("Hits").join("3.wav")).unwrap();
     std::fs::remove_file(fixture.music.join("Hits").join("2.wav")).unwrap();
     run_scan(&fixture, false);
-    roots::delete_missing(&fixture.database).unwrap();
+    directories::delete_missing(&fixture.database).unwrap();
     let after = albums(&fixture);
     assert_eq!(after[0], ("A".into(), "Hits".into(), "1/Hits".into(), 1));
 }

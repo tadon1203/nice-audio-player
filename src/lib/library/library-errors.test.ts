@@ -36,8 +36,8 @@ describe("LibraryErrors.statusMessage", () => {
 
 describe("LibraryErrors.scanFailureMessage", () => {
   it("never exposes a raw failure code", () => {
-    expect(LibraryErrors.scanFailureMessage("rootTraversalFailed")).toBe(
-      "A library folder could not be read.",
+    expect(LibraryErrors.scanFailureMessage("directoryTraversalFailed")).toBe(
+      "A library directory could not be read.",
     );
     expect(LibraryErrors.scanFailureMessage("unknownInternalCode")).toBe(
       "The scan stopped unexpectedly.",

@@ -6,40 +6,47 @@ mod playback_context;
 mod tests;
 
 pub use playback_context::PlaybackContext;
+// The types the Host names in commands and state. Each one is defined in the module that owns it.
+pub use crate::audio::devices::{AudioOutputDevice, AudioOutputSelection};
+pub use crate::audio::meter::MeterHub;
+pub use crate::audio::playback::{
+    CurrentPlayback, PlaybackFailureCode, PlaybackItem, PlaybackPosition, PlaybackQueueItem,
+    PlaybackState, QueueState, QueueWindow, RepeatMode, StartedBy,
+};
+pub use crate::audio::waveform::PlaybackWaveform;
+pub use crate::library::artwork::{ArtworkCache, ArtworkRef, ServedArtwork};
+pub use crate::library::models::{
+    AlbumArtistListRequest, AlbumArtistQuery, AlbumDetails, AlbumListRequest, AlbumQuery, AlbumRow,
+    AlbumTracksRequest, ArtistAlbumsRequest, ArtistRow, LibraryAlbumArtistPage, LibraryAlbumPage,
+    LibraryAlbumTrackPage, LibraryDirectory, LibraryStatus, LibraryTrackPage, ScrollIndexBucket,
+    SortDirection, TrackListRequest, TrackProperties, TrackQuery, TrackRow, TrackSortKey,
+};
+pub use crate::lyrics::LyricsResolution;
+pub use crate::messages::Revisioned;
+pub use crate::settings::{Appearance, AppearancePatch};
 
 use crate::audio::{
-    devices::{self, AudioDeviceListError, AudioOutputDevice, AudioOutputSelection},
-    meter::MeterHub,
+    devices::{self, AudioDeviceListError},
     output::{CpalBackend, OutputBackend},
     playback::{
-        NoTracks, PlaybackQueueSnapshot, PlaybackQueueWindow, PlaybackRepeatMode, PlaybackService,
-        PlaybackServiceError, PlaybackSnapshot, TrackListener, TrackResolver, TrackSource,
+        NoTracks, PlaybackService, PlaybackServiceError, TrackListener, TrackResolver, TrackSource,
     },
     waveform::Waveforms,
 };
-use crate::diagnostics::logged;
-use crate::errors::CommonError;
-use crate::ids::{AlbumId, ArtistId, ArtworkHash, FolderId, QueueItemId, TrackId};
+use crate::errors::CommandError;
+use crate::errors::logged;
+use crate::ids::{AlbumId, ArtistId, ArtworkHash, DirectoryId, QueueItemId, TrackId};
 use crate::library::{
     Library,
-    artwork::{self, ServedArtwork},
+    artwork::{self},
     error::{LibraryCommandError, StoreError},
-    models::{
-        AlbumArtistListRequest, AlbumArtistQuery, AlbumListRequest, AlbumQuery, AlbumTracksRequest,
-        ArtistAlbumsRequest, LibraryAlbumArtistPage, LibraryAlbumArtistSummary,
-        LibraryAlbumDetails, LibraryAlbumPage, LibraryAlbumTrackPage, LibraryIndexBucket,
-        LibraryRoot, LibraryStatus, LibraryTrackPage, LibraryTrackProperties,
-        LibraryUnavailableReason, TrackListRequest, TrackQuery,
-    },
+    models::LibraryUnavailableReason,
 };
-use crate::lyrics::{
-    LyricsCommandError, LyricsResolution, LyricsService, model::LyricsTrackContext,
-};
+use crate::lyrics::{LyricsCommandError, LyricsService, model::LyricsTrackContext};
 use crate::messages::{
-    BackendMessage, InitialState, SharedMessageSink, StateMessage, StateTopic, StateValue,
-    Versioned,
+    BackendMessage, InitialState, SharedMessageListener, StateMessage, StateTopic, StateValue,
 };
-use crate::settings::{Appearance, AppearancePatch, SettingsService};
+use crate::settings::SettingsService;
 use playback_context::LibraryTracks;
 use std::{
     path::{Path, PathBuf},
@@ -66,14 +73,14 @@ impl BackendApp {
     /// host that something changed.
     pub fn initialize(
         data_dir: PathBuf,
-        messages: SharedMessageSink,
+        messages: SharedMessageListener,
     ) -> Result<Self, BackendError> {
         Self::start(data_dir, messages, Box::new(CpalBackend))
     }
 
     /// Like `initialize`, with a fake output device instead of the platform's.
     #[cfg(test)]
-    pub(crate) fn initialize_for_tests(data_dir: PathBuf, messages: SharedMessageSink) -> Self {
+    pub(crate) fn initialize_for_tests(data_dir: PathBuf, messages: SharedMessageListener) -> Self {
         Self::start(
             data_dir,
             messages,
@@ -84,7 +91,7 @@ impl BackendApp {
 
     fn start(
         data_dir: PathBuf,
-        messages: SharedMessageSink,
+        messages: SharedMessageListener,
         output: Box<dyn OutputBackend>,
     ) -> Result<Self, BackendError> {
         let settings = Arc::new(SettingsService::load(&data_dir, Arc::clone(&messages)));
@@ -214,36 +221,36 @@ impl BackendApp {
         crate::library::database::request_reset(&self.data_dir).map_err(|cause| {
             log::error!("library.database.reset_request_failed cause={cause}");
             LibraryCommandError::Common {
-                error: CommonError::PersistenceFailed,
+                error: CommandError::PersistenceFailed,
             }
         })
     }
 
-    pub fn library_roots(&self) -> Result<Vec<LibraryRoot>, LibraryCommandError> {
-        self.library()?.roots()
+    pub fn list_directories(&self) -> Result<Vec<LibraryDirectory>, LibraryCommandError> {
+        self.library()?.directories()
     }
 
-    /// Registers a folder as a root. A path that is not valid Unicode cannot be stored, so it is
+    /// Registers a directory as a directory. A path that is not valid Unicode cannot be stored, so it is
     /// refused rather than changed.
-    pub fn register_library_root(&self, path: PathBuf) -> Result<LibraryRoot, LibraryCommandError> {
+    pub fn add_directory(&self, path: PathBuf) -> Result<LibraryDirectory, LibraryCommandError> {
         let path = path
             .into_os_string()
             .into_string()
             .ok()
-            .ok_or(LibraryCommandError::InvalidRoot)?;
-        self.library()?.register_root(path)
+            .ok_or(LibraryCommandError::InvalidDirectory)?;
+        self.library()?.register_directory(path)
     }
 
-    pub fn set_library_root_enabled(
+    pub fn set_directory_enabled(
         &self,
-        id: FolderId,
+        id: DirectoryId,
         enabled: bool,
-    ) -> Result<LibraryRoot, LibraryCommandError> {
-        self.library()?.set_root_enabled(id, enabled)
+    ) -> Result<LibraryDirectory, LibraryCommandError> {
+        self.library()?.set_directory_enabled(id, enabled)
     }
 
-    pub fn remove_library_root(&self, id: FolderId) -> Result<(), LibraryCommandError> {
-        self.library()?.remove_root(id)
+    pub fn remove_directory(&self, id: DirectoryId) -> Result<(), LibraryCommandError> {
+        self.library()?.remove_directory(id)
     }
 
     /// Deletes the Missing tracks from the Library and returns how many there were. Never touches a
@@ -288,28 +295,25 @@ impl BackendApp {
     pub fn track_index(
         &self,
         query: &TrackQuery,
-    ) -> Result<Vec<LibraryIndexBucket>, LibraryCommandError> {
+    ) -> Result<Vec<ScrollIndexBucket>, LibraryCommandError> {
         Ok(self.library()?.store().catalog_track_index(query)?)
     }
 
     pub fn album_index(
         &self,
         query: &AlbumQuery,
-    ) -> Result<Vec<LibraryIndexBucket>, LibraryCommandError> {
+    ) -> Result<Vec<ScrollIndexBucket>, LibraryCommandError> {
         Ok(self.library()?.store().catalog_album_index(query)?)
     }
 
     pub fn album_artist_index(
         &self,
         query: &AlbumArtistQuery,
-    ) -> Result<Vec<LibraryIndexBucket>, LibraryCommandError> {
+    ) -> Result<Vec<ScrollIndexBucket>, LibraryCommandError> {
         Ok(self.library()?.store().catalog_album_artist_index(query)?)
     }
 
-    pub fn album_by_id(
-        &self,
-        album_id: AlbumId,
-    ) -> Result<LibraryAlbumDetails, LibraryCommandError> {
+    pub fn album_by_id(&self, album_id: AlbumId) -> Result<AlbumDetails, LibraryCommandError> {
         Ok(self.library()?.store().catalog_album(album_id)?)
     }
 
@@ -323,10 +327,7 @@ impl BackendApp {
             .catalog_album_tracks_by_id(request.album_id, request.cursor.as_deref())?)
     }
 
-    pub fn artist(
-        &self,
-        artist_id: ArtistId,
-    ) -> Result<LibraryAlbumArtistSummary, LibraryCommandError> {
+    pub fn artist(&self, artist_id: ArtistId) -> Result<ArtistRow, LibraryCommandError> {
         Ok(self.library()?.store().catalog_artist(artist_id)?)
     }
 
@@ -345,7 +346,7 @@ impl BackendApp {
     pub fn track_properties(
         &self,
         track_id: TrackId,
-    ) -> Result<LibraryTrackProperties, LibraryCommandError> {
+    ) -> Result<TrackProperties, LibraryCommandError> {
         Ok(self.library()?.store().track_properties(track_id)?)
     }
 
@@ -373,7 +374,7 @@ impl BackendApp {
     pub fn track_lyrics(&self, track_id: TrackId) -> Result<LyricsResolution, LyricsCommandError> {
         let library = self.library.as_ref().map_err(logged(
             LyricsCommandError::Common {
-                error: CommonError::LibraryUnavailable,
+                error: CommandError::LibraryUnavailable,
             },
             "app.lyrics.library_unavailable",
         ))?;
@@ -385,22 +386,22 @@ impl BackendApp {
             .existing()
             .map_err(logged(
                 LyricsCommandError::Common {
-                    error: CommonError::TrackUnavailable,
+                    error: CommandError::TrackUnavailable,
                 },
                 "app.lyrics.track_unavailable",
             ))?;
         Ok(LyricsService::resolve(&LyricsTrackContext {
             track_id,
             source: file.path,
-            root: file.root,
+            directory: file.directory,
         }))
     }
 
     // ---- appearance ----
 
     /// Applies a renderer update and returns the appearance as it is afterwards.
-    pub fn update_appearance(&self, patch: &AppearancePatch) -> Versioned<Appearance> {
-        self.settings.update_appearance(patch)
+    pub fn appearance_update(&self, patch: &AppearancePatch) -> Revisioned<Appearance> {
+        self.settings.appearance_update(patch)
     }
 
     // ---- playback ----
@@ -408,11 +409,11 @@ impl BackendApp {
     /// Replaces the queue with `context` and plays from `start_track_id` (its first track when
     /// `None`). Blocking: the playback worker answers only once the source is loaded and the
     /// stream is running.
-    pub fn start_playback(
+    pub fn play(
         &self,
         context: &PlaybackContext,
         start_track_id: Option<TrackId>,
-    ) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
+    ) -> Result<Revisioned<PlaybackState>, PlaybackServiceError> {
         let library = self.playback_library()?;
         let selection = playback_context::resolve(library.store(), context, start_track_id)?;
         // The track the listener picked is checked now, so they get a clear answer when its
@@ -425,19 +426,19 @@ impl BackendApp {
             .start(selection.track_ids, selection.start_index)
     }
 
-    pub fn pause(&self) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
+    pub fn pause(&self) -> Result<Revisioned<PlaybackState>, PlaybackServiceError> {
         self.playback.handle().pause()
     }
 
-    pub fn resume(&self) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
+    pub fn resume(&self) -> Result<Revisioned<PlaybackState>, PlaybackServiceError> {
         self.playback.handle().resume()
     }
 
-    pub fn previous(&self) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
+    pub fn previous(&self) -> Result<Revisioned<PlaybackState>, PlaybackServiceError> {
         self.playback.handle().previous()
     }
 
-    pub fn next(&self) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
+    pub fn next(&self) -> Result<Revisioned<PlaybackState>, PlaybackServiceError> {
         self.playback.handle().next()
     }
 
@@ -445,7 +446,7 @@ impl BackendApp {
     pub fn seek(
         &self,
         position_ms: u64,
-    ) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
+    ) -> Result<Revisioned<PlaybackState>, PlaybackServiceError> {
         let duration_ms = self
             .playback
             .snapshot()
@@ -458,14 +459,14 @@ impl BackendApp {
     pub fn set_volume(
         &self,
         volume: f32,
-    ) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
+    ) -> Result<Revisioned<PlaybackState>, PlaybackServiceError> {
         self.playback.handle().set_volume(volume)
     }
 
     pub fn set_muted(
         &self,
         muted: bool,
-    ) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
+    ) -> Result<Revisioned<PlaybackState>, PlaybackServiceError> {
         let handle = self.playback.handle();
         if muted {
             handle.mute()
@@ -477,7 +478,7 @@ impl BackendApp {
     pub fn set_output_selection(
         &self,
         selection: AudioOutputSelection,
-    ) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
+    ) -> Result<Revisioned<PlaybackState>, PlaybackServiceError> {
         self.playback.handle().set_output_selection(selection)
     }
 
@@ -488,22 +489,22 @@ impl BackendApp {
 
     pub fn set_repeat_mode(
         &self,
-        mode: PlaybackRepeatMode,
-    ) -> Result<Versioned<PlaybackQueueSnapshot>, PlaybackServiceError> {
+        mode: RepeatMode,
+    ) -> Result<Revisioned<QueueState>, PlaybackServiceError> {
         self.playback.handle().set_repeat_mode(mode)
     }
 
     pub fn set_shuffle(
         &self,
         enabled: bool,
-    ) -> Result<Versioned<PlaybackQueueSnapshot>, PlaybackServiceError> {
+    ) -> Result<Revisioned<QueueState>, PlaybackServiceError> {
         self.playback.handle().set_shuffle(enabled)
     }
 
     pub fn remove_queue_item(
         &self,
         id: QueueItemId,
-    ) -> Result<Versioned<PlaybackQueueSnapshot>, PlaybackServiceError> {
+    ) -> Result<Revisioned<QueueState>, PlaybackServiceError> {
         self.playback.handle().remove_queue_item(id)
     }
 
@@ -511,7 +512,7 @@ impl BackendApp {
         &self,
         id: QueueItemId,
         to: usize,
-    ) -> Result<Versioned<PlaybackQueueSnapshot>, PlaybackServiceError> {
+    ) -> Result<Revisioned<QueueState>, PlaybackServiceError> {
         self.playback.handle().move_queue_item(id, to)
     }
 
@@ -519,36 +520,36 @@ impl BackendApp {
     pub fn play_queue_item(
         &self,
         id: QueueItemId,
-    ) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
+    ) -> Result<Revisioned<PlaybackState>, PlaybackServiceError> {
         self.playback.handle().play_queue_item(id)
     }
 
     /// Adds a library track to the queue: right after the current one (`next`) or at the end.
-    /// Blocking, like `start_playback`.
+    /// Blocking, like `play`.
     pub fn enqueue_track(
         &self,
         track_id: TrackId,
         next: bool,
-    ) -> Result<Versioned<PlaybackQueueSnapshot>, PlaybackServiceError> {
+    ) -> Result<Revisioned<QueueState>, PlaybackServiceError> {
         let library = self.playback_library()?;
         let track = playback_context::resolve_track(library.store(), track_id)?;
         self.playback.handle().enqueue(vec![track.id()], next)
     }
 
-    pub fn clear_queue(&self) -> Result<Versioned<PlaybackQueueSnapshot>, PlaybackServiceError> {
+    pub fn clear_queue(&self) -> Result<Revisioned<QueueState>, PlaybackServiceError> {
         self.playback.handle().clear_queue()
     }
 
     /// Puts back the queue the last replacement or Clear upcoming took away.
     pub fn restore_previous_queue(
         &self,
-    ) -> Result<Versioned<PlaybackSnapshot>, PlaybackServiceError> {
+    ) -> Result<Revisioned<PlaybackState>, PlaybackServiceError> {
         self.playback.handle().restore_previous_queue()
     }
 
     /// Upcoming queue items from `offset` (at most `limit`), for the parts of a long queue the
     /// snapshot does not carry.
-    pub fn queue_window(&self, offset: u32, limit: u32) -> PlaybackQueueWindow {
+    pub fn queue_window(&self, offset: u32, limit: u32) -> QueueWindow {
         self.playback
             .handle()
             .queue_window(offset as usize, limit as usize)
@@ -559,7 +560,7 @@ impl BackendApp {
     fn library(&self) -> Result<&Library, LibraryCommandError> {
         self.library.as_ref().map_err(logged(
             LibraryCommandError::Common {
-                error: CommonError::LibraryUnavailable,
+                error: CommandError::LibraryUnavailable,
             },
             "app.library.unavailable",
         ))
@@ -568,15 +569,15 @@ impl BackendApp {
     fn playback_library(&self) -> Result<&Library, PlaybackServiceError> {
         self.library.as_ref().map_err(logged(
             PlaybackServiceError::Common {
-                error: CommonError::LibraryUnavailable,
+                error: CommandError::LibraryUnavailable,
             },
             "app.playback.library_unavailable",
         ))
     }
 
-    fn library_scan(&self) -> Versioned<crate::library::models::LibraryScanSnapshot> {
+    fn library_scan(&self) -> Revisioned<crate::library::models::ScanState> {
         self.library.as_ref().map_or_else(
-            |_| Versioned::new(crate::library::models::LibraryScanSnapshot::idle()),
+            |_| Revisioned::new(crate::library::models::ScanState::idle()),
             Library::scan_state,
         )
     }

@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use cpal::StreamInstant;
 
-use crate::diagnostics::logged;
+use crate::errors::logged;
 
 use super::devices::{AudioOutputDeviceIdentity, AudioOutputSelection, DeviceResolutionError};
 use super::output::{

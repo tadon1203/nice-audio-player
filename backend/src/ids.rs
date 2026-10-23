@@ -88,7 +88,7 @@ macro_rules! hex_id {
 macro_rules! counter_id {
     ($(#[$meta:meta])* $vis:vis $name:ident) => {
         $(#[$meta])*
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
         $vis struct $name(u64);
 
         impl $name {
@@ -149,8 +149,8 @@ rowid_id! {
 }
 
 rowid_id! {
-    /// A library folder: the `library_roots` rowid. Above zero. On the IPC a number.
-    FolderId, "a folder ID is a positive integer"
+    /// A library directory: the `library_roots` rowid. Above zero. On the IPC a number.
+    DirectoryId, "a directory ID is a positive integer"
 }
 
 counter_id! {
@@ -288,9 +288,9 @@ pub(crate) fn track_id_column(row: &Row<'_>, index: usize) -> rusqlite::Result<T
 }
 
 /// A `library_roots` rowid read from a column. See [`track_id_column`].
-pub(crate) fn folder_id_column(row: &Row<'_>, index: usize) -> rusqlite::Result<FolderId> {
+pub(crate) fn directory_id_column(row: &Row<'_>, index: usize) -> rusqlite::Result<DirectoryId> {
     let rowid: i64 = row.get(index)?;
-    FolderId::try_from_rowid(rowid).ok_or(rusqlite::Error::IntegralValueOutOfRange(index, rowid))
+    DirectoryId::try_from_rowid(rowid).ok_or(rusqlite::Error::IntegralValueOutOfRange(index, rowid))
 }
 
 /// A text or blob argument as its bytes.
@@ -406,12 +406,12 @@ mod tests {
     }
 
     #[test]
-    fn a_folder_id_is_a_number_on_the_ipc_and_zero_or_negative_is_rejected() {
+    fn a_directory_id_is_a_number_on_the_ipc_and_zero_or_negative_is_rejected() {
         for bad in [serde_json::json!(0), serde_json::json!(-3)] {
-            assert!(serde_json::from_value::<FolderId>(bad).is_err());
+            assert!(serde_json::from_value::<DirectoryId>(bad).is_err());
         }
 
-        let parsed: FolderId = serde_json::from_value(serde_json::json!(7)).unwrap();
+        let parsed: DirectoryId = serde_json::from_value(serde_json::json!(7)).unwrap();
         assert_eq!(parsed.rowid(), 7);
         assert_eq!(serde_json::to_value(parsed).unwrap(), serde_json::json!(7));
     }

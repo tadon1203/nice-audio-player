@@ -3,8 +3,8 @@
 
 use super::{
     AdvanceReason, CompressedAudioSource, CompressedSourceError, Loaded, OpenedPipeline,
-    PlaybackWorker, Position, Prefetch, PrefetchState, PrefetchedTrack, SessionStartedBy,
-    SourceLoad, SourceLoadId, Transport, open_prefetch,
+    PlaybackWorker, Position, Prefetch, PrefetchState, PrefetchedTrack, SourceLoad, SourceLoadId,
+    StartedBy, Transport, open_prefetch,
 };
 
 /// How long before the end of a track the next one is opened. A shorter track opens it right
@@ -190,7 +190,7 @@ impl PlaybackWorker {
             id,
             position: Position::from_start(loaded.output.sample_rate(), next.duration_ms),
             item: next.item,
-            started_by: SessionStartedBy::Auto,
+            started_by: StartedBy::Auto,
             source: next.source,
             output: loaded.output,
             pipeline: next.pipeline,

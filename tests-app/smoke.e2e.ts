@@ -51,7 +51,7 @@ const e2eCounts = async (): Promise<{ connects: number; stateMessages: number }>
 describe("the real app", () => {
   it("starts and shows the library", async () => {
     await expect($("main")).toBeDisplayed();
-    expect(await invoke<{ status: string }>("get_library_status")).toEqual({ status: "ready" });
+    expect(await invoke<{ status: string }>("library_status")).toEqual({ status: "ready" });
   });
 
   it("serves artwork from the throwaway profile, a thumbnail falling back to the original", async () => {
@@ -78,12 +78,12 @@ describe("the real app", () => {
     expect(await loadedWidth(`${hash}.thumb.jpg`)).toBe(1);
   });
 
-  it("scans a folder and lists its tracks", async () => {
-    // The folder picker is a native dialog WebDriver cannot drive, so the folder is registered
+  it("scans a directory and lists its tracks", async () => {
+    // The directory picker is a native dialog WebDriver cannot drive, so the directory is registered
     // through the command the picker's result goes to.
-    // Registering a folder starts its scan by itself (after a short debounce), so the test does
+    // Registering a directory starts its scan by itself (after a short debounce), so the test does
     // not start one: a second start would be refused as already running.
-    await invoke("register_library_root", { path: musicDir });
+    await invoke("library_add_directory", { path: musicDir });
 
     // The scan's end reaches the renderer on its channel, and the Library refreshes itself.
     await $("a=Tracks").click();
@@ -146,13 +146,13 @@ describe("the real app", () => {
     // counted since.
     expect((await e2eCounts()).connects).toBe(1);
     const before = (await e2eCounts()).stateMessages;
-    await invoke("start_library_scan");
+    await invoke("library_start_scan");
     await browser.waitUntil(async () => (await e2eCounts()).stateMessages > before, {
       timeoutMsg: "no state message reached the renderer",
     });
 
     // A track was skipped to earlier, so the backend has a previous one. A fresh page holds no
-    // playback state, so the Previous button being enabled again means it came from `connect`.
+    // playback state, so the Previous button being enabled again means it came from `app_connect`.
     const previous = $(`${dock} button[aria-label="Previous track"]`);
     await expect(previous).toBeEnabled();
     await browser.refresh();

@@ -267,7 +267,7 @@ test("preserves the library scroll position across Now Playing open and close", 
 
 test("shows synced lyrics and follows the current line", async ({ page, native, player }) => {
   const dock = await playFirstTrack(page, () =>
-    native.respond("getTrackLyrics", {
+    native.respond("lyricsTrack", {
       status: "resolved",
       trackId: 1,
       notice: null,
@@ -370,7 +370,7 @@ test("a command answer older than the state on screen does not change the dock",
   library,
 }) => {
   const second = albumSequence(library)[1]!;
-  native.respond("pausePlayback", async () => {
+  native.respond("playerPause", async () => {
     // The newer state reaches the Renderer first; the answer to Pause is older and says stopped.
     await native.publish(
       "playback",

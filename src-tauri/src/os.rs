@@ -2,10 +2,10 @@
 
 use std::{ffi::OsString, path::Path};
 
-use backend::diagnostics::logged;
-use backend::errors::{CommonError, LibraryCommandError};
+use backend::errors::logged;
+use backend::errors::{CommandError, LibraryCommandError};
 
-/// Opens the folder at `path` in the file manager.
+/// Opens the directory at `path` in the file manager.
 #[cfg(windows)]
 pub(crate) fn open_in_file_manager(path: &Path) -> Result<(), LibraryCommandError> {
     std::process::Command::new("explorer.exe")
@@ -14,7 +14,7 @@ pub(crate) fn open_in_file_manager(path: &Path) -> Result<(), LibraryCommandErro
         .map(|_| ())
         .map_err(logged(
             LibraryCommandError::Common {
-                error: CommonError::TaskFailed,
+                error: CommandError::TaskFailed,
             },
             "host.os.explorer_failed",
         ))
@@ -23,7 +23,7 @@ pub(crate) fn open_in_file_manager(path: &Path) -> Result<(), LibraryCommandErro
 #[cfg(not(windows))]
 pub fn open_in_file_manager(_path: &Path) -> Result<(), LibraryCommandError> {
     Err(LibraryCommandError::Common {
-        error: CommonError::TaskFailed,
+        error: CommandError::TaskFailed,
     })
 }
 
@@ -42,7 +42,7 @@ pub(crate) fn reveal_in_file_manager(path: &Path) -> Result<(), LibraryCommandEr
         .map(|_| ())
         .map_err(logged(
             LibraryCommandError::Common {
-                error: CommonError::TaskFailed,
+                error: CommandError::TaskFailed,
             },
             "host.os.reveal_failed",
         ))
@@ -51,6 +51,6 @@ pub(crate) fn reveal_in_file_manager(path: &Path) -> Result<(), LibraryCommandEr
 #[cfg(not(windows))]
 pub fn reveal_in_file_manager(_path: &Path) -> Result<(), LibraryCommandError> {
     Err(LibraryCommandError::Common {
-        error: CommonError::TaskFailed,
+        error: CommandError::TaskFailed,
     })
 }

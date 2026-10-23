@@ -1,9 +1,9 @@
 import type {
-  LibraryAlbumArtistSortKey,
-  LibraryAlbumSortKey,
-  LibraryArtistAlbumSortKey,
-  LibrarySortDirection,
-  LibraryTrackSortKey,
+  ArtistSortKey,
+  AlbumSortKey,
+  ArtistAlbumSortKey,
+  SortDirection,
+  TrackSortKey,
 } from "#lib/native";
 import type { SortOption } from "#lib/ui/sort-option";
 import type { LibraryCatalogRequest } from "./catalog-repository";
@@ -12,9 +12,9 @@ import { Sort } from "./sort";
 export type LibraryPresentation = "albums" | "albumArtists" | "tracks";
 
 interface SortKeyOf {
-  albums: LibraryAlbumSortKey;
-  albumArtists: LibraryAlbumArtistSortKey;
-  tracks: LibraryTrackSortKey;
+  albums: AlbumSortKey;
+  albumArtists: ArtistSortKey;
+  tracks: TrackSortKey;
 }
 
 /**
@@ -24,7 +24,7 @@ interface SortKeyOf {
 class LibraryView<Presentation extends LibraryPresentation> {
   public filter = $state("");
   public sortKey: SortKeyOf[Presentation];
-  public direction: LibrarySortDirection = $state("ascending");
+  public direction: SortDirection = $state("ascending");
   /** Rows the list starts after: 0, or where the scroll index jumped to. */
   public skip = $state(0);
 
@@ -66,10 +66,7 @@ class LibraryView<Presentation extends LibraryPresentation> {
     this.skip = 0;
   };
 
-  public setSort = (
-    key: SortKeyOf[Presentation],
-    direction: LibrarySortDirection = "ascending",
-  ): void => {
+  public setSort = (key: SortKeyOf[Presentation], direction: SortDirection = "ascending"): void => {
     this.sortKey = key;
     this.direction = direction;
     this.skip = 0;
@@ -88,8 +85,8 @@ class LibraryView<Presentation extends LibraryPresentation> {
 
 /** An artist's albums have a sort but no filter. */
 class ArtistAlbumsView {
-  public sortKey: LibraryArtistAlbumSortKey = $state.raw("year");
-  public direction: LibrarySortDirection = $state("ascending");
+  public sortKey: ArtistAlbumSortKey = $state.raw("year");
+  public direction: SortDirection = $state("ascending");
   public readonly sortOptions = Sort.artistAlbumOptions;
 
   /** Identifies the sort alone, so a list can tell when its order changed. */
@@ -101,10 +98,7 @@ class ArtistAlbumsView {
     return `${this.sortKey}\u0000${this.direction}`;
   }
 
-  public setSort = (
-    key: LibraryArtistAlbumSortKey,
-    direction: LibrarySortDirection = "ascending",
-  ): void => {
+  public setSort = (key: ArtistAlbumSortKey, direction: SortDirection = "ascending"): void => {
     this.sortKey = key;
     this.direction = direction;
   };

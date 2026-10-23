@@ -22,8 +22,8 @@ use std::time::{Duration, Instant};
 use log::{error, info};
 
 use super::database::Database;
-use super::models::{LibraryRoot, LibraryScanSnapshot, LibraryScanState, ScanFailure};
-use crate::messages::{Notifier, Versioned};
+use super::models::{LibraryDirectory, ScanFailure, ScanState, ScanStatus};
+use crate::messages::{Notifier, Revisioned};
 use discover::{DiscoveredFile, Discovery, discover, relative_dir, scope};
 use inspect::{inspect_all, read_artwork};
 use persist::{LibraryWriter, Outcome, PersistError, Plan, plan};
@@ -34,13 +34,13 @@ const INSPECTIONS_PER_BATCH: usize = 100;
 const FILES_PER_BATCH: usize = 1_000;
 const PROGRESS_SIGNAL_INTERVAL: Duration = Duration::from_millis(200);
 
-/// One folder to scan: all of it, or only the directories where something changed.
+/// One directory to scan: all of it, or only the directories where something changed.
 pub(crate) struct ScanJob {
-    pub root: LibraryRoot,
+    pub directory: LibraryDirectory,
     pub dirs: Option<Vec<PathBuf>>,
 }
 
-pub(crate) type SharedScanState = Arc<Mutex<Versioned<LibraryScanSnapshot>>>;
+pub(crate) type SharedScanState = Arc<Mutex<Revisioned<ScanState>>>;
 
 /// Why a scan stopped before finishing.
 enum Stop {
@@ -62,29 +62,29 @@ pub(crate) fn run(
     state: &SharedScanState,
     cancel: &AtomicBool,
     notify: &Notifier,
-) -> LibraryScanState {
+) -> ScanStatus {
     let expected = expected_files(database, jobs);
     state.lock().update(|scan| scan.expected_count = expected);
     let mut progress = Progress::new(state, notify);
     let mut traversal_failed = false;
     for job in jobs {
-        let root = job.root.clone();
+        let directory = job.directory.clone();
         if cancel.load(Ordering::Acquire) {
-            return finish(state, LibraryScanState::Cancelled, None, notify);
+            return finish(state, ScanStatus::Cancelled, None, notify);
         }
         state
             .lock()
-            .update(|scan| scan.current_root = Some(root.clone()));
+            .update(|scan| scan.current_directory = Some(directory.clone()));
         notify.notify();
-        match scan_root(database, job, cancel, &mut progress) {
+        match scan_directory(database, job, cancel, &mut progress) {
             Ok(complete) => traversal_failed |= !complete,
             Err(Stop::Cancelled) => {
-                return finish(state, LibraryScanState::Cancelled, None, notify);
+                return finish(state, ScanStatus::Cancelled, None, notify);
             }
             Err(Stop::Persistence) => {
                 return finish(
                     state,
-                    LibraryScanState::Failed,
+                    ScanStatus::Failed,
                     Some(ScanFailure::PersistenceFailed),
                     notify,
                 );
@@ -94,25 +94,25 @@ pub(crate) fn run(
     if traversal_failed {
         return finish(
             state,
-            LibraryScanState::Failed,
-            Some(ScanFailure::RootTraversalFailed),
+            ScanStatus::Failed,
+            Some(ScanFailure::DirectoryTraversalFailed),
             notify,
         );
     }
-    // Only once every folder has been seen in full is a Missing track known to be missing, and so
+    // Only once every directory has been seen in full is a Missing track known to be missing, and so
     // a file that arrived known to be that track moved.
     match relink_moved(database) {
         Ok(relinked) => progress.changed(relinked as u64),
         Err(_) => {
             return finish(
                 state,
-                LibraryScanState::Failed,
+                ScanStatus::Failed,
                 Some(ScanFailure::PersistenceFailed),
                 notify,
             );
         }
     }
-    finish(state, LibraryScanState::Completed, None, notify)
+    finish(state, ScanStatus::Completed, None, notify)
 }
 
 fn relink_moved(database: &Database) -> Result<usize, PersistError> {
@@ -129,8 +129,8 @@ pub(crate) fn fail(state: &SharedScanState, notify: &Notifier) {
     // A panic can poison the lock; the snapshot is plain counters, so it is still good to use.
     let mut scan = state.lock();
     scan.update(|scan| {
-        scan.state = LibraryScanState::Failed;
-        scan.current_root = None;
+        scan.state = ScanStatus::Failed;
+        scan.current_directory = None;
         scan.failure_code = Some(ScanFailure::Panicked);
         scan.finished_count += 1;
     });
@@ -142,14 +142,14 @@ pub(crate) fn fail(state: &SharedScanState, notify: &Notifier) {
     notify.notify();
 }
 
-/// How many files earlier scans left in `roots`: a rescan should find about as many again.
+/// How many files earlier scans left in `directories`: a rescan should find about as many again.
 fn expected_files(database: &Database, jobs: &[ScanJob]) -> u64 {
     let Ok(connection) = database.read() else {
         return 0;
     };
     jobs.iter()
         .filter(|job| job.dirs.is_none())
-        .map(|job| job.root.id.rowid())
+        .map(|job| job.directory.id.rowid())
         .filter_map(|id| {
             connection
                 .query_row(
@@ -163,29 +163,29 @@ fn expected_files(database: &Database, jobs: &[ScanJob]) -> u64 {
         .sum()
 }
 
-/// Scans one root. `Ok(false)` means the walk broke partway, so nothing is marked missing.
-fn scan_root(
+/// Scans one directory. `Ok(false)` means the walk broke partway, so nothing is marked missing.
+fn scan_directory(
     database: &Database,
     job: &ScanJob,
     cancel: &AtomicBool,
     progress: &mut Progress<'_>,
 ) -> Result<bool, Stop> {
-    let root = &job.root;
-    let root_id = root.id.rowid();
+    let directory = &job.directory;
+    let directory_id = directory.id.rowid();
     let reader = database.read().map_err(PersistError::from)?;
     let mut writer = LibraryWriter::new(database.write().map_err(PersistError::from)?);
-    let generation = writer.begin_scan(root_id)?;
-    let dirs = scope(Path::new(&root.path), job.dirs.as_deref());
+    let generation = writer.begin_scan(directory_id)?;
+    let dirs = scope(Path::new(&directory.path), job.dirs.as_deref());
     // The prefixes the walk covers, to mark only those files Missing.
     let within: Option<Vec<String>> = job.dirs.as_ref().map(|_| {
         dirs.iter()
-            .map(|dir| match relative_dir(&root.path, dir) {
+            .map(|dir| match relative_dir(&directory.path, dir) {
                 relative if relative.is_empty() => relative,
                 relative => format!("{relative}/"),
             })
             .collect()
     });
-    let mut walk = discover(&root.path, &dirs);
+    let mut walk = discover(&directory.path, &dirs);
     let mut complete = true;
     loop {
         let mut planned: Vec<Plan> = Vec::new();
@@ -213,14 +213,14 @@ fn scan_root(
                 }
                 Some(Discovery::Found(file)) => {
                     progress.discovered();
-                    let plan = plan(&reader, root_id, file)?;
+                    let plan = plan(&reader, directory_id, file)?;
                     to_inspect += usize::from(matches!(plan, Plan::Inspect { .. }));
                     planned.push(plan);
                 }
             }
         }
         let outcomes = read_batch(planned, database.data_dir(), cancel, progress);
-        let changed = writer.write_batch(root_id, generation, &outcomes.outcomes)?;
+        let changed = writer.write_batch(directory_id, generation, &outcomes.outcomes)?;
         progress.changed(changed);
         if outcomes.cancelled {
             return Err(Stop::Cancelled);
@@ -230,7 +230,7 @@ fn scan_root(
         }
     }
     if complete {
-        let gone = writer.finish_root(root_id, generation, within.as_deref())?;
+        let gone = writer.finish_directory(directory_id, generation, within.as_deref())?;
         progress.changed(gone);
     } else {
         progress.failed();
@@ -307,15 +307,15 @@ fn read_batch(
 
 fn finish(
     state: &SharedScanState,
-    outcome: LibraryScanState,
+    outcome: ScanStatus,
     failure: Option<ScanFailure>,
     notify: &Notifier,
-) -> LibraryScanState {
+) -> ScanStatus {
     let snapshot = {
         let mut scan = state.lock();
         scan.update(|scan| {
             scan.state = outcome;
-            scan.current_root = None;
+            scan.current_directory = None;
             scan.failure_code = failure;
             scan.finished_count += 1;
         });
@@ -329,13 +329,13 @@ fn finish(
         snapshot.failed_count
     );
     match snapshot.state {
-        LibraryScanState::Completed => info!("library.scan.completed {counts}"),
-        LibraryScanState::Cancelled => info!("library.scan.cancelled {counts}"),
-        LibraryScanState::Failed => error!(
+        ScanStatus::Completed => info!("library.scan.completed {counts}"),
+        ScanStatus::Cancelled => info!("library.scan.cancelled {counts}"),
+        ScanStatus::Failed => error!(
             "library.scan.failed {counts} failure_code={:?}",
             snapshot.failure_code
         ),
-        LibraryScanState::Idle | LibraryScanState::Running => {}
+        ScanStatus::Idle | ScanStatus::Running => {}
     }
     notify.notify();
     outcome
@@ -359,7 +359,7 @@ impl<'a> Progress<'a> {
         }
     }
 
-    fn count(&mut self, update: impl FnOnce(&mut LibraryScanSnapshot)) {
+    fn count(&mut self, update: impl FnOnce(&mut ScanState)) {
         self.state.lock().update(update);
         if self.last_signal.elapsed() >= PROGRESS_SIGNAL_INTERVAL {
             self.notify.notify();

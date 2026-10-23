@@ -37,7 +37,7 @@ async function openNowPlaying(
   await page.setViewportSize(size);
   await page.goto("/library/tracks");
   if (lyrics) {
-    native.respond("getTrackLyrics", timedLyrics);
+    native.respond("lyricsTrack", timedLyrics);
   }
   await page.getByRole("button", { name: "Play Test track" }).click();
   const dock = page.getByRole("contentinfo", { name: "Playback controls" });

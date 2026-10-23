@@ -15,9 +15,9 @@ export class NowPlayingActions {
   };
 
   /** Plays a queue item; the queue keeps every other item in place. */
-  public readonly playQueueItem = (queueItemId: QueueItemId): void => {
+  public readonly playerPlayQueueItem = (queueItemId: QueueItemId): void => {
     const { actions, playback } = this.#services;
-    actions.run(() => playback.playQueueItem(queueItemId));
+    actions.run(() => playback.playerPlayQueueItem(queueItemId));
   };
 
   /** Copies text to the clipboard; a refused copy is reported. */

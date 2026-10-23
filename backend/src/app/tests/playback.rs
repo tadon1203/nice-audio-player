@@ -1,10 +1,8 @@
 use super::fixture;
 use crate::app::{BackendApp, PlaybackContext};
-use crate::dto::{
-    LibrarySortDirection, LibraryTrackSortKey, PlaybackRepeatMode, TrackListRequest, TrackQuery,
-};
-use crate::errors::PlaybackServiceError;
+use crate::audio::playback::{PlaybackServiceError, RepeatMode};
 use crate::ids::TrackId;
+use crate::library::models::{SortDirection, TrackListRequest, TrackQuery, TrackSortKey};
 use crate::messages::testing::{RecordingMessageSink, Sent};
 use crate::messages::{BackendMessage, StateTopic, StateValue};
 use crate::test_support::{TestDirectory, write_pcm_i16_wav};
@@ -13,8 +11,8 @@ use std::time::{Duration, Instant};
 fn title_order() -> TrackQuery {
     TrackQuery {
         search: None,
-        sort_key: LibraryTrackSortKey::Title,
-        sort_direction: LibrarySortDirection::Ascending,
+        sort_key: TrackSortKey::Title,
+        sort_direction: SortDirection::Ascending,
     }
 }
 
@@ -103,10 +101,10 @@ fn repeat_mode_is_reported_in_the_queue_snapshot() {
 
     let queue = fixture
         .backend
-        .set_repeat_mode(PlaybackRepeatMode::All)
+        .set_repeat_mode(RepeatMode::All)
         .expect("repeat mode");
 
-    assert_eq!(queue.value.repeat_mode, PlaybackRepeatMode::All);
+    assert_eq!(queue.value.repeat_mode, RepeatMode::All);
 }
 
 #[test]
@@ -114,7 +112,7 @@ fn previous_back_to_a_track_that_played_before_shows_its_waveform() {
     // The directory is declared first, so the backend shuts down before its files are removed.
     let directory = TestDirectory::new();
     let music = directory.file("music");
-    std::fs::create_dir_all(&music).expect("music folder");
+    std::fs::create_dir_all(&music).expect("music directory");
     write_pcm_i16_wav(&music.join("a.wav"), 8_000, 1, &[4_000i16; 8_000]);
     write_pcm_i16_wav(&music.join("b.wav"), 8_000, 1, &[8_000i16; 8_000]);
     let data_dir = directory.file("data");
@@ -122,13 +120,11 @@ fn previous_back_to_a_track_that_played_before_shows_its_waveform() {
     let (recorded, sink) = RecordingMessageSink::shared();
     let backend = BackendApp::initialize_for_tests(data_dir, sink);
     backend
-        .register_library_root(music)
-        .expect("register the music folder");
+        .add_directory(music)
+        .expect("register the music directory");
     let ids = wait_for_tracks(&backend, 2);
     let context = PlaybackContext::Tracks(title_order());
-    backend
-        .start_playback(&context, Some(ids[0]))
-        .expect("play a");
+    backend.play(&context, Some(ids[0])).expect("play a");
     let deadline = Instant::now() + Duration::from_secs(60);
     while backend.initial_state().waveform.value.is_none() && Instant::now() < deadline {
         std::thread::sleep(Duration::from_millis(10));

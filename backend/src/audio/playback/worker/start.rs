@@ -1,15 +1,14 @@
 //! Starting a playback: loading the source, prebuffering, and failing or skipping on.
 
 use super::{
-    AdvanceReason, CommonError, CompressedAudioSource, CompressedSourceError, FailureScope,
+    AdvanceReason, CommandError, CompressedAudioSource, CompressedSourceError, FailureScope,
     HISTORY_IN_SNAPSHOT, HashSet, LoadStage, Loaded, Loading, OpenedPipeline, PipelineError,
-    PlayableItem, PlaybackFailureCode, PlaybackQueueSnapshot, PlaybackServiceError,
-    PlaybackSnapshot, PlaybackWorker, Position, Prebuffering, QueueEntry, QueueError, QueueItemId,
-    Reply, SessionStartedBy, SourceLoad, SourceLoadId, StartFailure, StartFailurePhase,
-    StartRequest, TrackId, Transport, UPCOMING_IN_SNAPSHOT, Versioned, error, open_start,
-    output_failure_code, previous_restarts_track, respond,
+    PlayableItem, PlaybackFailureCode, PlaybackServiceError, PlaybackState, PlaybackWorker,
+    Position, Prebuffering, QueueEntry, QueueError, QueueItemId, QueueState, Reply, Revisioned,
+    SourceLoad, SourceLoadId, StartFailure, StartFailurePhase, StartRequest, StartedBy, TrackId,
+    Transport, UPCOMING_IN_SNAPSHOT, error, open_start, output_failure_code,
+    previous_restarts_track, respond,
 };
-use crate::slices::{head, tail_from};
 
 impl PlaybackWorker {
     /// Replaces the queue and starts its `start_index` item.
@@ -17,14 +16,14 @@ impl PlaybackWorker {
         &mut self,
         track_ids: Vec<TrackId>,
         start_index: usize,
-        reply: Reply<Versioned<PlaybackSnapshot>>,
+        reply: Reply<Revisioned<PlaybackState>>,
     ) {
         if self.replace_queue(track_ids, start_index).is_err() {
             respond(reply, Err(PlaybackServiceError::InvalidPlaybackState));
             return;
         }
         self.skipped_in_a_row = 0;
-        self.start_current(Some(reply), false, SessionStartedBy::Jump);
+        self.start_current(Some(reply), false, StartedBy::Jump);
     }
 
     /// Replaces the queue, keeping the old one for one-step undo. Nothing is kept when nothing
@@ -44,7 +43,7 @@ impl PlaybackWorker {
 
     /// Puts back the queue the last replacement or Clear upcoming took away. When the same item
     /// is still current, it keeps playing; otherwise the restored current item starts.
-    pub(super) fn restore_previous_queue(&mut self, reply: Reply<Versioned<PlaybackSnapshot>>) {
+    pub(super) fn restore_previous_queue(&mut self, reply: Reply<Revisioned<PlaybackState>>) {
         let Some(previous) = self.previous_queue.take() else {
             respond(reply, Err(PlaybackServiceError::InvalidPlaybackState));
             return;
@@ -60,7 +59,7 @@ impl PlaybackWorker {
             let snapshot = self.publish_state();
             respond(reply, Ok(snapshot));
         } else {
-            self.start_current(Some(reply), false, SessionStartedBy::Jump);
+            self.start_current(Some(reply), false, StartedBy::Jump);
         }
     }
 
@@ -69,14 +68,14 @@ impl PlaybackWorker {
     pub(super) fn start_enqueued(
         &mut self,
         track_ids: Vec<TrackId>,
-        reply: Reply<Versioned<PlaybackQueueSnapshot>>,
+        reply: Reply<Revisioned<QueueState>>,
     ) {
         if self.replace_queue(track_ids, 0).is_err() {
             respond(reply, Err(PlaybackServiceError::InvalidPlaybackState));
             return;
         }
         self.skipped_in_a_row = 0;
-        self.start_current(None, false, SessionStartedBy::Jump);
+        self.start_current(None, false, StartedBy::Jump);
         respond(reply, Ok(self.queue_snapshot()));
     }
 
@@ -84,8 +83,8 @@ impl PlaybackWorker {
     pub(super) fn new_start(
         &mut self,
         item: PlayableItem,
-        started_by: SessionStartedBy,
-        responder: Option<Reply<Versioned<PlaybackSnapshot>>>,
+        started_by: StartedBy,
+        responder: Option<Reply<Revisioned<PlaybackState>>>,
         start_paused: bool,
     ) -> StartRequest {
         StartRequest {
@@ -102,9 +101,9 @@ impl PlaybackWorker {
     /// Starts whatever the queue points at, after telling listeners where the queue stands.
     pub(super) fn start_current(
         &mut self,
-        responder: Option<Reply<Versioned<PlaybackSnapshot>>>,
+        responder: Option<Reply<Revisioned<PlaybackState>>>,
         start_paused: bool,
-        started_by: SessionStartedBy,
+        started_by: StartedBy,
     ) {
         if self.queue.current().is_none() {
             respond(responder, Err(PlaybackServiceError::InvalidPlaybackState));
@@ -121,7 +120,7 @@ impl PlaybackWorker {
                 respond(
                     responder,
                     Err(PlaybackServiceError::Common {
-                        error: CommonError::TrackUnavailable,
+                        error: CommandError::TrackUnavailable,
                     }),
                 );
                 return;
@@ -155,7 +154,10 @@ impl PlaybackWorker {
                 });
             }
             Err(()) => {
-                self.fail_start(request, StartFailure::item(StartFailurePhase::SourceWorker));
+                self.fail_start(
+                    request,
+                    &StartFailure::item(StartFailurePhase::SourceWorker),
+                );
             }
         }
     }
@@ -196,7 +198,7 @@ impl PlaybackWorker {
                     CompressedSourceError::OpenFailed => StartFailurePhase::SourceOpen,
                     CompressedSourceError::MetadataFailed => StartFailurePhase::SourceMetadata,
                 };
-                self.fail_start(request, StartFailure::item(phase));
+                self.fail_start(request, &StartFailure::item(phase));
             }
         }
     }
@@ -238,7 +240,7 @@ impl PlaybackWorker {
                     }),
                 });
             }
-            Err(error) => self.fail_start(request, start_failure(error)),
+            Err(error) => self.fail_start(request, &start_failure(error)),
         }
     }
 
@@ -265,7 +267,7 @@ impl PlaybackWorker {
             pipeline.cancel();
             self.fail_start(
                 request,
-                StartFailure::new(StartFailurePhase::StreamStart, code),
+                &StartFailure::new(StartFailurePhase::StreamStart, code),
             );
             return;
         }
@@ -307,7 +309,7 @@ impl PlaybackWorker {
 
     /// Reports a failed start and, when only this file is at fault, moves on to the next one.
     /// Listeners see the failure first, so a skipped file is never silent.
-    pub(super) fn fail_start(&mut self, request: StartRequest, failure: StartFailure) {
+    pub(super) fn fail_start(&mut self, request: StartRequest, failure: &StartFailure) {
         let id = Some(request.id);
         error!(
             "playback.start_failed code={:?} phase={:?} playback_id={:?}",
@@ -318,7 +320,7 @@ impl PlaybackWorker {
         let skipping = skips && self.will_skip();
         self.transport = Transport::Failed {
             id,
-            code: failure.code.clone(),
+            code: failure.code,
             skipping,
         };
         self.publish_state();
@@ -327,7 +329,7 @@ impl PlaybackWorker {
         }
         let responder = request.responder;
         if skips && let Some(item) = self.next_after_item_failure() {
-            let request = self.new_start(item, SessionStartedBy::Auto, responder, false);
+            let request = self.new_start(item, StartedBy::Auto, responder, false);
             self.begin_start(request);
             return;
         }
@@ -388,11 +390,11 @@ impl PlaybackWorker {
         loop {
             let history = self.queue.history();
             let upcoming = self.queue.upcoming();
-            let mut shown: Vec<&QueueEntry> =
-                tail_from(history, history.len().saturating_sub(HISTORY_IN_SNAPSHOT))
-                    .iter()
-                    .collect();
-            shown.extend(head(upcoming, UPCOMING_IN_SNAPSHOT));
+            let mut shown: Vec<&QueueEntry> = history
+                [history.len().saturating_sub(HISTORY_IN_SNAPSHOT)..]
+                .iter()
+                .collect();
+            shown.extend(upcoming[..UPCOMING_IN_SNAPSHOT.min(upcoming.len())].iter());
             let ids: Vec<TrackId> = shown.iter().map(|entry| entry.track_id).collect();
             let Ok(tracks) = self.tracks.resolve(&ids) else {
                 return;
@@ -412,7 +414,7 @@ impl PlaybackWorker {
     pub(super) fn navigate(
         &mut self,
         reason: AdvanceReason,
-        reply: Reply<Versioned<PlaybackSnapshot>>,
+        reply: Reply<Revisioned<PlaybackState>>,
     ) {
         if reason == AdvanceReason::UserPrevious
             && let Transport::Loaded(loaded) = &self.transport
@@ -428,8 +430,8 @@ impl PlaybackWorker {
             return;
         }
         let started_by = match reason {
-            AdvanceReason::UserPrevious => SessionStartedBy::Previous,
-            _ => SessionStartedBy::Next,
+            AdvanceReason::UserPrevious => StartedBy::Previous,
+            _ => StartedBy::Next,
         };
         self.start_current(Some(reply), paused, started_by);
     }

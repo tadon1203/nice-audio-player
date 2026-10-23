@@ -107,7 +107,7 @@
           {#if filter === ""}
             No {meta.plural} in your library.
             <a href={resolve("/settings")} class="text-foreground underline underline-offset-4">
-              Add a music folder
+              Add a music directory
             </a>
           {:else}
             No results for “{filter}”.

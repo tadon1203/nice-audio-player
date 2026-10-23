@@ -2,33 +2,33 @@ import type {
   Appearance,
   AudioOutputSelection,
   InitialState,
-  SessionStartedBy,
-  LibraryAlbumArtistSummary,
-  LibraryAlbumDetails,
-  LibraryAlbumSummary,
+  StartedBy,
+  ArtistRow,
+  AlbumDetails,
+  AlbumRow,
   LibraryAlbumTrackPage,
-  LibraryRoot,
-  LibraryScanSnapshot,
-  LibraryScanState,
-  LibraryTrackSummary,
+  LibraryDirectory,
+  ScanState,
+  ScanStatus,
+  TrackRow,
   PlaybackItem,
   PlaybackQueueItem,
-  PlaybackQueueSnapshot,
-  PlaybackSnapshot,
+  QueueState,
+  PlaybackState,
 } from "#lib/native";
 
 /** Plain data the fake backend serves. No rule lives here: tests say what a page contains. */
 export interface LibraryData {
-  roots: LibraryRoot[];
-  tracks: LibraryTrackSummary[];
-  albums: LibraryAlbumSummary[];
-  artists: LibraryAlbumArtistSummary[];
-  albumDetails: LibraryAlbumDetails;
+  directories: LibraryDirectory[];
+  tracks: TrackRow[];
+  albums: AlbumRow[];
+  artists: ArtistRow[];
+  albumDetails: AlbumDetails;
   albumTracks: LibraryAlbumTrackPage;
 }
 
-export const testRoot: LibraryRoot = {
-  id: "root-1",
+export const testDirectory: LibraryDirectory = {
+  id: 1,
   path: "C:/Music",
   enabled: true,
   scanGeneration: 0,
@@ -43,14 +43,14 @@ const extraArtistId = "3d2c1b0a9f8e7d6c5b4a39281706f5e4";
 const testAlbumId = "5a1b2c3d4e5f60718293a4b5c6d7e8f9";
 const secondAlbumId = "6b2c3d4e5f60718293a4b5c6d7e8f9a0";
 
-export const testAlbum: LibraryAlbumSummary = {
+export const testAlbum: AlbumRow = {
   id: testAlbumId,
   title: "Test album",
   albumArtist: { id: testArtistId, name: "Test artist" },
   artwork: null,
   year: 2020,
 };
-export const secondAlbum: LibraryAlbumSummary = {
+export const secondAlbum: AlbumRow = {
   id: secondAlbumId,
   title: "Second album",
   albumArtist: { id: testArtistId, name: "Test artist" },
@@ -64,11 +64,8 @@ export const ARTWORK = {
 } as const;
 
 /** Track 1 is "Test track", track 5 is missing on disk, the rest are "Track 00N". */
-export function makeTracks(
-  count = 140,
-  options: { artwork?: boolean } = {},
-): LibraryTrackSummary[] {
-  return Array.from({ length: count }, (_, index): LibraryTrackSummary => {
+export function makeTracks(count = 140, options: { artwork?: boolean } = {}): TrackRow[] {
+  return Array.from({ length: count }, (_, index): TrackRow => {
     const missing = index === 4;
     return {
       id: index + 1,
@@ -114,19 +111,16 @@ export function testLibrary(
 ): LibraryData {
   const tracks = makeTracks(options.trackCount ?? 140, { artwork: options.artwork });
   const artwork = options.artwork ? ARTWORK : null;
-  const albumOf = (album: LibraryAlbumSummary): LibraryAlbumSummary => ({ ...album, artwork });
-  const extra = Array.from(
-    { length: options.extraAlbums ?? 0 },
-    (_, index): LibraryAlbumSummary => ({
-      id: `e${String(index).padStart(31, "0")}`,
-      title: `Extra album ${String(index).padStart(4, "0")}`,
-      albumArtist: { id: extraArtistId, name: "Extra artist" },
-      artwork,
-      year: 2000 + (index % 20),
-    }),
-  );
+  const albumOf = (album: AlbumRow): AlbumRow => ({ ...album, artwork });
+  const extra = Array.from({ length: options.extraAlbums ?? 0 }, (_, index): AlbumRow => ({
+    id: `e${String(index).padStart(31, "0")}`,
+    title: `Extra album ${String(index).padStart(4, "0")}`,
+    albumArtist: { id: extraArtistId, name: "Extra artist" },
+    artwork,
+    year: 2000 + (index % 20),
+  }));
   return {
-    roots: [testRoot],
+    directories: [testDirectory],
     tracks,
     albums: [albumOf(testAlbum), albumOf(secondAlbum), ...extra],
     artists: [
@@ -168,35 +162,35 @@ export function testLibrary(
 /** Pages exactly as given: a search or sort the test cares about replaces the command. */
 export function libraryResponses(library: LibraryData = testLibrary()): Record<string, unknown> {
   return {
-    listLibraryRoots: library.roots,
-    listLibraryTracks: ({
+    libraryListDirectories: library.directories,
+    libraryListTracks: ({
       request,
     }: {
       request: { cursor: string | null };
-    }): { items: LibraryTrackSummary[]; totalCount: number; nextCursor: string | null } =>
+    }): { items: TrackRow[]; totalCount: number; nextCursor: string | null } =>
       pageOf(library.tracks, request.cursor),
-    listLibraryAlbums: (): {
-      items: LibraryAlbumSummary[];
+    libraryListAlbums: (): {
+      items: AlbumRow[];
       totalCount: number;
       nextCursor: string | null;
     } => pageOf(library.albums, null, library.albums.length),
-    listLibraryAlbumArtists: (): {
-      items: LibraryAlbumArtistSummary[];
+    libraryListArtists: (): {
+      items: ArtistRow[];
       totalCount: number;
       nextCursor: string | null;
     } => pageOf(library.artists, null),
-    listLibraryTrackIndex: [],
-    listLibraryAlbumIndex: [],
-    listLibraryAlbumArtistIndex: [],
-    getLibraryArtist: library.artists[0],
-    listLibraryArtistAlbums: (): {
-      items: LibraryAlbumSummary[];
+    libraryTrackIndex: [],
+    libraryAlbumIndex: [],
+    libraryArtistIndex: [],
+    libraryArtist: library.artists[0],
+    libraryListArtistAlbums: (): {
+      items: AlbumRow[];
       totalCount: number;
       nextCursor: string | null;
     } => pageOf(library.albums.slice(0, 2), null),
-    getLibraryAlbum: library.albumDetails,
-    listLibraryAlbumTracks: library.albumTracks,
-    getLibraryTrackProperties: ({
+    libraryAlbum: library.albumDetails,
+    libraryListAlbumTracks: library.albumTracks,
+    libraryTrackProperties: ({
       trackId: id,
     }: {
       trackId: number;
@@ -247,7 +241,7 @@ export function libraryResponses(library: LibraryData = testLibrary()): Record<s
         bitrateKbps: track.bitrateKbps,
       };
     },
-    revealLibraryTrack: null,
+    libraryRevealTrack: null,
   };
 }
 
@@ -256,9 +250,9 @@ export const outputDevices = [
   { id: "headphones", name: "Headphones", isDefault: false },
 ];
 
-export const idleScan: LibraryScanSnapshot = {
+export const idleScan: ScanState = {
   state: "idle",
-  currentRoot: null,
+  currentDirectory: null,
   expectedCount: 0,
   discoveredCount: 0,
   inspectedCount: 0,
@@ -270,17 +264,17 @@ export const idleScan: LibraryScanSnapshot = {
 };
 
 /** A scan snapshot in a state, with the counts a scan in that state would show. */
-export function scanSnapshot(state: LibraryScanState): LibraryScanSnapshot {
+export function scanSnapshot(state: ScanStatus): ScanState {
   if (state === "idle") return idleScan;
   return {
     state,
-    currentRoot: state === "running" ? testRoot : null,
+    currentDirectory: state === "running" ? testDirectory : null,
     expectedCount: 40,
     discoveredCount: 20,
     inspectedCount: state === "running" ? 8 : 20,
     indexedCount: state === "running" ? 6 : 18,
     failedCount: state === "failed" ? 2 : 0,
-    failureCode: state === "failed" ? "rootTraversalFailed" : null,
+    failureCode: state === "failed" ? "directoryTraversalFailed" : null,
     finishedCount: state === "running" ? 0 : 1,
     changedCount: 20,
   };
@@ -288,7 +282,7 @@ export function scanSnapshot(state: LibraryScanState): LibraryScanSnapshot {
 
 export const defaultSettings: Appearance = { artworkBackdrop: true, calmMotion: false };
 
-export const stoppedPlayback: PlaybackSnapshot = {
+export const stoppedPlayback: PlaybackState = {
   status: "stopped",
   base: {
     volume: 0.72,
@@ -300,7 +294,7 @@ export const stoppedPlayback: PlaybackSnapshot = {
   item: null,
 };
 
-export const emptyQueue: PlaybackQueueSnapshot = {
+export const emptyQueue: QueueState = {
   current: null,
   history: [],
   historyCount: 0,
@@ -344,23 +338,23 @@ export function idleInitialState(): InitialState {
 
 /** What an app answers before anything plays. */
 export function idleResponses(): {
-  subscribeMeterFrames: () => number;
-  unsubscribeMeterFrames: null;
-  getPlaybackQueueWindow: ({ offset }: { offset: number }) => {
+  meterStart: () => number;
+  meterStop: null;
+  playerQueueWindow: ({ offset }: { offset: number }) => {
     revision: number;
     offset: number;
     items: never[];
   };
-  listAudioOutputDevices: { id: string; name: string; isDefault: boolean }[];
-  getLibraryStatus: { status: "ready" };
-  getTrackLyrics: ({ trackId }: { trackId: number }) => { status: "notFound"; trackId: number };
-  getArtworkAccent: null;
+  playerListOutputDevices: { id: string; name: string; isDefault: boolean }[];
+  libraryStatus: { status: "ready" };
+  lyricsTrack: ({ trackId }: { trackId: number }) => { status: "notFound"; trackId: number };
+  libraryArtworkAccent: null;
 } {
   let nextMeterSubscription = 1;
   return {
-    subscribeMeterFrames: (): number => nextMeterSubscription++,
-    unsubscribeMeterFrames: null,
-    getPlaybackQueueWindow: ({
+    meterStart: (): number => nextMeterSubscription++,
+    meterStop: null,
+    playerQueueWindow: ({
       offset,
     }: {
       offset: number;
@@ -369,21 +363,17 @@ export function idleResponses(): {
       offset,
       items: [],
     }),
-    listAudioOutputDevices: outputDevices,
-    getLibraryStatus: { status: "ready" as const },
-    getTrackLyrics: ({
-      trackId,
-    }: {
-      trackId: number;
-    }): { status: "notFound"; trackId: number } => ({
+    playerListOutputDevices: outputDevices,
+    libraryStatus: { status: "ready" as const },
+    lyricsTrack: ({ trackId }: { trackId: number }): { status: "notFound"; trackId: number } => ({
       status: "notFound" as const,
       trackId,
     }),
-    getArtworkAccent: null,
+    libraryArtworkAccent: null,
   };
 }
 
-export const queueItemFor = (track: LibraryTrackSummary): PlaybackQueueItem => ({
+export const queueItemFor = (track: TrackRow): PlaybackQueueItem => ({
   queueItemId: track.id,
   id: track.id,
   title: track.title,
@@ -393,7 +383,7 @@ export const queueItemFor = (track: LibraryTrackSummary): PlaybackQueueItem => (
   durationMs: track.durationMs,
 });
 
-export function playbackItemFor(track: LibraryTrackSummary): PlaybackItem {
+export function playbackItemFor(track: TrackRow): PlaybackItem {
   return {
     ...queueItemFor(track),
     // A count of 0 is below every track number, so Now Playing shows "Track n" with no total.
@@ -407,7 +397,7 @@ export function playbackItemFor(track: LibraryTrackSummary): PlaybackItem {
 interface PlayingFields {
   status: "playing" | "paused";
   item: PlaybackItem;
-  startedBy: SessionStartedBy;
+  startedBy: StartedBy;
   positionMs: number;
   seekRevision: number;
   volume: number;
@@ -419,7 +409,7 @@ interface PlayingFields {
 
 export const playbackIdOf = (item: PlaybackItem): number => item.id;
 
-export function playingSnapshot(fields: PlayingFields): PlaybackSnapshot {
+export function playingSnapshot(fields: PlayingFields): PlaybackState {
   const device =
     fields.outputSelection.kind === "device"
       ? outputDevices.find(
@@ -455,7 +445,7 @@ export function playingSnapshot(fields: PlayingFields): PlaybackSnapshot {
 }
 
 /** The playable tracks of the library's one album, in order: what Play album should start. */
-export function albumSequence(library: LibraryData): LibraryTrackSummary[] {
+export function albumSequence(library: LibraryData): TrackRow[] {
   return library.albumTracks.items.flatMap((item) =>
     library.tracks.filter((track) => track.id === item.id && track.state === "playable"),
   );

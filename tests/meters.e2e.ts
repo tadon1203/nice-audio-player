@@ -26,8 +26,8 @@ async function openNowPlaying(
 const choose = (layer: ReturnType<Page["getByRole"]>, view: "Queue" | "Meters"): Promise<void> =>
   layer.getByRole("button", { name: view, exact: true }).click();
 
-const subscribes = (native: Native): number => native.callsTo("subscribeMeterFrames").length;
-const unsubscribes = (native: Native): number => native.callsTo("unsubscribeMeterFrames").length;
+const subscribes = (native: Native): number => native.callsTo("meterStart").length;
+const unsubscribes = (native: Native): number => native.callsTo("meterStop").length;
 
 test("offers Meters as a third view and chooses it", async ({ page }) => {
   const { layer } = await openNowPlaying(page, MEDIUM);
@@ -81,7 +81,7 @@ test("subscribes while Meters is shown and unsubscribes when another view is cho
 
   await choose(layer, "Queue");
   await expect.poll(() => unsubscribes(native)).toBe(1);
-  expect(native.callsTo("unsubscribeMeterFrames")[0]).toEqual({ subscription: 1 });
+  expect(native.callsTo("meterStop")[0]).toEqual({ subscription: 1 });
 
   await choose(layer, "Meters");
   await expect.poll(() => subscribes(native)).toBe(2);
@@ -117,7 +117,7 @@ test("shows Clip for a full-scale frame and clears it on click", async ({ page, 
   await expect.poll(() => subscribes(native)).toBe(1);
 
   await native.emitChannelMessage(
-    "subscribeMeterFrames",
+    "meterStart",
     "frames",
     meterFrameBytes({ band: -3, peak: [0, -12], rms: [-4, -14], fullScale: true }),
   );

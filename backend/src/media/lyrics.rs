@@ -1,4 +1,4 @@
-use crate::diagnostics::logged;
+use crate::errors::logged;
 use crate::lyrics::{
     lrc::{self, LrcParse},
     model::LyricsContent,

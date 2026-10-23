@@ -9,27 +9,27 @@ import type {
   ArtworkHash,
   LibraryAlbumArtistPage,
   LibraryAlbumPage,
-  LibraryAlbumArtistSortKey,
-  LibraryAlbumArtistSummary,
-  LibraryAlbumSortKey,
-  LibraryAlbumSummary,
+  ArtistSortKey,
+  ArtistRow,
+  AlbumSortKey,
+  AlbumRow,
   LibraryClient,
-  LibraryIndexBucket,
-  LibrarySortDirection,
+  ScrollIndexBucket,
+  SortDirection,
   LibraryTrackPage,
-  LibraryTrackSortKey,
-  LibraryTrackSummary,
+  TrackSortKey,
+  TrackRow,
   TrackId,
 } from "#lib/native";
 import { LibraryQueryKeys } from "./library-query-keys";
-import type { LibraryTrackProperties } from "#lib/native";
+import type { TrackProperties } from "#lib/native";
 import type {
   CreateInfiniteQueryOptions,
   CreateQueryOptions,
   InitialDataFunction,
   QueryKeyWithDataTag,
 } from "@tanstack/svelte-query";
-import type { LibraryRoot, LibraryStatus } from "#lib/native";
+import type { LibraryDirectory, LibraryStatus } from "#lib/native";
 
 export type CatalogPage = LibraryAlbumPage | LibraryAlbumArtistPage | LibraryTrackPage;
 
@@ -42,31 +42,31 @@ export interface Page<Item> {
 
 /** The catalog item type for a presentation. */
 export type LibraryCatalogItem<Presentation extends LibraryCatalogRequest["presentation"]> = {
-  albums: LibraryAlbumSummary;
-  albumArtists: LibraryAlbumArtistSummary;
-  tracks: LibraryTrackSummary;
+  albums: AlbumRow;
+  albumArtists: ArtistRow;
+  tracks: TrackRow;
 }[Presentation];
 
 export type LibraryCatalogRequest =
   | {
       readonly presentation: "albums";
       readonly filter: string;
-      readonly sortKey: LibraryAlbumSortKey;
-      readonly direction: LibrarySortDirection;
+      readonly sortKey: AlbumSortKey;
+      readonly direction: SortDirection;
       readonly skip: number;
     }
   | {
       readonly presentation: "albumArtists";
       readonly filter: string;
-      readonly sortKey: LibraryAlbumArtistSortKey;
-      readonly direction: LibrarySortDirection;
+      readonly sortKey: ArtistSortKey;
+      readonly direction: SortDirection;
       readonly skip: number;
     }
   | {
       readonly presentation: "tracks";
       readonly filter: string;
-      readonly sortKey: LibraryTrackSortKey;
-      readonly direction: LibrarySortDirection;
+      readonly sortKey: TrackSortKey;
+      readonly direction: SortDirection;
       /** Rows to start after, for a list entered at a letter of its scroll index. */
       readonly skip: number;
     };
@@ -95,17 +95,17 @@ export class CatalogRepository {
     });
   }
 
-  public rootsOptions(): CreateQueryOptions<
-    LibraryRoot[],
+  public directoriesOptions(): CreateQueryOptions<
+    LibraryDirectory[],
     Error,
-    LibraryRoot[],
-    readonly ["library", "data", "roots"]
+    LibraryDirectory[],
+    readonly ["library", "data", "directories"]
   > & {
-    initialData?: LibraryRoot[] | InitialDataFunction<LibraryRoot[]> | undefined;
-  } & QueryKeyWithDataTag<readonly ["library", "data", "roots"], LibraryRoot[], Error> {
+    initialData?: LibraryDirectory[] | InitialDataFunction<LibraryDirectory[]> | undefined;
+  } & QueryKeyWithDataTag<readonly ["library", "data", "directories"], LibraryDirectory[], Error> {
     return queryOptions({
-      queryKey: LibraryQueryKeys.roots,
-      queryFn: () => this.#client.roots(),
+      queryKey: LibraryQueryKeys.directories,
+      queryFn: () => this.#client.directories(),
     });
   }
 
@@ -136,9 +136,9 @@ export class CatalogRepository {
   public indexOptions(
     request: LibraryCatalogRequest,
     enabled: boolean,
-  ): CreateQueryOptions<LibraryIndexBucket[], Error, LibraryIndexBucket[], readonly unknown[]> & {
-    initialData?: LibraryIndexBucket[] | InitialDataFunction<LibraryIndexBucket[]> | undefined;
-  } & QueryKeyWithDataTag<readonly unknown[], LibraryIndexBucket[], Error> {
+  ): CreateQueryOptions<ScrollIndexBucket[], Error, ScrollIndexBucket[], readonly unknown[]> & {
+    initialData?: ScrollIndexBucket[] | InitialDataFunction<ScrollIndexBucket[]> | undefined;
+  } & QueryKeyWithDataTag<readonly unknown[], ScrollIndexBucket[], Error> {
     return queryOptions({
       queryKey: LibraryQueryKeys.catalogIndex(request),
       queryFn: () => this.#listIndex(request),
@@ -147,23 +147,19 @@ export class CatalogRepository {
   }
 
   public trackPropertiesOptions(trackId: TrackId | null): CreateQueryOptions<
-    LibraryTrackProperties,
+    TrackProperties,
     Error,
-    LibraryTrackProperties,
+    TrackProperties,
     readonly unknown[]
   > & {
-    initialData?:
-      | LibraryTrackProperties
-      | InitialDataFunction<LibraryTrackProperties>
-      | null
-      | undefined;
-  } & QueryKeyWithDataTag<readonly unknown[], LibraryTrackProperties, Error> {
+    initialData?: TrackProperties | InitialDataFunction<TrackProperties> | null | undefined;
+  } & QueryKeyWithDataTag<readonly unknown[], TrackProperties, Error> {
     return queryOptions({
       queryKey: LibraryQueryKeys.trackProperties(trackId),
       queryFn:
         trackId === null
           ? skipToken
-          : (): Promise<LibraryTrackProperties> => this.#client.trackProperties(trackId),
+          : (): Promise<TrackProperties> => this.#client.trackProperties(trackId),
     });
   }
 
@@ -234,7 +230,7 @@ export class CatalogRepository {
     }
   }
 
-  #listIndex(request: LibraryCatalogRequest): Promise<LibraryIndexBucket[]> {
+  #listIndex(request: LibraryCatalogRequest): Promise<ScrollIndexBucket[]> {
     const search = request.filter === "" ? null : request.filter;
     const sortDirection = request.direction;
     switch (request.presentation) {

@@ -6,9 +6,9 @@ import {
 } from "@tanstack/svelte-query";
 import type {
   AlbumId,
-  LibraryAlbumDetails,
+  AlbumDetails,
   LibraryAlbumPage,
-  LibraryAlbumSummary,
+  AlbumRow,
   LibraryAlbumTrackPage,
   LibraryClient,
 } from "#lib/native";
@@ -31,16 +31,16 @@ export class AlbumRepository {
   }
 
   public detailsOptions(albumId: AlbumId): CreateQueryOptions<
-    LibraryAlbumDetails,
+    AlbumDetails,
     Error,
-    LibraryAlbumDetails,
+    AlbumDetails,
     readonly unknown[]
   > & {
-    initialData?: LibraryAlbumDetails | InitialDataFunction<LibraryAlbumDetails> | undefined;
-  } & QueryKeyWithDataTag<readonly unknown[], LibraryAlbumDetails, Error> {
+    initialData?: AlbumDetails | InitialDataFunction<AlbumDetails> | undefined;
+  } & QueryKeyWithDataTag<readonly unknown[], AlbumDetails, Error> {
     return queryOptions({
       queryKey: LibraryQueryKeys.album(albumId),
-      queryFn: (): Promise<LibraryAlbumDetails> => this.#client.albumById(albumId),
+      queryFn: (): Promise<AlbumDetails> => this.#client.albumById(albumId),
       gcTime: Infinity,
     });
   }
@@ -72,11 +72,11 @@ export class AlbumRepository {
    * because a partial value must not become the cached data of a query that fetches the whole
    * album.
    */
-  public cachedSummary(albumId: AlbumId): LibraryAlbumSummary | null {
+  public cachedSummary(albumId: AlbumId): AlbumRow | null {
     return this.#albumSummaries().find((summary) => summary.id === albumId) ?? null;
   }
 
-  #albumSummaries(): LibraryAlbumSummary[] {
+  #albumSummaries(): AlbumRow[] {
     const albumLists = this.#queryClient.getQueriesData<InfiniteData<LibraryAlbumPage>>({
       queryKey: LibraryQueryKeys.catalogs,
     });

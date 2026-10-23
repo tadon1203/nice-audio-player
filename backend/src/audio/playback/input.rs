@@ -11,7 +11,7 @@ use crate::audio::compressed_source::{CompressedAudioSource, CompressedSourceErr
 use crate::audio::output::{
     OutputEvent, OutputEvents, OutputStreamId, PipelineId, StreamFailureKind,
 };
-use crate::diagnostics::log_failed;
+use crate::errors::log_failed;
 use crate::ids::PlaybackId;
 
 /// Counts the playbacks. A playback is one queue item being played; a seek or an output device

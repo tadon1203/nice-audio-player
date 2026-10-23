@@ -1,6 +1,7 @@
 //! The decode thread of one pipeline: decodes, converts and feeds the PCM queue, and tells the
 //! worker when the prebuffer is ready or decoding failed. End of stream is declared on the queue.
 
+use std::panic::AssertUnwindSafe;
 use std::thread;
 
 use super::input::{Inbox, WorkerEvent};
@@ -8,7 +9,7 @@ use crate::audio::decoding::{DecodeStep, StreamingDecoder};
 use crate::audio::output::PipelineId;
 use crate::audio::output_processing::{OutputPcmProcessor, OutputProcessingError};
 use crate::audio::pcm_queue::{PcmProducer, PcmWaker, WaitCancelled};
-use crate::containment::contain;
+use crate::errors::contain;
 use crate::threads::Cancellation;
 
 pub(crate) struct DecodeTaskInput {
@@ -123,7 +124,12 @@ impl DecodeTask {
     /// A decoder that panics on a bad file fails that playback, not the app.
     fn run_contained(self, decoder: StreamingDecoder) {
         let (inbox, pipeline) = (self.inbox.clone(), self.pipeline);
-        if contain("playback.decode", move || self.run(decoder)).is_none() {
+        if contain(
+            "playback.decode",
+            AssertUnwindSafe(move || self.run(decoder)),
+        )
+        .is_err()
+        {
             inbox.event(WorkerEvent::DecodeFailed { pipeline });
         }
     }

@@ -45,14 +45,14 @@ fn the_playback_item_serializes_its_track_and_no_file() {
     );
 }
 
-fn base() -> SnapshotBase {
-    SnapshotBase::new(VolumeState::default(), AudioOutputSelection::SystemDefault)
+fn base() -> PlaybackControls {
+    PlaybackControls::new(VolumeState::default(), AudioOutputSelection::SystemDefault)
 }
 
-fn wire_session() -> ActiveSession {
-    ActiveSession {
+fn wire_session() -> CurrentPlayback {
+    CurrentPlayback {
         item: test_item(),
-        started_by: SessionStartedBy::Jump,
+        started_by: StartedBy::Jump,
         playback_id: PlaybackId::first(),
         position_ms: 1_000,
         seek_revision: 0,
@@ -117,11 +117,11 @@ fn session_json() -> serde_json::Value {
 
 #[test]
 fn serializes_playing_and_paused_snapshots_with_a_camel_case_playback_id() {
-    let playing = PlaybackSnapshot::Playing {
+    let playing = PlaybackState::Playing {
         base: base(),
         session: wire_session(),
     };
-    let paused = PlaybackSnapshot::Paused {
+    let paused = PlaybackState::Paused {
         base: base(),
         session: wire_session(),
     };
@@ -138,7 +138,7 @@ fn serializes_playing_and_paused_snapshots_with_a_camel_case_playback_id() {
 
 #[test]
 fn serializes_a_missing_playback_id_as_null_in_a_failed_snapshot() {
-    let snapshot = PlaybackSnapshot::Failed {
+    let snapshot = PlaybackState::Failed {
         base: base(),
         item: None,
         playback_id: None,

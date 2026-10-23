@@ -132,7 +132,7 @@ fn settle_compilation(
         artist: String,
         artist_sort: String,
         filed_under: String,
-        root_path: String,
+        directory_path: String,
     }
     let rows: Vec<Row> = tx
         .prepare_cached(
@@ -152,7 +152,7 @@ fn settle_compilation(
                 artist: row.get(3)?,
                 artist_sort: row.get(4)?,
                 filed_under: row.get(5)?,
-                root_path: row.get(6)?,
+                directory_path: row.get(6)?,
             })
         })?
         .collect::<Result<_, _>>()?;
@@ -171,7 +171,7 @@ fn settle_compilation(
         if under == row.filed_under {
             continue;
         }
-        let directory = keys::absolute_directory(&row.root_path, directory);
+        let directory = keys::absolute_directory(&row.directory_path, directory);
         let album_id = AlbumId::of(under, title, OsStr::new(&directory)).to_hex();
         moved.insert(row.album_id.clone());
         moved.insert(album_id.clone());

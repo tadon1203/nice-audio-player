@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Root as ContextMenuRoot, Trigger as ContextMenuTrigger } from "#lib/ui/context-menu";
   import { Tracks } from "#lib/library/tracks";
-  import type { LibrarySortDirection, LibraryTrackSortKey, TrackId } from "#lib/native";
+  import type { SortDirection, TrackSortKey, TrackId } from "#lib/native";
   import { AppServices } from "#lib/shell/app-services.svelte";
   import ContextMenuContent from "#lib/ui/context-menu/context-menu-content.svelte";
   import ContextMenuItem from "#lib/ui/context-menu/context-menu-item.svelte";
@@ -41,9 +41,9 @@
     virtualized?: boolean;
     /** Told the index of the first row in view, for the scroll index label. */
     ontopindexchange?: (index: number) => void;
-    sortKey?: LibraryTrackSortKey;
-    sortDirection?: LibrarySortDirection;
-    onsortchange?: (key: LibraryTrackSortKey, direction: LibrarySortDirection) => void;
+    sortKey?: TrackSortKey;
+    sortDirection?: SortDirection;
+    onsortchange?: (key: TrackSortKey, direction: SortDirection) => void;
     /** Starts playback of this track in the page's context; pause and resume go straight to playback. */
     onplaytrack: (id: TrackId) => void;
   } = $props();
@@ -81,7 +81,7 @@
 </script>
 
 <div class="@container/track-table min-w-0">
-  <!-- Not the shadcn Table root: its overflow wrapper would break the sticky header. -->
+  <!-- Not the shadcn Table directory: its overflow wrapper would break the sticky header. -->
   <table class="w-full table-fixed border-collapse text-sm">
     <colgroup>
       {#each columns as column (column.id)}

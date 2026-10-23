@@ -3,7 +3,7 @@ import {
   type Appearance as AppearanceState,
   type AppearanceClient,
   type AppearancePatch,
-  type Versioned,
+  type Revisioned,
 } from "#lib/native";
 
 /**
@@ -31,7 +31,7 @@ export class Appearance {
   }
 
   /** Applies the value the backend holds, without writing it back: from `connect` or a pushed change. */
-  public accept(incoming: Versioned<AppearanceState>): void {
+  public accept(incoming: Revisioned<AppearanceState>): void {
     this.#replica.accept(incoming);
   }
 

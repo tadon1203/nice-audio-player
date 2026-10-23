@@ -16,7 +16,7 @@ test("Show in Explorer from the track table reveals that track's file", async ({
   await table.getByRole("row", { name: /Track 010/ }).click({ button: "right" });
   await page.getByRole("menuitem", { name: "Show in Explorer" }).click();
 
-  await expect.poll(() => native.callsTo("revealLibraryTrack")).toEqual([{ trackId: track.id }]);
+  await expect.poll(() => native.callsTo("libraryRevealTrack")).toEqual([{ trackId: track.id }]);
 });
 
 test("Show in Explorer from the properties sheet reveals that track's file", async ({
@@ -33,5 +33,5 @@ test("Show in Explorer from the properties sheet reveals that track's file", asy
   const sheet = page.getByRole("dialog", { name: "Properties" });
   await sheet.getByRole("button", { name: "Show in Explorer" }).click();
 
-  await expect.poll(() => native.callsTo("revealLibraryTrack")).toEqual([{ trackId: track.id }]);
+  await expect.poll(() => native.callsTo("libraryRevealTrack")).toEqual([{ trackId: track.id }]);
 });

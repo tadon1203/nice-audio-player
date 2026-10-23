@@ -56,7 +56,7 @@ fn albums_keep_their_identity_and_take_the_cover_of_their_first_track_with_artwo
     assert_eq!(by_artist.items[0].album_artist.name, "Album Artist");
 
     let artists = store
-        .catalog_album_artists(None, None, LibraryAlbumArtistSortKey::Artist, ASC)
+        .catalog_album_artists(None, None, ArtistSortKey::Artist, ASC)
         .unwrap();
     assert_eq!(
         (artists.items.len(), artists.total_count.unwrap_or(0)),
@@ -70,7 +70,7 @@ fn albums_keep_their_identity_and_take_the_cover_of_their_first_track_with_artwo
         .catalog_artist_albums(
             ArtistId::of("Album Artist"),
             None,
-            LibraryArtistAlbumSortKey::Year,
+            ArtistAlbumSortKey::Year,
             ASC,
         )
         .unwrap();
@@ -181,7 +181,7 @@ fn an_album_is_playable_and_reported_missing_by_its_id() {
         store
             .playback_for_album_id(shared, Some(track_id_of(1)))
             .err(),
-        Some(PlaybackLookupError::Common(CommonError::TrackUnavailable))
+        Some(PlaybackLookupError::Common(CommandError::TrackUnavailable))
     );
     assert_eq!(
         store.playback_for_album_id(shared, None).err(),
@@ -239,7 +239,7 @@ fn an_album_artist_shows_only_the_cover_of_its_first_album() {
 
     let artists = fixture
         .store
-        .catalog_album_artists(None, None, LibraryAlbumArtistSortKey::Artist, ASC)
+        .catalog_album_artists(None, None, ArtistSortKey::Artist, ASC)
         .unwrap();
 
     assert_eq!((artists.items.len(), artists.items[0].track_count), (1, 2));
@@ -359,7 +359,7 @@ fn a_filter_folds_kana_and_width_and_still_matches_wildcards_literally() {
     let store = &fixture.store;
     let tracks = |search: &str| {
         store
-            .catalog_tracks(None, Some(search), LibraryTrackSortKey::Title, ASC)
+            .catalog_tracks(None, Some(search), TrackSortKey::Title, ASC)
             .unwrap()
             .items
             .into_iter()
@@ -388,12 +388,12 @@ fn a_filter_folds_kana_and_width_and_still_matches_wildcards_literally() {
     assert_eq!(albums.items.len(), 1);
     assert_eq!(albums.items[0].title, "ユズ Best");
     let artists = store
-        .catalog_album_artists(None, Some("ﾕｽﾞ"), LibraryAlbumArtistSortKey::Artist, ASC)
+        .catalog_album_artists(None, Some("ﾕｽﾞ"), ArtistSortKey::Artist, ASC)
         .unwrap();
     assert_eq!(artists.items.len(), 1);
     assert_eq!(artists.items[0].name, "ゆず");
     let none = store
-        .catalog_album_artists(None, Some("%"), LibraryAlbumArtistSortKey::Artist, ASC)
+        .catalog_album_artists(None, Some("%"), ArtistSortKey::Artist, ASC)
         .unwrap();
     assert_eq!(none.items.len(), 0, "% is not a wildcard");
 }

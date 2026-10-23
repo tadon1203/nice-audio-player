@@ -4,7 +4,7 @@ import type {
   InitialState,
   PlaybackPosition,
   SessionClient,
-  Versioned,
+  Revisioned,
 } from "#lib/native";
 import { NativeSession, type SessionTargets } from "./native-session.svelte";
 
@@ -50,7 +50,7 @@ function fakeTargets(): {
   return { targets, acceptPlayback, acceptPosition, noteSkipped };
 }
 
-const playbackOf = (revision: number): Versioned<never> => ({
+const playbackOf = (revision: number): Revisioned<never> => ({
   revision,
   value: "snapshot" as never,
 });

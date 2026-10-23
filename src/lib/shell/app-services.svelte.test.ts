@@ -3,9 +3,9 @@ import { describe, expect, it, vi } from "vitest";
 import type {
   BackendMessage,
   InitialState,
-  LibraryScanSnapshot,
+  ScanState,
   NativeClients,
-  PlaybackSnapshot,
+  PlaybackState,
   SessionClient,
 } from "#lib/native";
 import { AppServices } from "./app-services.svelte";
@@ -18,9 +18,9 @@ const base = {
   canGoNext: false,
 };
 
-const stopped: PlaybackSnapshot = { status: "stopped", base, item: null };
+const stopped: PlaybackState = { status: "stopped", base, item: null };
 
-const scan = { finishedCount: 0, changedCount: 0 } as LibraryScanSnapshot;
+const scan = { finishedCount: 0, changedCount: 0 } as ScanState;
 
 /** Fake clients: every command rejects unless a test gives the method it calls. */
 function fakeNative(session: Partial<SessionClient> = {}): NativeClients {

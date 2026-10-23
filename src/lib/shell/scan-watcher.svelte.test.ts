@@ -1,17 +1,13 @@
 import { describe, expect, it, vi, type Mock } from "vitest";
 import type { CatalogRepository } from "#lib/library/catalog-repository";
 import type { LyricsRepository } from "#lib/lyrics/lyrics-repository";
-import type { LibraryScanSnapshot, LibraryScanState as ScanStateName } from "#lib/native";
+import type { ScanState, ScanStatus as ScanStateName } from "#lib/native";
 import { ScanWatcher } from "./scan-watcher.svelte";
 
-function scanSnapshot(
-  state: ScanStateName,
-  finishedCount: number,
-  changedCount = 0,
-): LibraryScanSnapshot {
+function scanSnapshot(state: ScanStateName, finishedCount: number, changedCount = 0): ScanState {
   return {
     state,
-    currentRoot: null,
+    currentDirectory: null,
     expectedCount: 0,
     discoveredCount: 0,
     inspectedCount: 0,
@@ -25,15 +21,16 @@ function scanSnapshot(
 
 /** Each accepted snapshot gets the next revision, so the replica keeps every one of them. */
 let revision = 0;
-const versioned = (
-  value: LibraryScanSnapshot,
-): { revision: number; value: LibraryScanSnapshot } => ({ revision: ++revision, value });
+const versioned = (value: ScanState): { revision: number; value: ScanState } => ({
+  revision: ++revision,
+  value,
+});
 
 function setup(): {
   catalog: { refresh: Mock };
   lyrics: { refresh: Mock };
   watcher: ScanWatcher;
-  accept: (value: LibraryScanSnapshot) => void;
+  accept: (value: ScanState) => void;
 } {
   const catalog = { refresh: vi.fn() };
   const lyrics = { refresh: vi.fn() };
@@ -41,7 +38,7 @@ function setup(): {
     catalog as unknown as CatalogRepository,
     lyrics as unknown as LyricsRepository,
   );
-  const accept = (value: LibraryScanSnapshot): void => watcher.accept(versioned(value));
+  const accept = (value: ScanState): void => watcher.accept(versioned(value));
   return { catalog, lyrics, watcher, accept };
 }
 

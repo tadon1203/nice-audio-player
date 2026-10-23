@@ -2,8 +2,7 @@ use rubato::audioadapter_buffers::direct::InterleavedSlice;
 use rubato::{Fft, FixedSync, Indexing, Resampler};
 
 use super::pcm::PcmSpec;
-use crate::diagnostics::logged;
-use crate::slices::head;
+use crate::errors::logged;
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub(crate) enum OutputProcessingError {
@@ -185,7 +184,8 @@ impl HighQualityResampler {
             ))?;
         self.input_frames = 0;
         let mut emitted = 0;
-        for frame in head(&self.output, output_frames * self.channels).chunks_exact(self.channels) {
+        let frames = output_frames * self.channels;
+        for frame in self.output[..frames.min(self.output.len())].chunks_exact(self.channels) {
             if self.delay_remaining > 0 {
                 self.delay_remaining -= 1;
                 continue;

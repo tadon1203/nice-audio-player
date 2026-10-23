@@ -86,7 +86,7 @@ fn read_sidecar(context: &LyricsTrackContext) -> LocalSource {
         }
         Ok(_) => dunce::canonicalize(candidate)
             .ok()
-            .filter(|path| path.starts_with(&context.root))
+            .filter(|path| path.starts_with(&context.directory))
             .and_then(read_text)
             .map_or(LocalSource::Failed, |text| match lrc::parse(&text) {
                 LrcParse::Parsed(language, lyrics) => LocalSource::Resolved((language, lyrics)),
@@ -268,7 +268,7 @@ mod tests {
         let context = LyricsTrackContext {
             track_id: TrackId::try_from_rowid(1).unwrap(),
             source: dunce::canonicalize(source).expect("canonical source"),
-            root: dunce::canonicalize(&directory).expect("canonical root"),
+            directory: dunce::canonicalize(&directory).expect("canonical directory"),
         };
 
         assert!(matches!(read_sidecar(&context), LocalSource::Failed));

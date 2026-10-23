@@ -129,7 +129,7 @@ export class Native {
     );
     await this.#page.addInitScript(installIpcBridge);
     // A reloaded page connects again and gets the current state, as the Backend answers it.
-    this.respond("connect", () => this.#state);
+    this.respond("appConnect", () => this.#state);
   }
 
   /** Sets what a command answers: a value, or a function of the arguments it was sent. */
@@ -147,8 +147,8 @@ export class Native {
     });
   }
 
-  /** Answers the folder picker. */
-  public respondToFolderPicker(path: string | null): void {
+  /** Answers the directory picker. */
+  public respondToDirectoryPicker(path: string | null): void {
     this.#responders.set("plugin:dialog|open", () => path);
   }
 
@@ -164,7 +164,7 @@ export class Native {
         [message.topic]: { revision: message.revision, value: message.value },
       };
     }
-    const channelId = this.#channelId("connect", "channel");
+    const channelId = this.#channelId("appConnect", "channel");
     if (channelId === undefined) return;
     await this.#page.evaluate(([id, value]) => window.__emitChannelValue?.(id, value), [
       channelId,
@@ -241,6 +241,6 @@ export async function installNativeApi(page: Page, options: InstallOptions = {})
   for (const [name, response] of Object.entries(libraryResponses(options.library))) {
     native.respond(name as CommandName, response as never);
   }
-  native.respondToFolderPicker("C:/More Music");
+  native.respondToDirectoryPicker("C:/More Music");
   return native;
 }

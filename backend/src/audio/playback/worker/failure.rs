@@ -2,8 +2,8 @@
 
 use super::{
     AudioOutputSelection, FailureScope, LoadStage, Occurrence, OutputStreamId, PipelineId,
-    PipelineOwner, PlaybackFailureCode, PlaybackServiceError, PlaybackWorker, SessionStartedBy,
-    StartFailure, StartFailurePhase, StreamFailureKind, StreamSignalAction, Transport, error, info,
+    PipelineOwner, PlaybackFailureCode, PlaybackServiceError, PlaybackWorker, StartFailure,
+    StartFailurePhase, StartedBy, StreamFailureKind, StreamSignalAction, Transport, error, info,
     respond, stream_signal_action,
 };
 
@@ -15,7 +15,7 @@ impl PlaybackWorker {
         } else {
             StartFailurePhase::PrebufferConversion
         };
-        let failure_error = StartFailure::new(phase, code.clone()).service_error();
+        let failure_error = StartFailure::new(phase, code).service_error();
         match self.owner_of(pipeline) {
             PipelineOwner::Start => {
                 let Transport::Loading(loading) =
@@ -26,7 +26,7 @@ impl PlaybackWorker {
                 if let LoadStage::Prebuffering(prebuffering) = loading.stage {
                     prebuffering.pipeline.cancel();
                 }
-                self.fail_start(loading.request, StartFailure::new(phase, code));
+                self.fail_start(loading.request, &StartFailure::new(phase, code));
             }
             PipelineOwner::Active => self.fail_active(code, FailureScope::Item, failure_error),
             PipelineOwner::Seek => {
@@ -74,11 +74,7 @@ impl PlaybackWorker {
     }
 
     pub(super) fn fail_output(&mut self, code: PlaybackFailureCode) {
-        self.fail_active(
-            code.clone(),
-            FailureScope::Output,
-            PlaybackServiceError::from(code),
-        );
+        self.fail_active(code, FailureScope::Output, PlaybackServiceError::from(code));
     }
 
     /// Fails the loaded track. An `Item` failure moves on to the next one; an `Output` failure
@@ -91,11 +87,7 @@ impl PlaybackWorker {
     ) {
         let id = self.drop_loaded(seek_error);
         let skipping = scope == FailureScope::Item && self.will_skip();
-        self.transport = Transport::Failed {
-            id,
-            code: code.clone(),
-            skipping,
-        };
+        self.transport = Transport::Failed { id, code, skipping };
         self.publish_state();
         if skipping {
             self.occur_track_skipped(code);
@@ -103,7 +95,7 @@ impl PlaybackWorker {
         if scope == FailureScope::Item
             && let Some(item) = self.next_after_item_failure()
         {
-            let request = self.new_start(item, SessionStartedBy::Auto, None, false);
+            let request = self.new_start(item, StartedBy::Auto, None, false);
             self.begin_start(request);
         }
     }

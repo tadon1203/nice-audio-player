@@ -3,7 +3,7 @@ import { expect, test } from "./fixtures/test";
 import { workspaceViewport } from "./fixtures/locators";
 import { playbackItemFor, playingSnapshot } from "./fixtures/data";
 import type { Locator } from "@playwright/test";
-import type { LibraryTrackSummary } from "../src/lib/native";
+import type { TrackRow } from "../src/lib/native";
 
 test.beforeEach(async ({ page }) => {
   await page.setViewportSize({ width: 1360, height: 900 });
@@ -130,12 +130,11 @@ test("Play next and Add to queue put a track where they say", async ({
 }) => {
   // What the queue should hold once each command has run: the test states it.
   const rest = library.tracks.filter((track) => track.state === "playable").slice(1);
-  const track = (title: string): LibraryTrackSummary =>
-    library.tracks.find((entry) => entry.title === title)!;
-  const without = (tracks: typeof rest, ...removed: typeof rest): LibraryTrackSummary[] =>
+  const track = (title: string): TrackRow => library.tracks.find((entry) => entry.title === title)!;
+  const without = (tracks: typeof rest, ...removed: typeof rest): TrackRow[] =>
     tracks.filter((entry) => !removed.some((gone) => gone.id === entry.id));
   const afterPlayNext = [track("Track 010"), ...without(rest, track("Track 010"))];
-  native.respond("enqueueTrack", ({ next }) =>
+  native.respond("playerEnqueueTrack", ({ next }) =>
     next
       ? player.queue({ upcoming: afterPlayNext })
       : player.queue({
@@ -163,8 +162,8 @@ test("Play next and Add to queue put a track where they say", async ({
 
 test("clearing the upcoming tracks can be undone", async ({ page, native, player, library }) => {
   const rest = library.tracks.filter((track) => track.state === "playable").slice(1);
-  native.respond("clearQueue", () => player.queue({ upcoming: [] }));
-  native.respond("restorePreviousQueue", async () => {
+  native.respond("playerClearQueue", () => player.queue({ upcoming: [] }));
+  native.respond("playerRestorePreviousQueue", async () => {
     await player.queue({ upcoming: rest });
     const value = playingSnapshot({
       status: "playing",

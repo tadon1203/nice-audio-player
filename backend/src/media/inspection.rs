@@ -19,7 +19,7 @@ use symphonia::core::meta::MetadataOptions;
 use symphonia::core::units::Timestamp;
 use symphonia::default::{get_codecs, get_probe};
 
-use crate::diagnostics::logged;
+use crate::errors::logged;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct AudioFileInfo {

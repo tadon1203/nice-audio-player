@@ -1,4 +1,4 @@
-//! Phase one: walk a root and describe the supported audio files in it.
+//! Phase one: walk a directory and describe the supported audio files in it.
 
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
@@ -9,7 +9,7 @@ use crate::media::validation::is_supported_extension;
 #[derive(Debug, Clone)]
 pub(super) struct DiscoveredFile {
     pub path: PathBuf,
-    /// Path below the root, always with `/` separators.
+    /// Path below the directory, always with `/` separators.
     pub relative: String,
     pub file_name: String,
     /// Lowercase, without the dot.
@@ -30,21 +30,21 @@ pub(super) enum Discovery {
     WalkFailed,
 }
 
-/// The directories a scan of `root` walks: the root itself, or, for a scan that follows changes,
+/// The directories a scan of `directory` walks: the directory itself, or, for a scan that follows changes,
 /// each changed path's directory (the nearest one that still exists), with directories inside
 /// another one left out since walking that covers them.
-pub(super) fn scope(root: &Path, changed: Option<&[PathBuf]>) -> Vec<PathBuf> {
+pub(super) fn scope(directory: &Path, changed: Option<&[PathBuf]>) -> Vec<PathBuf> {
     let Some(changed) = changed else {
-        return vec![root.to_path_buf()];
+        return vec![directory.to_path_buf()];
     };
     let mut dirs: Vec<PathBuf> = Vec::new();
     for path in changed {
         let mut dir = path.as_path();
-        while !(dir.is_dir() && dir.starts_with(root)) {
+        while !(dir.is_dir() && dir.starts_with(directory)) {
             match dir.parent() {
-                Some(parent) if dir != root => dir = parent,
+                Some(parent) if dir != directory => dir = parent,
                 _ => {
-                    dir = root;
+                    dir = directory;
                     break;
                 }
             }
@@ -55,14 +55,14 @@ pub(super) fn scope(root: &Path, changed: Option<&[PathBuf]>) -> Vec<PathBuf> {
         }
     }
     if dirs.is_empty() {
-        dirs.push(root.to_path_buf());
+        dirs.push(directory.to_path_buf());
     }
     dirs
 }
 
-/// A directory below `root` as `/`-separated relative text, `""` for the root itself.
-pub(super) fn relative_dir(root: &str, dir: &Path) -> String {
-    dir.strip_prefix(root)
+/// A directory below `directory` as `/`-separated relative text, `""` for the directory itself.
+pub(super) fn relative_dir(directory: &str, dir: &Path) -> String {
+    dir.strip_prefix(directory)
         .ok()
         .and_then(|relative| relative.to_str())
         .map(|relative| relative.replace('\\', "/"))
@@ -71,7 +71,7 @@ pub(super) fn relative_dir(root: &str, dir: &Path) -> String {
 
 /// Walks `dirs` (see [`scope`]) and describes the supported audio files in them.
 pub(super) fn discover<'a>(
-    root: &'a str,
+    directory: &'a str,
     dirs: &[PathBuf],
 ) -> impl Iterator<Item = Discovery> + 'a {
     let starts = dirs.to_vec();
@@ -94,7 +94,7 @@ pub(super) fn discover<'a>(
                 return None;
             }
             let Some(relative) = path
-                .strip_prefix(root)
+                .strip_prefix(directory)
                 .ok()
                 .and_then(|relative| relative.to_str())
                 .map(|relative| relative.replace('\\', "/"))

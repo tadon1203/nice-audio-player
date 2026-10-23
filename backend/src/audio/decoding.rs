@@ -11,9 +11,8 @@ use symphonia::core::units::{Time, TimeBase, Timestamp};
 use symphonia::default::{get_codecs, get_probe};
 
 use super::pcm::{ChannelCount, PcmSpec, SampleRate};
-use crate::diagnostics::logged;
+use crate::errors::logged;
 use crate::media::validation::ValidatedAudioFile;
-use crate::slices::tail_from;
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub(crate) enum PcmDecodeError {
@@ -253,7 +252,7 @@ impl StreamingDecoder {
                     return Ok(SeekStep::Samples(SeekResult {
                         preroll_source_frame,
                         confirmed_source_frame: target_source_frame,
-                        first_packet: tail_from(&packet, skip_samples).to_vec(),
+                        first_packet: packet[skip_samples.min(packet.len())..].to_vec(),
                     }));
                 }
             }
@@ -483,7 +482,7 @@ mod tests {
         .unwrap();
 
         for path in [truncated, garbage] {
-            let outcome = crate::containment::contain("test.decode", || {
+            let outcome = crate::errors::contain("test.decode", || {
                 let Ok(mut decoder) = super::open_analysis_decoder(&validated(&path)) else {
                     return;
                 };
@@ -492,7 +491,7 @@ mod tests {
                     buffer.clear();
                 }
             });
-            assert!(outcome.is_some(), "{path:?} panicked the decoder");
+            assert!(outcome.is_ok(), "{path:?} panicked the decoder");
         }
     }
 }

@@ -14,14 +14,14 @@ import { TauriNative } from "./tauri-native";
 function fakeCommands(reply: unknown): typeof commands {
   const reject = (): Promise<never> => Promise.reject(reply);
   return {
-    connect: vi.fn(reject),
-    pausePlayback: vi.fn(reject),
-    setPlaybackMuted: vi.fn(reject),
-    updateAppearance: vi.fn(reject),
-    listAudioOutputDevices: vi.fn(reject),
-    getLibraryStatus: vi.fn(reject),
-    getTrackLyrics: vi.fn(reject),
-    subscribeMeterFrames: vi.fn(reject),
+    appConnect: vi.fn(reject),
+    playerPause: vi.fn(reject),
+    playerSetMuted: vi.fn(reject),
+    appearanceUpdate: vi.fn(reject),
+    playerListOutputDevices: vi.fn(reject),
+    libraryStatus: vi.fn(reject),
+    lyricsTrack: vi.fn(reject),
+    meterStart: vi.fn(reject),
   } as unknown as typeof commands;
 }
 

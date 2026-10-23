@@ -12,6 +12,6 @@ export class ClearUpcoming {
   }
 
   public async run(): Promise<void> {
-    if (await this.#playback.clearQueue()) this.#notices.offerUndo("Upcoming cleared");
+    if (await this.#playback.playerClearQueue()) this.#notices.offerUndo("Upcoming cleared");
   }
 }

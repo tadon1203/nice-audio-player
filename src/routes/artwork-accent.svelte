@@ -20,8 +20,8 @@
 
   $effect(() => {
     if (accent === null) return;
-    const root = document.documentElement;
-    root.style.setProperty("--artwork-accent", accent);
-    return (): string => root.style.removeProperty("--artwork-accent");
+    const directory = document.documentElement;
+    directory.style.setProperty("--artwork-accent", accent);
+    return (): string => directory.style.removeProperty("--artwork-accent");
   });
 </script>

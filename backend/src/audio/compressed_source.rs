@@ -5,7 +5,7 @@ use std::sync::Arc;
 use symphonia::core::io::MediaSource;
 
 use super::decoding::{PcmDecodeError, StreamingDecoder};
-use crate::diagnostics::logged;
+use crate::errors::logged;
 use crate::media::validation::ValidatedAudioFile;
 use crate::threads::Cancellation;
 

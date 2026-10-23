@@ -15,9 +15,10 @@ pub(crate) use playback::{
 
 use super::{
     database::{Database, ReadConnection},
+    directories,
     error::StoreError,
-    models::LibraryRoot,
-    roots, text,
+    models::LibraryDirectory,
+    text,
 };
 
 #[derive(Clone)]
@@ -30,9 +31,9 @@ impl LibraryStore {
         Self { database }
     }
 
-    pub(crate) fn roots(&self) -> Result<Vec<LibraryRoot>, StoreError> {
+    pub(crate) fn directories(&self) -> Result<Vec<LibraryDirectory>, StoreError> {
         let connection = self.read()?;
-        roots::list(&connection)
+        directories::list(&connection)
     }
 
     fn read(&self) -> Result<ReadConnection, StoreError> {

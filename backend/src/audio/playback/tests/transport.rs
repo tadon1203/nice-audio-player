@@ -85,7 +85,7 @@ fn a_start_through_a_service_thread_needs_no_poll() {
         .unwrap()
         .value;
 
-    assert!(matches!(snapshot, PlaybackSnapshot::Playing { .. }));
+    assert!(matches!(snapshot, PlaybackState::Playing { .. }));
     assert!(output.is_running());
     service.shutdown();
 }
@@ -100,7 +100,7 @@ fn navigating_while_paused_starts_the_next_track_paused() {
     let snapshot = harness.next().unwrap();
 
     assert!(
-        matches!(&snapshot, PlaybackSnapshot::Paused { session, .. } if session.item.track.core.title == "b")
+        matches!(&snapshot, PlaybackState::Paused { session, .. } if session.item.track.core.title == "b")
     );
     assert!(!harness.output.is_running());
 }
@@ -159,12 +159,12 @@ fn pause_reads_the_newest_position_and_resume_continues() {
 
     let paused = harness.pause().unwrap();
 
-    assert!(matches!(paused, PlaybackSnapshot::Paused { .. }));
+    assert!(matches!(paused, PlaybackState::Paused { .. }));
     assert_eq!(session(&paused).position_ms, 500);
     assert!(!harness.output.is_running());
 
     let resumed = harness.resume().unwrap();
-    assert!(matches!(resumed, PlaybackSnapshot::Playing { .. }));
+    assert!(matches!(resumed, PlaybackState::Playing { .. }));
     assert_eq!(session(&resumed).position_ms, 500);
     assert!(harness.output.is_running());
 }
@@ -286,7 +286,7 @@ fn the_last_track_finishing_stops_and_clears_the_queue() {
     harness.deliver_pending();
     harness.tick();
 
-    let PlaybackSnapshot::Stopped { item, .. } = harness.snapshot() else {
+    let PlaybackState::Stopped { item, .. } = harness.snapshot() else {
         panic!("the player must stop");
     };
     assert_eq!(item.unwrap().track.core.title, "a");
@@ -304,10 +304,7 @@ fn a_paused_track_does_not_finish_naturally() {
 
     harness.tick();
 
-    assert!(matches!(
-        harness.snapshot(),
-        PlaybackSnapshot::Paused { .. }
-    ));
+    assert!(matches!(harness.snapshot(), PlaybackState::Paused { .. }));
 }
 
 #[test]
@@ -342,16 +339,16 @@ fn started_by_names_what_started_each_session() {
         harness.track("c", 5),
     ];
     let jumped = harness.start(tracks, 0).unwrap();
-    assert_eq!(session(&jumped).started_by, SessionStartedBy::Jump);
+    assert_eq!(session(&jumped).started_by, StartedBy::Jump);
 
     let next = harness.next().unwrap();
-    assert_eq!(session(&next).started_by, SessionStartedBy::Next);
+    assert_eq!(session(&next).started_by, StartedBy::Next);
 
     let previous = harness
         .call(|reply| PlaybackCommand::Previous { reply })
         .unwrap()
         .value;
-    assert_eq!(session(&previous).started_by, SessionStartedBy::Previous);
+    assert_eq!(session(&previous).started_by, StartedBy::Previous);
 }
 
 #[test]
@@ -364,13 +361,10 @@ fn an_automatic_advance_is_auto_and_a_seek_keeps_the_start() {
     harness.deliver_pending();
     harness.tick();
     harness.pump_until(|harness| is_playing(&harness.snapshot(), "b"));
-    assert_eq!(
-        session(&harness.snapshot()).started_by,
-        SessionStartedBy::Auto
-    );
+    assert_eq!(session(&harness.snapshot()).started_by, StartedBy::Auto);
 
     let sought = harness.seek(2_000).unwrap();
-    assert_eq!(session(&sought).started_by, SessionStartedBy::Auto);
+    assert_eq!(session(&sought).started_by, StartedBy::Auto);
 }
 
 #[test]
@@ -387,7 +381,7 @@ fn pausing_while_a_track_loads_starts_it_paused() {
     harness.pause().unwrap();
     let loaded = harness.wait_for(&start).unwrap().value;
 
-    assert!(matches!(loaded, PlaybackSnapshot::Paused { .. }));
+    assert!(matches!(loaded, PlaybackState::Paused { .. }));
     assert!(!harness.output.is_running());
 }
 
@@ -418,7 +412,7 @@ fn previous_restarts_a_track_that_has_played_for_a_while() {
         .value;
 
     assert!(
-        matches!(&restarted, PlaybackSnapshot::Paused { session, .. } if session.item.track.core.title == "b")
+        matches!(&restarted, PlaybackState::Paused { session, .. } if session.item.track.core.title == "b")
     );
     assert!(session(&restarted).position_ms < 100);
 }

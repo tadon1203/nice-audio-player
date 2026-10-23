@@ -1,13 +1,13 @@
 <script lang="ts">
   import { Button } from "#lib/ui/shadcn/button";
-  import type { LibraryIndexBucket } from "#lib/native";
+  import type { ScrollIndexBucket } from "#lib/native";
 
   let {
     buckets,
     current,
     onselect,
   }: {
-    buckets: readonly LibraryIndexBucket[];
+    buckets: readonly ScrollIndexBucket[];
     current: string | null;
     onselect: (label: string) => void;
   } = $props();

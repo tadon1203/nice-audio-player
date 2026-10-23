@@ -1,7 +1,7 @@
 use cpal::traits::{DeviceTrait, HostTrait};
 use serde::{Deserialize, Serialize};
 
-use crate::diagnostics::logged;
+use crate::errors::logged;
 
 #[derive(Debug, Clone, Serialize, specta::Type, Deserialize, PartialEq, Eq)]
 #[serde(
@@ -33,12 +33,6 @@ pub struct AudioOutputDevice {
 #[serde(tag = "code", rename_all = "camelCase")]
 pub enum AudioDeviceListError {
     EnumerationFailed,
-}
-
-impl crate::tasks::TaskError for AudioDeviceListError {
-    fn task_failed() -> Self {
-        Self::EnumerationFailed
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

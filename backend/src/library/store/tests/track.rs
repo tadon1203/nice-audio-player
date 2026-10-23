@@ -10,12 +10,7 @@ fn a_track_summary_carries_the_album_and_album_artist_ids() {
     let summary = |id: &str| {
         fixture
             .store
-            .catalog_tracks(
-                None,
-                None,
-                LibraryTrackSortKey::Title,
-                LibrarySortDirection::Ascending,
-            )
+            .catalog_tracks(None, None, TrackSortKey::Title, SortDirection::Ascending)
             .unwrap()
             .items
             .into_iter()
@@ -44,12 +39,7 @@ fn a_track_summary_serializes_its_core_fields_flat_and_no_path() {
 
     let summary = fixture
         .store
-        .catalog_tracks(
-            None,
-            None,
-            LibraryTrackSortKey::Title,
-            LibrarySortDirection::Ascending,
-        )
+        .catalog_tracks(None, None, TrackSortKey::Title, SortDirection::Ascending)
         .unwrap()
         .items
         .into_iter()
@@ -70,7 +60,7 @@ fn a_track_summary_serializes_its_core_fields_flat_and_no_path() {
 }
 
 #[test]
-fn a_track_location_is_found_by_id_and_stays_inside_its_root() {
+fn a_track_location_is_found_by_id_and_stays_inside_its_directory() {
     let fixture = fixture();
     fixture.touch_audio([1]);
     fixture.add(Seed::new(1, "Song", "Artist", "Album"));
@@ -85,7 +75,7 @@ fn a_track_location_is_found_by_id_and_stays_inside_its_root() {
         .unwrap()
         .existing()
         .unwrap();
-    assert!(file.path.ends_with("1.wav") && file.path.starts_with(&file.root));
+    assert!(file.path.ends_with("1.wav") && file.path.starts_with(&file.directory));
     assert_eq!(
         store.track_location(track_id_of(2)).unwrap().existing(),
         Err(Unavailable),
@@ -94,7 +84,7 @@ fn a_track_location_is_found_by_id_and_stays_inside_its_root() {
     assert_eq!(
         store.track_location(track_id_of(3)).unwrap().existing(),
         Err(Unavailable),
-        "it leaves the root"
+        "it leaves the directory"
     );
     assert_eq!(
         store.track_location(track_id_of(99)).err(),
@@ -117,12 +107,7 @@ fn a_track_is_playable_missing_or_unsupported_by_its_file_alone() {
 
     let state_of = |id: i64| {
         store
-            .catalog_tracks(
-                None,
-                None,
-                LibraryTrackSortKey::Title,
-                LibrarySortDirection::Ascending,
-            )
+            .catalog_tracks(None, None, TrackSortKey::Title, SortDirection::Ascending)
             .unwrap()
             .items
             .into_iter()

@@ -1,11 +1,11 @@
 <script lang="ts">
-  import type { LibraryAlbumArtistSummary } from "#lib/native";
+  import type { ArtistRow } from "#lib/native";
   import { resolve } from "$app/paths";
   import { artistNameLabel } from "#lib/library/unknown-name";
   import Artwork from "#lib/ui/artwork.svelte";
   import { CountFormat } from "#lib/utils/count-format";
 
-  let { artist }: { artist: LibraryAlbumArtistSummary } = $props();
+  let { artist }: { artist: ArtistRow } = $props();
 
   const name = $derived(artistNameLabel(artist.name));
   const href = $derived(

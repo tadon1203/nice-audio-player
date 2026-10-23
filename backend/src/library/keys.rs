@@ -61,14 +61,14 @@ impl TrackKeys {
     }
 
     /// All the keys. `album_directory` is the album's edition (see [`album_edition_of`]) and
-    /// `root_path` the absolute path of its root. Both are kept only when the track has an album.
+    /// `directory_path` the absolute path of its directory. Both are kept only when the track has an album.
     pub(crate) fn build(
         [title, artist, album, album_artist]: [Option<&str>; 4],
         date: Option<&str>,
         file_name: &str,
         sort: SortTags<'_>,
         album_directory: &str,
-        root_path: &str,
+        directory_path: &str,
     ) -> Self {
         let title_key = title_key(title, file_name);
         let artist_key = text_key(artist);
@@ -88,7 +88,7 @@ impl TrackKeys {
         let album_path = if album_key.is_empty() {
             String::new()
         } else {
-            absolute_directory(root_path, &album_directory)
+            absolute_directory(directory_path, &album_directory)
         };
         let album_id = AlbumId::of(&album_artist_key, &album_key, OsStr::new(&album_path));
         Self {
@@ -119,32 +119,32 @@ pub(crate) fn track_search_key(
     text::search_key(&[title, artist, album, album_artist])
 }
 
-/// The printing of an album a file belongs to: its folder, or the folder above it when it is a
-/// disc folder ("CD1", "Disc 2"), so one album on several discs stays one album while the same
-/// title and artist in two folders (an original and a remaster) are two.
-pub(crate) fn album_edition_of(root_id: i64, relative_path: &str) -> String {
+/// The printing of an album a file belongs to: its directory, or the directory above it when it is a
+/// disc directory ("CD1", "Disc 2"), so one album on several discs stays one album while the same
+/// title and artist in two directories (an original and a remaster) are two.
+pub(crate) fn album_edition_of(directory_id: i64, relative_path: &str) -> String {
     let directory = relative_path
         .rsplit_once('/')
         .map_or("", |(directory, _)| directory);
     let directory = match directory.rsplit_once('/') {
-        Some((parent, last)) if is_disc_folder(last) => parent,
-        None if is_disc_folder(directory) => "",
+        Some((parent, last)) if is_disc_directory(last) => parent,
+        None if is_disc_directory(directory) => "",
         _ => directory,
     };
-    format!("{root_id}/{directory}")
+    format!("{directory_id}/{directory}")
 }
 
-/// The absolute directory of an album edition: the root's path, `/`, then the directory below the
-/// root. `/` is written on every platform, so the text is the same in Rust and in SQL
+/// The absolute directory of an album edition: the library directory's path, `/`, then the album directory
+/// below it. `/` is written on every platform, so the text is the same in Rust and in SQL
 /// (`album_id()` joins them the same way).
-pub(crate) fn absolute_directory(root_path: &str, album_directory: &str) -> String {
+pub(crate) fn absolute_directory(directory_path: &str, album_directory: &str) -> String {
     let relative = album_directory
         .split_once('/')
         .map_or("", |(_, relative)| relative);
-    format!("{root_path}/{relative}")
+    format!("{directory_path}/{relative}")
 }
 
-fn is_disc_folder(name: &str) -> bool {
+fn is_disc_directory(name: &str) -> bool {
     let name = name.trim().to_lowercase();
     let Some(rest) = ["disc", "disk", "cd"]
         .iter()
@@ -240,7 +240,7 @@ mod tests {
     }
 
     #[test]
-    fn an_album_edition_is_a_folder_and_a_disc_folder_belongs_to_its_parent() {
+    fn an_album_edition_is_a_directory_and_a_disc_directory_belongs_to_its_parent() {
         assert_eq!(
             album_edition_of(1, "Artist/Album/01.flac"),
             "1/Artist/Album"
@@ -295,8 +295,8 @@ mod tests {
     }
 
     #[test]
-    fn a_disc_folder_with_a_multibyte_suffix_is_not_one_and_does_not_panic() {
-        assert!(!is_disc_folder("disc 1é"));
-        assert!(is_disc_folder("disc 1"));
+    fn a_disc_directory_with_a_multibyte_suffix_is_not_one_and_does_not_panic() {
+        assert!(!is_disc_directory("disc 1é"));
+        assert!(is_disc_directory("disc 1"));
     }
 }

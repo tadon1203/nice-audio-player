@@ -3,7 +3,7 @@ import { createContext } from "svelte";
 import { AlbumRepository } from "#lib/library/album-repository";
 import { ArtistRepository } from "#lib/library/artist-repository";
 import { CatalogRepository } from "#lib/library/catalog-repository";
-import { LibraryRootCommands } from "#lib/library/library-root-commands.svelte";
+import { LibraryDirectoryCommands } from "#lib/library/library-directory-commands.svelte";
 import { LibraryTrackCommands } from "#lib/library/library-track-commands";
 import { LibraryViews } from "#lib/library/library-views.svelte";
 import { LyricsRepository } from "#lib/lyrics/lyrics-repository";
@@ -31,7 +31,7 @@ import { UserActionRunner } from "./user-action-runner.svelte";
 const [getServices, setServices] = createContext<AppServices>();
 
 /**
- * The Renderer's composition root. Only this class constructs services. The root layout creates
+ * The Renderer's composition root. Only this class constructs services. The directory layout creates
  * it once; every component reads it with `current()`.
  */
 export class AppServices {
@@ -63,7 +63,7 @@ export class AppServices {
     return services;
   }
 
-  /** The services that the root layout registered. Call during component initialization. */
+  /** The services that the directory layout registered. Call during component initialization. */
   public static current(): AppServices {
     return getServices();
   }
@@ -82,7 +82,7 @@ export class AppServices {
   public readonly catalog: CatalogRepository;
   public readonly albums: AlbumRepository;
   public readonly artists: ArtistRepository;
-  public readonly libraryRoots: LibraryRootCommands;
+  public readonly libraryDirectories: LibraryDirectoryCommands;
   public readonly libraryTracks: LibraryTrackCommands;
   public readonly libraryViews = new LibraryViews();
   /** The Library scan, as the Backend last reported it. */
@@ -108,7 +108,7 @@ export class AppServices {
     this.catalog = new CatalogRepository(native.library, queryClient);
     this.albums = new AlbumRepository(native.library, queryClient);
     this.artists = new ArtistRepository(native.library);
-    this.libraryRoots = new LibraryRootCommands(native.library, this.catalog);
+    this.libraryDirectories = new LibraryDirectoryCommands(native.library, this.catalog);
     this.libraryTracks = new LibraryTrackCommands(native.library);
     this.lyrics = new LyricsRepository(native.lyrics, queryClient);
     this.scan = new ScanWatcher(this.catalog, this.lyrics);

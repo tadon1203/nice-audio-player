@@ -25,9 +25,8 @@ use super::session::{
     PrefetchState, PrefetchedTrack, SeekInFlight, StartRequest, Transport, should_publish_position,
 };
 use super::snapshot::{
-    ActiveSession, HISTORY_IN_SNAPSHOT, PlaybackFailureCode, PlaybackPosition,
-    PlaybackProcessingInfo, PlaybackQueueSnapshot, PlaybackSnapshot, SessionStartedBy,
-    SnapshotBase, UPCOMING_IN_SNAPSHOT,
+    CurrentPlayback, HISTORY_IN_SNAPSHOT, PlaybackControls, PlaybackFailureCode, PlaybackPosition,
+    PlaybackProcessingInfo, PlaybackState, QueueState, StartedBy, UPCOMING_IN_SNAPSHOT,
 };
 use super::source_loader::SourceLoad;
 use crate::audio::compressed_source::{CompressedAudioSource, CompressedSourceError};
@@ -40,9 +39,9 @@ use crate::audio::output::{
 };
 use crate::audio::timebase::millis_to_frame;
 use crate::audio::volume::{AtomicEffectiveGain, VolumeState};
-use crate::errors::CommonError;
+use crate::errors::CommandError;
 use crate::ids::{PlaybackId, QueueItemId, TrackId};
-use crate::messages::{Occurrence, SharedMessageSink, Versioned};
+use crate::messages::{Occurrence, Revisioned, SharedMessageListener};
 use log::{error, info};
 use rand::{SeedableRng, rngs::StdRng};
 
@@ -116,7 +115,7 @@ impl StartFailure {
     fn service_error(&self) -> PlaybackServiceError {
         match (self.phase, &self.code) {
             (StartFailurePhase::SourceWorker, _) => PlaybackServiceError::WorkerUnavailable,
-            (_, code) => PlaybackServiceError::from(code.clone()),
+            (_, code) => PlaybackServiceError::from(*code),
         }
     }
 }
@@ -138,13 +137,13 @@ enum PipelineOwner {
 
 /// The channels and shared state the service hands to the worker thread.
 pub(super) struct WorkerLinks {
-    pub snapshot: Arc<RwLock<Versioned<PlaybackSnapshot>>>,
+    pub snapshot: Arc<RwLock<Revisioned<PlaybackState>>>,
     pub position: Arc<RwLock<Option<PlaybackPosition>>>,
-    pub queue_snapshot: Arc<RwLock<Versioned<PlaybackQueueSnapshot>>>,
+    pub queue_snapshot: Arc<RwLock<Revisioned<QueueState>>>,
     pub effective_gain: AtomicEffectiveGain,
     pub meter: MeterHub,
     pub inbox: Inbox,
-    pub messages: SharedMessageSink,
+    pub messages: SharedMessageListener,
     pub observer: PreferencesObserver,
     pub backend: Box<dyn OutputBackend>,
     /// Where queue entries get their metadata.
@@ -178,11 +177,11 @@ pub(super) struct PlaybackWorker {
     effective_gain: AtomicEffectiveGain,
     meter: MeterHub,
     output_selection: AudioOutputSelection,
-    snapshot: Arc<RwLock<Versioned<PlaybackSnapshot>>>,
+    snapshot: Arc<RwLock<Revisioned<PlaybackState>>>,
     position: Arc<RwLock<Option<PlaybackPosition>>>,
-    queue_snapshot: Arc<RwLock<Versioned<PlaybackQueueSnapshot>>>,
+    queue_snapshot: Arc<RwLock<Revisioned<QueueState>>>,
     inbox: Inbox,
-    messages: SharedMessageSink,
+    messages: SharedMessageListener,
     observer: PreferencesObserver,
     backend: Box<dyn OutputBackend>,
 }
@@ -324,7 +323,7 @@ impl PlaybackWorker {
             PlaybackCommand::PlayQueueItem { id, reply } => {
                 self.skipped_in_a_row = 0;
                 match self.queue.jump_to(id) {
-                    Ok(()) => self.start_current(Some(reply), false, SessionStartedBy::Jump),
+                    Ok(()) => self.start_current(Some(reply), false, StartedBy::Jump),
                     Err(_) => {
                         respond(reply, Err(PlaybackServiceError::QueueItemNotFound));
                     }

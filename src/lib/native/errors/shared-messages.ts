@@ -1,4 +1,4 @@
-import type { CommonError } from "../bindings";
+import type { CommandError } from "../bindings";
 import { messageForCode, nativeErrorCode } from "./error-code";
 import { NativeCommandError } from "./native-command-error";
 
@@ -9,7 +9,13 @@ export const commonErrorMessages = {
   libraryUnavailable: "The library is unavailable.",
   persistenceFailed: "The library database could not be updated.",
   taskFailed: "The request did not finish. Try again.",
-} as const satisfies Record<CommonError["code"], string>;
+} as const satisfies Record<
+  Extract<
+    CommandError["code"],
+    "trackNotFound" | "trackUnavailable" | "libraryUnavailable" | "persistenceFailed" | "taskFailed"
+  >,
+  string
+>;
 
 /**
  * The message for an album the library does not hold. The library and playback tables both show

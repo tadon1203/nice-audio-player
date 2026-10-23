@@ -56,7 +56,7 @@ fn when_every_file_fails_each_is_tried_once_and_the_queue_survives() {
     let current = harness.snapshot();
     assert!(matches!(
         current,
-        PlaybackSnapshot::Failed {
+        PlaybackState::Failed {
             error: PlaybackFailureCode::DecodeFailed,
             ..
         }
@@ -70,7 +70,7 @@ fn skipping_failed_files_is_bounded_even_when_the_queue_repeats() {
     let mut harness = Harness::new();
     harness
         .call(|reply| PlaybackCommand::SetRepeatMode {
-            mode: PlaybackRepeatMode::All,
+            mode: RepeatMode::All,
             reply,
         })
         .unwrap();
@@ -106,7 +106,7 @@ fn navigating_onto_a_broken_file_reports_the_failure_and_keeps_the_queue() {
     assert_eq!(queue.history_count + 1 + queue.upcoming_count, 2);
     assert!(matches!(
         harness.snapshot(),
-        PlaybackSnapshot::Failed {
+        PlaybackState::Failed {
             error: PlaybackFailureCode::DecodeFailed,
             ..
         }
@@ -132,7 +132,7 @@ fn an_output_that_cannot_be_prepared_fails_without_skipping() {
     assert_eq!(harness.queue_titles(), ["a", "b"]);
     assert!(matches!(
         harness.snapshot(),
-        PlaybackSnapshot::Failed {
+        PlaybackState::Failed {
             error: PlaybackFailureCode::UnsupportedOutputConfiguration,
             ..
         }
@@ -207,7 +207,7 @@ fn a_stream_failure_stops_with_the_queue_intact() {
 
     assert!(matches!(
         harness.snapshot(),
-        PlaybackSnapshot::Failed {
+        PlaybackState::Failed {
             error: PlaybackFailureCode::OutputStreamRuntimeFailed,
             ..
         }
@@ -224,7 +224,7 @@ fn resume_after_an_output_failure_retries_the_current_item_with_the_queue_intact
     harness.deliver_pending();
     assert!(matches!(
         harness.snapshot(),
-        PlaybackSnapshot::Failed {
+        PlaybackState::Failed {
             skipping: false,
             ..
         }
@@ -248,7 +248,7 @@ fn a_failure_of_the_last_item_is_not_a_skip() {
 
     assert!(matches!(
         harness.snapshot(),
-        PlaybackSnapshot::Failed {
+        PlaybackState::Failed {
             skipping: false,
             ..
         }
@@ -301,7 +301,7 @@ fn a_decode_failure_on_the_last_track_leaves_a_failed_player() {
 
     assert!(matches!(
         harness.snapshot(),
-        PlaybackSnapshot::Failed {
+        PlaybackState::Failed {
             error: PlaybackFailureCode::DecodeFailed,
             ..
         }
@@ -320,7 +320,7 @@ fn a_conversion_failure_while_playing_is_reported_with_its_own_code() {
 
     assert!(matches!(
         harness.snapshot(),
-        PlaybackSnapshot::Failed {
+        PlaybackState::Failed {
             error: PlaybackFailureCode::SampleRateConversionFailed,
             ..
         }
@@ -346,7 +346,7 @@ fn a_failed_pause_fails_the_player() {
     );
     assert!(matches!(
         harness.snapshot(),
-        PlaybackSnapshot::Failed {
+        PlaybackState::Failed {
             error: PlaybackFailureCode::OutputStreamPauseFailed,
             ..
         }

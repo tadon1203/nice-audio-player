@@ -4,8 +4,8 @@ use std::thread::{self, JoinHandle};
 
 use super::input::{Inbox, SourceLoadId, WorkerEvent};
 use crate::audio::compressed_source::{CompressedSourceError, prepare_compressed_source};
-use crate::containment::contain;
-use crate::diagnostics::logged;
+use crate::errors::contain;
+use crate::errors::logged;
 use crate::media::validation::ValidatedAudioFile;
 use crate::threads::Cancellation;
 

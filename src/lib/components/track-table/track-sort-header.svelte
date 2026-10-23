@@ -2,7 +2,7 @@
   import ArrowDown from "@lucide/svelte/icons/arrow-down";
   import ArrowUp from "@lucide/svelte/icons/arrow-up";
   import { Sort } from "#lib/library/sort";
-  import type { LibrarySortDirection, LibraryTrackSortKey } from "#lib/native";
+  import type { SortDirection, TrackSortKey } from "#lib/native";
   import { Button } from "#lib/ui/shadcn/button/index.js";
 
   let {
@@ -13,10 +13,10 @@
     onsortchange,
   }: {
     header: string | null;
-    sortKey: LibraryTrackSortKey;
+    sortKey: TrackSortKey;
     active: boolean;
-    direction: LibrarySortDirection;
-    onsortchange: (key: LibraryTrackSortKey, direction: LibrarySortDirection) => void;
+    direction: SortDirection;
+    onsortchange: (key: TrackSortKey, direction: SortDirection) => void;
   } = $props();
 </script>
 

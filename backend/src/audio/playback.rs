@@ -21,12 +21,12 @@ mod worker;
 
 pub use item::PlaybackItem;
 pub(crate) use preferences::PlaybackPreferences;
-pub use queue::PlaybackRepeatMode;
+pub use queue::RepeatMode;
 pub(crate) use resolver::{NoTracks, TrackResolver, TrackSource};
 pub(crate) use service::{PlaybackService, PlaybackServiceError};
 pub use snapshot::{
-    ActiveSession, PlaybackFailureCode, PlaybackPosition, PlaybackQueueItem, PlaybackQueueSnapshot,
-    PlaybackQueueWindow, PlaybackSnapshot, SessionStartedBy,
+    CurrentPlayback, PlaybackFailureCode, PlaybackPosition, PlaybackQueueItem, PlaybackState,
+    QueueState, QueueWindow, StartedBy,
 };
 
 /// Hears that a track was loaded as the Playback with this id.

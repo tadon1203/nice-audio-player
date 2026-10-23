@@ -20,7 +20,7 @@ use crate::audio::playback::TrackListener;
 use crate::audio::playback::input::{Inbox, WorkerEvent, WorkerInput};
 use crate::audio::playback::item::PlaybackItem;
 use crate::audio::playback::preferences::PlaybackPreferences;
-use crate::audio::playback::queue::{PlaybackQueue, PlaybackRepeatMode};
+use crate::audio::playback::queue::{PlaybackQueue, RepeatMode};
 use crate::audio::playback::resolver::testing::{FakeTracks, resolver_of, track as library_track};
 use crate::audio::playback::resolver::{NoTracks, TrackResolver};
 use crate::audio::playback::service::{
@@ -28,16 +28,16 @@ use crate::audio::playback::service::{
 };
 use crate::audio::playback::session::POSITION_UPDATE_INTERVAL;
 use crate::audio::playback::snapshot::{
-    ActiveSession, PlaybackChannelConversion, PlaybackFailureCode, PlaybackPosition,
-    PlaybackQueueSnapshot, PlaybackSnapshot, SessionStartedBy, SnapshotBase, UPCOMING_IN_SNAPSHOT,
+    CurrentPlayback, PlaybackChannelConversion, PlaybackControls, PlaybackFailureCode,
+    PlaybackPosition, PlaybackState, QueueState, StartedBy, UPCOMING_IN_SNAPSHOT,
 };
 use crate::audio::playback::worker::{PlaybackWorker, WorkerLinks};
 use crate::audio::volume::{AtomicEffectiveGain, VolumeState};
-use crate::errors::CommonError;
+use crate::errors::CommandError;
 use crate::ids::{PlaybackId, TrackId};
 use crate::library::store::PlayableTrack;
 use crate::media::validation::ValidatedAudioFile;
-use crate::messages::{StateTopic, Versioned, testing::Sent};
+use crate::messages::{Revisioned, StateTopic, testing::Sent};
 use crate::test_support::{TestDirectory, write_pcm_i16_wav};
 use cpal::StreamInstant;
 use parking_lot::{Mutex, RwLock};
@@ -72,10 +72,10 @@ enum Heard {
 struct Harness {
     worker: PlaybackWorker,
     inputs: Receiver<WorkerInput>,
-    snapshot: Arc<RwLock<Versioned<PlaybackSnapshot>>>,
+    snapshot: Arc<RwLock<Revisioned<PlaybackState>>>,
     position: Arc<RwLock<Option<PlaybackPosition>>>,
     recorded: Arc<crate::messages::testing::RecordingMessageSink>,
-    queue_snapshot: Arc<RwLock<Versioned<PlaybackQueueSnapshot>>>,
+    queue_snapshot: Arc<RwLock<Revisioned<QueueState>>>,
     gain: AtomicEffectiveGain,
     output: FakeOutput,
     preferences: Arc<Mutex<Vec<PlaybackPreferences>>>,
@@ -88,14 +88,14 @@ struct Harness {
 impl Harness {
     fn new() -> Self {
         let (inbox, inputs) = Inbox::channel();
-        let queue = PlaybackQueue::new(PlaybackRepeatMode::Off, false);
+        let queue = PlaybackQueue::new(RepeatMode::Off, false);
         let volume = VolumeState::default();
-        let snapshot = Arc::new(RwLock::new(Versioned::new(PlaybackSnapshot::Stopped {
-            base: SnapshotBase::new(volume, AudioOutputSelection::SystemDefault),
+        let snapshot = Arc::new(RwLock::new(Revisioned::new(PlaybackState::Stopped {
+            base: PlaybackControls::new(volume, AudioOutputSelection::SystemDefault),
             item: None,
         })));
-        let queue_snapshot = Arc::new(RwLock::new(Versioned::new(PlaybackQueueSnapshot::empty(
-            PlaybackRepeatMode::Off,
+        let queue_snapshot = Arc::new(RwLock::new(Revisioned::new(QueueState::empty(
+            RepeatMode::Off,
             false,
         ))));
         let library = Arc::new(FakeTracks::default());
@@ -189,11 +189,11 @@ impl Harness {
             .collect()
     }
 
-    fn snapshot(&self) -> PlaybackSnapshot {
+    fn snapshot(&self) -> PlaybackState {
         self.versioned_snapshot().value
     }
 
-    fn versioned_snapshot(&self) -> Versioned<PlaybackSnapshot> {
+    fn versioned_snapshot(&self) -> Revisioned<PlaybackState> {
         self.snapshot.read().clone()
     }
 
@@ -205,11 +205,11 @@ impl Harness {
         self.recorded.sent()
     }
 
-    fn queue_snapshot(&self) -> PlaybackQueueSnapshot {
+    fn queue_snapshot(&self) -> QueueState {
         self.versioned_queue_snapshot().value
     }
 
-    fn versioned_queue_snapshot(&self) -> Versioned<PlaybackQueueSnapshot> {
+    fn versioned_queue_snapshot(&self) -> Revisioned<QueueState> {
         self.queue_snapshot.read().clone()
     }
 
@@ -272,12 +272,8 @@ impl Harness {
     }
 
     // The transport helpers answer with the snapshot alone; a test that reads a revision calls
-    // `call` and gets the `Versioned` answer.
-    fn start(
-        &mut self,
-        tracks: Vec<PlayableTrack>,
-        start_index: usize,
-    ) -> Answer<PlaybackSnapshot> {
+    // `call` and gets the `Revisioned` answer.
+    fn start(&mut self, tracks: Vec<PlayableTrack>, start_index: usize) -> Answer<PlaybackState> {
         let track_ids = self.register(tracks);
         self.call(|reply| PlaybackCommand::Start {
             track_ids,
@@ -287,27 +283,27 @@ impl Harness {
         .map(|versioned| versioned.value)
     }
 
-    fn pause(&mut self) -> Answer<PlaybackSnapshot> {
+    fn pause(&mut self) -> Answer<PlaybackState> {
         self.call(|reply| PlaybackCommand::Pause { reply })
             .map(|versioned| versioned.value)
     }
 
-    fn resume(&mut self) -> Answer<PlaybackSnapshot> {
+    fn resume(&mut self) -> Answer<PlaybackState> {
         self.call(|reply| PlaybackCommand::Resume { reply })
             .map(|versioned| versioned.value)
     }
 
-    fn next(&mut self) -> Answer<PlaybackSnapshot> {
+    fn next(&mut self) -> Answer<PlaybackState> {
         self.call(|reply| PlaybackCommand::Next { reply })
             .map(|versioned| versioned.value)
     }
 
-    fn seek(&mut self, position_ms: u64) -> Answer<PlaybackSnapshot> {
+    fn seek(&mut self, position_ms: u64) -> Answer<PlaybackState> {
         self.call(|reply| PlaybackCommand::Seek { position_ms, reply })
             .map(|versioned| versioned.value)
     }
 
-    fn select_output(&mut self, selection: AudioOutputSelection) -> Answer<PlaybackSnapshot> {
+    fn select_output(&mut self, selection: AudioOutputSelection) -> Answer<PlaybackState> {
         self.call(|reply| PlaybackCommand::SetOutputSelection { selection, reply })
             .map(|versioned| versioned.value)
     }
@@ -346,12 +342,12 @@ fn missing(count: usize) -> Vec<PlayableTrack> {
         .collect()
 }
 
-fn session(snapshot: &PlaybackSnapshot) -> &ActiveSession {
+fn session(snapshot: &PlaybackState) -> &CurrentPlayback {
     snapshot.session().expect("a track is loaded")
 }
 
-fn is_playing(snapshot: &PlaybackSnapshot, title: &str) -> bool {
-    matches!(snapshot, PlaybackSnapshot::Playing { session, .. } if session.item.track.core.title == title)
+fn is_playing(snapshot: &PlaybackState, title: &str) -> bool {
+    matches!(snapshot, PlaybackState::Playing { session, .. } if session.item.track.core.title == title)
 }
 
 /// A listener that hears nothing, for tests that do not look at what it is told.

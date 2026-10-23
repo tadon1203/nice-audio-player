@@ -1,6 +1,6 @@
 import type { TrackId } from "#lib/native";
 import { describe, expect, it, vi } from "vitest";
-import type { ActiveSession, PlaybackItem, PlaybackSnapshot } from "#lib/native";
+import type { CurrentPlayback, PlaybackItem, PlaybackState } from "#lib/native";
 vi.mock("svelte/motion", () => ({ prefersReducedMotion: { current: false } }));
 
 import { PlaybackClock } from "./playback-clock.svelte";
@@ -19,7 +19,7 @@ const item = (id: TrackId): PlaybackItem => ({
   year: null,
 });
 
-const session = (id: TrackId, positionMs: number, seekRevision = 0): ActiveSession => ({
+const session = (id: TrackId, positionMs: number, seekRevision = 0): CurrentPlayback => ({
   item: item(id),
   startedBy: "jump",
   playbackId: 1,
@@ -41,7 +41,7 @@ const snapshot = (
   id: TrackId,
   positionMs: number,
   seekRevision = 0,
-): PlaybackSnapshot => ({
+): PlaybackState => ({
   status,
   base: {
     volume: 1,
@@ -74,7 +74,7 @@ class FakeAnimation {
 /** A clock on hand-turned time, frames, timers and animations, so a test decides what passes. */
 function setup(): {
   clock: PlaybackClock;
-  report: (next: PlaybackSnapshot) => void;
+  report: (next: PlaybackState) => void;
   advance: (ms: number) => void;
   nextFrame: (ms: number) => void;
   drive: (keyframes?: { atMs: number }[]) => () => void;
@@ -110,8 +110,7 @@ function setup(): {
     },
     reducedMotion: (): false => false,
   });
-  const report = (next: PlaybackSnapshot): void =>
-    clock.accept(PlaybackSnapshots.clockReport(next));
+  const report = (next: PlaybackState): void => clock.accept(PlaybackSnapshots.clockReport(next));
   /** Moves time forward, firing due timers in order. */
   const advance = (ms: number): void => {
     const end = now + ms;

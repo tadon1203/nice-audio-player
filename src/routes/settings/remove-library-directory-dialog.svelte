@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { LibraryRoot } from "#lib/native";
+  import type { LibraryDirectory } from "#lib/native";
   import {
     AlertDialog,
     AlertDialogAction,
@@ -12,31 +12,32 @@
   } from "#lib/ui/shadcn/alert-dialog/index.js";
 
   let {
-    root,
+    directory,
     onOpenChange,
     onConfirm,
   }: {
-    root: LibraryRoot | null;
+    directory: LibraryDirectory | null;
     onOpenChange: (open: boolean) => void;
-    onConfirm: (root: LibraryRoot) => void;
+    onConfirm: (directory: LibraryDirectory) => void;
   } = $props();
 </script>
 
-<AlertDialog open={root !== null} {onOpenChange}>
+<AlertDialog open={directory !== null} {onOpenChange}>
   <AlertDialogContent>
     <AlertDialogHeader>
-      <AlertDialogTitle>Remove library folder?</AlertDialogTitle>
+      <AlertDialogTitle>Remove library directory?</AlertDialogTitle>
       <AlertDialogDescription>
-        {root?.path}
+        {directory?.path}
       </AlertDialogDescription>
     </AlertDialogHeader>
     <p class="text-sm leading-5 text-muted-foreground">
-      This removes indexed library records for this folder. It does not delete audio files.
+      This removes indexed library records for this directory. It does not delete audio files.
     </p>
     <AlertDialogFooter>
       <AlertDialogCancel>Cancel</AlertDialogCancel>
-      <AlertDialogAction variant="destructive" onclick={() => root !== null && onConfirm(root)}
-        >Remove</AlertDialogAction
+      <AlertDialogAction
+        variant="destructive"
+        onclick={() => directory !== null && onConfirm(directory)}>Remove</AlertDialogAction
       >
     </AlertDialogFooter>
   </AlertDialogContent>

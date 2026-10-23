@@ -101,7 +101,7 @@ pub(super) fn backfill_catalog_keys(transaction: &Transaction<'_>) -> rusqlite::
         [title, artist, album, album_artist, date],
         file_name,
         album_directory,
-        root_path,
+        directory_path,
     ) in rows
     {
         let keys = TrackKeys::build(
@@ -115,7 +115,7 @@ pub(super) fn backfill_catalog_keys(transaction: &Transaction<'_>) -> rusqlite::
             &file_name,
             SortTags::default(),
             &album_directory,
-            &root_path,
+            &directory_path,
         );
         update.execute(params![
             track_id,

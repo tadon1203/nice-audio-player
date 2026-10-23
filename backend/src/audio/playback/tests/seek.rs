@@ -8,7 +8,7 @@ fn a_seek_moves_the_position_and_keeps_the_session() {
 
     let seeked = harness.seek(1_500).unwrap();
 
-    assert!(matches!(seeked, PlaybackSnapshot::Playing { .. }));
+    assert!(matches!(seeked, PlaybackState::Playing { .. }));
     let position = session(&seeked).position_ms;
     assert!((1_450..=1_550).contains(&position), "position {position}");
     assert_eq!(session(&seeked).seek_revision, 1);
@@ -25,7 +25,7 @@ fn a_seek_while_paused_stays_paused() {
 
     let seeked = harness.seek(1_000).unwrap();
 
-    assert!(matches!(seeked, PlaybackSnapshot::Paused { .. }));
+    assert!(matches!(seeked, PlaybackState::Paused { .. }));
     assert!(!harness.output.is_running());
 }
 
@@ -86,7 +86,7 @@ fn seeking_to_the_end_stops() {
 
     let snapshot = harness.seek(5_000).unwrap();
 
-    assert!(matches!(snapshot, PlaybackSnapshot::Stopped { .. }));
+    assert!(matches!(snapshot, PlaybackState::Stopped { .. }));
 }
 
 #[test]
@@ -167,7 +167,7 @@ fn a_seek_whose_decode_fails_keeps_the_session_and_its_stream() {
         )))
     );
     let snapshot = harness.snapshot();
-    assert!(matches!(snapshot, PlaybackSnapshot::Playing { .. }));
+    assert!(matches!(snapshot, PlaybackState::Playing { .. }));
     assert_eq!(
         session(&snapshot).playback_id,
         session(&started).playback_id

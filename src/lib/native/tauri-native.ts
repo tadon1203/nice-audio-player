@@ -7,7 +7,7 @@ import {
   type AudioDeviceListError,
   type BackendMessage,
   type LibraryCommandError,
-  type LibraryTrackProperties,
+  type TrackProperties,
   type LyricsCommandError,
   type PlaybackContext,
   type PlaybackServiceError,
@@ -38,19 +38,19 @@ import type {
   AudioOutputDevice,
   InitialState,
   LibraryAlbumArtistPage,
-  LibraryAlbumArtistSummary,
-  LibraryAlbumDetails,
+  ArtistRow,
+  AlbumDetails,
   LibraryAlbumPage,
   LibraryAlbumTrackPage,
-  LibraryIndexBucket,
-  LibraryRoot,
+  ScrollIndexBucket,
+  LibraryDirectory,
   LibraryStatus,
   LibraryTrackPage,
   LyricsResolution,
-  PlaybackQueueSnapshot,
-  PlaybackQueueWindow,
-  PlaybackSnapshot,
-  Versioned,
+  QueueState,
+  QueueWindow,
+  PlaybackState,
+  Revisioned,
 } from "./bindings";
 
 type Commands = typeof commands;
@@ -88,7 +88,7 @@ class TauriSessionClient implements SessionClient {
   }
 
   public connect(onMessage: (message: BackendMessage) => void): Promise<InitialState> {
-    return this.#call(() => this.#commands.connect(new Channel<BackendMessage>(onMessage)));
+    return this.#call(() => this.#commands.appConnect(new Channel<BackendMessage>(onMessage)));
   }
 
   #call<T>(run: () => Promise<T>): Promise<T> {
@@ -106,67 +106,67 @@ class TauriPlaybackClient implements PlaybackClient {
   public start(
     context: PlaybackContext,
     startTrackId: TrackId | null,
-  ): Promise<Versioned<PlaybackSnapshot>> {
-    return this.#call(() => this.#commands.startPlayback(context, startTrackId));
+  ): Promise<Revisioned<PlaybackState>> {
+    return this.#call(() => this.#commands.playerPlay(context, startTrackId));
   }
-  public pause(): Promise<Versioned<PlaybackSnapshot>> {
-    return this.#call(() => this.#commands.pausePlayback());
+  public pause(): Promise<Revisioned<PlaybackState>> {
+    return this.#call(() => this.#commands.playerPause());
   }
-  public resume(): Promise<Versioned<PlaybackSnapshot>> {
-    return this.#call(() => this.#commands.resumePlayback());
+  public resume(): Promise<Revisioned<PlaybackState>> {
+    return this.#call(() => this.#commands.playerResume());
   }
-  public previous(): Promise<Versioned<PlaybackSnapshot>> {
-    return this.#call(() => this.#commands.previousPlayback());
+  public previous(): Promise<Revisioned<PlaybackState>> {
+    return this.#call(() => this.#commands.playerPrevious());
   }
-  public next(): Promise<Versioned<PlaybackSnapshot>> {
-    return this.#call(() => this.#commands.nextPlayback());
+  public next(): Promise<Revisioned<PlaybackState>> {
+    return this.#call(() => this.#commands.playerNext());
   }
-  public seek(positionMs: number): Promise<Versioned<PlaybackSnapshot>> {
-    return this.#call(() => this.#commands.seekPlayback(positionMs));
+  public seek(positionMs: number): Promise<Revisioned<PlaybackState>> {
+    return this.#call(() => this.#commands.playerSeek(positionMs));
   }
-  public setVolume(volume: number): Promise<Versioned<PlaybackSnapshot>> {
-    return this.#call(() => this.#commands.setPlaybackVolume(volume));
+  public setVolume(volume: number): Promise<Revisioned<PlaybackState>> {
+    return this.#call(() => this.#commands.playerSetVolume(volume));
   }
-  public setMuted(muted: boolean): Promise<Versioned<PlaybackSnapshot>> {
-    return this.#call(() => this.#commands.setPlaybackMuted(muted));
+  public setMuted(muted: boolean): Promise<Revisioned<PlaybackState>> {
+    return this.#call(() => this.#commands.playerSetMuted(muted));
   }
   public setOutputSelection(
-    selection: Parameters<Commands["setAudioOutputSelection"]>[0],
-  ): Promise<Versioned<PlaybackSnapshot>> {
-    return this.#call(() => this.#commands.setAudioOutputSelection(selection));
+    selection: Parameters<Commands["playerSetOutputSelection"]>[0],
+  ): Promise<Revisioned<PlaybackState>> {
+    return this.#call(() => this.#commands.playerSetOutputSelection(selection));
   }
   public setRepeatMode(
-    mode: Parameters<Commands["setPlaybackRepeatMode"]>[0],
-  ): Promise<Versioned<PlaybackQueueSnapshot>> {
-    return this.#call(() => this.#commands.setPlaybackRepeatMode(mode));
+    mode: Parameters<Commands["playerSetRepeatMode"]>[0],
+  ): Promise<Revisioned<QueueState>> {
+    return this.#call(() => this.#commands.playerSetRepeatMode(mode));
   }
-  public setShuffle(enabled: boolean): Promise<Versioned<PlaybackQueueSnapshot>> {
-    return this.#call(() => this.#commands.setPlaybackShuffle(enabled));
+  public setShuffle(enabled: boolean): Promise<Revisioned<QueueState>> {
+    return this.#call(() => this.#commands.playerSetShuffle(enabled));
   }
-  public removeQueueItem(id: QueueItemId): Promise<Versioned<PlaybackQueueSnapshot>> {
-    return this.#call(() => this.#commands.removeQueueItem(id));
+  public playerRemoveQueueItem(id: QueueItemId): Promise<Revisioned<QueueState>> {
+    return this.#call(() => this.#commands.playerRemoveQueueItem(id));
   }
-  public moveQueueItem(id: QueueItemId, to: number): Promise<Versioned<PlaybackQueueSnapshot>> {
-    return this.#call(() => this.#commands.moveQueueItem(id, to));
+  public playerMoveQueueItem(id: QueueItemId, to: number): Promise<Revisioned<QueueState>> {
+    return this.#call(() => this.#commands.playerMoveQueueItem(id, to));
   }
-  public playQueueItem(id: QueueItemId): Promise<Versioned<PlaybackSnapshot>> {
-    return this.#call(() => this.#commands.playQueueItem(id));
+  public playerPlayQueueItem(id: QueueItemId): Promise<Revisioned<PlaybackState>> {
+    return this.#call(() => this.#commands.playerPlayQueueItem(id));
   }
-  public enqueueTrack(trackId: TrackId, next: boolean): Promise<Versioned<PlaybackQueueSnapshot>> {
-    return this.#call(() => this.#commands.enqueueTrack(trackId, next));
+  public playerEnqueueTrack(trackId: TrackId, next: boolean): Promise<Revisioned<QueueState>> {
+    return this.#call(() => this.#commands.playerEnqueueTrack(trackId, next));
   }
-  public clearQueue(): Promise<Versioned<PlaybackQueueSnapshot>> {
-    return this.#call(() => this.#commands.clearQueue());
+  public playerClearQueue(): Promise<Revisioned<QueueState>> {
+    return this.#call(() => this.#commands.playerClearQueue());
   }
-  public restorePreviousQueue(): Promise<Versioned<PlaybackSnapshot>> {
-    return this.#call(() => this.#commands.restorePreviousQueue());
+  public playerRestorePreviousQueue(): Promise<Revisioned<PlaybackState>> {
+    return this.#call(() => this.#commands.playerRestorePreviousQueue());
   }
-  public queueWindow(offset: number, limit: number): Promise<PlaybackQueueWindow> {
-    return this.#call(() => this.#commands.getPlaybackQueueWindow(offset, limit));
+  public queueWindow(offset: number, limit: number): Promise<QueueWindow> {
+    return this.#call(() => this.#commands.playerQueueWindow(offset, limit));
   }
   public listOutputDevices(): Promise<AudioOutputDevice[]> {
     return callCommand(
-      () => this.#commands.listAudioOutputDevices(),
+      () => this.#commands.playerListOutputDevices(),
       (error: AudioDeviceListError) => new AudioDevicesError(error),
     );
   }
@@ -186,9 +186,9 @@ class TauriAppearanceClient implements AppearanceClient {
   }
 
   public update(
-    patch: Parameters<Commands["updateAppearance"]>[0],
-  ): Promise<Versioned<Appearance>> {
-    return this.#call(() => this.#commands.updateAppearance(patch));
+    patch: Parameters<Commands["appearanceUpdate"]>[0],
+  ): Promise<Revisioned<Appearance>> {
+    return this.#call(() => this.#commands.appearanceUpdate(patch));
   }
 
   #call<T>(run: () => Promise<T>): Promise<T> {
@@ -204,94 +204,90 @@ class TauriLibraryClient implements LibraryClient {
   }
 
   public status(): Promise<LibraryStatus> {
-    return this.#call(() => this.#commands.getLibraryStatus());
+    return this.#call(() => this.#commands.libraryStatus());
   }
-  public roots(): Promise<LibraryRoot[]> {
-    return this.#call(() => this.#commands.listLibraryRoots());
+  public directories(): Promise<LibraryDirectory[]> {
+    return this.#call(() => this.#commands.libraryListDirectories());
   }
   public async selectDirectory(): Promise<string | null> {
     const selected = await open({ directory: true, multiple: false });
     return typeof selected === "string" ? selected : null;
   }
-  public registerRoot(path: string): Promise<LibraryRoot> {
-    return this.#call(() => this.#commands.registerLibraryRoot(path));
+  public registerDirectory(path: string): Promise<LibraryDirectory> {
+    return this.#call(() => this.#commands.libraryAddDirectory(path));
   }
-  public setRootEnabled(id: string, enabled: boolean): Promise<LibraryRoot> {
-    return this.#call(() => this.#commands.setLibraryRootEnabled(id, enabled));
+  public setDirectoryEnabled(id: number, enabled: boolean): Promise<LibraryDirectory> {
+    return this.#call(() => this.#commands.librarySetDirectoryEnabled(id, enabled));
   }
-  public async removeRoot(id: string): Promise<void> {
-    await this.#call(() => this.#commands.removeLibraryRoot(id));
+  public async removeDirectory(id: number): Promise<void> {
+    await this.#call(() => this.#commands.libraryRemoveDirectory(id));
   }
   public deleteMissing(): Promise<number> {
-    return this.#call(() => this.#commands.deleteMissingLibraryTracks());
+    return this.#call(() => this.#commands.libraryDeleteMissingTracks());
   }
   public async startScan(): Promise<void> {
-    await this.#call(() => this.#commands.startLibraryScan());
+    await this.#call(() => this.#commands.libraryStartScan());
   }
   public async cancelScan(): Promise<void> {
-    await this.#call(() => this.#commands.cancelLibraryScan());
+    await this.#call(() => this.#commands.libraryCancelScan());
   }
   public async resetAndRescan(): Promise<void> {
-    await this.#call(() => this.#commands.resetLibraryAndRescan());
+    await this.#call(() => this.#commands.libraryReset());
   }
-  public async openLogDirectory(): Promise<void> {
-    await this.#call(() => this.#commands.openLogDirectory());
+  public async appOpenLogDirectory(): Promise<void> {
+    await this.#call(() => this.#commands.appOpenLogDirectory());
   }
-  public tracks(request: Parameters<Commands["listLibraryTracks"]>[0]): Promise<LibraryTrackPage> {
-    return this.#call(() => this.#commands.listLibraryTracks(request));
+  public tracks(request: Parameters<Commands["libraryListTracks"]>[0]): Promise<LibraryTrackPage> {
+    return this.#call(() => this.#commands.libraryListTracks(request));
   }
-  public albums(request: Parameters<Commands["listLibraryAlbums"]>[0]): Promise<LibraryAlbumPage> {
-    return this.#call(() => this.#commands.listLibraryAlbums(request));
+  public albums(request: Parameters<Commands["libraryListAlbums"]>[0]): Promise<LibraryAlbumPage> {
+    return this.#call(() => this.#commands.libraryListAlbums(request));
   }
   public albumArtists(
-    request: Parameters<Commands["listLibraryAlbumArtists"]>[0],
+    request: Parameters<Commands["libraryListArtists"]>[0],
   ): Promise<LibraryAlbumArtistPage> {
-    return this.#call(() => this.#commands.listLibraryAlbumArtists(request));
+    return this.#call(() => this.#commands.libraryListArtists(request));
   }
   public trackIndex(
-    query: Parameters<Commands["listLibraryTrackIndex"]>[0],
-  ): Promise<LibraryIndexBucket[]> {
-    return this.#call(() => this.#commands.listLibraryTrackIndex(query));
+    query: Parameters<Commands["libraryTrackIndex"]>[0],
+  ): Promise<ScrollIndexBucket[]> {
+    return this.#call(() => this.#commands.libraryTrackIndex(query));
   }
   public albumIndex(
-    query: Parameters<Commands["listLibraryAlbumIndex"]>[0],
-  ): Promise<LibraryIndexBucket[]> {
-    return this.#call(() => this.#commands.listLibraryAlbumIndex(query));
+    query: Parameters<Commands["libraryAlbumIndex"]>[0],
+  ): Promise<ScrollIndexBucket[]> {
+    return this.#call(() => this.#commands.libraryAlbumIndex(query));
   }
   public albumArtistIndex(
-    query: Parameters<Commands["listLibraryAlbumArtistIndex"]>[0],
-  ): Promise<LibraryIndexBucket[]> {
-    return this.#call(() => this.#commands.listLibraryAlbumArtistIndex(query));
+    query: Parameters<Commands["libraryArtistIndex"]>[0],
+  ): Promise<ScrollIndexBucket[]> {
+    return this.#call(() => this.#commands.libraryArtistIndex(query));
   }
-  public albumById(
-    albumId: Parameters<Commands["getLibraryAlbum"]>[0],
-  ): Promise<LibraryAlbumDetails> {
-    return this.#call(() => this.#commands.getLibraryAlbum(albumId));
+  public albumById(albumId: Parameters<Commands["libraryAlbum"]>[0]): Promise<AlbumDetails> {
+    return this.#call(() => this.#commands.libraryAlbum(albumId));
   }
   public albumTracksById(
-    albumId: Parameters<Commands["listLibraryAlbumTracks"]>[0]["albumId"],
+    albumId: Parameters<Commands["libraryListAlbumTracks"]>[0]["albumId"],
     cursor: string | null,
   ): Promise<LibraryAlbumTrackPage> {
-    return this.#call(() => this.#commands.listLibraryAlbumTracks({ albumId, cursor }));
+    return this.#call(() => this.#commands.libraryListAlbumTracks({ albumId, cursor }));
   }
-  public artist(
-    artistId: Parameters<Commands["getLibraryArtist"]>[0],
-  ): Promise<LibraryAlbumArtistSummary> {
-    return this.#call(() => this.#commands.getLibraryArtist(artistId));
+  public artist(artistId: Parameters<Commands["libraryArtist"]>[0]): Promise<ArtistRow> {
+    return this.#call(() => this.#commands.libraryArtist(artistId));
   }
   public artistAlbums(
-    request: Parameters<Commands["listLibraryArtistAlbums"]>[0],
+    request: Parameters<Commands["libraryListArtistAlbums"]>[0],
   ): Promise<LibraryAlbumPage> {
-    return this.#call(() => this.#commands.listLibraryArtistAlbums(request));
+    return this.#call(() => this.#commands.libraryListArtistAlbums(request));
   }
-  public trackProperties(trackId: TrackId): Promise<LibraryTrackProperties> {
-    return this.#call(() => this.#commands.getLibraryTrackProperties(trackId));
+  public trackProperties(trackId: TrackId): Promise<TrackProperties> {
+    return this.#call(() => this.#commands.libraryTrackProperties(trackId));
   }
   public async revealTrack(trackId: TrackId): Promise<void> {
-    await this.#call(() => this.#commands.revealLibraryTrack(trackId));
+    await this.#call(() => this.#commands.libraryRevealTrack(trackId));
   }
   public artworkAccent(hash: ArtworkHash): Promise<string | null> {
-    return this.#call(() => this.#commands.getArtworkAccent(hash));
+    return this.#call(() => this.#commands.libraryArtworkAccent(hash));
   }
 
   #call<T>(run: () => Promise<T>): Promise<T> {
@@ -308,7 +304,7 @@ class TauriLyricsClient implements LyricsClient {
 
   public trackLyrics(trackId: TrackId): Promise<LyricsResolution> {
     return callCommand(
-      () => this.#commands.getTrackLyrics(trackId),
+      () => this.#commands.lyricsTrack(trackId),
       (error: LyricsCommandError) => new LyricsError(error),
     );
   }
@@ -323,10 +319,10 @@ class TauriMeterClient implements MeterClient {
 
   public async subscribe(onFrame: (frame: ArrayBuffer) => void) {
     const subscription = await ipc(() =>
-      this.#commands.subscribeMeterFrames(new Channel<ArrayBuffer>(onFrame)),
+      this.#commands.meterStart(new Channel<ArrayBuffer>(onFrame)),
     );
     return async (): Promise<void> => {
-      await ipc(() => this.#commands.unsubscribeMeterFrames(subscription));
+      await ipc(() => this.#commands.meterStop(subscription));
     };
   }
 }

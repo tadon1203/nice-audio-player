@@ -9,8 +9,8 @@
 //! order is uniform, so each phase is a plain index range. A page continues into the next phase
 //! when the current one runs out.
 
-use super::super::{error::StoreError, models::LibrarySortDirection};
-use crate::diagnostics::logged;
+use super::super::{error::StoreError, models::SortDirection};
+use crate::errors::logged;
 use rusqlite::{
     Connection, Row, ToSql, params_from_iter,
     types::{FromSql, FromSqlError, FromSqlResult, ToSqlOutput, Value, ValueRef},
@@ -39,7 +39,7 @@ pub(super) struct Scope {
     /// The Album Artist or album the list is of, empty for the whole Library.
     owner: String,
     sort: String,
-    direction: LibrarySortDirection,
+    direction: SortDirection,
 }
 
 impl Scope {
@@ -48,7 +48,7 @@ impl Scope {
         search: &str,
         owner: &str,
         sort: &impl Serialize,
-        direction: LibrarySortDirection,
+        direction: SortDirection,
     ) -> Self {
         Self {
             view,
@@ -113,14 +113,14 @@ impl Phase {
 
 pub(super) struct Ordering {
     pub phases: Vec<Phase>,
-    pub direction: LibrarySortDirection,
+    pub direction: SortDirection,
 }
 
 impl Ordering {
     fn sql_direction(&self) -> &'static str {
         match self.direction {
-            LibrarySortDirection::Ascending => "ASC",
-            LibrarySortDirection::Descending => "DESC",
+            SortDirection::Ascending => "ASC",
+            SortDirection::Descending => "DESC",
         }
     }
 
@@ -337,8 +337,8 @@ impl PagedQuery {
                 .collect::<Vec<_>>()
                 .join(", ");
             let comparison = match self.ordering.direction {
-                LibrarySortDirection::Ascending => ">",
-                LibrarySortDirection::Descending => "<",
+                SortDirection::Ascending => ">",
+                SortDirection::Descending => "<",
             };
             condition = format!("{condition} AND ({terms}) {comparison} ({marks})");
         }
@@ -384,7 +384,7 @@ impl PagedQuery {
 mod tests {
     use super::*;
 
-    fn query(direction: LibrarySortDirection) -> PagedQuery {
+    fn query(direction: SortDirection) -> PagedQuery {
         PagedQuery {
             scope: Scope::new(View::Tracks, "", "", &"title", direction),
             ordering: Ordering {
@@ -442,10 +442,7 @@ mod tests {
     #[test]
     fn pages_cover_every_row_once_in_both_directions_with_unknown_last() {
         let connection = items();
-        for direction in [
-            LibrarySortDirection::Ascending,
-            LibrarySortDirection::Descending,
-        ] {
+        for direction in [SortDirection::Ascending, SortDirection::Descending] {
             let ids = all_ids(&query(direction), &connection);
 
             let mut sorted = ids.clone();
@@ -464,7 +461,7 @@ mod tests {
     #[test]
     fn a_row_written_between_pages_neither_repeats_nor_skips_one() {
         let connection = items();
-        let query = query(LibrarySortDirection::Ascending);
+        let query = query(SortDirection::Ascending);
         let first = query
             .fetch(&connection, None, 0, |row| row.get::<_, i64>(0))
             .unwrap();
@@ -509,14 +506,14 @@ mod tests {
     #[test]
     fn a_cursor_is_refused_by_any_list_it_does_not_belong_to() {
         let connection = items();
-        let ascending = query(LibrarySortDirection::Ascending);
+        let ascending = query(SortDirection::Ascending);
         let cursor = ascending
             .fetch(&connection, None, 0, |row| row.get::<_, i64>(0))
             .unwrap()
             .next_cursor
             .unwrap();
 
-        let descending = query(LibrarySortDirection::Descending);
+        let descending = query(SortDirection::Descending);
         for bad in [cursor.as_str(), "", "not json", r#"{"version":1}"#] {
             let Err(error) =
                 descending.fetch(&connection, Some(bad), 0, |row| row.get::<_, i64>(0))
@@ -551,10 +548,7 @@ mod skip_tests {
                 )
                 .unwrap();
         }
-        for direction in [
-            LibrarySortDirection::Ascending,
-            LibrarySortDirection::Descending,
-        ] {
+        for direction in [SortDirection::Ascending, SortDirection::Descending] {
             let query = PagedQuery {
                 scope: Scope::new(View::Tracks, "", "", &"name", direction),
                 ordering: Ordering {

@@ -1,7 +1,7 @@
 //! Metadata is deliberately best-effort: it can never change Symphonia playability.
 use std::borrow::Cow;
 
-use crate::diagnostics::logged;
+use crate::errors::logged;
 use crate::library::artwork::ArtworkMimeType;
 use lofty::{
     config::ParseOptions,

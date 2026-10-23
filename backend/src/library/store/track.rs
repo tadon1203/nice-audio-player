@@ -6,9 +6,7 @@ use crate::library::{
     artwork::{ArtworkMimeType, ArtworkRef},
     error::StoreError,
     location::TrackLocation,
-    models::{
-        ArtistRef, LibraryTrackProperties, LibraryTrackSummary, TrackAlbum, TrackCore, TrackState,
-    },
+    models::{ArtistRef, TrackAlbum, TrackCore, TrackProperties, TrackRow, TrackState},
     status::{Availability, InspectionStatus},
 };
 use rusqlite::{OptionalExtension, Row, params};
@@ -75,7 +73,7 @@ pub(super) fn track_album(
     })
 }
 
-pub(super) fn summary_from_row(row: &Row<'_>) -> rusqlite::Result<LibraryTrackSummary> {
+pub(super) fn summary_from_row(row: &Row<'_>) -> rusqlite::Result<TrackRow> {
     let title: String = row.get(3)?;
     let duration: Option<i64> = row.get(5)?;
     let state = track_state(row.get(11)?, row.get(12)?);
@@ -87,7 +85,7 @@ pub(super) fn summary_from_row(row: &Row<'_>) -> rusqlite::Result<LibraryTrackSu
             .and_then(|hex| ArtistId::from_hex(&hex)),
         row.get(4)?,
     );
-    Ok(LibraryTrackSummary {
+    Ok(TrackRow {
         core: TrackCore {
             id: track_id_column(row, 0)?,
             title: row.get(1)?,
@@ -107,7 +105,7 @@ impl LibraryStore {
     /// Where the track's file is. The one query every consumer of a track's path goes through.
     pub(crate) fn track_location(&self, id: TrackId) -> Result<TrackLocation, StoreError> {
         let connection = self.read()?;
-        let (root, relative, availability): (String, String, Availability) = connection
+        let (directory, relative, availability): (String, String, Availability) = connection
             .query_row(
                 "SELECT r.path, f.relative_path, f.availability
                  FROM tracks t
@@ -120,17 +118,14 @@ impl LibraryStore {
             .optional()?
             .ok_or(StoreError::TrackNotFound)?;
         Ok(TrackLocation::new(
-            &root,
+            &directory,
             &relative,
             availability == Availability::Available,
         ))
     }
 
     /// Tags, audio format and the file's path, or `TrackNotFound` for an unknown track.
-    pub(crate) fn track_properties(
-        &self,
-        id: TrackId,
-    ) -> Result<LibraryTrackProperties, StoreError> {
+    pub(crate) fn track_properties(&self, id: TrackId) -> Result<TrackProperties, StoreError> {
         let location = self.track_location(id)?;
         let path = location.path()?.to_string_lossy().into_owned();
         let connection = self.read()?;
@@ -151,7 +146,7 @@ impl LibraryStore {
                             .get::<_, Option<i64>>(index)?
                             .and_then(|value| u32::try_from(value).ok()))
                     };
-                    Ok(LibraryTrackProperties {
+                    Ok(TrackProperties {
                         id,
                         path: path.clone(),
                         file_name: row.get(0)?,

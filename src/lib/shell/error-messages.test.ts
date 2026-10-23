@@ -4,8 +4,8 @@ import { ErrorMessages } from "./error-messages";
 
 describe("ErrorMessages.of", () => {
   it("picks the library table for a library error", () => {
-    expect(ErrorMessages.of(new LibraryError({ code: "duplicateRoot" }))).toBe(
-      "That folder is already in the library.",
+    expect(ErrorMessages.of(new LibraryError({ code: "duplicateDirectory" }))).toBe(
+      "That directory is already in the library.",
     );
   });
 

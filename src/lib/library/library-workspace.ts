@@ -1,4 +1,4 @@
-import type { LibraryIndexBucket } from "#lib/native";
+import type { ScrollIndexBucket } from "#lib/native";
 import type { LibraryViewState } from "./library-catalog.svelte";
 
 export interface LibraryPresentationMeta {
@@ -29,5 +29,5 @@ export interface WorkspaceCatalog<Item> {
   fetchNextPage: () => Promise<unknown>;
   refetch: () => Promise<unknown>;
   /** The scroll index of the list's order; empty when the sort has none. */
-  index: readonly LibraryIndexBucket[];
+  index: readonly ScrollIndexBucket[];
 }

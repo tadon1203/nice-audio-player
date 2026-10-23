@@ -1,24 +1,14 @@
-import type {
-  LibraryAlbumTrackSummary,
-  LibraryTrackSortKey,
-  LibraryTrackSummary,
-} from "#lib/native";
+import type { AlbumTrackRow, TrackSortKey, TrackRow } from "#lib/native";
 import { AudioFormatText } from "#lib/utils/audio-format-text";
 import { cn } from "#lib/utils/cn.js";
 import { DurationFormat } from "#lib/utils/duration-format";
 import { MISSING } from "#lib/utils/missing";
 
 /** A track row shared by the Library and Album layouts; both DTOs satisfy it directly. */
-export type TrackTableRow = Pick<
-  LibraryTrackSummary,
-  "id" | "title" | "artist" | "durationMs" | "state"
-> &
+export type TrackTableRow = Pick<TrackRow, "id" | "title" | "artist" | "durationMs" | "state"> &
   Partial<
-    Pick<LibraryTrackSummary, "album"> &
-      Pick<
-        LibraryAlbumTrackSummary,
-        "trackNumber" | "discNumber" | "fileFormat" | "bitDepth" | "sampleRate"
-      >
+    Pick<TrackRow, "album"> &
+      Pick<AlbumTrackRow, "trackNumber" | "discNumber" | "fileFormat" | "bitDepth" | "sampleRate">
   >;
 
 /** The Library lists tracks across albums; the Album layout is one album's tracks in order. */
@@ -37,7 +27,7 @@ interface ColumnBase {
   /** Tailwind width class for the `<col>`; empty lets the column take the remaining width. */
   width: string;
   hideBelow?: TrackTableBreakpoint;
-  sortKey?: LibraryTrackSortKey;
+  sortKey?: TrackSortKey;
 }
 
 /** A column that shows a plain value; `text` returns `null` when the value is unknown. */

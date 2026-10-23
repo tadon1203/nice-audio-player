@@ -13,9 +13,8 @@ use std::{
 
 use backend::{
     app::BackendApp,
-    diagnostics::log_failed,
-    messages::{BackendMessage, MessageSink, Occurrence, StateTopic},
-    sync,
+    errors::log_failed,
+    messages::{BackendMessage, MessageListener, Occurrence, StateTopic},
 };
 use tauri::ipc::Channel;
 
@@ -33,7 +32,7 @@ pub(crate) struct HostMessageSink {
     sender: Sender<Signal>,
 }
 
-impl MessageSink for HostMessageSink {
+impl MessageListener for HostMessageSink {
     fn state_changed(&self, topic: StateTopic) {
         log_failed(
             self.sender.send(Signal::State(topic)),
@@ -73,7 +72,7 @@ impl Subscriber {
     }
 
     /// Without a Renderer on the channel the message is dropped, which is not an error: the next
-    /// `connect` replaces the channel.
+    /// `app_connect` replaces the channel.
     fn send(&self, message: BackendMessage) {
         let channel = self.channel.lock();
         if let Some(channel) = channel.as_ref()
@@ -147,7 +146,7 @@ fn batch_messages(
 mod tests {
     use super::*;
     use backend::{
-        dto::PlaybackFailureCode,
+        app::PlaybackFailureCode,
         messages::{StateMessage, StateValue},
     };
 

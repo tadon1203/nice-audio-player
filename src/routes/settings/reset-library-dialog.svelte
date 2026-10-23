@@ -31,8 +31,8 @@
     </AlertDialogHeader>
     <p class="text-sm leading-5 text-muted-foreground">
       The library database is moved to a backup file and recreated, then the app restarts and
-      rescans your folders. Your audio files and settings are not touched; only the library index is
-      rebuilt.
+      rescans your directories. Your audio files and settings are not touched; only the library
+      index is rebuilt.
     </p>
     <AlertDialogFooter>
       <AlertDialogCancel>Cancel</AlertDialogCancel>

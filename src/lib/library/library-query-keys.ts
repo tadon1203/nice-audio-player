@@ -2,8 +2,8 @@ import type {
   AlbumId,
   ArtistId,
   ArtworkHash,
-  LibraryArtistAlbumSortKey,
-  LibrarySortDirection,
+  ArtistAlbumSortKey,
+  SortDirection,
   TrackId,
 } from "#lib/native";
 import type { LibraryCatalogRequest } from "./catalog-repository";
@@ -11,8 +11,8 @@ import type { LibraryCatalogRequest } from "./catalog-repository";
 /** The arguments of an Album Artist's album list: which artist, and how its albums are ordered. */
 export interface ArtistAlbumsArguments {
   readonly artistId: ArtistId;
-  readonly sortKey: LibraryArtistAlbumSortKey;
-  readonly direction: LibrarySortDirection;
+  readonly sortKey: ArtistAlbumSortKey;
+  readonly direction: SortDirection;
 }
 
 /** Where `LibraryQueryKeys.catalog` puts the request: after `data` and "catalog". */
@@ -26,7 +26,7 @@ export class LibraryQueryKeys {
   public static readonly data = ["library", "data"] as const;
   public static readonly catalogs = [...LibraryQueryKeys.data, "catalog"] as const;
   public static readonly status = ["library", "status"] as const;
-  public static readonly roots = [...LibraryQueryKeys.data, "roots"] as const;
+  public static readonly directories = [...LibraryQueryKeys.data, "directories"] as const;
   /** The prefix of every Album Artist's album list, by ID, for reads across all of them. */
   public static readonly artistAlbumsPrefix = [
     ...LibraryQueryKeys.data,

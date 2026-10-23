@@ -1,4 +1,4 @@
-use backend::dto::{Appearance, AppearancePatch, Versioned};
+use backend::app::{Appearance, AppearancePatch, Revisioned};
 
 use crate::AppState;
 
@@ -10,9 +10,9 @@ use crate::AppState;
     clippy::needless_pass_by_value,
     reason = "Tauri passes State by value, and the patch is only read"
 )]
-pub(crate) fn update_appearance(
+pub(crate) fn appearance_update(
     patch: AppearancePatch,
     state: tauri::State<'_, AppState>,
-) -> Versioned<Appearance> {
-    state.backend.update_appearance(&patch)
+) -> Revisioned<Appearance> {
+    state.backend.appearance_update(&patch)
 }

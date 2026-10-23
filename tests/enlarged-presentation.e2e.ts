@@ -6,7 +6,7 @@ for (const width of [640, 1360]) {
     page,
     native,
   }) => {
-    native.respond("setAudioOutputSelection", async ({ selection }) => {
+    native.respond("playerSetOutputSelection", async ({ selection }) => {
       const value = {
         ...stoppedPlayback,
         base: { ...stoppedPlayback.base, outputSelection: selection },

@@ -6,8 +6,8 @@ use super::{
     catalog::{ALBUM_ORDER, track_filter, track_ordering},
     track::{artwork_ref, non_blank, track_album, track_state},
 };
-use crate::diagnostics::logged;
-use crate::errors::CommonError;
+use crate::errors::CommandError;
+use crate::errors::logged;
 use crate::ids::{AlbumId, ArtistId, TrackId, album_id_column, track_id_column};
 use crate::library::{
     artwork::ArtworkRef,
@@ -90,7 +90,7 @@ pub enum PlaybackSourceError {
 /// play. A missing album is only ever a `Source` reason, so `Common` cannot carry it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PlaybackLookupError {
-    Common(CommonError),
+    Common(CommandError),
     Source(PlaybackSourceError),
 }
 
@@ -139,13 +139,17 @@ const PLAYBACK_COLUMNS: &str = "t.id, r.path, f.relative_path, f.availability, f
 const PLAYBACK_FROM: &str = "FROM track_source_metadata m JOIN tracks t ON t.id = m.track_id JOIN library_files f ON f.id = t.file_id JOIN library_roots r ON r.id = f.root_id LEFT JOIN artwork_assets a ON a.id = m.artwork_id LEFT JOIN albums al ON al.id = m.album_id";
 
 fn playback_row(row: &Row<'_>) -> rusqlite::Result<PlaybackRow> {
-    let root: String = row.get(1)?;
+    let directory: String = row.get(1)?;
     let relative: String = row.get(2)?;
     let availability: Availability = row.get(3)?;
     let inspection: InspectionStatus = row.get(4)?;
     Ok(PlaybackRow {
         track_id: track_id_column(row, 0)?,
-        location: TrackLocation::new(&root, &relative, availability == Availability::Available),
+        location: TrackLocation::new(
+            &directory,
+            &relative,
+            availability == Availability::Available,
+        ),
         state: track_state(availability, inspection),
         title: row.get(5)?,
         artist: row.get(6)?,

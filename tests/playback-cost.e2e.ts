@@ -81,7 +81,7 @@ test("Now Playing stays cheap while a track plays", async ({ page, native, playe
     route.fulfill({ contentType: "image/png", body: png(600) }),
   );
   await page.goto("/library/tracks");
-  native.respond("getTrackLyrics", lyrics);
+  native.respond("lyricsTrack", lyrics);
   await page.getByRole("button", { name: "Play Test track" }).click();
   const dock = page.getByRole("contentinfo", { name: "Playback controls" });
   await dock.getByRole("button", { name: "Pause", exact: true }).waitFor();

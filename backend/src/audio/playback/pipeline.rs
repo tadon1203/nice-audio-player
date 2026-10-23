@@ -16,7 +16,7 @@ use crate::audio::output::{
 use crate::audio::output_processing::{OutputPcmProcessor, OutputProcessingPlan};
 use crate::audio::pcm_queue::{PcmConsumer, PcmProducer};
 use crate::audio::timebase::{millis_to_frame, rescale_frame};
-use crate::diagnostics::logged;
+use crate::errors::logged;
 
 /// The queue a seek or the next track plays through: the stream already playing takes it over.
 pub(super) type QueueOutput = PcmConsumer;

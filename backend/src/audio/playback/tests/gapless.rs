@@ -172,7 +172,7 @@ fn repeat_one_discards_the_prefetch_and_repeats_on_the_same_stream() {
 
     harness
         .call(|reply| PlaybackCommand::SetRepeatMode {
-            mode: PlaybackRepeatMode::One,
+            mode: RepeatMode::One,
             reply,
         })
         .unwrap();
@@ -275,10 +275,7 @@ fn pausing_in_the_handover_window_holds_the_next_track_back() {
     harness.deliver_pending();
     harness.pause().unwrap();
     harness.tick();
-    assert!(matches!(
-        harness.snapshot(),
-        PlaybackSnapshot::Paused { .. }
-    ));
+    assert!(matches!(harness.snapshot(), PlaybackState::Paused { .. }));
 
     harness.resume().unwrap();
     harness.tick();

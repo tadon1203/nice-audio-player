@@ -1,23 +1,23 @@
 //! Rendering the transport and queue into snapshots and telling listeners.
 
-use super::{ActiveSession, PlayableItem, previous_restarts_track};
 use super::{
     AudioOutputDeviceIdentity, PlaybackQueue, PlaybackServiceError, PlaybackWorker, QueueError,
     Transport,
 };
+use super::{CurrentPlayback, PlayableItem, previous_restarts_track};
 use super::{
-    PlaybackPosition, PlaybackProcessingInfo, PlaybackQueueSnapshot, PlaybackSnapshot, SnapshotBase,
+    PlaybackControls, PlaybackPosition, PlaybackProcessingInfo, PlaybackState, QueueState,
 };
 use crate::audio::playback::session::Loaded;
-use crate::diagnostics::logged;
-use crate::messages::{StateTopic, Versioned};
+use crate::errors::logged;
+use crate::messages::{Revisioned, StateTopic};
 
 impl PlaybackWorker {
     /// What listeners see, drawn from the transport, the queue and the volume.
-    pub(super) fn render(&self) -> PlaybackSnapshot {
-        let mut base = SnapshotBase::new(self.volume_state, self.output_selection.clone());
+    pub(super) fn render(&self) -> PlaybackState {
+        let mut base = PlaybackControls::new(self.volume_state, self.output_selection.clone());
         match &self.transport {
-            Transport::Idle | Transport::Loading(_) => PlaybackSnapshot::Stopped {
+            Transport::Idle | Transport::Loading(_) => PlaybackState::Stopped {
                 base,
                 item: self.last_item.as_ref().map(PlayableItem::to_playback_item),
             },
@@ -26,15 +26,15 @@ impl PlaybackWorker {
                 base.can_go_next = self.queue.can_go_next();
                 let session = self.render_session(loaded);
                 if loaded.paused {
-                    PlaybackSnapshot::Paused { base, session }
+                    PlaybackState::Paused { base, session }
                 } else {
-                    PlaybackSnapshot::Playing { base, session }
+                    PlaybackState::Playing { base, session }
                 }
             }
             Transport::Failed { id, code, skipping } => {
                 base.can_go_previous = self.queue.can_go_previous();
                 base.can_go_next = self.queue.can_go_next();
-                PlaybackSnapshot::Failed {
+                PlaybackState::Failed {
                     base,
                     item: self
                         .queue
@@ -43,17 +43,17 @@ impl PlaybackWorker {
                         .or_else(|| self.last_item.clone())
                         .map(|item| item.to_playback_item()),
                     playback_id: *id,
-                    error: code.clone(),
+                    error: *code,
                     skipping: *skipping,
                 }
             }
         }
     }
 
-    pub(super) fn render_session(&self, loaded: &Loaded) -> ActiveSession {
+    pub(super) fn render_session(&self, loaded: &Loaded) -> CurrentPlayback {
         let config = &loaded.output.config;
         let processing = PlaybackProcessingInfo::from_plan(config.processing_plan);
-        ActiveSession {
+        CurrentPlayback {
             item: loaded.item.to_playback_item(),
             started_by: loaded.started_by,
             playback_id: loaded.id,
@@ -80,8 +80,8 @@ impl PlaybackWorker {
 
     /// The transport as it stands, with the revision of its topic. A command that changes
     /// nothing answers with it.
-    pub(super) fn playback_versioned(&self) -> Versioned<PlaybackSnapshot> {
-        Versioned {
+    pub(super) fn playback_versioned(&self) -> Revisioned<PlaybackState> {
+        Revisioned {
             revision: self.revision,
             value: self.render(),
         }
@@ -89,7 +89,7 @@ impl PlaybackWorker {
 
     /// Renders the transport as a new revision and tells listeners. The snapshot carries the
     /// newest position too, so a listener that joins here starts from the right place.
-    pub(super) fn publish_state(&mut self) -> Versioned<PlaybackSnapshot> {
+    pub(super) fn publish_state(&mut self) -> Revisioned<PlaybackState> {
         if let Transport::Loaded(loaded) = &mut self.transport
             && !loaded.paused
         {
@@ -97,7 +97,7 @@ impl PlaybackWorker {
         }
         self.revision = self.revision.saturating_add(1);
         let published = self.playback_versioned();
-        self.store_position(published.value.session().map(ActiveSession::position));
+        self.store_position(published.value.session().map(CurrentPlayback::position));
         *self.snapshot.write() = published.clone();
         self.messages.state_changed(StateTopic::Playback);
         published
@@ -132,29 +132,25 @@ impl PlaybackWorker {
         self.snapshot.read().value.base().can_go_previous
     }
 
-    pub(super) fn publish_queue(&mut self) -> Versioned<PlaybackQueueSnapshot> {
+    pub(super) fn publish_queue(&mut self) -> Revisioned<QueueState> {
         self.prune_unavailable();
         self.next_queue_revision = self.next_queue_revision.saturating_add(1);
-        let published = Versioned {
+        let published = Revisioned {
             revision: self.next_queue_revision,
-            value: PlaybackQueueSnapshot::of(
-                &self.queue,
-                &self.tracks,
-                self.previous_queue.is_some(),
-            ),
+            value: QueueState::of(&self.queue, &self.tracks, self.previous_queue.is_some()),
         };
         *self.queue_snapshot.write() = published.clone();
         self.messages.state_changed(StateTopic::Queue);
         published
     }
 
-    pub(super) fn queue_snapshot(&self) -> Versioned<PlaybackQueueSnapshot> {
+    pub(super) fn queue_snapshot(&self) -> Revisioned<QueueState> {
         self.queue_snapshot.read().clone()
     }
 
     /// Publishes a queue change, and refreshes the transport so previous/next availability
     /// follows it even while paused.
-    pub(super) fn queue_changed(&mut self, changed: bool) -> Versioned<PlaybackQueueSnapshot> {
+    pub(super) fn queue_changed(&mut self, changed: bool) -> Revisioned<QueueState> {
         if !changed {
             return self.queue_snapshot();
         }

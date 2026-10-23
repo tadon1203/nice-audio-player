@@ -2,13 +2,13 @@ import type {
   Appearance as AppearanceValue,
   BackendMessage,
   InitialState,
-  LibraryScanSnapshot,
+  ScanState,
   PlaybackPosition,
-  PlaybackQueueSnapshot,
-  PlaybackSnapshot,
+  QueueState,
+  PlaybackState,
   PlaybackWaveform,
   SessionClient,
-  Versioned,
+  Revisioned,
 } from "#lib/native";
 import { countE2e } from "./e2e-counts";
 
@@ -17,13 +17,13 @@ export type ConnectionState = "connecting" | "ready" | "failed";
 /** Where `NativeSession` sends each value. Method types only, so tests pass small fakes. */
 export interface SessionTargets {
   readonly playback: {
-    acceptPlayback(incoming: Versioned<PlaybackSnapshot>): void;
-    acceptQueue(incoming: Versioned<PlaybackQueueSnapshot>): void;
-    acceptWaveform(incoming: Versioned<PlaybackWaveform | null>): void;
+    acceptPlayback(incoming: Revisioned<PlaybackState>): void;
+    acceptQueue(incoming: Revisioned<QueueState>): void;
+    acceptWaveform(incoming: Revisioned<PlaybackWaveform | null>): void;
     acceptPosition(position: PlaybackPosition): void;
   };
-  readonly appearance: { accept(incoming: Versioned<AppearanceValue>): void };
-  readonly scan: { accept(incoming: Versioned<LibraryScanSnapshot>): void };
+  readonly appearance: { accept(incoming: Revisioned<AppearanceValue>): void };
+  readonly scan: { accept(incoming: Revisioned<ScanState>): void };
   readonly notices: { noteSkipped(title: string | null): void };
 }
 

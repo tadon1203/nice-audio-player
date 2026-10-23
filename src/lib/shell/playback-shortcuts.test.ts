@@ -1,17 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
-import type { PlaybackClient, PlaybackSnapshot, Versioned } from "#lib/native";
+import type { PlaybackClient, PlaybackState, Revisioned } from "#lib/native";
 import { PlaybackClock } from "#lib/playback/playback-clock.svelte";
 import { Playback } from "#lib/playback/playback.svelte";
 import { NoticeCenter } from "./notice-center.svelte";
 import { PlaybackShortcuts } from "./playback-shortcuts";
 import { UserActionRunner } from "./user-action-runner.svelte";
 
-const playing = (positionMs: number): Versioned<PlaybackSnapshot> => ({
+const playing = (positionMs: number): Revisioned<PlaybackState> => ({
   revision: 1,
   value: playingValue(positionMs),
 });
 
-const playingValue = (positionMs: number): PlaybackSnapshot => ({
+const playingValue = (positionMs: number): PlaybackState => ({
   status: "playing",
   base: {
     volume: 0.5,
@@ -57,8 +57,8 @@ describe("global seek shortcut", () => {
       requestFrame: (): number => 0,
       cancelFrame: (): undefined => undefined,
     });
-    const seekPlayback = vi.fn(async (positionMs: number) => playing(positionMs));
-    const playback = new Playback({ seek: seekPlayback } as unknown as PlaybackClient, clock);
+    const playerSeek = vi.fn(async (positionMs: number) => playing(positionMs));
+    const playback = new Playback({ seek: playerSeek } as unknown as PlaybackClient, clock);
     playback.acceptPlayback(playing(10_000));
     now = 1_000 + 250.37;
     expect(Number.isInteger(clock.estimate())).toBe(false);
@@ -73,9 +73,9 @@ describe("global seek shortcut", () => {
         queuePanel: { isOpen: false, toggle: vi.fn() },
       },
     );
-    await vi.waitFor(() => expect(seekPlayback).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(playerSeek).toHaveBeenCalledTimes(1));
 
-    const [sent] = seekPlayback.mock.calls[0]!;
+    const [sent] = playerSeek.mock.calls[0]!;
     expect(Number.isInteger(sent)).toBe(true);
     expect(sent).toBeGreaterThan(10_000);
     expect(notices.at("dock")).toBeNull();

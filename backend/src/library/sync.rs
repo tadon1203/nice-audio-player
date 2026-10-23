@@ -1,4 +1,4 @@
-//! The write side of the Library: one actor that owns the folders, the file watchers and the
+//! The write side of the Library: one actor that owns the directories, the file watchers and the
 //! scanner thread. Everything that can change what the Library holds reaches it as an input on one
 //! channel (a listener's command, a watcher seeing a change, the scanner finishing), and it blocks
 //! on that channel until the next input or the next deadline its state asks for, so it never polls.
@@ -9,15 +9,16 @@ mod step;
 
 use super::{
     database::Database,
+    directories,
     error::{LibraryCommandError, StoreError},
     maintenance,
-    models::{LibraryRoot, LibraryScanSnapshot, LibraryScanState},
-    roots, scanner, watcher,
+    models::{LibraryDirectory, ScanState, ScanStatus},
+    scanner, watcher,
 };
-use crate::diagnostics::{log_failed, logged};
-use crate::errors::CommonError;
-use crate::ids::FolderId;
-use crate::messages::{Notifier, Versioned};
+use crate::errors::CommandError;
+use crate::errors::{log_failed, logged};
+use crate::ids::DirectoryId;
+use crate::messages::{Notifier, Revisioned};
 use log::{debug, error, info, warn};
 use notify::RecommendedWatcher;
 use parking_lot::Mutex;
@@ -31,7 +32,7 @@ use std::{
     thread::{self, JoinHandle},
     time::Instant,
 };
-use step::{Effect, Input, RootNumber, ScanOutcome, ScanTarget, State};
+use step::{DirectoryNumber, Effect, Input, ScanOutcome, ScanTarget, State};
 
 type Reply<T> = SyncSender<Result<T, LibraryCommandError>>;
 
@@ -44,9 +45,9 @@ fn respond<T>(reply: &Reply<T>, result: Result<T, LibraryCommandError>) {
 }
 
 enum Command {
-    Register(String, Reply<LibraryRoot>),
-    Enable(FolderId, bool, Reply<LibraryRoot>),
-    Remove(FolderId, Reply<()>),
+    Register(String, Reply<LibraryDirectory>),
+    Enable(DirectoryId, bool, Reply<LibraryDirectory>),
+    Remove(DirectoryId, Reply<()>),
     DeleteMissing(Reply<u64>),
     Start(Reply<()>),
     Cancel(Reply<()>),
@@ -67,7 +68,7 @@ pub(crate) struct LibrarySync {
 impl LibrarySync {
     pub(crate) fn start(
         database: Database,
-        scan: Arc<Mutex<Versioned<LibraryScanSnapshot>>>,
+        scan: Arc<Mutex<Revisioned<ScanState>>>,
         notify: Notifier,
     ) -> Self {
         let (messages, receiver) = mpsc::channel();
@@ -95,7 +96,7 @@ impl LibrarySync {
     fn call<T>(&self, command: impl FnOnce(Reply<T>) -> Command) -> Result<T, LibraryCommandError> {
         let (reply, answer) = mpsc::sync_channel(1);
         let task_failed = || LibraryCommandError::Common {
-            error: CommonError::TaskFailed,
+            error: CommandError::TaskFailed,
         };
         self.messages
             .send(Message::Command(command(reply)))
@@ -105,19 +106,22 @@ impl LibrarySync {
             .map_err(logged(task_failed(), "library.sync.reply_recv_failed"))?
     }
 
-    pub(crate) fn register_root(&self, path: String) -> Result<LibraryRoot, LibraryCommandError> {
+    pub(crate) fn register_directory(
+        &self,
+        path: String,
+    ) -> Result<LibraryDirectory, LibraryCommandError> {
         self.call(|reply| Command::Register(path, reply))
     }
 
-    pub(crate) fn set_root_enabled(
+    pub(crate) fn set_directory_enabled(
         &self,
-        id: FolderId,
+        id: DirectoryId,
         enabled: bool,
-    ) -> Result<LibraryRoot, LibraryCommandError> {
+    ) -> Result<LibraryDirectory, LibraryCommandError> {
         self.call(|reply| Command::Enable(id, enabled, reply))
     }
 
-    pub(crate) fn remove_root(&self, id: FolderId) -> Result<(), LibraryCommandError> {
+    pub(crate) fn remove_directory(&self, id: DirectoryId) -> Result<(), LibraryCommandError> {
         self.call(|reply| Command::Remove(id, reply))
     }
 
@@ -156,13 +160,13 @@ impl Drop for LibrarySync {
 
 struct Actor {
     database: Database,
-    scan: Arc<Mutex<Versioned<LibraryScanSnapshot>>>,
+    scan: Arc<Mutex<Revisioned<ScanState>>>,
     notify: Notifier,
     /// For the inputs the watchers and the scanner thread send back.
     messages: Sender<Message>,
     cancel: Arc<AtomicBool>,
     state: State,
-    watchers: HashMap<RootNumber, RecommendedWatcher>,
+    watchers: HashMap<DirectoryNumber, RecommendedWatcher>,
     scanner: Option<JoinHandle<()>>,
     /// Inputs the actor's own effects produced, processed before it waits again.
     queue: VecDeque<Input>,
@@ -171,9 +175,9 @@ struct Actor {
 impl Actor {
     fn run(mut self, receiver: &Receiver<Message>) {
         let enabled = self
-            .enabled_roots_or_log()
+            .enabled_directories_or_log()
             .iter()
-            .map(root_number)
+            .map(directory_number)
             .collect();
         self.feed(Input::Started { enabled });
         loop {
@@ -235,16 +239,16 @@ impl Actor {
     fn command(&mut self, command: Command) {
         match command {
             Command::Register(path, reply) => {
-                let result = self.while_idle(|actor| roots::register(&actor.database, &path));
-                if let Some(id) = result.as_ref().ok().map(root_number) {
+                let result = self.while_idle(|actor| directories::register(&actor.database, &path));
+                if let Some(id) = result.as_ref().ok().map(directory_number) {
                     self.feed(Input::Registered(id));
                 }
                 respond(&reply, result);
             }
             Command::Enable(id, enabled, reply) => {
                 let result =
-                    self.while_idle(|actor| roots::set_enabled(&actor.database, id, enabled));
-                if let Some(id) = result.as_ref().ok().map(root_number) {
+                    self.while_idle(|actor| directories::set_enabled(&actor.database, id, enabled));
+                if let Some(id) = result.as_ref().ok().map(directory_number) {
                     self.feed(if enabled {
                         Input::Enabled(id)
                     } else {
@@ -254,14 +258,14 @@ impl Actor {
                 respond(&reply, result);
             }
             Command::Remove(id, reply) => {
-                let result = self.while_idle(|actor| roots::remove(&actor.database, id));
+                let result = self.while_idle(|actor| directories::remove(&actor.database, id));
                 if result.is_ok() {
                     self.feed(Input::Removed(id.rowid()));
                 }
                 respond(&reply, result);
             }
             Command::DeleteMissing(reply) => {
-                let result = self.while_idle(|actor| roots::delete_missing(&actor.database));
+                let result = self.while_idle(|actor| directories::delete_missing(&actor.database));
                 if result.is_ok() {
                     self.feed(Input::MissingDeleted);
                 }
@@ -271,15 +275,16 @@ impl Actor {
                 let result = if self.state.scanning() {
                     Err(LibraryCommandError::ScanAlreadyRunning)
                 } else {
-                    self.enabled_roots().and_then(|roots| {
-                        if roots.is_empty() {
-                            Err(LibraryCommandError::NoEnabledRoots)
+                    self.enabled_directories().and_then(|directories| {
+                        if directories.is_empty() {
+                            Err(LibraryCommandError::NoEnabledDirectories)
                         } else {
-                            Ok(roots.iter().map(root_number).collect())
+                            Ok(directories.iter().map(directory_number).collect())
                         }
                     })
                 };
-                let result = result.map(|roots| self.feed(Input::ScanRequested { roots }));
+                let result =
+                    result.map(|directories| self.feed(Input::ScanRequested { directories }));
                 respond(&reply, result);
             }
             Command::Cancel(reply) => {
@@ -294,7 +299,7 @@ impl Actor {
         }
     }
 
-    /// Folders cannot change under a running scan.
+    /// Directories cannot change under a running scan.
     fn while_idle<T>(
         &mut self,
         change: impl FnOnce(&mut Self) -> Result<T, LibraryCommandError>,
@@ -305,52 +310,52 @@ impl Actor {
         change(self)
     }
 
-    fn enabled_roots(&self) -> Result<Vec<LibraryRoot>, LibraryCommandError> {
+    fn enabled_directories(&self) -> Result<Vec<LibraryDirectory>, LibraryCommandError> {
         let connection = self.database.read().map_err(StoreError::from)?;
-        Ok(roots::list(&connection)?
+        Ok(directories::list(&connection)?
             .into_iter()
-            .filter(|root| root.enabled)
+            .filter(|directory| directory.enabled)
             .collect())
     }
 
-    /// For callers that carry on without folders: a failed read is logged, not mistaken for
-    /// "no folders".
-    fn enabled_roots_or_log(&self) -> Vec<LibraryRoot> {
-        self.enabled_roots().unwrap_or_else(|error| {
-            error!("library.roots.read_failed error={error:?}");
+    /// For callers that carry on without directories: a failed read is logged, not mistaken for
+    /// "no directories".
+    fn enabled_directories_or_log(&self) -> Vec<LibraryDirectory> {
+        self.enabled_directories().unwrap_or_else(|error| {
+            error!("library.directories.read_failed error={error:?}");
             Vec::new()
         })
     }
 
     fn start_scan(&mut self, targets: &[ScanTarget]) {
         let jobs: Vec<scanner::ScanJob> = self
-            .enabled_roots_or_log()
+            .enabled_directories_or_log()
             .into_iter()
-            .filter_map(|root| {
-                let id = root_number(&root);
-                let target = targets.iter().find(|target| target.root == id)?;
+            .filter_map(|directory| {
+                let id = directory_number(&directory);
+                let target = targets.iter().find(|target| target.directory == id)?;
                 Some(scanner::ScanJob {
-                    root,
+                    directory,
                     dirs: target.dirs.clone(),
                 })
             })
             .collect();
         if jobs.is_empty() {
-            // Every folder that wanted a scan is gone: there is nothing to do.
+            // Every directory that wanted a scan is gone: there is nothing to do.
             self.queue
                 .push_back(Input::ScanFinished(ScanOutcome::Completed));
             return;
         }
         self.cancel.store(false, Ordering::Release);
         self.scan.lock().update(|scan| {
-            *scan = LibraryScanSnapshot {
-                state: LibraryScanState::Running,
+            *scan = ScanState {
+                state: ScanStatus::Running,
                 finished_count: scan.finished_count,
                 changed_count: scan.changed_count,
-                ..LibraryScanSnapshot::idle()
+                ..ScanState::idle()
             };
         });
-        info!("library.scan.started root_count={}", jobs.len());
+        info!("library.scan.started directory_count={}", jobs.len());
         self.notify.notify();
         let (database, scan, cancel, notify) = (
             self.database.clone(),
@@ -366,8 +371,8 @@ impl Actor {
                     let mut ending = ScanEnding::new(messages, Arc::clone(&scan), notify.clone());
                     let outcome = scanner::run(&database, &jobs, &scan, &cancel, &notify);
                     ending.finish(match outcome {
-                        LibraryScanState::Completed => ScanOutcome::Completed,
-                        LibraryScanState::Cancelled => ScanOutcome::Cancelled,
+                        ScanStatus::Completed => ScanOutcome::Completed,
+                        ScanStatus::Cancelled => ScanOutcome::Cancelled,
                         _ => ScanOutcome::Failed,
                     });
                 })
@@ -383,19 +388,22 @@ impl Actor {
         }
     }
 
-    fn attach(&mut self, id: RootNumber) {
+    fn attach(&mut self, id: DirectoryNumber) {
         let path = self
-            .enabled_roots_or_log()
+            .enabled_directories_or_log()
             .into_iter()
-            .find(|root| root_number(root) == id)
-            .map(|root| root.path);
+            .find(|directory| directory_number(directory) == id)
+            .map(|directory| directory.path);
         let messages = self.messages.clone();
         let attached = path.and_then(|path| {
             watcher::attach(std::path::Path::new(&path), move |paths| {
                 let input = if paths.is_empty() {
-                    Input::FolderChanged(id)
+                    Input::DirectoryChanged(id)
                 } else {
-                    Input::PathsChanged { root: id, paths }
+                    Input::PathsChanged {
+                        directory: id,
+                        paths,
+                    }
                 };
                 log_failed(
                     messages.send(Message::Input(input)),
@@ -424,7 +432,7 @@ impl Actor {
 /// when this drops, so the scan never stays "Running".
 struct ScanEnding {
     messages: Sender<Message>,
-    scan: Arc<Mutex<Versioned<LibraryScanSnapshot>>>,
+    scan: Arc<Mutex<Revisioned<ScanState>>>,
     notify: Notifier,
     finished: bool,
 }
@@ -432,7 +440,7 @@ struct ScanEnding {
 impl ScanEnding {
     fn new(
         messages: Sender<Message>,
-        scan: Arc<Mutex<Versioned<LibraryScanSnapshot>>>,
+        scan: Arc<Mutex<Revisioned<ScanState>>>,
         notify: Notifier,
     ) -> Self {
         Self {
@@ -466,8 +474,8 @@ impl Drop for ScanEnding {
     }
 }
 
-fn root_number(root: &LibraryRoot) -> RootNumber {
-    root.id.rowid()
+fn directory_number(directory: &LibraryDirectory) -> DirectoryNumber {
+    directory.id.rowid()
 }
 
 #[cfg(test)]
@@ -478,9 +486,9 @@ mod tests {
     #[test]
     fn a_scan_thread_that_dies_ends_the_scan_as_failed() {
         let (messages, received) = mpsc::channel();
-        let scan = Arc::new(Mutex::new(Versioned::new(LibraryScanSnapshot {
-            state: LibraryScanState::Running,
-            ..LibraryScanSnapshot::idle()
+        let scan = Arc::new(Mutex::new(Revisioned::new(ScanState {
+            state: ScanStatus::Running,
+            ..ScanState::idle()
         })));
         let notify = Notifier::new(null_message_sink(), StateTopic::LibraryScan);
         let thread_scan = Arc::clone(&scan);
@@ -496,7 +504,7 @@ mod tests {
 
         assert!(died.is_err());
         let snapshot = scan.lock().clone();
-        assert_eq!(snapshot.value.state, LibraryScanState::Failed);
+        assert_eq!(snapshot.value.state, ScanStatus::Failed);
         assert!(matches!(
             received.try_recv(),
             Ok(Message::Input(Input::ScanFinished(ScanOutcome::Failed)))

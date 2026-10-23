@@ -6,10 +6,10 @@ import {
   type PlaybackClient,
   type PlaybackItem,
   type PlaybackQueueItem,
-  type PlaybackQueueSnapshot,
-  type PlaybackSnapshot,
+  type QueueState,
+  type PlaybackState,
   type PlaybackWaveform,
-  type Versioned,
+  type Revisioned,
 } from "#lib/native";
 import { PlaybackClock } from "./playback-clock.svelte";
 import { Playback } from "./playback.svelte";
@@ -43,7 +43,7 @@ const item = (id: TrackId): PlaybackItem => ({
   year: null,
 });
 
-const stopped = (revision: number, id: TrackId | null): Versioned<PlaybackSnapshot> => ({
+const stopped = (revision: number, id: TrackId | null): Revisioned<PlaybackState> => ({
   revision,
   value: { status: "stopped", base: base(), item: id ? item(id) : null },
 });
@@ -54,7 +54,7 @@ const playing = (
   positionMs: number,
   seekRevision = 0,
   startedBy: "next" | "previous" | "auto" | "jump" = "jump",
-): Versioned<PlaybackSnapshot> => ({
+): Revisioned<PlaybackState> => ({
   revision,
   value: {
     status: "playing",
@@ -88,10 +88,7 @@ const queueItem = (id: QueueItemId): PlaybackQueueItem => ({
   durationMs: 120_000,
 });
 
-const queueOf = (
-  revision: number,
-  patch: Partial<PlaybackQueueSnapshot> = {},
-): Versioned<PlaybackQueueSnapshot> => ({
+const queueOf = (revision: number, patch: Partial<QueueState> = {}): Revisioned<QueueState> => ({
   revision,
   value: {
     current: null,
@@ -106,7 +103,7 @@ const queueOf = (
   },
 });
 
-const queue = (revision: number): Versioned<PlaybackQueueSnapshot> => queueOf(revision);
+const queue = (revision: number): Revisioned<QueueState> => queueOf(revision);
 
 /** A client whose methods are only the ones a test gives; the others are never called. */
 const fakeClient = (overrides: Partial<PlaybackClient> = {}): PlaybackClient =>
@@ -118,8 +115,8 @@ const quietClock = (): PlaybackClock => new PlaybackClock({ now: (): number => 0
 /** What `connect` gives the Renderer: the first snapshot and queue, as the session routes them. */
 function load(
   playback: Playback,
-  snapshot: Versioned<PlaybackSnapshot>,
-  queueSnapshot: Versioned<PlaybackQueueSnapshot>,
+  snapshot: Revisioned<PlaybackState>,
+  queueSnapshot: Revisioned<QueueState>,
 ): void {
   playback.acceptPlayback(snapshot);
   playback.acceptQueue(queueSnapshot);
@@ -266,7 +263,7 @@ describe("playback session ordering", () => {
 });
 
 describe("clearing the queue", () => {
-  const withUpcoming = (revision: number): Versioned<PlaybackQueueSnapshot> =>
+  const withUpcoming = (revision: number): Revisioned<QueueState> =>
     queueOf(revision, {
       current: queueItem(1),
       upcoming: [queueItem(2)],
@@ -276,23 +273,23 @@ describe("clearing the queue", () => {
   it("resolves true when upcoming items were removed, so the caller can offer an undo", async () => {
     const playback = new Playback(
       fakeClient({
-        clearQueue: vi.fn(async () => queue(2)),
+        playerClearQueue: vi.fn(async () => queue(2)),
       }),
       quietClock(),
     );
     load(playback, stopped(1, null), withUpcoming(1));
 
-    await expect(playback.clearQueue()).resolves.toBe(true);
+    await expect(playback.playerClearQueue()).resolves.toBe(true);
   });
 
   it("resolves false when nothing was upcoming", async () => {
     const playback = new Playback(
-      fakeClient({ clearQueue: vi.fn(async () => queue(2)) }),
+      fakeClient({ playerClearQueue: vi.fn(async () => queue(2)) }),
       quietClock(),
     );
     load(playback, stopped(1, null), queue(1));
 
-    await expect(playback.clearQueue()).resolves.toBe(false);
+    await expect(playback.playerClearQueue()).resolves.toBe(false);
   });
 });
 
@@ -330,7 +327,7 @@ describe("seeking", () => {
 });
 
 describe("failures", () => {
-  const failed = (revision: number, skipping: boolean, id = 1): Versioned<PlaybackSnapshot> => ({
+  const failed = (revision: number, skipping: boolean, id = 1): Revisioned<PlaybackState> => ({
     revision,
     value: {
       status: "failed",
@@ -629,7 +626,7 @@ describe("starting playback", () => {
 });
 
 describe("changing the volume", () => {
-  const mutedSnapshot = (): Versioned<PlaybackSnapshot> => ({
+  const mutedSnapshot = (): Revisioned<PlaybackState> => ({
     revision: 1,
     value: { status: "stopped", base: { ...base(), muted: true }, item: null },
   });
@@ -758,7 +755,7 @@ describe("the waveform", () => {
     playbackId: number,
     revision: number,
     peak: number,
-  ): Versioned<PlaybackWaveform | null> => ({
+  ): Revisioned<PlaybackWaveform | null> => ({
     revision,
     value: { playbackId, peaks: [peak], rms: [peak] },
   });

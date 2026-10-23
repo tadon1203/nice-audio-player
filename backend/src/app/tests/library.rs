@@ -1,12 +1,14 @@
 use super::{Fixture, fixture};
 use crate::app::{BackendApp, PlaybackContext};
-use crate::dto::{
-    AlbumTracksRequest, LibrarySortDirection, LibraryStatus, LibraryTrackSortKey, TrackListRequest,
-    TrackQuery,
-};
-use crate::errors::{CommonError, LibraryCommandError, LyricsCommandError, PlaybackServiceError};
+use crate::audio::playback::PlaybackServiceError;
+use crate::errors::CommandError;
 use crate::ids::{AlbumId, ArtistId, TrackId};
+use crate::library::error::LibraryCommandError;
+use crate::library::models::{
+    AlbumTracksRequest, LibraryStatus, SortDirection, TrackListRequest, TrackQuery, TrackSortKey,
+};
 use crate::library::store::PlaybackSourceError;
+use crate::lyrics::LyricsCommandError;
 use crate::messages::testing::RecordingMessageSink;
 use crate::test_support::TestDirectory;
 
@@ -32,8 +34,8 @@ fn fixture_without_library() -> Fixture {
 fn tracks_context() -> PlaybackContext {
     PlaybackContext::Tracks(TrackQuery {
         search: None,
-        sort_key: LibraryTrackSortKey::Title,
-        sort_direction: LibrarySortDirection::Ascending,
+        sort_key: TrackSortKey::Title,
+        sort_direction: SortDirection::Ascending,
     })
 }
 
@@ -51,8 +53,8 @@ fn the_tracks_context_is_a_track_query_beside_its_kind() {
         panic!("not the tracks context");
     };
     assert_eq!(query.search.as_deref(), Some("alp"));
-    assert_eq!(query.sort_key, LibraryTrackSortKey::Title);
-    assert_eq!(query.sort_direction, LibrarySortDirection::Ascending);
+    assert_eq!(query.sort_key, TrackSortKey::Title);
+    assert_eq!(query.sort_direction, SortDirection::Ascending);
 }
 
 #[test]
@@ -66,10 +68,7 @@ fn a_list_request_is_its_query_beside_the_cursor_and_skip() {
     }))
     .expect("a list request");
 
-    assert_eq!(
-        request.query.sort_direction,
-        LibrarySortDirection::Descending
-    );
+    assert_eq!(request.query.sort_direction, SortDirection::Descending);
     assert_eq!(request.skip, 7);
     let fixture = fixture();
     let page = fixture.backend.list_tracks(&request).expect("the page");
@@ -86,27 +85,27 @@ fn without_a_library_the_library_commands_say_it_is_unavailable() {
         LibraryStatus::Unavailable { .. }
     ));
     assert!(matches!(
-        backend.library_roots(),
+        backend.list_directories(),
         Err(LibraryCommandError::Common {
-            error: CommonError::LibraryUnavailable
+            error: CommandError::LibraryUnavailable
         })
     ));
     assert!(matches!(
         backend.start_scan(),
         Err(LibraryCommandError::Common {
-            error: CommonError::LibraryUnavailable
+            error: CommandError::LibraryUnavailable
         })
     ));
     assert!(matches!(
         backend.track_file(TrackId::try_from_rowid(1).unwrap()),
         Err(LibraryCommandError::Common {
-            error: CommonError::LibraryUnavailable
+            error: CommandError::LibraryUnavailable
         })
     ));
     assert!(matches!(
         backend.track_lyrics(TrackId::try_from_rowid(1).unwrap()),
         Err(LyricsCommandError::Common {
-            error: CommonError::LibraryUnavailable
+            error: CommandError::LibraryUnavailable
         })
     ));
 }
@@ -116,11 +115,11 @@ fn without_a_library_playing_from_it_says_it_is_unavailable() {
     let fixture = fixture_without_library();
     let backend = &fixture.backend;
     let unavailable = PlaybackServiceError::Common {
-        error: CommonError::LibraryUnavailable,
+        error: CommandError::LibraryUnavailable,
     };
 
     assert_eq!(
-        backend.start_playback(&tracks_context(), None).err(),
+        backend.play(&tracks_context(), None).err(),
         Some(unavailable.clone())
     );
     assert_eq!(
@@ -137,7 +136,7 @@ fn with_a_library_the_library_commands_answer() {
     let backend = &fixture.backend;
 
     assert!(matches!(backend.library_status(), LibraryStatus::Ready));
-    assert!(backend.library_roots().expect("roots").is_empty());
+    assert!(backend.list_directories().expect("directories").is_empty());
 }
 
 #[test]
@@ -149,7 +148,7 @@ fn track_properties_for_a_track_the_library_does_not_hold_are_not_found() {
             .backend
             .track_properties(TrackId::try_from_rowid(999).unwrap()),
         Err(LibraryCommandError::Common {
-            error: CommonError::TrackNotFound
+            error: CommandError::TrackNotFound
         })
     ));
 }
@@ -180,7 +179,7 @@ fn an_album_by_id_that_the_library_does_not_hold_has_no_tracks_and_does_not_play
     assert_eq!(
         fixture
             .backend
-            .start_playback(&PlaybackContext::Album { album_id }, None)
+            .play(&PlaybackContext::Album { album_id }, None)
             .err(),
         Some(PlaybackServiceError::Source {
             error: PlaybackSourceError::AlbumNotFound,

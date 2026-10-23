@@ -25,8 +25,7 @@ use super::output_processing::{OutputProcessingError, OutputProcessingPlan};
 use super::pcm::{ChannelCount, PcmSpec, SampleRate};
 use super::pcm_queue::{PcmConsumer, PcmProducer, bounded_pcm_queue};
 use super::volume::{AtomicEffectiveGain, process_sample};
-use crate::diagnostics::logged;
-use crate::slices::{head, head_mut, tail_from_mut};
+use crate::errors::logged;
 
 /// Identifies one output stream, which lives as long as a session.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -95,7 +94,7 @@ pub(crate) struct LatestPosition(Arc<Mutex<Option<PositionUpdate>>>);
 
 impl LatestPosition {
     pub(crate) fn publish(&self, update: PositionUpdate) {
-        if let Ok(mut cell) = self.0.try_lock() {
+        if let Some(mut cell) = self.0.try_lock() {
             *cell = Some(update);
         }
     }
@@ -709,7 +708,8 @@ impl CallbackState {
         let mut segment_samples = 0;
         let mut segment_time = playback_time;
         loop {
-            let popped = self.write_queue_samples(tail_from_mut(output, written), gain);
+            let popped =
+                self.write_queue_samples(output.get_mut(written..).unwrap_or_default(), gain);
             written += popped;
             segment_samples += popped;
             if written == output.len() || self.chained.is_none() || !self.consumer.is_finished() {
@@ -727,7 +727,10 @@ impl CallbackState {
                 calculate_end_time(playback_time, written, self.channel_count, self.sample_rate)
                     .unwrap_or(playback_time);
         }
-        tail_from_mut(output, written).fill(T::EQUILIBRIUM);
+        output
+            .get_mut(written..)
+            .unwrap_or_default()
+            .fill(T::EQUILIBRIUM);
         self.position_frame = self
             .position_frame
             .saturating_add((segment_samples / self.channel_count) as u64);
@@ -803,12 +806,15 @@ impl CallbackState {
         for destination in output.chunks_mut(FILL_CHUNK_SAMPLES) {
             let popped = self
                 .consumer
-                .pop_samples(head_mut(&mut chunk, destination.len()));
-            for (slot, sample) in destination.iter_mut().zip(head_mut(&mut chunk, popped)) {
+                .pop_samples(&mut chunk[..destination.len().min(FILL_CHUNK_SAMPLES)]);
+            for (slot, sample) in destination
+                .iter_mut()
+                .zip(chunk[..popped.min(FILL_CHUNK_SAMPLES)].iter_mut())
+            {
                 *sample = process_sample(*sample, gain);
                 *slot = T::from_sample(*sample);
             }
-            self.meter.push(head(&chunk, popped));
+            self.meter.push(&chunk[..popped.min(FILL_CHUNK_SAMPLES)]);
             consumed += popped;
             if popped < destination.len() {
                 break;
