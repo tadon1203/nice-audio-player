@@ -5,7 +5,8 @@ A feature lives in `.scratch/<feature-slug>/` while it is in progress.
 - `/to-spec` writes `spec.md`. The spec carries the decisions from the design session to `/to-tickets`. `/to-tickets` keeps it. No skill deletes it. Tickets do not link to it.
 - `/to-tickets` writes one file per ticket: `issues/<NN>-<slug>.md`, numbered from `01`.
 - The tickets are done in number order. A ticket depends only on tickets with lower numbers.
-- `/commit-ticket` commits a finished ticket and deletes the ticket file. The commit is the record (`.scratch/` is not tracked). When no ticket is left, it deletes the feature directory.
+- The next ticket is the lowest-numbered file directly in `issues/`. Ignore `issues/done/`.
+- `/commit-ticket` commits a finished ticket and moves the ticket file to `issues/done/`, with the same file name. Create `done/` when it is needed. No skill deletes a ticket, the spec, or the feature directory.
 
 ## Implementation-ready standard
 
