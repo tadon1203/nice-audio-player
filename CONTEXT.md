@@ -22,7 +22,7 @@ The language of Nice Audio Player. Use these terms in code, docs, and tickets. D
 - **Album**: the tracks that share an Album Artist, a title, and a directory. A disc directory counts as the directory above it. Two printings of one album in two directories are two albums.
 - **Compilation**: tracks that share a directory and an album title, but not an artist. They are one album, filed under Various Artists.
 - **Missing track**: a track whose file is gone. A new file with the same content is that track again (relinked, same `track_id`).
-- **Scroll index**: a list's names grouped by first character, counted in the list's own order. It backs the big letter shown while scrolling and the jump to a letter.
+- **Letter index**: a list's names grouped by first character, counted in the list's own order. It backs the big letter shown while scrolling and the jump to a letter.
 
 ## Playback
 
@@ -41,20 +41,20 @@ The language of Nice Audio Player. Use these terms in code, docs, and tickets. D
 - **Level meter**: the left and right channel levels of the audio being played. Each channel has a peak (with a held peak) and an RMS.
 - **Meter frame**: one measurement of the Spectrum and the Level meter, taken at one moment of the output.
 - **Level bar**: one drawn level of the Spectrum (a band) or the Level meter (a channel's RMS).
-- **Peak cap**: the thin line above a Level bar that marks its held peak.
-- **Peak hold time**: how long a Peak cap stays in place before it falls.
+- **Held peak**: the thin line above a Level bar that marks the highest recent level.
+- **Peak hold time**: how long a Held peak stays in place before it falls.
 - **Clip warning**: the word "Clip", shown on a Level meter channel after its signal clips.
 
 ## UI (see [DESIGN.md](./DESIGN.md))
 
-- **Dock**: the persistent playback bar at the bottom of the workspace.
-- **Now Playing**: the dock extended upward, as a layer over the current location. It is not a page.
-- **Sleeve**: the music as an object, shown as its artwork.
-- **Artwork glow**: the artwork, blurred, that lights a surface.
-- **Acrylic**: the surface of floating UI. It is used instead of the Artwork glow.
-- **Album strip**: a band that lays out an album's tracks as sections in proportion to their duration. It also shows the playing position.
-- **Row index**: position and order on the left, in tabular figures. It is also the button of its row.
+- **Player bar**: the persistent playback bar at the bottom of the workspace.
+- **Now Playing**: the Player bar extended upward, as a layer over the current location. It is not a page.
+- **Artwork**: the music as an object, shown as its cover image.
+- **Artwork background**: the Artwork, blurred, that lights a surface.
+- **Blurred surface**: the semi-transparent, blurred surface of floating UI, such as menus, tooltips, dialogs, and task panels. It is used instead of the Artwork background. In forced-colors mode it is opaque.
+- **Album timeline**: a band that lays out an album's tracks as sections in proportion to their duration. It also shows the playing position.
+- **Track number**: position and order on the left, in tabular figures. It is also the button of its row.
 - **Signal path**: technical notation for audio, such as `FLAC 24/96 › Speakers`. Its length shows whether the app altered the audio.
-- **Calm motion**: a setting that stops motion that starts on its own.
-- **Progress motion**: motion proportional to time or to work done. It runs at constant speed.
-- **Appearance**: the user's display settings: the Artwork glow and Calm motion. _Avoid_: Settings, as the name of this data (each Backend area owns its own settings; the Settings screen is only where the user changes them).
+- **Reduced motion**: a setting that stops motion that starts on its own.
+- **Linear motion**: motion proportional to time or to work done. It runs at constant speed.
+- **Appearance**: the user's display settings: the Artwork background and Reduced motion. _Avoid_: Settings, as the name of this data (each Backend area owns its own settings; the Settings screen is only where the user changes them).
