@@ -1,4 +1,4 @@
-import type { ScrollIndexBucket } from "#lib/native";
+import { type ScrollIndexBucket } from "#lib/native/bindings";
 import type { LibraryViewState } from "./library-catalog.svelte";
 
 export interface LibraryPresentationMeta {

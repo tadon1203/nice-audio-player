@@ -1,3 +1,4 @@
+use backend::errors::CommandError;
 use specta::{Type, Types, datatype::DataType};
 use tauri::ipc::{Channel, InvokeResponseBody, IpcResponse};
 
@@ -29,7 +30,7 @@ impl Type for MeterFrameBytes {
 pub(crate) async fn meter_start(
     frames: Channel<MeterFrameBytes>,
     state: tauri::State<'_, AppState>,
-) -> Result<u32, ()> {
+) -> Result<u32, CommandError> {
     let meter = state.backend.meter();
     // Replacing a subscription waits for the old analysis thread to end.
     tauri::async_runtime::spawn_blocking(move || {
@@ -41,7 +42,7 @@ pub(crate) async fn meter_start(
     })
     .await
     .inspect_err(|cause| log::warn!("host.meter.subscribe_failed cause={cause}"))
-    .map_err(|_| ())
+    .map_err(|_| CommandError::TaskFailed)
 }
 
 /// Ends the subscription `subscription` names; one that was already replaced or ended is left
@@ -51,10 +52,10 @@ pub(crate) async fn meter_start(
 pub(crate) async fn meter_stop(
     subscription: u32,
     state: tauri::State<'_, AppState>,
-) -> Result<(), ()> {
+) -> Result<(), CommandError> {
     let meter = state.backend.meter();
     tauri::async_runtime::spawn_blocking(move || meter.unsubscribe(subscription))
         .await
         .inspect_err(|cause| log::warn!("host.meter.unsubscribe_failed cause={cause}"))
-        .map_err(|_| ())
+        .map_err(|_| CommandError::TaskFailed)
 }

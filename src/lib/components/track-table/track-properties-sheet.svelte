@@ -1,6 +1,6 @@
 <script lang="ts">
-  import type { TrackId } from "#lib/native";
-  import { LibraryErrors } from "#lib/library/library-errors";
+  import { type TrackId } from "#lib/native/bindings";
+  import { errorMessage } from "#lib/native/messages";
   import { QueryResult } from "#lib/library/query-result.svelte";
   import { AppServices } from "#lib/shell/app-services.svelte";
   import { Button } from "#lib/ui/shadcn/button/index.js";
@@ -117,7 +117,7 @@
           </dd>
         </dl>
       {:else if query.error}
-        <p class="text-sm text-muted-foreground">{LibraryErrors.commandMessage(query.error)}</p>
+        <p class="text-sm text-muted-foreground">{errorMessage(query.error)}</p>
       {/if}
     </div>
   </SheetContent>

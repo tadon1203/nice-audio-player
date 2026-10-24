@@ -74,6 +74,61 @@ impl From<PlaybackLookupError> for PlaybackServiceError {
     }
 }
 
+/// The codes the Renderer shows for a playback command. A worker or device id the program
+/// produced is a bug, so it is shown as a failed task.
+impl From<PlaybackServiceError> for CommandError {
+    fn from(error: PlaybackServiceError) -> Self {
+        match error {
+            PlaybackServiceError::Common { error } => error,
+            PlaybackServiceError::Output { failure } => Self::Output { failure },
+            PlaybackServiceError::Source { error } => error.into(),
+            PlaybackServiceError::WorkerUnavailable | PlaybackServiceError::InvalidDeviceId => {
+                Self::TaskFailed
+            }
+            PlaybackServiceError::Superseded => Self::Superseded,
+            PlaybackServiceError::QueueItemNotFound => Self::QueueItemNotFound,
+            PlaybackServiceError::QueueBusy => Self::QueueBusy,
+            PlaybackServiceError::InvalidVolume => Self::InvalidVolume,
+            PlaybackServiceError::InvalidPlaybackState => Self::InvalidPlaybackState,
+            PlaybackServiceError::DurationUnavailable => Self::DurationUnavailable,
+            PlaybackServiceError::SeekFailed => Self::SeekFailed,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{CommandError, PlaybackServiceError, PlaybackSourceError};
+
+    #[test]
+    fn worker_and_device_faults_are_failed_tasks() {
+        assert_eq!(
+            CommandError::from(PlaybackServiceError::WorkerUnavailable),
+            CommandError::TaskFailed
+        );
+        assert_eq!(
+            CommandError::from(PlaybackServiceError::InvalidDeviceId),
+            CommandError::TaskFailed
+        );
+    }
+
+    #[test]
+    fn source_reasons_map_to_the_shared_codes() {
+        assert_eq!(
+            CommandError::from(PlaybackServiceError::Source {
+                error: PlaybackSourceError::TrackNotMember,
+            }),
+            CommandError::TrackNotFound
+        );
+        assert_eq!(
+            CommandError::from(PlaybackServiceError::Source {
+                error: PlaybackSourceError::NoPlayablePlaybackTracks,
+            }),
+            CommandError::TrackUnavailable
+        );
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub(crate) enum PlaybackServiceStartError {
     #[error("the playback worker thread could not start")]

@@ -1,4 +1,4 @@
-import type { ArtworkRef } from "#lib/native";
+import { type ArtworkRef } from "#lib/native/bindings";
 import type { RovingTarget } from "#lib/ui/artwork-glow/roving-target";
 
 /** The artwork of the item at an index. */

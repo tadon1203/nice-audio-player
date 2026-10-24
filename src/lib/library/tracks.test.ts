@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { AlbumId, ArtistId } from "#lib/native";
+import { type AlbumId, type ArtistId } from "#lib/native/bindings";
 import { Tracks } from "./tracks";
 
 const albumId = "0f0e0d0c0b0a09080706050403020100" as AlbumId;

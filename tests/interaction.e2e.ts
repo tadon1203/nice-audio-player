@@ -3,7 +3,7 @@ import { expect, test } from "./fixtures/test";
 import { workspaceViewport } from "./fixtures/locators";
 import { playbackItemFor, playingSnapshot } from "./fixtures/data";
 import type { Locator } from "@playwright/test";
-import type { TrackRow } from "../src/lib/native";
+import type { TrackRow } from "../src/lib/native/bindings";
 
 test.beforeEach(async ({ page }) => {
   await page.setViewportSize({ width: 1360, height: 900 });

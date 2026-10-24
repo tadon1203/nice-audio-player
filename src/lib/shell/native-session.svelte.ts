@@ -1,15 +1,15 @@
-import type {
-  Appearance as AppearanceValue,
-  BackendMessage,
-  InitialState,
-  ScanState,
-  PlaybackPosition,
-  QueueState,
-  PlaybackState,
-  PlaybackWaveform,
-  SessionClient,
-  Revisioned,
-} from "#lib/native";
+import {
+  type Appearance as AppearanceValue,
+  type BackendMessage,
+  type InitialState,
+  type ScanState,
+  type PlaybackPosition,
+  type QueueState,
+  type PlaybackState,
+  type PlaybackWaveform,
+  type Revisioned,
+} from "#lib/native/bindings";
+import { type SessionClient } from "#lib/native/native-clients";
 import { countE2e } from "./e2e-counts";
 
 export type ConnectionState = "connecting" | "ready" | "failed";

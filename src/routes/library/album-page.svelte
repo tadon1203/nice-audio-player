@@ -1,11 +1,11 @@
 <script lang="ts">
-  import type { AlbumId, ArtistId, TrackId } from "#lib/native";
+  import { type AlbumId, type ArtistId, type TrackId } from "#lib/native/bindings";
   import Shuffle from "@lucide/svelte/icons/shuffle";
   import { resolve } from "$app/paths";
   import AlbumStrip from "#lib/components/media-details/album-strip.svelte";
   import MediaDetailsHeader from "#lib/components/media-details/media-details-header.svelte";
   import TrackTable from "#lib/components/track-table/track-table.svelte";
-  import { LibraryErrors } from "#lib/library/library-errors";
+  import { errorMessage } from "#lib/native/messages";
   import { PagedCollection } from "#lib/library/paged-collection.svelte";
   import { QueryResult } from "#lib/library/query-result.svelte";
   import { albumTitleLabel, artistNameLabel } from "#lib/library/unknown-name";
@@ -76,7 +76,7 @@
 
   {#if details.isError}
     <ErrorAlert
-      message={LibraryErrors.commandMessage(details.error)}
+      message={errorMessage(details.error)}
       onRetry={() => actions.run(() => details.refetch(), "library")}
     />
   {:else if details.data === undefined || tracks.isPending}
@@ -84,7 +84,7 @@
     <LoadingStatus>Reading album…</LoadingStatus>
   {:else if tracks.isError}
     <ErrorAlert
-      message={LibraryErrors.commandMessage(tracks.error)}
+      message={errorMessage(tracks.error)}
       onRetry={() => actions.run(() => tracks.refetch(), "library")}
     />
   {:else}

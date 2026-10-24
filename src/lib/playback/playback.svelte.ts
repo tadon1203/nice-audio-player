@@ -10,14 +10,15 @@ import type {
   QueueState,
   RepeatMode,
   PlaybackState,
-  PlaybackClient,
   QueueWindow,
   PlaybackWaveform,
   QueueItemId,
   TrackId,
   Revisioned,
-} from "#lib/native";
-import { Replica, SupersededError } from "#lib/native";
+} from "#lib/native/bindings";
+import { NativeError } from "#lib/native/errors";
+import type { PlaybackClient } from "#lib/native/native-clients";
+import { Replica } from "#lib/native/replica.svelte";
 import type { PlaybackClock } from "./playback-clock.svelte";
 import { PlaybackSnapshots } from "./playback-snapshots";
 
@@ -47,8 +48,8 @@ function directionOf(session: CurrentPlayback | null): TransitionDirection {
 
 /**
  * Mirrors the backend's playback state. The replicas hold what the backend said, and every getter
- * reads them. Commands throw their PlaybackError on failure, and a command a newer one replaced
- * throws SupersededError; the caller decides where that shows (see UserActionRunner). Position never
+ * reads them. Commands throw their NativeError on failure, and a command a newer one replaced
+ * throws a superseded NativeError; the caller decides where that shows (see UserActionRunner). Position never
  * lands here: position events feed the clock and nothing else, and `item` keeps its identity while
  * the same queue item plays.
  */
@@ -381,7 +382,7 @@ export class Playback {
 
   /**
    * Runs a transport command. One that arrives while another is in flight waits for it, and a
-   * newer one replaces it: the replaced command rejects with SupersededError, so the latest press wins.
+   * newer one replaces it: the replaced command rejects as superseded, so the latest press wins.
    */
   #runTransport(
     command: TransportCommand,
@@ -390,7 +391,7 @@ export class Playback {
     if (this.#transportPending === null) {
       return this.#performTransport(command, operation);
     }
-    this.#queuedTransport?.reject(new SupersededError({ code: "superseded" }));
+    this.#queuedTransport?.reject(new NativeError("player", { code: "superseded" }));
     return new Promise((resolve, reject) => {
       this.#queuedTransport = { command, operation, resolve, reject };
     });

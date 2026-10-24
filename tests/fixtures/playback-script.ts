@@ -1,11 +1,11 @@
-import type {
-  AudioOutputSelection,
-  TrackRow,
-  QueueState,
-  PlaybackState,
-  StartedBy,
-  Revisioned,
-} from "#lib/native";
+import {
+  type AudioOutputSelection,
+  type TrackRow,
+  type QueueState,
+  type PlaybackState,
+  type StartedBy,
+  type Revisioned,
+} from "#lib/native/bindings";
 import type { Native } from "./native-api";
 import { playbackIdOf, playbackItemFor, playingSnapshot, queueItemFor } from "./data";
 

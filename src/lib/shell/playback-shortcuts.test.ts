@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import type { PlaybackClient, PlaybackState, Revisioned } from "#lib/native";
+import { type PlaybackClient } from "#lib/native/native-clients";
+import { type PlaybackState, type Revisioned } from "#lib/native/bindings";
 import { PlaybackClock } from "#lib/playback/playback-clock.svelte";
 import { Playback } from "#lib/playback/playback.svelte";
 import { NoticeCenter } from "./notice-center.svelte";

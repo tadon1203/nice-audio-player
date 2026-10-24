@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { AlbumId } from "#lib/native";
+  import { type AlbumId } from "#lib/native/bindings";
   import type { Snapshot } from "./$types";
   import { page } from "$app/state";
   import AlbumPage from "../../album-page.svelte";

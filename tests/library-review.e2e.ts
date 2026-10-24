@@ -1,4 +1,4 @@
-import type { LibraryDirectory, ScanStatus } from "#lib/native";
+import { type LibraryDirectory, type ScanStatus } from "#lib/native/bindings";
 import { pageOf, scanSnapshot, testDirectory } from "./fixtures/data";
 import type { Native } from "./fixtures/native-api";
 import { expect, test } from "./fixtures/test";

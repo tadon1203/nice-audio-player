@@ -217,8 +217,6 @@ export type ArtworkRef = {
 	mimeType: ArtworkMimeType,
 };
 
-export type AudioDeviceListError = { code: "enumerationFailed" };
-
 export type AudioOutputDevice = {
 	id: string,
 	name: string,
@@ -310,10 +308,6 @@ export type LibraryAlbumTrackPage = {
 	nextCursor: string | null,
 };
 
-export type LibraryCommandError = { code: "common"; error: CommandError } | { code: "invalidDirectory" } | { code: "directoryNotDirectory" } | { code: "canonicalizationFailed" } | { code: "duplicateDirectory" } | { code: "overlappingDirectory" } | 
-/**  The directory holds the app's own data directory, which a scan would read as music. */
-{ code: "directoryContainsDataDirectory" } | { code: "scanInProgress" } | { code: "albumNotFound" } | { code: "invalidCursor" } | { code: "albumArtistNotFound" } | { code: "directoryMissing" } | { code: "scanAlreadyRunning" } | { code: "noEnabledDirectories" } | { code: "scanNotRunning" };
-
 export type LibraryDirectory = {
 	id: DirectoryId,
 	path: string,
@@ -336,8 +330,6 @@ export type LibraryTrackPage = {
 };
 
 export type LibraryUnavailableReason = "databaseOpenFailed" | "migrationFailed" | "schemaTooNew" | "databaseCorrupt";
-
-export type LyricsCommandError = { code: "common"; error: CommandError };
 
 export type LyricsContent = { kind: "plain"; lines: string[] } | { kind: "timed"; lines: LyricsTimedLine[] };
 
@@ -438,23 +430,6 @@ export type PlaybackQueueItem = {
 	queueItemId: QueueItemId,
 	album: string | null,
 } & TrackCore;
-
-/**
- *  Why a playback request failed: the one error vocabulary for every command that plays or
- *  queues, serialized as `{ "code": "<camelCase>" }`.
- */
-export type PlaybackServiceError = { code: "common"; error: CommandError } | 
-/**  The output or the decoder failed. */
-{ code: "output"; failure: PlaybackFailureCode } | 
-/**  The Library could not give the tracks to play. */
-{ code: "source"; error: PlaybackSourceError } | { code: "workerUnavailable" } | 
-/**  A newer request replaced this one before it finished; the caller should not report it. */
-{ code: "superseded" } | { code: "queueItemNotFound" } | { code: "queueBusy" } | { code: "invalidVolume" } | { code: "invalidDeviceId" } | { code: "invalidPlaybackState" } | { code: "durationUnavailable" } | { code: "seekFailed" };
-
-/**  Why the library cannot give playback a selection, for reasons of the selection itself. */
-export type PlaybackSourceError = { code: "albumNotFound" } | 
-/**  The requested start track is not part of the selection. */
-{ code: "trackNotMember" } | { code: "trackNotPlayable" } | { code: "noPlayablePlaybackTracks" };
 
 export type PlaybackState = 
 /**  `item` is the last track that played, kept so the UI can still say what it was. */

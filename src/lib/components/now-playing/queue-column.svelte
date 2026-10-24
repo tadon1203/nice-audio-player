@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  import type { QueueItemId } from "#lib/native";
+  import { type QueueItemId } from "#lib/native/bindings";
   /** No transition: reduced motion gives everything a 100ms one, and the scroll target is measured right after the spacer changes. */
   const SPACER = "transition-none";
 </script>

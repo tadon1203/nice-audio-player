@@ -1,4 +1,4 @@
-import type { SortDirection, TrackSortKey, PlaybackContext } from "#lib/native";
+import { type SortDirection, type TrackSortKey, type PlaybackContext } from "#lib/native/bindings";
 
 /** A track list's filter and sort: what the backend needs to rebuild the same list. */
 export interface TrackListView {

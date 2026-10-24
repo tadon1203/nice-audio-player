@@ -1,10 +1,10 @@
-import type {
-  CurrentPlayback,
-  PlaybackItem,
-  PlaybackPosition,
-  RepeatMode,
-  PlaybackState,
-} from "#lib/native";
+import {
+  type CurrentPlayback,
+  type PlaybackItem,
+  type PlaybackPosition,
+  type RepeatMode,
+  type PlaybackState,
+} from "#lib/native/bindings";
 import type { ClockReport } from "./clock-state";
 
 export type ActivePlaybackSnapshot = Extract<PlaybackState, { status: "playing" | "paused" }>;

@@ -5,7 +5,7 @@
   import { Tracks } from "#lib/library/tracks";
   import { PlaybackFailure } from "#lib/playback/playback-failure";
   import { AppServices } from "#lib/shell/app-services.svelte";
-  import { ErrorMessages } from "#lib/shell/error-messages";
+  import { errorMessage } from "#lib/native/messages";
   import Artwork from "#lib/ui/artwork.svelte";
   import ContextMenuContent from "#lib/ui/context-menu/context-menu-content.svelte";
   import ContextMenuItem from "#lib/ui/context-menu/context-menu-item.svelte";
@@ -22,7 +22,7 @@
   // A failed startup shows its reason here, since there is no playback state to report on.
   const notice = $derived(
     session.connection === "failed"
-      ? { kind: "error" as const, message: ErrorMessages.of(session.startupError) }
+      ? { kind: "error" as const, message: errorMessage(session.startupError) }
       : notices.at("dock"),
   );
   const item = $derived(playback.item);

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Button } from "#lib/ui/shadcn/button";
-  import type { LyricsResolution, PlaybackItem } from "#lib/native";
+  import { type LyricsResolution, type PlaybackItem } from "#lib/native/bindings";
   import { SignalPath } from "#lib/components/signal-path/signal-path.svelte";
   import FactLine from "#lib/ui/fact-line.svelte";
   import { Tracks } from "#lib/library/tracks";

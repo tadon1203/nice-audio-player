@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { LibraryDirectory } from "#lib/native";
+  import { type LibraryDirectory } from "#lib/native/bindings";
   import {
     AlertDialog,
     AlertDialogAction,

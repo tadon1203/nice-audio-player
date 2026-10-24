@@ -85,6 +85,19 @@ pub enum PlaybackSourceError {
     NoPlayablePlaybackTracks,
 }
 
+/// The shared codes a selection failure maps to. A missing album keeps its own code, and the two
+/// track reasons are shown as a track that cannot be played.
+impl From<PlaybackSourceError> for CommandError {
+    fn from(error: PlaybackSourceError) -> Self {
+        match error {
+            PlaybackSourceError::AlbumNotFound => Self::AlbumNotFound,
+            PlaybackSourceError::TrackNotMember => Self::TrackNotFound,
+            PlaybackSourceError::TrackNotPlayable
+            | PlaybackSourceError::NoPlayablePlaybackTracks => Self::TrackUnavailable,
+        }
+    }
+}
+
 /// Why a playback lookup failed: a failure every command shares, or a reason the selection cannot
 /// play. A missing album is only ever a `Source` reason, so `Common` cannot carry it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

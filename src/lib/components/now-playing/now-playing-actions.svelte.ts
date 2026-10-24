@@ -1,4 +1,4 @@
-import type { QueueItemId } from "#lib/native";
+import { type QueueItemId } from "#lib/native/bindings";
 import { AppServices } from "#lib/shell/app-services.svelte";
 
 /**

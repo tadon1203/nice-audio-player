@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import type { Appearance as AppearanceState, AppearanceClient, Revisioned } from "#lib/native";
+import { type Appearance as AppearanceState, type Revisioned } from "#lib/native/bindings";
+import { type AppearanceClient } from "#lib/native/native-clients";
 import { Appearance } from "./appearance.svelte";
 import type { Mock } from "vitest";
-import type { AppearancePatch } from "#lib/native";
+import { type AppearancePatch } from "#lib/native/bindings";
 
 function stubClient(update: AppearanceClient["update"]): {
   update: Mock<(patch: AppearancePatch) => Promise<Revisioned<AppearanceState>>>;

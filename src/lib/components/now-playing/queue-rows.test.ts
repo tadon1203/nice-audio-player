@@ -1,6 +1,6 @@
-import type { QueueItemId } from "#lib/native";
+import { type QueueItemId } from "#lib/native/bindings";
 import { describe, expect, it } from "vitest";
-import type { PlaybackQueueItem } from "#lib/native";
+import { type PlaybackQueueItem } from "#lib/native/bindings";
 import { QueueRows } from "./queue-rows";
 
 const item = (id: QueueItemId): PlaybackQueueItem => ({

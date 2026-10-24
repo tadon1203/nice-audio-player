@@ -1,6 +1,7 @@
 import { queryOptions, skipToken, type QueryClient } from "@tanstack/svelte-query";
-import type { LyricsClient, TrackId } from "#lib/native";
-import type { LyricsResolution } from "#lib/native";
+import { type LyricsClient } from "#lib/native/native-clients";
+import { type TrackId } from "#lib/native/bindings";
+import { type LyricsResolution } from "#lib/native/bindings";
 import type {
   CreateQueryOptions,
   InitialDataFunction,

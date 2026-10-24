@@ -1,11 +1,11 @@
 import { describe, expect, it, vi, type Mock } from "vitest";
-import type {
-  BackendMessage,
-  InitialState,
-  PlaybackPosition,
-  SessionClient,
-  Revisioned,
-} from "#lib/native";
+import {
+  type BackendMessage,
+  type InitialState,
+  type PlaybackPosition,
+  type Revisioned,
+} from "#lib/native/bindings";
+import { type SessionClient } from "#lib/native/native-clients";
 import { NativeSession, type SessionTargets } from "./native-session.svelte";
 
 /** One `connect` call the test answers by hand: its message handler, and its reply. */

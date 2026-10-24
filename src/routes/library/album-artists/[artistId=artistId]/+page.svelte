@@ -2,7 +2,7 @@
   import { page } from "$app/state";
   import { resolve } from "$app/paths";
   import MediaDetailsHeader from "#lib/components/media-details/media-details-header.svelte";
-  import { LibraryErrors } from "#lib/library/library-errors";
+  import { errorMessage } from "#lib/native/messages";
   import { PagedCollection } from "#lib/library/paged-collection.svelte";
   import { QueryResult } from "#lib/library/query-result.svelte";
   import { artistNameLabel } from "#lib/library/unknown-name";
@@ -46,7 +46,7 @@
 
   {#if artistQuery.isError}
     <ErrorAlert
-      message={LibraryErrors.commandMessage(artistQuery.error)}
+      message={errorMessage(artistQuery.error)}
       onRetry={() => actions.run(() => artistQuery.refetch(), "library")}
     />
   {:else if artistQuery.data === undefined || albums.isPending}
@@ -56,7 +56,7 @@
     <LoadingStatus>Reading artist…</LoadingStatus>
   {:else if albums.isError}
     <ErrorAlert
-      message={LibraryErrors.commandMessage(albums.error)}
+      message={errorMessage(albums.error)}
       onRetry={() => actions.run(() => albums.refetch(), "library")}
     />
   {:else}

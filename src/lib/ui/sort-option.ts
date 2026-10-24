@@ -1,4 +1,4 @@
-import type { SortDirection } from "#lib/native";
+import { type SortDirection } from "#lib/native/bindings";
 
 export interface SortOption<Key extends string = string> {
   readonly key: Key;

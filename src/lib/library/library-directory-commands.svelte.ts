@@ -1,4 +1,5 @@
-import type { LibraryClient, LibraryDirectory } from "#lib/native";
+import { type LibraryClient } from "#lib/native/native-clients";
+import { type LibraryDirectory } from "#lib/native/bindings";
 import type { CatalogRepository } from "./catalog-repository";
 
 /**

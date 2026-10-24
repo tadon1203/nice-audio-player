@@ -1,21 +1,21 @@
-import type {
-  Appearance,
-  AudioOutputSelection,
-  InitialState,
-  StartedBy,
-  ArtistRow,
-  AlbumDetails,
-  AlbumRow,
-  LibraryAlbumTrackPage,
-  LibraryDirectory,
-  ScanState,
-  ScanStatus,
-  TrackRow,
-  PlaybackItem,
-  PlaybackQueueItem,
-  QueueState,
-  PlaybackState,
-} from "#lib/native";
+import {
+  type Appearance,
+  type AudioOutputSelection,
+  type InitialState,
+  type StartedBy,
+  type ArtistRow,
+  type AlbumDetails,
+  type AlbumRow,
+  type LibraryAlbumTrackPage,
+  type LibraryDirectory,
+  type ScanState,
+  type ScanStatus,
+  type TrackRow,
+  type PlaybackItem,
+  type PlaybackQueueItem,
+  type QueueState,
+  type PlaybackState,
+} from "#lib/native/bindings";
 
 /** Plain data the fake backend serves. No rule lives here: tests say what a page contains. */
 export interface LibraryData {

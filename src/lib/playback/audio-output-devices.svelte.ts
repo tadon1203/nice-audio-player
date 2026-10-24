@@ -1,4 +1,5 @@
-import type { AudioOutputDevice, PlaybackClient } from "#lib/native";
+import { type AudioOutputDevice } from "#lib/native/bindings";
+import { type PlaybackClient } from "#lib/native/native-clients";
 
 /**
  * The output devices the device menus offer. The list is read again each time a menu opens, so a

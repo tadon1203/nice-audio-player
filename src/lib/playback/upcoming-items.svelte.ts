@@ -1,4 +1,4 @@
-import type { PlaybackQueueItem } from "#lib/native";
+import { type PlaybackQueueItem } from "#lib/native/bindings";
 import type { Playback } from "./playback.svelte";
 
 /** Upcoming items are read this many at a time from the backend. */

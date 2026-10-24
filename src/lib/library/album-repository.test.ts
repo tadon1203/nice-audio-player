@@ -1,6 +1,7 @@
 import { QueryClient } from "@tanstack/svelte-query";
 import { describe, expect, it } from "vitest";
-import type { AlbumId, LibraryAlbumPage, AlbumRow, LibraryClient } from "#lib/native";
+import { type AlbumId, type LibraryAlbumPage, type AlbumRow } from "#lib/native/bindings";
+import { type LibraryClient } from "#lib/native/native-clients";
 import { AlbumRepository } from "./album-repository";
 import { LibraryQueryKeys } from "./library-query-keys";
 

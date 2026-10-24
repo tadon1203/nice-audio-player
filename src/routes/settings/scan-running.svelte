@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { ScanState } from "#lib/native";
+  import { type ScanState } from "#lib/native/bindings";
   import RollingNumber from "#lib/ui/rolling-number/rolling-number.svelte";
   import { Progress } from "#lib/ui/shadcn/progress/index.js";
   import { CountFormat } from "#lib/utils/count-format";

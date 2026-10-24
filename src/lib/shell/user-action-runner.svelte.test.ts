@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PlaybackError, SupersededError } from "#lib/native";
+import { NativeError } from "#lib/native/errors";
 import { NoticeCenter } from "./notice-center.svelte";
 import { UserActionRunner } from "./user-action-runner.svelte";
 
@@ -10,7 +10,7 @@ describe("UserActionRunner", () => {
   it("shows nothing for a superseded command", async () => {
     const notices = new NoticeCenter();
     const runner = new UserActionRunner(notices);
-    runner.run(() => Promise.reject(new SupersededError({ code: "superseded" })));
+    runner.run(() => Promise.reject(new NativeError("player", { code: "superseded" })));
     await settled();
     expect(notices.at("dock")).toBeNull();
   });
@@ -18,7 +18,7 @@ describe("UserActionRunner", () => {
   it("shows one error notice at the place it was run for", async () => {
     const notices = new NoticeCenter();
     const runner = new UserActionRunner(notices);
-    runner.run(() => Promise.reject(new PlaybackError({ code: "queueBusy" })), "settings");
+    runner.run(() => Promise.reject(new NativeError("player", { code: "queueBusy" })), "settings");
     await settled();
     expect(notices.at("settings")).toEqual({
       kind: "error",

@@ -1,10 +1,10 @@
-import type {
-  ArtistSortKey,
-  AlbumSortKey,
-  ArtistAlbumSortKey,
-  SortDirection,
-  TrackSortKey,
-} from "#lib/native";
+import {
+  type ArtistSortKey,
+  type AlbumSortKey,
+  type ArtistAlbumSortKey,
+  type SortDirection,
+  type TrackSortKey,
+} from "#lib/native/bindings";
 import type { SortOption } from "#lib/ui/sort-option";
 import type { LibraryCatalogRequest } from "./catalog-repository";
 import { Sort } from "./sort";

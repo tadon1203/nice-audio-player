@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { LyricsTimedLine } from "#lib/native";
+import { type LyricsTimedLine } from "#lib/native/bindings";
 import { LyricsLines } from "./lyrics-lines";
 
 const lines: LyricsTimedLine[] = [

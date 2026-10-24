@@ -7,8 +7,8 @@
   import type { Attachment } from "svelte/attachments";
   import { prefersReducedMotion } from "svelte/motion";
   import { fade, type TransitionConfig } from "svelte/transition";
-  import type { ArtworkRef } from "#lib/native";
-  import { ArtworkUrl } from "#lib/native";
+  import { type ArtworkRef } from "#lib/native/bindings";
+  import { ArtworkUrl } from "#lib/native/artwork-url";
   import { SvelteMotion } from "#lib/ui/motion/svelte-motion";
   import { cn } from "#lib/utils/cn.js";
   import { GLOW, type GlowStrength } from "./glow";

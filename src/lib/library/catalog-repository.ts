@@ -5,31 +5,31 @@ import {
   type InfiniteData,
   type QueryClient,
 } from "@tanstack/svelte-query";
-import type {
-  ArtworkHash,
-  LibraryAlbumArtistPage,
-  LibraryAlbumPage,
-  ArtistSortKey,
-  ArtistRow,
-  AlbumSortKey,
-  AlbumRow,
-  LibraryClient,
-  ScrollIndexBucket,
-  SortDirection,
-  LibraryTrackPage,
-  TrackSortKey,
-  TrackRow,
-  TrackId,
-} from "#lib/native";
+import {
+  type ArtworkHash,
+  type LibraryAlbumArtistPage,
+  type LibraryAlbumPage,
+  type ArtistSortKey,
+  type ArtistRow,
+  type AlbumSortKey,
+  type AlbumRow,
+  type ScrollIndexBucket,
+  type SortDirection,
+  type LibraryTrackPage,
+  type TrackSortKey,
+  type TrackRow,
+  type TrackId,
+} from "#lib/native/bindings";
+import { type LibraryClient } from "#lib/native/native-clients";
 import { LibraryQueryKeys } from "./library-query-keys";
-import type { TrackProperties } from "#lib/native";
+import { type TrackProperties } from "#lib/native/bindings";
 import type {
   CreateInfiniteQueryOptions,
   CreateQueryOptions,
   InitialDataFunction,
   QueryKeyWithDataTag,
 } from "@tanstack/svelte-query";
-import type { LibraryDirectory, LibraryStatus } from "#lib/native";
+import { type LibraryDirectory, type LibraryStatus } from "#lib/native/bindings";
 
 export type CatalogPage = LibraryAlbumPage | LibraryAlbumArtistPage | LibraryTrackPage;
 

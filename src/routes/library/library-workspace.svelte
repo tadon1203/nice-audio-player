@@ -6,7 +6,7 @@
     LibraryScroll,
     WorkspaceCatalog,
   } from "#lib/library/library-workspace";
-  import { LibraryErrors } from "#lib/library/library-errors";
+  import { errorMessage } from "#lib/native/messages";
   import { ScrollIndex } from "#lib/library/scroll-index";
   import { AppServices } from "#lib/shell/app-services.svelte";
   import { WorkspaceScroll } from "#lib/shell/workspace-scroll.svelte";
@@ -92,14 +92,14 @@
         <LoadingStatus>Loading library…</LoadingStatus>
       {:else if catalog.viewState === "statusError"}
         <ErrorAlert
-          message={LibraryErrors.commandMessage(catalog.statusError)}
+          message={errorMessage(catalog.statusError)}
           onRetry={() => actions.run(() => catalog.refetchStatus(), "library")}
         />
       {:else if catalog.viewState === "unavailable"}
         <ErrorAlert message={catalog.statusMessage ?? ""} />
       {:else if catalog.viewState === "catalogError"}
         <ErrorAlert
-          message={LibraryErrors.commandMessage(catalog.error)}
+          message={errorMessage(catalog.error)}
           onRetry={() => actions.run(() => catalog.refetch(), "library")}
         />
       {:else if catalog.viewState === "empty"}

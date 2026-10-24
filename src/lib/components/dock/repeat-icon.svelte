@@ -3,7 +3,7 @@
   import Repeat from "@lucide/svelte/icons/repeat";
   import { fade } from "svelte/transition";
   import { Tween } from "svelte/motion";
-  import type { RepeatMode } from "#lib/native";
+  import { type RepeatMode } from "#lib/native/bindings";
   import { AppServices } from "#lib/shell/app-services.svelte";
   import { SvelteMotion } from "#lib/ui/motion/svelte-motion";
   import { SvelteSlide } from "#lib/ui/motion/svelte-slide";

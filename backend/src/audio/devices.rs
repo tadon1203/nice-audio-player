@@ -1,6 +1,8 @@
 use cpal::traits::{DeviceTrait, HostTrait};
 use serde::{Deserialize, Serialize};
 
+use crate::errors::CommandError;
+
 #[derive(Debug, Clone, Serialize, specta::Type, Deserialize, PartialEq, Eq)]
 #[serde(
     tag = "kind",
@@ -31,6 +33,14 @@ pub struct AudioOutputDevice {
 #[serde(tag = "code", rename_all = "camelCase")]
 pub enum AudioDeviceListError {
     EnumerationFailed,
+}
+
+impl From<AudioDeviceListError> for CommandError {
+    fn from(error: AudioDeviceListError) -> Self {
+        match error {
+            AudioDeviceListError::EnumerationFailed => Self::DeviceEnumerationFailed,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

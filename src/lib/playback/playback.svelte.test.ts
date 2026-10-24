@@ -1,16 +1,16 @@
-import type { QueueItemId, TrackId } from "#lib/native";
+import type {
+  PlaybackItem,
+  PlaybackQueueItem,
+  QueueItemId,
+  QueueState,
+  PlaybackState,
+  PlaybackWaveform,
+  Revisioned,
+  TrackId,
+} from "#lib/native/bindings";
+import type { PlaybackClient } from "#lib/native/native-clients";
+import { NativeError } from "#lib/native/errors";
 import { describe, expect, it, vi } from "vitest";
-import {
-  PlaybackError,
-  SupersededError,
-  type PlaybackClient,
-  type PlaybackItem,
-  type PlaybackQueueItem,
-  type QueueState,
-  type PlaybackState,
-  type PlaybackWaveform,
-  type Revisioned,
-} from "#lib/native";
 import { PlaybackClock } from "./playback-clock.svelte";
 import { Playback } from "./playback.svelte";
 
@@ -206,7 +206,7 @@ describe("playback session ordering", () => {
     expect(playback.volumePending).toBe(false);
   });
 
-  it("replaces the transport command waiting behind one in flight with SupersededError", async () => {
+  it("replaces the transport command waiting behind one in flight as superseded", async () => {
     let releasePause: (() => void) | undefined;
     const pause = vi.fn(async () => {
       await new Promise<void>((resolve) => {
@@ -224,7 +224,7 @@ describe("playback session ordering", () => {
     const replaced = playback.resume();
     const latest = playback.next();
     expect(playback.transportPending).toBe("pause");
-    await expect(replaced).rejects.toBeInstanceOf(SupersededError);
+    await expect(replaced).rejects.toMatchObject({ error: { code: "superseded" } });
     expect(resume).not.toHaveBeenCalled();
     expect(next).not.toHaveBeenCalled();
 
@@ -593,18 +593,20 @@ describe("starting playback", () => {
     expect(playback.item?.id).toBe(3);
   });
 
-  it("rejects with SupersededError when the backend replaced the request", async () => {
+  it("rejects as superseded when the backend replaced the request", async () => {
     const playback = new Playback(
       fakeClient({
         start: async () => {
-          throw new SupersededError({ code: "superseded" });
+          throw new NativeError("player", { code: "superseded" });
         },
       }),
       quietClock(),
     );
     load(playback, stopped(1, null), queue(1));
 
-    await expect(playback.start(albumContext, null)).rejects.toBeInstanceOf(SupersededError);
+    await expect(playback.start(albumContext, null)).rejects.toMatchObject({
+      error: { code: "superseded" },
+    });
     expect(playback.transportPending).toBeNull();
   });
 
@@ -612,7 +614,7 @@ describe("starting playback", () => {
     const playback = new Playback(
       fakeClient({
         start: async () => {
-          throw new PlaybackError({ code: "common", error: { code: "trackUnavailable" } });
+          throw new NativeError("player", { code: "trackUnavailable" });
         },
       }),
       quietClock(),
@@ -620,7 +622,7 @@ describe("starting playback", () => {
     load(playback, stopped(1, null), queue(1));
 
     await expect(playback.start(albumContext, 1)).rejects.toMatchObject({
-      code: "common",
+      error: { code: "trackUnavailable" },
     });
   });
 });

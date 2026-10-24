@@ -1,4 +1,4 @@
-import type { AlbumTrackRow, TrackSortKey, TrackRow } from "#lib/native";
+import { type AlbumTrackRow, type TrackSortKey, type TrackRow } from "#lib/native/bindings";
 import { AudioFormatText } from "#lib/utils/audio-format-text";
 import { cn } from "#lib/utils/cn.js";
 import { DurationFormat } from "#lib/utils/duration-format";

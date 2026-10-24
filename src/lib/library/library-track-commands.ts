@@ -1,4 +1,5 @@
-import type { LibraryClient, TrackId } from "#lib/native";
+import { type LibraryClient } from "#lib/native/native-clients";
+import { type TrackId } from "#lib/native/bindings";
 
 /** The commands on one Library track that do not change the catalog. */
 export class LibraryTrackCommands {

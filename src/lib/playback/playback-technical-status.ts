@@ -1,4 +1,4 @@
-import type { AudioOutputSelection } from "#lib/native";
+import { type AudioOutputSelection } from "#lib/native/bindings";
 import { AudioFormatText } from "#lib/utils/audio-format-text";
 
 /** The dock's signal path: `source › processing › output`. `processing` is null when bit-perfect. */

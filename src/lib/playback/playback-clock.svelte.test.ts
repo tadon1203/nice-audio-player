@@ -1,6 +1,6 @@
-import type { TrackId } from "#lib/native";
+import { type TrackId } from "#lib/native/bindings";
 import { describe, expect, it, vi } from "vitest";
-import type { CurrentPlayback, PlaybackItem, PlaybackState } from "#lib/native";
+import { type CurrentPlayback, type PlaybackItem, type PlaybackState } from "#lib/native/bindings";
 vi.mock("svelte/motion", () => ({ prefersReducedMotion: { current: false } }));
 
 import { PlaybackClock } from "./playback-clock.svelte";

@@ -1,6 +1,6 @@
 <script lang="ts" generics="Item">
   import type { Snippet } from "svelte";
-  import type { ArtworkRef } from "#lib/native";
+  import { type ArtworkRef } from "#lib/native/bindings";
   import RovingGlow from "#lib/ui/artwork-glow/roving-glow.svelte";
   import {
     MediaGridController,

@@ -69,6 +69,14 @@ pub enum LyricsCommandError {
     Common { error: CommandError },
 }
 
+impl From<LyricsCommandError> for CommandError {
+    fn from(error: LyricsCommandError) -> Self {
+        match error {
+            LyricsCommandError::Common { error } => error,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct LyricsTrackContext {
     pub track_id: TrackId,

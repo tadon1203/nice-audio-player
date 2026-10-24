@@ -1,4 +1,4 @@
-import type { ScrollIndexBucket } from "#lib/native";
+import { type ScrollIndexBucket } from "#lib/native/bindings";
 
 /** Reads a list's scroll index: buckets in list order with their counts. */
 export class ScrollIndex {

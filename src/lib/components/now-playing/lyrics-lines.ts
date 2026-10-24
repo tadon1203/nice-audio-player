@@ -1,4 +1,4 @@
-import type { LyricsTimedLine } from "#lib/native";
+import { type LyricsTimedLine } from "#lib/native/bindings";
 
 /** Calculations on the timed lyric lines: the current line, the intro, spans and gap progress. */
 export class LyricsLines {

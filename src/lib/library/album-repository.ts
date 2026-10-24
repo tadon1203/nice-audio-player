@@ -4,14 +4,14 @@ import {
   type InfiniteData,
   type QueryClient,
 } from "@tanstack/svelte-query";
-import type {
-  AlbumId,
-  AlbumDetails,
-  LibraryAlbumPage,
-  AlbumRow,
-  LibraryAlbumTrackPage,
-  LibraryClient,
-} from "#lib/native";
+import {
+  type AlbumId,
+  type AlbumDetails,
+  type LibraryAlbumPage,
+  type AlbumRow,
+  type LibraryAlbumTrackPage,
+} from "#lib/native/bindings";
+import { type LibraryClient } from "#lib/native/native-clients";
 import { LibraryQueryKeys } from "./library-query-keys";
 import type {
   CreateInfiniteQueryOptions,

@@ -7,13 +7,8 @@ import { LibraryDirectoryCommands } from "#lib/library/library-directory-command
 import { LibraryTrackCommands } from "#lib/library/library-track-commands";
 import { LibraryViews } from "#lib/library/library-views.svelte";
 import { LyricsRepository } from "#lib/lyrics/lyrics-repository";
-import {
-  NativeBridgeUnavailableError,
-  TauriNative,
-  type MeterClient,
-  type NativeClients,
-  type WindowClient,
-} from "#lib/native";
+import { TauriNative } from "#lib/native/tauri-native";
+import type { MeterClient, NativeClients, WindowClient } from "#lib/native/native-clients";
 import { AudioOutputDevices } from "#lib/playback/audio-output-devices.svelte";
 import { PlaybackClock } from "#lib/playback/playback-clock.svelte";
 import { Playback } from "#lib/playback/playback.svelte";
@@ -40,13 +35,8 @@ export class AppServices {
    * Returns null when the native bridge is unavailable. Call during component initialization.
    */
   public static tryCreate(): AppServices | null {
-    let native: NativeClients;
-    try {
-      native = TauriNative.clients();
-    } catch (error) {
-      if (error instanceof NativeBridgeUnavailableError) return null;
-      throw error;
-    }
+    const native: NativeClients | null = TauriNative.clients();
+    if (native === null) return null;
     const services = new AppServices(
       native,
       new QueryClient({

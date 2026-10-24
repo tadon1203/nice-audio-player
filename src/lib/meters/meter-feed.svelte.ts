@@ -1,4 +1,4 @@
-import type { MeterClient } from "#lib/native";
+import { type MeterClient } from "#lib/native/native-clients";
 import { MeterFrames, type MeterFrame } from "./meter-frames";
 
 /** Frames kept while nobody draws; older ones are dropped (a late frame has no meaning). */

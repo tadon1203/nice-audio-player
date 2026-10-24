@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  import type { TrackId, TrackState } from "#lib/native";
+  import { type TrackId, type TrackState } from "#lib/native/bindings";
 
   export interface AlbumStripTrack {
     id: TrackId;

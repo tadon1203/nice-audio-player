@@ -1,4 +1,4 @@
-import type { PlaybackQueueItem } from "#lib/native";
+import { type PlaybackQueueItem } from "#lib/native/bindings";
 
 /** The rows of the queue as Now Playing lists them. */
 export class QueueRows {

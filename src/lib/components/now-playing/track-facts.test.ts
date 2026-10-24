@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import type { AlbumId, ArtistId, LyricsResolution, PlaybackItem } from "#lib/native";
+import {
+  type AlbumId,
+  type ArtistId,
+  type LyricsResolution,
+  type PlaybackItem,
+} from "#lib/native/bindings";
 import { TrackFacts } from "./track-facts";
 
 const item: PlaybackItem = {

@@ -1,8 +1,8 @@
 <script lang="ts">
   import FolderPlus from "@lucide/svelte/icons/folder-plus";
-  import { LibraryErrors } from "#lib/library/library-errors";
+  import { errorMessage } from "#lib/native/messages";
   import { QueryResult } from "#lib/library/query-result.svelte";
-  import type { LibraryDirectory } from "#lib/native";
+  import { type LibraryDirectory } from "#lib/native/bindings";
   import { AppServices } from "#lib/shell/app-services.svelte";
   import EmptyStatus from "#lib/ui/empty-status.svelte";
   import ErrorAlert from "#lib/ui/error-alert.svelte";
@@ -75,7 +75,7 @@
 
   {#if directoriesQuery.isError}
     <ErrorAlert
-      message={LibraryErrors.commandMessage(directoriesQuery.error)}
+      message={errorMessage(directoriesQuery.error)}
       onRetry={() => actions.run(() => directoriesQuery.refetch(), "library")}
     />
   {/if}

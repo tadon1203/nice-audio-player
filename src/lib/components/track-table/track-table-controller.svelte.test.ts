@@ -1,4 +1,4 @@
-import type { TrackId } from "#lib/native";
+import { type TrackId } from "#lib/native/bindings";
 import type { AppServices } from "#lib/shell/app-services.svelte";
 import { describe, expect, it, vi, type Mock } from "vitest";
 import { TrackTableController } from "./track-table-controller.svelte";

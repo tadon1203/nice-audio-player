@@ -1,4 +1,4 @@
-import type { ArtworkRef, AlbumRow } from "#lib/native";
+import { type ArtworkRef, type AlbumRow } from "#lib/native/bindings";
 import { testAlbum, testLibrary } from "./fixtures/data";
 import { expect, test } from "./fixtures/test";
 

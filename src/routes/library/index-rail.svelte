@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Button } from "#lib/ui/shadcn/button";
-  import type { ScrollIndexBucket } from "#lib/native";
+  import { type ScrollIndexBucket } from "#lib/native/bindings";
 
   let {
     buckets,

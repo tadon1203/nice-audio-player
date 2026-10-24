@@ -13,7 +13,7 @@
   import { Button } from "#lib/ui/shadcn/button";
   import Play from "@lucide/svelte/icons/play";
   import type { Attachment } from "svelte/attachments";
-  import type { LyricsTimedLine } from "#lib/native";
+  import { type LyricsTimedLine } from "#lib/native/bindings";
   import { AppServices } from "#lib/shell/app-services.svelte";
   import TimePresentation from "#lib/ui/time-presentation.svelte";
   import { cn } from "#lib/utils/cn.js";

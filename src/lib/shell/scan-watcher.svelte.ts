@@ -1,6 +1,7 @@
 import type { CatalogRepository } from "#lib/library/catalog-repository";
 import type { LyricsRepository } from "#lib/lyrics/lyrics-repository";
-import { Replica, type ScanState, type Revisioned } from "#lib/native";
+import { Replica } from "#lib/native/replica.svelte";
+import { type ScanState, type Revisioned } from "#lib/native/bindings";
 
 /**
  * The Library scan as the Backend last reported it. When a scan ends, it refreshes what depends on

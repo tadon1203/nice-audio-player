@@ -1,4 +1,4 @@
-import type { AlbumId, ArtistId } from "#lib/native";
+import { type AlbumId, type ArtistId } from "#lib/native/bindings";
 import { describe, expect, it } from "vitest";
 import { TrackColumns, type TextColumn, type TrackTableRow } from "./track-columns";
 

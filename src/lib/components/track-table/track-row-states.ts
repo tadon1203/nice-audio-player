@@ -1,4 +1,4 @@
-import type { TrackId } from "#lib/native";
+import { type TrackId } from "#lib/native/bindings";
 import { Tracks } from "#lib/library/tracks";
 import type { TrackTableRow } from "./track-columns";
 

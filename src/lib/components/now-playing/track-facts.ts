@@ -1,4 +1,4 @@
-import type { LyricsResolution, PlaybackItem } from "#lib/native";
+import { type LyricsResolution, type PlaybackItem } from "#lib/native/bindings";
 
 /** Why the right column shows no timed lyrics, said in the Facts line rather than the column. */
 export type LyricsState =

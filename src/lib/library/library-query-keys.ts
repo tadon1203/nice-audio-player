@@ -1,11 +1,11 @@
-import type {
-  AlbumId,
-  ArtistId,
-  ArtworkHash,
-  ArtistAlbumSortKey,
-  SortDirection,
-  TrackId,
-} from "#lib/native";
+import {
+  type AlbumId,
+  type ArtistId,
+  type ArtworkHash,
+  type ArtistAlbumSortKey,
+  type SortDirection,
+  type TrackId,
+} from "#lib/native/bindings";
 import type { LibraryCatalogRequest } from "./catalog-repository";
 
 /** The arguments of an Album Artist's album list: which artist, and how its albums are ordered. */

@@ -1,6 +1,6 @@
 import { flushSync } from "svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { PlaybackQueueItem } from "#lib/native";
+import { type PlaybackQueueItem } from "#lib/native/bindings";
 import type { Playback } from "./playback.svelte";
 import { UpcomingItems } from "./upcoming-items.svelte";
 

@@ -1,6 +1,6 @@
 import { flushSync } from "svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { MeterClient } from "#lib/native";
+import { type MeterClient } from "#lib/native/native-clients";
 import { BAND_COUNT } from "./ballistics";
 import { MeterFeed } from "./meter-feed.svelte";
 import type { Mock } from "vitest";

@@ -1,10 +1,10 @@
+import { Replica } from "#lib/native/replica.svelte";
 import {
-  Replica,
   type Appearance as AppearanceState,
-  type AppearanceClient,
   type AppearancePatch,
   type Revisioned,
-} from "#lib/native";
+} from "#lib/native/bindings";
+import { type AppearanceClient } from "#lib/native/native-clients";
 
 /**
  * The Renderer's copy of the Appearance. Changes apply at once; a failed save rolls back. The

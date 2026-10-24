@@ -1,5 +1,5 @@
 import { goto } from "$app/navigation";
-import type { TrackId } from "#lib/native";
+import { type TrackId } from "#lib/native/bindings";
 import type { AppServices } from "#lib/shell/app-services.svelte";
 import type { TrackTableRow } from "./track-columns";
 import { TrackRowStates } from "./track-row-states";

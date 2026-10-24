@@ -1,5 +1,5 @@
 import { untrack } from "svelte";
-import type { LyricsTimedLine } from "#lib/native";
+import { type LyricsTimedLine } from "#lib/native/bindings";
 import { AppServices } from "#lib/shell/app-services.svelte";
 import { LyricsLines } from "./lyrics-lines";
 

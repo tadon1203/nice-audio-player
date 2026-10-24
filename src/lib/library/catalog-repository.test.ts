@@ -1,6 +1,6 @@
 import { QueryClient } from "@tanstack/svelte-query";
 import { describe, expect, it, vi } from "vitest";
-import type { LibraryClient } from "#lib/native";
+import { type LibraryClient } from "#lib/native/native-clients";
 import { CatalogRepository, type LibraryCatalogRequest } from "./catalog-repository";
 import type { Mock } from "vitest";
 

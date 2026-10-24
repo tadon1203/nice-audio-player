@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, type Mock } from "vitest";
 import type { CatalogRepository } from "#lib/library/catalog-repository";
 import type { LyricsRepository } from "#lib/lyrics/lyrics-repository";
-import type { ScanState, ScanStatus as ScanStateName } from "#lib/native";
+import { type ScanState, type ScanStatus as ScanStateName } from "#lib/native/bindings";
 import { ScanWatcher } from "./scan-watcher.svelte";
 
 function scanSnapshot(state: ScanStateName, finishedCount: number, changedCount = 0): ScanState {

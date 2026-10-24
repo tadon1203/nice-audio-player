@@ -1,5 +1,5 @@
 import type { Attachment } from "svelte/attachments";
-import type { QueueItemId } from "#lib/native";
+import { type QueueItemId } from "#lib/native/bindings";
 import type { HTMLAttributes } from "svelte/elements";
 import { ScrollView } from "#lib/ui/scroll-view.svelte";
 import { DropSlot } from "./drop-slot";

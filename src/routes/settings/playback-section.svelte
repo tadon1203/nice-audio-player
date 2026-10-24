@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { AppearancePatch } from "#lib/native";
+  import { type AppearancePatch } from "#lib/native/bindings";
   import { SignalPath } from "#lib/components/signal-path/signal-path.svelte";
   import { AppServices } from "#lib/shell/app-services.svelte";
   import FlapText from "#lib/ui/rolling-number/flap-text.svelte";

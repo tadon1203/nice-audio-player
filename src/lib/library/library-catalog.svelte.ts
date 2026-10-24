@@ -1,5 +1,5 @@
 import type { CreateInfiniteQueryOptions, InfiniteData } from "@tanstack/svelte-query";
-import type { ScrollIndexBucket, LibraryStatus } from "#lib/native";
+import { type ScrollIndexBucket, type LibraryStatus } from "#lib/native/bindings";
 import {
   type CatalogRepository,
   type LibraryCatalogItem,

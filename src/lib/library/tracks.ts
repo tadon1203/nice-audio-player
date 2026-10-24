@@ -1,5 +1,5 @@
 import { resolve } from "$app/paths";
-import type { TrackRow } from "#lib/native";
+import { type TrackRow } from "#lib/native/bindings";
 
 interface Link {
   text: string;

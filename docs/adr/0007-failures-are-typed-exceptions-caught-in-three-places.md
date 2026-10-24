@@ -10,6 +10,8 @@ Three places catch failures:
 
 An absent value is a value. A failure is an exception.
 
+The Backend answers every command with one `CommandError`. The Renderer turns a rejection into one `NativeError`, which carries the area and the code, or into `IpcError` when the rejection has no code. The translation happens once, in `command` (`src/lib/native/commands.ts`). The messages for codes are one table in `src/lib/native/messages.ts`.
+
 ## Exception: reads of decorative state
 
 Some reads fill a view. The user cannot act on a failure of such a read. The upcoming rows that are read in chunks beyond the queue snapshot are one such read.

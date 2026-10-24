@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { LibraryClient } from "#lib/native";
+import { type LibraryClient } from "#lib/native/native-clients";
 import { ArtistRepository } from "./artist-repository";
 import { LibraryQueryKeys } from "./library-query-keys";
 import type { Mock } from "vitest";

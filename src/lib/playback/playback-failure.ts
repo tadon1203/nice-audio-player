@@ -1,20 +1,9 @@
-import type { PlaybackFailureCode } from "#lib/native";
+import type { PlaybackFailureCode } from "#lib/native/bindings";
+import { outputFailureMessages } from "#lib/native/messages";
 
-/** Why playback stopped by itself, as the dock tells the listener. */
+/** Why playback stopped by itself, as the dock tells the listener. The texts live in native/messages. */
 export class PlaybackFailure {
-  public static readonly messages = {
-    noOutputDevice: "No audio output device is available.",
-    outputDeviceUnavailable: "The audio output device is unavailable.",
-    unsupportedOutputConfiguration: "The output device configuration is unsupported.",
-    outputStreamBuildFailed: "The audio output could not be prepared.",
-    outputStreamStartFailed: "The audio output could not be started.",
-    outputStreamPauseFailed: "The audio output could not be paused.",
-    outputStreamResumeFailed: "The audio output could not be resumed.",
-    outputStreamRuntimeFailed: "The audio output stopped unexpectedly.",
-    completionTimingFailed: "Playback completion could not be determined.",
-    decodeFailed: "The audio file could not be decoded.",
-    sampleRateConversionFailed: "The audio could not be converted.",
-  } as const satisfies Record<PlaybackFailureCode, string>;
+  public static readonly messages = outputFailureMessages;
 
   public static message(code: PlaybackFailureCode): string {
     return PlaybackFailure.messages[code];

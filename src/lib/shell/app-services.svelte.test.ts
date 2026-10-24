@@ -1,13 +1,12 @@
 import { QueryClient } from "@tanstack/svelte-query";
 import { describe, expect, it, vi } from "vitest";
-import type {
-  BackendMessage,
-  InitialState,
-  ScanState,
-  NativeClients,
-  PlaybackState,
-  SessionClient,
-} from "#lib/native";
+import {
+  type BackendMessage,
+  type InitialState,
+  type ScanState,
+  type PlaybackState,
+} from "#lib/native/bindings";
+import { type NativeClients, type SessionClient } from "#lib/native/native-clients";
 import { AppServices } from "./app-services.svelte";
 
 const base = {

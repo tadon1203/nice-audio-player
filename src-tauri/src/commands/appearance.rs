@@ -6,10 +6,6 @@ use crate::AppState;
 /// revision.
 #[tauri::command]
 #[specta::specta]
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "Tauri passes State by value, and the patch is only read"
-)]
 pub(crate) fn appearance_update(
     patch: AppearancePatch,
     state: tauri::State<'_, AppState>,

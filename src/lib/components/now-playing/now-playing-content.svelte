@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { TrackId } from "#lib/native";
+  import { type TrackId } from "#lib/native/bindings";
   import { untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import PlaybackWaveformBand from "#lib/components/waveform-band/playback-waveform-band.svelte";

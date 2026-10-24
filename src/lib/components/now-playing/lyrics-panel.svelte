@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { TrackId } from "#lib/native";
+  import { type TrackId } from "#lib/native/bindings";
   import ArrowDown from "@lucide/svelte/icons/arrow-down";
   import ArrowUp from "@lucide/svelte/icons/arrow-up";
   import { TrackLyrics } from "#lib/lyrics/track-lyrics.svelte";

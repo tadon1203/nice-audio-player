@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Root as ContextMenuRoot, Trigger as ContextMenuTrigger } from "#lib/ui/context-menu";
   import { Tracks } from "#lib/library/tracks";
-  import type { SortDirection, TrackSortKey, TrackId } from "#lib/native";
+  import { type SortDirection, type TrackSortKey, type TrackId } from "#lib/native/bindings";
   import { AppServices } from "#lib/shell/app-services.svelte";
   import ContextMenuContent from "#lib/ui/context-menu/context-menu-content.svelte";
   import ContextMenuItem from "#lib/ui/context-menu/context-menu-item.svelte";

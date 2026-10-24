@@ -1,4 +1,4 @@
-import type { TrackId } from "#lib/native";
+import { type TrackId } from "#lib/native/bindings";
 
 export interface StripTrack {
   id: TrackId;

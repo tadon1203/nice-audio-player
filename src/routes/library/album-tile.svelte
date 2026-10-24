@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { ArtistId, AlbumRow } from "#lib/native";
+  import { type ArtistId, type AlbumRow } from "#lib/native/bindings";
   import { resolve } from "$app/paths";
   import { albumTitleLabel, artistNameLabel } from "#lib/library/unknown-name";
   import Artwork from "#lib/ui/artwork.svelte";

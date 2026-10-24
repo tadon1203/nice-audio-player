@@ -1,5 +1,6 @@
 import { infiniteQueryOptions, queryOptions } from "@tanstack/svelte-query";
-import type { ArtistId, ArtistRow, LibraryAlbumPage, LibraryClient } from "#lib/native";
+import { type ArtistId, type ArtistRow, type LibraryAlbumPage } from "#lib/native/bindings";
+import { type LibraryClient } from "#lib/native/native-clients";
 import { LibraryQueryKeys, type ArtistAlbumsArguments } from "./library-query-keys";
 import type {
   CreateInfiniteQueryOptions,

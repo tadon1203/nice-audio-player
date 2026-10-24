@@ -1,4 +1,4 @@
-import type { TrackId } from "#lib/native";
+import { type TrackId } from "#lib/native/bindings";
 import { describe, expect, it } from "vitest";
 import type { TrackTableRow } from "./track-columns";
 import { TrackRowStates, type TrackRowAction } from "./track-row-states";

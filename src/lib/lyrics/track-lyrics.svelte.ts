@@ -1,5 +1,5 @@
 import { createQuery, type CreateQueryResult } from "@tanstack/svelte-query";
-import type { LyricsResolution, TrackId } from "#lib/native";
+import { type LyricsResolution, type TrackId } from "#lib/native/bindings";
 import type { LyricsRepository } from "./lyrics-repository";
 
 /** The lyrics of the track that is loaded. Construct during component initialization. */

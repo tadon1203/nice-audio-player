@@ -1,7 +1,7 @@
 <script lang="ts">
   import Check from "@lucide/svelte/icons/check";
   import { LibraryErrors } from "#lib/library/library-errors";
-  import type { ScanState } from "#lib/native";
+  import { type ScanState } from "#lib/native/bindings";
   import { CountFormat } from "#lib/utils/count-format";
 
   /** What the last scan ended with: why it failed, or what it found. */

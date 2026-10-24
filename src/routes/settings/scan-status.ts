@@ -1,4 +1,4 @@
-import type { ScanStatus as NativeScanStatus } from "#lib/native";
+import { type ScanStatus as NativeScanStatus } from "#lib/native/bindings";
 
 /** The words and the share of a library scan that the settings screen shows. */
 export class ScanStatus {
