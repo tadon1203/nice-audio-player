@@ -10,17 +10,17 @@ use crate::audio::waveform::PlaybackWaveform;
 use crate::library::models::ScanState;
 use crate::settings::Appearance;
 
-/// A value with the revision of its topic. Revisions only grow, per topic.
+/// A value with the version of its topic. Versions only grow, per topic.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, specta::Type)]
-pub struct Revisioned<T> {
-    pub revision: u64,
+pub struct Versioned<T> {
+    pub version: u64,
     pub value: T,
 }
 
-impl<T> Revisioned<T> {
-    /// A value that has not changed yet: revision 0.
+impl<T> Versioned<T> {
+    /// A value that has not changed yet: version 0.
     pub fn new(value: T) -> Self {
-        Self { revision: 0, value }
+        Self { version: 0, value }
     }
 }
 
@@ -49,21 +49,21 @@ impl StateTopic {
 #[derive(Debug, Clone, serde::Serialize, specta::Type)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum BackendMessage {
-    /// The fields of the message merge into one object: { kind: "state", revision, topic, value }.
+    /// The fields of the message merge into one object: { kind: "state", version, topic, value }.
     State(Box<StateMessage>),
-    /// { kind: "position", playbackId, positionMs, seekRevision }
+    /// { kind: "position", playbackId, positionMs, seekCount }
     Position(PlaybackPosition),
     /// The player could not play a track and skipped it by itself. `title` is the track's title,
     /// when it has one.
     TrackSkipped { title: Option<String> },
 }
 
-/// One state topic's value with its revision. A tuple variant around this struct is what specta
+/// One state topic's value with its version. A tuple variant around this struct is what specta
 /// types as the merged object; a struct variant with a flattened field is not.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct StateMessage {
-    pub revision: u64,
+    pub version: u64,
     #[serde(flatten)]
     pub state: StateValue,
 }
@@ -96,8 +96,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_new_value_starts_at_revision_zero() {
-        let topic = Revisioned::new(10);
-        assert_eq!((topic.revision, topic.value), (0, 10));
+    fn a_new_value_starts_at_version_zero() {
+        let topic = Versioned::new(10);
+        assert_eq!((topic.version, topic.value), (0, 10));
     }
 }

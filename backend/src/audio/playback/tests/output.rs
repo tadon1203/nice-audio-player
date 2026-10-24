@@ -146,7 +146,7 @@ fn switching_the_output_while_paused_resumes_the_position_on_the_new_device() {
         harness
             .snapshot()
             .session()
-            .is_some_and(|session| session.seek_revision == 1)
+            .is_some_and(|session| session.seek_count == 1)
     });
 
     assert!(matches!(restarted, PlaybackState::Paused { .. }));

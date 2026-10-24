@@ -19,12 +19,12 @@ const item = (id: TrackId): PlaybackItem => ({
   year: null,
 });
 
-const session = (id: TrackId, positionMs: number, seekRevision = 0): CurrentPlayback => ({
+const session = (id: TrackId, positionMs: number, seekCount = 0): CurrentPlayback => ({
   item: item(id),
   startedBy: "jump",
   playbackId: 1,
   positionMs,
-  seekRevision,
+  seekCount,
   durationMs: 60_000,
   outputDevice: { id: "speakers", name: "Speakers" },
   channelConversion: "none",
@@ -40,7 +40,7 @@ const snapshot = (
   status: "playing" | "paused",
   id: TrackId,
   positionMs: number,
-  seekRevision = 0,
+  seekCount = 0,
 ): PlaybackState => ({
   status,
   base: {
@@ -50,7 +50,7 @@ const snapshot = (
     canGoPrevious: false,
     canGoNext: false,
   },
-  session: session(id, positionMs, seekRevision),
+  session: session(id, positionMs, seekCount),
 });
 
 class FakeAnimation {
@@ -156,7 +156,7 @@ describe("playback clock", () => {
     expect(clock.playing()).toBe(false);
   });
 
-  it("announces a seek once, from the seek revision, and a new track", () => {
+  it("announces a seek once, from the seek version, and a new track", () => {
     const { clock, report, advance } = setup();
     const jumps: string[] = [];
     clock.onJump((jump) => jumps.push(`${jump.kind}:${jump.fromMs}->${jump.toMs}`));

@@ -14,17 +14,17 @@ function item(index: number): PlaybackQueueItem {
 function fakePlayback(total: number, fetchQueueWindow: Playback["fetchQueueWindow"]): Playback {
   return {
     queue: { upcomingCount: total, upcoming: [] },
-    queueRevision: 1,
+    queueVersion: 1,
     fetchQueueWindow,
   } as unknown as Playback;
 }
 
 function windowAt(offset: number): {
-  revision: number;
+  version: number;
   offset: number;
   items: PlaybackQueueItem[];
 } {
-  return { revision: 1, offset, items: [item(offset)] };
+  return { version: 1, offset, items: [item(offset)] };
 }
 
 let cleanup: () => void;

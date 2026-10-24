@@ -7,8 +7,8 @@ export interface ClockReport {
   positionMs: number;
   durationMs: number | null;
   playing: boolean;
-  /** Counts the seeks the backend has completed (`CurrentPlayback.seekRevision`). */
-  seekRevision: number;
+  /** Counts the seeks the backend has completed (`CurrentPlayback.seekCount`). */
+  seekCount: number;
 }
 
 /**
@@ -48,7 +48,7 @@ export class ClockState {
   /**
    * Takes in a report (`null` when nothing is loaded). Each report re-anchors the clock, so drift
    * between reports never accumulates. A jump is announced only for a change of track or of
-   * `seekRevision`: a report that arrives late, or disagrees with the estimate, is just a
+   * `seekCount`: a report that arrives late, or disagrees with the estimate, is just a
    * correction, so a slow IPC round trip can never look like a seek.
    */
   public reduce(
@@ -63,7 +63,7 @@ export class ClockState {
     const kind =
       report.itemId !== previous.itemId
         ? "track"
-        : report.seekRevision !== previous.seekRevision
+        : report.seekCount !== previous.seekCount
           ? "seek"
           : null;
     if (kind === null) return { state: new ClockState(report, anchor, this.jumps), jump: null };

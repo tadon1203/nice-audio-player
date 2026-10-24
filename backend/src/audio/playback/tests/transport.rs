@@ -486,7 +486,7 @@ fn a_file_whose_name_is_not_unicode_plays() {
 }
 
 #[test]
-fn published_revisions_grow_and_commands_that_change_nothing_keep_theirs() {
+fn published_versions_grow_and_commands_that_change_nothing_keep_theirs() {
     let mut harness = Harness::new();
 
     let changed = harness
@@ -499,8 +499,8 @@ fn published_revisions_grow_and_commands_that_change_nothing_keep_theirs() {
         .call(|reply| PlaybackCommand::Mute { reply })
         .unwrap();
 
-    assert_eq!(changed.revision, 1);
-    assert_eq!(muted.revision, 2);
-    assert_eq!(muted_again.revision, 2);
-    assert_eq!(harness.versioned_snapshot().revision, 2);
+    assert_eq!(changed.version, 1);
+    assert_eq!(muted.version, 2);
+    assert_eq!(muted_again.version, 2);
+    assert_eq!(harness.versioned_snapshot().version, 2);
 }

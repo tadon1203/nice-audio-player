@@ -37,7 +37,7 @@ use crate::errors::CommandError;
 use crate::ids::{PlaybackId, TrackId};
 use crate::library::store::PlayableTrack;
 use crate::media::validation::ValidatedAudioFile;
-use crate::messages::{Revisioned, StateTopic};
+use crate::messages::{StateTopic, Versioned};
 use crate::settings::Settings;
 use crate::state_hub::{Published, StateHub};
 use crate::test_support::{
@@ -190,7 +190,7 @@ impl Harness {
         self.versioned_snapshot().value
     }
 
-    fn versioned_snapshot(&self) -> Revisioned<PlaybackState> {
+    fn versioned_snapshot(&self) -> Versioned<PlaybackState> {
         self.hub.read(|published| published.playback.clone())
     }
 
@@ -206,7 +206,7 @@ impl Harness {
         self.versioned_queue_snapshot().value
     }
 
-    fn versioned_queue_snapshot(&self) -> Revisioned<QueueState> {
+    fn versioned_queue_snapshot(&self) -> Versioned<QueueState> {
         self.hub.read(|published| published.queue.clone())
     }
 
@@ -268,8 +268,8 @@ impl Harness {
         self.worker.tick();
     }
 
-    // The transport helpers answer with the snapshot alone; a test that reads a revision calls
-    // `call` and gets the `Revisioned` answer.
+    // The transport helpers answer with the snapshot alone; a test that reads a version calls
+    // `call` and gets the `Versioned` answer.
     fn start(&mut self, tracks: Vec<PlayableTrack>, start_index: usize) -> Answer<PlaybackState> {
         let track_ids = self.register(tracks);
         self.call(|reply| PlaybackCommand::Start {

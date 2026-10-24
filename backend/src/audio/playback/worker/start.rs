@@ -4,9 +4,9 @@ use super::{
     AdvanceReason, CommandError, CompressedAudioSource, CompressedSourceError, FailureScope,
     HISTORY_IN_SNAPSHOT, HashSet, LoadStage, Loaded, Loading, OpenedPipeline, PipelineError,
     PlayableItem, PlaybackFailureCode, PlaybackServiceError, PlaybackState, PlaybackWorker,
-    Position, Prebuffering, QueueEntry, QueueError, QueueItemId, QueueState, Reply, Revisioned,
-    SourceLoad, SourceLoadId, StartFailure, StartFailurePhase, StartRequest, StartedBy, TrackId,
-    Transport, UPCOMING_IN_SNAPSHOT, error, open_start, output_failure_code,
+    Position, Prebuffering, QueueEntry, QueueError, QueueItemId, QueueState, Reply, SourceLoad,
+    SourceLoadId, StartFailure, StartFailurePhase, StartRequest, StartedBy, TrackId, Transport,
+    UPCOMING_IN_SNAPSHOT, Versioned, error, open_start, output_failure_code,
     previous_restarts_track, respond,
 };
 
@@ -16,7 +16,7 @@ impl PlaybackWorker {
         &mut self,
         track_ids: Vec<TrackId>,
         start_index: usize,
-        reply: Reply<Revisioned<PlaybackState>>,
+        reply: Reply<Versioned<PlaybackState>>,
     ) {
         if self.replace_queue(track_ids, start_index).is_err() {
             respond(reply, Err(PlaybackServiceError::InvalidPlaybackState));
@@ -43,7 +43,7 @@ impl PlaybackWorker {
 
     /// Puts back the queue the last replacement or Clear upcoming took away. When the same item
     /// is still current, it keeps playing; otherwise the restored current item starts.
-    pub(super) fn restore_previous_queue(&mut self, reply: Reply<Revisioned<PlaybackState>>) {
+    pub(super) fn restore_previous_queue(&mut self, reply: Reply<Versioned<PlaybackState>>) {
         let Some(previous) = self.previous_queue.take() else {
             respond(reply, Err(PlaybackServiceError::InvalidPlaybackState));
             return;
@@ -68,7 +68,7 @@ impl PlaybackWorker {
     pub(super) fn start_enqueued(
         &mut self,
         track_ids: Vec<TrackId>,
-        reply: Reply<Revisioned<QueueState>>,
+        reply: Reply<Versioned<QueueState>>,
     ) {
         if self.replace_queue(track_ids, 0).is_err() {
             respond(reply, Err(PlaybackServiceError::InvalidPlaybackState));
@@ -84,7 +84,7 @@ impl PlaybackWorker {
         &mut self,
         item: PlayableItem,
         started_by: StartedBy,
-        responder: Option<Reply<Revisioned<PlaybackState>>>,
+        responder: Option<Reply<Versioned<PlaybackState>>>,
         start_paused: bool,
     ) -> StartRequest {
         StartRequest {
@@ -101,7 +101,7 @@ impl PlaybackWorker {
     /// Starts whatever the queue points at, after telling listeners where the queue stands.
     pub(super) fn start_current(
         &mut self,
-        responder: Option<Reply<Revisioned<PlaybackState>>>,
+        responder: Option<Reply<Versioned<PlaybackState>>>,
         start_paused: bool,
         started_by: StartedBy,
     ) {
@@ -414,7 +414,7 @@ impl PlaybackWorker {
     pub(super) fn navigate(
         &mut self,
         reason: AdvanceReason,
-        reply: Reply<Revisioned<PlaybackState>>,
+        reply: Reply<Versioned<PlaybackState>>,
     ) {
         if reason == AdvanceReason::UserPrevious
             && let Transport::Loaded(loaded) = &self.transport

@@ -49,27 +49,27 @@ function fakeTargets(): {
   return { targets, acceptPlayback, acceptPosition, noteSkipped };
 }
 
-const initial = (playbackRevision: number): BackendMessage[] => [
-  { kind: "state", revision: playbackRevision, topic: "playback", value: "snapshot" as never },
-  { kind: "state", revision: 1, topic: "queue", value: "queue" as never },
-  { kind: "state", revision: 1, topic: "scan", value: "scan" as never },
-  { kind: "state", revision: 1, topic: "waveform", value: null },
+const initial = (playbackVersion: number): BackendMessage[] => [
+  { kind: "state", version: playbackVersion, topic: "playback", value: "snapshot" as never },
+  { kind: "state", version: 1, topic: "queue", value: "queue" as never },
+  { kind: "state", version: 1, topic: "scan", value: "scan" as never },
+  { kind: "state", version: 1, topic: "waveform", value: null },
   {
     kind: "state",
-    revision: 1,
+    version: 1,
     topic: "appearance",
     value: { artworkBackdrop: true, calmMotion: false },
   },
 ];
 
-const stateMessage = (revision: number): BackendMessage => ({
+const stateMessage = (version: number): BackendMessage => ({
   kind: "state",
-  revision,
+  version,
   topic: "playback",
   value: "pushed" as never,
 });
 
-const position: PlaybackPosition = { playbackId: 1, positionMs: 250, seekRevision: 0 };
+const position: PlaybackPosition = { playbackId: 1, positionMs: 250, seekCount: 0 };
 
 describe("NativeSession", () => {
   it("is connecting until the initial state is applied, then ready", async () => {
@@ -103,7 +103,7 @@ describe("NativeSession", () => {
     attempts[0].answer(initial(4));
     await vi.waitFor(() => expect(acceptPlayback).toHaveBeenCalledTimes(2));
 
-    const applied = acceptPlayback.mock.calls.map(([v]) => v.revision);
+    const applied = acceptPlayback.mock.calls.map(([v]) => v.version);
     expect(applied).toEqual([4, 5]);
   });
 
@@ -145,7 +145,7 @@ describe("NativeSession", () => {
     await vi.waitFor(() => expect(session.connection).toBe("ready"));
     attempts[1].onMessage(stateMessage(4));
 
-    const applied = acceptPlayback.mock.calls.map(([v]) => v.revision);
+    const applied = acceptPlayback.mock.calls.map(([v]) => v.version);
     expect(applied).toEqual([3, 4]);
   });
 

@@ -7,7 +7,7 @@ const report = (overrides: Partial<ClockReport> = {}): ClockReport => ({
   positionMs: 10_000,
   durationMs: 60_000,
   playing: true,
-  seekRevision: 0,
+  seekCount: 0,
   ...overrides,
 });
 
@@ -46,11 +46,11 @@ describe("ClockState.reduce", () => {
     expect(jumps).toEqual([]);
   });
 
-  it("announces one seek when the seek revision changes, with where it came from", () => {
+  it("announces one seek when the seek version changes, with where it came from", () => {
     const { jumps } = run([
       [0, report({ positionMs: 10_000 })],
-      [2_000, report({ positionMs: 42_000, seekRevision: 1 })],
-      [2_250, report({ positionMs: 42_250, seekRevision: 1 })],
+      [2_000, report({ positionMs: 42_000, seekCount: 1 })],
+      [2_250, report({ positionMs: 42_250, seekCount: 1 })],
     ]);
     expect(jumps).toEqual([{ id: 1, kind: "seek", fromMs: 12_000, toMs: 42_000 }]);
   });
@@ -58,7 +58,7 @@ describe("ClockState.reduce", () => {
   it("counts a seek to the very same place, because the backend said it happened", () => {
     const { jumps } = run([
       [0, report()],
-      [0, report({ seekRevision: 1 })],
+      [0, report({ seekCount: 1 })],
     ]);
     expect(jumps.map((jump) => jump.kind)).toEqual(["seek"]);
   });
@@ -94,16 +94,16 @@ describe("ClockState.reduce", () => {
   it("numbers jumps in order", () => {
     const { jumps } = run([
       [0, report()],
-      [10, report({ seekRevision: 1 })],
-      [20, report({ seekRevision: 2 })],
-      [30, report({ itemId: 2, seekRevision: 2 })],
+      [10, report({ seekCount: 1 })],
+      [20, report({ seekCount: 2 })],
+      [30, report({ itemId: 2, seekCount: 2 })],
     ]);
     expect(jumps.map((jump) => jump.id)).toEqual([1, 2, 3]);
   });
 
   it("leaves the state it reduced from unchanged", () => {
     const before = ClockState.initial.reduce(report(), 0).state;
-    before.reduce(report({ seekRevision: 1 }), 10);
+    before.reduce(report({ seekCount: 1 }), 10);
     expect(before.jumps).toBe(0);
   });
 });

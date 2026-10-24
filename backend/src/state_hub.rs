@@ -1,4 +1,4 @@
-//! The Backend's published state: one value per topic, each with its revision. Services publish
+//! The Backend's published state: one value per topic, each with its version. Services publish
 //! their values here and read their own values back; the host reads the latest messages here.
 
 use parking_lot::Mutex;
@@ -7,18 +7,18 @@ use crate::audio::playback::{PlaybackState, QueueState, initial_playback};
 use crate::audio::waveform::PlaybackWaveform;
 use crate::library::models::ScanState;
 use crate::messages::{
-    BackendMessage, Revisioned, SharedMessageListener, StateMessage, StateTopic, StateValue,
+    BackendMessage, SharedMessageListener, StateMessage, StateTopic, StateValue, Versioned,
 };
 use crate::settings::{Appearance, Settings};
 
-/// The current value of every state topic, each with its revision.
+/// The current value of every state topic, each with its version.
 #[derive(Clone)]
 pub struct Published {
-    pub playback: Revisioned<PlaybackState>,
-    pub queue: Revisioned<QueueState>,
-    pub scan: Revisioned<ScanState>,
-    pub waveform: Revisioned<Option<PlaybackWaveform>>,
-    pub appearance: Revisioned<Appearance>,
+    pub playback: Versioned<PlaybackState>,
+    pub queue: Versioned<QueueState>,
+    pub scan: Versioned<ScanState>,
+    pub waveform: Versioned<Option<PlaybackWaveform>>,
+    pub appearance: Versioned<Appearance>,
 }
 
 impl Published {
@@ -29,24 +29,24 @@ impl Published {
         Self {
             playback,
             queue,
-            scan: Revisioned::new(ScanState::idle()),
-            waveform: Revisioned::new(None),
-            appearance: Revisioned::new(settings.appearance.clone()),
+            scan: Versioned::new(ScanState::idle()),
+            waveform: Versioned::new(None),
+            appearance: Versioned::new(settings.appearance.clone()),
         }
     }
 
-    fn revision(&self, topic: StateTopic) -> u64 {
+    fn version(&self, topic: StateTopic) -> u64 {
         match topic {
-            StateTopic::Playback => self.playback.revision,
-            StateTopic::Queue => self.queue.revision,
-            StateTopic::Scan => self.scan.revision,
-            StateTopic::Waveform => self.waveform.revision,
-            StateTopic::Appearance => self.appearance.revision,
+            StateTopic::Playback => self.playback.version,
+            StateTopic::Queue => self.queue.version,
+            StateTopic::Scan => self.scan.version,
+            StateTopic::Waveform => self.waveform.version,
+            StateTopic::Appearance => self.appearance.version,
         }
     }
 
     fn message(&self, topic: StateTopic) -> BackendMessage {
-        let revision = self.revision(topic);
+        let version = self.version(topic);
         let value = match topic {
             StateTopic::Playback => StateValue::Playback(Box::new(self.playback.value.clone())),
             StateTopic::Queue => StateValue::Queue(self.queue.value.clone()),
@@ -55,7 +55,7 @@ impl Published {
             StateTopic::Appearance => StateValue::Appearance(self.appearance.value.clone()),
         };
         BackendMessage::State(Box::new(StateMessage {
-            revision,
+            version,
             state: value,
         }))
     }
@@ -74,11 +74,11 @@ impl StateHub {
         }
     }
 
-    /// Stores the value, increments that topic's revision, and tells the listener the topic
-    /// changed. Returns the topic's revision after the call. A value equal to the held one does
+    /// Stores the value, increments that topic's version, and tells the listener the topic
+    /// changed. Returns the topic's version after the call. A value equal to the held one does
     /// nothing.
     pub fn publish(&self, value: StateValue) -> u64 {
-        let (topic, revision, changed) = {
+        let (topic, version, changed) = {
             let mut published = self.published.lock();
             let (topic, changed) = match value {
                 StateValue::Playback(value) => {
@@ -94,12 +94,12 @@ impl StateHub {
                     store(&mut published.appearance, value),
                 ),
             };
-            (topic, published.revision(topic), changed)
+            (topic, published.version(topic), changed)
         };
         if changed {
             self.listener.state_changed(topic);
         }
-        revision
+        version
     }
 
     /// Reads the published values under the lock. Keep `f` short.
@@ -123,12 +123,12 @@ impl StateHub {
 }
 
 /// Replaces the slot's value and counts the change. Returns whether the value changed.
-fn store<T: PartialEq>(slot: &mut Revisioned<T>, value: T) -> bool {
+fn store<T: PartialEq>(slot: &mut Versioned<T>, value: T) -> bool {
     if slot.value == value {
         return false;
     }
     slot.value = value;
-    slot.revision = slot.revision.saturating_add(1);
+    slot.version = slot.version.saturating_add(1);
     true
 }
 
@@ -147,26 +147,26 @@ mod tests {
     #[test]
     fn publishing_a_changed_value_bumps_only_its_topic_and_notifies_once() {
         let (hub, recorder) = hub();
-        let revision = hub.publish(StateValue::Waveform(None));
-        assert_eq!(revision, 0, "an equal value is not a change");
+        let version = hub.publish(StateValue::Waveform(None));
+        assert_eq!(version, 0, "an equal value is not a change");
 
-        let revision = hub.publish(StateValue::Appearance(Appearance {
+        let version = hub.publish(StateValue::Appearance(Appearance {
             calm_motion: !Appearance::default().calm_motion,
             ..Appearance::default()
         }));
-        assert_eq!(revision, 1);
+        assert_eq!(version, 1);
         assert_eq!(recorder.state_topics(), [StateTopic::Appearance]);
         assert!(matches!(
             hub.message(StateTopic::Waveform),
-            BackendMessage::State(message) if message.revision == 0
+            BackendMessage::State(message) if message.version == 0
         ));
     }
 
     #[test]
     fn publishing_an_equal_value_does_nothing() {
         let (hub, recorder) = hub();
-        let revision = hub.publish(StateValue::Appearance(Appearance::default()));
-        assert_eq!(revision, 0);
+        let version = hub.publish(StateValue::Appearance(Appearance::default()));
+        assert_eq!(version, 0);
         assert_eq!(recorder.state_topics(), []);
     }
 

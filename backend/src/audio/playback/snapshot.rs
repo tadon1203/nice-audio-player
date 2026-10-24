@@ -57,7 +57,7 @@ pub struct CurrentPlayback {
     pub position_ms: u64,
     /// Counts the seeks the player has completed. A change means the position jumped on
     /// purpose, so a display can react to the jump instead of guessing it from the numbers.
-    pub seek_revision: u64,
+    pub seek_count: u64,
     pub duration_ms: Option<u64>,
     pub output_device: AudioOutputDeviceIdentity,
     pub channel_conversion: PlaybackChannelConversion,
@@ -78,7 +78,7 @@ pub struct CurrentPlayback {
 pub struct PlaybackPosition {
     pub playback_id: PlaybackId,
     pub position_ms: u64,
-    pub seek_revision: u64,
+    pub seek_count: u64,
 }
 
 impl CurrentPlayback {
@@ -86,7 +86,7 @@ impl CurrentPlayback {
         PlaybackPosition {
             playback_id: self.playback_id,
             position_ms: self.position_ms,
-            seek_revision: self.seek_revision,
+            seek_count: self.seek_count,
         }
     }
 }
@@ -302,11 +302,11 @@ pub struct QueueState {
     list: Option<QueueList>,
 }
 
-/// A slice of the upcoming list, tagged with the queue revision it was cut from.
+/// A slice of the upcoming list, tagged with the queue version it was cut from.
 #[derive(Debug, Clone, serde::Serialize, specta::Type, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct QueueWindow {
-    pub revision: u64,
+    pub version: u64,
     pub offset: u32,
     pub items: Vec<PlaybackQueueItem>,
 }
@@ -363,12 +363,12 @@ impl QueueState {
     }
 
     /// Upcoming items from `offset`, at most `limit` (and never more than `MAX_QUEUE_WINDOW`),
-    /// read from the library now. Tracks the library no longer has are left out. `revision` is
-    /// the queue revision this snapshot was published with.
-    pub fn window(&self, revision: u64, offset: usize, limit: usize) -> QueueWindow {
+    /// read from the library now. Tracks the library no longer has are left out. `version` is
+    /// the queue version this snapshot was published with.
+    pub fn window(&self, version: u64, offset: usize, limit: usize) -> QueueWindow {
         let Some(list) = &self.list else {
             return QueueWindow {
-                revision,
+                version,
                 offset: 0,
                 items: Vec::new(),
             };
@@ -379,7 +379,7 @@ impl QueueState {
             .saturating_add(limit.min(MAX_QUEUE_WINDOW))
             .min(upcoming.len());
         QueueWindow {
-            revision,
+            version,
             offset: u32::try_from(start).unwrap_or(u32::MAX),
             items: list
                 .rows(upcoming.get(start..end).unwrap_or_default())

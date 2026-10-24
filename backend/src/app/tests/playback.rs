@@ -43,9 +43,9 @@ fn waveform_announcements(recorded: &RecordingMessageListener) -> usize {
         .count()
 }
 
-fn waveform_revision(backend: &BackendApp) -> u64 {
+fn waveform_version(backend: &BackendApp) -> u64 {
     match backend.message(StateTopic::Waveform) {
-        BackendMessage::State(message) => message.revision,
+        BackendMessage::State(message) => message.version,
         other => panic!("the Waveform is not a state message: {other:?}"),
     }
 }
@@ -140,7 +140,7 @@ fn previous_back_to_a_track_that_played_before_shows_its_waveform() {
         std::thread::sleep(Duration::from_millis(10));
     }
     backend.next().expect("next");
-    let before = waveform_revision(&backend);
+    let before = waveform_version(&backend);
     let announced = waveform_announcements(&recorded);
 
     let back = backend.previous().expect("previous");
@@ -149,12 +149,12 @@ fn previous_back_to_a_track_that_played_before_shows_its_waveform() {
     let BackendMessage::State(message) = backend.message(StateTopic::Waveform) else {
         panic!("the Waveform is not a state message");
     };
-    assert!(message.revision > before);
+    assert!(message.version > before);
     assert!(waveform_announcements(&recorded) > announced);
     let StateValue::Waveform(Some(waveform)) = message.state else {
         panic!("the waveform of a was not shown after Previous");
     };
     assert_eq!(waveform.playback_id, session.playback_id);
-    assert_eq!(waveform_revision(&backend), message.revision);
+    assert_eq!(waveform_version(&backend), message.version);
     assert_eq!(shown_waveform(&backend), Some(waveform));
 }

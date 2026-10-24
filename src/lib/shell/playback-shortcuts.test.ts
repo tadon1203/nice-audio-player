@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { player } from "#lib/native/commands";
-import { type PlaybackState, type Revisioned } from "#lib/native/bindings";
+import { type PlaybackState, type Versioned } from "#lib/native/bindings";
 import { PlaybackClock } from "#lib/playback/playback-clock.svelte";
 import { Playback } from "#lib/playback/playback.svelte";
 import { NoticeCenter } from "./notice-center.svelte";
@@ -10,8 +10,8 @@ import { UserActionRunner } from "./user-action-runner.svelte";
 const mocks = vi.hoisted(() => ({ seek: vi.fn() }));
 vi.mock("#lib/native/commands", () => ({ player: { seek: mocks.seek } }));
 
-const playing = (positionMs: number): Revisioned<PlaybackState> => ({
-  revision: 1,
+const playing = (positionMs: number): Versioned<PlaybackState> => ({
+  version: 1,
   value: playingValue(positionMs),
 });
 
@@ -40,7 +40,7 @@ const playingValue = (positionMs: number): PlaybackState => ({
     startedBy: "jump",
     playbackId: 1,
     positionMs,
-    seekRevision: 0,
+    seekCount: 0,
     durationMs: 60_000,
     outputDevice: { id: "speakers", name: "Speakers" },
     channelConversion: "none",

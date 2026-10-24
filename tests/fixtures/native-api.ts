@@ -144,7 +144,7 @@ export class Native {
       (topic) =>
         ({
           kind: "state",
-          revision: this.#state[topic].revision,
+          version: this.#state[topic].version,
           topic,
           value: this.#state[topic].value,
         }) as BackendMessage,
@@ -180,7 +180,7 @@ export class Native {
     if (message.kind === "state") {
       this.#state = {
         ...this.#state,
-        [message.topic]: { revision: message.revision, value: message.value },
+        [message.topic]: { version: message.version, value: message.value },
       };
     }
     const channelId = this.#channelId("appConnect", "channel");
@@ -197,22 +197,22 @@ export class Native {
   }
 
   /**
-   * Publishes a new value of a state topic: the next revision of it, sent as a state message.
-   * Returns that revision, so a command that answers with the same value can carry it.
+   * Publishes a new value of a state topic: the next version of it, sent as a state message.
+   * Returns that version, so a command that answers with the same value can carry it.
    */
   public async publish<Topic extends keyof TopicState>(
     topic: Topic,
     value: TopicState[Topic]["value"],
   ): Promise<number> {
-    const revision = this.revisionOf(topic);
-    const next = revision + 1;
-    await this.send({ kind: "state", revision: next, topic, value } as BackendMessage);
+    const version = this.versionOf(topic);
+    const next = version + 1;
+    await this.send({ kind: "state", version: next, topic, value } as BackendMessage);
     return next;
   }
 
-  /** The revision of a state topic as the Backend last published it. */
-  public revisionOf(topic: keyof TopicState): number {
-    return this.#state[topic].revision;
+  /** The version of a state topic as the Backend last published it. */
+  public versionOf(topic: keyof TopicState): number {
+    return this.#state[topic].version;
   }
 
   /** Sends one binary message down the channel the renderer passed to its latest call of `name`. */

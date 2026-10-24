@@ -170,14 +170,14 @@ test("clearing the upcoming tracks can be undone", async ({ page, native, player
       item: playbackItemFor(library.tracks[0]!),
       startedBy: "jump",
       positionMs: 12_000,
-      seekRevision: 0,
+      seekCount: 0,
       volume: 0.72,
       muted: false,
       outputSelection: { kind: "systemDefault" },
       canGoPrevious: false,
       canGoNext: true,
     });
-    return { revision: await native.publish("playback", value), value };
+    return { version: await native.publish("playback", value), value };
   });
   const dock = await playFirstTrack(page);
   await dock.getByRole("button", { name: "Queue", exact: true }).click();

@@ -158,7 +158,7 @@ mod tests {
 
         let state = |_| {
             BackendMessage::State(Box::new(StateMessage {
-                revision: 0,
+                version: 0,
                 state: StateValue::Waveform(None),
             }))
         };
@@ -184,7 +184,7 @@ mod tests {
         ];
         let state = |_| {
             BackendMessage::State(Box::new(StateMessage {
-                revision: 0,
+                version: 0,
                 state: StateValue::Waveform(None),
             }))
         };

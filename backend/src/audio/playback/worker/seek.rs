@@ -2,7 +2,7 @@
 
 use super::{
     Instant, OpenedPipeline, PipelineError, PlaybackFailureCode, PlaybackServiceError,
-    PlaybackState, PlaybackWorker, Reply, Revisioned, SeekInFlight, Transport, millis_to_frame,
+    PlaybackState, PlaybackWorker, Reply, SeekInFlight, Transport, Versioned, millis_to_frame,
     open_seek, output_failure_code, respond,
 };
 
@@ -10,7 +10,7 @@ impl PlaybackWorker {
     pub(super) fn begin_seek(
         &mut self,
         requested_position_ms: u64,
-        responder: Option<Reply<Revisioned<PlaybackState>>>,
+        responder: Option<Reply<Versioned<PlaybackState>>>,
     ) {
         self.cancel_seek(PlaybackServiceError::Superseded);
         if let Transport::Loaded(loaded) = &mut self.transport {
@@ -84,7 +84,7 @@ impl PlaybackWorker {
         loaded.position.remaining_frames = Some(seek.remaining_frames);
         loaded.position.last_publish = Instant::now();
         loaded.completion_time = None;
-        self.seek_revision = self.seek_revision.saturating_add(1);
+        self.seek_count = self.seek_count.saturating_add(1);
         let snapshot = self.publish_state();
         respond(seek.responder, Ok(snapshot));
     }

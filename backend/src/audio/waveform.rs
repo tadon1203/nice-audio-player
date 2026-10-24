@@ -674,7 +674,7 @@ mod tests {
     use crate::ids::TrackId;
     use crate::media::validation::validate_audio_file;
     use crate::messages::SharedMessageListener;
-    use crate::messages::{Revisioned, StateTopic};
+    use crate::messages::{StateTopic, Versioned};
     use crate::settings::Settings;
     use crate::state_hub::{Published, StateHub};
     use crate::test_support::{RecordingMessageListener, Sent, null_message_listener};
@@ -886,7 +886,7 @@ mod tests {
         ))
     }
 
-    fn published_waveform(service: &Waveforms) -> Revisioned<Option<PlaybackWaveform>> {
+    fn published_waveform(service: &Waveforms) -> Versioned<Option<PlaybackWaveform>> {
         service
             .shared
             .hub
@@ -928,7 +928,7 @@ mod tests {
         service.loaded(PlaybackId::first(), &track_of(&file, None));
 
         // The topic starts at no waveform, and it still has none: nothing to publish.
-        assert_eq!(published_waveform(&service).revision, 0);
+        assert_eq!(published_waveform(&service).version, 0);
         assert_eq!(recorder.sent(), []);
     }
 
@@ -953,14 +953,14 @@ mod tests {
         service
             .shared
             .publish(Path::new(&other.path), stamp(), rebuilt());
-        assert_eq!(published_waveform(&service).revision, 0);
+        assert_eq!(published_waveform(&service).version, 0);
         assert_eq!(recorder.sent().len(), announced);
 
         service
             .shared
             .publish(Path::new(&loaded.path), stamp(), rebuilt());
         let state = published_waveform(&service);
-        assert_eq!(state.revision, 1);
+        assert_eq!(state.version, 1);
         assert_eq!(
             state.value,
             Some(PlaybackWaveform {

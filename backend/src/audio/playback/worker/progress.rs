@@ -3,7 +3,7 @@
 use super::prefetch::PREFETCH_LEAD_MS;
 use super::{
     AdvanceReason, Duration, Instant, POSITION_UPDATE_INTERVAL, PREVIOUS_RESTART_THRESHOLD_MS,
-    PlaybackState, PlaybackWorker, Reply, Revisioned, StartedBy, Transport, respond,
+    PlaybackState, PlaybackWorker, Reply, StartedBy, Transport, Versioned, respond,
     should_publish_position,
 };
 
@@ -79,7 +79,7 @@ impl PlaybackWorker {
     /// or stop.
     pub(super) fn advance_after_track(
         &mut self,
-        responder: Option<Reply<Revisioned<PlaybackState>>>,
+        responder: Option<Reply<Versioned<PlaybackState>>>,
         start_paused: bool,
     ) {
         let advanced = self

@@ -379,7 +379,7 @@ test("a command answer older than the state on screen does not change the dock",
         item: playbackItemFor(second),
         startedBy: "jump",
         positionMs: 0,
-        seekRevision: 0,
+        seekCount: 0,
         volume: 0.72,
         muted: false,
         outputSelection: { kind: "systemDefault" },
@@ -387,7 +387,7 @@ test("a command answer older than the state on screen does not change the dock",
         canGoNext: false,
       }),
     );
-    return { revision: 1, value: stoppedPlayback };
+    return { version: 1, value: stoppedPlayback };
   });
   const dock = await playFirstTrack(page);
 

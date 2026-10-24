@@ -13,31 +13,31 @@ export const commands = {
 	 *  Replaces the queue with `context` and plays from `start_track_id`, or from the context's
 	 *  first track when it is `None`.
 	 */
-	playerPlay: (context: PlaybackContext, startTrackId: number | null) => __TAURI_INVOKE<Revisioned<PlaybackState>>("player_play", { context, startTrackId }),
-	playerPause: () => __TAURI_INVOKE<Revisioned<PlaybackState>>("player_pause"),
-	playerResume: () => __TAURI_INVOKE<Revisioned<PlaybackState>>("player_resume"),
-	playerPrevious: () => __TAURI_INVOKE<Revisioned<PlaybackState>>("player_previous"),
-	playerNext: () => __TAURI_INVOKE<Revisioned<PlaybackState>>("player_next"),
-	playerSeek: (positionMs: number) => __TAURI_INVOKE<Revisioned<PlaybackState>>("player_seek", { positionMs }),
-	playerSetVolume: (volume: number) => __TAURI_INVOKE<Revisioned<PlaybackState>>("player_set_volume", { volume }),
-	playerSetMuted: (muted: boolean) => __TAURI_INVOKE<Revisioned<PlaybackState>>("player_set_muted", { muted }),
+	playerPlay: (context: PlaybackContext, startTrackId: number | null) => __TAURI_INVOKE<Versioned<PlaybackState>>("player_play", { context, startTrackId }),
+	playerPause: () => __TAURI_INVOKE<Versioned<PlaybackState>>("player_pause"),
+	playerResume: () => __TAURI_INVOKE<Versioned<PlaybackState>>("player_resume"),
+	playerPrevious: () => __TAURI_INVOKE<Versioned<PlaybackState>>("player_previous"),
+	playerNext: () => __TAURI_INVOKE<Versioned<PlaybackState>>("player_next"),
+	playerSeek: (positionMs: number) => __TAURI_INVOKE<Versioned<PlaybackState>>("player_seek", { positionMs }),
+	playerSetVolume: (volume: number) => __TAURI_INVOKE<Versioned<PlaybackState>>("player_set_volume", { volume }),
+	playerSetMuted: (muted: boolean) => __TAURI_INVOKE<Versioned<PlaybackState>>("player_set_muted", { muted }),
 	playerListOutputDevices: () => __TAURI_INVOKE<AudioOutputDevice[]>("player_list_output_devices"),
-	playerSetRepeatMode: (mode: RepeatMode) => __TAURI_INVOKE<Revisioned<QueueState>>("player_set_repeat_mode", { mode }),
-	playerSetShuffle: (enabled: boolean) => __TAURI_INVOKE<Revisioned<QueueState>>("player_set_shuffle", { enabled }),
+	playerSetRepeatMode: (mode: RepeatMode) => __TAURI_INVOKE<Versioned<QueueState>>("player_set_repeat_mode", { mode }),
+	playerSetShuffle: (enabled: boolean) => __TAURI_INVOKE<Versioned<QueueState>>("player_set_shuffle", { enabled }),
 	/**  Switches the output device; a loaded track restarts on it at the same position. */
-	playerSetOutputSelection: (selection: AudioOutputSelection) => __TAURI_INVOKE<Revisioned<PlaybackState>>("player_set_output_selection", { selection }),
-	playerRemoveQueueItem: (id: QueueItemId) => __TAURI_INVOKE<Revisioned<QueueState>>("player_remove_queue_item", { id }),
-	playerMoveQueueItem: (id: QueueItemId, to: number) => __TAURI_INVOKE<Revisioned<QueueState>>("player_move_queue_item", { id, to }),
+	playerSetOutputSelection: (selection: AudioOutputSelection) => __TAURI_INVOKE<Versioned<PlaybackState>>("player_set_output_selection", { selection }),
+	playerRemoveQueueItem: (id: QueueItemId) => __TAURI_INVOKE<Versioned<QueueState>>("player_remove_queue_item", { id }),
+	playerMoveQueueItem: (id: QueueItemId, to: number) => __TAURI_INVOKE<Versioned<QueueState>>("player_move_queue_item", { id, to }),
 	/**  Makes an upcoming queue item current and plays it. */
-	playerPlayQueueItem: (id: QueueItemId) => __TAURI_INVOKE<Revisioned<PlaybackState>>("player_play_queue_item", { id }),
+	playerPlayQueueItem: (id: QueueItemId) => __TAURI_INVOKE<Versioned<PlaybackState>>("player_play_queue_item", { id }),
 	/**
 	 *  Adds a library track to the queue: right after the current one (`next`) or at the end.
 	 *  With nothing queued it starts playing.
 	 */
-	playerEnqueueTrack: (trackId: TrackId, next: boolean) => __TAURI_INVOKE<Revisioned<QueueState>>("player_enqueue_track", { trackId, next }),
-	playerClearQueue: () => __TAURI_INVOKE<Revisioned<QueueState>>("player_clear_queue"),
+	playerEnqueueTrack: (trackId: TrackId, next: boolean) => __TAURI_INVOKE<Versioned<QueueState>>("player_enqueue_track", { trackId, next }),
+	playerClearQueue: () => __TAURI_INVOKE<Versioned<QueueState>>("player_clear_queue"),
 	/**  Puts back the queue the last replacement or Clear upcoming took away. */
-	playerRestorePreviousQueue: () => __TAURI_INVOKE<Revisioned<PlaybackState>>("player_restore_previous_queue"),
+	playerRestorePreviousQueue: () => __TAURI_INVOKE<Versioned<PlaybackState>>("player_restore_previous_queue"),
 	libraryStatus: () => __TAURI_INVOKE<LibraryStatus>("library_status"),
 	/**  Moves the library database aside and restarts the app, which recreates it and rescans. */
 	libraryReset: () => __TAURI_INVOKE<null>("library_reset"),
@@ -84,15 +84,15 @@ export const commands = {
 	meterStop: (subscription: number) => __TAURI_INVOKE<null>("meter_stop", { subscription }),
 	/**
 	 *  Registers `channel` as the one channel to the Renderer, replacing an earlier one. Returns the
-	 *  current value of every state topic. A message sent in between has a revision that is not
-	 *  older than the returned value, so the Renderer can order them by revision.
+	 *  current value of every state topic. A message sent in between has a version that is not
+	 *  older than the returned value, so the Renderer can order them by version.
 	 */
 	appConnect: (channel: Channel<BackendMessage>) => __TAURI_INVOKE<BackendMessage[]>("app_connect", { channel }),
 	/**
 	 *  Applies a partial update to the appearance and returns it as it is afterwards, with its
-	 *  revision.
+	 *  version.
 	 */
-	appearanceUpdate: (patch: AppearancePatch) => __TAURI_INVOKE<Revisioned<Appearance>>("appearance_update", { patch }),
+	appearanceUpdate: (patch: AppearancePatch) => __TAURI_INVOKE<Versioned<Appearance>>("appearance_update", { patch }),
 };
 
 /* Types */
@@ -232,11 +232,11 @@ export type AudioOutputSelection = { kind: "systemDefault" } | { kind: "device";
 
 /**  What the Renderer receives on its channel. */
 export type BackendMessage = 
-/**  The fields of the message merge into one object: { kind: "state", revision, topic, value }. */
+/**  The fields of the message merge into one object: { kind: "state", version, topic, value }. */
 {
 	kind: "state",
 } & StateMessage | 
-/**  { kind: "position", playbackId, positionMs, seekRevision } */
+/**  { kind: "position", playbackId, positionMs, seekCount } */
 {
 	kind: "position",
 } & PlaybackPosition | 
@@ -260,7 +260,7 @@ export type CurrentPlayback = {
 	 *  Counts the seeks the player has completed. A change means the position jumped on
 	 *  purpose, so a display can react to the jump instead of guessing it from the numbers.
 	 */
-	seekRevision: number,
+	seekCount: number,
 	durationMs: number | null,
 	outputDevice: AudioOutputDeviceIdentity,
 	channelConversion: PlaybackChannelConversion,
@@ -408,7 +408,7 @@ export type PlaybackItem = {
 export type PlaybackPosition = {
 	playbackId: PlaybackId,
 	positionMs: number,
-	seekRevision: number,
+	seekCount: number,
 };
 
 /**  A queue entry as the queue panel shows it; the file path stays in the backend. */
@@ -455,20 +455,14 @@ export type QueueState = {
 	canRestorePrevious: boolean,
 };
 
-/**  A slice of the upcoming list, tagged with the queue revision it was cut from. */
+/**  A slice of the upcoming list, tagged with the queue version it was cut from. */
 export type QueueWindow = {
-	revision: number,
+	version: number,
 	offset: number,
 	items: PlaybackQueueItem[],
 };
 
 export type RepeatMode = "off" | "all" | "one";
-
-/**  A value with the revision of its topic. Revisions only grow, per topic. */
-export type Revisioned<T> = {
-	revision: number,
-	value: T,
-};
 
 /**  Why a scan stopped without finishing. */
 export type ScanFailure = "persistenceFailed" | "directoryTraversalFailed" | 
@@ -522,11 +516,11 @@ export type StartedBy = "next" | "previous" |
 "jump";
 
 /**
- *  One state topic's value with its revision. A tuple variant around this struct is what specta
+ *  One state topic's value with its version. A tuple variant around this struct is what specta
  *  types as the merged object; a struct variant with a flattened field is not.
  */
 export type StateMessage = {
-	revision: number,
+	version: number,
 } & StateValue;
 
 /**  The whole value of one state topic. */
@@ -611,4 +605,10 @@ export type TrackSortKey = "title" | "artist" | "album" | "duration";
  *  decoded. Missing wins over unsupported.
  */
 export type TrackState = "playable" | "missing" | "unsupported";
+
+/**  A value with the version of its topic. Versions only grow, per topic. */
+export type Versioned<T> = {
+	version: number,
+	value: T,
+};
 

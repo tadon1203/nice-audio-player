@@ -19,10 +19,10 @@ function scanSnapshot(state: ScanStateName, finishedCount: number, changedCount 
   };
 }
 
-/** Each accepted snapshot gets the next revision, so the replica keeps every one of them. */
-let revision = 0;
-const versioned = (value: ScanState): { revision: number; value: ScanState } => ({
-  revision: ++revision,
+/** Each accepted snapshot gets the next version, so the replica keeps every one of them. */
+let version = 0;
+const versioned = (value: ScanState): { version: number; value: ScanState } => ({
+  version: ++version,
   value,
 });
 
@@ -84,12 +84,12 @@ describe("ScanWatcher", () => {
     expect(lyrics.refresh).toHaveBeenCalledTimes(3);
   });
 
-  it("ignores a snapshot whose revision is not newer than the one it holds", () => {
+  it("ignores a snapshot whose version is not newer than the one it holds", () => {
     const { watcher, catalog } = setup();
     const newer = versioned(scanSnapshot("completed", 1, 1));
     watcher.accept(newer);
 
-    watcher.accept({ revision: newer.revision, value: scanSnapshot("completed", 2, 1) });
+    watcher.accept({ version: newer.version, value: scanSnapshot("completed", 2, 1) });
 
     expect(watcher.snapshot?.finishedCount).toBe(1);
     expect(catalog.refresh).toHaveBeenCalledTimes(1);

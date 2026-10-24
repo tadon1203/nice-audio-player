@@ -1,17 +1,17 @@
 import { describe, expect, it } from "vitest";
-import type { Revisioned } from "./bindings";
+import type { Versioned } from "./bindings";
 import { Replica } from "./replica.svelte";
 
-const versioned = (revision: number, value: string): Revisioned<string> => ({ revision, value });
+const versioned = (version: number, value: string): Versioned<string> => ({ version, value });
 
 describe("Replica", () => {
   it("knows nothing until the first value is accepted, and keeps the first value", () => {
     const replica = new Replica<string>();
     expect(replica.value).toBeNull();
-    expect(replica.revision).toBeNull();
+    expect(replica.version).toBeNull();
     expect(replica.accept(versioned(1, "first"))).toBe(true);
     expect(replica.value).toBe("first");
-    expect(replica.revision).toBe(1);
+    expect(replica.version).toBe(1);
   });
 
   it("drops a stale value and keeps the held one", () => {
@@ -19,22 +19,22 @@ describe("Replica", () => {
     replica.accept(versioned(2, "newer"));
     expect(replica.accept(versioned(1, "older"))).toBe(false);
     expect(replica.value).toBe("newer");
-    expect(replica.revision).toBe(2);
+    expect(replica.version).toBe(2);
   });
 
-  it("drops a value with the same revision as the one it holds", () => {
+  it("drops a value with the same version as the one it holds", () => {
     const replica = new Replica<string>();
     replica.accept(versioned(3, "held"));
     expect(replica.accept(versioned(3, "again"))).toBe(false);
     expect(replica.value).toBe("held");
   });
 
-  it("replaces the held value with a newer revision", () => {
+  it("replaces the held value with a newer version", () => {
     const replica = new Replica<string>();
     replica.accept(versioned(1, "old"));
     expect(replica.accept(versioned(4, "new"))).toBe(true);
     expect(replica.value).toBe("new");
-    expect(replica.revision).toBe(4);
+    expect(replica.version).toBe(4);
   });
 
   it("orders a command response and a pushed message through the same accept", () => {

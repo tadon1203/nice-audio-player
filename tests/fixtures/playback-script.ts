@@ -4,7 +4,7 @@ import {
   type QueueState,
   type PlaybackState,
   type StartedBy,
-  type Revisioned,
+  type Versioned,
 } from "#lib/native/bindings";
 import type { Native } from "./native-api";
 import { playbackIdOf, playbackItemFor, playingSnapshot, queueItemFor } from "./data";
@@ -21,8 +21,8 @@ export function scriptPlayback(
   initialSequence: TrackRow[],
 ): {
   setSequence: (next: TrackRow[]) => void;
-  queue: (patch?: { upcoming?: TrackRow[] }) => Promise<Revisioned<QueueState>>;
-  finishTrack: () => Promise<Revisioned<PlaybackState>>;
+  queue: (patch?: { upcoming?: TrackRow[] }) => Promise<Versioned<QueueState>>;
+  finishTrack: () => Promise<Versioned<PlaybackState>>;
   reportPosition: (to: number) => Promise<void>;
   startTicks: () => void;
   stopTicks: () => void;
@@ -32,7 +32,7 @@ export function scriptPlayback(
   let index = -1;
   let status: "playing" | "paused" = "playing";
   let positionMs = 12_000;
-  let seekRevision = 0;
+  let seekCount = 0;
   let volume = 0.72;
   let muted = false;
   let outputSelection: AudioOutputSelection = { kind: "systemDefault" };
@@ -65,7 +65,7 @@ export function scriptPlayback(
       item: playbackItemFor(current()),
       startedBy,
       positionMs,
-      seekRevision,
+      seekCount,
       volume,
       muted,
       outputSelection,
@@ -73,21 +73,19 @@ export function scriptPlayback(
       canGoNext: index < sequence.length - 1,
     });
 
-  /** A playback change, published as a new revision the way the backend does; the answer carries it. */
-  const commit = async (): Promise<Revisioned<PlaybackState>> => {
+  /** A playback change, published as a new version the way the backend does; the answer carries it. */
+  const commit = async (): Promise<Versioned<PlaybackState>> => {
     const value = snapshot();
-    const revision = await native.publish("playback", value);
-    return { revision, value };
+    const version = await native.publish("playback", value);
+    return { version, value };
   };
-  const commitQueue = async (patch?: {
-    upcoming?: TrackRow[];
-  }): Promise<Revisioned<QueueState>> => {
+  const commitQueue = async (patch?: { upcoming?: TrackRow[] }): Promise<Versioned<QueueState>> => {
     const value = queue(patch);
-    const revision = await native.publish("queue", value);
-    return { revision, value };
+    const version = await native.publish("queue", value);
+    return { version, value };
   };
   /** A new session at `target`, started the way the backend would say it started. */
-  const moveTo = async (target: number, by: StartedBy): Promise<Revisioned<PlaybackState>> => {
+  const moveTo = async (target: number, by: StartedBy): Promise<Versioned<PlaybackState>> => {
     index = target;
     startedBy = by;
     positionMs = 12_000;
@@ -97,7 +95,7 @@ export function scriptPlayback(
   };
 
   native.respond("playerQueueWindow", ({ offset, limit }) => ({
-    revision: native.revisionOf("queue"),
+    version: native.versionOf("queue"),
     offset,
     items: upcoming.slice(offset, offset + Math.min(limit, 200)).map(queueItemFor),
   }));
@@ -127,7 +125,7 @@ export function scriptPlayback(
   );
   native.respond("playerSeek", ({ positionMs: to }) => {
     positionMs = to;
-    seekRevision += 1;
+    seekCount += 1;
     return commit();
   });
   native.respond("playerSetVolume", ({ volume: to }) => {
@@ -169,7 +167,7 @@ export function scriptPlayback(
     /** The queue as it stands, with `upcoming` replaced when a test expects an edit. */
     queue: commitQueue,
     /** The loaded track ended and the backend moved on by itself (an automatic advance). */
-    finishTrack: (): Promise<Revisioned<PlaybackState>> =>
+    finishTrack: (): Promise<Versioned<PlaybackState>> =>
       moveTo(Math.min(sequence.length - 1, index + 1), "auto"),
     /** Reports the loaded track's position (and nothing else), as the backend's ticks do. */
     reportPosition: (to: number): Promise<void> => {
@@ -178,7 +176,7 @@ export function scriptPlayback(
         kind: "position",
         playbackId: playbackIdOf(playbackItemFor(current())),
         positionMs,
-        seekRevision,
+        seekCount,
       });
     },
     /** Reports a position every 10 ms, 250 ms further each time, until stopped. */

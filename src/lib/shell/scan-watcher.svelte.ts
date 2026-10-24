@@ -1,7 +1,7 @@
 import type { CatalogRepository } from "#lib/library/catalog-repository";
 import type { LyricsRepository } from "#lib/lyrics/lyrics-repository";
 import { Replica } from "#lib/native/replica.svelte";
-import { type ScanState, type Revisioned } from "#lib/native/bindings";
+import { type ScanState, type Versioned } from "#lib/native/bindings";
 
 /**
  * The Library scan as the Backend last reported it. When a scan ends, it refreshes what depends on
@@ -27,7 +27,7 @@ export class ScanWatcher {
     return this.#replica.value;
   }
 
-  public accept(incoming: Revisioned<ScanState>): void {
+  public accept(incoming: Versioned<ScanState>): void {
     if (!this.#replica.accept(incoming)) return;
     const snapshot = incoming.value;
     if (snapshot.finishedCount <= this.#finished) return;

@@ -25,10 +25,10 @@ const stopped: PlaybackState = { status: "stopped", base, item: null };
 const scan = { finishedCount: 0, changedCount: 0 } as ScanState;
 
 const initial: BackendMessage[] = [
-  { kind: "state", revision: 1, topic: "playback", value: stopped },
+  { kind: "state", version: 1, topic: "playback", value: stopped },
   {
     kind: "state",
-    revision: 1,
+    version: 1,
     topic: "queue",
     value: {
       current: null,
@@ -41,11 +41,11 @@ const initial: BackendMessage[] = [
       canRestorePrevious: false,
     },
   },
-  { kind: "state", revision: 1, topic: "scan", value: scan },
-  { kind: "state", revision: 1, topic: "waveform", value: null },
+  { kind: "state", version: 1, topic: "scan", value: scan },
+  { kind: "state", version: 1, topic: "waveform", value: null },
   {
     kind: "state",
-    revision: 1,
+    version: 1,
     topic: "appearance",
     value: { artworkBackdrop: true, calmMotion: false },
   },

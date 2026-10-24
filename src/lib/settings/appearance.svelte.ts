@@ -2,7 +2,7 @@ import { Replica } from "#lib/native/replica.svelte";
 import {
   type Appearance as AppearanceState,
   type AppearancePatch,
-  type Revisioned,
+  type Versioned,
 } from "#lib/native/bindings";
 import type { appearance } from "#lib/native/commands";
 
@@ -31,7 +31,7 @@ export class Appearance {
   }
 
   /** Applies the value the backend holds, without writing it back: from `connect` or a pushed change. */
-  public accept(incoming: Revisioned<AppearanceState>): void {
+  public accept(incoming: Versioned<AppearanceState>): void {
     this.#replica.accept(incoming);
   }
 

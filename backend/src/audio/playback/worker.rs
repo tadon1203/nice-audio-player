@@ -41,7 +41,7 @@ use crate::audio::timebase::millis_to_frame;
 use crate::audio::volume::{AtomicEffectiveGain, VolumeState};
 use crate::errors::CommandError;
 use crate::ids::{PlaybackId, QueueItemId, TrackId};
-use crate::messages::{Revisioned, SharedMessageListener};
+use crate::messages::{SharedMessageListener, Versioned};
 use crate::state_hub::StateHub;
 use log::{error, info};
 use rand::{SeedableRng, rngs::StdRng};
@@ -160,7 +160,7 @@ pub(super) struct PlaybackWorker {
     next_stream_id: u64,
     next_pipeline_id: u64,
     /// Completed seeks; published with the session so the UI can tell a seek from a tick.
-    seek_revision: u64,
+    seek_count: u64,
     /// The last track that reached the output, kept so a stopped player can still name it.
     last_item: Option<PlayableItem>,
     queue: PlaybackQueue,
@@ -196,7 +196,7 @@ impl PlaybackWorker {
             source_load_ids: SourceLoadIds::default(),
             next_stream_id: 0,
             next_pipeline_id: 0,
-            seek_revision: 0,
+            seek_count: 0,
             last_item: None,
             queue,
             previous_queue: None,

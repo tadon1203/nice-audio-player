@@ -9,7 +9,7 @@ The language of Nice Audio Player. Use these terms in code, docs, and tickets. D
 - **Backend**: the part of the app that owns the domain and the persistent state. It knows nothing about Tauri.
 - **Area**: one part of the domain (the Player, the Library, lyrics, the Appearance, or the meters). The Backend and the Renderer are split into the same Areas. A Renderer Area holds that Area's cached state and logic, and never depends on another Renderer Area.
 - **App**: the part of the Renderer that holds state spanning several Areas, such as Now Playing, the queue panel, and workspace scroll. It sits between the product compositions and the Areas. _Avoid_: shell.
-- **Backend state**: a value that the Backend owns and the Renderer mirrors, such as the Playback, the Queue, the Library scan, the Waveform, and the Appearance. It always reaches the Renderer whole, with its revision.
+- **Backend state**: a value that the Backend owns and the Renderer mirrors, such as the Playback, the Queue, the Library scan, the Waveform, and the Appearance. It always reaches the Renderer whole, with its version.
 - **Backend event**: a fact about one moment that the Backend reports once, such as a skipped track. The Renderer shows it and builds no state from it. _Avoid_: occurrence.
 - **Measurement stream**: the frequent measurements that the Backend sends while audio plays: the playing position and the Meter frames. _Avoid_: Stream (an Output stream is a different thing).
 

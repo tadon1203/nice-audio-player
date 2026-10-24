@@ -43,7 +43,7 @@ export class PlaybackSnapshots {
       positionMs: position?.positionMs ?? session.positionMs,
       durationMs: session.durationMs,
       playing: snapshot.status === "playing",
-      seekRevision: session.seekRevision,
+      seekCount: session.seekCount,
     };
   }
 

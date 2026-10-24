@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { type Appearance as AppearanceState, type Revisioned } from "#lib/native/bindings";
+import { type Appearance as AppearanceState, type Versioned } from "#lib/native/bindings";
 import { appearance as appearanceCommands } from "#lib/native/commands";
 import { Appearance } from "./appearance.svelte";
 
 const mocks = vi.hoisted(() => ({ update: vi.fn() }));
 vi.mock("#lib/native/commands", () => ({ appearance: { update: mocks.update } }));
 
-const saved: Revisioned<AppearanceState> = {
-  revision: 0,
+const saved: Versioned<AppearanceState> = {
+  version: 0,
   value: { artworkBackdrop: true, calmMotion: false },
 };
 
@@ -40,16 +40,16 @@ describe("Appearance", () => {
     expect(store.calmMotion).toBe(false);
   });
 
-  it("keeps a value only if its revision is newer than the one it holds", () => {
+  it("keeps a value only if its version is newer than the one it holds", () => {
     const store = new Appearance(appearanceCommands);
-    store.accept({ revision: 2, value: { artworkBackdrop: false, calmMotion: true } });
-    store.accept({ revision: 1, value: { artworkBackdrop: true, calmMotion: false } });
+    store.accept({ version: 2, value: { artworkBackdrop: false, calmMotion: true } });
+    store.accept({ version: 1, value: { artworkBackdrop: true, calmMotion: false } });
     expect(store.artworkBackdrop).toBe(false);
     expect(store.calmMotion).toBe(true);
   });
 
   it("shows an update before the backend answers, sending the untouched fields as null", async () => {
-    const pending = deferred<Revisioned<AppearanceState>>();
+    const pending = deferred<Versioned<AppearanceState>>();
     mocks.update.mockReturnValue(pending.promise);
     const store = new Appearance(appearanceCommands);
     store.accept(saved);
@@ -58,7 +58,7 @@ describe("Appearance", () => {
     expect(store.calmMotion).toBe(true);
     expect(mocks.update).toHaveBeenCalledWith({ artworkBackdrop: null, calmMotion: true });
 
-    pending.resolve({ revision: 1, value: { artworkBackdrop: true, calmMotion: true } });
+    pending.resolve({ version: 1, value: { artworkBackdrop: true, calmMotion: true } });
     await result;
     expect(store.calmMotion).toBe(true);
     expect(store.artworkBackdrop).toBe(true);

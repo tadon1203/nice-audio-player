@@ -11,7 +11,7 @@ for (const width of [640, 1360]) {
         ...stoppedPlayback,
         base: { ...stoppedPlayback.base, outputSelection: selection },
       };
-      return { revision: await native.publish("playback", value), value };
+      return { version: await native.publish("playback", value), value };
     });
     await page.setViewportSize({ width, height: 1000 });
     await page.goto("/settings");

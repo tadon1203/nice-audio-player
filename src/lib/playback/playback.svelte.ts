@@ -14,7 +14,7 @@ import type {
   PlaybackWaveform,
   QueueItemId,
   TrackId,
-  Revisioned,
+  Versioned,
 } from "#lib/native/bindings";
 import { NativeError } from "#lib/native/errors";
 import type { player } from "#lib/native/commands";
@@ -33,7 +33,7 @@ export type TransportCommand =
 
 interface QueuedTransport {
   command: TransportCommand;
-  operation: () => Promise<Revisioned<PlaybackState>>;
+  operation: () => Promise<Versioned<PlaybackState>>;
   resolve: () => void;
   reject: (error: unknown) => void;
 }
@@ -91,9 +91,9 @@ export class Playback {
     return this.#queue.value;
   }
 
-  /** The revision the held queue was published with. */
-  public get queueRevision(): number | null {
-    return this.#queue.revision;
+  /** The version the held queue was published with. */
+  public get queueVersion(): number | null {
+    return this.#queue.version;
   }
 
   /** The clock that follows this playback's position. */
@@ -208,7 +208,7 @@ export class Playback {
   }
 
   /** Keeps the snapshot only if it is newer than the held one. Command responses come here too. */
-  public acceptPlayback(incoming: Revisioned<PlaybackState>): void {
+  public acceptPlayback(incoming: Versioned<PlaybackState>): void {
     const snapshot = incoming.value;
     const incomingItem = PlaybackSnapshots.item(snapshot);
     if (!this.#snapshot.accept(incoming)) return;
@@ -220,12 +220,12 @@ export class Playback {
   }
 
   /** Keeps the queue only if it is newer than the held one. Command responses come here too. */
-  public acceptQueue(incoming: Revisioned<QueueState>): void {
+  public acceptQueue(incoming: Versioned<QueueState>): void {
     this.#queue.accept(incoming);
   }
 
   /** Keeps the Waveform only if it is newer than the held one. Pushed states and the initial state come here. */
-  public acceptWaveform(incoming: Revisioned<PlaybackWaveform | null>): void {
+  public acceptWaveform(incoming: Versioned<PlaybackWaveform | null>): void {
     this.#waveform.accept(incoming);
   }
 
@@ -237,7 +237,7 @@ export class Playback {
     const session = this.#session();
     if (session === null || this.status !== "playing") return;
     if (position.playbackId !== session.playbackId) return;
-    if (position.seekRevision !== session.seekRevision) return;
+    if (position.seekCount !== session.seekCount) return;
     this.#clock.accept(PlaybackSnapshots.clockReport(this.snapshot, position));
   }
 
@@ -386,7 +386,7 @@ export class Playback {
    */
   #runTransport(
     command: TransportCommand,
-    operation: () => Promise<Revisioned<PlaybackState>>,
+    operation: () => Promise<Versioned<PlaybackState>>,
   ): Promise<void> {
     if (this.#transportPending === null) {
       return this.#performTransport(command, operation);
@@ -399,7 +399,7 @@ export class Playback {
 
   async #performTransport(
     command: TransportCommand,
-    operation: () => Promise<Revisioned<PlaybackState>>,
+    operation: () => Promise<Versioned<PlaybackState>>,
   ): Promise<void> {
     this.#transportPending = command;
     try {
@@ -417,7 +417,7 @@ export class Playback {
     }
   }
 
-  async #runQueueCommand(operation: () => Promise<Revisioned<QueueState>>): Promise<void> {
+  async #runQueueCommand(operation: () => Promise<Versioned<QueueState>>): Promise<void> {
     this.acceptQueue(await operation());
   }
 

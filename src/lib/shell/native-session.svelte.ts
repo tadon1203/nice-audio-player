@@ -6,7 +6,7 @@ import {
   type QueueState,
   type PlaybackState,
   type PlaybackWaveform,
-  type Revisioned,
+  type Versioned,
 } from "#lib/native/bindings";
 import type { app } from "#lib/native/commands";
 import { countE2e } from "./e2e-counts";
@@ -16,13 +16,13 @@ export type ConnectionState = "connecting" | "ready" | "failed";
 /** Where `NativeSession` sends each value. Method types only, so tests pass small fakes. */
 export interface SessionTargets {
   readonly playback: {
-    acceptPlayback(incoming: Revisioned<PlaybackState>): void;
-    acceptQueue(incoming: Revisioned<QueueState>): void;
-    acceptWaveform(incoming: Revisioned<PlaybackWaveform | null>): void;
+    acceptPlayback(incoming: Versioned<PlaybackState>): void;
+    acceptQueue(incoming: Versioned<QueueState>): void;
+    acceptWaveform(incoming: Versioned<PlaybackWaveform | null>): void;
     acceptPosition(position: PlaybackPosition): void;
   };
-  readonly appearance: { accept(incoming: Revisioned<AppearanceValue>): void };
-  readonly scan: { accept(incoming: Revisioned<ScanState>): void };
+  readonly appearance: { accept(incoming: Versioned<AppearanceValue>): void };
+  readonly scan: { accept(incoming: Versioned<ScanState>): void };
   readonly notices: { noteSkipped(title: string | null): void };
 }
 
@@ -103,19 +103,19 @@ export class NativeSession {
     }
     switch (message.topic) {
       case "playback":
-        this.#targets.playback.acceptPlayback({ revision: message.revision, value: message.value });
+        this.#targets.playback.acceptPlayback({ version: message.version, value: message.value });
         return;
       case "queue":
-        this.#targets.playback.acceptQueue({ revision: message.revision, value: message.value });
+        this.#targets.playback.acceptQueue({ version: message.version, value: message.value });
         return;
       case "scan":
-        this.#targets.scan.accept({ revision: message.revision, value: message.value });
+        this.#targets.scan.accept({ version: message.version, value: message.value });
         return;
       case "waveform":
-        this.#targets.playback.acceptWaveform({ revision: message.revision, value: message.value });
+        this.#targets.playback.acceptWaveform({ version: message.version, value: message.value });
         return;
       case "appearance":
-        this.#targets.appearance.accept({ revision: message.revision, value: message.value });
+        this.#targets.appearance.accept({ version: message.version, value: message.value });
         return;
     }
   }

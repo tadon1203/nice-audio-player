@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn queue_revisions_grow_on_each_queue_change() {
+fn queue_versions_grow_on_each_queue_change() {
     let mut harness = Harness::new();
 
     let repeat = harness
@@ -23,10 +23,10 @@ fn queue_revisions_grow_on_each_queue_change() {
         })
         .unwrap();
 
-    assert_eq!(repeat.revision, 1);
-    assert_eq!(shuffled.revision, 2);
-    assert_eq!(shuffled_again.revision, 2);
-    assert_eq!(harness.versioned_queue_snapshot().revision, 2);
+    assert_eq!(repeat.version, 1);
+    assert_eq!(shuffled.version, 2);
+    assert_eq!(shuffled_again.version, 2);
+    assert_eq!(harness.versioned_queue_snapshot().version, 2);
     // Each queue change is announced once. The transport is announced only when what it shows
     // changed, and here nothing it shows changed; the repeated shuffle changes nothing and says
     // nothing.
@@ -219,7 +219,7 @@ fn the_rows_further_down_a_long_queue_are_read_when_asked_for() {
     let before = harness.library.reads();
 
     let queue = harness.versioned_queue_snapshot();
-    let window = queue.value.window(queue.revision, 500, 50);
+    let window = queue.value.window(queue.version, 500, 50);
 
     assert_eq!(window.offset, 500);
     assert_eq!(window.items.len(), 50);
@@ -375,7 +375,7 @@ fn a_long_queue_snapshot_carries_a_prefix_and_serves_the_rest_in_windows() {
     assert_eq!(snapshot.upcoming_count as usize, total);
     assert_eq!(library.reads(), 50 + 1 + UPCOMING_IN_SNAPSHOT);
     let window = snapshot.window(7, UPCOMING_IN_SNAPSHOT, 500);
-    assert_eq!(window.revision, 7);
+    assert_eq!(window.version, 7);
     assert_eq!(window.offset as usize, UPCOMING_IN_SNAPSHOT);
     assert_eq!(window.items.len(), 150);
     assert_eq!(window.items[0].core.title, "t261.flac");

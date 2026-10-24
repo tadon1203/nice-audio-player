@@ -22,7 +22,7 @@ pub use crate::library::models::{
     SortDirection, TrackListRequest, TrackProperties, TrackQuery, TrackRow, TrackSortKey,
 };
 pub use crate::lyrics::LyricsResolution;
-pub use crate::messages::Revisioned;
+pub use crate::messages::Versioned;
 pub use crate::settings::{Appearance, AppearancePatch};
 
 use crate::audio::{
@@ -147,7 +147,7 @@ impl BackendApp {
 
     // ---- communication ----
 
-    /// Every state topic as a message, each with its revision. The connect command returns them.
+    /// Every state topic as a message, each with its version. The connect command returns them.
     pub fn messages(&self) -> Vec<BackendMessage> {
         self.hub.messages()
     }
@@ -369,7 +369,7 @@ impl BackendApp {
     // ---- appearance ----
 
     /// Applies a renderer update and returns the appearance as it is afterwards.
-    pub fn appearance_update(&self, patch: &AppearancePatch) -> Revisioned<Appearance> {
+    pub fn appearance_update(&self, patch: &AppearancePatch) -> Versioned<Appearance> {
         self.settings.appearance_update(patch)
     }
 
@@ -382,7 +382,7 @@ impl BackendApp {
         &self,
         context: &PlaybackContext,
         start_track_id: Option<TrackId>,
-    ) -> Result<Revisioned<PlaybackState>, PlaybackServiceError> {
+    ) -> Result<Versioned<PlaybackState>, PlaybackServiceError> {
         let library = self.playback_library()?;
         let selection = playback_context::resolve(library.store(), context, start_track_id)?;
         // The track the listener picked is checked now, so they get a clear answer when its
@@ -395,27 +395,24 @@ impl BackendApp {
             .start(selection.track_ids, selection.start_index)
     }
 
-    pub fn pause(&self) -> Result<Revisioned<PlaybackState>, PlaybackServiceError> {
+    pub fn pause(&self) -> Result<Versioned<PlaybackState>, PlaybackServiceError> {
         self.playback.handle().pause()
     }
 
-    pub fn resume(&self) -> Result<Revisioned<PlaybackState>, PlaybackServiceError> {
+    pub fn resume(&self) -> Result<Versioned<PlaybackState>, PlaybackServiceError> {
         self.playback.handle().resume()
     }
 
-    pub fn previous(&self) -> Result<Revisioned<PlaybackState>, PlaybackServiceError> {
+    pub fn previous(&self) -> Result<Versioned<PlaybackState>, PlaybackServiceError> {
         self.playback.handle().previous()
     }
 
-    pub fn next(&self) -> Result<Revisioned<PlaybackState>, PlaybackServiceError> {
+    pub fn next(&self) -> Result<Versioned<PlaybackState>, PlaybackServiceError> {
         self.playback.handle().next()
     }
 
     /// Clamps `position_ms` to the track's duration.
-    pub fn seek(
-        &self,
-        position_ms: u64,
-    ) -> Result<Revisioned<PlaybackState>, PlaybackServiceError> {
+    pub fn seek(&self, position_ms: u64) -> Result<Versioned<PlaybackState>, PlaybackServiceError> {
         let duration_ms = self
             .playback
             .snapshot()
@@ -428,14 +425,11 @@ impl BackendApp {
     pub fn set_volume(
         &self,
         volume: f32,
-    ) -> Result<Revisioned<PlaybackState>, PlaybackServiceError> {
+    ) -> Result<Versioned<PlaybackState>, PlaybackServiceError> {
         self.playback.handle().set_volume(volume)
     }
 
-    pub fn set_muted(
-        &self,
-        muted: bool,
-    ) -> Result<Revisioned<PlaybackState>, PlaybackServiceError> {
+    pub fn set_muted(&self, muted: bool) -> Result<Versioned<PlaybackState>, PlaybackServiceError> {
         let handle = self.playback.handle();
         if muted {
             handle.mute()
@@ -447,7 +441,7 @@ impl BackendApp {
     pub fn set_output_selection(
         &self,
         selection: AudioOutputSelection,
-    ) -> Result<Revisioned<PlaybackState>, PlaybackServiceError> {
+    ) -> Result<Versioned<PlaybackState>, PlaybackServiceError> {
         self.playback.handle().set_output_selection(selection)
     }
 
@@ -459,21 +453,21 @@ impl BackendApp {
     pub fn set_repeat_mode(
         &self,
         mode: RepeatMode,
-    ) -> Result<Revisioned<QueueState>, PlaybackServiceError> {
+    ) -> Result<Versioned<QueueState>, PlaybackServiceError> {
         self.playback.handle().set_repeat_mode(mode)
     }
 
     pub fn set_shuffle(
         &self,
         enabled: bool,
-    ) -> Result<Revisioned<QueueState>, PlaybackServiceError> {
+    ) -> Result<Versioned<QueueState>, PlaybackServiceError> {
         self.playback.handle().set_shuffle(enabled)
     }
 
     pub fn remove_queue_item(
         &self,
         id: QueueItemId,
-    ) -> Result<Revisioned<QueueState>, PlaybackServiceError> {
+    ) -> Result<Versioned<QueueState>, PlaybackServiceError> {
         self.playback.handle().remove_queue_item(id)
     }
 
@@ -481,7 +475,7 @@ impl BackendApp {
         &self,
         id: QueueItemId,
         to: usize,
-    ) -> Result<Revisioned<QueueState>, PlaybackServiceError> {
+    ) -> Result<Versioned<QueueState>, PlaybackServiceError> {
         self.playback.handle().move_queue_item(id, to)
     }
 
@@ -489,7 +483,7 @@ impl BackendApp {
     pub fn play_queue_item(
         &self,
         id: QueueItemId,
-    ) -> Result<Revisioned<PlaybackState>, PlaybackServiceError> {
+    ) -> Result<Versioned<PlaybackState>, PlaybackServiceError> {
         self.playback.handle().play_queue_item(id)
     }
 
@@ -499,20 +493,18 @@ impl BackendApp {
         &self,
         track_id: TrackId,
         next: bool,
-    ) -> Result<Revisioned<QueueState>, PlaybackServiceError> {
+    ) -> Result<Versioned<QueueState>, PlaybackServiceError> {
         let library = self.playback_library()?;
         let track = playback_context::resolve_track(library.store(), track_id)?;
         self.playback.handle().enqueue(vec![track.id()], next)
     }
 
-    pub fn clear_queue(&self) -> Result<Revisioned<QueueState>, PlaybackServiceError> {
+    pub fn clear_queue(&self) -> Result<Versioned<QueueState>, PlaybackServiceError> {
         self.playback.handle().clear_queue()
     }
 
     /// Puts back the queue the last replacement or Clear upcoming took away.
-    pub fn restore_previous_queue(
-        &self,
-    ) -> Result<Revisioned<PlaybackState>, PlaybackServiceError> {
+    pub fn restore_previous_queue(&self) -> Result<Versioned<PlaybackState>, PlaybackServiceError> {
         self.playback.handle().restore_previous_queue()
     }
 

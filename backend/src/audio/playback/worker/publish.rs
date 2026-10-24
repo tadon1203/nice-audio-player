@@ -9,7 +9,7 @@ use super::{
     PlaybackControls, PlaybackPosition, PlaybackProcessingInfo, PlaybackState, QueueState,
 };
 use crate::audio::playback::session::Loaded;
-use crate::messages::{Revisioned, StateValue};
+use crate::messages::{StateValue, Versioned};
 
 impl PlaybackWorker {
     /// What listeners see, drawn from the transport, the queue and the volume.
@@ -57,7 +57,7 @@ impl PlaybackWorker {
             started_by: loaded.started_by,
             playback_id: loaded.id,
             position_ms: loaded.position_ms(),
-            seek_revision: self.seek_revision,
+            seek_count: self.seek_count,
             duration_ms: loaded.position.duration_ms,
             output_device: AudioOutputDeviceIdentity {
                 id: config.device_id.clone(),
@@ -77,15 +77,15 @@ impl PlaybackWorker {
         }
     }
 
-    /// The transport as it is published, with the revision of its topic. A command that changes
+    /// The transport as it is published, with the version of its topic. A command that changes
     /// nothing answers with it.
-    pub(super) fn playback_versioned(&self) -> Revisioned<PlaybackState> {
+    pub(super) fn playback_versioned(&self) -> Versioned<PlaybackState> {
         self.hub.read(|published| published.playback.clone())
     }
 
     /// Renders the transport and publishes it, which tells listeners when it changed. The
     /// position is stored too, so a listener that joins later starts from the right place.
-    pub(super) fn publish_state(&mut self) -> Revisioned<PlaybackState> {
+    pub(super) fn publish_state(&mut self) -> Versioned<PlaybackState> {
         if let Transport::Loaded(loaded) = &mut self.transport
             && !loaded.paused
         {
@@ -93,10 +93,10 @@ impl PlaybackWorker {
         }
         let value = self.render();
         self.store_position(value.session().map(CurrentPlayback::position));
-        let revision = self
+        let version = self
             .hub
             .publish(StateValue::Playback(Box::new(value.clone())));
-        Revisioned { revision, value }
+        Versioned { version, value }
     }
 
     /// Tells listeners the loaded track moved on, without a new snapshot.
@@ -107,7 +107,7 @@ impl PlaybackWorker {
         self.store_position(Some(PlaybackPosition {
             playback_id: loaded.id,
             position_ms: loaded.position_ms(),
-            seek_revision: self.seek_revision,
+            seek_count: self.seek_count,
         }));
         self.messages.position_changed();
     }
@@ -129,20 +129,20 @@ impl PlaybackWorker {
             .read(|published| published.playback.value.base().can_go_previous)
     }
 
-    pub(super) fn publish_queue(&mut self) -> Revisioned<QueueState> {
+    pub(super) fn publish_queue(&mut self) -> Versioned<QueueState> {
         self.prune_unavailable();
         let value = QueueState::of(&self.queue, &self.tracks, self.previous_queue.is_some());
-        let revision = self.hub.publish(StateValue::Queue(value.clone()));
-        Revisioned { revision, value }
+        let version = self.hub.publish(StateValue::Queue(value.clone()));
+        Versioned { version, value }
     }
 
-    pub(super) fn queue_snapshot(&self) -> Revisioned<QueueState> {
+    pub(super) fn queue_snapshot(&self) -> Versioned<QueueState> {
         self.hub.read(|published| published.queue.clone())
     }
 
     /// Publishes a queue change, and refreshes the transport so previous/next availability
     /// follows it even while paused.
-    pub(super) fn queue_changed(&mut self, changed: bool) -> Revisioned<QueueState> {
+    pub(super) fn queue_changed(&mut self, changed: bool) -> Versioned<QueueState> {
         if !changed {
             return self.queue_snapshot();
         }

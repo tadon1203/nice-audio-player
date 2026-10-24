@@ -5,7 +5,7 @@ import type {
   QueueState,
   PlaybackState,
   PlaybackWaveform,
-  Revisioned,
+  Versioned,
   TrackId,
 } from "#lib/native/bindings";
 import { player } from "#lib/native/commands";
@@ -62,19 +62,19 @@ const item = (id: TrackId): PlaybackItem => ({
   year: null,
 });
 
-const stopped = (revision: number, id: TrackId | null): Revisioned<PlaybackState> => ({
-  revision,
+const stopped = (version: number, id: TrackId | null): Versioned<PlaybackState> => ({
+  version,
   value: { status: "stopped", base: base(), item: id ? item(id) : null },
 });
 
 const playing = (
-  revision: number,
+  version: number,
   id: TrackId,
   positionMs: number,
-  seekRevision = 0,
+  seekCount = 0,
   startedBy: "next" | "previous" | "auto" | "jump" = "jump",
-): Revisioned<PlaybackState> => ({
-  revision,
+): Versioned<PlaybackState> => ({
+  version,
   value: {
     status: "playing",
     base: base(),
@@ -83,7 +83,7 @@ const playing = (
       startedBy,
       playbackId: 1,
       positionMs,
-      seekRevision,
+      seekCount,
       durationMs: 60_000,
       outputDevice: { id: "speakers", name: "Speakers" },
       channelConversion: "none",
@@ -107,8 +107,8 @@ const queueItem = (id: QueueItemId): PlaybackQueueItem => ({
   durationMs: 120_000,
 });
 
-const queueOf = (revision: number, patch: Partial<QueueState> = {}): Revisioned<QueueState> => ({
-  revision,
+const queueOf = (version: number, patch: Partial<QueueState> = {}): Versioned<QueueState> => ({
+  version,
   value: {
     current: null,
     history: [],
@@ -122,7 +122,7 @@ const queueOf = (revision: number, patch: Partial<QueueState> = {}): Revisioned<
   },
 });
 
-const queue = (revision: number): Revisioned<QueueState> => queueOf(revision);
+const queue = (version: number): Versioned<QueueState> => queueOf(version);
 
 /** A clock that is never asked about time; the tests that need one pass their own. */
 const quietClock = (): PlaybackClock => new PlaybackClock({ now: (): number => 0 });
@@ -130,15 +130,15 @@ const quietClock = (): PlaybackClock => new PlaybackClock({ now: (): number => 0
 /** What `connect` gives the Renderer: the first snapshot and queue, as the session routes them. */
 function load(
   playback: Playback,
-  snapshot: Revisioned<PlaybackState>,
-  queueSnapshot: Revisioned<QueueState>,
+  snapshot: Versioned<PlaybackState>,
+  queueSnapshot: Versioned<QueueState>,
 ): void {
   playback.acceptPlayback(snapshot);
   playback.acceptQueue(queueSnapshot);
 }
 
 describe("playback session ordering", () => {
-  it("rejects stale playback revisions", () => {
+  it("rejects stale playback versions", () => {
     const playback = new Playback(player, quietClock());
     load(playback, stopped(1, 1), queue(1));
 
@@ -149,12 +149,12 @@ describe("playback session ordering", () => {
     expect(playback.item?.id).toBe(2);
   });
 
-  it("accepts queue revisions independently from playback revisions", () => {
+  it("accepts queue versions independently from playback versions", () => {
     const playback = new Playback(player, quietClock());
     playback.acceptPlayback(stopped(50, null));
     playback.acceptQueue(queueOf(2, { current: queueItem(1) }));
 
-    expect(playback.queueRevision).toBe(2);
+    expect(playback.queueVersion).toBe(2);
     expect(playback.queue?.current?.title).toBe("Current track");
   });
 
@@ -177,13 +177,13 @@ describe("playback session ordering", () => {
     await playback.setShuffle(false);
 
     expect(playback.shuffleEnabled).toBe(true);
-    expect(playback.queueRevision).toBe(3);
+    expect(playback.queueVersion).toBe(3);
   });
 
   it("coalesces volume writes without blocking transport or seek", async () => {
     let releaseFirstVolume: (() => void) | undefined;
     const volumeCalls: number[] = [];
-    let volumeRevision = 2;
+    let volumeVersion = 2;
     mocks.player.setVolume.mockImplementation(async (value: number) => {
       volumeCalls.push(value);
       if (volumeCalls.length === 1) {
@@ -191,7 +191,7 @@ describe("playback session ordering", () => {
           releaseFirstVolume = resolve;
         });
       }
-      return stopped(volumeRevision++, null);
+      return stopped(volumeVersion++, null);
     });
     mocks.player.pause.mockResolvedValue(stopped(10, null));
     mocks.player.seek.mockResolvedValue(stopped(11, null));
@@ -269,8 +269,8 @@ describe("playback session ordering", () => {
 });
 
 describe("clearing the queue", () => {
-  const withUpcoming = (revision: number): Revisioned<QueueState> =>
-    queueOf(revision, {
+  const withUpcoming = (version: number): Versioned<QueueState> =>
+    queueOf(version, {
       current: queueItem(1),
       upcoming: [queueItem(2)],
       upcomingCount: 1,
@@ -327,8 +327,8 @@ describe("seeking", () => {
 });
 
 describe("failures", () => {
-  const failed = (revision: number, skipping: boolean, id = 1): Revisioned<PlaybackState> => ({
-    revision,
+  const failed = (version: number, skipping: boolean, id = 1): Versioned<PlaybackState> => ({
+    version,
     value: {
       status: "failed",
       base: base(),
@@ -483,12 +483,12 @@ describe("playback session derived state", () => {
 describe("position messages", () => {
   const position = (
     positionMs: number,
-    seekRevision = 0,
+    seekCount = 0,
     playbackId = 1,
-  ): { playbackId: number; positionMs: number; seekRevision: number } => ({
+  ): { playbackId: number; positionMs: number; seekCount: number } => ({
     playbackId,
     positionMs,
-    seekRevision,
+    seekCount,
   });
 
   it("feed the clock without touching the snapshot", () => {
@@ -610,8 +610,8 @@ describe("starting playback", () => {
 });
 
 describe("changing the volume", () => {
-  const mutedSnapshot = (): Revisioned<PlaybackState> => ({
-    revision: 1,
+  const mutedSnapshot = (): Versioned<PlaybackState> => ({
+    version: 1,
     value: { status: "stopped", base: { ...base(), muted: true }, item: null },
   });
 
@@ -718,10 +718,10 @@ describe("transition direction", () => {
 describe("the waveform", () => {
   const waveformOf = (
     playbackId: number,
-    revision: number,
+    version: number,
     peak: number,
-  ): Revisioned<PlaybackWaveform | null> => ({
-    revision,
+  ): Versioned<PlaybackWaveform | null> => ({
+    version,
     value: { playbackId, peaks: [peak], rms: [peak] },
   });
 

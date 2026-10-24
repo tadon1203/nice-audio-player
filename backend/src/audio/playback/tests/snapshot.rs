@@ -55,7 +55,7 @@ fn wire_session() -> CurrentPlayback {
         started_by: StartedBy::Jump,
         playback_id: PlaybackId::first(),
         position_ms: 1_000,
-        seek_revision: 0,
+        seek_count: 0,
         duration_ms: Some(60_000),
         output_device: crate::audio::devices::AudioOutputDeviceIdentity {
             id: "test-device".into(),
@@ -102,7 +102,7 @@ fn session_json() -> serde_json::Value {
         "startedBy": "jump",
         "playbackId": 1,
         "positionMs": 1_000,
-        "seekRevision": 0,
+        "seekCount": 0,
         "durationMs": 60_000,
         "outputDevice": { "id": "test-device", "name": "Test device" },
         "channelConversion": "none",

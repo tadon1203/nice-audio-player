@@ -11,7 +11,7 @@ fn a_seek_moves_the_position_and_keeps_the_session() {
     assert!(matches!(seeked, PlaybackState::Playing { .. }));
     let position = session(&seeked).position_ms;
     assert!((1_450..=1_550).contains(&position), "position {position}");
-    assert_eq!(session(&seeked).seek_revision, 1);
+    assert_eq!(session(&seeked).seek_count, 1);
     assert_eq!(session(&seeked).playback_id, session(&started).playback_id);
     assert!(harness.output.is_running());
 }

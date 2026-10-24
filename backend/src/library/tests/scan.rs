@@ -3,7 +3,7 @@
 use crate::library::database::Database;
 use crate::library::directories;
 use crate::library::models::{ScanFailure, ScanState, ScanStatus};
-use crate::messages::{Revisioned, StateValue};
+use crate::messages::{StateValue, Versioned};
 use crate::test_support::{TestDirectory, hub_for_tests, null_message_listener, write_pcm_i16_wav};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
@@ -49,7 +49,7 @@ fn run_versioned(
     fixture: &Fixture,
     cancelled: bool,
     dirs: Option<&[PathBuf]>,
-) -> Revisioned<ScanState> {
+) -> Versioned<ScanState> {
     let directories = directories::list(&fixture.database.read().unwrap()).expect("directories");
     let jobs: Vec<_> = directories
         .into_iter()
@@ -69,14 +69,14 @@ fn run_versioned(
 }
 
 #[test]
-fn the_scan_revision_grows_with_each_change_of_the_scan() {
+fn the_scan_version_grows_with_each_change_of_the_scan() {
     let fixture = fixture();
     write_tone(&fixture.music.join("a.wav"), 16_000);
     let scan = run_versioned(&fixture, false, None);
     // The scan starts as running, sets the directory, and ends: each is a change, and a count that
-    // leaves the expected count unchanged is not, so the revision is at least three.
+    // leaves the expected count unchanged is not, so the version is at least three.
     assert_eq!(scan.value.state, ScanStatus::Completed);
-    assert!(scan.revision >= 3, "revision {}", scan.revision);
+    assert!(scan.version >= 3, "version {}", scan.version);
 }
 
 fn files(fixture: &Fixture) -> Vec<(String, String, String, i64)> {

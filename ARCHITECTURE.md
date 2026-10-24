@@ -52,9 +52,9 @@ Three layers, one direction of control. The terms are defined in [CONTEXT.md](./
 
 Communication: one path for requests, four for pushes.
 
-- **Renderer → Backend (1 path):** a command. The Renderer calls a Host command through the area objects in `src/lib/native/commands.ts` (`player`, `library`, `lyrics`, `meter`, `appearance`, `app`), and the Host calls the Backend. The answer is the command's return value. State answers are `Revisioned`.
+- **Renderer → Backend (1 path):** a command. The Renderer calls a Host command through the area objects in `src/lib/native/commands.ts` (`player`, `library`, `lyrics`, `meter`, `appearance`, `app`), and the Host calls the Backend. The answer is the command's return value. State answers are `Versioned`.
 - **Backend → Renderer (4 paths):**
-  1. **State:** a topic's whole value with its revision, on the `app_connect` channel. The Backend keeps every topic's value in its state hub.
+  1. **State:** a topic's whole value with its version, on the `app_connect` channel. The Backend keeps every topic's value in its state hub.
   2. **Backend event:** a fact that happened once, such as a skipped track, on the `app_connect` channel.
   3. **Position:** the playing position, on the `app_connect` channel.
   4. **Measurement:** meter frames, in binary, on a channel for each subscription.
@@ -94,7 +94,7 @@ The Renderer updates its caches and views from these.
 - Backend services know nothing about the Host or each other. They publish state to the state hub, and report a position or a backend event to the message listener.
 - The Host reaches the Backend only through `BackendApp` and its public modules.
 - Settings are read and written through the IPC of the area that owns them. Appearance is read from `app_connect` and written with `appearanceUpdate`; playback preferences are read and written through the playback commands.
-- A state is its whole value with a revision. The Renderer keeps a value only if its revision is newer than the one it holds, whether it came on the channel or as a command answer.
+- A state is its whole value with a version. The Renderer keeps a value only if its version is newer than the one it holds, whether it came on the channel or as a command answer.
 - A backend event is a fact. It builds no state in the Renderer.
 - The Renderer subscribes, then fetches: `app_connect` registers the channel and returns the current values.
 - Every state that the Library stores is a closed set of values. The code and the database enforce the same set.

@@ -23,7 +23,7 @@ use log::{error, warn};
 use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::audio::playback::PlaybackPreferences;
-use crate::messages::{Revisioned, StateValue};
+use crate::messages::{StateValue, Versioned};
 use crate::state_hub::StateHub;
 
 const FILE_NAME: &str = "settings.json";
@@ -135,7 +135,7 @@ impl SettingsService {
 
     /// Applies a renderer update, announces it when something changed, and returns the appearance
     /// as it is afterwards.
-    pub(crate) fn appearance_update(&self, patch: &AppearancePatch) -> Revisioned<Appearance> {
+    pub(crate) fn appearance_update(&self, patch: &AppearancePatch) -> Versioned<Appearance> {
         self.modify(|settings| settings.apply_appearance(patch)).0
     }
 
@@ -151,18 +151,18 @@ impl SettingsService {
     }
 
     /// Applies `change` under the lock and publishes the appearance. Returns the appearance with
-    /// its revision, and whether anything changed. A change is queued for the writer while the
+    /// its version, and whether anything changed. A change is queued for the writer while the
     /// lock is still held, so the writer sees the changes in the order they were made.
-    fn modify(&self, change: impl FnOnce(&mut Settings)) -> (Revisioned<Appearance>, bool) {
+    fn modify(&self, change: impl FnOnce(&mut Settings)) -> (Versioned<Appearance>, bool) {
         let mut state = self.state.lock();
         let before = state.clone();
         change(&mut state);
         let changed = *state != before;
-        let revision = self
+        let version = self
             .hub
             .publish(StateValue::Appearance(state.appearance.clone()));
-        let appearance = Revisioned {
-            revision,
+        let appearance = Versioned {
+            version,
             value: state.appearance.clone(),
         };
         if changed
@@ -377,13 +377,13 @@ mod tests {
     }
 
     #[test]
-    fn the_appearance_revision_counts_appearance_changes_only() {
+    fn the_appearance_version_counts_appearance_changes_only() {
         let (_guard, path) = directory();
         let service = load(&path, null_message_listener());
         assert_eq!(
             service
                 .appearance_update(&AppearancePatch::default())
-                .revision,
+                .version,
             0
         );
 
@@ -394,7 +394,7 @@ mod tests {
         assert_eq!(
             service
                 .appearance_update(&AppearancePatch::default())
-                .revision,
+                .version,
             0
         );
 
@@ -404,7 +404,7 @@ mod tests {
         };
         service.appearance_update(&change);
         let again = service.appearance_update(&change);
-        assert_eq!(again.revision, 1);
+        assert_eq!(again.version, 1);
         assert!(!again.value.artwork_backdrop);
         assert_eq!(
             service.appearance_update(&AppearancePatch::default()),

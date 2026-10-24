@@ -325,10 +325,10 @@ export function meterFrameBytes({
   return Array.from(new Uint8Array(view.buffer));
 }
 
-/** The value and revision of every state topic, as the Backend holds them. */
+/** The value and version of every state topic, as the Backend holds them. */
 export type TopicState = {
   [Topic in StateValue["topic"]]: {
-    revision: number;
+    version: number;
     value: Extract<StateValue, { topic: Topic }>["value"];
   };
 };
@@ -336,11 +336,11 @@ export type TopicState = {
 /** The state an app holds before anything plays: what `connect` answers first. */
 export function idleTopicState(): TopicState {
   return {
-    playback: { revision: 1, value: stoppedPlayback },
-    queue: { revision: 1, value: emptyQueue },
-    scan: { revision: 0, value: idleScan },
-    waveform: { revision: 0, value: null },
-    appearance: { revision: 0, value: defaultSettings },
+    playback: { version: 1, value: stoppedPlayback },
+    queue: { version: 1, value: emptyQueue },
+    scan: { version: 0, value: idleScan },
+    waveform: { version: 0, value: null },
+    appearance: { version: 0, value: defaultSettings },
   };
 }
 
@@ -349,7 +349,7 @@ export function idleResponses(): {
   meterStart: () => number;
   meterStop: null;
   playerQueueWindow: ({ offset }: { offset: number }) => {
-    revision: number;
+    version: number;
     offset: number;
     items: never[];
   };
@@ -366,8 +366,8 @@ export function idleResponses(): {
       offset,
     }: {
       offset: number;
-    }): { revision: number; offset: number; items: never[] } => ({
-      revision: 1,
+    }): { version: number; offset: number; items: never[] } => ({
+      version: 1,
       offset,
       items: [],
     }),
@@ -407,7 +407,7 @@ interface PlayingFields {
   item: PlaybackItem;
   startedBy: StartedBy;
   positionMs: number;
-  seekRevision: number;
+  seekCount: number;
   volume: number;
   muted: boolean;
   outputSelection: AudioOutputSelection;
@@ -438,7 +438,7 @@ export function playingSnapshot(fields: PlayingFields): PlaybackState {
       startedBy: fields.startedBy,
       playbackId: playbackIdOf(fields.item),
       positionMs: fields.positionMs,
-      seekRevision: fields.seekRevision,
+      seekCount: fields.seekCount,
       durationMs: fields.item.durationMs,
       outputDevice: { id: device?.id ?? "default", name: device?.name ?? "System default" },
       channelConversion: "none",
