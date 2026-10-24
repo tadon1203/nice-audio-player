@@ -165,10 +165,10 @@ describe("NativeSession", () => {
     const session = new NativeSession(app, targets);
     session.connect();
 
-    attempts[0].fail({ code: "noOutputDevice" });
+    attempts[0].fail({ code: "output", failure: "noOutputDevice" });
 
     await vi.waitFor(() => expect(session.connection).toBe("failed"));
-    expect(session.startupError).toEqual({ code: "noOutputDevice" });
+    expect(session.startupError).toEqual({ code: "output", failure: "noOutputDevice" });
     expect(acceptPlayback).not.toHaveBeenCalled();
   });
 

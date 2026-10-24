@@ -1,13 +1,13 @@
 import { testAlbum } from "./fixtures/data";
 import { expect, test } from "./fixtures/test";
 
-const persistenceFailure = { code: "common", error: { code: "persistenceFailed" } } as const;
+const persistenceFailure = { code: "persistenceFailed" } as const;
 
 test("shows playback initialization failure instead of remaining loading", async ({
   page,
   native,
 }) => {
-  native.fail("appConnect", { code: "noOutputDevice" });
+  native.fail("appConnect", { code: "output", failure: "noOutputDevice" });
   await page.goto("/library/albums");
 
   const dock = page.getByRole("contentinfo", { name: "Playback controls" });
@@ -64,10 +64,7 @@ test("the properties sheet says a track the library does not hold is not found",
   page,
   native,
 }) => {
-  native.fail("libraryTrackProperties", {
-    code: "common",
-    error: { code: "trackNotFound" },
-  });
+  native.fail("libraryTrackProperties", { code: "trackNotFound" });
   await page.goto("/library/tracks");
   await page
     .getByRole("table", { name: "Library tracks" })

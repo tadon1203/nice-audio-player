@@ -1,5 +1,11 @@
 import type { Page } from "@playwright/test";
-import type { BackendMessage, InitialState, Occurrence, commands } from "#lib/native/bindings";
+import type {
+  BackendMessage,
+  CommandError,
+  InitialState,
+  Occurrence,
+  commands,
+} from "#lib/native/bindings";
 import { idleInitialState, idleResponses, libraryResponses, type LibraryData } from "./data";
 
 type Commands = typeof commands;
@@ -141,7 +147,7 @@ export class Native {
   }
 
   /** Makes a command reject the way the backend does, with its structured reply. */
-  public fail(name: CommandName, reply: { readonly code: string; readonly error?: unknown }): void {
+  public fail(name: CommandName, reply: CommandError): void {
     this.#responders.set(toCommandName(name), () => {
       throw reply;
     });
