@@ -1,12 +1,12 @@
 import type { Page } from "@playwright/test";
-import type {
-  BackendMessage,
-  CommandError,
-  InitialState,
-  Occurrence,
-  commands,
-} from "#lib/native/bindings";
-import { idleInitialState, idleResponses, libraryResponses, type LibraryData } from "./data";
+import type { BackendMessage, CommandError, commands } from "#lib/native/bindings";
+import {
+  idleResponses,
+  idleTopicState,
+  libraryResponses,
+  type LibraryData,
+  type TopicState,
+} from "./data";
 
 type Commands = typeof commands;
 export type CommandName = keyof Commands;
@@ -112,7 +112,7 @@ export class Native {
   readonly #responders = new Map<string, Responder>();
   readonly #calls: { command: string; args: CommandArgs }[] = [];
   /** The current value of every state topic, as the Backend holds it; `connect` answers with it. */
-  #state: InitialState = idleInitialState();
+  #state: TopicState = idleTopicState();
 
   public constructor(page: Page) {
     this.#page = page;
@@ -135,7 +135,20 @@ export class Native {
     );
     await this.#page.addInitScript(installIpcBridge);
     // A reloaded page connects again and gets the current state, as the Backend answers it.
-    this.respond("appConnect", () => this.#state);
+    this.respond("appConnect", () => this.#connectMessages());
+  }
+
+  /** Every topic as a state message, which is what `connect` answers with. */
+  #connectMessages(): BackendMessage[] {
+    return (Object.keys(this.#state) as (keyof TopicState)[]).map(
+      (topic) =>
+        ({
+          kind: "state",
+          revision: this.#state[topic].revision,
+          topic,
+          value: this.#state[topic].value,
+        }) as BackendMessage,
+    );
   }
 
   /** Sets what a command answers: a value, or a function of the arguments it was sent. */
@@ -178,18 +191,18 @@ export class Native {
     ] as const);
   }
 
-  /** Sends a fact the Backend reports with its value, such as a skipped track, on the channel. */
-  public async occur(occurrence: Occurrence): Promise<void> {
-    await this.send({ kind: "occurrence", ...occurrence });
+  /** Sends a track the Backend skipped because it could not play it, by its title. */
+  public async skipTrack(title: string | null): Promise<void> {
+    await this.send({ kind: "trackSkipped", title });
   }
 
   /**
    * Publishes a new value of a state topic: the next revision of it, sent as a state message.
    * Returns that revision, so a command that answers with the same value can carry it.
    */
-  public async publish<Topic extends keyof InitialState>(
+  public async publish<Topic extends keyof TopicState>(
     topic: Topic,
-    value: InitialState[Topic]["value"],
+    value: TopicState[Topic]["value"],
   ): Promise<number> {
     const revision = this.revisionOf(topic);
     const next = revision + 1;
@@ -198,7 +211,7 @@ export class Native {
   }
 
   /** The revision of a state topic as the Backend last published it. */
-  public revisionOf(topic: keyof InitialState): number {
+  public revisionOf(topic: keyof TopicState): number {
     return this.#state[topic].revision;
   }
 

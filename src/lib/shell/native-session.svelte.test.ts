@@ -1,10 +1,5 @@
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
-import {
-  type BackendMessage,
-  type InitialState,
-  type PlaybackPosition,
-  type Revisioned,
-} from "#lib/native/bindings";
+import { type BackendMessage, type PlaybackPosition } from "#lib/native/bindings";
 import { app } from "#lib/native/commands";
 import { NativeSession, type SessionTargets } from "./native-session.svelte";
 
@@ -14,7 +9,7 @@ vi.mock("#lib/native/commands", () => ({ app: { connect: mocks.connect } }));
 /** One `connect` call the test answers by hand: its message handler, and its reply. */
 interface Attempt {
   onMessage: (message: BackendMessage) => void;
-  answer: (initial: InitialState) => void;
+  answer: (initial: BackendMessage[]) => void;
   fail: (error: unknown) => void;
 }
 
@@ -25,7 +20,7 @@ beforeEach(() => {
   mocks.connect.mockReset();
   mocks.connect.mockImplementation(
     (onMessage: (message: BackendMessage) => void) =>
-      new Promise<InitialState>((answer, fail) => {
+      new Promise<BackendMessage[]>((answer, fail) => {
         attempts.push({ onMessage, answer, fail });
       }),
   );
@@ -54,19 +49,18 @@ function fakeTargets(): {
   return { targets, acceptPlayback, acceptPosition, noteSkipped };
 }
 
-const playbackOf = (revision: number): Revisioned<never> => ({
-  revision,
-  value: "snapshot" as never,
-});
-
-const initial = (playbackRevision: number): InitialState =>
-  ({
-    playback: playbackOf(playbackRevision),
-    queue: { revision: 1, value: "queue" as never },
-    libraryScan: { revision: 1, value: "scan" as never },
-    waveform: { revision: 1, value: null },
-    appearance: { revision: 1, value: { artworkBackdrop: true, calmMotion: false } },
-  }) as InitialState;
+const initial = (playbackRevision: number): BackendMessage[] => [
+  { kind: "state", revision: playbackRevision, topic: "playback", value: "snapshot" as never },
+  { kind: "state", revision: 1, topic: "queue", value: "queue" as never },
+  { kind: "state", revision: 1, topic: "scan", value: "scan" as never },
+  { kind: "state", revision: 1, topic: "waveform", value: null },
+  {
+    kind: "state",
+    revision: 1,
+    topic: "appearance",
+    value: { artworkBackdrop: true, calmMotion: false },
+  },
+];
 
 const stateMessage = (revision: number): BackendMessage => ({
   kind: "state",
@@ -121,15 +115,10 @@ describe("NativeSession", () => {
     await vi.waitFor(() => expect(session.connection).toBe("ready"));
 
     attempts[0].onMessage({ kind: "position", ...position });
-    attempts[0].onMessage({
-      kind: "occurrence",
-      type: "trackSkipped",
-      item: null,
-      error: "decodeFailed",
-    });
+    attempts[0].onMessage({ kind: "trackSkipped", title: "Song" });
 
     expect(acceptPosition).toHaveBeenCalledWith({ kind: "position", ...position });
-    expect(noteSkipped).toHaveBeenCalledWith(null);
+    expect(noteSkipped).toHaveBeenCalledWith("Song");
   });
 
   it("drops messages from a connection that was cleaned up", async () => {

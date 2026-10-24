@@ -325,7 +325,7 @@ impl PlaybackWorker {
         };
         self.publish_state();
         if skipping {
-            self.occur_track_skipped(failure.code);
+            self.occur_track_skipped();
         }
         let responder = request.responder;
         if skips && let Some(item) = self.next_after_item_failure() {

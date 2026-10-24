@@ -9,8 +9,8 @@ use crate::library::models::{
 };
 use crate::library::store::PlaybackSourceError;
 use crate::lyrics::LyricsCommandError;
-use crate::messages::testing::RecordingMessageSink;
-use crate::test_support::TestDirectory;
+
+use crate::test_support::{RecordingMessageListener, TestDirectory};
 
 /// A backend whose library database cannot be opened, so the Library is absent.
 fn fixture_without_library() -> Fixture {
@@ -22,7 +22,7 @@ fn fixture_without_library() -> Fixture {
         "this file is not a database, so the library cannot be opened from it",
     )
     .expect("a damaged database");
-    let (recorded, sink) = RecordingMessageSink::shared();
+    let (recorded, sink) = RecordingMessageListener::shared();
     let backend = BackendApp::initialize_for_tests(data_dir, sink);
     Fixture {
         backend,
@@ -136,7 +136,7 @@ fn with_a_library_the_library_commands_answer() {
     let backend = &fixture.backend;
 
     assert!(matches!(backend.library_status(), LibraryStatus::Ready));
-    assert!(backend.list_directories().expect("directories").is_empty());
+    assert_eq!(backend.list_directories().expect("directories"), []);
 }
 
 #[test]

@@ -17,7 +17,8 @@ use super::{
 };
 use crate::errors::CommandError;
 use crate::ids::DirectoryId;
-use crate::messages::{Notifier, Revisioned};
+use crate::messages::StateValue;
+use crate::state_hub::StateHub;
 use log::{debug, error, info, warn};
 use notify::RecommendedWatcher;
 use parking_lot::Mutex;
@@ -65,16 +66,11 @@ pub(crate) struct LibrarySync {
 }
 
 impl LibrarySync {
-    pub(crate) fn start(
-        database: Database,
-        scan: Arc<Mutex<Revisioned<ScanState>>>,
-        notify: Notifier,
-    ) -> Self {
+    pub(crate) fn start(database: Database, hub: Arc<StateHub>) -> Self {
         let (messages, receiver) = mpsc::channel();
         let actor = Actor {
             database,
-            scan,
-            notify,
+            hub,
             messages: messages.clone(),
             cancel: Arc::new(AtomicBool::new(false)),
             state: State::new(),
@@ -160,8 +156,7 @@ impl Drop for LibrarySync {
 
 struct Actor {
     database: Database,
-    scan: Arc<Mutex<Revisioned<ScanState>>>,
-    notify: Notifier,
+    hub: Arc<StateHub>,
     /// For the inputs the watchers and the scanner thread send back.
     messages: Sender<Message>,
     cancel: Arc<AtomicBool>,
@@ -347,29 +342,26 @@ impl Actor {
             return;
         }
         self.cancel.store(false, Ordering::Release);
-        self.scan.lock().update(|scan| {
-            *scan = ScanState {
-                state: ScanStatus::Running,
-                finished_count: scan.finished_count,
-                changed_count: scan.changed_count,
-                ..ScanState::idle()
-            };
-        });
+        let previous = self.hub.read(|published| published.scan.value.clone());
+        self.hub.publish(StateValue::Scan(ScanState {
+            state: ScanStatus::Running,
+            finished_count: previous.finished_count,
+            changed_count: previous.changed_count,
+            ..ScanState::idle()
+        }));
         info!("library.scan.started directory_count={}", jobs.len());
-        self.notify.notify();
-        let (database, scan, cancel, notify) = (
+        let (database, hub, cancel) = (
             self.database.clone(),
-            Arc::clone(&self.scan),
+            Arc::clone(&self.hub),
             Arc::clone(&self.cancel),
-            self.notify.clone(),
         );
         let messages = self.messages.clone();
         self.scanner = Some(
             thread::Builder::new()
                 .name("library-scanner".into())
                 .spawn(move || {
-                    let mut ending = ScanEnding::new(messages, Arc::clone(&scan), notify.clone());
-                    let outcome = scanner::run(&database, &jobs, &scan, &cancel, &notify);
+                    let mut ending = ScanEnding::new(messages, Arc::clone(&hub));
+                    let outcome = scanner::run(&database, &jobs, &hub, &cancel);
                     ending.finish(match outcome {
                         ScanStatus::Completed => ScanOutcome::Completed,
                         ScanStatus::Cancelled => ScanOutcome::Cancelled,
@@ -431,21 +423,15 @@ impl Actor {
 /// when this drops, so the scan never stays "Running".
 struct ScanEnding {
     messages: Sender<Message>,
-    scan: Arc<Mutex<Revisioned<ScanState>>>,
-    notify: Notifier,
+    hub: Arc<StateHub>,
     finished: bool,
 }
 
 impl ScanEnding {
-    fn new(
-        messages: Sender<Message>,
-        scan: Arc<Mutex<Revisioned<ScanState>>>,
-        notify: Notifier,
-    ) -> Self {
+    fn new(messages: Sender<Message>, hub: Arc<StateHub>) -> Self {
         Self {
             messages,
-            scan,
-            notify,
+            hub,
             finished: false,
         }
     }
@@ -466,7 +452,7 @@ fn report_scan_finished(messages: &Sender<Message>, outcome: ScanOutcome) {
 impl Drop for ScanEnding {
     fn drop(&mut self) {
         if !self.finished {
-            scanner::fail(&self.scan, &self.notify);
+            scanner::fail(&self.hub);
             report_scan_finished(&self.messages, ScanOutcome::Failed);
         }
     }
@@ -479,29 +465,35 @@ fn directory_number(directory: &LibraryDirectory) -> DirectoryNumber {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::messages::{StateTopic, null_message_sink};
+    use crate::messages::StateValue;
+    use crate::settings::Settings;
+    use crate::state_hub::{Published, StateHub};
+    use crate::test_support::null_message_listener;
 
     #[test]
     fn a_scan_thread_that_dies_ends_the_scan_as_failed() {
         let (messages, received) = mpsc::channel();
-        let scan = Arc::new(Mutex::new(Revisioned::new(ScanState {
+        let hub = Arc::new(StateHub::new(
+            Published::initial(&Settings::default()),
+            null_message_listener(),
+        ));
+        hub.publish(StateValue::Scan(ScanState {
             state: ScanStatus::Running,
             ..ScanState::idle()
-        })));
-        let notify = Notifier::new(null_message_sink(), StateTopic::LibraryScan);
-        let thread_scan = Arc::clone(&scan);
+        }));
+        let thread_hub = Arc::clone(&hub);
 
         let died = thread::Builder::new()
             .name("scanner-bug-test".into())
             .spawn(move || {
-                let _ending = ScanEnding::new(messages, thread_scan, notify);
+                let _ending = ScanEnding::new(messages, thread_hub);
                 panic!("scanner bug");
             })
             .unwrap()
             .join();
 
         assert!(died.is_err());
-        let snapshot = scan.lock().clone();
+        let snapshot = hub.read(|published| published.scan.clone());
         assert_eq!(snapshot.value.state, ScanStatus::Failed);
         assert!(matches!(
             received.try_recv(),

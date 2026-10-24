@@ -9,7 +9,7 @@ use super::{
     PlaybackControls, PlaybackPosition, PlaybackProcessingInfo, PlaybackState, QueueState,
 };
 use crate::audio::playback::session::Loaded;
-use crate::messages::{Revisioned, StateTopic};
+use crate::messages::{Revisioned, StateValue};
 
 impl PlaybackWorker {
     /// What listeners see, drawn from the transport, the queue and the volume.
@@ -77,29 +77,26 @@ impl PlaybackWorker {
         }
     }
 
-    /// The transport as it stands, with the revision of its topic. A command that changes
+    /// The transport as it is published, with the revision of its topic. A command that changes
     /// nothing answers with it.
     pub(super) fn playback_versioned(&self) -> Revisioned<PlaybackState> {
-        Revisioned {
-            revision: self.revision,
-            value: self.render(),
-        }
+        self.hub.read(|published| published.playback.clone())
     }
 
-    /// Renders the transport as a new revision and tells listeners. The snapshot carries the
-    /// newest position too, so a listener that joins here starts from the right place.
+    /// Renders the transport and publishes it, which tells listeners when it changed. The
+    /// position is stored too, so a listener that joins later starts from the right place.
     pub(super) fn publish_state(&mut self) -> Revisioned<PlaybackState> {
         if let Transport::Loaded(loaded) = &mut self.transport
             && !loaded.paused
         {
             loaded.position.frame = loaded.sample_position();
         }
-        self.revision = self.revision.saturating_add(1);
-        let published = self.playback_versioned();
-        self.store_position(published.value.session().map(CurrentPlayback::position));
-        *self.snapshot.write() = published.clone();
-        self.messages.state_changed(StateTopic::Playback);
-        published
+        let value = self.render();
+        self.store_position(value.session().map(CurrentPlayback::position));
+        let revision = self
+            .hub
+            .publish(StateValue::Playback(Box::new(value.clone())));
+        Revisioned { revision, value }
     }
 
     /// Tells listeners the loaded track moved on, without a new snapshot.
@@ -128,23 +125,19 @@ impl PlaybackWorker {
 
     /// Whether Previous is offered, as listeners last saw it.
     pub(super) fn published_can_go_previous(&self) -> bool {
-        self.snapshot.read().value.base().can_go_previous
+        self.hub
+            .read(|published| published.playback.value.base().can_go_previous)
     }
 
     pub(super) fn publish_queue(&mut self) -> Revisioned<QueueState> {
         self.prune_unavailable();
-        self.next_queue_revision = self.next_queue_revision.saturating_add(1);
-        let published = Revisioned {
-            revision: self.next_queue_revision,
-            value: QueueState::of(&self.queue, &self.tracks, self.previous_queue.is_some()),
-        };
-        *self.queue_snapshot.write() = published.clone();
-        self.messages.state_changed(StateTopic::Queue);
-        published
+        let value = QueueState::of(&self.queue, &self.tracks, self.previous_queue.is_some());
+        let revision = self.hub.publish(StateValue::Queue(value.clone()));
+        Revisioned { revision, value }
     }
 
     pub(super) fn queue_snapshot(&self) -> Revisioned<QueueState> {
-        self.queue_snapshot.read().clone()
+        self.hub.read(|published| published.queue.clone())
     }
 
     /// Publishes a queue change, and refreshes the transport so previous/next availability

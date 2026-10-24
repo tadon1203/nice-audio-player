@@ -26,7 +26,8 @@ use crate::ids::PlaybackId;
 use crate::library::scanner::identity::content_hash;
 use crate::library::store::PlayableTrack;
 use crate::media::validation::ValidatedAudioFile;
-use crate::messages::{Revisioned, SharedMessageListener, StateTopic};
+use crate::messages::StateValue;
+use crate::state_hub::StateHub;
 use crate::threads::{Cancellation, run_in_background};
 
 pub(crate) const WAVEFORM_BUCKETS: usize = 1000;
@@ -419,21 +420,12 @@ struct Request {
     hash: Option<String>,
 }
 
-/// The Waveform topic: the loaded Playback and its waveform, changed together under one lock.
+/// The loaded Playback and its file. The Waveform topic is published to the hub under this lock,
+/// so a waveform that finishes late cannot replace the one of a newer Playback.
+#[derive(Default)]
 struct Current {
     playback_id: Option<PlaybackId>,
     file: Option<ValidatedAudioFile>,
-    value: Revisioned<Option<PlaybackWaveform>>,
-}
-
-impl Default for Current {
-    fn default() -> Self {
-        Self {
-            playback_id: None,
-            file: None,
-            value: Revisioned::new(None),
-        }
-    }
 }
 
 struct Shared {
@@ -441,7 +433,7 @@ struct Shared {
     ready: Mutex<HashMap<PathBuf, (FileStamp, Arc<Waveform>)>>,
     jobs: Mutex<Jobs>,
     wake: Condvar,
-    messages: SharedMessageListener,
+    hub: Arc<StateHub>,
     current: Mutex<Current>,
 }
 
@@ -525,14 +517,14 @@ pub(crate) struct Waveforms {
 }
 
 impl Waveforms {
-    pub(crate) fn start(directory: PathBuf, messages: SharedMessageListener) -> Self {
+    pub(crate) fn start(directory: PathBuf, hub: Arc<StateHub>) -> Self {
         let cache_directory = directory.clone();
         let shared = Arc::new(Shared {
             directory,
             ready: Mutex::new(HashMap::new()),
             jobs: Mutex::new(Jobs::default()),
             wake: Condvar::new(),
-            messages,
+            hub,
             current: Mutex::new(Current::default()),
         });
         let worker = Arc::clone(&shared);
@@ -560,28 +552,22 @@ impl Waveforms {
         Self { shared }
     }
 
-    /// The Waveform topic: the waveform of the loaded Playback, or `None` while it is analyzed.
-    pub(crate) fn state(&self) -> Revisioned<Option<PlaybackWaveform>> {
-        self.shared.current().value.clone()
-    }
-
-    /// A track was loaded as the Playback `playback_id`. Its waveform is shown when it is in
-    /// memory; otherwise it is analyzed, and the topic is announced again when it is ready.
+    /// A track was loaded as the Playback `playback_id`. Its waveform is published when it is in
+    /// memory, and `None` otherwise; then it is analyzed, and published again when it is ready.
     pub(crate) fn loaded(&self, playback_id: PlaybackId, track: &PlayableTrack) {
         let mut current = self.shared.current();
         let ready = self.get(&track.file);
         let missing = ready.is_none();
         current.playback_id = Some(playback_id);
         current.file = Some(track.file.clone());
-        current.value.update(|value| {
-            *value = ready.map(|waveform| PlaybackWaveform::of(playback_id, &waveform));
-        });
+        self.shared.hub.publish(StateValue::Waveform(
+            ready.map(|waveform| PlaybackWaveform::of(playback_id, &waveform)),
+        ));
         drop(current);
         if missing {
             self.shared
                 .request(&track.file, track.content_hash.as_deref());
         }
-        self.shared.messages.state_changed(StateTopic::Waveform);
     }
 
     /// The track that plays next. Its analysis queues behind the work in flight.
@@ -658,9 +644,9 @@ impl Shared {
     }
 
     /// Remembers the waveform of any file. When it is the file of the loaded Playback, it also
-    /// becomes the Waveform topic, with a new revision and an announcement.
+    /// becomes the Waveform topic.
     fn publish(&self, path: &Path, stamp: FileStamp, waveform: Waveform) {
-        let mut current = self.current();
+        let current = self.current();
         let shown = match (current.playback_id, &current.file) {
             (Some(playback_id), Some(file)) if file.path == path => {
                 Some(PlaybackWaveform::of(playback_id, &waveform))
@@ -668,12 +654,9 @@ impl Shared {
             _ => None,
         };
         self.remember(path, stamp, waveform);
-        let Some(shown) = shown else {
-            return;
-        };
-        current.value.update(|value| *value = Some(shown));
-        drop(current);
-        self.messages.state_changed(StateTopic::Waveform);
+        if let Some(shown) = shown {
+            self.hub.publish(StateValue::Waveform(Some(shown)));
+        }
     }
 
     fn remember(&self, path: &Path, stamp: FileStamp, waveform: Waveform) {
@@ -690,7 +673,11 @@ mod tests {
     use super::*;
     use crate::ids::TrackId;
     use crate::media::validation::validate_audio_file;
-    use crate::messages::testing::Sent;
+    use crate::messages::SharedMessageListener;
+    use crate::messages::{Revisioned, StateTopic};
+    use crate::settings::Settings;
+    use crate::state_hub::{Published, StateHub};
+    use crate::test_support::{RecordingMessageListener, Sent, null_message_listener};
     use crate::test_support::{TestDirectory, write_pcm_i16_wav};
 
     fn wav(directory: &TestDirectory, name: &str, samples: &[i16]) -> ValidatedAudioFile {
@@ -877,44 +864,53 @@ mod tests {
     fn service_publishes_the_exact_waveform_and_caches_it() {
         let directory = TestDirectory::new();
         let file = wav(&directory, "song.wav", &vec![5_000i16; 16_000]);
-        let (recorder, sink) = crate::messages::testing::RecordingMessageSink::shared();
-        let service = Waveforms::start(directory.file("cache"), sink);
+        let (recorder, sink) = RecordingMessageListener::shared();
+        let service = Waveforms::start(directory.file("cache"), hub_with(sink));
         let track = track_of(&file, None);
         service.loaded(PlaybackId::first(), &track);
         // Background priority: the worker yields to the rest of a busy test run.
         let deadline = Instant::now() + Duration::from_secs(60);
-        while service.state().value.is_none() && Instant::now() < deadline {
+        while published_waveform(&service).value.is_none() && Instant::now() < deadline {
             thread::sleep(Duration::from_millis(10));
         }
-        assert!(service.state().value.is_some());
+        assert!(published_waveform(&service).value.is_some());
         assert!(recorder.sent().contains(&Sent::State(StateTopic::Waveform)));
         let hash = content_hash(Path::new(&file.path)).unwrap();
         assert!(read_cache(&directory.file("cache"), &hash).is_some());
     }
 
-    fn idle_shared(directory: &TestDirectory) -> Shared {
-        let (_, sink) = crate::messages::testing::RecordingMessageSink::shared();
+    fn hub_with(listener: SharedMessageListener) -> Arc<StateHub> {
+        Arc::new(StateHub::new(
+            Published::initial(&Settings::default()),
+            listener,
+        ))
+    }
+
+    fn published_waveform(service: &Waveforms) -> Revisioned<Option<PlaybackWaveform>> {
+        service
+            .shared
+            .hub
+            .read(|published| published.waveform.clone())
+    }
+
+    fn idle_shared_with(directory: &TestDirectory, listener: SharedMessageListener) -> Shared {
         Shared {
             directory: directory.file("cache"),
             ready: Mutex::new(HashMap::new()),
             jobs: Mutex::new(Jobs::default()),
             wake: Condvar::new(),
-            messages: sink,
+            hub: hub_with(listener),
             current: Mutex::new(Current::default()),
         }
     }
 
-    fn idle_waveforms(
-        directory: &TestDirectory,
-    ) -> (
-        Waveforms,
-        Arc<crate::messages::testing::RecordingMessageSink>,
-    ) {
-        let (recorder, sink) = crate::messages::testing::RecordingMessageSink::shared();
-        let shared = Shared {
-            messages: sink,
-            ..idle_shared(directory)
-        };
+    fn idle_shared(directory: &TestDirectory) -> Shared {
+        idle_shared_with(directory, null_message_listener())
+    }
+
+    fn idle_waveforms(directory: &TestDirectory) -> (Waveforms, Arc<RecordingMessageListener>) {
+        let (recorder, listener) = RecordingMessageListener::shared();
+        let shared = idle_shared_with(directory, listener);
         (
             Waveforms {
                 shared: Arc::new(shared),
@@ -924,15 +920,16 @@ mod tests {
     }
 
     #[test]
-    fn loading_a_track_is_a_new_revision_and_an_announcement() {
+    fn loading_a_track_without_a_waveform_in_memory_changes_nothing() {
         let directory = TestDirectory::new();
         let file = wav(&directory, "a.wav", &[100, 200, 300, 400]);
         let (service, recorder) = idle_waveforms(&directory);
 
         service.loaded(PlaybackId::first(), &track_of(&file, None));
 
-        assert_eq!(service.state().revision, 1);
-        assert_eq!(recorder.sent(), vec![Sent::State(StateTopic::Waveform)]);
+        // The topic starts at no waveform, and it still has none: nothing to publish.
+        assert_eq!(published_waveform(&service).revision, 0);
+        assert_eq!(recorder.sent(), []);
     }
 
     #[test]
@@ -956,14 +953,14 @@ mod tests {
         service
             .shared
             .publish(Path::new(&other.path), stamp(), rebuilt());
-        assert_eq!(service.state().revision, 1);
+        assert_eq!(published_waveform(&service).revision, 0);
         assert_eq!(recorder.sent().len(), announced);
 
         service
             .shared
             .publish(Path::new(&loaded.path), stamp(), rebuilt());
-        let state = service.state();
-        assert_eq!(state.revision, 2);
+        let state = published_waveform(&service);
+        assert_eq!(state.revision, 1);
         assert_eq!(
             state.value,
             Some(PlaybackWaveform {
@@ -979,8 +976,8 @@ mod tests {
     fn peeking_never_starts_an_analysis() {
         let directory = TestDirectory::new();
         let file = wav(&directory, "a.wav", &[100, 200, 300, 400]);
-        let (_, sink) = crate::messages::testing::RecordingMessageSink::shared();
-        let service = Waveforms::start(directory.file("cache"), sink);
+        let (_, sink) = RecordingMessageListener::shared();
+        let service = Waveforms::start(directory.file("cache"), hub_with(sink));
         assert!(service.get(&file).is_none());
         assert!(service.shared.jobs().pending.is_none());
         assert!(service.shared.jobs().running.is_none());
@@ -1021,24 +1018,24 @@ mod tests {
     fn a_file_replaced_at_the_same_path_is_analyzed_again() {
         let directory = TestDirectory::new();
         let file = wav(&directory, "song.wav", &vec![5_000i16; 16_000]);
-        let (_, sink) = crate::messages::testing::RecordingMessageSink::shared();
-        let service = Waveforms::start(directory.file("cache"), sink);
+        let (_, sink) = RecordingMessageListener::shared();
+        let service = Waveforms::start(directory.file("cache"), hub_with(sink));
         let track = track_of(&file, None);
         service.loaded(PlaybackId::first(), &track);
         let deadline = Instant::now() + Duration::from_secs(60);
-        while service.state().value.is_none() && Instant::now() < deadline {
+        while published_waveform(&service).value.is_none() && Instant::now() < deadline {
             thread::sleep(Duration::from_millis(10));
         }
-        assert!(service.state().value.is_some());
+        assert!(published_waveform(&service).value.is_some());
 
         write_pcm_i16_wav(Path::new(&file.path), 8_000, 1, &vec![9_000i16; 24_000]);
         assert!(service.get(&file).is_none());
         service.loaded(PlaybackId::first(), &track);
         let deadline = Instant::now() + Duration::from_secs(60);
-        while service.state().value.is_none() && Instant::now() < deadline {
+        while published_waveform(&service).value.is_none() && Instant::now() < deadline {
             thread::sleep(Duration::from_millis(10));
         }
-        assert!(service.state().value.is_some());
+        assert!(published_waveform(&service).value.is_some());
     }
 
     #[test]

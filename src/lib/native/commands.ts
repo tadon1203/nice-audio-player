@@ -1,5 +1,5 @@
 import { Channel } from "@tauri-apps/api/core";
-import { commands, type BackendMessage, type CommandError, type InitialState } from "./bindings";
+import { commands, type BackendMessage, type CommandError } from "./bindings";
 import { IpcError, NativeError, type NativeArea } from "./errors";
 
 /** The `CommandError` a rejected command carries, or null when the rejection has none. */
@@ -101,8 +101,8 @@ export const appearance = {
 
 /** The app-wide commands: the one channel to the Renderer, and the log folder. */
 export const app = {
-  /** Registers `onMessage`, then resolves to the current value of every topic. */
-  connect: (onMessage: (message: BackendMessage) => void): Promise<InitialState> =>
+  /** Registers `onMessage`, then resolves to the current value of every topic, as messages. */
+  connect: (onMessage: (message: BackendMessage) => void): Promise<BackendMessage[]> =>
     command("app", () => commands.appConnect(new Channel<BackendMessage>(onMessage))),
   openLogDirectory: areaCommand("app", commands.appOpenLogDirectory),
 };

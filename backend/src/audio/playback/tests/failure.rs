@@ -1,25 +1,28 @@
 use super::*;
-use crate::messages::Occurrence;
 
 #[test]
-fn each_skipped_track_reaches_the_sink_as_an_occurrence_in_order() {
+fn each_skipped_track_reaches_the_listener_in_order() {
     let mut harness = Harness::new();
     let mut tracks = missing(2);
     tracks.push(harness.track("c", 1));
 
     harness.start(tracks, 0).unwrap();
 
-    let skipped: Vec<TrackId> = harness
+    let skipped: Vec<Option<String>> = harness
         .sent()
         .into_iter()
         .filter_map(|sent| match sent {
-            Sent::Occurrence(occurrence) => match *occurrence {
-                Occurrence::TrackSkipped { item, .. } => item.map(|item| item.track.core.id),
-            },
+            Sent::TrackSkipped(title) => Some(title),
             _ => None,
         })
         .collect();
-    assert_eq!(skipped, [track_id_of("track-0"), track_id_of("track-1")]);
+    assert_eq!(
+        skipped,
+        [
+            Some("track-0.flac".to_owned()),
+            Some("track-1.flac".to_owned())
+        ]
+    );
 }
 
 #[test]
@@ -281,10 +284,7 @@ fn a_track_that_fails_while_playing_is_reported_as_skipped_once() {
     let skipped = harness
         .sent()
         .iter()
-        .filter(|sent| {
-            matches!(sent, Sent::Occurrence(occurrence)
-                if matches!(**occurrence, Occurrence::TrackSkipped { .. }))
-        })
+        .filter(|sent| matches!(sent, Sent::TrackSkipped(_)))
         .count();
     assert_eq!(skipped, 1);
 }

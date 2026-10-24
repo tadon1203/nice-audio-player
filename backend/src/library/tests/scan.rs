@@ -3,21 +3,15 @@
 use crate::library::database::Database;
 use crate::library::directories;
 use crate::library::models::{ScanFailure, ScanState, ScanStatus};
-use crate::messages::{Notifier, Revisioned, StateTopic, null_message_sink};
-use crate::test_support::{TestDirectory, write_pcm_i16_wav};
-use parking_lot::Mutex;
+use crate::messages::{Revisioned, StateValue};
+use crate::test_support::{TestDirectory, hub_for_tests, null_message_listener, write_pcm_i16_wav};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
 pub(super) struct Fixture {
     _directory: TestDirectory,
     pub(super) music: PathBuf,
     pub(super) database: Database,
-}
-
-fn notifier() -> Notifier {
-    Notifier::new(null_message_sink(), StateTopic::LibraryScan)
 }
 
 pub(super) fn fixture() -> Fixture {
@@ -64,19 +58,14 @@ fn run_versioned(
             dirs: dirs.map(<[PathBuf]>::to_vec),
         })
         .collect();
-    let state = Arc::new(Mutex::new(Revisioned::new(ScanState {
+    let hub = hub_for_tests(null_message_listener());
+    hub.publish(StateValue::Scan(ScanState {
         state: ScanStatus::Running,
         ..ScanState::idle()
-    })));
-    crate::library::scanner::run(
-        &fixture.database,
-        &jobs,
-        &state,
-        &AtomicBool::new(cancelled),
-        &notifier(),
-    );
+    }));
+    crate::library::scanner::run(&fixture.database, &jobs, &hub, &AtomicBool::new(cancelled));
 
-    state.lock().clone()
+    hub.read(|published| published.scan.clone())
 }
 
 #[test]
@@ -84,10 +73,10 @@ fn the_scan_revision_grows_with_each_change_of_the_scan() {
     let fixture = fixture();
     write_tone(&fixture.music.join("a.wav"), 16_000);
     let scan = run_versioned(&fixture, false, None);
-    // The scan sets the expected count and the directory, counts the file it finds, and ends: each is
-    // a change, so the revision is at least four.
+    // The scan starts as running, sets the directory, and ends: each is a change, and a count that
+    // leaves the expected count unchanged is not, so the revision is at least three.
     assert_eq!(scan.value.state, ScanStatus::Completed);
-    assert!(scan.revision >= 4, "revision {}", scan.revision);
+    assert!(scan.revision >= 3, "revision {}", scan.revision);
 }
 
 fn files(fixture: &Fixture) -> Vec<(String, String, String, i64)> {

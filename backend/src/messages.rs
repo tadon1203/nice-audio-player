@@ -1,16 +1,11 @@
-//! How backend services tell the host that something changed, and what the host sends.
-//!
-//! Services hold a `SharedMessageListener`. They report a state topic, a position, or an occurrence.
-//! They do not know about Tauri or about each other.
-//!
-//! A state topic carries its whole value. The host reads the value when it sends, so several
-//! changes can become one message. An occurrence carries its value and is never merged.
+//! What the Backend tells the host: a state topic changed, the playing position moved, or a track
+//! was skipped. Every published state value lives in `StateHub`, which tells the listener which
+//! topic changed. The host reads the latest value when it sends, so several changes can become
+//! one message.
 
 use std::sync::Arc;
 
-use crate::audio::playback::{
-    PlaybackFailureCode, PlaybackItem, PlaybackPosition, PlaybackState, QueueState,
-};
+use crate::audio::playback::{PlaybackPosition, PlaybackState, QueueState};
 use crate::audio::waveform::PlaybackWaveform;
 use crate::library::models::ScanState;
 use crate::settings::Appearance;
@@ -27,12 +22,6 @@ impl<T> Revisioned<T> {
     pub fn new(value: T) -> Self {
         Self { revision: 0, value }
     }
-
-    /// Applies a change and counts it. Call it only when the value changes.
-    pub fn update(&mut self, change: impl FnOnce(&mut T)) {
-        change(&mut self.value);
-        self.revision = self.revision.saturating_add(1);
-    }
 }
 
 /// The Backend state topics. Declaration order is the order they are sent in.
@@ -40,9 +29,20 @@ impl<T> Revisioned<T> {
 pub enum StateTopic {
     Playback,
     Queue,
-    LibraryScan,
+    Scan,
     Waveform,
     Appearance,
+}
+
+impl StateTopic {
+    /// Every topic, in declaration order.
+    pub const ALL: [StateTopic; 5] = [
+        StateTopic::Playback,
+        StateTopic::Queue,
+        StateTopic::Scan,
+        StateTopic::Waveform,
+        StateTopic::Appearance,
+    ];
 }
 
 /// What the Renderer receives on its channel.
@@ -51,14 +51,16 @@ pub enum StateTopic {
 pub enum BackendMessage {
     /// The fields of the message merge into one object: { kind: "state", revision, topic, value }.
     State(Box<StateMessage>),
-    /// { kind: "occurrence", type: "...", ... }
-    Occurrence(Box<Occurrence>),
     /// { kind: "position", playbackId, positionMs, seekRevision }
     Position(PlaybackPosition),
+    /// The player could not play a track and skipped it by itself. `title` is the track's title,
+    /// when it has one.
+    TrackSkipped { title: Option<String> },
 }
 
-/// One state topic's value with its revision.
-#[derive(Debug, Clone, serde::Serialize, specta::Type)]
+/// One state topic's value with its revision. A tuple variant around this struct is what specta
+/// types as the merged object; a struct variant with a flattened field is not.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct StateMessage {
     pub revision: u64,
@@ -67,40 +69,14 @@ pub struct StateMessage {
 }
 
 /// The whole value of one state topic.
-#[derive(Debug, Clone, serde::Serialize, specta::Type)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, specta::Type)]
 #[serde(tag = "topic", content = "value", rename_all = "camelCase")]
 pub enum StateValue {
     Playback(Box<PlaybackState>),
     Queue(QueueState),
-    LibraryScan(ScanState),
+    Scan(ScanState),
     Waveform(Option<PlaybackWaveform>),
     Appearance(Appearance),
-}
-
-/// A fact that happened, with its value.
-#[derive(Debug, Clone, PartialEq, serde::Serialize, specta::Type)]
-#[serde(
-    tag = "type",
-    rename_all = "camelCase",
-    rename_all_fields = "camelCase"
-)]
-pub enum Occurrence {
-    /// The player could not play `item` and skipped it by itself.
-    TrackSkipped {
-        item: Option<PlaybackItem>,
-        error: PlaybackFailureCode,
-    },
-}
-
-/// The current value of every Backend state topic. `app_connect` returns it.
-#[derive(Debug, Clone, serde::Serialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
-pub struct InitialState {
-    pub playback: Revisioned<PlaybackState>,
-    pub queue: Revisioned<QueueState>,
-    pub library_scan: Revisioned<ScanState>,
-    pub waveform: Revisioned<Option<PlaybackWaveform>>,
-    pub appearance: Revisioned<Appearance>,
 }
 
 /// Receives messages on whichever thread produced them, so it must return quickly.
@@ -109,100 +85,19 @@ pub trait MessageListener: Send + Sync {
     fn state_changed(&self, topic: StateTopic);
     /// The playing position moved.
     fn position_changed(&self);
-    /// A fact, with its value. The sink keeps every one, in order.
-    fn occurred(&self, occurrence: Occurrence);
+    /// The player skipped a track it could not play.
+    fn track_skipped(&self, title: Option<String>);
 }
 
 pub type SharedMessageListener = Arc<dyn MessageListener>;
-
-/// Drops every message, for tests and headless use.
-#[derive(Debug)]
-pub struct NullMessageListener;
-
-impl MessageListener for NullMessageListener {
-    fn state_changed(&self, _topic: StateTopic) {}
-    fn position_changed(&self) {}
-    fn occurred(&self, _occurrence: Occurrence) {}
-}
-
-pub fn null_message_sink() -> SharedMessageListener {
-    Arc::new(NullMessageListener)
-}
-
-/// A sink bound to one state topic, for code that only ever announces "it changed".
-#[derive(Clone)]
-pub struct Notifier {
-    sink: SharedMessageListener,
-    topic: StateTopic,
-}
-
-impl Notifier {
-    pub fn new(sink: SharedMessageListener, topic: StateTopic) -> Self {
-        Self { sink, topic }
-    }
-
-    pub fn notify(&self) {
-        self.sink.state_changed(self.topic);
-    }
-}
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn an_update_applies_the_change_and_counts_it() {
-        let mut topic = Revisioned::new(10);
-        assert_eq!(topic.revision, 0);
-        topic.update(|value| *value += 5);
-        topic.update(|value| *value += 1);
-        assert_eq!((topic.revision, topic.value), (2, 16));
-    }
-}
-
-#[cfg(test)]
-pub(crate) mod testing {
-    use super::*;
-    use parking_lot::Mutex;
-
-    /// One call to a sink, in the order it was made.
-    #[derive(Debug, Clone, PartialEq)]
-    pub(crate) enum Sent {
-        State(StateTopic),
-        Position,
-        Occurrence(Box<Occurrence>),
-    }
-
-    /// Remembers every call, in order.
-    #[derive(Default)]
-    pub(crate) struct RecordingMessageSink {
-        sent: Mutex<Vec<Sent>>,
-    }
-
-    impl RecordingMessageSink {
-        pub(crate) fn shared() -> (Arc<Self>, SharedMessageListener) {
-            let sink = Arc::new(Self::default());
-            (Arc::clone(&sink), sink)
-        }
-
-        pub(crate) fn sent(&self) -> Vec<Sent> {
-            self.sent.lock().clone()
-        }
-    }
-
-    impl MessageListener for RecordingMessageSink {
-        fn state_changed(&self, topic: StateTopic) {
-            self.sent.lock().push(Sent::State(topic));
-        }
-
-        fn position_changed(&self) {
-            self.sent.lock().push(Sent::Position);
-        }
-
-        fn occurred(&self, occurrence: Occurrence) {
-            self.sent
-                .lock()
-                .push(Sent::Occurrence(Box::new(occurrence)));
-        }
+    fn a_new_value_starts_at_revision_zero() {
+        let topic = Revisioned::new(10);
+        assert_eq!((topic.revision, topic.value), (0, 10));
     }
 }

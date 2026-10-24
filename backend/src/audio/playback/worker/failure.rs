@@ -1,10 +1,10 @@
 //! Failed streams and decodes, and what the worker does about them.
 
 use super::{
-    AudioOutputSelection, FailureScope, LoadStage, Occurrence, OutputStreamId, PipelineId,
-    PipelineOwner, PlaybackFailureCode, PlaybackServiceError, PlaybackWorker, StartFailure,
-    StartFailurePhase, StartedBy, StreamFailureKind, StreamSignalAction, Transport, error, info,
-    respond, stream_signal_action,
+    AudioOutputSelection, FailureScope, LoadStage, OutputStreamId, PipelineId, PipelineOwner,
+    PlaybackFailureCode, PlaybackServiceError, PlaybackWorker, StartFailure, StartFailurePhase,
+    StartedBy, StreamFailureKind, StreamSignalAction, Transport, error, info, respond,
+    stream_signal_action,
 };
 
 impl PlaybackWorker {
@@ -90,7 +90,7 @@ impl PlaybackWorker {
         self.transport = Transport::Failed { id, code, skipping };
         self.publish_state();
         if skipping {
-            self.occur_track_skipped(code);
+            self.occur_track_skipped();
         }
         if scope == FailureScope::Item
             && let Some(item) = self.next_after_item_failure()
@@ -102,14 +102,13 @@ impl PlaybackWorker {
 
     /// Tells listeners that the current item could not be played and the worker moves on. Call it
     /// before the queue advances, so the current item is still the one that failed.
-    pub(super) fn occur_track_skipped(&self, error: PlaybackFailureCode) {
-        let item = self
+    pub(super) fn occur_track_skipped(&self) {
+        let title = self
             .queue
             .current()
             .and_then(|entry| self.item_of(entry))
-            .map(|item| item.to_playback_item());
-        self.messages
-            .occurred(Occurrence::TrackSkipped { item, error });
+            .map(|item| item.to_playback_item().track.core.title);
+        self.messages.track_skipped(title);
     }
 
     pub(super) fn refresh_default_device(&mut self) -> bool {

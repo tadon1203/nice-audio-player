@@ -42,10 +42,9 @@ use crate::library::{
     models::LibraryUnavailableReason,
 };
 use crate::lyrics::{LyricsCommandError, LyricsService, model::LyricsTrackContext};
-use crate::messages::{
-    BackendMessage, InitialState, SharedMessageListener, StateMessage, StateTopic, StateValue,
-};
-use crate::settings::SettingsService;
+use crate::messages::{BackendMessage, SharedMessageListener, StateTopic};
+use crate::settings::{SettingsService, load_saved};
+use crate::state_hub::{Published, StateHub};
 use playback_context::LibraryTracks;
 use std::{
     path::{Path, PathBuf},
@@ -62,8 +61,9 @@ pub struct BackendApp {
     playback: PlaybackService,
     /// The Library, or why it is unavailable.
     library: Result<Library, LibraryUnavailableReason>,
-    waveforms: Arc<Waveforms>,
     settings: Arc<SettingsService>,
+    /// Every published state value. The services publish into it, and the Host reads it.
+    hub: Arc<StateHub>,
     data_dir: PathBuf,
 }
 
@@ -93,12 +93,17 @@ impl BackendApp {
         messages: SharedMessageListener,
         output: Box<dyn OutputBackend>,
     ) -> Result<Self, BackendError> {
-        let settings = Arc::new(SettingsService::load(&data_dir, Arc::clone(&messages)));
-        let waveforms = Arc::new(Waveforms::start(
-            data_dir.join("waveforms"),
+        let saved = load_saved(&data_dir);
+        let hub = Arc::new(StateHub::new(
+            Published::initial(&saved),
             Arc::clone(&messages),
         ));
-        let library = Library::open(&data_dir, Arc::clone(&messages));
+        let settings = Arc::new(SettingsService::start(&data_dir, saved, Arc::clone(&hub)));
+        let waveforms = Arc::new(Waveforms::start(
+            data_dir.join("waveforms"),
+            Arc::clone(&hub),
+        ));
+        let library = Library::open(&data_dir, Arc::clone(&hub));
         let remember = Arc::clone(&settings);
         let tracks: Box<dyn TrackSource> = match &library {
             Ok(library) => Box::new(LibraryTracks(library.store().clone())),
@@ -113,6 +118,7 @@ impl BackendApp {
             upcoming: Arc::new(move |track| upcoming_waveforms.upcoming(track)),
         };
         let playback = PlaybackService::start_with_backend(
+            Arc::clone(&hub),
             messages,
             settings.playback_preferences(),
             Arc::new(move |preferences| remember.record_playback(preferences)),
@@ -125,8 +131,8 @@ impl BackendApp {
         Ok(Self {
             playback,
             library,
-            waveforms,
             settings,
+            hub,
             data_dir,
         })
     }
@@ -141,47 +147,14 @@ impl BackendApp {
 
     // ---- communication ----
 
-    /// The current value of every state topic, each with its revision.
-    pub fn initial_state(&self) -> InitialState {
-        InitialState {
-            playback: self.playback.versioned_snapshot(),
-            queue: self.playback.versioned_queue_snapshot(),
-            library_scan: self.library_scan(),
-            waveform: self.waveforms.state(),
-            appearance: self.settings.appearance(),
-        }
+    /// Every state topic as a message, each with its revision. The connect command returns them.
+    pub fn messages(&self) -> Vec<BackendMessage> {
+        self.hub.messages()
     }
 
     /// The message that carries the current value of `topic`.
-    pub fn state_message(&self, topic: StateTopic) -> BackendMessage {
-        match topic {
-            StateTopic::Playback => {
-                let playback = self.playback.versioned_snapshot();
-                state(
-                    playback.revision,
-                    StateValue::Playback(Box::new(playback.value)),
-                )
-            }
-            StateTopic::Queue => {
-                let queue = self.playback.versioned_queue_snapshot();
-                state(queue.revision, StateValue::Queue(queue.value))
-            }
-            StateTopic::LibraryScan => {
-                let scan = self.library_scan();
-                state(scan.revision, StateValue::LibraryScan(scan.value))
-            }
-            StateTopic::Waveform => {
-                let waveform = self.waveforms.state();
-                state(waveform.revision, StateValue::Waveform(waveform.value))
-            }
-            StateTopic::Appearance => {
-                let appearance = self.settings.appearance();
-                state(
-                    appearance.revision,
-                    StateValue::Appearance(appearance.value),
-                )
-            }
-        }
+    pub fn message(&self, topic: StateTopic) -> BackendMessage {
+        self.hub.message(topic)
     }
 
     /// The message that carries the newest playing position, when a track is loaded.
@@ -570,20 +543,6 @@ impl BackendApp {
                 error: CommandError::LibraryUnavailable,
             })
     }
-
-    fn library_scan(&self) -> Revisioned<crate::library::models::ScanState> {
-        self.library.as_ref().map_or_else(
-            |_| Revisioned::new(crate::library::models::ScanState::idle()),
-            Library::scan_state,
-        )
-    }
-}
-
-fn state(revision: u64, value: StateValue) -> BackendMessage {
-    BackendMessage::State(Box::new(StateMessage {
-        revision,
-        state: value,
-    }))
 }
 
 fn map_lyrics_context_error(error: StoreError) -> LyricsCommandError {

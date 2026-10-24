@@ -19,7 +19,7 @@ pub enum LibraryStatus {
     Ready,
     Unavailable { reason: LibraryUnavailableReason },
 }
-#[derive(Debug, Clone, Serialize, specta::Type)]
+#[derive(Debug, Clone, PartialEq, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LibraryDirectory {
     pub id: DirectoryId,
@@ -343,7 +343,7 @@ pub enum ScanFailure {
     Panicked,
 }
 
-#[derive(Debug, Clone, Serialize, specta::Type)]
+#[derive(Debug, Clone, PartialEq, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ScanState {
     pub state: ScanStatus,

@@ -1,11 +1,10 @@
 use super::fixture;
-use crate::app::{BackendApp, PlaybackContext};
+use crate::app::{BackendApp, PlaybackContext, PlaybackWaveform};
 use crate::audio::playback::{PlaybackServiceError, RepeatMode};
 use crate::ids::TrackId;
 use crate::library::models::{SortDirection, TrackListRequest, TrackQuery, TrackSortKey};
-use crate::messages::testing::{RecordingMessageSink, Sent};
 use crate::messages::{BackendMessage, StateTopic, StateValue};
-use crate::test_support::{TestDirectory, write_pcm_i16_wav};
+use crate::test_support::{RecordingMessageListener, Sent, TestDirectory, write_pcm_i16_wav};
 use std::time::{Duration, Instant};
 
 fn title_order() -> TrackQuery {
@@ -36,7 +35,7 @@ fn wait_for_tracks(backend: &BackendApp, count: usize) -> Vec<TrackId> {
 }
 
 /// How many times the Waveform topic was announced to the host.
-fn waveform_announcements(recorded: &RecordingMessageSink) -> usize {
+fn waveform_announcements(recorded: &RecordingMessageListener) -> usize {
     recorded
         .sent()
         .iter()
@@ -45,8 +44,19 @@ fn waveform_announcements(recorded: &RecordingMessageSink) -> usize {
 }
 
 fn waveform_revision(backend: &BackendApp) -> u64 {
-    match backend.state_message(StateTopic::Waveform) {
+    match backend.message(StateTopic::Waveform) {
         BackendMessage::State(message) => message.revision,
+        other => panic!("the Waveform is not a state message: {other:?}"),
+    }
+}
+
+/// The Waveform topic's value, as the Host reads it.
+fn shown_waveform(backend: &BackendApp) -> Option<PlaybackWaveform> {
+    match backend.message(StateTopic::Waveform) {
+        BackendMessage::State(message) => match message.state {
+            StateValue::Waveform(waveform) => waveform,
+            other => panic!("the Waveform topic holds {other:?}"),
+        },
         other => panic!("the Waveform is not a state message: {other:?}"),
     }
 }
@@ -56,7 +66,7 @@ fn with_nothing_playing_there_is_no_waveform_and_no_queue() {
     let fixture = fixture();
     let backend = &fixture.backend;
 
-    assert!(backend.initial_state().waveform.value.is_none());
+    assert!(shown_waveform(backend).is_none());
     let window = backend.queue_window(0, 10);
     assert_eq!(window.items.len(), 0);
     assert_eq!(window.offset, 0);
@@ -117,7 +127,7 @@ fn previous_back_to_a_track_that_played_before_shows_its_waveform() {
     write_pcm_i16_wav(&music.join("b.wav"), 8_000, 1, &[8_000i16; 8_000]);
     let data_dir = directory.file("data");
     std::fs::create_dir_all(&data_dir).expect("data directory");
-    let (recorded, sink) = RecordingMessageSink::shared();
+    let (recorded, sink) = RecordingMessageListener::shared();
     let backend = BackendApp::initialize_for_tests(data_dir, sink);
     backend
         .add_directory(music)
@@ -126,7 +136,7 @@ fn previous_back_to_a_track_that_played_before_shows_its_waveform() {
     let context = PlaybackContext::Tracks(title_order());
     backend.play(&context, Some(ids[0])).expect("play a");
     let deadline = Instant::now() + Duration::from_secs(60);
-    while backend.initial_state().waveform.value.is_none() && Instant::now() < deadline {
+    while shown_waveform(&backend).is_none() && Instant::now() < deadline {
         std::thread::sleep(Duration::from_millis(10));
     }
     backend.next().expect("next");
@@ -136,16 +146,15 @@ fn previous_back_to_a_track_that_played_before_shows_its_waveform() {
     let back = backend.previous().expect("previous");
 
     let session = back.value.session().expect("a track is playing");
-    let BackendMessage::State(message) = backend.state_message(StateTopic::Waveform) else {
+    let BackendMessage::State(message) = backend.message(StateTopic::Waveform) else {
         panic!("the Waveform is not a state message");
     };
     assert!(message.revision > before);
     assert!(waveform_announcements(&recorded) > announced);
-    let StateValue::Waveform(Some(waveform)) = message.state.clone() else {
+    let StateValue::Waveform(Some(waveform)) = message.state else {
         panic!("the waveform of a was not shown after Previous");
     };
     assert_eq!(waveform.playback_id, session.playback_id);
-    let initial = backend.initial_state().waveform;
-    assert_eq!(initial.revision, message.revision);
-    assert_eq!(initial.value, Some(waveform));
+    assert_eq!(waveform_revision(&backend), message.revision);
+    assert_eq!(shown_waveform(&backend), Some(waveform));
 }

@@ -16,7 +16,7 @@ async function publishScan(native: Native, state: ScanStatus): Promise<void> {
     finishedCount: scansEnded,
     changedCount: scansEnded * 20,
   };
-  await native.publish("libraryScan", snapshot);
+  await native.publish("scan", snapshot);
 }
 import { workspaceViewport } from "./fixtures/locators";
 

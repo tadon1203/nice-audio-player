@@ -1,5 +1,6 @@
 use super::*;
 use crate::ids::PlaybackId;
+use crate::test_support::hub_for_tests;
 
 #[test]
 fn a_start_plays_as_soon_as_the_prebuffer_is_ready() {
@@ -68,8 +69,10 @@ fn a_start_through_a_service_thread_needs_no_poll() {
             extension: "wav".into(),
         },
     ));
+    let messages = crate::test_support::null_message_listener();
     let service = PlaybackService::start_with_backend(
-        crate::messages::null_message_sink(),
+        hub_for_tests(Arc::clone(&messages)),
+        messages,
         PlaybackPreferences::default(),
         Arc::new(|_| {}),
         resolver_of(&library),

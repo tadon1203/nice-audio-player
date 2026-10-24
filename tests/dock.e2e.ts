@@ -439,12 +439,8 @@ test("consecutive skips share one notice", async ({ page, native, library }) => 
   const dock = await playFirstTrack(page);
   const first = playbackItemFor(second!);
 
-  await native.occur({ type: "trackSkipped", item: first, error: "decodeFailed" });
-  await native.occur({
-    type: "trackSkipped",
-    item: playbackItemFor(outside!),
-    error: "decodeFailed",
-  });
+  await native.skipTrack(first.title);
+  await native.skipTrack(playbackItemFor(outside!).title);
 
   await expect(dock.getByRole("status")).toHaveText(
     `Couldn't play ${first.title} and 1 more, skipped`,

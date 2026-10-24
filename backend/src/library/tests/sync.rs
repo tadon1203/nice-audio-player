@@ -4,9 +4,10 @@
 
 use crate::library::Library;
 use crate::library::models::{ScanStatus, SortDirection, TrackSortKey};
-use crate::messages::null_message_sink;
-use crate::test_support::{TestDirectory, write_pcm_i16_wav};
+use crate::state_hub::StateHub;
+use crate::test_support::{TestDirectory, hub_for_tests, null_message_listener, write_pcm_i16_wav};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 const SETTLE: Duration = Duration::from_secs(10);
@@ -15,14 +16,15 @@ struct Harness {
     _directory: TestDirectory,
     music: PathBuf,
     library: Library,
+    hub: Arc<StateHub>,
 }
 
 fn harness() -> Harness {
     let directory = TestDirectory::new();
     let music = directory.file("music");
     std::fs::create_dir_all(&music).unwrap();
-    let library =
-        Library::open(&directory.file("data"), null_message_sink()).expect("open library");
+    let hub = hub_for_tests(null_message_listener());
+    let library = Library::open(&directory.file("data"), Arc::clone(&hub)).expect("open library");
     library
         .register_directory(music.to_string_lossy().into_owned())
         .expect("register directory");
@@ -30,6 +32,7 @@ fn harness() -> Harness {
         _directory: directory,
         music,
         library,
+        hub,
     }
 }
 
@@ -62,7 +65,7 @@ impl Harness {
     }
 
     fn scan_state(&self) -> ScanStatus {
-        self.library.scan_state().value.state
+        self.hub.read(|published| published.scan.value.state)
     }
 
     fn wait_for_first_scan(&self) {
@@ -157,11 +160,5 @@ fn removing_a_directory_drops_its_tracks() {
     );
 
     assert_eq!(harness.track_count(), 0);
-    assert!(
-        harness
-            .library
-            .directories()
-            .expect("directories")
-            .is_empty()
-    );
+    assert_eq!(harness.library.directories().expect("directories"), []);
 }

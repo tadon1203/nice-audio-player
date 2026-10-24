@@ -23,7 +23,7 @@ pub use item::PlaybackItem;
 pub(crate) use preferences::PlaybackPreferences;
 pub use queue::RepeatMode;
 pub(crate) use resolver::{NoTracks, TrackResolver, TrackSource};
-pub(crate) use service::{PlaybackService, PlaybackServiceError};
+pub(crate) use service::{PlaybackService, PlaybackServiceError, initial_playback};
 pub use snapshot::{
     CurrentPlayback, PlaybackFailureCode, PlaybackPosition, PlaybackQueueItem, PlaybackState,
     QueueState, QueueWindow, StartedBy,

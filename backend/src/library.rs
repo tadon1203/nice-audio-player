@@ -26,12 +26,11 @@ pub(crate) mod text;
 pub(crate) mod watcher;
 
 use crate::ids::{ArtworkHash, DirectoryId};
-use crate::messages::{Notifier, Revisioned, SharedMessageListener, StateTopic};
+use crate::state_hub::StateHub;
 use database::{Database, DatabaseError};
 use error::LibraryCommandError;
 use log::error;
-use models::{LibraryDirectory, LibraryUnavailableReason, ScanState};
-use parking_lot::Mutex;
+use models::{LibraryDirectory, LibraryUnavailableReason};
 use std::{
     path::Path,
     sync::Arc,
@@ -45,7 +44,6 @@ pub(crate) struct Library {
     database: Database,
     store: LibraryStore,
     sync: Arc<LibrarySync>,
-    scan: Arc<Mutex<Revisioned<ScanState>>>,
 }
 
 impl Library {
@@ -53,7 +51,7 @@ impl Library {
     /// the registered directories.
     pub(crate) fn open(
         directory: &Path,
-        messages: SharedMessageListener,
+        hub: Arc<StateHub>,
     ) -> Result<Self, LibraryUnavailableReason> {
         database::apply_requested_reset(directory);
         let database = Database::initialize(directory).map_err(|error| {
@@ -68,28 +66,17 @@ impl Library {
             error!("library.database.unavailable reason={reason:?}");
             reason
         })?;
-        let scan = Arc::new(Mutex::new(Revisioned::new(ScanState::idle())));
-        let sync = LibrarySync::start(
-            database.clone(),
-            Arc::clone(&scan),
-            Notifier::new(messages, StateTopic::LibraryScan),
-        );
+        let sync = LibrarySync::start(database.clone(), hub);
         Ok(Self {
             store: LibraryStore::new(database.clone()),
             database,
             sync: Arc::new(sync),
-            scan,
         })
     }
 
     /// The read side.
     pub(crate) fn store(&self) -> &LibraryStore {
         &self.store
-    }
-
-    /// The scan state with the revision of its topic.
-    pub(crate) fn scan_state(&self) -> Revisioned<ScanState> {
-        self.scan.lock().clone()
     }
 
     pub(crate) fn directories(&self) -> Result<Vec<LibraryDirectory>, LibraryCommandError> {

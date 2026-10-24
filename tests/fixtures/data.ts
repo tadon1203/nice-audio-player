@@ -1,8 +1,8 @@
 import {
   type Appearance,
   type AudioOutputSelection,
-  type InitialState,
   type StartedBy,
+  type StateValue,
   type ArtistRow,
   type AlbumDetails,
   type AlbumRow,
@@ -325,12 +325,20 @@ export function meterFrameBytes({
   return Array.from(new Uint8Array(view.buffer));
 }
 
+/** The value and revision of every state topic, as the Backend holds them. */
+export type TopicState = {
+  [Topic in StateValue["topic"]]: {
+    revision: number;
+    value: Extract<StateValue, { topic: Topic }>["value"];
+  };
+};
+
 /** The state an app holds before anything plays: what `connect` answers first. */
-export function idleInitialState(): InitialState {
+export function idleTopicState(): TopicState {
   return {
     playback: { revision: 1, value: stoppedPlayback },
     queue: { revision: 1, value: emptyQueue },
-    libraryScan: { revision: 0, value: idleScan },
+    scan: { revision: 0, value: idleScan },
     waveform: { revision: 0, value: null },
     appearance: { revision: 0, value: defaultSettings },
   };

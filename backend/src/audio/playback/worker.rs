@@ -41,7 +41,8 @@ use crate::audio::timebase::millis_to_frame;
 use crate::audio::volume::{AtomicEffectiveGain, VolumeState};
 use crate::errors::CommandError;
 use crate::ids::{PlaybackId, QueueItemId, TrackId};
-use crate::messages::{Occurrence, Revisioned, SharedMessageListener};
+use crate::messages::{Revisioned, SharedMessageListener};
+use crate::state_hub::StateHub;
 use log::{error, info};
 use rand::{SeedableRng, rngs::StdRng};
 
@@ -137,9 +138,8 @@ enum PipelineOwner {
 
 /// The channels and shared state the service hands to the worker thread.
 pub(super) struct WorkerLinks {
-    pub snapshot: Arc<RwLock<Revisioned<PlaybackState>>>,
+    pub hub: Arc<StateHub>,
     pub position: Arc<RwLock<Option<PlaybackPosition>>>,
-    pub queue_snapshot: Arc<RwLock<Revisioned<QueueState>>>,
     pub effective_gain: AtomicEffectiveGain,
     pub meter: MeterHub,
     pub inbox: Inbox,
@@ -159,8 +159,6 @@ pub(super) struct PlaybackWorker {
     source_load_ids: SourceLoadIds,
     next_stream_id: u64,
     next_pipeline_id: u64,
-    revision: u64,
-    next_queue_revision: u64,
     /// Completed seeks; published with the session so the UI can tell a seek from a tick.
     seek_revision: u64,
     /// The last track that reached the output, kept so a stopped player can still name it.
@@ -177,9 +175,8 @@ pub(super) struct PlaybackWorker {
     effective_gain: AtomicEffectiveGain,
     meter: MeterHub,
     output_selection: AudioOutputSelection,
-    snapshot: Arc<RwLock<Revisioned<PlaybackState>>>,
+    hub: Arc<StateHub>,
     position: Arc<RwLock<Option<PlaybackPosition>>>,
-    queue_snapshot: Arc<RwLock<Revisioned<QueueState>>>,
     inbox: Inbox,
     messages: SharedMessageListener,
     observer: PreferencesObserver,
@@ -199,8 +196,6 @@ impl PlaybackWorker {
             source_load_ids: SourceLoadIds::default(),
             next_stream_id: 0,
             next_pipeline_id: 0,
-            revision: 0,
-            next_queue_revision: 0,
             seek_revision: 0,
             last_item: None,
             queue,
@@ -213,9 +208,8 @@ impl PlaybackWorker {
             effective_gain: links.effective_gain,
             meter: links.meter,
             output_selection,
-            snapshot: links.snapshot,
+            hub: links.hub,
             position: links.position,
-            queue_snapshot: links.queue_snapshot,
             inbox: links.inbox,
             messages: links.messages,
             observer: links.observer,

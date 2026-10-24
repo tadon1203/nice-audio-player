@@ -27,14 +27,14 @@ fn queue_revisions_grow_on_each_queue_change() {
     assert_eq!(shuffled.revision, 2);
     assert_eq!(shuffled_again.revision, 2);
     assert_eq!(harness.versioned_queue_snapshot().revision, 2);
-    // Each queue change is announced once; the repeated shuffle changes nothing and says nothing.
+    // Each queue change is announced once. The transport is announced only when what it shows
+    // changed, and here nothing it shows changed; the repeated shuffle changes nothing and says
+    // nothing.
     assert_eq!(
         harness.sent(),
         [
             Sent::State(StateTopic::Queue),
-            Sent::State(StateTopic::Playback),
             Sent::State(StateTopic::Queue),
-            Sent::State(StateTopic::Playback),
         ]
     );
 }

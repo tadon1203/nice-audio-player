@@ -87,7 +87,7 @@ export const commands = {
 	 *  current value of every state topic. A message sent in between has a revision that is not
 	 *  older than the returned value, so the Renderer can order them by revision.
 	 */
-	appConnect: (channel: Channel<BackendMessage>) => __TAURI_INVOKE<InitialState>("app_connect", { channel }),
+	appConnect: (channel: Channel<BackendMessage>) => __TAURI_INVOKE<BackendMessage[]>("app_connect", { channel }),
 	/**
 	 *  Applies a partial update to the appearance and returns it as it is afterwards, with its
 	 *  revision.
@@ -236,14 +236,15 @@ export type BackendMessage =
 {
 	kind: "state",
 } & StateMessage | 
-/**  { kind: "occurrence", type: "...", ... } */
-{
-	kind: "occurrence",
-} & Occurrence | 
 /**  { kind: "position", playbackId, positionMs, seekRevision } */
 {
 	kind: "position",
-} & PlaybackPosition;
+} & PlaybackPosition | 
+/**
+ *  The player could not play a track and skipped it by itself. `title` is the track's title,
+ *  when it has one.
+ */
+{ kind: "trackSkipped"; title: string | null };
 
 /**  The codes a command can answer with, so the Renderer shows each one the same way. */
 export type CommandError = { code: "trackNotFound" } | { code: "trackUnavailable" } | { code: "libraryUnavailable" } | { code: "persistenceFailed" } | { code: "taskFailed" } | { code: "invalidDirectory" } | { code: "directoryNotDirectory" } | { code: "duplicateDirectory" } | { code: "overlappingDirectory" } | { code: "directoryContainsDataDirectory" } | { code: "directoryMissing" } | { code: "albumNotFound" } | { code: "artistNotFound" } | { code: "scanAlreadyRunning" } | { code: "scanNotRunning" } | { code: "noEnabledDirectories" } | { code: "output"; failure: PlaybackFailureCode } | { code: "superseded" } | { code: "queueItemNotFound" } | { code: "queueBusy" } | { code: "invalidVolume" } | { code: "invalidPlaybackState" } | { code: "durationUnavailable" } | { code: "seekFailed" } | { code: "deviceEnumerationFailed" };
@@ -277,15 +278,6 @@ export type CurrentPlayback = {
 
 /**  A library directory: the `library_roots` rowid. Above zero. On the IPC a number. */
 export type DirectoryId = number;
-
-/**  The current value of every Backend state topic. `app_connect` returns it. */
-export type InitialState = {
-	playback: Revisioned<PlaybackState>,
-	queue: Revisioned<QueueState>,
-	libraryScan: Revisioned<ScanState>,
-	waveform: Revisioned<PlaybackWaveform | null>,
-	appearance: Revisioned<Appearance>,
-};
 
 export type LibraryAlbumArtistPage = {
 	items: ArtistRow[],
@@ -370,11 +362,6 @@ export type NowPlayingTrack = {
 	discNumber: number | null,
 	year: number | null,
 } & TrackCore;
-
-/**  A fact that happened, with its value. */
-export type Occurrence = 
-/**  The player could not play `item` and skipped it by itself. */
-{ type: "trackSkipped"; item: PlaybackItem | null; error: PlaybackFailureCode };
 
 export type PlaybackChannelConversion = "none" | "monoToStereo" | "stereoToMono" | "downmix";
 
@@ -534,13 +521,16 @@ export type StartedBy = "next" | "previous" |
 /**  Any other start: play a context, play a queue item, restore the queue. */
 "jump";
 
-/**  One state topic's value with its revision. */
+/**
+ *  One state topic's value with its revision. A tuple variant around this struct is what specta
+ *  types as the merged object; a struct variant with a flattened field is not.
+ */
 export type StateMessage = {
 	revision: number,
 } & StateValue;
 
 /**  The whole value of one state topic. */
-export type StateValue = { topic: "playback"; value: PlaybackState } | { topic: "queue"; value: QueueState } | { topic: "libraryScan"; value: ScanState } | { topic: "waveform"; value: PlaybackWaveform | null } | { topic: "appearance"; value: Appearance };
+export type StateValue = { topic: "playback"; value: PlaybackState } | { topic: "queue"; value: QueueState } | { topic: "scan"; value: ScanState } | { topic: "waveform"; value: PlaybackWaveform | null } | { topic: "appearance"; value: Appearance };
 
 /**
  *  The album a track is filed under, by ID (see `ids.rs`) and as titled, with its Album Artist. A

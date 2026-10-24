@@ -1,5 +1,5 @@
-//! The Host's side of the Backend's messages: a sink that only queues, and the one channel to the
-//! Renderer that a dispatcher thread sends through.
+//! The Host's side of the Backend's messages: a listener that only queues, and the one channel to
+//! the Renderer that a dispatcher thread sends through.
 
 use parking_lot::Mutex;
 use std::{
@@ -13,47 +13,49 @@ use std::{
 
 use backend::{
     app::BackendApp,
-    messages::{BackendMessage, MessageListener, Occurrence, StateTopic},
+    messages::{BackendMessage, MessageListener, StateTopic},
 };
 use tauri::ipc::Channel;
 
-/// What a service reported, waiting for the dispatcher. A state topic is only named here; its
+/// What the Backend reported, waiting for the dispatcher. A state topic is only named here; its
 /// value is read when the dispatcher sends it.
-pub(crate) enum Signal {
-    State(StateTopic),
+pub(crate) enum Pending {
+    StateChanged(StateTopic),
     Position,
-    Occurrence(Box<Occurrence>),
+    TrackSkipped(Option<String>),
 }
 
-/// The Backend's message sink. It only queues; `start_dispatcher` delivers, so a service never
-/// waits on the webview.
-pub(crate) struct HostMessageSink {
-    sender: Sender<Signal>,
+/// The Backend's listener. It only queues; `start_dispatcher` delivers, so a service never waits
+/// on the webview.
+pub(crate) struct HostMessageListener {
+    sender: Sender<Pending>,
 }
 
-impl MessageListener for HostMessageSink {
-    fn state_changed(&self, topic: StateTopic) {
-        if let Err(cause) = self.sender.send(Signal::State(topic)) {
-            log::debug!("host.session.state_send_failed cause={cause}");
+impl HostMessageListener {
+    fn send(&self, pending: Pending) {
+        if let Err(cause) = self.sender.send(pending) {
+            log::debug!("host.session.send_failed cause={cause}");
         }
+    }
+}
+
+impl MessageListener for HostMessageListener {
+    fn state_changed(&self, topic: StateTopic) {
+        self.send(Pending::StateChanged(topic));
     }
 
     fn position_changed(&self) {
-        if let Err(cause) = self.sender.send(Signal::Position) {
-            log::debug!("host.session.position_send_failed cause={cause}");
-        }
+        self.send(Pending::Position);
     }
 
-    fn occurred(&self, occurrence: Occurrence) {
-        if let Err(cause) = self.sender.send(Signal::Occurrence(Box::new(occurrence))) {
-            log::debug!("host.session.occurrence_send_failed cause={cause}");
-        }
+    fn track_skipped(&self, title: Option<String>) {
+        self.send(Pending::TrackSkipped(title));
     }
 }
 
-pub(crate) fn message_channel() -> (Arc<HostMessageSink>, Receiver<Signal>) {
+pub(crate) fn message_channel() -> (Arc<HostMessageListener>, Receiver<Pending>) {
     let (sender, receiver) = mpsc::channel();
-    (Arc::new(HostMessageSink { sender }), receiver)
+    (Arc::new(HostMessageListener { sender }), receiver)
 }
 
 /// The one channel to the Renderer. A new channel replaces the old one.
@@ -84,22 +86,22 @@ impl Subscriber {
     }
 }
 
-/// Delivers queued messages in three steps. First the occurrences, in arrival order. Then each
+/// Delivers queued messages in three steps. First the track skips, in arrival order. Then each
 /// changed state topic once, with its latest value. Then the position.
 pub(crate) fn start_dispatcher(
     backend: Arc<BackendApp>,
     subscriber: Arc<Subscriber>,
-    signals: Receiver<Signal>,
+    pending: Receiver<Pending>,
 ) {
     thread::Builder::new()
         .name("message-dispatcher".into())
         .spawn(move || {
-            while let Ok(first) = signals.recv() {
+            while let Ok(first) = pending.recv() {
                 let mut batch = vec![first];
-                batch.extend(signals.try_iter());
+                batch.extend(pending.try_iter());
                 let messages = batch_messages(
                     batch,
-                    |topic| backend.state_message(topic),
+                    |topic| backend.message(topic),
                     || backend.position_message(),
                 );
                 for message in messages {
@@ -110,24 +112,24 @@ pub(crate) fn start_dispatcher(
         .expect("the OS starts a thread unless it is out of resources");
 }
 
-/// The messages one batch sends, in order: its occurrences as they arrived, then each changed
+/// The messages one batch sends, in order: its track skips as they arrived, then each changed
 /// state topic once with its latest value, then the position.
 fn batch_messages(
-    batch: Vec<Signal>,
+    batch: Vec<Pending>,
     state: impl Fn(StateTopic) -> BackendMessage,
     position: impl Fn() -> Option<BackendMessage>,
 ) -> Vec<BackendMessage> {
     let mut messages = Vec::new();
     let mut topics = BTreeSet::new();
     let mut position_changed = false;
-    for signal in batch {
-        match signal {
-            Signal::State(topic) => {
+    for pending in batch {
+        match pending {
+            Pending::StateChanged(topic) => {
                 topics.insert(topic);
             }
-            Signal::Position => position_changed = true,
-            Signal::Occurrence(occurrence) => {
-                messages.push(BackendMessage::Occurrence(occurrence));
+            Pending::Position => position_changed = true,
+            Pending::TrackSkipped(title) => {
+                messages.push(BackendMessage::TrackSkipped { title });
             }
         }
     }
@@ -141,21 +143,17 @@ fn batch_messages(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use backend::{
-        app::PlaybackFailureCode,
-        messages::{StateMessage, StateValue},
-    };
+    use backend::messages::{StateMessage, StateValue};
 
     #[test]
-    fn occurrences_are_sent_in_arrival_order_and_never_merged() {
-        let skipped = |error| Occurrence::TrackSkipped { item: None, error };
-        let first = skipped(PlaybackFailureCode::DecodeFailed);
-        let second = skipped(PlaybackFailureCode::OutputStreamRuntimeFailed);
+    fn track_skips_are_sent_in_arrival_order_and_never_merged() {
+        let first = Some("First".to_owned());
+        let second = Some("Second".to_owned());
         let batch = vec![
-            Signal::Occurrence(Box::new(first.clone())),
-            Signal::State(StateTopic::Playback),
-            Signal::Occurrence(Box::new(second.clone())),
-            Signal::Occurrence(Box::new(first.clone())),
+            Pending::TrackSkipped(first.clone()),
+            Pending::StateChanged(StateTopic::Playback),
+            Pending::TrackSkipped(second.clone()),
+            Pending::TrackSkipped(first.clone()),
         ];
 
         let state = |_| {
@@ -167,14 +165,33 @@ mod tests {
 
         let messages = batch_messages(batch, state, || None);
 
-        let sent: Vec<Occurrence> = messages
+        let sent: Vec<Option<String>> = messages
             .into_iter()
             .filter_map(|message| match message {
-                BackendMessage::Occurrence(occurrence) => Some(*occurrence),
+                BackendMessage::TrackSkipped { title } => Some(title),
                 _ => None,
             })
             .collect();
         assert_eq!(sent, [first.clone(), second, first]);
+    }
+
+    #[test]
+    fn a_topic_changed_twice_in_one_batch_is_sent_once() {
+        let batch = vec![
+            Pending::StateChanged(StateTopic::Queue),
+            Pending::StateChanged(StateTopic::Playback),
+            Pending::StateChanged(StateTopic::Queue),
+        ];
+        let state = |_| {
+            BackendMessage::State(Box::new(StateMessage {
+                revision: 0,
+                state: StateValue::Waveform(None),
+            }))
+        };
+
+        let messages = batch_messages(batch, state, || None);
+
+        assert_eq!(messages.len(), 2);
     }
 
     #[test]

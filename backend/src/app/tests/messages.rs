@@ -1,18 +1,19 @@
 use super::fixture;
 use crate::app::BackendApp;
-use crate::messages::{BackendMessage, StateTopic, testing::Sent};
-use crate::settings::{Appearance, AppearancePatch};
+use crate::messages::{BackendMessage, StateTopic};
+use crate::settings::AppearancePatch;
+use crate::test_support::Sent;
 
 const TOPICS: [StateTopic; 5] = [
     StateTopic::Playback,
     StateTopic::Queue,
-    StateTopic::LibraryScan,
+    StateTopic::Scan,
     StateTopic::Waveform,
     StateTopic::Appearance,
 ];
 
 fn revision_of(backend: &BackendApp, topic: StateTopic) -> u64 {
-    match backend.state_message(topic) {
+    match backend.message(topic) {
         BackendMessage::State(message) => message.revision,
         other => panic!("{topic:?} is not a state message: {other:?}"),
     }
@@ -26,24 +27,14 @@ fn artwork_backdrop(enabled: bool) -> AppearancePatch {
 }
 
 #[test]
-fn initial_state_has_every_topic_at_its_starting_revision() {
+fn messages_has_every_topic_at_its_starting_revision() {
     let fixture = fixture();
-    let initial = fixture.backend.initial_state();
 
-    assert_eq!(initial.playback.revision, 0);
-    assert_eq!(initial.queue.revision, 0);
-    assert_eq!(initial.library_scan.revision, 0);
-    assert_eq!(initial.waveform.revision, 0);
-    assert_eq!(initial.appearance.revision, 0);
-    assert_eq!(initial.appearance.value, Appearance::default());
+    let messages = fixture.backend.messages();
+
+    assert_eq!(messages.len(), TOPICS.len());
     for topic in TOPICS {
-        assert!(
-            matches!(
-                fixture.backend.state_message(topic),
-                BackendMessage::State(_)
-            ),
-            "{topic:?}"
-        );
+        assert_eq!(revision_of(&fixture.backend, topic), 0, "{topic:?}");
     }
 }
 
@@ -80,7 +71,7 @@ fn an_appearance_change_that_changes_nothing_keeps_its_revision() {
 }
 
 #[test]
-fn changes_reach_the_sink_in_the_order_they_are_made() {
+fn changes_reach_the_listener_in_the_order_they_are_made() {
     let fixture = fixture();
 
     fixture.backend.appearance_update(&artwork_backdrop(false));

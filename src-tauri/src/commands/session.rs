@@ -1,4 +1,4 @@
-use backend::messages::{BackendMessage, InitialState};
+use backend::messages::BackendMessage;
 use tauri::ipc::Channel;
 
 use crate::AppState;
@@ -11,7 +11,7 @@ use crate::AppState;
 pub(crate) fn app_connect(
     channel: Channel<BackendMessage>,
     state: tauri::State<'_, AppState>,
-) -> InitialState {
+) -> Vec<BackendMessage> {
     state.subscriber.replace(channel);
-    state.backend.initial_state()
+    state.backend.messages()
 }

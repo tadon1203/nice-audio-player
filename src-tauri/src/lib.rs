@@ -75,8 +75,8 @@ pub fn run() {
                 None => app.path().app_data_dir()?,
             };
             app.manage(artwork::ArtworkDir(data_dir.clone()));
-            let (sink, signals) = session::message_channel();
-            let backend = BackendApp::initialize(data_dir, sink)
+            let (listener, pending) = session::message_channel();
+            let backend = BackendApp::initialize(data_dir, listener)
                 .inspect_err(|cause| log::warn!("host.backend.startup_failed cause={cause}"))
                 .map_err(|_| std::io::Error::other("backend startup failed"))?;
             let backend = Arc::new(backend);
@@ -85,7 +85,7 @@ pub fn run() {
                 backend: Arc::clone(&backend),
                 subscriber: Arc::clone(&subscriber),
             });
-            session::start_dispatcher(backend, subscriber, signals);
+            session::start_dispatcher(backend, subscriber, pending);
             Ok(())
         })
         .invoke_handler(bindings::builder().invoke_handler())

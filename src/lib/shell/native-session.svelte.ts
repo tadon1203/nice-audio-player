@@ -1,7 +1,6 @@
 import {
   type Appearance as AppearanceValue,
   type BackendMessage,
-  type InitialState,
   type ScanState,
   type PlaybackPosition,
   type QueueState,
@@ -76,7 +75,7 @@ export class NativeSession {
       if (!active) return;
       // A throw while the initial state is applied is a startup failure too, not a stuck connecting state.
       try {
-        this.#applyInitial(initial);
+        for (const message of initial) this.#route(message);
         for (const message of early ?? []) this.#route(message);
         early = null;
         this.#connection = "ready";
@@ -93,22 +92,13 @@ export class NativeSession {
     };
   }
 
-  #applyInitial(initial: InitialState): void {
-    this.#targets.playback.acceptPlayback(initial.playback);
-    this.#targets.playback.acceptQueue(initial.queue);
-    this.#targets.scan.accept(initial.libraryScan);
-    this.#targets.playback.acceptWaveform(initial.waveform);
-    this.#targets.appearance.accept(initial.appearance);
-  }
-
   #route(message: BackendMessage): void {
     if (message.kind === "position") {
       this.#targets.playback.acceptPosition(message);
       return;
     }
-    if (message.kind === "occurrence") {
-      if (message.type === "trackSkipped")
-        this.#targets.notices.noteSkipped(message.item?.title ?? null);
+    if (message.kind === "trackSkipped") {
+      this.#targets.notices.noteSkipped(message.title);
       return;
     }
     switch (message.topic) {
@@ -118,7 +108,7 @@ export class NativeSession {
       case "queue":
         this.#targets.playback.acceptQueue({ revision: message.revision, value: message.value });
         return;
-      case "libraryScan":
+      case "scan":
         this.#targets.scan.accept({ revision: message.revision, value: message.value });
         return;
       case "waveform":

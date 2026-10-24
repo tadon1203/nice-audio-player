@@ -25,6 +25,7 @@ use crate::errors::CommandError;
 use crate::ids::{QueueItemId, TrackId};
 use crate::library::store::{PlaybackLookupError, PlaybackSourceError};
 use crate::messages::{Revisioned, SharedMessageListener};
+use crate::state_hub::StateHub;
 use log::{debug, error};
 
 /// Why a playback request failed: the one error vocabulary for every command that plays or
@@ -225,12 +226,28 @@ pub(super) enum PlaybackCommand {
     },
 }
 
+/// The playback and queue values a worker started with `preferences` begins with. The state hub
+/// holds them until the worker publishes its first change.
+pub(crate) fn initial_playback(
+    preferences: &PlaybackPreferences,
+) -> (Revisioned<PlaybackState>, Revisioned<QueueState>) {
+    let preferences = preferences.clone().sanitized();
+    let volume_state = VolumeState::restored(preferences.volume, preferences.muted);
+    let queue = PlaybackQueue::new(preferences.repeat_mode, preferences.shuffle_enabled);
+    (
+        Revisioned::new(PlaybackState::Stopped {
+            base: PlaybackControls::new(volume_state, preferences.output_selection),
+            item: None,
+        }),
+        Revisioned::new(QueueState::empty(queue.repeat(), queue.shuffle())),
+    )
+}
+
 #[derive(Clone)]
 pub(crate) struct PlaybackServiceHandle {
     inbox: Inbox,
-    snapshot: Arc<RwLock<Revisioned<PlaybackState>>>,
+    hub: Arc<StateHub>,
     position: Arc<RwLock<Option<PlaybackPosition>>>,
-    queue_snapshot: Arc<RwLock<Revisioned<QueueState>>>,
     meter: MeterHub,
 }
 
@@ -241,10 +258,13 @@ pub(crate) struct PlaybackService {
 
 impl PlaybackService {
     /// Starts the worker with the saved preferences, on the audio output `backend` opens streams
-    /// on. `observer` hears about every later change so the caller can persist them; `tracks` is
-    /// where queue entries get their metadata; `listener` hears about each track when it is loaded
-    /// and when it starts opening as the next one.
+    /// on. Its state goes to `hub`, which the caller built from `initial_playback`. `messages`
+    /// hears about the position and skipped tracks. `observer` hears about every later change so
+    /// the caller can persist them; `tracks` is where queue entries get their metadata;
+    /// `listener` hears about each track when it is loaded and when it starts opening as the next
+    /// one.
     pub(crate) fn start_with_backend(
+        hub: Arc<StateHub>,
         messages: SharedMessageListener,
         preferences: PlaybackPreferences,
         observer: PreferencesObserver,
@@ -259,19 +279,10 @@ impl PlaybackService {
         let meter = MeterHub::new();
         let output_selection = preferences.output_selection;
         let queue = PlaybackQueue::new(preferences.repeat_mode, preferences.shuffle_enabled);
-        let state = Arc::new(RwLock::new(Revisioned::new(PlaybackState::Stopped {
-            base: PlaybackControls::new(volume_state, output_selection.clone()),
-            item: None,
-        })));
-        let queue_state = Arc::new(RwLock::new(Revisioned::new(QueueState::empty(
-            queue.repeat(),
-            queue.shuffle(),
-        ))));
         let position = Arc::new(RwLock::new(None));
         let links = WorkerLinks {
-            snapshot: Arc::clone(&state),
+            hub: Arc::clone(&hub),
             position: Arc::clone(&position),
-            queue_snapshot: Arc::clone(&queue_state),
             effective_gain,
             meter: meter.clone(),
             inbox: inbox.clone(),
@@ -291,9 +302,8 @@ impl PlaybackService {
         Ok(Self {
             handle: PlaybackServiceHandle {
                 inbox,
-                snapshot: state,
+                hub,
                 position,
-                queue_snapshot: queue_state,
                 meter,
             },
             worker: Mutex::new(Some(worker)),
@@ -313,18 +323,8 @@ impl PlaybackService {
         self.handle.snapshot()
     }
 
-    /// The transport snapshot with the revision of its topic.
-    pub(crate) fn versioned_snapshot(&self) -> Revisioned<PlaybackState> {
-        self.handle.versioned_snapshot()
-    }
-
     pub(crate) fn position(&self) -> Option<PlaybackPosition> {
         self.handle.position()
-    }
-
-    /// The queue snapshot with the revision of its topic.
-    pub(crate) fn versioned_queue_snapshot(&self) -> Revisioned<QueueState> {
-        self.handle.versioned_queue_snapshot()
     }
 
     pub(crate) fn shutdown(&self) {
@@ -349,7 +349,7 @@ impl PlaybackServiceHandle {
     }
 
     pub(crate) fn versioned_snapshot(&self) -> Revisioned<PlaybackState> {
-        self.snapshot.read().clone()
+        self.hub.read(|published| published.playback.clone())
     }
 
     /// The newest position of the loaded track, `None` when nothing is loaded.
@@ -358,7 +358,7 @@ impl PlaybackServiceHandle {
     }
 
     pub(crate) fn versioned_queue_snapshot(&self) -> Revisioned<QueueState> {
-        self.queue_snapshot.read().clone()
+        self.hub.read(|published| published.queue.clone())
     }
 
     /// Upcoming items from `offset`; a window of the queue the snapshot only starts. Reads the

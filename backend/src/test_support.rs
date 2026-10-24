@@ -1,8 +1,17 @@
+//! Test doubles and fixtures shared by the Backend's tests.
+
 use std::fs::{File, create_dir_all, remove_dir_all};
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
+
+use parking_lot::Mutex;
+
+use crate::messages::{MessageListener, SharedMessageListener, StateTopic};
+use crate::settings::Settings;
+use crate::state_hub::{Published, StateHub};
 
 static NEXT_TEST_DIRECTORY: AtomicUsize = AtomicUsize::new(0);
 
@@ -74,4 +83,77 @@ pub(crate) fn write_pcm_i16_wav(
     for sample in interleaved_samples {
         file.write_all(&sample.to_le_bytes()).unwrap();
     }
+}
+
+/// One call to a listener, in the order it was made.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum Sent {
+    State(StateTopic),
+    Position,
+    TrackSkipped(Option<String>),
+}
+
+/// Remembers every call, in order.
+#[derive(Default)]
+pub(crate) struct RecordingMessageListener {
+    sent: Mutex<Vec<Sent>>,
+}
+
+impl RecordingMessageListener {
+    pub(crate) fn shared() -> (Arc<Self>, SharedMessageListener) {
+        let listener = Arc::new(Self::default());
+        (Arc::clone(&listener), listener)
+    }
+
+    pub(crate) fn sent(&self) -> Vec<Sent> {
+        self.sent.lock().clone()
+    }
+
+    /// The topics that changed, in the order they changed.
+    pub(crate) fn state_topics(&self) -> Vec<StateTopic> {
+        self.sent()
+            .into_iter()
+            .filter_map(|sent| match sent {
+                Sent::State(topic) => Some(topic),
+                _ => None,
+            })
+            .collect()
+    }
+}
+
+impl MessageListener for RecordingMessageListener {
+    fn state_changed(&self, topic: StateTopic) {
+        self.sent.lock().push(Sent::State(topic));
+    }
+
+    fn position_changed(&self) {
+        self.sent.lock().push(Sent::Position);
+    }
+
+    fn track_skipped(&self, title: Option<String>) {
+        self.sent.lock().push(Sent::TrackSkipped(title));
+    }
+}
+
+/// Drops every message.
+#[derive(Debug)]
+pub(crate) struct NullMessageListener;
+
+impl MessageListener for NullMessageListener {
+    fn state_changed(&self, _topic: StateTopic) {}
+    fn position_changed(&self) {}
+    fn track_skipped(&self, _title: Option<String>) {}
+}
+
+pub(crate) fn null_message_listener() -> SharedMessageListener {
+    Arc::new(NullMessageListener)
+}
+
+/// A state hub over the default settings, reporting to `listener`, for tests that build a
+/// service directly.
+pub(crate) fn hub_for_tests(listener: SharedMessageListener) -> Arc<StateHub> {
+    Arc::new(StateHub::new(
+        Published::initial(&Settings::default()),
+        listener,
+    ))
 }
