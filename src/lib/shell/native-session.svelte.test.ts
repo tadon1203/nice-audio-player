@@ -1,12 +1,15 @@
-import { describe, expect, it, vi, type Mock } from "vitest";
+import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import {
   type BackendMessage,
   type InitialState,
   type PlaybackPosition,
   type Revisioned,
 } from "#lib/native/bindings";
-import { type SessionClient } from "#lib/native/native-clients";
+import { app } from "#lib/native/commands";
 import { NativeSession, type SessionTargets } from "./native-session.svelte";
+
+const mocks = vi.hoisted(() => ({ connect: vi.fn() }));
+vi.mock("#lib/native/commands", () => ({ app: { connect: mocks.connect } }));
 
 /** One `connect` call the test answers by hand: its message handler, and its reply. */
 interface Attempt {
@@ -15,17 +18,18 @@ interface Attempt {
   fail: (error: unknown) => void;
 }
 
-function fakeSession(): { client: SessionClient; connect: Mock; attempts: Attempt[] } {
-  const attempts: Attempt[] = [];
-  const connect = vi.fn(
+let attempts: Attempt[];
+
+beforeEach(() => {
+  attempts = [];
+  mocks.connect.mockReset();
+  mocks.connect.mockImplementation(
     (onMessage: (message: BackendMessage) => void) =>
       new Promise<InitialState>((answer, fail) => {
         attempts.push({ onMessage, answer, fail });
       }),
   );
-  const client: SessionClient = { connect };
-  return { client, connect, attempts };
-}
+});
 
 function fakeTargets(): {
   targets: SessionTargets;
@@ -75,8 +79,7 @@ const position: PlaybackPosition = { playbackId: 1, positionMs: 250, seekRevisio
 
 describe("NativeSession", () => {
   it("is connecting until the initial state is applied, then ready", async () => {
-    const { client, attempts } = fakeSession();
-    const session = new NativeSession(client, fakeTargets().targets);
+    const session = new NativeSession(app, fakeTargets().targets);
 
     session.connect();
     expect(session.connection).toBe("connecting");
@@ -86,11 +89,10 @@ describe("NativeSession", () => {
   });
 
   it("subscribes before it fetches, so a message sent in between is not lost", async () => {
-    const { client, connect, attempts } = fakeSession();
     const { targets, acceptPlayback } = fakeTargets();
-    new NativeSession(client, targets).connect();
+    new NativeSession(app, targets).connect();
 
-    expect(connect).toHaveBeenCalledTimes(1);
+    expect(mocks.connect).toHaveBeenCalledTimes(1);
     attempts[0].onMessage(stateMessage(2));
     attempts[0].answer(initial(1));
 
@@ -98,9 +100,8 @@ describe("NativeSession", () => {
   });
 
   it("applies a message that arrives before the initial state after it, never before", async () => {
-    const { client, attempts } = fakeSession();
     const { targets, acceptPlayback } = fakeTargets();
-    new NativeSession(client, targets).connect();
+    new NativeSession(app, targets).connect();
 
     attempts[0].onMessage(stateMessage(5));
     expect(acceptPlayback).not.toHaveBeenCalled();
@@ -113,9 +114,8 @@ describe("NativeSession", () => {
   });
 
   it("routes each message to the target of its topic", async () => {
-    const { client, attempts } = fakeSession();
     const { targets, acceptPosition, noteSkipped } = fakeTargets();
-    const session = new NativeSession(client, targets);
+    const session = new NativeSession(app, targets);
     session.connect();
     attempts[0].answer(initial(1));
     await vi.waitFor(() => expect(session.connection).toBe("ready"));
@@ -133,9 +133,8 @@ describe("NativeSession", () => {
   });
 
   it("drops messages from a connection that was cleaned up", async () => {
-    const { client, attempts } = fakeSession();
     const { targets, acceptPlayback } = fakeTargets();
-    const cleanup = new NativeSession(client, targets).connect();
+    const cleanup = new NativeSession(app, targets).connect();
 
     cleanup();
     attempts[0].onMessage(stateMessage(2));
@@ -144,9 +143,8 @@ describe("NativeSession", () => {
   });
 
   it("reconnects: a second connect replaces the first, which no longer applies anything", async () => {
-    const { client, attempts } = fakeSession();
     const { targets, acceptPlayback } = fakeTargets();
-    const session = new NativeSession(client, targets);
+    const session = new NativeSession(app, targets);
 
     const cleanup = session.connect();
     cleanup();
@@ -163,9 +161,8 @@ describe("NativeSession", () => {
   });
 
   it("is failed, and applies nothing, when the connect command fails", async () => {
-    const { client, attempts } = fakeSession();
     const { targets, acceptPlayback } = fakeTargets();
-    const session = new NativeSession(client, targets);
+    const session = new NativeSession(app, targets);
     session.connect();
 
     attempts[0].fail({ code: "noOutputDevice" });
@@ -176,12 +173,11 @@ describe("NativeSession", () => {
   });
 
   it("is failed, not stuck connecting, when applying the initial state throws", async () => {
-    const { client, attempts } = fakeSession();
     const { targets, acceptPlayback } = fakeTargets();
     acceptPlayback.mockImplementation(() => {
       throw new Error("bad state");
     });
-    const session = new NativeSession(client, targets);
+    const session = new NativeSession(app, targets);
     session.connect();
 
     attempts[0].answer(initial(1));

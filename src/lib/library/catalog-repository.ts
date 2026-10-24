@@ -20,7 +20,7 @@ import {
   type TrackRow,
   type TrackId,
 } from "#lib/native/bindings";
-import { type LibraryClient } from "#lib/native/native-clients";
+import type { library } from "#lib/native/commands";
 import { LibraryQueryKeys } from "./library-query-keys";
 import { type TrackProperties } from "#lib/native/bindings";
 import type {
@@ -73,11 +73,11 @@ export type LibraryCatalogRequest =
 
 /** The catalog lists and their scroll indexes: the data the Library browses. */
 export class CatalogRepository {
-  readonly #client: LibraryClient;
+  readonly #library: typeof library;
   readonly #queryClient: QueryClient;
 
-  public constructor(client: LibraryClient, queryClient: QueryClient) {
-    this.#client = client;
+  public constructor(libraryCommands: typeof library, queryClient: QueryClient) {
+    this.#library = libraryCommands;
     this.#queryClient = queryClient;
   }
 
@@ -91,7 +91,7 @@ export class CatalogRepository {
   } & QueryKeyWithDataTag<readonly ["library", "status"], LibraryStatus, Error> {
     return queryOptions({
       queryKey: LibraryQueryKeys.status,
-      queryFn: () => this.#client.status(),
+      queryFn: () => this.#library.status(),
     });
   }
 
@@ -105,7 +105,7 @@ export class CatalogRepository {
   } & QueryKeyWithDataTag<readonly ["library", "data", "directories"], LibraryDirectory[], Error> {
     return queryOptions({
       queryKey: LibraryQueryKeys.directories,
-      queryFn: () => this.#client.directories(),
+      queryFn: () => this.#library.listDirectories(),
     });
   }
 
@@ -159,7 +159,7 @@ export class CatalogRepository {
       queryFn:
         trackId === null
           ? skipToken
-          : (): Promise<TrackProperties> => this.#client.trackProperties(trackId),
+          : (): Promise<TrackProperties> => this.#library.trackProperties(trackId),
     });
   }
 
@@ -175,7 +175,7 @@ export class CatalogRepository {
     return queryOptions({
       queryKey: LibraryQueryKeys.accent(hash),
       queryFn:
-        hash === null ? skipToken : (): Promise<string | null> => this.#client.artworkAccent(hash),
+        hash === null ? skipToken : (): Promise<string | null> => this.#library.artworkAccent(hash),
       staleTime: Infinity,
       gcTime: Infinity,
     });
@@ -204,7 +204,7 @@ export class CatalogRepository {
     const { direction: sortDirection, skip } = request;
     switch (request.presentation) {
       case "albums":
-        return this.#client.albums({
+        return this.#library.listAlbums({
           search,
           sortKey: request.sortKey,
           sortDirection,
@@ -212,7 +212,7 @@ export class CatalogRepository {
           skip,
         });
       case "albumArtists":
-        return this.#client.albumArtists({
+        return this.#library.listArtists({
           search,
           sortKey: request.sortKey,
           sortDirection,
@@ -220,7 +220,7 @@ export class CatalogRepository {
           skip,
         });
       case "tracks":
-        return this.#client.tracks({
+        return this.#library.listTracks({
           search,
           sortKey: request.sortKey,
           sortDirection,
@@ -235,11 +235,11 @@ export class CatalogRepository {
     const sortDirection = request.direction;
     switch (request.presentation) {
       case "albums":
-        return this.#client.albumIndex({ search, sortKey: request.sortKey, sortDirection });
+        return this.#library.albumIndex({ search, sortKey: request.sortKey, sortDirection });
       case "albumArtists":
-        return this.#client.albumArtistIndex({ search, sortKey: request.sortKey, sortDirection });
+        return this.#library.artistIndex({ search, sortKey: request.sortKey, sortDirection });
       case "tracks":
-        return this.#client.trackIndex({ search, sortKey: request.sortKey, sortDirection });
+        return this.#library.trackIndex({ search, sortKey: request.sortKey, sortDirection });
     }
   }
 }

@@ -1,4 +1,4 @@
-import { type MeterClient } from "#lib/native/native-clients";
+import type { meter } from "#lib/native/commands";
 import { MeterFrames, type MeterFrame } from "./meter-frames";
 
 /** Frames kept while nobody draws; older ones are dropped (a late frame has no meaning). */
@@ -14,15 +14,15 @@ const MAX_PENDING = 64;
 export class MeterFeed {
   #pending: MeterFrame[] = [];
 
-  public constructor(client: MeterClient, active: () => boolean, onFrame?: () => void) {
+  public constructor(meterCommands: typeof meter, active: () => boolean, onFrame?: () => void) {
     $effect(() => {
       if (!active()) return;
       this.#pending = [];
       let ended = false;
-      let unsubscribe: (() => Promise<void>) | null = null;
+      let subscription: number | null = null;
 
-      client
-        .subscribe((message) => {
+      meterCommands
+        .start((message) => {
           if (ended) return;
           const frame = MeterFrames.decode(message);
           if (frame === null) return;
@@ -39,9 +39,9 @@ export class MeterFeed {
           onFrame?.();
         })
         .then(
-          (stop) => {
-            if (ended) void stop().catch(() => {});
-            else unsubscribe = stop;
+          (started) => {
+            if (ended) void meterCommands.stop(started).catch(() => {});
+            else subscription = started;
           },
           () => {},
         );
@@ -49,7 +49,7 @@ export class MeterFeed {
       return (): void => {
         ended = true;
         this.#pending = [];
-        if (unsubscribe !== null) void unsubscribe().catch(() => {});
+        if (subscription !== null) void meterCommands.stop(subscription).catch(() => {});
       };
     });
   }

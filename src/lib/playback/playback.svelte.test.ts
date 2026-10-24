@@ -8,13 +8,32 @@ import type {
   Revisioned,
   TrackId,
 } from "#lib/native/bindings";
-import type { PlaybackClient } from "#lib/native/native-clients";
+import { player } from "#lib/native/commands";
 import { NativeError } from "#lib/native/errors";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PlaybackClock } from "./playback-clock.svelte";
 import { Playback } from "./playback.svelte";
 
+const mocks = vi.hoisted(() => ({
+  player: {
+    play: vi.fn(),
+    pause: vi.fn(),
+    resume: vi.fn(),
+    previous: vi.fn(),
+    next: vi.fn(),
+    seek: vi.fn(),
+    setVolume: vi.fn(),
+    setMuted: vi.fn(),
+    setShuffle: vi.fn(),
+    clearQueue: vi.fn(),
+  },
+}));
+vi.mock("#lib/native/commands", () => ({ player: mocks.player }));
 vi.mock("svelte/motion", () => ({ prefersReducedMotion: { current: false } }));
+
+beforeEach(() => {
+  vi.resetAllMocks();
+});
 
 const base = (): {
   volume: number;
@@ -105,10 +124,6 @@ const queueOf = (revision: number, patch: Partial<QueueState> = {}): Revisioned<
 
 const queue = (revision: number): Revisioned<QueueState> => queueOf(revision);
 
-/** A client whose methods are only the ones a test gives; the others are never called. */
-const fakeClient = (overrides: Partial<PlaybackClient> = {}): PlaybackClient =>
-  overrides as PlaybackClient;
-
 /** A clock that is never asked about time; the tests that need one pass their own. */
 const quietClock = (): PlaybackClock => new PlaybackClock({ now: (): number => 0 });
 
@@ -124,7 +139,7 @@ function load(
 
 describe("playback session ordering", () => {
   it("rejects stale playback revisions", () => {
-    const playback = new Playback(fakeClient(), quietClock());
+    const playback = new Playback(player, quietClock());
     load(playback, stopped(1, 1), queue(1));
 
     playback.acceptPlayback(stopped(0, 9));
@@ -135,7 +150,7 @@ describe("playback session ordering", () => {
   });
 
   it("accepts queue revisions independently from playback revisions", () => {
-    const playback = new Playback(fakeClient(), quietClock());
+    const playback = new Playback(player, quietClock());
     playback.acceptPlayback(stopped(50, null));
     playback.acceptQueue(queueOf(2, { current: queueItem(1) }));
 
@@ -144,10 +159,8 @@ describe("playback session ordering", () => {
   });
 
   it("drops a command response older than the state it follows", async () => {
-    const playback = new Playback(
-      fakeClient({ pause: vi.fn(async () => stopped(2, 1)) }),
-      quietClock(),
-    );
+    mocks.player.pause.mockResolvedValue(stopped(2, 1));
+    const playback = new Playback(player, quietClock());
     load(playback, stopped(1, 1), queue(1));
     playback.acceptPlayback(stopped(3, 2));
 
@@ -157,12 +170,8 @@ describe("playback session ordering", () => {
   });
 
   it("drops a queue command response older than the queue it follows", async () => {
-    const playback = new Playback(
-      fakeClient({
-        setShuffle: vi.fn(async () => queueOf(2, { shuffleEnabled: false })),
-      }),
-      quietClock(),
-    );
+    mocks.player.setShuffle.mockResolvedValue(queueOf(2, { shuffleEnabled: false }));
+    const playback = new Playback(player, quietClock());
     load(playback, stopped(1, null), queueOf(3, { shuffleEnabled: true }));
 
     await playback.setShuffle(false);
@@ -175,7 +184,7 @@ describe("playback session ordering", () => {
     let releaseFirstVolume: (() => void) | undefined;
     const volumeCalls: number[] = [];
     let volumeRevision = 2;
-    const setVolume = vi.fn(async (value: number) => {
+    mocks.player.setVolume.mockImplementation(async (value: number) => {
       volumeCalls.push(value);
       if (volumeCalls.length === 1) {
         await new Promise<void>((resolve) => {
@@ -184,10 +193,9 @@ describe("playback session ordering", () => {
       }
       return stopped(volumeRevision++, null);
     });
-    const pause = vi.fn(async () => stopped(10, null));
-    const seek = vi.fn(async () => stopped(11, null));
-    const client = fakeClient({ setVolume, pause, seek });
-    const playback = new Playback(client, quietClock());
+    mocks.player.pause.mockResolvedValue(stopped(10, null));
+    mocks.player.seek.mockResolvedValue(stopped(11, null));
+    const playback = new Playback(player, quietClock());
     load(playback, stopped(1, null), queue(1));
 
     const first = playback.setVolume(0.2);
@@ -197,8 +205,8 @@ describe("playback session ordering", () => {
     expect(volumeCalls).toEqual([0.2]);
 
     await Promise.all([playback.pause(), playback.seek(1000)]);
-    expect(pause).toHaveBeenCalledTimes(1);
-    expect(seek).toHaveBeenCalledWith(1000);
+    expect(mocks.player.pause).toHaveBeenCalledTimes(1);
+    expect(mocks.player.seek).toHaveBeenCalledWith(1000);
 
     releaseFirstVolume?.();
     await Promise.all([first, second]);
@@ -208,16 +216,15 @@ describe("playback session ordering", () => {
 
   it("replaces the transport command waiting behind one in flight as superseded", async () => {
     let releasePause: (() => void) | undefined;
-    const pause = vi.fn(async () => {
+    mocks.player.pause.mockImplementation(async () => {
       await new Promise<void>((resolve) => {
         releasePause = resolve;
       });
       return stopped(2, null);
     });
-    const resume = vi.fn(async () => stopped(3, null));
-    const next = vi.fn(async () => stopped(4, null));
-    const client = fakeClient({ pause, resume, next });
-    const playback = new Playback(client, quietClock());
+    mocks.player.resume.mockResolvedValue(stopped(3, null));
+    mocks.player.next.mockResolvedValue(stopped(4, null));
+    const playback = new Playback(player, quietClock());
     load(playback, stopped(1, null), queue(1));
 
     const first = playback.pause();
@@ -225,29 +232,28 @@ describe("playback session ordering", () => {
     const latest = playback.next();
     expect(playback.transportPending).toBe("pause");
     await expect(replaced).rejects.toMatchObject({ error: { code: "superseded" } });
-    expect(resume).not.toHaveBeenCalled();
-    expect(next).not.toHaveBeenCalled();
+    expect(mocks.player.resume).not.toHaveBeenCalled();
+    expect(mocks.player.next).not.toHaveBeenCalled();
 
     releasePause?.();
     await first;
     await expect(latest).resolves.toBeUndefined();
-    expect(next).toHaveBeenCalledTimes(1);
-    expect(resume).not.toHaveBeenCalled();
+    expect(mocks.player.next).toHaveBeenCalledTimes(1);
+    expect(mocks.player.resume).not.toHaveBeenCalled();
     expect(playback.transportPending).toBeNull();
   });
 
   it("does not delay a seek or a volume change behind a transport command", async () => {
     let releaseStart: (() => void) | undefined;
-    const startMock = vi.fn(async () => {
+    mocks.player.play.mockImplementation(async () => {
       await new Promise<void>((resolve) => {
         releaseStart = resolve;
       });
       return playing(2, 1, 0);
     });
-    const seek = vi.fn(async () => playing(3, 1, 1_000));
-    const setVolume = vi.fn(async () => playing(4, 1, 0));
-    const client = fakeClient({ start: startMock, seek, setVolume });
-    const playback = new Playback(client, quietClock());
+    mocks.player.seek.mockResolvedValue(playing(3, 1, 1_000));
+    mocks.player.setVolume.mockResolvedValue(playing(4, 1, 0));
+    const playback = new Playback(player, quietClock());
     load(playback, stopped(1, null), queue(1));
     playback.acceptPlayback(playing(1, 1, 0));
 
@@ -255,8 +261,8 @@ describe("playback session ordering", () => {
     const seeking = playback.seek(1_000);
     const volume = playback.setVolume(0.2);
 
-    await vi.waitFor(() => expect(seek).toHaveBeenCalledWith(1_000));
-    await vi.waitFor(() => expect(setVolume).toHaveBeenCalledWith(0.2));
+    await vi.waitFor(() => expect(mocks.player.seek).toHaveBeenCalledWith(1_000));
+    await vi.waitFor(() => expect(mocks.player.setVolume).toHaveBeenCalledWith(0.2));
     releaseStart?.();
     await Promise.all([start, seeking, volume]);
   });
@@ -271,22 +277,16 @@ describe("clearing the queue", () => {
     });
 
   it("resolves true when upcoming items were removed, so the caller can offer an undo", async () => {
-    const playback = new Playback(
-      fakeClient({
-        playerClearQueue: vi.fn(async () => queue(2)),
-      }),
-      quietClock(),
-    );
+    mocks.player.clearQueue.mockResolvedValue(queue(2));
+    const playback = new Playback(player, quietClock());
     load(playback, stopped(1, null), withUpcoming(1));
 
     await expect(playback.playerClearQueue()).resolves.toBe(true);
   });
 
   it("resolves false when nothing was upcoming", async () => {
-    const playback = new Playback(
-      fakeClient({ playerClearQueue: vi.fn(async () => queue(2)) }),
-      quietClock(),
-    );
+    mocks.player.clearQueue.mockResolvedValue(queue(2));
+    const playback = new Playback(player, quietClock());
     load(playback, stopped(1, null), queue(1));
 
     await expect(playback.playerClearQueue()).resolves.toBe(false);
@@ -295,34 +295,34 @@ describe("clearing the queue", () => {
 
 describe("seeking", () => {
   it("rounds to whole milliseconds", async () => {
-    const seek = vi.fn(async () => playing(2, 1, 1_000));
-    const playback = new Playback(fakeClient({ seek }), quietClock());
+    mocks.player.seek.mockResolvedValue(playing(2, 1, 1_000));
+    const playback = new Playback(player, quietClock());
     playback.acceptPlayback(playing(1, 1, 0));
 
     await playback.seek(1_234.56);
 
-    expect(seek).toHaveBeenCalledWith(1_235);
+    expect(mocks.player.seek).toHaveBeenCalledWith(1_235);
   });
 
   it("sends a position past the duration as it is, for the backend to clamp", async () => {
-    const seek = vi.fn(async () => playing(2, 1, 60_000));
-    const playback = new Playback(fakeClient({ seek }), quietClock());
+    mocks.player.seek.mockResolvedValue(playing(2, 1, 60_000));
+    const playback = new Playback(player, quietClock());
     playback.acceptPlayback(playing(1, 1, 0));
     expect(playback.durationMs).toBe(60_000);
 
     await playback.seek(90_000);
 
-    expect(seek).toHaveBeenCalledWith(90_000);
+    expect(mocks.player.seek).toHaveBeenCalledWith(90_000);
   });
 
   it("never sends a negative position", async () => {
-    const seek = vi.fn(async () => playing(2, 1, 0));
-    const playback = new Playback(fakeClient({ seek }), quietClock());
+    mocks.player.seek.mockResolvedValue(playing(2, 1, 0));
+    const playback = new Playback(player, quietClock());
     playback.acceptPlayback(playing(1, 1, 500));
 
     await playback.seek(-300);
 
-    expect(seek).toHaveBeenCalledWith(0);
+    expect(mocks.player.seek).toHaveBeenCalledWith(0);
   });
 });
 
@@ -340,8 +340,8 @@ describe("failures", () => {
   });
 
   it("exposes why playback stopped, and retries through resume", async () => {
-    const resume = vi.fn(async () => playing(3, 1, 0));
-    const playback = new Playback(fakeClient({ resume }), quietClock());
+    mocks.player.resume.mockResolvedValue(playing(3, 1, 0));
+    const playback = new Playback(player, quietClock());
     playback.acceptPlayback(failed(2, false));
 
     expect(playback.status).toBe("failed");
@@ -349,12 +349,12 @@ describe("failures", () => {
 
     await playback.resume();
 
-    expect(resume).toHaveBeenCalledTimes(1);
+    expect(mocks.player.resume).toHaveBeenCalledTimes(1);
     expect(playback.failure).toBeNull();
   });
 
   it("is not a stop while the player moves on by itself", () => {
-    const playback = new Playback(fakeClient(), quietClock());
+    const playback = new Playback(player, quietClock());
 
     playback.acceptPlayback(failed(2, true));
 
@@ -370,19 +370,15 @@ describe("album shuffle", () => {
 
   it("turns the shuffle on, then starts", async () => {
     const order: string[] = [];
-    const playback = new Playback(
-      fakeClient({
-        setShuffle: vi.fn(async () => {
-          order.push("shuffle");
-          return queueOf(2, { shuffleEnabled: true });
-        }),
-        start: vi.fn(async () => {
-          order.push("start");
-          return playing(2, 1, 0);
-        }),
-      }),
-      quietClock(),
-    );
+    mocks.player.setShuffle.mockImplementation(async () => {
+      order.push("shuffle");
+      return queueOf(2, { shuffleEnabled: true });
+    });
+    mocks.player.play.mockImplementation(async () => {
+      order.push("start");
+      return playing(2, 1, 0);
+    });
+    const playback = new Playback(player, quietClock());
 
     await playback.shuffleAndStart(context);
 
@@ -391,25 +387,19 @@ describe("album shuffle", () => {
   });
 
   it("does not start when the shuffle cannot be turned on, and throws why", async () => {
-    const start = vi.fn(async () => playing(2, 1, 0));
-    const playback = new Playback(
-      fakeClient({
-        setShuffle: async () => {
-          throw { code: "workerUnavailable" };
-        },
-        start,
-      }),
-      quietClock(),
-    );
+    mocks.player.setShuffle.mockImplementation(async () => {
+      throw { code: "workerUnavailable" };
+    });
+    const playback = new Playback(player, quietClock());
 
     await expect(playback.shuffleAndStart(context)).rejects.toEqual({ code: "workerUnavailable" });
-    expect(start).not.toHaveBeenCalled();
+    expect(mocks.player.play).not.toHaveBeenCalled();
   });
 });
 
 describe("playback session derived state", () => {
   it("keeps the same item object while position ticks arrive", () => {
-    const playback = new Playback(fakeClient(), quietClock());
+    const playback = new Playback(player, quietClock());
 
     playback.acceptPlayback(playing(1, 1, 0));
     const first = playback.item;
@@ -421,7 +411,7 @@ describe("playback session derived state", () => {
   });
 
   it("replaces the item when another queue item starts", () => {
-    const playback = new Playback(fakeClient(), quietClock());
+    const playback = new Playback(player, quietClock());
 
     playback.acceptPlayback(playing(1, 1, 0));
     const first = playback.item;
@@ -432,7 +422,7 @@ describe("playback session derived state", () => {
   });
 
   it("keeps naming the last track while stopped and drops the session", () => {
-    const playback = new Playback(fakeClient(), quietClock());
+    const playback = new Playback(player, quietClock());
 
     playback.acceptPlayback(playing(1, 1, 4_000));
     playback.acceptPlayback(stopped(2, 1));
@@ -444,7 +434,7 @@ describe("playback session derived state", () => {
   });
 
   it("tells isActive and isPlaying apart: a paused track is active but not playing", () => {
-    const playback = new Playback(fakeClient(), quietClock());
+    const playback = new Playback(player, quietClock());
     const paused = playing(1, 1, 0);
     playback.acceptPlayback({ ...paused, value: { ...paused.value, status: "paused" } } as never);
 
@@ -453,7 +443,7 @@ describe("playback session derived state", () => {
   });
 
   it("knows whether the album's track is loaded, by its ID", () => {
-    const playback = new Playback(fakeClient(), quietClock());
+    const playback = new Playback(player, quietClock());
     const albumId = "0f0e0d0c0b0a09080706050403020100";
     const loaded = playing(1, 1, 0);
     playback.acceptPlayback({
@@ -481,7 +471,7 @@ describe("playback session derived state", () => {
 
   it("feeds every accepted snapshot to the clock and ignores stale ones", () => {
     const accept = vi.fn();
-    const playback = new Playback(fakeClient(), { accept } as never);
+    const playback = new Playback(player, { accept } as never);
 
     playback.acceptPlayback(playing(2, 1, 0));
     playback.acceptPlayback(playing(1, 1, 0));
@@ -503,7 +493,7 @@ describe("position messages", () => {
 
   it("feed the clock without touching the snapshot", () => {
     const accept = vi.fn();
-    const playback = new Playback(fakeClient(), { accept } as never);
+    const playback = new Playback(player, { accept } as never);
     playback.acceptPlayback(playing(1, 1, 0));
     const snapshot = playback.snapshot;
     accept.mockClear();
@@ -517,7 +507,7 @@ describe("position messages", () => {
 
   it("keep the playing flag the snapshot reported", () => {
     const accept = vi.fn();
-    const playback = new Playback(fakeClient(), { accept } as never);
+    const playback = new Playback(player, { accept } as never);
     playback.acceptPlayback(playing(1, 1, 0));
 
     playback.acceptPosition(position(250));
@@ -527,7 +517,7 @@ describe("position messages", () => {
 
   it("are ignored for another session or an older seek", () => {
     const accept = vi.fn();
-    const playback = new Playback(fakeClient(), { accept } as never);
+    const playback = new Playback(player, { accept } as never);
     playback.acceptPlayback(playing(1, 1, 0, 1));
     accept.mockClear();
 
@@ -539,7 +529,7 @@ describe("position messages", () => {
 
   it("are ignored while paused, so a tick sent before the pause cannot move the clock back", () => {
     const accept = vi.fn();
-    const playback = new Playback(fakeClient(), { accept } as never);
+    const playback = new Playback(player, { accept } as never);
     const paused = playing(1, 1, 1_100);
     playback.acceptPlayback({ ...paused, value: { ...paused.value, status: "paused" } } as never);
     accept.mockClear();
@@ -551,7 +541,7 @@ describe("position messages", () => {
 
   it("are ignored while nothing is loaded", () => {
     const accept = vi.fn();
-    const playback = new Playback(fakeClient(), { accept } as never);
+    const playback = new Playback(player, { accept } as never);
     playback.acceptPlayback(stopped(1, 1));
     accept.mockClear();
 
@@ -562,7 +552,7 @@ describe("position messages", () => {
 
   it("arrive as the Backend's position messages", () => {
     const accept = vi.fn();
-    const playback = new Playback(fakeClient(), { accept } as never);
+    const playback = new Playback(player, { accept } as never);
     playback.acceptPlayback(playing(1, 1, 0));
     accept.mockClear();
 
@@ -579,8 +569,8 @@ describe("starting playback", () => {
   } as const;
 
   it("passes the context and the clicked track to the backend", async () => {
-    const start = vi.fn(async () => playing(2, 3, 0));
-    const playback = new Playback(fakeClient({ start }), quietClock());
+    mocks.player.play.mockResolvedValue(playing(2, 3, 0));
+    const playback = new Playback(player, quietClock());
     load(playback, stopped(1, null), queue(1));
     const context = {
       kind: "album",
@@ -589,19 +579,15 @@ describe("starting playback", () => {
 
     await playback.start(context, 3);
 
-    expect(start).toHaveBeenCalledWith(context, 3);
+    expect(mocks.player.play).toHaveBeenCalledWith(context, 3);
     expect(playback.item?.id).toBe(3);
   });
 
   it("rejects as superseded when the backend replaced the request", async () => {
-    const playback = new Playback(
-      fakeClient({
-        start: async () => {
-          throw new NativeError("player", { code: "superseded" });
-        },
-      }),
-      quietClock(),
-    );
+    mocks.player.play.mockImplementation(async () => {
+      throw new NativeError("player", { code: "superseded" });
+    });
+    const playback = new Playback(player, quietClock());
     load(playback, stopped(1, null), queue(1));
 
     await expect(playback.start(albumContext, null)).rejects.toMatchObject({
@@ -611,14 +597,10 @@ describe("starting playback", () => {
   });
 
   it("rejects with the backend's error for a real failure", async () => {
-    const playback = new Playback(
-      fakeClient({
-        start: async () => {
-          throw new NativeError("player", { code: "trackUnavailable" });
-        },
-      }),
-      quietClock(),
-    );
+    mocks.player.play.mockImplementation(async () => {
+      throw new NativeError("player", { code: "trackUnavailable" });
+    });
+    const playback = new Playback(player, quietClock());
     load(playback, stopped(1, null), queue(1));
 
     await expect(playback.start(albumContext, 1)).rejects.toMatchObject({
@@ -634,45 +616,34 @@ describe("changing the volume", () => {
   });
 
   it("unmutes when the volume changes while muted", async () => {
-    const setMuted = vi.fn(async () => stopped(3, null));
-    const playback = new Playback(
-      fakeClient({
-        setVolume: vi.fn(async () => mutedSnapshot()),
-        setMuted,
-      }),
-      quietClock(),
-    );
+    mocks.player.setVolume.mockResolvedValue(mutedSnapshot());
+    mocks.player.setMuted.mockResolvedValue(stopped(3, null));
+    const playback = new Playback(player, quietClock());
     load(playback, mutedSnapshot(), queue(1));
 
     const change = playback.changeVolume(0.4);
 
     expect(playback.volume).toBe(0.4);
     await change;
-    expect(setMuted).toHaveBeenCalledWith(false);
+    expect(mocks.player.setMuted).toHaveBeenCalledWith(false);
   });
 
   it("leaves mute alone when not muted", async () => {
-    const setMuted = vi.fn(async () => stopped(3, null));
-    const playback = new Playback(
-      fakeClient({ setVolume: async () => stopped(2, null), setMuted }),
-      quietClock(),
-    );
+    mocks.player.setVolume.mockResolvedValue(stopped(2, null));
+    mocks.player.setMuted.mockResolvedValue(stopped(3, null));
+    const playback = new Playback(player, quietClock());
     load(playback, stopped(1, null), queue(1));
 
     await playback.changeVolume(0.4);
 
-    expect(setMuted).not.toHaveBeenCalled();
+    expect(mocks.player.setMuted).not.toHaveBeenCalled();
   });
 });
 
 describe("transition direction", () => {
   it("takes the direction from the session's startedBy when the item changes", async () => {
-    const playback = new Playback(
-      fakeClient({
-        previous: async () => playing(2, 1, 0, 0, "previous"),
-      }),
-      quietClock(),
-    );
+    mocks.player.previous.mockResolvedValue(playing(2, 1, 0, 0, "previous"));
+    const playback = new Playback(player, quietClock());
     load(playback, playing(1, 2, 0), queue(1));
 
     expect(playback.transitionDirection).toBe("forward");
@@ -686,7 +657,7 @@ describe("transition direction", () => {
   });
 
   it("keeps the direction across a seek and goes forward for a jump", () => {
-    const playback = new Playback(fakeClient(), quietClock());
+    const playback = new Playback(player, quietClock());
     load(playback, playing(1, 1, 0, 0, "previous"), queue(1));
     expect(playback.transitionDirection).toBe("backward");
 
@@ -700,23 +671,19 @@ describe("transition direction", () => {
   it("does not let a Previous waiting behind a Next recolour the Next in flight", async () => {
     let finishNext: (() => void) | undefined;
     let finishPrevious: (() => void) | undefined;
-    const playback = new Playback(
-      fakeClient({
-        next: async () => {
-          await new Promise<void>((resolve) => {
-            finishNext = resolve;
-          });
-          return playing(2, 2, 0, 0, "next");
-        },
-        previous: async () => {
-          await new Promise<void>((resolve) => {
-            finishPrevious = resolve;
-          });
-          return playing(3, 1, 0, 0, "previous");
-        },
-      }),
-      quietClock(),
-    );
+    mocks.player.next.mockImplementation(async () => {
+      await new Promise<void>((resolve) => {
+        finishNext = resolve;
+      });
+      return playing(2, 2, 0, 0, "next");
+    });
+    mocks.player.previous.mockImplementation(async () => {
+      await new Promise<void>((resolve) => {
+        finishPrevious = resolve;
+      });
+      return playing(3, 1, 0, 0, "previous");
+    });
+    const playback = new Playback(player, quietClock());
     load(playback, playing(1, 1, 0), queue(1));
 
     const next = playback.next();
@@ -733,14 +700,10 @@ describe("transition direction", () => {
   });
 
   it("does not let a failed Previous colour the next automatic change", async () => {
-    const playback = new Playback(
-      fakeClient({
-        previous: async () => {
-          throw { code: "common", error: { code: "trackUnavailable" } };
-        },
-      }),
-      quietClock(),
-    );
+    mocks.player.previous.mockImplementation(async () => {
+      throw { code: "common", error: { code: "trackUnavailable" } };
+    });
+    const playback = new Playback(player, quietClock());
     load(playback, playing(1, 2, 0), queue(1));
 
     await expect(playback.previous()).rejects.toEqual({
@@ -763,7 +726,7 @@ describe("the waveform", () => {
   });
 
   it("is shown only for the playback it belongs to", () => {
-    const playback = new Playback(fakeClient(), quietClock());
+    const playback = new Playback(player, quietClock());
     playback.acceptPlayback(playing(1, 1, 0));
 
     playback.acceptWaveform(waveformOf(1, 1, 5));
@@ -774,7 +737,7 @@ describe("the waveform", () => {
   });
 
   it("drops a waveform older than the one held", () => {
-    const playback = new Playback(fakeClient(), quietClock());
+    const playback = new Playback(player, quietClock());
     playback.acceptPlayback(playing(1, 1, 0));
 
     playback.acceptWaveform(waveformOf(1, 5, 9));

@@ -1,5 +1,5 @@
 import { queryOptions, skipToken, type QueryClient } from "@tanstack/svelte-query";
-import { type LyricsClient } from "#lib/native/native-clients";
+import type { lyrics } from "#lib/native/commands";
 import { type TrackId } from "#lib/native/bindings";
 import { type LyricsResolution } from "#lib/native/bindings";
 import type {
@@ -12,11 +12,11 @@ import type {
 export class LyricsRepository {
   static readonly #all = ["lyrics"] as const;
 
-  readonly #client: LyricsClient;
+  readonly #lyrics: typeof lyrics;
   readonly #queryClient: QueryClient;
 
-  public constructor(client: LyricsClient, queryClient: QueryClient) {
-    this.#client = client;
+  public constructor(lyricsCommands: typeof lyrics, queryClient: QueryClient) {
+    this.#lyrics = lyricsCommands;
     this.#queryClient = queryClient;
   }
 
@@ -31,9 +31,7 @@ export class LyricsRepository {
     return queryOptions({
       queryKey: [...LyricsRepository.#all, trackId],
       queryFn:
-        trackId === null
-          ? skipToken
-          : (): Promise<LyricsResolution> => this.#client.trackLyrics(trackId),
+        trackId === null ? skipToken : (): Promise<LyricsResolution> => this.#lyrics.track(trackId),
       // Stay fresh until a library scan finishes (`refresh`), which is when an added or edited .lrc
       // file can be noticed.
       staleTime: Infinity,

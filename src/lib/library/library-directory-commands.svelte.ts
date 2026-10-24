@@ -1,60 +1,57 @@
-import { type LibraryClient } from "#lib/native/native-clients";
+import type { library } from "#lib/native/commands";
 import { type LibraryDirectory } from "#lib/native/bindings";
+import { selectDirectory } from "#lib/native/desktop";
 import type { CatalogRepository } from "./catalog-repository";
 
 /**
- * The Library's directory and scan commands. Each awaits the client, then refreshes the catalog where
+ * The Library's directory and scan commands. Each awaits the command, then refreshes the catalog where
  * the change alters what the catalog lists.
  */
 export class LibraryDirectoryCommands {
-  readonly #client: LibraryClient;
+  readonly #library: typeof library;
   readonly #catalog: CatalogRepository;
 
-  public constructor(client: LibraryClient, catalog: CatalogRepository) {
-    this.#client = client;
+  public constructor(libraryCommands: typeof library, catalog: CatalogRepository) {
+    this.#library = libraryCommands;
     this.#catalog = catalog;
   }
 
   /** Resolves null when the user closes the directory dialog. */
   public async add(): Promise<LibraryDirectory | null> {
-    const path = await this.#client.selectDirectory();
+    const path = await selectDirectory();
     if (path === null) return null;
-    const directory = await this.#client.registerDirectory(path);
+    const directory = await this.#library.addDirectory(path);
     this.#catalog.refresh();
     return directory;
   }
 
   public async setEnabled(id: number, enabled: boolean): Promise<void> {
-    await this.#client.setDirectoryEnabled(id, enabled);
+    await this.#library.setDirectoryEnabled(id, enabled);
     this.#catalog.refresh();
   }
 
   public async remove(id: number): Promise<void> {
-    await this.#client.removeDirectory(id);
+    await this.#library.removeDirectory(id);
     this.#catalog.refresh();
   }
 
   /** Removes the Missing tracks from the Library (never a source file); resolves to how many. */
   public async deleteMissing(): Promise<number> {
-    const count = await this.#client.deleteMissing();
+    const count = await this.#library.deleteMissingTracks();
     this.#catalog.refresh();
     return count;
   }
 
-  public startScan(): Promise<void> {
-    return this.#client.startScan();
+  public async startScan(): Promise<void> {
+    await this.#library.startScan();
   }
 
-  public cancelScan(): Promise<void> {
-    return this.#client.cancelScan();
+  public async cancelScan(): Promise<void> {
+    await this.#library.cancelScan();
   }
 
   /** The Backend restarts the app on success. */
-  public resetAndRescan(): Promise<void> {
-    return this.#client.resetAndRescan();
-  }
-
-  public appOpenLogDirectory(): Promise<void> {
-    return this.#client.appOpenLogDirectory();
+  public async resetAndRescan(): Promise<void> {
+    await this.#library.reset();
   }
 }

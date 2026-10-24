@@ -1,6 +1,18 @@
-import { describe, expect, it } from "vitest";
-import { command } from "./commands";
+import { describe, expect, it, vi } from "vitest";
+import { command, player } from "./commands";
 import { IpcError, NativeError } from "./errors";
+
+const mocks = vi.hoisted(() => ({ playerPause: vi.fn() }));
+vi.mock("./bindings", () => ({ commands: { playerPause: mocks.playerPause } }));
+
+describe("area objects", () => {
+  it("runs the generated command behind a method and returns its result", async () => {
+    const reply = { revision: 2, value: { status: "paused" } };
+    mocks.playerPause.mockResolvedValue(reply);
+    await expect(player.pause()).resolves.toBe(reply);
+    expect(mocks.playerPause).toHaveBeenCalledOnce();
+  });
+});
 
 describe("command", () => {
   it("returns the value of a command that succeeds", async () => {

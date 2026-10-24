@@ -7,8 +7,7 @@ import { LibraryDirectoryCommands } from "#lib/library/library-directory-command
 import { LibraryTrackCommands } from "#lib/library/library-track-commands";
 import { LibraryViews } from "#lib/library/library-views.svelte";
 import { LyricsRepository } from "#lib/lyrics/lyrics-repository";
-import { TauriNative } from "#lib/native/tauri-native";
-import type { MeterClient, NativeClients, WindowClient } from "#lib/native/native-clients";
+import * as native from "#lib/native/commands";
 import { AudioOutputDevices } from "#lib/playback/audio-output-devices.svelte";
 import { PlaybackClock } from "#lib/playback/playback-clock.svelte";
 import { Playback } from "#lib/playback/playback.svelte";
@@ -30,15 +29,9 @@ const [getServices, setServices] = createContext<AppServices>();
  * it once; every component reads it with `current()`.
  */
 export class AppServices {
-  /**
-   * Makes the services from the Tauri clients and registers them in the Context.
-   * Returns null when the native bridge is unavailable. Call during component initialization.
-   */
-  public static tryCreate(): AppServices | null {
-    const native: NativeClients | null = TauriNative.clients();
-    if (native === null) return null;
+  /** Makes the services and registers them in the Context. Call during component initialization. */
+  public static create(): AppServices {
     const services = new AppServices(
-      native,
       new QueryClient({
         defaultOptions: {
           queries: {
@@ -78,21 +71,17 @@ export class AppServices {
   /** The Library scan, as the Backend last reported it. */
   public readonly scan: ScanWatcher;
   public readonly lyrics: LyricsRepository;
-  /** The Meter frames from the Backend; the Meters view subscribes through it. */
-  public readonly meter: MeterClient;
-  /** The window chrome, which the renderer draws itself. */
-  public readonly window: WindowClient;
   public readonly nowPlaying = new NowPlayingView();
   public readonly queuePanel = new QueuePanel();
   public readonly scrollMemory = new ScrollMemory();
   public readonly lyricsWaveformLink = new LyricsWaveformLink();
 
-  public constructor(native: NativeClients, queryClient: QueryClient) {
+  public constructor(queryClient: QueryClient) {
     this.queryClient = queryClient;
     this.actions = new UserActionRunner(this.notices);
-    this.playback = new Playback(native.playback, new PlaybackClock());
+    this.playback = new Playback(native.player, new PlaybackClock());
     this.appearance = new Appearance(native.appearance);
-    this.outputDevices = new AudioOutputDevices(native.playback);
+    this.outputDevices = new AudioOutputDevices(native.player);
     this.motion = new MotionBudget(this.appearance);
 
     this.catalog = new CatalogRepository(native.library, queryClient);
@@ -102,8 +91,6 @@ export class AppServices {
     this.libraryTracks = new LibraryTrackCommands(native.library);
     this.lyrics = new LyricsRepository(native.lyrics, queryClient);
     this.scan = new ScanWatcher(this.catalog, this.lyrics);
-    this.meter = native.meter;
-    this.window = native.window;
 
     const targets: SessionTargets = {
       playback: this.playback,
@@ -111,6 +98,6 @@ export class AppServices {
       scan: this.scan,
       notices: this.notices,
     };
-    this.session = new NativeSession(native.session, targets);
+    this.session = new NativeSession(native.app, targets);
   }
 }

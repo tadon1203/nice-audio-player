@@ -1,4 +1,5 @@
 import type { Attachment } from "svelte/attachments";
+import { meter } from "#lib/native/commands";
 import { BALLISTICS, BAND_COUNT } from "#lib/meters/ballistics";
 import { DrawLoop } from "#lib/meters/draw-loop";
 import { MeterDisplay } from "#lib/meters/meter-display";
@@ -65,7 +66,7 @@ export class MeterView {
 
   public constructor() {
     this.#feed = new MeterFeed(
-      this.#services.meter,
+      meter,
       () => this.#active,
       () => this.#wake(),
     );

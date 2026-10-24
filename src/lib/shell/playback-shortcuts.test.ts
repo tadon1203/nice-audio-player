@@ -1,11 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
-import { type PlaybackClient } from "#lib/native/native-clients";
+import { player } from "#lib/native/commands";
 import { type PlaybackState, type Revisioned } from "#lib/native/bindings";
 import { PlaybackClock } from "#lib/playback/playback-clock.svelte";
 import { Playback } from "#lib/playback/playback.svelte";
 import { NoticeCenter } from "./notice-center.svelte";
 import { PlaybackShortcuts } from "./playback-shortcuts";
 import { UserActionRunner } from "./user-action-runner.svelte";
+
+const mocks = vi.hoisted(() => ({ seek: vi.fn() }));
+vi.mock("#lib/native/commands", () => ({ player: { seek: mocks.seek } }));
 
 const playing = (positionMs: number): Revisioned<PlaybackState> => ({
   revision: 1,
@@ -58,8 +61,8 @@ describe("global seek shortcut", () => {
       requestFrame: (): number => 0,
       cancelFrame: (): undefined => undefined,
     });
-    const playerSeek = vi.fn(async (positionMs: number) => playing(positionMs));
-    const playback = new Playback({ seek: playerSeek } as unknown as PlaybackClient, clock);
+    mocks.seek.mockImplementation(async (positionMs: number) => playing(positionMs));
+    const playback = new Playback(player, clock);
     playback.acceptPlayback(playing(10_000));
     now = 1_000 + 250.37;
     expect(Number.isInteger(clock.estimate())).toBe(false);
@@ -74,9 +77,9 @@ describe("global seek shortcut", () => {
         queuePanel: { isOpen: false, toggle: vi.fn() },
       },
     );
-    await vi.waitFor(() => expect(playerSeek).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(mocks.seek).toHaveBeenCalledTimes(1));
 
-    const [sent] = playerSeek.mock.calls[0]!;
+    const [sent] = mocks.seek.mock.calls[0]!;
     expect(Number.isInteger(sent)).toBe(true);
     expect(sent).toBeGreaterThan(10_000);
     expect(notices.at("dock")).toBeNull();

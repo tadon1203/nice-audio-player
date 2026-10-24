@@ -1,13 +1,16 @@
 import { QueryClient } from "@tanstack/svelte-query";
-import { describe, expect, it, vi } from "vitest";
-import {
-  type BackendMessage,
-  type InitialState,
-  type ScanState,
-  type PlaybackState,
-} from "#lib/native/bindings";
-import { type NativeClients, type SessionClient } from "#lib/native/native-clients";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { type PlaybackState, type ScanState, type InitialState } from "#lib/native/bindings";
 import { AppServices } from "./app-services.svelte";
+
+const mocks = vi.hoisted(() => ({ connect: vi.fn() }));
+vi.mock("#lib/native/commands", () => ({
+  app: { connect: mocks.connect },
+  appearance: {},
+  library: {},
+  lyrics: {},
+  player: {},
+}));
 
 const base = {
   volume: 1,
@@ -20,18 +23,6 @@ const base = {
 const stopped: PlaybackState = { status: "stopped", base, item: null };
 
 const scan = { finishedCount: 0, changedCount: 0 } as ScanState;
-
-/** Fake clients: every command rejects unless a test gives the method it calls. */
-function fakeNative(session: Partial<SessionClient> = {}): NativeClients {
-  return {
-    session: {
-      connect: vi.fn(async (_onMessage: (message: BackendMessage) => void) => initial),
-      ...session,
-    },
-    playback: {},
-    appearance: { update: vi.fn() },
-  } as unknown as NativeClients;
-}
 
 const initial: InitialState = {
   playback: { revision: 1, value: stopped },
@@ -53,9 +44,14 @@ const initial: InitialState = {
   appearance: { revision: 1, value: { artworkBackdrop: true, calmMotion: false } },
 };
 
+beforeEach(() => {
+  mocks.connect.mockReset();
+  mocks.connect.mockResolvedValue(initial);
+});
+
 describe("AppServices", () => {
-  it("builds the session, playback, appearance, and motion services from the native clients", () => {
-    const services = new AppServices(fakeNative(), new QueryClient());
+  it("builds the session, playback, appearance, and motion services from the area objects", () => {
+    const services = new AppServices(new QueryClient());
 
     expect(services.session.connection).toBe("connecting");
     expect(services.playback).toBeDefined();
@@ -65,8 +61,7 @@ describe("AppServices", () => {
   });
 
   it("connects the session, and the initial state reaches the services", async () => {
-    const native = fakeNative();
-    const services = new AppServices(native, new QueryClient());
+    const services = new AppServices(new QueryClient());
 
     services.session.connect();
 

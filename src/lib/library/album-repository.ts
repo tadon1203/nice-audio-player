@@ -11,7 +11,7 @@ import {
   type AlbumRow,
   type LibraryAlbumTrackPage,
 } from "#lib/native/bindings";
-import { type LibraryClient } from "#lib/native/native-clients";
+import type { library } from "#lib/native/commands";
 import { LibraryQueryKeys } from "./library-query-keys";
 import type {
   CreateInfiniteQueryOptions,
@@ -22,11 +22,11 @@ import type {
 
 /** The album detail, track, and summary queries. */
 export class AlbumRepository {
-  readonly #client: LibraryClient;
+  readonly #library: typeof library;
   readonly #queryClient: QueryClient;
 
-  public constructor(client: LibraryClient, queryClient: QueryClient) {
-    this.#client = client;
+  public constructor(libraryCommands: typeof library, queryClient: QueryClient) {
+    this.#library = libraryCommands;
     this.#queryClient = queryClient;
   }
 
@@ -40,7 +40,7 @@ export class AlbumRepository {
   } & QueryKeyWithDataTag<readonly unknown[], AlbumDetails, Error> {
     return queryOptions({
       queryKey: LibraryQueryKeys.album(albumId),
-      queryFn: (): Promise<AlbumDetails> => this.#client.albumById(albumId),
+      queryFn: (): Promise<AlbumDetails> => this.#library.album(albumId),
       gcTime: Infinity,
     });
   }
@@ -61,7 +61,7 @@ export class AlbumRepository {
       queryKey: LibraryQueryKeys.albumTracks(albumId),
       initialPageParam: null as string | null,
       queryFn: ({ pageParam }): Promise<LibraryAlbumTrackPage> =>
-        this.#client.albumTracksById(albumId, pageParam),
+        this.#library.listAlbumTracks({ albumId, cursor: pageParam }),
       getNextPageParam: (page: LibraryAlbumTrackPage) => page.nextCursor ?? undefined,
       gcTime: Infinity,
     });

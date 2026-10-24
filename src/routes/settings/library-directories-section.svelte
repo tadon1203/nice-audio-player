@@ -1,5 +1,6 @@
 <script lang="ts">
   import FolderPlus from "@lucide/svelte/icons/folder-plus";
+  import { app } from "#lib/native/commands";
   import { errorMessage } from "#lib/native/messages";
   import { QueryResult } from "#lib/library/query-result.svelte";
   import { type LibraryDirectory } from "#lib/native/bindings";
@@ -196,7 +197,7 @@
           variant="outline"
           size="compact"
           disabled={busy}
-          onclick={() => actions.run(() => libraryDirectories.appOpenLogDirectory(), "library")}
+          onclick={() => actions.run(() => app.openLogDirectory(), "library")}
         >
           Open log directory
         </Button>

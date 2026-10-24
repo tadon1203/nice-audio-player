@@ -1,6 +1,7 @@
 <script lang="ts">
   import "../app.css";
   import { onMount } from "svelte";
+  import { isTauri } from "#lib/native/desktop";
   import { prefersReducedMotion } from "svelte/motion";
   import { CssMotion } from "#lib/ui/motion/css-motion";
   import { QueryClientProvider } from "@tanstack/svelte-query";
@@ -18,11 +19,12 @@
 
   let { children } = $props();
 
-  // Created once: the native bridge never changes while the renderer lives. Null without the bridge.
-  const services = AppServices.tryCreate();
+  // Checked once: the native bridge never changes while the renderer lives. Outside the desktop app
+  // there is no Backend, so no services are made and the unavailable screen shows.
+  const services = isTauri() ? AppServices.create() : null;
 
   // The UI does not wait for the connection: the Dock shows its state, the rest fills in as it arrives.
-  onMount(() => services?.session.connect());
+  if (services) onMount(() => services.session.connect());
 
   $effect(() => CssMotion.apply(document.documentElement, prefersReducedMotion.current));
 </script>

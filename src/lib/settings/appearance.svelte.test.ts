@@ -1,15 +1,10 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { type Appearance as AppearanceState, type Revisioned } from "#lib/native/bindings";
-import { type AppearanceClient } from "#lib/native/native-clients";
+import { appearance as appearanceCommands } from "#lib/native/commands";
 import { Appearance } from "./appearance.svelte";
-import type { Mock } from "vitest";
-import { type AppearancePatch } from "#lib/native/bindings";
 
-function stubClient(update: AppearanceClient["update"]): {
-  update: Mock<(patch: AppearancePatch) => Promise<Revisioned<AppearanceState>>>;
-} {
-  return { update: vi.fn(update) };
-}
+const mocks = vi.hoisted(() => ({ update: vi.fn() }));
+vi.mock("#lib/native/commands", () => ({ appearance: { update: mocks.update } }));
 
 const saved: Revisioned<AppearanceState> = {
   revision: 0,
@@ -30,9 +25,14 @@ function deferred<T>(): {
   return { promise, resolve, reject };
 }
 
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.update.mockResolvedValue(saved);
+});
+
 describe("Appearance", () => {
   it("knows nothing until the backend's appearance is accepted, then holds it", () => {
-    const store = new Appearance(stubClient(async () => saved));
+    const store = new Appearance(appearanceCommands);
     expect(store.artworkBackdrop).toBeNull();
     expect(store.calmMotion).toBeNull();
     store.accept(saved);
@@ -41,7 +41,7 @@ describe("Appearance", () => {
   });
 
   it("keeps a value only if its revision is newer than the one it holds", () => {
-    const store = new Appearance(stubClient(async () => saved));
+    const store = new Appearance(appearanceCommands);
     store.accept({ revision: 2, value: { artworkBackdrop: false, calmMotion: true } });
     store.accept({ revision: 1, value: { artworkBackdrop: true, calmMotion: false } });
     expect(store.artworkBackdrop).toBe(false);
@@ -50,13 +50,13 @@ describe("Appearance", () => {
 
   it("shows an update before the backend answers, sending the untouched fields as null", async () => {
     const pending = deferred<Revisioned<AppearanceState>>();
-    const client = stubClient(() => pending.promise);
-    const store = new Appearance(client);
+    mocks.update.mockReturnValue(pending.promise);
+    const store = new Appearance(appearanceCommands);
     store.accept(saved);
 
     const result = store.update({ artworkBackdrop: null, calmMotion: true });
     expect(store.calmMotion).toBe(true);
-    expect(client.update).toHaveBeenCalledWith({ artworkBackdrop: null, calmMotion: true });
+    expect(mocks.update).toHaveBeenCalledWith({ artworkBackdrop: null, calmMotion: true });
 
     pending.resolve({ revision: 1, value: { artworkBackdrop: true, calmMotion: true } });
     await result;
@@ -66,7 +66,8 @@ describe("Appearance", () => {
 
   it("rolls back its own change and throws when the save fails", async () => {
     const failure = { code: "persistenceFailed" };
-    const store = new Appearance(stubClient(vi.fn().mockRejectedValue(failure)));
+    mocks.update.mockRejectedValue(failure);
+    const store = new Appearance(appearanceCommands);
     store.accept(saved);
 
     await expect(store.update({ artworkBackdrop: false, calmMotion: null })).rejects.toBe(failure);
@@ -75,7 +76,8 @@ describe("Appearance", () => {
 
   it("shows nothing optimistic before the first value, and throws on a failed save", async () => {
     const failure = { code: "persistenceFailed" };
-    const store = new Appearance(stubClient(vi.fn().mockRejectedValue(failure)));
+    mocks.update.mockRejectedValue(failure);
+    const store = new Appearance(appearanceCommands);
 
     await expect(store.update({ artworkBackdrop: null, calmMotion: true })).rejects.toBe(failure);
     expect(store.calmMotion).toBeNull();

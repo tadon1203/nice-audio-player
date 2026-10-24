@@ -1,6 +1,6 @@
 import { infiniteQueryOptions, queryOptions } from "@tanstack/svelte-query";
 import { type ArtistId, type ArtistRow, type LibraryAlbumPage } from "#lib/native/bindings";
-import { type LibraryClient } from "#lib/native/native-clients";
+import type { library } from "#lib/native/commands";
 import { LibraryQueryKeys, type ArtistAlbumsArguments } from "./library-query-keys";
 import type {
   CreateInfiniteQueryOptions,
@@ -12,10 +12,10 @@ import type {
 
 /** The Album Artist detail and album list queries. */
 export class ArtistRepository {
-  readonly #client: LibraryClient;
+  readonly #library: typeof library;
 
-  public constructor(client: LibraryClient) {
-    this.#client = client;
+  public constructor(libraryCommands: typeof library) {
+    this.#library = libraryCommands;
   }
 
   public detailsOptions(artistId: ArtistId): CreateQueryOptions<
@@ -28,7 +28,7 @@ export class ArtistRepository {
   } & QueryKeyWithDataTag<readonly unknown[], ArtistRow, Error> {
     return queryOptions({
       queryKey: LibraryQueryKeys.artist(artistId),
-      queryFn: (): Promise<ArtistRow> => this.#client.artist(artistId),
+      queryFn: (): Promise<ArtistRow> => this.#library.artist(artistId),
       gcTime: Infinity,
     });
   }
@@ -49,7 +49,7 @@ export class ArtistRepository {
       queryKey: LibraryQueryKeys.artistAlbums(request),
       initialPageParam: null as string | null,
       queryFn: ({ pageParam }): Promise<LibraryAlbumPage> =>
-        this.#client.artistAlbums({
+        this.#library.listArtistAlbums({
           artistId: request.artistId,
           cursor: pageParam,
           sortKey: request.sortKey,

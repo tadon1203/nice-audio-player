@@ -1,9 +1,11 @@
 import { flushSync } from "svelte";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { type MeterClient } from "#lib/native/native-clients";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { meter } from "#lib/native/commands";
 import { BAND_COUNT } from "./ballistics";
 import { MeterFeed } from "./meter-feed.svelte";
-import type { Mock } from "vitest";
+
+const mocks = vi.hoisted(() => ({ start: vi.fn(), stop: vi.fn() }));
+vi.mock("#lib/native/commands", () => ({ meter: { start: mocks.start, stop: mocks.stop } }));
 
 const FRAME_BYTES = (BAND_COUNT + 5) * 4;
 
@@ -13,30 +15,26 @@ function wireFrame(peak: number): ArrayBuffer {
   return buffer;
 }
 
-function fakeClient(): {
-  client: MeterClient;
-  subscribe: Mock<(onFrame: (frame: ArrayBuffer) => void) => Promise<Mock<() => Promise<void>>>>;
-  stop: Mock<() => Promise<void>>;
-  push: (frame: ArrayBuffer) => void;
-} {
-  const stop = vi.fn(() => Promise.resolve());
-  let push: (frame: ArrayBuffer) => void = () => {};
-  const subscribe = vi.fn((onFrame: (frame: ArrayBuffer) => void) => {
+/** The frame callback the last subscription passed to `meter.start`. */
+let push: (frame: ArrayBuffer) => void;
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.start.mockImplementation((onFrame: (frame: ArrayBuffer) => void) => {
     push = onFrame;
-    return Promise.resolve(stop);
+    return Promise.resolve(1);
   });
-  const client: MeterClient = { subscribe };
-  return { client, subscribe, stop, push: (frame: ArrayBuffer): void => push(frame) };
-}
+  mocks.stop.mockResolvedValue(null);
+});
 
 let cleanup: () => void;
 
 afterEach(() => cleanup?.());
 
-function mount(client: MeterClient, active: () => boolean, onFrame?: () => void): MeterFeed {
+function mount(active: () => boolean, onFrame?: () => void): MeterFeed {
   let feed!: MeterFeed;
   cleanup = $effect.root(() => {
-    feed = new MeterFeed(client, active, onFrame);
+    feed = new MeterFeed(meter, active, onFrame);
   });
   flushSync();
   return feed;
@@ -44,15 +42,13 @@ function mount(client: MeterClient, active: () => boolean, onFrame?: () => void)
 
 describe("MeterFeed", () => {
   it("does not subscribe while inactive", () => {
-    const { client, subscribe } = fakeClient();
-    mount(client, () => false);
-    expect(subscribe).not.toHaveBeenCalled();
+    mount(() => false);
+    expect(mocks.start).not.toHaveBeenCalled();
   });
 
   it("hands over the frames since the last drain, then none", () => {
-    const { client, push } = fakeClient();
     const onFrame = vi.fn();
-    const feed = mount(client, () => true, onFrame);
+    const feed = mount(() => true, onFrame);
 
     push(wireFrame(-6));
     push(wireFrame(-3));
@@ -63,9 +59,8 @@ describe("MeterFeed", () => {
   });
 
   it("drops messages of the wrong size", () => {
-    const { client, push } = fakeClient();
     const onFrame = vi.fn();
-    const feed = mount(client, () => true, onFrame);
+    const feed = mount(() => true, onFrame);
 
     push(new ArrayBuffer(3));
 
@@ -74,26 +69,26 @@ describe("MeterFeed", () => {
   });
 
   it("unsubscribes when it turns inactive and ignores later frames", async () => {
-    const { client, stop, push } = fakeClient();
     let active = $state(true);
-    const feed = mount(client, () => active);
+    const feed = mount(() => active);
     await Promise.resolve();
 
     active = false;
     flushSync();
     push(wireFrame(-1));
 
-    expect(stop).toHaveBeenCalledTimes(1);
+    expect(mocks.stop).toHaveBeenCalledOnce();
+    expect(mocks.stop).toHaveBeenCalledWith(1);
     expect(feed.drain()).toEqual([]);
   });
 
   it("unsubscribes when the owner is destroyed", async () => {
-    const { client, stop } = fakeClient();
-    mount(client, () => true);
+    mount(() => true);
     await Promise.resolve();
 
     cleanup();
 
-    expect(stop).toHaveBeenCalledTimes(1);
+    expect(mocks.stop).toHaveBeenCalledOnce();
+    expect(mocks.stop).toHaveBeenCalledWith(1);
   });
 });

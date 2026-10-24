@@ -1,32 +1,34 @@
 import { QueryClient } from "@tanstack/svelte-query";
-import { describe, expect, it, vi } from "vitest";
-import { type LibraryClient } from "#lib/native/native-clients";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { library } from "#lib/native/commands";
 import { CatalogRepository, type LibraryCatalogRequest } from "./catalog-repository";
-import type { Mock } from "vitest";
 
-/** A fake client whose list methods resolve to empty pages. */
-function fakeClient(): {
-  albums: Mock<() => Promise<{ items: never[]; totalCount: number; nextCursor: null }>>;
-  albumArtists: Mock<() => Promise<{ items: never[]; totalCount: number; nextCursor: null }>>;
-  tracks: Mock<() => Promise<{ items: never[]; totalCount: number; nextCursor: null }>>;
-  albumIndex: Mock<() => Promise<never[]>>;
-  albumArtistIndex: Mock<() => Promise<never[]>>;
-  trackIndex: Mock<() => Promise<never[]>>;
-  status: Mock<() => Promise<{ status: "ready" }>>;
-} {
-  const empty = { items: [], totalCount: 0, nextCursor: null };
-  return {
-    albums: vi.fn(async () => empty),
-    albumArtists: vi.fn(async () => empty),
-    tracks: vi.fn(async () => empty),
-    albumIndex: vi.fn(async () => []),
-    albumArtistIndex: vi.fn(async () => []),
-    trackIndex: vi.fn(async () => []),
-    status: vi.fn(async () => ({ status: "ready" as const })),
-  };
-}
+/** The list and index commands resolve to empty pages, as the Backend does for an empty Library. */
+const mocks = vi.hoisted(() => ({
+  commands: {
+    libraryStatus: vi.fn(),
+    libraryListAlbums: vi.fn(),
+    libraryListArtists: vi.fn(),
+    libraryListTracks: vi.fn(),
+    libraryAlbumIndex: vi.fn(),
+    libraryArtistIndex: vi.fn(),
+    libraryTrackIndex: vi.fn(),
+  },
+}));
+vi.mock("#lib/native/bindings", () => ({ commands: mocks.commands }));
 
-type Client = ReturnType<typeof fakeClient>;
+const { commands } = mocks;
+const empty = { items: [], totalCount: 0, nextCursor: null };
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  commands.libraryListAlbums.mockResolvedValue(empty);
+  commands.libraryListArtists.mockResolvedValue(empty);
+  commands.libraryListTracks.mockResolvedValue(empty);
+  commands.libraryAlbumIndex.mockResolvedValue([]);
+  commands.libraryArtistIndex.mockResolvedValue([]);
+  commands.libraryTrackIndex.mockResolvedValue([]);
+});
 
 /** Runs the query function of a repository's options, as TanStack Query does. */
 async function runQuery(options: { queryFn?: unknown }, context: unknown = {}): Promise<unknown> {
@@ -34,14 +36,9 @@ async function runQuery(options: { queryFn?: unknown }, context: unknown = {}): 
   return queryFn(context);
 }
 
-function repositoryWith(client: Client): CatalogRepository {
-  return new CatalogRepository(client as unknown as LibraryClient, new QueryClient());
-}
-
 describe("CatalogRepository", () => {
   it("lists albums with the request's sort, direction, and skip", async () => {
-    const client = fakeClient();
-    const repository = repositoryWith(client);
+    const repository = new CatalogRepository(library, new QueryClient());
 
     await runQuery(
       repository.pageOptions(
@@ -57,7 +54,7 @@ describe("CatalogRepository", () => {
       { pageParam: null },
     );
 
-    expect(client.albums).toHaveBeenCalledWith({
+    expect(commands.libraryListAlbums).toHaveBeenCalledWith({
       search: "abbey",
       sortKey: "year",
       sortDirection: "descending",
@@ -67,8 +64,7 @@ describe("CatalogRepository", () => {
   });
 
   it("lists album artists with the request's sort and an empty filter as no search", async () => {
-    const client = fakeClient();
-    const repository = repositoryWith(client);
+    const repository = new CatalogRepository(library, new QueryClient());
 
     await runQuery(
       repository.pageOptions(
@@ -84,7 +80,7 @@ describe("CatalogRepository", () => {
       { pageParam: null },
     );
 
-    expect(client.albumArtists).toHaveBeenCalledWith({
+    expect(commands.libraryListArtists).toHaveBeenCalledWith({
       search: null,
       sortKey: "albumCount",
       sortDirection: "ascending",
@@ -94,8 +90,7 @@ describe("CatalogRepository", () => {
   });
 
   it("lists tracks, and reads the scroll index of the same list", async () => {
-    const client = fakeClient();
-    const repository = repositoryWith(client);
+    const repository = new CatalogRepository(library, new QueryClient());
     const request: LibraryCatalogRequest = {
       presentation: "tracks",
       filter: "",
@@ -107,14 +102,14 @@ describe("CatalogRepository", () => {
     await runQuery(repository.pageOptions(request, true), { pageParam: null });
     await runQuery(repository.indexOptions(request, true));
 
-    expect(client.tracks).toHaveBeenCalledWith({
+    expect(commands.libraryListTracks).toHaveBeenCalledWith({
       search: null,
       sortKey: "duration",
       sortDirection: "ascending",
       cursor: null,
       skip: 10,
     });
-    expect(client.trackIndex).toHaveBeenCalledWith({
+    expect(commands.libraryTrackIndex).toHaveBeenCalledWith({
       search: null,
       sortKey: "duration",
       sortDirection: "ascending",
@@ -122,8 +117,7 @@ describe("CatalogRepository", () => {
   });
 
   it("reads the index of albums and album artists from their own calls", async () => {
-    const client = fakeClient();
-    const repository = repositoryWith(client);
+    const repository = new CatalogRepository(library, new QueryClient());
 
     await runQuery(
       repository.indexOptions(
@@ -144,12 +138,12 @@ describe("CatalogRepository", () => {
       ),
     );
 
-    expect(client.albumIndex).toHaveBeenCalledWith({
+    expect(commands.libraryAlbumIndex).toHaveBeenCalledWith({
       search: "x",
       sortKey: "year",
       sortDirection: "ascending",
     });
-    expect(client.albumArtistIndex).toHaveBeenCalledWith({
+    expect(commands.libraryArtistIndex).toHaveBeenCalledWith({
       search: null,
       sortKey: "artist",
       sortDirection: "descending",
@@ -158,7 +152,7 @@ describe("CatalogRepository", () => {
 
   it("starts every loaded list over from its first page on refresh", () => {
     const queryClient = new QueryClient();
-    const repository = new CatalogRepository(fakeClient() as unknown as LibraryClient, queryClient);
+    const repository = new CatalogRepository(library, queryClient);
     const key = ["library", "data", "catalog", { presentation: "tracks" }];
     queryClient.setQueryData(key, { pages: [1, 2, 3], pageParams: [null, "a", "b"] });
 
@@ -167,11 +161,11 @@ describe("CatalogRepository", () => {
     expect(queryClient.getQueryData(key)).toEqual({ pages: [1], pageParams: [null] });
   });
 
-  it("reads the library status through the status call", async () => {
-    const client = fakeClient();
-    const repository = repositoryWith(client);
+  it("reads the library status through the status command", async () => {
+    commands.libraryStatus.mockResolvedValue({ status: "ready" });
+    const repository = new CatalogRepository(library, new QueryClient());
 
     await expect(runQuery(repository.statusOptions())).resolves.toEqual({ status: "ready" });
-    expect(client.status).toHaveBeenCalledOnce();
+    expect(commands.libraryStatus).toHaveBeenCalledOnce();
   });
 });

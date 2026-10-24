@@ -9,7 +9,7 @@ import {
   type PlaybackWaveform,
   type Revisioned,
 } from "#lib/native/bindings";
-import { type SessionClient } from "#lib/native/native-clients";
+import type { app } from "#lib/native/commands";
 import { countE2e } from "./e2e-counts";
 
 export type ConnectionState = "connecting" | "ready" | "failed";
@@ -29,13 +29,13 @@ export interface SessionTargets {
 
 /** The one place that runs the connect procedure. */
 export class NativeSession {
-  readonly #client: SessionClient;
+  readonly #app: typeof app;
   readonly #targets: SessionTargets;
   #connection = $state.raw<ConnectionState>("connecting");
   #startupError = $state.raw<unknown>(null);
 
-  public constructor(client: SessionClient, targets: SessionTargets) {
-    this.#client = client;
+  public constructor(appCommands: typeof app, targets: SessionTargets) {
+    this.#app = appCommands;
     this.#targets = targets;
   }
 
@@ -72,7 +72,7 @@ export class NativeSession {
     };
 
     this.#connection = "connecting";
-    this.#client.connect(receive).then((initial) => {
+    this.#app.connect(receive).then((initial) => {
       if (!active) return;
       // A throw while the initial state is applied is a startup failure too, not a stuck connecting state.
       try {

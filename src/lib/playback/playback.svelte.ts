@@ -17,7 +17,7 @@ import type {
   Revisioned,
 } from "#lib/native/bindings";
 import { NativeError } from "#lib/native/errors";
-import type { PlaybackClient } from "#lib/native/native-clients";
+import type { player } from "#lib/native/commands";
 import { Replica } from "#lib/native/replica.svelte";
 import type { PlaybackClock } from "./playback-clock.svelte";
 import { PlaybackSnapshots } from "./playback-snapshots";
@@ -54,7 +54,7 @@ function directionOf(session: CurrentPlayback | null): TransitionDirection {
  * the same queue item plays.
  */
 export class Playback {
-  readonly #client: PlaybackClient;
+  readonly #player: typeof player;
   readonly #clock: PlaybackClock;
   readonly #snapshot = new Replica<PlaybackState>();
   readonly #queue = new Replica<QueueState>();
@@ -76,8 +76,8 @@ export class Playback {
   // Latest wins, like the backend: one transport command waits for the one in flight.
   #queuedTransport: QueuedTransport | null = null;
 
-  public constructor(client: PlaybackClient, clock: PlaybackClock) {
-    this.#client = client;
+  public constructor(playerCommands: typeof player, clock: PlaybackClock) {
+    this.#player = playerCommands;
     this.#clock = clock;
   }
 
@@ -243,16 +243,16 @@ export class Playback {
 
   /** Replaces the queue with `context` and plays from `startTrackId` (its first track if null). */
   public start(context: PlaybackContext, startTrackId: TrackId | null): Promise<void> {
-    return this.#runTransport("start", () => this.#client.start(context, startTrackId));
+    return this.#runTransport("start", () => this.#player.play(context, startTrackId));
   }
 
   public pause(): Promise<void> {
-    return this.#runTransport("pause", () => this.#client.pause());
+    return this.#runTransport("pause", () => this.#player.pause());
   }
 
   /** Resumes a paused track; after a failure, retries the current item with the queue intact. */
   public resume(): Promise<void> {
-    return this.#runTransport("resume", () => this.#client.resume());
+    return this.#runTransport("resume", () => this.#player.resume());
   }
 
   /** Plays the album from its first track if it is not loaded; otherwise pauses or resumes it. */
@@ -266,11 +266,11 @@ export class Playback {
   }
 
   public previous(): Promise<void> {
-    return this.#runTransport("previous", () => this.#client.previous());
+    return this.#runTransport("previous", () => this.#player.previous());
   }
 
   public next(): Promise<void> {
-    return this.#runTransport("next", () => this.#client.next());
+    return this.#runTransport("next", () => this.#player.next());
   }
 
   /**
@@ -287,7 +287,7 @@ export class Playback {
       while (this.#requestedSeek !== null) {
         const value = this.#requestedSeek;
         this.#requestedSeek = null;
-        this.acceptPlayback(await this.#client.seek(value));
+        this.acceptPlayback(await this.#player.seek(value));
       }
     } catch (error) {
       this.#requestedSeek = null;
@@ -315,14 +315,14 @@ export class Playback {
     if (this.#mutePending) return;
     this.#mutePending = true;
     try {
-      this.acceptPlayback(await this.#client.setMuted(!this.muted));
+      this.acceptPlayback(await this.#player.setMuted(!this.muted));
     } finally {
       this.#mutePending = false;
     }
   }
 
   public setShuffle(enabled: boolean): Promise<void> {
-    return this.#runQueueCommand(() => this.#client.setShuffle(enabled));
+    return this.#runQueueCommand(() => this.#player.setShuffle(enabled));
   }
 
   /** Turns the global shuffle on, then replaces the queue with `context`. Nothing starts if the shuffle cannot be turned on. */
@@ -332,48 +332,48 @@ export class Playback {
   }
 
   public setRepeatMode(mode: RepeatMode): Promise<void> {
-    return this.#runQueueCommand(() => this.#client.setRepeatMode(mode));
+    return this.#runQueueCommand(() => this.#player.setRepeatMode(mode));
   }
 
   public playerRemoveQueueItem(id: QueueItemId): Promise<void> {
-    return this.#runQueueCommand(() => this.#client.playerRemoveQueueItem(id));
+    return this.#runQueueCommand(() => this.#player.removeQueueItem(id));
   }
 
   /** Moves an upcoming item to `to`, an index into the upcoming list (0 is next up). */
   public playerMoveQueueItem(id: QueueItemId, to: number): Promise<void> {
-    return this.#runQueueCommand(() => this.#client.playerMoveQueueItem(id, to));
+    return this.#runQueueCommand(() => this.#player.moveQueueItem(id, to));
   }
 
   /** Resolves true when upcoming items were removed (the caller offers an undo). */
   public async playerClearQueue(): Promise<boolean> {
     const hadUpcoming = (this.queue?.upcomingCount ?? 0) > 0;
-    await this.#runQueueCommand(() => this.#client.playerClearQueue());
+    await this.#runQueueCommand(() => this.#player.clearQueue());
     return hadUpcoming;
   }
 
   /** Puts back the queue the last replacement or "Clear upcoming" took away. */
   public undoQueueChange(): Promise<void> {
-    return this.#runTransport("start", () => this.#client.playerRestorePreviousQueue());
+    return this.#runTransport("start", () => this.#player.restorePreviousQueue());
   }
 
   /** Jumps to an upcoming item and plays it. */
   public playerPlayQueueItem(id: QueueItemId): Promise<void> {
-    return this.#runTransport("start", () => this.#client.playerPlayQueueItem(id));
+    return this.#runTransport("start", () => this.#player.playQueueItem(id));
   }
 
   /** Adds a library track right after the current one (`next`) or at the end. */
   public playerEnqueueTrack(trackId: TrackId, next: boolean): Promise<void> {
-    return this.#runQueueCommand(() => this.#client.playerEnqueueTrack(trackId, next));
+    return this.#runQueueCommand(() => this.#player.enqueueTrack(trackId, next));
   }
 
   /** A loaded track restarts on the new device at the same position. */
   public setOutputSelection(selection: AudioOutputSelection): Promise<void> {
-    return this.#runTransport("outputSelection", () => this.#client.setOutputSelection(selection));
+    return this.#runTransport("outputSelection", () => this.#player.setOutputSelection(selection));
   }
 
   /** A slice of the upcoming list beyond what the queue snapshot carries. */
   public fetchQueueWindow(offset: number, limit: number): Promise<QueueWindow> {
-    return this.#client.queueWindow(offset, limit);
+    return this.#player.queueWindow(offset, limit);
   }
 
   #session(): CurrentPlayback | null {
@@ -429,7 +429,7 @@ export class Playback {
       while (this.#requestedVolume !== null) {
         const value = this.#requestedVolume;
         this.#requestedVolume = null;
-        this.acceptPlayback(await this.#client.setVolume(value));
+        this.acceptPlayback(await this.#player.setVolume(value));
       }
       this.#volumePreview = null;
     } catch (error) {

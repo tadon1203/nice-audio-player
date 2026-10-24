@@ -1,7 +1,7 @@
 import { QueryClient } from "@tanstack/svelte-query";
 import { describe, expect, it } from "vitest";
 import { type AlbumId, type LibraryAlbumPage, type AlbumRow } from "#lib/native/bindings";
-import { type LibraryClient } from "#lib/native/native-clients";
+import { library } from "#lib/native/commands";
 import { AlbumRepository } from "./album-repository";
 import { LibraryQueryKeys } from "./library-query-keys";
 
@@ -22,9 +22,6 @@ const page = (items: AlbumRow[]): LibraryAlbumPage => ({
   nextCursor: null,
 });
 
-/** `cachedSummary` never calls the client, so the fake has no methods. */
-const fakeClient = (): LibraryClient => ({}) as LibraryClient;
-
 describe("AlbumRepository.cachedSummary", () => {
   it("reads the album by its ID from a cached album list", () => {
     const queryClient = new QueryClient();
@@ -38,7 +35,7 @@ describe("AlbumRepository.cachedSummary", () => {
       }),
       { pages: [page([summary(1969)])], pageParams: [null] },
     );
-    const repository = new AlbumRepository(fakeClient(), queryClient);
+    const repository = new AlbumRepository(library, queryClient);
 
     expect(repository.cachedSummary(albumId)).toEqual(summary(1969));
     expect(repository.cachedSummary("ffffffffffffffffffffffffffffffff" as AlbumId)).toBeNull();
@@ -54,14 +51,14 @@ describe("AlbumRepository.cachedSummary", () => {
       }),
       { pages: [page([summary(1969)])], pageParams: [null] },
     );
-    const repository = new AlbumRepository(fakeClient(), queryClient);
+    const repository = new AlbumRepository(library, queryClient);
 
     expect(repository.cachedSummary(albumId)).toEqual(summary(1969));
   });
 
   it("returns null without writing to the cache when no list holds the album", () => {
     const queryClient = new QueryClient();
-    const repository = new AlbumRepository(fakeClient(), queryClient);
+    const repository = new AlbumRepository(library, queryClient);
     const before = queryClient.getQueryCache().getAll().length;
 
     expect(repository.cachedSummary(albumId)).toBeNull();
@@ -80,7 +77,7 @@ describe("AlbumRepository.cachedSummary", () => {
     });
     const list = { pages: [page([summary(1969)])], pageParams: [null] };
     queryClient.setQueryData(listKey, list);
-    const repository = new AlbumRepository(fakeClient(), queryClient);
+    const repository = new AlbumRepository(library, queryClient);
 
     repository.cachedSummary(albumId);
 
