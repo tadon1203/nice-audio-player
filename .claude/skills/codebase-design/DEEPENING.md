@@ -26,7 +26,7 @@ Third-party services (Stripe, Twilio, etc.) you don't control. The deepened modu
 
 ## Seam discipline
 
-- **One adapter means a hypothetical seam. Two adapters means a real one.** Don't introduce a port unless at least two real adapters are justified. A test double does not count. A single-adapter seam is just indirection. See [ADR 0011](../../../docs/adr/0011-renderer-design.md).
+- **One adapter means a hypothetical seam. Two adapters means a real one.** Don't introduce a port unless at least two real adapters are justified. A test double does not count. A single-adapter seam is just indirection.
 - **One external seam.** A deep module has one seam, at its interface. Do not add internal seams for tests.
 
 ## Testing strategy: replace, don't layer

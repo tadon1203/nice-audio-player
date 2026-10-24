@@ -7,7 +7,7 @@ description: Test-driven development. Use when the user wants to build features 
 
 TDD is the red → green loop. This skill is the reference that makes that loop produce tests worth keeping: what a good test is, where tests go, how to replace a dependency, the anti-patterns, and the rules of the loop. Every section applies on every cycle: consult them before and during the loop, not after.
 
-When you explore the codebase, read `CONTEXT.md` and the ADRs for the area you work in. [ADR 0011](../../../docs/adr/0011-renderer-design.md) and [the coding standards](../../../docs/coding-standards.md#tests) state the test rules of this project.
+When you explore the codebase, read `CONTEXT.md` for the area you work in. [The coding standards](../../../docs/coding-standards.md#tests) state the test rules of this project.
 
 ## What a good test is
 

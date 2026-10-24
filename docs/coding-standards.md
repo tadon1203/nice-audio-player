@@ -1,8 +1,8 @@
 # Coding standards
 
-General best practice for Rust, TypeScript, and Svelte 5 overrides this project's docs, ADRs, and code. If a rule here conflicts with general best practice, change the rule. Do not follow the conflicting rule.
+General best practice for Rust, TypeScript, and Svelte 5 overrides this project's docs and code. If a rule here conflicts with general best practice, change the rule. Do not follow the conflicting rule.
 
-These are the rules for code and documentation that lint cannot check. Do not write a rule here if a lint or format tool enforces it. The tool configuration is the source of truth for those rules. The reasons are in the ADRs that each section links.
+These are the rules for code and documentation that lint cannot check. Do not write a rule here if a lint or format tool enforces it. The tool configuration is the source of truth for those rules.
 
 ## All code and documentation
 
@@ -93,8 +93,6 @@ A suffix has one meaning in the whole project. Do not use it for another meaning
 
 ## Errors and panics
 
-Reasons: [ADR 0010](adr/0010-failures-are-result-bugs-panic.md), [ADR 0007](adr/0007-failures-are-typed-exceptions-caught-in-three-places.md).
-
 - A failure that can happen is a `Result`. Examples: a missing file, a lost device, a corrupt database, bad input.
 - A bug panics. Examples: a broken invariant, an out-of-range index.
 - Use `expect` only for an invariant that the types cannot show, or for a failure at start-up. The message says why the call cannot fail. A message that only names the call is not a reason.
@@ -120,8 +118,6 @@ Reasons: [ADR 0010](adr/0010-failures-are-result-bugs-panic.md), [ADR 0007](adr/
 - Add a lint suppression only when the user agrees. Every `allow` in `[workspace.lints]` has a comment that gives the reason.
 
 ## Frontend
-
-Reasons: [ADR 0006](adr/0006-renderer-logic-in-classes-svelte-declarative.md), [ADR 0007](adr/0007-failures-are-typed-exceptions-caught-in-three-places.md), [ADR 0011](adr/0011-renderer-design.md).
 
 - The frontend is object-oriented by default. A state with rules is a class with `$state` fields. A pure calculation is a plain function.
 - A class gets its dependencies as constructor arguments.
@@ -155,7 +151,7 @@ Source: the Svelte documentation, "Best practices" and "When not to use `$effect
 ## Tests
 
 - Test through the public interface. Do not test private members.
-- Replace a dependency only at a real seam: a generated bindings module, a trait or interface with more than one implementation, and globals (timers, animation frames) through stubs and fake timers. Do not replace an internal collaborator. See [ADR 0011](adr/0011-renderer-design.md).
+- Replace a dependency only at a real seam: a generated bindings module, a trait or interface with more than one implementation, and globals (timers, animation frames) through stubs and fake timers. Do not replace an internal collaborator.
 - Keep unit tests of a pure function next to the function.
 
 ### Backend tests

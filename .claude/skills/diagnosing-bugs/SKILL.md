@@ -7,7 +7,7 @@ description: Diagnosis loop for hard bugs and performance regressions. Use when 
 
 A discipline for hard bugs. Skip phases only when explicitly justified.
 
-When you explore the codebase, read `CONTEXT.md` and the ADRs for the area you work in.
+When you explore the codebase, read `CONTEXT.md` for the area you work in.
 
 ## Redact
 

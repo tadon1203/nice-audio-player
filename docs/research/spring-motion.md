@@ -2,16 +2,16 @@
 
 Question: "I want to make as much motion as possible a spring (basically no overshoot). What's the appropriate way?"
 
-Context: [ADR 0005](../adr/0005-springs-for-all-motion-with-three-exceptions.md) went all-spring with the `motion` package; [ADR 0006](../adr/0006-three-durations-and-one-spring-for-interruptible-motion.md) backed out because of a spring-to-CSS conversion layer, the `motion` dependency, and a `visualDuration`/`bounce` vocabulary Svelte does not share. Today: three durations (`feedback` 100ms, `move` 300ms, `large` 420ms) with one ease-out (`cubicOut` / `cubic-bezier(0.33, 1, 0.68, 1)`), plus `settle`, a Svelte `Spring` for the Now Playing timeline and lyrics scroll (`src/lib/ui/motion/tokens.ts`).
+Context: An earlier design went all-spring with the `motion` package; a later one backed out because of a spring-to-CSS conversion layer, the `motion` dependency, and a `visualDuration`/`bounce` vocabulary Svelte does not share. Today: three durations (`feedback` 100ms, `move` 300ms, `large` 420ms) with one ease-out (`cubicOut` / `cubic-bezier(0.33, 1, 0.68, 1)`), plus `settle`, a Svelte `Spring` for the Now Playing timeline and lyrics scroll (`src/lib/ui/motion/tokens.ts`).
 
 Numbers marked _(computed)_ come from a throwaway Node script evaluating the formulas below and simulating Svelte's integrator line for line; they are not from a source.
 
 ## TL;DR
 
 - A critically damped spring (bounce 0) from rest has a closed form, so **no library is needed**: one ~25-line pure function can turn a _perceptual duration_ into (a) a JS easing `(t) => number` for Svelte transitions, `Tween`, `tweenNumber` and WAAPI, and (b) a CSS `linear()` string for CSS transitions. Both come from one formula, so they cannot disagree.
-- Fixed-duration spring easings get the spring's **shape** (soft start, long smooth tail). They **do not carry velocity** when interrupted. Only a real spring simulation (Svelte `Spring`, or a small analytic spring) does that. Keep that for the few values that are retargeted while moving (as ADR 0006 already does).
+- Fixed-duration spring easings get the spring's **shape** (soft start, long smooth tail). They **do not carry velocity** when interrupted. Only a real spring simulation (Svelte `Spring`, or a small analytic spring) does that. Keep that for the few values that are retargeted while moving (as the current design already does).
 - Svelte's `Spring` is **refresh-rate dependent**. At 60Hz `settle` is roughly Apple's 0.4s `.smooth`. At 144Hz it becomes overdamped (ζ ≈ 1.55) and its tail is slower (open Svelte issue [#10717](https://github.com/sveltejs/svelte/issues/10717)). A ~40-line analytic spring fixes this and uses the same perceptual-duration vocabulary.
-- Recommended: supersede ADR 0006 with one curve (a critically damped spring) and three perceptual durations. Keep reduced motion as a crossfade and progress motion linear. This avoids all three costs ADR 0006 rejected: no dependency, one tiny pure generator instead of a conversion layer, and the only vocabulary is "duration" (bounce is always 0, so it is not a parameter).
+- Recommended: replace the current motion design with one curve (a critically damped spring) and three perceptual durations. Keep reduced motion as a crossfade and progress motion linear. This avoids all three costs the earlier design rejected: no dependency, one tiny pure generator instead of a conversion layer, and the only vocabulary is "duration" (bounce is always 0, so it is not a parameter).
 
 ## 1. Mechanisms available without an animation library
 
@@ -60,7 +60,7 @@ None of the mechanisms handles reduced motion by itself. The existing seam (`res
 - `.smooth` is "a smooth spring … with no bounce" ([Animation.smooth](https://developer.apple.com/documentation/swiftui/animation/smooth)). `.snappy` has "a small amount of bounce" ([Animation.snappy](https://developer.apple.com/documentation/swiftui/animation/snappy)). `smooth(duration:extraBounce:)` defaults to duration 0.5 ([docs](<https://developer.apple.com/documentation/swiftui/animation/smooth(duration:extrabounce:)>)).
 - WWDC23 "Animate with springs" gives the conversion: `mass = 1`, `stiffness = (2π / duration)²`, `damping = (1 − bounce) · 4π / duration` for bounce ≥ 0. The talk also says a spring from rest "need[s] to preserve a velocity of 0 at the beginning" and that the perceptual duration is chosen to be predictable, unlike the settling duration ([WWDC23 session 10158, transcript and code at 19:26](https://developer.apple.com/videos/play/wwdc2023/10158/)).
 - With bounce 0, damping = 2√stiffness, so ζ = 1 and ω = 2π / duration.
-- For reference only: Motion's `visualDuration` uses `ω = 2π / (visualDuration · 1.2)`. So Motion's "0.4" is Apple's 0.48 ([motion-dom `spring.ts`](https://github.com/motiondivision/motion/blob/main/packages/motion-dom/src/animation/generators/spring.ts)). This is one reason the ADR 0005 numbers do not transfer one-to-one.
+- For reference only: Motion's `visualDuration` uses `ω = 2π / (visualDuration · 1.2)`. So Motion's "0.4" is Apple's 0.48 ([motion-dom `spring.ts`](https://github.com/motiondivision/motion/blob/main/packages/motion-dom/src/animation/generators/spring.ts)). This is one reason the earlier all-spring numbers do not transfer one-to-one.
 
 ### Critically damped closed form
 
@@ -105,12 +105,12 @@ Adaptive spacing with percentages reaches 0.2% error with 17 points (~230 chars)
 
 For comparison, Svelte's own keyframe sampling is one point per 16.7ms, so 26 points for 420ms. That is what `cubicOut` gets today.
 
-### Mapping to Svelte `Spring` units, and checking ADR 0006's numbers
+### Mapping to Svelte `Spring` units, and checking the earlier design's numbers
 
 - At exactly 60Hz (`dt = 1`), the per-tick update is `v ← v + k·δ − c·v`, `x ← x + v`. That is a continuous spring with `k = ω_f²` and `c = 2ζ·ω_f`, where `ω_f = ω / 60` is in radians per frame.
-- For d = 0.4s: `ω_f = 2π / 0.4 / 60 = 0.2618`, so `k = 0.06854` and `c = 0.5236`. **ADR 0006's 0.0685 / 0.5236 is the correct continuous mapping.**
+- For d = 0.4s: `ω_f = 2π / 0.4 / 60 = 0.2618`, so `k = 0.06854` and `c = 0.5236`. **The earlier design's 0.0685 / 0.5236 is the correct continuous mapping.**
 - The discrete integrator is less accurate than that. At 60Hz the simulated `settle` reaches 99% at **483ms**, while the continuous 0.4s spring does so at 423ms. 50% comes at 100ms vs 107ms _(computed)_. That is close enough to call it ".smooth 0.4s".
-- **Refresh-rate dependence (correction to the ADR):**
+- **Refresh-rate dependence (correction to the earlier numbers):**
   - `acceleration` is added to velocity once per tick, not scaled by `dt`. At refresh rate `f` the effective spring is `k' = k / h` and `c' = c / h`, with `h = 60 / f`, so ζ' = ζ / √h.
   - Simulated: 120Hz gives ζ ≈ 1.41 and t99 ≈ 542ms. 144Hz gives ζ ≈ 1.55 and t99 ≈ 549ms. 240Hz gives ζ = 2.0 and t99 ≈ 567ms. There is never overshoot.
   - The start (t50 ≈ 90ms) stays similar, but the tail gets longer and flatter on high-refresh displays.
@@ -176,7 +176,7 @@ Note that the easing shape does not depend on the duration: with a fixed ε it i
 
 ### Interruptible values stay true springs
 
-Which values: the Now Playing timeline (`now-playing-tween.svelte.ts`), lyrics scroll (`lyrics-follow.svelte.ts`), and anything newly found to reverse mid-flight (ADR 0006 named the queue panel and the Sleeve hand-off as candidates).
+Which values: the Now Playing timeline (`now-playing-tween.svelte.ts`), lyrics scroll (`lyrics-follow.svelte.ts`), and anything newly found to reverse mid-flight (the earlier design named the queue panel and the Sleeve hand-off as candidates).
 
 **Option A (minimal):** keep Svelte `Spring` and derive its parameters from the same token:
 
@@ -236,12 +236,12 @@ A `.svelte.ts` wrapper can expose `current` as `$state`. With this in place, Sve
 
 ### Reduced motion and progress motion
 
-- **Reduced motion:** unchanged. Every movement becomes the 100ms crossfade. It can use the same spring curve with a fixed 100ms length, so it keeps one curve but its own duration, like ADR 0005's `crossfade`. Retargetable springs `jump`.
+- **Reduced motion:** unchanged. Every movement becomes the 100ms crossfade. It can use the same spring curve with a fixed 100ms length, so it keeps one curve but its own duration, like the earlier design's `crossfade`. Retargetable springs `jump`.
 - **Progress motion:** unchanged (linear, proportional to time or work). It is not a spring and not a token.
 
-### What the ADR needs
+### What the new design needs
 
-Write **ADR 0007, superseding 0006**. Amending is not enough, because the curve changes for every movement and the token meaning changes from total length to perceptual duration. Content:
+Write it as one replacement of the current design, not as an amendment, because the curve changes for every movement and the token meaning changes from total length to perceptual duration. Content:
 
 - One curve: a critically damped spring (Apple's bounce 0), generated in-house from its closed form.
 - Three perceptual durations, plus the crossfade.
@@ -250,7 +250,7 @@ Write **ADR 0007, superseding 0006**. Amending is not enough, because the curve 
 
 Of 0006's rejected costs:
 
-| ADR 0006 cost                        | Status under this design                                                                                                                                                              |
+| Earlier design's cost                | Status under this design                                                                                                                                                              |
 | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `motion` dependency                  | Avoided. A closed form with no library.                                                                                                                                               |
 | Spring-to-CSS conversion layer       | Shrinks to one pure function. It is computed once, not per token, because the shape is fixed. Today's `tokens.test` / `css-motion.test` style tests can assert that JS and CSS agree. |
@@ -270,7 +270,7 @@ Also update DESIGN.md principle 7 ("three durations … with one ease-out curve"
 - **Interruption is still a velocity reset** for everything except the true springs (§3). If a CSS-only state reverses often (hover in and out), the spring curve feels softer than `cubicOut` but is not velocity-matched.
 - **Performance:**
   - Transform and opacity animations with a `linear()` timing function, or with many WAAPI keyframes (what Svelte already emits), stay off the main thread when composited ([Svelte docs: "web animations can run off the main thread"](https://svelte.dev/docs/svelte/transition)).
-  - JS springs (`Spring`, the analytic spring, `Tween`) run on rAF on the main thread. That is fine for one or two values, as ADR 0006 limits them.
+  - JS springs (`Spring`, the analytic spring, `Tween`) run on rAF on the main thread. That is fine for one or two values, as the earlier design limits them.
   - Not verified here: whether Chromium composites `linear()` easings on every property path. Check with DevTools "Animations"/Performance once.
 - **Refresh rate:** a fixed-duration curve looks the same at any Hz. Svelte `Spring` does not (§2). This is the main reason to prefer option B for the retargetable values.
 

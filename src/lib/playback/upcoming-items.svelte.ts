@@ -3,7 +3,7 @@ import type { Playback } from "./playback.svelte";
 
 /** Upcoming items are read this many at a time from the backend. */
 const CHUNK = 100;
-/** A failed chunk read is tried this many times in all. See ADR 0007. */
+/** A failed chunk read is tried this many times in all. */
 const MAX_ATTEMPTS = 3;
 const RETRY_DELAY_MS = 1000;
 

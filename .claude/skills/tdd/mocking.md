@@ -15,7 +15,7 @@ Everything else runs for real. Do not mock:
 
 ## Do not add a seam for a test
 
-Do not add an interface, a parameter, an export, or a constructor argument only so that a test can replace something. A seam that only tests use is a second path through the code, and the app does not run it. See [ADR 0011](../../../docs/adr/0011-renderer-design.md).
+Do not add an interface, a parameter, an export, or a constructor argument only so that a test can replace something. A seam that only tests use is a second path through the code, and the app does not run it.
 
 If a dependency has one real implementation and no real second one, do not put an interface in front of it. Pass the real object. If the dependency is a third-party service, the test must still use the real code path. Use a real local stand-in if one exists, or accept the gap and say so in the ticket.
 

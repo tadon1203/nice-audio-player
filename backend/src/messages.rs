@@ -4,8 +4,7 @@
 //! They do not know about Tauri or about each other.
 //!
 //! A state topic carries its whole value. The host reads the value when it sends, so several
-//! changes can become one message. An occurrence carries its value and is never merged. See ADR
-//! 0008.
+//! changes can become one message. An occurrence carries its value and is never merged.
 
 use std::sync::Arc;
 

@@ -32,7 +32,7 @@ The language of Nice Audio Player. Use these terms in code, docs, and tickets. D
 - **Playback**: one queue item being played. Every track that loads gets a new playback id. A seek or an output device switch keeps the same Playback.
 - **Output stream**: the device stream that playback opens. It can span several Playbacks.
 - **Gapless**: consecutive tracks of the same audio format play with no silence between them.
-- **Playback clock**: the single source of the playing position. The Backend reports it while a track plays. See [ADR 0004](./docs/adr/0004-time-is-drawn-by-the-compositor-not-a-frame-loop.md).
+- **Playback clock**: the single source of the playing position. The Backend reports it while a track plays.
 - **Waveform**: the RMS and peak levels of the loaded Playback, keyed by its playback id.
 
 ## Meters

@@ -59,7 +59,7 @@ When designing an interface, ask:
 
 ## Principles
 
-- **Depth is a property of the interface, not the implementation.** A deep module can be internally composed of small parts; they just aren't part of the interface. A module has one **external seam**, at its interface. Do not add internal seams for tests. See [ADR 0011](../../../docs/adr/0011-renderer-design.md).
+- **Depth is a property of the interface, not the implementation.** A deep module can be internally composed of small parts; they just aren't part of the interface. A module has one **external seam**, at its interface. Do not add internal seams for tests.
 - **The interface is the test surface.** Callers and tests cross the same seam. If you want to test *past* the interface, the module is probably the wrong shape.
 - **One adapter means a hypothetical seam. Two adapters means a real one.** Don't introduce a seam unless something actually varies across it. A test double does not count as an adapter.
 
@@ -75,7 +75,7 @@ Apply these to a module that is being designed and to a module that already exis
 
 ## Designing for testability
 
-Testability comes from the shape of the interface. Do not add a seam only so a test can reach or replace something. The rules for tests are in the `tdd` skill, and [ADR 0011](../../../docs/adr/0011-renderer-design.md) states the project rule.
+Testability comes from the shape of the interface. Do not add a seam only so a test can reach or replace something. The rules for tests are in the `tdd` skill.
 
 1. **Accept what the app already supplies.** A dependency that the caller passes in is easy to replace at a real seam. A dependency that a function creates inside itself is not.
 

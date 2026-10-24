@@ -48,7 +48,7 @@ Three layers, one direction of control. The terms are defined in [CONTEXT.md](./
 
 - **Renderer** (`src`): SvelteKit (Svelte 5, `adapter-static`, SPA), built by Vite. It composes views and caches native state. It holds no second source of truth.
 - **Host** (`src-tauri`): Tauri 2. It runs the Windows WebView and connects the Backend to the window and the operating system. It holds no domain rules.
-- **Backend** (`backend`): a Rust crate. It owns the domain and the persistent state: the Library, Playback, and settings. It knows nothing about Tauri. See [ADR 0001](./docs/adr/0001-rust-owns-domain-and-persistent-state.md).
+- **Backend** (`backend`): a Rust crate. It owns the domain and the persistent state: the Library, Playback, and settings. It knows nothing about Tauri.
 
 Communication: one path for requests, four for pushes.
 
@@ -91,7 +91,7 @@ The Renderer updates its caches and views from these.
 
 - The IPC contract is defined once, in the Backend. The Renderer's bindings are generated from it. Nobody edits them by hand.
 - A Host command that blocks does not run on the main thread.
-- Backend services know nothing about the Host or each other. They report through a message sink, and what each message carries is in [ADR 0008](./docs/adr/0008-backend-state-occurrences-and-measurements.md).
+- Backend services know nothing about the Host or each other. They report through a message sink.
 - The Host reaches the Backend only through `BackendApp` and its public modules.
 - Settings are read and written through the IPC of the area that owns them. Appearance is read from `app_connect` and written with `appearanceUpdate`; playback preferences are read and written through the playback commands.
 - A state is its whole value with a revision. The Renderer keeps a value only if its revision is newer than the one it holds, whether it came on the channel or as a command answer.
