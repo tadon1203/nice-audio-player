@@ -49,7 +49,7 @@ pub(crate) struct PcmProducer {
     finished: Arc<AtomicBool>,
 }
 
-pub(crate) struct PcmConsumer {
+pub struct PcmConsumer {
     consumer: ringbuf::HeapCons<f32>,
     room: SyncSender<()>,
     finished: Arc<AtomicBool>,

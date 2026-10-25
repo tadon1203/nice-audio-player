@@ -1,5 +1,6 @@
 use super::{Fixture, fixture};
 use crate::app::{BackendApp, PlaybackContext};
+use crate::audio::fake_output::FakeOutput;
 use crate::audio::playback::PlaybackServiceError;
 use crate::errors::CommandError;
 use crate::ids::{AlbumId, ArtistId, TrackId};
@@ -9,7 +10,7 @@ use crate::library::models::{ListRequest, SortDirection, TrackSortKey};
 use crate::library::tracks::PlaybackSourceError;
 use crate::lyrics::LyricsCommandError;
 
-use crate::test_support::{RecordingMessageListener, TestDirectory};
+use crate::test_support::{NotificationLog, TestDirectory};
 
 /// A backend whose library database cannot be opened, so the Library is absent. A file where the
 /// data directory should be stops the database from being created; a damaged database alone is
@@ -19,8 +20,9 @@ fn fixture_without_library() -> Fixture {
     let data_dir = directory.file("data");
     std::fs::write(&data_dir, "a file, so the data directory cannot be created")
         .expect("a blocker");
-    let (recorded, sink) = RecordingMessageListener::shared();
-    let backend = BackendApp::initialize_for_tests(data_dir, sink);
+    let (recorded, sink) = NotificationLog::shared();
+    let backend = BackendApp::initialize(data_dir, sink, Box::new(FakeOutput::new()))
+        .expect("the test backend starts");
     Fixture {
         backend,
         recorded,

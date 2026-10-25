@@ -28,7 +28,7 @@ impl ChannelCount {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub(crate) struct PcmSpec {
+pub struct PcmSpec {
     sample_rate: SampleRate,
     channel_count: ChannelCount,
 }

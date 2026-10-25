@@ -1,6 +1,6 @@
 use super::*;
 use crate::ids::PlaybackId;
-use crate::test_support::hub_for_tests;
+use crate::test_support::state_store_for_tests;
 
 #[test]
 fn a_start_plays_as_soon_as_the_prebuffer_is_ready() {
@@ -69,9 +69,9 @@ fn a_start_through_a_service_thread_needs_no_poll() {
             extension: "wav".into(),
         },
     ));
-    let messages = crate::test_support::null_message_listener();
+    let messages = crate::test_support::null_notifier();
     let service = PlaybackService::start_with_backend(
-        hub_for_tests(Arc::clone(&messages)),
+        state_store_for_tests(messages.clone()),
         messages,
         PlaybackPreferences::default(),
         Arc::new(|_| {}),
@@ -213,7 +213,7 @@ fn a_tick_publishes_the_position_the_speakers_reached_without_a_new_snapshot() {
         harness.position().unwrap().playback_id,
         session(&started).playback_id
     );
-    assert_eq!(harness.sent()[sent..], [Sent::Position]);
+    assert_eq!(harness.sent()[sent..], [Notification::PositionChanged]);
     assert_eq!(harness.snapshot(), started);
 }
 
@@ -261,7 +261,7 @@ fn previous_becomes_available_once_the_track_has_played_a_while() {
     assert!(harness.snapshot().base().can_go_previous);
     assert_eq!(
         harness.sent().last(),
-        Some(&Sent::State(StateTopic::Playback))
+        Some(&Notification::StateChanged(StateTopic::Playback))
     );
 }
 

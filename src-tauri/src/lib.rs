@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
-use backend::app::BackendApp;
+use backend::app::{BackendApp, CpalBackend};
+use backend::messages::Notifier;
 use session::Subscriber;
 use tauri::Manager;
 
@@ -75,8 +76,8 @@ pub fn run() {
                 None => app.path().app_data_dir()?,
             };
             app.manage(artwork::ArtworkDir(data_dir.clone()));
-            let (listener, pending) = session::message_channel();
-            let backend = BackendApp::initialize(data_dir, listener)
+            let (notifier, notifications) = Notifier::channel();
+            let backend = BackendApp::initialize(data_dir, notifier, Box::new(CpalBackend))
                 .inspect_err(|cause| log::warn!("host.backend.startup_failed cause={cause}"))
                 .map_err(|_| std::io::Error::other("backend startup failed"))?;
             let backend = Arc::new(backend);
@@ -85,7 +86,7 @@ pub fn run() {
                 backend: Arc::clone(&backend),
                 subscriber: Arc::clone(&subscriber),
             });
-            session::start_dispatcher(backend, subscriber, pending);
+            session::start_dispatcher(backend, subscriber, notifications);
             Ok(())
         })
         .invoke_handler(bindings::builder().invoke_handler())

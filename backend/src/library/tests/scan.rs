@@ -3,8 +3,8 @@
 use crate::library::database::Database;
 use crate::library::directories;
 use crate::library::models::{ScanFailure, ScanState, ScanStatus};
-use crate::messages::{StateValue, Versioned};
-use crate::test_support::{TestDirectory, hub_for_tests, null_message_listener, write_pcm_i16_wav};
+use crate::messages::Versioned;
+use crate::test_support::{TestDirectory, null_notifier, state_store_for_tests, write_pcm_i16_wav};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64};
 
@@ -61,20 +61,20 @@ fn run_versioned(
             dirs: dirs.map(<[PathBuf]>::to_vec),
         })
         .collect();
-    let hub = hub_for_tests(null_message_listener());
-    hub.publish(StateValue::Scan(ScanState {
+    let state_store = state_store_for_tests(null_notifier());
+    state_store.set_scan(ScanState {
         state: ScanStatus::Running,
         ..ScanState::idle()
-    }));
+    });
     crate::library::scanner::run(
         &fixture.database,
         &jobs,
-        &hub,
+        &state_store,
         &fixture.version,
         &AtomicBool::new(cancelled),
     );
 
-    hub.read(|published| published.scan.clone())
+    state_store.scan()
 }
 
 #[test]

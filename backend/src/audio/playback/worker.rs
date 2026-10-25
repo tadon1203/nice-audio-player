@@ -41,8 +41,8 @@ use crate::audio::timebase::millis_to_frame;
 use crate::audio::volume::{AtomicEffectiveGain, VolumeState};
 use crate::errors::CommandError;
 use crate::ids::{PlaybackId, QueueItemId, TrackId};
-use crate::messages::{SharedMessageListener, Versioned};
-use crate::state_hub::StateHub;
+use crate::messages::{Notifier, Versioned};
+use crate::state_store::StateStore;
 use log::{error, info};
 use rand::{SeedableRng, rngs::StdRng};
 
@@ -138,12 +138,12 @@ enum PipelineOwner {
 
 /// The channels and shared state the service hands to the worker thread.
 pub(super) struct WorkerLinks {
-    pub hub: Arc<StateHub>,
+    pub state_store: Arc<StateStore>,
     pub position: Arc<RwLock<Option<PlaybackPosition>>>,
     pub effective_gain: AtomicEffectiveGain,
     pub meter: MeterHub,
     pub inbox: Inbox,
-    pub messages: SharedMessageListener,
+    pub messages: Notifier,
     pub observer: PreferencesObserver,
     pub backend: Box<dyn OutputBackend>,
     /// Where queue entries get their metadata.
@@ -175,10 +175,10 @@ pub(super) struct PlaybackWorker {
     effective_gain: AtomicEffectiveGain,
     meter: MeterHub,
     output_selection: AudioOutputSelection,
-    hub: Arc<StateHub>,
+    state_store: Arc<StateStore>,
     position: Arc<RwLock<Option<PlaybackPosition>>>,
     inbox: Inbox,
-    messages: SharedMessageListener,
+    messages: Notifier,
     observer: PreferencesObserver,
     backend: Box<dyn OutputBackend>,
 }
@@ -208,7 +208,7 @@ impl PlaybackWorker {
             effective_gain: links.effective_gain,
             meter: links.meter,
             output_selection,
-            hub: links.hub,
+            state_store: links.state_store,
             position: links.position,
             inbox: links.inbox,
             messages: links.messages,

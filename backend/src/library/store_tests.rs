@@ -8,7 +8,7 @@ use crate::library::models::*;
 use crate::library::text::{SortTags, TrackKeys, album_edition_of};
 use crate::library::tracks::{PlaybackLookupError, PlaybackSourceError};
 use crate::library::{Library, summary};
-use crate::test_support::{TestDirectory, hub_for_tests, null_message_listener};
+use crate::test_support::{TestDirectory, null_notifier, state_store_for_tests};
 use rusqlite::params;
 use std::path::PathBuf;
 
@@ -62,7 +62,7 @@ fn fixture() -> Fixture {
     std::fs::create_dir_all(&music).unwrap();
     let library = Library::open(
         &directory.file("data"),
-        hub_for_tests(null_message_listener()),
+        state_store_for_tests(null_notifier()),
     )
     .expect("library");
     let database = library.database.clone();
@@ -357,12 +357,7 @@ fn an_album_list_by_year_is_indexed_by_year_with_the_undated_last() {
     assert_eq!(
         entries
             .iter()
-            .map(|entry| (
-                entry.label.as_str(),
-                entry.kind,
-                entry.start,
-                entry.count
-            ))
+            .map(|entry| (entry.label.as_str(), entry.kind, entry.start, entry.count))
             .collect::<Vec<_>>(),
         [
             ("2004", LetterIndexEntryKind::Letter, 0, 1),
@@ -408,7 +403,7 @@ fn the_version_changes_when_a_directory_is_added() {
     std::fs::create_dir_all(&music).unwrap();
     let library = Library::open(
         &directory.file("data"),
-        hub_for_tests(null_message_listener()),
+        state_store_for_tests(null_notifier()),
     )
     .expect("library");
     let before = library.version();

@@ -33,7 +33,7 @@ pub(crate) struct OutputStreamId(pub(crate) u64);
 /// Identifies one pipeline: the decode thread and the queue it fills. A stream plays one
 /// pipeline at a time; a seek replaces the pipeline and keeps the stream.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub(crate) struct PipelineId(pub(crate) u64);
+pub struct PipelineId(pub(crate) u64);
 
 /// What a running stream reports on its own.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -69,7 +69,7 @@ pub(crate) type OutputEvents = Arc<dyn Fn(OutputEvent) + Send + Sync>;
 
 /// What a stream's callback shares with the rest of the application.
 #[derive(Clone)]
-pub(crate) struct OutputLinks {
+pub struct OutputLinks {
     pub(crate) gain: AtomicEffectiveGain,
     pub(crate) events: OutputEvents,
     /// Where the callback copies what it plays for the meters.
@@ -104,7 +104,7 @@ impl LatestPosition {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum AudioOutputError {
+pub enum AudioOutputError {
     NoOutputDevice,
     ConfigurationQueryFailed,
     UnsupportedConfiguration,
@@ -135,7 +135,7 @@ pub(crate) struct PreparedOutputConfig {
 }
 
 /// A stream that exists but may not be running yet, with the queue that feeds it.
-pub(crate) struct PreparedOutput {
+pub struct PreparedOutput {
     pub(crate) stream: Box<dyn OutputStream>,
     pub(crate) producer: PcmProducer,
     pub(crate) config: PreparedOutputConfig,
@@ -161,7 +161,7 @@ pub(crate) struct Chain {
 type ChainHandoff = triple_buffer::Input<Option<Chain>>;
 type ChainSlot = triple_buffer::Output<Option<Chain>>;
 
-pub(crate) trait OutputBackend: Send {
+pub trait OutputBackend: Send {
     /// Checks that a selection names a usable device and says which one it is.
     fn resolve(
         &self,
@@ -179,7 +179,7 @@ pub(crate) trait OutputBackend: Send {
     ) -> Result<PreparedOutput, AudioOutputError>;
 }
 
-pub(crate) trait OutputStream {
+pub trait OutputStream {
     fn start(&self) -> Result<(), AudioOutputError>;
     fn pause(&self) -> Result<(), AudioOutputError>;
     /// The stream clock; a `FinalFrames` event is due once it reaches the event's end time.
@@ -207,7 +207,7 @@ pub(crate) trait OutputStream {
     fn adopt_next(&mut self, pipeline: PipelineId);
 }
 
-pub(crate) struct CpalBackend;
+pub struct CpalBackend;
 
 impl OutputBackend for CpalBackend {
     fn resolve(

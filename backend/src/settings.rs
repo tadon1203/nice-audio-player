@@ -23,8 +23,8 @@ use log::{error, warn};
 use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::audio::playback::PlaybackPreferences;
-use crate::messages::{StateValue, Versioned};
-use crate::state_hub::StateHub;
+use crate::messages::Versioned;
+use crate::state_store::StateStore;
 
 const FILE_NAME: &str = "settings.json";
 const WRITE_DEBOUNCE: Duration = Duration::from_millis(400);
@@ -103,7 +103,7 @@ impl Settings {
 
 pub(crate) struct SettingsService {
     state: Mutex<Settings>,
-    hub: Arc<StateHub>,
+    state_store: Arc<StateStore>,
     writer: Mutex<Option<Sender<Settings>>>,
     writer_thread: Mutex<Option<JoinHandle<()>>>,
 }
@@ -116,8 +116,12 @@ pub(crate) fn load_saved(directory: &Path) -> Settings {
 
 impl SettingsService {
     /// Starts the writer for the settings file in `directory`. `settings` is what `load_saved`
-    /// read from it, and the appearance in `hub` must already be that appearance.
-    pub(crate) fn start(directory: &Path, settings: Settings, hub: Arc<StateHub>) -> Self {
+    /// read from it, and the appearance in `state_store` must already be that appearance.
+    pub(crate) fn start(
+        directory: &Path,
+        settings: Settings,
+        state_store: Arc<StateStore>,
+    ) -> Self {
         let path = directory.join(FILE_NAME);
         let (sender, receiver) = mpsc::channel();
         let writer_thread = thread::Builder::new()
@@ -127,7 +131,7 @@ impl SettingsService {
             .ok();
         Self {
             state: Mutex::new(settings),
-            hub,
+            state_store,
             writer: Mutex::new(writer_thread.is_some().then_some(sender)),
             writer_thread: Mutex::new(writer_thread),
         }
@@ -158,9 +162,7 @@ impl SettingsService {
         let before = state.clone();
         change(&mut state);
         let changed = *state != before;
-        let version = self
-            .hub
-            .publish(StateValue::Appearance(state.appearance.clone()));
+        let version = self.state_store.set_appearance(state.appearance.clone());
         let appearance = Versioned {
             version,
             value: state.appearance.clone(),
@@ -261,11 +263,9 @@ mod tests {
     use super::*;
     use crate::audio::devices::AudioOutputSelection;
     use crate::audio::playback::RepeatMode;
-    use crate::messages::{SharedMessageListener, StateTopic};
-    use crate::state_hub::{Published, StateHub};
-    use crate::test_support::{
-        RecordingMessageListener, Sent, TestDirectory, null_message_listener,
-    };
+    use crate::messages::{Notification, Notifier, StateTopic};
+    use crate::state_store::StateStore;
+    use crate::test_support::{NotificationLog, TestDirectory, null_notifier};
     use std::path::PathBuf;
 
     fn directory() -> (TestDirectory, PathBuf) {
@@ -275,17 +275,17 @@ mod tests {
         (directory, path)
     }
 
-    /// A service over the settings saved in `path`, publishing to `listener`.
-    fn load(path: &Path, listener: SharedMessageListener) -> SettingsService {
+    /// A service over the settings saved in `path`, notifying through `notifier`.
+    fn load(path: &Path, notifier: Notifier) -> SettingsService {
         let settings = load_saved(path);
-        let hub = Arc::new(StateHub::new(Published::initial(&settings), listener));
-        SettingsService::start(path, settings, hub)
+        let state_store = Arc::new(StateStore::new(&settings, notifier));
+        SettingsService::start(path, settings, state_store)
     }
 
     #[test]
     fn starts_from_defaults_without_a_file() {
         let (_guard, path) = directory();
-        let service = load(&path, null_message_listener());
+        let service = load(&path, null_notifier());
         assert_eq!(service.get(), Settings::default());
         assert!(service.get().appearance.artwork_backdrop);
     }
@@ -293,7 +293,7 @@ mod tests {
     #[test]
     fn saved_changes_are_restored_on_the_next_start() {
         let (_guard, path) = directory();
-        let service = load(&path, null_message_listener());
+        let service = load(&path, null_notifier());
         service.appearance_update(&AppearancePatch {
             artwork_backdrop: Some(false),
             calm_motion: Some(true),
@@ -309,7 +309,7 @@ mod tests {
         });
         service.shutdown();
 
-        let restored = load(&path, null_message_listener()).get();
+        let restored = load(&path, null_notifier()).get();
         assert!(!restored.appearance.artwork_backdrop);
         assert!(restored.appearance.calm_motion);
         assert_eq!(restored.playback.volume, 0.4);
@@ -331,7 +331,7 @@ mod tests {
             r#"{ "playback": { "volume": 0.25 } }"#,
         )
         .unwrap();
-        let settings = load(&path, null_message_listener()).get();
+        let settings = load(&path, null_notifier()).get();
         assert_eq!(settings.playback.volume, 0.25);
         assert!(!settings.playback.muted);
         assert!(settings.appearance.artwork_backdrop);
@@ -343,14 +343,12 @@ mod tests {
         let (_guard, path) = directory();
         std::fs::write(path.join(FILE_NAME), r#"{ "playback": { "volume": 7.0 } }"#).unwrap();
         assert_eq!(
-            load(&path, null_message_listener())
-                .playback_preferences()
-                .volume,
+            load(&path, null_notifier()).playback_preferences().volume,
             1.0
         );
 
         std::fs::write(path.join(FILE_NAME), "not json").unwrap();
-        let settings = load(&path, null_message_listener()).get();
+        let settings = load(&path, null_notifier()).get();
         assert_eq!(settings, Settings::default());
         assert!(path.join("settings.json.bad").exists());
     }
@@ -358,7 +356,7 @@ mod tests {
     #[test]
     fn only_renderer_visible_changes_are_announced() {
         let (_guard, path) = directory();
-        let (recorder, sink) = RecordingMessageListener::shared();
+        let (recorder, sink) = NotificationLog::shared();
         let service = load(&path, sink);
 
         service.record_playback(PlaybackPreferences {
@@ -373,13 +371,16 @@ mod tests {
         };
         service.appearance_update(&change);
         service.appearance_update(&change);
-        assert_eq!(recorder.sent(), vec![Sent::State(StateTopic::Appearance)]);
+        assert_eq!(
+            recorder.sent(),
+            vec![Notification::StateChanged(StateTopic::Appearance)]
+        );
     }
 
     #[test]
     fn the_appearance_version_counts_appearance_changes_only() {
         let (_guard, path) = directory();
-        let service = load(&path, null_message_listener());
+        let service = load(&path, null_notifier());
         assert_eq!(
             service
                 .appearance_update(&AppearancePatch::default())

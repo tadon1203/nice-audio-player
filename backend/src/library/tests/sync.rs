@@ -5,9 +5,9 @@
 use crate::library::Library;
 use crate::library::database::Database;
 use crate::library::models::{ListRequest, ScanStatus, SortDirection, TrackSortKey};
-use crate::state_hub::StateHub;
+use crate::state_store::StateStore;
 use crate::test_support::{
-    TestDirectory, hub_for_tests, null_message_listener, wait_until, write_pcm_i16_wav,
+    TestDirectory, null_notifier, state_store_for_tests, wait_until, write_pcm_i16_wav,
 };
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -19,15 +19,16 @@ struct Harness {
     directory: TestDirectory,
     music: PathBuf,
     library: Library,
-    hub: Arc<StateHub>,
+    state_store: Arc<StateStore>,
 }
 
 fn harness() -> Harness {
     let directory = TestDirectory::new();
     let music = directory.file("music");
     std::fs::create_dir_all(&music).unwrap();
-    let hub = hub_for_tests(null_message_listener());
-    let library = Library::open(&directory.file("data"), Arc::clone(&hub)).expect("open library");
+    let state_store = state_store_for_tests(null_notifier());
+    let library =
+        Library::open(&directory.file("data"), Arc::clone(&state_store)).expect("open library");
     library
         .add_directory(music.clone())
         .expect("register directory");
@@ -35,7 +36,7 @@ fn harness() -> Harness {
         directory,
         music,
         library,
-        hub,
+        state_store,
     }
 }
 
@@ -70,7 +71,7 @@ impl Harness {
     }
 
     fn scan_state(&self) -> ScanStatus {
-        self.hub.read(|published| published.scan.value.state)
+        self.state_store.scan().value.state
     }
 
     fn wait_for_first_scan(&self) {

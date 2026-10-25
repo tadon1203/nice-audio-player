@@ -1,10 +1,11 @@
 use super::fixture;
 use crate::app::{BackendApp, PlaybackContext, PlaybackWaveform};
+use crate::audio::fake_output::FakeOutput;
 use crate::audio::playback::{PlaybackServiceError, RepeatMode};
 use crate::ids::TrackId;
 use crate::library::models::{ListRequest, SortDirection, TrackSortKey};
-use crate::messages::{BackendMessage, StateTopic, StateValue};
-use crate::test_support::{RecordingMessageListener, Sent, TestDirectory, write_pcm_i16_wav};
+use crate::messages::{BackendMessage, Notification, StateTopic, StateValue};
+use crate::test_support::{NotificationLog, TestDirectory, write_pcm_i16_wav};
 use std::time::{Duration, Instant};
 
 fn title_order() -> ListRequest<TrackSortKey> {
@@ -31,11 +32,11 @@ fn wait_for_tracks(backend: &BackendApp, count: usize) -> Vec<TrackId> {
 }
 
 /// How many times the Waveform topic was announced to the host.
-fn waveform_announcements(recorded: &RecordingMessageListener) -> usize {
+fn waveform_announcements(recorded: &NotificationLog) -> usize {
     recorded
         .sent()
         .iter()
-        .filter(|sent| **sent == Sent::State(StateTopic::Waveform))
+        .filter(|sent| **sent == Notification::StateChanged(StateTopic::Waveform))
         .count()
 }
 
@@ -123,8 +124,9 @@ fn previous_back_to_a_track_that_played_before_shows_its_waveform() {
     write_pcm_i16_wav(&music.join("b.wav"), 8_000, 1, &[8_000i16; 8_000]);
     let data_dir = directory.file("data");
     std::fs::create_dir_all(&data_dir).expect("data directory");
-    let (recorded, sink) = RecordingMessageListener::shared();
-    let backend = BackendApp::initialize_for_tests(data_dir, sink);
+    let (recorded, sink) = NotificationLog::shared();
+    let backend = BackendApp::initialize(data_dir, sink, Box::new(FakeOutput::new()))
+        .expect("the test backend starts");
     backend
         .add_directory(music)
         .expect("register the music directory");

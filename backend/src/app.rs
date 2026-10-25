@@ -7,8 +7,15 @@ mod tests;
 
 pub use playback_context::PlaybackContext;
 // The types the Host names in commands and state. Each one is defined in the module that owns it.
+pub use crate::audio::devices::DeviceResolutionError;
 pub use crate::audio::devices::{AudioOutputDevice, AudioOutputSelection};
 pub use crate::audio::meter::MeterHub;
+pub use crate::audio::output::{
+    AudioOutputError, CpalBackend, OutputBackend, OutputLinks, OutputStream, PipelineId,
+    PreparedOutput,
+};
+pub use crate::audio::pcm::PcmSpec;
+pub use crate::audio::pcm_queue::PcmConsumer;
 pub use crate::audio::playback::{
     CurrentPlayback, PlaybackFailureCode, PlaybackItem, PlaybackPosition, PlaybackQueueItem,
     PlaybackState, QueueState, QueueWindow, RepeatMode, StartedBy,
@@ -27,7 +34,6 @@ pub use crate::settings::{Appearance, AppearancePatch};
 
 use crate::audio::{
     devices::{self, AudioDeviceListError},
-    output::{CpalBackend, OutputBackend},
     playback::{
         NoTracks, PlaybackService, PlaybackServiceError, TrackListener, TrackResolver, TrackSource,
     },
@@ -40,9 +46,9 @@ use crate::library::{
     artwork::{self},
 };
 use crate::lyrics::{LyricsCommandError, LyricsService, model::LyricsTrackContext};
-use crate::messages::{BackendMessage, SharedMessageListener, StateTopic};
+use crate::messages::{BackendMessage, Notifier, StateTopic};
 use crate::settings::{SettingsService, load_saved};
-use crate::state_hub::{Published, StateHub};
+use crate::state_store::StateStore;
 use playback_context::LibraryTracks;
 use std::{
     path::{Path, PathBuf},
@@ -61,47 +67,30 @@ pub struct BackendApp {
     library: Result<Library, LibraryUnavailableReason>,
     settings: Arc<SettingsService>,
     /// Every published state value. The services publish into it, and the Host reads it.
-    hub: Arc<StateHub>,
+    state_store: Arc<StateStore>,
     data_dir: PathBuf,
 }
 
 impl BackendApp {
-    /// Starts every service with the platform's audio output. `messages` is how they tell the
-    /// host that something changed.
+    /// Starts every service on `output`: `CpalBackend` in the Host, a fake device in tests.
+    /// `messages` is how they tell the host that something changed.
     pub fn initialize(
         data_dir: PathBuf,
-        messages: SharedMessageListener,
-    ) -> Result<Self, BackendError> {
-        Self::start(data_dir, messages, Box::new(CpalBackend))
-    }
-
-    /// Like `initialize`, with a fake output device instead of the platform's.
-    #[cfg(test)]
-    pub(crate) fn initialize_for_tests(data_dir: PathBuf, messages: SharedMessageListener) -> Self {
-        Self::start(
-            data_dir,
-            messages,
-            Box::new(crate::audio::fake_output::FakeOutput::new()),
-        )
-        .expect("the test backend starts")
-    }
-
-    fn start(
-        data_dir: PathBuf,
-        messages: SharedMessageListener,
+        messages: Notifier,
         output: Box<dyn OutputBackend>,
     ) -> Result<Self, BackendError> {
         let saved = load_saved(&data_dir);
-        let hub = Arc::new(StateHub::new(
-            Published::initial(&saved),
-            Arc::clone(&messages),
+        let state_store = Arc::new(StateStore::new(&saved, messages.clone()));
+        let settings = Arc::new(SettingsService::start(
+            &data_dir,
+            saved,
+            Arc::clone(&state_store),
         ));
-        let settings = Arc::new(SettingsService::start(&data_dir, saved, Arc::clone(&hub)));
         let waveforms = Arc::new(Waveforms::start(
             data_dir.join("waveforms"),
-            Arc::clone(&hub),
+            Arc::clone(&state_store),
         ));
-        let library = Library::open(&data_dir, Arc::clone(&hub));
+        let library = Library::open(&data_dir, Arc::clone(&state_store));
         let remember = Arc::clone(&settings);
         let tracks: Box<dyn TrackSource> = match &library {
             Ok(library) => Box::new(LibraryTracks(library.clone())),
@@ -116,7 +105,7 @@ impl BackendApp {
             upcoming: Arc::new(move |track| upcoming_waveforms.upcoming(track)),
         };
         let playback = PlaybackService::start_with_backend(
-            Arc::clone(&hub),
+            Arc::clone(&state_store),
             messages,
             settings.playback_preferences(),
             Arc::new(move |preferences| remember.record_playback(preferences)),
@@ -130,7 +119,7 @@ impl BackendApp {
             playback,
             library,
             settings,
-            hub,
+            state_store,
             data_dir,
         })
     }
@@ -147,12 +136,12 @@ impl BackendApp {
 
     /// Every state topic as a message, each with its version. The connect command returns them.
     pub fn messages(&self) -> Vec<BackendMessage> {
-        self.hub.messages()
+        self.state_store.messages()
     }
 
     /// The message that carries the current value of `topic`.
     pub fn message(&self, topic: StateTopic) -> BackendMessage {
-        self.hub.message(topic)
+        self.state_store.message(topic)
     }
 
     /// The message that carries the newest playing position, when a track is loaded.

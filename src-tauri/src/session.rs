@@ -1,62 +1,19 @@
-//! The Host's side of the Backend's messages: a listener that only queues, and the one channel to
-//! the Renderer that a dispatcher thread sends through.
+//! The Host's side of the Backend's messages: the one channel to the Renderer that a dispatcher
+//! thread sends through. The Backend only queues its notifications, so a service never waits on
+//! the webview.
 
 use parking_lot::Mutex;
 use std::{
     collections::BTreeSet,
-    sync::{
-        Arc,
-        mpsc::{self, Receiver, Sender},
-    },
+    sync::{Arc, mpsc::Receiver},
     thread,
 };
 
 use backend::{
     app::BackendApp,
-    messages::{BackendMessage, MessageListener, StateTopic},
+    messages::{BackendMessage, Notification, StateTopic},
 };
 use tauri::ipc::Channel;
-
-/// What the Backend reported, waiting for the dispatcher. A state topic is only named here; its
-/// value is read when the dispatcher sends it.
-pub(crate) enum Pending {
-    StateChanged(StateTopic),
-    Position,
-    TrackSkipped(Option<String>),
-}
-
-/// The Backend's listener. It only queues; `start_dispatcher` delivers, so a service never waits
-/// on the webview.
-pub(crate) struct HostMessageListener {
-    sender: Sender<Pending>,
-}
-
-impl HostMessageListener {
-    fn send(&self, pending: Pending) {
-        if let Err(cause) = self.sender.send(pending) {
-            log::debug!("host.session.send_failed cause={cause}");
-        }
-    }
-}
-
-impl MessageListener for HostMessageListener {
-    fn state_changed(&self, topic: StateTopic) {
-        self.send(Pending::StateChanged(topic));
-    }
-
-    fn position_changed(&self) {
-        self.send(Pending::Position);
-    }
-
-    fn track_skipped(&self, title: Option<String>) {
-        self.send(Pending::TrackSkipped(title));
-    }
-}
-
-pub(crate) fn message_channel() -> (Arc<HostMessageListener>, Receiver<Pending>) {
-    let (sender, receiver) = mpsc::channel();
-    (Arc::new(HostMessageListener { sender }), receiver)
-}
 
 /// The one channel to the Renderer. A new channel replaces the old one.
 #[derive(Default)]
@@ -91,14 +48,14 @@ impl Subscriber {
 pub(crate) fn start_dispatcher(
     backend: Arc<BackendApp>,
     subscriber: Arc<Subscriber>,
-    pending: Receiver<Pending>,
+    notifications: Receiver<Notification>,
 ) {
     thread::Builder::new()
         .name("message-dispatcher".into())
         .spawn(move || {
-            while let Ok(first) = pending.recv() {
+            while let Ok(first) = notifications.recv() {
                 let mut batch = vec![first];
-                batch.extend(pending.try_iter());
+                batch.extend(notifications.try_iter());
                 let messages = batch_messages(
                     batch,
                     |topic| backend.message(topic),
@@ -115,20 +72,20 @@ pub(crate) fn start_dispatcher(
 /// The messages one batch sends, in order: its track skips as they arrived, then each changed
 /// state topic once with its latest value, then the position.
 fn batch_messages(
-    batch: Vec<Pending>,
+    batch: Vec<Notification>,
     state: impl Fn(StateTopic) -> BackendMessage,
     position: impl Fn() -> Option<BackendMessage>,
 ) -> Vec<BackendMessage> {
     let mut messages = Vec::new();
     let mut topics = BTreeSet::new();
     let mut position_changed = false;
-    for pending in batch {
-        match pending {
-            Pending::StateChanged(topic) => {
+    for notification in batch {
+        match notification {
+            Notification::StateChanged(topic) => {
                 topics.insert(topic);
             }
-            Pending::Position => position_changed = true,
-            Pending::TrackSkipped(title) => {
+            Notification::PositionChanged => position_changed = true,
+            Notification::TrackSkipped(title) => {
                 messages.push(BackendMessage::TrackSkipped { title });
             }
         }
@@ -150,10 +107,10 @@ mod tests {
         let first = Some("First".to_owned());
         let second = Some("Second".to_owned());
         let batch = vec![
-            Pending::TrackSkipped(first.clone()),
-            Pending::StateChanged(StateTopic::Playback),
-            Pending::TrackSkipped(second.clone()),
-            Pending::TrackSkipped(first.clone()),
+            Notification::TrackSkipped(first.clone()),
+            Notification::StateChanged(StateTopic::Playback),
+            Notification::TrackSkipped(second.clone()),
+            Notification::TrackSkipped(first.clone()),
         ];
 
         let state = |_| {
@@ -178,9 +135,9 @@ mod tests {
     #[test]
     fn a_topic_changed_twice_in_one_batch_is_sent_once() {
         let batch = vec![
-            Pending::StateChanged(StateTopic::Queue),
-            Pending::StateChanged(StateTopic::Playback),
-            Pending::StateChanged(StateTopic::Queue),
+            Notification::StateChanged(StateTopic::Queue),
+            Notification::StateChanged(StateTopic::Playback),
+            Notification::StateChanged(StateTopic::Queue),
         ];
         let state = |_| {
             BackendMessage::State(Box::new(StateMessage {

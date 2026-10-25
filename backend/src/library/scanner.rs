@@ -19,8 +19,7 @@ use log::{error, info};
 
 use super::database::Database;
 use super::models::{LibraryDirectory, ScanFailure, ScanState, ScanStatus};
-use crate::messages::StateValue;
-use crate::state_hub::StateHub;
+use crate::state_store::StateStore;
 use discover::{DiscoveredFile, Discovery, discover, relative_dir, scope};
 use inspect::{inspect_all, read_artwork};
 use persist::{LibraryWriter, Outcome, PersistError, Plan, plan};
@@ -49,17 +48,17 @@ impl From<PersistError> for Stop {
     }
 }
 
-/// Scans `jobs` in order, publishing progress through `hub`. Returns how the scan ended, which is
+/// Scans `jobs` in order, publishing progress through `state_store`. Returns how the scan ended, which is
 /// also the published scan state.
 pub(crate) fn run(
     database: &Database,
     jobs: &[ScanJob],
-    hub: &StateHub,
+    state_store: &StateStore,
     version: &AtomicU64,
     cancel: &AtomicBool,
 ) -> ScanStatus {
     let expected = expected_files(database, jobs);
-    let mut progress = Progress::new(hub, version);
+    let mut progress = Progress::new(state_store, version);
     progress.change(|scan| scan.expected_count = expected);
     let mut traversal_failed = false;
     for job in jobs {
@@ -103,13 +102,13 @@ fn relink_moved(database: &Database) -> Result<usize, PersistError> {
 
 /// Ends the scan as failed, for a scan thread that died before it could say how it ended. The
 /// counts are the ones last published.
-pub(crate) fn fail(hub: &StateHub, version: &AtomicU64) {
-    let mut scan = hub.read(|published| published.scan.value.clone());
+pub(crate) fn fail(state_store: &StateStore, version: &AtomicU64) {
+    let mut scan = state_store.scan().value;
     scan.state = ScanStatus::Failed;
     scan.current_directory = None;
     scan.failure_code = Some(ScanFailure::Panicked);
     scan.library_version = version.fetch_add(1, Ordering::SeqCst) + 1;
-    hub.publish(StateValue::Scan(scan));
+    state_store.set_scan(scan);
     error!(
         "library.scan.failed failure_code={:?}",
         ScanFailure::Panicked
@@ -280,7 +279,7 @@ fn read_batch(
 /// Counts what the scan has done, and publishes it. The scan thread is the only writer while a
 /// scan runs, so `scan` is its working copy of the published state.
 struct Progress<'a> {
-    hub: &'a StateHub,
+    state_store: &'a StateStore,
     /// The Library version: advanced when the scan ends, so the lists reload what it changed.
     version: &'a AtomicU64,
     scan: ScanState,
@@ -288,11 +287,11 @@ struct Progress<'a> {
 }
 
 impl<'a> Progress<'a> {
-    fn new(hub: &'a StateHub, version: &'a AtomicU64) -> Self {
+    fn new(state_store: &'a StateStore, version: &'a AtomicU64) -> Self {
         Self {
-            hub,
+            state_store,
             version,
-            scan: hub.read(|published| published.scan.value.clone()),
+            scan: state_store.scan().value,
             last_publish: Instant::now()
                 .checked_sub(PROGRESS_PUBLISH_INTERVAL)
                 .unwrap_or_else(Instant::now),
@@ -315,7 +314,7 @@ impl<'a> Progress<'a> {
     }
 
     fn publish(&mut self) {
-        self.hub.publish(StateValue::Scan(self.scan.clone()));
+        self.state_store.set_scan(self.scan.clone());
         self.last_publish = Instant::now();
     }
 

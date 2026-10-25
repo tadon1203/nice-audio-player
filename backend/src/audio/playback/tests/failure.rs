@@ -12,7 +12,7 @@ fn each_skipped_track_reaches_the_listener_in_order() {
         .sent()
         .into_iter()
         .filter_map(|sent| match sent {
-            Sent::TrackSkipped(title) => Some(title),
+            Notification::TrackSkipped(title) => Some(title),
             _ => None,
         })
         .collect();
@@ -284,7 +284,7 @@ fn a_track_that_fails_while_playing_is_reported_as_skipped_once() {
     let skipped = harness
         .sent()
         .iter()
-        .filter(|sent| matches!(sent, Sent::TrackSkipped(_)))
+        .filter(|sent| matches!(sent, Notification::TrackSkipped(_)))
         .count();
     assert_eq!(skipped, 1);
 }

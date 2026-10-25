@@ -9,8 +9,8 @@
 
 use super::models::{
     AlbumDetails, AlbumRow, AlbumSortKey, AlbumTrackRow, ArtistAlbumSortKey, ArtistRef, ArtistRow,
-    ArtistSortKey, LetterIndexEntryKind, LetterIndexEntry, ListRequest, Page, SortDirection, TrackCore,
-    TrackRow, TrackSortKey,
+    ArtistSortKey, LetterIndexEntry, LetterIndexEntryKind, ListRequest, Page, SortDirection,
+    TrackCore, TrackRow, TrackSortKey,
 };
 use super::{
     Library, StoreError, text,

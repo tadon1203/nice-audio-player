@@ -9,7 +9,7 @@ use super::{
     PlaybackControls, PlaybackPosition, PlaybackProcessingInfo, PlaybackState, QueueState,
 };
 use crate::audio::playback::session::Loaded;
-use crate::messages::{StateValue, Versioned};
+use crate::messages::{Notification, Versioned};
 
 impl PlaybackWorker {
     /// What listeners see, drawn from the transport, the queue and the volume.
@@ -80,7 +80,7 @@ impl PlaybackWorker {
     /// The transport as it is published, with the version of its topic. A command that changes
     /// nothing answers with it.
     pub(super) fn playback_versioned(&self) -> Versioned<PlaybackState> {
-        self.hub.read(|published| published.playback.clone())
+        self.state_store.playback()
     }
 
     /// Renders the transport and publishes it, which tells listeners when it changed. The
@@ -93,9 +93,7 @@ impl PlaybackWorker {
         }
         let value = self.render();
         self.store_position(value.session().map(CurrentPlayback::position));
-        let version = self
-            .hub
-            .publish(StateValue::Playback(Box::new(value.clone())));
+        let version = self.state_store.set_playback(value.clone());
         Versioned { version, value }
     }
 
@@ -109,7 +107,7 @@ impl PlaybackWorker {
             position_ms: loaded.position_ms(),
             seek_count: self.seek_count,
         }));
-        self.messages.position_changed();
+        self.messages.send(Notification::PositionChanged);
     }
 
     /// Previous is offered when the queue has an earlier item, or the track has played long
@@ -125,19 +123,18 @@ impl PlaybackWorker {
 
     /// Whether Previous is offered, as listeners last saw it.
     pub(super) fn published_can_go_previous(&self) -> bool {
-        self.hub
-            .read(|published| published.playback.value.base().can_go_previous)
+        self.state_store.playback().value.base().can_go_previous
     }
 
     pub(super) fn publish_queue(&mut self) -> Versioned<QueueState> {
         self.prune_unavailable();
         let value = QueueState::of(&self.queue, &self.tracks, self.previous_queue.is_some());
-        let version = self.hub.publish(StateValue::Queue(value.clone()));
+        let version = self.state_store.set_queue(value.clone());
         Versioned { version, value }
     }
 
     pub(super) fn queue_snapshot(&self) -> Versioned<QueueState> {
-        self.hub.read(|published| published.queue.clone())
+        self.state_store.queue()
     }
 
     /// Publishes a queue change, and refreshes the transport so previous/next availability

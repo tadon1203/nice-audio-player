@@ -26,8 +26,7 @@ use crate::ids::PlaybackId;
 use crate::library::scanner::identity::content_hash;
 use crate::library::tracks::PlayableTrack;
 use crate::media::validation::ValidatedAudioFile;
-use crate::messages::StateValue;
-use crate::state_hub::StateHub;
+use crate::state_store::StateStore;
 use crate::threads::{Cancellation, run_in_background};
 
 pub(crate) const WAVEFORM_BUCKETS: usize = 1000;
@@ -420,7 +419,7 @@ struct Request {
     hash: Option<String>,
 }
 
-/// The loaded Playback and its file. The Waveform topic is published to the hub under this lock,
+/// The loaded Playback and its file. The Waveform topic is set in the state store under this lock,
 /// so a waveform that finishes late cannot replace the one of a newer Playback.
 #[derive(Default)]
 struct Current {
@@ -433,7 +432,7 @@ struct Shared {
     ready: Mutex<HashMap<PathBuf, (FileStamp, Arc<Waveform>)>>,
     jobs: Mutex<Jobs>,
     wake: Condvar,
-    hub: Arc<StateHub>,
+    state_store: Arc<StateStore>,
     current: Mutex<Current>,
 }
 
@@ -517,14 +516,14 @@ pub(crate) struct Waveforms {
 }
 
 impl Waveforms {
-    pub(crate) fn start(directory: PathBuf, hub: Arc<StateHub>) -> Self {
+    pub(crate) fn start(directory: PathBuf, state_store: Arc<StateStore>) -> Self {
         let cache_directory = directory.clone();
         let shared = Arc::new(Shared {
             directory,
             ready: Mutex::new(HashMap::new()),
             jobs: Mutex::new(Jobs::default()),
             wake: Condvar::new(),
-            hub,
+            state_store,
             current: Mutex::new(Current::default()),
         });
         let worker = Arc::clone(&shared);
@@ -560,9 +559,9 @@ impl Waveforms {
         let missing = ready.is_none();
         current.playback_id = Some(playback_id);
         current.file = Some(track.file.clone());
-        self.shared.hub.publish(StateValue::Waveform(
-            ready.map(|waveform| PlaybackWaveform::of(playback_id, &waveform)),
-        ));
+        self.shared
+            .state_store
+            .set_waveform(ready.map(|waveform| PlaybackWaveform::of(playback_id, &waveform)));
         drop(current);
         if missing {
             self.shared
@@ -655,7 +654,7 @@ impl Shared {
         };
         self.remember(path, stamp, waveform);
         if let Some(shown) = shown {
-            self.hub.publish(StateValue::Waveform(Some(shown)));
+            self.state_store.set_waveform(Some(shown));
         }
     }
 
@@ -673,12 +672,10 @@ mod tests {
     use super::*;
     use crate::ids::TrackId;
     use crate::media::validation::validate_audio_file;
-    use crate::messages::SharedMessageListener;
-    use crate::messages::{StateTopic, Versioned};
-    use crate::settings::Settings;
-    use crate::state_hub::{Published, StateHub};
-    use crate::test_support::{RecordingMessageListener, Sent, null_message_listener};
-    use crate::test_support::{TestDirectory, write_pcm_i16_wav};
+    use crate::messages::{Notification, Notifier, StateTopic, Versioned};
+    use crate::test_support::{
+        NotificationLog, TestDirectory, null_notifier, state_store_for_tests, write_pcm_i16_wav,
+    };
 
     fn wav(directory: &TestDirectory, name: &str, samples: &[i16]) -> ValidatedAudioFile {
         let path = directory.file(name);
@@ -864,8 +861,8 @@ mod tests {
     fn service_publishes_the_exact_waveform_and_caches_it() {
         let directory = TestDirectory::new();
         let file = wav(&directory, "song.wav", &vec![5_000i16; 16_000]);
-        let (recorder, sink) = RecordingMessageListener::shared();
-        let service = Waveforms::start(directory.file("cache"), hub_with(sink));
+        let (recorder, notifier) = NotificationLog::shared();
+        let service = Waveforms::start(directory.file("cache"), state_store_for_tests(notifier));
         let track = track_of(&file, None);
         service.loaded(PlaybackId::first(), &track);
         // Background priority: the worker yields to the rest of a busy test run.
@@ -874,43 +871,37 @@ mod tests {
             thread::sleep(Duration::from_millis(10));
         }
         assert!(published_waveform(&service).value.is_some());
-        assert!(recorder.sent().contains(&Sent::State(StateTopic::Waveform)));
+        assert!(
+            recorder
+                .sent()
+                .contains(&Notification::StateChanged(StateTopic::Waveform))
+        );
         let hash = content_hash(Path::new(&file.path)).unwrap();
         assert!(read_cache(&directory.file("cache"), &hash).is_some());
     }
 
-    fn hub_with(listener: SharedMessageListener) -> Arc<StateHub> {
-        Arc::new(StateHub::new(
-            Published::initial(&Settings::default()),
-            listener,
-        ))
-    }
-
     fn published_waveform(service: &Waveforms) -> Versioned<Option<PlaybackWaveform>> {
-        service
-            .shared
-            .hub
-            .read(|published| published.waveform.clone())
+        service.shared.state_store.waveform()
     }
 
-    fn idle_shared_with(directory: &TestDirectory, listener: SharedMessageListener) -> Shared {
+    fn idle_shared_with(directory: &TestDirectory, notifier: Notifier) -> Shared {
         Shared {
             directory: directory.file("cache"),
             ready: Mutex::new(HashMap::new()),
             jobs: Mutex::new(Jobs::default()),
             wake: Condvar::new(),
-            hub: hub_with(listener),
+            state_store: state_store_for_tests(notifier),
             current: Mutex::new(Current::default()),
         }
     }
 
     fn idle_shared(directory: &TestDirectory) -> Shared {
-        idle_shared_with(directory, null_message_listener())
+        idle_shared_with(directory, null_notifier())
     }
 
-    fn idle_waveforms(directory: &TestDirectory) -> (Waveforms, Arc<RecordingMessageListener>) {
-        let (recorder, listener) = RecordingMessageListener::shared();
-        let shared = idle_shared_with(directory, listener);
+    fn idle_waveforms(directory: &TestDirectory) -> (Waveforms, Arc<NotificationLog>) {
+        let (recorder, notifier) = NotificationLog::shared();
+        let shared = idle_shared_with(directory, notifier);
         (
             Waveforms {
                 shared: Arc::new(shared),
@@ -976,8 +967,8 @@ mod tests {
     fn peeking_never_starts_an_analysis() {
         let directory = TestDirectory::new();
         let file = wav(&directory, "a.wav", &[100, 200, 300, 400]);
-        let (_, sink) = RecordingMessageListener::shared();
-        let service = Waveforms::start(directory.file("cache"), hub_with(sink));
+        let (_, notifier) = NotificationLog::shared();
+        let service = Waveforms::start(directory.file("cache"), state_store_for_tests(notifier));
         assert!(service.get(&file).is_none());
         assert!(service.shared.jobs().pending.is_none());
         assert!(service.shared.jobs().running.is_none());
@@ -1018,8 +1009,8 @@ mod tests {
     fn a_file_replaced_at_the_same_path_is_analyzed_again() {
         let directory = TestDirectory::new();
         let file = wav(&directory, "song.wav", &vec![5_000i16; 16_000]);
-        let (_, sink) = RecordingMessageListener::shared();
-        let service = Waveforms::start(directory.file("cache"), hub_with(sink));
+        let (_, notifier) = NotificationLog::shared();
+        let service = Waveforms::start(directory.file("cache"), state_store_for_tests(notifier));
         let track = track_of(&file, None);
         service.loaded(PlaybackId::first(), &track);
         let deadline = Instant::now() + Duration::from_secs(60);

@@ -33,8 +33,8 @@ fn queue_versions_grow_on_each_queue_change() {
     assert_eq!(
         harness.sent(),
         [
-            Sent::State(StateTopic::Queue),
-            Sent::State(StateTopic::Queue),
+            Notification::StateChanged(StateTopic::Queue),
+            Notification::StateChanged(StateTopic::Queue),
         ]
     );
 }

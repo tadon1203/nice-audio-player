@@ -25,7 +25,7 @@ pub(crate) mod watcher;
 
 use crate::errors::CommandError;
 use crate::ids::{ArtworkHash, DirectoryId};
-use crate::state_hub::StateHub;
+use crate::state_store::StateStore;
 use database::{Database, DatabaseError, ReadConnection};
 use log::error;
 use models::LibraryDirectory;
@@ -326,14 +326,14 @@ impl Library {
     /// starts watching and scanning the registered directories.
     pub(crate) fn open(
         directory: &Path,
-        hub: Arc<StateHub>,
+        state_store: Arc<StateStore>,
     ) -> Result<Self, LibraryUnavailableReason> {
         let database = Database::initialize(directory).map_err(|error| {
             error!("library.database.unavailable cause={error}");
             LibraryUnavailableReason::DatabaseOpenFailed
         })?;
         let version = Arc::new(AtomicU64::new(0));
-        let sync = LibrarySync::start(database.clone(), hub, Arc::clone(&version));
+        let sync = LibrarySync::start(database.clone(), state_store, Arc::clone(&version));
         Ok(Self {
             database,
             sync: Arc::new(sync),

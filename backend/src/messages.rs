@@ -1,9 +1,11 @@
-//! What the Backend tells the host: a state topic changed, the playing position moved, or a track
-//! was skipped. Every published state value lives in `StateHub`, which tells the listener which
-//! topic changed. The host reads the latest value when it sends, so several changes can become
-//! one message.
+//! What the Backend tells the Host: a state topic changed, the playing position moved, or a track
+//! was skipped. Every state value lives in `StateStore`, which sends a `Notification` for the topic
+//! that changed. The Host reads the latest value when it sends, so several changes can become one
+//! message.
 
-use std::sync::Arc;
+use std::sync::mpsc::{self, Receiver, Sender};
+
+use log::debug;
 
 use crate::audio::playback::{PlaybackPosition, PlaybackState, QueueState};
 use crate::audio::waveform::PlaybackWaveform;
@@ -21,6 +23,20 @@ impl<T> Versioned<T> {
     /// A value that has not changed yet: version 0.
     pub fn new(value: T) -> Self {
         Self { version: 0, value }
+    }
+
+    /// Replaces the value and adds one to the version. An equal value changes nothing. Returns
+    /// whether the value changed.
+    pub fn set(&mut self, value: T) -> bool
+    where
+        T: PartialEq,
+    {
+        if self.value == value {
+            return false;
+        }
+        self.value = value;
+        self.version += 1;
+        true
     }
 }
 
@@ -79,17 +95,36 @@ pub enum StateValue {
     Appearance(Appearance),
 }
 
-/// Receives messages on whichever thread produced them, so it must return quickly.
-pub trait MessageListener: Send + Sync {
-    /// A state topic has a new value. The host reads the latest value when it sends.
-    fn state_changed(&self, topic: StateTopic);
+/// What the Backend reports to the Host. Each one is sent on the thread that produced it.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Notification {
+    /// A state topic has a new value. The Host reads the latest value when it sends.
+    StateChanged(StateTopic),
     /// The playing position moved.
-    fn position_changed(&self);
+    PositionChanged,
     /// The player skipped a track it could not play.
-    fn track_skipped(&self, title: Option<String>);
+    TrackSkipped(Option<String>),
 }
 
-pub type SharedMessageListener = Arc<dyn MessageListener>;
+/// The sending end of the channel that carries `Notification`s to the Host. Every clone sends
+/// into the same channel. A send never waits.
+#[derive(Debug, Clone)]
+pub struct Notifier {
+    sender: Sender<Notification>,
+}
+
+impl Notifier {
+    pub fn channel() -> (Self, Receiver<Notification>) {
+        let (sender, receiver) = mpsc::channel();
+        (Self { sender }, receiver)
+    }
+
+    pub fn send(&self, notification: Notification) {
+        if let Err(cause) = self.sender.send(notification) {
+            debug!("backend.notification.send_failed cause={cause}");
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -98,6 +133,20 @@ mod tests {
     #[test]
     fn a_new_value_starts_at_version_zero() {
         let topic = Versioned::new(10);
+        assert_eq!((topic.version, topic.value), (0, 10));
+    }
+
+    #[test]
+    fn setting_a_different_value_adds_one_to_the_version() {
+        let mut topic = Versioned::new(10);
+        assert!(topic.set(11));
+        assert_eq!((topic.version, topic.value), (1, 11));
+    }
+
+    #[test]
+    fn setting_an_equal_value_changes_nothing() {
+        let mut topic = Versioned::new(10);
+        assert!(!topic.set(10));
         assert_eq!((topic.version, topic.value), (0, 10));
     }
 }

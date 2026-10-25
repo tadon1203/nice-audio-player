@@ -44,7 +44,7 @@ impl From<AudioDeviceListError> for CommandError {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum DeviceResolutionError {
+pub enum DeviceResolutionError {
     NoDefaultOutputDevice,
     InvalidDeviceId,
     DeviceUnavailable,

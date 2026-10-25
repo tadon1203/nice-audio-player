@@ -5,13 +5,14 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::mpsc::Receiver;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use parking_lot::Mutex;
 
-use crate::messages::{MessageListener, SharedMessageListener, StateTopic};
+use crate::messages::{Notification, Notifier, StateTopic};
 use crate::settings::Settings;
-use crate::state_hub::{Published, StateHub};
+use crate::state_store::StateStore;
 
 static NEXT_TEST_DIRECTORY: AtomicUsize = AtomicUsize::new(0);
 
@@ -97,75 +98,47 @@ pub(crate) fn wait_until(mut condition: impl FnMut() -> bool, timeout: Duration)
     condition()
 }
 
-/// One call to a listener, in the order it was made.
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) enum Sent {
-    State(StateTopic),
-    Position,
-    TrackSkipped(Option<String>),
+/// Remembers every notification, in the order it was sent.
+pub(crate) struct NotificationLog {
+    receiver: Mutex<Receiver<Notification>>,
+    received: Mutex<Vec<Notification>>,
 }
 
-/// Remembers every call, in order.
-#[derive(Default)]
-pub(crate) struct RecordingMessageListener {
-    sent: Mutex<Vec<Sent>>,
-}
-
-impl RecordingMessageListener {
-    pub(crate) fn shared() -> (Arc<Self>, SharedMessageListener) {
-        let listener = Arc::new(Self::default());
-        (Arc::clone(&listener), listener)
+impl NotificationLog {
+    pub(crate) fn shared() -> (Arc<Self>, Notifier) {
+        let (notifier, receiver) = Notifier::channel();
+        let log = Arc::new(Self {
+            receiver: Mutex::new(receiver),
+            received: Mutex::new(Vec::new()),
+        });
+        (log, notifier)
     }
 
-    pub(crate) fn sent(&self) -> Vec<Sent> {
-        self.sent.lock().clone()
+    pub(crate) fn sent(&self) -> Vec<Notification> {
+        let mut received = self.received.lock();
+        received.extend(self.receiver.lock().try_iter());
+        received.clone()
     }
 
     /// The topics that changed, in the order they changed.
     pub(crate) fn state_topics(&self) -> Vec<StateTopic> {
         self.sent()
             .into_iter()
-            .filter_map(|sent| match sent {
-                Sent::State(topic) => Some(topic),
+            .filter_map(|notification| match notification {
+                Notification::StateChanged(topic) => Some(topic),
                 _ => None,
             })
             .collect()
     }
 }
 
-impl MessageListener for RecordingMessageListener {
-    fn state_changed(&self, topic: StateTopic) {
-        self.sent.lock().push(Sent::State(topic));
-    }
-
-    fn position_changed(&self) {
-        self.sent.lock().push(Sent::Position);
-    }
-
-    fn track_skipped(&self, title: Option<String>) {
-        self.sent.lock().push(Sent::TrackSkipped(title));
-    }
+/// A notifier that nobody receives from.
+pub(crate) fn null_notifier() -> Notifier {
+    Notifier::channel().0
 }
 
-/// Drops every message.
-#[derive(Debug)]
-pub(crate) struct NullMessageListener;
-
-impl MessageListener for NullMessageListener {
-    fn state_changed(&self, _topic: StateTopic) {}
-    fn position_changed(&self) {}
-    fn track_skipped(&self, _title: Option<String>) {}
-}
-
-pub(crate) fn null_message_listener() -> SharedMessageListener {
-    Arc::new(NullMessageListener)
-}
-
-/// A state hub over the default settings, reporting to `listener`, for tests that build a
+/// A state store over the default settings, notifying through `notifier`, for tests that build a
 /// service directly.
-pub(crate) fn hub_for_tests(listener: SharedMessageListener) -> Arc<StateHub> {
-    Arc::new(StateHub::new(
-        Published::initial(&Settings::default()),
-        listener,
-    ))
+pub(crate) fn state_store_for_tests(notifier: Notifier) -> Arc<StateStore> {
+    Arc::new(StateStore::new(&Settings::default(), notifier))
 }

@@ -37,11 +37,10 @@ use crate::errors::CommandError;
 use crate::ids::{PlaybackId, TrackId};
 use crate::library::tracks::PlayableTrack;
 use crate::media::validation::ValidatedAudioFile;
-use crate::messages::{StateTopic, Versioned};
-use crate::settings::Settings;
-use crate::state_hub::{Published, StateHub};
+use crate::messages::{Notification, StateTopic, Versioned};
+use crate::state_store::StateStore;
 use crate::test_support::{
-    RecordingMessageListener, Sent, TestDirectory, hub_for_tests, write_pcm_i16_wav,
+    NotificationLog, TestDirectory, state_store_for_tests, write_pcm_i16_wav,
 };
 use cpal::StreamInstant;
 use parking_lot::{Mutex, RwLock};
@@ -76,9 +75,9 @@ enum Heard {
 struct Harness {
     worker: PlaybackWorker,
     inputs: Receiver<WorkerInput>,
-    hub: Arc<StateHub>,
+    state_store: Arc<StateStore>,
     position: Arc<RwLock<Option<PlaybackPosition>>>,
-    recorded: Arc<RecordingMessageListener>,
+    recorded: Arc<NotificationLog>,
     gain: AtomicEffectiveGain,
     output: FakeOutput,
     preferences: Arc<Mutex<Vec<PlaybackPreferences>>>,
@@ -95,11 +94,8 @@ impl Harness {
         let volume = VolumeState::default();
         let library = Arc::new(FakeTracks::default());
         let position = Arc::new(RwLock::new(None));
-        let (recorded, messages) = RecordingMessageListener::shared();
-        let hub = Arc::new(StateHub::new(
-            Published::initial(&Settings::default()),
-            Arc::clone(&messages),
-        ));
+        let (recorded, messages) = NotificationLog::shared();
+        let state_store = state_store_for_tests(messages.clone());
         let gain = AtomicEffectiveGain::new(1.0);
         let output = FakeOutput::new();
         let preferences = Arc::new(Mutex::new(Vec::new()));
@@ -119,7 +115,7 @@ impl Harness {
         };
         let worker = PlaybackWorker::new(
             WorkerLinks {
-                hub: Arc::clone(&hub),
+                state_store: Arc::clone(&state_store),
                 position: Arc::clone(&position),
                 effective_gain: gain.clone(),
                 meter: MeterHub::new(),
@@ -137,7 +133,7 @@ impl Harness {
         Self {
             worker,
             inputs,
-            hub,
+            state_store,
             position,
             recorded,
             gain,
@@ -191,14 +187,14 @@ impl Harness {
     }
 
     fn versioned_snapshot(&self) -> Versioned<PlaybackState> {
-        self.hub.read(|published| published.playback.clone())
+        self.state_store.playback()
     }
 
     fn position(&self) -> Option<PlaybackPosition> {
         self.position.read().clone()
     }
 
-    fn sent(&self) -> Vec<Sent> {
+    fn sent(&self) -> Vec<Notification> {
         self.recorded.sent()
     }
 
@@ -207,7 +203,7 @@ impl Harness {
     }
 
     fn versioned_queue_snapshot(&self) -> Versioned<QueueState> {
-        self.hub.read(|published| published.queue.clone())
+        self.state_store.queue()
     }
 
     /// Sends a command without waiting for the answer.
@@ -356,9 +352,9 @@ fn silent_listener() -> TrackListener {
 }
 
 fn start_service() -> PlaybackService {
-    let messages = crate::test_support::null_message_listener();
+    let messages = crate::test_support::null_notifier();
     PlaybackService::start_with_backend(
-        hub_for_tests(Arc::clone(&messages)),
+        state_store_for_tests(messages.clone()),
         messages,
         PlaybackPreferences::default(),
         Arc::new(|_| {}),

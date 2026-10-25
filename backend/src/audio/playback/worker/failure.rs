@@ -1,5 +1,7 @@
 //! Failed streams and decodes, and what the worker does about them.
 
+use crate::messages::Notification;
+
 use super::{
     AudioOutputSelection, FailureScope, LoadStage, OutputStreamId, PipelineId, PipelineOwner,
     PlaybackFailureCode, PlaybackServiceError, PlaybackWorker, StartFailure, StartFailurePhase,
@@ -108,7 +110,7 @@ impl PlaybackWorker {
             .current()
             .and_then(|entry| self.item_of(entry))
             .map(|item| item.to_playback_item().track.core.title);
-        self.messages.track_skipped(title);
+        self.messages.send(Notification::TrackSkipped(title));
     }
 
     pub(super) fn refresh_default_device(&mut self) -> bool {

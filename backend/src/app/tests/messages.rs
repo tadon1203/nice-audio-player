@@ -1,8 +1,8 @@
 use super::fixture;
 use crate::app::BackendApp;
+use crate::messages::Notification;
 use crate::messages::{BackendMessage, StateTopic};
 use crate::settings::AppearancePatch;
-use crate::test_support::Sent;
 
 const TOPICS: [StateTopic; 5] = [
     StateTopic::Playback,
@@ -77,22 +77,22 @@ fn changes_reach_the_listener_in_the_order_they_are_made() {
     fixture.backend.appearance_update(&artwork_backdrop(false));
     fixture.backend.set_volume(0.5).expect("volume");
 
-    let topics: Vec<Sent> = fixture
+    let topics: Vec<Notification> = fixture
         .recorded
         .sent()
         .into_iter()
         .filter(|sent| {
             matches!(
                 sent,
-                Sent::State(StateTopic::Appearance | StateTopic::Playback)
+                Notification::StateChanged(StateTopic::Appearance | StateTopic::Playback)
             )
         })
         .collect();
     assert_eq!(
         topics,
         [
-            Sent::State(StateTopic::Appearance),
-            Sent::State(StateTopic::Playback),
+            Notification::StateChanged(StateTopic::Appearance),
+            Notification::StateChanged(StateTopic::Playback),
         ]
     );
 }
