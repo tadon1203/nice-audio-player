@@ -9,7 +9,7 @@ pub use playback_context::PlaybackContext;
 // The types the Host names in commands and state. Each one is defined in the module that owns it.
 pub use crate::audio::devices::DeviceResolutionError;
 pub use crate::audio::devices::{AudioOutputDevice, AudioOutputSelection};
-pub use crate::audio::meter::MeterHub;
+pub use crate::audio::meter::{FrameCallback, Meter, MeterFrame};
 pub use crate::audio::output::{
     AudioOutputError, CpalBackend, OutputBackend, OutputLinks, OutputStream, PipelineId,
     PreparedOutput,
@@ -150,8 +150,8 @@ impl BackendApp {
         self.playback.position().map(BackendMessage::Position)
     }
 
-    /// Where Meter frames are subscribed to.
-    pub fn meter(&self) -> MeterHub {
+    /// The Meter that measures the output, for the Renderer's meter subscription.
+    pub fn meter(&self) -> Meter {
         self.playback.meter()
     }
 

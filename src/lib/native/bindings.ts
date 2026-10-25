@@ -74,17 +74,13 @@ export const commands = {
 	libraryArtworkAccent: (path: string) => __TAURI_INVOKE<string | null>("library_artwork_accent", { path }),
 	lyricsTrack: (trackId: TrackId) => __TAURI_INVOKE<Lyrics>("lyrics_track", { trackId }),
 	/**
-	 *  Starts streaming Meter frames to `frames` as binary messages (see `FRAME_BYTES` in the
-	 *  backend's `meter` module for the layout), replacing any earlier subscription the way `connect`
-	 *  replaces the Renderer's channel. Returns the id to end it with. Frames the channel cannot
-	 *  deliver are dropped; a channel that is gone ends the subscription.
+	 *  Starts sending Meter frames to `frames` as JSON messages, replacing the channel of an earlier
+	 *  start. A frame the channel cannot deliver is dropped; the Renderer starts again when it needs
+	 *  the frames back.
 	 */
-	meterStart: (frames: Channel<ArrayBuffer>) => __TAURI_INVOKE<number>("meter_start", { frames }),
-	/**
-	 *  Ends the subscription `subscription` names; one that was already replaced or ended is left
-	 *  alone.
-	 */
-	meterStop: (subscription: number) => __TAURI_INVOKE<null>("meter_stop", { subscription }),
+	meterStart: (frames: Channel<MeterFrame>) => __TAURI_INVOKE<void>("meter_start", { frames }),
+	/**  Stops sending Meter frames. The measurement continues only while the Player runs. */
+	meterStop: () => __TAURI_INVOKE<void>("meter_stop"),
 	/**
 	 *  Registers `channel` as the one channel to the Renderer, replacing an earlier one. Returns the
 	 *  current value of every state topic. A message sent in between has a version that is not
@@ -298,6 +294,21 @@ export type LyricsTimedLine = {
 };
 
 /**
+ *  One measurement of the output. Levels are dBFS in `FLOOR_DB..=0`-ish (a band can read above 0
+ *  only for a signal beyond full scale). A band level is the amplitude of the sine that would
+ *  give that band energy, so a full-scale sine reads 0; left and right are combined per band as
+ *  the louder of the two ("Max LR"), so mono is not 6 dB louder and an inverted pair does not
+ *  cancel. Peak and RMS are per channel; RMS is of the samples as they are, so a full-scale sine
+ *  reads -3 dBFS. Clip is per channel: its peak reached full scale (`peak >= 1.0`).
+ */
+export type MeterFrame = {
+	bands: number[],
+	peak: [number, number],
+	rms: [number, number],
+	clip: [boolean, boolean],
+};
+
+/**
  *  The album of the loaded track: the album it is filed under and how many tracks the library
  *  holds for it.
  */
@@ -391,7 +402,6 @@ skipping: boolean };
 export type PlaybackWaveform = {
 	/**  The playback the waveform belongs to, so a late answer cannot be drawn for another track. */
 	playbackId: PlaybackId,
-	peaks: number[],
 	rms: number[],
 };
 

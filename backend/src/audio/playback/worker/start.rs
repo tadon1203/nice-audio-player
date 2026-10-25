@@ -300,6 +300,7 @@ impl PlaybackWorker {
             seek: None,
             prefetch: None,
         });
+        self.meter.set_running(!start_paused);
         let snapshot = self.publish_state();
         respond(responder, Ok(snapshot));
         if let Some(position_ms) = resume_at_ms {
@@ -318,6 +319,7 @@ impl PlaybackWorker {
         let error = failure.service_error();
         let skips = failure.phase.scope() == FailureScope::Item && request.selection.is_none();
         let skipping = skips && self.will_skip();
+        self.meter.set_running(false);
         self.transport = Transport::Failed {
             id,
             code: failure.code,

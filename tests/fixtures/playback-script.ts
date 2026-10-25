@@ -148,14 +148,13 @@ export function scriptPlayback(
     shuffleEnabled = enabled;
     return commitQueue();
   });
-  const waveform = (): { playbackId: number; peaks: number[]; rms: number[] } => {
-    const peaks = Array.from({ length: 400 }, (_, bar) =>
+  const waveform = (): { playbackId: number; rms: number[] } => {
+    const levels = Array.from({ length: 400 }, (_, bar) =>
       Math.round(40 + 200 * Math.abs(Math.sin(bar / 9))),
     );
     return {
       playbackId: playbackIdOf(playbackItemFor(current())),
-      peaks,
-      rms: peaks.map((peak) => Math.round(peak * 0.6)),
+      rms: levels.map((level) => Math.round(level * 0.6)),
     };
   };
 

@@ -1,16 +1,15 @@
 //! Meter frames: the Spectrum and Level meter measured from the audio leaving the app. A frame
 //! measures a moment, not state: a missed frame is skipped, never kept or replayed.
 //!
-//! The output callback copies what it wrote into a lock-free ring through a [`MeterTap`] and never
-//! waits. While a subscriber exists, an analysis thread reads the ring and feeds an [`Analyzer`],
-//! which measures one [`MeterFrame`] per ~8 ms (120 Hz). A [`FrameBatcher`] combines every two into
-//! one frame at 60 Hz for the subscriber's sink, and sends nothing while the sound is silent and
-//! unchanged. With no subscriber nothing is copied and nothing is analysed.
+//! The output callback copies what it wrote into a lock-free ring through a [`MeterTap`], and only
+//! while the Meter runs. It never waits. An analysis thread reads the ring, measures one
+//! [`MeterFrame`] per 1/60 s, and passes it to the callback. The thread parks while the Meter does
+//! not run or has no callback, so a paused or unlistened player measures nothing.
 
 use parking_lot::Mutex;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
-use std::thread::{self, JoinHandle};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::thread::{self, Thread};
 use std::time::Duration;
 
 use ringbuf::traits::{Consumer, Producer, Split};
@@ -23,56 +22,39 @@ pub(crate) const BAND_COUNT: usize = 30;
 /// Levels never go below this, in dBFS.
 pub(crate) const FLOOR_DB: f32 = -90.0;
 /// Frames per second the analysis produces.
-pub(crate) const FRAMES_PER_SECOND: u32 = 120;
-/// Size of an encoded frame: 30 band levels, peak L/R, RMS L/R (f32), then a u32 of flags. All
-/// little endian.
-pub(crate) const FRAME_BYTES: usize = (BAND_COUNT + 4 + 1) * 4;
-/// Set in the flags word when a sample reached full scale in the frame.
-pub(crate) const FLAG_FULL_SCALE: u32 = 1;
+pub(crate) const FRAMES_PER_SECOND: u32 = 60;
+const FRAME_PERIOD: Duration = Duration::from_micros(1_000_000 / FRAMES_PER_SECOND as u64);
 
 /// Stereo samples the ring holds: a quarter second at 48 kHz.
 const RING_SAMPLES: usize = 24_000;
-const IDLE_SLEEP: Duration = Duration::from_millis(2);
 
 /// One measurement of the output. Levels are dBFS in `FLOOR_DB..=0`-ish (a band can read above 0
 /// only for a signal beyond full scale). A band level is the amplitude of the sine that would
 /// give that band energy, so a full-scale sine reads 0; left and right are combined per band as
 /// the louder of the two ("Max LR"), so mono is not 6 dB louder and an inverted pair does not
 /// cancel. Peak and RMS are per channel; RMS is of the samples as they are, so a full-scale sine
-/// reads -3 dBFS.
-#[derive(Debug, Clone, PartialEq)]
+/// reads -3 dBFS. Clip is per channel: its peak reached full scale (`peak >= 1.0`).
+#[derive(Debug, Clone, PartialEq, serde::Serialize, specta::Type)]
 pub struct MeterFrame {
-    pub bands: [f32; BAND_COUNT],
+    // Every level is finite (floored at `FLOOR_DB`), so the contract says `number`, not the
+    // `number | null` that a float gets for a NaN, and the Channel needs no decoding on arrival.
+    #[specta(type = Vec<specta_typescript::Number>)]
+    pub bands: Vec<f32>,
+    #[specta(type = [specta_typescript::Number; 2])]
     pub peak: [f32; 2],
+    #[specta(type = [specta_typescript::Number; 2])]
     pub rms: [f32; 2],
-    pub full_scale: bool,
+    pub clip: [bool; 2],
 }
 
 impl MeterFrame {
     pub fn silent() -> Self {
         Self {
-            bands: [FLOOR_DB; BAND_COUNT],
+            bands: vec![FLOOR_DB; BAND_COUNT],
             peak: [FLOOR_DB; 2],
             rms: [FLOOR_DB; 2],
-            full_scale: false,
+            clip: [false; 2],
         }
-    }
-
-    /// The wire form sent to the renderer; see [`FRAME_BYTES`].
-    pub fn to_bytes(&self) -> [u8; FRAME_BYTES] {
-        let mut bytes = [0_u8; FRAME_BYTES];
-        let floats = self
-            .bands
-            .iter()
-            .chain(&self.peak)
-            .chain(&self.rms)
-            .copied();
-        for (slot, value) in bytes.as_chunks_mut::<4>().0.iter_mut().zip(floats) {
-            *slot = value.to_le_bytes();
-        }
-        let flags = if self.full_scale { FLAG_FULL_SCALE } else { 0 };
-        bytes[FRAME_BYTES - 4..].copy_from_slice(&flags.to_le_bytes());
-        bytes
     }
 }
 
@@ -296,7 +278,7 @@ impl Band {
 
 // --- Analysis -------------------------------------------------------------------------------
 
-/// Turns interleaved stereo samples into Meter frames, one per `sample_rate / 120` frames of
+/// Turns interleaved stereo samples into Meter frames, one per `sample_rate / 60` frames of
 /// audio, whatever the chunking of the input.
 pub(crate) struct Analyzer {
     /// `bands[channel][band]`; a band the sample rate cannot carry is `None` and reads the floor.
@@ -372,7 +354,7 @@ impl Analyzer {
             *peak = to_db(f64::from(channel_peak).powi(2));
             *rms = to_db(sum_squares / len);
         }
-        frame.full_scale = self.peak.iter().any(|peak| *peak >= 1.0);
+        frame.clip = self.peak.map(|peak| peak >= 1.0);
         self.filled = 0;
         self.energy = [[0.0; BAND_COUNT]; 2];
         self.sum_squares = [0.0; 2];
@@ -384,118 +366,85 @@ impl Analyzer {
     }
 }
 
-/// Measurements combined into one sent frame: 120 Hz in, 60 Hz out.
-const MEASUREMENTS_PER_FRAME: usize = 2;
-
-/// Combines every two measurements into one Meter frame (bands and peaks by max, RMS by mean
-/// energy, clip by OR) and holds back frames while the sound is silent and unchanged.
-pub(crate) struct FrameBatcher {
-    pending: Vec<MeterFrame>,
-    last_sent_silent: bool,
+/// Holds back a frame that is silent right after a silent frame: nothing changed, so nothing is
+/// sent. `last_sent_silent` starts as true, because the renderer starts from the floor.
+fn held_back(frame: &MeterFrame, last_sent_silent: &mut bool) -> bool {
+    let silent = *frame == MeterFrame::silent();
+    let held = silent && *last_sent_silent;
+    *last_sent_silent = silent;
+    held
 }
 
-impl Default for FrameBatcher {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl FrameBatcher {
-    pub(crate) fn new() -> Self {
-        Self {
-            pending: Vec::with_capacity(MEASUREMENTS_PER_FRAME),
-            // The renderer starts from the floor, so a silent first frame says nothing new.
-            last_sent_silent: true,
-        }
-    }
-
-    /// Takes one measurement; returns the frame to send, if one is due and worth sending.
-    pub(crate) fn push(&mut self, measurement: MeterFrame) -> Option<MeterFrame> {
-        self.pending.push(measurement);
-        if self.pending.len() < MEASUREMENTS_PER_FRAME {
-            return None;
-        }
-        let frame = combine(&self.pending);
-        self.pending.clear();
-        let silent = frame == MeterFrame::silent();
-        if silent && self.last_sent_silent {
-            return None;
-        }
-        self.last_sent_silent = silent;
-        Some(frame)
-    }
-}
-
-fn combine(frames: &[MeterFrame]) -> MeterFrame {
-    let mut out = MeterFrame::silent();
-    for frame in frames {
-        for (slot, band) in out.bands.iter_mut().zip(&frame.bands) {
-            *slot = slot.max(*band);
-        }
-        for (out_peak, peak) in out.peak.iter_mut().zip(frame.peak) {
-            *out_peak = out_peak.max(peak);
-        }
-        out.full_scale |= frame.full_scale;
-    }
-    let mut energy = [0.0_f64; 2];
-    for frame in frames {
-        for (sum, level) in energy.iter_mut().zip(frame.rms) {
-            *sum += 10_f64.powf(f64::from(level) / 10.0);
-        }
-    }
-    for (rms, sum) in out.rms.iter_mut().zip(energy) {
-        *rms = to_db(sum / frames.len() as f64);
-    }
-    out
-}
-
-// --- The tap and the hub --------------------------------------------------------------------
+// --- The tap and the Meter ------------------------------------------------------------------
 
 struct Source {
     consumer: HeapCons<f32>,
     sample_rate: u32,
 }
 
+/// Where Meter frames go. Called on the analysis thread for each frame that is sent.
+pub type FrameCallback = Box<dyn Fn(&MeterFrame) + Send>;
+
 struct Shared {
-    /// The id of the live subscription, 0 for none. The callback reads it to skip its copy.
-    active: Arc<AtomicU32>,
-    /// The newest stream's ring, waiting for the analysis thread (or parked here while there is
-    /// none).
+    /// Whether the Player runs the output. The output callback copies only while it is set.
+    running: Arc<AtomicBool>,
+    /// The newest stream's ring, until the analysis thread takes it.
     source: Mutex<Option<Source>>,
-    session: Mutex<Option<Session>>,
-    next_id: AtomicU32,
+    callback: Mutex<Option<FrameCallback>>,
 }
 
-struct Session {
-    id: u32,
-    thread: JoinHandle<()>,
-}
-
-/// Where Meter frames go. Returns `false` when nobody is listening any more, which ends the
-/// subscription.
-pub(crate) type FrameSink = Box<dyn FnMut(&MeterFrame) -> bool + Send>;
-
-/// Hands out taps for output streams and runs the one subscription at a time.
+/// The Meter: the frames measured from the output, for the one callback that listens.
 #[derive(Clone)]
-pub struct MeterHub {
+pub struct Meter {
     shared: Arc<Shared>,
+    /// The analysis thread, to unpark it.
+    analysis: Thread,
 }
 
-impl Default for MeterHub {
+impl Default for Meter {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl MeterHub {
+impl Meter {
+    /// Starts the analysis thread, which parks until the Meter runs and has a callback.
     pub fn new() -> Self {
+        let shared = Arc::new(Shared {
+            running: Arc::new(AtomicBool::new(false)),
+            source: Mutex::new(None),
+            callback: Mutex::new(None),
+        });
+        let analysis = thread::Builder::new()
+            .name("meter-analysis".into())
+            .spawn({
+                let shared = Arc::clone(&shared);
+                move || run_analysis(&shared)
+            })
+            .expect("the meter thread starts with the app");
         Self {
-            shared: Arc::new(Shared {
-                active: Arc::new(AtomicU32::new(0)),
-                source: Mutex::new(None),
-                session: Mutex::new(None),
-                next_id: AtomicU32::new(1),
-            }),
+            shared,
+            analysis: analysis.thread().clone(),
+        }
+    }
+
+    /// Sends frames to `callback`, replacing any earlier callback.
+    pub fn start(&self, callback: FrameCallback) {
+        *self.shared.callback.lock() = Some(callback);
+        self.analysis.unpark();
+    }
+
+    /// Stops sending frames. The analysis thread parks until the next `start`.
+    pub fn stop(&self) {
+        *self.shared.callback.lock() = None;
+    }
+
+    /// Runs or parks the measurement. The Player calls it on start, pause, resume, stop and
+    /// failure.
+    pub(crate) fn set_running(&self, running: bool) {
+        self.shared.running.store(running, Ordering::Release);
+        if running {
+            self.analysis.unpark();
         }
     }
 
@@ -509,133 +458,67 @@ impl MeterHub {
         });
         MeterTap {
             producer,
-            active: Arc::clone(&self.shared.active),
+            running: Arc::clone(&self.shared.running),
             channel_count: channel_count.max(1),
             phase: 0,
             left: 0.0,
-            dropped: Arc::new(AtomicU64::new(0)),
-        }
-    }
-
-    /// Starts measuring and sending frames to `sink`, replacing any earlier subscription. Returns
-    /// its id. Joins the replaced analysis thread, which ends within a few milliseconds.
-    pub fn subscribe(&self, sink: FrameSink) -> u32 {
-        let mut session = self.shared.session.lock();
-        self.stop(&mut session, None);
-        // What the callback copied while nobody listened (a stream built since) is old.
-        if let Some(source) = self.shared.source.lock().as_mut() {
-            source.consumer.clear();
-        }
-        let id = self.shared.next_id.fetch_add(1, Ordering::Relaxed);
-        let shared = Arc::clone(&self.shared);
-        self.shared.active.store(id, Ordering::Release);
-        let thread = thread::Builder::new()
-            .name("meter-analysis".into())
-            .spawn(move || run_analysis(&shared, id, sink));
-        match thread {
-            Ok(thread) => *session = Some(Session { id, thread }),
-            Err(_) => self.shared.active.store(0, Ordering::Release),
-        }
-        id
-    }
-
-    /// Ends subscription `id`; a stale id (already replaced or ended) changes nothing. Joins the
-    /// analysis thread, so it can wait a few milliseconds.
-    pub fn unsubscribe(&self, id: u32) {
-        let mut session = self.shared.session.lock();
-        self.stop(&mut session, Some(id));
-    }
-
-    /// Ends whatever subscription there is, for a renderer that went away without saying so.
-    pub fn unsubscribe_all(&self) {
-        let mut session = self.shared.session.lock();
-        self.stop(&mut session, None);
-    }
-
-    /// Whether anything is being measured.
-    pub fn is_active(&self) -> bool {
-        self.shared.active.load(Ordering::Acquire) != 0
-    }
-
-    fn stop(&self, session: &mut Option<Session>, only: Option<u32>) {
-        if only.is_some_and(|id| session.as_ref().map(|s| s.id) != Some(id)) {
-            return;
-        }
-        if let Some(old) = session.take() {
-            if let Err(cause) =
-                self.shared
-                    .active
-                    .compare_exchange(old.id, 0, Ordering::AcqRel, Ordering::Acquire)
-            {
-                log::debug!("audio.meter.active_clear_failed cause={cause}");
-            }
-            if old.thread.join().is_err() {
-                log::debug!("audio.meter.analysis_panicked");
-            }
         }
     }
 }
 
-fn run_analysis(shared: &Shared, id: u32, mut sink: FrameSink) {
-    let mut current: Option<(Source, Analyzer)> = None;
+fn is_wanted(shared: &Shared) -> bool {
+    shared.running.load(Ordering::Acquire) && shared.callback.lock().is_some()
+}
+
+fn run_analysis(shared: &Shared) {
+    let mut source: Option<(Source, Analyzer)> = None;
     let mut buffer = [0.0_f32; 2048];
-    let mut batcher = FrameBatcher::new();
-    let mut open = true;
-    while open && shared.active.load(Ordering::Acquire) == id {
+    let mut last_sent_silent = true;
+    loop {
+        if !is_wanted(shared) {
+            thread::park();
+            continue;
+        }
         if let Some(fresh) = shared.source.lock().take() {
             let analyzer = Analyzer::new(fresh.sample_rate);
-            current = Some((fresh, analyzer));
+            source = Some((fresh, analyzer));
         }
-        let Some((source, analyzer)) = &mut current else {
-            thread::sleep(IDLE_SLEEP);
+        let Some((ring, analyzer)) = &mut source else {
+            thread::sleep(FRAME_PERIOD);
             continue;
         };
-        let read = source.consumer.pop_slice(&mut buffer);
+        let read = ring.consumer.pop_slice(&mut buffer);
         if read == 0 {
-            thread::sleep(IDLE_SLEEP);
+            thread::sleep(FRAME_PERIOD);
             continue;
         }
-        analyzer.process(&buffer[..read.min(buffer.len())], &mut |measurement| {
-            if let Some(frame) = batcher.push(measurement)
-                && open
-                && !sink(&frame)
-            {
-                open = false;
+        analyzer.process(&buffer[..read], &mut |frame| {
+            if held_back(&frame, &mut last_sent_silent) {
+                return;
+            }
+            if let Some(callback) = shared.callback.lock().as_ref() {
+                callback(&frame);
             }
         });
     }
-    // Park the ring for the next subscription, unless a newer stream already brought its own.
-    if let Some((source, _)) = current {
-        let mut slot = shared.source.lock();
-        if slot.is_none() {
-            *slot = Some(source);
-        }
-    }
-    if let Err(cause) = shared
-        .active
-        .compare_exchange(id, 0, Ordering::AcqRel, Ordering::Acquire)
-    {
-        log::debug!("audio.meter.active_clear_failed cause={cause}");
-    }
 }
 
-/// The output callback's end of the ring. Copies stereo samples while a subscriber exists and
-/// drops them when the ring is full; it never waits, allocates, locks or analyses.
+/// The output callback's end of the ring. Copies stereo samples while the Meter runs and drops
+/// them when the ring is full; it never waits, allocates, locks or analyses.
 pub(crate) struct MeterTap {
     producer: HeapProd<f32>,
-    active: Arc<AtomicU32>,
+    running: Arc<AtomicBool>,
     channel_count: usize,
     /// Position within the interleaved frame being copied; chunks may end mid-frame.
     phase: usize,
     left: f32,
-    dropped: Arc<AtomicU64>,
 }
 
 impl MeterTap {
     /// Copies `samples`, interleaved with the stream's channel count: mono is duplicated, and
     /// channels after the first two are skipped.
     pub(crate) fn push(&mut self, samples: &[f32]) {
-        if self.active.load(Ordering::Relaxed) == 0 {
+        if !self.running.load(Ordering::Acquire) {
             return;
         }
         for &sample in samples {
@@ -649,17 +532,11 @@ impl MeterTap {
                 _ => None,
             };
             self.phase = (self.phase + 1) % self.channel_count;
-            if let Some(pair) = pair
-                && self.producer.push_slice(&pair) < pair.len()
-            {
-                self.dropped.fetch_add(1, Ordering::Relaxed);
+            if let Some(pair) = pair {
+                // A full ring drops the pair; the analysis is behind, and a late frame is useless.
+                self.producer.push_slice(&pair);
             }
         }
-    }
-
-    #[cfg(test)]
-    fn dropped(&self) -> u64 {
-        self.dropped.load(Ordering::Relaxed)
     }
 
     #[cfg(test)]
@@ -743,14 +620,35 @@ mod tests {
     }
 
     #[test]
-    fn silence_gives_the_floor_everywhere() {
-        let frame = measure(&vec![0.0; 2 * 4_800]);
-        assert_eq!(frame, MeterFrame::silent());
-        assert!(!frame.full_scale);
+    fn the_20khz_band_exists_at_44100_hz() {
+        let mut analyzer = Analyzer::new(44_100);
+        let tone: Vec<f32> = (0..2 * 4_410)
+            .map(|n| {
+                (2.0 * std::f32::consts::PI * 19_953.0 * (n / 2) as f32 / 44_100.0).sin() * 0.5
+            })
+            .collect();
+        let mut last = None;
+        analyzer.process(&tone, &mut |frame| last = Some(frame));
+        assert!(last.unwrap().bands[BAND_COUNT - 1] > -12.0);
     }
 
     #[test]
-    fn full_scale_gives_0_dbfs_and_the_flag() {
+    fn a_band_the_sample_rate_cannot_carry_reads_the_floor() {
+        let mut analyzer = Analyzer::new(22_050);
+        let mut last = None;
+        analyzer.process(&vec![0.5; 2 * 2_205], &mut |frame| last = Some(frame));
+        assert!(is_floor(last.unwrap().bands[BAND_COUNT - 1]));
+    }
+
+    #[test]
+    fn silence_gives_the_floor_everywhere() {
+        let frame = measure(&vec![0.0; 2 * 4_800]);
+        assert_eq!(frame, MeterFrame::silent());
+        assert_eq!(frame.clip, [false; 2]);
+    }
+
+    #[test]
+    fn full_scale_on_one_channel_clips_that_channel_only() {
         let mut samples = vec![0.0_f32; 2 * 800];
         samples[10] = 1.0;
         let mut analyzer = Analyzer::new(RATE);
@@ -760,12 +658,12 @@ mod tests {
         });
         let frame = first.unwrap();
         assert!(frame.peak[0].abs() < 1e-6 && is_floor(frame.peak[1]));
-        assert!(frame.full_scale);
+        assert_eq!(frame.clip, [true, false]);
         let quiet = measure(&interleave(
             &sine(1000.0, 0.5, 4_800),
             &sine(1000.0, 0.5, 4_800),
         ));
-        assert!(!quiet.full_scale);
+        assert_eq!(quiet.clip, [false; 2]);
     }
 
     #[test]
@@ -813,203 +711,142 @@ mod tests {
         for chunk in samples.chunks(2 * 37) {
             analyzer.process(chunk, &mut |_| frames += 1);
         }
-        assert_eq!(frames, 120);
-    }
-
-    #[test]
-    fn a_band_the_sample_rate_cannot_carry_reads_the_floor() {
-        let mut analyzer = Analyzer::new(22_050);
-        let mut last = None;
-        analyzer.process(&vec![0.5; 2 * 2_205], &mut |frame| last = Some(frame));
-        assert!(is_floor(last.unwrap().bands[BAND_COUNT - 1]));
-    }
-
-    #[test]
-    fn the_20khz_band_exists_at_44100_hz() {
-        let mut analyzer = Analyzer::new(44_100);
-        let tone: Vec<f32> = (0..2 * 4_410)
-            .map(|n| {
-                (2.0 * std::f32::consts::PI * 19_953.0 * (n / 2) as f32 / 44_100.0).sin() * 0.5
-            })
-            .collect();
-        let mut last = None;
-        analyzer.process(&tone, &mut |frame| last = Some(frame));
-        assert!(last.unwrap().bands[BAND_COUNT - 1] > -12.0);
-    }
-
-    #[test]
-    fn a_frame_encodes_to_its_wire_layout() {
-        let mut frame = MeterFrame::silent();
-        frame.bands[0] = -12.5;
-        frame.peak[1] = -3.0;
-        frame.rms[0] = -20.0;
-        frame.full_scale = true;
-        let bytes = frame.to_bytes();
-        let float =
-            |index: usize| f32::from_le_bytes(bytes[index * 4..index * 4 + 4].try_into().unwrap());
-        assert_eq!(bytes.len(), FRAME_BYTES);
-        assert_eq!(float(0), -12.5);
-        assert_eq!(float(BAND_COUNT + 1), -3.0);
-        assert_eq!(float(BAND_COUNT + 2), -20.0);
-        assert_eq!(
-            u32::from_le_bytes(bytes[FRAME_BYTES - 4..].try_into().unwrap()),
-            FLAG_FULL_SCALE
-        );
-    }
-
-    // --- batching ---
-
-    fn level(db: f32) -> MeterFrame {
-        MeterFrame {
-            bands: [db; BAND_COUNT],
-            peak: [db; 2],
-            rms: [db; 2],
-            full_scale: false,
-        }
-    }
-
-    #[test]
-    fn two_measurements_become_one_frame_by_max_mean_energy_and_or() {
-        let mut batcher = FrameBatcher::new();
-        let mut first = level(-20.0);
-        first.bands[3] = -6.0;
-        first.rms = [-20.0, FLOOR_DB];
-        let mut second = level(-30.0);
-        second.peak = [-10.0, -40.0];
-        second.rms = [-20.0, -23.0];
-        second.full_scale = true;
-
-        assert_eq!(batcher.push(first), None);
-        let frame = batcher.push(second).expect("the second completes a frame");
-        assert_eq!(frame.bands[3], -6.0);
-        assert_eq!(frame.bands[4], -20.0);
-        assert_eq!(frame.peak, [-10.0, -20.0]);
-        assert!((frame.rms[0] - -20.0).abs() < 1e-4);
-        // Mean of the energies at -90 and -23 dB is half of -23 dB: about -26 dB.
-        assert!((frame.rms[1] - -26.01).abs() < 0.05, "{}", frame.rms[1]);
-        assert!(frame.full_scale);
-    }
-
-    #[test]
-    fn one_hundred_twenty_measurements_a_second_give_sixty_frames() {
-        let mut batcher = FrameBatcher::new();
-        let frames = (0..120).filter_map(|_| batcher.push(level(-20.0))).count();
         assert_eq!(frames, 60);
     }
 
     #[test]
-    fn nothing_is_sent_while_silent_and_unchanged() {
-        let mut batcher = FrameBatcher::new();
-        let sent = (0..120)
-            .filter_map(|_| batcher.push(MeterFrame::silent()))
-            .count();
-        assert_eq!(sent, 0);
-
-        // Sound starts, then stops: the drop to silence is sent once, then nothing again.
-        assert!(batcher.push(level(-20.0)).is_none());
-        assert!(batcher.push(level(-20.0)).is_some());
-        assert!(batcher.push(MeterFrame::silent()).is_none());
-        assert!(batcher.push(MeterFrame::silent()).is_some());
-        let after = (0..20)
-            .filter_map(|_| batcher.push(MeterFrame::silent()))
-            .count();
-        assert_eq!(after, 0);
+    fn a_frame_serializes_to_the_json_the_renderer_reads() {
+        let mut frame = MeterFrame::silent();
+        frame.bands[0] = -12.5;
+        frame.peak[1] = -3.0;
+        frame.rms[0] = -20.0;
+        frame.clip = [false, true];
+        let json = serde_json::to_value(&frame).unwrap();
+        assert_eq!(json["bands"].as_array().unwrap().len(), BAND_COUNT);
+        assert_eq!(json["bands"][0], -12.5);
+        assert_eq!(json["peak"], serde_json::json!([-90.0, -3.0]));
+        assert_eq!(json["rms"][0], -20.0);
+        assert_eq!(json["clip"], serde_json::json!([false, true]));
     }
 
-    // --- tap and hub ---
+    // --- held back ---
+
+    fn level(db: f32) -> MeterFrame {
+        MeterFrame {
+            bands: vec![db; BAND_COUNT],
+            peak: [db; 2],
+            rms: [db; 2],
+            clip: [false; 2],
+        }
+    }
+
+    #[test]
+    fn nothing_is_sent_while_silent_and_unchanged() {
+        let mut last_sent_silent = true;
+        assert!(held_back(&MeterFrame::silent(), &mut last_sent_silent));
+        assert!(!held_back(&level(-20.0), &mut last_sent_silent));
+        // The drop to silence is sent once, then nothing again.
+        assert!(!held_back(&MeterFrame::silent(), &mut last_sent_silent));
+        assert!(held_back(&MeterFrame::silent(), &mut last_sent_silent));
+    }
+
+    // --- tap and Meter ---
 
     #[test]
     fn a_full_ring_drops_samples_and_returns() {
-        let hub = MeterHub::new();
-        let mut tap = hub.tap(RATE, 2);
-        hub.shared.active.store(1, Ordering::Release);
+        let meter = Meter::new();
+        let mut tap = meter.tap(RATE, 2);
+        meter.set_running(true);
         let burst = vec![0.25_f32; RING_SAMPLES];
         tap.push(&burst);
         assert_eq!(tap.vacant(), 0);
-        assert_eq!(tap.dropped(), 0);
         tap.push(&burst);
-        assert_eq!(tap.dropped(), (RING_SAMPLES / 2) as u64);
+        assert_eq!(
+            tap.vacant(),
+            0,
+            "the full ring stays full, and the push returns"
+        );
     }
 
     #[test]
     fn mono_is_duplicated_and_extra_channels_are_skipped() {
-        let hub = MeterHub::new();
-        let mut mono = hub.tap(RATE, 1);
-        hub.shared.active.store(1, Ordering::Release);
+        let meter = Meter::new();
+        let mut mono = meter.tap(RATE, 1);
+        meter.set_running(true);
         mono.push(&[0.1, 0.2]);
-        let mut source = hub.shared.source.lock().take().unwrap();
+        let mut source = meter.shared.source.lock().take().unwrap();
         let mut out = [0.0; 4];
         assert_eq!(source.consumer.pop_slice(&mut out), 4);
         assert_eq!(out, [0.1, 0.1, 0.2, 0.2]);
 
-        let mut surround = hub.tap(RATE, 6);
+        let mut surround = meter.tap(RATE, 6);
         // Chunks that end mid-frame must not shift the channels.
         surround.push(&[1.0, 2.0, 3.0, 4.0, 5.0]);
         surround.push(&[6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0]);
-        let mut source = hub.shared.source.lock().take().unwrap();
+        let mut source = meter.shared.source.lock().take().unwrap();
         let mut out = [0.0; 4];
         assert_eq!(source.consumer.pop_slice(&mut out), 4);
         assert_eq!(out, [1.0, 2.0, 7.0, 8.0]);
     }
 
     #[test]
-    fn with_no_subscriber_nothing_is_copied_and_nothing_runs() {
-        let hub = MeterHub::new();
-        let mut tap = hub.tap(RATE, 2);
+    fn nothing_is_copied_while_the_meter_does_not_run() {
+        let meter = Meter::new();
+        let mut tap = meter.tap(RATE, 2);
         tap.push(&[0.5; 64]);
         assert_eq!(tap.vacant(), RING_SAMPLES, "nothing was copied");
-        assert!(!hub.is_active());
-        assert!(hub.shared.session.lock().is_none(), "no analysis thread");
     }
 
     #[test]
-    fn a_subscriber_gets_frames_until_it_unsubscribes() {
-        let hub = MeterHub::new();
-        let mut tap = hub.tap(RATE, 2);
+    fn a_running_meter_sends_frames_to_its_callback_and_a_paused_one_sends_none() {
+        let meter = Meter::new();
+        let mut tap = meter.tap(RATE, 2);
         let (sender, receiver) = mpsc::channel();
-        let id = hub.subscribe(Box::new(move |frame| sender.send(frame.clone()).is_ok()));
-        assert!(hub.is_active());
+        meter.start(Box::new(move |frame| {
+            sender.send(frame.clone()).ok();
+        }));
+        meter.set_running(true);
 
+        // One tone is six frames: all of it is measured once six frames arrive.
         let tone = sine(1000.0, 0.5, 4_800);
         tap.push(&interleave(&tone, &tone));
-        let frame = receiver
-            .recv_timeout(Duration::from_secs(5))
-            .expect("a frame arrives");
-        assert!(frame.peak[0] > -7.0);
-
-        hub.unsubscribe(id);
-        assert!(!hub.is_active());
-        let vacant = tap.vacant();
-        tap.push(&[0.5; 64]);
-        assert_eq!(tap.vacant(), vacant, "nothing is copied once unsubscribed");
-    }
-
-    #[test]
-    fn a_closed_sink_ends_the_subscription() {
-        let hub = MeterHub::new();
-        let mut tap = hub.tap(RATE, 2);
-        let (sender, receiver) = mpsc::channel::<MeterFrame>();
-        drop(receiver);
-        hub.subscribe(Box::new(move |frame| sender.send(frame.clone()).is_ok()));
-        let tone = sine(1000.0, 0.5, 4_800);
-        tap.push(&interleave(&tone, &tone));
-        let deadline = std::time::Instant::now() + Duration::from_secs(5);
-        while hub.is_active() && std::time::Instant::now() < deadline {
-            thread::sleep(Duration::from_millis(5));
+        for _ in 0..6 {
+            let frame = receiver
+                .recv_timeout(Duration::from_secs(5))
+                .expect("a frame arrives");
+            assert!(frame.peak[0] > -7.0);
         }
-        assert!(!hub.is_active());
+
+        meter.set_running(false);
+        tap.push(&interleave(&tone, &tone));
+        thread::sleep(Duration::from_millis(100));
+        assert!(receiver.try_recv().is_err(), "a paused meter sends nothing");
+
+        meter.set_running(true);
+        tap.push(&interleave(&tone, &tone));
+        assert!(receiver.recv_timeout(Duration::from_secs(5)).is_ok());
     }
 
     #[test]
-    fn a_new_subscription_replaces_the_old_and_a_stale_unsubscribe_is_ignored() {
-        let hub = MeterHub::new();
-        let _tap = hub.tap(RATE, 2);
-        let first = hub.subscribe(Box::new(|_| true));
-        let second = hub.subscribe(Box::new(|_| true));
-        assert_ne!(first, second);
-        hub.unsubscribe(first);
-        assert!(hub.is_active(), "the newer subscription survives");
-        hub.unsubscribe(second);
-        assert!(!hub.is_active());
+    fn a_second_start_replaces_the_callback() {
+        let meter = Meter::new();
+        let mut tap = meter.tap(RATE, 2);
+        let (first_sender, first) = mpsc::channel();
+        let (second_sender, second) = mpsc::channel();
+        meter.start(Box::new(move |frame| {
+            first_sender.send(frame.clone()).ok();
+        }));
+        meter.start(Box::new(move |frame| {
+            second_sender.send(frame.clone()).ok();
+        }));
+        meter.set_running(true);
+
+        let tone = sine(1000.0, 0.5, 4_800);
+        tap.push(&interleave(&tone, &tone));
+        assert!(second.recv_timeout(Duration::from_secs(5)).is_ok());
+        assert!(
+            first.try_recv().is_err(),
+            "the replaced callback hears nothing"
+        );
     }
 }

@@ -4,7 +4,7 @@ import { BALLISTICS, BAND_COUNT } from "#lib/meters/ballistics";
 import { DrawLoop } from "#lib/meters/draw-loop";
 import { MeterDisplay } from "#lib/meters/meter-display";
 import { MeterFeed } from "#lib/meters/meter-feed.svelte";
-import { MeterFrames } from "#lib/meters/meter-frames";
+import { reduceMeterFrames } from "#lib/meters/meter-frames";
 import { MeterDraw } from "#lib/meters/meter-draw";
 import { Readout } from "#lib/meters/readout";
 import { AppServices } from "#lib/shell/app-services.svelte";
@@ -85,7 +85,7 @@ export class MeterView {
           const { playback } = this.#services;
           const input =
             playback.status === "playing"
-              ? MeterFrames.reduce(this.#feed.drain())
+              ? reduceMeterFrames(this.#feed.drain())
               : (this.#feed.drain(), null);
           this.#display = this.#display.step(input, elapsed);
           this.#drawAll(this.#color);

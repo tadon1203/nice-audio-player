@@ -190,13 +190,6 @@ impl StreamingDecoder {
         self.duration_ms
     }
 
-    pub(crate) fn seek_to_frame(
-        &mut self,
-        target_source_frame: u64,
-    ) -> Result<SeekStep, PcmDecodeError> {
-        self.seek_to_frame_with_preroll(target_source_frame, 0)
-    }
-
     pub(crate) fn seek_to_frame_with_preroll(
         &mut self,
         target_source_frame: u64,
@@ -444,7 +437,9 @@ mod tests {
         }
         write_pcm_i16_wav(&path, 100_000, 1, &samples);
         let mut decoder = open_source_decoder(&validated(&path));
-        let result = decoder.seek_to_frame(500).expect("seek succeeds");
+        let result = decoder
+            .seek_to_frame_with_preroll(500, 0)
+            .expect("seek succeeds");
         let SeekStep::Samples(result) = result else {
             panic!("seek reached end of stream unexpectedly");
         };

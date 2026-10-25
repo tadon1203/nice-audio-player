@@ -1,5 +1,5 @@
 import { type Page } from "@playwright/test";
-import { defaultSettings, meterFrameBytes } from "./fixtures/data";
+import { defaultSettings, meterFrame } from "./fixtures/data";
 import type { Native } from "./fixtures/native-api";
 import { expect, test } from "./fixtures/test";
 import type { Locator } from "@playwright/test";
@@ -116,10 +116,10 @@ test("shows Clip for a full-scale frame and clears it on click", async ({ page, 
   await expect(meters.getByText("-inf")).toHaveCount(2);
   await expect.poll(() => subscribes(native)).toBe(1);
 
-  await native.emitChannelMessage(
+  await native.emitChannelValue(
     "meterStart",
     "frames",
-    meterFrameBytes({ band: -3, peak: [0, -12], rms: [-4, -14], fullScale: true }),
+    meterFrame({ band: -3, peak: [0, -12], rms: [-4, -14], clip: [true, false] }),
   );
   const clip = meters.getByRole("button", { name: "Clip" });
   await expect(clip).toBeVisible();

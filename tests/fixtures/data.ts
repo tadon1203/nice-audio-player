@@ -16,6 +16,7 @@ import {
   type PlaybackQueueItem,
   type QueueState,
   type PlaybackState,
+  type MeterFrame,
 } from "#lib/native/bindings";
 
 /** Plain data the fake backend serves. No rule lives here: tests say what a page contains. */
@@ -283,24 +284,19 @@ export const emptyQueue: QueueState = {
   canRestorePrevious: false,
 };
 
-/** A Meter frame as the backend sends it (35 little-endian 32-bit words, see `MeterFrames.decode`). */
-export function meterFrameBytes({
+/** A Meter frame as the backend sends it: every band at `band`, and the given peak, RMS and clip. */
+export function meterFrame({
   band = -90,
   peak = [-90, -90],
   rms = [-90, -90],
-  fullScale = false,
+  clip = [false, false],
 }: {
   band?: number;
   peak?: [number, number];
   rms?: [number, number];
-  fullScale?: boolean;
-} = {}): number[] {
-  const view = new DataView(new ArrayBuffer(35 * 4));
-  [...Array.from({ length: 30 }, () => band), ...peak, ...rms].forEach((value, i) =>
-    view.setFloat32(i * 4, value, true),
-  );
-  view.setUint32(34 * 4, fullScale ? 1 : 0, true);
-  return Array.from(new Uint8Array(view.buffer));
+  clip?: [boolean, boolean];
+} = {}): MeterFrame {
+  return { bands: Array.from({ length: 30 }, () => band), peak, rms, clip };
 }
 
 /** The value and version of every state topic, as the Backend holds them. */

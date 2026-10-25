@@ -18,7 +18,7 @@ use super::snapshot::{
 };
 use super::worker::{PlaybackWorker, WorkerLinks};
 use crate::audio::devices::AudioOutputSelection;
-use crate::audio::meter::MeterHub;
+use crate::audio::meter::Meter;
 use crate::audio::output::OutputBackend;
 use crate::audio::volume::{AtomicEffectiveGain, VolumeState};
 use crate::errors::CommandError;
@@ -248,7 +248,7 @@ pub(crate) struct PlaybackServiceHandle {
     inbox: Inbox,
     state_store: Arc<StateStore>,
     position: Arc<RwLock<Option<PlaybackPosition>>>,
-    meter: MeterHub,
+    meter: Meter,
 }
 
 pub(crate) struct PlaybackService {
@@ -275,7 +275,7 @@ impl PlaybackService {
         let (inbox, inputs) = Inbox::channel();
         let volume_state = VolumeState::restored(preferences.volume, preferences.muted);
         let effective_gain = AtomicEffectiveGain::new(volume_state.effective_gain());
-        let meter = MeterHub::new();
+        let meter = Meter::new();
         let output_selection = preferences.output_selection;
         let queue = PlaybackQueue::new(preferences.repeat_mode, preferences.shuffle_enabled);
         let position = Arc::new(RwLock::new(None));
@@ -313,8 +313,8 @@ impl PlaybackService {
         self.handle.clone()
     }
 
-    /// Where Meter frames are subscribed to; its taps belong to this service's output streams.
-    pub(crate) fn meter(&self) -> MeterHub {
+    /// The Meter; its taps belong to this service's output streams.
+    pub(crate) fn meter(&self) -> Meter {
         self.handle.meter.clone()
     }
 

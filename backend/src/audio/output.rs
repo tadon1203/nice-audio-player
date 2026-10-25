@@ -20,7 +20,7 @@ use super::devices::{
     AudioOutputDeviceIdentity, AudioOutputSelection, DeviceResolutionError,
     ResolvedAudioOutputDevice, resolve_output_selection,
 };
-use super::meter::{MeterHub, MeterTap};
+use super::meter::{Meter, MeterTap};
 use super::output_processing::{OutputProcessingError, OutputProcessingPlan};
 use super::pcm::{ChannelCount, PcmSpec, SampleRate};
 use super::pcm_queue::{PcmConsumer, PcmProducer, bounded_pcm_queue};
@@ -73,7 +73,7 @@ pub struct OutputLinks {
     pub(crate) gain: AtomicEffectiveGain,
     pub(crate) events: OutputEvents,
     /// Where the callback copies what it plays for the meters.
-    pub(crate) meter: MeterHub,
+    pub(crate) meter: Meter,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -931,7 +931,7 @@ mod tests {
         classify_stream_error_kind, played_frame_position, sample_format_rank,
         select_output_config,
     };
-    use crate::audio::meter::MeterHub;
+    use crate::audio::meter::Meter;
     use crate::audio::pcm::ChannelCount;
     use crate::audio::pcm_queue::{PcmProducer, bounded_pcm_queue};
     use crate::audio::volume::AtomicEffectiveGain;
@@ -1182,7 +1182,7 @@ mod tests {
         events: Arc<Mutex<Vec<OutputEvent>>>,
         handoff: triple_buffer::Input<Option<Generation>>,
         chain: triple_buffer::Input<Option<Chain>>,
-        meter: MeterHub,
+        meter: Meter,
     }
 
     fn callback(channels: usize, capacity_frames: usize, gain: f32) -> Callback {
@@ -1191,7 +1191,7 @@ mod tests {
         let events = Arc::new(Mutex::new(Vec::new()));
         let sink = Arc::clone(&events);
         let position = LatestPosition::default();
-        let meter = MeterHub::new();
+        let meter = Meter::new();
         let (handoff, slot) = triple_buffer::TripleBuffer::default().split();
         let (chain, chain_slot) = triple_buffer::TripleBuffer::default().split();
         let state = CallbackState::new(
@@ -1246,9 +1246,10 @@ mod tests {
         let mut callback = callback(2, 8, 0.5);
         callback.producer.push_samples(&[1.0; 8]);
         let (sender, receiver) = std::sync::mpsc::channel();
-        callback
-            .meter
-            .subscribe(Box::new(move |frame| sender.send(frame.clone()).is_ok()));
+        callback.meter.start(Box::new(move |frame| {
+            sender.send(frame.clone()).ok();
+        }));
+        callback.meter.set_running(true);
 
         let mut output = [0.0_f32; 8];
         callback.state.fill(&mut output, at(10));
@@ -1257,7 +1258,7 @@ mod tests {
             .recv_timeout(Duration::from_secs(5))
             .expect("a frame arrives");
         assert!((frame.peak[0] - 20.0 * 0.5_f32.log10()).abs() < 0.01);
-        assert!(!frame.full_scale, "full scale is judged after the volume");
+        assert_eq!(frame.clip, [false; 2], "clip is judged after the volume");
     }
 
     #[test]

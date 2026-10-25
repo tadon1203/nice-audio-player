@@ -9,6 +9,7 @@ use super::{
 impl PlaybackWorker {
     /// Lets go of whatever is loading or loaded, answering whoever waits for it.
     pub(super) fn discard_transport(&mut self) {
+        self.meter.set_running(false);
         match std::mem::replace(&mut self.transport, Transport::Idle) {
             Transport::Idle | Transport::Failed { .. } => {}
             Transport::Loading(loading) => {
@@ -37,6 +38,7 @@ impl PlaybackWorker {
     /// Lets go of the loaded track and returns its identity. A seek in flight is answered with
     /// `seek_error`.
     pub(super) fn drop_loaded(&mut self, seek_error: PlaybackServiceError) -> Option<PlaybackId> {
+        self.meter.set_running(false);
         let Transport::Loaded(mut loaded) = std::mem::replace(&mut self.transport, Transport::Idle)
         else {
             return None;
@@ -71,6 +73,7 @@ impl PlaybackWorker {
         loaded.output.stream.clear_timing_anchor();
         loaded.position.frame = position;
         loaded.paused = true;
+        self.meter.set_running(false);
         Ok(self.publish_state())
     }
 
@@ -103,6 +106,7 @@ impl PlaybackWorker {
             return Err(self.control_failure(error));
         }
         loaded.paused = false;
+        self.meter.set_running(true);
         Ok(self.publish_state())
     }
 

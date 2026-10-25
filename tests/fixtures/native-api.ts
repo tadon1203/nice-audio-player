@@ -24,7 +24,6 @@ declare global {
   interface Window {
     /** Node side of the IPC bridge, bound by `installNativeApi`. */
     __nativeInvoke?: (command: string, args: unknown) => Promise<Reply>;
-    __emitChannelMessage?: (channelId: number, bytes: number[]) => void;
     __emitChannelValue?: (channelId: number, value: unknown) => void;
   }
 }
@@ -92,8 +91,6 @@ function installIpcBridge(): void {
     channelIndexes.set(channelId, index + 1);
     callbacks.get(channelId)?.({ index, message });
   };
-  window.__emitChannelMessage = (channelId, bytes): void =>
-    deliver(channelId, new Uint8Array(bytes).buffer);
   window.__emitChannelValue = deliver;
 }
 
@@ -216,16 +213,17 @@ export class Native {
   }
 
   /** Sends one binary message down the channel the renderer passed to its latest call of `name`. */
-  public async emitChannelMessage(
+  /** Delivers `message` as the next message of the channel that `argument` of `name` passed. */
+  public async emitChannelValue(
     name: CommandName,
     argument: string,
-    bytes: number[],
+    message: unknown,
   ): Promise<void> {
     const id = this.#channelId(name, argument);
     if (id === undefined) throw new Error(`no channel was passed to ${name}`);
     await this.#page.evaluate(
-      ([channelId, payload]) => window.__emitChannelMessage?.(channelId, payload),
-      [id, bytes] as const,
+      ([channelId, payload]) => window.__emitChannelValue?.(channelId, payload),
+      [id, message] as const,
     );
   }
 

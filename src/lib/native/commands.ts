@@ -1,5 +1,5 @@
 import { Channel } from "@tauri-apps/api/core";
-import { commands, type BackendMessage, type CommandError } from "./bindings";
+import { commands, type BackendMessage, type CommandError, type MeterFrame } from "./bindings";
 import { IpcError, NativeError, type NativeArea } from "./errors";
 
 /** The `CommandError` a rejected command carries, or null when the rejection has none. */
@@ -85,13 +85,14 @@ export const lyrics = {
 };
 
 /**
- * The Meter frames. `start` takes the callback for each frame and resolves to the id that `stop`
- * ends the subscription with. The Channel that carries the frames is made here, not by the caller.
+ * The Meter frames. `start` takes the callback for each frame, and a new start replaces the one
+ * before it. `stop` ends the frames. The Channel that carries the frames is made here, not by the
+ * caller.
  */
 export const meter = {
-  start: (onFrame: (frame: ArrayBuffer) => void): Promise<number> =>
-    command("meter", () => commands.meterStart(new Channel<ArrayBuffer>(onFrame))),
-  stop: areaCommand("meter", commands.meterStop),
+  start: (onFrame: (frame: MeterFrame) => void): Promise<void> =>
+    command("meter", () => commands.meterStart(new Channel<MeterFrame>(onFrame))),
+  stop: (): Promise<void> => command("meter", () => commands.meterStop()),
 };
 
 /** The Appearance: the partial update that the Backend saves and returns. */

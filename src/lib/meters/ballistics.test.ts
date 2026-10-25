@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { BALLISTICS, type MeterInput } from "./ballistics";
 import { MeterDisplay } from "./meter-display";
-import { MeterFrames, type MeterFrame } from "./meter-frames";
+import type { MeterFrame } from "#lib/native/bindings";
+import { reduceMeterFrames } from "./meter-frames";
 import { Readout } from "./readout";
 
 const { floorDb } = BALLISTICS;
@@ -173,12 +174,12 @@ describe("frames", () => {
     bands: bandsAt(floorDb),
     peak: [floorDb, floorDb],
     rms: [floorDb, floorDb],
-    fullScale: false,
+    clip: [false, false],
     ...overrides,
   });
 
   it("reduce to their maximum so a short peak is not lost", () => {
-    const reduced = MeterFrames.reduce([
+    const reduced = reduceMeterFrames([
       frame({ bands: bandsAt(-40), peak: [-30, -50], rms: [-35, -35] }),
       frame({ bands: bandsAt(-10), peak: [-6, -50], rms: [-33, -33] }),
       frame({ bands: bandsAt(-60), peak: [-40, -45], rms: [-32, -32] }),
@@ -190,33 +191,16 @@ describe("frames", () => {
   });
 
   it("flag a clip on the channel whose peak reached full scale", () => {
-    const reduced = MeterFrames.reduce([frame({ peak: [0, -20], fullScale: true })])!;
+    const reduced = reduceMeterFrames([frame({ peak: [0, -20], clip: [true, false] })])!;
     expect(reduced.clip).toEqual([true, false]);
-    expect(MeterFrames.reduce([frame({ peak: [0, 0], fullScale: false })])!.clip).toEqual([
+    expect(reduceMeterFrames([frame({ peak: [0, 0], clip: [false, false] })])!.clip).toEqual([
       false,
       false,
     ]);
   });
 
   it("reduce to nothing when there are none", () => {
-    expect(MeterFrames.reduce([])).toBeNull();
-  });
-
-  it("decode from the wire layout", () => {
-    const buffer = new ArrayBuffer(35 * 4);
-    const view = new DataView(buffer);
-    for (let i = 0; i < 30; i += 1) view.setFloat32(i * 4, -i, true);
-    view.setFloat32(30 * 4, -3, true);
-    view.setFloat32(31 * 4, -4, true);
-    view.setFloat32(32 * 4, -5, true);
-    view.setFloat32(33 * 4, -6, true);
-    view.setUint32(34 * 4, 1, true);
-    const decoded = MeterFrames.decode(buffer)!;
-    expect(decoded.bands[7]).toBe(-7);
-    expect(decoded.peak).toEqual([-3, -4]);
-    expect(decoded.rms).toEqual([-5, -6]);
-    expect(decoded.fullScale).toBe(true);
-    expect(MeterFrames.decode(new ArrayBuffer(8))).toBeNull();
+    expect(reduceMeterFrames([])).toBeNull();
   });
 });
 

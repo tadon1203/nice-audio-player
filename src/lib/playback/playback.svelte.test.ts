@@ -722,7 +722,7 @@ describe("the waveform", () => {
     peak: number,
   ): Versioned<PlaybackWaveform | null> => ({
     version,
-    value: { playbackId, peaks: [peak], rms: [peak] },
+    value: { playbackId, rms: [peak] },
   });
 
   it("is shown only for the playback it belongs to", () => {
@@ -730,7 +730,7 @@ describe("the waveform", () => {
     playback.acceptPlayback(playing(1, 1, 0));
 
     playback.acceptWaveform(waveformOf(1, 1, 5));
-    expect(playback.waveform?.peaks).toEqual([5]);
+    expect(playback.waveform?.rms).toEqual([5]);
 
     playback.acceptWaveform(waveformOf(2, 2, 7));
     expect(playback.waveform).toBeNull();
@@ -743,6 +743,6 @@ describe("the waveform", () => {
     playback.acceptWaveform(waveformOf(1, 5, 9));
     playback.acceptWaveform(waveformOf(1, 4, 3));
 
-    expect(playback.waveform?.peaks).toEqual([9]);
+    expect(playback.waveform?.rms).toEqual([9]);
   });
 });

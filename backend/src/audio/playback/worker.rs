@@ -33,7 +33,7 @@ use crate::audio::compressed_source::{CompressedAudioSource, CompressedSourceErr
 use crate::audio::devices::{
     AudioOutputDeviceIdentity, AudioOutputSelection, DeviceResolutionError,
 };
-use crate::audio::meter::MeterHub;
+use crate::audio::meter::Meter;
 use crate::audio::output::{
     AudioOutputError, OutputBackend, OutputLinks, OutputStreamId, PipelineId, StreamFailureKind,
 };
@@ -141,7 +141,7 @@ pub(super) struct WorkerLinks {
     pub state_store: Arc<StateStore>,
     pub position: Arc<RwLock<Option<PlaybackPosition>>>,
     pub effective_gain: AtomicEffectiveGain,
-    pub meter: MeterHub,
+    pub meter: Meter,
     pub inbox: Inbox,
     pub messages: Notifier,
     pub observer: PreferencesObserver,
@@ -173,7 +173,7 @@ pub(super) struct PlaybackWorker {
     skipped_in_a_row: usize,
     volume_state: VolumeState,
     effective_gain: AtomicEffectiveGain,
-    meter: MeterHub,
+    meter: Meter,
     output_selection: AudioOutputSelection,
     state_store: Arc<StateStore>,
     position: Arc<RwLock<Option<PlaybackPosition>>>,

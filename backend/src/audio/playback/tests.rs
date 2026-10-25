@@ -14,7 +14,7 @@ mod transport;
 
 use crate::audio::devices::AudioOutputSelection;
 use crate::audio::fake_output::FakeOutput;
-use crate::audio::meter::MeterHub;
+use crate::audio::meter::Meter;
 use crate::audio::output::{AudioOutputError, OutputStreamId, PipelineId, StreamFailureKind};
 use crate::audio::playback::TrackListener;
 use crate::audio::playback::input::{Inbox, WorkerEvent, WorkerInput};
@@ -118,7 +118,7 @@ impl Harness {
                 state_store: Arc::clone(&state_store),
                 position: Arc::clone(&position),
                 effective_gain: gain.clone(),
-                meter: MeterHub::new(),
+                meter: Meter::new(),
                 inbox,
                 messages,
                 observer: Arc::new(move |preferences| observed.lock().push(preferences)),

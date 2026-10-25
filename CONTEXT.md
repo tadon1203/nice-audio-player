@@ -34,7 +34,7 @@ The language of Nice Audio Player. Use these terms in code, docs, and tickets. D
 - **Output stream**: the device stream that playback opens. It can span several Playbacks.
 - **Gapless**: consecutive tracks of the same audio format play with no silence between them.
 - **Playback clock**: the single source of the playing position. The Backend reports it while a track plays.
-- **Waveform**: the RMS and peak levels of the loaded Playback, keyed by its playback id.
+- **Waveform**: the RMS level of each bucket of the loaded Playback, keyed by its playback id.
 
 ## Meters
 

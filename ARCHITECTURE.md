@@ -57,7 +57,7 @@ Communication: one path for requests, four for pushes.
   1. **State:** a topic's whole value with its version, on the `app_connect` channel. The Backend keeps every topic's value in its state store.
   2. **Backend event:** a fact that happened once, such as a skipped track, on the `app_connect` channel.
   3. **Position:** the playing position, on the `app_connect` channel.
-  4. **Measurement:** meter frames, in binary, on a channel for each subscription.
+  4. **Measurement:** meter frames, as JSON, on the channel that `meter_start` takes. The Meter measures only while the Player runs.
 
 The Renderer updates its caches and views from these.
 
