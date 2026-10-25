@@ -1,9 +1,9 @@
 //! Stopping, pausing, resuming and switching the output device.
 
 use super::{
-    AudioOutputError, AudioOutputSelection, LoadStage, PlaybackId, PlaybackServiceError,
-    PlaybackState, PlaybackWorker, Reply, StartRequest, StartedBy, Transport, Versioned,
-    output_failure_code, resolution_error, respond,
+    AudioOutputSelection, LoadStage, OutputError, PlaybackId, PlaybackServiceError, PlaybackState,
+    PlaybackWorker, Reply, StartRequest, StartedBy, Transport, Versioned, output_failure_code,
+    resolution_error, respond,
 };
 
 impl PlaybackWorker {
@@ -100,7 +100,7 @@ impl PlaybackWorker {
         }
         if let Err(error) = loaded.output.stream.start() {
             let error = match error {
-                AudioOutputError::StreamStartFailed => AudioOutputError::StreamResumeFailed,
+                OutputError::StreamStartFailed => OutputError::StreamResumeFailed,
                 other => other,
             };
             return Err(self.control_failure(error));
@@ -110,7 +110,7 @@ impl PlaybackWorker {
         Ok(self.publish_state())
     }
 
-    pub(super) fn control_failure(&mut self, error: AudioOutputError) -> PlaybackServiceError {
+    pub(super) fn control_failure(&mut self, error: OutputError) -> PlaybackServiceError {
         let id = self.drop_loaded(PlaybackServiceError::Superseded);
         let code = output_failure_code(error);
         self.transport = Transport::Failed {
@@ -141,7 +141,7 @@ impl PlaybackWorker {
             respond(reply, Ok(self.playback_versioned()));
             return;
         }
-        if let Err(error) = self.backend.resolve(&selection) {
+        if let Err(error) = self.output_stream_factory.resolve(&selection) {
             respond(reply, Err(resolution_error(error)));
             return;
         }
@@ -165,7 +165,9 @@ impl PlaybackWorker {
             return Err(PlaybackServiceError::InvalidPlaybackState);
         }
         if let AudioOutputSelection::Device { .. } = &selection {
-            self.backend.resolve(&selection).map_err(resolution_error)?;
+            self.output_stream_factory
+                .resolve(&selection)
+                .map_err(resolution_error)?;
         }
         let unchanged = self.output_selection == selection;
         self.output_selection = selection;

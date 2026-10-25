@@ -7,14 +7,14 @@ use crate::ids::PlaybackId;
 use crate::library::tracks::PlayableTrack;
 
 mod decode_worker;
-mod input;
+pub(crate) mod input;
 mod item;
 mod pipeline;
 mod preferences;
 mod queue;
 mod resolver;
 pub(crate) mod service;
-mod session;
+pub(crate) mod session;
 mod snapshot;
 mod source_loader;
 mod worker;

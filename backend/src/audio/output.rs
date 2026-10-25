@@ -1,30 +1,35 @@
-//! The output device behind a seam.
+//! The output device behind a seam, and the PCM queue that feeds it.
 //!
-//! Playback talks to an `OutputBackend` (resolve a device, prepare a stream) and to the
-//! `OutputStream` it returns (start, pause, position, switch queue). `CpalBackend` is the real
-//! adapter; a fake adapter lives in `fake_output` for tests. The cpal callback body is
+//! Playback talks to an `OutputStreamFactory` (list the devices, resolve a device, open a stream)
+//! and to the `OutputStream` it returns (start, pause, position, switch queue). `CpalOutput` is
+//! the real adapter; a fake adapter lives in `fake_output` for tests. The cpal callback body is
 //! `CallbackState::fill`, a plain function over its state, tested directly.
 //!
 //! A session opens one stream. A seek builds a new queue and hands it to the running callback
 //! through a lock-free single-slot handoff; the callback switches to it at its next run.
 
-use parking_lot::Mutex;
-use std::sync::Arc;
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+    mpsc::{self, Receiver, SyncSender, TrySendError},
+};
 use std::time::Duration;
 
-use cpal::traits::{DeviceTrait, StreamTrait};
+use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, Sample, SampleFormat, StreamConfig, StreamInstant, SupportedStreamConfig};
 use log::{error, info, warn};
-
-use super::devices::{
-    AudioOutputDeviceIdentity, AudioOutputSelection, DeviceResolutionError,
-    ResolvedAudioOutputDevice, resolve_output_selection,
+use parking_lot::Mutex;
+use ringbuf::{
+    HeapRb,
+    traits::{Consumer, Observer, Producer, Split},
 };
+use serde::{Deserialize, Serialize};
+
 use super::meter::{Meter, MeterTap};
-use super::output_processing::{OutputProcessingError, OutputProcessingPlan};
 use super::pcm::{ChannelCount, PcmSpec, SampleRate};
-use super::pcm_queue::{PcmConsumer, PcmProducer, bounded_pcm_queue};
+use super::processing::OutputProcessingPlan;
 use super::volume::{AtomicEffectiveGain, process_sample};
+use crate::errors::CommandError;
 
 /// Identifies one output stream, which lives as long as a session.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -104,7 +109,7 @@ impl LatestPosition {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AudioOutputError {
+pub enum OutputError {
     NoOutputDevice,
     ConfigurationQueryFailed,
     UnsupportedConfiguration,
@@ -116,7 +121,7 @@ pub enum AudioOutputError {
     DeviceUnavailable,
 }
 
-impl From<DeviceResolutionError> for AudioOutputError {
+impl From<DeviceResolutionError> for OutputError {
     fn from(error: DeviceResolutionError) -> Self {
         match error {
             DeviceResolutionError::NoDefaultOutputDevice => Self::NoOutputDevice,
@@ -161,7 +166,9 @@ pub(crate) struct Chain {
 type ChainHandoff = triple_buffer::Input<Option<Chain>>;
 type ChainSlot = triple_buffer::Output<Option<Chain>>;
 
-pub trait OutputBackend: Send {
+/// Opens the streams that play on the output devices. `CpalOutput` is the real one; `FakeOutput`
+/// stands in for tests.
+pub trait OutputStreamFactory: Send {
     /// Checks that a selection names a usable device and says which one it is.
     fn resolve(
         &self,
@@ -170,18 +177,18 @@ pub trait OutputBackend: Send {
 
     /// Opens a stream on the device `selection` names, configured for audio of `spec`. The stream
     /// plays `first` from the returned producer's queue once started.
-    fn prepare(
+    fn open(
         &self,
         selection: &AudioOutputSelection,
         spec: PcmSpec,
         first: PipelineId,
         links: OutputLinks,
-    ) -> Result<PreparedOutput, AudioOutputError>;
+    ) -> Result<PreparedOutput, OutputError>;
 }
 
 pub trait OutputStream {
-    fn start(&self) -> Result<(), AudioOutputError>;
-    fn pause(&self) -> Result<(), AudioOutputError>;
+    fn start(&self) -> Result<(), OutputError>;
+    fn pause(&self) -> Result<(), OutputError>;
     /// The stream clock; a `FinalFrames` event is due once it reaches the event's end time.
     fn now(&self) -> StreamInstant;
     /// Frames of the current pipeline heard so far, from the newest position report. Never moves
@@ -207,9 +214,9 @@ pub trait OutputStream {
     fn adopt_next(&mut self, pipeline: PipelineId);
 }
 
-pub struct CpalBackend;
+pub struct CpalOutput;
 
-impl OutputBackend for CpalBackend {
+impl OutputStreamFactory for CpalOutput {
     fn resolve(
         &self,
         selection: &AudioOutputSelection,
@@ -217,46 +224,21 @@ impl OutputBackend for CpalBackend {
         resolve_output_selection(selection).map(|device| device.identity)
     }
 
-    fn prepare(
+    fn open(
         &self,
         selection: &AudioOutputSelection,
         spec: PcmSpec,
         first: PipelineId,
         links: OutputLinks,
-    ) -> Result<PreparedOutput, AudioOutputError> {
-        prepare_for_spec(resolve_output_selection(selection)?, spec, first, links)
+    ) -> Result<PreparedOutput, OutputError> {
+        open_stream(resolve_output_selection(selection)?, spec, first, links)
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
-enum NativeAttemptDecision<T> {
-    Success(T),
-    Fallback,
-    Failure(AudioOutputError),
-}
-
-fn classify_native_attempt<T>(result: Result<T, AudioOutputError>) -> NativeAttemptDecision<T> {
-    match result {
-        Ok(value) => NativeAttemptDecision::Success(value),
-        Err(
-            AudioOutputError::UnsupportedConfiguration
-            | AudioOutputError::StreamConfigurationUnsupported,
-        ) => NativeAttemptDecision::Fallback,
-        Err(error) => NativeAttemptDecision::Failure(error),
-    }
-}
-
-fn classify_fallback_build<T>(result: Result<T, AudioOutputError>) -> Result<T, AudioOutputError> {
-    result.map_err(|error| match error {
-        AudioOutputError::StreamConfigurationUnsupported => AudioOutputError::StreamBuildFailed,
-        error => error,
-    })
-}
-
-fn map_stream_start_error(error: &cpal::Error) -> AudioOutputError {
+fn map_stream_start_error(error: &cpal::Error) -> OutputError {
     match error.kind() {
-        cpal::ErrorKind::DeviceNotAvailable => AudioOutputError::DeviceUnavailable,
-        _ => AudioOutputError::StreamStartFailed,
+        cpal::ErrorKind::DeviceNotAvailable => OutputError::DeviceUnavailable,
+        _ => OutputError::StreamStartFailed,
     }
 }
 
@@ -272,16 +254,16 @@ struct CpalStream {
 }
 
 impl OutputStream for CpalStream {
-    fn start(&self) -> Result<(), AudioOutputError> {
+    fn start(&self) -> Result<(), OutputError> {
         self.stream
             .play()
             .map_err(|error| map_stream_start_error(&error))
     }
 
-    fn pause(&self) -> Result<(), AudioOutputError> {
+    fn pause(&self) -> Result<(), OutputError> {
         self.stream.pause().map_err(|error| match error.kind() {
-            cpal::ErrorKind::DeviceNotAvailable => AudioOutputError::DeviceUnavailable,
-            _ => AudioOutputError::StreamPauseFailed,
+            cpal::ErrorKind::DeviceNotAvailable => OutputError::DeviceUnavailable,
+            _ => OutputError::StreamPauseFailed,
         })
     }
 
@@ -395,7 +377,7 @@ macro_rules! with_sample_type {
                 type $sample = u64;
                 $body
             }
-            _ => return Err(AudioOutputError::UnsupportedConfiguration),
+            _ => return Err(OutputError::UnsupportedConfiguration),
         }
     };
 }
@@ -407,7 +389,7 @@ fn build_stream_for_config(
     consumer: PcmConsumer,
     first: PipelineId,
     links: OutputLinks,
-) -> Result<CpalStream, AudioOutputError> {
+) -> Result<CpalStream, OutputError> {
     let latest_position = LatestPosition::default();
     let (handoff, slot) = triple_buffer::TripleBuffer::default().split();
     let (chain, chain_slot) = triple_buffer::TripleBuffer::default().split();
@@ -437,144 +419,112 @@ fn build_stream_for_config(
     })
 }
 
-fn prepare_for_spec(
+/// Opens a stream on `resolved_device` for audio of `spec`. The device's native configuration is
+/// tried first. When the device cannot take it, the device default is used and `spec` is
+/// converted to that.
+fn open_stream(
     resolved_device: ResolvedAudioOutputDevice,
     spec: PcmSpec,
     first: PipelineId,
     links: OutputLinks,
-) -> Result<PreparedOutput, AudioOutputError> {
-    let device_identity = resolved_device.identity;
-    let device = resolved_device.device;
-    let device_name = device_identity.name.clone();
-    let device_id = device_identity.id.clone();
+) -> Result<PreparedOutput, OutputError> {
+    let ResolvedAudioOutputDevice { device, identity } = resolved_device;
     let source_rate = spec.sample_rate().get();
     let source_channels = spec.channel_count().get();
     let ranges = device
         .supported_output_configs()
         .map_err(|error| match error.kind() {
-            cpal::ErrorKind::DeviceNotAvailable => AudioOutputError::DeviceUnavailable,
-            _ => AudioOutputError::ConfigurationQueryFailed,
+            cpal::ErrorKind::DeviceNotAvailable => OutputError::DeviceUnavailable,
+            _ => OutputError::ConfigurationQueryFailed,
         })?
         .collect::<Vec<_>>();
     let native = select_output_config(ranges.iter().copied(), source_rate, source_channels);
-    let native_sample_format = native
-        .as_ref()
-        .ok()
-        .map(SupportedStreamConfig::sample_format);
-    let native_result = native.and_then(|config| {
-        let stream_config = config.config();
-        let sample_format = config.sample_format();
-        let plan = OutputProcessingPlan::new(spec, spec)
-            .inspect_err(|cause| log::warn!("audio.output.plan_failed cause={cause}"))
-            .map_err(|_| AudioOutputError::UnsupportedConfiguration)?;
-        let (producer, consumer) = make_queue(plan.output())?;
-        let result = build_stream_for_config(
-            &device,
-            stream_config,
-            sample_format,
-            consumer,
-            first,
-            links.clone(),
-        );
-        result.map(|stream| PreparedOutput {
-            stream: Box::new(stream),
-            producer,
-            config: PreparedOutputConfig {
-                device_id: device_id.clone(),
-                device_name: device_name.clone(),
-                processing_plan: plan,
-            },
-        })
-    });
-    match classify_native_attempt(native_result) {
-        NativeAttemptDecision::Success(prepared) => {
+    match native
+        .and_then(|config| build_prepared(&device, &identity, config, spec, first, links.clone()))
+    {
+        Ok(prepared) => {
             info!(
-                "audio.output.configured path=native source_rate={} source_channels={} output_rate={} output_channels={} conversion={:?} sample_format={:?}",
+                "audio.output.configured path=native source_rate={} source_channels={} output_rate={} output_channels={} conversion={:?}",
                 source_rate,
                 source_channels,
                 source_rate,
                 source_channels,
-                prepared.config.processing_plan.channel_conversion(),
-                native_sample_format
+                prepared.config.processing_plan.channel_conversion()
             );
             return Ok(prepared);
         }
-        NativeAttemptDecision::Fallback => {
+        Err(
+            OutputError::UnsupportedConfiguration | OutputError::StreamConfigurationUnsupported,
+        ) => {
             warn!("audio.output.native_fallback");
         }
-        NativeAttemptDecision::Failure(error) => return Err(error),
+        Err(error) => return Err(error),
     }
 
-    prepare_fallback(&device, spec, first, links, device_identity)
+    let default = device
+        .default_output_config()
+        .map_err(|error| match error.kind() {
+            cpal::ErrorKind::DeviceNotAvailable => OutputError::DeviceUnavailable,
+            _ => OutputError::UnsupportedConfiguration,
+        })?;
+    let prepared = build_prepared(&device, &identity, default, spec, first, links)
+        // A default configuration the device refuses is a failed build, not another fallback.
+        .map_err(|error| match error {
+            OutputError::StreamConfigurationUnsupported => OutputError::StreamBuildFailed,
+            error => error,
+        })?;
+    let output = prepared.config.processing_plan.output();
+    info!(
+        "audio.output.configured path=fallback source_rate={} source_channels={} output_rate={} output_channels={} conversion={:?}",
+        source_rate,
+        source_channels,
+        output.sample_rate().get(),
+        output.channel_count().get(),
+        prepared.config.processing_plan.channel_conversion()
+    );
+    Ok(prepared)
 }
 
-fn prepare_fallback(
+/// Opens a stream that plays `config`, and the queue that feeds it. `spec` is converted to what
+/// `config` plays.
+fn build_prepared(
     device: &cpal::Device,
+    identity: &AudioOutputDeviceIdentity,
+    config: SupportedStreamConfig,
     spec: PcmSpec,
     first: PipelineId,
     links: OutputLinks,
-    identity: AudioOutputDeviceIdentity,
-) -> Result<PreparedOutput, AudioOutputError> {
-    let source_rate = spec.sample_rate().get();
-    let source_channels = spec.channel_count().get();
-    let fallback = device
-        .default_output_config()
-        .map_err(|error| match error.kind() {
-            cpal::ErrorKind::DeviceNotAvailable => AudioOutputError::DeviceUnavailable,
-            _ => AudioOutputError::UnsupportedConfiguration,
-        })?;
-    if fallback.sample_format().is_dsd() || sample_format_rank(fallback.sample_format()).is_none() {
-        return Err(AudioOutputError::UnsupportedConfiguration);
-    }
-    let target_rate = fallback.sample_rate();
-    let target_channels = fallback.channels();
+) -> Result<PreparedOutput, OutputError> {
     let target = PcmSpec::new(
-        SampleRate::new(target_rate).ok_or(AudioOutputError::UnsupportedConfiguration)?,
-        ChannelCount::new(usize::from(target_channels))
-            .ok_or(AudioOutputError::UnsupportedConfiguration)?,
+        SampleRate::new(config.sample_rate()).ok_or(OutputError::UnsupportedConfiguration)?,
+        ChannelCount::new(usize::from(config.channels()))
+            .ok_or(OutputError::UnsupportedConfiguration)?,
     );
-    let plan = OutputProcessingPlan::new(spec, target).map_err(|error| match error {
-        OutputProcessingError::UnsupportedChannelConversion
-        | OutputProcessingError::MisalignedSamples
-        | OutputProcessingError::InvalidInputSamples
-        | OutputProcessingError::ResamplerConstructionFailed
-        | OutputProcessingError::ResamplerProcessingFailed
-        | OutputProcessingError::InvalidResamplerOutput => {
-            AudioOutputError::UnsupportedConfiguration
-        }
-    })?;
+    let plan = OutputProcessingPlan::new(spec, target)
+        .inspect_err(|cause| log::warn!("audio.output.plan_failed cause={cause}"))
+        .map_err(|_| OutputError::UnsupportedConfiguration)?;
     let (producer, consumer) = make_queue(target)?;
-    let config = fallback.config();
-    let stream = classify_fallback_build(build_stream_for_config(
+    let stream = build_stream_for_config(
         device,
-        config,
-        fallback.sample_format(),
+        config.config(),
+        config.sample_format(),
         consumer,
         first,
         links,
-    ))?;
-    info!(
-        "audio.output.configured path=fallback source_rate={} source_channels={} output_rate={} output_channels={} conversion={:?} sample_format={:?}",
-        source_rate,
-        source_channels,
-        target_rate,
-        target_channels,
-        plan.channel_conversion(),
-        fallback.sample_format()
-    );
+    )?;
     Ok(PreparedOutput {
         stream: Box::new(stream),
         producer,
         config: PreparedOutputConfig {
-            device_id: identity.id,
-            device_name: identity.name,
+            device_id: identity.id.clone(),
+            device_name: identity.name.clone(),
             processing_plan: plan,
         },
     })
 }
 
 /// A two second queue for `spec`.
-pub(crate) fn make_queue(spec: PcmSpec) -> Result<(PcmProducer, PcmConsumer), AudioOutputError> {
+pub(crate) fn make_queue(spec: PcmSpec) -> Result<(PcmProducer, PcmConsumer), OutputError> {
     let sample_rate = spec.sample_rate().get();
     let channels = spec.channel_count().get();
     let capacity = usize::try_from(sample_rate)
@@ -583,18 +533,17 @@ pub(crate) fn make_queue(spec: PcmSpec) -> Result<(PcmProducer, PcmConsumer), Au
         .max(1);
     bounded_pcm_queue(
         capacity,
-        ChannelCount::new(usize::from(channels))
-            .ok_or(AudioOutputError::UnsupportedConfiguration)?,
+        ChannelCount::new(usize::from(channels)).ok_or(OutputError::UnsupportedConfiguration)?,
     )
     .inspect_err(|cause| log::warn!("audio.output.queue_failed cause={cause}"))
-    .map_err(|_| AudioOutputError::UnsupportedConfiguration)
+    .map_err(|_| OutputError::UnsupportedConfiguration)
 }
 
 fn select_output_config(
     ranges: impl IntoIterator<Item = cpal::SupportedStreamConfigRange>,
     sample_rate: u32,
     channel_count: u16,
-) -> Result<SupportedStreamConfig, AudioOutputError> {
+) -> Result<SupportedStreamConfig, OutputError> {
     ranges
         .into_iter()
         .filter(|range| range.channels() == channel_count)
@@ -611,7 +560,7 @@ fn select_output_config(
         })
         .min_by_key(|(rank, _)| *rank)
         .map(|(_, config)| config)
-        .ok_or(AudioOutputError::UnsupportedConfiguration)
+        .ok_or(OutputError::UnsupportedConfiguration)
 }
 
 fn sample_format_rank(sample_format: SampleFormat) -> Option<u8> {
@@ -843,7 +792,7 @@ fn build_stream<T>(
     config: StreamConfig,
     sample_format: SampleFormat,
     mut state: CallbackState,
-) -> Result<cpal::Stream, AudioOutputError>
+) -> Result<cpal::Stream, OutputError>
 where
     T: cpal::SizedSample + FromSample<f32>,
 {
@@ -867,11 +816,11 @@ where
                 "audio.output.stream_build_failed kind={error_kind:?} sample_format={sample_format:?} sample_rate={config_sample_rate} channels={config_channels} buffer_size={config_buffer_size:?}"
             );
             match error_kind {
-                cpal::ErrorKind::DeviceNotAvailable => AudioOutputError::DeviceUnavailable,
+                cpal::ErrorKind::DeviceNotAvailable => OutputError::DeviceUnavailable,
                 cpal::ErrorKind::UnsupportedConfig => {
-                    AudioOutputError::StreamConfigurationUnsupported
+                    OutputError::StreamConfigurationUnsupported
                 }
-                _ => AudioOutputError::StreamBuildFailed,
+                _ => OutputError::StreamBuildFailed,
             }
         })
 }
@@ -922,18 +871,491 @@ fn calculate_end_time(
     playback_start.checked_add(Duration::from_secs_f64(seconds))
 }
 
+#[derive(Debug, Clone, Serialize, specta::Type, Deserialize, PartialEq, Eq)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum AudioOutputSelection {
+    SystemDefault,
+    Device { device_id: String },
+}
+
+#[derive(Debug, Clone, Serialize, specta::Type, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioOutputDeviceIdentity {
+    pub id: String,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Serialize, specta::Type, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioOutputDevice {
+    pub id: String,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DeviceResolutionError {
+    NoDefaultOutputDevice,
+    InvalidDeviceId,
+    DeviceUnavailable,
+}
+
+pub(crate) struct ResolvedAudioOutputDevice {
+    pub(crate) device: cpal::Device,
+    pub(crate) identity: AudioOutputDeviceIdentity,
+}
+
+pub(crate) fn list_output_devices() -> Result<Vec<AudioOutputDevice>, CommandError> {
+    let devices = cpal::default_host()
+        .output_devices()
+        .inspect_err(|cause| log::warn!("audio.devices.enumerate_failed cause={cause}"))
+        .map_err(|_| CommandError::DeviceEnumerationFailed)?;
+    let mut output_devices = devices
+        .filter_map(|device| {
+            let id = device
+                .id()
+                .map(|id| id.to_string())
+                .inspect_err(|cause| log::warn!("audio.devices.id_failed cause={cause}"))
+                .ok()?;
+            let name = device
+                .description()
+                .map(|description| description.name().to_owned())
+                .inspect_err(|cause| log::warn!("audio.devices.name_failed cause={cause}"))
+                .ok()?;
+            Some(AudioOutputDevice { id, name })
+        })
+        .collect::<Vec<_>>();
+    sort_output_devices(&mut output_devices);
+    Ok(output_devices)
+}
+
+pub(crate) fn resolve_output_selection(
+    selection: &AudioOutputSelection,
+) -> Result<ResolvedAudioOutputDevice, DeviceResolutionError> {
+    let host = cpal::default_host();
+    let device = match selection {
+        AudioOutputSelection::SystemDefault => host
+            .default_output_device()
+            .ok_or(DeviceResolutionError::NoDefaultOutputDevice)?,
+        AudioOutputSelection::Device { device_id } => {
+            let id = device_id
+                .parse::<cpal::DeviceId>()
+                .inspect_err(|cause| log::warn!("audio.devices.id_invalid cause={cause}"))
+                .map_err(|_| DeviceResolutionError::InvalidDeviceId)?;
+            host.device_by_id(&id)
+                .ok_or(DeviceResolutionError::DeviceUnavailable)?
+        }
+    };
+    let identity = device_identity(&device)
+        .inspect_err(|cause| log::warn!("audio.devices.identity_failed cause={cause}"))
+        .map_err(|_| DeviceResolutionError::DeviceUnavailable)?;
+    Ok(ResolvedAudioOutputDevice { device, identity })
+}
+
+fn device_identity(device: &cpal::Device) -> Result<AudioOutputDeviceIdentity, cpal::Error> {
+    Ok(AudioOutputDeviceIdentity {
+        id: device.id()?.to_string(),
+        name: device.description()?.name().to_owned(),
+    })
+}
+
+fn sort_output_devices(devices: &mut [AudioOutputDevice]) {
+    devices.sort_by(|left, right| {
+        left.name
+            .to_lowercase()
+            .cmp(&right.name.to_lowercase())
+            .then_with(|| left.id.cmp(&right.id))
+    });
+}
+
+/// The consumer wakes a waiting producer when occupancy falls below this fraction (1/2).
+const WAKE_NUMERATOR: usize = 1;
+const WAKE_DENOMINATOR: usize = 2;
+
+/// A full wake channel already holds a pending wake, so only a closed one is a failure.
+fn ignore_full(result: Result<(), TrySendError<()>>) -> Result<(), TrySendError<()>> {
+    match result {
+        Err(TrySendError::Full(())) => Ok(()),
+        other => other,
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub(crate) enum PcmQueueBuildError {
+    #[error("the queue has no capacity")]
+    ZeroCapacity,
+    #[error("the queue capacity overflows")]
+    CapacityOverflow,
+}
+
+/// A wait for room in the queue ended because it was cancelled.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct WaitCancelled;
+
+pub(crate) struct PcmProducer {
+    producer: ringbuf::HeapProd<f32>,
+    channel_count: usize,
+    room: Receiver<()>,
+    waker: PcmWaker,
+    finished: Arc<AtomicBool>,
+}
+
+pub struct PcmConsumer {
+    consumer: ringbuf::HeapCons<f32>,
+    room: SyncSender<()>,
+    finished: Arc<AtomicBool>,
+}
+
+/// Wakes a producer that is waiting for room, so it can notice that it was cancelled.
+#[derive(Clone)]
+pub(crate) struct PcmWaker(SyncSender<()>);
+
+impl PcmWaker {
+    pub(crate) fn wake(&self) {
+        if let Err(cause) = ignore_full(self.0.try_send(())) {
+            log::debug!("audio.pcm_queue.wake_failed cause={cause}");
+        }
+    }
+}
+
+pub(crate) fn bounded_pcm_queue(
+    capacity_frames: usize,
+    channel_count: ChannelCount,
+) -> Result<(PcmProducer, PcmConsumer), PcmQueueBuildError> {
+    if capacity_frames == 0 {
+        return Err(PcmQueueBuildError::ZeroCapacity);
+    }
+    let channel_count = usize::from(channel_count.get());
+    let capacity_samples = capacity_frames
+        .checked_mul(channel_count)
+        .ok_or(PcmQueueBuildError::CapacityOverflow)?;
+    let (producer, consumer) = HeapRb::<f32>::new(capacity_samples).split();
+    let (room_sender, room) = mpsc::sync_channel(1);
+    let finished = Arc::new(AtomicBool::new(false));
+    Ok((
+        PcmProducer {
+            producer,
+            channel_count,
+            room,
+            waker: PcmWaker(room_sender.clone()),
+            finished: Arc::clone(&finished),
+        },
+        PcmConsumer {
+            consumer,
+            room: room_sender,
+            finished,
+        },
+    ))
+}
+
+impl PcmProducer {
+    pub(crate) fn waker(&self) -> PcmWaker {
+        self.waker.clone()
+    }
+
+    /// Writes as many complete frames as current capacity allows and returns the number of
+    /// samples written. The caller retries the rest, or uses `write_all`.
+    pub(crate) fn push_samples(&mut self, samples: &[f32]) -> usize {
+        debug_assert_eq!(samples.len() % self.channel_count, 0);
+        let complete = samples.len() - samples.len() % self.channel_count;
+        let writable = self.producer.vacant_len().min(complete);
+        let writable = writable - writable % self.channel_count;
+        self.producer
+            .push_slice(&samples[..writable.min(samples.len())])
+    }
+
+    /// Writes every sample, waiting for the consumer to make room. `after_push` runs after each
+    /// partial write with the frames now queued. A cancelled wait is woken through the waker.
+    pub(crate) fn write_all(
+        &mut self,
+        samples: &[f32],
+        is_cancelled: impl Fn() -> bool,
+        mut after_push: impl FnMut(usize),
+    ) -> Result<(), WaitCancelled> {
+        let mut offset = 0;
+        while offset < samples.len() {
+            if is_cancelled() {
+                return Err(WaitCancelled);
+            }
+            let pushed = self.push_samples(&samples[offset.min(samples.len())..]);
+            offset += pushed;
+            after_push(self.queued_frames());
+            if pushed == 0 && self.room.recv().is_err() {
+                return Err(WaitCancelled);
+            }
+        }
+        Ok(())
+    }
+
+    pub(crate) fn queued_frames(&self) -> usize {
+        (self.producer.capacity().get() - self.producer.vacant_len()) / self.channel_count
+    }
+
+    /// Declares that nothing more will be written. The consumer reports `is_finished` once it
+    /// has drained what is queued.
+    pub(crate) fn finish(self) {
+        self.finished.store(true, Ordering::Release);
+    }
+}
+
+impl PcmConsumer {
+    /// Pops up to `out.len()` samples and returns how many it got. Wakes a producer waiting for
+    /// room only when this pop takes occupancy below `WAKE_BELOW_FRACTION` of capacity, so the
+    /// producer refills in large batches.
+    pub(crate) fn pop_samples(&mut self, out: &mut [f32]) -> usize {
+        let popped = self.consumer.pop_slice(out);
+        if popped > 0 {
+            let capacity = self.consumer.capacity().get();
+            let after = self.consumer.occupied_len();
+            let before = after + popped;
+            let below = |occupied: usize| occupied * WAKE_DENOMINATOR < capacity * WAKE_NUMERATOR;
+            if below(after) && !below(before) {
+                // This runs in the output callback, which does not log. A full channel has a wake
+                // pending, and a closed one means no producer is waiting for room.
+                match self.room.try_send(()) {
+                    Ok(()) | Err(TrySendError::Full(()) | TrySendError::Disconnected(())) => {}
+                }
+            }
+        }
+        popped
+    }
+
+    /// Whether the producer finished and every sample it wrote has been popped.
+    pub(crate) fn is_finished(&self) -> bool {
+        // Read the flag first: a producer that finished has written everything by then.
+        self.finished.load(Ordering::Acquire) && self.consumer.is_empty()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn available_frames(&self, channel_count: usize) -> usize {
+        self.consumer.occupied_len() / channel_count
+    }
+}
+
+#[cfg(test)]
+mod device_tests {
+    use super::{AudioOutputDevice, AudioOutputSelection, sort_output_devices};
+
+    fn device(id: &str, name: &str) -> AudioOutputDevice {
+        AudioOutputDevice {
+            id: id.to_owned(),
+            name: name.to_owned(),
+        }
+    }
+
+    #[test]
+    fn sorts_devices_by_name() {
+        let mut devices = vec![device("id-b", "Speakers"), device("id-a", "Headphones")];
+
+        sort_output_devices(&mut devices);
+
+        assert_eq!(devices[0].name, "Headphones");
+        assert_eq!(devices[1].name, "Speakers");
+    }
+
+    #[test]
+    fn sorts_equal_names_by_id() {
+        let mut devices = vec![device("id-b", "Speakers"), device("id-a", "Speakers")];
+
+        sort_output_devices(&mut devices);
+
+        assert_eq!(devices[0].id, "id-a");
+        assert_eq!(devices[1].id, "id-b");
+    }
+
+    #[test]
+    fn accepts_an_empty_device_list() {
+        let mut devices = Vec::new();
+
+        sort_output_devices(&mut devices);
+
+        assert_eq!(devices.len(), 0);
+    }
+
+    #[test]
+    fn serializes_system_default_selection() {
+        assert_eq!(
+            serde_json::to_value(AudioOutputSelection::SystemDefault).unwrap(),
+            serde_json::json!({"kind": "systemDefault"})
+        );
+    }
+
+    #[test]
+    fn serializes_and_round_trips_specific_selection() {
+        let selection = AudioOutputSelection::Device {
+            device_id: "device-id".into(),
+        };
+        let value = serde_json::to_value(&selection).unwrap();
+        assert_eq!(
+            value,
+            serde_json::json!({"kind": "device", "deviceId": "device-id"})
+        );
+        assert_eq!(
+            serde_json::from_value::<AudioOutputSelection>(value).unwrap(),
+            selection
+        );
+    }
+}
+
+#[cfg(test)]
+mod pcm_queue_tests {
+    use super::{PcmQueueBuildError, WaitCancelled, bounded_pcm_queue};
+    use crate::audio::pcm::ChannelCount;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::time::Duration;
+
+    #[test]
+    fn capacity_is_measured_in_frames_and_writes_are_frame_aligned() {
+        let (mut producer, mut consumer) =
+            bounded_pcm_queue(2, ChannelCount::new(2).unwrap()).unwrap();
+
+        assert_eq!(producer.push_samples(&[1.0, 2.0, 3.0, 4.0]), 4);
+        assert_eq!(producer.queued_frames(), 2);
+        assert_eq!(producer.push_samples(&[5.0, 6.0]), 0);
+        let mut out = [0.0; 2];
+        assert_eq!(consumer.pop_samples(&mut out), 2);
+        assert_eq!(out, [1.0, 2.0]);
+        assert_eq!(consumer.available_frames(2), 1);
+    }
+
+    #[test]
+    fn partial_reads_and_wraparound_preserve_fifo_order() {
+        let (mut producer, mut consumer) =
+            bounded_pcm_queue(2, ChannelCount::new(1).unwrap()).unwrap();
+        let mut out = [0.0; 1];
+
+        assert_eq!(producer.push_samples(&[1.0, 2.0]), 2);
+        assert_eq!(consumer.pop_samples(&mut out), 1);
+        assert_eq!(out, [1.0]);
+        assert_eq!(producer.push_samples(&[3.0, 4.0]), 1);
+        let mut rest = [0.0; 4];
+        assert_eq!(consumer.pop_samples(&mut rest), 2);
+        assert_eq!(rest[..2], [2.0, 3.0]);
+        assert_eq!(producer.push_samples(&[4.0]), 1);
+        assert_eq!(consumer.pop_samples(&mut rest), 1);
+        assert_eq!(rest[0], 4.0);
+    }
+
+    #[test]
+    fn rejects_zero_capacity() {
+        assert_eq!(
+            bounded_pcm_queue(0, ChannelCount::new(2).unwrap()).err(),
+            Some(PcmQueueBuildError::ZeroCapacity)
+        );
+    }
+
+    #[test]
+    fn finished_only_after_the_producer_finished_and_the_queue_drained() {
+        let (mut producer, mut consumer) =
+            bounded_pcm_queue(4, ChannelCount::new(1).unwrap()).unwrap();
+        assert!(!consumer.is_finished(), "an empty queue is not finished");
+
+        producer.push_samples(&[1.0, 2.0]);
+        producer.finish();
+        assert!(!consumer.is_finished(), "samples are still queued");
+
+        let mut out = [0.0; 4];
+        assert_eq!(consumer.pop_samples(&mut out), 2);
+        assert!(consumer.is_finished());
+    }
+
+    #[test]
+    fn a_full_queue_makes_the_producer_wait_until_the_consumer_pops() {
+        let (mut producer, mut consumer) =
+            bounded_pcm_queue(2, ChannelCount::new(1).unwrap()).unwrap();
+        let writer = std::thread::Builder::new()
+            .name("pcm-producer".into())
+            .spawn(move || producer.write_all(&[1.0, 2.0, 3.0, 4.0], || false, |_| {}))
+            .unwrap();
+
+        let mut out = [0.0; 2];
+        let mut collected = Vec::new();
+        while collected.len() < 4 {
+            let popped = consumer.pop_samples(&mut out);
+            collected.extend_from_slice(&out[..popped]);
+            std::thread::yield_now();
+        }
+
+        assert_eq!(writer.join().unwrap(), Ok(()));
+        assert_eq!(collected, [1.0, 2.0, 3.0, 4.0]);
+    }
+
+    #[test]
+    fn the_producer_wakes_at_most_three_times_per_two_seconds_consumed() {
+        // A two second queue at 1 kHz, consumed in 10 ms callbacks for 4 s of audio.
+        let (mut producer, mut consumer) =
+            bounded_pcm_queue(2_000, ChannelCount::new(1).unwrap()).unwrap();
+        let writer = std::thread::Builder::new()
+            .name("pcm-producer".into())
+            .spawn(move || {
+                let mut last = 0;
+                let mut refills = 0;
+                producer
+                    .write_all(
+                        &vec![0.5; 4_000],
+                        || false,
+                        |queued| {
+                            if queued > last {
+                                refills += 1;
+                            }
+                            last = queued;
+                        },
+                    )
+                    .map(|()| refills)
+            })
+            .unwrap();
+
+        let mut out = [0.0; 10];
+        let mut drained = 0;
+        while drained < 4_000 {
+            let popped = consumer.pop_samples(&mut out);
+            drained += popped;
+            if popped == 0 {
+                std::thread::yield_now();
+            } else {
+                std::thread::sleep(Duration::from_micros(200));
+            }
+        }
+
+        // The first refill is the initial fill; the rest are wakes.
+        let wakes = writer.join().unwrap().unwrap() - 1;
+        assert!(wakes <= 6, "{wakes} wakes for 4 s consumed");
+    }
+
+    #[test]
+    fn a_waiting_producer_is_released_by_cancellation_through_its_waker() {
+        let (mut producer, _consumer) =
+            bounded_pcm_queue(1, ChannelCount::new(1).unwrap()).unwrap();
+        let waker = producer.waker();
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let flag = Arc::clone(&cancelled);
+        let writer = std::thread::Builder::new()
+            .name("pcm-producer".into())
+            .spawn(move || producer.write_all(&[1.0, 2.0], || flag.load(Ordering::SeqCst), |_| {}))
+            .unwrap();
+
+        std::thread::sleep(Duration::from_millis(20));
+        cancelled.store(true, Ordering::SeqCst);
+        waker.wake();
+
+        assert_eq!(writer.join().unwrap(), Err(WaitCancelled));
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        AudioOutputError, CallbackState, Chain, Generation, LatestPosition, NativeAttemptDecision,
-        OutputEvent, OutputLinks, PipelineId, PositionUpdate, StreamFailureKind,
-        calculate_end_time, classify_fallback_build, classify_native_attempt,
-        classify_stream_error_kind, played_frame_position, sample_format_rank,
-        select_output_config,
+        CallbackState, Chain, Generation, LatestPosition, OutputEvent, OutputLinks, PipelineId,
+        PositionUpdate, StreamFailureKind, calculate_end_time, classify_stream_error_kind,
+        played_frame_position, sample_format_rank, select_output_config,
     };
     use crate::audio::meter::Meter;
+    use crate::audio::output::{PcmProducer, bounded_pcm_queue};
     use crate::audio::pcm::ChannelCount;
-    use crate::audio::pcm_queue::{PcmProducer, bounded_pcm_queue};
     use crate::audio::volume::AtomicEffectiveGain;
     use cpal::{
         Sample, SampleFormat, StreamInstant, SupportedBufferSize, SupportedStreamConfigRange,
@@ -992,42 +1414,6 @@ mod tests {
         assert!(select_output_config([range(SampleFormat::F32, 1)], 44_100, 2).is_err());
         assert!(select_output_config([range(SampleFormat::F32, 2)], 96_000, 2).is_err());
         assert!(select_output_config([range(SampleFormat::DsdU8, 2)], 44_100, 2).is_err());
-    }
-
-    #[test]
-    fn native_attempt_decision_only_falls_back_for_unsupported_configuration() {
-        assert_eq!(
-            classify_native_attempt(Ok::<_, AudioOutputError>(7)),
-            NativeAttemptDecision::Success(7)
-        );
-        assert_eq!(
-            classify_native_attempt::<u8>(Err(AudioOutputError::UnsupportedConfiguration)),
-            NativeAttemptDecision::Fallback
-        );
-        assert_eq!(
-            classify_native_attempt::<u8>(Err(AudioOutputError::StreamConfigurationUnsupported)),
-            NativeAttemptDecision::Fallback
-        );
-        assert_eq!(
-            classify_native_attempt::<u8>(Err(AudioOutputError::ConfigurationQueryFailed)),
-            NativeAttemptDecision::Failure(AudioOutputError::ConfigurationQueryFailed)
-        );
-        assert_eq!(
-            classify_native_attempt::<u8>(Err(AudioOutputError::StreamBuildFailed)),
-            NativeAttemptDecision::Failure(AudioOutputError::StreamBuildFailed)
-        );
-    }
-
-    #[test]
-    fn fallback_unsupported_build_is_final_stream_build_failure() {
-        assert_eq!(
-            classify_fallback_build::<u8>(Err(AudioOutputError::StreamConfigurationUnsupported)),
-            Err(AudioOutputError::StreamBuildFailed)
-        );
-        assert_eq!(
-            classify_fallback_build::<u8>(Err(AudioOutputError::StreamBuildFailed)),
-            Err(AudioOutputError::StreamBuildFailed)
-        );
     }
 
     #[test]

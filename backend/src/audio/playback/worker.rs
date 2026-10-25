@@ -29,15 +29,15 @@ use super::snapshot::{
     PlaybackProcessingInfo, PlaybackState, QueueState, StartedBy, UPCOMING_IN_SNAPSHOT,
 };
 use super::source_loader::SourceLoad;
-use crate::audio::compressed_source::{CompressedAudioSource, CompressedSourceError};
-use crate::audio::devices::{
-    AudioOutputDeviceIdentity, AudioOutputSelection, DeviceResolutionError,
-};
+use crate::audio::decode::{CompressedAudioSource, DecodeError};
 use crate::audio::meter::Meter;
 use crate::audio::output::{
-    AudioOutputError, OutputBackend, OutputLinks, OutputStreamId, PipelineId, StreamFailureKind,
+    AudioOutputDeviceIdentity, AudioOutputSelection, DeviceResolutionError,
 };
-use crate::audio::timebase::millis_to_frame;
+use crate::audio::output::{
+    OutputError, OutputLinks, OutputStreamFactory, OutputStreamId, PipelineId, StreamFailureKind,
+};
+use crate::audio::pcm::millis_to_frame;
 use crate::audio::volume::{AtomicEffectiveGain, VolumeState};
 use crate::errors::CommandError;
 use crate::ids::{PlaybackId, QueueItemId, TrackId};
@@ -145,7 +145,7 @@ pub(super) struct WorkerLinks {
     pub inbox: Inbox,
     pub messages: Notifier,
     pub observer: PreferencesObserver,
-    pub backend: Box<dyn OutputBackend>,
+    pub output_stream_factory: Box<dyn OutputStreamFactory>,
     /// Where queue entries get their metadata.
     pub tracks: Arc<TrackResolver>,
     /// Told of each track when it is loaded, and of each track as it starts opening for gapless
@@ -180,7 +180,7 @@ pub(super) struct PlaybackWorker {
     inbox: Inbox,
     messages: Notifier,
     observer: PreferencesObserver,
-    backend: Box<dyn OutputBackend>,
+    output_stream_factory: Box<dyn OutputStreamFactory>,
 }
 
 impl PlaybackWorker {
@@ -213,7 +213,7 @@ impl PlaybackWorker {
             inbox: links.inbox,
             messages: links.messages,
             observer: links.observer,
-            backend: links.backend,
+            output_stream_factory: links.output_stream_factory,
         }
     }
 
@@ -420,15 +420,10 @@ impl PlaybackWorker {
     }
 
     /// The request for the next pipeline, under the next pipeline id.
-    fn pipeline_request<'a>(
-        &mut self,
-        source: &'a CompressedAudioSource,
-        extension: &'a str,
-    ) -> PipelineRequest<'a> {
+    fn pipeline_request<'a>(&mut self, source: &'a CompressedAudioSource) -> PipelineRequest<'a> {
         self.next_pipeline_id = self.next_pipeline_id.wrapping_add(1);
         PipelineRequest {
             source,
-            extension,
             pipeline_id: PipelineId(self.next_pipeline_id),
         }
     }
@@ -490,27 +485,27 @@ fn resolution_error(error: DeviceResolutionError) -> PlaybackServiceError {
     }
 }
 
-pub(super) fn output_failure_code(error: AudioOutputError) -> PlaybackFailureCode {
+pub(super) fn output_failure_code(error: OutputError) -> PlaybackFailureCode {
     match error {
-        AudioOutputError::NoOutputDevice => PlaybackFailureCode::NoOutputDevice,
-        AudioOutputError::UnsupportedConfiguration
-        | AudioOutputError::ConfigurationQueryFailed
-        | AudioOutputError::StreamConfigurationUnsupported => {
+        OutputError::NoOutputDevice => PlaybackFailureCode::NoOutputDevice,
+        OutputError::UnsupportedConfiguration
+        | OutputError::ConfigurationQueryFailed
+        | OutputError::StreamConfigurationUnsupported => {
             PlaybackFailureCode::UnsupportedOutputConfiguration
         }
-        AudioOutputError::StreamBuildFailed => PlaybackFailureCode::OutputStreamBuildFailed,
-        AudioOutputError::StreamStartFailed => PlaybackFailureCode::OutputStreamStartFailed,
-        AudioOutputError::StreamPauseFailed => PlaybackFailureCode::OutputStreamPauseFailed,
-        AudioOutputError::StreamResumeFailed => PlaybackFailureCode::OutputStreamResumeFailed,
-        AudioOutputError::DeviceUnavailable => PlaybackFailureCode::OutputDeviceUnavailable,
+        OutputError::StreamBuildFailed => PlaybackFailureCode::OutputStreamBuildFailed,
+        OutputError::StreamStartFailed => PlaybackFailureCode::OutputStreamStartFailed,
+        OutputError::StreamPauseFailed => PlaybackFailureCode::OutputStreamPauseFailed,
+        OutputError::StreamResumeFailed => PlaybackFailureCode::OutputStreamResumeFailed,
+        OutputError::DeviceUnavailable => PlaybackFailureCode::OutputDeviceUnavailable,
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::audio::devices::AudioOutputSelection;
-    use crate::audio::output::{AudioOutputError, StreamFailureKind};
+    use crate::audio::output::AudioOutputSelection;
+    use crate::audio::output::{OutputError, StreamFailureKind};
     use crate::audio::playback::snapshot::PlaybackFailureCode;
 
     #[test]
@@ -543,7 +538,7 @@ mod tests {
 
     #[test]
     fn maps_output_errors_to_failure_codes() {
-        use AudioOutputError as E;
+        use OutputError as E;
         use PlaybackFailureCode as C;
         for (error, code) in [
             (E::NoOutputDevice, C::NoOutputDevice),

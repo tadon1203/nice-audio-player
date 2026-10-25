@@ -1,7 +1,7 @@
 //! Starting a playback: loading the source, prebuffering, and failing or skipping on.
 
 use super::{
-    AdvanceReason, CommandError, CompressedAudioSource, CompressedSourceError, FailureScope,
+    AdvanceReason, CommandError, CompressedAudioSource, DecodeError, FailureScope,
     HISTORY_IN_SNAPSHOT, HashSet, LoadStage, Loaded, Loading, OpenedPipeline, PipelineError,
     PlayableItem, PlaybackFailureCode, PlaybackServiceError, PlaybackState, PlaybackWorker,
     Position, Prebuffering, QueueEntry, QueueError, QueueItemId, QueueState, Reply, SourceLoad,
@@ -165,7 +165,7 @@ impl PlaybackWorker {
     pub(super) fn source_loaded(
         &mut self,
         id: SourceLoadId,
-        result: Result<CompressedAudioSource, CompressedSourceError>,
+        result: Result<CompressedAudioSource, DecodeError>,
     ) {
         if self.is_prefetch_load(id) {
             self.prefetch_source_loaded(result);
@@ -191,12 +191,12 @@ impl PlaybackWorker {
             Ok(source) => self.begin_prebuffering(request, source),
             Err(error) => {
                 let phase = match error {
-                    CompressedSourceError::Cancelled => {
+                    DecodeError::Cancelled => {
                         respond(request.responder, Err(PlaybackServiceError::Superseded));
                         return;
                     }
-                    CompressedSourceError::OpenFailed => StartFailurePhase::SourceOpen,
-                    CompressedSourceError::MetadataFailed => StartFailurePhase::SourceMetadata,
+                    DecodeError::MetadataFailed => StartFailurePhase::SourceMetadata,
+                    _ => StartFailurePhase::SourceOpen,
                 };
                 self.fail_start(request, &StartFailure::item(phase));
             }
@@ -214,9 +214,9 @@ impl PlaybackWorker {
             .clone()
             .unwrap_or_else(|| self.output_selection.clone());
         let (stream_id, links) = self.new_stream();
-        let pipeline_request = self.pipeline_request(&source, &request.item.file.extension);
+        let pipeline_request = self.pipeline_request(&source);
         let opened = open_start(
-            self.backend.as_ref(),
+            self.output_stream_factory.as_ref(),
             &self.inbox,
             &pipeline_request,
             &selection,

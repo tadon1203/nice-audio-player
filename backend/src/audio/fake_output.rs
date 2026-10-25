@@ -1,27 +1,26 @@
-//! A fake output backend for tests: no device, no callback. Tests play the part of the device by
-//! setting how far the "speakers" got and by sending the events a real stream would.
+//! A fake output for tests: no device, no callback. Tests play the part of the device by setting
+//! how far the "speakers" got and by sending the events a real stream would.
 
 use parking_lot::Mutex;
 use std::sync::Arc;
 
 use cpal::StreamInstant;
 
-use super::devices::{AudioOutputDeviceIdentity, AudioOutputSelection, DeviceResolutionError};
 use super::output::{
-    AudioOutputError, OutputBackend, OutputEvent, OutputEvents, OutputLinks, OutputStream,
+    AudioOutputDeviceIdentity, AudioOutputSelection, DeviceResolutionError, OutputError,
+    OutputEvent, OutputEvents, OutputLinks, OutputStream, OutputStreamFactory, PcmConsumer,
     PipelineId, PreparedOutput, PreparedOutputConfig, StreamFailureKind, make_queue,
 };
-use super::output_processing::OutputProcessingPlan;
 use super::pcm::PcmSpec;
-use super::pcm_queue::PcmConsumer;
+use super::processing::OutputProcessingPlan;
 
 struct StreamState {
     running: bool,
     played_frames: u64,
     now: StreamInstant,
     events: OutputEvents,
-    fail_start: Option<AudioOutputError>,
-    fail_pause: Option<AudioOutputError>,
+    fail_start: Option<OutputError>,
+    fail_pause: Option<OutputError>,
     /// The pipeline the stream plays.
     pipeline: PipelineId,
     /// How many times a seek handed the stream a new queue.
@@ -36,8 +35,8 @@ struct StreamState {
 
 struct Shared {
     devices: Vec<AudioOutputDeviceIdentity>,
-    fail_prepare: Option<AudioOutputError>,
-    fail_next_start: Option<AudioOutputError>,
+    fail_open: Option<OutputError>,
+    fail_next_start: Option<OutputError>,
     streams: Vec<Arc<Mutex<StreamState>>>,
     selections: Vec<AudioOutputSelection>,
 }
@@ -57,7 +56,7 @@ impl FakeOutput {
                 device("fake-default", "Fake speakers"),
                 device("fake-other", "Other fake speakers"),
             ],
-            fail_prepare: None,
+            fail_open: None,
             fail_next_start: None,
             streams: Vec::new(),
             selections: Vec::new(),
@@ -102,7 +101,7 @@ impl FakeOutput {
     }
 
     /// The selections new sessions were prepared for, in order.
-    pub(crate) fn prepared_selections(&self) -> Vec<AudioOutputSelection> {
+    pub(crate) fn opened_selections(&self) -> Vec<AudioOutputSelection> {
         self.shared().selections.clone()
     }
 
@@ -116,17 +115,17 @@ impl FakeOutput {
         self.latest().lock().played_frames = frames;
     }
 
-    pub(crate) fn fail_next_prepare(&self, error: AudioOutputError) {
-        self.shared().fail_prepare = Some(error);
+    pub(crate) fn fail_next_open(&self, error: OutputError) {
+        self.shared().fail_open = Some(error);
     }
 
     /// The next stream's `start` fails.
-    pub(crate) fn fail_next_start(&self, error: AudioOutputError) {
+    pub(crate) fn fail_next_start(&self, error: OutputError) {
         self.shared().fail_next_start = Some(error);
     }
 
     /// The newest stream's next `pause` fails.
-    pub(crate) fn fail_next_pause(&self, error: AudioOutputError) {
+    pub(crate) fn fail_next_pause(&self, error: OutputError) {
         self.latest().lock().fail_pause = Some(error);
     }
 
@@ -149,7 +148,7 @@ impl FakeOutput {
     }
 }
 
-impl OutputBackend for FakeOutput {
+impl OutputStreamFactory for FakeOutput {
     fn resolve(
         &self,
         selection: &AudioOutputSelection,
@@ -173,21 +172,21 @@ impl OutputBackend for FakeOutput {
         }
     }
 
-    fn prepare(
+    fn open(
         &self,
         selection: &AudioOutputSelection,
         spec: PcmSpec,
         first: PipelineId,
         links: OutputLinks,
-    ) -> Result<PreparedOutput, AudioOutputError> {
-        if let Some(error) = self.shared().fail_prepare.take() {
+    ) -> Result<PreparedOutput, OutputError> {
+        if let Some(error) = self.shared().fail_open.take() {
             return Err(error);
         }
         let device = self.resolve(selection)?;
         self.shared().selections.push(selection.clone());
         let plan = OutputProcessingPlan::new(spec, spec)
             .inspect_err(|cause| log::warn!("audio.fake_output.plan_failed cause={cause}"))
-            .map_err(|_| AudioOutputError::UnsupportedConfiguration)?;
+            .map_err(|_| OutputError::UnsupportedConfiguration)?;
         let config = PreparedOutputConfig {
             device_id: device.id,
             device_name: device.name,
@@ -232,7 +231,7 @@ impl FakeStream {
 }
 
 impl OutputStream for FakeStream {
-    fn start(&self) -> Result<(), AudioOutputError> {
+    fn start(&self) -> Result<(), OutputError> {
         let mut state = self.state();
         if let Some(error) = state.fail_start.take() {
             return Err(error);
@@ -241,7 +240,7 @@ impl OutputStream for FakeStream {
         Ok(())
     }
 
-    fn pause(&self) -> Result<(), AudioOutputError> {
+    fn pause(&self) -> Result<(), OutputError> {
         let mut state = self.state();
         if let Some(error) = state.fail_pause.take() {
             return Err(error);

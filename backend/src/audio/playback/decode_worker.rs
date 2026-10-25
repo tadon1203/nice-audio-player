@@ -1,25 +1,15 @@
-//! The decode thread of one pipeline: decodes, converts and feeds the PCM queue, and tells the
-//! worker when the prebuffer is ready or decoding failed. End of stream is declared on the queue.
+//! A decode thread: decodes a source, converts the samples, and fills the PCM queue, reporting to
+//! the worker's inbox.
 
 use std::panic::AssertUnwindSafe;
 use std::thread;
 
 use super::input::{Inbox, WorkerEvent};
-use crate::audio::decoding::{DecodeStep, StreamingDecoder};
-use crate::audio::output::PipelineId;
-use crate::audio::output_processing::{OutputPcmProcessor, OutputProcessingError};
-use crate::audio::pcm_queue::{PcmProducer, PcmWaker, WaitCancelled};
+use crate::audio::decode::{DecodeStep, StreamingDecoder};
+use crate::audio::output::{PcmProducer, PcmWaker, PipelineId, WaitCancelled};
+use crate::audio::processing::{OutputProcessingError, PcmConverter};
 use crate::errors::contain;
 use crate::threads::Cancellation;
-
-pub(crate) struct DecodeTaskInput {
-    pub(crate) decoder: StreamingDecoder,
-    pub(crate) first_packet: Vec<f32>,
-    pub(crate) producer: PcmProducer,
-    pub(crate) processor: OutputPcmProcessor,
-    pub(crate) output_sample_rate: u32,
-    pub(crate) discard_output_samples: usize,
-}
 
 /// Why a decode task ended without reaching the end of the stream.
 #[derive(Debug, PartialEq, Eq)]
@@ -40,58 +30,29 @@ impl From<OutputProcessingError> for Stop {
     }
 }
 
-struct DecodeTask {
-    producer: PcmProducer,
-    first_packet: Vec<f32>,
-    converter: OutputPcmProcessor,
-    converted: Vec<f32>,
-    discard_output_samples: usize,
-    cancellation: Cancellation,
-    inbox: Inbox,
-    pipeline: PipelineId,
-    prebuffer_frames: usize,
-    prebuffer_sent: bool,
+/// One decode thread: it decodes a source, converts the samples, and fills the PCM queue. The task
+/// owns its input and moves it to its thread when it spawns.
+pub(super) struct DecodeTask {
+    pub(super) decoder: StreamingDecoder,
+    pub(super) first_packet: Vec<f32>,
+    pub(super) producer: PcmProducer,
+    pub(super) converter: PcmConverter,
+    pub(super) converted: Vec<f32>,
+    pub(super) discard_output_samples: usize,
+    pub(super) cancellation: Cancellation,
+    pub(super) inbox: Inbox,
+    pub(super) pipeline: PipelineId,
+    pub(super) prebuffer_frames: usize,
+    pub(super) prebuffer_sent: bool,
 }
 
+/// The playback worker's handle on a decode thread: how to stop it, and how to wake it.
 pub(crate) struct DecodeWorker {
     cancellation: Cancellation,
-    #[cfg(test)]
-    join_handle: thread::JoinHandle<()>,
     waker: PcmWaker,
 }
 
 impl DecodeWorker {
-    pub(super) fn spawn(input: DecodeTaskInput, inbox: Inbox, pipeline: PipelineId) -> Self {
-        let cancellation = Cancellation::default();
-        let waker = input.producer.waker();
-        let decoder = input.decoder;
-        let task = DecodeTask {
-            producer: input.producer,
-            first_packet: input.first_packet,
-            converter: input.processor,
-            converted: Vec::new(),
-            discard_output_samples: input.discard_output_samples,
-            cancellation: cancellation.clone(),
-            inbox,
-            pipeline,
-            prebuffer_frames: prebuffer_frames(input.output_sample_rate),
-            prebuffer_sent: false,
-        };
-        let join_handle = thread::Builder::new()
-            .name("decode".into())
-            .spawn(move || task.run_contained(decoder))
-            .expect("decode thread spawns");
-        // Outside tests the thread is detached: dropping the handle does not stop it.
-        #[cfg(not(test))]
-        drop(join_handle);
-        Self {
-            cancellation,
-            #[cfg(test)]
-            join_handle,
-            waker,
-        }
-    }
-
     /// Stops the decode thread without waiting for it: a read stalled on a network path must
     /// not block the playback worker. Whatever the thread still reports is ignored by pipeline
     /// id.
@@ -99,19 +60,24 @@ impl DecodeWorker {
         self.cancellation.cancel();
         self.waker.wake();
     }
+}
 
-    #[cfg(test)]
-    pub(crate) fn cancel_and_join(self) {
-        self.cancellation.cancel();
-        self.waker.wake();
-        // A panic payload has no `Display`, so the join result is checked with `is_err`.
-        if self.join_handle.join().is_err() {
-            log::debug!("playback.decode_worker.join_panicked");
-        }
+impl DecodeTask {
+    /// Starts the thread. The thread is detached: nothing waits for it, and `cancel` stops it.
+    pub(super) fn spawn(self) -> DecodeWorker {
+        let worker = DecodeWorker {
+            cancellation: self.cancellation.clone(),
+            waker: self.producer.waker(),
+        };
+        thread::Builder::new()
+            .name("decode".into())
+            .spawn(move || self.run_contained())
+            .expect("decode thread spawns");
+        worker
     }
 }
 
-fn prebuffer_frames(sample_rate: u32) -> usize {
+pub(super) fn prebuffer_frames(sample_rate: u32) -> usize {
     usize::try_from(sample_rate)
         .unwrap_or(usize::MAX)
         .saturating_mul(250)
@@ -122,20 +88,15 @@ fn prebuffer_frames(sample_rate: u32) -> usize {
 
 impl DecodeTask {
     /// A decoder that panics on a bad file fails that playback, not the app.
-    fn run_contained(self, decoder: StreamingDecoder) {
+    fn run_contained(self) {
         let (inbox, pipeline) = (self.inbox.clone(), self.pipeline);
-        if contain(
-            "playback.decode",
-            AssertUnwindSafe(move || self.run(decoder)),
-        )
-        .is_err()
-        {
+        if contain("decode", AssertUnwindSafe(move || self.run())).is_err() {
             inbox.event(WorkerEvent::DecodeFailed { pipeline });
         }
     }
 
-    fn run(mut self, decoder: StreamingDecoder) {
-        match self.decode_to_end(decoder) {
+    fn run(mut self) {
+        match self.decode_to_end() {
             Ok(()) => self.producer.finish(),
             Err(Stop::Cancelled) => {}
             Err(Stop::Decode) => self.inbox.event(WorkerEvent::DecodeFailed {
@@ -147,7 +108,7 @@ impl DecodeTask {
         }
     }
 
-    fn decode_to_end(&mut self, mut decoder: StreamingDecoder) -> Result<(), Stop> {
+    fn decode_to_end(&mut self) -> Result<(), Stop> {
         let first_packet = std::mem::take(&mut self.first_packet);
         self.process(&first_packet)?;
         let mut packet = Vec::new();
@@ -156,7 +117,7 @@ impl DecodeTask {
                 return Err(Stop::Cancelled);
             }
             packet.clear();
-            match decoder.decode_next(&mut packet) {
+            match self.decoder.decode_next(&mut packet) {
                 Ok(DecodeStep::Samples) => self.process(&packet)?,
                 Ok(DecodeStep::EndOfStream) => {
                     self.converter.flush(&mut self.converted)?;
@@ -211,18 +172,16 @@ fn discard_output_prefix(samples: &mut Vec<f32>, remaining_samples: &mut usize) 
 
 #[cfg(test)]
 mod tests {
-    use super::{DecodeTaskInput, DecodeWorker, Stop, prebuffer_frames};
-    use crate::audio::compressed_source::prepare_compressed_source;
+    use super::{DecodeTask, DecodeWorker, Stop, prebuffer_frames};
+    use crate::audio::decode::{CompressedAudioSource, DecodeStep};
     use crate::audio::output::PipelineId;
-    use crate::audio::output_processing::{
-        OutputPcmProcessor, OutputProcessingError, OutputProcessingPlan,
-    };
-    use crate::audio::pcm_queue::{PcmConsumer, bounded_pcm_queue};
+    use crate::audio::output::{PcmConsumer, bounded_pcm_queue};
     use crate::audio::playback::input::{Inbox, WorkerEvent, WorkerInput};
+    use crate::audio::processing::{OutputProcessingError, OutputProcessingPlan, PcmConverter};
     use crate::library::media::ValidatedAudioFile;
     use crate::test_support::{TestDirectory, write_pcm_i16_wav};
     use crate::threads::Cancellation;
-    use std::sync::mpsc::Receiver;
+    use std::sync::mpsc::{Receiver, RecvTimeoutError};
     use std::time::{Duration, Instant};
 
     fn wav_file(directory: &TestDirectory, sample_count: usize) -> ValidatedAudioFile {
@@ -239,32 +198,34 @@ mod tests {
         file: &ValidatedAudioFile,
         capacity_frames: usize,
     ) -> (DecodeWorker, PcmConsumer, Receiver<WorkerInput>) {
-        let mut decoder = prepare_compressed_source(file, &Cancellation::default())
+        let mut decoder = CompressedAudioSource::open(file, &Cancellation::default())
             .unwrap()
-            .open_decoder(&file.extension)
+            .decoder()
             .unwrap();
         let spec = decoder.spec();
         let mut first_packet = Vec::new();
         assert!(matches!(
             decoder.decode_next(&mut first_packet),
-            Ok(crate::audio::decoding::DecodeStep::Samples)
+            Ok(DecodeStep::Samples)
         ));
         let plan = OutputProcessingPlan::new(spec, spec).unwrap();
         let (producer, consumer) =
             bounded_pcm_queue(capacity_frames, spec.channel_count()).unwrap();
         let (inbox, events) = Inbox::channel();
-        let worker = DecodeWorker::spawn(
-            DecodeTaskInput {
-                decoder,
-                first_packet,
-                producer,
-                processor: OutputPcmProcessor::new(plan).unwrap(),
-                output_sample_rate: spec.sample_rate().get(),
-                discard_output_samples: 0,
-            },
+        let worker = DecodeTask {
+            decoder,
+            first_packet,
+            producer,
+            converter: PcmConverter::new(plan).unwrap(),
+            converted: Vec::new(),
+            discard_output_samples: 0,
+            cancellation: Cancellation::default(),
             inbox,
-            PipelineId(7),
-        );
+            pipeline: PipelineId(7),
+            prebuffer_frames: prebuffer_frames(spec.sample_rate().get()),
+            prebuffer_sent: false,
+        }
+        .spawn();
         (worker, consumer, events)
     }
 
@@ -293,7 +254,7 @@ mod tests {
             }
         ));
         assert!(consumer.available_frames(1) >= prebuffer_frames(44_100));
-        worker.cancel_and_join();
+        worker.cancel();
     }
 
     #[test]
@@ -318,7 +279,7 @@ mod tests {
             std::thread::yield_now();
         }
         assert!(consumer.is_finished());
-        worker.cancel_and_join();
+        worker.cancel();
     }
 
     #[test]
@@ -333,11 +294,15 @@ mod tests {
             std::thread::yield_now();
         }
         assert_eq!(consumer.available_frames(1), 8);
-        worker.cancel_and_join();
+        worker.cancel();
 
+        // The thread ends by itself and drops its inbox: a cancelled worker reports nothing.
         assert!(
-            events.try_recv().is_err(),
-            "a cancelled worker reports nothing"
+            matches!(
+                events.recv_timeout(Duration::from_secs(2)),
+                Err(RecvTimeoutError::Disconnected)
+            ),
+            "a cancelled worker reports nothing and ends"
         );
     }
 

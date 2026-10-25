@@ -240,7 +240,7 @@ impl HighQualityResampler {
     }
 }
 
-impl OutputPcmProcessor {
+impl PcmConverter {
     pub(crate) fn new(plan: OutputProcessingPlan) -> Result<Self, OutputProcessingError> {
         let source_channels = usize::from(plan.source().channel_count().get());
         let target_channels = usize::from(plan.output().channel_count().get());
@@ -311,7 +311,7 @@ impl OutputPcmProcessor {
     }
 }
 
-pub(crate) struct OutputPcmProcessor {
+pub(crate) struct PcmConverter {
     channel_scratch: Vec<f32>,
     channel_conversion: ChannelConversion,
     resampler: Option<HighQualityResampler>,
@@ -413,17 +413,17 @@ mod tests {
     fn equal_rates_bypass_resampling_and_preserve_channel_rules() {
         let same = plan(44_100, 2, 44_100, 2);
         assert_eq!(same.sample_rate_conversion(), SampleRateConversion::None);
-        let mut processor = OutputPcmProcessor::new(same).unwrap();
+        let mut converter = PcmConverter::new(same).unwrap();
         let mut output = Vec::new();
-        processor
+        converter
             .convert(&[0.25, -0.5, 0.75, 0.5], &mut output)
             .unwrap();
         assert_eq!(output, [0.25, -0.5, 0.75, 0.5]);
 
         let mono = plan(44_100, 1, 44_100, 2);
         assert_eq!(mono.channel_conversion(), ChannelConversion::MonoToStereo);
-        let mut processor = OutputPcmProcessor::new(mono).unwrap();
-        processor.convert(&[0.25, -0.5], &mut output).unwrap();
+        let mut converter = PcmConverter::new(mono).unwrap();
+        converter.convert(&[0.25, -0.5], &mut output).unwrap();
         assert_eq!(output, [0.25, 0.25, -0.5, -0.5]);
     }
 
@@ -436,22 +436,22 @@ mod tests {
             five_one.channel_conversion(),
             ChannelConversion::Downmix { to_mono: false, .. }
         ));
-        let mut processor = OutputPcmProcessor::new(five_one).unwrap();
+        let mut converter = PcmConverter::new(five_one).unwrap();
         // Only the front-left channel: it reaches the left output alone.
-        processor
+        converter
             .convert(&[1.0, 0.0, 0.0, 0.0, 0.0, 0.0], &mut output)
             .unwrap();
         assert!(output[0] > 0.4 && output[1] == 0.0);
         // The LFE is dropped.
-        processor
+        converter
             .convert(&[0.0, 0.0, 0.0, 1.0, 0.0, 0.0], &mut output)
             .unwrap();
         assert_eq!(output, [0.0, 0.0]);
         // Every channel at full scale stays within full scale.
-        processor.convert(&[1.0; 6], &mut output).unwrap();
+        converter.convert(&[1.0; 6], &mut output).unwrap();
         assert!(output.iter().all(|sample| *sample <= 1.0));
 
-        let mut mono = OutputPcmProcessor::new(plan(44_100, 8, 44_100, 1)).unwrap();
+        let mut mono = PcmConverter::new(plan(44_100, 8, 44_100, 1)).unwrap();
         mono.convert(&[1.0; 8], &mut output).unwrap();
         assert_eq!(output.len(), 1);
         assert!(output[0] > 0.0 && output[0] <= 1.0);
@@ -476,14 +476,14 @@ mod tests {
         let input: Vec<f32> = (0..2_000)
             .map(|index| (index as f32 * 0.001).sin() * 0.5)
             .collect();
-        let mut whole = OutputPcmProcessor::new(plan(44_100, 1, 48_000, 1)).unwrap();
+        let mut whole = PcmConverter::new(plan(44_100, 1, 48_000, 1)).unwrap();
         let mut whole_output = Vec::new();
         whole.convert(&input, &mut whole_output).unwrap();
         let mut tail = Vec::new();
         whole.flush(&mut tail).unwrap();
         whole_output.extend_from_slice(&tail);
 
-        let mut split = OutputPcmProcessor::new(plan(44_100, 1, 48_000, 1)).unwrap();
+        let mut split = PcmConverter::new(plan(44_100, 1, 48_000, 1)).unwrap();
         let mut split_output = Vec::new();
         for packet in input.chunks(37) {
             split.convert(packet, &mut tail).unwrap();
@@ -506,10 +506,10 @@ mod tests {
 
     #[test]
     fn rejects_non_finite_input() {
-        let mut processor = OutputPcmProcessor::new(plan(44_100, 1, 48_000, 1)).unwrap();
+        let mut converter = PcmConverter::new(plan(44_100, 1, 48_000, 1)).unwrap();
         let mut output = Vec::new();
         assert_eq!(
-            processor.convert(&[f32::NAN], &mut output),
+            converter.convert(&[f32::NAN], &mut output),
             Err(OutputProcessingError::InvalidInputSamples)
         );
     }
@@ -522,7 +522,7 @@ mod tests {
                 .collect();
             let plan = plan(source_rate, 1, output_rate, 1);
 
-            let mut continuous = OutputPcmProcessor::new(plan).unwrap();
+            let mut continuous = PcmConverter::new(plan).unwrap();
             let mut full = Vec::new();
             continuous.convert(&source, &mut full).unwrap();
             let mut tail = Vec::new();
@@ -530,7 +530,7 @@ mod tests {
             full.extend_from_slice(&tail);
 
             let target_source_frame = 8_000_u64;
-            let mut seeked = OutputPcmProcessor::new(plan).unwrap();
+            let mut seeked = PcmConverter::new(plan).unwrap();
             let preroll_frames = seeked.seek_preroll_frames(target_source_frame);
             let preroll_start = target_source_frame.saturating_sub(preroll_frames) as usize;
             let mut seeked_output = Vec::new();

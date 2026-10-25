@@ -2,9 +2,9 @@
 //! moment the loaded one has been heard to its end.
 
 use super::{
-    AdvanceReason, CompressedAudioSource, CompressedSourceError, Loaded, OpenedPipeline,
-    PlaybackWorker, Position, Prefetch, PrefetchState, PrefetchedTrack, SourceLoad, SourceLoadId,
-    StartedBy, Transport, open_prefetch,
+    AdvanceReason, CompressedAudioSource, DecodeError, Loaded, OpenedPipeline, PlaybackWorker,
+    Position, Prefetch, PrefetchState, PrefetchedTrack, SourceLoad, SourceLoadId, StartedBy,
+    Transport, open_prefetch,
 };
 
 /// How long before the end of a track the next one is opened. A shorter track opens it right
@@ -69,7 +69,7 @@ impl PlaybackWorker {
     /// track, when it has the format the stream was opened for.
     pub(super) fn prefetch_source_loaded(
         &mut self,
-        result: Result<CompressedAudioSource, CompressedSourceError>,
+        result: Result<CompressedAudioSource, DecodeError>,
     ) {
         let Transport::Loaded(loaded) = &mut self.transport else {
             return;
@@ -92,7 +92,7 @@ impl PlaybackWorker {
             loaded.prefetch = Some(unusable);
             return;
         };
-        let pipeline_request = self.pipeline_request(&source, &item.file.extension);
+        let pipeline_request = self.pipeline_request(&source);
         let opened = open_prefetch(&self.inbox, &pipeline_request, &config);
         let Transport::Loaded(loaded) = &mut self.transport else {
             return;

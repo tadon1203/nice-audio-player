@@ -1,32 +1,27 @@
-//! Opens a pipeline: a decoder positioned in a file, the queue it fills, and the decode thread
-//! between them. A start and a seek share the opening and the hand-off to the decode thread; they
-//! differ in where the queue plays: a start opens the session's output stream, a seek hands its
-//! queue to the stream already playing.
+//! Opens a pipeline for a playback start, seek, or prefetch: a decoder positioned in a file, the
+//! queue it fills, and the decode thread between them.
 
-use super::decode_worker::{DecodeTaskInput, DecodeWorker};
+use super::decode_worker::{DecodeTask, prebuffer_frames};
 use super::input::Inbox;
 use super::session::{Output as StreamOutput, Pipeline};
-use crate::audio::compressed_source::CompressedAudioSource;
-use crate::audio::decoding::{DecodeStep, PcmDecodeError, SeekStep, StreamingDecoder};
-use crate::audio::devices::AudioOutputSelection;
+use crate::audio::decode::{CompressedAudioSource, DecodeError, DecodeStep, StreamingDecoder};
 use crate::audio::output::{
-    AudioOutputError, OutputBackend, OutputLinks, OutputStreamId, PipelineId, PreparedOutputConfig,
-    make_queue,
+    AudioOutputSelection, OutputError, OutputLinks, OutputStreamFactory, OutputStreamId,
+    PcmConsumer, PcmProducer, PipelineId, PreparedOutputConfig, make_queue,
 };
-use crate::audio::output_processing::{OutputPcmProcessor, OutputProcessingPlan};
-use crate::audio::pcm_queue::{PcmConsumer, PcmProducer};
-use crate::audio::timebase::{millis_to_frame, rescale_frame};
+use crate::audio::pcm::{millis_to_frame, rescale_frame};
+use crate::audio::processing::{OutputProcessingPlan, PcmConverter};
+use crate::threads::Cancellation;
 
 /// The queue a seek or the next track plays through: the stream already playing takes it over.
-pub(super) type QueueOutput = PcmConsumer;
+pub(crate) type QueueOutput = PcmConsumer;
 
-pub(super) struct PipelineRequest<'a> {
+pub(crate) struct PipelineRequest<'a> {
     pub source: &'a CompressedAudioSource,
-    pub extension: &'a str,
     pub pipeline_id: PipelineId,
 }
 
-pub(super) struct OpenedPipeline<Sink> {
+pub(crate) struct OpenedPipeline<Sink> {
     pub pipeline: Pipeline,
     /// Where the pipeline's queue plays: a new stream for a start, the queue handed to the playing
     /// stream for a seek or the next track.
@@ -38,13 +33,13 @@ pub(super) struct OpenedPipeline<Sink> {
 }
 
 #[derive(Clone, Copy)]
-pub(super) enum PipelineError {
+pub(crate) enum PipelineError {
     DecoderOpen,
     /// The file no longer has the format the output was prepared for.
     SpecChanged,
     FirstPacketDecode,
     SeekFailed,
-    OutputPrepare(AudioOutputError),
+    OutputPrepare(OutputError),
     ProcessorCreate,
 }
 
@@ -61,14 +56,14 @@ struct Positioned {
 /// The queue the decode thread fills and how its samples are processed.
 struct Queue {
     producer: PcmProducer,
-    processor: OutputPcmProcessor,
+    converter: PcmConverter,
     plan: OutputProcessingPlan,
 }
 
 /// From the beginning of the file, on a new stream on the device `selection` names. The stream
 /// is not started yet.
-pub(super) fn open_start(
-    backend: &dyn OutputBackend,
+pub(crate) fn open_start(
+    output_stream_factory: &dyn OutputStreamFactory,
     inbox: &Inbox,
     request: &PipelineRequest<'_>,
     selection: &AudioOutputSelection,
@@ -77,17 +72,17 @@ pub(super) fn open_start(
 ) -> Result<OpenedPipeline<StreamOutput>, PipelineError> {
     let mut decoder = request
         .source
-        .open_decoder(request.extension)
+        .decoder()
         .inspect_err(|cause| log::warn!("pipeline.start.decoder_open cause={cause}"))
         .map_err(|_| PipelineError::DecoderOpen)?;
     let spec = decoder.spec();
     let first_packet = decode_first_packet(&mut decoder)?;
-    let prepared = backend
-        .prepare(selection, spec, request.pipeline_id, links)
+    let prepared = output_stream_factory
+        .open(selection, spec, request.pipeline_id, links)
         .map_err(PipelineError::OutputPrepare)?;
     let plan = prepared.config.processing_plan;
-    let processor = OutputPcmProcessor::new(plan)
-        .inspect_err(|cause| log::warn!("pipeline.start.processor cause={cause}"))
+    let converter = PcmConverter::new(plan)
+        .inspect_err(|cause| log::warn!("pipeline.start.converter cause={cause}"))
         .map_err(|_| PipelineError::ProcessorCreate)?;
     let positioned = Positioned {
         duration_ms: decoder.duration_ms(),
@@ -98,7 +93,7 @@ pub(super) fn open_start(
     };
     let queue = Queue {
         producer: prepared.producer,
-        processor,
+        converter,
         plan,
     };
     let sink = StreamOutput {
@@ -117,18 +112,18 @@ pub(super) fn open_start(
 
 /// From the beginning of the file that follows the playing one, for the stream already playing.
 /// The file must have the format the stream was opened for.
-pub(super) fn open_prefetch(
+pub(crate) fn open_prefetch(
     inbox: &Inbox,
     request: &PipelineRequest<'_>,
     config: &PreparedOutputConfig,
 ) -> Result<OpenedPipeline<QueueOutput>, PipelineError> {
     let plan = config.processing_plan;
-    let processor = OutputPcmProcessor::new(plan)
-        .inspect_err(|cause| log::warn!("pipeline.prefetch.processor cause={cause}"))
+    let converter = PcmConverter::new(plan)
+        .inspect_err(|cause| log::warn!("pipeline.prefetch.converter cause={cause}"))
         .map_err(|_| PipelineError::ProcessorCreate)?;
     let mut decoder = request
         .source
-        .open_decoder(request.extension)
+        .decoder()
         .inspect_err(|cause| log::warn!("pipeline.prefetch.decoder_open cause={cause}"))
         .map_err(|_| PipelineError::DecoderOpen)?;
     if decoder.spec() != plan.source() {
@@ -145,7 +140,7 @@ pub(super) fn open_prefetch(
     };
     let queue = Queue {
         producer,
-        processor,
+        converter,
         plan,
     };
     Ok(spawn_decode(
@@ -158,7 +153,7 @@ pub(super) fn open_prefetch(
 }
 
 /// From `target_ms`, for the stream already playing, which keeps its device and configuration.
-pub(super) fn open_seek(
+pub(crate) fn open_seek(
     inbox: &Inbox,
     request: &PipelineRequest<'_>,
     config: &PreparedOutputConfig,
@@ -168,21 +163,21 @@ pub(super) fn open_seek(
     let source_rate = plan.source().sample_rate().get();
     let output_rate = plan.output().sample_rate().get();
     let target_source_frame = millis_to_frame(target_ms, source_rate);
-    let processor = OutputPcmProcessor::new(plan)
-        .inspect_err(|cause| log::warn!("pipeline.seek.processor cause={cause}"))
+    let converter = PcmConverter::new(plan)
+        .inspect_err(|cause| log::warn!("pipeline.seek.converter cause={cause}"))
         .map_err(|_| PipelineError::ProcessorCreate)?;
     let mut decoder = request
         .source
-        .open_decoder(request.extension)
+        .decoder()
         .inspect_err(|cause| log::warn!("pipeline.seek.decoder_open cause={cause}"))
         .map_err(|_| PipelineError::DecoderOpen)?;
     if decoder.spec() != plan.source() {
         return Err(PipelineError::SpecChanged);
     }
-    let preroll_frames = processor.seek_preroll_frames(target_source_frame);
+    let preroll_frames = converter.seek_preroll_frames(target_source_frame);
     let seek = match decoder.seek_to_frame_with_preroll(target_source_frame, preroll_frames) {
-        Ok(SeekStep::Samples(seek)) if !seek.first_packet.is_empty() => seek,
-        Err(PcmDecodeError::SeekFailed) => return Err(PipelineError::SeekFailed),
+        Ok(seek) if !seek.first_packet.is_empty() => seek,
+        Err(DecodeError::SeekFailed) => return Err(PipelineError::SeekFailed),
         Ok(_) | Err(_) => return Err(PipelineError::FirstPacketDecode),
     };
     let (producer, consumer) = make_queue(plan.output()).map_err(PipelineError::OutputPrepare)?;
@@ -200,7 +195,7 @@ pub(super) fn open_seek(
     };
     let queue = Queue {
         producer,
-        processor,
+        converter,
         plan,
     };
     Ok(spawn_decode(
@@ -232,18 +227,20 @@ fn spawn_decode<Sink>(
     let discard_output_samples = usize::try_from(positioned.discard_output_frames)
         .unwrap_or(usize::MAX)
         .saturating_mul(usize::from(queue.plan.output().channel_count().get()));
-    let decode = DecodeWorker::spawn(
-        DecodeTaskInput {
-            decoder: positioned.decoder,
-            first_packet: positioned.first_packet,
-            producer: queue.producer,
-            processor: queue.processor,
-            output_sample_rate: queue.plan.output().sample_rate().get(),
-            discard_output_samples,
-        },
-        inbox.clone(),
-        pipeline_id,
-    );
+    let decode = DecodeTask {
+        decoder: positioned.decoder,
+        first_packet: positioned.first_packet,
+        producer: queue.producer,
+        converter: queue.converter,
+        converted: Vec::new(),
+        discard_output_samples,
+        cancellation: Cancellation::default(),
+        inbox: inbox.clone(),
+        pipeline: pipeline_id,
+        prebuffer_frames: prebuffer_frames(queue.plan.output().sample_rate().get()),
+        prebuffer_sent: false,
+    }
+    .spawn();
     OpenedPipeline {
         pipeline: Pipeline {
             id: pipeline_id,

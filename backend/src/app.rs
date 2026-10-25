@@ -7,15 +7,15 @@ mod tests;
 
 pub use playback_context::PlaybackContext;
 // The types the Host names in commands and state. Each one is defined in the module that owns it.
-pub use crate::audio::devices::DeviceResolutionError;
-pub use crate::audio::devices::{AudioOutputDevice, AudioOutputSelection};
 pub use crate::audio::meter::{FrameCallback, Meter, MeterFrame};
+pub use crate::audio::output::DeviceResolutionError;
+pub use crate::audio::output::PcmConsumer;
+pub use crate::audio::output::{AudioOutputDevice, AudioOutputSelection};
 pub use crate::audio::output::{
-    AudioOutputError, CpalBackend, OutputBackend, OutputLinks, OutputStream, PipelineId,
+    CpalOutput, OutputError, OutputLinks, OutputStream, OutputStreamFactory, PipelineId,
     PreparedOutput,
 };
 pub use crate::audio::pcm::PcmSpec;
-pub use crate::audio::pcm_queue::PcmConsumer;
 pub use crate::audio::playback::{
     CurrentPlayback, PlaybackFailureCode, PlaybackItem, PlaybackPosition, PlaybackQueueItem,
     PlaybackState, QueueState, QueueWindow, RepeatMode, StartedBy,
@@ -33,7 +33,6 @@ pub use crate::messages::Versioned;
 pub use crate::settings::{Appearance, AppearancePatch};
 
 use crate::audio::{
-    devices::{self, AudioDeviceListError},
     playback::{
         NoTracks, PlaybackService, PlaybackServiceError, TrackListener, TrackResolver, TrackSource,
     },
@@ -73,12 +72,12 @@ pub struct BackendApp {
 }
 
 impl BackendApp {
-    /// Starts every service on `output`: `CpalBackend` in the Host, a fake device in tests.
+    /// Starts every service on `output`: `CpalOutput` in the Host, a fake device in tests.
     /// `messages` is how they tell the host that something changed.
     pub fn initialize(
         data_dir: PathBuf,
         messages: Notifier,
-        output: Box<dyn OutputBackend>,
+        output: Box<dyn OutputStreamFactory>,
     ) -> Result<Self, BackendError> {
         let saved = settings::read(&settings::file_path(&data_dir));
         let state_store = Arc::new(StateStore::new(&saved, messages.clone()));
@@ -105,7 +104,7 @@ impl BackendApp {
             }),
             upcoming: Arc::new(move |track| upcoming_waveforms.upcoming(track)),
         };
-        let playback = PlaybackService::start_with_backend(
+        let playback = PlaybackService::start_with_output_stream_factory(
             Arc::clone(&state_store),
             messages,
             settings.playback_preferences(),
@@ -392,8 +391,8 @@ impl BackendApp {
     }
 
     /// The output devices the system has. Blocking: the device query waits on the audio host.
-    pub fn list_output_devices() -> Result<Vec<AudioOutputDevice>, AudioDeviceListError> {
-        devices::list_output_devices()
+    pub fn list_output_devices() -> Result<Vec<AudioOutputDevice>, CommandError> {
+        crate::audio::output::list_output_devices()
     }
 
     pub fn set_repeat_mode(

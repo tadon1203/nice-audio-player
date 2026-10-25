@@ -54,7 +54,7 @@ fn a_failed_device_switch_keeps_the_saved_selection_and_the_queue() {
     harness.start(tracks, 0).unwrap();
     harness
         .output
-        .fail_next_prepare(AudioOutputError::DeviceUnavailable);
+        .fail_next_open(OutputError::DeviceUnavailable);
 
     let result = harness.select_output(AudioOutputSelection::Device {
         device_id: "fake-other".into(),
@@ -157,7 +157,7 @@ fn switching_the_output_while_paused_resumes_the_position_on_the_new_device() {
     assert!((950..=1_050).contains(&position), "position {position}");
     assert_eq!(harness.preferences.lock().len(), 1);
     assert_eq!(
-        harness.output.prepared_selections().last(),
+        harness.output.opened_selections().last(),
         Some(&AudioOutputSelection::Device {
             device_id: "fake-other".into()
         })

@@ -12,10 +12,10 @@ mod service;
 mod snapshot;
 mod transport;
 
-use crate::audio::devices::AudioOutputSelection;
 use crate::audio::fake_output::FakeOutput;
 use crate::audio::meter::Meter;
-use crate::audio::output::{AudioOutputError, OutputStreamId, PipelineId, StreamFailureKind};
+use crate::audio::output::AudioOutputSelection;
+use crate::audio::output::{OutputError, OutputStreamId, PipelineId, StreamFailureKind};
 use crate::audio::playback::TrackListener;
 use crate::audio::playback::input::{Inbox, WorkerEvent, WorkerInput};
 use crate::audio::playback::item::PlaybackItem;
@@ -122,7 +122,7 @@ impl Harness {
                 inbox,
                 messages,
                 observer: Arc::new(move |preferences| observed.lock().push(preferences)),
-                backend: Box::new(output.clone()),
+                output_stream_factory: Box::new(output.clone()),
                 tracks: resolver_of(&library),
                 listener,
             },
@@ -353,7 +353,7 @@ fn silent_listener() -> TrackListener {
 
 fn start_service() -> PlaybackService {
     let messages = crate::test_support::null_notifier();
-    PlaybackService::start_with_backend(
+    PlaybackService::start_with_output_stream_factory(
         state_store_for_tests(messages.clone()),
         messages,
         PlaybackPreferences::default(),

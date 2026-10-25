@@ -114,7 +114,10 @@ impl PlaybackWorker {
     }
 
     pub(super) fn refresh_default_device(&mut self) -> bool {
-        let Ok(identity) = self.backend.resolve(&AudioOutputSelection::SystemDefault) else {
+        let Ok(identity) = self
+            .output_stream_factory
+            .resolve(&AudioOutputSelection::SystemDefault)
+        else {
             return false;
         };
         let Transport::Loaded(loaded) = &mut self.transport else {

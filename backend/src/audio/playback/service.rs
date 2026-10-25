@@ -17,9 +17,9 @@ use super::snapshot::{
     PlaybackControls, PlaybackFailureCode, PlaybackPosition, PlaybackState, QueueState, QueueWindow,
 };
 use super::worker::{PlaybackWorker, WorkerLinks};
-use crate::audio::devices::AudioOutputSelection;
 use crate::audio::meter::Meter;
-use crate::audio::output::OutputBackend;
+use crate::audio::output::AudioOutputSelection;
+use crate::audio::output::OutputStreamFactory;
 use crate::audio::volume::{AtomicEffectiveGain, VolumeState};
 use crate::errors::CommandError;
 use crate::ids::{QueueItemId, TrackId};
@@ -152,7 +152,7 @@ pub(super) fn respond<T>(
     }
 }
 
-pub(super) enum PlaybackCommand {
+pub(crate) enum PlaybackCommand {
     Start {
         track_ids: Vec<TrackId>,
         start_index: usize,
@@ -257,20 +257,20 @@ pub(crate) struct PlaybackService {
 }
 
 impl PlaybackService {
-    /// Starts the worker with the saved preferences, on the audio output `backend` opens streams
+    /// Starts the worker with the saved preferences, on the audio output `output_stream_factory` opens streams
     /// on. Its state goes to `state_store`, which the caller built from `initial_playback`. `messages`
     /// hears about the position and skipped tracks. `observer` hears about every later change so
     /// the caller can persist them; `tracks` is where queue entries get their metadata;
     /// `listener` hears about each track when it is loaded and when it starts opening as the next
     /// one.
-    pub(crate) fn start_with_backend(
+    pub(crate) fn start_with_output_stream_factory(
         state_store: Arc<StateStore>,
         messages: Notifier,
         preferences: PlaybackPreferences,
         observer: PreferencesObserver,
         tracks: Arc<TrackResolver>,
         listener: TrackListener,
-        backend: Box<dyn OutputBackend>,
+        output_stream_factory: Box<dyn OutputStreamFactory>,
     ) -> Result<Self, PlaybackServiceStartError> {
         let (inbox, inputs) = Inbox::channel();
         let volume_state = VolumeState::restored(preferences.volume, preferences.muted);
@@ -287,7 +287,7 @@ impl PlaybackService {
             inbox: inbox.clone(),
             messages,
             observer,
-            backend,
+            output_stream_factory,
             tracks,
             listener,
         };

@@ -70,7 +70,7 @@ fn a_start_through_a_service_thread_needs_no_poll() {
         },
     ));
     let messages = crate::test_support::null_notifier();
-    let service = PlaybackService::start_with_backend(
+    let service = PlaybackService::start_with_output_stream_factory(
         state_store_for_tests(messages.clone()),
         messages,
         PlaybackPreferences::default(),

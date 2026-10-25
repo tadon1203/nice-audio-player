@@ -122,7 +122,7 @@ fn an_output_that_cannot_be_prepared_fails_without_skipping() {
     let tracks = vec![harness.track("a", 1), harness.track("b", 1)];
     harness
         .output
-        .fail_next_prepare(AudioOutputError::UnsupportedConfiguration);
+        .fail_next_open(OutputError::UnsupportedConfiguration);
 
     let result = harness.start(tracks, 0);
 
@@ -146,9 +146,7 @@ fn an_output_that_cannot_be_prepared_fails_without_skipping() {
 fn a_missing_output_device_is_reported_as_such() {
     let mut harness = Harness::new();
     let tracks = vec![harness.track("a", 1)];
-    harness
-        .output
-        .fail_next_prepare(AudioOutputError::NoOutputDevice);
+    harness.output.fail_next_open(OutputError::NoOutputDevice);
 
     assert_eq!(
         harness.start(tracks, 0),
@@ -164,7 +162,7 @@ fn a_stream_that_will_not_start_fails_the_start_without_skipping() {
     let tracks = vec![harness.track("a", 1), harness.track("b", 1)];
     harness
         .output
-        .fail_next_start(AudioOutputError::StreamStartFailed);
+        .fail_next_start(OutputError::StreamStartFailed);
 
     let result = harness.start(tracks, 0);
 
@@ -334,7 +332,7 @@ fn a_failed_pause_fails_the_player() {
     harness.start(tracks, 0).unwrap();
     harness
         .output
-        .fail_next_pause(AudioOutputError::StreamPauseFailed);
+        .fail_next_pause(OutputError::StreamPauseFailed);
 
     let result = harness.pause();
 

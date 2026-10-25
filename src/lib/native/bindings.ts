@@ -176,7 +176,6 @@ export type ArtworkRef = {
 export type AudioOutputDevice = {
 	id: string,
 	name: string,
-	isDefault: boolean,
 };
 
 export type AudioOutputDeviceIdentity = {

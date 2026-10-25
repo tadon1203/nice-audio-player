@@ -18,7 +18,7 @@ use std::thread;
 
 use serde::Serialize;
 
-use super::decoding::{DecodeStep, PcmDecodeError, open_analysis_decoder};
+use super::decode::{CompressedAudioSource, DecodeError, DecodeStep};
 use crate::errors::contain;
 use crate::ids::PlaybackId;
 use crate::library::media::ValidatedAudioFile;
@@ -87,16 +87,13 @@ impl Chunker {
 }
 
 /// Decodes the whole file in one pass and reduces it to at most [`WAVEFORM_BUCKETS`] RMS buckets.
-fn analyze(
-    file: &ValidatedAudioFile,
-    cancellation: &Cancellation,
-) -> Result<Vec<u8>, PcmDecodeError> {
-    let mut decoder = open_analysis_decoder(file)?;
+fn analyze(file: &ValidatedAudioFile, cancellation: &Cancellation) -> Result<Vec<u8>, DecodeError> {
+    let mut decoder = CompressedAudioSource::open(file, cancellation)?.decoder()?;
     let mut chunker = Chunker::new(usize::from(decoder.spec().channel_count().get()));
     let mut packet = Vec::new();
     loop {
         if cancellation.is_cancelled() {
-            return Err(PcmDecodeError::Cancelled);
+            return Err(DecodeError::Cancelled);
         }
         if decoder.decode_next(&mut packet)? == DecodeStep::EndOfStream {
             break;
@@ -105,7 +102,7 @@ fn analyze(
     }
     let chunks = chunker.finish();
     if chunks.is_empty() {
-        return Err(PcmDecodeError::EmptyAudioStream);
+        return Err(DecodeError::EmptyAudioStream);
     }
     Ok(reduce(&chunks))
 }
@@ -231,7 +228,7 @@ impl Shared {
         }
         let rms = match analyze(file, cancellation) {
             Ok(rms) => rms,
-            Err(PcmDecodeError::Cancelled) => return,
+            Err(DecodeError::Cancelled) => return,
             Err(error) => {
                 log::warn!("waveform.analysis_failed error={error:?}");
                 return;

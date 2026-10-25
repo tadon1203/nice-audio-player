@@ -57,7 +57,7 @@ fn wire_session() -> CurrentPlayback {
         position_ms: 1_000,
         seek_count: 0,
         duration_ms: Some(60_000),
-        output_device: crate::audio::devices::AudioOutputDeviceIdentity {
+        output_device: crate::audio::output::AudioOutputDeviceIdentity {
             id: "test-device".into(),
             name: "Test device".into(),
         },

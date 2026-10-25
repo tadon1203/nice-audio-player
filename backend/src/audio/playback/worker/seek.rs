@@ -33,9 +33,8 @@ impl PlaybackWorker {
             return;
         }
         let source = loaded.source.clone();
-        let extension = loaded.item.file.extension.clone();
         let config = loaded.output.config.clone();
-        let pipeline_request = self.pipeline_request(&source, &extension);
+        let pipeline_request = self.pipeline_request(&source);
         let opened = open_seek(&self.inbox, &pipeline_request, &config, target_ms);
         match opened {
             Ok(OpenedPipeline {

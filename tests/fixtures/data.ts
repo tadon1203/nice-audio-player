@@ -225,8 +225,8 @@ export function libraryResponses(library: LibraryData = testLibrary()): Record<s
 }
 
 export const outputDevices = [
-  { id: "speakers", name: "Speakers", isDefault: true },
-  { id: "headphones", name: "Headphones", isDefault: false },
+  { id: "speakers", name: "Speakers" },
+  { id: "headphones", name: "Headphones" },
 ];
 
 export const idleScan: ScanState = {
@@ -327,7 +327,7 @@ export function idleResponses(): {
     offset: number;
     items: never[];
   };
-  playerListOutputDevices: { id: string; name: string; isDefault: boolean }[];
+  playerListOutputDevices: { id: string; name: string }[];
   libraryStatus: { status: "ready" };
   lyricsTrack: () => { status: "notFound" };
   libraryArtworkAccent: null;
@@ -396,7 +396,7 @@ export function playingSnapshot(fields: PlayingFields): PlaybackState {
       ? outputDevices.find(
           (item) => item.id === (fields.outputSelection as { deviceId: string }).deviceId,
         )
-      : outputDevices.find((item) => item.isDefault);
+      : outputDevices[0];
   return {
     status: fields.status,
     base: {

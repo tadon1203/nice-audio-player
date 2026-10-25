@@ -229,7 +229,7 @@ fn flush(path: &Path, pending: &mut Option<SettingsFile>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::audio::devices::AudioOutputSelection;
+    use crate::audio::output::AudioOutputSelection;
     use crate::audio::playback::RepeatMode;
     use crate::messages::{Notification, Notifier, StateTopic};
     use crate::test_support::{NotificationLog, TestDirectory, null_notifier};

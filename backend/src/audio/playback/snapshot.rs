@@ -3,8 +3,8 @@
 use super::item::PlaybackItem;
 use super::queue::{PlaybackQueue, QueueEntry, RepeatMode};
 use super::resolver::TrackResolver;
-use crate::audio::devices::{AudioOutputDeviceIdentity, AudioOutputSelection};
-use crate::audio::output_processing::{ChannelConversion, OutputProcessingPlan};
+use crate::audio::output::{AudioOutputDeviceIdentity, AudioOutputSelection};
+use crate::audio::processing::{ChannelConversion, OutputProcessingPlan};
 use crate::audio::volume::VolumeState;
 use crate::ids::{PlaybackId, QueueItemId, TrackId};
 use crate::library::models::TrackCore;

@@ -1,9 +1,9 @@
-//! Loads a track's compressed source off the worker thread and reports it as an event.
+//! A source load: opens the next file on its own thread and reports it to the worker's inbox.
 
 use std::thread::{self, JoinHandle};
 
 use super::input::{Inbox, SourceLoadId, WorkerEvent};
-use crate::audio::compressed_source::{CompressedSourceError, prepare_compressed_source};
+use crate::audio::decode::{CompressedAudioSource, DecodeError};
 use crate::errors::contain;
 use crate::library::media::ValidatedAudioFile;
 use crate::threads::Cancellation;
@@ -31,9 +31,9 @@ impl SourceLoad {
             .name("audio-source-load".into())
             .spawn(move || {
                 let result = contain("playback.source_loader", || {
-                    prepare_compressed_source(&file, &worker_cancellation)
+                    CompressedAudioSource::open(&file, &worker_cancellation)
                 })
-                .unwrap_or(Err(CompressedSourceError::OpenFailed));
+                .unwrap_or(Err(DecodeError::FileOpenFailed));
                 inbox.event(WorkerEvent::SourceLoaded { id, result });
             })
             .inspect_err(|cause| log::warn!("playback.source_loader.thread_failed cause={cause}"))

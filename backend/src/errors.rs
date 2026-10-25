@@ -1,7 +1,6 @@
 //! The error a command answers with, and the helper that keeps a panic from a parser from
 //! reaching the Host. Each code is what the Renderer sees; the messages only reach the log.
 
-pub use crate::audio::devices::AudioDeviceListError;
 use crate::audio::playback::PlaybackFailureCode;
 pub use crate::audio::playback::service::PlaybackServiceError;
 use std::any::Any;

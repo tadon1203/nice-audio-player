@@ -7,11 +7,11 @@ use super::item::PlayableItem;
 use super::service::Reply;
 use super::snapshot::{PlaybackFailureCode, PlaybackState, StartedBy};
 use super::source_loader::SourceLoad;
-use crate::audio::compressed_source::CompressedAudioSource;
-use crate::audio::devices::AudioOutputSelection;
+use crate::audio::decode::CompressedAudioSource;
+use crate::audio::output::AudioOutputSelection;
+use crate::audio::output::PcmConsumer;
 use crate::audio::output::{OutputStream, OutputStreamId, PipelineId, PreparedOutputConfig};
-use crate::audio::pcm_queue::PcmConsumer;
-use crate::audio::timebase::{frame_to_millis, millis_to_frame};
+use crate::audio::pcm::{frame_to_millis, millis_to_frame};
 use crate::ids::{PlaybackId, QueueItemId};
 use crate::messages::Versioned;
 use cpal::StreamInstant;
@@ -72,7 +72,7 @@ pub(super) struct Prebuffering {
 }
 
 /// The output stream of a session. It outlives the pipelines that play through it.
-pub(super) struct Output {
+pub(crate) struct Output {
     pub id: OutputStreamId,
     pub stream: Box<dyn OutputStream>,
     pub config: PreparedOutputConfig,
@@ -85,7 +85,7 @@ impl Output {
 }
 
 /// The decode thread of one stretch of a track, and the queue it fills for the stream.
-pub(super) struct Pipeline {
+pub(crate) struct Pipeline {
     pub id: PipelineId,
     pub decode: DecodeWorker,
 }

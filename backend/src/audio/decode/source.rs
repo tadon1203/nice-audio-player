@@ -1,10 +1,12 @@
+//! A compressed source: an open file that decoders read through positioned reads.
+
 use std::fs::File;
 use std::io::{self, Read, Seek, SeekFrom};
 use std::sync::Arc;
 
 use symphonia::core::io::MediaSource;
 
-use super::decoding::{PcmDecodeError, StreamingDecoder};
+use super::stream::{DecodeError, StreamingDecoder, open_decoder_from_source};
 use crate::library::media::ValidatedAudioFile;
 use crate::threads::Cancellation;
 
@@ -14,44 +16,39 @@ use crate::threads::Cancellation;
 pub(crate) struct CompressedAudioSource {
     file: Arc<File>,
     byte_len: u64,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum CompressedSourceError {
-    Cancelled,
-    OpenFailed,
-    MetadataFailed,
-}
-
-pub(crate) fn prepare_compressed_source(
-    file: &ValidatedAudioFile,
-    cancellation: &Cancellation,
-) -> Result<CompressedAudioSource, CompressedSourceError> {
-    if cancellation.is_cancelled() {
-        return Err(CompressedSourceError::Cancelled);
-    }
-    let source = File::open(&file.path)
-        .inspect_err(|cause| log::warn!("audio.source.open_failed cause={cause}"))
-        .map_err(|_| CompressedSourceError::OpenFailed)?;
-    let byte_len = source
-        .metadata()
-        .inspect_err(|cause| log::warn!("audio.source.metadata_failed cause={cause}"))
-        .map_err(|_| CompressedSourceError::MetadataFailed)?
-        .len();
-    Ok(CompressedAudioSource {
-        file: Arc::new(source),
-        byte_len,
-    })
+    extension: String,
 }
 
 impl CompressedAudioSource {
-    pub(crate) fn open_decoder(&self, extension: &str) -> Result<StreamingDecoder, PcmDecodeError> {
+    pub(crate) fn open(
+        file: &ValidatedAudioFile,
+        cancellation: &Cancellation,
+    ) -> Result<Self, DecodeError> {
+        if cancellation.is_cancelled() {
+            return Err(DecodeError::Cancelled);
+        }
+        let source = File::open(&file.path)
+            .inspect_err(|cause| log::warn!("audio.source.open_failed cause={cause}"))
+            .map_err(|_| DecodeError::FileOpenFailed)?;
+        let byte_len = source
+            .metadata()
+            .inspect_err(|cause| log::warn!("audio.source.metadata_failed cause={cause}"))
+            .map_err(|_| DecodeError::MetadataFailed)?
+            .len();
+        Ok(Self {
+            file: Arc::new(source),
+            byte_len,
+            extension: file.extension.clone(),
+        })
+    }
+
+    pub(crate) fn decoder(&self) -> Result<StreamingDecoder, DecodeError> {
         let reader = PositionedFileReader {
             file: Arc::clone(&self.file),
             position: 0,
             byte_len: self.byte_len,
         };
-        super::decoding::open_decoder_from_source(Box::new(reader), extension)
+        open_decoder_from_source(Box::new(reader), &self.extension)
     }
 }
 

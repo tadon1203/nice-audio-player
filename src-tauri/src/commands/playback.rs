@@ -1,8 +1,7 @@
 use backend::{
-    app::BackendApp,
     app::{
-        AudioOutputDevice, AudioOutputSelection, PlaybackContext, PlaybackState, QueueState,
-        QueueWindow, RepeatMode, Versioned,
+        AudioOutputDevice, AudioOutputSelection, BackendApp, PlaybackContext, PlaybackState,
+        QueueState, QueueWindow, RepeatMode, Versioned,
     },
     errors::CommandError,
     ids::{QueueItemId, TrackId},
@@ -127,10 +126,7 @@ pub(crate) async fn player_set_muted(
 pub(crate) async fn player_list_output_devices(
     state: tauri::State<'_, AppState>,
 ) -> Result<Vec<AudioOutputDevice>, CommandError> {
-    blocking(&state, |_| {
-        BackendApp::list_output_devices().map_err(CommandError::from)
-    })
-    .await
+    blocking(&state, |_| BackendApp::list_output_devices()).await
 }
 
 #[tauri::command]

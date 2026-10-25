@@ -1,24 +1,25 @@
-use std::fs::File;
+//! A decoder positioned in a file: probes a source, decodes it to interleaved PCM, and seeks.
 
 use log::warn;
 use symphonia::core::codecs::audio::{AudioDecoder, AudioDecoderOptions};
 use symphonia::core::errors::Error as SymphoniaError;
 use symphonia::core::formats::probe::Hint;
 use symphonia::core::formats::{FormatOptions, FormatReader, SeekMode, SeekTo, TrackType};
-use symphonia::core::io::{MediaSourceStream, MediaSourceStreamOptions};
+use symphonia::core::io::{MediaSource, MediaSourceStream, MediaSourceStreamOptions};
 use symphonia::core::meta::MetadataOptions;
 use symphonia::core::units::{Time, TimeBase, Timestamp};
 use symphonia::default::{get_codecs, get_probe};
 
-use super::pcm::{ChannelCount, PcmSpec, SampleRate};
-use crate::library::media::ValidatedAudioFile;
+use crate::audio::pcm::{ChannelCount, PcmSpec, SampleRate};
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-pub(crate) enum PcmDecodeError {
+pub(crate) enum DecodeError {
     #[error("decoding was cancelled")]
     Cancelled,
     #[error("the file could not be opened")]
     FileOpenFailed,
+    #[error("the file's size could not be read")]
+    MetadataFailed,
     #[error("the format is not supported")]
     UnsupportedFormat,
     #[error("the file has no audio track")]
@@ -59,11 +60,6 @@ pub(crate) struct SeekResult {
     pub(crate) first_packet: Vec<f32>,
 }
 
-pub(crate) enum SeekStep {
-    Samples(SeekResult),
-    EndOfStream,
-}
-
 /// Consecutive undecodable packets after which a track is given up on. One damaged frame is
 /// common in real files and is skipped; a long run means the rest is unreadable too.
 const MAX_CONSECUTIVE_DAMAGED_PACKETS: u32 = 8;
@@ -100,20 +96,10 @@ pub(crate) struct StreamingDecoder {
     damaged: DamagedPackets,
 }
 
-/// Opens a decoder for whole-file analysis; CRC verification is skipped because nothing is played.
-pub(crate) fn open_analysis_decoder(
-    file: &ValidatedAudioFile,
-) -> Result<StreamingDecoder, PcmDecodeError> {
-    let source = File::open(&file.path)
-        .inspect_err(|cause| log::warn!("audio.decode.open_failed cause={cause}"))
-        .map_err(|_| PcmDecodeError::FileOpenFailed)?;
-    open_decoder_from_source(Box::new(source), &file.extension)
-}
-
-pub(crate) fn open_decoder_from_source(
-    source: Box<dyn symphonia::core::io::MediaSource>,
+pub(super) fn open_decoder_from_source(
+    source: Box<dyn MediaSource>,
     extension: &str,
-) -> Result<StreamingDecoder, PcmDecodeError> {
+) -> Result<StreamingDecoder, DecodeError> {
     let media_source = MediaSourceStream::new(source, MediaSourceStreamOptions::default());
     let mut hint = Hint::new();
     hint.with_extension(extension);
@@ -123,7 +109,7 @@ pub(crate) fn open_decoder_from_source(
 fn open_decoder_from_media_source(
     media_source: MediaSourceStream<'static>,
     hint: &Hint,
-) -> Result<StreamingDecoder, PcmDecodeError> {
+) -> Result<StreamingDecoder, DecodeError> {
     let format = get_probe()
         .probe(
             hint,
@@ -134,29 +120,29 @@ fn open_decoder_from_media_source(
         .map_err(|error| map_probe_error(&error))?;
     let track = format
         .default_track(TrackType::Audio)
-        .ok_or(PcmDecodeError::MissingAudioTrack)?;
+        .ok_or(DecodeError::MissingAudioTrack)?;
     let track_id = track.id;
     let codec_params = track
         .codec_params
         .as_ref()
-        .ok_or(PcmDecodeError::MissingCodecParameters)?
+        .ok_or(DecodeError::MissingCodecParameters)?
         .audio()
-        .ok_or(PcmDecodeError::MissingCodecParameters)?;
+        .ok_or(DecodeError::MissingCodecParameters)?;
     let expected_spec = PcmSpec::new(
         SampleRate::new(
             codec_params
                 .sample_rate
-                .ok_or(PcmDecodeError::InvalidSampleRate)?,
+                .ok_or(DecodeError::InvalidSampleRate)?,
         )
-        .ok_or(PcmDecodeError::InvalidSampleRate)?,
+        .ok_or(DecodeError::InvalidSampleRate)?,
         ChannelCount::new(
             codec_params
                 .channels
                 .as_ref()
-                .ok_or(PcmDecodeError::InvalidChannelCount)?
+                .ok_or(DecodeError::InvalidChannelCount)?
                 .count(),
         )
-        .ok_or(PcmDecodeError::InvalidChannelCount)?,
+        .ok_or(DecodeError::InvalidChannelCount)?,
     );
     let duration_ms = track_duration_ms(track);
     let time_base = track.time_base.unwrap_or_else(|| {
@@ -194,14 +180,14 @@ impl StreamingDecoder {
         &mut self,
         target_source_frame: u64,
         preroll_frames: u64,
-    ) -> Result<SeekStep, PcmDecodeError> {
+    ) -> Result<SeekResult, DecodeError> {
         let sample_rate = self.expected_spec.sample_rate().get();
         let preroll_source_frame = target_source_frame.saturating_sub(preroll_frames);
         let target_nanos = u128::from(preroll_source_frame)
             .saturating_mul(1_000_000_000)
             .checked_div(u128::from(sample_rate))
-            .ok_or(PcmDecodeError::SeekFailed)?;
-        let time = Time::try_from_nanos_u128(target_nanos).ok_or(PcmDecodeError::SeekFailed)?;
+            .ok_or(DecodeError::SeekFailed)?;
+        let time = Time::try_from_nanos_u128(target_nanos).ok_or(DecodeError::SeekFailed)?;
         let seeked = self
             .format
             .seek(
@@ -212,7 +198,7 @@ impl StreamingDecoder {
                 },
             )
             .inspect_err(|cause| log::warn!("audio.decode.seek_failed cause={cause}"))
-            .map_err(|_| PcmDecodeError::SeekFailed)?;
+            .map_err(|_| DecodeError::SeekFailed)?;
         self.decoder.reset();
         self.finished = false;
 
@@ -226,7 +212,7 @@ impl StreamingDecoder {
         let mut packet = Vec::new();
         loop {
             match self.decode_next(&mut packet)? {
-                DecodeStep::EndOfStream => return Ok(SeekStep::EndOfStream),
+                DecodeStep::EndOfStream => return Err(DecodeError::EmptyAudioStream),
                 DecodeStep::Samples => {
                     let channels = usize::from(self.expected_spec.channel_count().get());
                     let packet_frames = packet.len() / channels;
@@ -237,12 +223,12 @@ impl StreamingDecoder {
                     let skip_frames = frames_to_discard as usize;
                     let skip_samples = skip_frames
                         .checked_mul(channels)
-                        .ok_or(PcmDecodeError::BufferAllocationFailed)?;
-                    return Ok(SeekStep::Samples(SeekResult {
+                        .ok_or(DecodeError::BufferAllocationFailed)?;
+                    return Ok(SeekResult {
                         preroll_source_frame,
                         confirmed_source_frame: target_source_frame,
                         first_packet: packet[skip_samples.min(packet.len())..].to_vec(),
-                    }));
+                    });
                 }
             }
         }
@@ -251,7 +237,7 @@ impl StreamingDecoder {
     pub(crate) fn decode_next(
         &mut self,
         destination: &mut Vec<f32>,
-    ) -> Result<DecodeStep, PcmDecodeError> {
+    ) -> Result<DecodeStep, DecodeError> {
         if self.finished {
             return Ok(DecodeStep::EndOfStream);
         }
@@ -285,7 +271,7 @@ impl StreamingDecoder {
                         "decoding.damaged_packets_gave_up count={}",
                         self.damaged.skipped
                     );
-                    return Err(PcmDecodeError::CorruptedAudioData);
+                    return Err(DecodeError::CorruptedAudioData);
                 }
                 Err(error) => return Err(map_decode_error(&error)),
             };
@@ -297,19 +283,19 @@ impl StreamingDecoder {
 
             let spec = decoded.spec();
             let current_spec = PcmSpec::new(
-                SampleRate::new(spec.rate()).ok_or(PcmDecodeError::InvalidSampleRate)?,
+                SampleRate::new(spec.rate()).ok_or(DecodeError::InvalidSampleRate)?,
                 ChannelCount::new(spec.channels().count())
-                    .ok_or(PcmDecodeError::InvalidChannelCount)?,
+                    .ok_or(DecodeError::InvalidChannelCount)?,
             );
             if current_spec != self.expected_spec {
-                return Err(PcmDecodeError::StreamChanged);
+                return Err(DecodeError::StreamChanged);
             }
 
             destination.clear();
             destination
                 .try_reserve(packet_sample_count)
                 .inspect_err(|cause| log::warn!("audio.decode.buffer_failed cause={cause}"))
-                .map_err(|_| PcmDecodeError::BufferAllocationFailed)?;
+                .map_err(|_| DecodeError::BufferAllocationFailed)?;
             destination.resize(packet_sample_count, 0.0);
             decoded.copy_to_slice_interleaved(destination);
             return Ok(DecodeStep::Samples);
@@ -329,66 +315,66 @@ fn timestamp_delta_to_frames(
     actual: Timestamp,
     time_base: TimeBase,
     sample_rate: u32,
-) -> Result<u64, PcmDecodeError> {
+) -> Result<u64, DecodeError> {
     if required < actual {
-        return Err(PcmDecodeError::SeekFailed);
+        return Err(DecodeError::SeekFailed);
     }
     let delta = u128::try_from(required.get() - actual.get())
         .inspect_err(|cause| log::warn!("audio.decode.seek_delta_failed cause={cause}"))
-        .map_err(|_| PcmDecodeError::SeekFailed)?;
+        .map_err(|_| DecodeError::SeekFailed)?;
     let numerator = delta
         .checked_mul(u128::from(time_base.numer.get()))
         .and_then(|value| value.checked_mul(u128::from(sample_rate)))
-        .ok_or(PcmDecodeError::SeekFailed)?;
+        .ok_or(DecodeError::SeekFailed)?;
     let denominator = u128::from(time_base.denom.get());
     let frames = numerator
         .checked_add(denominator.saturating_sub(1))
         .and_then(|value| value.checked_div(denominator))
-        .ok_or(PcmDecodeError::SeekFailed)?;
+        .ok_or(DecodeError::SeekFailed)?;
     u64::try_from(frames)
         .inspect_err(|cause| log::warn!("audio.decode.seek_frames_failed cause={cause}"))
-        .map_err(|_| PcmDecodeError::SeekFailed)
+        .map_err(|_| DecodeError::SeekFailed)
 }
 
-fn map_probe_error(error: &SymphoniaError) -> PcmDecodeError {
+fn map_probe_error(error: &SymphoniaError) -> DecodeError {
     match error {
-        SymphoniaError::Unsupported(_) => PcmDecodeError::UnsupportedFormat,
-        SymphoniaError::IoError(_) => PcmDecodeError::ReadFailed,
-        _ => PcmDecodeError::CorruptedAudioData,
+        SymphoniaError::Unsupported(_) => DecodeError::UnsupportedFormat,
+        SymphoniaError::IoError(_) => DecodeError::ReadFailed,
+        _ => DecodeError::CorruptedAudioData,
     }
 }
 
-fn map_decoder_creation_error(error: &SymphoniaError) -> PcmDecodeError {
+fn map_decoder_creation_error(error: &SymphoniaError) -> DecodeError {
     match error {
-        SymphoniaError::Unsupported(_) => PcmDecodeError::UnsupportedCodec,
-        SymphoniaError::IoError(_) => PcmDecodeError::ReadFailed,
-        _ => PcmDecodeError::DecodeFailed,
+        SymphoniaError::Unsupported(_) => DecodeError::UnsupportedCodec,
+        SymphoniaError::IoError(_) => DecodeError::ReadFailed,
+        _ => DecodeError::DecodeFailed,
     }
 }
 
-fn map_packet_error(error: &SymphoniaError) -> PcmDecodeError {
+fn map_packet_error(error: &SymphoniaError) -> DecodeError {
     match error {
-        SymphoniaError::ResetRequired => PcmDecodeError::StreamChanged,
-        SymphoniaError::IoError(_) => PcmDecodeError::ReadFailed,
-        SymphoniaError::DecodeError(_) => PcmDecodeError::CorruptedAudioData,
-        _ => PcmDecodeError::DecodeFailed,
+        SymphoniaError::ResetRequired => DecodeError::StreamChanged,
+        SymphoniaError::IoError(_) => DecodeError::ReadFailed,
+        SymphoniaError::DecodeError(_) => DecodeError::CorruptedAudioData,
+        _ => DecodeError::DecodeFailed,
     }
 }
 
-fn map_decode_error(error: &SymphoniaError) -> PcmDecodeError {
+fn map_decode_error(error: &SymphoniaError) -> DecodeError {
     match error {
-        SymphoniaError::DecodeError(_) => PcmDecodeError::CorruptedAudioData,
-        SymphoniaError::IoError(_) => PcmDecodeError::ReadFailed,
-        SymphoniaError::Unsupported(_) => PcmDecodeError::UnsupportedCodec,
-        SymphoniaError::ResetRequired => PcmDecodeError::StreamChanged,
-        _ => PcmDecodeError::DecodeFailed,
+        SymphoniaError::DecodeError(_) => DecodeError::CorruptedAudioData,
+        SymphoniaError::IoError(_) => DecodeError::ReadFailed,
+        SymphoniaError::Unsupported(_) => DecodeError::UnsupportedCodec,
+        SymphoniaError::ResetRequired => DecodeError::StreamChanged,
+        _ => DecodeError::DecodeFailed,
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{DamagedPackets, DecodeStep, MAX_CONSECUTIVE_DAMAGED_PACKETS, SeekStep};
-    use crate::audio::compressed_source::prepare_compressed_source;
+    use super::{DamagedPackets, DecodeStep, MAX_CONSECUTIVE_DAMAGED_PACKETS};
+    use crate::audio::decode::CompressedAudioSource;
     use crate::library::media::ValidatedAudioFile;
     use crate::test_support::{TestDirectory, write_pcm_i16_wav};
     use crate::threads::Cancellation;
@@ -402,9 +388,9 @@ mod tests {
     }
 
     fn open_source_decoder(file: &ValidatedAudioFile) -> super::StreamingDecoder {
-        prepare_compressed_source(file, &Cancellation::default())
+        CompressedAudioSource::open(file, &Cancellation::default())
             .unwrap()
-            .open_decoder(&file.extension)
+            .decoder()
             .unwrap()
     }
 
@@ -440,9 +426,6 @@ mod tests {
         let result = decoder
             .seek_to_frame_with_preroll(500, 0)
             .expect("seek succeeds");
-        let SeekStep::Samples(result) = result else {
-            panic!("seek reached end of stream unexpectedly");
-        };
         assert_eq!(result.confirmed_source_frame, 500);
         assert_eq!(result.first_packet[0], 500.0 / 32_768.0);
         assert!(matches!(
@@ -470,7 +453,12 @@ mod tests {
 
         for path in [truncated, garbage] {
             let outcome = crate::errors::contain("test.decode", || {
-                let Ok(mut decoder) = super::open_analysis_decoder(&validated(&path)) else {
+                let Ok(source) =
+                    CompressedAudioSource::open(&validated(&path), &Cancellation::default())
+                else {
+                    return;
+                };
+                let Ok(mut decoder) = source.decoder() else {
                     return;
                 };
                 let mut buffer = Vec::new();

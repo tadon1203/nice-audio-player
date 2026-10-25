@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use super::queue::RepeatMode;
-use crate::audio::devices::AudioOutputSelection;
+use crate::audio::output::AudioOutputSelection;
 use crate::audio::volume::DEFAULT_PLAYBACK_VOLUME;
 
 /// The playback choices that outlive a session: what the listener set, restored at startup.
