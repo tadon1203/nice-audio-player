@@ -10,16 +10,14 @@ use std::collections::HashSet;
 use std::sync::{Arc, mpsc::Receiver};
 use std::time::{Duration, Instant};
 
-use super::TrackListener;
 use super::input::{Inbox, PlaybackIds, SourceLoadId, SourceLoadIds, WorkerEvent, WorkerInput};
 use super::item::PlayableItem;
 use super::pipeline::{
     OpenedPipeline, PipelineError, PipelineRequest, open_prefetch, open_seek, open_start,
 };
 use super::preferences::{PlaybackPreferences, PreferencesObserver};
-use super::queue::{AdvanceReason, PlaybackQueue, QueueEntry, QueueError};
+use super::queue::{AdvanceReason, PlaybackQueue, QueueEntry, QueueError, RepeatMode};
 use super::resolver::TrackResolver;
-use super::service::{PlaybackCommand, PlaybackServiceError, Reply, respond};
 use super::session::{
     LoadStage, Loaded, Loading, POSITION_UPDATE_INTERVAL, Position, Prebuffering, Prefetch,
     PrefetchState, PrefetchedTrack, SeekInFlight, StartRequest, Transport, should_publish_position,
@@ -29,6 +27,7 @@ use super::snapshot::{
     PlaybackProcessingInfo, PlaybackState, QueueState, StartedBy, UPCOMING_IN_SNAPSHOT,
 };
 use super::source_loader::SourceLoad;
+use super::{Reply, TrackListener, respond};
 use crate::audio::decode::{CompressedAudioSource, DecodeError};
 use crate::audio::meter::Meter;
 use crate::audio::output::{
@@ -41,7 +40,7 @@ use crate::audio::pcm::millis_to_frame;
 use crate::audio::volume::{AtomicEffectiveGain, VolumeState};
 use crate::errors::CommandError;
 use crate::ids::{PlaybackId, QueueItemId, TrackId};
-use crate::messages::{Notifier, Versioned};
+use crate::messages::Versioned;
 use crate::state_store::StateStore;
 use log::{error, info};
 use rand::{SeedableRng, rngs::StdRng};
@@ -113,10 +112,10 @@ impl StartFailure {
         Self { phase, code }
     }
 
-    fn service_error(&self) -> PlaybackServiceError {
+    fn command_error(&self) -> CommandError {
         match (self.phase, &self.code) {
-            (StartFailurePhase::SourceWorker, _) => PlaybackServiceError::WorkerUnavailable,
-            (_, code) => PlaybackServiceError::from(*code),
+            (StartFailurePhase::SourceWorker, _) => CommandError::TaskFailed,
+            (_, code) => CommandError::from(*code),
         }
     }
 }
@@ -136,14 +135,13 @@ enum PipelineOwner {
     Gone,
 }
 
-/// The channels and shared state the service hands to the worker thread.
+/// The channels and shared state the player hands to the worker thread.
 pub(super) struct WorkerLinks {
     pub state_store: Arc<StateStore>,
     pub position: Arc<RwLock<Option<PlaybackPosition>>>,
     pub effective_gain: AtomicEffectiveGain,
     pub meter: Meter,
     pub inbox: Inbox,
-    pub messages: Notifier,
     pub observer: PreferencesObserver,
     pub output_stream_factory: Box<dyn OutputStreamFactory>,
     /// Where queue entries get their metadata.
@@ -178,7 +176,6 @@ pub(super) struct PlaybackWorker {
     state_store: Arc<StateStore>,
     position: Arc<RwLock<Option<PlaybackPosition>>>,
     inbox: Inbox,
-    messages: Notifier,
     observer: PreferencesObserver,
     output_stream_factory: Box<dyn OutputStreamFactory>,
 }
@@ -211,7 +208,6 @@ impl PlaybackWorker {
             state_store: links.state_store,
             position: links.position,
             inbox: links.inbox,
-            messages: links.messages,
             observer: links.observer,
             output_stream_factory: links.output_stream_factory,
         }
@@ -250,8 +246,8 @@ impl PlaybackWorker {
     /// Takes one input. Returns whether the worker should keep running.
     pub(super) fn handle(&mut self, input: WorkerInput) -> bool {
         match input {
-            WorkerInput::Command(command) => {
-                self.handle_command(command);
+            WorkerInput::Run(job) => {
+                job(self);
                 self.revalidate_prefetch();
             }
             WorkerInput::Event(event) => self.handle_event(event),
@@ -260,93 +256,86 @@ impl PlaybackWorker {
         true
     }
 
-    fn handle_command(&mut self, command: PlaybackCommand) {
-        match command {
-            PlaybackCommand::Start {
-                track_ids,
-                start_index,
-                reply,
-            } => self.start_queue(track_ids, start_index, reply),
-            PlaybackCommand::Previous { reply } => {
-                self.navigate(AdvanceReason::UserPrevious, reply);
-            }
-            PlaybackCommand::Next { reply } => self.navigate(AdvanceReason::UserNext, reply),
-            PlaybackCommand::Pause { reply } => {
-                respond(reply, self.pause());
-            }
-            PlaybackCommand::Resume { reply } => {
-                self.resume_command(reply);
-            }
-            PlaybackCommand::Seek { position_ms, reply } => {
-                self.begin_seek(position_ms, Some(reply));
-            }
-            PlaybackCommand::SetVolume { volume, reply } => {
-                respond(reply, self.set_volume(volume));
-            }
-            PlaybackCommand::Mute { reply } => {
-                respond(reply, Ok(self.mute()));
-            }
-            PlaybackCommand::Unmute { reply } => {
-                respond(reply, Ok(self.unmute()));
-            }
-            PlaybackCommand::SetOutputSelection { selection, reply } => {
-                self.change_output_selection(selection, reply);
-            }
-            PlaybackCommand::SetRepeatMode { mode, reply } => {
-                let changed = self.queue.set_repeat(mode);
-                if changed {
-                    self.preferences_changed();
-                }
-                respond(reply, Ok(self.queue_changed(changed)));
-            }
-            PlaybackCommand::SetShuffle { enabled, reply } => {
-                let changed = self.queue.set_shuffle(enabled, &mut self.rng);
-                if changed {
-                    self.preferences_changed();
-                }
-                respond(reply, Ok(self.queue_changed(changed)));
-            }
-            PlaybackCommand::RemoveQueueItem { id, reply } => {
-                let result = self.edit_queue(|queue| queue.remove_upcoming(id).map(|()| true));
-                respond(reply, result.map(|changed| self.queue_changed(changed)));
-            }
-            PlaybackCommand::MoveQueueItem { id, to, reply } => {
-                let result = self.edit_queue(|queue| queue.move_upcoming(id, to));
-                respond(reply, result.map(|changed| self.queue_changed(changed)));
-            }
-            PlaybackCommand::PlayQueueItem { id, reply } => {
-                self.skipped_in_a_row = 0;
-                match self.queue.jump_to(id) {
-                    Ok(()) => self.start_current(Some(reply), false, StartedBy::Jump),
-                    Err(_) => {
-                        respond(reply, Err(PlaybackServiceError::QueueItemNotFound));
-                    }
-                }
-            }
-            PlaybackCommand::Enqueue {
-                track_ids,
-                next,
-                reply,
-            } => {
-                if self.queue.current().is_none() {
-                    self.start_enqueued(track_ids, reply);
-                    return;
-                }
-                let result = self.edit_queue(|queue| queue.enqueue(track_ids, next).map(|()| true));
-                respond(reply, result.map(|changed| self.queue_changed(changed)));
-            }
-            PlaybackCommand::ClearQueue { reply } => {
-                let before = self.queue.clone();
-                let changed = self.queue.clear_upcoming();
-                if changed {
-                    self.previous_queue = Some(before);
-                }
-                respond(reply, Ok(self.queue_changed(changed)));
-            }
-            PlaybackCommand::RestorePreviousQueue { reply } => {
-                self.restore_previous_queue(reply);
-            }
+    pub(super) fn previous(&mut self, reply: Reply<Versioned<PlaybackState>>) {
+        self.navigate(AdvanceReason::UserPrevious, reply);
+    }
+
+    pub(super) fn next(&mut self, reply: Reply<Versioned<PlaybackState>>) {
+        self.navigate(AdvanceReason::UserNext, reply);
+    }
+
+    pub(super) fn set_repeat_mode(
+        &mut self,
+        mode: RepeatMode,
+        reply: Reply<Versioned<QueueState>>,
+    ) {
+        let changed = self.queue.set_repeat(mode);
+        if changed {
+            self.preferences_changed();
         }
+        respond(reply, Ok(self.queue_changed(changed)));
+    }
+
+    pub(super) fn set_shuffle(&mut self, enabled: bool, reply: Reply<Versioned<QueueState>>) {
+        let changed = self.queue.set_shuffle(enabled, &mut self.rng);
+        if changed {
+            self.preferences_changed();
+        }
+        respond(reply, Ok(self.queue_changed(changed)));
+    }
+
+    pub(super) fn remove_queue_item(
+        &mut self,
+        id: QueueItemId,
+        reply: Reply<Versioned<QueueState>>,
+    ) {
+        let result = self.edit_queue(|queue| queue.remove_upcoming(id).map(|()| true));
+        respond(reply, result.map(|changed| self.queue_changed(changed)));
+    }
+
+    pub(super) fn move_queue_item(
+        &mut self,
+        id: QueueItemId,
+        to: usize,
+        reply: Reply<Versioned<QueueState>>,
+    ) {
+        let result = self.edit_queue(|queue| queue.move_upcoming(id, to));
+        respond(reply, result.map(|changed| self.queue_changed(changed)));
+    }
+
+    pub(super) fn play_queue_item(
+        &mut self,
+        id: QueueItemId,
+        reply: Reply<Versioned<PlaybackState>>,
+    ) {
+        self.skipped_in_a_row = 0;
+        match self.queue.jump_to(id) {
+            Ok(()) => self.start_current(Some(reply), false, StartedBy::Jump),
+            Err(_) => respond(reply, Err(CommandError::QueueItemNotFound)),
+        }
+    }
+
+    pub(super) fn enqueue(
+        &mut self,
+        track_ids: Vec<TrackId>,
+        next: bool,
+        reply: Reply<Versioned<QueueState>>,
+    ) {
+        if self.queue.current().is_none() {
+            self.start_enqueued(track_ids, reply);
+            return;
+        }
+        let result = self.edit_queue(|queue| queue.enqueue(track_ids, next).map(|()| true));
+        respond(reply, result.map(|changed| self.queue_changed(changed)));
+    }
+
+    pub(super) fn clear_queue(&mut self, reply: Reply<Versioned<QueueState>>) {
+        let before = self.queue.clone();
+        let changed = self.queue.clear_upcoming();
+        if changed {
+            self.previous_queue = Some(before);
+        }
+        respond(reply, Ok(self.queue_changed(changed)));
     }
 
     fn handle_event(&mut self, event: WorkerEvent) {
@@ -476,11 +465,11 @@ pub(super) fn stream_signal_action(
     }
 }
 
-fn resolution_error(error: DeviceResolutionError) -> PlaybackServiceError {
+fn resolution_error(error: DeviceResolutionError) -> CommandError {
     match error {
-        DeviceResolutionError::InvalidDeviceId => PlaybackServiceError::InvalidDeviceId,
+        DeviceResolutionError::InvalidDeviceId => CommandError::TaskFailed,
         DeviceResolutionError::DeviceUnavailable | DeviceResolutionError::NoDefaultOutputDevice => {
-            PlaybackServiceError::from(PlaybackFailureCode::OutputDeviceUnavailable)
+            CommandError::from(PlaybackFailureCode::OutputDeviceUnavailable)
         }
     }
 }
@@ -498,98 +487,5 @@ pub(super) fn output_failure_code(error: OutputError) -> PlaybackFailureCode {
         OutputError::StreamPauseFailed => PlaybackFailureCode::OutputStreamPauseFailed,
         OutputError::StreamResumeFailed => PlaybackFailureCode::OutputStreamResumeFailed,
         OutputError::DeviceUnavailable => PlaybackFailureCode::OutputDeviceUnavailable,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::audio::output::AudioOutputSelection;
-    use crate::audio::output::{OutputError, StreamFailureKind};
-    use crate::audio::playback::snapshot::PlaybackFailureCode;
-
-    #[test]
-    fn classifies_stream_failures_by_selection_and_kind() {
-        let device = AudioOutputSelection::Device {
-            device_id: "device".into(),
-        };
-        let default = AudioOutputSelection::SystemDefault;
-        assert_eq!(
-            stream_signal_action(&default, StreamFailureKind::DeviceChanged),
-            StreamSignalAction::RefreshDefaultDevice
-        );
-        assert_eq!(
-            stream_signal_action(&device, StreamFailureKind::DeviceChanged),
-            StreamSignalAction::PreservePlayback
-        );
-        assert_eq!(
-            stream_signal_action(&default, StreamFailureKind::DeviceUnavailable),
-            StreamSignalAction::Fail(PlaybackFailureCode::OutputDeviceUnavailable)
-        );
-        assert_eq!(
-            stream_signal_action(&default, StreamFailureKind::RuntimeFailed),
-            StreamSignalAction::Fail(PlaybackFailureCode::OutputStreamRuntimeFailed)
-        );
-        assert_eq!(
-            stream_signal_action(&default, StreamFailureKind::CompletionTimingFailed),
-            StreamSignalAction::Fail(PlaybackFailureCode::CompletionTimingFailed)
-        );
-    }
-
-    #[test]
-    fn maps_output_errors_to_failure_codes() {
-        use OutputError as E;
-        use PlaybackFailureCode as C;
-        for (error, code) in [
-            (E::NoOutputDevice, C::NoOutputDevice),
-            (E::DeviceUnavailable, C::OutputDeviceUnavailable),
-            (
-                E::UnsupportedConfiguration,
-                C::UnsupportedOutputConfiguration,
-            ),
-            (
-                E::StreamConfigurationUnsupported,
-                C::UnsupportedOutputConfiguration,
-            ),
-            (
-                E::ConfigurationQueryFailed,
-                C::UnsupportedOutputConfiguration,
-            ),
-            (E::StreamBuildFailed, C::OutputStreamBuildFailed),
-            (E::StreamStartFailed, C::OutputStreamStartFailed),
-            (E::StreamPauseFailed, C::OutputStreamPauseFailed),
-            (E::StreamResumeFailed, C::OutputStreamResumeFailed),
-        ] {
-            assert_eq!(output_failure_code(error), code, "{error:?}");
-        }
-    }
-
-    #[test]
-    fn start_failure_scope_separates_file_problems_from_output_problems() {
-        for phase in [
-            StartFailurePhase::SourceOpen,
-            StartFailurePhase::SourceMetadata,
-            StartFailurePhase::DecoderOpen,
-            StartFailurePhase::FirstPacketDecode,
-            StartFailurePhase::ProcessorCreate,
-            StartFailurePhase::PrebufferDecode,
-            StartFailurePhase::PrebufferConversion,
-        ] {
-            assert_eq!(phase.scope(), FailureScope::Item, "{phase:?}");
-        }
-        for phase in [
-            StartFailurePhase::SourceWorker,
-            StartFailurePhase::OutputPrepare,
-            StartFailurePhase::StreamStart,
-        ] {
-            assert_eq!(phase.scope(), FailureScope::Output, "{phase:?}");
-        }
-    }
-
-    #[test]
-    fn previous_restarts_after_three_seconds_of_a_track_with_a_duration() {
-        assert!(!previous_restarts_track(2_999, Some(60_000)));
-        assert!(previous_restarts_track(3_000, Some(60_000)));
-        assert!(!previous_restarts_track(30_000, None));
     }
 }

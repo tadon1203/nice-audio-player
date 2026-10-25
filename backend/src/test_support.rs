@@ -170,7 +170,7 @@ pub(crate) fn null_notifier() -> Notifier {
 }
 
 /// A state store over the default settings, notifying through `notifier`, for tests that build a
-/// service directly.
+/// player directly.
 pub(crate) fn state_store_for_tests(notifier: Notifier) -> Arc<StateStore> {
     Arc::new(StateStore::new(&SettingsFile::default(), notifier))
 }

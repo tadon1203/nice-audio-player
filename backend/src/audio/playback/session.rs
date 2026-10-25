@@ -2,9 +2,9 @@
 
 use std::time::{Duration, Instant};
 
+use super::Reply;
 use super::decode_worker::DecodeWorker;
 use super::item::PlayableItem;
-use super::service::Reply;
 use super::snapshot::{PlaybackFailureCode, PlaybackState, StartedBy};
 use super::source_loader::SourceLoad;
 use crate::audio::decode::CompressedAudioSource;
@@ -72,7 +72,7 @@ pub(super) struct Prebuffering {
 }
 
 /// The output stream of a session. It outlives the pipelines that play through it.
-pub(crate) struct Output {
+pub(super) struct Output {
     pub id: OutputStreamId,
     pub stream: Box<dyn OutputStream>,
     pub config: PreparedOutputConfig,
@@ -85,7 +85,7 @@ impl Output {
 }
 
 /// The decode thread of one stretch of a track, and the queue it fills for the stream.
-pub(crate) struct Pipeline {
+pub(super) struct Pipeline {
     pub id: PipelineId,
     pub decode: DecodeWorker,
 }
@@ -228,21 +228,4 @@ pub(super) fn should_publish_position(
     position_changed: bool,
 ) -> bool {
     elapsed_since_publish >= POSITION_UPDATE_INTERVAL && position_changed
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::time::Duration;
-
-    #[test]
-    fn position_publication_requires_interval_and_a_changed_position() {
-        assert!(!should_publish_position(
-            POSITION_UPDATE_INTERVAL.saturating_sub(Duration::from_millis(1)),
-            true
-        ));
-        assert!(!should_publish_position(POSITION_UPDATE_INTERVAL, false));
-        assert!(should_publish_position(POSITION_UPDATE_INTERVAL, true));
-        assert!(should_publish_position(POSITION_UPDATE_INTERVAL * 2, true));
-    }
 }

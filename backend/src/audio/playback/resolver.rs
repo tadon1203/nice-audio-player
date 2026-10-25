@@ -5,7 +5,7 @@
 use parking_lot::Mutex;
 use std::collections::HashMap;
 
-use crate::audio::playback::PlaybackServiceError;
+use crate::errors::CommandError;
 use crate::ids::TrackId;
 use crate::library::tracks::PlayableTrack;
 
@@ -13,20 +13,14 @@ use crate::library::tracks::PlayableTrack;
 pub trait TrackSource: Send + Sync {
     /// The tracks with these ids, in the order asked: `None` for one that is gone or cannot be
     /// played any more. A failure to read the library is an error, not a missing track.
-    fn tracks(
-        &self,
-        track_ids: &[TrackId],
-    ) -> Result<Vec<Option<PlayableTrack>>, PlaybackServiceError>;
+    fn tracks(&self, track_ids: &[TrackId]) -> Result<Vec<Option<PlayableTrack>>, CommandError>;
 }
 
 /// A source that knows no tracks, for when the library is unavailable.
 pub(crate) struct NoTracks;
 
 impl TrackSource for NoTracks {
-    fn tracks(
-        &self,
-        track_ids: &[TrackId],
-    ) -> Result<Vec<Option<PlayableTrack>>, PlaybackServiceError> {
+    fn tracks(&self, track_ids: &[TrackId]) -> Result<Vec<Option<PlayableTrack>>, CommandError> {
         Ok(vec![None; track_ids.len()])
     }
 }
@@ -53,7 +47,7 @@ impl TrackResolver {
     pub fn resolve(
         &self,
         track_ids: &[TrackId],
-    ) -> Result<Vec<Option<PlayableTrack>>, PlaybackServiceError> {
+    ) -> Result<Vec<Option<PlayableTrack>>, CommandError> {
         let mut found: Vec<Option<PlayableTrack>> = {
             let cache = self.cache.lock();
             track_ids.iter().map(|id| cache.get(id).cloned()).collect()
@@ -87,79 +81,12 @@ impl TrackResolver {
         Ok(found)
     }
 
-    pub fn resolve_one(
-        &self,
-        track_id: TrackId,
-    ) -> Result<Option<PlayableTrack>, PlaybackServiceError> {
+    pub fn resolve_one(&self, track_id: TrackId) -> Result<Option<PlayableTrack>, CommandError> {
         Ok(self.resolve(&[track_id])?.pop().flatten())
     }
 
     /// Forgets what was read, so the next read sees the library as it is then.
     pub fn forget(&self) {
         self.cache.lock().clear();
-    }
-}
-
-#[cfg(test)]
-pub(super) mod testing {
-    use super::*;
-    use crate::errors::CommandError;
-    use crate::library::media::ValidatedAudioFile;
-    use std::sync::{
-        Arc,
-        atomic::{AtomicBool, AtomicUsize, Ordering},
-    };
-
-    /// A library of hand-made tracks that counts how often it is read.
-    #[derive(Debug, Default)]
-    pub struct FakeTracks {
-        tracks: Mutex<HashMap<TrackId, PlayableTrack>>,
-        reads: AtomicUsize,
-        failing: AtomicBool,
-    }
-
-    impl FakeTracks {
-        pub fn add(&self, track: PlayableTrack) {
-            self.tracks.lock().insert(track.id(), track);
-        }
-
-        pub fn remove(&self, track_id: TrackId) {
-            self.tracks.lock().remove(&track_id);
-        }
-
-        /// Makes every read fail, as a database error would, until it is switched back.
-        pub fn fail_reads(&self, failing: bool) {
-            self.failing.store(failing, Ordering::SeqCst);
-        }
-
-        /// How many ids the library was asked for.
-        pub fn reads(&self) -> usize {
-            self.reads.load(Ordering::SeqCst)
-        }
-    }
-
-    impl TrackSource for Arc<FakeTracks> {
-        fn tracks(
-            &self,
-            track_ids: &[TrackId],
-        ) -> Result<Vec<Option<PlayableTrack>>, PlaybackServiceError> {
-            self.reads.fetch_add(track_ids.len(), Ordering::SeqCst);
-            if self.failing.load(Ordering::SeqCst) {
-                return Err(PlaybackServiceError::Common {
-                    error: CommandError::PersistenceFailed,
-                });
-            }
-            let tracks = self.tracks.lock();
-            Ok(track_ids.iter().map(|id| tracks.get(id).cloned()).collect())
-        }
-    }
-
-    pub(crate) fn resolver_of(tracks: &Arc<FakeTracks>) -> Arc<TrackResolver> {
-        Arc::new(TrackResolver::new(Box::new(Arc::clone(tracks))))
-    }
-
-    /// A track that is only a name and a path.
-    pub(crate) fn track(id: TrackId, file: ValidatedAudioFile) -> PlayableTrack {
-        crate::test_support::bare_track(id, file)
     }
 }

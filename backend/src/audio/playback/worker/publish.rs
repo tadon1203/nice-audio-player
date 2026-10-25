@@ -1,8 +1,7 @@
 //! Rendering the transport and queue into snapshots and telling listeners.
 
 use super::{
-    AudioOutputDeviceIdentity, PlaybackQueue, PlaybackServiceError, PlaybackWorker, QueueError,
-    Transport,
+    AudioOutputDeviceIdentity, CommandError, PlaybackQueue, PlaybackWorker, QueueError, Transport,
 };
 use super::{CurrentPlayback, PlayableItem, previous_restarts_track};
 use super::{
@@ -107,7 +106,7 @@ impl PlaybackWorker {
             position_ms: loaded.position_ms(),
             seek_count: self.seek_count,
         }));
-        self.messages.send(Notification::PositionChanged);
+        self.state_store.notify(Notification::PositionChanged);
     }
 
     /// Previous is offered when the queue has an earlier item, or the track has played long
@@ -151,12 +150,12 @@ impl PlaybackWorker {
     pub(super) fn edit_queue(
         &mut self,
         edit: impl FnOnce(&mut PlaybackQueue) -> Result<bool, QueueError>,
-    ) -> Result<bool, PlaybackServiceError> {
+    ) -> Result<bool, CommandError> {
         if matches!(self.transport, Transport::Loading(_)) {
-            return Err(PlaybackServiceError::QueueBusy);
+            return Err(CommandError::QueueBusy);
         }
         edit(&mut self.queue)
             .inspect_err(|cause| log::warn!("playback.queue.edit_failed cause={cause}"))
-            .map_err(|_| PlaybackServiceError::QueueItemNotFound)
+            .map_err(|_| CommandError::QueueItemNotFound)
     }
 }

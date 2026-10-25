@@ -47,7 +47,7 @@ pub(super) struct DecodeTask {
 }
 
 /// The playback worker's handle on a decode thread: how to stop it, and how to wake it.
-pub(crate) struct DecodeWorker {
+pub(super) struct DecodeWorker {
     cancellation: Cancellation,
     waker: PcmWaker,
 }
@@ -56,7 +56,7 @@ impl DecodeWorker {
     /// Stops the decode thread without waiting for it: a read stalled on a network path must
     /// not block the playback worker. Whatever the thread still reports is ignored by pipeline
     /// id.
-    pub(crate) fn cancel(self) {
+    pub(super) fn cancel(self) {
         self.cancellation.cancel();
         self.waker.wake();
     }

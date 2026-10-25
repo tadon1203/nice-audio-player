@@ -28,4 +28,4 @@ impl Default for PlaybackPreferences {
 }
 
 /// Told, on the playback worker's thread, whenever a preference changes.
-pub(super) type PreferencesObserver = Arc<dyn Fn(PlaybackPreferences) + Send + Sync>;
+pub(crate) type PreferencesObserver = Arc<dyn Fn(PlaybackPreferences) + Send + Sync>;

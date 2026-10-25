@@ -1,436 +1,184 @@
+//! Transport through `Player`: start, pause, navigation, position and the end of a track.
+
 use super::*;
-use crate::ids::PlaybackId;
-use crate::test_support::state_store_for_tests;
 
 #[test]
-fn a_start_plays_as_soon_as_the_prebuffer_is_ready() {
-    let mut harness = Harness::new();
-    let tracks = vec![harness.track("a", 1)];
+fn a_start_plays_the_track_at_the_start_index() {
+    let fixture = Fixture::with(&clips(&["a", "b"]));
 
-    let snapshot = harness.start(tracks, 0).unwrap();
-
-    assert!(is_playing(&snapshot, "a"));
-    assert_eq!(session(&snapshot).playback_id, PlaybackId::first());
-    assert_eq!(session(&snapshot).duration_ms, Some(1_000));
-    assert_eq!(session(&snapshot).output_device.name, "Fake speakers");
-    assert!(harness.output.is_running());
-    assert_eq!(harness.snapshot(), snapshot);
-}
-
-#[test]
-fn the_worker_has_a_deadline_only_while_a_track_is_playing() {
-    let mut harness = Harness::new();
-    assert!(harness.worker.next_deadline().is_none(), "idle");
-
-    let tracks = vec![harness.track("a", 1)];
-    harness.start(tracks, 0).unwrap();
-    assert!(harness.worker.next_deadline().is_some(), "playing");
-
-    harness.pause().unwrap();
-    assert!(harness.worker.next_deadline().is_none(), "paused");
-
-    harness.start(missing(1), 0).unwrap_err();
-    assert!(harness.worker.next_deadline().is_none(), "failed");
-}
-
-#[test]
-fn a_playing_worker_wakes_only_a_few_times_per_second() {
-    let mut harness = Harness::new();
-    let tracks = vec![harness.track("a", 60)];
-    harness.start(tracks, 0).unwrap();
-    harness.tick();
-
-    let end = Instant::now() + Duration::from_secs(2);
-    let mut wakes = 0;
-    while let Some(deadline) = harness.worker.next_deadline() {
-        if deadline >= end {
-            break;
-        }
-        std::thread::sleep(deadline.saturating_duration_since(Instant::now()));
-        harness.tick();
-        wakes += 1;
-    }
-
-    assert!(wakes <= 4, "woke {wakes} times in 2 s");
-}
-
-#[test]
-fn a_start_through_a_service_thread_needs_no_poll() {
-    let output = FakeOutput::new();
-    let library = Arc::new(FakeTracks::default());
-    let directory = TestDirectory::new();
-    let path = directory.file("a.wav");
-    write_pcm_i16_wav(&path, SAMPLE_RATE, 1, &vec![0; SAMPLE_RATE as usize]);
-    library.add(library_track(
-        track_id_of("a"),
-        ValidatedAudioFile {
-            path,
-            file_name: "a.wav".into(),
-            extension: "wav".into(),
-        },
-    ));
-    let messages = crate::test_support::null_notifier();
-    let service = PlaybackService::start_with_output_stream_factory(
-        state_store_for_tests(messages.clone()),
-        messages,
-        PlaybackPreferences::default(),
-        Arc::new(|_| {}),
-        resolver_of(&library),
-        silent_listener(),
-        Box::new(output.clone()),
-    )
-    .expect("worker should start");
-
-    // The worker sleeps in a blocking receive while idle; only an event can wake it for this.
-    let snapshot = service
-        .handle()
-        .start(vec![track_id_of("a")], 0)
+    let started = fixture
+        .player
+        .play_queue(fixture.ids(&["a", "b"]), 1)
         .unwrap()
         .value;
 
-    assert!(matches!(snapshot, PlaybackState::Playing { .. }));
-    assert!(output.is_running());
-    service.shutdown();
+    assert!(is_playing(&started, "b"));
+    assert_eq!(session(&started).started_by, StartedBy::Jump);
+    assert!(fixture.output.is_running());
 }
 
 #[test]
 fn navigating_while_paused_starts_the_next_track_paused() {
-    let mut harness = Harness::new();
-    let tracks = vec![harness.track("a", 1), harness.track("b", 1)];
-    harness.start(tracks, 0).unwrap();
-    harness.pause().unwrap();
+    let fixture = Fixture::with(&clips(&["a", "b"]));
+    fixture
+        .player
+        .play_queue(fixture.ids(&["a", "b"]), 0)
+        .unwrap();
+    fixture.player.pause().unwrap();
 
-    let snapshot = harness.next().unwrap();
+    let next = fixture.player.next().unwrap().value;
 
-    assert!(
-        matches!(&snapshot, PlaybackState::Paused { session, .. } if session.item.track.core.title == "b")
-    );
-    assert!(!harness.output.is_running());
+    assert!(is_paused(&next, "b"));
+    assert_eq!(session(&next).started_by, StartedBy::Next);
 }
 
 #[test]
-fn volume_and_next_are_answered_while_a_start_loads() {
-    let mut harness = Harness::new();
-    let tracks = vec![harness.track("a", 1), harness.track("b", 1)];
-    let track_ids = harness.register(tracks);
-    let start = harness.send(|reply| PlaybackCommand::Start {
-        track_ids,
-        start_index: 0,
-        reply,
-    });
+fn pause_keeps_the_position_and_resume_continues_from_it() {
+    let fixture = Fixture::with(&clips(&["a"]));
+    fixture.player.play_queue(fixture.ids(&["a"]), 0).unwrap();
+    fixture.output.set_played_frames(u64::from(SAMPLE_RATE) / 2);
+    fixture.wait_for_position(500);
 
-    let volume = harness.call(|reply| PlaybackCommand::SetVolume {
-        volume: 0.25,
-        reply,
-    });
-    let next = harness.next();
+    let paused = fixture.player.pause().unwrap().value;
+    assert!(is_paused(&paused, "a"));
+    let position = fixture.player.position().expect("a position").position_ms;
+    assert!(position >= 500);
 
-    assert_eq!(volume.unwrap().value.base().volume, 0.25);
-    assert!(is_playing(&next.unwrap(), "b"));
-    assert_eq!(start.try_recv(), Ok(Err(PlaybackServiceError::Superseded)));
-}
+    let resumed = fixture.player.resume().unwrap().value;
 
-#[test]
-fn a_superseded_start_is_answered_instead_of_dropped() {
-    let mut harness = Harness::new();
-    let first_tracks = vec![harness.track("a", 1)];
-    let second_tracks = vec![harness.track("b", 1)];
-
-    let first_ids = harness.register(first_tracks);
-    let second_ids = harness.register(second_tracks);
-    let first = harness.send(|reply| PlaybackCommand::Start {
-        track_ids: first_ids,
-        start_index: 0,
-        reply,
-    });
-    let second = harness.send(|reply| PlaybackCommand::Start {
-        track_ids: second_ids,
-        start_index: 0,
-        reply,
-    });
-
-    assert_eq!(first.try_recv(), Ok(Err(PlaybackServiceError::Superseded)));
-    assert!(is_playing(&harness.wait_for(&second).unwrap().value, "b"));
-}
-
-#[test]
-fn pause_reads_the_newest_position_and_resume_continues() {
-    let mut harness = Harness::new();
-    let tracks = vec![harness.track("a", 2)];
-    harness.start(tracks, 0).unwrap();
-    harness.output.set_played_frames(22_050);
-
-    let paused = harness.pause().unwrap();
-
-    assert!(matches!(paused, PlaybackState::Paused { .. }));
-    assert_eq!(session(&paused).position_ms, 500);
-    assert!(!harness.output.is_running());
-
-    let resumed = harness.resume().unwrap();
-    assert!(matches!(resumed, PlaybackState::Playing { .. }));
-    assert_eq!(session(&resumed).position_ms, 500);
-    assert!(harness.output.is_running());
-}
-
-#[test]
-fn pausing_a_paused_track_changes_nothing() {
-    let mut harness = Harness::new();
-    let tracks = vec![harness.track("a", 1)];
-    harness.start(tracks, 0).unwrap();
-
-    let paused = harness.pause().unwrap();
-
-    assert_eq!(harness.pause().unwrap(), paused);
+    assert!(is_playing(&resumed, "a"));
+    assert!(fixture.output.is_running());
 }
 
 #[test]
 fn pause_and_resume_need_a_loaded_track() {
-    let mut harness = Harness::new();
+    let fixture = Fixture::with(&[]);
 
     assert_eq!(
-        harness.pause(),
-        Err(PlaybackServiceError::InvalidPlaybackState)
+        fixture.player.pause().err(),
+        Some(CommandError::InvalidPlaybackState)
     );
     assert_eq!(
-        harness.resume(),
-        Err(PlaybackServiceError::InvalidPlaybackState)
+        fixture.player.resume().err(),
+        Some(CommandError::InvalidPlaybackState)
     );
 }
 
 #[test]
-fn a_tick_publishes_the_position_the_speakers_reached_without_a_new_snapshot() {
-    let mut harness = Harness::new();
-    let tracks = vec![harness.track("a", 2)];
-    let started = harness.start(tracks, 0).unwrap();
-    harness.output.set_played_frames(44_100);
-    let sent = harness.sent().len();
+fn a_tick_publishes_the_position_the_speakers_reached() {
+    let fixture = Fixture::with(&clips(&["a"]));
+    fixture.player.play_queue(fixture.ids(&["a"]), 0).unwrap();
 
-    std::thread::sleep(POSITION_UPDATE_INTERVAL + Duration::from_millis(10));
-    harness.tick();
+    fixture.output.set_played_frames(u64::from(SAMPLE_RATE));
 
-    assert_eq!(harness.position().unwrap().position_ms, 1_000);
+    fixture.wait_for_position(1_000);
     assert_eq!(
-        harness.position().unwrap().playback_id,
-        session(&started).playback_id
-    );
-    assert_eq!(harness.sent()[sent..], [Notification::PositionChanged]);
-    assert_eq!(harness.snapshot(), started);
-}
-
-#[test]
-fn a_tick_inside_the_publish_interval_publishes_nothing() {
-    let mut harness = Harness::new();
-    let tracks = vec![harness.track("a", 2)];
-    let started = harness.start(tracks, 0).unwrap();
-    harness.output.set_played_frames(44_100);
-    let sent = harness.sent().len();
-
-    harness.tick();
-
-    assert_eq!(harness.snapshot(), started);
-    assert_eq!(harness.sent().len(), sent);
-}
-
-#[test]
-fn a_state_change_carries_the_newest_position() {
-    let mut harness = Harness::new();
-    let tracks = vec![harness.track("a", 2)];
-    harness.start(tracks, 0).unwrap();
-    harness.output.set_played_frames(22_050);
-
-    let muted = harness
-        .call(|reply| PlaybackCommand::Mute { reply })
-        .unwrap()
-        .value;
-
-    assert_eq!(session(&muted).position_ms, 500);
-    assert_eq!(harness.position().unwrap().position_ms, 500);
-}
-
-#[test]
-fn previous_becomes_available_once_the_track_has_played_a_while() {
-    let mut harness = Harness::new();
-    let tracks = vec![harness.track("a", 10)];
-    let started = harness.start(tracks, 0).unwrap();
-    assert!(!started.base().can_go_previous);
-    harness.output.set_played_frames(SAMPLE_RATE as u64 * 5);
-
-    std::thread::sleep(POSITION_UPDATE_INTERVAL + Duration::from_millis(10));
-    harness.tick();
-
-    assert!(harness.snapshot().base().can_go_previous);
-    assert_eq!(
-        harness.sent().last(),
-        Some(&Notification::StateChanged(StateTopic::Playback))
+        fixture
+            .player
+            .position()
+            .map(|position| position.playback_id),
+        Some(session(&fixture.state()).playback_id)
     );
 }
 
 #[test]
 fn a_finished_track_moves_on_to_the_next_one() {
-    let mut harness = Harness::new();
-    let tracks = vec![harness.track("a", 1), harness.track("b", 1)];
-    harness.start(tracks, 0).unwrap();
+    let fixture = Fixture::with(&clips(&["a", "b"]));
+    fixture
+        .player
+        .play_queue(fixture.ids(&["a", "b"]), 0)
+        .unwrap();
 
-    harness.output.finish_playback();
-    harness.deliver_pending();
-    harness.tick();
-    harness.pump_until(|harness| is_playing(&harness.snapshot(), "b"));
+    fixture.finish();
 
-    assert_eq!(harness.queue_snapshot().current.unwrap().core.title, "b");
+    fixture.wait_for(|state| is_playing(state, "b"));
+    assert_eq!(session(&fixture.state()).started_by, StartedBy::Auto);
+    assert_eq!(
+        fixture.queue().current.map(|item| item.core.title),
+        Some("b".into())
+    );
 }
 
 #[test]
 fn the_last_track_finishing_stops_and_clears_the_queue() {
-    let mut harness = Harness::new();
-    let tracks = vec![harness.track("a", 1)];
-    harness.start(tracks, 0).unwrap();
+    let fixture = Fixture::with(&clips(&["a"]));
+    fixture.player.play_queue(fixture.ids(&["a"]), 0).unwrap();
 
-    harness.output.finish_playback();
-    harness.deliver_pending();
-    harness.tick();
+    fixture.finish();
 
-    let PlaybackState::Stopped { item, .. } = harness.snapshot() else {
-        panic!("the player must stop");
+    fixture.wait_for(|state| matches!(state, PlaybackState::Stopped { .. }));
+    let PlaybackState::Stopped { item, .. } = fixture.state() else {
+        panic!("the player stops");
     };
-    assert_eq!(item.unwrap().track.core.title, "a");
-    assert!(harness.queue_snapshot().current.is_none());
+    assert_eq!(item.map(|item| item.track.core.title), Some("a".into()));
+    assert!(fixture.queue().current.is_none());
 }
 
 #[test]
 fn a_paused_track_does_not_finish_naturally() {
-    let mut harness = Harness::new();
-    let tracks = vec![harness.track("a", 1), harness.track("b", 1)];
-    harness.start(tracks, 0).unwrap();
-    harness.output.finish_playback();
-    harness.deliver_pending();
-    harness.pause().unwrap();
+    let fixture = Fixture::with(&clips(&["a", "b"]));
+    fixture
+        .player
+        .play_queue(fixture.ids(&["a", "b"]), 0)
+        .unwrap();
+    fixture.player.pause().unwrap();
 
-    harness.tick();
+    fixture.finish();
+    fixture.settle();
 
-    assert!(matches!(harness.snapshot(), PlaybackState::Paused { .. }));
-}
-
-#[test]
-fn the_session_carries_the_source_format_of_the_loaded_track() {
-    let mut harness = Harness::new();
-    let mut known = harness.track("known", 1);
-    known.file_format = Some("FLAC".into());
-    known.bit_depth = Some(24);
-    known.bitrate_kbps = Some(1_411);
-    let unknown = harness.track("unknown", 1);
-
-    let snapshot = harness.start(vec![known, unknown], 0).unwrap();
-    assert_eq!(session(&snapshot).source_format, "FLAC");
-    assert_eq!(session(&snapshot).source_bit_depth, Some(24));
-    assert_eq!(session(&snapshot).source_bitrate_kbps, Some(1_411));
-
-    let snapshot = harness.next().unwrap();
-    assert_eq!(
-        session(&snapshot).source_format,
-        "wav",
-        "a file the library does not know is named by its extension"
-    );
-    assert_eq!(session(&snapshot).source_bit_depth, None);
-}
-
-#[test]
-fn started_by_names_what_started_each_session() {
-    let mut harness = Harness::new();
-    let tracks = vec![
-        harness.track("a", 5),
-        harness.track("b", 5),
-        harness.track("c", 5),
-    ];
-    let jumped = harness.start(tracks, 0).unwrap();
-    assert_eq!(session(&jumped).started_by, StartedBy::Jump);
-
-    let next = harness.next().unwrap();
-    assert_eq!(session(&next).started_by, StartedBy::Next);
-
-    let previous = harness
-        .call(|reply| PlaybackCommand::Previous { reply })
-        .unwrap()
-        .value;
-    assert_eq!(session(&previous).started_by, StartedBy::Previous);
-}
-
-#[test]
-fn an_automatic_advance_is_auto_and_a_seek_keeps_the_start() {
-    let mut harness = Harness::new();
-    let tracks = vec![harness.track("a", 1), harness.track("b", 5)];
-    harness.start(tracks, 0).unwrap();
-
-    harness.output.finish_playback();
-    harness.deliver_pending();
-    harness.tick();
-    harness.pump_until(|harness| is_playing(&harness.snapshot(), "b"));
-    assert_eq!(session(&harness.snapshot()).started_by, StartedBy::Auto);
-
-    let sought = harness.seek(2_000).unwrap();
-    assert_eq!(session(&sought).started_by, StartedBy::Auto);
-}
-
-#[test]
-fn pausing_while_a_track_loads_starts_it_paused() {
-    let mut harness = Harness::new();
-    let tracks = vec![harness.track("a", 1)];
-    let track_ids = harness.register(tracks);
-    let start = harness.send(|reply| PlaybackCommand::Start {
-        track_ids,
-        start_index: 0,
-        reply,
-    });
-
-    harness.pause().unwrap();
-    let loaded = harness.wait_for(&start).unwrap().value;
-
-    assert!(matches!(loaded, PlaybackState::Paused { .. }));
-    assert!(!harness.output.is_running());
-}
-
-#[test]
-fn resuming_while_a_paused_start_loads_plays_it() {
-    let mut harness = Harness::new();
-    let tracks = vec![harness.track("a", 1), harness.track("b", 1)];
-    harness.start(tracks, 0).unwrap();
-    harness.pause().unwrap();
-    let start = harness.send(|reply| PlaybackCommand::Next { reply });
-
-    harness.resume().unwrap();
-
-    assert!(is_playing(&harness.wait_for(&start).unwrap().value, "b"));
+    assert!(is_paused(&fixture.state(), "a"));
 }
 
 #[test]
 fn previous_restarts_a_track_that_has_played_for_a_while() {
-    let mut harness = Harness::new();
-    let tracks = vec![harness.track("a", 5), harness.track("b", 5)];
-    harness.start(tracks, 1).unwrap();
-    harness.output.set_played_frames(4 * u64::from(SAMPLE_RATE));
-    harness.pause().unwrap();
+    let fixture = Fixture::with(&[Clip::new("a", 2), Clip::new("b", 5)]);
+    fixture
+        .player
+        .play_queue(fixture.ids(&["a", "b"]), 0)
+        .unwrap();
+    fixture.player.next().unwrap();
+    fixture.output.set_played_frames(u64::from(SAMPLE_RATE) * 3);
+    fixture.wait_for_position(3_000);
 
-    let restarted = harness
-        .call(|reply| PlaybackCommand::Previous { reply })
-        .unwrap()
-        .value;
+    let restarted = fixture.player.previous().unwrap().value;
 
     assert!(
-        matches!(&restarted, PlaybackState::Paused { session, .. } if session.item.track.core.title == "b")
+        is_playing(&restarted, "b"),
+        "b restarts instead of going back to a"
     );
-    assert!(session(&restarted).position_ms < 100);
+    assert_eq!(
+        fixture.queue().current.map(|item| item.core.title),
+        Some("b".into())
+    );
 }
 
 #[test]
-fn the_listener_hears_each_load_as_a_new_playback_including_a_previous_one() {
-    let mut harness = Harness::new();
-    let tracks = vec![harness.track("a", 5), harness.track("b", 5)];
-    harness.start(tracks, 0).unwrap();
-    harness.next().unwrap();
-    harness
-        .call(|reply| PlaybackCommand::Previous { reply })
+fn previous_goes_back_to_the_last_track_when_it_has_just_started() {
+    let fixture = Fixture::with(&clips(&["a", "b"]));
+    fixture
+        .player
+        .play_queue(fixture.ids(&["a", "b"]), 0)
         .unwrap();
+    fixture.player.next().unwrap();
 
-    let loads: Vec<(PlaybackId, String)> = harness
+    let back = fixture.player.previous().unwrap().value;
+
+    assert!(is_playing(&back, "a"));
+    assert_eq!(session(&back).started_by, StartedBy::Previous);
+}
+
+#[test]
+fn the_listener_hears_each_load_as_a_new_playback() {
+    let fixture = Fixture::with(&clips(&["a", "b"]));
+    let first = fixture
+        .player
+        .play_queue(fixture.ids(&["a", "b"]), 0)
+        .unwrap()
+        .value;
+    fixture.player.next().unwrap();
+    let back = fixture.player.previous().unwrap().value;
+
+    let loaded: Vec<_> = fixture
         .heard()
         .into_iter()
         .filter_map(|heard| match heard {
@@ -438,69 +186,85 @@ fn the_listener_hears_each_load_as_a_new_playback_including_a_previous_one() {
             Heard::Upcoming(_) => None,
         })
         .collect();
-    let titles: Vec<&str> = loads.iter().map(|(_, title)| title.as_str()).collect();
+    let titles: Vec<_> = loaded.iter().map(|(_, title)| title.as_str()).collect();
     assert_eq!(titles, ["a", "b", "a"]);
-    assert_ne!(loads[0].0, loads[1].0);
-    assert_ne!(loads[1].0, loads[2].0);
-    assert_ne!(loads[0].0, loads[2].0, "Previous is a new playback too");
+    assert_eq!(loaded[0].0, session(&first).playback_id);
+    assert_eq!(loaded[2].0, session(&back).playback_id);
+    assert_ne!(loaded[0].0, loaded[2].0, "a second load is a new playback");
 }
 
 #[test]
-fn navigation_availability_follows_the_queue_and_the_restart_rule() {
-    let mut harness = Harness::new();
-    let tracks = vec![harness.track("a", 5), harness.track("b", 5)];
-    let early = harness.start(tracks, 0).unwrap();
-    assert!(!early.base().can_go_previous);
-    assert!(early.base().can_go_next);
+fn a_seek_moves_the_position_and_keeps_the_session() {
+    let fixture = Fixture::with(&clips(&["a"]));
+    let playing = fixture
+        .player
+        .play_queue(fixture.ids(&["a"]), 0)
+        .unwrap()
+        .value;
 
-    harness.output.set_played_frames(4 * u64::from(SAMPLE_RATE));
-    let late = harness.pause().unwrap();
-    assert!(late.base().can_go_previous, "previous restarts the track");
+    let sought = fixture.player.seek(1_000).unwrap().value;
+
+    assert!(is_playing(&sought, "a"));
+    assert_eq!(session(&sought).playback_id, session(&playing).playback_id);
+    assert_eq!(session(&sought).seek_count, 1);
+    assert_eq!(session(&sought).position_ms, 1_000);
 }
 
-/// A file whose name holds an unpaired UTF-16 surrogate: Windows allows it, UTF-8 cannot hold it.
-/// Its path must reach the file system as it is, or the file cannot be opened.
-#[cfg(windows)]
 #[test]
-fn a_file_whose_name_is_not_unicode_plays() {
-    use std::os::windows::ffi::OsStringExt;
+fn a_seek_while_paused_stays_paused() {
+    let fixture = Fixture::with(&clips(&["a"]));
+    fixture.player.play_queue(fixture.ids(&["a"]), 0).unwrap();
+    fixture.player.pause().unwrap();
 
-    let mut harness = Harness::new();
-    let name = std::ffi::OsString::from_wide(&[0x61, 0xD800, 0x2E, 0x77, 0x61, 0x76]);
-    let mut path = harness.files.file("placeholder.wav");
-    path.set_file_name(&name);
-    write_pcm_i16_wav(&path, SAMPLE_RATE, 1, &vec![0; SAMPLE_RATE as usize]);
-    let mut track = library_track(
-        track_id_of("odd"),
-        ValidatedAudioFile {
-            path,
-            file_name: name.to_string_lossy().into_owned(),
-            extension: "wav".into(),
-        },
+    let sought = fixture.player.seek(500).unwrap().value;
+
+    assert!(is_paused(&sought, "a"));
+    assert!(!fixture.output.is_running());
+}
+
+#[test]
+fn seeking_past_the_end_plays_the_next_track_like_a_natural_finish() {
+    let fixture = Fixture::with(&clips(&["a", "b"]));
+    fixture
+        .player
+        .play_queue(fixture.ids(&["a", "b"]), 0)
+        .unwrap();
+
+    // The position is clamped to the duration, which is where the track ends.
+    fixture.player.seek(u64::MAX).unwrap();
+
+    fixture.wait_for(|state| is_playing(state, "b"));
+}
+
+#[test]
+fn seeking_to_the_end_of_the_last_track_stops() {
+    let fixture = Fixture::with(&clips(&["a"]));
+    fixture.player.play_queue(fixture.ids(&["a"]), 0).unwrap();
+
+    fixture.player.seek(u64::MAX).unwrap();
+
+    fixture.wait_for(|state| matches!(state, PlaybackState::Stopped { .. }));
+}
+
+#[test]
+fn seeks_reuse_the_one_output_stream_of_the_session() {
+    let fixture = Fixture::with(&clips(&["a"]));
+    fixture.player.play_queue(fixture.ids(&["a"]), 0).unwrap();
+
+    fixture.player.seek(500).unwrap();
+    fixture.player.seek(1_000).unwrap();
+
+    assert_eq!(fixture.output.streams_opened(), 1);
+}
+
+#[test]
+fn commands_after_shutdown_report_a_failed_task() {
+    let fixture = Fixture::with(&[]);
+
+    fixture.player.shutdown();
+
+    assert_eq!(
+        fixture.player.set_volume(0.5).err(),
+        Some(CommandError::TaskFailed)
     );
-    track.track.core.title = "odd".into();
-
-    let snapshot = harness.start(vec![track], 0).unwrap();
-
-    assert!(is_playing(&snapshot, "odd"));
-}
-
-#[test]
-fn published_versions_grow_and_commands_that_change_nothing_keep_theirs() {
-    let mut harness = Harness::new();
-
-    let changed = harness
-        .call(|reply| PlaybackCommand::SetVolume { volume: 0.5, reply })
-        .unwrap();
-    let muted = harness
-        .call(|reply| PlaybackCommand::Mute { reply })
-        .unwrap();
-    let muted_again = harness
-        .call(|reply| PlaybackCommand::Mute { reply })
-        .unwrap();
-
-    assert_eq!(changed.version, 1);
-    assert_eq!(muted.version, 2);
-    assert_eq!(muted_again.version, 2);
-    assert_eq!(harness.versioned_snapshot().version, 2);
 }

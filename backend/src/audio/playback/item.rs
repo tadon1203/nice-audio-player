@@ -20,7 +20,7 @@ pub struct PlaybackItem {
 /// The queue entry the playback worker plays: the entry's id and the playable track, file
 /// included. Internal to the backend and never serialized; `to_playback_item` gives the renderer's view.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct PlayableItem {
+pub(super) struct PlayableItem {
     pub queue_item_id: QueueItemId,
     pub track: PlayableTrack,
 }

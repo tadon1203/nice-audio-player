@@ -1,26 +1,18 @@
 //! The Backend's composition root and its cross-domain use cases. The Host calls `BackendApp` and
 //! nothing else: each method is one use case, and its services stay behind it.
 
-mod playback_context;
+pub(crate) mod playback_context;
 #[cfg(test)]
 mod tests;
 
 pub use playback_context::PlaybackContext;
 // The types the Host names in commands and state. Each one is defined in the module that owns it.
-pub use crate::audio::meter::{FrameCallback, Meter, MeterFrame};
-pub use crate::audio::output::DeviceResolutionError;
-pub use crate::audio::output::PcmConsumer;
+pub use crate::audio::meter::{Meter, MeterFrame};
 pub use crate::audio::output::{AudioOutputDevice, AudioOutputSelection};
-pub use crate::audio::output::{
-    CpalOutput, OutputError, OutputLinks, OutputStream, OutputStreamFactory, PipelineId,
-    PreparedOutput,
-};
-pub use crate::audio::pcm::PcmSpec;
+pub use crate::audio::output::{CpalOutput, OutputStreamFactory};
 pub use crate::audio::playback::{
-    CurrentPlayback, PlaybackFailureCode, PlaybackItem, PlaybackPosition, PlaybackQueueItem,
-    PlaybackState, QueueState, QueueWindow, RepeatMode, StartedBy,
+    PlaybackPosition, PlaybackState, QueueState, QueueWindow, RepeatMode,
 };
-pub use crate::audio::waveform::PlaybackWaveform;
 pub use crate::library::LibraryStatus;
 pub use crate::library::artwork::{ArtworkRef, ServedArtwork};
 pub use crate::library::models::{
@@ -33,9 +25,7 @@ pub use crate::messages::Versioned;
 pub use crate::settings::{Appearance, AppearancePatch};
 
 use crate::audio::{
-    playback::{
-        NoTracks, PlaybackService, PlaybackServiceError, TrackListener, TrackResolver, TrackSource,
-    },
+    playback::{NoTracks, Player, TrackListener, TrackResolver, TrackSource},
     waveform::Waveforms,
 };
 use crate::errors::CommandError;
@@ -43,7 +33,6 @@ use crate::ids::{AlbumId, ArtistId, DirectoryId, QueueItemId, TrackId};
 use crate::library::{
     Library, LibraryUnavailableReason,
     artwork::{self},
-    tracks::PlaybackLookupError,
 };
 use crate::lyrics;
 use crate::messages::{BackendMessage, Notifier, StateTopic};
@@ -62,7 +51,8 @@ pub enum BackendError {
 }
 
 pub struct BackendApp {
-    playback: PlaybackService,
+    playback: Player,
+    meter: Meter,
     /// The Library, or why it is unavailable.
     library: Result<Library, LibraryUnavailableReason>,
     settings: Arc<SettingsStore>,
@@ -80,7 +70,7 @@ impl BackendApp {
         output: Box<dyn OutputStreamFactory>,
     ) -> Result<Self, BackendError> {
         let saved = settings::read(&settings::file_path(&data_dir));
-        let state_store = Arc::new(StateStore::new(&saved, messages.clone()));
+        let state_store = Arc::new(StateStore::new(&saved, messages));
         let settings = Arc::new(SettingsStore::open(
             settings::file_path(&data_dir),
             saved,
@@ -104,9 +94,10 @@ impl BackendApp {
             }),
             upcoming: Arc::new(move |track| upcoming_waveforms.upcoming(track)),
         };
-        let playback = PlaybackService::start_with_output_stream_factory(
+        let meter = Meter::new();
+        let playback = Player::start(
             Arc::clone(&state_store),
-            messages,
+            meter.clone(),
             settings.playback_preferences(),
             Arc::new(move |preferences| remember.record_playback(preferences)),
             Arc::new(TrackResolver::new(tracks)),
@@ -117,6 +108,7 @@ impl BackendApp {
         .map_err(|_| BackendError::PlaybackStartFailed)?;
         Ok(Self {
             playback,
+            meter,
             library,
             settings,
             state_store,
@@ -151,7 +143,7 @@ impl BackendApp {
 
     /// The Meter that measures the output, for the Renderer's meter subscription.
     pub fn meter(&self) -> Meter {
-        self.playback.meter()
+        self.meter.clone()
     }
 
     /// The artwork file `relative` names inside the data directory `data_dir`, for the Host's
@@ -299,11 +291,7 @@ impl BackendApp {
     pub fn track_lyrics(&self, track_id: TrackId) -> Result<Lyrics, CommandError> {
         let library = self.library()?;
         let track = library
-            .playable_tracks(&[track_id])
-            .map_err(|error| match error {
-                PlaybackLookupError::Common(error) => error,
-                PlaybackLookupError::Source(_) => CommandError::TrackUnavailable,
-            })?
+            .playable_tracks(&[track_id])?
             .pop()
             .flatten()
             .ok_or(CommandError::TrackUnavailable)
@@ -327,67 +315,60 @@ impl BackendApp {
         &self,
         context: &PlaybackContext,
         start_track_id: Option<TrackId>,
-    ) -> Result<Versioned<PlaybackState>, PlaybackServiceError> {
+    ) -> Result<Versioned<PlaybackState>, CommandError> {
         let library = self.playback_library()?;
-        let selection = playback_context::resolve(library, context, start_track_id)?;
+        let selection = match context {
+            PlaybackContext::Album { album_id } => {
+                library.playback_for_album_id(*album_id, start_track_id)
+            }
+            PlaybackContext::Tracks {
+                search,
+                sort,
+                direction,
+            } => library.playback_for_tracks(search.as_deref(), *sort, *direction, start_track_id),
+        }?;
         // The track the listener picked is checked now, so they get a clear answer when its
         // file is gone; the others are read when the queue needs them.
         if let Some(requested) = start_track_id {
-            playback_context::resolve_track(library, requested)?;
+            library.playback_for_track(requested)?;
         }
         self.playback
-            .handle()
-            .start(selection.track_ids, selection.start_index)
+            .play_queue(selection.track_ids, selection.start_index)
     }
 
-    pub fn pause(&self) -> Result<Versioned<PlaybackState>, PlaybackServiceError> {
-        self.playback.handle().pause()
+    pub fn pause(&self) -> Result<Versioned<PlaybackState>, CommandError> {
+        self.playback.pause()
     }
 
-    pub fn resume(&self) -> Result<Versioned<PlaybackState>, PlaybackServiceError> {
-        self.playback.handle().resume()
+    pub fn resume(&self) -> Result<Versioned<PlaybackState>, CommandError> {
+        self.playback.resume()
     }
 
-    pub fn previous(&self) -> Result<Versioned<PlaybackState>, PlaybackServiceError> {
-        self.playback.handle().previous()
+    pub fn previous(&self) -> Result<Versioned<PlaybackState>, CommandError> {
+        self.playback.previous()
     }
 
-    pub fn next(&self) -> Result<Versioned<PlaybackState>, PlaybackServiceError> {
-        self.playback.handle().next()
+    pub fn next(&self) -> Result<Versioned<PlaybackState>, CommandError> {
+        self.playback.next()
     }
 
-    /// Clamps `position_ms` to the track's duration.
-    pub fn seek(&self, position_ms: u64) -> Result<Versioned<PlaybackState>, PlaybackServiceError> {
-        let duration_ms = self
-            .playback
-            .snapshot()
-            .session()
-            .and_then(|session| session.duration_ms);
-        let position_ms = duration_ms.map_or(position_ms, |duration| position_ms.min(duration));
-        self.playback.handle().seek(position_ms)
+    pub fn seek(&self, position_ms: u64) -> Result<Versioned<PlaybackState>, CommandError> {
+        self.playback.seek(position_ms)
     }
 
-    pub fn set_volume(
-        &self,
-        volume: f32,
-    ) -> Result<Versioned<PlaybackState>, PlaybackServiceError> {
-        self.playback.handle().set_volume(volume)
+    pub fn set_volume(&self, volume: f32) -> Result<Versioned<PlaybackState>, CommandError> {
+        self.playback.set_volume(volume)
     }
 
-    pub fn set_muted(&self, muted: bool) -> Result<Versioned<PlaybackState>, PlaybackServiceError> {
-        let handle = self.playback.handle();
-        if muted {
-            handle.mute()
-        } else {
-            handle.unmute()
-        }
+    pub fn set_muted(&self, muted: bool) -> Result<Versioned<PlaybackState>, CommandError> {
+        self.playback.set_muted(muted)
     }
 
     pub fn set_output_selection(
         &self,
         selection: AudioOutputSelection,
-    ) -> Result<Versioned<PlaybackState>, PlaybackServiceError> {
-        self.playback.handle().set_output_selection(selection)
+    ) -> Result<Versioned<PlaybackState>, CommandError> {
+        self.playback.set_output_selection(selection)
     }
 
     /// The output devices the system has. Blocking: the device query waits on the audio host.
@@ -395,41 +376,35 @@ impl BackendApp {
         crate::audio::output::list_output_devices()
     }
 
-    pub fn set_repeat_mode(
-        &self,
-        mode: RepeatMode,
-    ) -> Result<Versioned<QueueState>, PlaybackServiceError> {
-        self.playback.handle().set_repeat_mode(mode)
+    pub fn set_repeat_mode(&self, mode: RepeatMode) -> Result<Versioned<QueueState>, CommandError> {
+        self.playback.set_repeat_mode(mode)
     }
 
-    pub fn set_shuffle(
-        &self,
-        enabled: bool,
-    ) -> Result<Versioned<QueueState>, PlaybackServiceError> {
-        self.playback.handle().set_shuffle(enabled)
+    pub fn set_shuffle(&self, enabled: bool) -> Result<Versioned<QueueState>, CommandError> {
+        self.playback.set_shuffle(enabled)
     }
 
     pub fn remove_queue_item(
         &self,
         id: QueueItemId,
-    ) -> Result<Versioned<QueueState>, PlaybackServiceError> {
-        self.playback.handle().remove_queue_item(id)
+    ) -> Result<Versioned<QueueState>, CommandError> {
+        self.playback.remove_queue_item(id)
     }
 
     pub fn move_queue_item(
         &self,
         id: QueueItemId,
         to: usize,
-    ) -> Result<Versioned<QueueState>, PlaybackServiceError> {
-        self.playback.handle().move_queue_item(id, to)
+    ) -> Result<Versioned<QueueState>, CommandError> {
+        self.playback.move_queue_item(id, to)
     }
 
     /// Makes an upcoming queue item current and plays it.
     pub fn play_queue_item(
         &self,
         id: QueueItemId,
-    ) -> Result<Versioned<PlaybackState>, PlaybackServiceError> {
-        self.playback.handle().play_queue_item(id)
+    ) -> Result<Versioned<PlaybackState>, CommandError> {
+        self.playback.play_queue_item(id)
     }
 
     /// Adds a library track to the queue: right after the current one (`next`) or at the end.
@@ -438,27 +413,25 @@ impl BackendApp {
         &self,
         track_id: TrackId,
         next: bool,
-    ) -> Result<Versioned<QueueState>, PlaybackServiceError> {
+    ) -> Result<Versioned<QueueState>, CommandError> {
         let library = self.playback_library()?;
-        let track = playback_context::resolve_track(library, track_id)?;
-        self.playback.handle().enqueue(vec![track.id()], next)
+        let track = library.playback_for_track(track_id)?;
+        self.playback.enqueue(track.id(), next)
     }
 
-    pub fn clear_queue(&self) -> Result<Versioned<QueueState>, PlaybackServiceError> {
-        self.playback.handle().clear_queue()
+    pub fn clear_queue(&self) -> Result<Versioned<QueueState>, CommandError> {
+        self.playback.clear_queue()
     }
 
     /// Puts back the queue the last replacement or Clear upcoming took away.
-    pub fn restore_previous_queue(&self) -> Result<Versioned<PlaybackState>, PlaybackServiceError> {
-        self.playback.handle().restore_previous_queue()
+    pub fn restore_previous_queue(&self) -> Result<Versioned<PlaybackState>, CommandError> {
+        self.playback.restore_previous_queue()
     }
 
     /// Upcoming queue items from `offset` (at most `limit`), for the parts of a long queue the
     /// snapshot does not carry.
     pub fn queue_window(&self, offset: u32, limit: u32) -> QueueWindow {
-        self.playback
-            .handle()
-            .queue_window(offset as usize, limit as usize)
+        self.playback.queue_window(offset, limit)
     }
 
     // ---- private helpers ----
@@ -470,12 +443,10 @@ impl BackendApp {
             .map_err(|_| CommandError::LibraryUnavailable)
     }
 
-    fn playback_library(&self) -> Result<&Library, PlaybackServiceError> {
+    fn playback_library(&self) -> Result<&Library, CommandError> {
         self.library
             .as_ref()
             .inspect_err(|cause| log::warn!("app.playback.library_unavailable cause={cause}"))
-            .map_err(|_| PlaybackServiceError::Common {
-                error: CommandError::LibraryUnavailable,
-            })
+            .map_err(|_| CommandError::LibraryUnavailable)
     }
 }

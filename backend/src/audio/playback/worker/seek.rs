@@ -1,29 +1,29 @@
 //! Seeking inside a loaded playback.
 
 use super::{
-    Instant, OpenedPipeline, PipelineError, PlaybackFailureCode, PlaybackServiceError,
-    PlaybackState, PlaybackWorker, Reply, SeekInFlight, Transport, Versioned, millis_to_frame,
-    open_seek, output_failure_code, respond,
+    CommandError, Instant, OpenedPipeline, PipelineError, PlaybackFailureCode, PlaybackState,
+    PlaybackWorker, Reply, SeekInFlight, Transport, Versioned, millis_to_frame, open_seek,
+    output_failure_code, respond,
 };
 
 impl PlaybackWorker {
-    pub(super) fn begin_seek(
+    pub(in super::super) fn seek(
         &mut self,
         requested_position_ms: u64,
         responder: Option<Reply<Versioned<PlaybackState>>>,
     ) {
-        self.cancel_seek(PlaybackServiceError::Superseded);
+        self.cancel_seek(CommandError::Superseded);
         if let Transport::Loaded(loaded) = &mut self.transport {
             // The stream plays something else from here on, and what follows is opened again
             // when the end is near.
             loaded.cancel_prefetch();
         }
         let Transport::Loaded(loaded) = &self.transport else {
-            respond(responder, Err(PlaybackServiceError::InvalidPlaybackState));
+            respond(responder, Err(CommandError::InvalidPlaybackState));
             return;
         };
         let Some(duration_ms) = loaded.position.duration_ms else {
-            respond(responder, Err(PlaybackServiceError::DurationUnavailable));
+            respond(responder, Err(CommandError::DurationUnavailable));
             return;
         };
         let target_ms = requested_position_ms.min(duration_ms);
@@ -88,7 +88,7 @@ impl PlaybackWorker {
         respond(seek.responder, Ok(snapshot));
     }
 
-    pub(super) fn cancel_seek(&mut self, error: PlaybackServiceError) {
+    pub(super) fn cancel_seek(&mut self, error: CommandError) {
         if let Transport::Loaded(loaded) = &mut self.transport
             && let Some(seek) = loaded.seek.take()
         {
@@ -98,19 +98,15 @@ impl PlaybackWorker {
     }
 }
 
-fn seek_error(error: PipelineError) -> PlaybackServiceError {
+fn seek_error(error: PipelineError) -> CommandError {
     match error {
-        PipelineError::SeekFailed => PlaybackServiceError::SeekFailed,
-        PipelineError::OutputPrepare(error) => {
-            PlaybackServiceError::from(output_failure_code(error))
-        }
+        PipelineError::SeekFailed => CommandError::SeekFailed,
+        PipelineError::OutputPrepare(error) => CommandError::from(output_failure_code(error)),
         PipelineError::ProcessorCreate => {
-            PlaybackServiceError::from(PlaybackFailureCode::SampleRateConversionFailed)
+            CommandError::from(PlaybackFailureCode::SampleRateConversionFailed)
         }
         PipelineError::DecoderOpen
         | PipelineError::SpecChanged
-        | PipelineError::FirstPacketDecode => {
-            PlaybackServiceError::from(PlaybackFailureCode::DecodeFailed)
-        }
+        | PipelineError::FirstPacketDecode => CommandError::from(PlaybackFailureCode::DecodeFailed),
     }
 }

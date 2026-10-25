@@ -1,102 +1,122 @@
-//! The worker is driven through the commands and events it receives, with a fake output device.
-//! `Harness` plays the part of the worker thread: it hands the worker one input at a time, so a
-//! test decides when a tick happens and when an event is delivered.
+//! Playback through `Player`: the queue, transport, seek, gapless handover, failures, output
+//! devices and preferences. A real Library in a temp directory holds real WAV files, and
+//! `FakeOutput` plays the part of the device. Tests wait for the published state with `wait_until`
+//! or for an event; none of them sleeps for a fixed time.
+//!
+//! The worker handles one input at a time in the order they arrive, so a command sent after an
+//! event from the device is answered after that event. `settle` uses this to know that an event
+//! has been handled when a test expects something to *not* happen.
 
-mod failure;
-mod gapless;
-mod output;
-mod preferences;
-mod queue;
-mod seek;
-mod service;
-mod snapshot;
-mod transport;
+use parking_lot::Mutex;
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::time::Duration;
 
+use crate::app::playback_context::LibraryTracks;
 use crate::audio::fake_output::FakeOutput;
 use crate::audio::meter::Meter;
-use crate::audio::output::AudioOutputSelection;
-use crate::audio::output::{OutputError, OutputStreamId, PipelineId, StreamFailureKind};
+use crate::audio::output::{AudioOutputSelection, OutputError, StreamFailureKind};
+use crate::audio::playback::Player;
 use crate::audio::playback::TrackListener;
-use crate::audio::playback::input::{Inbox, WorkerEvent, WorkerInput};
-use crate::audio::playback::item::PlaybackItem;
 use crate::audio::playback::preferences::PlaybackPreferences;
-use crate::audio::playback::queue::{PlaybackQueue, RepeatMode};
-use crate::audio::playback::resolver::testing::{FakeTracks, resolver_of, track as library_track};
-use crate::audio::playback::resolver::{NoTracks, TrackResolver};
-use crate::audio::playback::service::{
-    PlaybackCommand, PlaybackService, PlaybackServiceError, Reply,
-};
-use crate::audio::playback::session::POSITION_UPDATE_INTERVAL;
+use crate::audio::playback::queue::RepeatMode;
+use crate::audio::playback::resolver::TrackResolver;
 use crate::audio::playback::snapshot::{
-    CurrentPlayback, PlaybackChannelConversion, PlaybackControls, PlaybackFailureCode,
-    PlaybackPosition, PlaybackState, QueueState, StartedBy, UPCOMING_IN_SNAPSHOT,
+    CurrentPlayback, PlaybackChannelConversion, PlaybackFailureCode, PlaybackState, QueueState,
+    StartedBy,
 };
-use crate::audio::playback::worker::{PlaybackWorker, WorkerLinks};
-use crate::audio::volume::{AtomicEffectiveGain, VolumeState};
 use crate::errors::CommandError;
 use crate::ids::{PlaybackId, TrackId};
-use crate::library::media::ValidatedAudioFile;
-use crate::library::tracks::PlayableTrack;
-use crate::messages::{Notification, StateTopic, Versioned};
+use crate::library::Library;
+use crate::library::models::{ListRequest, SortDirection, TrackSortKey};
+use crate::messages::StateTopic;
 use crate::state_store::StateStore;
 use crate::test_support::{
-    NotificationLog, TestDirectory, state_store_for_tests, write_pcm_i16_wav,
+    NotificationLog, TestDirectory, state_store_for_tests, wait_until, write_pcm_i16_wav,
 };
-use cpal::StreamInstant;
-use parking_lot::{Mutex, RwLock};
-use rand::{SeedableRng, rngs::StdRng};
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
-use std::sync::Arc;
-use std::sync::mpsc::Receiver;
-use std::time::{Duration, Instant};
 
 const SAMPLE_RATE: u32 = 44_100;
+const WAIT: Duration = Duration::from_secs(30);
 
-/// The track ID a test gives the track of this name: the same name always gives the same ID.
-fn track_id_of(name: &str) -> TrackId {
-    let mut hasher = DefaultHasher::new();
-    name.hash(&mut hasher);
-    TrackId::try_from_rowid(((hasher.finish() >> 1) as i64) | 1).unwrap()
+/// A WAV file in the test library: its name is its title.
+#[derive(Clone, Copy)]
+struct Clip {
+    name: &'static str,
+    seconds: usize,
+    rate: u32,
+    channels: u16,
 }
 
-// ---- the harness ----
+impl Clip {
+    /// A mono clip at the usual sample rate.
+    fn new(name: &'static str, seconds: usize) -> Self {
+        Self {
+            name,
+            seconds,
+            rate: SAMPLE_RATE,
+            channels: 1,
+        }
+    }
 
-type Answer<T> = Result<T, PlaybackServiceError>;
+    fn format(self, rate: u32, channels: u16) -> Self {
+        Self {
+            rate,
+            channels,
+            ..self
+        }
+    }
+}
 
-/// What the Player told its listener, in order: a track loaded as a playback, or a track about
-/// to play next.
+/// What the Player told its listener, in order.
 #[derive(Debug, Clone, PartialEq)]
 enum Heard {
     Loaded(PlaybackId, String),
     Upcoming(String),
 }
 
-struct Harness {
-    worker: PlaybackWorker,
-    inputs: Receiver<WorkerInput>,
-    state_store: Arc<StateStore>,
-    position: Arc<RwLock<Option<PlaybackPosition>>>,
-    recorded: Arc<NotificationLog>,
-    gain: AtomicEffectiveGain,
+struct Fixture {
+    player: Player,
+    library: Library,
     output: FakeOutput,
+    state_store: Arc<StateStore>,
+    notifications: Arc<NotificationLog>,
     preferences: Arc<Mutex<Vec<PlaybackPreferences>>>,
     heard: Arc<Mutex<Vec<Heard>>>,
-    files: TestDirectory,
-    /// What the library knows; the queue reads its tracks from here.
-    library: Arc<FakeTracks>,
+    /// The track of each clip, by name.
+    ids: HashMap<&'static str, TrackId>,
+    /// The music directory and the data directory; kept alive for the test.
+    _files: TestDirectory,
 }
 
-impl Harness {
-    fn new() -> Self {
-        let (inbox, inputs) = Inbox::channel();
-        let queue = PlaybackQueue::new(RepeatMode::Off, false);
-        let volume = VolumeState::default();
-        let library = Arc::new(FakeTracks::default());
-        let position = Arc::new(RwLock::new(None));
-        let (recorded, messages) = NotificationLog::shared();
-        let state_store = state_store_for_tests(messages.clone());
-        let gain = AtomicEffectiveGain::new(1.0);
+impl Fixture {
+    /// A Player over a Library that holds `clips`, after the scan has found them all.
+    fn with(clips: &[Clip]) -> Self {
+        let files = TestDirectory::new();
+        let music = files.file("music");
+        std::fs::create_dir_all(&music).expect("music directory");
+        for clip in clips {
+            write_pcm_i16_wav(
+                &music.join(format!("{}.wav", clip.name)),
+                clip.rate,
+                clip.channels,
+                &vec![0; clip.rate as usize * usize::from(clip.channels) * clip.seconds],
+            );
+        }
+        let (notifications, notifier) = NotificationLog::shared();
+        let state_store = state_store_for_tests(notifier.clone());
+        let data = files.file("data");
+        std::fs::create_dir_all(&data).expect("data directory");
+        let library = Library::open(&data, Arc::clone(&state_store)).expect("library");
+        library
+            .add_directory(music.clone())
+            .expect("the music directory is added");
+        let found = wait_until(|| library_tracks(&library).len() == clips.len(), WAIT);
+        assert!(found, "the scan found every clip");
+        let ids = library_tracks(&library)
+            .into_iter()
+            .map(|(id, title)| (clip_named(clips, &title), id))
+            .collect();
+
         let output = FakeOutput::new();
         let preferences = Arc::new(Mutex::new(Vec::new()));
         let observed = Arc::clone(&preferences);
@@ -113,197 +133,53 @@ impl Harness {
                 upcoming_heard.lock().push(Heard::Upcoming(title));
             }),
         };
-        let worker = PlaybackWorker::new(
-            WorkerLinks {
-                state_store: Arc::clone(&state_store),
-                position: Arc::clone(&position),
-                effective_gain: gain.clone(),
-                meter: Meter::new(),
-                inbox,
-                messages,
-                observer: Arc::new(move |preferences| observed.lock().push(preferences)),
-                output_stream_factory: Box::new(output.clone()),
-                tracks: resolver_of(&library),
-                listener,
-            },
-            queue,
-            volume,
-            AudioOutputSelection::SystemDefault,
-        );
+        let player = Player::start(
+            Arc::clone(&state_store),
+            Meter::new(),
+            PlaybackPreferences::default(),
+            Arc::new(move |preferences| observed.lock().push(preferences)),
+            Arc::new(TrackResolver::new(Box::new(LibraryTracks(library.clone())))),
+            listener,
+            Box::new(output.clone()),
+        )
+        .expect("the player starts");
+
         Self {
-            worker,
-            inputs,
-            state_store,
-            position,
-            recorded,
-            gain,
+            player,
+            library,
             output,
+            state_store,
+            notifications,
             preferences,
             heard,
-            files: TestDirectory::new(),
-            library,
+            ids,
+            _files: files,
         }
     }
 
-    fn heard(&self) -> Vec<Heard> {
-        self.heard.lock().clone()
+    /// The track ids of the clips `names`, in the order given.
+    fn ids(&self, names: &[&str]) -> Vec<TrackId> {
+        names.iter().map(|name| self.id(name)).collect()
     }
 
-    /// A real WAV of `seconds` of silence, which the decode thread reads as any other file.
-    fn track(&self, name: &str, seconds: usize) -> PlayableTrack {
-        let path = self.files.file(&format!("{name}.wav"));
-        write_pcm_i16_wav(
-            &path,
-            SAMPLE_RATE,
-            1,
-            &vec![0; SAMPLE_RATE as usize * seconds],
-        );
-        let mut track = library_track(
-            track_id_of(name),
-            ValidatedAudioFile {
-                path,
-                file_name: format!("{name}.wav"),
-                extension: "wav".into(),
-            },
-        );
-        track.track.core.title = name.into();
-        track
+    fn id(&self, name: &str) -> TrackId {
+        *self
+            .ids
+            .get(name)
+            .unwrap_or_else(|| panic!("no clip named {name}"))
     }
 
-    /// Makes the library know `tracks` and returns their ids, which is what a queue is made of.
-    fn register(&self, tracks: Vec<PlayableTrack>) -> Vec<TrackId> {
-        tracks
-            .into_iter()
-            .map(|track| {
-                let id = track.id();
-                self.library.add(track);
-                id
-            })
-            .collect()
+    fn state(&self) -> PlaybackState {
+        self.state_store.playback().value
     }
 
-    fn snapshot(&self) -> PlaybackState {
-        self.versioned_snapshot().value
-    }
-
-    fn versioned_snapshot(&self) -> Versioned<PlaybackState> {
-        self.state_store.playback()
-    }
-
-    fn position(&self) -> Option<PlaybackPosition> {
-        self.position.read().clone()
-    }
-
-    fn sent(&self) -> Vec<Notification> {
-        self.recorded.sent()
-    }
-
-    fn queue_snapshot(&self) -> QueueState {
-        self.versioned_queue_snapshot().value
-    }
-
-    fn versioned_queue_snapshot(&self) -> Versioned<QueueState> {
-        self.state_store.queue()
-    }
-
-    /// Sends a command without waiting for the answer.
-    fn send<T>(&mut self, make: impl FnOnce(Reply<T>) -> PlaybackCommand) -> Receiver<Answer<T>> {
-        let (reply, answer) = std::sync::mpsc::sync_channel(1);
-        self.worker.handle(WorkerInput::Command(make(reply)));
-        answer
-    }
-
-    /// Hands the worker what arrives until `answer` has the reply.
-    fn wait_for<T>(&mut self, answer: &Receiver<Answer<T>>) -> Answer<T> {
-        let deadline = Instant::now() + Duration::from_secs(5);
-        loop {
-            if let Ok(result) = answer.try_recv() {
-                return result;
-            }
-            self.deliver_next(deadline);
-        }
-    }
-
-    fn call<T>(&mut self, make: impl FnOnce(Reply<T>) -> PlaybackCommand) -> Answer<T> {
-        let answer = self.send(make);
-        self.wait_for(&answer)
-    }
-
-    fn deliver_next(&mut self, deadline: Instant) {
-        let wait = deadline.saturating_duration_since(Instant::now());
-        match self.inputs.recv_timeout(wait) {
-            Ok(input) => {
-                self.worker.handle(input);
-            }
-            Err(
-                std::sync::mpsc::RecvTimeoutError::Timeout
-                | std::sync::mpsc::RecvTimeoutError::Disconnected,
-            ) => panic!("the worker was left waiting for an input that never came"),
-        }
-    }
-
-    fn pump_until(&mut self, done: impl Fn(&Self) -> bool) {
-        let deadline = Instant::now() + Duration::from_secs(5);
-        while !done(self) {
-            self.deliver_next(deadline);
-        }
-    }
-
-    /// Hands the worker what has already arrived.
-    fn deliver_pending(&mut self) {
-        while let Ok(input) = self.inputs.try_recv() {
-            self.worker.handle(input);
-        }
-    }
-
-    fn event(&mut self, event: WorkerEvent) {
-        self.worker.handle(WorkerInput::Event(event));
-    }
-
-    fn tick(&mut self) {
-        self.worker.tick();
-    }
-
-    // The transport helpers answer with the snapshot alone; a test that reads a version calls
-    // `call` and gets the `Versioned` answer.
-    fn start(&mut self, tracks: Vec<PlayableTrack>, start_index: usize) -> Answer<PlaybackState> {
-        let track_ids = self.register(tracks);
-        self.call(|reply| PlaybackCommand::Start {
-            track_ids,
-            start_index,
-            reply,
-        })
-        .map(|versioned| versioned.value)
-    }
-
-    fn pause(&mut self) -> Answer<PlaybackState> {
-        self.call(|reply| PlaybackCommand::Pause { reply })
-            .map(|versioned| versioned.value)
-    }
-
-    fn resume(&mut self) -> Answer<PlaybackState> {
-        self.call(|reply| PlaybackCommand::Resume { reply })
-            .map(|versioned| versioned.value)
-    }
-
-    fn next(&mut self) -> Answer<PlaybackState> {
-        self.call(|reply| PlaybackCommand::Next { reply })
-            .map(|versioned| versioned.value)
-    }
-
-    fn seek(&mut self, position_ms: u64) -> Answer<PlaybackState> {
-        self.call(|reply| PlaybackCommand::Seek { position_ms, reply })
-            .map(|versioned| versioned.value)
-    }
-
-    fn select_output(&mut self, selection: AudioOutputSelection) -> Answer<PlaybackState> {
-        self.call(|reply| PlaybackCommand::SetOutputSelection { selection, reply })
-            .map(|versioned| versioned.value)
+    fn queue(&self) -> QueueState {
+        self.player.queue_state().value
     }
 
     /// The titles of the current item and then the upcoming ones.
-    fn queue_titles(&self) -> Vec<String> {
-        let queue = self.queue_snapshot();
+    fn titles(&self) -> Vec<String> {
+        let queue = self.queue();
         queue
             .current
             .into_iter()
@@ -311,56 +187,104 @@ impl Harness {
             .map(|item| item.core.title)
             .collect()
     }
-}
 
-impl Drop for Harness {
-    fn drop(&mut self) {
-        self.worker.shutdown();
+    fn heard(&self) -> Vec<Heard> {
+        self.heard.lock().clone()
+    }
+
+    /// Waits until the published state satisfies `done`.
+    fn wait_for(&self, done: impl Fn(&PlaybackState) -> bool) {
+        let reached = wait_until(|| done(&self.state()), WAIT);
+        assert!(
+            reached,
+            "the playback state did not reach the expected value: {:?}",
+            self.state()
+        );
+    }
+
+    /// Waits until the published position of the loaded track reaches `position_ms`.
+    fn wait_for_position(&self, position_ms: u64) {
+        let reached = wait_until(
+            || {
+                self.player
+                    .position()
+                    .is_some_and(|position| position.position_ms >= position_ms)
+            },
+            WAIT,
+        );
+        assert!(reached, "the position did not reach {position_ms} ms");
+    }
+
+    /// Lets the worker handle everything the device has sent so far: a command is answered only
+    /// after the events that arrived before it.
+    fn settle(&self) {
+        let mode = self.queue().repeat_mode;
+        self.player
+            .set_repeat_mode(mode)
+            .expect("the worker answers");
+    }
+
+    /// The device heard the end of the playing track, and the worker moves on.
+    fn finish(&self) {
+        self.output.finish_playback();
     }
 }
 
-/// Files that do not exist, so loading them fails as an unreadable file.
-fn missing(count: usize) -> Vec<PlayableTrack> {
-    (0..count)
-        .map(|i| {
-            library_track(
-                track_id_of(&format!("track-{i}")),
-                ValidatedAudioFile {
-                    path: format!("C:/missing/track-{i}.flac").into(),
-                    file_name: format!("track-{i}.flac"),
-                    extension: "flac".into(),
-                },
-            )
-        })
+impl Drop for Fixture {
+    fn drop(&mut self) {
+        self.player.shutdown();
+        self.library.shutdown();
+    }
+}
+
+/// The library's tracks as (id, title), by title.
+fn library_tracks(library: &Library) -> Vec<(TrackId, String)> {
+    let request = ListRequest {
+        search: None,
+        sort: TrackSortKey::Title,
+        direction: SortDirection::Ascending,
+        offset: 0,
+        limit: 500,
+    };
+    library
+        .list_tracks(&request)
+        .expect("track list")
+        .items
+        .into_iter()
+        .map(|row| (row.core.id, row.core.title))
         .collect()
 }
 
-fn session(snapshot: &PlaybackState) -> &CurrentPlayback {
-    snapshot.session().expect("a track is loaded")
+/// The clip whose name is `title`. Titles of the test files are their names.
+fn clip_named(clips: &[Clip], title: &str) -> &'static str {
+    clips
+        .iter()
+        .map(|clip| clip.name)
+        .find(|name| *name == title)
+        .unwrap_or_else(|| panic!("the library holds {title}, which is not a clip"))
 }
 
-fn is_playing(snapshot: &PlaybackState, title: &str) -> bool {
-    matches!(snapshot, PlaybackState::Playing { session, .. } if session.item.track.core.title == title)
+fn clips(names: &[&'static str]) -> Vec<Clip> {
+    names.iter().map(|name| Clip::new(name, 2)).collect()
 }
 
-/// A listener that hears nothing, for tests that do not look at what it is told.
-fn silent_listener() -> TrackListener {
-    TrackListener {
-        loaded: Arc::new(|_, _| {}),
-        upcoming: Arc::new(|_| {}),
-    }
+fn is_playing(state: &PlaybackState, title: &str) -> bool {
+    matches!(state, PlaybackState::Playing { session, .. } if session.item.track.core.title == title)
 }
 
-fn start_service() -> PlaybackService {
-    let messages = crate::test_support::null_notifier();
-    PlaybackService::start_with_output_stream_factory(
-        state_store_for_tests(messages.clone()),
-        messages,
-        PlaybackPreferences::default(),
-        Arc::new(|_| {}),
-        Arc::new(TrackResolver::new(Box::new(NoTracks))),
-        silent_listener(),
-        Box::new(FakeOutput::new()),
-    )
-    .expect("worker should start")
+fn is_paused(state: &PlaybackState, title: &str) -> bool {
+    matches!(state, PlaybackState::Paused { session, .. } if session.item.track.core.title == title)
 }
+
+fn session(state: &PlaybackState) -> &CurrentPlayback {
+    state
+        .session()
+        .unwrap_or_else(|| panic!("a track is loaded, the state is {state:?}"))
+}
+
+mod failures;
+mod gapless;
+mod output;
+mod preferences;
+mod queue;
+mod transport;

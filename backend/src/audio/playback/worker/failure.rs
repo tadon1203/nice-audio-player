@@ -3,10 +3,9 @@
 use crate::messages::Notification;
 
 use super::{
-    AudioOutputSelection, FailureScope, LoadStage, OutputStreamId, PipelineId, PipelineOwner,
-    PlaybackFailureCode, PlaybackServiceError, PlaybackWorker, StartFailure, StartFailurePhase,
-    StartedBy, StreamFailureKind, StreamSignalAction, Transport, error, info, respond,
-    stream_signal_action,
+    AudioOutputSelection, CommandError, FailureScope, LoadStage, OutputStreamId, PipelineId,
+    PipelineOwner, PlaybackFailureCode, PlaybackWorker, StartFailure, StartFailurePhase, StartedBy,
+    StreamFailureKind, StreamSignalAction, Transport, error, info, respond, stream_signal_action,
 };
 
 impl PlaybackWorker {
@@ -17,7 +16,7 @@ impl PlaybackWorker {
         } else {
             StartFailurePhase::PrebufferConversion
         };
-        let failure_error = StartFailure::new(phase, code).service_error();
+        let failure_error = StartFailure::new(phase, code).command_error();
         match self.owner_of(pipeline) {
             PipelineOwner::Start => {
                 let Transport::Loading(loading) =
@@ -55,7 +54,7 @@ impl PlaybackWorker {
         match stream_signal_action(&self.output_selection, kind) {
             StreamSignalAction::RefreshDefaultDevice => {
                 info!("playback.stream_interrupted stream_id={}", stream.0);
-                self.cancel_seek(PlaybackServiceError::from(
+                self.cancel_seek(CommandError::from(
                     PlaybackFailureCode::OutputDeviceUnavailable,
                 ));
                 if self.refresh_default_device() {
@@ -76,7 +75,7 @@ impl PlaybackWorker {
     }
 
     pub(super) fn fail_output(&mut self, code: PlaybackFailureCode) {
-        self.fail_active(code, FailureScope::Output, PlaybackServiceError::from(code));
+        self.fail_active(code, FailureScope::Output, CommandError::from(code));
     }
 
     /// Fails the loaded track. An `Item` failure moves on to the next one; an `Output` failure
@@ -85,7 +84,7 @@ impl PlaybackWorker {
         &mut self,
         code: PlaybackFailureCode,
         scope: FailureScope,
-        seek_error: PlaybackServiceError,
+        seek_error: CommandError,
     ) {
         let id = self.drop_loaded(seek_error);
         let skipping = scope == FailureScope::Item && self.will_skip();
@@ -110,7 +109,7 @@ impl PlaybackWorker {
             .current()
             .and_then(|entry| self.item_of(entry))
             .map(|item| item.to_playback_item().track.core.title);
-        self.messages.send(Notification::TrackSkipped(title));
+        self.state_store.notify(Notification::TrackSkipped(title));
     }
 
     pub(super) fn refresh_default_device(&mut self) -> bool {

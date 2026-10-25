@@ -6,7 +6,8 @@ use std::sync::mpsc::{self, Receiver, Sender};
 
 use cpal::StreamInstant;
 
-use super::service::PlaybackCommand;
+use super::worker::PlaybackWorker;
+
 use crate::audio::decode::{CompressedAudioSource, DecodeError};
 use crate::audio::output::{
     OutputEvent, OutputEvents, OutputStreamId, PipelineId, StreamFailureKind,
@@ -16,7 +17,7 @@ use crate::ids::PlaybackId;
 /// Counts the playbacks. A playback is one queue item being played; a seek or an output device
 /// switch keeps it.
 #[derive(Debug)]
-pub(crate) struct PlaybackIds(PlaybackId);
+pub(super) struct PlaybackIds(PlaybackId);
 
 impl Default for PlaybackIds {
     fn default() -> Self {
@@ -25,7 +26,7 @@ impl Default for PlaybackIds {
 }
 
 impl PlaybackIds {
-    pub(crate) fn next(&mut self) -> PlaybackId {
+    pub(super) fn next(&mut self) -> PlaybackId {
         let id = self.0;
         self.0 = id.next();
         id
@@ -34,19 +35,19 @@ impl PlaybackIds {
 
 /// Identifies one source load, so a late result from a superseded load is told apart.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub(crate) struct SourceLoadId(u64);
+pub(super) struct SourceLoadId(u64);
 
 #[derive(Debug, Default)]
-pub(crate) struct SourceLoadIds(u64);
+pub(super) struct SourceLoadIds(u64);
 
 impl SourceLoadIds {
-    pub(crate) fn next(&mut self) -> SourceLoadId {
+    pub(super) fn next(&mut self) -> SourceLoadId {
         self.0 = self.0.wrapping_add(1);
         SourceLoadId(self.0)
     }
 }
 
-pub(crate) enum WorkerEvent {
+pub(super) enum WorkerEvent {
     SourceLoaded {
         id: SourceLoadId,
         result: Result<CompressedAudioSource, DecodeError>,
@@ -70,35 +71,38 @@ pub(crate) enum WorkerEvent {
     },
 }
 
-pub(crate) enum WorkerInput {
-    Command(PlaybackCommand),
+/// What a caller asks of the worker: a closure the worker runs on its own thread.
+pub(super) type Job = Box<dyn FnOnce(&mut PlaybackWorker) + Send>;
+
+pub(super) enum WorkerInput {
+    Run(Job),
     Event(WorkerEvent),
     Shutdown,
 }
 
 /// The sending side of the worker's channel.
 #[derive(Clone)]
-pub(crate) struct Inbox(Sender<WorkerInput>);
+pub(super) struct Inbox(Sender<WorkerInput>);
 
 impl Inbox {
-    pub(crate) fn channel() -> (Self, Receiver<WorkerInput>) {
+    pub(super) fn channel() -> (Self, Receiver<WorkerInput>) {
         let (sender, receiver) = mpsc::channel();
         (Self(sender), receiver)
     }
 
     /// Returns whether the worker was still there to take it.
-    pub(crate) fn send(&self, input: WorkerInput) -> bool {
+    pub(super) fn send(&self, input: WorkerInput) -> bool {
         self.0.send(input).is_ok()
     }
 
-    pub(crate) fn event(&self, event: WorkerEvent) {
+    pub(super) fn event(&self, event: WorkerEvent) {
         if let Err(cause) = self.0.send(WorkerInput::Event(event)) {
             log::debug!("audio.playback.input_send_failed cause={cause}");
         }
     }
 
     /// An output stream's way to report to the worker.
-    pub(crate) fn output_events(&self, stream: OutputStreamId) -> OutputEvents {
+    pub(super) fn output_events(&self, stream: OutputStreamId) -> OutputEvents {
         let inbox = self.clone();
         Arc::new(move |event| {
             inbox.event(match event {

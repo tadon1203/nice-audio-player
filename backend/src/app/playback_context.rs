@@ -1,17 +1,17 @@
-//! "Play from here": turns a library context and a start track into the ids a playback queue
-//! is built from.
+//! "Play from here": the contexts a playback queue can be built from.
 //!
 //! Every way of starting library playback is a variant of `PlaybackContext`, so a new one
-//! (artist, playlist, smart playlist) adds a variant and a resolver, not a new command.
+//! (artist, playlist, smart playlist) adds a variant, not a new command.
 
 use serde::Deserialize;
 
-use crate::audio::playback::{PlaybackServiceError, TrackSource};
+use crate::audio::playback::TrackSource;
+use crate::errors::CommandError;
 use crate::ids::{AlbumId, TrackId};
 use crate::library::{
     Library,
     models::{SortDirection, TrackSortKey},
-    tracks::{PlayableTrack, PlaybackSelection},
+    tracks::PlayableTrack,
 };
 
 #[derive(Debug, Clone, Deserialize, specta::Type)]
@@ -31,42 +31,11 @@ pub enum PlaybackContext {
     },
 }
 
-/// Reads the ids of the context's playable tracks from the library, in playing order, and where
-/// to start. The tracks themselves are read when the queue needs them. Blocking: call it off
-/// the async runtime.
-pub(super) fn resolve(
-    library: &Library,
-    context: &PlaybackContext,
-    start_track_id: Option<TrackId>,
-) -> Result<PlaybackSelection, PlaybackServiceError> {
-    Ok(match context {
-        PlaybackContext::Album { album_id } => {
-            library.playback_for_album_id(*album_id, start_track_id)
-        }
-        PlaybackContext::Tracks {
-            search,
-            sort,
-            direction,
-        } => library.playback_for_tracks(search.as_deref(), *sort, *direction, start_track_id),
-    }?)
-}
-
-/// Reads one library track, which must be playable. Blocking: call it off the async runtime.
-pub(super) fn resolve_track(
-    library: &Library,
-    track_id: TrackId,
-) -> Result<PlayableTrack, PlaybackServiceError> {
-    Ok(library.playback_for_track(track_id)?)
-}
-
 /// The library as the playback queue reads its tracks.
-pub(super) struct LibraryTracks(pub Library);
+pub(crate) struct LibraryTracks(pub Library);
 
 impl TrackSource for LibraryTracks {
-    fn tracks(
-        &self,
-        track_ids: &[TrackId],
-    ) -> Result<Vec<Option<PlayableTrack>>, PlaybackServiceError> {
-        Ok(self.0.playable_tracks(track_ids)?)
+    fn tracks(&self, track_ids: &[TrackId]) -> Result<Vec<Option<PlayableTrack>>, CommandError> {
+        self.0.playable_tracks(track_ids)
     }
 }

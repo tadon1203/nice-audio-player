@@ -2,7 +2,6 @@
 //! reaching the Host. Each code is what the Renderer sees; the messages only reach the log.
 
 use crate::audio::playback::PlaybackFailureCode;
-pub use crate::audio::playback::service::PlaybackServiceError;
 use std::any::Any;
 use std::panic::{UnwindSafe, catch_unwind};
 
@@ -64,6 +63,12 @@ pub enum CommandError {
     // devices
     #[error("the audio devices could not be listed")]
     DeviceEnumerationFailed,
+}
+
+impl From<PlaybackFailureCode> for CommandError {
+    fn from(failure: PlaybackFailureCode) -> Self {
+        Self::Output { failure }
+    }
 }
 
 /// A panic caught by [`contain`]. The payload is logged there and not kept.

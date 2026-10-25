@@ -56,11 +56,11 @@ impl VolumeState {
         if self.muted { 0.0 } else { self.volume() }
     }
 
-    pub(crate) fn set_volume(&mut self, value: f32) -> Option<bool> {
-        let volume = NormalizedVolume::new(value)?;
+    /// Whether the volume changed.
+    pub(crate) fn set_volume(&mut self, volume: NormalizedVolume) -> bool {
         let changed = self.volume != volume;
         self.volume = volume;
-        Some(changed)
+        changed
     }
 
     pub(crate) fn mute(&mut self) -> bool {
@@ -132,11 +132,11 @@ mod tests {
         assert_eq!(state.volume(), 1.0);
         assert_eq!(state.effective_gain(), 0.0);
         assert!(!state.mute());
-        assert!(state.set_volume(0.5).unwrap());
+        assert!(state.set_volume(NormalizedVolume::new(0.5).unwrap()));
         assert!(state.unmute());
         assert_eq!(state.effective_gain(), 0.5);
         assert!(state.mute());
-        assert!(state.set_volume(0.25).unwrap());
+        assert!(state.set_volume(NormalizedVolume::new(0.25).unwrap()));
         assert_eq!(state.effective_gain(), 0.0);
         assert!(state.unmute());
         assert_eq!(state.effective_gain(), 0.25);

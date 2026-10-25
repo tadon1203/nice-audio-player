@@ -3,23 +3,22 @@
 use super::{
     AdvanceReason, CommandError, CompressedAudioSource, DecodeError, FailureScope,
     HISTORY_IN_SNAPSHOT, HashSet, LoadStage, Loaded, Loading, OpenedPipeline, PipelineError,
-    PlayableItem, PlaybackFailureCode, PlaybackServiceError, PlaybackState, PlaybackWorker,
-    Position, Prebuffering, QueueEntry, QueueError, QueueItemId, QueueState, Reply, SourceLoad,
-    SourceLoadId, StartFailure, StartFailurePhase, StartRequest, StartedBy, TrackId, Transport,
-    UPCOMING_IN_SNAPSHOT, Versioned, error, open_start, output_failure_code,
-    previous_restarts_track, respond,
+    PlayableItem, PlaybackFailureCode, PlaybackState, PlaybackWorker, Position, Prebuffering,
+    QueueEntry, QueueError, QueueItemId, QueueState, Reply, SourceLoad, SourceLoadId, StartFailure,
+    StartFailurePhase, StartRequest, StartedBy, TrackId, Transport, UPCOMING_IN_SNAPSHOT,
+    Versioned, error, open_start, output_failure_code, previous_restarts_track, respond,
 };
 
 impl PlaybackWorker {
     /// Replaces the queue and starts its `start_index` item.
-    pub(super) fn start_queue(
+    pub(in super::super) fn play_queue(
         &mut self,
         track_ids: Vec<TrackId>,
         start_index: usize,
         reply: Reply<Versioned<PlaybackState>>,
     ) {
         if self.replace_queue(track_ids, start_index).is_err() {
-            respond(reply, Err(PlaybackServiceError::InvalidPlaybackState));
+            respond(reply, Err(CommandError::InvalidPlaybackState));
             return;
         }
         self.skipped_in_a_row = 0;
@@ -43,9 +42,12 @@ impl PlaybackWorker {
 
     /// Puts back the queue the last replacement or Clear upcoming took away. When the same item
     /// is still current, it keeps playing; otherwise the restored current item starts.
-    pub(super) fn restore_previous_queue(&mut self, reply: Reply<Versioned<PlaybackState>>) {
+    pub(in super::super) fn restore_previous_queue(
+        &mut self,
+        reply: Reply<Versioned<PlaybackState>>,
+    ) {
         let Some(previous) = self.previous_queue.take() else {
-            respond(reply, Err(PlaybackServiceError::InvalidPlaybackState));
+            respond(reply, Err(CommandError::InvalidPlaybackState));
             return;
         };
         let same_current = matches!(
@@ -71,7 +73,7 @@ impl PlaybackWorker {
         reply: Reply<Versioned<QueueState>>,
     ) {
         if self.replace_queue(track_ids, 0).is_err() {
-            respond(reply, Err(PlaybackServiceError::InvalidPlaybackState));
+            respond(reply, Err(CommandError::InvalidPlaybackState));
             return;
         }
         self.skipped_in_a_row = 0;
@@ -106,7 +108,7 @@ impl PlaybackWorker {
         started_by: StartedBy,
     ) {
         if self.queue.current().is_none() {
-            respond(responder, Err(PlaybackServiceError::InvalidPlaybackState));
+            respond(responder, Err(CommandError::InvalidPlaybackState));
             return;
         }
         let item = match self.resolve_current() {
@@ -117,12 +119,7 @@ impl PlaybackWorker {
                 self.queue.clear();
                 self.publish_queue();
                 self.publish_state();
-                respond(
-                    responder,
-                    Err(PlaybackServiceError::Common {
-                        error: CommandError::TrackUnavailable,
-                    }),
-                );
+                respond(responder, Err(CommandError::TrackUnavailable));
                 return;
             }
             Err(error) => {
@@ -192,7 +189,7 @@ impl PlaybackWorker {
             Err(error) => {
                 let phase = match error {
                     DecodeError::Cancelled => {
-                        respond(request.responder, Err(PlaybackServiceError::Superseded));
+                        respond(request.responder, Err(CommandError::Superseded));
                         return;
                     }
                     DecodeError::MetadataFailed => StartFailurePhase::SourceMetadata,
@@ -304,7 +301,7 @@ impl PlaybackWorker {
         let snapshot = self.publish_state();
         respond(responder, Ok(snapshot));
         if let Some(position_ms) = resume_at_ms {
-            self.begin_seek(position_ms, None);
+            self.seek(position_ms, None);
         }
     }
 
@@ -316,7 +313,7 @@ impl PlaybackWorker {
             "playback.start_failed code={:?} phase={:?} playback_id={:?}",
             failure.code, failure.phase, id
         );
-        let error = failure.service_error();
+        let error = failure.command_error();
         let skips = failure.phase.scope() == FailureScope::Item && request.selection.is_none();
         let skipping = skips && self.will_skip();
         self.meter.set_running(false);
@@ -359,7 +356,7 @@ impl PlaybackWorker {
     /// is dropped from the queue and the one after it is tried, so an entry that disappeared
     /// between starting and playing never stops the queue. A failed read drops nothing and is
     /// returned, so the queue stays whole.
-    pub(super) fn resolve_current(&mut self) -> Result<Option<PlayableItem>, PlaybackServiceError> {
+    pub(super) fn resolve_current(&mut self) -> Result<Option<PlayableItem>, CommandError> {
         loop {
             let Some(entry) = self.queue.current().cloned() else {
                 return Ok(None);
@@ -422,7 +419,7 @@ impl PlaybackWorker {
             && let Transport::Loaded(loaded) = &self.transport
             && previous_restarts_track(loaded.position_ms(), loaded.position.duration_ms)
         {
-            self.begin_seek(0, Some(reply));
+            self.seek(0, Some(reply));
             return;
         }
         let paused = matches!(&self.transport, Transport::Loaded(loaded) if loaded.paused);

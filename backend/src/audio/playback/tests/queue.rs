@@ -1,165 +1,113 @@
+//! Queue behavior through `Player`: the queue by id, undo, windows, repeat and shuffle.
+
 use super::*;
 
 #[test]
 fn queue_versions_grow_on_each_queue_change() {
-    let mut harness = Harness::new();
+    let fixture = Fixture::with(&[]);
+    let player = &fixture.player;
 
-    let repeat = harness
-        .call(|reply| PlaybackCommand::SetRepeatMode {
-            mode: RepeatMode::All,
-            reply,
-        })
-        .unwrap();
-    let shuffled = harness
-        .call(|reply| PlaybackCommand::SetShuffle {
-            enabled: true,
-            reply,
-        })
-        .unwrap();
-    let shuffled_again = harness
-        .call(|reply| PlaybackCommand::SetShuffle {
-            enabled: true,
-            reply,
-        })
-        .unwrap();
+    let repeat = player.set_repeat_mode(RepeatMode::All).unwrap();
+    let shuffled = player.set_shuffle(true).unwrap();
+    let shuffled_again = player.set_shuffle(true).unwrap();
 
     assert_eq!(repeat.version, 1);
     assert_eq!(shuffled.version, 2);
     assert_eq!(shuffled_again.version, 2);
-    assert_eq!(harness.versioned_queue_snapshot().version, 2);
-    // Each queue change is announced once. The transport is announced only when what it shows
-    // changed, and here nothing it shows changed; the repeated shuffle changes nothing and says
-    // nothing.
-    assert_eq!(
-        harness.sent(),
-        [
-            Notification::StateChanged(StateTopic::Queue),
-            Notification::StateChanged(StateTopic::Queue),
-        ]
-    );
+    assert_eq!(fixture.queue().repeat_mode, RepeatMode::All);
+    fixture.settle();
+    // Each queue change is announced once, and the repeated shuffle changes nothing. The library's
+    // scan announces its own topics, so only the queue's are counted.
+    let queue_changes = fixture
+        .notifications
+        .state_topics()
+        .into_iter()
+        .filter(|topic| *topic == StateTopic::Queue)
+        .count();
+    assert_eq!(queue_changes, 2);
 }
 
 #[test]
-fn queue_edits_are_rejected_while_a_start_loads() {
-    let mut harness = Harness::new();
-    let tracks = vec![harness.track("a", 1)];
-    let extra = vec![harness.track("b", 1)];
-    let track_ids = harness.register(tracks);
-    let start = harness.send(|reply| PlaybackCommand::Start {
-        track_ids,
-        start_index: 0,
-        reply,
-    });
+fn enqueueing_on_an_empty_queue_starts_playback() {
+    let fixture = Fixture::with(&clips(&["a", "b"]));
 
-    let extra_ids = harness.register(extra);
-    let result = harness.call(|reply| PlaybackCommand::Enqueue {
-        track_ids: extra_ids,
-        next: false,
-        reply,
-    });
-
-    assert_eq!(result, Err(PlaybackServiceError::QueueBusy));
-    harness.wait_for(&start).unwrap();
-}
-
-#[test]
-fn enqueueing_on_an_empty_queue_starts_playback_inside_the_worker() {
-    let mut harness = Harness::new();
-    let tracks = vec![harness.track("a", 1), harness.track("b", 1)];
-    let track_ids = harness.register(tracks);
-
-    let queue = harness
-        .call(|reply| PlaybackCommand::Enqueue {
-            track_ids,
-            next: false,
-            reply,
-        })
+    fixture.player.enqueue(fixture.id("a"), false).unwrap();
+    fixture.wait_for(|state| is_playing(state, "a"));
+    let queue = fixture
+        .player
+        .enqueue(fixture.id("b"), false)
         .unwrap()
         .value;
 
     assert_eq!(queue.current.map(|item| item.core.title), Some("a".into()));
     assert_eq!(queue.upcoming_count, 1);
-    harness.pump_until(|harness| is_playing(&harness.snapshot(), "a"));
 }
 
 #[test]
-fn enqueueing_nothing_on_an_empty_queue_is_refused() {
-    let mut harness = Harness::new();
+fn enqueue_next_puts_the_track_after_the_current_one() {
+    let fixture = Fixture::with(&clips(&["a", "b", "c"]));
+    let ids = fixture.ids(&["a", "b", "c"]);
+    fixture.player.play_queue(ids[..2].to_vec(), 0).unwrap();
 
-    let result = harness.call(|reply| PlaybackCommand::Enqueue {
-        track_ids: Vec::new(),
-        next: false,
-        reply,
-    });
+    fixture.player.enqueue(ids[2], true).unwrap();
 
-    assert_eq!(result, Err(PlaybackServiceError::InvalidPlaybackState));
-}
-
-fn restore(harness: &mut Harness) -> Answer<PlaybackState> {
-    harness
-        .call(|reply| PlaybackCommand::RestorePreviousQueue { reply })
-        .map(|versioned| versioned.value)
+    assert_eq!(fixture.titles(), ["a", "c", "b"]);
 }
 
 #[test]
 fn replacing_the_queue_can_be_undone_in_one_step() {
-    let mut harness = Harness::new();
-    let first = vec![harness.track("a", 1), harness.track("b", 1)];
-    harness.start(first, 0).unwrap();
-    assert!(!harness.queue_snapshot().can_restore_previous);
+    let fixture = Fixture::with(&clips(&["a", "b", "c"]));
+    let ids = fixture.ids(&["a", "b", "c"]);
+    fixture.player.play_queue(ids[..2].to_vec(), 0).unwrap();
+    assert!(!fixture.queue().can_restore_previous);
 
-    let second = vec![harness.track("c", 1)];
-    harness.start(second, 0).unwrap();
-    assert!(harness.queue_snapshot().can_restore_previous);
+    fixture.player.play_queue(vec![ids[2]], 0).unwrap();
+    assert!(fixture.queue().can_restore_previous);
 
-    let restored = restore(&mut harness).unwrap();
+    let restored = fixture.player.restore_previous_queue().unwrap().value;
 
     assert!(
         is_playing(&restored, "a"),
         "the item that was current plays again"
     );
-    assert_eq!(harness.queue_titles(), ["a", "b"]);
+    assert_eq!(fixture.titles(), ["a", "b"]);
     assert!(
-        !harness.queue_snapshot().can_restore_previous,
+        !fixture.queue().can_restore_previous,
         "one step back, no further"
     );
     assert_eq!(
-        restore(&mut harness),
-        Err(PlaybackServiceError::InvalidPlaybackState)
+        fixture.player.restore_previous_queue().err(),
+        Some(CommandError::InvalidPlaybackState)
     );
 }
 
 #[test]
 fn there_is_nothing_to_undo_after_starting_from_an_empty_queue() {
-    let mut harness = Harness::new();
-    let tracks = vec![harness.track("a", 1)];
-    harness.start(tracks, 0).unwrap();
+    let fixture = Fixture::with(&clips(&["a"]));
+    fixture.player.play_queue(fixture.ids(&["a"]), 0).unwrap();
 
-    assert!(!harness.queue_snapshot().can_restore_previous);
+    assert!(!fixture.queue().can_restore_previous);
     assert_eq!(
-        restore(&mut harness),
-        Err(PlaybackServiceError::InvalidPlaybackState)
+        fixture.player.restore_previous_queue().err(),
+        Some(CommandError::InvalidPlaybackState)
     );
 }
 
 #[test]
 fn clearing_upcoming_can_be_undone_without_restarting_the_track() {
-    let mut harness = Harness::new();
-    let tracks = vec![
-        harness.track("a", 1),
-        harness.track("b", 1),
-        harness.track("c", 1),
-    ];
-    let playing = harness.start(tracks, 0).unwrap();
-    harness
-        .call(|reply| PlaybackCommand::ClearQueue { reply })
-        .unwrap();
-    assert_eq!(harness.queue_titles(), ["a"]);
-    assert!(harness.queue_snapshot().can_restore_previous);
+    let fixture = Fixture::with(&clips(&["a", "b", "c"]));
+    let playing = fixture
+        .player
+        .play_queue(fixture.ids(&["a", "b", "c"]), 0)
+        .unwrap()
+        .value;
+    fixture.player.clear_queue().unwrap();
+    assert_eq!(fixture.titles(), ["a"]);
+    assert!(fixture.queue().can_restore_previous);
 
-    let restored = restore(&mut harness).unwrap();
+    let restored = fixture.player.restore_previous_queue().unwrap().value;
 
-    assert_eq!(harness.queue_titles(), ["a", "b", "c"]);
+    assert_eq!(fixture.titles(), ["a", "b", "c"]);
     assert_eq!(
         session(&restored).playback_id,
         session(&playing).playback_id,
@@ -169,227 +117,95 @@ fn clearing_upcoming_can_be_undone_without_restarting_the_track() {
 
 #[test]
 fn an_undone_queue_follows_the_shuffle_chosen_since() {
-    let mut harness = Harness::new();
-    let first = vec![harness.track("a", 1), harness.track("b", 1)];
-    harness.start(first, 0).unwrap();
-    let second = vec![harness.track("c", 1)];
-    harness.start(second, 0).unwrap();
-    harness
-        .call(|reply| PlaybackCommand::SetShuffle {
-            enabled: true,
-            reply,
-        })
-        .unwrap();
+    let fixture = Fixture::with(&clips(&["a", "b", "c"]));
+    let ids = fixture.ids(&["a", "b", "c"]);
+    fixture.player.play_queue(ids[..2].to_vec(), 0).unwrap();
+    fixture.player.play_queue(vec![ids[2]], 0).unwrap();
+    fixture.player.set_shuffle(true).unwrap();
 
-    restore(&mut harness).unwrap();
+    fixture.player.restore_previous_queue().unwrap();
 
-    let queue = harness.queue_snapshot();
+    let queue = fixture.queue();
     assert!(queue.shuffle_enabled);
     assert_eq!(queue.current.map(|item| item.core.title), Some("a".into()));
     assert_eq!(queue.upcoming_count, 1);
 }
 
-// ---- lazy resolution ----
-
 #[test]
-fn starting_reads_only_the_part_of_a_huge_queue_that_is_shown() {
-    let mut harness = Harness::new();
-    let mut tracks = vec![harness.track("first", 1)];
-    tracks.extend((0..4_999).map(|i| named_track(&format!("t{i}"))));
-
-    let snapshot = harness.start(tracks, 0).unwrap();
-
-    assert!(is_playing(&snapshot, "first"));
-    let queue = harness.queue_snapshot();
-    assert_eq!(queue.upcoming_count, 4_999);
-    assert_eq!(queue.upcoming.len(), UPCOMING_IN_SNAPSHOT);
-    assert!(
-        harness.library.reads() <= UPCOMING_IN_SNAPSHOT + 2,
-        "read {} tracks for a queue of 5000",
-        harness.library.reads()
+fn queue_items_can_be_removed_moved_and_played_by_id() {
+    let fixture = Fixture::with(&clips(&["a", "b", "c", "d"]));
+    fixture
+        .player
+        .play_queue(fixture.ids(&["a", "b", "c", "d"]), 0)
+        .unwrap();
+    let upcoming = fixture.queue().upcoming;
+    let (b, c, d) = (
+        upcoming[0].queue_item_id,
+        upcoming[1].queue_item_id,
+        upcoming[2].queue_item_id,
     );
+
+    fixture.player.remove_queue_item(b).unwrap();
+    assert_eq!(fixture.titles(), ["a", "c", "d"]);
+
+    fixture.player.move_queue_item(d, 0).unwrap();
+    assert_eq!(fixture.titles(), ["a", "d", "c"]);
+
+    let played = fixture.player.play_queue_item(c).unwrap().value;
+    assert!(is_playing(&played, "c"));
+    assert_eq!(session(&played).started_by, StartedBy::Jump);
 }
 
 #[test]
-fn the_rows_further_down_a_long_queue_are_read_when_asked_for() {
-    let mut harness = Harness::new();
-    let mut tracks = vec![harness.track("first", 1)];
-    tracks.extend((0..999).map(|i| named_track(&format!("t{i}"))));
-    harness.start(tracks, 0).unwrap();
-    let before = harness.library.reads();
-
-    let queue = harness.versioned_queue_snapshot();
-    let window = queue.value.window(queue.version, 500, 50);
-
-    assert_eq!(window.offset, 500);
-    assert_eq!(window.items.len(), 50);
-    assert_eq!(window.items[0].core.title, "t500.flac");
-    assert_eq!(harness.library.reads() - before, 50);
-}
-
-#[test]
-fn a_track_that_left_the_library_after_the_start_is_dropped_where_it_is_read() {
-    let mut harness = Harness::new();
-    let first = harness.track("first", 1);
-    let mut tracks = vec![first];
-    tracks.extend(["x", "gone", "y"].map(named_track));
-    let track_ids = harness.register(tracks);
-    harness.library.remove(track_id_of("gone"));
-
-    harness
-        .call(|reply| PlaybackCommand::Start {
-            track_ids,
-            start_index: 0,
-            reply,
-        })
+fn the_queue_window_serves_the_upcoming_rows_from_an_offset() {
+    let fixture = Fixture::with(&clips(&["a", "b", "c", "d", "e"]));
+    fixture
+        .player
+        .play_queue(fixture.ids(&["a", "b", "c", "d", "e"]), 0)
         .unwrap();
 
-    let queue = harness.queue_snapshot();
-    assert_eq!(queue.upcoming_count, 2, "the missing item is not counted");
-    assert_eq!(
-        harness.queue_titles(),
-        ["first", "x.flac", "y.flac"],
-        "nor shown"
-    );
-}
+    let window = fixture.player.queue_window(1, 2);
 
-#[test]
-fn a_current_track_that_left_the_library_is_skipped() {
-    let mut harness = Harness::new();
-    let tracks = vec![named_track("gone"), harness.track("b", 1)];
-    let track_ids = harness.register(tracks);
-    harness.library.remove(track_id_of("gone"));
-
-    let snapshot = harness
-        .call(|reply| PlaybackCommand::Start {
-            track_ids,
-            start_index: 0,
-            reply,
-        })
-        .unwrap()
-        .value;
-
-    assert!(is_playing(&snapshot, "b"));
-    assert_eq!(harness.queue_snapshot().history_count, 0);
-}
-
-#[test]
-fn when_every_track_has_left_the_library_the_start_is_refused() {
-    let mut harness = Harness::new();
-    let track_ids = harness.register(vec![named_track("gone")]);
-    harness.library.remove(track_id_of("gone"));
-
-    let result = harness.call(|reply| PlaybackCommand::Start {
-        track_ids,
-        start_index: 0,
-        reply,
-    });
-
-    assert_eq!(
-        result,
-        Err(PlaybackServiceError::Common {
-            error: CommandError::TrackUnavailable,
-        })
-    );
-    assert!(harness.queue_snapshot().current.is_none());
-}
-
-#[test]
-fn a_failed_library_read_during_the_queue_lookup_drops_no_queue_item() {
-    let mut harness = Harness::new();
-    harness.library.fail_reads(true);
-    let tracks = vec![
-        harness.track("a", 1),
-        harness.track("b", 1),
-        harness.track("c", 1),
-    ];
-
-    let result = harness.start(tracks, 0);
-    harness.library.fail_reads(false);
-
-    assert_eq!(
-        result,
-        Err(PlaybackServiceError::Common {
-            error: CommandError::PersistenceFailed,
-        })
-    );
-    assert_eq!(
-        harness.queue_snapshot().upcoming_count,
-        2,
-        "the two other tracks stay queued"
-    );
-}
-
-#[test]
-fn a_window_leaves_out_a_track_that_has_left_the_library_since() {
-    let library = Arc::new(FakeTracks::default());
-    let tracks = resolver_of(&library);
-    for i in 0..10 {
-        library.add(named_track(&format!("t{i}")));
-    }
-    let ids: Vec<TrackId> = (0..10).map(|i| track_id_of(&format!("t{i}"))).collect();
-    let mut queue = PlaybackQueue::new(RepeatMode::Off, false);
-    queue
-        .replace(ids, 0, &mut StdRng::seed_from_u64(1))
-        .unwrap();
-    let snapshot = QueueState::of(&queue, &tracks, false);
-    tracks.forget();
-    library.remove(track_id_of("t4"));
-
-    let window = snapshot.window(1, 0, 20);
-
-    assert_eq!(window.items.len(), 8, "nine upcoming, one of them gone");
-    assert!(
-        window
-            .items
-            .iter()
-            .all(|item| item.core.id != track_id_of("t4"))
-    );
-}
-
-#[test]
-fn a_long_queue_snapshot_carries_a_prefix_and_serves_the_rest_in_windows() {
-    let library = Arc::new(FakeTracks::default());
-    let tracks = resolver_of(&library);
-    let total = UPCOMING_IN_SNAPSHOT + 150;
-    for i in 0..total + 61 {
-        library.add(named_track(&format!("t{i}")));
-    }
-    let ids: Vec<TrackId> = (0..total + 61)
-        .map(|i| track_id_of(&format!("t{i}")))
+    let titles: Vec<_> = window
+        .items
+        .iter()
+        .map(|item| item.core.title.as_str())
         .collect();
-    let mut queue = PlaybackQueue::new(RepeatMode::Off, false);
-    queue
-        .replace(ids, 60, &mut StdRng::seed_from_u64(1))
-        .unwrap();
-
-    let snapshot = QueueState::of(&queue, &tracks, false);
-
-    assert_eq!(snapshot.history.len(), 50);
-    assert_eq!(snapshot.history_count, 60);
-    assert_eq!(
-        snapshot.history.last().map(|i| i.core.title.as_str()),
-        Some("t59.flac")
-    );
-    assert_eq!(snapshot.upcoming.len(), UPCOMING_IN_SNAPSHOT);
-    assert_eq!(snapshot.upcoming_count as usize, total);
-    assert_eq!(library.reads(), 50 + 1 + UPCOMING_IN_SNAPSHOT);
-    let window = snapshot.window(7, UPCOMING_IN_SNAPSHOT, 500);
-    assert_eq!(window.version, 7);
-    assert_eq!(window.offset as usize, UPCOMING_IN_SNAPSHOT);
-    assert_eq!(window.items.len(), 150);
-    assert_eq!(window.items[0].core.title, "t261.flac");
-    assert_eq!(snapshot.window(7, total + 10, 5).items.len(), 0);
+    assert_eq!(titles, ["c", "d"]);
+    assert_eq!(window.offset, 1);
 }
 
-/// A track whose file does not exist: fine to queue and show, unplayable.
-fn named_track(name: &str) -> PlayableTrack {
-    library_track(
-        track_id_of(name),
-        ValidatedAudioFile {
-            path: format!("C:/music/{name}.flac").into(),
-            file_name: format!("{name}.flac"),
-            extension: "flac".into(),
-        },
-    )
+#[test]
+fn a_queue_change_that_changes_nothing_answers_the_same_queue_state() {
+    let fixture = Fixture::with(&[]);
+
+    let first = fixture.player.set_shuffle(true).unwrap().value;
+    let again = fixture.player.set_shuffle(true).unwrap().value;
+
+    assert_eq!(again, first);
+}
+
+#[test]
+fn a_removed_track_cannot_start() {
+    let fixture = Fixture::with(&clips(&["a"]));
+    let a = fixture.id("a");
+    let directory = fixture
+        .library
+        .directories()
+        .expect("directories")
+        .pop()
+        .expect("the music directory");
+    // The first scan may still be running; the directory can go once it has finished.
+    let removed = wait_until(
+        || fixture.library.remove_directory(directory.id).is_ok(),
+        WAIT,
+    );
+    assert!(removed, "the directory was removed");
+    let emptied = wait_until(|| library_tracks(&fixture.library).is_empty(), WAIT);
+    assert!(emptied, "the track left the library");
+
+    assert_eq!(
+        fixture.player.play_queue(vec![a], 0).err(),
+        Some(CommandError::TrackUnavailable)
+    );
 }

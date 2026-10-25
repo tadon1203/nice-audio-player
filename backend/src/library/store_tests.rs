@@ -6,7 +6,6 @@ use crate::ids::{AlbumId, ArtistId, DirectoryId, TrackId};
 use crate::library::database::Database;
 use crate::library::models::*;
 use crate::library::text::{SortTags, TrackKeys, album_edition_of};
-use crate::library::tracks::{PlaybackLookupError, PlaybackSourceError};
 use crate::library::{Library, albums};
 use crate::test_support::{TestDirectory, null_notifier, state_store_for_tests};
 use rusqlite::params;
@@ -526,15 +525,13 @@ fn track_playback_follows_the_list_order_and_skips_tracks_that_cannot_play() {
         library
             .playback_for_tracks(Some("alp"), TrackSortKey::Title, ASC, Some(track_id_of(1)))
             .err(),
-        Some(PlaybackLookupError::Source(
-            PlaybackSourceError::TrackNotMember
-        ))
+        Some(CommandError::TrackNotFound)
     );
     assert_eq!(
         library
             .playback_for_tracks(None, TrackSortKey::Title, ASC, Some(track_id_of(4)))
             .err(),
-        Some(PlaybackLookupError::Common(CommandError::TrackUnavailable))
+        Some(CommandError::TrackUnavailable)
     );
 }
 

@@ -1,7 +1,7 @@
 //! Stopping, pausing, resuming and switching the output device.
 
 use super::{
-    AudioOutputSelection, LoadStage, OutputError, PlaybackId, PlaybackServiceError, PlaybackState,
+    AudioOutputSelection, CommandError, LoadStage, OutputError, PlaybackId, PlaybackState,
     PlaybackWorker, Reply, StartRequest, StartedBy, Transport, Versioned, output_failure_code,
     resolution_error, respond,
 };
@@ -17,15 +17,12 @@ impl PlaybackWorker {
                     LoadStage::Source(load) => load.cancel(),
                     LoadStage::Prebuffering(prebuffering) => prebuffering.pipeline.cancel(),
                 }
-                respond(
-                    loading.request.responder,
-                    Err(PlaybackServiceError::Superseded),
-                );
+                respond(loading.request.responder, Err(CommandError::Superseded));
             }
             Transport::Loaded(mut loaded) => {
                 if let Some(seek) = loaded.seek.take() {
                     seek.pipeline.cancel();
-                    respond(seek.responder, Err(PlaybackServiceError::Superseded));
+                    respond(seek.responder, Err(CommandError::Superseded));
                 }
                 if let Some(prefetch) = loaded.prefetch.take() {
                     prefetch.cancel();
@@ -37,7 +34,7 @@ impl PlaybackWorker {
 
     /// Lets go of the loaded track and returns its identity. A seek in flight is answered with
     /// `seek_error`.
-    pub(super) fn drop_loaded(&mut self, seek_error: PlaybackServiceError) -> Option<PlaybackId> {
+    pub(super) fn drop_loaded(&mut self, seek_error: CommandError) -> Option<PlaybackId> {
         self.meter.set_running(false);
         let Transport::Loaded(mut loaded) = std::mem::replace(&mut self.transport, Transport::Idle)
         else {
@@ -55,13 +52,13 @@ impl PlaybackWorker {
         Some(id)
     }
 
-    pub(super) fn pause(&mut self) -> Result<Versioned<PlaybackState>, PlaybackServiceError> {
+    pub(in super::super) fn pause(&mut self) -> Result<Versioned<PlaybackState>, CommandError> {
         if let Transport::Loading(loading) = &mut self.transport {
             loading.request.start_paused = true;
             return Ok(self.playback_versioned());
         }
         let Transport::Loaded(loaded) = &mut self.transport else {
-            return Err(PlaybackServiceError::InvalidPlaybackState);
+            return Err(CommandError::InvalidPlaybackState);
         };
         if loaded.paused {
             return Ok(self.playback_versioned());
@@ -78,22 +75,22 @@ impl PlaybackWorker {
     }
 
     /// Resume, or after a failure Retry: starts the current queue item again, queue intact.
-    pub(super) fn resume_command(&mut self, reply: Reply<Versioned<PlaybackState>>) {
+    pub(in super::super) fn resume(&mut self, reply: Reply<Versioned<PlaybackState>>) {
         if matches!(self.transport, Transport::Failed { .. }) {
             self.skipped_in_a_row = 0;
             self.start_current(Some(reply), false, StartedBy::Jump);
             return;
         }
-        respond(reply, self.resume());
+        respond(reply, self.unpause());
     }
 
-    pub(super) fn resume(&mut self) -> Result<Versioned<PlaybackState>, PlaybackServiceError> {
+    pub(super) fn unpause(&mut self) -> Result<Versioned<PlaybackState>, CommandError> {
         if let Transport::Loading(loading) = &mut self.transport {
             loading.request.start_paused = false;
             return Ok(self.playback_versioned());
         }
         let Transport::Loaded(loaded) = &mut self.transport else {
-            return Err(PlaybackServiceError::InvalidPlaybackState);
+            return Err(CommandError::InvalidPlaybackState);
         };
         if !loaded.paused {
             return Ok(self.playback_versioned());
@@ -110,8 +107,8 @@ impl PlaybackWorker {
         Ok(self.publish_state())
     }
 
-    pub(super) fn control_failure(&mut self, error: OutputError) -> PlaybackServiceError {
-        let id = self.drop_loaded(PlaybackServiceError::Superseded);
+    pub(super) fn control_failure(&mut self, error: OutputError) -> CommandError {
+        let id = self.drop_loaded(CommandError::Superseded);
         let code = output_failure_code(error);
         self.transport = Transport::Failed {
             id,
@@ -119,22 +116,22 @@ impl PlaybackWorker {
             skipping: false,
         };
         self.publish_state();
-        PlaybackServiceError::from(code)
+        CommandError::from(code)
     }
 
     /// Switches the output device. While a track is loaded, playback restarts on the new device
     /// at the same position and keeps its paused state and queue.
-    pub(super) fn change_output_selection(
+    pub(in super::super) fn set_output_selection(
         &mut self,
         selection: AudioOutputSelection,
         reply: Reply<Versioned<PlaybackState>>,
     ) {
         let Transport::Loaded(loaded) = &self.transport else {
-            respond(reply, self.set_output_selection(selection));
+            respond(reply, self.set_idle_output_selection(selection));
             return;
         };
         if loaded.seek.is_some() {
-            respond(reply, Err(PlaybackServiceError::InvalidPlaybackState));
+            respond(reply, Err(CommandError::InvalidPlaybackState));
             return;
         }
         if selection == self.output_selection {
@@ -157,12 +154,12 @@ impl PlaybackWorker {
         self.begin_start(request);
     }
 
-    pub(super) fn set_output_selection(
+    pub(super) fn set_idle_output_selection(
         &mut self,
         selection: AudioOutputSelection,
-    ) -> Result<Versioned<PlaybackState>, PlaybackServiceError> {
+    ) -> Result<Versioned<PlaybackState>, CommandError> {
         if matches!(self.transport, Transport::Loading(_)) {
-            return Err(PlaybackServiceError::InvalidPlaybackState);
+            return Err(CommandError::InvalidPlaybackState);
         }
         if let AudioOutputSelection::Device { .. } = &selection {
             self.output_stream_factory

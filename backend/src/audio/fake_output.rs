@@ -23,8 +23,6 @@ struct StreamState {
     fail_pause: Option<OutputError>,
     /// The pipeline the stream plays.
     pipeline: PipelineId,
-    /// How many times a seek handed the stream a new queue.
-    queue_switches: usize,
     /// The pipeline whose queue was chained to play after the current one, and the queue.
     next: Option<(PipelineId, PcmConsumer)>,
     /// How many times the stream moved on to a chained queue.
@@ -79,11 +77,6 @@ impl FakeOutput {
     /// How many streams were opened. A session opens one, however often it seeks.
     pub(crate) fn streams_opened(&self) -> usize {
         self.shared().streams.len()
-    }
-
-    /// How many times the newest stream was handed a new queue.
-    pub(crate) fn queue_switches(&self) -> usize {
-        self.latest().lock().queue_switches
     }
 
     /// The pipeline chained to play after the current one on the newest stream, if any.
@@ -202,7 +195,6 @@ impl OutputStreamFactory for FakeOutput {
             fail_start: start_error,
             fail_pause: None,
             pipeline: first,
-            queue_switches: 0,
             next: None,
             adoptions: 0,
             consumer,
@@ -268,7 +260,6 @@ impl OutputStream for FakeStream {
         state.consumer = consumer;
         state.pipeline = pipeline;
         state.played_frames = 0;
-        state.queue_switches += 1;
         state.next = None;
     }
 

@@ -35,9 +35,7 @@ pub(crate) async fn player_play(
     state: tauri::State<'_, AppState>,
 ) -> Result<Versioned<PlaybackState>, CommandError> {
     blocking(&state, move |backend| {
-        backend
-            .play(&context, start_track_id)
-            .map_err(CommandError::from)
+        backend.play(&context, start_track_id)
     })
     .await
 }
@@ -47,10 +45,7 @@ pub(crate) async fn player_play(
 pub(crate) async fn player_pause(
     state: tauri::State<'_, AppState>,
 ) -> Result<Versioned<PlaybackState>, CommandError> {
-    blocking(&state, |backend| {
-        backend.pause().map_err(CommandError::from)
-    })
-    .await
+    blocking(&state, BackendApp::pause).await
 }
 
 #[tauri::command]
@@ -58,10 +53,7 @@ pub(crate) async fn player_pause(
 pub(crate) async fn player_resume(
     state: tauri::State<'_, AppState>,
 ) -> Result<Versioned<PlaybackState>, CommandError> {
-    blocking(&state, |backend| {
-        backend.resume().map_err(CommandError::from)
-    })
-    .await
+    blocking(&state, BackendApp::resume).await
 }
 
 #[tauri::command]
@@ -69,10 +61,7 @@ pub(crate) async fn player_resume(
 pub(crate) async fn player_previous(
     state: tauri::State<'_, AppState>,
 ) -> Result<Versioned<PlaybackState>, CommandError> {
-    blocking(&state, |backend| {
-        backend.previous().map_err(CommandError::from)
-    })
-    .await
+    blocking(&state, BackendApp::previous).await
 }
 
 #[tauri::command]
@@ -80,7 +69,7 @@ pub(crate) async fn player_previous(
 pub(crate) async fn player_next(
     state: tauri::State<'_, AppState>,
 ) -> Result<Versioned<PlaybackState>, CommandError> {
-    blocking(&state, |backend| backend.next().map_err(CommandError::from)).await
+    blocking(&state, BackendApp::next).await
 }
 
 #[tauri::command]
@@ -89,10 +78,7 @@ pub(crate) async fn player_seek(
     position_ms: u64,
     state: tauri::State<'_, AppState>,
 ) -> Result<Versioned<PlaybackState>, CommandError> {
-    blocking(&state, move |backend| {
-        backend.seek(position_ms).map_err(CommandError::from)
-    })
-    .await
+    blocking(&state, move |backend| backend.seek(position_ms)).await
 }
 
 #[tauri::command]
@@ -101,12 +87,7 @@ pub(crate) async fn player_set_volume(
     volume: f64,
     state: tauri::State<'_, AppState>,
 ) -> Result<Versioned<PlaybackState>, CommandError> {
-    blocking(&state, move |backend| {
-        backend
-            .set_volume(volume as f32)
-            .map_err(CommandError::from)
-    })
-    .await
+    blocking(&state, move |backend| backend.set_volume(volume as f32)).await
 }
 
 #[tauri::command]
@@ -115,10 +96,7 @@ pub(crate) async fn player_set_muted(
     muted: bool,
     state: tauri::State<'_, AppState>,
 ) -> Result<Versioned<PlaybackState>, CommandError> {
-    blocking(&state, move |backend| {
-        backend.set_muted(muted).map_err(CommandError::from)
-    })
-    .await
+    blocking(&state, move |backend| backend.set_muted(muted)).await
 }
 
 #[tauri::command]
@@ -135,10 +113,7 @@ pub(crate) async fn player_set_repeat_mode(
     mode: RepeatMode,
     state: tauri::State<'_, AppState>,
 ) -> Result<Versioned<QueueState>, CommandError> {
-    blocking(&state, move |backend| {
-        backend.set_repeat_mode(mode).map_err(CommandError::from)
-    })
-    .await
+    blocking(&state, move |backend| backend.set_repeat_mode(mode)).await
 }
 
 #[tauri::command]
@@ -147,10 +122,7 @@ pub(crate) async fn player_set_shuffle(
     enabled: bool,
     state: tauri::State<'_, AppState>,
 ) -> Result<Versioned<QueueState>, CommandError> {
-    blocking(&state, move |backend| {
-        backend.set_shuffle(enabled).map_err(CommandError::from)
-    })
-    .await
+    blocking(&state, move |backend| backend.set_shuffle(enabled)).await
 }
 
 /// Switches the output device; a loaded track restarts on it at the same position.
@@ -161,9 +133,7 @@ pub(crate) async fn player_set_output_selection(
     state: tauri::State<'_, AppState>,
 ) -> Result<Versioned<PlaybackState>, CommandError> {
     blocking(&state, move |backend| {
-        backend
-            .set_output_selection(selection)
-            .map_err(CommandError::from)
+        backend.set_output_selection(selection)
     })
     .await
 }
@@ -174,10 +144,7 @@ pub(crate) async fn player_remove_queue_item(
     id: QueueItemId,
     state: tauri::State<'_, AppState>,
 ) -> Result<Versioned<QueueState>, CommandError> {
-    blocking(&state, move |backend| {
-        backend.remove_queue_item(id).map_err(CommandError::from)
-    })
-    .await
+    blocking(&state, move |backend| backend.remove_queue_item(id)).await
 }
 
 #[tauri::command]
@@ -187,10 +154,7 @@ pub(crate) async fn player_move_queue_item(
     to: usize,
     state: tauri::State<'_, AppState>,
 ) -> Result<Versioned<QueueState>, CommandError> {
-    blocking(&state, move |backend| {
-        backend.move_queue_item(id, to).map_err(CommandError::from)
-    })
-    .await
+    blocking(&state, move |backend| backend.move_queue_item(id, to)).await
 }
 
 /// Makes an upcoming queue item current and plays it.
@@ -200,10 +164,7 @@ pub(crate) async fn player_play_queue_item(
     id: QueueItemId,
     state: tauri::State<'_, AppState>,
 ) -> Result<Versioned<PlaybackState>, CommandError> {
-    blocking(&state, move |backend| {
-        backend.play_queue_item(id).map_err(CommandError::from)
-    })
-    .await
+    blocking(&state, move |backend| backend.play_queue_item(id)).await
 }
 
 /// Adds a library track to the queue: right after the current one (`next`) or at the end.
@@ -215,12 +176,7 @@ pub(crate) async fn player_enqueue_track(
     next: bool,
     state: tauri::State<'_, AppState>,
 ) -> Result<Versioned<QueueState>, CommandError> {
-    blocking(&state, move |backend| {
-        backend
-            .enqueue_track(track_id, next)
-            .map_err(CommandError::from)
-    })
-    .await
+    blocking(&state, move |backend| backend.enqueue_track(track_id, next)).await
 }
 
 #[tauri::command]
@@ -228,10 +184,7 @@ pub(crate) async fn player_enqueue_track(
 pub(crate) async fn player_clear_queue(
     state: tauri::State<'_, AppState>,
 ) -> Result<Versioned<QueueState>, CommandError> {
-    blocking(&state, |backend| {
-        backend.clear_queue().map_err(CommandError::from)
-    })
-    .await
+    blocking(&state, BackendApp::clear_queue).await
 }
 
 /// Puts back the queue the last replacement or Clear upcoming took away.
@@ -240,8 +193,5 @@ pub(crate) async fn player_clear_queue(
 pub(crate) async fn player_restore_previous_queue(
     state: tauri::State<'_, AppState>,
 ) -> Result<Versioned<PlaybackState>, CommandError> {
-    blocking(&state, |backend| {
-        backend.restore_previous_queue().map_err(CommandError::from)
-    })
-    .await
+    blocking(&state, BackendApp::restore_previous_queue).await
 }

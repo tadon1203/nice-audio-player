@@ -1,7 +1,9 @@
 use super::fixture;
-use crate::app::{BackendApp, PlaybackContext, PlaybackWaveform};
+use crate::app::{BackendApp, PlaybackContext};
 use crate::audio::fake_output::FakeOutput;
-use crate::audio::playback::{PlaybackServiceError, RepeatMode};
+use crate::audio::playback::RepeatMode;
+use crate::audio::waveform::PlaybackWaveform;
+use crate::errors::CommandError;
 use crate::ids::TrackId;
 use crate::library::models::{ListRequest, SortDirection, TrackSortKey};
 use crate::messages::{BackendMessage, Notification, StateTopic, StateValue};
@@ -75,7 +77,7 @@ fn pause_needs_a_loaded_track() {
 
     assert_eq!(
         fixture.backend.pause().err(),
-        Some(PlaybackServiceError::InvalidPlaybackState)
+        Some(CommandError::InvalidPlaybackState)
     );
 }
 
@@ -85,7 +87,7 @@ fn seeking_needs_a_loaded_track_whatever_the_position() {
 
     assert_eq!(
         fixture.backend.seek(u64::MAX).err(),
-        Some(PlaybackServiceError::InvalidPlaybackState)
+        Some(CommandError::InvalidPlaybackState)
     );
 }
 

@@ -48,53 +48,6 @@ pub(crate) struct PlaybackSelection {
     pub start_index: usize,
 }
 
-/// Why the library cannot give playback a selection, for reasons of the selection itself.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, specta::Type)]
-#[serde(tag = "code", rename_all = "camelCase")]
-pub enum PlaybackSourceError {
-    AlbumNotFound,
-    /// The requested start track is not part of the selection.
-    TrackNotMember,
-    TrackNotPlayable,
-    NoPlayablePlaybackTracks,
-}
-
-/// The shared codes a selection failure maps to. A missing album keeps its own code, and the two
-/// track reasons are shown as a track that cannot be played.
-impl From<PlaybackSourceError> for CommandError {
-    fn from(error: PlaybackSourceError) -> Self {
-        match error {
-            PlaybackSourceError::AlbumNotFound => Self::AlbumNotFound,
-            PlaybackSourceError::TrackNotMember => Self::TrackNotFound,
-            PlaybackSourceError::TrackNotPlayable
-            | PlaybackSourceError::NoPlayablePlaybackTracks => Self::TrackUnavailable,
-        }
-    }
-}
-
-/// Why a playback lookup failed: a failure every command shares, or a reason the selection cannot
-/// play. A missing album is only ever a `Source` reason, so `Common` cannot carry it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PlaybackLookupError {
-    Common(CommandError),
-    Source(PlaybackSourceError),
-}
-
-impl From<StoreError> for PlaybackLookupError {
-    fn from(error: StoreError) -> Self {
-        match error {
-            StoreError::AlbumNotFound => Self::Source(PlaybackSourceError::AlbumNotFound),
-            other => Self::Common(other.into()),
-        }
-    }
-}
-
-impl From<PlaybackSourceError> for PlaybackLookupError {
-    fn from(error: PlaybackSourceError) -> Self {
-        Self::Source(error)
-    }
-}
-
 /// The state of a track, from its file's availability and inspection. Every DTO's `state` comes
 /// from here, and so does the playback path's check that a track can play.
 pub(super) fn track_state(availability: Availability, inspection: InspectionStatus) -> TrackState {
@@ -219,11 +172,11 @@ fn playback_row(row: &Row<'_>) -> rusqlite::Result<PlaybackRow> {
 }
 
 /// Why a track in this state cannot be played, or `Ok` when it can.
-fn ensure_playable(state: TrackState) -> Result<(), PlaybackLookupError> {
+fn ensure_playable(state: TrackState) -> Result<(), CommandError> {
     match state {
         TrackState::Playable => Ok(()),
         TrackState::Missing => Err(StoreError::TrackUnavailable.into()),
-        TrackState::Unsupported => Err(PlaybackSourceError::TrackNotPlayable.into()),
+        TrackState::Unsupported => Err(CommandError::TrackUnavailable),
     }
 }
 
@@ -234,7 +187,7 @@ fn playable_track(
     row: PlaybackRow,
     counts: &AlbumCounts,
     requested: bool,
-) -> Result<Option<PlayableTrack>, PlaybackLookupError> {
+) -> Result<Option<PlayableTrack>, CommandError> {
     if let Err(error) = ensure_playable(row.state) {
         return if requested { Err(error) } else { Ok(None) };
     }
@@ -307,10 +260,10 @@ struct SelectionRow {
 fn select_playable(
     rows: &[SelectionRow],
     start_track_id: Option<TrackId>,
-) -> Result<PlaybackSelection, PlaybackLookupError> {
+) -> Result<PlaybackSelection, CommandError> {
     if let Some(requested) = start_track_id {
         let Some(row) = rows.iter().find(|row| row.track_id == requested) else {
-            return Err(PlaybackSourceError::TrackNotMember.into());
+            return Err(CommandError::TrackNotFound);
         };
         ensure_playable(row.state)?;
     }
@@ -323,7 +276,7 @@ fn select_playable(
         track_ids.push(row.track_id);
     }
     if track_ids.is_empty() {
-        return Err(PlaybackSourceError::NoPlayablePlaybackTracks.into());
+        return Err(CommandError::TrackUnavailable);
     }
     Ok(PlaybackSelection {
         track_ids,
@@ -435,7 +388,7 @@ impl Library {
         &self,
         album_id: AlbumId,
         start_track_id: Option<TrackId>,
-    ) -> Result<PlaybackSelection, PlaybackLookupError> {
+    ) -> Result<PlaybackSelection, CommandError> {
         let connection = self.read()?;
         let rows = collect_selection(
             &connection,
@@ -447,7 +400,7 @@ impl Library {
             params![album_id.to_hex()],
         )?;
         if rows.is_empty() {
-            return Err(PlaybackSourceError::AlbumNotFound.into());
+            return Err(CommandError::AlbumNotFound);
         }
         select_playable(&rows, start_track_id)
     }
@@ -457,7 +410,7 @@ impl Library {
     pub(crate) fn playback_for_track(
         &self,
         track_id: TrackId,
-    ) -> Result<PlayableTrack, PlaybackLookupError> {
+    ) -> Result<PlayableTrack, CommandError> {
         let connection = self.read()?;
         let rows = collect_rows(
             &connection,
@@ -468,8 +421,7 @@ impl Library {
             return Err(StoreError::TrackNotFound.into());
         };
         let counts = album_counts(&connection, [row.album_id.to_hex()])?;
-        playable_track(row, &counts, true)?
-            .ok_or(PlaybackSourceError::NoPlayablePlaybackTracks.into())
+        playable_track(row, &counts, true)?.ok_or(CommandError::TrackUnavailable)
     }
 
     /// The tracks with these ids, in the order given: `None` for an id that is unknown, not
@@ -477,7 +429,7 @@ impl Library {
     pub(crate) fn playable_tracks(
         &self,
         track_ids: &[TrackId],
-    ) -> Result<Vec<Option<PlayableTrack>>, PlaybackLookupError> {
+    ) -> Result<Vec<Option<PlayableTrack>>, CommandError> {
         let connection = self.read()?;
         let mut found: HashMap<TrackId, PlayableTrack> = HashMap::with_capacity(track_ids.len());
         for chunk in track_ids.chunks(IDS_PER_QUERY) {
@@ -509,7 +461,7 @@ impl Library {
         sort: TrackSortKey,
         direction: SortDirection,
         start_track_id: Option<TrackId>,
-    ) -> Result<PlaybackSelection, PlaybackLookupError> {
+    ) -> Result<PlaybackSelection, CommandError> {
         let listing = track_listing(search, sort, direction);
         let connection = self.read()?;
         let rows = collect_selection(
@@ -530,7 +482,7 @@ impl Library {
 fn album_counts(
     connection: &Connection,
     album_ids: impl IntoIterator<Item = String>,
-) -> Result<AlbumCounts, PlaybackLookupError> {
+) -> Result<AlbumCounts, CommandError> {
     let mut wanted: Vec<String> = album_ids.into_iter().collect();
     wanted.sort();
     wanted.dedup();

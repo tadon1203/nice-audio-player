@@ -14,14 +14,14 @@ use crate::audio::processing::{OutputProcessingPlan, PcmConverter};
 use crate::threads::Cancellation;
 
 /// The queue a seek or the next track plays through: the stream already playing takes it over.
-pub(crate) type QueueOutput = PcmConsumer;
+pub(super) type QueueOutput = PcmConsumer;
 
-pub(crate) struct PipelineRequest<'a> {
+pub(super) struct PipelineRequest<'a> {
     pub source: &'a CompressedAudioSource,
     pub pipeline_id: PipelineId,
 }
 
-pub(crate) struct OpenedPipeline<Sink> {
+pub(super) struct OpenedPipeline<Sink> {
     pub pipeline: Pipeline,
     /// Where the pipeline's queue plays: a new stream for a start, the queue handed to the playing
     /// stream for a seek or the next track.
@@ -33,7 +33,7 @@ pub(crate) struct OpenedPipeline<Sink> {
 }
 
 #[derive(Clone, Copy)]
-pub(crate) enum PipelineError {
+pub(super) enum PipelineError {
     DecoderOpen,
     /// The file no longer has the format the output was prepared for.
     SpecChanged,
@@ -62,7 +62,7 @@ struct Queue {
 
 /// From the beginning of the file, on a new stream on the device `selection` names. The stream
 /// is not started yet.
-pub(crate) fn open_start(
+pub(super) fn open_start(
     output_stream_factory: &dyn OutputStreamFactory,
     inbox: &Inbox,
     request: &PipelineRequest<'_>,
@@ -112,7 +112,7 @@ pub(crate) fn open_start(
 
 /// From the beginning of the file that follows the playing one, for the stream already playing.
 /// The file must have the format the stream was opened for.
-pub(crate) fn open_prefetch(
+pub(super) fn open_prefetch(
     inbox: &Inbox,
     request: &PipelineRequest<'_>,
     config: &PreparedOutputConfig,
@@ -153,7 +153,7 @@ pub(crate) fn open_prefetch(
 }
 
 /// From `target_ms`, for the stream already playing, which keeps its device and configuration.
-pub(crate) fn open_seek(
+pub(super) fn open_seek(
     inbox: &Inbox,
     request: &PipelineRequest<'_>,
     config: &PreparedOutputConfig,

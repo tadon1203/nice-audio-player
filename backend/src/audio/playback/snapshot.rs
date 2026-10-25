@@ -1,5 +1,6 @@
 //! What the worker publishes: the transport snapshot and the queue snapshot.
 
+use super::PlaybackPreferences;
 use super::item::PlaybackItem;
 use super::queue::{PlaybackQueue, QueueEntry, RepeatMode};
 use super::resolver::TrackResolver;
@@ -123,6 +124,17 @@ pub enum PlaybackState {
 }
 
 impl PlaybackState {
+    /// Nothing has played yet, with the volume and output the listener saved.
+    pub(crate) fn stopped(preferences: &PlaybackPreferences) -> Self {
+        Self::Stopped {
+            base: PlaybackControls::new(
+                VolumeState::restored(preferences.volume, preferences.muted),
+                preferences.output_selection.clone(),
+            ),
+            item: None,
+        }
+    }
+
     pub fn base(&self) -> &PlaybackControls {
         match self {
             Self::Stopped { base, .. }

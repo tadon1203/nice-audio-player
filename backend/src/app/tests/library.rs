@@ -1,13 +1,11 @@
 use super::{Fixture, fixture};
 use crate::app::{BackendApp, PlaybackContext};
 use crate::audio::fake_output::FakeOutput;
-use crate::audio::playback::PlaybackServiceError;
 use crate::errors::CommandError;
 use crate::ids::{AlbumId, ArtistId, TrackId};
 
 use crate::library::LibraryStatus;
 use crate::library::models::{ListRequest, SortDirection, TrackSortKey};
-use crate::library::tracks::PlaybackSourceError;
 
 use crate::test_support::{NotificationLog, TestDirectory};
 
@@ -110,13 +108,11 @@ fn without_a_library_the_library_commands_say_it_is_unavailable() {
 fn without_a_library_playing_from_it_says_it_is_unavailable() {
     let fixture = fixture_without_library();
     let backend = &fixture.backend;
-    let unavailable = PlaybackServiceError::Common {
-        error: CommandError::LibraryUnavailable,
-    };
+    let unavailable = CommandError::LibraryUnavailable;
 
     assert_eq!(
         backend.play(&tracks_context(), None).err(),
-        Some(unavailable.clone())
+        Some(unavailable)
     );
     assert_eq!(
         backend
@@ -171,9 +167,7 @@ fn an_album_by_id_that_the_library_does_not_hold_has_no_tracks_and_does_not_play
             .backend
             .play(&PlaybackContext::Album { album_id }, None)
             .err(),
-        Some(PlaybackServiceError::Source {
-            error: PlaybackSourceError::AlbumNotFound,
-        })
+        Some(CommandError::AlbumNotFound)
     );
 }
 

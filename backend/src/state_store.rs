@@ -3,7 +3,7 @@
 
 use parking_lot::Mutex;
 
-use crate::audio::playback::{PlaybackState, QueueState, initial_playback};
+use crate::audio::playback::{PlaybackState, QueueState};
 use crate::audio::waveform::PlaybackWaveform;
 use crate::library::models::ScanState;
 use crate::messages::{
@@ -25,10 +25,13 @@ impl States {
     /// The values before any service has set one: the saved playback and appearance, an idle
     /// scan, and no waveform.
     fn new(settings: &SettingsFile) -> Self {
-        let (playback, queue) = initial_playback(&settings.playback);
+        let preferences = &settings.playback;
         Self {
-            playback,
-            queue,
+            playback: Versioned::new(PlaybackState::stopped(preferences)),
+            queue: Versioned::new(QueueState::empty(
+                preferences.repeat_mode,
+                preferences.shuffle_enabled,
+            )),
             scan: Versioned::new(ScanState::idle()),
             waveform: Versioned::new(None),
             appearance: Versioned::new(settings.appearance.clone()),
@@ -70,6 +73,11 @@ impl StateStore {
             states: Mutex::new(States::new(settings)),
             notifier,
         }
+    }
+
+    /// Tells the Host of something that is not a state value: a skipped track, a new position.
+    pub(crate) fn notify(&self, notification: Notification) {
+        self.notifier.send(notification);
     }
 
     pub fn playback(&self) -> Versioned<PlaybackState> {

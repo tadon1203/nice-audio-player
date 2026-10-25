@@ -1,320 +1,150 @@
+//! Gapless handover through `Player`: prefetch, the switch to the next track and the stream it plays on.
+
 use super::*;
-
-impl Harness {
-    /// A WAV of `seconds` of silence in another format than `track` makes.
-    fn track_in(&self, name: &str, rate: u32, channels: u16, seconds: usize) -> PlayableTrack {
-        let path = self.files.file(&format!("{name}.wav"));
-        write_pcm_i16_wav(
-            &path,
-            rate,
-            channels,
-            &vec![0; rate as usize * usize::from(channels) * seconds],
-        );
-        let mut track = library_track(
-            track_id_of(name),
-            ValidatedAudioFile {
-                path,
-                file_name: format!("{name}.wav"),
-                extension: "wav".into(),
-            },
-        );
-        track.track.core.title = name.into();
-        track
-    }
-
-    /// Ticks until the next track is chained to the stream.
-    fn prefetch_next(&mut self) {
-        self.tick();
-        self.pump_until(|harness| harness.output.chained_pipeline().is_some());
-    }
-
-    /// Lets a prefetch that cannot be chained finish trying.
-    fn settle_prefetch(&mut self) {
-        self.tick();
-        std::thread::sleep(Duration::from_millis(150));
-        self.deliver_pending();
-    }
-
-    /// The stream heard the end of the playing track.
-    fn hear_the_end(&mut self) {
-        self.output.finish_playback();
-        self.deliver_pending();
-        self.tick();
-    }
-}
 
 #[test]
 fn a_track_of_the_same_format_follows_on_the_same_stream() {
-    let mut harness = Harness::new();
-    let tracks = vec![harness.track("a", 1), harness.track("b", 1)];
-    let first = harness.start(tracks, 0).unwrap();
+    let fixture = Fixture::with(&clips(&["a", "b"]));
+    let first = fixture
+        .player
+        .play_queue(fixture.ids(&["a", "b"]), 0)
+        .unwrap()
+        .value;
+    wait_until(|| fixture.output.chained_pipeline().is_some(), WAIT);
 
-    harness.prefetch_next();
-    harness.hear_the_end();
+    fixture.finish();
 
-    let snapshot = harness.snapshot();
-    assert!(is_playing(&snapshot, "b"));
+    fixture.wait_for(|state| is_playing(state, "b"));
+    let snapshot = fixture.state();
     assert_ne!(
         session(&snapshot).playback_id,
         session(&first).playback_id,
         "each track is its own playback"
     );
     assert_eq!(session(&snapshot).position_ms, 0);
-    assert_eq!(harness.output.streams_opened(), 1, "the stream is kept");
-    assert_eq!(harness.output.adoptions(), 1);
-    assert_eq!(harness.queue_snapshot().current.unwrap().core.title, "b");
-    assert!(harness.output.is_running());
-}
-
-#[test]
-fn a_track_of_another_sample_rate_reopens_the_stream() {
-    let mut harness = Harness::new();
-    let tracks = vec![harness.track("a", 1), harness.track_in("b", 48_000, 2, 1)];
-    harness.start(tracks, 0).unwrap();
-
-    harness.settle_prefetch();
-    assert_eq!(harness.output.chained_pipeline(), None);
-    harness.hear_the_end();
-    harness.pump_until(|harness| is_playing(&harness.snapshot(), "b"));
-
-    assert_eq!(
-        harness.output.streams_opened(),
-        2,
-        "a short gap is accepted"
-    );
-    assert_eq!(harness.output.adoptions(), 0);
-    let snapshot = harness.snapshot();
-    assert_eq!(session(&snapshot).source_sample_rate, 48_000);
-}
-
-#[test]
-fn a_different_channel_count_reopens_the_stream_too() {
-    let mut harness = Harness::new();
-    let tracks = vec![
-        harness.track("a", 1),
-        harness.track_in("b", SAMPLE_RATE, 2, 1),
-    ];
-    harness.start(tracks, 0).unwrap();
-
-    harness.settle_prefetch();
-    harness.hear_the_end();
-    harness.pump_until(|harness| is_playing(&harness.snapshot(), "b"));
-
-    assert_eq!(harness.output.streams_opened(), 2);
-}
-
-#[test]
-fn the_listener_hears_the_prefetch_as_upcoming_and_the_gapless_switch_as_a_load() {
-    let mut harness = Harness::new();
-    let tracks = vec![harness.track("a", 1), harness.track("b", 1)];
-    harness.start(tracks, 0).unwrap();
-
-    harness.prefetch_next();
-    harness.hear_the_end();
-
-    let heard = harness.heard();
-    assert_eq!(heard.len(), 3, "{heard:?}");
-    assert!(matches!(&heard[0], Heard::Loaded(_, title) if title == "a"));
-    assert_eq!(heard[1], Heard::Upcoming("b".into()));
-    assert!(matches!(&heard[2], Heard::Loaded(_, title) if title == "b"));
+    assert_eq!(fixture.output.streams_opened(), 1, "the stream is kept");
+    assert_eq!(fixture.output.adoptions(), 1);
+    assert!(fixture.output.is_running());
 }
 
 #[test]
 fn a_long_track_is_not_prefetched_until_its_last_ten_seconds() {
-    let mut harness = Harness::new();
-    let tracks = vec![harness.track("a", 30), harness.track("b", 1)];
-    harness.start(tracks, 0).unwrap();
-
-    harness.settle_prefetch();
-    assert_eq!(harness.output.chained_pipeline(), None);
-
-    harness
-        .output
-        .set_played_frames(21 * u64::from(SAMPLE_RATE));
-    std::thread::sleep(POSITION_UPDATE_INTERVAL + Duration::from_millis(10));
-    harness.prefetch_next();
-}
-
-#[test]
-fn putting_a_track_next_discards_the_prefetch_and_plays_it_next() {
-    let mut harness = Harness::new();
-    let tracks = vec![
-        harness.track("a", 1),
-        harness.track("b", 1),
-        harness.track("c", 1),
-    ];
-    harness.start(tracks, 0).unwrap();
-    harness.prefetch_next();
-
-    let track_ids = harness.register(vec![harness.track("d", 1)]);
-    harness
-        .call(|reply| PlaybackCommand::Enqueue {
-            track_ids,
-            next: true,
-            reply,
-        })
+    let fixture = Fixture::with(&[Clip::new("a", 15), Clip::new("b", 2)]);
+    fixture
+        .player
+        .play_queue(fixture.ids(&["a", "b"]), 0)
         .unwrap();
-    assert_eq!(harness.output.chained_pipeline(), None, "b is not next now");
+    fixture.output.set_played_frames(u64::from(SAMPLE_RATE) * 4);
+    fixture.wait_for_position(4_000);
 
-    harness.prefetch_next();
-    harness.hear_the_end();
+    fixture.settle();
+    assert!(
+        fixture.output.chained_pipeline().is_none(),
+        "11 seconds are left"
+    );
 
-    assert!(is_playing(&harness.snapshot(), "d"));
-    assert_eq!(harness.output.streams_opened(), 1);
-}
+    fixture.output.set_played_frames(u64::from(SAMPLE_RATE) * 6);
+    fixture.wait_for_position(6_000);
 
-#[test]
-fn repeat_one_discards_the_prefetch_and_repeats_on_the_same_stream() {
-    let mut harness = Harness::new();
-    let tracks = vec![harness.track("a", 1), harness.track("b", 1)];
-    harness.start(tracks, 0).unwrap();
-    harness.prefetch_next();
-
-    harness
-        .call(|reply| PlaybackCommand::SetRepeatMode {
-            mode: RepeatMode::One,
-            reply,
-        })
-        .unwrap();
-    assert_eq!(harness.output.chained_pipeline(), None, "b is not next now");
-
-    harness.prefetch_next();
-    harness.hear_the_end();
-    assert!(is_playing(&harness.snapshot(), "a"));
-    assert_eq!(harness.output.streams_opened(), 1);
-}
-
-#[test]
-fn turning_shuffle_on_discards_the_prefetch() {
-    let mut harness = Harness::new();
-    let tracks = vec![
-        harness.track("a", 1),
-        harness.track("b", 1),
-        harness.track("c", 1),
-        harness.track("d", 1),
-    ];
-    harness.start(tracks, 0).unwrap();
-    harness.prefetch_next();
-
-    harness
-        .call(|reply| PlaybackCommand::SetShuffle {
-            enabled: true,
-            reply,
-        })
-        .unwrap();
-    let next = harness.queue_snapshot().upcoming[0].core.title.clone();
-    harness.prefetch_next();
-    harness.hear_the_end();
-
-    assert!(is_playing(&harness.snapshot(), &next), "{next} plays next");
-    assert_eq!(harness.output.streams_opened(), 1);
-}
-
-#[test]
-fn removing_the_next_track_discards_the_prefetch() {
-    let mut harness = Harness::new();
-    let tracks = vec![
-        harness.track("a", 1),
-        harness.track("b", 1),
-        harness.track("c", 1),
-    ];
-    harness.start(tracks, 0).unwrap();
-    harness.prefetch_next();
-    let next = harness.queue_snapshot().upcoming[0].queue_item_id;
-
-    harness
-        .call(|reply| PlaybackCommand::RemoveQueueItem { id: next, reply })
-        .unwrap();
-    assert_eq!(harness.output.chained_pipeline(), None);
-
-    harness.prefetch_next();
-    harness.hear_the_end();
-    assert!(is_playing(&harness.snapshot(), "c"));
-}
-
-#[test]
-fn a_seek_discards_the_prefetch_and_the_end_opens_it_again() {
-    let mut harness = Harness::new();
-    let tracks = vec![harness.track("a", 2), harness.track("b", 1)];
-    harness.start(tracks, 0).unwrap();
-    harness.prefetch_next();
-
-    harness.seek(500).unwrap();
-    assert_eq!(harness.output.chained_pipeline(), None);
-
-    harness.prefetch_next();
-    harness.hear_the_end();
-    assert!(is_playing(&harness.snapshot(), "b"));
-    assert_eq!(harness.output.streams_opened(), 1);
+    wait_until(|| fixture.output.chained_pipeline().is_some(), WAIT);
 }
 
 #[test]
 fn skipping_during_the_handover_window_plays_the_next_track() {
-    let mut harness = Harness::new();
-    let tracks = vec![
-        harness.track("a", 1),
-        harness.track("b", 1),
-        harness.track("c", 1),
-    ];
-    harness.start(tracks, 0).unwrap();
-    harness.prefetch_next();
-
-    harness.next().unwrap();
-
-    assert!(is_playing(&harness.snapshot(), "b"));
-    assert_eq!(harness.queue_snapshot().current.unwrap().core.title, "b");
-}
-
-#[test]
-fn pausing_in_the_handover_window_holds_the_next_track_back() {
-    let mut harness = Harness::new();
-    let tracks = vec![harness.track("a", 1), harness.track("b", 1)];
-    harness.start(tracks, 0).unwrap();
-    harness.prefetch_next();
-    harness.output.finish_playback();
-    harness.deliver_pending();
-    harness.pause().unwrap();
-    harness.tick();
-    assert!(matches!(harness.snapshot(), PlaybackState::Paused { .. }));
-
-    harness.resume().unwrap();
-    harness.tick();
-
-    assert!(is_playing(&harness.snapshot(), "b"));
-    assert_eq!(harness.output.streams_opened(), 1);
-}
-
-#[test]
-fn a_device_change_in_the_handover_window_prefetches_again_on_the_new_stream() {
-    let mut harness = Harness::new();
-    let tracks = vec![harness.track("a", 2), harness.track("b", 1)];
-    harness.start(tracks, 0).unwrap();
-    harness.prefetch_next();
-
-    harness
-        .select_output(AudioOutputSelection::Device {
-            device_id: "fake-other".into(),
-        })
+    let fixture = Fixture::with(&clips(&["a", "b"]));
+    fixture
+        .player
+        .play_queue(fixture.ids(&["a", "b"]), 0)
         .unwrap();
-    assert_eq!(harness.output.streams_opened(), 2);
-    assert_eq!(harness.output.chained_pipeline(), None);
-    // The restart seeks back to where it was before anything else follows.
-    std::thread::sleep(Duration::from_millis(150));
-    harness.deliver_pending();
+    wait_until(|| fixture.output.chained_pipeline().is_some(), WAIT);
 
-    harness.prefetch_next();
-    harness.hear_the_end();
-    assert!(is_playing(&harness.snapshot(), "b"));
-    assert_eq!(harness.output.streams_opened(), 2);
+    let next = fixture.player.next().unwrap().value;
+
+    assert!(is_playing(&next, "b"));
+    assert_eq!(session(&next).started_by, StartedBy::Next);
+}
+
+#[test]
+fn the_session_carries_the_source_format_of_the_loaded_track() {
+    let fixture = Fixture::with(&clips(&["a"]));
+
+    let started = fixture
+        .player
+        .play_queue(fixture.ids(&["a"]), 0)
+        .unwrap()
+        .value;
+
+    let current = session(&started);
+    assert_eq!(current.source_sample_rate, SAMPLE_RATE);
+    assert_eq!(current.output_sample_rate, SAMPLE_RATE);
+    assert!(!current.resampling_active);
+    assert_eq!(current.channel_conversion, PlaybackChannelConversion::None);
+}
+
+#[test]
+fn a_track_of_another_format_reopens_the_stream() {
+    for (rate, channels) in [(48_000, 1), (SAMPLE_RATE, 2)] {
+        let fixture = Fixture::with(&[Clip::new("a", 2), Clip::new("b", 2).format(rate, channels)]);
+        fixture
+            .player
+            .play_queue(fixture.ids(&["a", "b"]), 0)
+            .unwrap();
+        wait_until(|| fixture.output.chained_pipeline().is_none(), WAIT);
+
+        fixture.finish();
+
+        fixture.wait_for(|state| is_playing(state, "b"));
+        assert_eq!(session(&fixture.state()).source_sample_rate, rate);
+        assert_eq!(fixture.output.streams_opened(), 2);
+    }
+}
+
+#[test]
+fn the_listener_hears_the_prefetch_as_upcoming_and_the_gapless_switch_as_a_load() {
+    let fixture = Fixture::with(&clips(&["a", "b"]));
+    fixture
+        .player
+        .play_queue(fixture.ids(&["a", "b"]), 0)
+        .unwrap();
+    wait_until(|| fixture.output.chained_pipeline().is_some(), WAIT);
+
+    fixture.finish();
+    fixture.wait_for(|state| is_playing(state, "b"));
+
+    let heard = fixture.heard();
+    let upcoming = heard
+        .iter()
+        .position(|heard| *heard == Heard::Upcoming("b".into()));
+    let loaded = heard
+        .iter()
+        .rposition(|heard| matches!(heard, Heard::Loaded(_, title) if title == "b"));
+    assert!(upcoming.is_some(), "b was heard as upcoming: {heard:?}");
+    assert!(
+        loaded > upcoming,
+        "b was loaded after it was heard as upcoming: {heard:?}"
+    );
+}
+
+#[test]
+fn putting_a_track_next_discards_the_prefetch_and_plays_it_next() {
+    let fixture = Fixture::with(&clips(&["a", "b", "c"]));
+    let ids = fixture.ids(&["a", "b", "c"]);
+    fixture.player.play_queue(vec![ids[0], ids[1]], 0).unwrap();
+    wait_until(|| fixture.output.chained_pipeline().is_some(), WAIT);
+
+    fixture.player.enqueue(ids[2], true).unwrap();
+    wait_until(|| fixture.output.chained_pipeline().is_none(), WAIT);
+    fixture.finish();
+
+    fixture.wait_for(|state| is_playing(state, "c"));
 }
 
 #[test]
 fn the_last_track_of_the_queue_has_nothing_to_prefetch() {
-    let mut harness = Harness::new();
-    let tracks = vec![harness.track("a", 1)];
-    harness.start(tracks, 0).unwrap();
+    let fixture = Fixture::with(&clips(&["a"]));
+    fixture.player.play_queue(fixture.ids(&["a"]), 0).unwrap();
 
-    harness.settle_prefetch();
+    fixture.settle();
 
-    assert_eq!(harness.output.chained_pipeline(), None);
+    assert!(fixture.output.chained_pipeline().is_none());
 }

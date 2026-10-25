@@ -8,19 +8,19 @@ use crate::errors::contain;
 use crate::library::media::ValidatedAudioFile;
 use crate::threads::Cancellation;
 
-pub(crate) struct SourceLoad {
+pub(super) struct SourceLoad {
     id: SourceLoadId,
     cancellation: Cancellation,
     join_handle: JoinHandle<()>,
 }
 
 impl SourceLoad {
-    pub(crate) fn id(&self) -> SourceLoadId {
+    pub(super) fn id(&self) -> SourceLoadId {
         self.id
     }
 
     /// Starts loading `file`; the result arrives as `WorkerEvent::SourceLoaded` for `id`.
-    pub(crate) fn spawn(
+    pub(super) fn spawn(
         file: ValidatedAudioFile,
         id: SourceLoadId,
         inbox: Inbox,
@@ -46,7 +46,7 @@ impl SourceLoad {
     }
 
     /// Waits for a load that has already reported.
-    pub(crate) fn join(self) {
+    pub(super) fn join(self) {
         // A panic payload has no `Display`, so the join result is checked with `is_err`.
         if self.join_handle.join().is_err() {
             log::debug!("playback.source_loader.join_panicked");
@@ -55,7 +55,7 @@ impl SourceLoad {
 
     /// Abandons the load without waiting for it: a stalled network path must not block the
     /// worker. The thread stops on its own, and its result is ignored by id.
-    pub(crate) fn cancel(self) {
+    pub(super) fn cancel(self) {
         self.cancellation.cancel();
     }
 }

@@ -1,26 +1,23 @@
 //! Volume, mute and the saved playback preferences.
 
-use super::{PlaybackPreferences, PlaybackServiceError, PlaybackState, PlaybackWorker, Versioned};
+use super::{PlaybackPreferences, PlaybackState, PlaybackWorker, Versioned};
+use crate::audio::volume::NormalizedVolume;
 
 impl PlaybackWorker {
-    pub(super) fn set_volume(
+    pub(in super::super) fn set_volume(
         &mut self,
-        volume: f32,
-    ) -> Result<Versioned<PlaybackState>, PlaybackServiceError> {
-        let changed = self
-            .volume_state
-            .set_volume(volume)
-            .ok_or(PlaybackServiceError::InvalidVolume)?;
-        Ok(self.volume_changed(changed))
-    }
-
-    pub(super) fn mute(&mut self) -> Versioned<PlaybackState> {
-        let changed = self.volume_state.mute();
+        volume: NormalizedVolume,
+    ) -> Versioned<PlaybackState> {
+        let changed = self.volume_state.set_volume(volume);
         self.volume_changed(changed)
     }
 
-    pub(super) fn unmute(&mut self) -> Versioned<PlaybackState> {
-        let changed = self.volume_state.unmute();
+    pub(in super::super) fn set_muted(&mut self, muted: bool) -> Versioned<PlaybackState> {
+        let changed = if muted {
+            self.volume_state.mute()
+        } else {
+            self.volume_state.unmute()
+        };
         self.volume_changed(changed)
     }
 

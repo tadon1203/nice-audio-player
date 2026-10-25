@@ -1,44 +1,51 @@
+//! Volume, mute and the saved preferences through `Player`.
+
 use super::*;
 
 #[test]
-fn volume_commands_update_the_snapshot_and_the_gain() {
-    let mut harness = Harness::new();
-    let tracks = vec![harness.track("a", 1)];
-    harness.start(tracks, 0).unwrap();
+fn volume_and_mute_are_reported_in_the_snapshot() {
+    let fixture = Fixture::with(&[]);
 
-    let changed = harness
-        .call(|reply| PlaybackCommand::SetVolume { volume: 0.5, reply })
-        .unwrap();
-    assert_eq!(
-        (changed.value.base().volume, changed.value.base().muted),
-        (0.5, false)
-    );
-    assert_eq!(harness.gain.load(), 0.5);
+    let quiet = fixture.player.set_volume(0.25).unwrap().value;
+    assert_eq!(quiet.base().volume, 0.25);
 
-    let before_invalid = harness.snapshot();
-    assert_eq!(
-        harness.call(|reply| PlaybackCommand::SetVolume {
-            volume: f32::NAN,
-            reply
-        }),
-        Err(PlaybackServiceError::InvalidVolume)
-    );
-    assert_eq!(harness.snapshot(), before_invalid);
+    let muted = fixture.player.set_muted(true).unwrap().value;
+    assert!(muted.base().muted);
+    assert_eq!(muted.base().volume, 0.25);
 
-    let muted = harness
-        .call(|reply| PlaybackCommand::Mute { reply })
-        .unwrap();
+    let unmuted = fixture.player.set_muted(false).unwrap().value;
+    assert!(!unmuted.base().muted);
+}
+
+#[test]
+fn a_volume_outside_the_range_is_refused_not_clamped() {
+    let fixture = Fixture::with(&[]);
+    let before = fixture.state_store.playback().version;
+
     assert_eq!(
-        (muted.value.base().volume, muted.value.base().muted),
-        (0.5, true)
+        fixture.player.set_volume(1.5).err(),
+        Some(CommandError::InvalidVolume)
     );
-    assert_eq!(harness.gain.load(), 0.0);
-    let unmuted = harness
-        .call(|reply| PlaybackCommand::Unmute { reply })
-        .unwrap();
     assert_eq!(
-        (unmuted.value.base().volume, unmuted.value.base().muted),
-        (0.5, false)
+        fixture.player.set_volume(f32::NAN).err(),
+        Some(CommandError::InvalidVolume)
     );
-    assert_eq!(harness.gain.load(), 0.5);
+    assert_eq!(fixture.state_store.playback().version, before);
+}
+
+#[test]
+fn volume_changes_are_saved_as_preferences() {
+    let fixture = Fixture::with(&[]);
+
+    fixture.player.set_volume(0.5).unwrap();
+    fixture.player.set_muted(true).unwrap();
+
+    let last = fixture
+        .preferences
+        .lock()
+        .last()
+        .cloned()
+        .expect("a preference was saved");
+    assert_eq!(last.volume, 0.5);
+    assert!(last.muted);
 }
