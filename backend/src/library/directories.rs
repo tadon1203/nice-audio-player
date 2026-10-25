@@ -1,8 +1,8 @@
 //! The registered music directories: listing them, and the writes that change them. The write side
-//! (the sync actor) is the only caller of `add`, `set_enabled` and `remove`.
+//! (the sync worker) is the only caller of `add`, `set_enabled`, `remove` and `delete_missing`.
 
 use super::{
-    LibraryCommandError, StoreError, database::Database, models::LibraryDirectory, summary,
+    StoreError, albums, database::Database, models::LibraryDirectory, version::LibraryVersion,
 };
 use crate::errors::CommandError;
 use crate::ids::{DirectoryId, directory_id_column};
@@ -101,8 +101,12 @@ pub(crate) fn set_enabled(
     Ok(())
 }
 
-/// Removes the directory with its files, tracks and metadata (they cascade).
-pub(crate) fn remove(database: &Database, id: DirectoryId) -> Result<(), CommandError> {
+/// Removes the directory with its files, tracks and metadata (they cascade), then rebuilds the albums.
+pub(crate) fn remove(
+    database: &Database,
+    id: DirectoryId,
+    version: &LibraryVersion,
+) -> Result<(), CommandError> {
     let mut connection = database.write().map_err(StoreError::from)?;
     let transaction = connection.transaction().map_err(StoreError::from)?;
     let removed = transaction
@@ -111,14 +115,17 @@ pub(crate) fn remove(database: &Database, id: DirectoryId) -> Result<(), Command
     if removed == 0 {
         return Err(CommandError::DirectoryMissing);
     }
-    summary::rebuild(&transaction).map_err(StoreError::from)?;
+    albums::rebuild(&transaction, version).map_err(StoreError::from)?;
     transaction.commit().map_err(StoreError::from)?;
     Ok(())
 }
 
-/// Forgets the tracks whose file is gone, for good. Never touches a source file. Returns how many
-/// tracks went.
-pub(crate) fn delete_missing(database: &Database) -> Result<u64, LibraryCommandError> {
+/// Forgets the tracks whose file is gone, for good, then rebuilds the albums. Never touches a source
+/// file. Returns how many tracks went.
+pub(crate) fn delete_missing(
+    database: &Database,
+    version: &LibraryVersion,
+) -> Result<u32, CommandError> {
     let mut connection = database.write().map_err(StoreError::from)?;
     let transaction = connection.transaction().map_err(StoreError::from)?;
     let tracks: i64 = transaction
@@ -136,7 +143,7 @@ pub(crate) fn delete_missing(database: &Database) -> Result<u64, LibraryCommandE
             [],
         )
         .map_err(StoreError::from)?;
-    summary::rebuild(&transaction).map_err(StoreError::from)?;
+    albums::rebuild(&transaction, version).map_err(StoreError::from)?;
     transaction.commit().map_err(StoreError::from)?;
-    Ok(tracks as u64)
+    u32::try_from(tracks).map_err(|_| CommandError::PersistenceFailed)
 }

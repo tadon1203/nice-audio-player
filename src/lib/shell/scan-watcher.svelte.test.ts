@@ -9,6 +9,7 @@ function scanSnapshot(state: ScanStateName, libraryVersion: number): ScanState {
     state,
     currentDirectory: null,
     expectedCount: 0,
+    progress: null,
     discoveredCount: 0,
     inspectedCount: 0,
     indexedCount: 0,

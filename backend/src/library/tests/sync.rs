@@ -2,6 +2,7 @@
 //! change in a registered directory is picked up while idle, and a failed scan is reported until a
 //! scan succeeds.
 
+use crate::errors::CommandError;
 use crate::library::Library;
 use crate::library::database::Database;
 use crate::library::models::{ListRequest, ScanStatus, SortDirection, TrackSortKey};
@@ -74,10 +75,12 @@ impl Harness {
         self.state_store.scan().value.state
     }
 
+    /// Waits until a scan of the directory has completed. A file written just after registration
+    /// may start a second one, so this does not count the scans.
     fn wait_for_first_scan(&self) {
         assert!(
             wait_until(
-                || self.scans_done() == 1 && self.scan_state() == ScanStatus::Completed,
+                || self.scans_done() >= 1 && self.scan_state() == ScanStatus::Completed,
                 SETTLE
             ),
             "registering a directory scans it"
@@ -155,11 +158,73 @@ fn a_failed_scan_is_reported_until_a_scan_succeeds() {
 }
 
 #[test]
+fn a_disabled_directory_is_not_scanned() {
+    let harness = harness();
+    harness.wait_for_first_scan();
+    let id = harness.library.directories().expect("directories")[0].id;
+    harness
+        .library
+        .set_directory_enabled(id, false)
+        .expect("disabled");
+    let scans = harness.scans_done();
+
+    write_tone(&harness.music.join("a.wav"));
+    std::thread::sleep(Duration::from_millis(1_500));
+
+    assert_eq!(
+        harness.scans_done(),
+        scans,
+        "no scan of a disabled directory"
+    );
+    assert_eq!(harness.track_count(), 0);
+}
+
+#[test]
+fn a_manual_scan_while_one_runs_is_refused() {
+    let harness = harness();
+    harness.wait_for_first_scan();
+    for index in 0..600 {
+        write_tone(&harness.music.join(format!("{index:03}.wav")));
+    }
+    assert!(
+        wait_until(|| harness.scan_state() == ScanStatus::Running, SETTLE),
+        "the changes start a scan"
+    );
+
+    assert_eq!(
+        harness.library.start_scan(),
+        Err(CommandError::ScanAlreadyRunning)
+    );
+}
+
+#[test]
+fn a_change_during_a_scan_is_scanned_after_it() {
+    let harness = harness();
+    harness.wait_for_first_scan();
+    for index in 0..600 {
+        write_tone(&harness.music.join(format!("{index:03}.wav")));
+    }
+    assert!(
+        wait_until(|| harness.scan_state() == ScanStatus::Running, SETTLE),
+        "the changes start a scan"
+    );
+
+    write_tone(&harness.music.join("late.wav"));
+
+    assert!(
+        wait_until(|| harness.track_count() == 601, SETTLE),
+        "the change made during the scan is indexed once it ends"
+    );
+}
+
+#[test]
 fn removing_a_directory_drops_its_tracks() {
     let harness = harness();
     write_tone(&harness.music.join("a.wav"));
-    harness.wait_for_first_scan();
-    assert_eq!(harness.track_count(), 1);
+    assert!(
+        wait_until(|| harness.track_count() == 1, SETTLE),
+        "the file is scanned"
+    );
     let id = harness.library.directories().expect("directories")[0].id;
 
     assert!(

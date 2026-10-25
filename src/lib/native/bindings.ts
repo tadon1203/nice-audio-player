@@ -71,7 +71,7 @@ export const commands = {
 	libraryTrackProperties: (trackId: TrackId) => __TAURI_INVOKE<TrackProperties>("library_track_properties", { trackId }),
 	/**  Shows the track's file in Explorer, selected. */
 	libraryRevealTrack: (trackId: TrackId) => __TAURI_INVOKE<null>("library_reveal_track", { trackId }),
-	libraryArtworkAccent: (hash: ArtworkHash) => __TAURI_INVOKE<string | null>("library_artwork_accent", { hash }),
+	libraryArtworkAccent: (path: string) => __TAURI_INVOKE<string | null>("library_artwork_accent", { path }),
 	lyricsTrack: (trackId: TrackId) => __TAURI_INVOKE<LyricsResolution>("lyrics_track", { trackId }),
 	/**
 	 *  Starts streaming Meter frames to `frames` as binary messages (see `FRAME_BYTES` in the
@@ -169,15 +169,12 @@ export type ArtistRow = {
 
 export type ArtistSortKey = "artist" | "albumCount" | "trackCount";
 
-/**  Stored artwork: the 64-character blake3 hex of the image file. */
-export type ArtworkHash = string;
-
-export type ArtworkMimeType = "jpeg" | "png";
-
-/**  Stored artwork as the renderer addresses it. Shared by the library catalog and playback items. */
+/**  Stored artwork as the Renderer addresses it: two paths relative to the artwork protocol root. */
 export type ArtworkRef = {
-	hash: ArtworkHash,
-	mimeType: ArtworkMimeType,
+	/**  The original image. */
+	path: string,
+	/**  The thumbnail. It is the original when no thumbnail could be made. */
+	thumbPath: string,
 };
 
 export type AudioOutputDevice = {
@@ -449,6 +446,8 @@ export type ScanState = {
 	 *  to find, so its progress can be shown as a share. 0 when there is no such history.
 	 */
 	expectedCount: number,
+	/**  The share of the scan done, from 0 to 1. `None` while a first scan has no count to compare with. */
+	progress: number | null,
 	discoveredCount: number,
 	inspectedCount: number,
 	indexedCount: number,

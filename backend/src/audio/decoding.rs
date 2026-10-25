@@ -11,7 +11,7 @@ use symphonia::core::units::{Time, TimeBase, Timestamp};
 use symphonia::default::{get_codecs, get_probe};
 
 use super::pcm::{ChannelCount, PcmSpec, SampleRate};
-use crate::media::validation::ValidatedAudioFile;
+use crate::library::media::ValidatedAudioFile;
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub(crate) enum PcmDecodeError {
@@ -396,7 +396,7 @@ fn map_decode_error(error: &SymphoniaError) -> PcmDecodeError {
 mod tests {
     use super::{DamagedPackets, DecodeStep, MAX_CONSECUTIVE_DAMAGED_PACKETS, SeekStep};
     use crate::audio::compressed_source::prepare_compressed_source;
-    use crate::media::validation::ValidatedAudioFile;
+    use crate::library::media::ValidatedAudioFile;
     use crate::test_support::{TestDirectory, write_pcm_i16_wav};
     use crate::threads::Cancellation;
 

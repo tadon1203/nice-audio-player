@@ -62,8 +62,10 @@ MP3, FLAC, WAV, AAC, M4A. A file counts as supported only if it can actually be 
   - Long scans show progress and can be cancelled.
   - A cancelled or failed scan never leaves a half-written batch.
   - A failed scan stays flagged until a scan succeeds.
+  - During a first scan, albums appear in batches as their tracks are indexed.
+  - A watcher that cannot attach is not retried automatically. The directory is still scanned.
 - Missing files are shown as missing. The app never deletes them automatically.
-  - A moved or renamed file is found again by its size and the hash of its head and tail. If that fails, it is found by its tags, when exactly one Missing track carries them. It is the same track, so queues still resolve.
+  - A moved or renamed file is found again by its size and the hash of its head and tail, when exactly one Missing track has them. It is the same track, so queues still resolve.
   - Settings shows each directory's last scan, track count and Missing track count.
   - Settings offers "Delete Missing", with confirmation. Source files are never touched.
   - Settings offers a way to open the log directory.

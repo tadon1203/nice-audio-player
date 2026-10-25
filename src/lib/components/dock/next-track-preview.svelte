@@ -50,7 +50,7 @@
     next !== null &&
       inLastSeconds &&
       playback.repeatMode !== "one" &&
-      next.artwork?.hash !== playback.item?.artwork?.hash,
+      next.artwork?.path !== playback.item?.artwork?.path,
   );
 
   const slideIn = (_node: Element): TransitionConfig =>

@@ -1,7 +1,6 @@
 import {
   type AlbumId,
   type ArtistId,
-  type ArtworkHash,
   type ArtistAlbumSortKey,
   type SortDirection,
   type TrackId,
@@ -75,7 +74,7 @@ export class LibraryQueryKeys {
   }
 
   /** Content-addressed, so it is never invalidated with the catalog. */
-  public static accent(hash: ArtworkHash | null): readonly unknown[] {
-    return ["library", "accent", hash];
+  public static accent(path: string | null): readonly unknown[] {
+    return ["library", "accent", path];
   }
 }

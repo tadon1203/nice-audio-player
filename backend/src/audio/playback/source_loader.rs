@@ -5,7 +5,7 @@ use std::thread::{self, JoinHandle};
 use super::input::{Inbox, SourceLoadId, WorkerEvent};
 use crate::audio::compressed_source::{CompressedSourceError, prepare_compressed_source};
 use crate::errors::contain;
-use crate::media::validation::ValidatedAudioFile;
+use crate::library::media::ValidatedAudioFile;
 use crate::threads::Cancellation;
 
 pub(crate) struct SourceLoad {

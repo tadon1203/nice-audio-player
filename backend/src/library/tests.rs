@@ -8,9 +8,7 @@ mod sync;
 use crate::errors::CommandError;
 use crate::library::database::{self, Database};
 use crate::library::directories;
-use crate::library::{
-    Library, LibraryCommandError, LibraryUnavailableReason, TrackLocation, Unavailable,
-};
+use crate::library::{Library, LibraryUnavailableReason, TrackLocation, Unavailable};
 use crate::test_support::{TestDirectory, null_notifier, state_store_for_tests};
 use rusqlite::Connection;
 use std::path::{Path, PathBuf};
@@ -45,7 +43,7 @@ fn an_empty_file_is_given_the_schema() {
     let library = open(&data).expect("an empty file opens");
 
     assert_eq!(library.directories().unwrap(), []);
-    assert_eq!(user_version(&data.join(DATABASE_FILE)), 1);
+    assert_eq!(user_version(&data.join(DATABASE_FILE)), 2);
 }
 
 #[test]
@@ -165,8 +163,8 @@ fn a_path_that_is_not_unicode_is_refused_not_changed() {
     assert_eq!(library.directories().unwrap(), []);
 }
 
-/// The database the directory commands write to, opened without the sync actor: a directory add starts a
-/// scan, and the actor refuses directory changes while one runs.
+/// The database the directory commands write to, opened without the sync worker: the worker refuses
+/// directory changes while a scan runs.
 fn open_database(directory: &TestDirectory) -> Database {
     Database::initialize(&directory.file("data")).expect("database")
 }
@@ -240,24 +238,12 @@ fn a_directory_can_be_disabled_and_removed_and_a_missing_one_is_reported() {
     directories::set_enabled(&database, id, false).unwrap();
     assert!(!directories::list(&database.read().unwrap()).unwrap()[0].enabled);
 
-    directories::remove(&database, id).unwrap();
+    directories::remove(&database, id, &super::version::LibraryVersion::default()).unwrap();
     assert_eq!(directories::list(&database.read().unwrap()).unwrap(), []);
     assert!(matches!(
-        directories::remove(&database, id),
+        directories::remove(&database, id, &super::version::LibraryVersion::default()),
         Err(CommandError::DirectoryMissing)
     ));
-}
-
-#[test]
-fn a_scan_error_maps_to_the_shared_code_the_renderer_shows() {
-    assert_eq!(
-        CommandError::from(LibraryCommandError::ScanInProgress),
-        CommandError::ScanAlreadyRunning
-    );
-    assert_eq!(
-        CommandError::from(LibraryCommandError::NoEnabledDirectories),
-        CommandError::NoEnabledDirectories
-    );
 }
 
 fn location(directory: &TestDirectory, relative: &str) -> TrackLocation {

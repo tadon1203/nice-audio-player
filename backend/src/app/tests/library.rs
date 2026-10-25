@@ -4,7 +4,7 @@ use crate::audio::fake_output::FakeOutput;
 use crate::audio::playback::PlaybackServiceError;
 use crate::errors::CommandError;
 use crate::ids::{AlbumId, ArtistId, TrackId};
-use crate::library::LibraryCommandError;
+
 use crate::library::LibraryStatus;
 use crate::library::models::{ListRequest, SortDirection, TrackSortKey};
 use crate::library::tracks::PlaybackSourceError;
@@ -95,9 +95,7 @@ fn without_a_library_the_library_commands_say_it_is_unavailable() {
     ));
     assert!(matches!(
         backend.start_scan(),
-        Err(LibraryCommandError::Common {
-            error: CommandError::LibraryUnavailable
-        })
+        Err(CommandError::LibraryUnavailable)
     ));
     assert!(matches!(
         backend.track_file(TrackId::try_from_rowid(1).unwrap()),

@@ -14,7 +14,7 @@ use super::{
 };
 use crate::errors::CommandError;
 use crate::ids::{AlbumId, ArtistId, ArtworkHash, TrackId, album_id_column, track_id_column};
-use crate::media::validation::{ValidatedAudioFile, describe_audio_file, validate_audio_file};
+use crate::library::media::{ValidatedAudioFile, describe_audio_file, validate_audio_file};
 use rusqlite::{Connection, OptionalExtension, Row, params};
 use std::collections::HashMap;
 
@@ -144,14 +144,15 @@ pub(super) fn non_blank(value: Option<String>) -> Option<String> {
     value.filter(|value| !value.trim().is_empty())
 }
 
+/// The artwork a row names, from its hash, its type and whether its thumbnail exists. A row with no
+/// artwork has no hash, so the join gives `None`.
 pub(super) fn artwork_ref(
     hash: Option<String>,
     mime_type: Option<ArtworkMimeType>,
+    has_thumbnail: Option<bool>,
 ) -> Option<ArtworkRef> {
-    Some(ArtworkRef {
-        hash: ArtworkHash::try_from(hash?).ok()?,
-        mime_type: mime_type?,
-    })
+    let hash = ArtworkHash::try_from(hash?).ok()?;
+    Some(ArtworkRef::new(&hash, mime_type?, has_thumbnail?))
 }
 
 /// The album of a track: `None` for a track with no album tag, which has no album ID either. An
@@ -202,8 +203,8 @@ type AlbumCounts = HashMap<String, u32>;
 
 /// The columns every playback query returns, in the order `playback_row` reads them, and what they
 /// are selected from.
-const PLAYBACK_COLUMNS: &str = "t.id, r.path, f.relative_path, f.availability, f.inspection_status, m.title, m.artist, m.album, al.album_artist, m.duration_ms, a.content_hash, a.mime_type, m.track_number, m.disc_number, m.year, m.file_format, m.bit_depth, m.bitrate_kbps, f.content_hash, m.album_id, al.artist_id";
-const PLAYBACK_FROM: &str = "FROM track_source_metadata m JOIN tracks t ON t.id = m.track_id JOIN library_files f ON f.id = t.file_id JOIN directories r ON r.id = f.directory_id LEFT JOIN artwork_assets a ON a.id = m.artwork_id LEFT JOIN albums al ON al.id = m.album_id";
+const PLAYBACK_COLUMNS: &str = "t.id, r.path, f.relative_path, f.availability, f.inspection_status, m.title, m.artist, m.album, al.album_artist, m.duration_ms, a.hash, a.mime, m.track_number, m.disc_number, m.year, m.file_format, m.bit_depth, m.bitrate_kbps, f.content_hash, m.album_id, al.artist_id, a.has_thumbnail";
+const PLAYBACK_FROM: &str = "FROM track_source_metadata m JOIN tracks t ON t.id = m.track_id JOIN library_files f ON f.id = t.file_id JOIN directories r ON r.id = f.directory_id LEFT JOIN artwork a ON a.hash = m.artwork_hash LEFT JOIN albums al ON al.id = m.album_id";
 
 fn playback_row(row: &Row<'_>) -> rusqlite::Result<PlaybackRow> {
     let directory: String = row.get(1)?;
@@ -227,7 +228,7 @@ fn playback_row(row: &Row<'_>) -> rusqlite::Result<PlaybackRow> {
             .get::<_, Option<String>>(20)?
             .and_then(|hex| ArtistId::from_hex(&hex)),
         duration_ms: row.get(9)?,
-        artwork: artwork_ref(row.get(10)?, row.get(11)?),
+        artwork: artwork_ref(row.get(10)?, row.get(11)?, row.get(21)?),
         track_number: row.get(12)?,
         disc_number: row.get(13)?,
         year: row.get(14)?,
@@ -401,11 +402,11 @@ impl Library {
     }
 
     /// Tags, audio format and the file's path, or `TrackNotFound` for an unknown track.
-    pub(crate) fn track_properties(&self, id: TrackId) -> Result<TrackProperties, StoreError> {
+    pub(crate) fn track_properties(&self, id: TrackId) -> Result<TrackProperties, CommandError> {
         let location = self.track_location(id)?;
         let path = location.path()?.to_string_lossy().into_owned();
         let connection = self.read()?;
-        connection
+        let properties = connection
             .query_row(
                 "SELECT f.file_name, m.tag_title, m.tag_artist, m.tag_album, m.tag_album_artist,
                         m.track_number, m.track_total, m.disc_number, m.disc_total, m.genre, m.date,
@@ -448,8 +449,10 @@ impl Library {
                     })
                 },
             )
-            .optional()?
-            .ok_or(StoreError::TrackNotFound)
+            .optional()
+            .map_err(StoreError::from)?
+            .ok_or(StoreError::TrackNotFound)?;
+        Ok(properties)
     }
 
     /// The album in disc and track order, by its ID.

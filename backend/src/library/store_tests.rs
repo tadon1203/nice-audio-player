@@ -7,7 +7,7 @@ use crate::library::database::Database;
 use crate::library::models::*;
 use crate::library::text::{SortTags, TrackKeys, album_edition_of};
 use crate::library::tracks::{PlaybackLookupError, PlaybackSourceError};
-use crate::library::{Library, summary};
+use crate::library::{Library, albums};
 use crate::test_support::{TestDirectory, null_notifier, state_store_for_tests};
 use rusqlite::params;
 use std::path::PathBuf;
@@ -24,7 +24,7 @@ struct Fixture {
     library: Library,
 }
 
-/// One track to put in the database, with the tags the scanner would have read.
+/// One track to put in the database, with the tags a Library scan would have read.
 #[derive(Clone, Copy)]
 struct Seed<'a> {
     id: i64,
@@ -34,7 +34,7 @@ struct Seed<'a> {
     album_artist: Option<&'a str>,
     disc: Option<i64>,
     track: Option<i64>,
-    artwork: Option<i64>,
+    artwork: Option<&'static str>,
     date: Option<&'a str>,
     duration_ms: Option<i64>,
 }
@@ -66,11 +66,12 @@ fn fixture() -> Fixture {
     )
     .expect("library");
     let database = library.database.clone();
+    // Disabled: the sync worker would otherwise scan the seeded files that the tests write by hand.
     database
         .write()
         .unwrap()
         .execute(
-            "INSERT INTO directories(id,path,enabled,scan_generation) VALUES(1,?1,1,0)",
+            "INSERT INTO directories(id,path,enabled,scan_generation) VALUES(1,?1,0,0)",
             params![music.to_string_lossy()],
         )
         .unwrap();
@@ -87,7 +88,7 @@ impl Fixture {
         self.add_all(&[seed]);
     }
 
-    /// Writes tracks the way the scanner does: the tags, and the keys computed from them.
+    /// Writes tracks the way a Library scan does: the tags, and the keys computed from them.
     fn add_all(&self, seeds: &[Seed<'_>]) {
         let mut connection = self.database.write().unwrap();
         let transaction = connection.transaction().unwrap();
@@ -103,7 +104,7 @@ impl Fixture {
                 seed.date,
                 &file,
                 SortTags::default(),
-                &album_edition_of(1, &file),
+                &album_edition_of(&file),
                 &self.music.to_string_lossy(),
             );
             transaction
@@ -120,7 +121,7 @@ impl Fixture {
                 .unwrap();
             transaction
                 .execute(
-                    "INSERT INTO track_source_metadata(track_id,source_revision,tag_title,tag_artist,tag_album,tag_album_artist,track_number,disc_number,date,duration_ms,tag_status,artwork_status,artwork_id,title,artist,album,album_artist,year,title_sort,artist_sort,album_sort,album_artist_sort,search_text,album_id,album_directory) VALUES(?1,1,?2,?3,?4,?5,?6,?7,?8,?9,'loaded','notPresent',?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22)",
+                    "INSERT INTO track_source_metadata(track_id,source_revision,tag_title,tag_artist,tag_album,tag_album_artist,track_number,disc_number,date,duration_ms,tag_status,artwork_status,artwork_hash,title,artist,album,album_artist,year,title_sort,artist_sort,album_sort,album_artist_sort,search_text,album_id,album_directory_id,album_relative_dir) VALUES(?1,1,?2,?3,?4,?5,?6,?7,?8,?9,'loaded','notPresent',?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23)",
                     params![
                         seed.id,
                         seed.title,
@@ -143,12 +144,13 @@ impl Fixture {
                         keys.album_artist_sort,
                         keys.search,
                         keys.album_id,
-                        keys.album_directory
+                        1,
+                        keys.album_relative_dir
                     ],
                 )
                 .unwrap();
         }
-        summary::rebuild(&transaction).unwrap();
+        albums::rebuild(&transaction, &super::version::LibraryVersion::default()).unwrap();
         transaction.commit().unwrap();
     }
 
@@ -391,7 +393,7 @@ fn the_version_changes_when_a_directory_is_disabled_and_when_missing_tracks_are_
     let after_disable = fixture.library.version();
     assert!(after_disable > before);
 
-    assert_eq!(fixture.library.delete_missing().unwrap(), 1);
+    assert_eq!(fixture.library.delete_missing_tracks().unwrap(), 1);
     assert!(fixture.library.version() > after_disable);
     assert_eq!(fixture.tracks(None, TrackSortKey::Title, ASC).total, 0);
 }
@@ -425,7 +427,7 @@ fn a_track_with_an_album_tag_carries_the_album_and_album_artist_ids() {
     let filed = library.playback_for_track(track_id_of(1)).unwrap();
     let album_id = filed.track.album.as_ref().unwrap().album.id;
     assert_eq!(
-        library.album_details(album_id).unwrap().track_count,
+        library.album(album_id).unwrap().track_count,
         1,
         "the ID opens the album the playback names"
     );
@@ -448,7 +450,7 @@ fn a_track_without_a_title_is_named_after_its_file_in_playback_and_in_search() {
     fixture.sql(
         "UPDATE library_files SET file_name='multi.part.flac', relative_path='1.wav' WHERE id=1",
     );
-    // The scanner derives the title from the file name; do the same for this renamed file.
+    // A Library scan derives the title from the file name; do the same for this renamed file.
     fixture.sql(
         "UPDATE track_source_metadata SET title='multi.part', title_sort='multi.part', search_text='multi.part'||char(31)||'artist'||char(31)||'album'||char(31)||'artist' WHERE track_id=1",
     );
@@ -599,4 +601,59 @@ fn an_album_playback_sequence_is_complete_beyond_one_page() {
         101,
         "an album's tracks are listed whole"
     );
+}
+
+#[test]
+fn artwork_collection_deletes_what_no_track_uses_and_keeps_the_rest() {
+    use crate::library::artwork::{self, ArtworkMimeType};
+    let fixture = fixture();
+    let data = fixture.database.data_dir().to_path_buf();
+    let used = artwork::store(&data, b"used image", ArtworkMimeType::Png).unwrap();
+    let unused = artwork::store(&data, b"unused image", ArtworkMimeType::Png).unwrap();
+    fixture.add(Seed::new(1, "A", "Apple", "x"));
+    fixture
+        .database
+        .write()
+        .unwrap()
+        .execute(
+            "INSERT INTO artwork(hash, mime, has_thumbnail, byte_length)
+         VALUES(?1, 'image/png', 0, 10), (?2, 'image/png', 0, 12)",
+            params![used.hash.as_str(), unused.hash.as_str()],
+        )
+        .unwrap();
+    fixture
+        .database
+        .write()
+        .unwrap()
+        .execute(
+            "UPDATE track_source_metadata SET artwork_hash = ?1 WHERE track_id = 1",
+            params![used.hash.as_str()],
+        )
+        .unwrap();
+    let used_path = data.join(artwork::original_path(&used.hash, used.mime_type));
+    let unused_path = data.join(artwork::original_path(&unused.hash, unused.mime_type));
+
+    artwork::collect(&fixture.database).unwrap();
+
+    assert!(used_path.exists(), "a track still uses it");
+    assert!(!unused_path.exists(), "no track uses it");
+    assert_eq!(count_rows(&fixture, "artwork"), 1);
+    assert_eq!(
+        count_rows(
+            &fixture,
+            "track_source_metadata WHERE artwork_hash IS NOT NULL"
+        ),
+        1
+    );
+}
+
+fn count_rows(fixture: &Fixture, from: &str) -> i64 {
+    fixture
+        .database
+        .read()
+        .unwrap()
+        .query_row(&format!("SELECT COUNT(*) FROM {from}"), [], |row| {
+            row.get(0)
+        })
+        .unwrap()
 }

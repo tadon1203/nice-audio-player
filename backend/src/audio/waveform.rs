@@ -23,9 +23,9 @@ use serde::Serialize;
 use super::decoding::{DecodeStep, PcmDecodeError, SeekStep, open_analysis_decoder};
 use crate::errors::contain;
 use crate::ids::PlaybackId;
-use crate::library::scanner::identity::content_hash;
+use crate::library::media::ValidatedAudioFile;
+use crate::library::scan::content_hash;
 use crate::library::tracks::PlayableTrack;
-use crate::media::validation::ValidatedAudioFile;
 use crate::state_store::StateStore;
 use crate::threads::{Cancellation, run_in_background};
 
@@ -671,7 +671,7 @@ impl Shared {
 mod tests {
     use super::*;
     use crate::ids::TrackId;
-    use crate::media::validation::validate_audio_file;
+    use crate::library::media::validate_audio_file;
     use crate::messages::{Notification, Notifier, StateTopic, Versioned};
     use crate::test_support::{
         NotificationLog, TestDirectory, null_notifier, state_store_for_tests, write_pcm_i16_wav,

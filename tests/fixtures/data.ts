@@ -59,9 +59,11 @@ export const secondAlbum: AlbumRow = {
   year: 2024,
 };
 
+const ARTWORK_HASH = "ab".repeat(32);
+
 export const ARTWORK = {
-  hash: "ab".repeat(32),
-  mimeType: "png",
+  path: `artwork/ab/${ARTWORK_HASH}.png`,
+  thumbPath: `artwork/ab/${ARTWORK_HASH}.thumb.jpg`,
 } as const;
 
 /** Track 1 is "Test track", track 5 is missing on disk, the rest are "Track 00N". */
@@ -230,6 +232,7 @@ export const idleScan: ScanState = {
   state: "idle",
   currentDirectory: null,
   expectedCount: 0,
+  progress: null,
   discoveredCount: 0,
   inspectedCount: 0,
   indexedCount: 0,
@@ -245,6 +248,7 @@ export function scanSnapshot(state: ScanStatus): ScanState {
     state,
     currentDirectory: state === "running" ? testDirectory : null,
     expectedCount: 40,
+    progress: 0.5,
     discoveredCount: 20,
     inspectedCount: state === "running" ? 8 : 20,
     indexedCount: state === "running" ? 6 : 18,

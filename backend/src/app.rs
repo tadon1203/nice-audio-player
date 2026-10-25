@@ -22,7 +22,7 @@ pub use crate::audio::playback::{
 };
 pub use crate::audio::waveform::PlaybackWaveform;
 pub use crate::library::LibraryStatus;
-pub use crate::library::artwork::{ArtworkCache, ArtworkRef, ServedArtwork};
+pub use crate::library::artwork::{ArtworkRef, ServedArtwork};
 pub use crate::library::models::{
     AlbumDetails, AlbumRow, AlbumSortKey, AlbumTrackRow, ArtistAlbumSortKey, ArtistRow,
     ArtistSortKey, LetterIndexEntry, LibraryDirectory, ListRequest, Page, SortDirection,
@@ -40,9 +40,9 @@ use crate::audio::{
     waveform::Waveforms,
 };
 use crate::errors::CommandError;
-use crate::ids::{AlbumId, ArtistId, ArtworkHash, DirectoryId, QueueItemId, TrackId};
+use crate::ids::{AlbumId, ArtistId, DirectoryId, QueueItemId, TrackId};
 use crate::library::{
-    Library, LibraryCommandError, LibraryUnavailableReason, StoreError,
+    Library, LibraryUnavailableReason, StoreError,
     artwork::{self},
 };
 use crate::lyrics::{LyricsCommandError, LyricsService, model::LyricsTrackContext};
@@ -203,15 +203,15 @@ impl BackendApp {
 
     /// Deletes the Missing tracks from the Library and returns how many there were. Never touches a
     /// source file.
-    pub fn delete_missing_tracks(&self) -> Result<u64, LibraryCommandError> {
-        self.library()?.delete_missing()
+    pub fn delete_missing_tracks(&self) -> Result<u32, CommandError> {
+        self.library()?.delete_missing_tracks()
     }
 
-    pub fn start_scan(&self) -> Result<(), LibraryCommandError> {
+    pub fn start_scan(&self) -> Result<(), CommandError> {
         self.library()?.start_scan()
     }
 
-    pub fn cancel_scan(&self) -> Result<(), LibraryCommandError> {
+    pub fn cancel_scan(&self) -> Result<(), CommandError> {
         self.library()?.cancel_scan()
     }
 
@@ -259,7 +259,7 @@ impl BackendApp {
     }
 
     pub fn album_by_id(&self, album_id: AlbumId) -> Result<AlbumDetails, CommandError> {
-        self.library()?.album_details(album_id)
+        self.library()?.album(album_id)
     }
 
     pub fn album_tracks(&self, album_id: AlbumId) -> Result<Vec<AlbumTrackRow>, CommandError> {
@@ -267,7 +267,7 @@ impl BackendApp {
     }
 
     pub fn artist(&self, artist_id: ArtistId) -> Result<ArtistRow, CommandError> {
-        self.library()?.artist_row(artist_id)
+        self.library()?.artist(artist_id)
     }
 
     pub fn artist_albums(
@@ -279,7 +279,7 @@ impl BackendApp {
     }
 
     pub fn track_properties(&self, track_id: TrackId) -> Result<TrackProperties, CommandError> {
-        Ok(self.library()?.track_properties(track_id)?)
+        self.library()?.track_properties(track_id)
     }
 
     /// The track's file, for the Host to show in Explorer.
@@ -288,12 +288,9 @@ impl BackendApp {
         Ok(file.path)
     }
 
-    /// The accent color of stored artwork, computed on first request and cached.
-    pub fn artwork_accent(
-        &self,
-        hash: &ArtworkHash,
-    ) -> Result<Option<String>, LibraryCommandError> {
-        self.library()?.artwork_accent(hash)
+    /// The accent color of the stored image at `path`, computed on first request and cached.
+    pub fn artwork_accent(&self, path: &str) -> Result<Option<String>, CommandError> {
+        self.library()?.artwork_accent(path)
     }
 
     // ---- lyrics ----

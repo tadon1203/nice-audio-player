@@ -1,4 +1,4 @@
--- The Library schema, version 1. There are no migrations: a database with another version is
+-- The Library schema, version 2. There are no migrations: a database with another version is
 -- replaced (library/database.rs).
 
 CREATE TABLE directories (
@@ -31,11 +31,12 @@ CREATE TABLE tracks (
   file_id INTEGER NOT NULL UNIQUE REFERENCES library_files(id) ON DELETE CASCADE
 );
 
-CREATE TABLE artwork_assets (
-  id INTEGER PRIMARY KEY,
-  content_hash TEXT NOT NULL UNIQUE,
-  mime_type TEXT NOT NULL CHECK(mime_type IN ('image/jpeg','image/png')),
-  relative_path TEXT NOT NULL UNIQUE,
+-- An image, stored once per content hash. Its files are `artwork/<shard>/<hash>.<ext>` and, when
+-- `has_thumbnail` is 1, `artwork/<shard>/<hash>.thumb.jpg`; the paths follow from the hash and `mime`.
+CREATE TABLE artwork (
+  hash TEXT PRIMARY KEY,
+  mime TEXT NOT NULL CHECK(mime IN ('image/jpeg','image/png')),
+  has_thumbnail INTEGER NOT NULL CHECK(has_thumbnail IN (0,1)),
   byte_length INTEGER NOT NULL,
   accent TEXT
 );
@@ -62,7 +63,7 @@ CREATE TABLE track_source_metadata (
   bitrate_kbps INTEGER,
   tag_status TEXT NOT NULL CHECK(tag_status IN ('loaded','absent','failed')),
   artwork_status TEXT NOT NULL CHECK(artwork_status IN ('notPresent','unavailable','invalid','stored','storeFailed')),
-  artwork_id INTEGER REFERENCES artwork_assets(id) ON DELETE SET NULL,
+  artwork_hash TEXT REFERENCES artwork(hash) ON DELETE SET NULL,
   title TEXT NOT NULL DEFAULT '',
   artist TEXT NOT NULL DEFAULT '',
   album TEXT NOT NULL DEFAULT '',
@@ -73,8 +74,9 @@ CREATE TABLE track_source_metadata (
   album_sort TEXT NOT NULL DEFAULT '',
   album_artist_sort TEXT NOT NULL DEFAULT '',
   search_text TEXT NOT NULL DEFAULT '',
-  album_directory TEXT NOT NULL DEFAULT '',
-  album_id TEXT NOT NULL DEFAULT ''
+  album_id TEXT NOT NULL DEFAULT '',
+  album_directory_id INTEGER NOT NULL REFERENCES directories(id) ON DELETE CASCADE,
+  album_relative_dir TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE albums (
@@ -82,13 +84,14 @@ CREATE TABLE albums (
   artist_id TEXT NOT NULL,
   title TEXT NOT NULL,
   album_artist TEXT NOT NULL,
-  album_directory TEXT NOT NULL,
+  directory_id INTEGER NOT NULL REFERENCES directories(id) ON DELETE CASCADE,
+  relative_dir TEXT NOT NULL,
   title_sort TEXT NOT NULL,
   album_artist_sort TEXT NOT NULL,
   search_text TEXT NOT NULL,
   year INTEGER,
   track_count INTEGER NOT NULL,
-  cover_artwork_id INTEGER REFERENCES artwork_assets(id) ON DELETE SET NULL
+  cover_artwork_hash TEXT REFERENCES artwork(hash) ON DELETE SET NULL
 );
 
 CREATE TABLE artists (
@@ -98,16 +101,16 @@ CREATE TABLE artists (
   search_text TEXT NOT NULL,
   album_count INTEGER NOT NULL,
   track_count INTEGER NOT NULL,
-  cover_artwork_id INTEGER REFERENCES artwork_assets(id) ON DELETE SET NULL
+  cover_artwork_hash TEXT REFERENCES artwork(hash) ON DELETE SET NULL
 );
 
 CREATE INDEX library_files_directory_seen_idx ON library_files(directory_id, seen_generation);
 CREATE INDEX library_files_directory_availability_idx ON library_files(directory_id, availability);
 CREATE INDEX library_files_identity_idx ON library_files(byte_length, content_hash) WHERE content_hash IS NOT NULL;
-CREATE INDEX track_source_metadata_artwork_idx ON track_source_metadata(artwork_id);
+CREATE INDEX track_source_metadata_artwork_idx ON track_source_metadata(artwork_hash);
 CREATE INDEX track_metadata_duration_idx ON track_source_metadata(duration_ms, track_id);
 CREATE INDEX track_source_metadata_album_idx ON track_source_metadata(album_id);
-CREATE INDEX track_source_metadata_directory_idx ON track_source_metadata(album_directory, album);
+CREATE INDEX track_source_metadata_edition_idx ON track_source_metadata(album_directory_id, album_relative_dir, album);
 CREATE INDEX track_source_metadata_title_idx ON track_source_metadata(title_sort, title, track_id);
 CREATE INDEX track_source_metadata_artist_idx ON track_source_metadata(artist_sort, artist, track_id);
 CREATE INDEX track_source_metadata_album_title_idx ON track_source_metadata(album_sort, album, track_id);

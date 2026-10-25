@@ -219,7 +219,7 @@ mod tests {
     };
     use crate::audio::pcm_queue::{PcmConsumer, bounded_pcm_queue};
     use crate::audio::playback::input::{Inbox, WorkerEvent, WorkerInput};
-    use crate::media::validation::ValidatedAudioFile;
+    use crate::library::media::ValidatedAudioFile;
     use crate::test_support::{TestDirectory, write_pcm_i16_wav};
     use crate::threads::Cancellation;
     use std::sync::mpsc::Receiver;

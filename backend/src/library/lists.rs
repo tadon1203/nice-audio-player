@@ -4,7 +4,7 @@
 //! A page is one query: the filter, then `ORDER BY` with the unknown values last in both
 //! directions, then `LIMIT` and `OFFSET`. `total` counts with the same filter. Tracks are read from
 //! the normalized columns of `track_source_metadata` (see `text.rs`); albums and Album Artists from
-//! their summary tables (see `summary.rs`). An album is found by its ID, which is hashed from its
+//! their summary tables (see `albums.rs`). An album is found by its ID, which is hashed from its
 //! (Album Artist, title, directory) (see `ids.rs`).
 
 use super::models::{
@@ -139,8 +139,8 @@ fn sql_direction(direction: SortDirection) -> &'static str {
 }
 
 /// The columns of a track row, in the order `track_row` reads them.
-const TRACK_COLUMNS: &str = "t.id, m.title, m.artist, m.album, al.album_artist, m.duration_ms, a.content_hash, a.mime_type, f.availability, f.inspection_status, m.album_id, al.artist_id";
-const TRACK_FROM: &str = "FROM track_source_metadata m JOIN tracks t ON t.id = m.track_id JOIN library_files f ON f.id = t.file_id LEFT JOIN artwork_assets a ON a.id = m.artwork_id LEFT JOIN albums al ON al.id = m.album_id";
+const TRACK_COLUMNS: &str = "t.id, m.title, m.artist, m.album, al.album_artist, m.duration_ms, a.hash, a.mime, f.availability, f.inspection_status, m.album_id, al.artist_id, a.has_thumbnail";
+const TRACK_FROM: &str = "FROM track_source_metadata m JOIN tracks t ON t.id = m.track_id JOIN library_files f ON f.id = t.file_id LEFT JOIN artwork a ON a.hash = m.artwork_hash LEFT JOIN albums al ON al.id = m.album_id";
 
 fn track_row(row: &Row<'_>) -> rusqlite::Result<TrackRow> {
     let artist: String = row.get(2)?;
@@ -157,7 +157,7 @@ fn track_row(row: &Row<'_>) -> rusqlite::Result<TrackRow> {
             title: row.get(1)?,
             artist: (!artist.is_empty()).then_some(artist),
             duration_ms: row.get::<_, Option<i64>>(5)?.map(|value| value as u64),
-            artwork: artwork_ref(row.get(6)?, row.get(7)?),
+            artwork: artwork_ref(row.get(6)?, row.get(7)?, row.get(12)?),
         },
         state: track_state(row.get(8)?, row.get(9)?),
         album,
@@ -208,8 +208,8 @@ fn track_index_column(sort: TrackSortKey) -> Option<&'static str> {
 
 /// The columns of an album row, in the order `album_row` reads them.
 const ALBUM_COLUMNS: &str =
-    "al.title, al.album_artist, al.year, a.content_hash, a.mime_type, al.artist_id, al.id";
-const ALBUM_FROM: &str = "FROM albums al LEFT JOIN artwork_assets a ON a.id = al.cover_artwork_id";
+    "al.title, al.album_artist, al.year, a.hash, a.mime, al.artist_id, al.id, a.has_thumbnail";
+const ALBUM_FROM: &str = "FROM albums al LEFT JOIN artwork a ON a.hash = al.cover_artwork_hash";
 
 fn album_row(row: &Row<'_>) -> rusqlite::Result<AlbumRow> {
     Ok(AlbumRow {
@@ -220,7 +220,7 @@ fn album_row(row: &Row<'_>) -> rusqlite::Result<AlbumRow> {
             name: row.get(1)?,
         },
         year: row.get(2)?,
-        artwork: artwork_ref(row.get(3)?, row.get(4)?),
+        artwork: artwork_ref(row.get(3)?, row.get(4)?, row.get(7)?),
     })
 }
 
@@ -278,9 +278,8 @@ fn album_index_column(sort: AlbumSortKey) -> Option<&'static str> {
 
 /// The columns of an Album Artist row, in the order `read_artist` reads them.
 const ARTIST_COLUMNS: &str =
-    "ar.id, ar.name, ar.album_count, ar.track_count, a.content_hash, a.mime_type";
-const ARTIST_FROM: &str =
-    "FROM artists ar LEFT JOIN artwork_assets a ON a.id = ar.cover_artwork_id";
+    "ar.id, ar.name, ar.album_count, ar.track_count, a.hash, a.mime, a.has_thumbnail";
+const ARTIST_FROM: &str = "FROM artists ar LEFT JOIN artwork a ON a.hash = ar.cover_artwork_hash";
 
 fn read_artist(row: &Row<'_>) -> rusqlite::Result<ArtistRow> {
     Ok(ArtistRow {
@@ -288,7 +287,7 @@ fn read_artist(row: &Row<'_>) -> rusqlite::Result<ArtistRow> {
         name: row.get(1)?,
         album_count: row.get::<_, i64>(2)? as u64,
         track_count: row.get::<_, i64>(3)? as u64,
-        artwork: artwork_ref(row.get(4)?, row.get(5)?),
+        artwork: artwork_ref(row.get(4)?, row.get(5)?, row.get(6)?),
     })
 }
 
@@ -346,8 +345,8 @@ fn artist_album_listing(
 /// The tracks of one album, in playing order.
 fn album_track_listing(album: AlbumId) -> Listing {
     Listing {
-        columns: "t.id, m.title, m.artist, m.track_number, m.disc_number, m.file_format, m.bit_depth, m.sample_rate, m.duration_ms, f.availability, f.inspection_status, a.content_hash, a.mime_type",
-        from: "FROM track_source_metadata m JOIN tracks t ON t.id = m.track_id JOIN library_files f ON f.id = t.file_id LEFT JOIN artwork_assets a ON a.id = m.artwork_id",
+        columns: "t.id, m.title, m.artist, m.track_number, m.disc_number, m.file_format, m.bit_depth, m.sample_rate, m.duration_ms, f.availability, f.inspection_status, a.hash, a.mime, a.has_thumbnail",
+        from: "FROM track_source_metadata m JOIN tracks t ON t.id = m.track_id JOIN library_files f ON f.id = t.file_id LEFT JOIN artwork a ON a.hash = m.artwork_hash",
         filter: Filter::default().with("m.album_id = {}", album.to_hex()),
         order: ALBUM_ORDER.to_owned(),
     }
@@ -364,7 +363,7 @@ fn album_track_row(row: &Row<'_>) -> rusqlite::Result<AlbumTrackRow> {
             title: row.get(1)?,
             artist: (!artist.is_empty()).then_some(artist),
             duration_ms: row.get::<_, Option<i64>>(8)?.map(|value| value as u64),
-            artwork: artwork_ref(row.get(11)?, row.get(12)?),
+            artwork: artwork_ref(row.get(11)?, row.get(12)?, row.get(13)?),
         },
         state: track_state(row.get(9)?, row.get(10)?),
         track_number: number(3)?,
@@ -661,7 +660,7 @@ impl Library {
     }
 
     /// One Album Artist's row, by its ID.
-    pub fn artist_row(&self, artist: ArtistId) -> Result<ArtistRow, CommandError> {
+    pub fn artist(&self, artist: ArtistId) -> Result<ArtistRow, CommandError> {
         let connection = self.read()?;
         Ok(connection
             .query_row(
@@ -675,7 +674,7 @@ impl Library {
     }
 
     /// The details of an album by its ID.
-    pub fn album_details(&self, album_id: AlbumId) -> Result<AlbumDetails, CommandError> {
+    pub fn album(&self, album_id: AlbumId) -> Result<AlbumDetails, CommandError> {
         let connection = self.read()?;
         Ok(album_details_of(&connection, album_id)?)
     }

@@ -3,28 +3,27 @@
 //! `Library::open` yields a working Library or the reason it is unavailable, and the app holds
 //! that result. A working Library has two sides that meet only in the database: the read side
 //! (`lists` and `tracks`: the lists, playback selections, track lookups) and the write side
-//! (`sync`: directories, watchers, scanner), reached through the methods below.
+//! (`sync`: directories, watchers, and the scan), reached through the methods below.
 
-pub(crate) mod accent;
+pub(crate) mod albums;
 pub(crate) mod artwork;
 pub(crate) mod database;
 pub(crate) mod directories;
 pub(crate) mod lists;
-pub(crate) mod maintenance;
+pub(crate) mod media;
 pub(crate) mod models;
-pub(crate) mod scanner;
+pub(crate) mod scan;
 #[cfg(test)]
 mod store_tests;
-pub(crate) mod summary;
 pub(crate) mod sync;
 #[cfg(test)]
 mod tests;
 pub(crate) mod text;
 pub(crate) mod tracks;
-pub(crate) mod watcher;
+pub(crate) mod version;
 
 use crate::errors::CommandError;
-use crate::ids::{ArtworkHash, DirectoryId};
+use crate::ids::DirectoryId;
 use crate::state_store::StateStore;
 use database::{Database, DatabaseError, ReadConnection};
 use log::error;
@@ -32,13 +31,11 @@ use models::LibraryDirectory;
 use serde::Serialize;
 use std::{
     path::{Component, Path, PathBuf},
-    sync::{
-        Arc,
-        atomic::{AtomicU64, Ordering},
-    },
+    sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
 };
 use sync::LibrarySync;
+use version::LibraryVersion;
 
 /// Makes an enum a text column: `as_str`, `Display`, `ToSql` and `FromSql` from one table of
 /// names.
@@ -182,49 +179,6 @@ impl From<StoreError> for CommandError {
     }
 }
 
-/// The errors of the Library commands that are not directory commands. Directory commands return
-/// `CommandError` directly.
-#[derive(Debug, Clone, serde::Serialize, specta::Type)]
-#[serde(
-    tag = "code",
-    rename_all = "camelCase",
-    rename_all_fields = "camelCase"
-)]
-pub enum LibraryCommandError {
-    Common { error: CommandError },
-    ScanInProgress,
-    NoEnabledDirectories,
-    ScanAlreadyRunning,
-    ScanNotRunning,
-}
-
-impl From<CommandError> for LibraryCommandError {
-    fn from(error: CommandError) -> Self {
-        Self::Common { error }
-    }
-}
-
-impl From<StoreError> for LibraryCommandError {
-    fn from(error: StoreError) -> Self {
-        Self::Common {
-            error: error.into(),
-        }
-    }
-}
-
-impl From<LibraryCommandError> for CommandError {
-    fn from(error: LibraryCommandError) -> Self {
-        match error {
-            LibraryCommandError::Common { error } => error,
-            LibraryCommandError::ScanInProgress | LibraryCommandError::ScanAlreadyRunning => {
-                Self::ScanAlreadyRunning
-            }
-            LibraryCommandError::ScanNotRunning => Self::ScanNotRunning,
-            LibraryCommandError::NoEnabledDirectories => Self::NoEnabledDirectories,
-        }
-    }
-}
-
 /// A track's file is not where the Library says it is, or not inside its directory.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 #[error("the track's location is unavailable")]
@@ -239,14 +193,6 @@ impl From<Unavailable> for StoreError {
 impl From<Unavailable> for CommandError {
     fn from(_: Unavailable) -> Self {
         Self::TrackUnavailable
-    }
-}
-
-impl From<Unavailable> for LibraryCommandError {
-    fn from(error: Unavailable) -> Self {
-        Self::Common {
-            error: error.into(),
-        }
     }
 }
 
@@ -317,8 +263,8 @@ impl TrackLocation {
 pub(crate) struct Library {
     database: Database,
     sync: Arc<LibrarySync>,
-    /// See [`Library::version`]. Shared with the sync actor, which publishes it with the scan.
-    version: Arc<AtomicU64>,
+    /// See [`Library::version`]. Shared with the sync worker, which advances it on every album rebuild.
+    version: Arc<LibraryVersion>,
 }
 
 impl Library {
@@ -332,7 +278,7 @@ impl Library {
             error!("library.database.unavailable cause={error}");
             LibraryUnavailableReason::DatabaseOpenFailed
         })?;
-        let version = Arc::new(AtomicU64::new(0));
+        let version = Arc::new(LibraryVersion::default());
         let sync = LibrarySync::start(database.clone(), state_store, Arc::clone(&version));
         Ok(Self {
             database,
@@ -341,16 +287,13 @@ impl Library {
         })
     }
 
-    /// The Library version: it changes after every committed change that can alter a list (a
-    /// directory added, enabled, disabled or removed, Missing tracks deleted, a scan finished). A
-    /// list page carries the version it was read at, and the Renderer restarts a list when it
-    /// changes.
+    /// The current [`LibraryVersion`].
     pub(crate) fn version(&self) -> u64 {
-        self.version.load(Ordering::SeqCst)
+        self.version.get()
     }
 
     fn bump_version(&self) {
-        self.version.fetch_add(1, Ordering::SeqCst);
+        self.version.bump();
     }
 
     fn read(&self) -> Result<ReadConnection, StoreError> {
@@ -385,32 +328,29 @@ impl Library {
     }
 
     pub(crate) fn remove_directory(&self, id: DirectoryId) -> Result<(), CommandError> {
-        self.sync.remove_directory(id)?;
-        self.bump_version();
-        Ok(())
+        self.sync.remove_directory(id)
     }
 
     /// Deletes every Missing track from the Library. Source files are never touched.
-    pub(crate) fn delete_missing(&self) -> Result<u64, LibraryCommandError> {
-        let deleted = self.sync.delete_missing()?;
-        self.bump_version();
-        Ok(deleted)
+    pub(crate) fn delete_missing_tracks(&self) -> Result<u32, CommandError> {
+        self.sync.delete_missing_tracks()
     }
 
-    pub(crate) fn start_scan(&self) -> Result<(), LibraryCommandError> {
+    pub(crate) fn start_scan(&self) -> Result<(), CommandError> {
         self.sync.start_scan()
     }
 
-    pub(crate) fn cancel_scan(&self) -> Result<(), LibraryCommandError> {
+    pub(crate) fn cancel_scan(&self) -> Result<(), CommandError> {
         self.sync.cancel_scan()
     }
 
-    /// The accent color of stored artwork, computed on first request and cached.
-    pub(crate) fn artwork_accent(
-        &self,
-        hash: &ArtworkHash,
-    ) -> Result<Option<String>, LibraryCommandError> {
-        Ok(accent::artwork_accent(&self.database, hash)?)
+    /// The accent color of the stored original image at `path` (the path the Renderer holds), computed
+    /// on first request and cached. A path that names no stored image has no accent.
+    pub(crate) fn artwork_accent(&self, path: &str) -> Result<Option<String>, CommandError> {
+        let Some(hash) = artwork::hash_of_original(path) else {
+            return Ok(None);
+        };
+        Ok(artwork::artwork_accent(&self.database, &hash)?)
     }
 
     /// Stops the watchers and any scan in progress, waits for them, and drops the idle read

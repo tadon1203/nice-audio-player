@@ -4,19 +4,24 @@ import { ArtworkUrl } from "./artwork-url";
 
 describe("ArtworkUrl.of", () => {
   const hash = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
-  const jpeg: ArtworkRef = { hash, mimeType: "jpeg" };
-  const png: ArtworkRef = { hash, mimeType: "png" };
-  const origin = "http://nice-artwork.localhost/artwork/ab";
+  const origin = "http://nice-artwork.localhost";
+  const withThumbnail: ArtworkRef = {
+    path: `artwork/ab/${hash}.jpg`,
+    thumbPath: `artwork/ab/${hash}.thumb.jpg`,
+  };
+  const withoutThumbnail: ArtworkRef = {
+    path: `artwork/ab/${hash}.png`,
+    thumbPath: `artwork/ab/${hash}.png`,
+  };
 
-  it("maps the full level to the original, with the extension of its MIME type", () => {
-    expect(ArtworkUrl.of(jpeg, "full")).toBe(`${origin}/${hash}.jpg`);
-    expect(ArtworkUrl.of(png, "full")).toBe(`${origin}/${hash}.png`);
+  it("maps the full level to the original", () => {
+    expect(ArtworkUrl.of(withThumbnail, "full")).toBe(`${origin}/artwork/ab/${hash}.jpg`);
+    expect(ArtworkUrl.of(withoutThumbnail, "full")).toBe(`${origin}/artwork/ab/${hash}.png`);
   });
 
-  it("maps the thumb level to the thumbnail, whatever the original's type", () => {
-    const thumb = `${origin}/${hash}.thumb.jpg`;
-    expect(ArtworkUrl.of(jpeg, "thumb")).toBe(thumb);
-    expect(ArtworkUrl.of(png, "thumb")).toBe(thumb);
+  it("maps the thumb level to the thumbnail, or to the original when there is none", () => {
+    expect(ArtworkUrl.of(withThumbnail, "thumb")).toBe(`${origin}/artwork/ab/${hash}.thumb.jpg`);
+    expect(ArtworkUrl.of(withoutThumbnail, "thumb")).toBe(`${origin}/artwork/ab/${hash}.png`);
   });
 
   it("returns null when there is no artwork", () => {

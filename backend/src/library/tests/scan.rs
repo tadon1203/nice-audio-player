@@ -3,17 +3,18 @@
 use crate::library::database::Database;
 use crate::library::directories;
 use crate::library::models::{ScanFailure, ScanState, ScanStatus};
+use crate::library::version::LibraryVersion;
 use crate::messages::Versioned;
 use crate::test_support::{TestDirectory, null_notifier, state_store_for_tests, write_pcm_i16_wav};
+use crate::threads::Cancellation;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicU64};
 
 pub(super) struct Fixture {
     _directory: TestDirectory,
     pub(super) music: PathBuf,
     pub(super) database: Database,
     /// The Library version the scans advance.
-    pub(super) version: AtomicU64,
+    pub(super) version: LibraryVersion,
 }
 
 pub(super) fn fixture() -> Fixture {
@@ -27,7 +28,7 @@ pub(super) fn fixture() -> Fixture {
         _directory: directory,
         music,
         database,
-        version: AtomicU64::new(0),
+        version: LibraryVersion::default(),
     }
 }
 
@@ -56,7 +57,7 @@ fn run_versioned(
     let directories = directories::list(&fixture.database.read().unwrap()).expect("directories");
     let jobs: Vec<_> = directories
         .into_iter()
-        .map(|directory| crate::library::scanner::ScanJob {
+        .map(|directory| crate::library::scan::ScanJob {
             directory,
             dirs: dirs.map(<[PathBuf]>::to_vec),
         })
@@ -66,12 +67,16 @@ fn run_versioned(
         state: ScanStatus::Running,
         ..ScanState::idle()
     });
-    crate::library::scanner::run(
+    let cancellation = Cancellation::default();
+    if cancelled {
+        cancellation.cancel();
+    }
+    crate::library::scan::run(
         &fixture.database,
         &jobs,
         &state_store,
         &fixture.version,
-        &AtomicBool::new(cancelled),
+        &cancellation,
     );
 
     state_store.scan()
@@ -503,7 +508,11 @@ fn a_deleted_file_stays_missing_until_the_listener_deletes_it() {
     );
     assert_eq!(files(&fixture)[0].1, "missing", "gone.wav sorts first");
 
-    let deleted = directories::delete_missing(&fixture.database).unwrap();
+    let deleted = directories::delete_missing(
+        &fixture.database,
+        &crate::library::version::LibraryVersion::default(),
+    )
+    .unwrap();
 
     assert_eq!(deleted, 1);
     let directories = directories::list(&fixture.database.read().unwrap()).unwrap();
@@ -599,7 +608,7 @@ fn a_removed_directory_is_found_through_its_nearest_existing_parent() {
 }
 
 #[test]
-fn every_scan_end_advances_the_library_version() {
+fn every_album_rebuild_advances_the_library_version() {
     let fixture = fixture();
     write_tone(&fixture.music.join("a.wav"), 8_000);
 
@@ -613,8 +622,8 @@ fn every_scan_end_advances_the_library_version() {
             second.library_version,
             cancelled.library_version
         ),
-        (1, 2, 3),
-        "a scan that ends, however it ends, is a change the lists must see"
+        (1, 2, 2),
+        "a directory's scan ends with a rebuild; a scan cancelled before it reads anything rebuilds nothing"
     );
 }
 
@@ -639,8 +648,8 @@ fn albums(fixture: &Fixture) -> Vec<(String, String, String, i64)> {
     let connection = fixture.database.read().unwrap();
     let mut statement = connection
         .prepare(
-            "SELECT album_artist, title, album_directory, track_count FROM albums
-             ORDER BY album_directory, album_artist",
+            "SELECT album_artist, title, relative_dir, track_count FROM albums
+             ORDER BY relative_dir, album_artist",
         )
         .unwrap();
 
@@ -688,10 +697,10 @@ fn tracks_of_one_directory_and_album_with_different_artists_are_a_compilation() 
     assert_eq!(
         albums(&fixture),
         vec![
-            ("Various Artists".into(), "Hits".into(), "1/Hits".into(), 3),
-            ("Y".into(), "Double".into(), "1/Multi".into(), 2),
-            ("X".into(), "Record".into(), "1/Solo".into(), 2),
-            ("X".into(), "Record".into(), "1/Solo Remaster".into(), 1),
+            ("Various Artists".into(), "Hits".into(), "Hits".into(), 3),
+            ("Y".into(), "Double".into(), "Multi".into(), 2),
+            ("X".into(), "Record".into(), "Solo".into(), 2),
+            ("X".into(), "Record".into(), "Solo Remaster".into(), 1),
         ],
         "one compilation, one two-disc album, and two printings of the same title and artist"
     );
@@ -712,9 +721,13 @@ fn tracks_of_one_directory_and_album_with_different_artists_are_a_compilation() 
     std::fs::remove_file(fixture.music.join("Hits").join("3.wav")).unwrap();
     std::fs::remove_file(fixture.music.join("Hits").join("2.wav")).unwrap();
     run_scan(&fixture, false);
-    directories::delete_missing(&fixture.database).unwrap();
+    directories::delete_missing(
+        &fixture.database,
+        &crate::library::version::LibraryVersion::default(),
+    )
+    .unwrap();
     let after = albums(&fixture);
-    assert_eq!(after[0], ("A".into(), "Hits".into(), "1/Hits".into(), 1));
+    assert_eq!(after[0], ("A".into(), "Hits".into(), "Hits".into(), 1));
 }
 
 #[test]
@@ -756,4 +769,75 @@ fn sort_order_tags_win_over_derived_sort_keys() {
             ("ユズ".to_owned(), "ゆず".to_owned()),
         ]
     );
+}
+
+#[test]
+fn a_rescan_updates_the_track_and_album_names() {
+    use lofty::tag::ItemKey::{AlbumTitle, TrackArtist, TrackTitle};
+    let fixture = fixture();
+    let path = fixture.music.join("a.wav");
+    tagged_tone(
+        &path,
+        8_000,
+        &[
+            (TrackTitle, "Old title"),
+            (TrackArtist, "Artist"),
+            (AlbumTitle, "Old album"),
+        ],
+    );
+    run_scan(&fixture, false);
+
+    std::thread::sleep(std::time::Duration::from_millis(30));
+    tagged_tone(
+        &path,
+        8_000,
+        &[
+            (TrackTitle, "New title"),
+            (TrackArtist, "Artist"),
+            (AlbumTitle, "New album"),
+        ],
+    );
+    run_scan(&fixture, false);
+
+    assert_eq!(
+        count(
+            &fixture,
+            "SELECT COUNT(*) FROM track_source_metadata WHERE title = 'New title'"
+        ),
+        1
+    );
+    assert_eq!(
+        albums(&fixture)
+            .iter()
+            .map(|album| album.1.as_str())
+            .collect::<Vec<_>>(),
+        ["New album"]
+    );
+}
+
+#[test]
+fn a_file_with_the_tags_of_a_missing_track_but_other_content_is_not_relinked() {
+    use lofty::tag::ItemKey::{AlbumTitle, TrackArtist, TrackTitle};
+    let fixture = fixture();
+    let fields = [
+        (TrackTitle, "Same"),
+        (TrackArtist, "Artist"),
+        (AlbumTitle, "Album"),
+    ];
+    tagged_tone(&fixture.music.join("gone.wav"), 8_000, &fields);
+    run_scan(&fixture, false);
+    std::fs::remove_file(fixture.music.join("gone.wav")).unwrap();
+    tagged_tone(&fixture.music.join("other.wav"), 16_000, &fields);
+
+    run_scan(&fixture, false);
+
+    assert_eq!(
+        count(
+            &fixture,
+            "SELECT COUNT(*) FROM library_files WHERE availability = 'missing'"
+        ),
+        1,
+        "the same tags do not make it the same file"
+    );
+    assert_eq!(count(&fixture, "SELECT COUNT(*) FROM tracks"), 2);
 }

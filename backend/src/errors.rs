@@ -4,7 +4,6 @@
 pub use crate::audio::devices::AudioDeviceListError;
 use crate::audio::playback::PlaybackFailureCode;
 pub use crate::audio::playback::service::PlaybackServiceError;
-pub use crate::library::LibraryCommandError;
 pub use crate::lyrics::LyricsCommandError;
 use std::any::Any;
 use std::panic::{UnwindSafe, catch_unwind};

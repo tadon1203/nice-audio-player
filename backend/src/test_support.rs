@@ -30,6 +30,10 @@ impl TestDirectory {
         Self(path)
     }
 
+    pub(crate) fn path(&self) -> &Path {
+        &self.0
+    }
+
     pub(crate) fn file(&self, name: &str) -> PathBuf {
         self.0.join(name)
     }

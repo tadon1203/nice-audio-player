@@ -12,7 +12,7 @@
    */
   const { playback, appearance, catalog } = AppServices.current();
   const artworkColor = new QueryResult(() =>
-    catalog.accentOptions(playback.item?.artwork?.hash ?? null),
+    catalog.accentOptions(playback.item?.artwork?.path ?? null),
   );
   const accent = $derived(
     appearance.artworkBackdrop ? GlowContrast.readableAccent(artworkColor.data ?? null) : null,

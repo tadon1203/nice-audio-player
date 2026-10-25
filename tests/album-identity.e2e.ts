@@ -8,10 +8,11 @@ const PIXEL = Buffer.from(
   "base64",
 );
 
-const artworkOf = (pair: string): ArtworkRef => ({
-  hash: pair.repeat(32),
-  mimeType: "png",
-});
+const artworkOf = (pair: string): ArtworkRef => {
+  const hash = pair.repeat(32);
+  const path = `artwork/${hash.slice(0, 2)}/${hash}.png`;
+  return { path, thumbPath: `artwork/${hash.slice(0, 2)}/${hash}.thumb.jpg` };
+};
 const printings = [
   {
     id: "a1".repeat(16),
@@ -80,9 +81,7 @@ test("two albums with one title and Album Artist in two directories each open th
     await tiles.nth(index).click();
     const table = page.getByRole("table", { name: "Album tracks" });
     await expect(table.getByText(track, { exact: true })).toBeVisible();
-    await expect
-      .poll(() => requested.includes(`/artwork/${artwork.hash.slice(0, 2)}/${artwork.hash}.png`))
-      .toBe(true);
+    await expect.poll(() => requested.includes(`/${artwork.path}`)).toBe(true);
     for (const other of printings.filter((entry) => entry.track !== track)) {
       await expect(table.getByText(other.track, { exact: true })).toHaveCount(0);
     }

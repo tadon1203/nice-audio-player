@@ -35,8 +35,8 @@ use crate::audio::playback::worker::{PlaybackWorker, WorkerLinks};
 use crate::audio::volume::{AtomicEffectiveGain, VolumeState};
 use crate::errors::CommandError;
 use crate::ids::{PlaybackId, TrackId};
+use crate::library::media::ValidatedAudioFile;
 use crate::library::tracks::PlayableTrack;
-use crate::media::validation::ValidatedAudioFile;
 use crate::messages::{Notification, StateTopic, Versioned};
 use crate::state_store::StateStore;
 use crate::test_support::{

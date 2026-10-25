@@ -3,7 +3,6 @@
   import RollingNumber from "#lib/ui/rolling-number/rolling-number.svelte";
   import { Progress } from "#lib/ui/shadcn/progress/index.js";
   import { CountFormat } from "#lib/utils/count-format";
-  import { ScanStatus } from "./scan-status";
 
   /** The running scan's counters, progress bar and current directory. */
   let { scan }: { scan: ScanState } = $props();
@@ -28,7 +27,11 @@
       </span>
     {/each}
   </div>
-  <Progress class="mt-3" value={ScanStatus.share(scan)} aria-label="Scan progress" />
+  <Progress
+    class="mt-3"
+    value={scan.progress === null ? null : scan.progress * 100}
+    aria-label="Scan progress"
+  />
   {#if scan.currentDirectory}
     <p class="mt-2 truncate text-sm">Current directory: {scan.currentDirectory.path}</p>
   {/if}

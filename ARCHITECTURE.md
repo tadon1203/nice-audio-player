@@ -78,9 +78,9 @@ The Renderer updates its caches and views from these.
 | `src/lib/utils`          | Small helpers with no domain knowledge.                                                                       |
 | `backend/src/app`        | The composition root. It joins the services and holds the cross-domain use cases.                             |
 | `backend/src/audio`      | Playback, the Output stream, the Waveform, the Spectrum, and the Level meter.                                 |
-| `backend/src/library`    | The Library: its database, the Scan, and artwork.                                                             |
+| `backend/src/library`    | The Library: its database, the sync worker, the Scan, the albums, the media files it reads, and artwork.      |
 | `backend/src/lyrics`     | Lyrics parsing and service.                                                                                   |
-| `backend/src/media`      | Reading tags, embedded lyrics, and file checks.                                                               |
+| `backend/src/media`      | Embedded lyrics.                                                                                              |
 | `backend/src`            | Also holds the small modules that serve many domains (settings, messages, state store, errors, threads, ids). |
 | `src-tauri/src/commands` | Host commands, grouped by domain.                                                                             |
 | `src-tauri/src`          | Also holds command registration, message delivery, and the artwork protocol.                                  |

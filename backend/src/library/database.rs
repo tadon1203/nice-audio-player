@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 /// The schema this build reads and writes (`schema.sql`).
-const SCHEMA_VERSION: i32 = 1;
+const SCHEMA_VERSION: i32 = 2;
 const SCHEMA: &str = include_str!("schema.sql");
 /// The tables a database of the current schema holds.
 const TABLES: [&str; 7] = [
@@ -18,7 +18,7 @@ const TABLES: [&str; 7] = [
     "library_files",
     "tracks",
     "track_source_metadata",
-    "artwork_assets",
+    "artwork",
     "albums",
     "artists",
 ];

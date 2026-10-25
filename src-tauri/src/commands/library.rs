@@ -2,11 +2,11 @@ use std::path::PathBuf;
 
 use backend::app::{
     AlbumDetails, AlbumRow, AlbumSortKey, AlbumTrackRow, ArtistAlbumSortKey, ArtistRow,
-    ArtistSortKey, LetterIndexEntry, LibraryDirectory, LibraryStatus, ListRequest, Page,
-    TrackProperties, TrackRow, TrackSortKey,
+    ArtistSortKey, BackendApp, LetterIndexEntry, LibraryDirectory, LibraryStatus, ListRequest,
+    Page, TrackProperties, TrackRow, TrackSortKey,
 };
 use backend::errors::CommandError;
-use backend::ids::{AlbumId, ArtistId, ArtworkHash, DirectoryId, TrackId};
+use backend::ids::{AlbumId, ArtistId, DirectoryId, TrackId};
 
 use super::blocking;
 use crate::{
@@ -82,11 +82,8 @@ pub(crate) async fn library_remove_directory(
 #[specta::specta]
 pub(crate) async fn library_delete_missing_tracks(
     state: tauri::State<'_, AppState>,
-) -> Result<u64, CommandError> {
-    blocking(&state, |backend| {
-        backend.delete_missing_tracks().map_err(CommandError::from)
-    })
-    .await
+) -> Result<u32, CommandError> {
+    blocking(&state, BackendApp::delete_missing_tracks).await
 }
 
 /// Opens the directory holding the log files in the file manager.
@@ -116,10 +113,7 @@ pub(crate) async fn app_open_log_directory(app: tauri::AppHandle) -> Result<(), 
 pub(crate) async fn library_start_scan(
     state: tauri::State<'_, AppState>,
 ) -> Result<(), CommandError> {
-    blocking(&state, |backend| {
-        backend.start_scan().map_err(CommandError::from)
-    })
-    .await
+    blocking(&state, BackendApp::start_scan).await
 }
 
 #[tauri::command]
@@ -127,10 +121,7 @@ pub(crate) async fn library_start_scan(
 pub(crate) async fn library_cancel_scan(
     state: tauri::State<'_, AppState>,
 ) -> Result<(), CommandError> {
-    blocking(&state, |backend| {
-        backend.cancel_scan().map_err(CommandError::from)
-    })
-    .await
+    blocking(&state, BackendApp::cancel_scan).await
 }
 
 #[tauri::command]
@@ -254,11 +245,8 @@ pub(crate) async fn library_reveal_track(
 #[tauri::command]
 #[specta::specta]
 pub(crate) async fn library_artwork_accent(
-    hash: ArtworkHash,
+    path: String,
     state: tauri::State<'_, AppState>,
 ) -> Result<Option<String>, CommandError> {
-    blocking(&state, move |backend| {
-        backend.artwork_accent(&hash).map_err(CommandError::from)
-    })
-    .await
+    blocking(&state, move |backend| backend.artwork_accent(&path)).await
 }

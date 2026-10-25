@@ -230,6 +230,7 @@ impl ScanState {
             state: ScanStatus::Idle,
             current_directory: None,
             expected_count: 0,
+            progress: None,
             discovered_count: 0,
             inspected_count: 0,
             indexed_count: 0,
@@ -258,6 +259,8 @@ pub struct ScanState {
     /// How many files the previous scans left in the scanned directories: what a rescan can expect
     /// to find, so its progress can be shown as a share. 0 when there is no such history.
     pub expected_count: u64,
+    /// The share of the scan done, from 0 to 1. `None` while a first scan has no count to compare with.
+    pub progress: Option<f32>,
     pub discovered_count: u64,
     pub inspected_count: u64,
     pub indexed_count: u64,

@@ -104,7 +104,7 @@ impl TrackResolver {
 pub(super) mod testing {
     use super::*;
     use crate::errors::CommandError;
-    use crate::media::validation::ValidatedAudioFile;
+    use crate::library::media::ValidatedAudioFile;
     use std::sync::{
         Arc,
         atomic::{AtomicBool, AtomicUsize, Ordering},

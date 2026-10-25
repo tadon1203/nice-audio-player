@@ -6,7 +6,6 @@ import {
   type QueryClient,
 } from "@tanstack/svelte-query";
 import {
-  type ArtworkHash,
   type AlbumRow,
   type AlbumSortKey,
   type ArtistRow,
@@ -180,7 +179,7 @@ export class CatalogRepository {
   }
 
   /** Representative artwork color as `#rrggbb`, for backgrounds only. */
-  public accentOptions(hash: ArtworkHash | null): CreateQueryOptions<
+  public accentOptions(path: string | null): CreateQueryOptions<
     string | null,
     Error,
     string | null,
@@ -189,9 +188,9 @@ export class CatalogRepository {
     initialData?: string | InitialDataFunction<string | null> | null | undefined;
   } & QueryKeyWithDataTag<readonly unknown[], string | null, Error> {
     return queryOptions({
-      queryKey: LibraryQueryKeys.accent(hash),
+      queryKey: LibraryQueryKeys.accent(path),
       queryFn:
-        hash === null ? skipToken : (): Promise<string | null> => this.#library.artworkAccent(hash),
+        path === null ? skipToken : (): Promise<string | null> => this.#library.artworkAccent(path),
       staleTime: Infinity,
       gcTime: Infinity,
     });

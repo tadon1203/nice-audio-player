@@ -5,7 +5,8 @@ const ARTWORK_ORIGIN = "http://nice-artwork.localhost";
 
 /**
  * `full` is the original image, for where the Sleeve is the star; `thumb` is its 512px JPEG,
- * for everything else. Until a thumbnail exists the app serves the original at the same URL.
+ * for everything else. The Backend gives the thumbnail's path, which is the original's when no
+ * thumbnail could be made.
  */
 export type ArtworkLevel = "full" | "thumb";
 
@@ -13,9 +14,6 @@ export class ArtworkUrl {
   /** The `nice-artwork` URL of stored artwork at a level. */
   public static of(artwork: ArtworkRef | null | undefined, level: ArtworkLevel): string | null {
     if (!artwork) return null;
-    const shard = artwork.hash.slice(0, 2);
-    if (level === "thumb") return `${ARTWORK_ORIGIN}/artwork/${shard}/${artwork.hash}.thumb.jpg`;
-    const extension = artwork.mimeType === "jpeg" ? "jpg" : "png";
-    return `${ARTWORK_ORIGIN}/artwork/${shard}/${artwork.hash}.${extension}`;
+    return `${ARTWORK_ORIGIN}/${level === "thumb" ? artwork.thumbPath : artwork.path}`;
   }
 }

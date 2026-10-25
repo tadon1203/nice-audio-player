@@ -1,9 +1,6 @@
 use std::path::PathBuf;
 
-use backend::{
-    app::BackendApp,
-    app::{ArtworkCache, ServedArtwork},
-};
+use backend::{app::BackendApp, app::ServedArtwork};
 use tauri::{
     Manager,
     http::{Method, Response, StatusCode, header},
@@ -32,14 +29,10 @@ fn not_found() -> Response<Vec<u8>> {
 }
 
 fn found(served: ServedArtwork) -> Response<Vec<u8>> {
-    let cache_control = match served.cache {
-        ArtworkCache::Immutable => "public, max-age=31536000, immutable",
-        ArtworkCache::Temporary => "no-cache",
-    };
     response(
         StatusCode::OK,
         served.mime_type,
-        cache_control,
+        "public, max-age=31536000, immutable",
         served.bytes,
     )
 }

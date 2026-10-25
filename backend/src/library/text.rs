@@ -144,9 +144,9 @@ pub(crate) struct TrackKeys {
     pub album_artist_sort: String,
     /// The folded names the filter looks in.
     pub search: String,
-    /// Which printing of the album the track is on (see [`album_edition_of`]), `""` for a track
-    /// with no album.
-    pub album_directory: String,
+    /// Which printing of the album the track is on, as a path below its library directory (see
+    /// [`album_edition_of`]), `""` for a track with no album.
+    pub album_relative_dir: String,
     /// The album the track is on (see `AlbumId`); a track with no album has the ID of an empty
     /// title in an empty directory.
     pub album_id: String,
@@ -171,14 +171,15 @@ impl TrackKeys {
         )
     }
 
-    /// All the keys. `album_directory` is the album's edition (see [`album_edition_of`]) and
-    /// `directory_path` the absolute path of its directory. Both are kept only when the track has an album.
+    /// All the keys. `album_relative_dir` is the album's edition (see [`album_edition_of`]) and
+    /// `directory_path` the path of its library directory. Both are kept only when the track has an
+    /// album.
     pub(crate) fn build(
         [title, artist, album, album_artist]: [Option<&str>; 4],
         date: Option<&str>,
         file_name: &str,
         sort: SortTags<'_>,
-        album_directory: &str,
+        album_relative_dir: &str,
         directory_path: &str,
     ) -> Self {
         let title_key = title_key(title, file_name);
@@ -191,15 +192,15 @@ impl TrackKeys {
         } else {
             sort.album_artist
         };
-        let album_directory = if album_key.is_empty() {
+        let album_relative_dir = if album_key.is_empty() {
             String::new()
         } else {
-            album_directory.to_owned()
+            album_relative_dir.to_owned()
         };
         let album_path = if album_key.is_empty() {
             String::new()
         } else {
-            absolute_directory(directory_path, &album_directory)
+            absolute_directory(directory_path, &album_relative_dir)
         };
         let album_id = AlbumId::of(&album_artist_key, &album_key, OsStr::new(&album_path));
         Self {
@@ -208,7 +209,7 @@ impl TrackKeys {
             album_sort: sort_key(&album_key, sort.album),
             album_artist_sort: sort_key(&album_artist_key, album_artist_sort_tag),
             search: track_search_key(&title_key, &artist_key, &album_key, &album_artist_key),
-            album_directory,
+            album_relative_dir,
             album_id: album_id.to_hex(),
             title: title_key,
             artist: artist_key,
@@ -220,7 +221,7 @@ impl TrackKeys {
 }
 
 /// What a track's filter looks in: its title, artist, album and Album Artist, folded. The one
-/// place that lists them, for the scanner and for the compilations that refile a track.
+/// place that lists them, for the Library scan and for the compilations that refile a track.
 pub(crate) fn track_search_key(
     title: &str,
     artist: &str,
@@ -230,10 +231,11 @@ pub(crate) fn track_search_key(
     search_key(&[title, artist, album, album_artist])
 }
 
-/// The printing of an album a file belongs to: its directory, or the directory above it when it is a
-/// disc directory ("CD1", "Disc 2"), so one album on several discs stays one album while the same
-/// title and artist in two directories (an original and a remaster) are two.
-pub(crate) fn album_edition_of(directory_id: i64, relative_path: &str) -> String {
+/// The printing of an album a file belongs to, as the path of its directory below the library
+/// directory: the directory of the file, or the directory above it when it is a disc directory
+/// ("CD1", "Disc 2"), so one album on several discs stays one album while the same title and artist
+/// in two directories (an original and a remaster) are two.
+pub(crate) fn album_edition_of(relative_path: &str) -> String {
     let directory = relative_path
         .rsplit_once('/')
         .map_or("", |(directory, _)| directory);
@@ -242,17 +244,14 @@ pub(crate) fn album_edition_of(directory_id: i64, relative_path: &str) -> String
         None if is_disc_directory(directory) => "",
         _ => directory,
     };
-    format!("{directory_id}/{directory}")
+    directory.to_owned()
 }
 
-/// The absolute directory of an album edition: the library directory's path, `/`, then the album directory
-/// below it. `/` is written on every platform, so the text is the same in Rust and in SQL
+/// The absolute path of an album edition: the library directory's path, `/`, then the edition's
+/// path below it. `/` is written on every platform, so the text is the same in Rust and in SQL
 /// (`album_id()` joins them the same way).
-pub(crate) fn absolute_directory(directory_path: &str, album_directory: &str) -> String {
-    let relative = album_directory
-        .split_once('/')
-        .map_or("", |(_, relative)| relative);
-    format!("{directory_path}/{relative}")
+pub(crate) fn absolute_directory(directory_path: &str, relative_dir: &str) -> String {
+    format!("{directory_path}/{relative_dir}")
 }
 
 fn is_disc_directory(name: &str) -> bool {
@@ -476,27 +475,21 @@ mod tests {
 
     #[test]
     fn an_album_edition_is_a_directory_and_a_disc_directory_belongs_to_its_parent() {
+        assert_eq!(album_edition_of("Artist/Album/01.flac"), "Artist/Album");
+        assert_eq!(album_edition_of("Artist/Album/CD1/01.flac"), "Artist/Album");
         assert_eq!(
-            album_edition_of(1, "Artist/Album/01.flac"),
-            "1/Artist/Album"
+            album_edition_of("Artist/Album/Disc 02/01.flac"),
+            "Artist/Album"
+        );
+        assert_eq!(album_edition_of("01.flac"), "");
+        assert_eq!(album_edition_of("CD1/01.flac"), "");
+        assert_eq!(
+            album_edition_of("Artist/Album (2011 Remaster)/01.flac"),
+            "Artist/Album (2011 Remaster)"
         );
         assert_eq!(
-            album_edition_of(1, "Artist/Album/CD1/01.flac"),
-            "1/Artist/Album"
-        );
-        assert_eq!(
-            album_edition_of(1, "Artist/Album/Disc 02/01.flac"),
-            "1/Artist/Album"
-        );
-        assert_eq!(album_edition_of(2, "01.flac"), "2/");
-        assert_eq!(album_edition_of(1, "CD1/01.flac"), "1/");
-        assert_eq!(
-            album_edition_of(1, "Artist/Album (2011 Remaster)/01.flac"),
-            "1/Artist/Album (2011 Remaster)"
-        );
-        assert_eq!(
-            album_edition_of(1, "Artist/CD Collection/01.flac"),
-            "1/Artist/CD Collection"
+            album_edition_of("Artist/CD Collection/01.flac"),
+            "Artist/CD Collection"
         );
     }
 
@@ -510,7 +503,7 @@ mod tests {
                 artist: Some("Band, The"),
                 ..SortTags::default()
             },
-            "1/d",
+            "d",
             "C:/Music",
         );
         assert_eq!(keys.title_sort, "ゆず");
@@ -520,7 +513,7 @@ mod tests {
             "the artist's order carries over"
         );
         assert_eq!(keys.album_sort, "");
-        assert_eq!(keys.album_directory, "", "no album, no album_directory");
+        assert_eq!(keys.album_relative_dir, "", "no album, no album directory");
         assert_eq!(keys.search, "ゆず\u{1f}the band\u{1f}\u{1f}the band");
     }
 
