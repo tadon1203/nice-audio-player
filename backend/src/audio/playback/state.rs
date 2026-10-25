@@ -3,12 +3,11 @@
 
 use super::PlaybackPreferences;
 use super::queue::{PlaybackQueue, QueueEntry, RepeatMode};
-use super::resolver::TrackResolver;
-use super::session::PlayableItem;
 use crate::audio::output::AudioOutputSelection;
 use crate::audio::processing::{ChannelConversion, OutputProcessingPlan};
 use crate::audio::volume::VolumeState;
 use crate::ids::{PlaybackId, QueueItemId, TrackId};
+use crate::library::Library;
 use crate::library::models::NowPlayingTrack;
 use std::sync::Arc;
 
@@ -56,15 +55,6 @@ pub struct QueueItem {
     pub queue_item_id: QueueItemId,
     #[serde(flatten)]
     pub track: NowPlayingTrack,
-}
-
-impl From<&PlayableItem> for QueueItem {
-    fn from(item: &PlayableItem) -> Self {
-        Self {
-            queue_item_id: item.queue_item_id,
-            track: item.track.track.clone(),
-        }
-    }
 }
 
 /// A loaded track: identity plus how it reaches the output device.
@@ -234,13 +224,15 @@ pub const UPCOMING_WINDOW: u32 = 100;
 /// How many already played items the queue state carries (the most recent ones).
 pub(super) const HISTORY_IN_STATE: usize = 50;
 
-/// The rows for `entries`, read in one go: `None` where the library no longer has the track,
-/// or where the library could not be read (the rows are left out of the state only).
-fn rows(entries: &[QueueEntry], tracks: &TrackResolver) -> Vec<Option<QueueItem>> {
+/// The rows for `entries`, read from the library in one query: `None` where the library no longer
+/// has the track, or where there is no library or it cannot be read (the rows are left out of the
+/// state only).
+fn rows(entries: &[QueueEntry], library: Option<&Library>) -> Vec<Option<QueueItem>> {
     let ids: Vec<TrackId> = entries.iter().map(|entry| entry.track_id).collect();
-    let Ok(resolved) = tracks.resolve(&ids) else {
-        return vec![None; entries.len()];
-    };
+    let resolved = library
+        .map(|library| library.playable_tracks(&ids))
+        .and_then(Result::ok)
+        .unwrap_or_else(|| vec![None; ids.len()]);
     entries
         .iter()
         .zip(resolved)
@@ -296,7 +288,7 @@ impl QueueState {
     }
 
     /// Reads the rows of the current item, the last few played and the first upcoming ones.
-    pub fn of(queue: &PlaybackQueue, tracks: &TrackResolver) -> Self {
+    pub(super) fn of(queue: &PlaybackQueue, library: Option<&Library>) -> Self {
         let history = queue.history();
         let shown_history = &history[history.len().saturating_sub(HISTORY_IN_STATE)..];
         let upcoming = queue.upcoming();
@@ -304,7 +296,7 @@ impl QueueState {
         let mut shown: Vec<QueueEntry> = shown_history.to_vec();
         shown.extend(queue.current().cloned());
         shown.extend_from_slice(shown_upcoming);
-        let shown_rows = rows(&shown, tracks);
+        let shown_rows = rows(&shown, library);
         let (history_rows, rest) = shown_rows.split_at(shown_history.len());
         let (current_row, upcoming_rows) = rest.split_at(usize::from(queue.current().is_some()));
         Self {
@@ -321,12 +313,12 @@ impl QueueState {
     /// Upcoming rows from `offset`, at most `limit` (and never more than `UPCOMING_WINDOW`),
     /// read from the library now. Tracks the library no longer has are left out. `version` is
     /// the queue version this state was published with.
-    pub fn window(
+    pub(super) fn window(
         &self,
         version: u64,
         offset: usize,
         limit: usize,
-        tracks: &TrackResolver,
+        library: Option<&Library>,
     ) -> QueueWindow {
         let upcoming = &self.upcoming_entries;
         let start = offset.min(upcoming.len());
@@ -336,7 +328,7 @@ impl QueueState {
         QueueWindow {
             version,
             offset: u32::try_from(start).unwrap_or(u32::MAX),
-            items: rows(&upcoming[start..end], tracks)
+            items: rows(&upcoming[start..end], library)
                 .into_iter()
                 .flatten()
                 .collect(),

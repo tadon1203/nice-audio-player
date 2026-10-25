@@ -24,10 +24,7 @@ pub use crate::lyrics::Lyrics;
 pub use crate::messages::Versioned;
 pub use crate::settings::{Appearance, AppearancePatch};
 
-use crate::audio::{
-    playback::{NoTracks, Player, TrackListener, TrackResolver, TrackSource},
-    waveform::Waveforms,
-};
+use crate::audio::{playback::Player, waveform::Waveforms};
 use crate::errors::CommandError;
 use crate::ids::{AlbumId, ArtistId, DirectoryId, QueueItemId, TrackId};
 use crate::library::{
@@ -38,7 +35,6 @@ use crate::lyrics;
 use crate::messages::{BackendMessage, Notifier, StateTopic};
 use crate::settings::{self, SettingsStore};
 use crate::state_store::StateStore;
-use playback_context::LibraryTracks;
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
@@ -82,26 +78,14 @@ impl BackendApp {
         ));
         let library = Library::open(&data_dir, Arc::clone(&state_store));
         let remember = Arc::clone(&settings);
-        let tracks: Box<dyn TrackSource> = match &library {
-            Ok(library) => Box::new(LibraryTracks(library.clone())),
-            Err(_) => Box::new(NoTracks),
-        };
-        let loaded_waveforms = Arc::clone(&waveforms);
-        let upcoming_waveforms = Arc::clone(&waveforms);
-        let listener = TrackListener {
-            loaded: Arc::new(move |playback_id, track| {
-                loaded_waveforms.loaded(playback_id, track);
-            }),
-            upcoming: Arc::new(move |track| upcoming_waveforms.upcoming(track)),
-        };
         let meter = Meter::new();
         let playback = Player::start(
+            library.clone().ok().map(Arc::new),
             Arc::clone(&state_store),
             meter.clone(),
+            Arc::clone(&waveforms),
             settings.playback_preferences(),
-            Arc::new(move |preferences| remember.record_playback(preferences)),
-            Arc::new(TrackResolver::new(tracks)),
-            listener,
+            move |preferences| remember.record_playback(preferences.clone()),
             output,
         )
         .inspect_err(|cause| log::warn!("app.playback.start_failed cause={cause}"))

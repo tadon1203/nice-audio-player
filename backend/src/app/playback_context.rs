@@ -5,14 +5,8 @@
 
 use serde::Deserialize;
 
-use crate::audio::playback::TrackSource;
-use crate::errors::CommandError;
-use crate::ids::{AlbumId, TrackId};
-use crate::library::{
-    Library,
-    models::{SortDirection, TrackSortKey},
-    tracks::PlayableTrack,
-};
+use crate::ids::AlbumId;
+use crate::library::models::{SortDirection, TrackSortKey};
 
 #[derive(Debug, Clone, Deserialize, specta::Type)]
 #[serde(
@@ -29,13 +23,4 @@ pub enum PlaybackContext {
         sort: TrackSortKey,
         direction: SortDirection,
     },
-}
-
-/// The library as the playback queue reads its tracks.
-pub(crate) struct LibraryTracks(pub Library);
-
-impl TrackSource for LibraryTracks {
-    fn tracks(&self, track_ids: &[TrackId]) -> Result<Vec<Option<PlayableTrack>>, CommandError> {
-        self.0.playable_tracks(track_ids)
-    }
 }

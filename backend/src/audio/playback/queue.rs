@@ -3,7 +3,7 @@
 //! queued".
 //!
 //! The queue holds track ids, not tracks: what an entry looks like is read when it is needed
-//! (see `resolver`). The arranged order is the one source of truth for what is queued and how
+//! (see `QueueState` in `state.rs`). The arranged order is the one source of truth for what is queued and how
 //! the listener arranged it. Shuffle is only a second list, the order the entries play in;
 //! turning it off drops that list, so nothing can be lost or reordered by having shuffled.
 
@@ -217,31 +217,6 @@ impl PlaybackQueue {
             }
             None => edit_order(&mut self.arranged, |arranged| arranged.truncate(keep)),
         }
-        true
-    }
-
-    /// Removes the entries with these ids, wherever they are. The current position follows the
-    /// entries before it; if the current entry itself goes, the one after it becomes current
-    /// (and none is current when it was the last).
-    pub fn remove_entries(&mut self, ids: &HashSet<QueueItemId>) -> bool {
-        let order = self.play_order();
-        if !order.iter().any(|entry| ids.contains(&entry.id)) {
-            return false;
-        }
-        let position = self.position();
-        let before = order[..position]
-            .iter()
-            .filter(|entry| ids.contains(&entry.id))
-            .count();
-        edit_order(&mut self.arranged, |arranged| {
-            arranged.retain(|entry| !ids.contains(&entry.id));
-        });
-        if let Some(shuffled) = &mut self.shuffled {
-            edit_order(shuffled, |order| {
-                order.retain(|entry| !ids.contains(&entry.id));
-            });
-        }
-        self.set_position(position - before);
         true
     }
 
@@ -942,34 +917,13 @@ mod tests {
     }
 
     #[test]
-    fn removing_entries_keeps_the_current_position_on_the_same_item() {
-        let mut queue = queue_of(6, 3, RepeatMode::Off, false);
-        let gone: HashSet<QueueItemId> = [item_id(&queue, 1), item_id(&queue, 6)]
-            .into_iter()
-            .collect();
-        assert!(queue.remove_entries(&gone));
-        assert_eq!(current(&queue), 4);
-        assert_eq!(order(&queue), [2, 3, 4, 5]);
-        assert!(!queue.remove_entries(&gone));
-
-        // Removing the current entry makes the one after it current.
-        let current_id: HashSet<QueueItemId> = [item_id(&queue, 4)].into();
-        assert!(queue.remove_entries(&current_id));
-        assert_eq!(current(&queue), 5);
-        let last: HashSet<QueueItemId> = [item_id(&queue, 5)].into();
-        assert!(queue.remove_entries(&last));
-        assert!(queue.current().is_none(), "nothing follows the last entry");
-    }
-
-    #[test]
     fn nothing_current_stays_nothing_current_across_shuffle() {
         let mut queue = queue_of(2, 1, RepeatMode::Off, false);
-        queue.remove_entries(&HashSet::from([item_id(&queue, 2)]));
+        queue.clear();
         assert!(queue.current().is_none());
 
         queue.set_shuffle(true, &mut rng());
         assert!(queue.current().is_none());
-        assert_eq!(order(&queue), [1]);
 
         queue.set_shuffle(false, &mut rng());
         assert!(queue.current().is_none());

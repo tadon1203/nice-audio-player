@@ -168,29 +168,19 @@ fn previous_goes_back_to_the_last_track_when_it_has_just_started() {
 }
 
 #[test]
-fn the_listener_hears_each_load_as_a_new_playback() {
+fn each_load_is_a_new_playback() {
     let fixture = Fixture::with(&clips(&["a", "b"]));
     let first = fixture
         .player
         .play_queue(fixture.ids(&["a", "b"]), 0)
         .unwrap()
         .value;
-    fixture.player.next().unwrap();
+    let next = fixture.player.next().unwrap().value;
     let back = fixture.player.previous().unwrap().value;
 
-    let loaded: Vec<_> = fixture
-        .heard()
-        .into_iter()
-        .filter_map(|heard| match heard {
-            Heard::Loaded(id, title) => Some((id, title)),
-            Heard::Upcoming(_) => None,
-        })
-        .collect();
-    let titles: Vec<_> = loaded.iter().map(|(_, title)| title.as_str()).collect();
-    assert_eq!(titles, ["a", "b", "a"]);
-    assert_eq!(loaded[0].0, session(&first).playback_id);
-    assert_eq!(loaded[2].0, session(&back).playback_id);
-    assert_ne!(loaded[0].0, loaded[2].0, "a second load is a new playback");
+    assert!(is_playing(&back, "a"));
+    assert_ne!(session(&first).playback_id, session(&next).playback_id);
+    assert_ne!(session(&first).playback_id, session(&back).playback_id);
 }
 
 #[test]

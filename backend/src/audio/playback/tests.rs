@@ -12,21 +12,19 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::app::playback_context::LibraryTracks;
 use crate::audio::fake_output::FakeOutput;
 use crate::audio::meter::Meter;
 use crate::audio::output::{AudioOutputSelection, OutputError, StreamFailureKind};
+use crate::audio::playback::PlaybackPreferences;
 use crate::audio::playback::Player;
-use crate::audio::playback::TrackListener;
-use crate::audio::playback::preferences::PlaybackPreferences;
-use crate::audio::playback::queue::RepeatMode;
-use crate::audio::playback::resolver::TrackResolver;
+use crate::audio::playback::RepeatMode;
 use crate::audio::playback::state::{
     CurrentPlayback, PlaybackChannelConversion, PlaybackFailureCode, PlaybackState, QueueState,
     StartedBy,
 };
+use crate::audio::waveform::Waveforms;
 use crate::errors::CommandError;
-use crate::ids::{PlaybackId, TrackId};
+use crate::ids::TrackId;
 use crate::library::Library;
 use crate::library::models::{ListRequest, SortDirection, TrackSortKey};
 use crate::messages::StateTopic;
@@ -67,13 +65,6 @@ impl Clip {
     }
 }
 
-/// What the Player told its listener, in order.
-#[derive(Debug, Clone, PartialEq)]
-enum Heard {
-    Loaded(PlaybackId, String),
-    Upcoming(String),
-}
-
 struct Fixture {
     player: Player,
     library: Library,
@@ -81,7 +72,6 @@ struct Fixture {
     state_store: Arc<StateStore>,
     notifications: Arc<NotificationLog>,
     preferences: Arc<Mutex<Vec<PlaybackPreferences>>>,
-    heard: Arc<Mutex<Vec<Heard>>>,
     /// The track of each clip, by name.
     ids: HashMap<&'static str, TrackId>,
     /// The music directory and the data directory; kept alive for the test.
@@ -120,26 +110,17 @@ impl Fixture {
         let output = FakeOutput::new();
         let preferences = Arc::new(Mutex::new(Vec::new()));
         let observed = Arc::clone(&preferences);
-        let heard = Arc::new(Mutex::new(Vec::new()));
-        let loaded_heard = Arc::clone(&heard);
-        let upcoming_heard = Arc::clone(&heard);
-        let listener = TrackListener {
-            loaded: Arc::new(move |playback_id, track| {
-                let title = track.track.core.title.clone();
-                loaded_heard.lock().push(Heard::Loaded(playback_id, title));
-            }),
-            upcoming: Arc::new(move |track| {
-                let title = track.track.core.title.clone();
-                upcoming_heard.lock().push(Heard::Upcoming(title));
-            }),
-        };
+        let waveforms = Arc::new(Waveforms::start(
+            files.file("waveforms"),
+            Arc::clone(&state_store),
+        ));
         let player = Player::start(
+            Some(Arc::new(library.clone())),
             Arc::clone(&state_store),
             Meter::new(),
+            waveforms,
             PlaybackPreferences::default(),
-            Arc::new(move |preferences| observed.lock().push(preferences)),
-            Arc::new(TrackResolver::new(Box::new(LibraryTracks(library.clone())))),
-            listener,
+            move |preferences| observed.lock().push(preferences.clone()),
             Box::new(output.clone()),
         )
         .expect("the player starts");
@@ -151,7 +132,6 @@ impl Fixture {
             state_store,
             notifications,
             preferences,
-            heard,
             ids,
             _files: files,
         }
@@ -186,10 +166,6 @@ impl Fixture {
             .chain(queue.upcoming)
             .map(|item| item.track.core.title)
             .collect()
-    }
-
-    fn heard(&self) -> Vec<Heard> {
-        self.heard.lock().clone()
     }
 
     /// Waits until the published state satisfies `done`.
@@ -284,6 +260,7 @@ fn session(state: &PlaybackState) -> &CurrentPlayback {
 
 mod failures;
 mod gapless;
+mod loading;
 mod output;
 mod preferences;
 mod queue;

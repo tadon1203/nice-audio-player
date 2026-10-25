@@ -5,80 +5,86 @@
 //! This file is all the rest of the application sees of playback. Its modules are private.
 
 use parking_lot::{Mutex, RwLock};
+use serde::{Deserialize, Serialize};
 use std::io;
 use std::sync::{
     Arc,
-    mpsc::{self, SyncSender},
+    mpsc::{self, Sender, SyncSender},
 };
 use std::thread::{self, JoinHandle};
 
 use crate::audio::meter::Meter;
 use crate::audio::output::{AudioOutputSelection, OutputStreamFactory};
-use crate::audio::volume::{AtomicEffectiveGain, NormalizedVolume, VolumeState};
+use crate::audio::volume::{
+    AtomicEffectiveGain, DEFAULT_PLAYBACK_VOLUME, NormalizedVolume, VolumeState,
+};
+use crate::audio::waveform::Waveforms;
 use crate::errors::CommandError;
-use crate::ids::{PlaybackId, QueueItemId, TrackId};
-use crate::library::tracks::PlayableTrack;
+use crate::ids::{QueueItemId, TrackId};
+use crate::library::Library;
 use crate::messages::Versioned;
 use crate::state_store::StateStore;
 use log::{debug, error};
 
-mod decode_worker;
-mod input;
 mod pipeline;
-mod preferences;
 mod queue;
-mod resolver;
-mod session;
-mod source_loader;
 mod state;
 #[cfg(test)]
 mod tests;
+mod transport;
 mod worker;
 
-use input::{Inbox, WorkerInput};
 use queue::PlaybackQueue;
-use worker::{PlaybackWorker, WorkerLinks};
+use worker::{Input, PlaybackWorker, WorkerLinks};
 
-pub(crate) use preferences::{PlaybackPreferences, PreferencesObserver};
 pub use queue::RepeatMode;
-pub(crate) use resolver::{NoTracks, TrackResolver, TrackSource};
 pub use state::{
     PlaybackFailureCode, PlaybackPosition, PlaybackState, QueueState, QueueWindow, UPCOMING_WINDOW,
 };
 
-/// Hears that a track was loaded as the Playback with this id.
-pub(crate) type LoadObserver = Arc<dyn Fn(PlaybackId, &PlayableTrack) + Send + Sync>;
+/// The playback choices that outlive a session: what the listener set, restored at startup.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase", default)]
+pub(crate) struct PlaybackPreferences {
+    pub volume: f32,
+    pub muted: bool,
+    pub output_selection: AudioOutputSelection,
+    pub repeat_mode: RepeatMode,
+    pub shuffle_enabled: bool,
+}
 
-/// Hears that a track is about to play next.
-pub(crate) type UpcomingObserver = Arc<dyn Fn(&PlayableTrack) + Send + Sync>;
-
-/// Hears what the Player does with tracks, without knowing who listens.
-pub(crate) struct TrackListener {
-    pub loaded: LoadObserver,
-    /// Its analysis may start now.
-    pub upcoming: UpcomingObserver,
+impl Default for PlaybackPreferences {
+    fn default() -> Self {
+        Self {
+            volume: DEFAULT_PLAYBACK_VOLUME,
+            muted: false,
+            output_selection: AudioOutputSelection::SystemDefault,
+            repeat_mode: RepeatMode::Off,
+            shuffle_enabled: false,
+        }
+    }
 }
 
 type Reply<T> = SyncSender<Result<T, CommandError>>;
 
-/// Answers a request, if anyone is waiting for the answer. A caller that has gone away is logged,
-/// not an error.
+/// Answers a request, if anyone is waiting for the answer. A caller that has gone away is not an
+/// error.
 fn respond<T>(reply: impl Into<Option<Reply<T>>>, result: Result<T, CommandError>) {
     let reply: Option<Reply<T>> = reply.into();
     if let Some(reply) = reply
         && reply.send(result).is_err()
     {
-        debug!("playback.reply_closed");
+        log::debug!("playback.reply_closed");
     }
 }
 
 /// The one object the application holds to play music. The worker stops when it is dropped or
 /// `shutdown` is called.
 pub(crate) struct Player {
-    inbox: Inbox,
+    inputs: Sender<Input>,
     state_store: Arc<StateStore>,
     position: Arc<RwLock<Option<PlaybackPosition>>>,
-    tracks: Arc<TrackResolver>,
+    library: Option<Arc<Library>>,
     worker: Mutex<Option<JoinHandle<()>>>,
 }
 
@@ -89,39 +95,37 @@ impl Drop for Player {
 }
 
 impl Player {
-    /// Starts the worker with the saved preferences, on the audio output `output_stream_factory` opens
-    /// streams on. Its state goes to `state_store`, which holds `PlaybackState::stopped` until
-    /// the worker sets its first change. `meter` takes the taps of this player's output
-    /// streams. `observer` hears about
-    /// every later change so the caller can persist them; `tracks` is where queue entries get
-    /// their metadata; `listener` hears about each track when it is loaded and when it starts
-    /// opening as the next one.
+    /// Starts the worker with the saved preferences, on the audio output `output_stream_factory`
+    /// opens streams on. Tracks are read from `library`; without one, playing fails with
+    /// `LibraryUnavailable`. Its state goes to `state_store`, which holds `PlaybackState::stopped`
+    /// until the worker sets its first change. `meter` takes the taps of this player's output
+    /// streams, and `waveforms` hears about each track as it is loaded or is about to play.
+    /// `on_preferences` hears about every change so the caller can persist it.
     pub(crate) fn start(
+        library: Option<Arc<Library>>,
         state_store: Arc<StateStore>,
         meter: Meter,
+        waveforms: Arc<Waveforms>,
         preferences: PlaybackPreferences,
-        observer: PreferencesObserver,
-        tracks: Arc<TrackResolver>,
-        listener: TrackListener,
+        on_preferences: impl Fn(&PlaybackPreferences) + Send + Sync + 'static,
         output_stream_factory: Box<dyn OutputStreamFactory>,
     ) -> io::Result<Self> {
-        let (inbox, inputs) = Inbox::channel();
+        let (inputs_sender, inputs) = mpsc::channel();
         let volume_state = VolumeState::restored(preferences.volume, preferences.muted);
         let effective_gain = AtomicEffectiveGain::new(volume_state.effective_gain());
         let output_selection = preferences.output_selection;
         let queue = PlaybackQueue::new(preferences.repeat_mode, preferences.shuffle_enabled);
         let position = Arc::new(RwLock::new(None));
-        let player_tracks = Arc::clone(&tracks);
         let links = WorkerLinks {
             state_store: Arc::clone(&state_store),
             position: Arc::clone(&position),
             effective_gain,
             meter,
-            inbox: inbox.clone(),
-            observer,
+            inbox: inputs_sender.clone(),
+            library: library.clone(),
+            waveforms,
+            on_preferences: Box::new(on_preferences),
             output_stream_factory,
-            tracks,
-            listener,
         };
         let worker = thread::Builder::new()
             .name("worker".into())
@@ -130,10 +134,10 @@ impl Player {
             })
             .inspect_err(|cause| log::warn!("playback.worker.start_failed cause={cause}"))?;
         Ok(Self {
-            inbox,
+            inputs: inputs_sender,
             state_store,
             position,
-            tracks: player_tracks,
+            library,
             worker: Mutex::new(Some(worker)),
         })
     }
@@ -155,7 +159,7 @@ impl Player {
             queue_state.version,
             offset as usize,
             limit as usize,
-            &self.tracks,
+            self.library.as_deref(),
         )
     }
 
@@ -185,8 +189,8 @@ impl Player {
         self.run(PlaybackWorker::resume)
     }
 
-    /// The worker clamps `position_ms` to the duration of the track it has loaded; the clamp is
-    /// not done here, where the loaded track could change before the job arrives.
+    /// The worker clamps `position_ms` to the duration of the track it has loaded; the clamp is not
+    /// done here, where the loaded track could change before the job arrives.
     pub(crate) fn seek(&self, position_ms: u64) -> Result<Versioned<PlaybackState>, CommandError> {
         self.run(move |worker, reply| worker.seek(position_ms, Some(reply)))
     }
@@ -264,7 +268,9 @@ impl Player {
 
     /// Stops the worker and waits for it to finish. Calling it again does nothing.
     pub(crate) fn shutdown(&self) {
-        self.inbox.send(WorkerInput::Shutdown);
+        if self.inputs.send(Input::Shutdown).is_err() {
+            debug!("playback.shutdown_worker_gone");
+        }
         if let Some(worker) = self.worker.lock().take()
             && worker.join().is_err()
         {
@@ -272,16 +278,15 @@ impl Player {
         }
     }
 
-    /// Runs `job` on the worker thread and blocks until it answers, which for a start is after
-    /// the source is loaded and the stream is running. Callers on an async runtime must not
-    /// call this on the runtime itself.
+    /// Runs `job` on the worker thread and blocks until it answers. Callers on an async runtime must
+    /// not call this on the runtime itself.
     fn run<T: Send + 'static>(
         &self,
         job: impl FnOnce(&mut PlaybackWorker, Reply<T>) + Send + 'static,
     ) -> Result<T, CommandError> {
         let (reply_sender, reply_receiver) = mpsc::sync_channel(1);
         let job = Box::new(move |worker: &mut PlaybackWorker| job(worker, reply_sender));
-        if !self.inbox.send(WorkerInput::Run(job)) {
+        if self.inputs.send(Input::Run(job)).is_err() {
             return Err(CommandError::TaskFailed);
         }
         reply_receiver

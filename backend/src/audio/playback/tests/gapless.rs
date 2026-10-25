@@ -100,29 +100,24 @@ fn a_track_of_another_format_reopens_the_stream() {
 }
 
 #[test]
-fn the_listener_hears_the_prefetch_as_upcoming_and_the_gapless_switch_as_a_load() {
+fn the_gapless_switch_is_a_new_playback_on_the_same_stream() {
     let fixture = Fixture::with(&clips(&["a", "b"]));
-    fixture
+    let first = fixture
         .player
         .play_queue(fixture.ids(&["a", "b"]), 0)
-        .unwrap();
+        .unwrap()
+        .value;
     wait_until(|| fixture.output.chained_pipeline().is_some(), WAIT);
 
     fixture.finish();
     fixture.wait_for(|state| is_playing(state, "b"));
 
-    let heard = fixture.heard();
-    let upcoming = heard
-        .iter()
-        .position(|heard| *heard == Heard::Upcoming("b".into()));
-    let loaded = heard
-        .iter()
-        .rposition(|heard| matches!(heard, Heard::Loaded(_, title) if title == "b"));
-    assert!(upcoming.is_some(), "b was heard as upcoming: {heard:?}");
-    assert!(
-        loaded > upcoming,
-        "b was loaded after it was heard as upcoming: {heard:?}"
+    assert_ne!(
+        session(&fixture.state()).playback_id,
+        session(&first).playback_id
     );
+    assert_eq!(fixture.output.streams_opened(), 1);
+    assert_eq!(fixture.output.adoptions(), 1);
 }
 
 #[test]
