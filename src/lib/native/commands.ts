@@ -57,7 +57,7 @@ export const player = {
 export const library = {
   status: areaCommand("library", commands.libraryStatus),
   reset: areaCommand("library", commands.libraryReset),
-  listDirectories: areaCommand("library", commands.libraryListDirectories),
+  listDirectories: areaCommand("library", commands.libraryDirectories),
   addDirectory: areaCommand("library", commands.libraryAddDirectory),
   setDirectoryEnabled: areaCommand("library", commands.librarySetDirectoryEnabled),
   removeDirectory: areaCommand("library", commands.libraryRemoveDirectory),
@@ -99,7 +99,7 @@ export const appearance = {
   update: areaCommand("appearance", commands.appearanceUpdate),
 };
 
-/** The app-wide commands: the one channel to the Renderer, and the log folder. */
+/** The app-wide commands: the one channel to the Renderer, and the log directory. */
 export const app = {
   /** Registers `onMessage`, then resolves to the current value of every topic, as messages. */
   connect: (onMessage: (message: BackendMessage) => void): Promise<BackendMessage[]> =>

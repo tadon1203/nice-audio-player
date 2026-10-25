@@ -18,7 +18,7 @@ use super::{
 };
 use crate::ids::{AlbumId, ArtistId, TrackId, album_id_column, artist_id_column, track_id_column};
 use crate::library::{
-    error::StoreError,
+    StoreError,
     models::{
         AlbumArtistListRequest, AlbumArtistQuery, AlbumDetails, AlbumListRequest, AlbumQuery,
         AlbumRow, AlbumSortKey, AlbumTrackRow, ArtistAlbumSortKey, ArtistRef, ArtistRow,
@@ -176,7 +176,7 @@ fn build_query(
 }
 
 /// The Tracks list: every track, filtered by `search`, in `sort_key` order.
-pub(super) fn tracks_query(
+pub(in crate::library) fn tracks_query(
     search: Option<&str>,
     sort_key: TrackSortKey,
     direction: SortDirection,
@@ -237,7 +237,7 @@ fn album_ordering(sort_key: AlbumSortKey, direction: SortDirection) -> Ordering 
 }
 
 /// The Albums list: one row per album, filtered by `search`.
-pub(super) fn albums_query(
+pub(in crate::library) fn albums_query(
     search: Option<&str>,
     sort_key: AlbumSortKey,
     direction: SortDirection,
@@ -275,7 +275,7 @@ fn album_artist_ordering(sort_key: ArtistSortKey, direction: SortDirection) -> O
 }
 
 /// The Album Artists list: one row per Album Artist, filtered by `search`.
-pub(super) fn album_artists_query(
+pub(in crate::library) fn album_artists_query(
     search: Option<&str>,
     sort_key: ArtistSortKey,
     direction: SortDirection,
@@ -296,7 +296,7 @@ pub(super) fn album_artists_query(
 }
 
 /// The albums of one Album Artist.
-pub(super) fn artist_albums_query(
+pub(in crate::library) fn artist_albums_query(
     artist: ArtistId,
     sort_key: ArtistAlbumSortKey,
     direction: SortDirection,

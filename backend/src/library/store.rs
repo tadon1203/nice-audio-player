@@ -2,21 +2,19 @@
 //! a database alone, so it can be opened (and tested) without the scanner, the watchers or the
 //! sync actor that write to that database.
 
-mod catalog;
-mod paging;
-mod playback;
-#[cfg(test)]
-mod tests;
-mod track;
+pub(super) mod catalog;
+pub(super) mod paging;
+pub(super) mod playback;
+pub(super) mod track;
 
 pub(crate) use playback::{
     PlayableTrack, PlaybackLookupError, PlaybackSelection, PlaybackSourceError,
 };
 
 use super::{
+    StoreError,
     database::{Database, ReadConnection},
     directories,
-    error::StoreError,
     models::LibraryDirectory,
     text,
 };

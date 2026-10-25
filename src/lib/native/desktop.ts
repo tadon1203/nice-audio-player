@@ -34,7 +34,7 @@ export const windowChrome = {
   },
 };
 
-/** Opens the folder dialog. Resolves null when the user closes it. */
+/** Opens the directory dialog. Resolves null when the user closes it. */
 export async function selectDirectory(): Promise<string | null> {
   const selected = await open({ directory: true, multiple: false });
   return typeof selected === "string" ? selected : null;

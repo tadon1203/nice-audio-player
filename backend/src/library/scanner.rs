@@ -129,7 +129,7 @@ fn expected_files(database: &Database, jobs: &[ScanJob]) -> u64 {
         .filter_map(|id| {
             connection
                 .query_row(
-                    "SELECT COUNT(*) FROM library_files WHERE root_id=?1 AND availability='available'",
+                    "SELECT COUNT(*) FROM library_files WHERE directory_id=?1 AND availability='available'",
                     [id],
                     |row| row.get::<_, i64>(0),
                 )

@@ -14,12 +14,13 @@ pub use crate::audio::playback::{
     PlaybackState, QueueState, QueueWindow, RepeatMode, StartedBy,
 };
 pub use crate::audio::waveform::PlaybackWaveform;
+pub use crate::library::LibraryStatus;
 pub use crate::library::artwork::{ArtworkCache, ArtworkRef, ServedArtwork};
 pub use crate::library::models::{
     AlbumArtistListRequest, AlbumArtistQuery, AlbumDetails, AlbumListRequest, AlbumQuery, AlbumRow,
     AlbumTracksRequest, ArtistAlbumsRequest, ArtistRow, LibraryAlbumArtistPage, LibraryAlbumPage,
-    LibraryAlbumTrackPage, LibraryDirectory, LibraryStatus, LibraryTrackPage, ScrollIndexBucket,
-    SortDirection, TrackListRequest, TrackProperties, TrackQuery, TrackRow, TrackSortKey,
+    LibraryAlbumTrackPage, LibraryDirectory, LibraryTrackPage, ScrollIndexBucket, SortDirection,
+    TrackListRequest, TrackProperties, TrackQuery, TrackRow, TrackSortKey,
 };
 pub use crate::lyrics::LyricsResolution;
 pub use crate::messages::Versioned;
@@ -36,10 +37,8 @@ use crate::audio::{
 use crate::errors::CommandError;
 use crate::ids::{AlbumId, ArtistId, ArtworkHash, DirectoryId, QueueItemId, TrackId};
 use crate::library::{
-    Library,
+    Library, LibraryCommandError, LibraryUnavailableReason, StoreError,
     artwork::{self},
-    error::{LibraryCommandError, StoreError},
-    models::LibraryUnavailableReason,
 };
 use crate::lyrics::{LyricsCommandError, LyricsService, model::LyricsTrackContext};
 use crate::messages::{BackendMessage, SharedMessageListener, StateTopic};
@@ -184,42 +183,33 @@ impl BackendApp {
         }
     }
 
-    /// Asks for the library database to be moved to a `.bak` file and recreated, which happens at
-    /// the next start (the caller restarts the app). The tracks are found again by the rescan that
-    /// start-up does.
-    pub fn request_library_reset(&self) -> Result<(), LibraryCommandError> {
-        crate::library::database::request_reset(&self.data_dir).map_err(|cause| {
-            log::error!("library.database.reset_request_failed cause={cause}");
-            LibraryCommandError::Common {
-                error: CommandError::PersistenceFailed,
-            }
-        })
+    /// Stops the Library, then deletes its database and artwork and creates an empty database. The
+    /// caller restarts the app, and the next start rescans the directories.
+    pub fn reset_library(&self) -> Result<(), CommandError> {
+        if let Ok(library) = &self.library {
+            library.shutdown();
+        }
+        crate::library::database::reset(&self.data_dir).map_err(|_| CommandError::PersistenceFailed)
     }
 
-    pub fn list_directories(&self) -> Result<Vec<LibraryDirectory>, LibraryCommandError> {
+    pub fn list_directories(&self) -> Result<Vec<LibraryDirectory>, CommandError> {
         self.library()?.directories()
     }
 
-    /// Registers a directory as a directory. A path that is not valid Unicode cannot be stored, so it is
-    /// refused rather than changed.
-    pub fn add_directory(&self, path: PathBuf) -> Result<LibraryDirectory, LibraryCommandError> {
-        let path = path
-            .into_os_string()
-            .into_string()
-            .ok()
-            .ok_or(LibraryCommandError::InvalidDirectory)?;
-        self.library()?.register_directory(path)
+    /// Adds a directory. A path that is not valid Unicode is refused by the Library, not changed.
+    pub fn add_directory(&self, path: PathBuf) -> Result<LibraryDirectory, CommandError> {
+        self.library()?.add_directory(path)
     }
 
     pub fn set_directory_enabled(
         &self,
         id: DirectoryId,
         enabled: bool,
-    ) -> Result<LibraryDirectory, LibraryCommandError> {
+    ) -> Result<(), CommandError> {
         self.library()?.set_directory_enabled(id, enabled)
     }
 
-    pub fn remove_directory(&self, id: DirectoryId) -> Result<(), LibraryCommandError> {
+    pub fn remove_directory(&self, id: DirectoryId) -> Result<(), CommandError> {
         self.library()?.remove_directory(id)
     }
 

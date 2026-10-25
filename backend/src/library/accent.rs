@@ -1,4 +1,4 @@
-use super::{artwork::ArtworkPath, database::Database, error::StoreError};
+use super::{StoreError, artwork::ArtworkPath, database::Database};
 use crate::ids::ArtworkHash;
 use image::{ImageReader, imageops::FilterType};
 use rusqlite::{OptionalExtension, params};

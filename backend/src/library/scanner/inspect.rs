@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use super::discover::DiscoveredFile;
 use crate::errors::contain;
 use crate::library::artwork::{self, StoredArtwork};
-use crate::library::status::{ArtworkStatus, TagStatus};
+use crate::library::{ArtworkStatus, TagStatus};
 use crate::media::{
     inspection::{InspectedAudioFile, Undecodable, inspect_audio_file},
     metadata::{ArtworkRead, SourceMetadata, read_source_metadata},

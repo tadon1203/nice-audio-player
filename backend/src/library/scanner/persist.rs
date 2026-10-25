@@ -7,8 +7,8 @@ use super::discover::DiscoveredFile;
 use super::inspect::{ArtworkOutcome, InspectedFile};
 use crate::library::database::DatabaseError;
 use crate::library::keys::{SortTags, TrackKeys, album_edition_of};
-use crate::library::status::{ArtworkStatus, Availability, InspectionStatus, TagStatus};
 use crate::library::summary::{self, Touched};
+use crate::library::{ArtworkStatus, Availability, InspectionStatus, TagStatus};
 use crate::media::inspection::Undecodable;
 
 const SELECT_EXISTING_FILE: &str = "
@@ -17,7 +17,7 @@ const SELECT_EXISTING_FILE: &str = "
     FROM library_files f
     LEFT JOIN tracks t ON t.file_id = f.id
     LEFT JOIN track_source_metadata m ON m.track_id = t.id AND m.source_revision = f.source_revision
-    WHERE f.root_id = ?1 AND f.relative_path = ?2";
+    WHERE f.directory_id = ?1 AND f.relative_path = ?2";
 
 const TOUCH_FILE: &str = "
     UPDATE library_files SET seen_generation = ?2, availability = ?3 WHERE id = ?1";
@@ -29,7 +29,7 @@ const REVISE_FILE: &str = "
     WHERE id = ?1";
 
 const INSERT_FILE: &str = "
-    INSERT INTO library_files(root_id, relative_path, file_name, extension, modification_key,
+    INSERT INTO library_files(directory_id, relative_path, file_name, extension, modification_key,
                               source_revision, seen_generation, availability, inspection_status,
                               byte_length, content_hash, relink_pending)
     VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6, ?7, ?8, ?9, ?10, ?11)";
@@ -198,7 +198,7 @@ impl LibraryWriter {
     /// Starts a new pass over a directory and returns its generation number.
     pub(super) fn begin_scan(&self, directory_id: i64) -> Persisted<i64> {
         Ok(self.connection.query_row(
-            "UPDATE library_roots SET scan_generation = scan_generation + 1
+            "UPDATE directories SET scan_generation = scan_generation + 1
              WHERE id = ?1 RETURNING scan_generation",
             params![directory_id],
             |row| row.get(0),
@@ -218,7 +218,7 @@ impl LibraryWriter {
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
         let directory_path: String = transaction.query_row(
-            "SELECT path FROM library_roots WHERE id = ?1",
+            "SELECT path FROM directories WHERE id = ?1",
             params![directory_id],
             |row| row.get(0),
         )?;
@@ -278,14 +278,14 @@ impl LibraryWriter {
         for prefix in within.unwrap_or(&whole) {
             gone += self.connection.execute(
                 "UPDATE library_files SET availability = ?3
-                 WHERE root_id = ?1 AND seen_generation < ?2 AND availability <> ?3
+                 WHERE directory_id = ?1 AND seen_generation < ?2 AND availability <> ?3
                    AND substr(relative_path, 1, length(?4)) = ?4",
                 params![directory_id, generation, Availability::Missing, prefix],
             )? as u64;
         }
         if within.is_none() {
             self.connection.execute(
-                "UPDATE library_roots SET last_successful_scan_at_ms = ?2 WHERE id = ?1",
+                "UPDATE directories SET last_successful_scan_at_ms = ?2 WHERE id = ?1",
                 params![directory_id, crate::library::now_ms()],
             )?;
         }

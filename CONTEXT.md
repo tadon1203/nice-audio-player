@@ -16,7 +16,7 @@ The language of Nice Audio Player. Use these terms in code, docs, and tickets. D
 ## Library
 
 - **Library**: the indexed set of tracks from the Library directories.
-- **Library directory**: a music directory the user added to the Library. It can be disabled without being removed. _Avoid_: root, folder.
+- **Library directory**: a music directory the user added to the Library. It can be disabled without being removed.
 - **Library scan**: discovering, inspecting, and indexing files in batches.
 - **Album Artist**: the artist an album is filed under. In code it is called Artist, because the app files nothing under a track's own artist.
 - **Album**: the tracks that share an Album Artist, a title, and a directory. A disc directory counts as the directory above it. Two printings of one album in two directories are two albums.

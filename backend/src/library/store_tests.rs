@@ -1,17 +1,16 @@
 //! The read side over a seeded database: what the catalog lists, how it pages, how playback
 //! selections are resolved.
 
-use super::{
+use super::store::{
     LibraryStore, PlaybackLookupError, PlaybackSourceError,
     catalog::{album_artists_query, albums_query, artist_albums_query, tracks_query},
     paging::PAGE_SIZE,
 };
 use crate::errors::CommandError;
 use crate::library::{
+    StoreError, Unavailable,
     database::Database,
-    error::StoreError,
     keys::{SortTags, TrackKeys, album_edition_of},
-    location::Unavailable,
     models::*,
     summary,
 };
@@ -80,7 +79,7 @@ fn fixture() -> Fixture {
         .write()
         .unwrap()
         .execute(
-            "INSERT INTO library_roots(id,path,enabled,scan_generation) VALUES(1,?1,1,0)",
+            "INSERT INTO directories(id,path,enabled,scan_generation) VALUES(1,?1,1,0)",
             params![music.to_string_lossy()],
         )
         .unwrap();
@@ -118,7 +117,7 @@ impl Fixture {
             );
             transaction
                 .execute(
-                    "INSERT INTO library_files(id,root_id,relative_path,file_name,extension,modification_key,source_revision,seen_generation,availability,inspection_status) VALUES(?1,1,?2,?2,'wav','1',1,1,'available','indexed')",
+                    "INSERT INTO library_files(id,directory_id,relative_path,file_name,extension,modification_key,source_revision,seen_generation,availability,inspection_status) VALUES(?1,1,?2,?2,'wav','1',1,1,'available','indexed')",
                     params![seed.id, file],
                 )
                 .unwrap();
@@ -273,46 +272,6 @@ fn varied_library(fixture: &Fixture) {
                 (id % 6 != 0).then_some(["1990", "2004", "0000", "1975-02"][id as usize % 4]);
             seed.disc = (id % 7 != 0).then_some(id % 2 + 1);
             seed.track = (id % 5 != 0).then_some(id);
-            seed
-        })
-        .collect();
-    fixture.add_all(&seeds);
-}
-
-static STATEMENTS: parking_lot::Mutex<Vec<String>> = parking_lot::Mutex::new(Vec::new());
-
-fn record_statement(sql: &str) {
-    STATEMENTS.lock().push(sql.to_owned());
-}
-
-/// The statements `run` executes on the store's read connection.
-#[expect(
-    deprecated,
-    reason = "`trace_v2` takes a closure-less callback too, and this is all a test needs"
-)]
-fn statements_of(fixture: &Fixture, run: impl FnOnce()) -> Vec<String> {
-    // The pool hands its idle connection to the next read, which is the store's.
-    let mut connection = fixture.database.read().unwrap();
-    connection.connection_mut().trace(Some(record_statement));
-    drop(connection);
-    STATEMENTS.lock().clear();
-    run();
-    let mut connection = fixture.database.read().unwrap();
-    connection.connection_mut().trace(None);
-    drop(connection);
-    std::mem::take(&mut *STATEMENTS.lock())
-}
-
-fn leak(text: String) -> &'static str {
-    Box::leak(text.into_boxed_str())
-}
-
-fn many_albums(fixture: &Fixture) {
-    let seeds: Vec<Seed<'_>> = (1..=250)
-        .map(|id| {
-            let artist = leak(format!("Artist {id:03}"));
-            let mut seed = Seed::new(id, "Song", artist, leak(format!("Album {id:03}")));
-            seed.date = Some(["1990", "2004", "1975-02"][id as usize % 3]);
             seed
         })
         .collect();

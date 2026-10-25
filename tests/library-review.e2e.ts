@@ -200,7 +200,7 @@ test("manages directories and shows scan progress and terminal states", async ({
 }) => {
   const added: LibraryDirectory = { ...testDirectory, id: 2, path: "C:/More Music" };
   let directories = [testDirectory];
-  native.respond("libraryListDirectories", () => directories);
+  native.respond("libraryDirectories", () => directories);
   native.respond("libraryAddDirectory", () => {
     directories = [...directories, added];
     return added;
@@ -209,7 +209,7 @@ test("manages directories and shows scan progress and terminal states", async ({
     directories = directories.map((directory) =>
       directory.id === id ? { ...directory, enabled } : directory,
     );
-    return directories.find((directory) => directory.id === id)!;
+    return null;
   });
   native.respond("libraryRemoveDirectory", ({ id }) => {
     directories = directories.filter((directory) => directory.id !== id);
@@ -264,12 +264,12 @@ test("invalidates mounted library queries after terminal scan events and directo
   library,
 }) => {
   let directories = [testDirectory];
-  native.respond("libraryListDirectories", () => directories);
+  native.respond("libraryDirectories", () => directories);
   native.respond("librarySetDirectoryEnabled", ({ id, enabled }) => {
     directories = directories.map((directory) =>
       directory.id === id ? { ...directory, enabled } : directory,
     );
-    return directories.find((directory) => directory.id === id)!;
+    return null;
   });
   native.respond("libraryListTracks", ({ request: { cursor } }) =>
     pageOf(directories.some((directory) => directory.enabled) ? library.tracks : [], cursor),

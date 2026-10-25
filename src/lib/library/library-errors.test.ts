@@ -7,9 +7,9 @@ describe("LibraryErrors.statusMessage", () => {
   });
 
   it("maps unavailable reasons", () => {
-    expect(LibraryErrors.statusMessage({ status: "unavailable", reason: "databaseCorrupt" })).toBe(
-      "The library database is corrupt.",
-    );
+    expect(
+      LibraryErrors.statusMessage({ status: "unavailable", reason: "databaseOpenFailed" }),
+    ).toBe("The library storage is unavailable.");
   });
 });
 

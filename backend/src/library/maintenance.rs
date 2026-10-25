@@ -2,10 +2,9 @@
 //! uses, and delete files no asset owns.
 
 use super::{
+    ArtworkStatus, StoreError,
     artwork::{self, ArtworkMimeType, ArtworkPath},
     database::Database,
-    error::StoreError,
-    status::ArtworkStatus,
 };
 use rusqlite::params;
 use std::{collections::HashSet, fs, path::Path};
@@ -22,7 +21,7 @@ pub(crate) fn collect_source_artwork(database: &Database) -> Result<Vec<i64>, St
         let transaction = connection.transaction()?;
         for asset_id in broken {
             let mut directories = transaction.prepare(
-                "SELECT DISTINCT f.root_id FROM track_source_metadata m
+                "SELECT DISTINCT f.directory_id FROM track_source_metadata m
                  JOIN tracks t ON t.id = m.track_id
                  JOIN library_files f ON f.id = t.file_id
                  WHERE m.artwork_id = ?1",

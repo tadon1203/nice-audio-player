@@ -3,17 +3,20 @@
 //! scan succeeds.
 
 use crate::library::Library;
+use crate::library::database::Database;
 use crate::library::models::{ScanStatus, SortDirection, TrackSortKey};
 use crate::state_hub::StateHub;
-use crate::test_support::{TestDirectory, hub_for_tests, null_message_listener, write_pcm_i16_wav};
+use crate::test_support::{
+    TestDirectory, hub_for_tests, null_message_listener, wait_until, write_pcm_i16_wav,
+};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 const SETTLE: Duration = Duration::from_secs(10);
 
 struct Harness {
-    _directory: TestDirectory,
+    directory: TestDirectory,
     music: PathBuf,
     library: Library,
     hub: Arc<StateHub>,
@@ -26,25 +29,14 @@ fn harness() -> Harness {
     let hub = hub_for_tests(null_message_listener());
     let library = Library::open(&directory.file("data"), Arc::clone(&hub)).expect("open library");
     library
-        .register_directory(music.to_string_lossy().into_owned())
+        .add_directory(music.clone())
         .expect("register directory");
     Harness {
-        _directory: directory,
+        directory,
         music,
         library,
         hub,
     }
-}
-
-fn wait_until(timeout: Duration, mut condition: impl FnMut() -> bool) -> bool {
-    let deadline = Instant::now() + timeout;
-    while Instant::now() < deadline {
-        if condition() {
-            return true;
-        }
-        std::thread::sleep(Duration::from_millis(25));
-    }
-    condition()
 }
 
 fn write_tone(path: &Path) {
@@ -59,9 +51,17 @@ impl Harness {
             .map_or(0, |page| page.total_count.unwrap_or(0))
     }
 
-    /// How many scans have covered the directory: each one bumps its generation.
-    fn scans_done(&self) -> u64 {
-        self.library.directories().expect("directories")[0].scan_generation
+    /// How many scans have covered the directory: each one bumps its generation in the database.
+    fn scans_done(&self) -> i64 {
+        let database = Database::initialize(&self.directory.file("data")).expect("database");
+        let connection = database.read().unwrap();
+        connection
+            .query_row(
+                "SELECT scan_generation FROM directories WHERE id = 1",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap()
     }
 
     fn scan_state(&self) -> ScanStatus {
@@ -70,8 +70,10 @@ impl Harness {
 
     fn wait_for_first_scan(&self) {
         assert!(
-            wait_until(SETTLE, || self.scans_done() == 1
-                && self.scan_state() == ScanStatus::Completed),
+            wait_until(
+                || self.scans_done() == 1 && self.scan_state() == ScanStatus::Completed,
+                SETTLE
+            ),
             "registering a directory scans it"
         );
     }
@@ -79,7 +81,7 @@ impl Harness {
     /// Starts a scan by hand, waiting out an automatic one that is already running.
     fn scan_by_hand(&self) {
         assert!(
-            wait_until(SETTLE, || self.library.start_scan().is_ok()),
+            wait_until(|| self.library.start_scan().is_ok(), SETTLE),
             "a scan can be started"
         );
     }
@@ -93,7 +95,7 @@ fn a_file_added_while_idle_is_picked_up() {
     write_tone(&harness.music.join("a.wav"));
 
     assert!(
-        wait_until(SETTLE, || harness.track_count() == 1),
+        wait_until(|| harness.track_count() == 1, SETTLE),
         "the Library follows the directory without a manual scan"
     );
 }
@@ -108,7 +110,7 @@ fn a_burst_of_changes_starts_one_scan() {
         std::thread::sleep(Duration::from_millis(20));
     }
 
-    assert!(wait_until(SETTLE, || harness.track_count() == 6));
+    assert!(wait_until(|| harness.track_count() == 6, SETTLE));
     std::thread::sleep(Duration::from_millis(1_500));
     assert_eq!(
         harness.scans_done(),
@@ -126,7 +128,7 @@ fn a_failed_scan_is_reported_until_a_scan_succeeds() {
 
     harness.scan_by_hand();
     assert!(
-        wait_until(SETTLE, || harness.scan_state() == ScanStatus::Failed),
+        wait_until(|| harness.scan_state() == ScanStatus::Failed, SETTLE),
         "an unreadable directory fails the scan"
     );
     for _ in 0..8 {
@@ -141,7 +143,7 @@ fn a_failed_scan_is_reported_until_a_scan_succeeds() {
     std::fs::create_dir_all(&harness.music).unwrap();
     harness.scan_by_hand();
     assert!(
-        wait_until(SETTLE, || harness.scan_state() == ScanStatus::Completed),
+        wait_until(|| harness.scan_state() == ScanStatus::Completed, SETTLE),
         "the next successful scan completes"
     );
 }
@@ -155,7 +157,7 @@ fn removing_a_directory_drops_its_tracks() {
     let id = harness.library.directories().expect("directories")[0].id;
 
     assert!(
-        wait_until(SETTLE, || harness.library.remove_directory(id).is_ok()),
+        wait_until(|| harness.library.remove_directory(id).is_ok(), SETTLE),
         "a directory can be removed once no scan is running"
     );
 

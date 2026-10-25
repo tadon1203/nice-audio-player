@@ -9,11 +9,9 @@ use super::{
 use crate::errors::CommandError;
 use crate::ids::{AlbumId, ArtistId, TrackId, album_id_column, track_id_column};
 use crate::library::{
+    Availability, InspectionStatus, StoreError, TrackLocation,
     artwork::ArtworkRef,
-    error::StoreError,
-    location::TrackLocation,
     models::{NowPlayingAlbum, NowPlayingTrack, TrackCore, TrackQuery, TrackState},
-    status::{Availability, InspectionStatus},
 };
 use crate::media::validation::{ValidatedAudioFile, describe_audio_file, validate_audio_file};
 use rusqlite::{Connection, Row, params};
@@ -148,7 +146,7 @@ type AlbumCounts = HashMap<String, u32>;
 /// The columns every playback query returns, in the order `playback_row` reads them, and what they
 /// are selected from.
 const PLAYBACK_COLUMNS: &str = "t.id, r.path, f.relative_path, f.availability, f.inspection_status, m.title, m.artist, m.album, al.album_artist, m.duration_ms, a.content_hash, a.mime_type, m.track_number, m.disc_number, m.year, m.file_format, m.bit_depth, m.bitrate_kbps, f.content_hash, m.album_id, al.artist_id";
-const PLAYBACK_FROM: &str = "FROM track_source_metadata m JOIN tracks t ON t.id = m.track_id JOIN library_files f ON f.id = t.file_id JOIN library_roots r ON r.id = f.root_id LEFT JOIN artwork_assets a ON a.id = m.artwork_id LEFT JOIN albums al ON al.id = m.album_id";
+const PLAYBACK_FROM: &str = "FROM track_source_metadata m JOIN tracks t ON t.id = m.track_id JOIN library_files f ON f.id = t.file_id JOIN directories r ON r.id = f.directory_id LEFT JOIN artwork_assets a ON a.id = m.artwork_id LEFT JOIN albums al ON al.id = m.album_id";
 
 fn playback_row(row: &Row<'_>) -> rusqlite::Result<PlaybackRow> {
     let directory: String = row.get(1)?;

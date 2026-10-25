@@ -78,8 +78,8 @@ test("the properties sheet says a track the library does not hold is not found",
 });
 
 test("shows the structured library unavailable reason", async ({ page, native }) => {
-  native.respond("libraryStatus", { status: "unavailable", reason: "databaseCorrupt" });
+  native.respond("libraryStatus", { status: "unavailable", reason: "databaseOpenFailed" });
   await page.goto("/library/albums");
 
-  await expect(page.getByRole("alert")).toContainText("The library database is corrupt.");
+  await expect(page.getByRole("alert")).toContainText("The library storage is unavailable.");
 });

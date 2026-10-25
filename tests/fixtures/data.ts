@@ -31,7 +31,7 @@ export const testDirectory: LibraryDirectory = {
   id: 1,
   path: "C:/Music",
   enabled: true,
-  scanGeneration: 0,
+
   lastSuccessfulScanAtMs: null,
   trackCount: 0,
   missingCount: 0,
@@ -162,7 +162,7 @@ export function testLibrary(
 /** Pages exactly as given: a search or sort the test cares about replaces the command. */
 export function libraryResponses(library: LibraryData = testLibrary()): Record<string, unknown> {
   return {
-    libraryListDirectories: library.directories,
+    libraryDirectories: library.directories,
     libraryListTracks: ({
       request,
     }: {

@@ -1,7 +1,7 @@
 //! Artwork storage: content-addressed files under the application data directory, and the
 //! reference the catalog and playback items hand to the renderer.
 
-use super::status::sql_text_enum;
+use super::sql_text_enum;
 use crate::ids::{ArtworkHash, is_artwork_hash};
 use image::{ImageReader, codecs::jpeg::JpegEncoder, imageops::FilterType};
 use serde::Serialize;

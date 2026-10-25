@@ -5,7 +5,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use parking_lot::Mutex;
 
@@ -83,6 +83,18 @@ pub(crate) fn write_pcm_i16_wav(
     for sample in interleaved_samples {
         file.write_all(&sample.to_le_bytes()).unwrap();
     }
+}
+
+/// Polls `condition` until it holds or `timeout` passes. Returns whether it held.
+pub(crate) fn wait_until(mut condition: impl FnMut() -> bool, timeout: Duration) -> bool {
+    let deadline = Instant::now() + timeout;
+    while Instant::now() < deadline {
+        if condition() {
+            return true;
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    condition()
 }
 
 /// One call to a listener, in the order it was made.

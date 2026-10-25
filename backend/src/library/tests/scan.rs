@@ -20,7 +20,7 @@ pub(super) fn fixture() -> Fixture {
     std::fs::create_dir_all(&music).unwrap();
     let data = directory.file("data");
     let database = Database::initialize(&data).expect("database");
-    directories::register(&database, &music.to_string_lossy()).expect("register directory");
+    directories::add(&database, &music.to_string_lossy()).expect("register directory");
     Fixture {
         _directory: directory,
         music,
@@ -393,11 +393,11 @@ fn a_directory_holding_the_data_directory_cannot_be_registered() {
     let fixture = fixture();
     let parent = fixture.music.parent().unwrap();
 
-    let refused = directories::register(&fixture.database, &parent.to_string_lossy());
+    let refused = directories::add(&fixture.database, &parent.to_string_lossy());
 
     assert!(matches!(
         refused,
-        Err(crate::library::error::LibraryCommandError::DirectoryContainsDataDirectory)
+        Err(crate::errors::CommandError::DirectoryContainsDataDirectory)
     ));
 }
 

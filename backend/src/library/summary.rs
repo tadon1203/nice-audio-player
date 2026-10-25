@@ -97,7 +97,7 @@ pub(crate) fn settle(tx: &Transaction<'_>, mut touched: Touched) -> rusqlite::Re
 }
 
 /// Rebuilds every summary from the tracks: after a change too big to follow row by row (a directory
-/// removed, Missing tracks deleted, a migration).
+/// removed, Missing tracks deleted).
 pub(crate) fn rebuild(tx: &Transaction<'_>) -> rusqlite::Result<()> {
     let groups: Vec<(String, String)> = tx
         .prepare(
@@ -140,7 +140,7 @@ fn settle_compilation(
              FROM track_source_metadata m
              JOIN tracks t ON t.id = m.track_id
              JOIN library_files f ON f.id = t.file_id
-             JOIN library_roots r ON r.id = f.root_id
+             JOIN directories r ON r.id = f.directory_id
              WHERE m.album_directory = ?1 AND m.album = ?2
                AND trim(COALESCE(m.tag_album_artist, '')) = ''",
         )?

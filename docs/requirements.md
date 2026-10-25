@@ -67,6 +67,8 @@ MP3, FLAC, WAV, AAC, M4A. A file counts as supported only if it can actually be 
   - Settings shows each directory's last scan, track count and Missing track count.
   - Settings offers "Delete Missing", with confirmation. Source files are never touched.
   - Settings offers a way to open the log directory.
+- Settings offers "Reset library and rescan", with confirmation. It deletes the library database and its artwork, then restarts the app, which creates an empty database and rescans the directories. Source files are never touched.
+- At start-up an empty database file gets the schema. A database of another version, or a file that is not a database, is replaced by an empty one, and the directories are rescanned. Only a database that cannot be created at all leaves the Library unavailable; the app says so and the rest of the app still works.
 - Browse as Albums, Album Artists, or Tracks; Album Artists drill into their Albums
 - Each view keeps its own filter and scroll position across view switches and Library/Settings round trips
 - Back returns to the semantic parent (Album Artist → Album → Album Artist)

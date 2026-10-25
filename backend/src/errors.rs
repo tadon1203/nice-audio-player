@@ -4,7 +4,7 @@
 pub use crate::audio::devices::AudioDeviceListError;
 use crate::audio::playback::PlaybackFailureCode;
 pub use crate::audio::playback::service::PlaybackServiceError;
-pub use crate::library::error::LibraryCommandError;
+pub use crate::library::LibraryCommandError;
 pub use crate::lyrics::LyricsCommandError;
 use std::any::Any;
 use std::panic::{UnwindSafe, catch_unwind};
@@ -27,7 +27,7 @@ pub enum CommandError {
     // library
     #[error("the directory is invalid")]
     InvalidDirectory,
-    #[error("the directory is not a directory")]
+    #[error("the path is not a directory")]
     DirectoryNotDirectory,
     #[error("the directory is already in the library")]
     DuplicateDirectory,

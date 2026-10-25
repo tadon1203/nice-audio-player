@@ -39,11 +39,14 @@ export const commands = {
 	/**  Puts back the queue the last replacement or Clear upcoming took away. */
 	playerRestorePreviousQueue: () => __TAURI_INVOKE<Versioned<PlaybackState>>("player_restore_previous_queue"),
 	libraryStatus: () => __TAURI_INVOKE<LibraryStatus>("library_status"),
-	/**  Moves the library database aside and restarts the app, which recreates it and rescans. */
+	/**
+	 *  Deletes the library database and its artwork, then restarts the app, which creates an empty
+	 *  database and rescans the directories.
+	 */
 	libraryReset: () => __TAURI_INVOKE<null>("library_reset"),
-	libraryListDirectories: () => __TAURI_INVOKE<LibraryDirectory[]>("library_list_directories"),
+	libraryDirectories: () => __TAURI_INVOKE<LibraryDirectory[]>("library_directories"),
 	libraryAddDirectory: (path: string) => __TAURI_INVOKE<LibraryDirectory>("library_add_directory", { path }),
-	librarySetDirectoryEnabled: (id: DirectoryId, enabled: boolean) => __TAURI_INVOKE<LibraryDirectory>("library_set_directory_enabled", { id, enabled }),
+	librarySetDirectoryEnabled: (id: DirectoryId, enabled: boolean) => __TAURI_INVOKE<null>("library_set_directory_enabled", { id, enabled }),
 	libraryRemoveDirectory: (id: DirectoryId) => __TAURI_INVOKE<null>("library_remove_directory", { id }),
 	/**
 	 *  Deletes the Missing tracks from the Library and returns how many there were. Never touches a
@@ -276,7 +279,7 @@ export type CurrentPlayback = {
 	resamplingActive: boolean,
 };
 
-/**  A library directory: the `library_roots` rowid. Above zero. On the IPC a number. */
+/**  A library directory: the `directories` rowid. Above zero. On the IPC a number. */
 export type DirectoryId = number;
 
 export type LibraryAlbumArtistPage = {
@@ -304,7 +307,6 @@ export type LibraryDirectory = {
 	id: DirectoryId,
 	path: string,
 	enabled: boolean,
-	scanGeneration: number,
 	lastSuccessfulScanAtMs: number | null,
 	/**  Tracks whose file is there. */
 	trackCount: number,
@@ -321,7 +323,11 @@ export type LibraryTrackPage = {
 	nextCursor: string | null,
 };
 
-export type LibraryUnavailableReason = "databaseOpenFailed" | "migrationFailed" | "schemaTooNew" | "databaseCorrupt";
+/**
+ *  Why the Library is unavailable. The only reason left is a database that cannot be opened: any
+ *  other database is replaced at open.
+ */
+export type LibraryUnavailableReason = "databaseOpenFailed";
 
 export type LyricsContent = { kind: "plain"; lines: string[] } | { kind: "timed"; lines: LyricsTimedLine[] };
 

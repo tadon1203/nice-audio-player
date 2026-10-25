@@ -2,9 +2,6 @@ import type { LibraryStatus, LibraryUnavailableReason, ScanFailure } from "#lib/
 
 const unavailableMessages = {
   databaseOpenFailed: "The library storage is unavailable.",
-  migrationFailed: "The library database could not be upgraded.",
-  schemaTooNew: "This library database was created by a newer version.",
-  databaseCorrupt: "The library database is corrupt.",
 } as const satisfies Record<LibraryUnavailableReason, string>;
 
 const scanFailureMessages = {

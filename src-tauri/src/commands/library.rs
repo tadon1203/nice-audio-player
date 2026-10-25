@@ -21,17 +21,15 @@ pub(crate) fn library_status(state: tauri::State<'_, AppState>) -> LibraryStatus
     state.backend.library_status()
 }
 
-/// Moves the library database aside and restarts the app, which recreates it and rescans.
+/// Deletes the library database and its artwork, then restarts the app, which creates an empty
+/// database and rescans the directories.
 #[tauri::command]
 #[specta::specta]
 pub(crate) async fn library_reset(
     app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), CommandError> {
-    blocking(&state, |backend| {
-        backend.request_library_reset().map_err(CommandError::from)
-    })
-    .await?;
+    blocking(&state, backend::app::BackendApp::reset_library).await?;
     // `restart` skips the exit event, so close the database cleanly first.
     state.backend.shutdown();
     app.restart()
@@ -39,13 +37,10 @@ pub(crate) async fn library_reset(
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) async fn library_list_directories(
+pub(crate) async fn library_directories(
     state: tauri::State<'_, AppState>,
 ) -> Result<Vec<LibraryDirectory>, CommandError> {
-    blocking(&state, |backend| {
-        backend.list_directories().map_err(CommandError::from)
-    })
-    .await
+    blocking(&state, backend::app::BackendApp::list_directories).await
 }
 
 #[tauri::command]
@@ -55,9 +50,7 @@ pub(crate) async fn library_add_directory(
     state: tauri::State<'_, AppState>,
 ) -> Result<LibraryDirectory, CommandError> {
     blocking(&state, move |backend| {
-        backend
-            .add_directory(PathBuf::from(path))
-            .map_err(CommandError::from)
+        backend.add_directory(PathBuf::from(path))
     })
     .await
 }
@@ -68,11 +61,9 @@ pub(crate) async fn library_set_directory_enabled(
     id: DirectoryId,
     enabled: bool,
     state: tauri::State<'_, AppState>,
-) -> Result<LibraryDirectory, CommandError> {
+) -> Result<(), CommandError> {
     blocking(&state, move |backend| {
-        backend
-            .set_directory_enabled(id, enabled)
-            .map_err(CommandError::from)
+        backend.set_directory_enabled(id, enabled)
     })
     .await
 }
@@ -83,10 +74,7 @@ pub(crate) async fn library_remove_directory(
     id: DirectoryId,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), CommandError> {
-    blocking(&state, move |backend| {
-        backend.remove_directory(id).map_err(CommandError::from)
-    })
-    .await
+    blocking(&state, move |backend| backend.remove_directory(id)).await
 }
 
 /// Deletes the Missing tracks from the Library and returns how many there were. Never touches a

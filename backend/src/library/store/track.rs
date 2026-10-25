@@ -3,11 +3,9 @@
 use super::LibraryStore;
 use crate::ids::{AlbumId, ArtistId, ArtworkHash, TrackId, album_id_column, track_id_column};
 use crate::library::{
+    Availability, InspectionStatus, StoreError, TrackLocation,
     artwork::{ArtworkMimeType, ArtworkRef},
-    error::StoreError,
-    location::TrackLocation,
     models::{ArtistRef, TrackAlbum, TrackCore, TrackProperties, TrackRow, TrackState},
-    status::{Availability, InspectionStatus},
 };
 use rusqlite::{OptionalExtension, Row, params};
 
@@ -110,7 +108,7 @@ impl LibraryStore {
                 "SELECT r.path, f.relative_path, f.availability
                  FROM tracks t
                  JOIN library_files f ON f.id = t.file_id
-                 JOIN library_roots r ON r.id = f.root_id
+                 JOIN directories r ON r.id = f.directory_id
                  WHERE t.id = ?1",
                 params![id.rowid()],
                 |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),

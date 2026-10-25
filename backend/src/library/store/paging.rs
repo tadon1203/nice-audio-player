@@ -9,19 +9,19 @@
 //! order is uniform, so each phase is a plain index range. A page continues into the next phase
 //! when the current one runs out.
 
-use super::super::{error::StoreError, models::SortDirection};
+use super::super::{StoreError, models::SortDirection};
 use rusqlite::{
     Connection, Row, ToSql, params_from_iter,
     types::{FromSql, FromSqlError, FromSqlResult, ToSqlOutput, Value, ValueRef},
 };
 use serde::{Deserialize, Serialize};
 
-pub(super) const PAGE_SIZE: usize = 100;
-const CURSOR_VERSION: u8 = 1;
+pub(in crate::library) const PAGE_SIZE: usize = 100;
+pub(in crate::library) const CURSOR_VERSION: u8 = 1;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub(super) enum View {
+pub(in crate::library) enum View {
     Tracks,
     Albums,
     AlbumArtists,
@@ -32,7 +32,7 @@ pub(super) enum View {
 /// What a cursor belongs to. A cursor from another view, search, owner, sort or direction is
 /// refused.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub(super) struct Scope {
+pub(in crate::library) struct Scope {
     view: View,
     search: String,
     /// The Album Artist or album the list is of, empty for the whole Library.
@@ -62,7 +62,7 @@ impl Scope {
 /// One sort value of the row a page ended on.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(untagged)]
-pub(super) enum Key {
+pub(in crate::library) enum Key {
     Int(i64),
     Text(String),
 }
@@ -87,7 +87,7 @@ impl FromSql for Key {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct Cursor {
+pub(in crate::library) struct Cursor {
     version: u8,
     scope: Scope,
     phase: usize,
@@ -96,7 +96,7 @@ struct Cursor {
 
 /// The rows of one phase: the condition that selects them and the sort terms that order them.
 /// Terms are SQL expressions, each compared (and collated) as written.
-pub(super) struct Phase {
+pub(in crate::library) struct Phase {
     pub predicate: String,
     pub terms: Vec<String>,
 }
@@ -110,7 +110,7 @@ impl Phase {
     }
 }
 
-pub(super) struct Ordering {
+pub(in crate::library) struct Ordering {
     pub phases: Vec<Phase>,
     pub direction: SortDirection,
 }
@@ -148,13 +148,13 @@ impl Ordering {
     }
 }
 
-pub(super) struct Page<T> {
+pub(in crate::library) struct Page<T> {
     pub items: Vec<T>,
     pub next_cursor: Option<String>,
 }
 
 /// A paged list: how to select its rows, in which order, and what its cursor is valid for.
-pub(super) struct PagedQuery {
+pub(in crate::library) struct PagedQuery {
     pub scope: Scope,
     pub ordering: Ordering,
     /// The columns a row is built from, read by position from 0.
@@ -301,7 +301,12 @@ impl PagedQuery {
     /// How SQLite runs a phase's query, one line per step. For checking that a list reads an
     /// index range instead of the whole table.
     #[cfg(test)]
-    pub(super) fn plan(&self, connection: &Connection, phase: usize, after: bool) -> Vec<String> {
+    pub(in crate::library) fn plan(
+        &self,
+        connection: &Connection,
+        phase: usize,
+        after: bool,
+    ) -> Vec<String> {
         let phase = &self.ordering.phases[phase];
         let sql = format!(
             "EXPLAIN QUERY PLAN {}",

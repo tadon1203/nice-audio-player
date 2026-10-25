@@ -1,5 +1,5 @@
 //! The normalized facts the Library files a track under. They are computed here, once, when a
-//! track is written (and when a migration backfills old rows), and the catalog reads them back
+//! track is written, and the catalog reads them back
 //! from their columns, so every view agrees on what an album, an Album Artist or a year is.
 //!
 //! Unknown is the empty string: the backend never returns display strings (ARCHITECTURE).

@@ -8,10 +8,9 @@
 mod step;
 
 use super::{
+    LibraryCommandError, StoreError,
     database::Database,
-    directories,
-    error::{LibraryCommandError, StoreError},
-    maintenance,
+    directories, maintenance,
     models::{LibraryDirectory, ScanState, ScanStatus},
     scanner, watcher,
 };
@@ -34,23 +33,23 @@ use std::{
 };
 use step::{DirectoryNumber, Effect, Input, ScanOutcome, ScanTarget, State};
 
-type Reply<T> = SyncSender<Result<T, LibraryCommandError>>;
+type Reply<T, E> = SyncSender<Result<T, E>>;
 
 /// Answers a command, if its caller is still waiting. A caller that has gone away is logged, not
 /// an error.
-fn respond<T>(reply: &Reply<T>, result: Result<T, LibraryCommandError>) {
+fn respond<T, E>(reply: &Reply<T, E>, result: Result<T, E>) {
     if reply.send(result).is_err() {
         debug!("library.reply_closed");
     }
 }
 
 enum Command {
-    Register(String, Reply<LibraryDirectory>),
-    Enable(DirectoryId, bool, Reply<LibraryDirectory>),
-    Remove(DirectoryId, Reply<()>),
-    DeleteMissing(Reply<u64>),
-    Start(Reply<()>),
-    Cancel(Reply<()>),
+    Register(String, Reply<LibraryDirectory, CommandError>),
+    Enable(DirectoryId, bool, Reply<(), CommandError>),
+    Remove(DirectoryId, Reply<(), CommandError>),
+    DeleteMissing(Reply<u64, LibraryCommandError>),
+    Start(Reply<(), LibraryCommandError>),
+    Cancel(Reply<(), LibraryCommandError>),
 }
 
 enum Message {
@@ -88,11 +87,12 @@ impl LibrarySync {
         }
     }
 
-    fn call<T>(&self, command: impl FnOnce(Reply<T>) -> Command) -> Result<T, LibraryCommandError> {
+    fn call<T, E: From<CommandError>>(
+        &self,
+        command: impl FnOnce(Reply<T, E>) -> Command,
+    ) -> Result<T, E> {
         let (reply, answer) = mpsc::sync_channel(1);
-        let task_failed = || LibraryCommandError::Common {
-            error: CommandError::TaskFailed,
-        };
+        let task_failed = || E::from(CommandError::TaskFailed);
         self.messages
             .send(Message::Command(command(reply)))
             .inspect_err(|cause| log::warn!("library.sync.command_send_failed cause={cause}"))
@@ -103,10 +103,7 @@ impl LibrarySync {
             .map_err(|_| task_failed())?
     }
 
-    pub(crate) fn register_directory(
-        &self,
-        path: String,
-    ) -> Result<LibraryDirectory, LibraryCommandError> {
+    pub(crate) fn add_directory(&self, path: String) -> Result<LibraryDirectory, CommandError> {
         self.call(|reply| Command::Register(path, reply))
     }
 
@@ -114,11 +111,11 @@ impl LibrarySync {
         &self,
         id: DirectoryId,
         enabled: bool,
-    ) -> Result<LibraryDirectory, LibraryCommandError> {
+    ) -> Result<(), CommandError> {
         self.call(|reply| Command::Enable(id, enabled, reply))
     }
 
-    pub(crate) fn remove_directory(&self, id: DirectoryId) -> Result<(), LibraryCommandError> {
+    pub(crate) fn remove_directory(&self, id: DirectoryId) -> Result<(), CommandError> {
         self.call(|reply| Command::Remove(id, reply))
     }
 
@@ -234,7 +231,7 @@ impl Actor {
     fn command(&mut self, command: Command) {
         match command {
             Command::Register(path, reply) => {
-                let result = self.while_idle(|actor| directories::register(&actor.database, &path));
+                let result = self.while_idle(|actor| directories::add(&actor.database, &path));
                 if let Some(id) = result.as_ref().ok().map(directory_number) {
                     self.feed(Input::Registered(id));
                 }
@@ -243,11 +240,11 @@ impl Actor {
             Command::Enable(id, enabled, reply) => {
                 let result =
                     self.while_idle(|actor| directories::set_enabled(&actor.database, id, enabled));
-                if let Some(id) = result.as_ref().ok().map(directory_number) {
+                if result.is_ok() {
                     self.feed(if enabled {
-                        Input::Enabled(id)
+                        Input::Enabled(id.rowid())
                     } else {
-                        Input::Disabled(id)
+                        Input::Disabled(id.rowid())
                     });
                 }
                 respond(&reply, result);
@@ -295,12 +292,12 @@ impl Actor {
     }
 
     /// Directories cannot change under a running scan.
-    fn while_idle<T>(
+    fn while_idle<T, E: From<LibraryCommandError>>(
         &mut self,
-        change: impl FnOnce(&mut Self) -> Result<T, LibraryCommandError>,
-    ) -> Result<T, LibraryCommandError> {
+        change: impl FnOnce(&mut Self) -> Result<T, E>,
+    ) -> Result<T, E> {
         if self.state.scanning() {
-            return Err(LibraryCommandError::ScanInProgress);
+            return Err(E::from(LibraryCommandError::ScanInProgress));
         }
         change(self)
     }
@@ -407,7 +404,7 @@ impl Actor {
             self.watchers.insert(id, watcher);
             self.queue.push_back(Input::Attached(id));
         } else {
-            warn!("library.watcher.attach_failed root_id={id}");
+            warn!("library.watcher.attach_failed directory_id={id}");
             self.queue.push_back(Input::AttachFailed(id));
         }
     }

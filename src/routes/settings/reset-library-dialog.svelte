@@ -26,11 +26,11 @@
     <AlertDialogHeader>
       <AlertDialogTitle>Reset library and rescan?</AlertDialogTitle>
       <AlertDialogDescription class="sr-only">
-        Moves the library database to a backup file and restarts the app.
+        Deletes the library database and its artwork, then restarts the app.
       </AlertDialogDescription>
     </AlertDialogHeader>
     <p class="text-sm leading-5 text-muted-foreground">
-      The library database is moved to a backup file and recreated, then the app restarts and
+      The library database and its artwork are deleted and recreated, then the app restarts and
       rescans your directories. Your audio files and settings are not touched; only the library
       index is rebuilt.
     </p>

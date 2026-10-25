@@ -3,25 +3,24 @@ use crate::app::{BackendApp, PlaybackContext};
 use crate::audio::playback::PlaybackServiceError;
 use crate::errors::CommandError;
 use crate::ids::{AlbumId, ArtistId, TrackId};
-use crate::library::error::LibraryCommandError;
+use crate::library::LibraryCommandError;
+use crate::library::LibraryStatus;
 use crate::library::models::{
-    AlbumTracksRequest, LibraryStatus, SortDirection, TrackListRequest, TrackQuery, TrackSortKey,
+    AlbumTracksRequest, SortDirection, TrackListRequest, TrackQuery, TrackSortKey,
 };
 use crate::library::store::PlaybackSourceError;
 use crate::lyrics::LyricsCommandError;
 
 use crate::test_support::{RecordingMessageListener, TestDirectory};
 
-/// A backend whose library database cannot be opened, so the Library is absent.
+/// A backend whose library database cannot be opened, so the Library is absent. A file where the
+/// data directory should be stops the database from being created; a damaged database alone is
+/// replaced at open and does not make the Library absent.
 fn fixture_without_library() -> Fixture {
     let directory = TestDirectory::new();
     let data_dir = directory.file("data");
-    std::fs::create_dir_all(&data_dir).expect("data directory");
-    std::fs::write(
-        data_dir.join("library.sqlite3"),
-        "this file is not a database, so the library cannot be opened from it",
-    )
-    .expect("a damaged database");
+    std::fs::write(&data_dir, "a file, so the data directory cannot be created")
+        .expect("a blocker");
     let (recorded, sink) = RecordingMessageListener::shared();
     let backend = BackendApp::initialize_for_tests(data_dir, sink);
     Fixture {
@@ -86,9 +85,7 @@ fn without_a_library_the_library_commands_say_it_is_unavailable() {
     ));
     assert!(matches!(
         backend.list_directories(),
-        Err(LibraryCommandError::Common {
-            error: CommandError::LibraryUnavailable
-        })
+        Err(CommandError::LibraryUnavailable)
     ));
     assert!(matches!(
         backend.start_scan(),

@@ -29,7 +29,7 @@ pub(crate) fn builder() -> Builder<tauri::Wry> {
             commands::playback::player_restore_previous_queue,
             commands::library::library_status,
             commands::library::library_reset,
-            commands::library::library_list_directories,
+            commands::library::library_directories,
             commands::library::library_add_directory,
             commands::library::library_set_directory_enabled,
             commands::library::library_remove_directory,

@@ -149,7 +149,7 @@ rowid_id! {
 }
 
 rowid_id! {
-    /// A library directory: the `library_roots` rowid. Above zero. On the IPC a number.
+    /// A library directory: the `directories` rowid. Above zero. On the IPC a number.
     DirectoryId, "a directory ID is a positive integer"
 }
 
@@ -256,8 +256,8 @@ fn hex_of(bytes: &[u8; 16]) -> String {
         .concat()
 }
 
-/// Registers the functions that compute IDs and search text in SQL, on a connection, so a
-/// migration and a query give the same values as Rust: `album_id(album_artist, title, directory)`,
+/// Registers the functions that compute IDs and search text in SQL, on a connection, so a query
+/// gives the same values as Rust: `album_id(album_artist, title, directory)`,
 /// `artist_id(name)`, and `search_key(name, ...)` (the folded search text of the names).
 pub(crate) fn register_sql_functions(connection: &rusqlite::Connection) -> rusqlite::Result<()> {
     let flags = FunctionFlags::SQLITE_UTF8 | FunctionFlags::SQLITE_DETERMINISTIC;
@@ -287,7 +287,7 @@ pub(crate) fn track_id_column(row: &Row<'_>, index: usize) -> rusqlite::Result<T
     TrackId::try_from_rowid(rowid).ok_or(rusqlite::Error::IntegralValueOutOfRange(index, rowid))
 }
 
-/// A `library_roots` rowid read from a column. See [`track_id_column`].
+/// A `directories` rowid read from a column. See [`track_id_column`].
 pub(crate) fn directory_id_column(row: &Row<'_>, index: usize) -> rusqlite::Result<DirectoryId> {
     let rowid: i64 = row.get(index)?;
     DirectoryId::try_from_rowid(rowid).ok_or(rusqlite::Error::IntegralValueOutOfRange(index, rowid))
