@@ -268,20 +268,15 @@ test("preserves the library scroll position across Now Playing open and close", 
 test("shows synced lyrics and follows the current line", async ({ page, native, player }) => {
   const dock = await playFirstTrack(page, () =>
     native.respond("lyricsTrack", {
-      status: "resolved",
-      trackId: 1,
+      status: "found",
       notice: null,
-      document: {
-        source: "sidecar",
-        language: null,
-        content: {
-          kind: "timed",
-          lines: [
-            { startMs: 0, text: "First line" },
-            { startMs: 30_000, text: "Second line" },
-            { startMs: 90_000, text: "Third line" },
-          ],
-        },
+      content: {
+        kind: "timed",
+        lines: [
+          { startMs: 0, text: "First line" },
+          { startMs: 30_000, text: "Second line" },
+          { startMs: 90_000, text: "Third line" },
+        ],
       },
     }),
   );

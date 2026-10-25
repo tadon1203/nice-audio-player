@@ -10,8 +10,36 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use parking_lot::Mutex;
 
+use crate::ids::TrackId;
+use crate::library::media::ValidatedAudioFile;
+use crate::library::models::{NowPlayingTrack, TrackCore};
+use crate::library::tracks::PlayableTrack;
 use crate::messages::{Notification, Notifier, StateTopic};
-use crate::settings::Settings;
+
+/// A track that is only an id, the file's name as its title, and the file.
+pub(crate) fn bare_track(id: TrackId, file: ValidatedAudioFile) -> PlayableTrack {
+    PlayableTrack {
+        track: NowPlayingTrack {
+            core: TrackCore {
+                id,
+                title: file.file_name.clone(),
+                artist: None,
+                duration_ms: None,
+                artwork: None,
+            },
+            album: None,
+            track_number: None,
+            disc_number: None,
+            year: None,
+        },
+        file,
+        file_format: None,
+        bit_depth: None,
+        bitrate_kbps: None,
+        content_hash: None,
+    }
+}
+use crate::settings::SettingsFile;
 use crate::state_store::StateStore;
 
 static NEXT_TEST_DIRECTORY: AtomicUsize = AtomicUsize::new(0);
@@ -144,5 +172,5 @@ pub(crate) fn null_notifier() -> Notifier {
 /// A state store over the default settings, notifying through `notifier`, for tests that build a
 /// service directly.
 pub(crate) fn state_store_for_tests(notifier: Notifier) -> Arc<StateStore> {
-    Arc::new(StateStore::new(&Settings::default(), notifier))
+    Arc::new(StateStore::new(&SettingsFile::default(), notifier))
 }

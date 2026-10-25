@@ -333,7 +333,7 @@ export function idleResponses(): {
   };
   playerListOutputDevices: { id: string; name: string; isDefault: boolean }[];
   libraryStatus: { status: "ready" };
-  lyricsTrack: ({ trackId }: { trackId: number }) => { status: "notFound"; trackId: number };
+  lyricsTrack: () => { status: "notFound" };
   libraryArtworkAccent: null;
 } {
   let nextMeterSubscription = 1;
@@ -351,9 +351,8 @@ export function idleResponses(): {
     }),
     playerListOutputDevices: outputDevices,
     libraryStatus: { status: "ready" as const },
-    lyricsTrack: ({ trackId }: { trackId: number }): { status: "notFound"; trackId: number } => ({
+    lyricsTrack: (): { status: "notFound" } => ({
       status: "notFound" as const,
-      trackId,
     }),
     libraryArtworkAccent: null,
   };

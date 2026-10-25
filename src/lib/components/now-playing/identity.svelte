@@ -1,6 +1,6 @@
 <script lang="ts">
   import { untrack } from "svelte";
-  import { type LyricsResolution, type PlaybackItem } from "#lib/native/bindings";
+  import { type Lyrics, type PlaybackItem } from "#lib/native/bindings";
   import { AppServices } from "#lib/shell/app-services.svelte";
   import Artwork from "#lib/ui/artwork.svelte";
   import KineticText from "#lib/ui/kinetic-text/kinetic-text.svelte";
@@ -18,10 +18,10 @@
    */
   let {
     item,
-    resolution,
+    lyrics,
   }: {
     item: PlaybackItem | null;
-    resolution: LyricsResolution | null;
+    lyrics: Lyrics | null;
   } = $props();
 
   const { playback, nowPlaying } = AppServices.current();
@@ -63,7 +63,7 @@
           {item?.title ?? "Nothing playing"}
         {/if}
       </p>
-      <TrackFacts {item} {resolution} />
+      <TrackFacts {item} {lyrics} />
     </div>
   {/key}
 </div>

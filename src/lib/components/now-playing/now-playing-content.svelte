@@ -36,13 +36,13 @@
   const item = $derived(playback.item);
   const trackId = $derived(item?.id ?? null);
   const lyrics = new TrackLyrics(lyricsRepository, () => trackId);
-  const resolution = $derived(lyrics.resolution);
+  const current = $derived(lyrics.current);
 
   // While lyrics are loading keep the column the previous track had, so it does not flip twice
   // (they are also fetched ahead of time). The first ever render starts from what is cached.
-  let showLyrics = $state(untrack(() => resolution?.status === "resolved"));
+  let showLyrics = $state(untrack(() => current?.status === "found"));
   $effect.pre(() => {
-    if (resolution !== null) showLyrics = resolution.status === "resolved";
+    if (current !== null) showLyrics = current.status === "found";
   });
 
   // The left column exists beside the queue rail when there are lyrics or the meters are chosen.
@@ -80,7 +80,7 @@
       style:--np-sleeve={NowPlayingLayout.sleeveSize}
     >
       <div class="flex min-h-0 min-w-0 flex-col gap-4 p-6 md:w-(--np-sleeve) md:p-0">
-        <Identity {item} resolution={resolution ?? null} />
+        <Identity {item} lyrics={current} />
       </div>
       <!--
         The right column. The switch is the first row; below it the lyrics, the meters and the queue are

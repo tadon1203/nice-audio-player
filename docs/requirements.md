@@ -128,6 +128,7 @@ Source audio files are never modified.
 ## Reliability
 
 - Failures don't damage unrelated user data
+- A damaged or older settings file does not stop start-up: it is replaced by defaults, and the next change overwrites it
 - No destructive file operations without confirmation
 - No silent fallback that changes a selected playback mode
 - Background and audio resources shut down cleanly

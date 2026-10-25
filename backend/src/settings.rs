@@ -2,15 +2,17 @@
 //!
 //! The file is independent of the library database, so settings survive a database that is
 //! unavailable. Writes are debounced on a background thread and replace the file atomically.
-//! Fields missing from the file take their defaults, so older files keep loading.
+//! The file must match its shape: a damaged or older file is logged and replaced by defaults,
+//! and the next change overwrites it.
 //!
 //! The file holds the appearance the renderer edits and the playback preferences the playback
-//! worker records. Nothing outside this module sees the file's shape: the Host reads and writes
-//! appearance through `SettingsService`, and the playback service reads its preferences from it.
+//! worker records. The appearance is published through the state store; nothing else sees the
+//! file's shape.
 
 use parking_lot::Mutex;
 use std::{
-    path::Path,
+    fs,
+    path::{Path, PathBuf},
     sync::{
         Arc,
         mpsc::{self, RecvTimeoutError, Sender},
@@ -20,7 +22,7 @@ use std::{
 };
 
 use log::{error, warn};
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 
 use crate::audio::playback::PlaybackPreferences;
 use crate::messages::Versioned;
@@ -30,33 +32,14 @@ const FILE_NAME: &str = "settings.json";
 const WRITE_DEBOUNCE: Duration = Duration::from_millis(400);
 
 /// What the renderer reads and writes. Every field is always present, so the renderer declares
-/// no defaults of its own; a saved file missing a field takes the default here.
-#[derive(Debug, Clone, PartialEq, Serialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
+/// no defaults of its own.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Appearance {
     /// Artwork glow behind the library and Now Playing.
     pub artwork_backdrop: bool,
     /// Only what marks the position moves by itself: nothing breathes or lifts on its own.
     pub calm_motion: bool,
-}
-
-/// How the file stores appearance: every field may be missing.
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct StoredAppearance {
-    artwork_backdrop: Option<bool>,
-    calm_motion: Option<bool>,
-}
-
-fn appearance_from_file<'de, D: Deserializer<'de>>(
-    deserializer: D,
-) -> Result<Appearance, D::Error> {
-    let stored = StoredAppearance::deserialize(deserializer)?;
-    let defaults = Appearance::default();
-    Ok(Appearance {
-        artwork_backdrop: stored.artwork_backdrop.unwrap_or(defaults.artwork_backdrop),
-        calm_motion: stored.calm_motion.unwrap_or(defaults.calm_motion),
-    })
 }
 
 impl Default for Appearance {
@@ -76,159 +59,144 @@ pub struct AppearancePatch {
     pub calm_motion: Option<bool>,
 }
 
-/// Everything saved in the settings file.
+/// Everything saved in the settings file. Strict: an unknown field, or a missing section, makes
+/// the whole file unusable.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", default)]
-pub(crate) struct Settings {
-    pub(crate) playback: PlaybackPreferences,
-    #[serde(deserialize_with = "appearance_from_file")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct SettingsFile {
     pub(crate) appearance: Appearance,
+    pub(crate) playback: PlaybackPreferences,
 }
 
-impl Settings {
-    fn sanitized(mut self) -> Self {
-        self.playback = self.playback.sanitized();
-        self
-    }
+/// The settings file in `directory`.
+pub(crate) fn file_path(directory: &Path) -> PathBuf {
+    directory.join(FILE_NAME)
+}
 
-    fn apply_appearance(&mut self, patch: &AppearancePatch) {
-        if let Some(value) = patch.artwork_backdrop {
-            self.appearance.artwork_backdrop = value;
-        }
-        if let Some(value) = patch.calm_motion {
-            self.appearance.calm_motion = value;
+/// The settings saved at `path`, or defaults when there is no file or the file is unusable.
+pub(crate) fn read(path: &Path) -> SettingsFile {
+    match fs::read_to_string(path) {
+        Ok(text) => serde_json::from_str(&text).unwrap_or_else(|error| {
+            warn!("settings.file_unusable error={error}");
+            SettingsFile::default()
+        }),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => SettingsFile::default(),
+        Err(error) => {
+            warn!("settings.read_failed error={error}");
+            SettingsFile::default()
         }
     }
 }
 
-pub(crate) struct SettingsService {
-    state: Mutex<Settings>,
+pub(crate) struct SettingsStore {
+    state: Mutex<State>,
     state_store: Arc<StateStore>,
-    writer: Mutex<Option<Sender<Settings>>>,
-    writer_thread: Mutex<Option<JoinHandle<()>>>,
 }
 
-/// The settings saved in `directory`, or defaults when there are none or the file is unusable
-/// (an unusable file is kept aside as `settings.json.bad`).
-pub(crate) fn load_saved(directory: &Path) -> Settings {
-    read(&directory.join(FILE_NAME))
+struct State {
+    file: SettingsFile,
+    /// The writer thread, until `shutdown` takes it. It lives under the same lock as the file, so
+    /// changes reach it in the order they were made.
+    writer: Option<Writer>,
 }
 
-impl SettingsService {
-    /// Starts the writer for the settings file in `directory`. `settings` is what `load_saved`
-    /// read from it, and the appearance in `state_store` must already be that appearance.
-    pub(crate) fn start(
-        directory: &Path,
-        settings: Settings,
-        state_store: Arc<StateStore>,
-    ) -> Self {
-        let path = directory.join(FILE_NAME);
+struct Writer {
+    sender: Sender<SettingsFile>,
+    thread: JoinHandle<()>,
+}
+
+impl SettingsStore {
+    /// Starts the writer for the settings file at `path`. `file` is what `read` found there, and
+    /// the appearance in `state_store` must already be that appearance.
+    pub(crate) fn open(path: PathBuf, file: SettingsFile, state_store: Arc<StateStore>) -> Self {
         let (sender, receiver) = mpsc::channel();
-        let writer_thread = thread::Builder::new()
+        let thread = thread::Builder::new()
             .name("settings-writer".into())
             .spawn(move || write_loop(&receiver, &path))
-            .map_err(|error| error!("settings.writer_spawn_failed error={error}"))
-            .ok();
+            .expect("the settings writer thread must start");
         Self {
-            state: Mutex::new(settings),
+            state: Mutex::new(State {
+                file,
+                writer: Some(Writer { sender, thread }),
+            }),
             state_store,
-            writer: Mutex::new(writer_thread.is_some().then_some(sender)),
-            writer_thread: Mutex::new(writer_thread),
         }
     }
 
-    /// Applies a renderer update, announces it when something changed, and returns the appearance
-    /// as it is afterwards.
-    pub(crate) fn appearance_update(&self, patch: &AppearancePatch) -> Versioned<Appearance> {
-        self.modify(|settings| settings.apply_appearance(patch)).0
+    /// Applies a renderer update, publishes the appearance when something changed, and returns
+    /// the appearance as it is afterwards, with its version.
+    pub(crate) fn update_appearance(&self, patch: &AppearancePatch) -> Versioned<Appearance> {
+        self.modify(|file| {
+            if let Some(value) = patch.artwork_backdrop {
+                file.appearance.artwork_backdrop = value;
+            }
+            if let Some(value) = patch.calm_motion {
+                file.appearance.calm_motion = value;
+            }
+        })
     }
 
     /// The playback preferences the next start of the playback worker begins with.
     pub(crate) fn playback_preferences(&self) -> PlaybackPreferences {
-        self.state.lock().playback.clone()
+        self.state.lock().file.playback.clone()
     }
 
     /// Remembers the playback preferences. They are persisted but not published: the playback
     /// state already tells the renderer.
     pub(crate) fn record_playback(&self, preferences: PlaybackPreferences) {
-        self.modify(|settings| settings.playback = preferences);
+        self.modify(|file| file.playback = preferences);
     }
 
-    /// Applies `change` under the lock and publishes the appearance. Returns the appearance with
-    /// its version, and whether anything changed. A change is queued for the writer while the
-    /// lock is still held, so the writer sees the changes in the order they were made.
-    fn modify(&self, change: impl FnOnce(&mut Settings)) -> (Versioned<Appearance>, bool) {
+    /// Applies `change` under the lock and publishes the appearance. A change is queued for the
+    /// writer while the lock is still held, so the writer sees the changes in the order they were
+    /// made.
+    fn modify(&self, change: impl FnOnce(&mut SettingsFile)) -> Versioned<Appearance> {
         let mut state = self.state.lock();
-        let before = state.clone();
-        change(&mut state);
-        let changed = *state != before;
-        let version = self.state_store.set_appearance(state.appearance.clone());
-        let appearance = Versioned {
-            version,
-            value: state.appearance.clone(),
-        };
-        if changed
-            && let Some(writer) = self.writer.lock().as_ref()
-            && let Err(cause) = writer.send(state.clone())
+        let before = state.file.clone();
+        change(&mut state.file);
+        let version = self
+            .state_store
+            .set_appearance(state.file.appearance.clone());
+        if state.file != before
+            && let Some(writer) = &state.writer
+            && let Err(cause) = writer.sender.send(state.file.clone())
         {
             log::debug!("settings.writer_send_failed cause={cause}");
         }
-        (appearance, changed)
+        Versioned {
+            version,
+            value: state.file.appearance.clone(),
+        }
     }
 
     /// Writes any pending change and stops the writer thread.
     pub(crate) fn shutdown(&self) {
-        drop(self.writer.lock().take());
-        if let Some(thread) = self.writer_thread.lock().take()
-            && thread.join().is_err()
-        {
-            error!("settings.writer_panicked");
+        let writer = self.state.lock().writer.take();
+        if let Some(Writer { sender, thread }) = writer {
+            drop(sender);
+            if thread.join().is_err() {
+                error!("settings.writer_panicked");
+            }
         }
-    }
-
-    #[cfg(test)]
-    fn get(&self) -> Settings {
-        self.state.lock().clone()
     }
 }
 
-impl Drop for SettingsService {
+impl Drop for SettingsStore {
     fn drop(&mut self) {
         self.shutdown();
     }
 }
 
-fn read(path: &std::path::Path) -> Settings {
-    let text = match std::fs::read_to_string(path) {
-        Ok(text) => text,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Settings::default(),
-        Err(error) => {
-            warn!("settings.read_failed error={error}");
-            return Settings::default();
-        }
-    };
-    match serde_json::from_str::<Settings>(&text) {
-        Ok(settings) => settings.sanitized(),
-        Err(error) => {
-            warn!("settings.file_unusable error={error}");
-            if let Err(cause) = std::fs::rename(path, path.with_extension("json.bad")) {
-                log::debug!("settings.quarantine_failed cause={cause}");
-            }
-            Settings::default()
-        }
-    }
-}
-
-fn write(path: &std::path::Path, settings: &Settings) -> std::io::Result<()> {
+fn write(path: &Path, file: &SettingsFile) -> std::io::Result<()> {
     let temporary = path.with_extension("json.tmp");
-    let text = serde_json::to_string_pretty(settings).map_err(std::io::Error::other)?;
-    std::fs::write(&temporary, text)?;
-    std::fs::rename(&temporary, path)
+    let text = serde_json::to_string_pretty(file).map_err(std::io::Error::other)?;
+    fs::write(&temporary, text)?;
+    fs::rename(&temporary, path)
 }
 
 /// Collapses bursts of changes (a volume drag) into one write of the latest settings.
-fn write_loop(receiver: &mpsc::Receiver<Settings>, path: &Path) {
-    let mut pending: Option<Settings> = None;
+fn write_loop(receiver: &mpsc::Receiver<SettingsFile>, path: &Path) {
+    let mut pending: Option<SettingsFile> = None;
     loop {
         let next = if pending.is_some() {
             receiver.recv_timeout(WRITE_DEBOUNCE)
@@ -240,7 +208,7 @@ fn write_loop(receiver: &mpsc::Receiver<Settings>, path: &Path) {
             })
         };
         match next {
-            Ok(settings) => pending = Some(settings),
+            Ok(file) => pending = Some(file),
             Err(RecvTimeoutError::Timeout) => flush(path, &mut pending),
             Err(RecvTimeoutError::Disconnected) => {
                 flush(path, &mut pending);
@@ -250,9 +218,9 @@ fn write_loop(receiver: &mpsc::Receiver<Settings>, path: &Path) {
     }
 }
 
-fn flush(path: &Path, pending: &mut Option<Settings>) {
-    if let Some(settings) = pending.take()
-        && let Err(error) = write(path, &settings)
+fn flush(path: &Path, pending: &mut Option<SettingsFile>) {
+    if let Some(file) = pending.take()
+        && let Err(error) = write(path, &file)
     {
         error!("settings.write_failed error={error}");
     }
@@ -264,41 +232,36 @@ mod tests {
     use crate::audio::devices::AudioOutputSelection;
     use crate::audio::playback::RepeatMode;
     use crate::messages::{Notification, Notifier, StateTopic};
-    use crate::state_store::StateStore;
     use crate::test_support::{NotificationLog, TestDirectory, null_notifier};
-    use std::path::PathBuf;
 
-    fn directory() -> (TestDirectory, PathBuf) {
-        let directory = TestDirectory::new();
-        let path = directory.file("data");
-        std::fs::create_dir_all(&path).unwrap();
-        (directory, path)
+    /// A store over the settings saved in `directory`, notifying through `notifier`.
+    fn open(directory: &Path, notifier: Notifier) -> SettingsStore {
+        let path = file_path(directory);
+        let file = read(&path);
+        let state_store = Arc::new(StateStore::new(&file, notifier));
+        SettingsStore::open(path, file, state_store)
     }
 
-    /// A service over the settings saved in `path`, notifying through `notifier`.
-    fn load(path: &Path, notifier: Notifier) -> SettingsService {
-        let settings = load_saved(path);
-        let state_store = Arc::new(StateStore::new(&settings, notifier));
-        SettingsService::start(path, settings, state_store)
+    fn saved(store: &SettingsStore) -> SettingsFile {
+        store.state.lock().file.clone()
     }
 
     #[test]
     fn starts_from_defaults_without_a_file() {
-        let (_guard, path) = directory();
-        let service = load(&path, null_notifier());
-        assert_eq!(service.get(), Settings::default());
-        assert!(service.get().appearance.artwork_backdrop);
+        let directory = TestDirectory::new();
+        let store = open(directory.path(), null_notifier());
+        assert_eq!(saved(&store), SettingsFile::default());
     }
 
     #[test]
     fn saved_changes_are_restored_on_the_next_start() {
-        let (_guard, path) = directory();
-        let service = load(&path, null_notifier());
-        service.appearance_update(&AppearancePatch {
+        let directory = TestDirectory::new();
+        let store = open(directory.path(), null_notifier());
+        store.update_appearance(&AppearancePatch {
             artwork_backdrop: Some(false),
             calm_motion: Some(true),
         });
-        service.record_playback(PlaybackPreferences {
+        store.record_playback(PlaybackPreferences {
             volume: 0.4,
             muted: true,
             output_selection: AudioOutputSelection::Device {
@@ -307,9 +270,9 @@ mod tests {
             repeat_mode: RepeatMode::All,
             shuffle_enabled: true,
         });
-        service.shutdown();
+        store.shutdown();
 
-        let restored = load(&path, null_notifier()).get();
+        let restored = saved(&open(directory.path(), null_notifier()));
         assert!(!restored.appearance.artwork_backdrop);
         assert!(restored.appearance.calm_motion);
         assert_eq!(restored.playback.volume, 0.4);
@@ -324,42 +287,63 @@ mod tests {
     }
 
     #[test]
-    fn a_partial_file_keeps_defaults_for_missing_fields() {
-        let (_guard, path) = directory();
+    fn an_older_file_is_replaced_by_defaults() {
+        let directory = TestDirectory::new();
         std::fs::write(
-            path.join(FILE_NAME),
+            file_path(directory.path()),
             r#"{ "playback": { "volume": 0.25 } }"#,
         )
         .unwrap();
-        let settings = load(&path, null_notifier()).get();
-        assert_eq!(settings.playback.volume, 0.25);
-        assert!(!settings.playback.muted);
-        assert!(settings.appearance.artwork_backdrop);
-        assert!(!settings.appearance.calm_motion);
+        assert_eq!(
+            saved(&open(directory.path(), null_notifier())),
+            SettingsFile::default()
+        );
     }
 
     #[test]
-    fn out_of_range_values_are_replaced_and_an_unusable_file_is_kept_aside() {
-        let (_guard, path) = directory();
-        std::fs::write(path.join(FILE_NAME), r#"{ "playback": { "volume": 7.0 } }"#).unwrap();
+    fn a_file_with_an_unknown_field_is_replaced_by_defaults() {
+        let directory = TestDirectory::new();
+        std::fs::write(
+            file_path(directory.path()),
+            r#"{ "appearance": { "artworkBackdrop": false, "calmMotion": true }, "playback": {}, "extra": 1 }"#,
+        )
+        .unwrap();
         assert_eq!(
-            load(&path, null_notifier()).playback_preferences().volume,
-            1.0
+            saved(&open(directory.path(), null_notifier())),
+            SettingsFile::default()
         );
+    }
 
-        std::fs::write(path.join(FILE_NAME), "not json").unwrap();
-        let settings = load(&path, null_notifier()).get();
-        assert_eq!(settings, Settings::default());
-        assert!(path.join("settings.json.bad").exists());
+    #[test]
+    fn an_unusable_file_is_left_for_the_next_change_to_replace() {
+        let directory = TestDirectory::new();
+        let path = file_path(directory.path());
+        std::fs::write(&path, "not json").unwrap();
+
+        let store = open(directory.path(), null_notifier());
+        assert_eq!(saved(&store), SettingsFile::default());
+        assert!(!directory.file("settings.json.bad").exists());
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "not json");
+
+        store.update_appearance(&AppearancePatch {
+            calm_motion: Some(true),
+            ..AppearancePatch::default()
+        });
+        store.shutdown();
+        assert!(
+            std::fs::read_to_string(&path)
+                .unwrap()
+                .contains("\"calmMotion\": true")
+        );
     }
 
     #[test]
     fn only_renderer_visible_changes_are_announced() {
-        let (_guard, path) = directory();
+        let directory = TestDirectory::new();
         let (recorder, sink) = NotificationLog::shared();
-        let service = load(&path, sink);
+        let store = open(directory.path(), sink);
 
-        service.record_playback(PlaybackPreferences {
+        store.record_playback(PlaybackPreferences {
             volume: 0.5,
             ..PlaybackPreferences::default()
         });
@@ -369,8 +353,8 @@ mod tests {
             artwork_backdrop: Some(false),
             calm_motion: None,
         };
-        service.appearance_update(&change);
-        service.appearance_update(&change);
+        store.update_appearance(&change);
+        store.update_appearance(&change);
         assert_eq!(
             recorder.sent(),
             vec![Notification::StateChanged(StateTopic::Appearance)]
@@ -379,23 +363,19 @@ mod tests {
 
     #[test]
     fn the_appearance_version_counts_appearance_changes_only() {
-        let (_guard, path) = directory();
-        let service = load(&path, null_notifier());
+        let directory = TestDirectory::new();
+        let store = open(directory.path(), null_notifier());
         assert_eq!(
-            service
-                .appearance_update(&AppearancePatch::default())
-                .version,
+            store.update_appearance(&AppearancePatch::default()).version,
             0
         );
 
-        service.record_playback(PlaybackPreferences {
+        store.record_playback(PlaybackPreferences {
             volume: 0.5,
             ..PlaybackPreferences::default()
         });
         assert_eq!(
-            service
-                .appearance_update(&AppearancePatch::default())
-                .version,
+            store.update_appearance(&AppearancePatch::default()).version,
             0
         );
 
@@ -403,13 +383,10 @@ mod tests {
             artwork_backdrop: Some(false),
             calm_motion: None,
         };
-        service.appearance_update(&change);
-        let again = service.appearance_update(&change);
+        store.update_appearance(&change);
+        let again = store.update_appearance(&change);
         assert_eq!(again.version, 1);
         assert!(!again.value.artwork_backdrop);
-        assert_eq!(
-            service.appearance_update(&AppearancePatch::default()),
-            again
-        );
+        assert_eq!(store.update_appearance(&AppearancePatch::default()), again);
     }
 }

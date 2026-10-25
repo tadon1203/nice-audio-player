@@ -1,4 +1,4 @@
-import { type LyricsResolution, type PlaybackItem } from "#lib/native/bindings";
+import { type Lyrics, type PlaybackItem } from "#lib/native/bindings";
 
 /** Why the right column shows no timed lyrics, said in the Facts line rather than the column. */
 export type LyricsState =
@@ -30,13 +30,13 @@ export class TrackFacts {
     ];
   }
 
-  public static lyricsState(resolution: LyricsResolution | null | undefined): LyricsState {
-    if (resolution === null || resolution === undefined) return { kind: "none" };
-    if (resolution.status === "notFound") return { kind: "notFound" };
-    if (resolution.status === "sourceFailed") {
-      return { kind: "sourceFailed", fileName: resolution.sidecarFileName };
+  public static lyricsState(lyrics: Lyrics | null | undefined): LyricsState {
+    if (lyrics === null || lyrics === undefined) return { kind: "none" };
+    if (lyrics.status === "notFound") return { kind: "notFound" };
+    if (lyrics.status === "sourceFailed") {
+      return { kind: "sourceFailed", fileName: lyrics.sidecarFileName };
     }
-    if (resolution.notice === "sidecarFailedUsingEmbedded") return { kind: "embedded" };
-    return resolution.document.content.kind === "plain" ? { kind: "unsynced" } : { kind: "none" };
+    if (lyrics.notice === "sidecarFailedUsingEmbedded") return { kind: "embedded" };
+    return lyrics.content.kind === "plain" ? { kind: "unsynced" } : { kind: "none" };
   }
 }

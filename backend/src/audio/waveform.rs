@@ -673,6 +673,7 @@ mod tests {
     use crate::ids::TrackId;
     use crate::library::media::validate_audio_file;
     use crate::messages::{Notification, Notifier, StateTopic, Versioned};
+    use crate::test_support::bare_track;
     use crate::test_support::{
         NotificationLog, TestDirectory, null_notifier, state_store_for_tests, write_pcm_i16_wav,
     };
@@ -686,7 +687,7 @@ mod tests {
     fn track_of(file: &ValidatedAudioFile, hash: Option<&str>) -> PlayableTrack {
         PlayableTrack {
             content_hash: hash.map(str::to_owned),
-            ..PlayableTrack::bare(TrackId::try_from_rowid(1).unwrap(), file.clone())
+            ..bare_track(TrackId::try_from_rowid(1).unwrap(), file.clone())
         }
     }
 

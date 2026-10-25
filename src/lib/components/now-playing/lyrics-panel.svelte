@@ -15,7 +15,7 @@
 
   /**
    * Local LRC lyrics: synced (Row index, auto-scroll, waveform link) or plain (static). Now Playing
-   * shows it only once the lyrics are resolved; why there are none is said in its Facts line. The
+   * shows it only once the lyrics are found; why there are none is said in its Facts line. The
    * current line sits 40% from the top, and a long intro shows as a gap bar.
    * Only a change of the current line reaches the lines: only the gap bar of an instrumental line
    * follows the playback clock, through styles.
@@ -24,8 +24,8 @@
 
   const { playback, lyrics: lyricsRepository, lyricsWaveformLink } = AppServices.current();
   const lyrics = new TrackLyrics(lyricsRepository, () => trackId);
-  const resolution = $derived(lyrics.resolution?.status === "resolved" ? lyrics.resolution : null);
-  const content = $derived(resolution?.document.content ?? null);
+  const found = $derived(lyrics.current?.status === "found" ? lyrics.current : null);
+  const content = $derived(found?.content ?? null);
   const rawLines = $derived(content?.kind === "timed" ? content.lines : null);
   const timedLines = $derived(rawLines === null ? null : LyricsLines.withIntro(rawLines));
 

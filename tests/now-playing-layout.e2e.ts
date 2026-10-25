@@ -12,19 +12,14 @@ const SIZES = [
 ] as const;
 
 const timedLyrics = {
-  status: "resolved",
-  trackId: 1,
+  status: "found",
   notice: null,
-  document: {
-    source: "sidecar",
-    language: null,
-    content: {
-      kind: "timed",
-      lines: Array.from({ length: 30 }, (_, index) => ({
-        startMs: index * 10_000,
-        text: `This is lyric line number ${index + 1} of the song`,
-      })),
-    },
+  content: {
+    kind: "timed",
+    lines: Array.from({ length: 30 }, (_, index) => ({
+      startMs: index * 10_000,
+      text: `This is lyric line number ${index + 1} of the song`,
+    })),
   },
 } as const;
 

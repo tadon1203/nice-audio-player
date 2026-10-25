@@ -231,7 +231,7 @@ pub(super) enum PlaybackCommand {
 pub(crate) fn initial_playback(
     preferences: &PlaybackPreferences,
 ) -> (Versioned<PlaybackState>, Versioned<QueueState>) {
-    let preferences = preferences.clone().sanitized();
+    let preferences = preferences.clone();
     let volume_state = VolumeState::restored(preferences.volume, preferences.muted);
     let queue = PlaybackQueue::new(preferences.repeat_mode, preferences.shuffle_enabled);
     (
@@ -272,7 +272,6 @@ impl PlaybackService {
         listener: TrackListener,
         backend: Box<dyn OutputBackend>,
     ) -> Result<Self, PlaybackServiceStartError> {
-        let preferences = preferences.sanitized();
         let (inbox, inputs) = Inbox::channel();
         let volume_state = VolumeState::restored(preferences.volume, preferences.muted);
         let effective_gain = AtomicEffectiveGain::new(volume_state.effective_gain());

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Button } from "#lib/ui/shadcn/button";
-  import { type LyricsResolution, type PlaybackItem } from "#lib/native/bindings";
+  import { type Lyrics, type PlaybackItem } from "#lib/native/bindings";
   import { SignalPath } from "#lib/components/signal-path/signal-path.svelte";
   import FactLine from "#lib/ui/fact-line.svelte";
   import { Tracks } from "#lib/library/tracks";
@@ -14,10 +14,10 @@
    */
   let {
     item,
-    resolution,
+    lyrics,
   }: {
     item: PlaybackItem | null;
-    resolution: LyricsResolution | null;
+    lyrics: Lyrics | null;
   } = $props();
 
   const linkClass =
@@ -27,7 +27,7 @@
   const links = $derived(item === null ? null : Tracks.links(item));
   const artistHref = $derived(links?.artist?.href ?? null);
   const albumLinkHref = $derived(links?.album?.href ?? null);
-  const lyrics = $derived(item === null ? null : TrackFacts.lyricsState(resolution));
+  const state = $derived(item === null ? null : TrackFacts.lyricsState(lyrics));
   const actions = new NowPlayingActions();
 </script>
 
@@ -52,22 +52,22 @@
   {/if}
   <div class="mt-1 flex flex-wrap items-baseline gap-x-4 text-sm text-muted-foreground">
     <FactLine facts={TrackFacts.of(item, signalPath.current?.source)} />
-    {#if lyrics?.kind === "notFound"}
+    {#if state?.kind === "notFound"}
       <span>No lyrics</span>
-    {:else if lyrics?.kind === "sourceFailed"}
+    {:else if state?.kind === "sourceFailed"}
       <Button
         type="button"
-        title="{lyrics.fileName} (click to copy)"
-        onclick={() => actions.copy(lyrics.fileName)}
+        title="{state.fileName} (click to copy)"
+        onclick={() => actions.copy(state.fileName)}
         variant="text"
         size="inline"
         class="font-normal"
       >
         Lyrics file unreadable
       </Button>
-    {:else if lyrics?.kind === "embedded"}
+    {:else if state?.kind === "embedded"}
       <span title="The .lrc file couldn't be read.">Embedded lyrics</span>
-    {:else if lyrics?.kind === "unsynced"}
+    {:else if state?.kind === "unsynced"}
       <span>Unsynced lyrics</span>
     {/if}
   </div>

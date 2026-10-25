@@ -1,4 +1,4 @@
-use backend::{app::LyricsResolution, errors::CommandError, ids::TrackId};
+use backend::{app::Lyrics, errors::CommandError, ids::TrackId};
 
 use super::blocking;
 use crate::AppState;
@@ -8,9 +8,6 @@ use crate::AppState;
 pub(crate) async fn lyrics_track(
     track_id: TrackId,
     state: tauri::State<'_, AppState>,
-) -> Result<LyricsResolution, CommandError> {
-    blocking(&state, move |backend| {
-        backend.track_lyrics(track_id).map_err(CommandError::from)
-    })
-    .await
+) -> Result<Lyrics, CommandError> {
+    blocking(&state, move |backend| backend.track_lyrics(track_id)).await
 }

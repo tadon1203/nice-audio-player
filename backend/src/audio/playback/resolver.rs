@@ -160,6 +160,6 @@ pub(super) mod testing {
 
     /// A track that is only a name and a path.
     pub(crate) fn track(id: TrackId, file: ValidatedAudioFile) -> PlayableTrack {
-        PlayableTrack::bare(id, file)
+        crate::test_support::bare_track(id, file)
     }
 }

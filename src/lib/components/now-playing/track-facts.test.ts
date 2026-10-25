@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  type AlbumId,
-  type ArtistId,
-  type LyricsResolution,
-  type PlaybackItem,
-} from "#lib/native/bindings";
+import { type AlbumId, type ArtistId, type Lyrics, type PlaybackItem } from "#lib/native/bindings";
 import { TrackFacts } from "./track-facts";
 
 const item: PlaybackItem = {
@@ -25,14 +20,13 @@ const item: PlaybackItem = {
   year: 2019,
 };
 
-const resolved = (
-  content: Extract<LyricsResolution, { status: "resolved" }>["document"]["content"],
+const found = (
+  content: Extract<Lyrics, { status: "found" }>["content"],
   notice: "sidecarFailedUsingEmbedded" | null = null,
-): LyricsResolution => ({
-  status: "resolved",
-  trackId: 1,
+): Lyrics => ({
+  status: "found",
   notice,
-  document: { source: "sidecar", language: null, content },
+  content,
 });
 
 describe("TrackFacts.of", () => {
@@ -56,26 +50,25 @@ describe("TrackFacts.of", () => {
 describe("TrackFacts.lyricsState", () => {
   it("says nothing before the lyrics are known or when they are synced", () => {
     expect(TrackFacts.lyricsState(null)).toEqual({ kind: "none" });
-    expect(TrackFacts.lyricsState(resolved({ kind: "timed", lines: [] }))).toEqual({
+    expect(TrackFacts.lyricsState(found({ kind: "timed", lines: [] }))).toEqual({
       kind: "none",
     });
   });
 
   it("reports missing, unreadable, embedded fallback and unsynced lyrics", () => {
-    expect(TrackFacts.lyricsState({ status: "notFound", trackId: 1 })).toEqual({
+    expect(TrackFacts.lyricsState({ status: "notFound" })).toEqual({
       kind: "notFound",
     });
     expect(
       TrackFacts.lyricsState({
         status: "sourceFailed",
-        trackId: 1,
         sidecarFileName: "01 Song.lrc",
       }),
     ).toEqual({ kind: "sourceFailed", fileName: "01 Song.lrc" });
     expect(
-      TrackFacts.lyricsState(resolved({ kind: "timed", lines: [] }, "sidecarFailedUsingEmbedded")),
+      TrackFacts.lyricsState(found({ kind: "timed", lines: [] }, "sidecarFailedUsingEmbedded")),
     ).toEqual({ kind: "embedded" });
-    expect(TrackFacts.lyricsState(resolved({ kind: "plain", lines: ["a"] }))).toEqual({
+    expect(TrackFacts.lyricsState(found({ kind: "plain", lines: ["a"] }))).toEqual({
       kind: "unsynced",
     });
   });

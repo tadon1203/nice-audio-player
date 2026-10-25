@@ -72,7 +72,7 @@ export const commands = {
 	/**  Shows the track's file in Explorer, selected. */
 	libraryRevealTrack: (trackId: TrackId) => __TAURI_INVOKE<null>("library_reveal_track", { trackId }),
 	libraryArtworkAccent: (path: string) => __TAURI_INVOKE<string | null>("library_artwork_accent", { path }),
-	lyricsTrack: (trackId: TrackId) => __TAURI_INVOKE<LyricsResolution>("lyrics_track", { trackId }),
+	lyricsTrack: (trackId: TrackId) => __TAURI_INVOKE<Lyrics>("lyrics_track", { trackId }),
 	/**
 	 *  Starts streaming Meter frames to `frames` as binary messages (see `FRAME_BYTES` in the
 	 *  backend's `meter` module for the layout), replacing any earlier subscription the way `connect`
@@ -134,7 +134,7 @@ export type AlbumTrackRow = {
 
 /**
  *  What the renderer reads and writes. Every field is always present, so the renderer declares
- *  no defaults of its own; a saved file missing a field takes the default here.
+ *  no defaults of its own.
  */
 export type Appearance = {
 	/**  Artwork glow behind the library and Now Playing. */
@@ -284,21 +284,13 @@ export type ListRequest<K> = {
 	limit: number,
 };
 
-export type LyricsContent = { kind: "plain"; lines: string[] } | { kind: "timed"; lines: LyricsTimedLine[] };
-
-export type LyricsDocument = {
-	source: LyricsSourceKind,
-	language: string | null,
-	content: LyricsContent,
-};
-
-export type LyricsResolution = { status: "resolved"; trackId: TrackId; document: LyricsDocument; notice: LyricsResolutionNotice | null } | { status: "notFound"; trackId: TrackId } | { status: "sourceFailed"; trackId: TrackId; 
+export type Lyrics = { status: "found"; content: LyricsContent; notice: LyricsNotice | null } | { status: "notFound" } | { status: "sourceFailed"; 
 /**  The name of the sidecar file the track looks for, without its directory. */
 sidecarFileName: string };
 
-export type LyricsResolutionNotice = "sidecarFailedUsingEmbedded";
+export type LyricsContent = { kind: "plain"; lines: string[] } | { kind: "timed"; lines: LyricsTimedLine[] };
 
-export type LyricsSourceKind = "sidecar" | "embedded";
+export type LyricsNotice = "sidecarFailedUsingEmbedded";
 
 export type LyricsTimedLine = {
 	startMs: number,

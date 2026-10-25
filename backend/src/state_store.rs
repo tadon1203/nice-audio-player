@@ -9,7 +9,7 @@ use crate::library::models::ScanState;
 use crate::messages::{
     BackendMessage, Notification, Notifier, StateMessage, StateTopic, StateValue, Versioned,
 };
-use crate::settings::{Appearance, Settings};
+use crate::settings::{Appearance, SettingsFile};
 
 /// The current value of every state topic, each with its version.
 #[derive(Clone)]
@@ -24,7 +24,7 @@ struct States {
 impl States {
     /// The values before any service has set one: the saved playback and appearance, an idle
     /// scan, and no waveform.
-    fn new(settings: &Settings) -> Self {
+    fn new(settings: &SettingsFile) -> Self {
         let (playback, queue) = initial_playback(&settings.playback);
         Self {
             playback,
@@ -65,7 +65,7 @@ pub struct StateStore {
 }
 
 impl StateStore {
-    pub fn new(settings: &Settings, notifier: Notifier) -> Self {
+    pub fn new(settings: &SettingsFile, notifier: Notifier) -> Self {
         Self {
             states: Mutex::new(States::new(settings)),
             notifier,
@@ -160,7 +160,7 @@ mod tests {
 
     fn state_store() -> (StateStore, Arc<NotificationLog>) {
         let (log, notifier) = NotificationLog::shared();
-        (StateStore::new(&Settings::default(), notifier), log)
+        (StateStore::new(&SettingsFile::default(), notifier), log)
     }
 
     #[test]

@@ -28,7 +28,7 @@ pub use crate::library::models::{
     ArtistSortKey, LetterIndexEntry, LibraryDirectory, ListRequest, Page, SortDirection,
     TrackProperties, TrackRow, TrackSortKey,
 };
-pub use crate::lyrics::LyricsResolution;
+pub use crate::lyrics::Lyrics;
 pub use crate::messages::Versioned;
 pub use crate::settings::{Appearance, AppearancePatch};
 
@@ -42,12 +42,13 @@ use crate::audio::{
 use crate::errors::CommandError;
 use crate::ids::{AlbumId, ArtistId, DirectoryId, QueueItemId, TrackId};
 use crate::library::{
-    Library, LibraryUnavailableReason, StoreError,
+    Library, LibraryUnavailableReason,
     artwork::{self},
+    tracks::PlaybackLookupError,
 };
-use crate::lyrics::{LyricsCommandError, LyricsService, model::LyricsTrackContext};
+use crate::lyrics;
 use crate::messages::{BackendMessage, Notifier, StateTopic};
-use crate::settings::{SettingsService, load_saved};
+use crate::settings::{self, SettingsStore};
 use crate::state_store::StateStore;
 use playback_context::LibraryTracks;
 use std::{
@@ -65,7 +66,7 @@ pub struct BackendApp {
     playback: PlaybackService,
     /// The Library, or why it is unavailable.
     library: Result<Library, LibraryUnavailableReason>,
-    settings: Arc<SettingsService>,
+    settings: Arc<SettingsStore>,
     /// Every published state value. The services publish into it, and the Host reads it.
     state_store: Arc<StateStore>,
     data_dir: PathBuf,
@@ -79,10 +80,10 @@ impl BackendApp {
         messages: Notifier,
         output: Box<dyn OutputBackend>,
     ) -> Result<Self, BackendError> {
-        let saved = load_saved(&data_dir);
+        let saved = settings::read(&settings::file_path(&data_dir));
         let state_store = Arc::new(StateStore::new(&saved, messages.clone()));
-        let settings = Arc::new(SettingsService::start(
-            &data_dir,
+        let settings = Arc::new(SettingsStore::open(
+            settings::file_path(&data_dir),
             saved,
             Arc::clone(&state_store),
         ));
@@ -296,35 +297,26 @@ impl BackendApp {
     // ---- lyrics ----
 
     /// Blocking: the host runs it on a blocking thread.
-    pub fn track_lyrics(&self, track_id: TrackId) -> Result<LyricsResolution, LyricsCommandError> {
-        let library = self
-            .library
-            .as_ref()
-            .inspect_err(|cause| log::warn!("app.lyrics.library_unavailable cause={cause}"))
-            .map_err(|_| LyricsCommandError::Common {
-                error: CommandError::LibraryUnavailable,
-            })?;
-        // The Library says where the file is; lyrics reads what is beside and inside it.
-        let file = library
-            .track_location(track_id)
-            .map_err(map_lyrics_context_error)?
-            .existing()
-            .inspect_err(|cause| log::warn!("app.lyrics.track_unavailable cause={cause}"))
-            .map_err(|_| LyricsCommandError::Common {
-                error: CommandError::TrackUnavailable,
-            })?;
-        Ok(LyricsService::resolve(&LyricsTrackContext {
-            track_id,
-            source: file.path,
-            directory: file.directory,
-        }))
+    pub fn track_lyrics(&self, track_id: TrackId) -> Result<Lyrics, CommandError> {
+        let library = self.library()?;
+        let track = library
+            .playable_tracks(&[track_id])
+            .map_err(|error| match error {
+                PlaybackLookupError::Common(error) => error,
+                PlaybackLookupError::Source(_) => CommandError::TrackUnavailable,
+            })?
+            .pop()
+            .flatten()
+            .ok_or(CommandError::TrackUnavailable)
+            .inspect_err(|cause| log::warn!("app.lyrics.track_unavailable cause={cause}"))?;
+        Ok(lyrics::load(&track))
     }
 
     // ---- appearance ----
 
     /// Applies a renderer update and returns the appearance as it is afterwards.
     pub fn appearance_update(&self, patch: &AppearancePatch) -> Versioned<Appearance> {
-        self.settings.appearance_update(patch)
+        self.settings.update_appearance(patch)
     }
 
     // ---- playback ----
@@ -486,11 +478,5 @@ impl BackendApp {
             .map_err(|_| PlaybackServiceError::Common {
                 error: CommandError::LibraryUnavailable,
             })
-    }
-}
-
-fn map_lyrics_context_error(error: StoreError) -> LyricsCommandError {
-    LyricsCommandError::Common {
-        error: error.into(),
     }
 }

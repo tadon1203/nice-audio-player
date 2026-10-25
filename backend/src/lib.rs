@@ -16,7 +16,6 @@ pub mod threads;
 pub(crate) mod audio;
 pub(crate) mod library;
 pub(crate) mod lyrics;
-pub(crate) mod media;
 pub(crate) mod settings;
 pub(crate) mod state_store;
 

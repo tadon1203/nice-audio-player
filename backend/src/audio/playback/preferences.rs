@@ -27,15 +27,5 @@ impl Default for PlaybackPreferences {
     }
 }
 
-impl PlaybackPreferences {
-    /// Replaces values a hand-edited or damaged file could hold that playback cannot use.
-    pub(crate) fn sanitized(mut self) -> Self {
-        if !self.volume.is_finite() || !(0.0..=1.0).contains(&self.volume) {
-            self.volume = DEFAULT_PLAYBACK_VOLUME;
-        }
-        self
-    }
-}
-
 /// Told, on the playback worker's thread, whenever a preference changes.
 pub(super) type PreferencesObserver = Arc<dyn Fn(PlaybackPreferences) + Send + Sync>;

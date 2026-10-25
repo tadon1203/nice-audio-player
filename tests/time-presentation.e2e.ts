@@ -56,20 +56,15 @@ test("lyrics retain artwork ink, readable Row index times and equal ink while re
   native,
   player,
 }) => {
-  native.respond("lyricsTrack", ({ trackId }) => ({
-    status: "resolved",
-    trackId,
+  native.respond("lyricsTrack", () => ({
+    status: "found",
     notice: null,
-    document: {
-      source: "sidecar",
-      language: null,
-      content: {
-        kind: "timed",
-        lines: Array.from({ length: 30 }, (_, i) => ({
-          startMs: i * 10_000,
-          text: `日本語の長い歌詞 ${i + 1} — 変わらない文字の大きさと読みやすさ`,
-        })),
-      },
+    content: {
+      kind: "timed",
+      lines: Array.from({ length: 30 }, (_, i) => ({
+        startMs: i * 10_000,
+        text: `日本語の長い歌詞 ${i + 1} — 変わらない文字の大きさと読みやすさ`,
+      })),
     },
   }));
   await page.goto("/library/tracks");

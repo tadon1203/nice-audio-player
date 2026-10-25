@@ -37,31 +37,6 @@ impl PlayableTrack {
     pub fn id(&self) -> TrackId {
         self.track.core.id
     }
-
-    /// A track that is only an id, the file's name as its title, and the file.
-    #[cfg(test)]
-    pub(crate) fn bare(id: TrackId, file: ValidatedAudioFile) -> Self {
-        Self {
-            track: NowPlayingTrack {
-                core: TrackCore {
-                    id,
-                    title: file.file_name.clone(),
-                    artist: None,
-                    duration_ms: None,
-                    artwork: None,
-                },
-                album: None,
-                track_number: None,
-                disc_number: None,
-                year: None,
-            },
-            file,
-            file_format: None,
-            bit_depth: None,
-            bitrate_kbps: None,
-            content_hash: None,
-        }
-    }
 }
 
 /// The playable tracks of a selection by id, in playing order, and where to start. The tracks
