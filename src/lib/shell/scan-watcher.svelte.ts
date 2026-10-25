@@ -4,18 +4,16 @@ import { Replica } from "#lib/native/replica.svelte";
 import { type ScanState, type Versioned } from "#lib/native/bindings";
 
 /**
- * The Library scan as the Backend last reported it. When a scan ends, it refreshes what depends on
- * the files: lyrics always, the catalog only if the scan changed something. Both are read from
- * counters that only grow, so a scan is never missed because the snapshots in between were
- * coalesced, and a scan that found nothing new costs no refetch. The one place that decides
- * "scan finished".
+ * The Library scan as the Backend last reported it. The Library version moves when a scan ends, so
+ * when it moves the catalog and the lyrics are refreshed; a scan that did not end costs no
+ * refetch. The version only grows, so a scan is never missed because the snapshots in between were
+ * coalesced. The one place that decides "scan finished".
  */
 export class ScanWatcher {
   readonly #replica = new Replica<ScanState>();
   readonly #catalog: CatalogRepository;
   readonly #lyrics: LyricsRepository;
-  #finished = 0;
-  #changed = 0;
+  #libraryVersion = 0;
 
   public constructor(catalog: CatalogRepository, lyrics: LyricsRepository) {
     this.#catalog = catalog;
@@ -29,13 +27,10 @@ export class ScanWatcher {
 
   public accept(incoming: Versioned<ScanState>): void {
     if (!this.#replica.accept(incoming)) return;
-    const snapshot = incoming.value;
-    if (snapshot.finishedCount <= this.#finished) return;
-    this.#finished = snapshot.finishedCount;
-    if (snapshot.changedCount > this.#changed) {
-      this.#changed = snapshot.changedCount;
-      this.#catalog.refresh();
-    }
+    const { libraryVersion } = incoming.value;
+    if (libraryVersion === this.#libraryVersion) return;
+    this.#libraryVersion = libraryVersion;
+    this.#catalog.refresh();
     this.#lyrics.refresh();
   }
 }

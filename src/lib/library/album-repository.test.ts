@@ -1,7 +1,8 @@
 import { QueryClient } from "@tanstack/svelte-query";
 import { describe, expect, it } from "vitest";
-import { type AlbumId, type LibraryAlbumPage, type AlbumRow } from "#lib/native/bindings";
+import { type AlbumId, type AlbumRow } from "#lib/native/bindings";
 import { library } from "#lib/native/commands";
+import type { Page } from "./catalog-repository";
 import { AlbumRepository } from "./album-repository";
 import { LibraryQueryKeys } from "./library-query-keys";
 
@@ -16,10 +17,10 @@ const summary = (year: number): AlbumRow => ({
   year,
 });
 
-const page = (items: AlbumRow[]): LibraryAlbumPage => ({
+const page = (items: AlbumRow[]): Page<AlbumRow> => ({
   items,
-  totalCount: items.length,
-  nextCursor: null,
+  total: items.length,
+  version: 1,
 });
 
 describe("AlbumRepository.cachedSummary", () => {
@@ -33,7 +34,7 @@ describe("AlbumRepository.cachedSummary", () => {
         direction: "ascending",
         skip: 0,
       }),
-      { pages: [page([summary(1969)])], pageParams: [null] },
+      { pages: [page([summary(1969)])], pageParams: [0] },
     );
     const repository = new AlbumRepository(library, queryClient);
 
@@ -49,7 +50,7 @@ describe("AlbumRepository.cachedSummary", () => {
         sortKey: "year",
         direction: "ascending",
       }),
-      { pages: [page([summary(1969)])], pageParams: [null] },
+      { pages: [page([summary(1969)])], pageParams: [0] },
     );
     const repository = new AlbumRepository(library, queryClient);
 
@@ -75,7 +76,7 @@ describe("AlbumRepository.cachedSummary", () => {
       direction: "ascending",
       skip: 0,
     });
-    const list = { pages: [page([summary(1969)])], pageParams: [null] };
+    const list = { pages: [page([summary(1969)])], pageParams: [0] };
     queryClient.setQueryData(listKey, list);
     const repository = new AlbumRepository(library, queryClient);
 

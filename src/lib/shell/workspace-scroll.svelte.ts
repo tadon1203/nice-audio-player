@@ -2,7 +2,7 @@ import type { Attachment } from "svelte/attachments";
 import { untrack } from "svelte";
 import type { ScrollMemory } from "./scroll-memory";
 
-/** How long the scroll index stays after the last scroll. */
+/** How long the letter index stays after the last scroll. */
 const INDEX_HOLD_MS = 800;
 
 /** How many frames to wait for the content to grow tall enough before settling for the maximum. */

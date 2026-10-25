@@ -23,6 +23,7 @@ The language of Nice Audio Player. Use these terms in code, docs, and tickets. D
 - **Compilation**: tracks that share a directory and an album title, but not an artist. They are one album, filed under Various Artists.
 - **Missing track**: a track whose file is gone. A new file with the same content is that track again (relinked, same `track_id`).
 - **Letter index**: a list's names grouped by first character, counted in the list's own order. It backs the big letter shown while scrolling and the jump to a letter.
+- **Library version**: a number that moves after every change that can alter a list: a directory added, enabled, disabled or removed, Missing tracks deleted, a scan ended. A list page carries the version it was read at, and a list starts over when its pages disagree. _Avoid_: revision.
 
 ## Playback
 

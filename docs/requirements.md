@@ -82,7 +82,7 @@ MP3, FLAC, WAV, AAC, M4A. A file counts as supported only if it can actually be 
 - Sort order uses the same folding. If the file has a SortOrder tag (`TITLESORT`, `ARTISTSORT`, `ALBUMSORT`, `ALBUMARTISTSORT`), the tag is used instead. The app does not skip a leading "The".
   - Order: symbols and digits, Latin, other scripts, kana in gojūon order, then kanji by code point (kanji have no reading).
   - Names with no value come last in both directions.
-- The scroll index (letters, or years for albums sorted by year) is read from the library, in the list's own order. The big letter shown while scrolling and the index rail agree with the order by construction.
+- The letter index (letters, or years for albums sorted by year) is read from the library, in the list's own order. The big letter shown while scrolling and the index rail agree with the order by construction.
   - Kana are filed under the head of their row (か for が). All kanji are one "漢".
   - Choosing a letter starts the list there, without loading what precedes it.
   - Choosing the first letter, or changing the sort or filter, starts the list from the top.

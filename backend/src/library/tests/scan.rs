@@ -6,12 +6,14 @@ use crate::library::models::{ScanFailure, ScanState, ScanStatus};
 use crate::messages::{StateValue, Versioned};
 use crate::test_support::{TestDirectory, hub_for_tests, null_message_listener, write_pcm_i16_wav};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, AtomicU64};
 
 pub(super) struct Fixture {
     _directory: TestDirectory,
     pub(super) music: PathBuf,
     pub(super) database: Database,
+    /// The Library version the scans advance.
+    pub(super) version: AtomicU64,
 }
 
 pub(super) fn fixture() -> Fixture {
@@ -25,6 +27,7 @@ pub(super) fn fixture() -> Fixture {
         _directory: directory,
         music,
         database,
+        version: AtomicU64::new(0),
     }
 }
 
@@ -63,7 +66,13 @@ fn run_versioned(
         state: ScanStatus::Running,
         ..ScanState::idle()
     }));
-    crate::library::scanner::run(&fixture.database, &jobs, &hub, &AtomicBool::new(cancelled));
+    crate::library::scanner::run(
+        &fixture.database,
+        &jobs,
+        &hub,
+        &fixture.version,
+        &AtomicBool::new(cancelled),
+    );
 
     hub.read(|published| published.scan.clone())
 }
@@ -442,10 +451,12 @@ fn a_moved_directory_and_a_renamed_file_keep_their_tracks_and_leave_nothing_miss
     assert_eq!(id_of(&after, "New/two.wav"), id_of(&before, "Old/two.wav"));
     assert_eq!(id_of(&after, "renamed.wav"), id_of(&before, "loose.wav"));
     // A queue entry holds the track id: it now resolves to the file's new place.
-    let store = crate::library::store::LibraryStore::new(fixture.database.clone());
     let queued =
         crate::ids::TrackId::try_from_rowid(id_of(&before, "Old/one.wav").unwrap()).unwrap();
-    let location = store.track_location(queued).unwrap().existing().unwrap();
+    let location = crate::library::tracks::location_of(&fixture.database, queued)
+        .unwrap()
+        .existing()
+        .unwrap();
     assert!(
         location.path.ends_with("New/one.wav"),
         "{:?}",
@@ -546,7 +557,7 @@ fn a_scan_that_follows_a_change_walks_only_that_directory() {
 
     assert_eq!(scan.state, ScanStatus::Completed);
     assert_eq!(scan.discovered_count, 4, "B's four files, nothing else");
-    assert_eq!((scan.inspected_count, scan.changed_count), (1, 1));
+    assert_eq!(scan.inspected_count, 1);
     assert_eq!(
         count(
             &fixture,
@@ -559,7 +570,6 @@ fn a_scan_that_follows_a_change_walks_only_that_directory() {
     let scan = run_scan_of(&fixture, &[fixture.music.join("C").join("0.wav")]);
 
     assert_eq!(scan.discovered_count, 2, "the vanished file's directory");
-    assert_eq!(scan.changed_count, 1);
     assert_eq!(
         count(
             &fixture,
@@ -589,25 +599,22 @@ fn a_removed_directory_is_found_through_its_nearest_existing_parent() {
 }
 
 #[test]
-fn a_scan_reports_whether_it_changed_anything_and_every_end_is_counted() {
+fn every_scan_end_advances_the_library_version() {
     let fixture = fixture();
     write_tone(&fixture.music.join("a.wav"), 8_000);
 
     let first = run_scan(&fixture, false);
     let second = run_scan(&fixture, false);
-    write_tone(&fixture.music.join("b.wav"), 16_000);
-    let third = run_scan(&fixture, false);
+    let cancelled = run_scan(&fixture, true);
 
-    assert_eq!(first.changed_count, 1);
     assert_eq!(
-        second.changed_count, 0,
-        "nothing changed, nothing to refetch"
-    );
-    assert_eq!(third.changed_count, 1);
-    assert_eq!(
-        (first.finished_count, second.finished_count),
-        (1, 1),
-        "each scan here starts from its own snapshot"
+        (
+            first.library_version,
+            second.library_version,
+            cancelled.library_version
+        ),
+        (1, 2, 3),
+        "a scan that ends, however it ends, is a change the lists must see"
     );
 }
 

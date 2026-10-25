@@ -57,17 +57,17 @@ export const commands = {
 	appOpenLogDirectory: () => __TAURI_INVOKE<null>("app_open_log_directory"),
 	libraryStartScan: () => __TAURI_INVOKE<null>("library_start_scan"),
 	libraryCancelScan: () => __TAURI_INVOKE<null>("library_cancel_scan"),
-	libraryListTracks: (request: TrackListRequest) => __TAURI_INVOKE<LibraryTrackPage>("library_list_tracks", { request }),
-	libraryListAlbums: (request: AlbumListRequest) => __TAURI_INVOKE<LibraryAlbumPage>("library_list_albums", { request }),
-	libraryListArtists: (request: AlbumArtistListRequest) => __TAURI_INVOKE<LibraryAlbumArtistPage>("library_list_artists", { request }),
-	/**  The scroll index of the Tracks list: how many names start under each label, in list order. */
-	libraryTrackIndex: (query: TrackQuery) => __TAURI_INVOKE<ScrollIndexBucket[]>("library_track_index", { query }),
-	libraryAlbumIndex: (query: AlbumQuery) => __TAURI_INVOKE<ScrollIndexBucket[]>("library_album_index", { query }),
-	libraryArtistIndex: (query: AlbumArtistQuery) => __TAURI_INVOKE<ScrollIndexBucket[]>("library_artist_index", { query }),
+	libraryListTracks: (request: ListRequest<TrackSortKey>) => __TAURI_INVOKE<Page<TrackRow>>("library_list_tracks", { request }),
+	libraryListAlbums: (request: ListRequest<AlbumSortKey>) => __TAURI_INVOKE<Page<AlbumRow>>("library_list_albums", { request }),
+	libraryListArtists: (request: ListRequest<ArtistSortKey>) => __TAURI_INVOKE<Page<ArtistRow>>("library_list_artists", { request }),
+	/**  The letter index of the Tracks list: how many names start under each label, in list order. */
+	libraryTrackIndex: (request: ListRequest<TrackSortKey>) => __TAURI_INVOKE<LetterIndexEntry[]>("library_track_index", { request }),
+	libraryAlbumIndex: (request: ListRequest<AlbumSortKey>) => __TAURI_INVOKE<LetterIndexEntry[]>("library_album_index", { request }),
+	libraryArtistIndex: (request: ListRequest<ArtistSortKey>) => __TAURI_INVOKE<LetterIndexEntry[]>("library_artist_index", { request }),
 	libraryArtist: (artistId: ArtistId) => __TAURI_INVOKE<ArtistRow>("library_artist", { artistId }),
-	libraryListArtistAlbums: (request: ArtistAlbumsRequest) => __TAURI_INVOKE<LibraryAlbumPage>("library_list_artist_albums", { request }),
+	libraryListArtistAlbums: (artistId: ArtistId, request: ListRequest<ArtistAlbumSortKey>) => __TAURI_INVOKE<Page<AlbumRow>>("library_list_artist_albums", { artistId, request }),
 	libraryAlbum: (albumId: AlbumId) => __TAURI_INVOKE<AlbumDetails>("library_album", { albumId }),
-	libraryListAlbumTracks: (request: AlbumTracksRequest) => __TAURI_INVOKE<LibraryAlbumTrackPage>("library_list_album_tracks", { request }),
+	libraryListAlbumTracks: (albumId: AlbumId) => __TAURI_INVOKE<AlbumTrackRow[]>("library_list_album_tracks", { albumId }),
 	libraryTrackProperties: (trackId: TrackId) => __TAURI_INVOKE<TrackProperties>("library_track_properties", { trackId }),
 	/**  Shows the track's file in Explorer, selected. */
 	libraryRevealTrack: (trackId: TrackId) => __TAURI_INVOKE<null>("library_reveal_track", { trackId }),
@@ -99,19 +99,6 @@ export const commands = {
 };
 
 /* Types */
-/**  A page of the Album Artists list (see [`TrackListRequest`]). */
-export type AlbumArtistListRequest = {
-	cursor: string | null,
-	skip: number,
-} & AlbumArtistQuery;
-
-/**  How the Album Artists list is filtered and sorted. */
-export type AlbumArtistQuery = {
-	search: string | null,
-	sortKey: ArtistSortKey,
-	sortDirection: SortDirection,
-};
-
 export type AlbumDetails = {
 	summary: AlbumRow,
 	date: string | null,
@@ -125,19 +112,6 @@ export type AlbumDetails = {
  *  directory. A track with no album hashes an empty directory.
  */
 export type AlbumId = string;
-
-/**  A page of the Albums list (see [`TrackListRequest`]). */
-export type AlbumListRequest = {
-	cursor: string | null,
-	skip: number,
-} & AlbumQuery;
-
-/**  How the Albums list is filtered and sorted. */
-export type AlbumQuery = {
-	search: string | null,
-	sortKey: AlbumSortKey,
-	sortDirection: SortDirection,
-};
 
 export type AlbumRow = {
 	id: AlbumId,
@@ -158,12 +132,6 @@ export type AlbumTrackRow = {
 	sampleRate: number | null,
 } & TrackCore;
 
-/**  The tracks of one album, by its ID (see `ids.rs`), from a page cursor. */
-export type AlbumTracksRequest = {
-	albumId: AlbumId,
-	cursor: string | null,
-};
-
 /**
  *  What the renderer reads and writes. Every field is always present, so the renderer declares
  *  no defaults of its own; a saved file missing a field takes the default here.
@@ -182,14 +150,6 @@ export type AppearancePatch = {
 };
 
 export type ArtistAlbumSortKey = "year" | "title";
-
-/**  The albums of one Album Artist, by its ID (see `ids.rs`). */
-export type ArtistAlbumsRequest = {
-	artistId: ArtistId,
-	cursor: string | null,
-	sortKey: ArtistAlbumSortKey,
-	sortDirection: SortDirection,
-};
 
 /**  An Album Artist: blake3 of the normalized name. */
 export type ArtistId = string;
@@ -282,26 +242,22 @@ export type CurrentPlayback = {
 /**  A library directory: the `directories` rowid. Above zero. On the IPC a number. */
 export type DirectoryId = number;
 
-export type LibraryAlbumArtistPage = {
-	items: ArtistRow[],
-	/**  How many rows the whole list has; only the first page (no cursor) says. */
-	totalCount: number | null,
-	nextCursor: string | null,
+/**
+ *  One entry of a list's letter index: the label its names are filed under, the offset of its
+ *  first row in the list, and how many rows it has. Entries come in the list's own order.
+ */
+export type LetterIndexEntry = {
+	label: string,
+	kind: LetterIndexEntryKind,
+	start: number,
+	count: number,
 };
 
-export type LibraryAlbumPage = {
-	items: AlbumRow[],
-	/**  How many rows the whole list has; only the first page (no cursor) says. */
-	totalCount: number | null,
-	nextCursor: string | null,
-};
-
-export type LibraryAlbumTrackPage = {
-	items: AlbumTrackRow[],
-	/**  How many rows the whole list has; only the first page (no cursor) says. */
-	totalCount: number | null,
-	nextCursor: string | null,
-};
+/**
+ *  What kind of label a letter index entry has. `Unknown` is the entry for the names with no
+ *  value to file them by, which comes last.
+ */
+export type LetterIndexEntryKind = "letter" | "kana" | "kanji" | "unknown";
 
 export type LibraryDirectory = {
 	id: DirectoryId,
@@ -316,18 +272,20 @@ export type LibraryDirectory = {
 
 export type LibraryStatus = { status: "ready" } | { status: "unavailable"; reason: LibraryUnavailableReason };
 
-export type LibraryTrackPage = {
-	items: TrackRow[],
-	/**  How many rows the whole list has; only the first page (no cursor) says. */
-	totalCount: number | null,
-	nextCursor: string | null,
-};
-
 /**
  *  Why the Library is unavailable. The only reason left is a database that cannot be opened: any
  *  other database is replaced at open.
  */
 export type LibraryUnavailableReason = "databaseOpenFailed";
+
+/**  A page request: the search (`None` when empty), the sort, and the window of rows. */
+export type ListRequest<K> = {
+	search: string | null,
+	sort: K,
+	direction: SortDirection,
+	offset: number,
+	limit: number,
+};
 
 export type LyricsContent = { kind: "plain"; lines: string[] } | { kind: "timed"; lines: LyricsTimedLine[] };
 
@@ -369,15 +327,23 @@ export type NowPlayingTrack = {
 	year: number | null,
 } & TrackCore;
 
+/**
+ *  One page of a list: which rows, how many the whole list has, and the Library version it was
+ *  read at. A page whose version differs from the first one's means the list changed under it.
+ */
+export type Page<T> = {
+	items: T[],
+	total: number,
+	version: number,
+};
+
 export type PlaybackChannelConversion = "none" | "monoToStereo" | "stereoToMono" | "downmix";
 
 export type PlaybackContext = 
 /**  An album in disc and track order, by its ID. */
 { kind: "album"; albumId: AlbumId } | 
 /**  The tracks list as currently filtered and sorted. */
-{
-	kind: "tracks",
-} & TrackQuery;
+{ kind: "tracks"; search: string | null; sort: TrackSortKey; direction: SortDirection };
 
 /**  Fields every transport state carries. */
 export type PlaybackControls = {
@@ -489,28 +455,13 @@ export type ScanState = {
 	failedCount: number,
 	failureCode: ScanFailure | null,
 	/**
-	 *  How many scans have ended since the app started. Only ever grows, so a listener that saw
-	 *  the count change knows a scan ended, however many snapshots it missed in between.
+	 *  The Library version (see `Library::version`). It changes whenever a scan ends, so a
+	 *  listener that sees it move knows the lists may have changed.
 	 */
-	finishedCount: number,
-	/**
-	 *  How many files scans have added, changed, relinked, or found Missing or back since the app
-	 *  started. Only ever grows: a listener that sees it move since it last looked knows the
-	 *  catalog changed, and one that does not knows it did not.
-	 */
-	changedCount: number,
+	libraryVersion: number,
 };
 
 export type ScanStatus = "idle" | "running" | "completed" | "cancelled" | "failed";
-
-/**
- *  One entry of a list's scroll index: the label its names are filed under, and how many there
- *  are. Buckets come in the list's own order.
- */
-export type ScrollIndexBucket = {
-	label: string,
-	count: number,
-};
 
 export type SortDirection = "ascending" | "descending";
 
@@ -554,15 +505,6 @@ export type TrackCore = {
 /**  A track: the `tracks` rowid. Above zero. On the IPC a number. */
 export type TrackId = number;
 
-/**
- *  A page of the Tracks list. With no `cursor` it starts after the first `skip` rows, which is
- *  how the scroll index jumps to a letter without paging through what precedes it.
- */
-export type TrackListRequest = {
-	cursor: string | null,
-	skip: number,
-} & TrackQuery;
-
 /**  The tags, audio format and location of one track, as the Properties view lists them. */
 export type TrackProperties = {
 	id: TrackId,
@@ -585,23 +527,12 @@ export type TrackProperties = {
 	channelCount: number | null,
 	bitDepth: number | null,
 	bitrateKbps: number | null,
-	state: TrackState,
-};
-
-/**  How the Tracks list is filtered and sorted. */
-export type TrackQuery = {
-	search: string | null,
-	sortKey: TrackSortKey,
-	sortDirection: SortDirection,
 };
 
 export type TrackRow = {
 	state: TrackState,
 	/**  `None` for a track with no album tag. */
 	album: TrackAlbum | null,
-	fileFormat: string | null,
-	bitDepth: number | null,
-	bitrateKbps: number | null,
 } & TrackCore;
 
 export type TrackSortKey = "title" | "artist" | "album" | "duration";

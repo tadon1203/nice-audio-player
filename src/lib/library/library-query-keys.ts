@@ -44,7 +44,7 @@ export class LibraryQueryKeys {
     return [...LibraryQueryKeys.catalogs, request];
   }
 
-  /** The scroll index of a list: how its names are filed, in its order. Not tied to `skip`. */
+  /** The letter index of a list: how its names are filed, in its order. Not tied to `skip`. */
   public static catalogIndex(request: LibraryCatalogRequest): readonly unknown[] {
     return [...LibraryQueryKeys.data, "catalogIndex", { ...request, skip: 0 }];
   }

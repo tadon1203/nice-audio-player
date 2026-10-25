@@ -6,7 +6,8 @@ import {
   type ArtistRow,
   type AlbumDetails,
   type AlbumRow,
-  type LibraryAlbumTrackPage,
+  type AlbumTrackRow,
+  type Page,
   type LibraryDirectory,
   type ScanState,
   type ScanStatus,
@@ -24,7 +25,7 @@ export interface LibraryData {
   albums: AlbumRow[];
   artists: ArtistRow[];
   albumDetails: AlbumDetails;
-  albumTracks: LibraryAlbumTrackPage;
+  albumTracks: AlbumTrackRow[];
 }
 
 export const testDirectory: LibraryDirectory = {
@@ -83,26 +84,16 @@ export function makeTracks(count = 140, options: { artwork?: boolean } = {}): Tr
       },
       artwork: options.artwork ? ARTWORK : null,
       durationMs: 120_000 + index * 1_000,
-      fileFormat: "FLAC",
-      bitDepth: 24,
-      bitrateKbps: null,
       state: missing ? "missing" : "playable",
     };
   });
 }
 
-export function pageOf<T>(
-  items: T[],
-  cursor: string | null,
-  size = 40,
-): { items: T[]; totalCount: number; nextCursor: string | null } {
-  const start = cursor === null ? 0 : Number(cursor);
-  const slice = items.slice(start, start + size);
-  const next = start + slice.length;
+export function pageOf<T>(items: T[], offset: number, size = 40): Page<T> {
   return {
-    items: slice,
-    totalCount: items.length,
-    nextCursor: next < items.length ? String(next) : null,
+    items: items.slice(offset, offset + size),
+    total: items.length,
+    version: 1,
   };
 }
 
@@ -139,23 +130,19 @@ export function testLibrary(
       durationMs: 421_000,
       firstPlayableTrackId: tracks[0]?.id ?? null,
     },
-    albumTracks: {
-      items: [tracks[0]!, tracks[1]!, tracks[4]!].map((track, index) => ({
-        id: track.id,
-        title: track.title,
-        artist: track.artist,
-        artwork: track.artwork,
-        trackNumber: index + 1,
-        discNumber: null,
-        fileFormat: "FLAC",
-        bitDepth: 24,
-        sampleRate: 96_000,
-        durationMs: track.durationMs,
-        state: track.state,
-      })),
-      totalCount: 3,
-      nextCursor: null,
-    },
+    albumTracks: [tracks[0]!, tracks[1]!, tracks[4]!].map((track, index) => ({
+      id: track.id,
+      title: track.title,
+      artist: track.artist,
+      artwork: track.artwork,
+      trackNumber: index + 1,
+      discNumber: null,
+      fileFormat: "FLAC",
+      bitDepth: 24,
+      sampleRate: 96_000,
+      durationMs: track.durationMs,
+      state: track.state,
+    })),
   };
 }
 
@@ -163,31 +150,20 @@ export function testLibrary(
 export function libraryResponses(library: LibraryData = testLibrary()): Record<string, unknown> {
   return {
     libraryDirectories: library.directories,
-    libraryListTracks: ({
+    libraryListTracks: ({ request }: { request: { offset: number } }): Page<TrackRow> =>
+      pageOf(library.tracks, request.offset),
+    libraryListAlbums: ({ request }: { request: { offset: number } }): Page<AlbumRow> =>
+      pageOf(library.albums, request.offset, library.albums.length),
+    libraryListArtists: ({
       request,
     }: {
-      request: { cursor: string | null };
-    }): { items: TrackRow[]; totalCount: number; nextCursor: string | null } =>
-      pageOf(library.tracks, request.cursor),
-    libraryListAlbums: (): {
-      items: AlbumRow[];
-      totalCount: number;
-      nextCursor: string | null;
-    } => pageOf(library.albums, null, library.albums.length),
-    libraryListArtists: (): {
-      items: ArtistRow[];
-      totalCount: number;
-      nextCursor: string | null;
-    } => pageOf(library.artists, null),
+      request: { offset: number; limit: number };
+    }): Page<ArtistRow> => pageOf(library.artists, request.offset, request.limit),
     libraryTrackIndex: [],
     libraryAlbumIndex: [],
     libraryArtistIndex: [],
     libraryArtist: library.artists[0],
-    libraryListArtistAlbums: (): {
-      items: AlbumRow[];
-      totalCount: number;
-      nextCursor: string | null;
-    } => pageOf(library.albums.slice(0, 2), null),
+    libraryListArtistAlbums: (): Page<AlbumRow> => pageOf(library.albums.slice(0, 2), 0),
     libraryAlbum: library.albumDetails,
     libraryListAlbumTracks: library.albumTracks,
     libraryTrackProperties: ({
@@ -233,12 +209,12 @@ export function libraryResponses(library: LibraryData = testLibrary()): Record<s
         genre: "Electronic",
         date: "2019-05-03",
         durationMs: track.durationMs,
-        fileFormat: track.fileFormat,
+        fileFormat: "FLAC",
         codec: "flac",
         sampleRate: 96_000,
         channelCount: 2,
-        bitDepth: track.bitDepth,
-        bitrateKbps: track.bitrateKbps,
+        bitDepth: 24,
+        bitrateKbps: null,
       };
     },
     libraryRevealTrack: null,
@@ -259,8 +235,7 @@ export const idleScan: ScanState = {
   indexedCount: 0,
   failedCount: 0,
   failureCode: null,
-  finishedCount: 0,
-  changedCount: 0,
+  libraryVersion: 0,
 };
 
 /** A scan snapshot in a state, with the counts a scan in that state would show. */
@@ -275,8 +250,7 @@ export function scanSnapshot(state: ScanStatus): ScanState {
     indexedCount: state === "running" ? 6 : 18,
     failedCount: state === "failed" ? 2 : 0,
     failureCode: state === "failed" ? "directoryTraversalFailed" : null,
-    finishedCount: state === "running" ? 0 : 1,
-    changedCount: 20,
+    libraryVersion: state === "running" ? 0 : 1,
   };
 }
 
@@ -454,7 +428,7 @@ export function playingSnapshot(fields: PlayingFields): PlaybackState {
 
 /** The playable tracks of the library's one album, in order: what Play album should start. */
 export function albumSequence(library: LibraryData): TrackRow[] {
-  return library.albumTracks.items.flatMap((item) =>
+  return library.albumTracks.flatMap((item) =>
     library.tracks.filter((track) => track.id === item.id && track.state === "playable"),
   );
 }

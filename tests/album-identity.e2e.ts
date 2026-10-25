@@ -61,20 +61,16 @@ test("two albums with one title and Album Artist in two directories each open th
 
   native.respond("libraryListAlbums", () => ({
     items: albums,
-    totalCount: albums.length,
-    nextCursor: null,
+    total: albums.length,
+    version: 1,
   }));
   native.respond("libraryAlbum", ({ albumId }) => ({
     ...base.albumDetails,
     summary: albums[printingOf(albumId)]!,
   }));
-  native.respond("libraryListAlbumTracks", ({ request }) => ({
-    ...base.albumTracks,
-    items: [
-      { ...base.albumTracks.items[0]!, title: printings[printingOf(request.albumId)]!.track },
-    ],
-    totalCount: 1,
-  }));
+  native.respond("libraryListAlbumTracks", ({ albumId }) => [
+    { ...base.albumTracks[0]!, title: printings[printingOf(albumId)]!.track },
+  ]);
 
   await page.goto("/library/albums");
   const tiles = page.getByRole("link", { name: "Open album Test album by Test artist" });

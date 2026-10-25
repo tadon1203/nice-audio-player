@@ -18,7 +18,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("#lib/native/bindings", () => ({ commands: mocks.commands }));
 
 const { commands } = mocks;
-const empty = { items: [], totalCount: 0, nextCursor: null };
+const empty = { items: [], total: 0, version: 1 };
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -31,9 +31,12 @@ beforeEach(() => {
 });
 
 /** Runs the query function of a repository's options, as TanStack Query does. */
-async function runQuery(options: { queryFn?: unknown }, context: unknown = {}): Promise<unknown> {
+async function runQuery(
+  options: { queryFn?: unknown; queryKey?: readonly unknown[] },
+  pageParam = 0,
+): Promise<unknown> {
   const queryFn = options.queryFn as (context: unknown) => Promise<unknown>;
-  return queryFn(context);
+  return queryFn({ pageParam, queryKey: options.queryKey });
 }
 
 describe("CatalogRepository", () => {
@@ -51,15 +54,15 @@ describe("CatalogRepository", () => {
         },
         true,
       ),
-      { pageParam: null },
+      4,
     );
 
     expect(commands.libraryListAlbums).toHaveBeenCalledWith({
       search: "abbey",
-      sortKey: "year",
-      sortDirection: "descending",
-      cursor: null,
-      skip: 4,
+      sort: "year",
+      direction: "descending",
+      offset: 4,
+      limit: 100,
     });
   });
 
@@ -77,19 +80,18 @@ describe("CatalogRepository", () => {
         },
         true,
       ),
-      { pageParam: null },
     );
 
     expect(commands.libraryListArtists).toHaveBeenCalledWith({
       search: null,
-      sortKey: "albumCount",
-      sortDirection: "ascending",
-      cursor: null,
-      skip: 0,
+      sort: "albumCount",
+      direction: "ascending",
+      offset: 0,
+      limit: 100,
     });
   });
 
-  it("lists tracks, and reads the scroll index of the same list", async () => {
+  it("lists tracks, and reads the letter index of the same list", async () => {
     const repository = new CatalogRepository(library, new QueryClient());
     const request: LibraryCatalogRequest = {
       presentation: "tracks",
@@ -99,20 +101,22 @@ describe("CatalogRepository", () => {
       skip: 10,
     };
 
-    await runQuery(repository.pageOptions(request, true), { pageParam: null });
+    await runQuery(repository.pageOptions(request, true), 10);
     await runQuery(repository.indexOptions(request, true));
 
     expect(commands.libraryListTracks).toHaveBeenCalledWith({
       search: null,
-      sortKey: "duration",
-      sortDirection: "ascending",
-      cursor: null,
-      skip: 10,
+      sort: "duration",
+      direction: "ascending",
+      offset: 10,
+      limit: 100,
     });
     expect(commands.libraryTrackIndex).toHaveBeenCalledWith({
       search: null,
-      sortKey: "duration",
-      sortDirection: "ascending",
+      sort: "duration",
+      direction: "ascending",
+      offset: 0,
+      limit: 0,
     });
   });
 
@@ -140,13 +144,17 @@ describe("CatalogRepository", () => {
 
     expect(commands.libraryAlbumIndex).toHaveBeenCalledWith({
       search: "x",
-      sortKey: "year",
-      sortDirection: "ascending",
+      sort: "year",
+      direction: "ascending",
+      offset: 0,
+      limit: 0,
     });
     expect(commands.libraryArtistIndex).toHaveBeenCalledWith({
       search: null,
-      sortKey: "artist",
-      sortDirection: "descending",
+      sort: "artist",
+      direction: "descending",
+      offset: 0,
+      limit: 0,
     });
   });
 
@@ -154,11 +162,11 @@ describe("CatalogRepository", () => {
     const queryClient = new QueryClient();
     const repository = new CatalogRepository(library, queryClient);
     const key = ["library", "data", "catalog", { presentation: "tracks" }];
-    queryClient.setQueryData(key, { pages: [1, 2, 3], pageParams: [null, "a", "b"] });
+    queryClient.setQueryData(key, { pages: [1, 2, 3], pageParams: [0, 100, 200] });
 
     repository.refresh();
 
-    expect(queryClient.getQueryData(key)).toEqual({ pages: [1], pageParams: [null] });
+    expect(queryClient.getQueryData(key)).toEqual({ pages: [1], pageParams: [0] });
   });
 
   it("reads the library status through the status command", async () => {
@@ -167,5 +175,57 @@ describe("CatalogRepository", () => {
 
     await expect(runQuery(repository.statusOptions())).resolves.toEqual({ status: "ready" });
     expect(commands.libraryStatus).toHaveBeenCalledOnce();
+  });
+});
+
+describe("CatalogRepository page versions", () => {
+  it("starts the list over when a page was read at another Library version", async () => {
+    const queryClient = new QueryClient();
+    const repository = new CatalogRepository(library, queryClient);
+    const options = repository.pageOptions(
+      {
+        presentation: "tracks",
+        filter: "",
+        sortKey: "title",
+        direction: "ascending",
+        skip: 0,
+      },
+      true,
+    );
+    queryClient.setQueryData(options.queryKey, {
+      pages: [{ items: [], total: 200, version: 1 }],
+      pageParams: [0],
+    });
+    commands.libraryListTracks.mockResolvedValue({ items: [], total: 200, version: 2 });
+    const reset = vi.spyOn(queryClient, "resetQueries").mockResolvedValue(undefined);
+
+    await runQuery(options, 100);
+
+    expect(reset).toHaveBeenCalledWith({ queryKey: options.queryKey, exact: true });
+  });
+
+  it("keeps the list when the page was read at the version of the first page", async () => {
+    const queryClient = new QueryClient();
+    const repository = new CatalogRepository(library, queryClient);
+    const options = repository.pageOptions(
+      {
+        presentation: "tracks",
+        filter: "",
+        sortKey: "title",
+        direction: "ascending",
+        skip: 0,
+      },
+      true,
+    );
+    queryClient.setQueryData(options.queryKey, {
+      pages: [{ items: [], total: 200, version: 1 }],
+      pageParams: [0],
+    });
+    commands.libraryListTracks.mockResolvedValue({ items: [], total: 200, version: 1 });
+    const reset = vi.spyOn(queryClient, "resetQueries");
+
+    await runQuery(options, 100);
+
+    expect(reset).not.toHaveBeenCalled();
   });
 });

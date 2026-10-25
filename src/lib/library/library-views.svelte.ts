@@ -25,7 +25,7 @@ class LibraryView<Presentation extends LibraryPresentation> {
   public filter = $state("");
   public sortKey: SortKeyOf[Presentation];
   public direction: SortDirection = $state("ascending");
-  /** Rows the list starts after: 0, or where the scroll index jumped to. */
+  /** Rows the list starts after: 0, or where the letter index jumped to. */
   public skip = $state(0);
 
   readonly #presentation: Presentation;
@@ -77,7 +77,7 @@ class LibraryView<Presentation extends LibraryPresentation> {
     this.skip = 0;
   };
 
-  /** Starts the list after `skip` rows (a letter of the scroll index); 0 is the top. */
+  /** Starts the list after `skip` rows (a letter of the letter index); 0 is the top. */
   public jumpTo = (skip: number): void => {
     this.skip = skip;
   };

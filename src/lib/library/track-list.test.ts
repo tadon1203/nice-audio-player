@@ -7,8 +7,8 @@ describe("TrackList.context", () => {
     expect(TrackList.context(view)).toEqual({
       kind: "tracks",
       search: null,
-      sortKey: "title",
-      sortDirection: "ascending",
+      sort: "title",
+      direction: "ascending",
     });
     expect(TrackList.context({ ...view, filter: "x" })).toMatchObject({ search: "x" });
   });

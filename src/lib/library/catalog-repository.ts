@@ -7,17 +7,14 @@ import {
 } from "@tanstack/svelte-query";
 import {
   type ArtworkHash,
-  type LibraryAlbumArtistPage,
-  type LibraryAlbumPage,
-  type ArtistSortKey,
-  type ArtistRow,
-  type AlbumSortKey,
   type AlbumRow,
-  type ScrollIndexBucket,
+  type AlbumSortKey,
+  type ArtistRow,
+  type ArtistSortKey,
+  type LetterIndexEntry,
   type SortDirection,
-  type LibraryTrackPage,
-  type TrackSortKey,
   type TrackRow,
+  type TrackSortKey,
   type TrackId,
 } from "#lib/native/bindings";
 import type { library } from "#lib/native/commands";
@@ -31,14 +28,17 @@ import type {
 } from "@tanstack/svelte-query";
 import { type LibraryDirectory, type LibraryStatus } from "#lib/native/bindings";
 
-export type CatalogPage = LibraryAlbumPage | LibraryAlbumArtistPage | LibraryTrackPage;
+/** How many rows one page asks for. */
+export const PAGE_SIZE = 100;
 
+/** A page of a list: its rows, how long the whole list is, and the Library version it was read at. */
 export interface Page<Item> {
   readonly items: readonly Item[];
-  /** How long the whole list is; only its first page says. */
-  readonly totalCount: number | null;
-  readonly nextCursor: string | null;
+  readonly total: number;
+  readonly version: number;
 }
+
+export type CatalogPage = Page<AlbumRow> | Page<ArtistRow> | Page<TrackRow>;
 
 /** The catalog item type for a presentation. */
 export type LibraryCatalogItem<Presentation extends LibraryCatalogRequest["presentation"]> = {
@@ -53,6 +53,7 @@ export type LibraryCatalogRequest =
       readonly filter: string;
       readonly sortKey: AlbumSortKey;
       readonly direction: SortDirection;
+      /** The row the list starts at: 0, or the start of a letter of its letter index. */
       readonly skip: number;
     }
   | {
@@ -67,11 +68,10 @@ export type LibraryCatalogRequest =
       readonly filter: string;
       readonly sortKey: TrackSortKey;
       readonly direction: SortDirection;
-      /** Rows to start after, for a list entered at a letter of its scroll index. */
       readonly skip: number;
     };
 
-/** The catalog lists and their scroll indexes: the data the Library browses. */
+/** The catalog lists and their letter indexes: the data the Library browses. */
 export class CatalogRepository {
   readonly #library: typeof library;
   readonly #queryClient: QueryClient;
@@ -109,6 +109,11 @@ export class CatalogRepository {
     });
   }
 
+  /**
+   * The pages of a list, by offset. The first page starts at `request.skip`; each next one starts
+   * after the rows loaded so far. A page read at another Library version than the first one's
+   * means the list changed under it, so the list starts over from its first page.
+   */
   public pageOptions(
     request: LibraryCatalogRequest,
     enabled: boolean,
@@ -117,18 +122,29 @@ export class CatalogRepository {
     Error,
     InfiniteData<CatalogPage, unknown>,
     readonly unknown[],
-    string | null
+    number
   > & {
     initialData?:
-      | InfiniteData<CatalogPage, string | null>
-      | InitialDataFunction<InfiniteData<CatalogPage, string | null>>
+      | InfiniteData<CatalogPage, number>
+      | InitialDataFunction<InfiniteData<CatalogPage, number>>
       | undefined;
   } & QueryKeyWithDataTag<readonly unknown[], InfiniteData<CatalogPage, unknown>, Error> {
     return infiniteQueryOptions({
       queryKey: LibraryQueryKeys.catalog(request),
-      initialPageParam: null as string | null,
-      queryFn: ({ pageParam }) => this.#listPage(request, pageParam),
-      getNextPageParam: (page: CatalogPage) => page.nextCursor ?? undefined,
+      initialPageParam: request.skip,
+      queryFn: async ({ pageParam, queryKey }) => {
+        const page = await this.#listPage(request, pageParam);
+        const first =
+          this.#queryClient.getQueryData<InfiniteData<CatalogPage, number>>(queryKey)?.pages[0];
+        if (pageParam !== request.skip && first !== undefined && first.version !== page.version) {
+          void this.#queryClient.resetQueries({ queryKey, exact: true }).catch(() => undefined);
+        }
+        return page;
+      },
+      getNextPageParam: (last: CatalogPage, _pages, lastPageParam: number) => {
+        const next = lastPageParam + last.items.length;
+        return next < last.total ? next : undefined;
+      },
       enabled,
     });
   }
@@ -136,9 +152,9 @@ export class CatalogRepository {
   public indexOptions(
     request: LibraryCatalogRequest,
     enabled: boolean,
-  ): CreateQueryOptions<ScrollIndexBucket[], Error, ScrollIndexBucket[], readonly unknown[]> & {
-    initialData?: ScrollIndexBucket[] | InitialDataFunction<ScrollIndexBucket[]> | undefined;
-  } & QueryKeyWithDataTag<readonly unknown[], ScrollIndexBucket[], Error> {
+  ): CreateQueryOptions<LetterIndexEntry[], Error, LetterIndexEntry[], readonly unknown[]> & {
+    initialData?: LetterIndexEntry[] | InitialDataFunction<LetterIndexEntry[]> | undefined;
+  } & QueryKeyWithDataTag<readonly unknown[], LetterIndexEntry[], Error> {
     return queryOptions({
       queryKey: LibraryQueryKeys.catalogIndex(request),
       queryFn: () => this.#listIndex(request),
@@ -183,11 +199,11 @@ export class CatalogRepository {
 
   /**
    * Refetches everything the catalog serves. A list scrolled deep would refetch every loaded page,
-   * one request after another (each needs the cursor of the one before), so lists start over from
-   * their first page and load the rest as they are scrolled to again.
+   * one request after another, so lists start over from their first page and load the rest as
+   * they are scrolled to again.
    */
   public refresh(): void {
-    this.#queryClient.setQueriesData<InfiniteData<unknown>>(
+    this.#queryClient.setQueriesData<InfiniteData<unknown, number>>(
       { queryKey: LibraryQueryKeys.catalogs },
       (data) =>
         data === undefined || data.pages.length <= 1
@@ -199,47 +215,50 @@ export class CatalogRepository {
       .catch(() => undefined);
   }
 
-  #listPage(request: LibraryCatalogRequest, cursor: string | null): Promise<CatalogPage> {
+  #listPage(request: LibraryCatalogRequest, offset: number): Promise<CatalogPage> {
     const search = request.filter === "" ? null : request.filter;
-    const { direction: sortDirection, skip } = request;
+    const { direction } = request;
+    const limit = PAGE_SIZE;
     switch (request.presentation) {
       case "albums":
         return this.#library.listAlbums({
           search,
-          sortKey: request.sortKey,
-          sortDirection,
-          cursor,
-          skip,
+          sort: request.sortKey,
+          direction,
+          offset,
+          limit,
         });
       case "albumArtists":
         return this.#library.listArtists({
           search,
-          sortKey: request.sortKey,
-          sortDirection,
-          cursor,
-          skip,
+          sort: request.sortKey,
+          direction,
+          offset,
+          limit,
         });
       case "tracks":
         return this.#library.listTracks({
           search,
-          sortKey: request.sortKey,
-          sortDirection,
-          cursor,
-          skip,
+          sort: request.sortKey,
+          direction,
+          offset,
+          limit,
         });
     }
   }
 
-  #listIndex(request: LibraryCatalogRequest): Promise<ScrollIndexBucket[]> {
+  /** A letter index reads no rows, so its request asks for none. */
+  #listIndex(request: LibraryCatalogRequest): Promise<LetterIndexEntry[]> {
     const search = request.filter === "" ? null : request.filter;
-    const sortDirection = request.direction;
+    const { direction } = request;
+    const window = { offset: 0, limit: 0 };
     switch (request.presentation) {
       case "albums":
-        return this.#library.albumIndex({ search, sortKey: request.sortKey, sortDirection });
+        return this.#library.albumIndex({ search, sort: request.sortKey, direction, ...window });
       case "albumArtists":
-        return this.#library.artistIndex({ search, sortKey: request.sortKey, sortDirection });
+        return this.#library.artistIndex({ search, sort: request.sortKey, direction, ...window });
       case "tracks":
-        return this.#library.trackIndex({ search, sortKey: request.sortKey, sortDirection });
+        return this.#library.trackIndex({ search, sort: request.sortKey, direction, ...window });
     }
   }
 }

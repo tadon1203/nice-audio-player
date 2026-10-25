@@ -7,14 +7,14 @@
     WorkspaceCatalog,
   } from "#lib/library/library-workspace";
   import { errorMessage } from "#lib/native/messages";
-  import { ScrollIndex } from "#lib/library/scroll-index";
+  import { labelAt, skipTo } from "#lib/library/letter-index";
   import { AppServices } from "#lib/shell/app-services.svelte";
   import { WorkspaceScroll } from "#lib/shell/workspace-scroll.svelte";
   import EmptyStatus from "#lib/ui/empty-status.svelte";
   import ErrorAlert from "#lib/ui/error-alert.svelte";
   import LoadMoreSentinel from "#lib/ui/load-more-sentinel.svelte";
   import LoadingStatus from "#lib/ui/loading-status.svelte";
-  import ScrollIndexBadge from "#lib/ui/scroll-index-badge.svelte";
+  import LetterIndexBadge from "#lib/ui/letter-index-badge.svelte";
   import type { SortableView } from "#lib/ui/sort-option";
   import WorkspaceScrollRegion from "#lib/ui/workspace-scroll.svelte";
   import IndexRail from "./index-rail.svelte";
@@ -57,7 +57,7 @@
     ready: (): boolean => catalog.items.length > 0,
   });
 
-  const scrollIndexLabel = $derived(ScrollIndex.labelAt(catalog.index, skip + topIndex));
+  const letterIndexLabel = $derived(labelAt(catalog.index, skip + topIndex));
 
   const scroll = $derived<LibraryScroll>({
     ontopindexchange: (index) => (topIndex = index),
@@ -79,12 +79,12 @@
   />
 
   <div class="@container relative min-h-0">
-    <ScrollIndexBadge label={scrollIndexLabel} visible={workspaceScroll.scrolling} />
+    <LetterIndexBadge label={letterIndexLabel} visible={workspaceScroll.scrolling} />
     {#if catalog.index.length > 1}
       <IndexRail
-        buckets={catalog.index}
-        current={scrollIndexLabel}
-        onselect={(label) => onjump(ScrollIndex.skipTo(catalog.index, label) ?? 0)}
+        entries={catalog.index}
+        current={letterIndexLabel}
+        onselect={(label) => onjump(skipTo(catalog.index, label) ?? 0)}
       />
     {/if}
     <WorkspaceScrollRegion viewportAttachment={workspaceScroll.attach} contentClass="pt-6 pb-16">

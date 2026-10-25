@@ -9,8 +9,9 @@ use serde::Deserialize;
 use crate::audio::playback::{PlaybackServiceError, TrackSource};
 use crate::ids::{AlbumId, TrackId};
 use crate::library::{
-    models::TrackQuery,
-    store::{LibraryStore, PlayableTrack, PlaybackSelection},
+    Library,
+    models::{SortDirection, TrackSortKey},
+    tracks::{PlayableTrack, PlaybackSelection},
 };
 
 #[derive(Debug, Clone, Deserialize, specta::Type)]
@@ -23,14 +24,18 @@ pub enum PlaybackContext {
     /// An album in disc and track order, by its ID.
     Album { album_id: AlbumId },
     /// The tracks list as currently filtered and sorted.
-    Tracks(TrackQuery),
+    Tracks {
+        search: Option<String>,
+        sort: TrackSortKey,
+        direction: SortDirection,
+    },
 }
 
 /// Reads the ids of the context's playable tracks from the library, in playing order, and where
 /// to start. The tracks themselves are read when the queue needs them. Blocking: call it off
 /// the async runtime.
 pub(super) fn resolve(
-    library: &LibraryStore,
+    library: &Library,
     context: &PlaybackContext,
     start_track_id: Option<TrackId>,
 ) -> Result<PlaybackSelection, PlaybackServiceError> {
@@ -38,20 +43,24 @@ pub(super) fn resolve(
         PlaybackContext::Album { album_id } => {
             library.playback_for_album_id(*album_id, start_track_id)
         }
-        PlaybackContext::Tracks(query) => library.playback_for_tracks(query, start_track_id),
+        PlaybackContext::Tracks {
+            search,
+            sort,
+            direction,
+        } => library.playback_for_tracks(search.as_deref(), *sort, *direction, start_track_id),
     }?)
 }
 
 /// Reads one library track, which must be playable. Blocking: call it off the async runtime.
 pub(super) fn resolve_track(
-    library: &LibraryStore,
+    library: &Library,
     track_id: TrackId,
 ) -> Result<PlayableTrack, PlaybackServiceError> {
     Ok(library.playback_for_track(track_id)?)
 }
 
 /// The library as the playback queue reads its tracks.
-pub(super) struct LibraryTracks(pub LibraryStore);
+pub(super) struct LibraryTracks(pub Library);
 
 impl TrackSource for LibraryTracks {
     fn tracks(

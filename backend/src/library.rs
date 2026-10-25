@@ -2,18 +2,17 @@
 //!
 //! `Library::open` yields a working Library or the reason it is unavailable, and the app holds
 //! that result. A working Library has two sides that meet only in the database: the read side
-//! (`store`: catalog, playback selections, track lookups) and the write side (`sync`: directories,
-//! watchers, scanner), reached through the methods below.
+//! (`lists` and `tracks`: the lists, playback selections, track lookups) and the write side
+//! (`sync`: directories, watchers, scanner), reached through the methods below.
 
 pub(crate) mod accent;
 pub(crate) mod artwork;
 pub(crate) mod database;
 pub(crate) mod directories;
-pub(crate) mod keys;
+pub(crate) mod lists;
 pub(crate) mod maintenance;
 pub(crate) mod models;
 pub(crate) mod scanner;
-pub(crate) mod store;
 #[cfg(test)]
 mod store_tests;
 pub(crate) mod summary;
@@ -21,21 +20,24 @@ pub(crate) mod sync;
 #[cfg(test)]
 mod tests;
 pub(crate) mod text;
+pub(crate) mod tracks;
 pub(crate) mod watcher;
 
 use crate::errors::CommandError;
 use crate::ids::{ArtworkHash, DirectoryId};
 use crate::state_hub::StateHub;
-use database::{Database, DatabaseError};
+use database::{Database, DatabaseError, ReadConnection};
 use log::error;
 use models::LibraryDirectory;
 use serde::Serialize;
 use std::{
     path::{Component, Path, PathBuf},
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
     time::{SystemTime, UNIX_EPOCH},
 };
-use store::LibraryStore;
 use sync::LibrarySync;
 
 /// Makes an enum a text column: `as_str`, `Display`, `ToSql` and `FromSql` from one table of
@@ -140,11 +142,10 @@ pub enum LibraryStatus {
     Unavailable { reason: LibraryUnavailableReason },
 }
 
-/// The Library's read-side errors. The store logs a failure once, where it is built; the facade
+/// The Library's read-side errors. The read side logs a failure once, where it is built; the facade
 /// maps it to a code that carries no implementation detail.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum StoreError {
-    InvalidCursor,
     TrackNotFound,
     TrackUnavailable,
     AlbumNotFound,
@@ -174,10 +175,9 @@ impl From<StoreError> for CommandError {
         match error {
             StoreError::TrackNotFound => Self::TrackNotFound,
             StoreError::TrackUnavailable => Self::TrackUnavailable,
-            StoreError::InvalidCursor
-            | StoreError::AlbumNotFound
-            | StoreError::AlbumArtistNotFound
-            | StoreError::Persistence => Self::PersistenceFailed,
+            StoreError::AlbumNotFound => Self::AlbumNotFound,
+            StoreError::AlbumArtistNotFound => Self::ArtistNotFound,
+            StoreError::Persistence => Self::PersistenceFailed,
         }
     }
 }
@@ -193,9 +193,6 @@ impl From<StoreError> for CommandError {
 pub enum LibraryCommandError {
     Common { error: CommandError },
     ScanInProgress,
-    AlbumNotFound,
-    InvalidCursor,
-    AlbumArtistNotFound,
     NoEnabledDirectories,
     ScanAlreadyRunning,
     ScanNotRunning,
@@ -209,25 +206,12 @@ impl From<CommandError> for LibraryCommandError {
 
 impl From<StoreError> for LibraryCommandError {
     fn from(error: StoreError) -> Self {
-        match error {
-            StoreError::InvalidCursor => Self::InvalidCursor,
-            StoreError::AlbumNotFound => Self::AlbumNotFound,
-            StoreError::AlbumArtistNotFound => Self::AlbumArtistNotFound,
-            StoreError::TrackNotFound => Self::Common {
-                error: CommandError::TrackNotFound,
-            },
-            StoreError::TrackUnavailable => Self::Common {
-                error: CommandError::TrackUnavailable,
-            },
-            StoreError::Persistence => Self::Common {
-                error: CommandError::PersistenceFailed,
-            },
+        Self::Common {
+            error: error.into(),
         }
     }
 }
 
-/// The codes the Renderer shows for a Library command. A cursor is never invalid from the
-/// Renderer's side, so it is a failed task.
 impl From<LibraryCommandError> for CommandError {
     fn from(error: LibraryCommandError) -> Self {
         match error {
@@ -237,9 +221,6 @@ impl From<LibraryCommandError> for CommandError {
             }
             LibraryCommandError::ScanNotRunning => Self::ScanNotRunning,
             LibraryCommandError::NoEnabledDirectories => Self::NoEnabledDirectories,
-            LibraryCommandError::AlbumNotFound => Self::AlbumNotFound,
-            LibraryCommandError::AlbumArtistNotFound => Self::ArtistNotFound,
-            LibraryCommandError::InvalidCursor => Self::TaskFailed,
         }
     }
 }
@@ -255,10 +236,16 @@ impl From<Unavailable> for StoreError {
     }
 }
 
-impl From<Unavailable> for LibraryCommandError {
+impl From<Unavailable> for CommandError {
     fn from(_: Unavailable) -> Self {
+        Self::TrackUnavailable
+    }
+}
+
+impl From<Unavailable> for LibraryCommandError {
+    fn from(error: Unavailable) -> Self {
         Self::Common {
-            error: CommandError::TrackUnavailable,
+            error: error.into(),
         }
     }
 }
@@ -329,8 +316,9 @@ impl TrackLocation {
 #[derive(Clone)]
 pub(crate) struct Library {
     database: Database,
-    store: LibraryStore,
     sync: Arc<LibrarySync>,
+    /// See [`Library::version`]. Shared with the sync actor, which publishes it with the scan.
+    version: Arc<AtomicU64>,
 }
 
 impl Library {
@@ -344,21 +332,34 @@ impl Library {
             error!("library.database.unavailable cause={error}");
             LibraryUnavailableReason::DatabaseOpenFailed
         })?;
-        let sync = LibrarySync::start(database.clone(), hub);
+        let version = Arc::new(AtomicU64::new(0));
+        let sync = LibrarySync::start(database.clone(), hub, Arc::clone(&version));
         Ok(Self {
-            store: LibraryStore::new(database.clone()),
             database,
             sync: Arc::new(sync),
+            version,
         })
     }
 
-    /// The read side.
-    pub(crate) fn store(&self) -> &LibraryStore {
-        &self.store
+    /// The Library version: it changes after every committed change that can alter a list (a
+    /// directory added, enabled, disabled or removed, Missing tracks deleted, a scan finished). A
+    /// list page carries the version it was read at, and the Renderer restarts a list when it
+    /// changes.
+    pub(crate) fn version(&self) -> u64 {
+        self.version.load(Ordering::SeqCst)
+    }
+
+    fn bump_version(&self) {
+        self.version.fetch_add(1, Ordering::SeqCst);
+    }
+
+    fn read(&self) -> Result<ReadConnection, StoreError> {
+        Ok(self.database.read()?)
     }
 
     pub(crate) fn directories(&self) -> Result<Vec<LibraryDirectory>, CommandError> {
-        Ok(self.store.directories()?)
+        let connection = self.read()?;
+        Ok(directories::list(&connection)?)
     }
 
     /// Adds a directory. A path that is not valid Unicode cannot be stored, so it is refused rather
@@ -368,7 +369,9 @@ impl Library {
             .into_os_string()
             .into_string()
             .map_err(|_| CommandError::InvalidDirectory)?;
-        self.sync.add_directory(path)
+        let directory = self.sync.add_directory(path)?;
+        self.bump_version();
+        Ok(directory)
     }
 
     pub(crate) fn set_directory_enabled(
@@ -376,16 +379,22 @@ impl Library {
         id: DirectoryId,
         enabled: bool,
     ) -> Result<(), CommandError> {
-        self.sync.set_directory_enabled(id, enabled)
+        self.sync.set_directory_enabled(id, enabled)?;
+        self.bump_version();
+        Ok(())
     }
 
     pub(crate) fn remove_directory(&self, id: DirectoryId) -> Result<(), CommandError> {
-        self.sync.remove_directory(id)
+        self.sync.remove_directory(id)?;
+        self.bump_version();
+        Ok(())
     }
 
     /// Deletes every Missing track from the Library. Source files are never touched.
     pub(crate) fn delete_missing(&self) -> Result<u64, LibraryCommandError> {
-        self.sync.delete_missing()
+        let deleted = self.sync.delete_missing()?;
+        self.bump_version();
+        Ok(deleted)
     }
 
     pub(crate) fn start_scan(&self) -> Result<(), LibraryCommandError> {

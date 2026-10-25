@@ -17,10 +17,9 @@ pub use crate::audio::waveform::PlaybackWaveform;
 pub use crate::library::LibraryStatus;
 pub use crate::library::artwork::{ArtworkCache, ArtworkRef, ServedArtwork};
 pub use crate::library::models::{
-    AlbumArtistListRequest, AlbumArtistQuery, AlbumDetails, AlbumListRequest, AlbumQuery, AlbumRow,
-    AlbumTracksRequest, ArtistAlbumsRequest, ArtistRow, LibraryAlbumArtistPage, LibraryAlbumPage,
-    LibraryAlbumTrackPage, LibraryDirectory, LibraryTrackPage, ScrollIndexBucket, SortDirection,
-    TrackListRequest, TrackProperties, TrackQuery, TrackRow, TrackSortKey,
+    AlbumDetails, AlbumRow, AlbumSortKey, AlbumTrackRow, ArtistAlbumSortKey, ArtistRow,
+    ArtistSortKey, LetterIndexEntry, LibraryDirectory, ListRequest, Page, SortDirection,
+    TrackProperties, TrackRow, TrackSortKey,
 };
 pub use crate::lyrics::LyricsResolution;
 pub use crate::messages::Versioned;
@@ -105,7 +104,7 @@ impl BackendApp {
         let library = Library::open(&data_dir, Arc::clone(&hub));
         let remember = Arc::clone(&settings);
         let tracks: Box<dyn TrackSource> = match &library {
-            Ok(library) => Box::new(LibraryTracks(library.store().clone())),
+            Ok(library) => Box::new(LibraryTracks(library.clone())),
             Err(_) => Box::new(NoTracks),
         };
         let loaded_waveforms = Arc::clone(&waveforms);
@@ -229,94 +228,74 @@ impl BackendApp {
 
     pub fn list_tracks(
         &self,
-        request: &TrackListRequest,
-    ) -> Result<LibraryTrackPage, LibraryCommandError> {
-        Ok(self.library()?.store().catalog_tracks_from(request)?)
+        request: &ListRequest<TrackSortKey>,
+    ) -> Result<Page<TrackRow>, CommandError> {
+        self.library()?.list_tracks(request)
     }
 
     pub fn list_albums(
         &self,
-        request: &AlbumListRequest,
-    ) -> Result<LibraryAlbumPage, LibraryCommandError> {
-        Ok(self.library()?.store().catalog_albums_from(request)?)
+        request: &ListRequest<AlbumSortKey>,
+    ) -> Result<Page<AlbumRow>, CommandError> {
+        self.library()?.list_albums(request)
     }
 
-    pub fn list_album_artists(
+    pub fn list_artists(
         &self,
-        request: &AlbumArtistListRequest,
-    ) -> Result<LibraryAlbumArtistPage, LibraryCommandError> {
-        Ok(self
-            .library()?
-            .store()
-            .catalog_album_artists_from(request)?)
+        request: &ListRequest<ArtistSortKey>,
+    ) -> Result<Page<ArtistRow>, CommandError> {
+        self.library()?.list_artists(request)
     }
 
-    /// The scroll index of the Tracks list: how many names start under each label, in list order.
+    /// The letter index of the Tracks list: how many names start under each label, in list order.
     pub fn track_index(
         &self,
-        query: &TrackQuery,
-    ) -> Result<Vec<ScrollIndexBucket>, LibraryCommandError> {
-        Ok(self.library()?.store().catalog_track_index(query)?)
+        request: &ListRequest<TrackSortKey>,
+    ) -> Result<Vec<LetterIndexEntry>, CommandError> {
+        self.library()?.track_index(request)
     }
 
     pub fn album_index(
         &self,
-        query: &AlbumQuery,
-    ) -> Result<Vec<ScrollIndexBucket>, LibraryCommandError> {
-        Ok(self.library()?.store().catalog_album_index(query)?)
+        request: &ListRequest<AlbumSortKey>,
+    ) -> Result<Vec<LetterIndexEntry>, CommandError> {
+        self.library()?.album_index(request)
     }
 
-    pub fn album_artist_index(
+    pub fn artist_index(
         &self,
-        query: &AlbumArtistQuery,
-    ) -> Result<Vec<ScrollIndexBucket>, LibraryCommandError> {
-        Ok(self.library()?.store().catalog_album_artist_index(query)?)
+        request: &ListRequest<ArtistSortKey>,
+    ) -> Result<Vec<LetterIndexEntry>, CommandError> {
+        self.library()?.artist_index(request)
     }
 
-    pub fn album_by_id(&self, album_id: AlbumId) -> Result<AlbumDetails, LibraryCommandError> {
-        Ok(self.library()?.store().catalog_album(album_id)?)
+    pub fn album_by_id(&self, album_id: AlbumId) -> Result<AlbumDetails, CommandError> {
+        self.library()?.album_details(album_id)
     }
 
-    pub fn album_tracks_by_id(
-        &self,
-        request: &AlbumTracksRequest,
-    ) -> Result<LibraryAlbumTrackPage, LibraryCommandError> {
-        Ok(self
-            .library()?
-            .store()
-            .catalog_album_tracks_by_id(request.album_id, request.cursor.as_deref())?)
+    pub fn album_tracks(&self, album_id: AlbumId) -> Result<Vec<AlbumTrackRow>, CommandError> {
+        self.library()?.list_album_tracks(album_id)
     }
 
-    pub fn artist(&self, artist_id: ArtistId) -> Result<ArtistRow, LibraryCommandError> {
-        Ok(self.library()?.store().catalog_artist(artist_id)?)
+    pub fn artist(&self, artist_id: ArtistId) -> Result<ArtistRow, CommandError> {
+        self.library()?.artist_row(artist_id)
     }
 
     pub fn artist_albums(
         &self,
-        request: &ArtistAlbumsRequest,
-    ) -> Result<LibraryAlbumPage, LibraryCommandError> {
-        Ok(self.library()?.store().catalog_artist_albums(
-            request.artist_id,
-            request.cursor.as_deref(),
-            request.sort_key,
-            request.sort_direction,
-        )?)
+        artist_id: ArtistId,
+        request: &ListRequest<ArtistAlbumSortKey>,
+    ) -> Result<Page<AlbumRow>, CommandError> {
+        self.library()?.list_artist_albums(artist_id, request)
     }
 
-    pub fn track_properties(
-        &self,
-        track_id: TrackId,
-    ) -> Result<TrackProperties, LibraryCommandError> {
-        Ok(self.library()?.store().track_properties(track_id)?)
+    pub fn track_properties(&self, track_id: TrackId) -> Result<TrackProperties, CommandError> {
+        Ok(self.library()?.track_properties(track_id)?)
     }
 
     /// The track's file, for the Host to show in Explorer.
-    pub fn track_file(&self, track_id: TrackId) -> Result<PathBuf, LibraryCommandError> {
-        let file = self
-            .library()?
-            .store()
-            .track_location(track_id)?
-            .existing()?;
+    pub fn track_file(&self, track_id: TrackId) -> Result<PathBuf, CommandError> {
+        let file = self.library()?.track_location(track_id)?.existing()?;
         Ok(file.path)
     }
 
@@ -341,7 +320,6 @@ impl BackendApp {
             })?;
         // The Library says where the file is; lyrics reads what is beside and inside it.
         let file = library
-            .store()
             .track_location(track_id)
             .map_err(map_lyrics_context_error)?
             .existing()
@@ -374,11 +352,11 @@ impl BackendApp {
         start_track_id: Option<TrackId>,
     ) -> Result<Versioned<PlaybackState>, PlaybackServiceError> {
         let library = self.playback_library()?;
-        let selection = playback_context::resolve(library.store(), context, start_track_id)?;
+        let selection = playback_context::resolve(library, context, start_track_id)?;
         // The track the listener picked is checked now, so they get a clear answer when its
         // file is gone; the others are read when the queue needs them.
         if let Some(requested) = start_track_id {
-            playback_context::resolve_track(library.store(), requested)?;
+            playback_context::resolve_track(library, requested)?;
         }
         self.playback
             .handle()
@@ -485,7 +463,7 @@ impl BackendApp {
         next: bool,
     ) -> Result<Versioned<QueueState>, PlaybackServiceError> {
         let library = self.playback_library()?;
-        let track = playback_context::resolve_track(library.store(), track_id)?;
+        let track = playback_context::resolve_track(library, track_id)?;
         self.playback.handle().enqueue(vec![track.id()], next)
     }
 
@@ -508,13 +486,11 @@ impl BackendApp {
 
     // ---- private helpers ----
 
-    fn library(&self) -> Result<&Library, LibraryCommandError> {
+    fn library(&self) -> Result<&Library, CommandError> {
         self.library
             .as_ref()
             .inspect_err(|cause| log::warn!("app.library.unavailable cause={cause}"))
-            .map_err(|_| LibraryCommandError::Common {
-                error: CommandError::LibraryUnavailable,
-            })
+            .map_err(|_| CommandError::LibraryUnavailable)
     }
 
     fn playback_library(&self) -> Result<&Library, PlaybackServiceError> {

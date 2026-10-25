@@ -7,18 +7,21 @@ import {
 import {
   type AlbumId,
   type AlbumDetails,
-  type LibraryAlbumPage,
   type AlbumRow,
-  type LibraryAlbumTrackPage,
+  type AlbumTrackRow,
 } from "#lib/native/bindings";
 import type { library } from "#lib/native/commands";
 import { LibraryQueryKeys } from "./library-query-keys";
+import type { Page } from "./catalog-repository";
 import type {
   CreateInfiniteQueryOptions,
   CreateQueryOptions,
   InitialDataFunction,
   QueryKeyWithDataTag,
 } from "@tanstack/svelte-query";
+
+/** An album's tracks: the Backend answers the whole album at once, so it is one page. */
+export type AlbumTracksPage = Page<AlbumTrackRow>;
 
 /** The album detail, track, and summary queries. */
 export class AlbumRepository {
@@ -46,23 +49,25 @@ export class AlbumRepository {
   }
 
   public tracksOptions(albumId: AlbumId): CreateInfiniteQueryOptions<
-    LibraryAlbumTrackPage,
+    AlbumTracksPage,
     Error,
-    InfiniteData<LibraryAlbumTrackPage, unknown>,
+    InfiniteData<AlbumTracksPage, unknown>,
     readonly unknown[],
-    string | null
+    number
   > & {
     initialData?:
-      | InfiniteData<LibraryAlbumTrackPage, string | null>
-      | InitialDataFunction<InfiniteData<LibraryAlbumTrackPage, string | null>>
+      | InfiniteData<AlbumTracksPage, number>
+      | InitialDataFunction<InfiniteData<AlbumTracksPage, number>>
       | undefined;
-  } & QueryKeyWithDataTag<readonly unknown[], InfiniteData<LibraryAlbumTrackPage, unknown>, Error> {
+  } & QueryKeyWithDataTag<readonly unknown[], InfiniteData<AlbumTracksPage, unknown>, Error> {
     return infiniteQueryOptions({
       queryKey: LibraryQueryKeys.albumTracks(albumId),
-      initialPageParam: null as string | null,
-      queryFn: ({ pageParam }): Promise<LibraryAlbumTrackPage> =>
-        this.#library.listAlbumTracks({ albumId, cursor: pageParam }),
-      getNextPageParam: (page: LibraryAlbumTrackPage) => page.nextCursor ?? undefined,
+      initialPageParam: 0,
+      queryFn: async (): Promise<AlbumTracksPage> => {
+        const items = await this.#library.listAlbumTracks(albumId);
+        return { items, total: items.length, version: 0 };
+      },
+      getNextPageParam: () => undefined,
       gcTime: Infinity,
     });
   }
@@ -77,10 +82,10 @@ export class AlbumRepository {
   }
 
   #albumSummaries(): AlbumRow[] {
-    const albumLists = this.#queryClient.getQueriesData<InfiniteData<LibraryAlbumPage>>({
+    const albumLists = this.#queryClient.getQueriesData<InfiniteData<Page<AlbumRow>, number>>({
       queryKey: LibraryQueryKeys.catalogs,
     });
-    const artistLists = this.#queryClient.getQueriesData<InfiniteData<LibraryAlbumPage>>({
+    const artistLists = this.#queryClient.getQueriesData<InfiniteData<Page<AlbumRow>, number>>({
       queryKey: LibraryQueryKeys.artistAlbumsPrefix,
     });
     const catalogAlbums = albumLists

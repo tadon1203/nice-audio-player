@@ -13,7 +13,7 @@
 {#if label !== null}
   <div
     aria-hidden="true"
-    data-slot="scroll-index"
+    data-slot="letter-index"
     class="pointer-events-none absolute top-1/4 right-10 hidden text-[10rem] leading-none text-foreground/5 transition-opacity @min-[40rem]:block forced-colors:hidden"
     style:opacity={visible ? 1 : 0}
   >

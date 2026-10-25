@@ -56,6 +56,25 @@ pub enum TrackSortKey {
     Album,
     Duration,
 }
+/// One page of a list: which rows, how many the whole list has, and the Library version it was
+/// read at. A page whose version differs from the first one's means the list changed under it.
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct Page<T> {
+    pub items: Vec<T>,
+    pub total: u32,
+    pub version: u64,
+}
+/// A page request: the search (`None` when empty), the sort, and the window of rows.
+#[derive(Debug, Clone, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ListRequest<K> {
+    pub search: Option<String>,
+    pub sort: K,
+    pub direction: SortDirection,
+    pub offset: u32,
+    pub limit: u32,
+}
 pub(crate) use super::artwork::ArtworkRef;
 /// The album a track is filed under, by ID (see `ids.rs`) and as titled, with its Album Artist. A
 /// track with no album tag has none.
@@ -84,9 +103,6 @@ pub struct TrackRow {
     pub state: TrackState,
     /// `None` for a track with no album tag.
     pub album: Option<TrackAlbum>,
-    pub file_format: Option<String>,
-    pub bit_depth: Option<u32>,
-    pub bitrate_kbps: Option<u64>,
 }
 /// The tags, audio format and location of one track, as the Properties view lists them.
 #[derive(Debug, Clone, Serialize, specta::Type)]
@@ -112,23 +128,26 @@ pub struct TrackProperties {
     pub channel_count: Option<u32>,
     pub bit_depth: Option<u32>,
     pub bitrate_kbps: Option<u32>,
-    pub state: TrackState,
 }
-#[derive(Debug, Clone, Serialize, specta::Type)]
+/// What kind of label a letter index entry has. `Unknown` is the entry for the names with no
+/// value to file them by, which comes last.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
-pub struct LibraryTrackPage {
-    pub items: Vec<TrackRow>,
-    /// How many rows the whole list has; only the first page (no cursor) says.
-    pub total_count: Option<u64>,
-    pub next_cursor: Option<String>,
+pub enum LetterIndexEntryKind {
+    Letter,
+    Kana,
+    Kanji,
+    Unknown,
 }
-/// One entry of a list's scroll index: the label its names are filed under, and how many there
-/// are. Buckets come in the list's own order.
+/// One entry of a list's letter index: the label its names are filed under, the offset of its
+/// first row in the list, and how many rows it has. Entries come in the list's own order.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
-pub struct ScrollIndexBucket {
+pub struct LetterIndexEntry {
     pub label: String,
-    pub count: u64,
+    pub kind: LetterIndexEntryKind,
+    pub start: u32,
+    pub count: u32,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
@@ -147,96 +166,12 @@ pub struct AlbumRow {
 }
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
-pub struct LibraryAlbumPage {
-    pub items: Vec<AlbumRow>,
-    /// How many rows the whole list has; only the first page (no cursor) says.
-    pub total_count: Option<u64>,
-    pub next_cursor: Option<String>,
-}
-#[derive(Debug, Clone, Serialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
 pub struct ArtistRow {
     pub id: ArtistId,
     pub name: String,
     pub artwork: Option<ArtworkRef>,
     pub album_count: u64,
     pub track_count: u64,
-}
-/// How the Tracks list is filtered and sorted.
-#[derive(Debug, Clone, serde::Deserialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
-pub struct TrackQuery {
-    pub search: Option<String>,
-    pub sort_key: TrackSortKey,
-    pub sort_direction: SortDirection,
-}
-/// How the Albums list is filtered and sorted.
-#[derive(Debug, Clone, serde::Deserialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
-pub struct AlbumQuery {
-    pub search: Option<String>,
-    pub sort_key: AlbumSortKey,
-    pub sort_direction: SortDirection,
-}
-/// How the Album Artists list is filtered and sorted.
-#[derive(Debug, Clone, serde::Deserialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
-pub struct AlbumArtistQuery {
-    pub search: Option<String>,
-    pub sort_key: ArtistSortKey,
-    pub sort_direction: SortDirection,
-}
-/// A page of the Tracks list. With no `cursor` it starts after the first `skip` rows, which is
-/// how the scroll index jumps to a letter without paging through what precedes it.
-#[derive(Debug, Clone, serde::Deserialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
-pub struct TrackListRequest {
-    #[serde(flatten)]
-    pub query: TrackQuery,
-    pub cursor: Option<String>,
-    pub skip: u64,
-}
-/// A page of the Albums list (see [`TrackListRequest`]).
-#[derive(Debug, Clone, serde::Deserialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
-pub struct AlbumListRequest {
-    #[serde(flatten)]
-    pub query: AlbumQuery,
-    pub cursor: Option<String>,
-    pub skip: u64,
-}
-/// A page of the Album Artists list (see [`TrackListRequest`]).
-#[derive(Debug, Clone, serde::Deserialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
-pub struct AlbumArtistListRequest {
-    #[serde(flatten)]
-    pub query: AlbumArtistQuery,
-    pub cursor: Option<String>,
-    pub skip: u64,
-}
-/// The albums of one Album Artist, by its ID (see `ids.rs`).
-#[derive(Debug, Clone, serde::Deserialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
-pub struct ArtistAlbumsRequest {
-    pub artist_id: ArtistId,
-    pub cursor: Option<String>,
-    pub sort_key: ArtistAlbumSortKey,
-    pub sort_direction: SortDirection,
-}
-/// The tracks of one album, by its ID (see `ids.rs`), from a page cursor.
-#[derive(Debug, Clone, serde::Deserialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
-pub struct AlbumTracksRequest {
-    pub album_id: AlbumId,
-    pub cursor: Option<String>,
-}
-#[derive(Debug, Clone, Serialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
-pub struct LibraryAlbumArtistPage {
-    pub items: Vec<ArtistRow>,
-    /// How many rows the whole list has; only the first page (no cursor) says.
-    pub total_count: Option<u64>,
-    pub next_cursor: Option<String>,
 }
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
@@ -280,14 +215,6 @@ pub struct NowPlayingTrack {
     pub disc_number: Option<u32>,
     pub year: Option<i32>,
 }
-#[derive(Debug, Clone, Serialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
-pub struct LibraryAlbumTrackPage {
-    pub items: Vec<AlbumTrackRow>,
-    /// How many rows the whole list has; only the first page (no cursor) says.
-    pub total_count: Option<u64>,
-    pub next_cursor: Option<String>,
-}
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub enum ScanStatus {
@@ -308,8 +235,7 @@ impl ScanState {
             indexed_count: 0,
             failed_count: 0,
             failure_code: None,
-            finished_count: 0,
-            changed_count: 0,
+            library_version: 0,
         }
     }
 }
@@ -337,11 +263,7 @@ pub struct ScanState {
     pub indexed_count: u64,
     pub failed_count: u64,
     pub failure_code: Option<ScanFailure>,
-    /// How many scans have ended since the app started. Only ever grows, so a listener that saw
-    /// the count change knows a scan ended, however many snapshots it missed in between.
-    pub finished_count: u64,
-    /// How many files scans have added, changed, relinked, or found Missing or back since the app
-    /// started. Only ever grows: a listener that sees it move since it last looked knows the
-    /// catalog changed, and one that does not knows it did not.
-    pub changed_count: u64,
+    /// The Library version (see `Library::version`). It changes whenever a scan ends, so a
+    /// listener that sees it move knows the lists may have changed.
+    pub library_version: u64,
 }

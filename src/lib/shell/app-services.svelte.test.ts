@@ -22,7 +22,7 @@ const base = {
 
 const stopped: PlaybackState = { status: "stopped", base, item: null };
 
-const scan = { finishedCount: 0, changedCount: 0 } as ScanState;
+const scan = { libraryVersion: 0 } as ScanState;
 
 const initial: BackendMessage[] = [
   { kind: "state", version: 1, topic: "playback", value: stopped },

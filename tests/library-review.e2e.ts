@@ -13,8 +13,7 @@ async function publishScan(native: Native, state: ScanStatus): Promise<void> {
   if (state !== "running" && state !== "idle") scansEnded += 1;
   const snapshot = {
     ...scanSnapshot(state),
-    finishedCount: scansEnded,
-    changedCount: scansEnded * 20,
+    libraryVersion: scansEnded,
   };
   await native.publish("scan", snapshot);
 }
@@ -26,7 +25,7 @@ test("keeps each library filter and sort when switching peers and visiting Setti
   library,
 }) => {
   native.respond("libraryListAlbums", ({ request: { search } }) =>
-    pageOf(search === "Test album" ? [library.albums[0]!] : library.albums, null, 100),
+    pageOf(search === "Test album" ? [library.albums[0]!] : library.albums, 0, 100),
   );
   await page.goto("/library/albums");
   let filter = page.getByRole("searchbox", { name: "Search albums" });
@@ -271,8 +270,8 @@ test("invalidates mounted library queries after terminal scan events and directo
     );
     return null;
   });
-  native.respond("libraryListTracks", ({ request: { cursor } }) =>
-    pageOf(directories.some((directory) => directory.enabled) ? library.tracks : [], cursor),
+  native.respond("libraryListTracks", ({ request: { offset } }) =>
+    pageOf(directories.some((directory) => directory.enabled) ? library.tracks : [], offset),
   );
   await page.goto("/library/tracks");
   const getCount = (): number => native.callsTo("libraryListTracks").length;

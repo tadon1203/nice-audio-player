@@ -4,7 +4,7 @@
 
 use crate::library::Library;
 use crate::library::database::Database;
-use crate::library::models::{ScanStatus, SortDirection, TrackSortKey};
+use crate::library::models::{ListRequest, ScanStatus, SortDirection, TrackSortKey};
 use crate::state_hub::StateHub;
 use crate::test_support::{
     TestDirectory, hub_for_tests, null_message_listener, wait_until, write_pcm_i16_wav,
@@ -46,9 +46,14 @@ fn write_tone(path: &Path) {
 impl Harness {
     fn track_count(&self) -> u64 {
         self.library
-            .store()
-            .catalog_tracks(None, None, TrackSortKey::Title, SortDirection::Ascending)
-            .map_or(0, |page| page.total_count.unwrap_or(0))
+            .list_tracks(&ListRequest {
+                search: None,
+                sort: TrackSortKey::Title,
+                direction: SortDirection::Ascending,
+                offset: 0,
+                limit: 1,
+            })
+            .map_or(0, |page| u64::from(page.total))
     }
 
     /// How many scans have covered the directory: each one bumps its generation in the database.

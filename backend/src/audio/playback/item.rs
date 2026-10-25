@@ -2,7 +2,7 @@ use std::ops::Deref;
 
 use crate::ids::QueueItemId;
 use crate::library::models::NowPlayingTrack;
-use crate::library::store::PlayableTrack;
+use crate::library::tracks::PlayableTrack;
 
 /// One entry of the playback queue and the identity of the loaded track, as the renderer sees
 /// it: the queue's id for the entry and the track's metadata. It carries no file path.

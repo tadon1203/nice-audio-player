@@ -4,7 +4,7 @@ import type { LyricsRepository } from "#lib/lyrics/lyrics-repository";
 import { type ScanState, type ScanStatus as ScanStateName } from "#lib/native/bindings";
 import { ScanWatcher } from "./scan-watcher.svelte";
 
-function scanSnapshot(state: ScanStateName, finishedCount: number, changedCount = 0): ScanState {
+function scanSnapshot(state: ScanStateName, libraryVersion: number): ScanState {
   return {
     state,
     currentDirectory: null,
@@ -14,8 +14,7 @@ function scanSnapshot(state: ScanStateName, finishedCount: number, changedCount 
     indexedCount: 0,
     failedCount: 0,
     failureCode: null,
-    finishedCount,
-    changedCount,
+    libraryVersion,
   };
 }
 
@@ -53,45 +52,36 @@ describe("ScanWatcher", () => {
     expect(lyrics.refresh).not.toHaveBeenCalled();
   });
 
-  it("refreshes the catalog and lyrics once when a scan that changed something finishes", () => {
+  it("refreshes the catalog and lyrics once when the Library version moves", () => {
     const { catalog, lyrics, accept } = setup();
 
     accept(scanSnapshot("running", 0));
-    accept(scanSnapshot("completed", 1, 3));
-    accept(scanSnapshot("completed", 1, 3));
+    accept(scanSnapshot("completed", 1));
+    accept(scanSnapshot("completed", 1));
 
     expect(catalog.refresh).toHaveBeenCalledTimes(1);
-    expect(lyrics.refresh).toHaveBeenCalledTimes(1);
-  });
-
-  it("refreshes only the lyrics after a scan that changed nothing", () => {
-    const { catalog, lyrics, accept } = setup();
-
-    accept(scanSnapshot("completed", 1, 0));
-
-    expect(catalog.refresh).not.toHaveBeenCalled();
     expect(lyrics.refresh).toHaveBeenCalledTimes(1);
   });
 
   it("never misses back-to-back scans, even when the running snapshot between them is dropped", () => {
     const { catalog, lyrics, accept } = setup();
 
-    accept(scanSnapshot("completed", 1, 2));
-    accept(scanSnapshot("completed", 2, 2));
-    accept(scanSnapshot("failed", 3, 5));
+    accept(scanSnapshot("completed", 1));
+    accept(scanSnapshot("completed", 2));
+    accept(scanSnapshot("failed", 3));
 
-    expect(catalog.refresh).toHaveBeenCalledTimes(2);
+    expect(catalog.refresh).toHaveBeenCalledTimes(3);
     expect(lyrics.refresh).toHaveBeenCalledTimes(3);
   });
 
   it("ignores a snapshot whose version is not newer than the one it holds", () => {
     const { watcher, catalog } = setup();
-    const newer = versioned(scanSnapshot("completed", 1, 1));
+    const newer = versioned(scanSnapshot("completed", 1));
     watcher.accept(newer);
 
-    watcher.accept({ version: newer.version, value: scanSnapshot("completed", 2, 1) });
+    watcher.accept({ version: newer.version, value: scanSnapshot("completed", 2) });
 
-    expect(watcher.snapshot?.finishedCount).toBe(1);
+    expect(watcher.snapshot?.libraryVersion).toBe(1);
     expect(catalog.refresh).toHaveBeenCalledTimes(1);
   });
 });

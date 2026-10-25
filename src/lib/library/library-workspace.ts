@@ -1,4 +1,4 @@
-import { type ScrollIndexBucket } from "#lib/native/bindings";
+import { type LetterIndexEntry } from "#lib/native/bindings";
 import type { LibraryViewState } from "./library-catalog.svelte";
 
 export interface LibraryPresentationMeta {
@@ -10,7 +10,7 @@ export interface LibraryPresentationMeta {
 }
 
 export interface LibraryScroll {
-  /** The list reports the index of its first visible item here (for the scroll index). */
+  /** The list reports the index of its first visible item here (for the letter index). */
   ontopindexchange: (index: number) => void;
 }
 
@@ -28,6 +28,6 @@ export interface WorkspaceCatalog<Item> {
   isFetchingNextPage: boolean;
   fetchNextPage: () => Promise<unknown>;
   refetch: () => Promise<unknown>;
-  /** The scroll index of the list's order; empty when the sort has none. */
-  index: readonly ScrollIndexBucket[];
+  /** The letter index of the list's order; empty when the sort has none. */
+  index: readonly LetterIndexEntry[];
 }

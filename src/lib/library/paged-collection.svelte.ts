@@ -37,7 +37,7 @@ export class PagedCollection<
   }
 
   public get totalCount(): number | null {
-    return this.#query.data?.pages[0]?.totalCount ?? null;
+    return this.#query.data?.pages[0]?.total ?? null;
   }
 
   public get isPending(): boolean {
@@ -66,9 +66,5 @@ export class PagedCollection<
 
   public get isFetchingNextPage(): boolean {
     return this.#query.isFetchingNextPage;
-  }
-
-  public get nextCursor(): string | null {
-    return this.#query.data?.pages.at(-1)?.nextCursor ?? null;
   }
 }

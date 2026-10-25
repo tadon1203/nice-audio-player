@@ -27,7 +27,7 @@ export interface MediaGridOptions<TItem> {
   artworkAt?: ArtworkLookup;
   /** Changes when the sort does: tiles then slide (or fade) to their new places. */
   sortSignature: string;
-  /** Told the index of the first tile in view, for the scroll index label. */
+  /** Told the index of the first tile in view, for the letter index label. */
   ontopindexchange?: (index: number) => void;
 }
 

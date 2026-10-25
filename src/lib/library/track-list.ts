@@ -14,8 +14,8 @@ export class TrackList {
     return {
       kind: "tracks",
       search: view.filter === "" ? null : view.filter,
-      sortKey: view.sortKey,
-      sortDirection: view.direction,
+      sort: view.sortKey,
+      direction: view.direction,
     };
   }
 }

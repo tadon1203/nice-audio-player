@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 use crate::audio::playback::PlaybackServiceError;
 use crate::ids::TrackId;
-use crate::library::store::PlayableTrack;
+use crate::library::tracks::PlayableTrack;
 
 /// The library, as far as playback is concerned.
 pub trait TrackSource: Send + Sync {

@@ -5,10 +5,8 @@ use crate::errors::CommandError;
 use crate::ids::{AlbumId, ArtistId, TrackId};
 use crate::library::LibraryCommandError;
 use crate::library::LibraryStatus;
-use crate::library::models::{
-    AlbumTracksRequest, SortDirection, TrackListRequest, TrackQuery, TrackSortKey,
-};
-use crate::library::store::PlaybackSourceError;
+use crate::library::models::{ListRequest, SortDirection, TrackSortKey};
+use crate::library::tracks::PlaybackSourceError;
 use crate::lyrics::LyricsCommandError;
 
 use crate::test_support::{RecordingMessageListener, TestDirectory};
@@ -31,47 +29,53 @@ fn fixture_without_library() -> Fixture {
 }
 
 fn tracks_context() -> PlaybackContext {
-    PlaybackContext::Tracks(TrackQuery {
+    PlaybackContext::Tracks {
         search: None,
-        sort_key: TrackSortKey::Title,
-        sort_direction: SortDirection::Ascending,
-    })
+        sort: TrackSortKey::Title,
+        direction: SortDirection::Ascending,
+    }
 }
 
 #[test]
-fn the_tracks_context_is_a_track_query_beside_its_kind() {
+fn the_tracks_context_is_the_list_s_search_and_sort() {
     let context: PlaybackContext = serde_json::from_value(serde_json::json!({
         "kind": "tracks",
         "search": "alp",
-        "sortKey": "title",
-        "sortDirection": "ascending",
+        "sort": "title",
+        "direction": "ascending",
     }))
     .expect("a tracks context");
 
-    let PlaybackContext::Tracks(query) = context else {
+    let PlaybackContext::Tracks {
+        search,
+        sort,
+        direction,
+    } = context
+    else {
         panic!("not the tracks context");
     };
-    assert_eq!(query.search.as_deref(), Some("alp"));
-    assert_eq!(query.sort_key, TrackSortKey::Title);
-    assert_eq!(query.sort_direction, SortDirection::Ascending);
+    assert_eq!(search.as_deref(), Some("alp"));
+    assert_eq!(sort, TrackSortKey::Title);
+    assert_eq!(direction, SortDirection::Ascending);
 }
 
 #[test]
-fn a_list_request_is_its_query_beside_the_cursor_and_skip() {
-    let request: TrackListRequest = serde_json::from_value(serde_json::json!({
+fn a_list_request_is_its_search_sort_direction_and_window() {
+    let request: ListRequest<TrackSortKey> = serde_json::from_value(serde_json::json!({
         "search": null,
-        "sortKey": "title",
-        "sortDirection": "descending",
-        "cursor": null,
-        "skip": 7,
+        "sort": "title",
+        "direction": "descending",
+        "offset": 7,
+        "limit": 50,
     }))
     .expect("a list request");
 
-    assert_eq!(request.query.sort_direction, SortDirection::Descending);
-    assert_eq!(request.skip, 7);
+    assert_eq!(request.direction, SortDirection::Descending);
+    assert_eq!((request.offset, request.limit), (7, 50));
     let fixture = fixture();
     let page = fixture.backend.list_tracks(&request).expect("the page");
     assert_eq!(page.items.len(), 0);
+    assert_eq!(page.total, 0);
 }
 
 #[test]
@@ -95,9 +99,7 @@ fn without_a_library_the_library_commands_say_it_is_unavailable() {
     ));
     assert!(matches!(
         backend.track_file(TrackId::try_from_rowid(1).unwrap()),
-        Err(LibraryCommandError::Common {
-            error: CommandError::LibraryUnavailable
-        })
+        Err(CommandError::LibraryUnavailable)
     ));
     assert!(matches!(
         backend.track_lyrics(TrackId::try_from_rowid(1).unwrap()),
@@ -144,9 +146,7 @@ fn track_properties_for_a_track_the_library_does_not_hold_are_not_found() {
         fixture
             .backend
             .track_properties(TrackId::try_from_rowid(999).unwrap()),
-        Err(LibraryCommandError::Common {
-            error: CommandError::TrackNotFound
-        })
+        Err(CommandError::TrackNotFound)
     ));
 }
 
@@ -157,22 +157,18 @@ fn an_album_by_id_that_the_library_does_not_hold_is_not_found() {
 
     let error = fixture.backend.album_by_id(album_id).err();
 
-    assert!(matches!(error, Some(LibraryCommandError::AlbumNotFound)));
+    assert_eq!(error, Some(CommandError::AlbumNotFound));
 }
 
 #[test]
 fn an_album_by_id_that_the_library_does_not_hold_has_no_tracks_and_does_not_play() {
     let fixture = fixture();
     let album_id = AlbumId::of("Nobody", "Nope", std::ffi::OsStr::new(""));
-    let request = AlbumTracksRequest {
-        album_id,
-        cursor: None,
-    };
 
-    assert!(matches!(
-        fixture.backend.album_tracks_by_id(&request).err(),
-        Some(LibraryCommandError::AlbumNotFound)
-    ));
+    assert_eq!(
+        fixture.backend.album_tracks(album_id).err(),
+        Some(CommandError::AlbumNotFound)
+    );
     assert_eq!(
         fixture
             .backend
@@ -190,8 +186,5 @@ fn an_album_artist_by_id_that_the_library_does_not_hold_is_not_found() {
 
     let error = fixture.backend.artist(ArtistId::of("Nobody")).err();
 
-    assert!(matches!(
-        error,
-        Some(LibraryCommandError::AlbumArtistNotFound)
-    ));
+    assert_eq!(error, Some(CommandError::ArtistNotFound));
 }

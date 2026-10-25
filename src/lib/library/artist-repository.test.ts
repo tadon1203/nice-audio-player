@@ -29,7 +29,7 @@ describe("ArtistRepository", () => {
     expect(mocks.commands.libraryArtist).toHaveBeenCalledWith(artistId);
   });
 
-  it("pages the album list by ID with the cursor", async () => {
+  it("pages the album list by offset, from the one the page asks for", async () => {
     const repository = new ArtistRepository(library);
     const options = repository.albumsOptions({
       artistId,
@@ -37,13 +37,14 @@ describe("ArtistRepository", () => {
       direction: "descending",
     });
 
-    await (options.queryFn as (context: unknown) => Promise<unknown>)({ pageParam: "next" });
+    await (options.queryFn as (context: unknown) => Promise<unknown>)({ pageParam: 100 });
 
-    expect(mocks.commands.libraryListArtistAlbums).toHaveBeenCalledWith({
-      artistId,
-      cursor: "next",
-      sortKey: "title",
-      sortDirection: "descending",
+    expect(mocks.commands.libraryListArtistAlbums).toHaveBeenCalledWith(artistId, {
+      search: null,
+      sort: "title",
+      direction: "descending",
+      offset: 100,
+      limit: 100,
     });
   });
 });

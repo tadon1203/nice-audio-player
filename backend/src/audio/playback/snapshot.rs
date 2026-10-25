@@ -8,7 +8,7 @@ use crate::audio::output_processing::{ChannelConversion, OutputProcessingPlan};
 use crate::audio::volume::VolumeState;
 use crate::ids::{PlaybackId, QueueItemId, TrackId};
 use crate::library::models::TrackCore;
-use crate::library::store::PlayableTrack;
+use crate::library::tracks::PlayableTrack;
 use std::sync::Arc;
 
 /// Fields every transport state carries.

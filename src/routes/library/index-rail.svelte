@@ -1,13 +1,13 @@
 <script lang="ts">
   import { Button } from "#lib/ui/shadcn/button";
-  import { type ScrollIndexBucket } from "#lib/native/bindings";
+  import { type LetterIndexEntry } from "#lib/native/bindings";
 
   let {
-    buckets,
+    entries,
     current,
     onselect,
   }: {
-    buckets: readonly ScrollIndexBucket[];
+    entries: readonly LetterIndexEntry[];
     current: string | null;
     onselect: (label: string) => void;
   } = $props();
@@ -18,17 +18,17 @@
   aria-label="Index"
   class="absolute inset-y-2 right-4 z-10 flex flex-col items-center overflow-y-auto"
 >
-  {#each buckets as bucket (bucket.label)}
+  {#each entries as entry (entry.label)}
     <Button
       type="button"
-      aria-label={`Jump to ${bucket.label === "?" ? "names without a value" : bucket.label}`}
-      aria-current={bucket.label === current ? "true" : undefined}
+      aria-label={`Jump to ${entry.kind === "unknown" ? "names without a value" : entry.label}`}
+      aria-current={entry.label === current ? "true" : undefined}
       variant="bare"
       size="inline"
-      onclick={() => onselect(bucket.label)}
+      onclick={() => onselect(entry.label)}
       class="h-auto min-h-6 w-auto min-w-6 shrink-0 px-1 py-0.5 font-normal"
     >
-      {bucket.label === "?" ? "…" : bucket.label}
+      {entry.kind === "unknown" ? "…" : entry.label}
     </Button>
   {/each}
 </nav>

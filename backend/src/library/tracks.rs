@@ -1,20 +1,21 @@
-//! Resolves library selections (an album, the track list under a filter) into the track ids a
-//! playback queue is built from, and reads those tracks back when they are needed.
+//! One track and playback: a track's summary helpers, its properties and where its file is, and
+//! the resolution of library selections (an album, the track list under a filter) into the track
+//! ids a playback queue is built from, and reading those tracks back when they are needed.
 
 use super::{
-    LibraryStore,
-    catalog::{ALBUM_ORDER, track_filter, track_ordering},
-    track::{artwork_ref, non_blank, track_album, track_state},
+    Availability, InspectionStatus, Library, StoreError, TrackLocation,
+    artwork::{ArtworkMimeType, ArtworkRef},
+    database::Database,
+    lists::{ALBUM_ORDER, track_listing},
+    models::{
+        ArtistRef, NowPlayingAlbum, NowPlayingTrack, SortDirection, TrackAlbum, TrackCore,
+        TrackProperties, TrackSortKey, TrackState,
+    },
 };
 use crate::errors::CommandError;
-use crate::ids::{AlbumId, ArtistId, TrackId, album_id_column, track_id_column};
-use crate::library::{
-    Availability, InspectionStatus, StoreError, TrackLocation,
-    artwork::ArtworkRef,
-    models::{NowPlayingAlbum, NowPlayingTrack, TrackCore, TrackQuery, TrackState},
-};
+use crate::ids::{AlbumId, ArtistId, ArtworkHash, TrackId, album_id_column, track_id_column};
 use crate::media::validation::{ValidatedAudioFile, describe_audio_file, validate_audio_file};
-use rusqlite::{Connection, Row, params};
+use rusqlite::{Connection, OptionalExtension, Row, params};
 use std::collections::HashMap;
 
 /// A library track ready to be played: the track the renderer sees, and the file facts the
@@ -119,6 +120,62 @@ impl From<PlaybackSourceError> for PlaybackLookupError {
     }
 }
 
+/// The state of a track, from its file's availability and inspection. Every DTO's `state` comes
+/// from here, and so does the playback path's check that a track can play.
+pub(super) fn track_state(availability: Availability, inspection: InspectionStatus) -> TrackState {
+    match (availability, inspection) {
+        (Availability::Missing, _) => TrackState::Missing,
+        (Availability::Available, InspectionStatus::Indexed) => TrackState::Playable,
+        (Availability::Available, InspectionStatus::Unsupported) => TrackState::Unsupported,
+    }
+}
+
+/// The SQL condition, on the `f` alias of `library_files`, that holds for the files `track_state`
+/// calls playable.
+pub(super) fn playable_file_condition() -> String {
+    format!(
+        "f.availability = '{}' AND f.inspection_status = '{}'",
+        Availability::Available.as_str(),
+        InspectionStatus::Indexed.as_str()
+    )
+}
+
+pub(super) fn non_blank(value: Option<String>) -> Option<String> {
+    value.filter(|value| !value.trim().is_empty())
+}
+
+pub(super) fn artwork_ref(
+    hash: Option<String>,
+    mime_type: Option<ArtworkMimeType>,
+) -> Option<ArtworkRef> {
+    Some(ArtworkRef {
+        hash: ArtworkHash::try_from(hash?).ok()?,
+        mime_type: mime_type?,
+    })
+}
+
+/// The album of a track: `None` for a track with no album tag, which has no album ID either. An
+/// album row always comes with its Album Artist, so a missing one is treated as no album.
+pub(super) fn track_album(
+    title: String,
+    id: AlbumId,
+    artist_id: Option<ArtistId>,
+    artist_name: Option<String>,
+) -> Option<TrackAlbum> {
+    if title.is_empty() {
+        return None;
+    }
+    Some(TrackAlbum {
+        id,
+        title,
+        artist: ArtistRef {
+            id: artist_id?,
+            name: artist_name?,
+        },
+    })
+}
+
+/// One playback query's row, with the file's location, before it is turned into a playable track.
 struct PlaybackRow {
     track_id: TrackId,
     location: TrackLocation,
@@ -315,7 +372,86 @@ fn selection_row(row: &Row<'_>) -> rusqlite::Result<SelectionRow> {
 /// How many ids one query binds; SQLite's default limit on variables is far above it.
 const IDS_PER_QUERY: usize = 400;
 
-impl LibraryStore {
+/// Where the track's file is. The one query every consumer of a track's path goes through.
+pub(crate) fn location_of(database: &Database, id: TrackId) -> Result<TrackLocation, StoreError> {
+    let connection = database.read()?;
+    let (directory, relative, availability): (String, String, Availability) = connection
+        .query_row(
+            "SELECT r.path, f.relative_path, f.availability
+                 FROM tracks t
+                 JOIN library_files f ON f.id = t.file_id
+                 JOIN directories r ON r.id = f.directory_id
+                 WHERE t.id = ?1",
+            params![id.rowid()],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .optional()?
+        .ok_or(StoreError::TrackNotFound)?;
+    Ok(TrackLocation::new(
+        &directory,
+        &relative,
+        availability == Availability::Available,
+    ))
+}
+
+impl Library {
+    /// Where the track's file is (see [`location_of`]).
+    pub(crate) fn track_location(&self, id: TrackId) -> Result<TrackLocation, StoreError> {
+        location_of(&self.database, id)
+    }
+
+    /// Tags, audio format and the file's path, or `TrackNotFound` for an unknown track.
+    pub(crate) fn track_properties(&self, id: TrackId) -> Result<TrackProperties, StoreError> {
+        let location = self.track_location(id)?;
+        let path = location.path()?.to_string_lossy().into_owned();
+        let connection = self.read()?;
+        connection
+            .query_row(
+                "SELECT f.file_name, m.tag_title, m.tag_artist, m.tag_album, m.tag_album_artist,
+                        m.track_number, m.track_total, m.disc_number, m.disc_total, m.genre, m.date,
+                        m.duration_ms, m.file_format, m.codec, m.sample_rate, m.channel_count,
+                        m.bit_depth, m.bitrate_kbps
+                 FROM tracks t
+                 JOIN library_files f ON f.id = t.file_id
+                 JOIN track_source_metadata m ON m.track_id = t.id
+                 WHERE t.id = ?1",
+                params![id.rowid()],
+                |row| {
+                    let number = |index: usize| -> rusqlite::Result<Option<u32>> {
+                        Ok(row
+                            .get::<_, Option<i64>>(index)?
+                            .and_then(|value| u32::try_from(value).ok()))
+                    };
+                    Ok(TrackProperties {
+                        id,
+                        path: path.clone(),
+                        file_name: row.get(0)?,
+                        title: non_blank(row.get(1)?),
+                        artist: non_blank(row.get(2)?),
+                        album: non_blank(row.get(3)?),
+                        album_artist: non_blank(row.get(4)?),
+                        track_number: number(5)?,
+                        track_total: number(6)?,
+                        disc_number: number(7)?,
+                        disc_total: number(8)?,
+                        genre: non_blank(row.get(9)?),
+                        date: non_blank(row.get(10)?),
+                        duration_ms: row
+                            .get::<_, Option<i64>>(11)?
+                            .and_then(|value| u64::try_from(value).ok()),
+                        file_format: non_blank(row.get(12)?),
+                        codec: non_blank(row.get(13)?),
+                        sample_rate: number(14)?,
+                        channel_count: number(15)?,
+                        bit_depth: number(16)?,
+                        bitrate_kbps: number(17)?,
+                    })
+                },
+            )
+            .optional()?
+            .ok_or(StoreError::TrackNotFound)
+    }
+
     /// The album in disc and track order, by its ID.
     pub(crate) fn playback_for_album_id(
         &self,
@@ -323,16 +459,8 @@ impl LibraryStore {
         start_track_id: Option<TrackId>,
     ) -> Result<PlaybackSelection, PlaybackLookupError> {
         let connection = self.read()?;
-        Self::album_selection(&connection, album_id, start_track_id)
-    }
-
-    fn album_selection(
-        connection: &Connection,
-        album_id: AlbumId,
-        start_track_id: Option<TrackId>,
-    ) -> Result<PlaybackSelection, PlaybackLookupError> {
         let rows = collect_selection(
-            connection,
+            &connection,
             &format!(
                 "SELECT {SELECTION_COLUMNS} {SELECTION_FROM}
                  WHERE m.album_id = ?1
@@ -396,22 +524,24 @@ impl LibraryStore {
         Ok(track_ids.iter().map(|id| found.get(id).cloned()).collect())
     }
 
-    /// Every track the tracks page shows under `search`, in the page's sort order.
+    /// Every track the tracks list shows under `search`, in the list's sort order.
     pub(crate) fn playback_for_tracks(
         &self,
-        query: &TrackQuery,
+        search: Option<&str>,
+        sort: TrackSortKey,
+        direction: SortDirection,
         start_track_id: Option<TrackId>,
     ) -> Result<PlaybackSelection, PlaybackLookupError> {
-        let filter = track_filter(query.search.as_deref());
+        let listing = track_listing(search, sort, direction);
         let connection = self.read()?;
         let rows = collect_selection(
             &connection,
             &format!(
                 "SELECT {SELECTION_COLUMNS} {SELECTION_FROM} WHERE {} ORDER BY {}",
-                filter.sql,
-                track_ordering(query.sort_key, query.sort_direction).order_by()
+                listing.filter.sql(),
+                listing.order
             ),
-            rusqlite::params_from_iter(filter.params),
+            rusqlite::params_from_iter(&listing.filter.params),
         )?;
         select_playable(&rows, start_track_id)
     }

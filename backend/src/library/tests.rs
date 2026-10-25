@@ -255,8 +255,8 @@ fn a_scan_error_maps_to_the_shared_code_the_renderer_shows() {
         CommandError::ScanAlreadyRunning
     );
     assert_eq!(
-        CommandError::from(LibraryCommandError::InvalidCursor),
-        CommandError::TaskFailed
+        CommandError::from(LibraryCommandError::NoEnabledDirectories),
+        CommandError::NoEnabledDirectories
     );
 }
 

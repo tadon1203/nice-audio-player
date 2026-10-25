@@ -2,16 +2,18 @@ use super::fixture;
 use crate::app::{BackendApp, PlaybackContext, PlaybackWaveform};
 use crate::audio::playback::{PlaybackServiceError, RepeatMode};
 use crate::ids::TrackId;
-use crate::library::models::{SortDirection, TrackListRequest, TrackQuery, TrackSortKey};
+use crate::library::models::{ListRequest, SortDirection, TrackSortKey};
 use crate::messages::{BackendMessage, StateTopic, StateValue};
 use crate::test_support::{RecordingMessageListener, Sent, TestDirectory, write_pcm_i16_wav};
 use std::time::{Duration, Instant};
 
-fn title_order() -> TrackQuery {
-    TrackQuery {
+fn title_order() -> ListRequest<TrackSortKey> {
+    ListRequest {
         search: None,
-        sort_key: TrackSortKey::Title,
-        sort_direction: SortDirection::Ascending,
+        sort: TrackSortKey::Title,
+        direction: SortDirection::Ascending,
+        offset: 0,
+        limit: 500,
     }
 }
 
@@ -19,13 +21,7 @@ fn title_order() -> TrackQuery {
 fn wait_for_tracks(backend: &BackendApp, count: usize) -> Vec<TrackId> {
     let deadline = Instant::now() + Duration::from_secs(30);
     loop {
-        let page = backend
-            .list_tracks(&TrackListRequest {
-                query: title_order(),
-                cursor: None,
-                skip: 0,
-            })
-            .expect("track list");
+        let page = backend.list_tracks(&title_order()).expect("track list");
         let ids: Vec<TrackId> = page.items.iter().map(|item| item.core.id).collect();
         if ids.len() == count || Instant::now() > deadline {
             return ids;
@@ -133,7 +129,11 @@ fn previous_back_to_a_track_that_played_before_shows_its_waveform() {
         .add_directory(music)
         .expect("register the music directory");
     let ids = wait_for_tracks(&backend, 2);
-    let context = PlaybackContext::Tracks(title_order());
+    let context = PlaybackContext::Tracks {
+        search: None,
+        sort: TrackSortKey::Title,
+        direction: SortDirection::Ascending,
+    };
     backend.play(&context, Some(ids[0])).expect("play a");
     let deadline = Instant::now() + Duration::from_secs(60);
     while shown_waveform(&backend).is_none() && Instant::now() < deadline {

@@ -1,7 +1,8 @@
 import { infiniteQueryOptions, queryOptions } from "@tanstack/svelte-query";
-import { type ArtistId, type ArtistRow, type LibraryAlbumPage } from "#lib/native/bindings";
+import { type AlbumRow, type ArtistId, type ArtistRow } from "#lib/native/bindings";
 import type { library } from "#lib/native/commands";
 import { LibraryQueryKeys, type ArtistAlbumsArguments } from "./library-query-keys";
+import { PAGE_SIZE, type Page } from "./catalog-repository";
 import type {
   CreateInfiniteQueryOptions,
   CreateQueryOptions,
@@ -34,28 +35,32 @@ export class ArtistRepository {
   }
 
   public albumsOptions(request: ArtistAlbumsArguments): CreateInfiniteQueryOptions<
-    LibraryAlbumPage,
+    Page<AlbumRow>,
     Error,
-    InfiniteData<LibraryAlbumPage, unknown>,
+    InfiniteData<Page<AlbumRow>, unknown>,
     readonly unknown[],
-    string | null
+    number
   > & {
     initialData?:
-      | InfiniteData<LibraryAlbumPage, string | null>
-      | InitialDataFunction<InfiniteData<LibraryAlbumPage, string | null>>
+      | InfiniteData<Page<AlbumRow>, number>
+      | InitialDataFunction<InfiniteData<Page<AlbumRow>, number>>
       | undefined;
-  } & QueryKeyWithDataTag<readonly unknown[], InfiniteData<LibraryAlbumPage, unknown>, Error> {
+  } & QueryKeyWithDataTag<readonly unknown[], InfiniteData<Page<AlbumRow>, unknown>, Error> {
     return infiniteQueryOptions({
       queryKey: LibraryQueryKeys.artistAlbums(request),
-      initialPageParam: null as string | null,
-      queryFn: ({ pageParam }): Promise<LibraryAlbumPage> =>
-        this.#library.listArtistAlbums({
-          artistId: request.artistId,
-          cursor: pageParam,
-          sortKey: request.sortKey,
-          sortDirection: request.direction,
+      initialPageParam: 0,
+      queryFn: ({ pageParam }): Promise<Page<AlbumRow>> =>
+        this.#library.listArtistAlbums(request.artistId, {
+          search: null,
+          sort: request.sortKey,
+          direction: request.direction,
+          offset: pageParam,
+          limit: PAGE_SIZE,
         }),
-      getNextPageParam: (page: LibraryAlbumPage) => page.nextCursor ?? undefined,
+      getNextPageParam: (last: Page<AlbumRow>, _pages, lastPageParam: number) => {
+        const next = lastPageParam + last.items.length;
+        return next < last.total ? next : undefined;
+      },
       gcTime: Infinity,
     });
   }

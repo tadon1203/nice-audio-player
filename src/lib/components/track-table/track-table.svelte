@@ -39,7 +39,7 @@
     layout?: TrackTableLayout;
     /** Mounts only the rows near the view, in the scroll view above. Off renders every row. */
     virtualized?: boolean;
-    /** Told the index of the first row in view, for the scroll index label. */
+    /** Told the index of the first row in view, for the letter index label. */
     ontopindexchange?: (index: number) => void;
     sortKey?: TrackSortKey;
     sortDirection?: SortDirection;
@@ -64,7 +64,7 @@
     rowHeight: TrackColumns.rowHeight,
     overscan: 10,
   });
-  // The scroll index label is told the top row as the virtual rows scroll. The callback belongs to
+  // The letter index label is told the top row as the virtual rows scroll. The callback belongs to
   // the parent, so this stays an effect rather than an attachment.
   $effect(() => {
     if (virtualized) ontopindexchange?.(virtual.topIndex);

@@ -25,7 +25,7 @@ use std::{
     collections::{HashMap, VecDeque},
     sync::{
         Arc,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
         mpsc::{self, Receiver, RecvTimeoutError, Sender, SyncSender},
     },
     thread::{self, JoinHandle},
@@ -65,11 +65,12 @@ pub(crate) struct LibrarySync {
 }
 
 impl LibrarySync {
-    pub(crate) fn start(database: Database, hub: Arc<StateHub>) -> Self {
+    pub(crate) fn start(database: Database, hub: Arc<StateHub>, version: Arc<AtomicU64>) -> Self {
         let (messages, receiver) = mpsc::channel();
         let actor = Actor {
             database,
             hub,
+            version,
             messages: messages.clone(),
             cancel: Arc::new(AtomicBool::new(false)),
             state: State::new(),
@@ -154,6 +155,8 @@ impl Drop for LibrarySync {
 struct Actor {
     database: Database,
     hub: Arc<StateHub>,
+    /// The Library version, which a scan advances when it ends.
+    version: Arc<AtomicU64>,
     /// For the inputs the watchers and the scanner thread send back.
     messages: Sender<Message>,
     cancel: Arc<AtomicBool>,
@@ -342,23 +345,24 @@ impl Actor {
         let previous = self.hub.read(|published| published.scan.value.clone());
         self.hub.publish(StateValue::Scan(ScanState {
             state: ScanStatus::Running,
-            finished_count: previous.finished_count,
-            changed_count: previous.changed_count,
+            library_version: previous.library_version,
             ..ScanState::idle()
         }));
         info!("library.scan.started directory_count={}", jobs.len());
-        let (database, hub, cancel) = (
+        let (database, hub, cancel, version) = (
             self.database.clone(),
             Arc::clone(&self.hub),
             Arc::clone(&self.cancel),
+            Arc::clone(&self.version),
         );
         let messages = self.messages.clone();
         self.scanner = Some(
             thread::Builder::new()
                 .name("library-scanner".into())
                 .spawn(move || {
-                    let mut ending = ScanEnding::new(messages, Arc::clone(&hub));
-                    let outcome = scanner::run(&database, &jobs, &hub, &cancel);
+                    let mut ending =
+                        ScanEnding::new(messages, Arc::clone(&hub), Arc::clone(&version));
+                    let outcome = scanner::run(&database, &jobs, &hub, &version, &cancel);
                     ending.finish(match outcome {
                         ScanStatus::Completed => ScanOutcome::Completed,
                         ScanStatus::Cancelled => ScanOutcome::Cancelled,
@@ -421,14 +425,16 @@ impl Actor {
 struct ScanEnding {
     messages: Sender<Message>,
     hub: Arc<StateHub>,
+    version: Arc<AtomicU64>,
     finished: bool,
 }
 
 impl ScanEnding {
-    fn new(messages: Sender<Message>, hub: Arc<StateHub>) -> Self {
+    fn new(messages: Sender<Message>, hub: Arc<StateHub>, version: Arc<AtomicU64>) -> Self {
         Self {
             messages,
             hub,
+            version,
             finished: false,
         }
     }
@@ -449,7 +455,7 @@ fn report_scan_finished(messages: &Sender<Message>, outcome: ScanOutcome) {
 impl Drop for ScanEnding {
     fn drop(&mut self) {
         if !self.finished {
-            scanner::fail(&self.hub);
+            scanner::fail(&self.hub, &self.version);
             report_scan_finished(&self.messages, ScanOutcome::Failed);
         }
     }
@@ -483,7 +489,11 @@ mod tests {
         let died = thread::Builder::new()
             .name("scanner-bug-test".into())
             .spawn(move || {
-                let _ending = ScanEnding::new(messages, thread_hub);
+                let _ending = ScanEnding::new(
+                    messages,
+                    thread_hub,
+                    Arc::new(std::sync::atomic::AtomicU64::new(0)),
+                );
                 panic!("scanner bug");
             })
             .unwrap()

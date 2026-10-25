@@ -25,7 +25,7 @@
     artworkAt?: (index: number) => ArtworkRef | null | undefined;
     /** Changes when the sort does: tiles then slide (or fade) to their new places. */
     sortSignature: string;
-    /** Told the index of the first tile in view, for the scroll index label. */
+    /** Told the index of the first tile in view, for the letter index label. */
     ontopindexchange?: (index: number) => void;
     tile: Snippet<[Item, number]>;
   } = $props();

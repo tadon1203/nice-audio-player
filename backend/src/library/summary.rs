@@ -9,7 +9,6 @@
 //! The rows are computed by SQL from the tracks (`album_id()`, `artist_id()` and `search_key()` are
 //! registered in `ids.rs`), so a rebuild and a single album give the same rows.
 
-use super::keys;
 use super::text;
 use crate::ids::AlbumId;
 use rusqlite::{OptionalExtension, Transaction, params, params_from_iter};
@@ -171,7 +170,7 @@ fn settle_compilation(
         if under == row.filed_under {
             continue;
         }
-        let directory = keys::absolute_directory(&row.directory_path, directory);
+        let directory = text::absolute_directory(&row.directory_path, directory);
         let album_id = AlbumId::of(under, title, OsStr::new(&directory)).to_hex();
         moved.insert(row.album_id.clone());
         moved.insert(album_id.clone());
@@ -184,7 +183,7 @@ fn settle_compilation(
             row.track_id,
             under,
             sort,
-            keys::track_search_key(&row.track_title, &row.artist, title, under),
+            text::track_search_key(&row.track_title, &row.artist, title, under),
             album_id,
         ])?;
     }

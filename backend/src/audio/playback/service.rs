@@ -23,7 +23,7 @@ use crate::audio::output::OutputBackend;
 use crate::audio::volume::{AtomicEffectiveGain, VolumeState};
 use crate::errors::CommandError;
 use crate::ids::{QueueItemId, TrackId};
-use crate::library::store::{PlaybackLookupError, PlaybackSourceError};
+use crate::library::tracks::{PlaybackLookupError, PlaybackSourceError};
 use crate::messages::{SharedMessageListener, Versioned};
 use crate::state_hub::StateHub;
 use log::{debug, error};

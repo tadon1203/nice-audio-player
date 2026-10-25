@@ -61,7 +61,7 @@ export class AppServices {
   public readonly appearance: Appearance;
   public readonly outputDevices: AudioOutputDevices;
   public readonly motion: MotionBudget;
-  /** The Library's catalog lists and scroll indexes. */
+  /** The Library's catalog lists and letter indexes. */
   public readonly catalog: CatalogRepository;
   public readonly albums: AlbumRepository;
   public readonly artists: ArtistRepository;

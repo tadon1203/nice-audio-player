@@ -12,7 +12,7 @@ mod persist;
 mod relink;
 
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use log::{error, info};
@@ -55,10 +55,11 @@ pub(crate) fn run(
     database: &Database,
     jobs: &[ScanJob],
     hub: &StateHub,
+    version: &AtomicU64,
     cancel: &AtomicBool,
 ) -> ScanStatus {
     let expected = expected_files(database, jobs);
-    let mut progress = Progress::new(hub);
+    let mut progress = Progress::new(hub, version);
     progress.change(|scan| scan.expected_count = expected);
     let mut traversal_failed = false;
     for job in jobs {
@@ -85,11 +86,8 @@ pub(crate) fn run(
     }
     // Only once every directory has been seen in full is a Missing track known to be missing, and so
     // a file that arrived known to be that track moved.
-    match relink_moved(database) {
-        Ok(relinked) => progress.changed(relinked as u64),
-        Err(_) => {
-            return progress.finish(ScanStatus::Failed, Some(ScanFailure::PersistenceFailed));
-        }
+    if relink_moved(database).is_err() {
+        return progress.finish(ScanStatus::Failed, Some(ScanFailure::PersistenceFailed));
     }
     progress.finish(ScanStatus::Completed, None)
 }
@@ -105,12 +103,12 @@ fn relink_moved(database: &Database) -> Result<usize, PersistError> {
 
 /// Ends the scan as failed, for a scan thread that died before it could say how it ended. The
 /// counts are the ones last published.
-pub(crate) fn fail(hub: &StateHub) {
+pub(crate) fn fail(hub: &StateHub, version: &AtomicU64) {
     let mut scan = hub.read(|published| published.scan.value.clone());
     scan.state = ScanStatus::Failed;
     scan.current_directory = None;
     scan.failure_code = Some(ScanFailure::Panicked);
-    scan.finished_count += 1;
+    scan.library_version = version.fetch_add(1, Ordering::SeqCst) + 1;
     hub.publish(StateValue::Scan(scan));
     error!(
         "library.scan.failed failure_code={:?}",
@@ -196,8 +194,7 @@ fn scan_directory(
             }
         }
         let outcomes = read_batch(planned, database.data_dir(), cancel, progress);
-        let changed = writer.write_batch(directory_id, generation, &outcomes.outcomes)?;
-        progress.changed(changed);
+        writer.write_batch(directory_id, generation, &outcomes.outcomes)?;
         if outcomes.cancelled {
             return Err(Stop::Cancelled);
         }
@@ -206,8 +203,7 @@ fn scan_directory(
         }
     }
     if complete {
-        let gone = writer.finish_directory(directory_id, generation, within.as_deref())?;
-        progress.changed(gone);
+        writer.finish_directory(directory_id, generation, within.as_deref())?;
     } else {
         progress.failed();
     }
@@ -285,14 +281,17 @@ fn read_batch(
 /// scan runs, so `scan` is its working copy of the published state.
 struct Progress<'a> {
     hub: &'a StateHub,
+    /// The Library version: advanced when the scan ends, so the lists reload what it changed.
+    version: &'a AtomicU64,
     scan: ScanState,
     last_publish: Instant,
 }
 
 impl<'a> Progress<'a> {
-    fn new(hub: &'a StateHub) -> Self {
+    fn new(hub: &'a StateHub, version: &'a AtomicU64) -> Self {
         Self {
             hub,
+            version,
             scan: hub.read(|published| published.scan.value.clone()),
             last_publish: Instant::now()
                 .checked_sub(PROGRESS_PUBLISH_INTERVAL)
@@ -322,11 +321,12 @@ impl<'a> Progress<'a> {
 
     /// Ends the scan with `outcome` and publishes the final state.
     fn finish(&mut self, outcome: ScanStatus, failure: Option<ScanFailure>) -> ScanStatus {
+        let library_version = self.version.fetch_add(1, Ordering::SeqCst) + 1;
         self.change(|scan| {
             scan.state = outcome;
             scan.current_directory = None;
             scan.failure_code = failure;
-            scan.finished_count += 1;
+            scan.library_version = library_version;
         });
         let counts = format!(
             "discovered_count={} inspected_count={} indexed_count={} failed_count={}",
@@ -357,12 +357,6 @@ impl<'a> Progress<'a> {
 
     fn indexed(&mut self) {
         self.count(|scan| scan.indexed_count += 1);
-    }
-
-    fn changed(&mut self, files: u64) {
-        if files > 0 {
-            self.count(|scan| scan.changed_count += files);
-        }
     }
 
     fn failed(&mut self) {

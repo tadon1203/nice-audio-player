@@ -1,5 +1,5 @@
 import type { CreateInfiniteQueryOptions, InfiniteData } from "@tanstack/svelte-query";
-import { type ScrollIndexBucket, type LibraryStatus } from "#lib/native/bindings";
+import { type LetterIndexEntry, type LibraryStatus } from "#lib/native/bindings";
 import {
   type CatalogRepository,
   type LibraryCatalogItem,
@@ -30,7 +30,7 @@ interface SettledFilter {
 }
 
 /**
- * A presentation's list, its scroll index, and its one view state. Loads the list once the library
+ * A presentation's list, its letter index, and its one view state. Loads the list once the library
  * is ready and derives the one view state to render. The filter is debounced into the query key so
  * typing stays responsive while the list refetches; the previous list of the same presentation stays
  * on screen until the new one arrives. Construct during component initialization.
@@ -39,7 +39,7 @@ export class LibraryCatalog<TRequest extends LibraryCatalogRequest> {
   readonly #request: () => TRequest;
   readonly #status: QueryResult<LibraryStatus>;
   readonly #pages: PagedCollection<Page<LibraryCatalogItem<TRequest["presentation"]>>>;
-  readonly #index: QueryResult<ScrollIndexBucket[]>;
+  readonly #index: QueryResult<LetterIndexEntry[]>;
   // Both start unset: until the debounce settles, the live request is the one in use.
   #settled = $state.raw<SettledFilter | null>(null);
   #shown = $state.raw<TRequest | null>(null);
@@ -89,13 +89,12 @@ export class LibraryCatalog<TRequest extends LibraryCatalogRequest> {
     this.#request = request;
     this.#status = new QueryResult(() => catalog.statusOptions());
     this.#pages = new PagedCollection(() => this.#pageOptions(catalog));
-    // The scroll index follows the list's filter and sort (not where it was entered), so a jump
-    // keeps the buckets it was made from.
+    // The letter index follows the list's filter and sort (not where it was entered), so a jump
+    // keeps the entries it was made from.
     this.#index = new QueryResult(() => ({
       ...catalog.indexOptions(this.#queryRequest, this.#ready),
-      placeholderData: (
-        previous: ScrollIndexBucket[] | undefined,
-      ): ScrollIndexBucket[] | undefined => previous,
+      placeholderData: (previous: LetterIndexEntry[] | undefined): LetterIndexEntry[] | undefined =>
+        previous,
     }));
 
     $effect(() => {
@@ -149,8 +148,8 @@ export class LibraryCatalog<TRequest extends LibraryCatalogRequest> {
     return this.#pages.totalCount;
   }
 
-  /** The list's scroll index: buckets of names in list order; empty when the sort has none. */
-  public get index(): readonly ScrollIndexBucket[] {
+  /** The list's letter index: entries of names in list order; empty when the sort has none. */
+  public get index(): readonly LetterIndexEntry[] {
     return this.#index.data ?? [];
   }
 

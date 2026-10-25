@@ -6,8 +6,8 @@ use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, 
 use super::discover::DiscoveredFile;
 use super::inspect::{ArtworkOutcome, InspectedFile};
 use crate::library::database::DatabaseError;
-use crate::library::keys::{SortTags, TrackKeys, album_edition_of};
 use crate::library::summary::{self, Touched};
+use crate::library::text::{SortTags, TrackKeys, album_edition_of};
 use crate::library::{ArtworkStatus, Availability, InspectionStatus, TagStatus};
 use crate::media::inspection::Undecodable;
 

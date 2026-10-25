@@ -24,7 +24,7 @@ use super::decoding::{DecodeStep, PcmDecodeError, SeekStep, open_analysis_decode
 use crate::errors::contain;
 use crate::ids::PlaybackId;
 use crate::library::scanner::identity::content_hash;
-use crate::library::store::PlayableTrack;
+use crate::library::tracks::PlayableTrack;
 use crate::media::validation::ValidatedAudioFile;
 use crate::messages::StateValue;
 use crate::state_hub::StateHub;
