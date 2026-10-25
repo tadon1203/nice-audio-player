@@ -1,6 +1,6 @@
 import {
   type CurrentPlayback,
-  type PlaybackItem,
+  type QueueItem,
   type PlaybackPosition,
   type RepeatMode,
   type PlaybackState,
@@ -23,7 +23,7 @@ export class PlaybackSnapshots {
   }
 
   /** The loaded track, or the last one that played while stopped. */
-  public static item(snapshot: PlaybackState | null): PlaybackItem | null {
+  public static item(snapshot: PlaybackState | null): QueueItem | null {
     if (snapshot === null) return null;
     return PlaybackSnapshots.isActive(snapshot) ? snapshot.session.item : snapshot.item;
   }

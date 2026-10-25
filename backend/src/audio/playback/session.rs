@@ -1,18 +1,19 @@
 //! The worker's transport state: what is loading, what is loaded, and the operations in flight.
 
+use std::ops::Deref;
 use std::time::{Duration, Instant};
 
 use super::Reply;
 use super::decode_worker::DecodeWorker;
-use super::item::PlayableItem;
-use super::snapshot::{PlaybackFailureCode, PlaybackState, StartedBy};
 use super::source_loader::SourceLoad;
+use super::state::{PlaybackFailureCode, PlaybackState, StartedBy};
 use crate::audio::decode::CompressedAudioSource;
 use crate::audio::output::AudioOutputSelection;
 use crate::audio::output::PcmConsumer;
 use crate::audio::output::{OutputStream, OutputStreamId, PipelineId, PreparedOutputConfig};
 use crate::audio::pcm::{frame_to_millis, millis_to_frame};
 use crate::ids::{PlaybackId, QueueItemId};
+use crate::library::tracks::PlayableTrack;
 use crate::messages::Versioned;
 use cpal::StreamInstant;
 
@@ -29,11 +30,26 @@ pub(super) enum Transport {
     Loading(Loading),
     Loaded(Loaded),
     Failed {
-        id: Option<PlaybackId>,
         code: PlaybackFailureCode,
         /// The worker is moving on to the next item, so this failure is a skip, not a stop.
         skipping: bool,
     },
+}
+
+/// The queue entry the playback worker plays: the entry's id and the playable track, file
+/// included. Internal to the backend; the renderer gets a `QueueItem` built from it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct PlayableItem {
+    pub queue_item_id: QueueItemId,
+    pub track: PlayableTrack,
+}
+
+impl Deref for PlayableItem {
+    type Target = PlayableTrack;
+
+    fn deref(&self) -> &PlayableTrack {
+        &self.track
+    }
 }
 
 /// Everything a start carries: what to play, who is waiting for the answer, and how to begin.

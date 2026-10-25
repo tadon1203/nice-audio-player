@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Button } from "#lib/ui/shadcn/button";
-  import { type Lyrics, type PlaybackItem } from "#lib/native/bindings";
+  import { type Lyrics, type QueueItem } from "#lib/native/bindings";
   import { SignalPath } from "#lib/components/signal-path/signal-path.svelte";
   import FactLine from "#lib/ui/fact-line.svelte";
   import { Tracks } from "#lib/library/tracks";
@@ -16,7 +16,7 @@
     item,
     lyrics,
   }: {
-    item: PlaybackItem | null;
+    item: QueueItem | null;
     lyrics: Lyrics | null;
   } = $props();
 

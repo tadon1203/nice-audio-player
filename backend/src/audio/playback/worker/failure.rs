@@ -86,9 +86,9 @@ impl PlaybackWorker {
         scope: FailureScope,
         seek_error: CommandError,
     ) {
-        let id = self.drop_loaded(seek_error);
+        self.drop_loaded(seek_error);
         let skipping = scope == FailureScope::Item && self.will_skip();
-        self.transport = Transport::Failed { id, code, skipping };
+        self.transport = Transport::Failed { code, skipping };
         self.publish_state();
         if skipping {
             self.occur_track_skipped();
@@ -108,7 +108,7 @@ impl PlaybackWorker {
             .queue
             .current()
             .and_then(|entry| self.item_of(entry))
-            .map(|item| item.to_playback_item().track.core.title);
+            .map(|item| item.track.track.core.title);
         self.state_store.notify(Notification::TrackSkipped(title));
     }
 

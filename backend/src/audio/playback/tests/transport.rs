@@ -94,7 +94,7 @@ fn a_finished_track_moves_on_to_the_next_one() {
     fixture.wait_for(|state| is_playing(state, "b"));
     assert_eq!(session(&fixture.state()).started_by, StartedBy::Auto);
     assert_eq!(
-        fixture.queue().current.map(|item| item.core.title),
+        fixture.queue().current.map(|item| item.track.core.title),
         Some("b".into())
     );
 }
@@ -147,7 +147,7 @@ fn previous_restarts_a_track_that_has_played_for_a_while() {
         "b restarts instead of going back to a"
     );
     assert_eq!(
-        fixture.queue().current.map(|item| item.core.title),
+        fixture.queue().current.map(|item| item.track.core.title),
         Some("b".into())
     );
 }

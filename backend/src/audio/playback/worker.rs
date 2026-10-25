@@ -11,7 +11,6 @@ use std::sync::{Arc, mpsc::Receiver};
 use std::time::{Duration, Instant};
 
 use super::input::{Inbox, PlaybackIds, SourceLoadId, SourceLoadIds, WorkerEvent, WorkerInput};
-use super::item::PlayableItem;
 use super::pipeline::{
     OpenedPipeline, PipelineError, PipelineRequest, open_prefetch, open_seek, open_start,
 };
@@ -19,27 +18,26 @@ use super::preferences::{PlaybackPreferences, PreferencesObserver};
 use super::queue::{AdvanceReason, PlaybackQueue, QueueEntry, QueueError, RepeatMode};
 use super::resolver::TrackResolver;
 use super::session::{
-    LoadStage, Loaded, Loading, POSITION_UPDATE_INTERVAL, Position, Prebuffering, Prefetch,
-    PrefetchState, PrefetchedTrack, SeekInFlight, StartRequest, Transport, should_publish_position,
-};
-use super::snapshot::{
-    CurrentPlayback, HISTORY_IN_SNAPSHOT, PlaybackControls, PlaybackFailureCode, PlaybackPosition,
-    PlaybackProcessingInfo, PlaybackState, QueueState, StartedBy, UPCOMING_IN_SNAPSHOT,
+    LoadStage, Loaded, Loading, POSITION_UPDATE_INTERVAL, PlayableItem, Position, Prebuffering,
+    Prefetch, PrefetchState, PrefetchedTrack, SeekInFlight, StartRequest, Transport,
+    should_publish_position,
 };
 use super::source_loader::SourceLoad;
+use super::state::{
+    CurrentPlayback, HISTORY_IN_STATE, PlaybackControls, PlaybackFailureCode, PlaybackPosition,
+    PlaybackProcessingInfo, PlaybackState, QueueItem, QueueState, StartedBy, UPCOMING_WINDOW,
+};
 use super::{Reply, TrackListener, respond};
 use crate::audio::decode::{CompressedAudioSource, DecodeError};
 use crate::audio::meter::Meter;
-use crate::audio::output::{
-    AudioOutputDeviceIdentity, AudioOutputSelection, DeviceResolutionError,
-};
+use crate::audio::output::{AudioOutputSelection, DeviceResolutionError};
 use crate::audio::output::{
     OutputError, OutputLinks, OutputStreamFactory, OutputStreamId, PipelineId, StreamFailureKind,
 };
 use crate::audio::pcm::millis_to_frame;
 use crate::audio::volume::{AtomicEffectiveGain, VolumeState};
 use crate::errors::CommandError;
-use crate::ids::{PlaybackId, QueueItemId, TrackId};
+use crate::ids::{QueueItemId, TrackId};
 use crate::messages::Versioned;
 use crate::state_store::StateStore;
 use log::{error, info};

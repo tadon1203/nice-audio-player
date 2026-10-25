@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { type AlbumId, type ArtistId, type Lyrics, type PlaybackItem } from "#lib/native/bindings";
+import { type AlbumId, type ArtistId, type Lyrics, type QueueItem } from "#lib/native/bindings";
 import { TrackFacts } from "./track-facts";
 
-const item: PlaybackItem = {
+const item: QueueItem = {
   queueItemId: 1,
   id: 1,
   title: "Song",

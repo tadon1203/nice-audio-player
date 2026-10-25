@@ -1,9 +1,9 @@
 //! Stopping, pausing, resuming and switching the output device.
 
 use super::{
-    AudioOutputSelection, CommandError, LoadStage, OutputError, PlaybackId, PlaybackState,
-    PlaybackWorker, Reply, StartRequest, StartedBy, Transport, Versioned, output_failure_code,
-    resolution_error, respond,
+    AudioOutputSelection, CommandError, LoadStage, OutputError, PlaybackState, PlaybackWorker,
+    Reply, StartRequest, StartedBy, Transport, Versioned, output_failure_code, resolution_error,
+    respond,
 };
 
 impl PlaybackWorker {
@@ -32,24 +32,21 @@ impl PlaybackWorker {
         }
     }
 
-    /// Lets go of the loaded track and returns its identity. A seek in flight is answered with
-    /// `seek_error`.
-    pub(super) fn drop_loaded(&mut self, seek_error: CommandError) -> Option<PlaybackId> {
+    /// Lets go of the loaded track. A seek in flight is answered with `seek_error`.
+    pub(super) fn drop_loaded(&mut self, seek_error: CommandError) {
         self.meter.set_running(false);
         let Transport::Loaded(mut loaded) = std::mem::replace(&mut self.transport, Transport::Idle)
         else {
-            return None;
+            return;
         };
         if let Some(seek) = loaded.seek.take() {
             seek.pipeline.cancel();
             respond(seek.responder, Err(seek_error));
         }
-        let id = loaded.id;
         if let Some(prefetch) = loaded.prefetch.take() {
             prefetch.cancel();
         }
         loaded.pipeline.cancel();
-        Some(id)
     }
 
     pub(in super::super) fn pause(&mut self) -> Result<Versioned<PlaybackState>, CommandError> {
@@ -108,10 +105,9 @@ impl PlaybackWorker {
     }
 
     pub(super) fn control_failure(&mut self, error: OutputError) -> CommandError {
-        let id = self.drop_loaded(CommandError::Superseded);
+        self.drop_loaded(CommandError::Superseded);
         let code = output_failure_code(error);
         self.transport = Transport::Failed {
-            id,
             code,
             skipping: false,
         };

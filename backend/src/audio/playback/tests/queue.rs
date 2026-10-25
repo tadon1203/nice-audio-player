@@ -39,7 +39,10 @@ fn enqueueing_on_an_empty_queue_starts_playback() {
         .unwrap()
         .value;
 
-    assert_eq!(queue.current.map(|item| item.core.title), Some("a".into()));
+    assert_eq!(
+        queue.current.map(|item| item.track.core.title),
+        Some("a".into())
+    );
     assert_eq!(queue.upcoming_count, 1);
 }
 
@@ -59,10 +62,8 @@ fn replacing_the_queue_can_be_undone_in_one_step() {
     let fixture = Fixture::with(&clips(&["a", "b", "c"]));
     let ids = fixture.ids(&["a", "b", "c"]);
     fixture.player.play_queue(ids[..2].to_vec(), 0).unwrap();
-    assert!(!fixture.queue().can_restore_previous);
 
     fixture.player.play_queue(vec![ids[2]], 0).unwrap();
-    assert!(fixture.queue().can_restore_previous);
 
     let restored = fixture.player.restore_previous_queue().unwrap().value;
 
@@ -71,10 +72,7 @@ fn replacing_the_queue_can_be_undone_in_one_step() {
         "the item that was current plays again"
     );
     assert_eq!(fixture.titles(), ["a", "b"]);
-    assert!(
-        !fixture.queue().can_restore_previous,
-        "one step back, no further"
-    );
+    // One step back, no further.
     assert_eq!(
         fixture.player.restore_previous_queue().err(),
         Some(CommandError::InvalidPlaybackState)
@@ -86,7 +84,6 @@ fn there_is_nothing_to_undo_after_starting_from_an_empty_queue() {
     let fixture = Fixture::with(&clips(&["a"]));
     fixture.player.play_queue(fixture.ids(&["a"]), 0).unwrap();
 
-    assert!(!fixture.queue().can_restore_previous);
     assert_eq!(
         fixture.player.restore_previous_queue().err(),
         Some(CommandError::InvalidPlaybackState)
@@ -103,7 +100,6 @@ fn clearing_upcoming_can_be_undone_without_restarting_the_track() {
         .value;
     fixture.player.clear_queue().unwrap();
     assert_eq!(fixture.titles(), ["a"]);
-    assert!(fixture.queue().can_restore_previous);
 
     let restored = fixture.player.restore_previous_queue().unwrap().value;
 
@@ -127,7 +123,10 @@ fn an_undone_queue_follows_the_shuffle_chosen_since() {
 
     let queue = fixture.queue();
     assert!(queue.shuffle_enabled);
-    assert_eq!(queue.current.map(|item| item.core.title), Some("a".into()));
+    assert_eq!(
+        queue.current.map(|item| item.track.core.title),
+        Some("a".into())
+    );
     assert_eq!(queue.upcoming_count, 1);
 }
 
@@ -169,7 +168,7 @@ fn the_queue_window_serves_the_upcoming_rows_from_an_offset() {
     let titles: Vec<_> = window
         .items
         .iter()
-        .map(|item| item.core.title.as_str())
+        .map(|item| item.track.core.title.as_str())
         .collect();
     assert_eq!(titles, ["c", "d"]);
     assert_eq!(window.offset, 1);

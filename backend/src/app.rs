@@ -11,7 +11,7 @@ pub use crate::audio::meter::{Meter, MeterFrame};
 pub use crate::audio::output::{AudioOutputDevice, AudioOutputSelection};
 pub use crate::audio::output::{CpalOutput, OutputStreamFactory};
 pub use crate::audio::playback::{
-    PlaybackPosition, PlaybackState, QueueState, QueueWindow, RepeatMode,
+    PlaybackPosition, PlaybackState, QueueState, QueueWindow, RepeatMode, UPCOMING_WINDOW,
 };
 pub use crate::library::LibraryStatus;
 pub use crate::library::artwork::{ArtworkRef, ServedArtwork};

@@ -28,7 +28,7 @@ export class SignalPath {
         resamplingActive: session.resamplingActive,
         outputSampleRate: session.outputSampleRate,
         channelConversion: session.channelConversion,
-        outputName: session.outputDevice.name,
+        outputName: session.outputDeviceName,
       },
       this.#playback.snapshot?.base.outputSelection ?? null,
     );

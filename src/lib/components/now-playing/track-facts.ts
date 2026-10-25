@@ -1,4 +1,4 @@
-import { type Lyrics, type PlaybackItem } from "#lib/native/bindings";
+import { type Lyrics, type QueueItem } from "#lib/native/bindings";
 
 /** Why the right column shows no timed lyrics, said in the Facts line rather than the column. */
 export type LyricsState =
@@ -15,7 +15,7 @@ export class TrackFacts {
    * (`source`, from the signal path). A first disc is not mentioned.
    */
   public static of(
-    item: PlaybackItem,
+    item: QueueItem,
     source: string | null | undefined,
   ): (string | number | null | undefined)[] {
     return [

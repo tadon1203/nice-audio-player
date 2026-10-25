@@ -1,12 +1,12 @@
 import { type TrackId } from "#lib/native/bindings";
 import { describe, expect, it, vi } from "vitest";
-import { type CurrentPlayback, type PlaybackItem, type PlaybackState } from "#lib/native/bindings";
+import { type CurrentPlayback, type QueueItem, type PlaybackState } from "#lib/native/bindings";
 vi.mock("svelte/motion", () => ({ prefersReducedMotion: { current: false } }));
 
 import { PlaybackClock } from "./playback-clock.svelte";
 import { PlaybackSnapshots } from "./playback-snapshots";
 
-const item = (id: TrackId): PlaybackItem => ({
+const item = (id: TrackId): QueueItem => ({
   queueItemId: id,
   id,
   title: String(id),
@@ -26,7 +26,7 @@ const session = (id: TrackId, positionMs: number, seekCount = 0): CurrentPlaybac
   positionMs,
   seekCount,
   durationMs: 60_000,
-  outputDevice: { id: "speakers", name: "Speakers" },
+  outputDeviceName: "Speakers",
   channelConversion: "none",
   sourceFormat: "FLAC",
   sourceBitDepth: 24,

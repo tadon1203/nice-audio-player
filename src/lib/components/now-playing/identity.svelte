@@ -1,6 +1,6 @@
 <script lang="ts">
   import { untrack } from "svelte";
-  import { type Lyrics, type PlaybackItem } from "#lib/native/bindings";
+  import { type Lyrics, type QueueItem } from "#lib/native/bindings";
   import { AppServices } from "#lib/shell/app-services.svelte";
   import Artwork from "#lib/ui/artwork.svelte";
   import KineticText from "#lib/ui/kinetic-text/kinetic-text.svelte";
@@ -20,7 +20,7 @@
     item,
     lyrics,
   }: {
-    item: PlaybackItem | null;
+    item: QueueItem | null;
     lyrics: Lyrics | null;
   } = $props();
 

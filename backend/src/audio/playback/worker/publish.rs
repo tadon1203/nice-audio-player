@@ -1,9 +1,7 @@
 //! Rendering the transport and queue into snapshots and telling listeners.
 
-use super::{
-    AudioOutputDeviceIdentity, CommandError, PlaybackQueue, PlaybackWorker, QueueError, Transport,
-};
-use super::{CurrentPlayback, PlayableItem, previous_restarts_track};
+use super::{CommandError, PlaybackQueue, PlaybackWorker, QueueError, Transport};
+use super::{CurrentPlayback, QueueItem, previous_restarts_track};
 use super::{
     PlaybackControls, PlaybackPosition, PlaybackProcessingInfo, PlaybackState, QueueState,
 };
@@ -17,7 +15,7 @@ impl PlaybackWorker {
         match &self.transport {
             Transport::Idle | Transport::Loading(_) => PlaybackState::Stopped {
                 base,
-                item: self.last_item.as_ref().map(PlayableItem::to_playback_item),
+                item: self.last_item.as_ref().map(QueueItem::from),
             },
             Transport::Loaded(loaded) => {
                 base.can_go_previous = self.loaded_can_go_previous(loaded);
@@ -29,7 +27,7 @@ impl PlaybackWorker {
                     PlaybackState::Playing { base, session }
                 }
             }
-            Transport::Failed { id, code, skipping } => {
+            Transport::Failed { code, skipping } => {
                 base.can_go_previous = self.queue.can_go_previous();
                 base.can_go_next = self.queue.can_go_next();
                 PlaybackState::Failed {
@@ -39,8 +37,8 @@ impl PlaybackWorker {
                         .current()
                         .and_then(|entry| self.item_of(entry))
                         .or_else(|| self.last_item.clone())
-                        .map(|item| item.to_playback_item()),
-                    playback_id: *id,
+                        .as_ref()
+                        .map(QueueItem::from),
                     error: *code,
                     skipping: *skipping,
                 }
@@ -52,16 +50,13 @@ impl PlaybackWorker {
         let config = &loaded.output.config;
         let processing = PlaybackProcessingInfo::from_plan(config.processing_plan);
         CurrentPlayback {
-            item: loaded.item.to_playback_item(),
+            item: QueueItem::from(&loaded.item),
             started_by: loaded.started_by,
             playback_id: loaded.id,
             position_ms: loaded.position_ms(),
             seek_count: self.seek_count,
             duration_ms: loaded.position.duration_ms,
-            output_device: AudioOutputDeviceIdentity {
-                id: config.device_id.clone(),
-                name: config.device_name.clone(),
-            },
+            output_device_name: config.device_name.clone(),
             channel_conversion: processing.channel_conversion,
             source_format: loaded
                 .item
@@ -127,7 +122,7 @@ impl PlaybackWorker {
 
     pub(super) fn publish_queue(&mut self) -> Versioned<QueueState> {
         self.prune_unavailable();
-        let value = QueueState::of(&self.queue, &self.tracks, self.previous_queue.is_some());
+        let value = QueueState::of(&self.queue, &self.tracks);
         let version = self.state_store.set_queue(value.clone());
         Versioned { version, value }
     }

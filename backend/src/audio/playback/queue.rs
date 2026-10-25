@@ -64,8 +64,8 @@ pub struct PlaybackQueue {
     arranged: Arc<[QueueEntry]>,
     /// While shuffle is on, the order the entries play in; the same entries as `arranged`.
     shuffled: Option<Arc<[QueueEntry]>>,
-    /// The position of the current entry in the play order.
-    current: usize,
+    /// The id of the current entry; `None` when nothing is current.
+    current: Option<QueueItemId>,
     repeat: RepeatMode,
     shuffle: bool,
     next_item_id: QueueItemId,
@@ -76,7 +76,7 @@ impl PlaybackQueue {
         Self {
             arranged: Arc::default(),
             shuffled: None,
-            current: 0,
+            current: None,
             repeat,
             shuffle,
             next_item_id: QueueItemId::first(),
@@ -104,34 +104,46 @@ impl PlaybackQueue {
         self.shuffled.as_ref().unwrap_or(&self.arranged)
     }
 
-    /// The position of the current entry in `play_order`.
+    /// The position of the current entry in `play_order`; the length when nothing is current.
     pub fn position(&self) -> usize {
-        self.current
+        match self.current {
+            Some(id) => self
+                .play_order()
+                .iter()
+                .position(|entry| entry.id == id)
+                .expect("the current entry is in the play order"),
+            None => self.play_order().len(),
+        }
+    }
+
+    /// Makes the entry at `position` in `play_order` current. Past the end makes nothing current.
+    fn set_position(&mut self, position: usize) {
+        self.current = self.play_order().get(position).map(|entry| entry.id);
     }
 
     pub fn current(&self) -> Option<&QueueEntry> {
-        self.play_order().get(self.current)
+        self.play_order().get(self.position())
     }
 
     /// What was played before the current entry, oldest first.
     pub fn history(&self) -> &[QueueEntry] {
-        self.play_order().get(..self.current).unwrap_or_default()
+        self.play_order().get(..self.position()).unwrap_or_default()
     }
 
     pub fn upcoming(&self) -> &[QueueEntry] {
         self.play_order()
-            .get(self.current + 1..)
+            .get(self.position() + 1..)
             .unwrap_or_default()
     }
 
     /// Whether the queue can move backward or forward. Repeat-all wraps, but a single item has
     /// nowhere else to go.
     pub fn can_go_previous(&self) -> bool {
-        self.current > 0 || self.wraps()
+        self.position() > 0 || self.wraps()
     }
 
     pub fn can_go_next(&self) -> bool {
-        self.current + 1 < self.len() || self.wraps()
+        self.position() + 1 < self.len() || self.wraps()
     }
 
     fn wraps(&self) -> bool {
@@ -158,9 +170,9 @@ impl PlaybackQueue {
             .into_iter()
             .map(|track_id| self.new_entry(track_id))
             .collect();
+        self.current = Some(entries[start_index].id);
         self.arranged = entries.into();
         self.shuffled = None;
-        self.current = start_index;
         if self.shuffle {
             self.shuffle_around_current(rng);
         }
@@ -183,7 +195,7 @@ impl PlaybackQueue {
     pub fn clear(&mut self) {
         self.arranged = Arc::default();
         self.shuffled = None;
-        self.current = 0;
+        self.current = None;
     }
 
     /// Drops everything after the current item.
@@ -191,7 +203,7 @@ impl PlaybackQueue {
         if self.upcoming().is_empty() {
             return false;
         }
-        let keep = self.current + 1;
+        let keep = self.position() + 1;
         match &mut self.shuffled {
             Some(shuffled) => {
                 let dropped: HashSet<QueueItemId> = shuffled[keep.min(shuffled.len())..]
@@ -216,7 +228,8 @@ impl PlaybackQueue {
         if !order.iter().any(|entry| ids.contains(&entry.id)) {
             return false;
         }
-        let before = order[..self.current.min(order.len())]
+        let position = self.position();
+        let before = order[..position]
             .iter()
             .filter(|entry| ids.contains(&entry.id))
             .count();
@@ -228,7 +241,7 @@ impl PlaybackQueue {
                 order.retain(|entry| !ids.contains(&entry.id));
             });
         }
-        self.current -= before;
+        self.set_position(position - before);
         true
     }
 
@@ -252,7 +265,7 @@ impl PlaybackQueue {
     pub fn move_upcoming(&mut self, id: QueueItemId, to: usize) -> Result<bool, QueueError> {
         let index = self.upcoming_index(id)?;
         let target = self
-            .current
+            .position()
             .saturating_add(1)
             .saturating_add(to)
             .min(self.len() - 1);
@@ -282,13 +295,11 @@ impl PlaybackQueue {
 
     /// Makes any other item current, played or upcoming: the listener picked it from the queue.
     pub fn jump_to(&mut self, id: QueueItemId) -> Result<(), QueueError> {
-        let index = self
-            .play_order()
-            .iter()
-            .position(|entry| entry.id == id)
-            .filter(|index| *index != self.current)
-            .ok_or(QueueError::ItemNotUpcoming)?;
-        self.current = index;
+        let known = self.play_order().iter().any(|entry| entry.id == id);
+        if !known || self.current == Some(id) {
+            return Err(QueueError::ItemNotUpcoming);
+        }
+        self.current = Some(id);
         Ok(())
     }
 
@@ -305,8 +316,12 @@ impl PlaybackQueue {
             .into_iter()
             .map(|track_id| self.new_entry(track_id))
             .collect();
-        let current_id = self.current().map(|entry| entry.id);
-        let at = if next { self.current + 1 } else { self.len() };
+        let current_id = self.current;
+        let at = if next {
+            self.position() + 1
+        } else {
+            self.len()
+        };
         if self.shuffled.is_some() {
             edit_order(&mut self.arranged, |arranged| {
                 let arranged_at = match (next, current_id) {
@@ -333,7 +348,7 @@ impl PlaybackQueue {
         self.play_order()
             .iter()
             .position(|entry| entry.id == id)
-            .filter(|index| *index > self.current)
+            .filter(|index| *index > self.position())
             .ok_or(QueueError::ItemNotUpcoming)
     }
 
@@ -354,11 +369,8 @@ impl PlaybackQueue {
         }
         if enabled {
             self.shuffle_around_current(rng);
-        } else if let Some(shuffled) = self.shuffled.take() {
-            let current_id = shuffled.get(self.current).map(|entry| entry.id);
-            self.current = current_id
-                .and_then(|id| self.arranged.iter().position(|entry| entry.id == id))
-                .unwrap_or(0);
+        } else {
+            self.shuffled = None;
         }
         true
     }
@@ -372,11 +384,12 @@ impl PlaybackQueue {
         if self.is_empty() {
             return None;
         }
+        let position = self.position();
         match reason {
             AdvanceReason::Natural if self.repeat == RepeatMode::One => {}
             AdvanceReason::Natural | AdvanceReason::UserNext => {
-                if self.current + 1 < self.len() {
-                    self.current += 1;
+                if position + 1 < self.len() {
+                    self.set_position(position + 1);
                 } else if self.repeat == RepeatMode::All {
                     self.wrap_to_start(rng);
                 } else {
@@ -384,10 +397,10 @@ impl PlaybackQueue {
                 }
             }
             AdvanceReason::UserPrevious => {
-                if self.current > 0 {
-                    self.current -= 1;
+                if position > 0 {
+                    self.set_position(position - 1);
                 } else if self.repeat == RepeatMode::All {
-                    self.current = self.len() - 1;
+                    self.set_position(self.len() - 1);
                 } else {
                     return None;
                 }
@@ -405,8 +418,9 @@ impl PlaybackQueue {
         if self.repeat == RepeatMode::One {
             return self.current();
         }
-        if self.current + 1 < self.len() {
-            return self.play_order().get(self.current + 1);
+        let position = self.position();
+        if position + 1 < self.len() {
+            return self.play_order().get(position + 1);
         }
         (self.repeat == RepeatMode::All && self.shuffled.is_none())
             .then(|| self.play_order().first())
@@ -419,7 +433,7 @@ impl PlaybackQueue {
         if let Some(shuffled) = &mut self.shuffled
             && shuffled.len() > 1
         {
-            let last_played = shuffled.get(self.current).map(|entry| entry.id);
+            let last_played = self.current;
             edit_order(shuffled, |order| {
                 order.shuffle(rng);
                 if order.first().map(|entry| entry.id) == last_played {
@@ -428,22 +442,22 @@ impl PlaybackQueue {
                 }
             });
         }
-        self.current = 0;
+        self.set_position(0);
     }
 
+    /// Shuffles the arranged order into a new play order that starts with the current entry.
+    /// With nothing current, the whole queue is shuffled and nothing is made current.
     fn shuffle_around_current<R: Rng + ?Sized>(&mut self, rng: &mut R) {
         let mut order: Vec<QueueEntry> = self.arranged.to_vec();
-        let current = order.remove(self.current_arranged_index());
+        let current = self.current.and_then(|id| {
+            let index = order.iter().position(|entry| entry.id == id)?;
+            Some(order.remove(index))
+        });
         order.shuffle(rng);
-        order.insert(0, current);
+        if let Some(current) = current {
+            order.insert(0, current);
+        }
         self.shuffled = Some(order.into());
-        self.current = 0;
-    }
-
-    /// Where the current entry sits in the arranged order. Only meaningful while no shuffled
-    /// order exists, which is when this is called.
-    fn current_arranged_index(&self) -> usize {
-        self.current.min(self.arranged.len().saturating_sub(1))
     }
 }
 
@@ -846,7 +860,7 @@ mod tests {
                 }
                 let play: HashSet<_> = queue.play_order().iter().map(|e| e.id).collect();
                 assert_eq!(play.len(), queue.play_order().len(), "ids are unique");
-                assert!(queue.is_empty() || queue.current < queue.len());
+                assert!(queue.is_empty() || queue.position() < queue.len());
                 let arranged: HashSet<_> = queue.arranged.iter().map(|e| e.id).collect();
                 assert_eq!(arranged.len(), queue.arranged.len());
                 assert_eq!(
@@ -945,6 +959,21 @@ mod tests {
         let last: HashSet<QueueItemId> = [item_id(&queue, 5)].into();
         assert!(queue.remove_entries(&last));
         assert!(queue.current().is_none(), "nothing follows the last entry");
+    }
+
+    #[test]
+    fn nothing_current_stays_nothing_current_across_shuffle() {
+        let mut queue = queue_of(2, 1, RepeatMode::Off, false);
+        queue.remove_entries(&HashSet::from([item_id(&queue, 2)]));
+        assert!(queue.current().is_none());
+
+        queue.set_shuffle(true, &mut rng());
+        assert!(queue.current().is_none());
+        assert_eq!(order(&queue), [1]);
+
+        queue.set_shuffle(false, &mut rng());
+        assert!(queue.current().is_none());
+        assert_eq!(queue.position(), queue.len());
     }
 
     #[test]

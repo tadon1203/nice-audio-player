@@ -12,8 +12,7 @@ import {
   type ScanState,
   type ScanStatus,
   type TrackRow,
-  type PlaybackItem,
-  type PlaybackQueueItem,
+  type QueueItem,
   type QueueState,
   type PlaybackState,
   type MeterFrame,
@@ -276,12 +275,10 @@ export const stoppedPlayback: PlaybackState = {
 export const emptyQueue: QueueState = {
   current: null,
   history: [],
-  historyCount: 0,
   upcoming: [],
   upcomingCount: 0,
   repeatMode: "off",
   shuffleEnabled: false,
-  canRestorePrevious: false,
 };
 
 /** A Meter frame as the backend sends it: every band at `band`, and the given peak, RMS and clip. */
@@ -354,17 +351,20 @@ export function idleResponses(): {
   };
 }
 
-export const queueItemFor = (track: TrackRow): PlaybackQueueItem => ({
+export const queueItemFor = (track: TrackRow): QueueItem => ({
   queueItemId: track.id,
   id: track.id,
   title: track.title,
   artist: track.artist,
-  album: track.album?.title ?? null,
+  album: null,
   artwork: track.artwork,
   durationMs: track.durationMs,
+  trackNumber: null,
+  discNumber: null,
+  year: null,
 });
 
-export function playbackItemFor(track: TrackRow): PlaybackItem {
+export function playbackItemFor(track: TrackRow): QueueItem {
   return {
     ...queueItemFor(track),
     // A count of 0 is below every track number, so Now Playing shows "Track n" with no total.
@@ -377,7 +377,7 @@ export function playbackItemFor(track: TrackRow): PlaybackItem {
 
 interface PlayingFields {
   status: "playing" | "paused";
-  item: PlaybackItem;
+  item: QueueItem;
   startedBy: StartedBy;
   positionMs: number;
   seekCount: number;
@@ -388,7 +388,7 @@ interface PlayingFields {
   canGoNext: boolean;
 }
 
-export const playbackIdOf = (item: PlaybackItem): number => item.id;
+export const playbackIdOf = (item: QueueItem): number => item.id;
 
 export function playingSnapshot(fields: PlayingFields): PlaybackState {
   const device =
@@ -413,7 +413,7 @@ export function playingSnapshot(fields: PlayingFields): PlaybackState {
       positionMs: fields.positionMs,
       seekCount: fields.seekCount,
       durationMs: fields.item.durationMs,
-      outputDevice: { id: device?.id ?? "default", name: device?.name ?? "System default" },
+      outputDeviceName: device?.name ?? "System default",
       channelConversion: "none",
       sourceFormat: "FLAC",
       sourceBitDepth: 24,

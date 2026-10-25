@@ -21,7 +21,7 @@ use crate::audio::playback::TrackListener;
 use crate::audio::playback::preferences::PlaybackPreferences;
 use crate::audio::playback::queue::RepeatMode;
 use crate::audio::playback::resolver::TrackResolver;
-use crate::audio::playback::snapshot::{
+use crate::audio::playback::state::{
     CurrentPlayback, PlaybackChannelConversion, PlaybackFailureCode, PlaybackState, QueueState,
     StartedBy,
 };
@@ -184,7 +184,7 @@ impl Fixture {
             .current
             .into_iter()
             .chain(queue.upcoming)
-            .map(|item| item.core.title)
+            .map(|item| item.track.core.title)
             .collect()
     }
 

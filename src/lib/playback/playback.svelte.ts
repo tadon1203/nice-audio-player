@@ -5,7 +5,7 @@ import type {
   PlaybackContext,
   PlaybackFailureCode,
   PlaybackId,
-  PlaybackItem,
+  QueueItem,
   PlaybackPosition,
   QueueState,
   RepeatMode,
@@ -61,7 +61,7 @@ export class Playback {
   readonly #waveform = new Replica<PlaybackWaveform | null>();
 
   /** The loaded track, or the last one that played. Replaced only when the queue item changes. */
-  #item = $state.raw<PlaybackItem | null>(null);
+  #item = $state.raw<QueueItem | null>(null);
   /** How the current item was reached: Next/Previous, or anything else (counts as forward). */
   #transitionDirection = $state.raw<TransitionDirection>("forward");
   #transportPending = $state.raw<TransportCommand | null>(null);
@@ -102,7 +102,7 @@ export class Playback {
   }
 
   /** The loaded track, or the last one that played. */
-  public get item(): PlaybackItem | null {
+  public get item(): QueueItem | null {
     return this.#item;
   }
 

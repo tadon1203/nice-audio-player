@@ -4,7 +4,7 @@
   import { AppServices } from "#lib/shell/app-services.svelte";
   import { Sheet, SheetContent, SheetHeader, SheetTitle } from "#lib/ui/shadcn/sheet";
   import QueueFooter from "./queue-footer.svelte";
-  import QueueRow from "./queue-row.svelte";
+  import QueueItem from "./queue-row.svelte";
   import { ShuffleCascade } from "./shuffle-cascade.svelte";
   import UpcomingList from "./upcoming-list.svelte";
 
@@ -48,7 +48,7 @@
     <div {@attach scrollView.attachViewport} class="min-h-0 flex-1 overflow-y-auto py-2">
       <div {@attach scrollView.attachContent}>
         {#each history as item (item.queueItemId)}
-          <QueueRow
+          <QueueItem
             {item}
             tone="past"
             onPlay={() => actions.run(() => playback.playerPlayQueueItem(item.queueItemId))}
@@ -56,7 +56,7 @@
         {/each}
         {#if queue?.current}
           <div {@attach showAtTop}>
-            <QueueRow item={queue.current} tone="current" />
+            <QueueItem item={queue.current} tone="current" />
           </div>
         {:else}
           <p class="px-4 py-6 text-sm text-muted-foreground">Nothing playing.</p>

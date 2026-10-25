@@ -57,6 +57,7 @@ pub(crate) fn builder() -> Builder<tauri::Wry> {
             commands::appearance::appearance_update,
         ])
         .typ::<BackendMessage>()
+        .constant("UPCOMING_WINDOW", backend::app::UPCOMING_WINDOW)
         .error_handling(ErrorHandlingMode::Throw)
         .dangerously_cast_bigints_to_number()
         .disable_serde_phases()

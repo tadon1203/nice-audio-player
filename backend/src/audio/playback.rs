@@ -24,14 +24,13 @@ use log::{debug, error};
 
 mod decode_worker;
 mod input;
-mod item;
 mod pipeline;
 mod preferences;
 mod queue;
 mod resolver;
 mod session;
-mod snapshot;
 mod source_loader;
+mod state;
 #[cfg(test)]
 mod tests;
 mod worker;
@@ -43,7 +42,9 @@ use worker::{PlaybackWorker, WorkerLinks};
 pub(crate) use preferences::{PlaybackPreferences, PreferencesObserver};
 pub use queue::RepeatMode;
 pub(crate) use resolver::{NoTracks, TrackResolver, TrackSource};
-pub use snapshot::{PlaybackFailureCode, PlaybackPosition, PlaybackState, QueueState, QueueWindow};
+pub use state::{
+    PlaybackFailureCode, PlaybackPosition, PlaybackState, QueueState, QueueWindow, UPCOMING_WINDOW,
+};
 
 /// Hears that a track was loaded as the Playback with this id.
 pub(crate) type LoadObserver = Arc<dyn Fn(PlaybackId, &PlayableTrack) + Send + Sync>;
@@ -77,6 +78,7 @@ pub(crate) struct Player {
     inbox: Inbox,
     state_store: Arc<StateStore>,
     position: Arc<RwLock<Option<PlaybackPosition>>>,
+    tracks: Arc<TrackResolver>,
     worker: Mutex<Option<JoinHandle<()>>>,
 }
 
@@ -109,6 +111,7 @@ impl Player {
         let output_selection = preferences.output_selection;
         let queue = PlaybackQueue::new(preferences.repeat_mode, preferences.shuffle_enabled);
         let position = Arc::new(RwLock::new(None));
+        let player_tracks = Arc::clone(&tracks);
         let links = WorkerLinks {
             state_store: Arc::clone(&state_store),
             position: Arc::clone(&position),
@@ -130,6 +133,7 @@ impl Player {
             inbox,
             state_store,
             position,
+            tracks: player_tracks,
             worker: Mutex::new(Some(worker)),
         })
     }
@@ -143,13 +147,16 @@ impl Player {
         self.position.read().clone()
     }
 
-    /// Upcoming items from `offset`; a window of the queue the state only starts. It is cut from
-    /// the published queue, so it does not wait for the worker.
+    /// Upcoming items from `offset`, read from the published queue and the library now. It does
+    /// not wait for the worker.
     pub(crate) fn queue_window(&self, offset: u32, limit: u32) -> QueueWindow {
         let queue_state = self.queue_state();
-        queue_state
-            .value
-            .window(queue_state.version, offset as usize, limit as usize)
+        queue_state.value.window(
+            queue_state.version,
+            offset as usize,
+            limit as usize,
+            &self.tracks,
+        )
     }
 
     /// Replaces the queue with the tracks `track_ids` (in play order) and starts the one at

@@ -5,6 +5,7 @@ import {
   type PlaybackState,
   type StartedBy,
   type Versioned,
+  UPCOMING_WINDOW,
 } from "#lib/native/bindings";
 import type { Native } from "./native-api";
 import { playbackIdOf, playbackItemFor, playingSnapshot, queueItemFor } from "./data";
@@ -50,12 +51,10 @@ export function scriptPlayback(
     return {
       current: index < 0 ? null : queueItemFor(current()),
       history: played.slice(-50).map(queueItemFor),
-      historyCount: played.length,
-      upcoming: upcoming.slice(0, 200).map(queueItemFor),
+      upcoming: upcoming.slice(0, UPCOMING_WINDOW).map(queueItemFor),
       upcomingCount: upcoming.length,
       repeatMode,
       shuffleEnabled,
-      canRestorePrevious: false,
     };
   };
 

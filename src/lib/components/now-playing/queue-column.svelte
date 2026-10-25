@@ -119,7 +119,7 @@
         <p class="py-2 pl-20 text-sm text-muted-foreground">Nothing else in the queue</p>
       {/if}
       {#if hidden > 0}
-        <div class="pl-20">
+        <div role="listitem" class="pl-20">
           <Button
             type="button"
             onclick={() => queuePanel.open()}

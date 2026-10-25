@@ -94,6 +94,9 @@ export const commands = {
 	appearanceUpdate: (patch: AppearancePatch) => __TAURI_INVOKE<Versioned<Appearance>>("appearance_update", { patch }),
 };
 
+/* Constants */
+export const UPCOMING_WINDOW = 100 as const;
+
 /* Types */
 export type AlbumDetails = {
 	summary: AlbumRow,
@@ -178,11 +181,6 @@ export type AudioOutputDevice = {
 	name: string,
 };
 
-export type AudioOutputDeviceIdentity = {
-	id: string,
-	name: string,
-};
-
 export type AudioOutputSelection = { kind: "systemDefault" } | { kind: "device"; deviceId: string };
 
 /**  What the Renderer receives on its channel. */
@@ -206,7 +204,7 @@ export type CommandError = { code: "trackNotFound" } | { code: "trackUnavailable
 
 /**  A loaded track: identity plus how it reaches the output device. */
 export type CurrentPlayback = {
-	item: PlaybackItem,
+	item: QueueItem,
 	/**  What started this session. A seek or an output switch keeps it. */
 	startedBy: StartedBy,
 	playbackId: PlaybackId,
@@ -217,7 +215,7 @@ export type CurrentPlayback = {
 	 */
 	seekCount: number,
 	durationMs: number | null,
-	outputDevice: AudioOutputDeviceIdentity,
+	outputDeviceName: string,
 	channelConversion: PlaybackChannelConversion,
 	/**
 	 *  The loaded file's format (its extension when the library has none), bit depth and
@@ -362,17 +360,6 @@ export type PlaybackFailureCode = "noOutputDevice" | "outputDeviceUnavailable" |
 export type PlaybackId = number;
 
 /**
- *  One entry of the playback queue and the identity of the loaded track, as the renderer sees
- *  it: the queue's id for the entry and the track's metadata. It carries no file path.
- * 
- *  Everything a listener-facing feature needs about "what is playing" lives here, so history
- *  and the UI can show it without reading the library again.
- */
-export type PlaybackItem = {
-	queueItemId: QueueItemId,
-} & NowPlayingTrack;
-
-/**
  *  Where the loaded track is. Sent on its own, far more often than the snapshot, so a tick
  *  never carries (or re-renders) the rest of the playback state.
  */
@@ -382,16 +369,9 @@ export type PlaybackPosition = {
 	seekCount: number,
 };
 
-/**  A queue entry as the queue panel shows it; the file path stays in the backend. */
-export type PlaybackQueueItem = {
-	/**  The queue's id for the entry. Named apart from the track's `id` it flattens with. */
-	queueItemId: QueueItemId,
-	album: string | null,
-} & TrackCore;
-
 export type PlaybackState = 
 /**  `item` is the last track that played, kept so the UI can still say what it was. */
-{ status: "stopped"; base: PlaybackControls; item: PlaybackItem | null } | { status: "playing"; base: PlaybackControls; session: CurrentPlayback } | { status: "paused"; base: PlaybackControls; session: CurrentPlayback } | { status: "failed"; base: PlaybackControls; item: PlaybackItem | null; playbackId: PlaybackId | null; error: PlaybackFailureCode; 
+{ status: "stopped"; base: PlaybackControls; item: QueueItem | null } | { status: "playing"; base: PlaybackControls; session: CurrentPlayback } | { status: "paused"; base: PlaybackControls; session: CurrentPlayback } | { status: "failed"; base: PlaybackControls; item: QueueItem | null; error: PlaybackFailureCode; 
 /**
  *  The player is moving on to the next item by itself: a skip the listener is told
  *  about, not a stop that waits for Retry.
@@ -404,32 +384,39 @@ export type PlaybackWaveform = {
 	rms: number[],
 };
 
+/**
+ *  One queue entry as the renderer shows it: the queue's id for the entry and the track's
+ *  metadata. It carries no file path. The track's fields are flattened, so the renderer reads
+ *  `title` on a row.
+ */
+export type QueueItem = {
+	queueItemId: QueueItemId,
+} & NowPlayingTrack;
+
 /**  One entry of the playback queue: the queue's counter. On the IPC a number. */
 export type QueueItemId = number;
 
 /**
  *  The queue as the renderer mirrors it: the current item, the last few played, the first
- *  upcoming ones, and how many there are in all. Longer queues are read with `window`, so a
- *  library-sized queue never crosses the IPC boundary in one piece.
+ *  upcoming ones, and how many there are in all. The upcoming entries stay on the backend and
+ *  are read a window at a time, so a library-sized queue never crosses the IPC boundary in one
+ *  piece.
  */
 export type QueueState = {
-	current: PlaybackQueueItem | null,
+	current: QueueItem | null,
 	/**  The most recently played items, oldest first. */
-	history: PlaybackQueueItem[],
-	historyCount: number,
-	upcoming: PlaybackQueueItem[],
+	history: QueueItem[],
+	upcoming: QueueItem[],
 	upcomingCount: number,
 	repeatMode: RepeatMode,
 	shuffleEnabled: boolean,
-	/**  The queue before the last replacement can be put back. */
-	canRestorePrevious: boolean,
 };
 
 /**  A slice of the upcoming list, tagged with the queue version it was cut from. */
 export type QueueWindow = {
 	version: number,
 	offset: number,
-	items: PlaybackQueueItem[],
+	items: QueueItem[],
 };
 
 export type RepeatMode = "off" | "all" | "one";

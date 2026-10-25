@@ -1,9 +1,9 @@
 import { type QueueItemId } from "#lib/native/bindings";
 import { describe, expect, it } from "vitest";
-import { type PlaybackQueueItem } from "#lib/native/bindings";
+import { type QueueItem } from "#lib/native/bindings";
 import { QueueRows } from "./queue-rows";
 
-const item = (id: QueueItemId): PlaybackQueueItem => ({
+const item = (id: QueueItemId): QueueItem => ({
   queueItemId: id,
   id,
   title: String(id),
@@ -11,6 +11,9 @@ const item = (id: QueueItemId): PlaybackQueueItem => ({
   album: null,
   artwork: null,
   durationMs: 60_000,
+  trackNumber: null,
+  discNumber: null,
+  year: null,
 });
 
 describe("QueueRows.build", () => {

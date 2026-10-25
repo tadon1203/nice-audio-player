@@ -81,7 +81,7 @@ test("subscribes while Meters is shown and unsubscribes when another view is cho
 
   await choose(layer, "Queue");
   await expect.poll(() => unsubscribes(native)).toBe(1);
-  expect(native.callsTo("meterStop")[0]).toEqual({ subscription: 1 });
+  expect(native.callsTo("meterStop")[0]).toEqual({});
 
   await choose(layer, "Meters");
   await expect.poll(() => subscribes(native)).toBe(2);

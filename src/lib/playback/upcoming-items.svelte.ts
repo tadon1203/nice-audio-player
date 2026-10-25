@@ -1,15 +1,13 @@
-import { type PlaybackQueueItem } from "#lib/native/bindings";
+import { type QueueItem, UPCOMING_WINDOW } from "#lib/native/bindings";
 import type { Playback } from "./playback.svelte";
 
-/** Upcoming items are read this many at a time from the backend. */
-const CHUNK = 100;
 /** A failed chunk read is tried this many times in all. */
 const MAX_ATTEMPTS = 3;
 const RETRY_DELAY_MS = 1000;
 
 interface Loaded {
   version: number | null;
-  chunks: ReadonlyMap<number, PlaybackQueueItem[]>;
+  chunks: ReadonlyMap<number, QueueItem[]>;
 }
 
 /**
@@ -34,7 +32,10 @@ export class UpcomingItems {
       const total = queue.upcomingCount;
       const { start, end } = visible;
       const first = Math.max(start, queue.upcoming.length);
-      for (let chunk = Math.floor(first / CHUNK); chunk * CHUNK < total && chunk * CHUNK <= end;) {
+      for (
+        let chunk = Math.floor(first / UPCOMING_WINDOW);
+        chunk * UPCOMING_WINDOW < total && chunk * UPCOMING_WINDOW <= end;
+      ) {
         this.#fetchChunk(chunk, version);
         chunk += 1;
       }
@@ -42,11 +43,11 @@ export class UpcomingItems {
   }
 
   /** The upcoming item at `index`, or undefined while it has not arrived. */
-  public at(index: number): PlaybackQueueItem | undefined {
+  public at(index: number): QueueItem | undefined {
     const prefix = this.#playback.queue?.upcoming ?? [];
     if (index < prefix.length) return prefix[index];
     if (this.#loaded.version !== this.#playback.queueVersion) return undefined;
-    return this.#loaded.chunks.get(Math.floor(index / CHUNK))?.[index % CHUNK];
+    return this.#loaded.chunks.get(Math.floor(index / UPCOMING_WINDOW))?.[index % UPCOMING_WINDOW];
   }
 
   #fetchChunk(chunk: number, version: number): void {
@@ -55,11 +56,11 @@ export class UpcomingItems {
     if (have || this.#inFlight.has(key)) return;
     this.#inFlight.add(key);
     void this.#playback
-      .fetchQueueWindow(chunk * CHUNK, CHUNK)
+      .fetchQueueWindow(chunk * UPCOMING_WINDOW, UPCOMING_WINDOW)
       .then((result) => {
         this.#attempts.delete(key);
         const chunks = new Map(this.#loaded.version === result.version ? this.#loaded.chunks : []);
-        chunks.set(Math.floor(result.offset / CHUNK), result.items);
+        chunks.set(Math.floor(result.offset / UPCOMING_WINDOW), result.items);
         this.#loaded = { version: result.version, chunks };
       })
       .catch(() => this.#retryLater(chunk, version, key))

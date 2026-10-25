@@ -6,7 +6,7 @@
   import { VirtualRows } from "#lib/ui/virtual-rows.svelte";
   import { cn } from "#lib/utils/cn.js";
   import { QueueDrag } from "./queue-drag.svelte";
-  import QueueRow, { QUEUE_ROW_PX } from "./queue-row.svelte";
+  import QueueItem, { QUEUE_ROW_PX } from "./queue-row.svelte";
 
   /** Each row starts a little after the one above it. */
   const CASCADE_STEP_MS = TokenTiming.delayOf("feedback", 0.2);
@@ -92,7 +92,7 @@
       data-drop={dropMarker(drag?.slot ?? null, index)}
     >
       {#if item !== undefined}
-        <QueueRow
+        <QueueItem
           {item}
           tone="upcoming"
           dragHandlers={queueDrag.handlersFor(item.queueItemId, index)}

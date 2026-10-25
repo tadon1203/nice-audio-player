@@ -42,7 +42,7 @@ const playingValue = (positionMs: number): PlaybackState => ({
     positionMs,
     seekCount: 0,
     durationMs: 60_000,
-    outputDevice: { id: "speakers", name: "Speakers" },
+    outputDeviceName: "Speakers",
     channelConversion: "none",
     sourceFormat: "MP3",
     sourceBitDepth: null,

@@ -1,6 +1,5 @@
 import type {
-  PlaybackItem,
-  PlaybackQueueItem,
+  QueueItem,
   QueueItemId,
   QueueState,
   PlaybackState,
@@ -49,7 +48,7 @@ const base = (): {
   canGoNext: false,
 });
 
-const item = (id: TrackId): PlaybackItem => ({
+const item = (id: TrackId): QueueItem => ({
   queueItemId: id,
   id,
   title: String(id),
@@ -85,7 +84,7 @@ const playing = (
       positionMs,
       seekCount,
       durationMs: 60_000,
-      outputDevice: { id: "speakers", name: "Speakers" },
+      outputDeviceName: "Speakers",
       channelConversion: "none",
       sourceFormat: "FLAC",
       sourceBitDepth: 24,
@@ -97,7 +96,7 @@ const playing = (
   },
 });
 
-const queueItem = (id: QueueItemId): PlaybackQueueItem => ({
+const queueItem = (id: QueueItemId): QueueItem => ({
   queueItemId: id,
   id,
   title: "Current track",
@@ -105,6 +104,9 @@ const queueItem = (id: QueueItemId): PlaybackQueueItem => ({
   album: null,
   artwork: null,
   durationMs: 120_000,
+  trackNumber: null,
+  discNumber: null,
+  year: null,
 });
 
 const queueOf = (version: number, patch: Partial<QueueState> = {}): Versioned<QueueState> => ({
@@ -112,12 +114,10 @@ const queueOf = (version: number, patch: Partial<QueueState> = {}): Versioned<Qu
   value: {
     current: null,
     history: [],
-    historyCount: 0,
     upcoming: [],
     upcomingCount: 0,
     repeatMode: "off",
     shuffleEnabled: false,
-    canRestorePrevious: false,
     ...patch,
   },
 });
@@ -333,7 +333,6 @@ describe("failures", () => {
       status: "failed",
       base: base(),
       item: item(id),
-      playbackId: null,
       error: "outputDeviceUnavailable",
       skipping,
     },

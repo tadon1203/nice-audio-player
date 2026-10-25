@@ -2,11 +2,11 @@
 
 use super::{
     AdvanceReason, CommandError, CompressedAudioSource, DecodeError, FailureScope,
-    HISTORY_IN_SNAPSHOT, HashSet, LoadStage, Loaded, Loading, OpenedPipeline, PipelineError,
+    HISTORY_IN_STATE, HashSet, LoadStage, Loaded, Loading, OpenedPipeline, PipelineError,
     PlayableItem, PlaybackFailureCode, PlaybackState, PlaybackWorker, Position, Prebuffering,
     QueueEntry, QueueError, QueueItemId, QueueState, Reply, SourceLoad, SourceLoadId, StartFailure,
-    StartFailurePhase, StartRequest, StartedBy, TrackId, Transport, UPCOMING_IN_SNAPSHOT,
-    Versioned, error, open_start, output_failure_code, previous_restarts_track, respond,
+    StartFailurePhase, StartRequest, StartedBy, TrackId, Transport, UPCOMING_WINDOW, Versioned,
+    error, open_start, output_failure_code, previous_restarts_track, respond,
 };
 
 impl PlaybackWorker {
@@ -308,17 +308,15 @@ impl PlaybackWorker {
     /// Reports a failed start and, when only this file is at fault, moves on to the next one.
     /// Listeners see the failure first, so a skipped file is never silent.
     pub(super) fn fail_start(&mut self, request: StartRequest, failure: &StartFailure) {
-        let id = Some(request.id);
         error!(
             "playback.start_failed code={:?} phase={:?} playback_id={:?}",
-            failure.code, failure.phase, id
+            failure.code, failure.phase, request.id
         );
         let error = failure.command_error();
         let skips = failure.phase.scope() == FailureScope::Item && request.selection.is_none();
         let skipping = skips && self.will_skip();
         self.meter.set_running(false);
         self.transport = Transport::Failed {
-            id,
             code: failure.code,
             skipping,
         };
@@ -390,10 +388,10 @@ impl PlaybackWorker {
             let history = self.queue.history();
             let upcoming = self.queue.upcoming();
             let mut shown: Vec<&QueueEntry> = history
-                [history.len().saturating_sub(HISTORY_IN_SNAPSHOT)..]
+                [history.len().saturating_sub(HISTORY_IN_STATE)..]
                 .iter()
                 .collect();
-            shown.extend(upcoming[..UPCOMING_IN_SNAPSHOT.min(upcoming.len())].iter());
+            shown.extend(upcoming[..(UPCOMING_WINDOW as usize).min(upcoming.len())].iter());
             let ids: Vec<TrackId> = shown.iter().map(|entry| entry.track_id).collect();
             let Ok(tracks) = self.tracks.resolve(&ids) else {
                 return;

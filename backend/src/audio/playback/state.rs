@@ -1,15 +1,15 @@
-//! What the worker publishes: the transport snapshot and the queue snapshot.
+//! What the worker publishes: the transport state, the queue state, and the rows that show a
+//! queue entry.
 
 use super::PlaybackPreferences;
-use super::item::PlaybackItem;
 use super::queue::{PlaybackQueue, QueueEntry, RepeatMode};
 use super::resolver::TrackResolver;
-use crate::audio::output::{AudioOutputDeviceIdentity, AudioOutputSelection};
+use super::session::PlayableItem;
+use crate::audio::output::AudioOutputSelection;
 use crate::audio::processing::{ChannelConversion, OutputProcessingPlan};
 use crate::audio::volume::VolumeState;
 use crate::ids::{PlaybackId, QueueItemId, TrackId};
-use crate::library::models::TrackCore;
-use crate::library::tracks::PlayableTrack;
+use crate::library::models::NowPlayingTrack;
 use std::sync::Arc;
 
 /// Fields every transport state carries.
@@ -47,11 +47,31 @@ pub enum StartedBy {
     Jump,
 }
 
+/// One queue entry as the renderer shows it: the queue's id for the entry and the track's
+/// metadata. It carries no file path. The track's fields are flattened, so the renderer reads
+/// `title` on a row.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct QueueItem {
+    pub queue_item_id: QueueItemId,
+    #[serde(flatten)]
+    pub track: NowPlayingTrack,
+}
+
+impl From<&PlayableItem> for QueueItem {
+    fn from(item: &PlayableItem) -> Self {
+        Self {
+            queue_item_id: item.queue_item_id,
+            track: item.track.track.clone(),
+        }
+    }
+}
+
 /// A loaded track: identity plus how it reaches the output device.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct CurrentPlayback {
-    pub item: PlaybackItem,
+    pub item: QueueItem,
     /// What started this session. A seek or an output switch keeps it.
     pub started_by: StartedBy,
     pub playback_id: PlaybackId,
@@ -60,7 +80,7 @@ pub struct CurrentPlayback {
     /// purpose, so a display can react to the jump instead of guessing it from the numbers.
     pub seek_count: u64,
     pub duration_ms: Option<u64>,
-    pub output_device: AudioOutputDeviceIdentity,
+    pub output_device_name: String,
     pub channel_conversion: PlaybackChannelConversion,
     /// The loaded file's format (its extension when the library has none), bit depth and
     /// average bitrate: the start of the signal path.
@@ -102,7 +122,7 @@ pub enum PlaybackState {
     /// `item` is the last track that played, kept so the UI can still say what it was.
     Stopped {
         base: PlaybackControls,
-        item: Option<PlaybackItem>,
+        item: Option<QueueItem>,
     },
     Playing {
         base: PlaybackControls,
@@ -114,8 +134,7 @@ pub enum PlaybackState {
     },
     Failed {
         base: PlaybackControls,
-        item: Option<PlaybackItem>,
-        playback_id: Option<PlaybackId>,
+        item: Option<QueueItem>,
         error: PlaybackFailureCode,
         /// The player is moving on to the next item by itself: a skip the listener is told
         /// about, not a stop that waits for Retry.
@@ -150,11 +169,6 @@ impl PlaybackState {
             Self::Playing { session, .. } | Self::Paused { session, .. } => Some(session),
             Self::Stopped { .. } | Self::Failed { .. } => None,
         }
-    }
-
-    /// The item loaded for playback, whether playing or paused.
-    pub fn active_item(&self) -> Option<&PlaybackItem> {
-        self.session().map(|session| &session.item)
     }
 }
 
@@ -215,103 +229,47 @@ impl PlaybackProcessingInfo {
     }
 }
 
-/// A queue entry as the queue panel shows it; the file path stays in the backend.
-#[derive(Debug, Clone, serde::Serialize, specta::Type, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct PlaybackQueueItem {
-    /// The queue's id for the entry. Named apart from the track's `id` it flattens with.
-    pub queue_item_id: QueueItemId,
-    #[serde(flatten)]
-    pub core: TrackCore,
-    pub album: Option<String>,
+/// The most upcoming items a window returns, and how many the queue state carries.
+pub const UPCOMING_WINDOW: u32 = 100;
+/// How many already played items the queue state carries (the most recent ones).
+pub(super) const HISTORY_IN_STATE: usize = 50;
+
+/// The rows for `entries`, read in one go: `None` where the library no longer has the track,
+/// or where the library could not be read (the rows are left out of the state only).
+fn rows(entries: &[QueueEntry], tracks: &TrackResolver) -> Vec<Option<QueueItem>> {
+    let ids: Vec<TrackId> = entries.iter().map(|entry| entry.track_id).collect();
+    let Ok(resolved) = tracks.resolve(&ids) else {
+        return vec![None; entries.len()];
+    };
+    entries
+        .iter()
+        .zip(resolved)
+        .map(|(entry, track)| {
+            track.map(|track| QueueItem {
+                queue_item_id: entry.id,
+                track: track.track,
+            })
+        })
+        .collect()
 }
-
-impl PlaybackQueueItem {
-    fn of(entry: &QueueEntry, track: &PlayableTrack) -> Self {
-        Self {
-            queue_item_id: entry.id,
-            core: track.track.core.clone(),
-            album: track
-                .track
-                .album
-                .as_ref()
-                .map(|album| album.album.title.clone()),
-        }
-    }
-}
-
-/// How many upcoming items a snapshot carries; the rest are read a window at a time.
-pub(super) const UPCOMING_IN_SNAPSHOT: usize = 200;
-/// How many already played items a snapshot carries (the most recent ones).
-pub(super) const HISTORY_IN_SNAPSHOT: usize = 50;
-/// The most items one window read returns.
-pub(super) const MAX_QUEUE_WINDOW: usize = 200;
-
-/// The queue's play order as ids, shared with the queue itself, and the means to read the
-/// tracks of any part of it: a snapshot copies no item, whatever the queue's length.
-#[derive(Clone)]
-struct QueueList {
-    entries: Arc<[QueueEntry]>,
-    /// Where the upcoming items start.
-    upcoming_from: usize,
-    tracks: Arc<TrackResolver>,
-}
-
-impl QueueList {
-    /// The rows for `entries`, read in one go: `None` where the library no longer has the track,
-    /// or where the library could not be read (the rows are left out of this snapshot only).
-    fn rows(&self, entries: &[QueueEntry]) -> Vec<Option<PlaybackQueueItem>> {
-        let ids: Vec<TrackId> = entries.iter().map(|entry| entry.track_id).collect();
-        let Ok(tracks) = self.tracks.resolve(&ids) else {
-            return vec![None; entries.len()];
-        };
-        entries
-            .iter()
-            .zip(tracks)
-            .map(|(entry, track)| Some(PlaybackQueueItem::of(entry, &track?)))
-            .collect()
-    }
-
-    fn upcoming(&self) -> &[QueueEntry] {
-        self.entries.get(self.upcoming_from..).unwrap_or_default()
-    }
-}
-
-impl std::fmt::Debug for QueueList {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("QueueList")
-            .field("len", &self.entries.len())
-            .finish_non_exhaustive()
-    }
-}
-
-impl PartialEq for QueueList {
-    fn eq(&self, other: &Self) -> bool {
-        Arc::ptr_eq(&self.entries, &other.entries) && self.upcoming_from == other.upcoming_from
-    }
-}
-
-impl Eq for QueueList {}
 
 /// The queue as the renderer mirrors it: the current item, the last few played, the first
-/// upcoming ones, and how many there are in all. Longer queues are read with `window`, so a
-/// library-sized queue never crosses the IPC boundary in one piece.
+/// upcoming ones, and how many there are in all. The upcoming entries stay on the backend and
+/// are read a window at a time, so a library-sized queue never crosses the IPC boundary in one
+/// piece.
 #[derive(Debug, Clone, serde::Serialize, specta::Type, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct QueueState {
-    pub current: Option<PlaybackQueueItem>,
+    pub current: Option<QueueItem>,
     /// The most recently played items, oldest first.
-    pub history: Vec<PlaybackQueueItem>,
-    pub history_count: u32,
-    pub upcoming: Vec<PlaybackQueueItem>,
+    pub history: Vec<QueueItem>,
+    pub upcoming: Vec<QueueItem>,
     pub upcoming_count: u32,
     pub repeat_mode: RepeatMode,
     pub shuffle_enabled: bool,
-    /// The queue before the last replacement can be put back.
-    pub can_restore_previous: bool,
     #[serde(skip)]
     #[specta(skip)]
-    list: Option<QueueList>,
+    pub(crate) upcoming_entries: Arc<[QueueEntry]>,
 }
 
 /// A slice of the upcoming list, tagged with the queue version it was cut from.
@@ -320,7 +278,7 @@ pub struct QueueState {
 pub struct QueueWindow {
     pub version: u64,
     pub offset: u32,
-    pub items: Vec<PlaybackQueueItem>,
+    pub items: Vec<QueueItem>,
 }
 
 impl QueueState {
@@ -329,72 +287,56 @@ impl QueueState {
         Self {
             current: None,
             history: Vec::new(),
-            history_count: 0,
             upcoming: Vec::new(),
             upcoming_count: 0,
             repeat_mode,
             shuffle_enabled,
-            can_restore_previous: false,
-            list: None,
+            upcoming_entries: Arc::from(Vec::new()),
         }
     }
 
-    /// Reads the tracks of the current item, the last few played and the first upcoming ones;
-    /// everything else stays ids until a window asks for it.
-    pub fn of(
-        queue: &PlaybackQueue,
-        tracks: &Arc<TrackResolver>,
-        can_restore_previous: bool,
-    ) -> Self {
-        let list = QueueList {
-            entries: Arc::clone(queue.play_order()),
-            upcoming_from: queue.position().saturating_add(1),
-            tracks: Arc::clone(tracks),
-        };
+    /// Reads the rows of the current item, the last few played and the first upcoming ones.
+    pub fn of(queue: &PlaybackQueue, tracks: &TrackResolver) -> Self {
         let history = queue.history();
-        let shown_history = &history[history.len().saturating_sub(HISTORY_IN_SNAPSHOT)..];
+        let shown_history = &history[history.len().saturating_sub(HISTORY_IN_STATE)..];
         let upcoming = queue.upcoming();
-        let shown_upcoming = &upcoming[..UPCOMING_IN_SNAPSHOT.min(upcoming.len())];
+        let shown_upcoming = &upcoming[..(UPCOMING_WINDOW as usize).min(upcoming.len())];
         let mut shown: Vec<QueueEntry> = shown_history.to_vec();
         shown.extend(queue.current().cloned());
         shown.extend_from_slice(shown_upcoming);
-        let rows = list.rows(&shown);
-        let (history_rows, rest) = rows.split_at(shown_history.len());
+        let shown_rows = rows(&shown, tracks);
+        let (history_rows, rest) = shown_rows.split_at(shown_history.len());
         let (current_row, upcoming_rows) = rest.split_at(usize::from(queue.current().is_some()));
         Self {
             current: current_row.first().cloned().flatten(),
             history: history_rows.iter().flatten().cloned().collect(),
-            history_count: u32::try_from(history.len()).unwrap_or(u32::MAX),
             upcoming: upcoming_rows.iter().flatten().cloned().collect(),
             upcoming_count: u32::try_from(upcoming.len()).unwrap_or(u32::MAX),
             repeat_mode: queue.repeat(),
             shuffle_enabled: queue.shuffle(),
-            can_restore_previous,
-            list: Some(list),
+            upcoming_entries: Arc::from(upcoming),
         }
     }
 
-    /// Upcoming items from `offset`, at most `limit` (and never more than `MAX_QUEUE_WINDOW`),
+    /// Upcoming rows from `offset`, at most `limit` (and never more than `UPCOMING_WINDOW`),
     /// read from the library now. Tracks the library no longer has are left out. `version` is
-    /// the queue version this snapshot was published with.
-    pub fn window(&self, version: u64, offset: usize, limit: usize) -> QueueWindow {
-        let Some(list) = &self.list else {
-            return QueueWindow {
-                version,
-                offset: 0,
-                items: Vec::new(),
-            };
-        };
-        let upcoming = list.upcoming();
+    /// the queue version this state was published with.
+    pub fn window(
+        &self,
+        version: u64,
+        offset: usize,
+        limit: usize,
+        tracks: &TrackResolver,
+    ) -> QueueWindow {
+        let upcoming = &self.upcoming_entries;
         let start = offset.min(upcoming.len());
         let end = start
-            .saturating_add(limit.min(MAX_QUEUE_WINDOW))
+            .saturating_add(limit.min(UPCOMING_WINDOW as usize))
             .min(upcoming.len());
         QueueWindow {
             version,
             offset: u32::try_from(start).unwrap_or(u32::MAX),
-            items: list
-                .rows(upcoming.get(start..end).unwrap_or_default())
+            items: rows(&upcoming[start..end], tracks)
                 .into_iter()
                 .flatten()
                 .collect(),

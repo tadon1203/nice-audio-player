@@ -33,12 +33,10 @@ const initial: BackendMessage[] = [
     value: {
       current: null,
       history: [],
-      historyCount: 0,
       upcoming: [],
       upcomingCount: 0,
       repeatMode: "off",
       shuffleEnabled: false,
-      canRestorePrevious: false,
     },
   },
   { kind: "state", version: 1, topic: "scan", value: scan },
