@@ -72,7 +72,7 @@ impl Harness {
     }
 
     fn scan_state(&self) -> ScanStatus {
-        self.state_store.scan().value.state
+        self.state_store.library().value.scan.status
     }
 
     /// Waits until a scan of the directory has completed. A file written just after registration
@@ -234,4 +234,57 @@ fn removing_a_directory_drops_its_tracks() {
 
     assert_eq!(harness.track_count(), 0);
     assert_eq!(harness.library.directories().expect("directories"), []);
+}
+
+#[test]
+fn a_finished_scan_publishes_the_directory_counts_it_found() {
+    let harness = harness();
+    write_tone(&harness.music.join("a.wav"));
+
+    assert!(
+        wait_until(
+            || {
+                let state = harness.state_store.library().value;
+                state.scan.status == ScanStatus::Completed
+                    && state
+                        .directories
+                        .first()
+                        .is_some_and(|directory| directory.track_count == 1)
+            },
+            SETTLE
+        ),
+        "the published state carries the scan's end and the fresh track count"
+    );
+}
+
+#[test]
+fn each_directory_change_publishes_the_library_state_with_a_higher_version() {
+    let harness = harness();
+    let added = harness.state_store.library().value;
+    assert_eq!(
+        added.directories.len(),
+        1,
+        "the registered directory is published"
+    );
+    assert!(added.version > 0);
+    let id = added.directories[0].id;
+
+    assert!(
+        wait_until(
+            || harness.library.set_directory_enabled(id, false).is_ok(),
+            SETTLE
+        ),
+        "a directory can be disabled once no scan is running"
+    );
+    let disabled = harness.state_store.library().value;
+    assert!(!disabled.directories[0].enabled);
+    assert!(disabled.version > added.version);
+
+    assert!(
+        wait_until(|| harness.library.remove_directory(id).is_ok(), SETTLE),
+        "a directory can be removed once no scan is running"
+    );
+    let removed = harness.state_store.library().value;
+    assert_eq!(removed.directories, []);
+    assert!(removed.version > disabled.version);
 }

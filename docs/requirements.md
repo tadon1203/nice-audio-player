@@ -66,7 +66,7 @@ MP3, FLAC, WAV, AAC, M4A. A file counts as supported only if it can actually be 
   - A watcher that cannot attach is not retried automatically. The directory is still scanned.
 - Missing files are shown as missing. The app never deletes them automatically.
   - A moved or renamed file is found again by its size and the hash of its head and tail, when exactly one Missing track has them. It is the same track, so queues still resolve.
-  - Settings shows each directory's last scan, track count and Missing track count.
+  - Settings shows each directory's last scan, track count and Missing track count. The directory list, the counts and the scan update by themselves, without a reload.
   - Settings offers "Delete Missing", with confirmation. Source files are never touched.
   - Settings offers a way to open the log directory.
 - Settings offers "Reset library and rescan", with confirmation. It deletes the library database and its artwork, then restarts the app, which creates an empty database and rescans the directories. Source files are never touched.

@@ -16,7 +16,7 @@ import { MotionBudget } from "./motion-budget.svelte";
 import { NativeSession, type SessionTargets } from "./native-session.svelte";
 import { NoticeCenter } from "./notice-center.svelte";
 import { QueuePanel } from "./queue-panel.svelte";
-import { ScanWatcher } from "./scan-watcher.svelte";
+import { LibraryStateReplica } from "./library-state-replica.svelte";
 import { ScrollMemory } from "./scroll-memory";
 import { NowPlayingView } from "./now-playing-view.svelte";
 import { LyricsWaveformLink } from "./lyrics-waveform-link.svelte";
@@ -68,8 +68,8 @@ export class AppServices {
   public readonly libraryDirectories: LibraryDirectoryCommands;
   public readonly libraryTracks: LibraryTrackCommands;
   public readonly libraryViews = new LibraryViews();
-  /** The Library scan, as the Backend last reported it. */
-  public readonly scan: ScanWatcher;
+  /** The Library state, as the Backend last pushed it. */
+  public readonly libraryState: LibraryStateReplica;
   public readonly lyrics: LyricsRepository;
   public readonly nowPlaying = new NowPlayingView();
   public readonly queuePanel = new QueuePanel();
@@ -87,15 +87,18 @@ export class AppServices {
     this.catalog = new CatalogRepository(native.library, queryClient);
     this.albums = new AlbumRepository(native.library, queryClient);
     this.artists = new ArtistRepository(native.library);
-    this.libraryDirectories = new LibraryDirectoryCommands(native.library, this.catalog);
+    this.libraryDirectories = new LibraryDirectoryCommands(native.library);
     this.libraryTracks = new LibraryTrackCommands(native.library);
     this.lyrics = new LyricsRepository(native.lyrics, queryClient);
-    this.scan = new ScanWatcher(this.catalog, this.lyrics);
+    this.libraryState = new LibraryStateReplica(() => {
+      this.catalog.refresh();
+      this.lyrics.refresh();
+    });
 
     const targets: SessionTargets = {
       playback: this.player,
       appearance: this.appearance,
-      scan: this.scan,
+      library: this.libraryState,
       notices: this.notices,
     };
     this.session = new NativeSession(native.app, targets);

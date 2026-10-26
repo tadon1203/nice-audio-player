@@ -9,7 +9,6 @@
 //! of the whole Library give the same rows.
 
 use super::text;
-use super::version::LibraryVersion;
 use crate::ids::AlbumId;
 use rusqlite::{Transaction, params};
 use std::ffi::OsStr;
@@ -44,11 +43,8 @@ const ARTIST_ROWS: &str = "INSERT INTO artists(id, name, name_sort, search_text,
      GROUP BY a.artist_id";
 
 /// Replaces the Album and Album Artist rows with ones computed from the tracks, settling the
-/// compilations first. Bumps the Library version, so the lists reload what changed.
-pub(crate) fn rebuild(
-    transaction: &Transaction<'_>,
-    version: &LibraryVersion,
-) -> rusqlite::Result<()> {
+/// compilations first. The caller bumps the Library version after it commits the transaction.
+pub(crate) fn rebuild(transaction: &Transaction<'_>) -> rusqlite::Result<()> {
     let groups: Vec<(i64, String, String)> = transaction
         .prepare(
             "SELECT DISTINCT album_directory_id, album_relative_dir, album
@@ -64,7 +60,6 @@ pub(crate) fn rebuild(
     transaction.execute("DELETE FROM artists", [])?;
     transaction.execute(ALBUM_ROWS, [])?;
     transaction.execute(ARTIST_ROWS, [])?;
-    version.bump();
     Ok(())
 }
 

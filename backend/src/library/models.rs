@@ -1,4 +1,5 @@
 use crate::ids::{AlbumId, ArtistId, DirectoryId, TrackId};
+use crate::library::LibraryStatus;
 use serde::Deserialize;
 use serde::Serialize;
 #[derive(Debug, Clone, PartialEq, Serialize, specta::Type)]
@@ -227,7 +228,7 @@ pub enum ScanStatus {
 impl ScanState {
     pub fn idle() -> Self {
         Self {
-            state: ScanStatus::Idle,
+            status: ScanStatus::Idle,
             current_directory: None,
             expected_count: 0,
             progress: None,
@@ -235,8 +236,7 @@ impl ScanState {
             inspected_count: 0,
             indexed_count: 0,
             failed_count: 0,
-            failure_code: None,
-            library_version: 0,
+            failure: None,
         }
     }
 }
@@ -254,7 +254,7 @@ pub enum ScanFailure {
 #[derive(Debug, Clone, PartialEq, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ScanState {
-    pub state: ScanStatus,
+    pub status: ScanStatus,
     pub current_directory: Option<LibraryDirectory>,
     /// How many files the previous scans left in the scanned directories: what a rescan can expect
     /// to find, so its progress can be shown as a share. 0 when there is no such history.
@@ -265,8 +265,29 @@ pub struct ScanState {
     pub inspected_count: u64,
     pub indexed_count: u64,
     pub failed_count: u64,
-    pub failure_code: Option<ScanFailure>,
-    /// The Library version (see `Library::version`). It changes whenever a scan ends, so a
-    /// listener that sees it move knows the lists may have changed.
-    pub library_version: u64,
+    pub failure: Option<ScanFailure>,
+}
+
+/// The whole Library state, pushed by the Library worker whenever any part changes.
+#[derive(Debug, Clone, PartialEq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryState {
+    pub status: LibraryStatus,
+    /// The Library version (see `LibraryVersion`). It changes after every committed change that
+    /// alters a list, so a list that was read at another version is read again.
+    pub version: u64,
+    pub directories: Vec<LibraryDirectory>,
+    pub scan: ScanState,
+}
+
+impl LibraryState {
+    /// A Library with no directories and an idle scan, at version 0.
+    pub fn empty(status: LibraryStatus) -> Self {
+        Self {
+            status,
+            version: 0,
+            directories: Vec::new(),
+            scan: ScanState::idle(),
+        }
+    }
 }

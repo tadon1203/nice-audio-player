@@ -136,13 +136,12 @@ fn an_added_directory_is_listed_and_enabled() {
     let directory = TestDirectory::new();
     let library = open(&directory.file("data")).unwrap();
 
-    let added = library
+    library
         .add_directory(subdirectory(&directory, "music"))
         .expect("added");
 
     let listed = library.directories().unwrap();
     assert_eq!(listed.len(), 1);
-    assert_eq!(listed[0].id, added.id);
     assert!(listed[0].path.ends_with("music"));
     assert!(listed[0].enabled);
 }
@@ -238,10 +237,10 @@ fn a_directory_can_be_disabled_and_removed_and_a_missing_one_is_reported() {
     directories::set_enabled(&database, id, false).unwrap();
     assert!(!directories::list(&database.read().unwrap()).unwrap()[0].enabled);
 
-    directories::remove(&database, id, &super::version::LibraryVersion::default()).unwrap();
+    directories::remove(&database, id).unwrap();
     assert_eq!(directories::list(&database.read().unwrap()).unwrap(), []);
     assert!(matches!(
-        directories::remove(&database, id, &super::version::LibraryVersion::default()),
+        directories::remove(&database, id),
         Err(CommandError::DirectoryMissing)
     ));
 }

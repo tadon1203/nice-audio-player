@@ -1,5 +1,5 @@
 import type { CreateInfiniteQueryOptions, InfiniteData } from "@tanstack/svelte-query";
-import { type LetterIndexEntry, type LibraryStatus } from "#lib/native/bindings";
+import { type LetterIndexEntry, type LibraryState } from "#lib/native/bindings";
 import {
   type CatalogRepository,
   type LibraryCatalogItem,
@@ -11,14 +11,13 @@ import { LibraryQueryKeys } from "./library-query-keys";
 import { PagedCollection } from "./paged-collection.svelte";
 import { QueryResult } from "./query-result.svelte";
 
+/** The Library state the catalog reads: `null` until the Backend's first push. */
+export interface LibraryStateSource {
+  readonly snapshot: LibraryState | null;
+}
+
 /** Which single region owns the workspace; states never compete. */
-export type LibraryViewState =
-  | "loading"
-  | "statusError"
-  | "unavailable"
-  | "catalogError"
-  | "empty"
-  | "content";
+export type LibraryViewState = "loading" | "unavailable" | "catalogError" | "empty" | "content";
 
 /** How long typing pauses before the filter reaches the query. The input itself never waits. */
 const FILTER_DEBOUNCE_MS = 120;
@@ -37,7 +36,7 @@ interface SettledFilter {
  */
 export class LibraryCatalog<TRequest extends LibraryCatalogRequest> {
   readonly #request: () => TRequest;
-  readonly #status: QueryResult<LibraryStatus>;
+  readonly #library: LibraryStateSource;
   readonly #pages: PagedCollection<Page<LibraryCatalogItem<TRequest["presentation"]>>>;
   readonly #index: QueryResult<LetterIndexEntry[]>;
   // Both start unset: until the debounce settles, the live request is the one in use.
@@ -54,25 +53,24 @@ export class LibraryCatalog<TRequest extends LibraryCatalogRequest> {
   }
 
   get #statusMessage(): string | null {
-    return this.#status.data ? LibraryErrors.statusMessage(this.#status.data) : null;
+    const status = this.#library.snapshot?.status;
+    return status ? LibraryErrors.statusMessage(status) : null;
   }
 
   get #ready(): boolean {
-    return this.#status.data?.status === "ready";
+    return this.#library.snapshot?.status.status === "ready";
   }
 
   get #viewState(): LibraryViewState {
-    return this.#status.isError
-      ? "statusError"
-      : this.#statusMessage !== null
-        ? "unavailable"
-        : this.#status.isPending || this.#pages.isPending
-          ? "loading"
-          : this.#pages.isError
-            ? "catalogError"
-            : this.#pages.items.length === 0
-              ? "empty"
-              : "content";
+    return this.#statusMessage !== null
+      ? "unavailable"
+      : this.#library.snapshot === null || this.#pages.isPending
+        ? "loading"
+        : this.#pages.isError
+          ? "catalogError"
+          : this.#pages.items.length === 0
+            ? "empty"
+            : "content";
   }
 
   get #updating(): boolean {
@@ -85,9 +83,13 @@ export class LibraryCatalog<TRequest extends LibraryCatalogRequest> {
     );
   }
 
-  public constructor(catalog: CatalogRepository, request: () => TRequest) {
+  public constructor(
+    catalog: CatalogRepository,
+    request: () => TRequest,
+    library: LibraryStateSource,
+  ) {
     this.#request = request;
-    this.#status = new QueryResult(() => catalog.statusOptions());
+    this.#library = library;
     this.#pages = new PagedCollection(() => this.#pageOptions(catalog));
     // The letter index follows the list's filter and sort (not where it was entered), so a jump
     // keeps the entries it was made from.
@@ -130,11 +132,6 @@ export class LibraryCatalog<TRequest extends LibraryCatalogRequest> {
     return this.#statusMessage;
   }
 
-  /** The failure of the status query, if the status could not be read. */
-  public get statusError(): Error | null {
-    return this.#status.error;
-  }
-
   /** True while the list refetches behind existing content. */
   public get updating(): boolean {
     return this.#updating;
@@ -168,8 +165,6 @@ export class LibraryCatalog<TRequest extends LibraryCatalogRequest> {
   public readonly fetchNextPage = (): Promise<void> => this.#pages.fetchNextPage();
 
   public readonly refetch = (): Promise<void> => this.#pages.refetch();
-
-  public readonly refetchStatus = (): Promise<void> => this.#status.refetch();
 
   /**
    * The list's query options, with the previous list kept only while the presentation stays the

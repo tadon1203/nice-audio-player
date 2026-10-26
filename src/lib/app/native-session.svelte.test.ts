@@ -43,7 +43,7 @@ function fakeTargets(): {
       acceptPosition,
     },
     appearance: { accept: vi.fn() },
-    scan: { accept: vi.fn() },
+    library: { accept: vi.fn() },
     notices: { noteSkipped },
   } as unknown as SessionTargets;
   return { targets, acceptPlayback, acceptPosition, noteSkipped };
@@ -52,7 +52,7 @@ function fakeTargets(): {
 const initial = (playbackVersion: number): BackendMessage[] => [
   { kind: "state", version: playbackVersion, topic: "playback", value: "snapshot" as never },
   { kind: "state", version: 1, topic: "queue", value: "queue" as never },
-  { kind: "state", version: 1, topic: "scan", value: "scan" as never },
+  { kind: "state", version: 1, topic: "library", value: "library" as never },
   { kind: "state", version: 1, topic: "waveform", value: null },
   {
     kind: "state",

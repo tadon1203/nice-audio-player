@@ -38,21 +38,16 @@ export const commands = {
 	playerClearQueue: () => __TAURI_INVOKE<Versioned<QueueState>>("player_clear_queue"),
 	/**  Puts back the queue the last replacement or Clear upcoming took away. */
 	playerRestorePreviousQueue: () => __TAURI_INVOKE<Versioned<PlayerState>>("player_restore_previous_queue"),
-	libraryStatus: () => __TAURI_INVOKE<LibraryStatus>("library_status"),
 	/**
 	 *  Deletes the library database and its artwork, then restarts the app, which creates an empty
 	 *  database and rescans the directories.
 	 */
 	libraryReset: () => __TAURI_INVOKE<null>("library_reset"),
-	libraryDirectories: () => __TAURI_INVOKE<LibraryDirectory[]>("library_directories"),
-	libraryAddDirectory: (path: string) => __TAURI_INVOKE<LibraryDirectory>("library_add_directory", { path }),
+	libraryAddDirectory: (path: string) => __TAURI_INVOKE<null>("library_add_directory", { path }),
 	librarySetDirectoryEnabled: (id: DirectoryId, enabled: boolean) => __TAURI_INVOKE<null>("library_set_directory_enabled", { id, enabled }),
 	libraryRemoveDirectory: (id: DirectoryId) => __TAURI_INVOKE<null>("library_remove_directory", { id }),
-	/**
-	 *  Deletes the Missing tracks from the Library and returns how many there were. Never touches a
-	 *  source file.
-	 */
-	libraryDeleteMissingTracks: () => __TAURI_INVOKE<number>("library_delete_missing_tracks"),
+	/**  Deletes the Missing tracks from the Library. Never touches a source file. */
+	libraryDeleteMissingTracks: () => __TAURI_INVOKE<null>("library_delete_missing_tracks"),
 	/**  Opens the directory holding the log files in the file manager. */
 	appOpenLogDirectory: () => __TAURI_INVOKE<null>("app_open_log_directory"),
 	libraryStartScan: () => __TAURI_INVOKE<null>("library_start_scan"),
@@ -260,6 +255,18 @@ export type LibraryDirectory = {
 	missingCount: number,
 };
 
+/**  The whole Library state, pushed by the Library worker whenever any part changes. */
+export type LibraryState = {
+	status: LibraryStatus,
+	/**
+	 *  The Library version (see `LibraryVersion`). It changes after every committed change that
+	 *  alters a list, so a list that was read at another version is read again.
+	 */
+	version: number,
+	directories: LibraryDirectory[],
+	scan: ScanState,
+};
+
 export type LibraryStatus = { status: "ready" } | { status: "unavailable"; reason: LibraryUnavailableReason };
 
 /**
@@ -427,7 +434,7 @@ export type ScanFailure = "persistenceFailed" | "directoryTraversalFailed" |
 "panicked";
 
 export type ScanState = {
-	state: ScanStatus,
+	status: ScanStatus,
 	currentDirectory: LibraryDirectory | null,
 	/**
 	 *  How many files the previous scans left in the scanned directories: what a rescan can expect
@@ -440,12 +447,7 @@ export type ScanState = {
 	inspectedCount: number,
 	indexedCount: number,
 	failedCount: number,
-	failureCode: ScanFailure | null,
-	/**
-	 *  The Library version (see `Library::version`). It changes whenever a scan ends, so a
-	 *  listener that sees it move knows the lists may have changed.
-	 */
-	libraryVersion: number,
+	failure: ScanFailure | null,
 };
 
 export type ScanStatus = "idle" | "running" | "completed" | "cancelled" | "failed";
@@ -468,7 +470,7 @@ export type StateMessage = {
 } & StateValue;
 
 /**  The whole value of one state topic. */
-export type StateValue = { topic: "playback"; value: PlayerState } | { topic: "queue"; value: QueueState } | { topic: "scan"; value: ScanState } | { topic: "waveform"; value: PlaybackWaveform | null } | { topic: "appearance"; value: Appearance };
+export type StateValue = { topic: "playback"; value: PlayerState } | { topic: "queue"; value: QueueState } | { topic: "library"; value: LibraryState } | { topic: "waveform"; value: PlaybackWaveform | null } | { topic: "appearance"; value: Appearance };
 
 /**
  *  The album a track is filed under, by ID (see `ids.rs`) and as titled, with its Album Artist. A

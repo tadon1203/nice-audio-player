@@ -90,11 +90,6 @@
     <WorkspaceScrollRegion viewportAttachment={workspaceScroll.attach} contentClass="pt-6 pb-16">
       {#if catalog.viewState === "loading"}
         <LoadingStatus>Loading library…</LoadingStatus>
-      {:else if catalog.viewState === "statusError"}
-        <ErrorAlert
-          message={errorMessage(catalog.statusError)}
-          onRetry={() => actions.run(() => catalog.refetchStatus(), "library")}
-        />
       {:else if catalog.viewState === "unavailable"}
         <ErrorAlert message={catalog.statusMessage ?? ""} />
       {:else if catalog.viewState === "catalogError"}

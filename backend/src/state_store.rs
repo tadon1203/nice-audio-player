@@ -3,7 +3,8 @@
 
 use parking_lot::Mutex;
 
-use crate::library::models::ScanState;
+use crate::library::LibraryStatus;
+use crate::library::models::LibraryState;
 use crate::messages::{
     BackendMessage, Notification, Notifier, StateMessage, StateTopic, StateValue, Versioned,
 };
@@ -16,14 +17,14 @@ use crate::settings::{Appearance, SettingsFile};
 struct States {
     playback: Versioned<PlayerState>,
     queue: Versioned<QueueState>,
-    scan: Versioned<ScanState>,
+    library: Versioned<LibraryState>,
     waveform: Versioned<Option<PlaybackWaveform>>,
     appearance: Versioned<Appearance>,
 }
 
 impl States {
-    /// The values before any service has set one: the saved playback and appearance, an idle
-    /// scan, and no waveform.
+    /// The values before any service has set one: the saved playback and appearance, an empty
+    /// Library, and no waveform.
     fn new(settings: &SettingsFile) -> Self {
         let preferences = &settings.player;
         Self {
@@ -32,7 +33,7 @@ impl States {
                 preferences.repeat_mode,
                 preferences.shuffle_enabled,
             )),
-            scan: Versioned::new(ScanState::idle()),
+            library: Versioned::new(LibraryState::empty(LibraryStatus::Ready)),
             waveform: Versioned::new(None),
             appearance: Versioned::new(settings.appearance.clone()),
         }
@@ -48,7 +49,10 @@ impl States {
                 self.queue.version,
                 StateValue::Queue(self.queue.value.clone()),
             ),
-            StateTopic::Scan => (self.scan.version, StateValue::Scan(self.scan.value.clone())),
+            StateTopic::Library => (
+                self.library.version,
+                StateValue::Library(self.library.value.clone()),
+            ),
             StateTopic::Waveform => (
                 self.waveform.version,
                 StateValue::Waveform(self.waveform.value.clone()),
@@ -88,8 +92,9 @@ impl StateStore {
         self.states.lock().queue.clone()
     }
 
-    pub fn scan(&self) -> Versioned<ScanState> {
-        self.states.lock().scan.clone()
+    #[cfg(test)]
+    pub fn library(&self) -> Versioned<LibraryState> {
+        self.states.lock().library.clone()
     }
 
     #[cfg(test)]
@@ -108,9 +113,9 @@ impl StateStore {
         self.set(StateTopic::Queue, |states| &mut states.queue, value)
     }
 
-    /// Like `set_playback`, for the Library scan.
-    pub fn set_scan(&self, value: ScanState) -> u64 {
-        self.set(StateTopic::Scan, |states| &mut states.scan, value)
+    /// Like `set_playback`, for the Library state.
+    pub fn set_library(&self, value: LibraryState) -> u64 {
+        self.set(StateTopic::Library, |states| &mut states.library, value)
     }
 
     /// Like `set_playback`, for the Waveform.

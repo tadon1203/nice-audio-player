@@ -8,10 +8,10 @@
 //! logged and not retried.
 
 use super::{
-    StoreError, artwork,
+    LibraryStatus, StoreError, artwork,
     database::Database,
     directories,
-    models::{LibraryDirectory, ScanState, ScanStatus},
+    models::{LibraryDirectory, LibraryState, ScanFailure, ScanState, ScanStatus},
     scan,
     version::LibraryVersion,
 };
@@ -44,10 +44,10 @@ type Reply<T> = SyncSender<Result<T, CommandError>>;
 
 /// What a caller asks the worker to do. Each command answers on its own reply channel.
 pub(crate) enum SyncCommand {
-    AddDirectory(String, Reply<LibraryDirectory>),
+    AddDirectory(String, Reply<()>),
     SetDirectoryEnabled(DirectoryId, bool, Reply<()>),
     RemoveDirectory(DirectoryId, Reply<()>),
-    DeleteMissingTracks(Reply<u32>),
+    DeleteMissingTracks(Reply<()>),
     StartScan(Reply<()>),
     CancelScan(Reply<()>),
     Shutdown(Reply<()>),
@@ -68,6 +68,8 @@ pub(crate) enum SyncInput {
         directory: DirectoryId,
         dirs: Option<Vec<PathBuf>>,
     },
+    /// The scan's state changed. The scan thread sends its final state before `ScanEnded`.
+    ScanProgress(ScanState),
     ScanEnded(ScanOutcome),
 }
 
@@ -76,6 +78,13 @@ pub(crate) enum SyncInput {
 fn respond<T>(reply: &Reply<T>, result: Result<T, CommandError>) {
     if reply.send(result).is_err() {
         debug!("library.reply_closed");
+    }
+}
+
+/// Sends an input to the worker. The worker may already be gone, which is logged.
+fn send(messages: &Sender<SyncInput>, input: SyncInput) {
+    if let Err(cause) = messages.send(input) {
+        debug!("library.sync.input_send_failed cause={cause}");
     }
 }
 
@@ -96,6 +105,7 @@ impl LibrarySync {
             database,
             state_store,
             version,
+            state: LibraryState::empty(LibraryStatus::Ready),
             messages: messages.clone(),
             dirty: HashMap::new(),
             deadline: None,
@@ -118,7 +128,7 @@ impl LibrarySync {
         request(&self.messages, |reply| SyncInput::Command(command(reply)))?
     }
 
-    pub(crate) fn add_directory(&self, path: String) -> Result<LibraryDirectory, CommandError> {
+    pub(crate) fn add_directory(&self, path: String) -> Result<(), CommandError> {
         self.call(|reply| SyncCommand::AddDirectory(path, reply))
     }
 
@@ -134,7 +144,7 @@ impl LibrarySync {
         self.call(|reply| SyncCommand::RemoveDirectory(id, reply))
     }
 
-    pub(crate) fn delete_missing_tracks(&self) -> Result<u32, CommandError> {
+    pub(crate) fn delete_missing_tracks(&self) -> Result<(), CommandError> {
         self.call(SyncCommand::DeleteMissingTracks)
     }
 
@@ -170,8 +180,10 @@ impl Drop for LibrarySync {
 struct LibraryWorker {
     database: Database,
     state_store: Arc<StateStore>,
-    /// The Library version, which every album rebuild advances.
+    /// The Library version, which the worker advances after each committed directory change.
     version: Arc<LibraryVersion>,
+    /// The Library state as last published. The worker is its only writer.
+    state: LibraryState,
     /// For the inputs the watchers and the scan thread send back.
     messages: Sender<SyncInput>,
     /// What is waiting to be scanned: a directory's changed paths, or `None` for all of it.
@@ -194,6 +206,8 @@ impl LibraryWorker {
         for directory in self.enabled_directories_or_log() {
             self.watch_and_scan(&directory, DEBOUNCE);
         }
+        self.read_directories();
+        self.publish();
         loop {
             let input = match self.deadline {
                 Some(deadline) => {
@@ -216,6 +230,10 @@ impl LibraryWorker {
                     }
                 }
                 Some(SyncInput::Changed { directory, dirs }) => self.changed(directory, dirs),
+                Some(SyncInput::ScanProgress(scan)) => {
+                    self.state.scan = scan;
+                    self.publish();
+                }
                 Some(SyncInput::ScanEnded(outcome)) => self.scan_ended(outcome),
                 None => {}
             }
@@ -228,27 +246,29 @@ impl LibraryWorker {
     fn command(&mut self, command: SyncCommand) -> bool {
         match command {
             SyncCommand::AddDirectory(path, reply) => {
-                let result = self.while_idle(|database, _| directories::add(database, &path));
+                let result = self.while_idle(|database| directories::add(database, &path));
                 if let Ok(directory) = &result {
                     self.watch_and_scan(directory, Duration::ZERO);
+                    self.changed_directories();
                 }
-                respond(&reply, result);
+                respond(&reply, result.map(|_| ()));
             }
             SyncCommand::SetDirectoryEnabled(id, enabled, reply) => {
                 let result =
-                    self.while_idle(|database, _| directories::set_enabled(database, id, enabled));
+                    self.while_idle(|database| directories::set_enabled(database, id, enabled));
                 if result.is_ok() {
                     self.set_enabled(id, enabled);
+                    self.changed_directories();
                 }
                 respond(&reply, result);
             }
             SyncCommand::RemoveDirectory(id, reply) => {
-                let result =
-                    self.while_idle(|database, version| directories::remove(database, id, version));
+                let result = self.while_idle(|database| directories::remove(database, id));
                 if result.is_ok() {
                     self.dirty.remove(&id);
                     self.watchers.remove(&id);
                     self.collect_artwork_in_background();
+                    self.changed_directories();
                 }
                 respond(&reply, result);
             }
@@ -256,6 +276,7 @@ impl LibraryWorker {
                 let result = self.while_idle(directories::delete_missing);
                 if result.is_ok() {
                     self.collect_artwork_in_background();
+                    self.changed_directories();
                 }
                 respond(&reply, result);
             }
@@ -301,12 +322,41 @@ impl LibraryWorker {
     /// Runs a change to the directories, unless a scan is running: directories cannot change under one.
     fn while_idle<T>(
         &mut self,
-        change: impl FnOnce(&Database, &LibraryVersion) -> Result<T, CommandError>,
+        change: impl FnOnce(&Database) -> Result<T, CommandError>,
     ) -> Result<T, CommandError> {
         if self.scan.is_some() {
             return Err(CommandError::ScanAlreadyRunning);
         }
-        change(&self.database, &self.version)
+        change(&self.database)
+    }
+
+    /// Called after a committed change to the directories or their tracks: advances the Library
+    /// version, reads the directory rows, and publishes the Library state.
+    fn changed_directories(&mut self) {
+        self.version.bump();
+        self.read_directories();
+        self.publish();
+    }
+
+    /// Reads the directory rows, with their counts, into the state. A failed read is logged and
+    /// keeps the rows last read.
+    fn read_directories(&mut self) {
+        let directories = self
+            .database
+            .read()
+            .map_err(StoreError::from)
+            .and_then(|connection| directories::list(&connection));
+        match directories {
+            Ok(directories) => self.state.directories = directories,
+            Err(error) => error!("library.directories.read_failed error={error:?}"),
+        }
+    }
+
+    /// Sets the Library version in the state and pushes the state. Every change to the state goes
+    /// through here.
+    fn publish(&mut self) {
+        self.state.version = self.version.get();
+        self.state_store.set_library(self.state.clone());
     }
 
     /// Watches a directory and marks all of it for a scan after `delay`. A watcher that cannot attach
@@ -365,6 +415,15 @@ impl LibraryWorker {
     fn scan_ended(&mut self, outcome: ScanOutcome) {
         debug!("library.scan.ended outcome={outcome:?}");
         self.reap_scan();
+        if self.state.scan.status == ScanStatus::Running {
+            // The scan thread died before it published how the scan ended.
+            self.state.scan.status = ScanStatus::Failed;
+            self.state.scan.current_directory = None;
+            self.state.scan.failure = Some(ScanFailure::Panicked);
+            error!("library.scan.failed failure={:?}", ScanFailure::Panicked);
+        }
+        self.read_directories();
+        self.publish();
         // Changes that came in during the scan are scanned next.
         if !self.dirty.is_empty() {
             self.deadline = Some(Instant::now());
@@ -408,33 +467,22 @@ impl LibraryWorker {
         if jobs.is_empty() {
             return Ok(());
         }
-        let previous = self.state_store.scan().value;
-        self.state_store.set_scan(ScanState {
-            state: ScanStatus::Running,
-            library_version: previous.library_version,
+        self.state.scan = ScanState {
+            status: ScanStatus::Running,
             ..ScanState::idle()
-        });
+        };
+        self.publish();
         info!("library.scan.started directory_count={}", jobs.len());
         let cancellation = Cancellation::default();
-        let (database, state_store, version) = (
-            self.database.clone(),
-            Arc::clone(&self.state_store),
-            Arc::clone(&self.version),
-        );
+        let (database, version) = (self.database.clone(), Arc::clone(&self.version));
         let (thread_cancellation, messages) = (cancellation.clone(), self.messages.clone());
         let thread = thread::Builder::new()
             .name("library-scan".into())
             .spawn(move || {
                 run_in_background();
-                let mut ending =
-                    ScanEnding::new(messages, Arc::clone(&state_store), Arc::clone(&version));
-                let status = scan::run(
-                    &database,
-                    &jobs,
-                    &state_store,
-                    &version,
-                    &thread_cancellation,
-                );
+                let mut ending = ScanEnding::new(messages.clone());
+                let publish = |scan: ScanState| send(&messages, SyncInput::ScanProgress(scan));
+                let status = scan::run(&database, &jobs, &publish, &version, &thread_cancellation);
                 ending.finish(match status {
                     ScanStatus::Completed => ScanOutcome::Completed,
                     ScanStatus::Cancelled => ScanOutcome::Cancelled,
@@ -539,43 +587,27 @@ fn attach(
 /// when this drops, so the scan never stays "Running".
 struct ScanEnding {
     messages: Sender<SyncInput>,
-    state_store: Arc<StateStore>,
-    version: Arc<LibraryVersion>,
     finished: bool,
 }
 
 impl ScanEnding {
-    fn new(
-        messages: Sender<SyncInput>,
-        state_store: Arc<StateStore>,
-        version: Arc<LibraryVersion>,
-    ) -> Self {
+    fn new(messages: Sender<SyncInput>) -> Self {
         Self {
             messages,
-            state_store,
-            version,
             finished: false,
         }
     }
 
     fn finish(&mut self, outcome: ScanOutcome) {
         self.finished = true;
-        report_scan_ended(&self.messages, outcome);
-    }
-}
-
-/// Sends the scan's end to the worker. The worker may already be gone, which is logged.
-fn report_scan_ended(messages: &Sender<SyncInput>, outcome: ScanOutcome) {
-    if let Err(cause) = messages.send(SyncInput::ScanEnded(outcome)) {
-        debug!("library.sync.scan_ended_send_failed cause={cause}");
+        send(&self.messages, SyncInput::ScanEnded(outcome));
     }
 }
 
 impl Drop for ScanEnding {
     fn drop(&mut self) {
         if !self.finished {
-            scan::fail(&self.state_store, &self.version);
-            report_scan_ended(&self.messages, ScanOutcome::Failed);
+            send(&self.messages, SyncInput::ScanEnded(ScanOutcome::Failed));
         }
     }
 }
@@ -583,33 +615,54 @@ impl Drop for ScanEnding {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_support::{null_notifier, state_store_for_tests};
+    use crate::test_support::{TestDirectory, null_notifier, state_store_for_tests};
 
     #[test]
-    fn a_scan_thread_that_dies_ends_the_scan_as_failed() {
-        let (messages, received) = mpsc::channel();
+    fn a_scan_that_ends_without_publishing_its_state_is_published_as_failed() {
+        let directory = TestDirectory::new();
+        let database = Database::initialize(&directory.file("data")).expect("database");
         let state_store = state_store_for_tests(null_notifier());
-        state_store.set_scan(ScanState {
-            state: ScanStatus::Running,
-            ..ScanState::idle()
-        });
-        let thread_state_store = Arc::clone(&state_store);
+        let (messages, _received) = mpsc::channel();
+        let mut worker = LibraryWorker {
+            database,
+            state_store: Arc::clone(&state_store),
+            version: Arc::new(LibraryVersion::default()),
+            state: LibraryState {
+                scan: ScanState {
+                    status: ScanStatus::Running,
+                    ..ScanState::idle()
+                },
+                ..LibraryState::empty(LibraryStatus::Ready)
+            },
+            messages,
+            dirty: HashMap::new(),
+            deadline: None,
+            scan: None,
+            collector: None,
+            watchers: HashMap::new(),
+        };
+
+        worker.scan_ended(ScanOutcome::Failed);
+
+        let scan = state_store.library().value.scan;
+        assert_eq!(scan.status, ScanStatus::Failed);
+        assert_eq!(scan.failure, Some(ScanFailure::Panicked));
+    }
+
+    #[test]
+    fn a_scan_thread_that_dies_reports_the_scan_as_failed() {
+        let (messages, received) = mpsc::channel();
 
         let died = thread::Builder::new()
             .name("scanner-bug-test".into())
             .spawn(move || {
-                let _ending = ScanEnding::new(
-                    messages,
-                    thread_state_store,
-                    Arc::new(LibraryVersion::default()),
-                );
+                let _ending = ScanEnding::new(messages);
                 panic!("scanner bug");
             })
             .unwrap()
             .join();
 
         assert!(died.is_err());
-        assert_eq!(state_store.scan().value.state, ScanStatus::Failed);
         assert!(matches!(
             received.try_recv(),
             Ok(SyncInput::ScanEnded(ScanOutcome::Failed))

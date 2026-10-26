@@ -34,7 +34,6 @@ use super::{
     version::LibraryVersion,
 };
 use crate::errors::contain;
-use crate::state_store::StateStore;
 use crate::threads::{Cancellation, run_in_background};
 
 /// Files inspected per transaction.
@@ -68,17 +67,17 @@ impl From<PersistError> for Stop {
     }
 }
 
-/// Scans `jobs` in order, publishing progress through `state_store`. Returns how the scan ended, which is
-/// also the published scan state.
+/// Scans `jobs` in order. `publish` receives the scan's state as it changes. Returns how the scan
+/// ended; the state it ended with has already been published.
 pub(crate) fn run(
     database: &Database,
     jobs: &[ScanJob],
-    state_store: &StateStore,
+    publish: &dyn Fn(ScanState),
     version: &LibraryVersion,
     cancel: &Cancellation,
 ) -> ScanStatus {
     let expected = expected_files(database, jobs);
-    let mut progress = Progress::new(state_store, version);
+    let mut progress = Progress::new(publish);
     progress.change(|scan| scan.expected_count = expected);
     let mut traversal_failed = false;
     for job in jobs {
@@ -110,21 +109,6 @@ pub(crate) fn run(
         error!("library.scan.collect_failed cause={cause:?}");
     }
     progress.finish(ScanStatus::Completed, None)
-}
-
-/// Ends the scan as failed, for a scan thread that died before it could say how it ended. The
-/// counts are the ones last published.
-pub(crate) fn fail(state_store: &StateStore, version: &LibraryVersion) {
-    let mut scan = state_store.scan().value;
-    scan.state = ScanStatus::Failed;
-    scan.current_directory = None;
-    scan.failure_code = Some(ScanFailure::Panicked);
-    scan.library_version = version.get();
-    state_store.set_scan(scan);
-    error!(
-        "library.scan.failed failure_code={:?}",
-        ScanFailure::Panicked
-    );
 }
 
 /// How many files earlier scans left in `directories`: a rescan should find about as many again.
@@ -861,12 +845,16 @@ impl LibraryWriter {
         }
         self.albums_stale = true;
         self.batches_since_rebuild += 1;
-        if self.batches_since_rebuild >= REBUILD_EVERY_BATCHES {
-            albums::rebuild(&transaction, version)?;
-            self.batches_since_rebuild = 0;
-            self.albums_stale = false;
+        let rebuilt = self.batches_since_rebuild >= REBUILD_EVERY_BATCHES;
+        if rebuilt {
+            albums::rebuild(&transaction)?;
         }
         transaction.commit()?;
+        if rebuilt {
+            self.batches_since_rebuild = 0;
+            self.albums_stale = false;
+            version.bump();
+        }
         Ok(())
     }
 
@@ -878,10 +866,11 @@ impl LibraryWriter {
         let transaction = self
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
-        albums::rebuild(&transaction, version)?;
+        albums::rebuild(&transaction)?;
         transaction.commit()?;
         self.albums_stale = false;
         self.batches_since_rebuild = 0;
+        version.bump();
         Ok(())
     }
 
@@ -1248,30 +1237,33 @@ fn relink(connection: &mut Connection, version: &LibraryVersion) -> rusqlite::Re
         [],
     )?;
     if !pairs.is_empty() {
-        albums::rebuild(&transaction, version)?;
+        albums::rebuild(&transaction)?;
     }
     transaction.commit()?;
+    if !pairs.is_empty() {
+        version.bump();
+    }
     Ok(pairs.len())
 }
 
 // Progress: counts what the scan has done, and publishes it.
 
 /// Counts what the scan has done, and publishes it. The scan thread is the only writer while a
-/// scan runs, so `scan` is its working copy of the published state.
+/// scan runs, so `scan` is its own copy of the state.
 struct Progress<'a> {
-    state_store: &'a StateStore,
-    /// The Library version, which the album rebuilds advance.
-    version: &'a LibraryVersion,
+    publish: &'a dyn Fn(ScanState),
     scan: ScanState,
     last_publish: Instant,
 }
 
 impl<'a> Progress<'a> {
-    fn new(state_store: &'a StateStore, version: &'a LibraryVersion) -> Self {
+    fn new(publish: &'a dyn Fn(ScanState)) -> Self {
         Self {
-            state_store,
-            version,
-            scan: state_store.scan().value,
+            publish,
+            scan: ScanState {
+                status: ScanStatus::Running,
+                ..ScanState::idle()
+            },
             last_publish: Instant::now()
                 .checked_sub(PROGRESS_PUBLISH_INTERVAL)
                 .unwrap_or_else(Instant::now),
@@ -1295,18 +1287,16 @@ impl<'a> Progress<'a> {
 
     fn publish(&mut self) {
         self.scan.progress = share(&self.scan);
-        self.state_store.set_scan(self.scan.clone());
+        (self.publish)(self.scan.clone());
         self.last_publish = Instant::now();
     }
 
     /// Ends the scan with `outcome` and publishes the final state.
     fn finish(&mut self, outcome: ScanStatus, failure: Option<ScanFailure>) -> ScanStatus {
-        let library_version = self.version.get();
         self.change(|scan| {
-            scan.state = outcome;
+            scan.status = outcome;
             scan.current_directory = None;
-            scan.failure_code = failure;
-            scan.library_version = library_version;
+            scan.failure = failure;
         });
         let counts = format!(
             "discovered_count={} inspected_count={} indexed_count={} failed_count={}",
@@ -1315,12 +1305,12 @@ impl<'a> Progress<'a> {
             self.scan.indexed_count,
             self.scan.failed_count
         );
-        match self.scan.state {
+        match self.scan.status {
             ScanStatus::Completed => info!("library.scan.completed {counts}"),
             ScanStatus::Cancelled => info!("library.scan.cancelled {counts}"),
             ScanStatus::Failed => error!(
-                "library.scan.failed {counts} failure_code={:?}",
-                self.scan.failure_code
+                "library.scan.failed {counts} failure={:?}",
+                self.scan.failure
             ),
             ScanStatus::Idle | ScanStatus::Running => {}
         }

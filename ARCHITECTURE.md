@@ -54,7 +54,7 @@ Communication: one path for requests, four for pushes.
 
 - **Renderer → Backend (1 path):** a command. The Renderer calls a Host command through the area objects in `src/lib/native/commands.ts` (`player`, `library`, `lyrics`, `meter`, `appearance`, `app`), and the Host calls the Backend. The answer is the command's return value. State answers are `Versioned`.
 - **Backend → Renderer (4 paths):**
-  1. **State:** a topic's whole value with its version, on the `app_connect` channel. The Backend keeps every topic's value in its state store.
+  1. **State:** a topic's whole value with its version, on the `app_connect` channel. The Backend keeps every topic's value in its state store. The Library topic carries the Library state: its availability, its version, its directories, and its scan. The Library worker publishes it; `BackendApp` publishes the Unavailable state when the Library did not open, since there is no worker then.
   2. **Backend event:** a fact that happened once, such as a skipped track, on the `app_connect` channel.
   3. **Position:** the playing position, on the `app_connect` channel.
   4. **Measurement:** meter frames, as JSON, on the channel that `meter_start` takes. The Meter measures only while the Player runs.

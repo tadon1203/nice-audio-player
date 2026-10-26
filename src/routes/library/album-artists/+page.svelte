@@ -15,7 +15,7 @@
 
   const services = AppServices.current();
   const view = services.libraryViews.albumArtists;
-  const catalog = new LibraryCatalog(services.catalog, () => view.request);
+  const catalog = new LibraryCatalog(services.catalog, () => view.request, services.libraryState);
 </script>
 
 <LibraryWorkspace

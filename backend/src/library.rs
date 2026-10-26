@@ -27,6 +27,7 @@ use crate::ids::DirectoryId;
 use crate::state_store::StateStore;
 use database::{Database, DatabaseError, ReadConnection};
 use log::error;
+#[cfg(test)]
 use models::LibraryDirectory;
 use serde::Serialize;
 use std::{
@@ -125,14 +126,14 @@ sql_text_enum!(ArtworkStatus {
 
 /// Why the Library is unavailable. The only reason left is a database that cannot be opened: any
 /// other database is replaced at open.
-#[derive(Debug, Clone, Serialize, specta::Type, thiserror::Error)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type, thiserror::Error)]
 #[serde(rename_all = "camelCase")]
 pub enum LibraryUnavailableReason {
     #[error("the database could not be opened")]
     DatabaseOpenFailed,
 }
 
-#[derive(Debug, Clone, Serialize, specta::Type)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(tag = "status", rename_all = "camelCase")]
 pub enum LibraryStatus {
     Ready,
@@ -263,7 +264,8 @@ impl TrackLocation {
 pub(crate) struct Library {
     database: Database,
     sync: Arc<LibrarySync>,
-    /// See [`Library::version`]. Shared with the sync worker, which advances it on every album rebuild.
+    /// See [`Library::version`]. Shared with the sync worker and the scan thread, which advance it
+    /// after each commit that alters a list.
     version: Arc<LibraryVersion>,
 }
 
@@ -292,14 +294,11 @@ impl Library {
         self.version.get()
     }
 
-    fn bump_version(&self) {
-        self.version.bump();
-    }
-
     fn read(&self) -> Result<ReadConnection, StoreError> {
         Ok(self.database.read()?)
     }
 
+    #[cfg(test)]
     pub(crate) fn directories(&self) -> Result<Vec<LibraryDirectory>, CommandError> {
         let connection = self.read()?;
         Ok(directories::list(&connection)?)
@@ -307,14 +306,12 @@ impl Library {
 
     /// Adds a directory. A path that is not valid Unicode cannot be stored, so it is refused rather
     /// than changed.
-    pub(crate) fn add_directory(&self, path: PathBuf) -> Result<LibraryDirectory, CommandError> {
+    pub(crate) fn add_directory(&self, path: PathBuf) -> Result<(), CommandError> {
         let path = path
             .into_os_string()
             .into_string()
             .map_err(|_| CommandError::InvalidDirectory)?;
-        let directory = self.sync.add_directory(path)?;
-        self.bump_version();
-        Ok(directory)
+        self.sync.add_directory(path)
     }
 
     pub(crate) fn set_directory_enabled(
@@ -322,9 +319,7 @@ impl Library {
         id: DirectoryId,
         enabled: bool,
     ) -> Result<(), CommandError> {
-        self.sync.set_directory_enabled(id, enabled)?;
-        self.bump_version();
-        Ok(())
+        self.sync.set_directory_enabled(id, enabled)
     }
 
     pub(crate) fn remove_directory(&self, id: DirectoryId) -> Result<(), CommandError> {
@@ -332,7 +327,7 @@ impl Library {
     }
 
     /// Deletes every Missing track from the Library. Source files are never touched.
-    pub(crate) fn delete_missing_tracks(&self) -> Result<u32, CommandError> {
+    pub(crate) fn delete_missing_tracks(&self) -> Result<(), CommandError> {
         self.sync.delete_missing_tracks()
     }
 

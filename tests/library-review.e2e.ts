@@ -1,21 +1,39 @@
 import { type LibraryDirectory, type ScanStatus } from "#lib/native/bindings";
-import { pageOf, scanSnapshot, testDirectory } from "./fixtures/data";
+import { libraryState, pageOf, scanSnapshot, testDirectory } from "./fixtures/data";
 import type { Native } from "./fixtures/native-api";
 import { expect, test } from "./fixtures/test";
 
-let scansEnded = 0;
+/** The Library version and the scan the test has pushed last, which each push carries on. */
+let libraryVersion = 0;
+let lastScan: ScanStatus = "idle";
+
+test.beforeEach(() => {
+  libraryVersion = 0;
+  lastScan = "idle";
+});
 
 /**
- * The scan is in `state`: what the renderer reads now, and the event that announces it. Every
- * scan that ends has ended one more than the last and changed something, as a real one would.
+ * Pushes the Library state: the directories and the scan in `status`. A change that alters a list
+ * bumps the Library version, as the Backend does.
  */
-async function publishScan(native: Native, state: ScanStatus): Promise<void> {
-  if (state !== "running" && state !== "idle") scansEnded += 1;
-  const snapshot = {
-    ...scanSnapshot(state),
-    libraryVersion: scansEnded,
-  };
-  await native.publish("scan", snapshot);
+async function publishLibrary(
+  native: Native,
+  directories: LibraryDirectory[],
+  status: ScanStatus,
+  altersLists: boolean,
+): Promise<void> {
+  lastScan = status;
+  if (altersLists) libraryVersion += 1;
+  await native.publish("library", libraryState(scanSnapshot(status), directories, libraryVersion));
+}
+
+/** A scan in `status`. A scan that ends has changed something, so the lists may have changed. */
+async function publishScan(
+  native: Native,
+  status: ScanStatus,
+  directories: LibraryDirectory[],
+): Promise<void> {
+  await publishLibrary(native, directories, status, status !== "running" && status !== "idle");
 }
 import { workspaceViewport } from "./fixtures/locators";
 
@@ -199,27 +217,29 @@ test("manages directories and shows scan progress and terminal states", async ({
 }) => {
   const added: LibraryDirectory = { ...testDirectory, id: 2, path: "C:/More Music" };
   let directories = [testDirectory];
-  native.respond("libraryDirectories", () => directories);
-  native.respond("libraryAddDirectory", () => {
+  native.respond("libraryAddDirectory", async () => {
     directories = [...directories, added];
-    return added;
+    await publishLibrary(native, directories, lastScan, true);
+    return null;
   });
-  native.respond("librarySetDirectoryEnabled", ({ id, enabled }) => {
+  native.respond("librarySetDirectoryEnabled", async ({ id, enabled }) => {
     directories = directories.map((directory) =>
       directory.id === id ? { ...directory, enabled } : directory,
     );
+    await publishLibrary(native, directories, lastScan, true);
     return null;
   });
-  native.respond("libraryRemoveDirectory", ({ id }) => {
+  native.respond("libraryRemoveDirectory", async ({ id }) => {
     directories = directories.filter((directory) => directory.id !== id);
+    await publishLibrary(native, directories, lastScan, true);
     return null;
   });
   native.respond("libraryStartScan", async () => {
-    await publishScan(native, "running");
+    await publishScan(native, "running", directories);
     return null;
   });
   native.respond("libraryCancelScan", async () => {
-    await publishScan(native, "cancelled");
+    await publishScan(native, "cancelled", directories);
     return null;
   });
 
@@ -242,9 +262,9 @@ test("manages directories and shows scan progress and terminal states", async ({
   await page.getByRole("button", { name: "Cancel scan" }).click();
   await expect(page.getByRole("status")).toContainText("Scan cancelled");
 
-  await publishScan(native, "completed");
+  await publishScan(native, "completed", directories);
   await expect(page.getByText(/20 discovered, 20 inspected, 18 indexed, 0 failed/)).toBeVisible();
-  await publishScan(native, "failed");
+  await publishScan(native, "failed", directories);
   await expect(page.getByRole("alert")).toContainText("A library directory could not be read.");
 
   await page.getByRole("button", { name: "Remove C:/More Music from library" }).click();
@@ -263,11 +283,11 @@ test("invalidates mounted library queries after terminal scan events and directo
   library,
 }) => {
   let directories = [testDirectory];
-  native.respond("libraryDirectories", () => directories);
-  native.respond("librarySetDirectoryEnabled", ({ id, enabled }) => {
+  native.respond("librarySetDirectoryEnabled", async ({ id, enabled }) => {
     directories = directories.map((directory) =>
       directory.id === id ? { ...directory, enabled } : directory,
     );
+    await publishLibrary(native, directories, lastScan, true);
     return null;
   });
   native.respond("libraryListTracks", ({ request: { offset } }) =>
@@ -278,13 +298,13 @@ test("invalidates mounted library queries after terminal scan events and directo
   await expect.poll(getCount).toBeGreaterThan(0);
 
   let requestCount = getCount();
-  await publishScan(native, "completed");
+  await publishScan(native, "completed", directories);
   await expect.poll(getCount).toBeGreaterThan(requestCount);
   requestCount = getCount();
-  await publishScan(native, "cancelled");
+  await publishScan(native, "cancelled", directories);
   await expect.poll(getCount).toBeGreaterThan(requestCount);
   requestCount = getCount();
-  await publishScan(native, "failed");
+  await publishScan(native, "failed", directories);
   await expect.poll(getCount).toBeGreaterThan(requestCount);
 
   requestCount = getCount();

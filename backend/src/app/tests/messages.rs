@@ -7,7 +7,7 @@ use crate::settings::AppearancePatch;
 const TOPICS: [StateTopic; 5] = [
     StateTopic::Playback,
     StateTopic::Queue,
-    StateTopic::Scan,
+    StateTopic::Library,
     StateTopic::Waveform,
     StateTopic::Appearance,
 ];

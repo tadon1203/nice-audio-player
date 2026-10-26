@@ -1,7 +1,7 @@
 import {
   type Appearance as AppearanceValue,
   type BackendMessage,
-  type ScanState,
+  type LibraryState,
   type PlaybackPosition,
   type QueueState,
   type PlayerState,
@@ -22,7 +22,7 @@ export interface SessionTargets {
     acceptPosition(position: PlaybackPosition): void;
   };
   readonly appearance: { accept(incoming: Versioned<AppearanceValue>): void };
-  readonly scan: { accept(incoming: Versioned<ScanState>): void };
+  readonly library: { accept(incoming: Versioned<LibraryState>): void };
   readonly notices: { noteSkipped(title: string | null): void };
 }
 
@@ -108,8 +108,8 @@ export class NativeSession {
       case "queue":
         this.#targets.playback.acceptQueue({ version: message.version, value: message.value });
         return;
-      case "scan":
-        this.#targets.scan.accept({ version: message.version, value: message.value });
+      case "library":
+        this.#targets.library.accept({ version: message.version, value: message.value });
         return;
       case "waveform":
         this.#targets.playback.acceptWaveform({ version: message.version, value: message.value });

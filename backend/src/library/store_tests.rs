@@ -149,7 +149,7 @@ impl Fixture {
                 )
                 .unwrap();
         }
-        albums::rebuild(&transaction, &super::version::LibraryVersion::default()).unwrap();
+        albums::rebuild(&transaction).unwrap();
         transaction.commit().unwrap();
     }
 
@@ -392,7 +392,7 @@ fn the_version_changes_when_a_directory_is_disabled_and_when_missing_tracks_are_
     let after_disable = fixture.library.version();
     assert!(after_disable > before);
 
-    assert_eq!(fixture.library.delete_missing_tracks().unwrap(), 1);
+    fixture.library.delete_missing_tracks().unwrap();
     assert!(fixture.library.version() > after_disable);
     assert_eq!(fixture.tracks(None, TrackSortKey::Title, ASC).total, 0);
 }

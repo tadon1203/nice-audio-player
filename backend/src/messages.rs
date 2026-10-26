@@ -7,7 +7,7 @@ use std::sync::mpsc::{self, Receiver, Sender};
 
 use log::debug;
 
-use crate::library::models::ScanState;
+use crate::library::models::LibraryState;
 use crate::player::waveform::PlaybackWaveform;
 use crate::player::{PlaybackPosition, PlayerState, QueueState};
 use crate::settings::Appearance;
@@ -45,7 +45,7 @@ impl<T> Versioned<T> {
 pub enum StateTopic {
     Playback,
     Queue,
-    Scan,
+    Library,
     Waveform,
     Appearance,
 }
@@ -55,7 +55,7 @@ impl StateTopic {
     pub const ALL: [StateTopic; 5] = [
         StateTopic::Playback,
         StateTopic::Queue,
-        StateTopic::Scan,
+        StateTopic::Library,
         StateTopic::Waveform,
         StateTopic::Appearance,
     ];
@@ -90,7 +90,7 @@ pub struct StateMessage {
 pub enum StateValue {
     Playback(Box<PlayerState>),
     Queue(QueueState),
-    Scan(ScanState),
+    Library(LibraryState),
     Waveform(Option<PlaybackWaveform>),
     Appearance(Appearance),
 }

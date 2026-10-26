@@ -24,8 +24,6 @@ const CATALOG_REQUEST_INDEX = 3;
 export class LibraryQueryKeys {
   public static readonly data = ["library", "data"] as const;
   public static readonly catalogs = [...LibraryQueryKeys.data, "catalog"] as const;
-  public static readonly status = ["library", "status"] as const;
-  public static readonly directories = [...LibraryQueryKeys.data, "directories"] as const;
   /** The prefix of every Album Artist's album list, by ID, for reads across all of them. */
   public static readonly artistAlbumsPrefix = [
     ...LibraryQueryKeys.data,

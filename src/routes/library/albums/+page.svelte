@@ -16,7 +16,7 @@
   const services = AppServices.current();
   const { player: playback, actions, libraryViews } = services;
   const view = libraryViews.albums;
-  const catalog = new LibraryCatalog(services.catalog, () => view.request);
+  const catalog = new LibraryCatalog(services.catalog, () => view.request, services.libraryState);
 </script>
 
 <LibraryWorkspace

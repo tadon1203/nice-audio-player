@@ -6,7 +6,6 @@ import { CatalogRepository, type LibraryCatalogRequest } from "./catalog-reposit
 /** The list and index commands resolve to empty pages, as the Backend does for an empty Library. */
 const mocks = vi.hoisted(() => ({
   commands: {
-    libraryStatus: vi.fn(),
     libraryListAlbums: vi.fn(),
     libraryListArtists: vi.fn(),
     libraryListTracks: vi.fn(),
@@ -167,14 +166,6 @@ describe("CatalogRepository", () => {
     repository.refresh();
 
     expect(queryClient.getQueryData(key)).toEqual({ pages: [1], pageParams: [0] });
-  });
-
-  it("reads the library status through the status command", async () => {
-    commands.libraryStatus.mockResolvedValue({ status: "ready" });
-    const repository = new CatalogRepository(library, new QueryClient());
-
-    await expect(runQuery(repository.statusOptions())).resolves.toEqual({ status: "ready" });
-    expect(commands.libraryStatus).toHaveBeenCalledOnce();
   });
 });
 

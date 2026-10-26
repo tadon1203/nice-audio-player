@@ -12,11 +12,11 @@
   );
 </script>
 
-{#if scan.state === "failed"}
+{#if scan.status === "failed"}
   <p class="mt-4 text-sm text-destructive" role="alert">
-    {LibraryErrors.scanFailureMessage(scan.failureCode)}
+    {LibraryErrors.scanFailureMessage(scan.failure)}
   </p>
-{:else if scan.state === "completed"}
+{:else if scan.status === "completed"}
   <p class="mt-4 flex items-center gap-2 text-sm text-muted-foreground">
     <Check class="size-4" aria-hidden="true" />
     {summary}

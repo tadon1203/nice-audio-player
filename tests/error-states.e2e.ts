@@ -1,4 +1,4 @@
-import { testAlbum } from "./fixtures/data";
+import { idleScan, libraryState, testAlbum } from "./fixtures/data";
 import { expect, test } from "./fixtures/test";
 
 const persistenceFailure = { code: "persistenceFailed" } as const;
@@ -78,7 +78,10 @@ test("the properties sheet says a track the library does not hold is not found",
 });
 
 test("shows the structured library unavailable reason", async ({ page, native }) => {
-  native.respond("libraryStatus", { status: "unavailable", reason: "databaseOpenFailed" });
+  await native.publish("library", {
+    ...libraryState(idleScan, []),
+    status: { status: "unavailable", reason: "databaseOpenFailed" },
+  });
   await page.goto("/library/albums");
 
   await expect(page.getByRole("alert")).toContainText("The library storage is unavailable.");

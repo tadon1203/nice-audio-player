@@ -8,17 +8,17 @@
   /** The scan's state in words, and the button that starts or cancels it. */
   let { directoryCount }: { directoryCount: number } = $props();
 
-  const { actions, libraryDirectories, scan: scanWatcher } = AppServices.current();
+  const { actions, libraryDirectories, libraryState } = AppServices.current();
 
-  const scan = $derived(scanWatcher.snapshot);
+  const scan = $derived(libraryState.snapshot?.scan ?? null);
 </script>
 
 <div class="flex max-w-sm flex-col items-end gap-2">
   <div class="flex items-center gap-2">
     <span role="status" aria-live="polite" class="text-sm text-muted-foreground">
-      {ScanStatus.label(scan?.state)}
+      {ScanStatus.label(scan?.status)}
     </span>
-    {#if scan?.state === "running"}
+    {#if scan?.status === "running"}
       <Button
         type="button"
         variant="outline"

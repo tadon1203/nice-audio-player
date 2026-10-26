@@ -1,6 +1,6 @@
 import { QueryClient } from "@tanstack/svelte-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { type BackendMessage, type PlayerState, type ScanState } from "#lib/native/bindings";
+import { type BackendMessage, type LibraryState, type PlayerState } from "#lib/native/bindings";
 import { AppServices } from "./app-services.svelte";
 
 const mocks = vi.hoisted(() => ({ connect: vi.fn() }));
@@ -22,7 +22,7 @@ const base = {
 
 const stopped: PlayerState = { status: "stopped", base, item: null };
 
-const scan = { libraryVersion: 0 } as ScanState;
+const library = { status: { status: "ready" }, version: 0 } as LibraryState;
 
 const initial: BackendMessage[] = [
   { kind: "state", version: 1, topic: "playback", value: stopped },
@@ -39,7 +39,7 @@ const initial: BackendMessage[] = [
       shuffleEnabled: false,
     },
   },
-  { kind: "state", version: 1, topic: "scan", value: scan },
+  { kind: "state", version: 1, topic: "library", value: library },
   { kind: "state", version: 1, topic: "waveform", value: null },
   {
     kind: "state",

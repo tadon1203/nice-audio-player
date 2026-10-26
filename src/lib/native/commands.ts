@@ -55,9 +55,7 @@ export const player = {
 
 /** The Library commands: the directories, the scan, the catalog lists and their indexes. */
 export const library = {
-  status: areaCommand("library", commands.libraryStatus),
   reset: areaCommand("library", commands.libraryReset),
-  listDirectories: areaCommand("library", commands.libraryDirectories),
   addDirectory: areaCommand("library", commands.libraryAddDirectory),
   setDirectoryEnabled: areaCommand("library", commands.librarySetDirectoryEnabled),
   removeDirectory: areaCommand("library", commands.libraryRemoveDirectory),

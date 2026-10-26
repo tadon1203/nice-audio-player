@@ -2,20 +2,14 @@ use std::path::PathBuf;
 
 use backend::app::{
     AlbumDetails, AlbumRow, AlbumSortKey, AlbumTrackRow, ArtistAlbumSortKey, ArtistRow,
-    ArtistSortKey, BackendApp, LetterIndexEntry, LibraryDirectory, LibraryStatus, ListRequest,
-    Page, TrackProperties, TrackRow, TrackSortKey,
+    ArtistSortKey, BackendApp, LetterIndexEntry, ListRequest, Page, TrackProperties, TrackRow,
+    TrackSortKey,
 };
 use backend::errors::CommandError;
 use backend::ids::{AlbumId, ArtistId, DirectoryId, TrackId};
 
 use super::blocking;
 use crate::{AppState, os::reveal_in_file_manager};
-
-#[tauri::command]
-#[specta::specta]
-pub(crate) fn library_status(state: tauri::State<'_, AppState>) -> LibraryStatus {
-    state.backend.library_status()
-}
 
 /// Deletes the library database and its artwork, then restarts the app, which creates an empty
 /// database and rescans the directories.
@@ -33,18 +27,10 @@ pub(crate) async fn library_reset(
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) async fn library_directories(
-    state: tauri::State<'_, AppState>,
-) -> Result<Vec<LibraryDirectory>, CommandError> {
-    blocking(&state, backend::app::BackendApp::list_directories).await
-}
-
-#[tauri::command]
-#[specta::specta]
 pub(crate) async fn library_add_directory(
     path: String,
     state: tauri::State<'_, AppState>,
-) -> Result<LibraryDirectory, CommandError> {
+) -> Result<(), CommandError> {
     blocking(&state, move |backend| {
         backend.add_directory(PathBuf::from(path))
     })
@@ -73,13 +59,12 @@ pub(crate) async fn library_remove_directory(
     blocking(&state, move |backend| backend.remove_directory(id)).await
 }
 
-/// Deletes the Missing tracks from the Library and returns how many there were. Never touches a
-/// source file.
+/// Deletes the Missing tracks from the Library. Never touches a source file.
 #[tauri::command]
 #[specta::specta]
 pub(crate) async fn library_delete_missing_tracks(
     state: tauri::State<'_, AppState>,
-) -> Result<u32, CommandError> {
+) -> Result<(), CommandError> {
     blocking(&state, BackendApp::delete_missing_tracks).await
 }
 

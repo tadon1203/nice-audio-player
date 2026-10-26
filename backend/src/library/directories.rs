@@ -1,9 +1,7 @@
 //! The registered music directories: listing them, and the writes that change them. The write side
 //! (the sync worker) is the only caller of `add`, `set_enabled`, `remove` and `delete_missing`.
 
-use super::{
-    StoreError, albums, database::Database, models::LibraryDirectory, version::LibraryVersion,
-};
+use super::{StoreError, albums, database::Database, models::LibraryDirectory};
 use crate::errors::CommandError;
 use crate::ids::{DirectoryId, directory_id_column};
 use rusqlite::{Connection, params};
@@ -102,11 +100,7 @@ pub(crate) fn set_enabled(
 }
 
 /// Removes the directory with its files, tracks and metadata (they cascade), then rebuilds the albums.
-pub(crate) fn remove(
-    database: &Database,
-    id: DirectoryId,
-    version: &LibraryVersion,
-) -> Result<(), CommandError> {
+pub(crate) fn remove(database: &Database, id: DirectoryId) -> Result<(), CommandError> {
     let mut connection = database.write().map_err(StoreError::from)?;
     let transaction = connection.transaction().map_err(StoreError::from)?;
     let removed = transaction
@@ -115,27 +109,16 @@ pub(crate) fn remove(
     if removed == 0 {
         return Err(CommandError::DirectoryMissing);
     }
-    albums::rebuild(&transaction, version).map_err(StoreError::from)?;
+    albums::rebuild(&transaction).map_err(StoreError::from)?;
     transaction.commit().map_err(StoreError::from)?;
     Ok(())
 }
 
 /// Forgets the tracks whose file is gone, for good, then rebuilds the albums. Never touches a source
-/// file. Returns how many tracks went.
-pub(crate) fn delete_missing(
-    database: &Database,
-    version: &LibraryVersion,
-) -> Result<u32, CommandError> {
+/// file.
+pub(crate) fn delete_missing(database: &Database) -> Result<(), CommandError> {
     let mut connection = database.write().map_err(StoreError::from)?;
     let transaction = connection.transaction().map_err(StoreError::from)?;
-    let tracks: i64 = transaction
-        .query_row(
-            "SELECT COUNT(*) FROM library_files f JOIN tracks t ON t.file_id = f.id
-             WHERE f.availability = 'missing'",
-            [],
-            |row| row.get(0),
-        )
-        .map_err(StoreError::from)?;
     // Tracks and their metadata cascade.
     transaction
         .execute(
@@ -143,7 +126,7 @@ pub(crate) fn delete_missing(
             [],
         )
         .map_err(StoreError::from)?;
-    albums::rebuild(&transaction, version).map_err(StoreError::from)?;
+    albums::rebuild(&transaction).map_err(StoreError::from)?;
     transaction.commit().map_err(StoreError::from)?;
-    u32::try_from(tracks).map_err(|_| CommandError::PersistenceFailed)
+    Ok(())
 }

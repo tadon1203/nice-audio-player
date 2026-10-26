@@ -9,6 +9,7 @@ import {
   type AlbumTrackRow,
   type Page,
   type LibraryDirectory,
+  type LibraryState,
   type ScanState,
   type ScanStatus,
   type TrackRow,
@@ -151,7 +152,6 @@ export function testLibrary(
 /** Pages exactly as given: a search or sort the test cares about replaces the command. */
 export function libraryResponses(library: LibraryData = testLibrary()): Record<string, unknown> {
   return {
-    libraryDirectories: library.directories,
     libraryListTracks: ({ request }: { request: { offset: number } }): Page<TrackRow> =>
       pageOf(library.tracks, request.offset),
     libraryListAlbums: ({ request }: { request: { offset: number } }): Page<AlbumRow> =>
@@ -229,7 +229,7 @@ export const outputDevices = [
 ];
 
 export const idleScan: ScanState = {
-  state: "idle",
+  status: "idle",
   currentDirectory: null,
   expectedCount: 0,
   progress: null,
@@ -237,25 +237,32 @@ export const idleScan: ScanState = {
   inspectedCount: 0,
   indexedCount: 0,
   failedCount: 0,
-  failureCode: null,
-  libraryVersion: 0,
+  failure: null,
 };
 
-/** A scan snapshot in a state, with the counts a scan in that state would show. */
-export function scanSnapshot(state: ScanStatus): ScanState {
-  if (state === "idle") return idleScan;
+/** A scan in a status, with the counts a scan in that status would show. */
+export function scanSnapshot(status: ScanStatus): ScanState {
+  if (status === "idle") return idleScan;
   return {
-    state,
-    currentDirectory: state === "running" ? testDirectory : null,
+    status,
+    currentDirectory: status === "running" ? testDirectory : null,
     expectedCount: 40,
     progress: 0.5,
     discoveredCount: 20,
-    inspectedCount: state === "running" ? 8 : 20,
-    indexedCount: state === "running" ? 6 : 18,
-    failedCount: state === "failed" ? 2 : 0,
-    failureCode: state === "failed" ? "directoryTraversalFailed" : null,
-    libraryVersion: state === "running" ? 0 : 1,
+    inspectedCount: status === "running" ? 8 : 20,
+    indexedCount: status === "running" ? 6 : 18,
+    failedCount: status === "failed" ? 2 : 0,
+    failure: status === "failed" ? "directoryTraversalFailed" : null,
   };
+}
+
+/** The Library state the Backend pushes: a ready Library with these directories and this scan. */
+export function libraryState(
+  scan: ScanState,
+  directories: LibraryDirectory[] = [testDirectory],
+  version = 0,
+): LibraryState {
+  return { status: { status: "ready" }, version, directories, scan };
 }
 
 export const defaultSettings: Appearance = { artworkBackdrop: true, calmMotion: false };
@@ -309,7 +316,7 @@ export function idleTopicState(): TopicState {
   return {
     playback: { version: 1, value: stoppedPlayback },
     queue: { version: 1, value: emptyQueue },
-    scan: { version: 0, value: idleScan },
+    library: { version: 0, value: libraryState(idleScan) },
     waveform: { version: 0, value: null },
     appearance: { version: 0, value: defaultSettings },
   };
@@ -325,7 +332,6 @@ export function idleResponses(): {
     items: never[];
   };
   playerListOutputDevices: { id: string; name: string }[];
-  libraryStatus: { status: "ready" };
   lyricsTrack: () => { status: "notFound" };
   libraryArtworkAccent: null;
 } {
@@ -343,7 +349,6 @@ export function idleResponses(): {
       items: [],
     }),
     playerListOutputDevices: outputDevices,
-    libraryStatus: { status: "ready" as const },
     lyricsTrack: (): { status: "notFound" } => ({
       status: "notFound" as const,
     }),

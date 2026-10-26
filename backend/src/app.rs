@@ -26,6 +26,7 @@ pub use crate::settings::{Appearance, AppearancePatch};
 
 use crate::errors::CommandError;
 use crate::ids::{AlbumId, ArtistId, DirectoryId, QueueItemId, TrackId};
+use crate::library::models::LibraryState;
 use crate::library::{
     Library, LibraryUnavailableReason,
     artwork::{self},
@@ -77,6 +78,12 @@ impl BackendApp {
             Arc::clone(&state_store),
         ));
         let library = Library::open(&data_dir, Arc::clone(&state_store));
+        // A Library that did not open has no worker to publish its state, so the state is published here.
+        if let Err(reason) = &library {
+            state_store.set_library(LibraryState::empty(LibraryStatus::Unavailable {
+                reason: reason.clone(),
+            }));
+        }
         let remember = Arc::clone(&settings);
         let meter = Meter::new();
         let player = Player::start(
@@ -138,15 +145,6 @@ impl BackendApp {
 
     // ---- library ----
 
-    pub fn library_status(&self) -> LibraryStatus {
-        match &self.library {
-            Ok(_) => LibraryStatus::Ready,
-            Err(reason) => LibraryStatus::Unavailable {
-                reason: reason.clone(),
-            },
-        }
-    }
-
     /// Stops the Library, then deletes its database and artwork and creates an empty database. The
     /// caller restarts the app, and the next start rescans the directories.
     pub fn reset_library(&self) -> Result<(), CommandError> {
@@ -156,12 +154,8 @@ impl BackendApp {
         crate::library::database::reset(&self.data_dir).map_err(|_| CommandError::PersistenceFailed)
     }
 
-    pub fn list_directories(&self) -> Result<Vec<LibraryDirectory>, CommandError> {
-        self.library()?.directories()
-    }
-
     /// Adds a directory. A path that is not valid Unicode is refused by the Library, not changed.
-    pub fn add_directory(&self, path: PathBuf) -> Result<LibraryDirectory, CommandError> {
+    pub fn add_directory(&self, path: PathBuf) -> Result<(), CommandError> {
         self.library()?.add_directory(path)
     }
 
@@ -177,9 +171,8 @@ impl BackendApp {
         self.library()?.remove_directory(id)
     }
 
-    /// Deletes the Missing tracks from the Library and returns how many there were. Never touches a
-    /// source file.
-    pub fn delete_missing_tracks(&self) -> Result<u32, CommandError> {
+    /// Deletes the Missing tracks from the Library. Never touches a source file.
+    pub fn delete_missing_tracks(&self) -> Result<(), CommandError> {
         self.library()?.delete_missing_tracks()
     }
 

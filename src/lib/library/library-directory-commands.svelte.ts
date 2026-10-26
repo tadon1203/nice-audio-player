@@ -1,45 +1,35 @@
 import type { library } from "#lib/native/commands";
-import { type LibraryDirectory } from "#lib/native/bindings";
 import { selectDirectory } from "#lib/native/desktop";
-import type { CatalogRepository } from "./catalog-repository";
 
 /**
- * The Library's directory and scan commands. Each awaits the command, then refreshes the catalog where
- * the change alters what the catalog lists.
+ * The Library's directory and scan commands. Each awaits the command. The Library state that
+ * follows it arrives by push, so nothing is refreshed here.
  */
 export class LibraryDirectoryCommands {
   readonly #library: typeof library;
-  readonly #catalog: CatalogRepository;
 
-  public constructor(libraryCommands: typeof library, catalog: CatalogRepository) {
+  public constructor(libraryCommands: typeof library) {
     this.#library = libraryCommands;
-    this.#catalog = catalog;
   }
 
-  /** Resolves null when the user closes the directory dialog. */
-  public async add(): Promise<LibraryDirectory | null> {
+  /** Does nothing when the user closes the directory dialog. */
+  public async add(): Promise<void> {
     const path = await selectDirectory();
-    if (path === null) return null;
-    const directory = await this.#library.addDirectory(path);
-    this.#catalog.refresh();
-    return directory;
+    if (path === null) return;
+    await this.#library.addDirectory(path);
   }
 
   public async setEnabled(id: number, enabled: boolean): Promise<void> {
     await this.#library.setDirectoryEnabled(id, enabled);
-    this.#catalog.refresh();
   }
 
   public async remove(id: number): Promise<void> {
     await this.#library.removeDirectory(id);
-    this.#catalog.refresh();
   }
 
-  /** Removes the Missing tracks from the Library (never a source file); resolves to how many. */
-  public async deleteMissing(): Promise<number> {
-    const count = await this.#library.deleteMissingTracks();
-    this.#catalog.refresh();
-    return count;
+  /** Removes the Missing tracks from the Library (never a source file). */
+  public async deleteMissing(): Promise<void> {
+    await this.#library.deleteMissingTracks();
   }
 
   public async startScan(): Promise<void> {

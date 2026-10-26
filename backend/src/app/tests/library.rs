@@ -5,7 +5,8 @@ use crate::ids::{AlbumId, ArtistId, TrackId};
 use crate::player::fake_output::FakeOutput;
 
 use crate::library::LibraryStatus;
-use crate::library::models::{ListRequest, SortDirection, TrackSortKey};
+use crate::library::models::{LibraryState, ListRequest, SortDirection, TrackSortKey};
+use crate::messages::{BackendMessage, StateTopic, StateValue};
 
 use crate::test_support::{NotificationLog, TestDirectory};
 
@@ -82,14 +83,9 @@ fn without_a_library_the_library_commands_say_it_is_unavailable() {
     let fixture = fixture_without_library();
     let backend = &fixture.backend;
 
-    assert!(matches!(
-        backend.library_status(),
-        LibraryStatus::Unavailable { .. }
-    ));
-    assert!(matches!(
-        backend.list_directories(),
-        Err(CommandError::LibraryUnavailable)
-    ));
+    let state = library_state(backend);
+    assert!(matches!(state.status, LibraryStatus::Unavailable { .. }));
+    assert_eq!(state.directories, []);
     assert!(matches!(
         backend.start_scan(),
         Err(CommandError::LibraryUnavailable)
@@ -127,8 +123,20 @@ fn with_a_library_the_library_commands_answer() {
     let fixture = fixture();
     let backend = &fixture.backend;
 
-    assert!(matches!(backend.library_status(), LibraryStatus::Ready));
-    assert_eq!(backend.list_directories().expect("directories"), []);
+    let state = library_state(backend);
+    assert!(matches!(state.status, LibraryStatus::Ready));
+    assert_eq!(state.directories, []);
+}
+
+/// The Library state the Backend pushes on the Library topic.
+fn library_state(backend: &BackendApp) -> LibraryState {
+    match backend.message(StateTopic::Library) {
+        BackendMessage::State(message) => match message.state {
+            StateValue::Library(state) => state,
+            other => panic!("the Library topic carries {other:?}"),
+        },
+        other => panic!("the Library topic is not a state message: {other:?}"),
+    }
 }
 
 #[test]

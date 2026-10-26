@@ -1,12 +1,9 @@
 <script lang="ts">
   import FolderPlus from "@lucide/svelte/icons/folder-plus";
   import { app } from "#lib/native/commands";
-  import { errorMessage } from "#lib/native/messages";
-  import { QueryResult } from "#lib/library/query-result.svelte";
   import { type LibraryDirectory } from "#lib/native/bindings";
   import { AppServices } from "#lib/app/app-services.svelte";
   import EmptyStatus from "#lib/ui/empty-status.svelte";
-  import ErrorAlert from "#lib/ui/error-alert.svelte";
   import LoadingStatus from "#lib/ui/loading-status.svelte";
   import SectionTitle from "#lib/ui/section-title.svelte";
   import { Button } from "#lib/ui/shadcn/button/index.js";
@@ -28,24 +25,17 @@
   import ScanResult from "./scan-result.svelte";
   import ScanRunning from "./scan-running.svelte";
 
-  const {
-    actions,
-    catalog,
-    libraryDirectories,
-    notices,
-    scan: scanWatcher,
-  } = AppServices.current();
-  const directoriesQuery = new QueryResult(() => catalog.directoriesOptions());
+  const { actions, libraryDirectories, notices, libraryState } = AppServices.current();
   const scanTime = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
 
   let removeTarget = $state<LibraryDirectory | null>(null);
   let resetOpen = $state(false);
   let deleteMissingOpen = $state(false);
 
-  const directories = $derived(directoriesQuery.data ?? []);
+  const directories = $derived(libraryState.snapshot?.directories ?? []);
   const missingTotal = $derived(directories.reduce((n, r) => n + r.missingCount, 0));
-  const scan = $derived(scanWatcher.snapshot);
-  const scanRunning = $derived(scan?.state === "running");
+  const scan = $derived(libraryState.snapshot?.scan ?? null);
+  const scanRunning = $derived(scan?.status === "running");
   /** A Library command is in flight: its controls wait for it, so one request is sent at a time. */
   const busy = $derived(actions.isRunning("library"));
   /** The last failed Library command, shown once for the whole section. */
@@ -74,13 +64,6 @@
     <p class="mt-4 text-right text-sm text-destructive" role="alert">{failure}</p>
   {/if}
 
-  {#if directoriesQuery.isError}
-    <ErrorAlert
-      message={errorMessage(directoriesQuery.error)}
-      onRetry={() => actions.run(() => directoriesQuery.refetch(), "library")}
-    />
-  {/if}
-
   <div class="mt-6 flex flex-wrap items-start justify-between gap-4">
     <div>
       <h3 id="library-directories-heading" class="text-base font-medium text-foreground">
@@ -93,14 +76,12 @@
     <ScanControls directoryCount={directories.length} />
   </div>
 
-  {#if scan?.state === "running"}
+  {#if scan?.status === "running"}
     <ScanRunning {scan} />
   {/if}
 
-  {#if directoriesQuery.isPending && directories.length === 0}
+  {#if libraryState.snapshot === null}
     <LoadingStatus>Loading library directories…</LoadingStatus>
-  {:else if directoriesQuery.isError}
-    <!-- The error alert above owns this region. -->
   {:else if directories.length === 0}
     <EmptyStatus
       >No library directories yet. Add a directory to start building your library.</EmptyStatus

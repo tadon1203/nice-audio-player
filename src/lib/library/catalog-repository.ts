@@ -25,7 +25,6 @@ import type {
   InitialDataFunction,
   QueryKeyWithDataTag,
 } from "@tanstack/svelte-query";
-import { type LibraryDirectory, type LibraryStatus } from "#lib/native/bindings";
 
 /** How many rows one page asks for. */
 export const PAGE_SIZE = 100;
@@ -78,34 +77,6 @@ export class CatalogRepository {
   public constructor(libraryCommands: typeof library, queryClient: QueryClient) {
     this.#library = libraryCommands;
     this.#queryClient = queryClient;
-  }
-
-  public statusOptions(): CreateQueryOptions<
-    LibraryStatus,
-    Error,
-    LibraryStatus,
-    readonly ["library", "status"]
-  > & {
-    initialData?: LibraryStatus | InitialDataFunction<LibraryStatus> | undefined;
-  } & QueryKeyWithDataTag<readonly ["library", "status"], LibraryStatus, Error> {
-    return queryOptions({
-      queryKey: LibraryQueryKeys.status,
-      queryFn: () => this.#library.status(),
-    });
-  }
-
-  public directoriesOptions(): CreateQueryOptions<
-    LibraryDirectory[],
-    Error,
-    LibraryDirectory[],
-    readonly ["library", "data", "directories"]
-  > & {
-    initialData?: LibraryDirectory[] | InitialDataFunction<LibraryDirectory[]> | undefined;
-  } & QueryKeyWithDataTag<readonly ["library", "data", "directories"], LibraryDirectory[], Error> {
-    return queryOptions({
-      queryKey: LibraryQueryKeys.directories,
-      queryFn: () => this.#library.listDirectories(),
-    });
   }
 
   /**

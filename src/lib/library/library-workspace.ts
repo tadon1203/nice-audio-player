@@ -16,8 +16,6 @@ export interface LibraryScroll {
 
 /** What the workspace reads from `LibraryCatalog`. */
 export interface WorkspaceCatalog<Item> {
-  statusError: unknown;
-  refetchStatus: () => Promise<unknown>;
   statusMessage: string | null;
   viewState: LibraryViewState;
   updating: boolean;
