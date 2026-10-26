@@ -3,12 +3,12 @@
     reason = "Tauri passes State and AppHandle by value"
 )]
 
+pub(crate) mod app;
 pub(crate) mod appearance;
 pub(crate) mod library;
 pub(crate) mod lyrics;
 pub(crate) mod meter;
-pub(crate) mod playback;
-pub(crate) mod session;
+pub(crate) mod player;
 
 use std::sync::Arc;
 

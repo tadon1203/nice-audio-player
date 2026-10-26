@@ -4,7 +4,7 @@
   import { errorMessage } from "#lib/native/messages";
   import { QueryResult } from "#lib/library/query-result.svelte";
   import { type LibraryDirectory } from "#lib/native/bindings";
-  import { AppServices } from "#lib/shell/app-services.svelte";
+  import { AppServices } from "#lib/app/app-services.svelte";
   import EmptyStatus from "#lib/ui/empty-status.svelte";
   import ErrorAlert from "#lib/ui/error-alert.svelte";
   import LoadingStatus from "#lib/ui/loading-status.svelte";

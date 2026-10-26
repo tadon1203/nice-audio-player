@@ -1,8 +1,8 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
   import type { TransitionConfig } from "svelte/transition";
-  import { AppServices } from "#lib/shell/app-services.svelte";
-  import { NowPlayingMotion } from "#lib/shell/now-playing-motion";
+  import { AppServices } from "#lib/app/app-services.svelte";
+  import { NowPlayingMotion } from "#lib/app/now-playing-motion";
   import { SvelteMotion } from "#lib/ui/motion/svelte-motion";
   import { NowPlayingTransitions } from "./now-playing-transitions";
 

@@ -1,17 +1,17 @@
 import { AudioFormatText } from "#lib/utils/audio-format-text";
-import { AppServices } from "#lib/shell/app-services.svelte";
+import { AppServices } from "#lib/app/app-services.svelte";
 import {
   PlaybackTechnicalStatus,
   type PlaybackSignalPath,
-} from "#lib/playback/playback-technical-status";
-import { PlaybackSnapshots } from "#lib/playback/playback-snapshots";
+} from "#lib/player/playback-technical-status";
+import { PlaybackSnapshots } from "#lib/player/playback-snapshots";
 
 /**
  * The signal path of the loaded track, or null when nothing is loaded. Construct it during
  * component initialization; read `current` where it is shown.
  */
 export class SignalPath {
-  readonly #playback = AppServices.current().playback;
+  readonly #playback = AppServices.current().player;
   readonly #session = $derived(PlaybackSnapshots.session(this.#playback.snapshot));
 
   readonly #current = $derived.by<PlaybackSignalPath | null>(() => {

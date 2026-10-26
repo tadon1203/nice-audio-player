@@ -3,8 +3,8 @@
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import { goto } from "$app/navigation";
   import { Tracks } from "#lib/library/tracks";
-  import { PlaybackFailure } from "#lib/playback/playback-failure";
-  import { AppServices } from "#lib/shell/app-services.svelte";
+  import { PlaybackFailure } from "#lib/player/playback-failure";
+  import { AppServices } from "#lib/app/app-services.svelte";
   import { errorMessage } from "#lib/native/messages";
   import Artwork from "#lib/ui/artwork.svelte";
   import ContextMenuContent from "#lib/ui/context-menu/context-menu-content.svelte";
@@ -18,7 +18,14 @@
   /** Sliding distance for the artwork, title and artist. One value so they travel together. */
   const SLIDE_PX = 16;
 
-  const { playback, session, motion: budget, notices, actions, nowPlaying } = AppServices.current();
+  const {
+    player: playback,
+    session,
+    motion: budget,
+    notices,
+    actions,
+    nowPlaying,
+  } = AppServices.current();
   // A failed startup shows its reason here, since there is no playback state to report on.
   const notice = $derived(
     session.connection === "failed"

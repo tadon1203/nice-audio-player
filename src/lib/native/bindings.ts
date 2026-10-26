@@ -13,23 +13,23 @@ export const commands = {
 	 *  Replaces the queue with `context` and plays from `start_track_id`, or from the context's
 	 *  first track when it is `None`.
 	 */
-	playerPlay: (context: PlaybackContext, startTrackId: number | null) => __TAURI_INVOKE<Versioned<PlaybackState>>("player_play", { context, startTrackId }),
-	playerPause: () => __TAURI_INVOKE<Versioned<PlaybackState>>("player_pause"),
-	playerResume: () => __TAURI_INVOKE<Versioned<PlaybackState>>("player_resume"),
-	playerPrevious: () => __TAURI_INVOKE<Versioned<PlaybackState>>("player_previous"),
-	playerNext: () => __TAURI_INVOKE<Versioned<PlaybackState>>("player_next"),
-	playerSeek: (positionMs: number) => __TAURI_INVOKE<Versioned<PlaybackState>>("player_seek", { positionMs }),
-	playerSetVolume: (volume: number) => __TAURI_INVOKE<Versioned<PlaybackState>>("player_set_volume", { volume }),
-	playerSetMuted: (muted: boolean) => __TAURI_INVOKE<Versioned<PlaybackState>>("player_set_muted", { muted }),
+	playerPlay: (context: PlaybackContext, startTrackId: number | null) => __TAURI_INVOKE<Versioned<PlayerState>>("player_play", { context, startTrackId }),
+	playerPause: () => __TAURI_INVOKE<Versioned<PlayerState>>("player_pause"),
+	playerResume: () => __TAURI_INVOKE<Versioned<PlayerState>>("player_resume"),
+	playerPrevious: () => __TAURI_INVOKE<Versioned<PlayerState>>("player_previous"),
+	playerNext: () => __TAURI_INVOKE<Versioned<PlayerState>>("player_next"),
+	playerSeek: (positionMs: number) => __TAURI_INVOKE<Versioned<PlayerState>>("player_seek", { positionMs }),
+	playerSetVolume: (volume: number) => __TAURI_INVOKE<Versioned<PlayerState>>("player_set_volume", { volume }),
+	playerSetMuted: (muted: boolean) => __TAURI_INVOKE<Versioned<PlayerState>>("player_set_muted", { muted }),
 	playerListOutputDevices: () => __TAURI_INVOKE<AudioOutputDevice[]>("player_list_output_devices"),
 	playerSetRepeatMode: (mode: RepeatMode) => __TAURI_INVOKE<Versioned<QueueState>>("player_set_repeat_mode", { mode }),
 	playerSetShuffle: (enabled: boolean) => __TAURI_INVOKE<Versioned<QueueState>>("player_set_shuffle", { enabled }),
 	/**  Switches the output device; a loaded track restarts on it at the same position. */
-	playerSetOutputSelection: (selection: AudioOutputSelection) => __TAURI_INVOKE<Versioned<PlaybackState>>("player_set_output_selection", { selection }),
+	playerSetOutputSelection: (selection: AudioOutputSelection) => __TAURI_INVOKE<Versioned<PlayerState>>("player_set_output_selection", { selection }),
 	playerRemoveQueueItem: (id: QueueItemId) => __TAURI_INVOKE<Versioned<QueueState>>("player_remove_queue_item", { id }),
 	playerMoveQueueItem: (id: QueueItemId, to: number) => __TAURI_INVOKE<Versioned<QueueState>>("player_move_queue_item", { id, to }),
 	/**  Makes an upcoming queue item current and plays it. */
-	playerPlayQueueItem: (id: QueueItemId) => __TAURI_INVOKE<Versioned<PlaybackState>>("player_play_queue_item", { id }),
+	playerPlayQueueItem: (id: QueueItemId) => __TAURI_INVOKE<Versioned<PlayerState>>("player_play_queue_item", { id }),
 	/**
 	 *  Adds a library track to the queue: right after the current one (`next`) or at the end.
 	 *  With nothing queued it starts playing.
@@ -37,7 +37,7 @@ export const commands = {
 	playerEnqueueTrack: (trackId: TrackId, next: boolean) => __TAURI_INVOKE<Versioned<QueueState>>("player_enqueue_track", { trackId, next }),
 	playerClearQueue: () => __TAURI_INVOKE<Versioned<QueueState>>("player_clear_queue"),
 	/**  Puts back the queue the last replacement or Clear upcoming took away. */
-	playerRestorePreviousQueue: () => __TAURI_INVOKE<Versioned<PlaybackState>>("player_restore_previous_queue"),
+	playerRestorePreviousQueue: () => __TAURI_INVOKE<Versioned<PlayerState>>("player_restore_previous_queue"),
 	libraryStatus: () => __TAURI_INVOKE<LibraryStatus>("library_status"),
 	/**
 	 *  Deletes the library database and its artwork, then restarts the app, which creates an empty
@@ -342,15 +342,6 @@ export type PlaybackContext =
 /**  The tracks list as currently filtered and sorted. */
 { kind: "tracks"; search: string | null; sort: TrackSortKey; direction: SortDirection };
 
-/**  Fields every transport state carries. */
-export type PlaybackControls = {
-	volume: number,
-	muted: boolean,
-	outputSelection: AudioOutputSelection,
-	canGoPrevious: boolean,
-	canGoNext: boolean,
-};
-
 export type PlaybackFailureCode = "noOutputDevice" | "outputDeviceUnavailable" | "unsupportedOutputConfiguration" | "outputStreamBuildFailed" | "outputStreamStartFailed" | "outputStreamPauseFailed" | "outputStreamResumeFailed" | "outputStreamRuntimeFailed" | "completionTimingFailed" | "decodeFailed" | "sampleRateConversionFailed";
 
 /**
@@ -369,20 +360,29 @@ export type PlaybackPosition = {
 	seekCount: number,
 };
 
-export type PlaybackState = 
-/**  `item` is the last track that played, kept so the UI can still say what it was. */
-{ status: "stopped"; base: PlaybackControls; item: QueueItem | null } | { status: "playing"; base: PlaybackControls; session: CurrentPlayback } | { status: "paused"; base: PlaybackControls; session: CurrentPlayback } | { status: "failed"; base: PlaybackControls; item: QueueItem | null; error: PlaybackFailureCode; 
-/**
- *  The player is moving on to the next item by itself: a skip the listener is told
- *  about, not a stop that waits for Retry.
- */
-skipping: boolean };
-
 export type PlaybackWaveform = {
 	/**  The playback the waveform belongs to, so a late answer cannot be drawn for another track. */
 	playbackId: PlaybackId,
 	rms: number[],
 };
+
+/**  Fields every transport state carries. */
+export type PlayerControls = {
+	volume: number,
+	muted: boolean,
+	outputSelection: AudioOutputSelection,
+	canGoPrevious: boolean,
+	canGoNext: boolean,
+};
+
+export type PlayerState = 
+/**  `item` is the last track that played, kept so the UI can still say what it was. */
+{ status: "stopped"; base: PlayerControls; item: QueueItem | null } | { status: "playing"; base: PlayerControls; session: CurrentPlayback } | { status: "paused"; base: PlayerControls; session: CurrentPlayback } | { status: "failed"; base: PlayerControls; item: QueueItem | null; error: PlaybackFailureCode; 
+/**
+ *  The player is moving on to the next item by itself: a skip the listener is told
+ *  about, not a stop that waits for Retry.
+ */
+skipping: boolean };
 
 /**
  *  One queue entry as the renderer shows it: the queue's id for the entry and the track's
@@ -468,7 +468,7 @@ export type StateMessage = {
 } & StateValue;
 
 /**  The whole value of one state topic. */
-export type StateValue = { topic: "playback"; value: PlaybackState } | { topic: "queue"; value: QueueState } | { topic: "scan"; value: ScanState } | { topic: "waveform"; value: PlaybackWaveform | null } | { topic: "appearance"; value: Appearance };
+export type StateValue = { topic: "playback"; value: PlayerState } | { topic: "queue"; value: QueueState } | { topic: "scan"; value: ScanState } | { topic: "waveform"; value: PlaybackWaveform | null } | { topic: "appearance"; value: Appearance };
 
 /**
  *  The album a track is filed under, by ID (see `ids.rs`) and as titled, with its Album Artist. A

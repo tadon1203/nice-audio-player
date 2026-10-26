@@ -1,6 +1,6 @@
 import { goto } from "$app/navigation";
 import { type TrackId } from "#lib/native/bindings";
-import type { AppServices } from "#lib/shell/app-services.svelte";
+import type { AppServices } from "#lib/app/app-services.svelte";
 import type { TrackTableRow } from "./track-columns";
 import { TrackRowStates } from "./track-row-states";
 
@@ -69,7 +69,7 @@ export class TrackTableController {
 
   /** Runs the row's action button: play, pause or resume. */
   public readonly runAction = (row: TrackTableRow): void => {
-    const { playback, actions } = this.#services;
+    const { player: playback, actions } = this.#services;
     const { action } = TrackRowStates.of(row, playback.activeTrackId, playback.status);
     if (action.kind === "play") this.#play(row.id);
     else if (action.kind === "pause") actions.run(() => playback.pause());
@@ -112,14 +112,14 @@ export class TrackTableController {
   #enqueue(next: boolean): void {
     const row = this.#menuRow;
     if (row === null) return;
-    const { actions, playback } = this.#services;
+    const { actions, player: playback } = this.#services;
     actions.run(() => playback.playerEnqueueTrack(row.id, next));
   }
 
   #activate(trackId: TrackId): void {
     const row = this.#rows().find((candidate) => candidate.id === trackId);
     if (row === undefined) return;
-    const { playback, actions } = this.#services;
+    const { player: playback, actions } = this.#services;
     const { clickIntent } = TrackRowStates.of(row, playback.activeTrackId, playback.status);
     if (clickIntent === "play") this.#play(row.id);
     else if (clickIntent === "resume") actions.run(() => playback.resume());

@@ -9,8 +9,8 @@
   import { PagedCollection } from "#lib/library/paged-collection.svelte";
   import { QueryResult } from "#lib/library/query-result.svelte";
   import { albumTitleLabel, artistNameLabel } from "#lib/library/unknown-name";
-  import { AppServices } from "#lib/shell/app-services.svelte";
-  import { WorkspaceScroll } from "#lib/shell/workspace-scroll.svelte";
+  import { AppServices } from "#lib/app/app-services.svelte";
+  import { WorkspaceScroll } from "#lib/app/workspace-scroll.svelte";
   import BackLink from "#lib/ui/back-link.svelte";
   import EmptyStatus from "#lib/ui/empty-status.svelte";
   import ErrorAlert from "#lib/ui/error-alert.svelte";
@@ -38,7 +38,7 @@
     readonly parentArtistId: ArtistId | null;
   } = $props();
 
-  const { actions, albums, playback, scrollMemory } = AppServices.current();
+  const { actions, albums, player: playback, scrollMemory } = AppServices.current();
 
   const details = new QueryResult(() => albums.detailsOptions(albumId));
   const tracks = new PagedCollection(() => albums.tracksOptions(albumId));

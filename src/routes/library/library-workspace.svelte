@@ -8,8 +8,8 @@
   } from "#lib/library/library-workspace";
   import { errorMessage } from "#lib/native/messages";
   import { labelAt, skipTo } from "#lib/library/letter-index";
-  import { AppServices } from "#lib/shell/app-services.svelte";
-  import { WorkspaceScroll } from "#lib/shell/workspace-scroll.svelte";
+  import { AppServices } from "#lib/app/app-services.svelte";
+  import { WorkspaceScroll } from "#lib/app/workspace-scroll.svelte";
   import EmptyStatus from "#lib/ui/empty-status.svelte";
   import ErrorAlert from "#lib/ui/error-alert.svelte";
   import LoadMoreSentinel from "#lib/ui/load-more-sentinel.svelte";

@@ -6,7 +6,7 @@ mod messages;
 mod playback;
 
 use crate::app::BackendApp;
-use crate::audio::fake_output::FakeOutput;
+use crate::player::fake_output::FakeOutput;
 use crate::test_support::{NotificationLog, TestDirectory};
 use std::sync::Arc;
 

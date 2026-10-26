@@ -1,7 +1,7 @@
 //! The error a command answers with, and the helper that keeps a panic from a parser from
 //! reaching the Host. Each code is what the Renderer sees; the messages only reach the log.
 
-use crate::audio::playback::PlaybackFailureCode;
+use crate::player::PlaybackFailureCode;
 use std::any::Any;
 use std::panic::{UnwindSafe, catch_unwind};
 

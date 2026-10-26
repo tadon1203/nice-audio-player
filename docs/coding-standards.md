@@ -37,42 +37,17 @@ Casing and conversion names follow the standards below. Rust casing is enforced 
 
 - A name is plain. It says what the thing is, with a noun. A function name says what it does, with a verb. Do not use a metaphor or a clever word. The terms in [CONTEXT.md](../CONTEXT.md) are the plain names of the project.
 - A name says what it handles. A role word alone (`Manager`, `Handler`, `Data`, `Info`) or two vague words together (`DataInfo`) says nothing. Put a specific noun before a role word: `ScanWorker`, `TrackRow`, `PackageInfo`.
-- One concept has one name everywhere. One word has one meaning. Do not make a synonym.
+- One concept has one name in every layer: the Backend module, the Host command file, the Renderer directory, and the type. That name is the term of [CONTEXT.md](../CONTEXT.md). One word has one meaning. Do not make a synonym.
 - A local variable is named after its type, in lower case: `GlobalState` is `global_state`.
 - Abbreviate only a word that everyone knows: `id`, `url`, `db`. Write every other word in full.
 - Do not put the type in a name. Write `tracks`, not `track_list`.
 
-| Plain                                | Not plain             |
-| ------------------------------------ | --------------------- |
-| `queue`, `tracks`                    | `lineup`, `track_vec` |
-| `scan_library`, `load_track`         | `crawl`, `kick_off`   |
-| `playback_state` (a `PlaybackState`) | `ps`, `st`, `current` |
-| `position`                           | `pos`, `idx`          |
-
-### Suffixes
-
-A suffix has one meaning in the whole project. Do not use it for another meaning. A word that is not in the table is allowed when it follows the rules above.
-
-| Suffix                | Meaning                                                               | Example          |
-| --------------------- | --------------------------------------------------------------------- | ---------------- |
-| `Id`                  | The identifier of an entity                                           | `TrackId`        |
-| `Key`                 | A value for lookup or order. It is not a stored identifier            | `SortKey`        |
-| `Kind`                | An enum of variants that carry no data                                | `AssetKind`      |
-| `Mode`                | A choice that switches behavior, made by the user or by the program   | `RepeatMode`     |
-| `Status`              | A finite value for the stage of a task                                | `ScanStatus`     |
-| `State`               | A value that changes over time. It is a Backend state of CONTEXT.md   | `PlaybackState`  |
-| `Options`             | The optional arguments of a function or constructor                   | `QueryOptions`   |
-| `Request`, `Response` | A question and an answer that cross a boundary (IPC, another process) | `ScanRequest`    |
-| `Query`               | The specification of a read with conditions                           | `TrackQuery`     |
-| `Error`               | An error type                                                         | `DecodeError`    |
-| `Event`               | A Backend event of CONTEXT.md                                         | `TrackSkipped`   |
-| `Row`                 | One row of the database or of a table                                 | `TrackRow`       |
-| `Item`                | One element in an ordered list                                        | `QueueItem`      |
-| `Page`                | One slice of an offset list. It is not a route                        | `TrackPage`      |
-| `View`                | A read-only value made for display                                    | `AlbumView`      |
-| `Builder`             | A worker that assembles a value in steps                              | `QueueBuilder`   |
-| `Worker`              | A dedicated thread or async task                                      | `PlaybackWorker` |
-| `Client`              | The side that calls across a boundary                                 | `NativeClient`   |
+| Plain                            | Not plain             |
+| -------------------------------- | --------------------- |
+| `queue`, `tracks`                | `lineup`, `track_vec` |
+| `scan_library`, `load_track`     | `crawl`, `kick_off`   |
+| `player_state` (a `PlayerState`) | `ps`, `st`, `current` |
+| `position`                       | `pos`, `idx`          |
 
 ### Functions and members
 

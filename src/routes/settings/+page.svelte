@@ -1,7 +1,7 @@
 <script lang="ts">
   import SettingsScreen from "./settings-screen.svelte";
-  import { AppServices } from "#lib/shell/app-services.svelte";
-  import { WorkspaceScroll } from "#lib/shell/workspace-scroll.svelte";
+  import { AppServices } from "#lib/app/app-services.svelte";
+  import { WorkspaceScroll } from "#lib/app/workspace-scroll.svelte";
   import WorkspaceScrollRegion from "#lib/ui/workspace-scroll.svelte";
 
   const { scrollMemory } = AppServices.current();

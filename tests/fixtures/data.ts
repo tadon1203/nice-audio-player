@@ -14,7 +14,7 @@ import {
   type TrackRow,
   type QueueItem,
   type QueueState,
-  type PlaybackState,
+  type PlayerState,
   type MeterFrame,
 } from "#lib/native/bindings";
 
@@ -260,7 +260,7 @@ export function scanSnapshot(state: ScanStatus): ScanState {
 
 export const defaultSettings: Appearance = { artworkBackdrop: true, calmMotion: false };
 
-export const stoppedPlayback: PlaybackState = {
+export const stoppedPlayback: PlayerState = {
   status: "stopped",
   base: {
     volume: 0.72,
@@ -390,7 +390,7 @@ interface PlayingFields {
 
 export const playbackIdOf = (item: QueueItem): number => item.id;
 
-export function playingSnapshot(fields: PlayingFields): PlaybackState {
+export function playingSnapshot(fields: PlayingFields): PlayerState {
   const device =
     fields.outputSelection.kind === "device"
       ? outputDevices.find(

@@ -5,7 +5,7 @@
 //! The file must match its shape: a damaged or older file is logged and replaced by defaults,
 //! and the next change overwrites it.
 //!
-//! The file holds the appearance the renderer edits and the playback preferences the playback
+//! The file holds the appearance the renderer edits and the player preferences the player
 //! worker records. The appearance is published through the state store; nothing else sees the
 //! file's shape.
 
@@ -24,8 +24,8 @@ use std::{
 use log::{error, warn};
 use serde::{Deserialize, Serialize};
 
-use crate::audio::playback::PlaybackPreferences;
 use crate::messages::Versioned;
+use crate::player::PlayerPreferences;
 use crate::state_store::StateStore;
 
 const FILE_NAME: &str = "settings.json";
@@ -65,7 +65,7 @@ pub struct AppearancePatch {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct SettingsFile {
     pub(crate) appearance: Appearance,
-    pub(crate) playback: PlaybackPreferences,
+    pub(crate) player: PlayerPreferences,
 }
 
 /// The settings file in `directory`.
@@ -136,15 +136,15 @@ impl SettingsStore {
         })
     }
 
-    /// The playback preferences the next start of the playback worker begins with.
-    pub(crate) fn playback_preferences(&self) -> PlaybackPreferences {
-        self.state.lock().file.playback.clone()
+    /// The player preferences the next start of the player worker begins with.
+    pub(crate) fn player_preferences(&self) -> PlayerPreferences {
+        self.state.lock().file.player.clone()
     }
 
-    /// Remembers the playback preferences. They are persisted but not published: the playback
+    /// Remembers the player preferences. They are persisted but not published: the playback
     /// state already tells the renderer.
-    pub(crate) fn record_playback(&self, preferences: PlaybackPreferences) {
-        self.modify(|file| file.playback = preferences);
+    pub(crate) fn record_player(&self, preferences: PlayerPreferences) {
+        self.modify(|file| file.player = preferences);
     }
 
     /// Applies `change` under the lock and publishes the appearance. A change is queued for the
@@ -229,9 +229,9 @@ fn flush(path: &Path, pending: &mut Option<SettingsFile>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::audio::output::AudioOutputSelection;
-    use crate::audio::playback::RepeatMode;
     use crate::messages::{Notification, Notifier, StateTopic};
+    use crate::player::RepeatMode;
+    use crate::player::output::AudioOutputSelection;
     use crate::test_support::{NotificationLog, TestDirectory, null_notifier};
 
     /// A store over the settings saved in `directory`, notifying through `notifier`.
@@ -261,7 +261,7 @@ mod tests {
             artwork_backdrop: Some(false),
             calm_motion: Some(true),
         });
-        store.record_playback(PlaybackPreferences {
+        store.record_player(PlayerPreferences {
             volume: 0.4,
             muted: true,
             output_selection: AudioOutputSelection::Device {
@@ -275,11 +275,11 @@ mod tests {
         let restored = saved(&open(directory.path(), null_notifier()));
         assert!(!restored.appearance.artwork_backdrop);
         assert!(restored.appearance.calm_motion);
-        assert_eq!(restored.playback.volume, 0.4);
-        assert!(restored.playback.muted && restored.playback.shuffle_enabled);
-        assert_eq!(restored.playback.repeat_mode, RepeatMode::All);
+        assert_eq!(restored.player.volume, 0.4);
+        assert!(restored.player.muted && restored.player.shuffle_enabled);
+        assert_eq!(restored.player.repeat_mode, RepeatMode::All);
         assert_eq!(
-            restored.playback.output_selection,
+            restored.player.output_selection,
             AudioOutputSelection::Device {
                 device_id: "dac".into()
             }
@@ -291,7 +291,7 @@ mod tests {
         let directory = TestDirectory::new();
         std::fs::write(
             file_path(directory.path()),
-            r#"{ "playback": { "volume": 0.25 } }"#,
+            r#"{ "player": { "volume": 0.25 } }"#,
         )
         .unwrap();
         assert_eq!(
@@ -305,7 +305,7 @@ mod tests {
         let directory = TestDirectory::new();
         std::fs::write(
             file_path(directory.path()),
-            r#"{ "appearance": { "artworkBackdrop": false, "calmMotion": true }, "playback": {}, "extra": 1 }"#,
+            r#"{ "appearance": { "artworkBackdrop": false, "calmMotion": true }, "player": {}, "extra": 1 }"#,
         )
         .unwrap();
         assert_eq!(
@@ -343,9 +343,9 @@ mod tests {
         let (recorder, sink) = NotificationLog::shared();
         let store = open(directory.path(), sink);
 
-        store.record_playback(PlaybackPreferences {
+        store.record_player(PlayerPreferences {
             volume: 0.5,
-            ..PlaybackPreferences::default()
+            ..PlayerPreferences::default()
         });
         assert_eq!(recorder.sent().len(), 0);
 
@@ -370,9 +370,9 @@ mod tests {
             0
         );
 
-        store.record_playback(PlaybackPreferences {
+        store.record_player(PlayerPreferences {
             volume: 0.5,
-            ..PlaybackPreferences::default()
+            ..PlayerPreferences::default()
         });
         assert_eq!(
             store.update_appearance(&AppearancePatch::default()).version,

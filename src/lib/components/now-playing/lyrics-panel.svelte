@@ -3,7 +3,7 @@
   import ArrowDown from "@lucide/svelte/icons/arrow-down";
   import ArrowUp from "@lucide/svelte/icons/arrow-up";
   import { TrackLyrics } from "#lib/lyrics/track-lyrics.svelte";
-  import { AppServices } from "#lib/shell/app-services.svelte";
+  import { AppServices } from "#lib/app/app-services.svelte";
   import { Button } from "#lib/ui/shadcn/button";
   import { cn } from "#lib/utils/cn.js";
   import { AnchorColumn } from "./anchor-column";
@@ -22,7 +22,7 @@
    */
   let { trackId, class: className }: { trackId: TrackId | null; class?: string } = $props();
 
-  const { playback, lyrics: lyricsRepository, lyricsWaveformLink } = AppServices.current();
+  const { player: playback, lyrics: lyricsRepository, lyricsWaveformLink } = AppServices.current();
   const lyrics = new TrackLyrics(lyricsRepository, () => trackId);
   const found = $derived(lyrics.current?.status === "found" ? lyrics.current : null);
   const content = $derived(found?.content ?? null);

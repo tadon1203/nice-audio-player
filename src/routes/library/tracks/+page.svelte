@@ -2,7 +2,7 @@
   import TrackTable from "#lib/components/track-table/track-table.svelte";
   import { LibraryCatalog } from "#lib/library/library-catalog.svelte";
   import { TrackList } from "#lib/library/track-list";
-  import { AppServices } from "#lib/shell/app-services.svelte";
+  import { AppServices } from "#lib/app/app-services.svelte";
   import LibraryWorkspace from "../library-workspace.svelte";
 
   const meta = {
@@ -14,7 +14,7 @@
   };
 
   const services = AppServices.current();
-  const { playback, actions, libraryViews } = services;
+  const { player: playback, actions, libraryViews } = services;
   const view = libraryViews.tracks;
   const catalog = new LibraryCatalog(services.catalog, () => view.request);
 </script>

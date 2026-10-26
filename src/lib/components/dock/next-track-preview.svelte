@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { AppServices } from "#lib/shell/app-services.svelte";
+  import { AppServices } from "#lib/app/app-services.svelte";
   import Artwork from "#lib/ui/artwork.svelte";
   import { SvelteSlide } from "#lib/ui/motion/svelte-slide";
   import { cn } from "#lib/utils/cn.js";
@@ -20,7 +20,7 @@
    */
   let { class: className }: { class?: string } = $props();
 
-  const playback = AppServices.current().playback;
+  const playback = AppServices.current().player;
   const budget = AppServices.current().motion;
   let inLastSeconds = $state(false);
 

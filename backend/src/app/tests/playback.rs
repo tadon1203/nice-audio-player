@@ -1,12 +1,12 @@
 use super::fixture;
 use crate::app::{BackendApp, PlaybackContext};
-use crate::audio::fake_output::FakeOutput;
-use crate::audio::playback::RepeatMode;
-use crate::audio::waveform::PlaybackWaveform;
 use crate::errors::CommandError;
 use crate::ids::TrackId;
 use crate::library::models::{ListRequest, SortDirection, TrackSortKey};
 use crate::messages::{BackendMessage, Notification, StateTopic, StateValue};
+use crate::player::RepeatMode;
+use crate::player::fake_output::FakeOutput;
+use crate::player::waveform::PlaybackWaveform;
 use crate::test_support::{NotificationLog, TestDirectory, write_pcm_i16_wav};
 use std::time::{Duration, Instant};
 

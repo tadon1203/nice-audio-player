@@ -6,7 +6,7 @@
   } from "#lib/ui/dropdown-menu";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import { SignalPath } from "#lib/components/signal-path/signal-path.svelte";
-  import { AppServices } from "#lib/shell/app-services.svelte";
+  import { AppServices } from "#lib/app/app-services.svelte";
   import DropdownMenuContent from "#lib/ui/dropdown-menu/dropdown-menu-content.svelte";
   import DropdownMenuRadioItem from "#lib/ui/dropdown-menu/dropdown-menu-radio-item.svelte";
   import FlapText from "#lib/ui/rolling-number/flap-text.svelte";
@@ -20,7 +20,7 @@
    */
   let { class: className }: { class?: string } = $props();
 
-  const { playback, session, actions, outputDevices } = AppServices.current();
+  const { player: playback, session, actions, outputDevices } = AppServices.current();
   const path = new SignalPath();
   let open = $state(false);
 

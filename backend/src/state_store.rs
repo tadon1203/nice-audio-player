@@ -3,18 +3,18 @@
 
 use parking_lot::Mutex;
 
-use crate::audio::playback::{PlaybackState, QueueState};
-use crate::audio::waveform::PlaybackWaveform;
 use crate::library::models::ScanState;
 use crate::messages::{
     BackendMessage, Notification, Notifier, StateMessage, StateTopic, StateValue, Versioned,
 };
+use crate::player::waveform::PlaybackWaveform;
+use crate::player::{PlayerState, QueueState};
 use crate::settings::{Appearance, SettingsFile};
 
 /// The current value of every state topic, each with its version.
 #[derive(Clone)]
 struct States {
-    playback: Versioned<PlaybackState>,
+    playback: Versioned<PlayerState>,
     queue: Versioned<QueueState>,
     scan: Versioned<ScanState>,
     waveform: Versioned<Option<PlaybackWaveform>>,
@@ -25,9 +25,9 @@ impl States {
     /// The values before any service has set one: the saved playback and appearance, an idle
     /// scan, and no waveform.
     fn new(settings: &SettingsFile) -> Self {
-        let preferences = &settings.playback;
+        let preferences = &settings.player;
         Self {
-            playback: Versioned::new(PlaybackState::stopped(preferences)),
+            playback: Versioned::new(PlayerState::stopped(preferences)),
             queue: Versioned::new(QueueState::empty(
                 preferences.repeat_mode,
                 preferences.shuffle_enabled,
@@ -80,7 +80,7 @@ impl StateStore {
         self.notifier.send(notification);
     }
 
-    pub fn playback(&self) -> Versioned<PlaybackState> {
+    pub fn playback(&self) -> Versioned<PlayerState> {
         self.states.lock().playback.clone()
     }
 
@@ -99,7 +99,7 @@ impl StateStore {
 
     /// Sets the value, adds one to that topic's version, and notifies that the topic changed.
     /// Returns the topic's version after the call. A value equal to the held one does nothing.
-    pub fn set_playback(&self, value: PlaybackState) -> u64 {
+    pub fn set_playback(&self, value: PlayerState) -> u64 {
         self.set(StateTopic::Playback, |states| &mut states.playback, value)
     }
 

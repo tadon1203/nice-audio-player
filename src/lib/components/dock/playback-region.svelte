@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { NowPlayingTween } from "#lib/shell/now-playing-tween.svelte";
+  import { NowPlayingTween } from "#lib/app/now-playing-tween.svelte";
   import { DOCK_HEIGHT_NOW_PLAYING_PX, DOCK_HEIGHT_PX } from "./dock-metrics";
   import PlaybackDock from "./playback-dock.svelte";
 

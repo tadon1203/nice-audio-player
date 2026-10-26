@@ -9,7 +9,9 @@ The language of Nice Audio Player. Use these terms in code, docs, and tickets. D
 - **Backend**: the part of the app that owns the domain and the persistent state. It knows nothing about Tauri.
 - **Area**: one part of the domain (the Player, the Library, lyrics, the Appearance, or the meters). The Backend and the Renderer are split into the same Areas. A Renderer Area holds that Area's cached state and logic, and never depends on another Renderer Area.
 - **App**: the part of the Renderer that holds state spanning several Areas, such as Now Playing, the queue panel, and workspace scroll. It sits between the product compositions and the Areas. _Avoid_: shell.
-- **Backend state**: a value that the Backend owns and the Renderer mirrors, such as the Playback, the Queue, the Library scan, the Waveform, and the Appearance. It always reaches the Renderer whole, with its version.
+- **Backend state**: a value that the Backend owns and the Renderer mirrors, such as the Player state, the Queue state, the Library state, the Waveform, and the Appearance. It always reaches the Renderer whole, and only by push. A command never answers with it.
+- **Command**: a request from the Renderer that changes Backend state. It answers only whether it was accepted; its outcome arrives as Backend state. _Avoid_: action.
+- **Query**: a request from the Renderer that reads data, such as a list page or lyrics. It answers with the data and changes nothing.
 - **Backend event**: a fact about one moment that the Backend reports once, such as a skipped track. The Renderer shows it and builds no state from it. _Avoid_: occurrence.
 - **Measurement stream**: the frequent measurements that the Backend sends while audio plays: the playing position and the Meter frames. _Avoid_: Stream (an Output stream is a different thing).
 
@@ -17,6 +19,7 @@ The language of Nice Audio Player. Use these terms in code, docs, and tickets. D
 
 - **Library**: the indexed set of tracks from the Library directories.
 - **Library directory**: a music directory the user added to the Library. It can be disabled without being removed.
+- **Library state**: whether the Library is available, its Library version, its Library directories, and its Library scan, as one Backend state.
 - **Library scan**: discovering, inspecting, and indexing files in batches.
 - **Album Artist**: the artist an album is filed under. In code it is called Artist, because the app files nothing under a track's own artist.
 - **Album**: the tracks that share an Album Artist, a title, and a directory. A disc directory counts as the directory above it. Two printings of one album in two directories are two albums.
@@ -27,9 +30,11 @@ The language of Nice Audio Player. Use these terms in code, docs, and tickets. D
 
 ## Playback
 
-- **Player**: the object that plays the Queue, in the Backend and in the Renderer. Its state is the Playback state and the Queue state.
+- **Player**: the object that plays the Queue, in the Backend and in the Renderer. Its state is the Player state and the Queue state.
+- **Player state**: what the Player is doing: stopped, loading a Playback, playing, paused, or failed. _Avoid_: Playback state.
 - **Playback context**: the list the user picked a track from (an album, or the Tracks list as filtered and sorted). It is the source of the queue, not the queue itself.
 - **Queue**: the items to play, held as track ids. Its **arranged order** is the one source of truth. Shuffle is a separate **play order** over it.
+- **Queue version**: a number that moves after every change of the Queue. A window of upcoming items carries the Queue version it was cut from. _Avoid_: revision.
 - **Playback**: one queue item being played. Every track that loads gets a new playback id. A seek or an output device switch keeps the same Playback.
 - **Output stream**: the device stream that playback opens. It can span several Playbacks.
 - **Gapless**: consecutive tracks of the same audio format play with no silence between them.

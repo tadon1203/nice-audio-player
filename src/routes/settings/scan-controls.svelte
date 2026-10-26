@@ -1,7 +1,7 @@
 <script lang="ts">
   import RefreshCw from "@lucide/svelte/icons/refresh-cw";
   import X from "@lucide/svelte/icons/x";
-  import { AppServices } from "#lib/shell/app-services.svelte";
+  import { AppServices } from "#lib/app/app-services.svelte";
   import { Button } from "#lib/ui/shadcn/button/index.js";
   import { ScanStatus } from "./scan-status";
 

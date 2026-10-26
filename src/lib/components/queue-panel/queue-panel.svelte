@@ -1,14 +1,14 @@
 <script lang="ts">
   import type { Attachment } from "svelte/attachments";
   import { ScrollView } from "#lib/ui/scroll-view.svelte";
-  import { AppServices } from "#lib/shell/app-services.svelte";
+  import { AppServices } from "#lib/app/app-services.svelte";
   import { Sheet, SheetContent, SheetHeader, SheetTitle } from "#lib/ui/shadcn/sheet";
   import QueueFooter from "./queue-footer.svelte";
   import QueueItem from "./queue-row.svelte";
   import { ShuffleCascade } from "./shuffle-cascade.svelte";
   import UpcomingList from "./upcoming-list.svelte";
 
-  const { playback, actions, queuePanel } = AppServices.current();
+  const { player: playback, actions, queuePanel } = AppServices.current();
 
   const queue = $derived(playback.queue);
   const history = $derived(queue?.history ?? []);

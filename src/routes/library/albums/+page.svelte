@@ -1,6 +1,6 @@
 <script lang="ts">
   import { LibraryCatalog } from "#lib/library/library-catalog.svelte";
-  import { AppServices } from "#lib/shell/app-services.svelte";
+  import { AppServices } from "#lib/app/app-services.svelte";
   import VirtualMediaGrid from "#lib/ui/media-grid/virtual-media-grid.svelte";
   import AlbumTile from "../album-tile.svelte";
   import LibraryWorkspace from "../library-workspace.svelte";
@@ -14,7 +14,7 @@
   };
 
   const services = AppServices.current();
-  const { playback, actions, libraryViews } = services;
+  const { player: playback, actions, libraryViews } = services;
   const view = libraryViews.albums;
   const catalog = new LibraryCatalog(services.catalog, () => view.request);
 </script>

@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { AppServices } from "#lib/shell/app-services.svelte";
-  import { UpcomingItems } from "#lib/playback/upcoming-items.svelte";
+  import { AppServices } from "#lib/app/app-services.svelte";
+  import { UpcomingItems } from "#lib/player/upcoming-items.svelte";
   import { SvelteFlip } from "#lib/ui/motion/svelte-flip";
   import { TokenTiming } from "#lib/ui/motion/token-timing";
   import { VirtualRows } from "#lib/ui/virtual-rows.svelte";
@@ -21,7 +21,7 @@
     cascading: boolean;
   } = $props();
 
-  const { playback, actions } = AppServices.current();
+  const { player: playback, actions } = AppServices.current();
 
   const upcomingCount = $derived(playback.queue?.upcomingCount ?? 0);
 

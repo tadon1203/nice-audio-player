@@ -1,5 +1,5 @@
 import { onDestroy } from "svelte";
-import { AppServices } from "#lib/shell/app-services.svelte";
+import { AppServices } from "#lib/app/app-services.svelte";
 
 /**
  * The seek drag of the waveform band. While the pointer drags, the playback clock holds the bar at
@@ -7,7 +7,7 @@ import { AppServices } from "#lib/shell/app-services.svelte";
  * reported. Construct during component initialization.
  */
 export class SeekDrag {
-  readonly #playback = AppServices.current().playback;
+  readonly #playback = AppServices.current().player;
   #preview = $state<number | null>(null);
   #release: (() => void) | null = null;
 

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Button } from "#lib/ui/shadcn/button";
-  import { BALLISTICS } from "#lib/meters/ballistics";
-  import { MeterDraw } from "#lib/meters/meter-draw";
+  import { BALLISTICS } from "#lib/meter/ballistics";
+  import { MeterDraw } from "#lib/meter/meter-draw";
   import { cn } from "#lib/utils/cn.js";
   import { MeterView } from "./meter-view.svelte";
 

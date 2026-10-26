@@ -6,8 +6,8 @@
   import { PagedCollection } from "#lib/library/paged-collection.svelte";
   import { QueryResult } from "#lib/library/query-result.svelte";
   import { artistNameLabel } from "#lib/library/unknown-name";
-  import { AppServices } from "#lib/shell/app-services.svelte";
-  import { WorkspaceScroll } from "#lib/shell/workspace-scroll.svelte";
+  import { AppServices } from "#lib/app/app-services.svelte";
+  import { WorkspaceScroll } from "#lib/app/workspace-scroll.svelte";
   import BackLink from "#lib/ui/back-link.svelte";
   import CollectionSortControl from "#lib/ui/collection-sort-control.svelte";
   import EmptyStatus from "#lib/ui/empty-status.svelte";
@@ -22,7 +22,7 @@
   import { CountFormat } from "#lib/utils/count-format";
   import AlbumTile from "../../album-tile.svelte";
 
-  const { actions, artists, libraryViews, playback, scrollMemory } = AppServices.current();
+  const { actions, artists, libraryViews, player: playback, scrollMemory } = AppServices.current();
   const view = libraryViews.artistAlbums;
 
   const artistId = $derived(page.params.artistId ?? "");

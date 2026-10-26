@@ -1,6 +1,6 @@
 import { untrack } from "svelte";
 import { type LyricsTimedLine } from "#lib/native/bindings";
-import { AppServices } from "#lib/shell/app-services.svelte";
+import { AppServices } from "#lib/app/app-services.svelte";
 import { LyricsLines } from "./lyrics-lines";
 
 /**
@@ -10,7 +10,7 @@ import { LyricsLines } from "./lyrics-lines";
  * while a component initialises.
  */
 export class LyricsSync {
-  readonly #clock = AppServices.current().playback.clock;
+  readonly #clock = AppServices.current().player.clock;
   readonly #lines: () => readonly LyricsTimedLine[] | null;
   #index = $state.raw(-1);
 

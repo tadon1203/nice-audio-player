@@ -4,7 +4,7 @@
   import Square from "@lucide/svelte/icons/square";
   import X from "@lucide/svelte/icons/x";
   import { windowChrome } from "#lib/native/desktop";
-  import { AppServices } from "#lib/shell/app-services.svelte";
+  import { AppServices } from "#lib/app/app-services.svelte";
   import { Button } from "#lib/ui/shadcn/button/index.js";
 
   const { actions } = AppServices.current();

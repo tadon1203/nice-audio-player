@@ -14,7 +14,7 @@
   import Play from "@lucide/svelte/icons/play";
   import type { Attachment } from "svelte/attachments";
   import { type LyricsTimedLine } from "#lib/native/bindings";
-  import { AppServices } from "#lib/shell/app-services.svelte";
+  import { AppServices } from "#lib/app/app-services.svelte";
   import TimePresentation from "#lib/ui/time-presentation.svelte";
   import { cn } from "#lib/utils/cn.js";
   import { DurationFormat } from "#lib/utils/duration-format";

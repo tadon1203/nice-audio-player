@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { AppServices } from "#lib/shell/app-services.svelte";
-  import { GlowBreath } from "#lib/playback/glow-breath";
-  import { Loudness } from "#lib/playback/loudness";
+  import { AppServices } from "#lib/app/app-services.svelte";
+  import { GlowBreath } from "#lib/player/glow-breath";
+  import { Loudness } from "#lib/player/loudness";
   import ArtworkGlow from "#lib/ui/artwork-glow/artwork-glow.svelte";
   import { GLOW } from "#lib/ui/artwork-glow/glow";
   import { GlowOpacity } from "#lib/ui/artwork-glow/glow-opacity";
@@ -12,7 +12,7 @@
    * strength). It follows the playback clock through compositor keyframes, so nothing re-renders with time. The
    * breathing is off under calm or reduced motion, and then nothing here runs per frame.
    */
-  const playback = AppServices.current().playback;
+  const playback = AppServices.current().player;
   const appearance = AppServices.current().appearance;
   const budget = AppServices.current().motion;
 

@@ -1,5 +1,5 @@
 /**
- * Playback position arrives about four times a second. The playback clock (`lib/playback`)
+ * Playback position arrives about four times a second. The playback clock (`lib/player`)
  * advances from the last reported position between reports; this is that arithmetic.
  */
 

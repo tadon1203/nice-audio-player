@@ -2,7 +2,7 @@ import {
   type AudioOutputSelection,
   type TrackRow,
   type QueueState,
-  type PlaybackState,
+  type PlayerState,
   type StartedBy,
   type Versioned,
   UPCOMING_WINDOW,
@@ -23,7 +23,7 @@ export function scriptPlayback(
 ): {
   setSequence: (next: TrackRow[]) => void;
   queue: (patch?: { upcoming?: TrackRow[] }) => Promise<Versioned<QueueState>>;
-  finishTrack: () => Promise<Versioned<PlaybackState>>;
+  finishTrack: () => Promise<Versioned<PlayerState>>;
   reportPosition: (to: number) => Promise<void>;
   startTicks: () => void;
   stopTicks: () => void;
@@ -58,7 +58,7 @@ export function scriptPlayback(
     };
   };
 
-  const snapshot = (): PlaybackState =>
+  const snapshot = (): PlayerState =>
     playingSnapshot({
       status,
       item: playbackItemFor(current()),
@@ -73,7 +73,7 @@ export function scriptPlayback(
     });
 
   /** A playback change, published as a new version the way the backend does; the answer carries it. */
-  const commit = async (): Promise<Versioned<PlaybackState>> => {
+  const commit = async (): Promise<Versioned<PlayerState>> => {
     const value = snapshot();
     const version = await native.publish("playback", value);
     return { version, value };
@@ -84,7 +84,7 @@ export function scriptPlayback(
     return { version, value };
   };
   /** A new session at `target`, started the way the backend would say it started. */
-  const moveTo = async (target: number, by: StartedBy): Promise<Versioned<PlaybackState>> => {
+  const moveTo = async (target: number, by: StartedBy): Promise<Versioned<PlayerState>> => {
     index = target;
     startedBy = by;
     positionMs = 12_000;
@@ -165,7 +165,7 @@ export function scriptPlayback(
     /** The queue as it stands, with `upcoming` replaced when a test expects an edit. */
     queue: commitQueue,
     /** The loaded track ended and the backend moved on by itself (an automatic advance). */
-    finishTrack: (): Promise<Versioned<PlaybackState>> =>
+    finishTrack: (): Promise<Versioned<PlayerState>> =>
       moveTo(Math.min(sequence.length - 1, index + 1), "auto"),
     /** Reports the loaded track's position (and nothing else), as the backend's ticks do. */
     reportPosition: (to: number): Promise<void> => {

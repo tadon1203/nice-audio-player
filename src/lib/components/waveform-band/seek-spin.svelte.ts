@@ -1,5 +1,5 @@
 import { onMount, tick } from "svelte";
-import { AppServices } from "#lib/shell/app-services.svelte";
+import { AppServices } from "#lib/app/app-services.svelte";
 import { RollingMath } from "#lib/ui/rolling-number/rolling-math";
 
 /**
@@ -8,7 +8,7 @@ import { RollingMath } from "#lib/ui/rolling-number/rolling-math";
  * Construct during component initialization; read `turns` where it is shown.
  */
 export class SeekSpin {
-  readonly #playback = AppServices.current().playback;
+  readonly #playback = AppServices.current().player;
   readonly #dragging: () => boolean;
   #turns = $state(0);
 

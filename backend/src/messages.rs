@@ -7,9 +7,9 @@ use std::sync::mpsc::{self, Receiver, Sender};
 
 use log::debug;
 
-use crate::audio::playback::{PlaybackPosition, PlaybackState, QueueState};
-use crate::audio::waveform::PlaybackWaveform;
 use crate::library::models::ScanState;
+use crate::player::waveform::PlaybackWaveform;
+use crate::player::{PlaybackPosition, PlayerState, QueueState};
 use crate::settings::Appearance;
 
 /// A value with the version of its topic. Versions only grow, per topic.
@@ -88,7 +88,7 @@ pub struct StateMessage {
 #[derive(Debug, Clone, PartialEq, serde::Serialize, specta::Type)]
 #[serde(tag = "topic", content = "value", rename_all = "camelCase")]
 pub enum StateValue {
-    Playback(Box<PlaybackState>),
+    Playback(Box<PlayerState>),
     Queue(QueueState),
     Scan(ScanState),
     Waveform(Option<PlaybackWaveform>),

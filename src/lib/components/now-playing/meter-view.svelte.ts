@@ -1,13 +1,13 @@
 import type { Attachment } from "svelte/attachments";
 import { meter } from "#lib/native/commands";
-import { BALLISTICS, BAND_COUNT } from "#lib/meters/ballistics";
-import { DrawLoop } from "#lib/meters/draw-loop";
-import { MeterDisplay } from "#lib/meters/meter-display";
-import { MeterFeed } from "#lib/meters/meter-feed.svelte";
-import { reduceMeterFrames } from "#lib/meters/meter-frames";
-import { MeterDraw } from "#lib/meters/meter-draw";
-import { Readout } from "#lib/meters/readout";
-import { AppServices } from "#lib/shell/app-services.svelte";
+import { BALLISTICS, BAND_COUNT } from "#lib/meter/ballistics";
+import { DrawLoop } from "#lib/meter/draw-loop";
+import { MeterDisplay } from "#lib/meter/meter-display";
+import { MeterFeed } from "#lib/meter/meter-feed.svelte";
+import { reduceMeterFrames } from "#lib/meter/meter-frames";
+import { MeterDraw } from "#lib/meter/meter-draw";
+import { Readout } from "#lib/meter/readout";
+import { AppServices } from "#lib/app/app-services.svelte";
 import { DocumentVisibility } from "#lib/ui/document-visibility.svelte";
 
 const NARROW_BELOW_PX = 512;
@@ -82,7 +82,7 @@ export class MeterView {
       // The loop sleeps once every Level bar and Peak cap is at the floor and wakes on the next frame.
       const loop = new DrawLoop(
         (elapsed) => {
-          const { playback } = this.#services;
+          const { player: playback } = this.#services;
           const input =
             playback.status === "playing"
               ? reduceMeterFrames(this.#feed.drain())

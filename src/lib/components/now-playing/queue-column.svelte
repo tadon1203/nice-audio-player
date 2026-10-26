@@ -8,7 +8,7 @@
   import { timeStateClass } from "#lib/ui/time-state";
   import { Button } from "#lib/ui/shadcn/button";
   import Play from "@lucide/svelte/icons/play";
-  import { AppServices } from "#lib/shell/app-services.svelte";
+  import { AppServices } from "#lib/app/app-services.svelte";
   import { SvelteFlip } from "#lib/ui/motion/svelte-flip";
   /** The `animate:` of a row: a directive takes a name, not a member. */
   const flipRow = SvelteFlip.motion;
@@ -31,7 +31,7 @@
    */
   let { class: className }: { class?: string } = $props();
 
-  const { playback, queuePanel } = AppServices.current();
+  const { player: playback, queuePanel } = AppServices.current();
   const actions = new NowPlayingActions();
   const history = $derived(playback.queue?.history ?? []);
   const current = $derived(playback.queue?.current ?? null);

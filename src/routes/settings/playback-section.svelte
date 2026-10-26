@@ -1,7 +1,7 @@
 <script lang="ts">
   import { type AppearancePatch } from "#lib/native/bindings";
   import { SignalPath } from "#lib/components/signal-path/signal-path.svelte";
-  import { AppServices } from "#lib/shell/app-services.svelte";
+  import { AppServices } from "#lib/app/app-services.svelte";
   import FlapText from "#lib/ui/rolling-number/flap-text.svelte";
   import SectionTitle from "#lib/ui/section-title.svelte";
   import * as Select from "#lib/ui/shadcn/select/index.js";
@@ -9,7 +9,14 @@
 
   const DEFAULT_DEVICE = "default";
 
-  const { playback, session, appearance, actions, notices, outputDevices } = AppServices.current();
+  const {
+    player: playback,
+    session,
+    appearance,
+    actions,
+    notices,
+    outputDevices,
+  } = AppServices.current();
   const signalPath = new SignalPath();
 
   let deviceMenuOpen = $state(false);

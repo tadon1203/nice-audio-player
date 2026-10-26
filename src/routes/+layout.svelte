@@ -11,8 +11,8 @@
   import NowPlayingContent from "#lib/components/now-playing/now-playing-content.svelte";
   import NowPlayingLayer from "#lib/components/now-playing/now-playing-layer.svelte";
   import QueuePanel from "#lib/components/queue-panel/queue-panel.svelte";
-  import { AppServices } from "#lib/shell/app-services.svelte";
-  import { PlaybackShortcuts } from "#lib/shell/playback-shortcuts";
+  import { AppServices } from "#lib/app/app-services.svelte";
+  import { PlaybackShortcuts } from "#lib/app/playback-shortcuts";
   import { TooltipProvider } from "#lib/ui/shadcn/tooltip";
   import Navigation from "./navigation.svelte";
   import TitleBar from "./title-bar.svelte";
@@ -31,7 +31,7 @@
 
 <svelte:window
   onkeydown={(event) =>
-    services && PlaybackShortcuts.handle(event, services.playback, services.actions, services)}
+    services && PlaybackShortcuts.handle(event, services.player, services.actions, services)}
 />
 
 {#if services === null}

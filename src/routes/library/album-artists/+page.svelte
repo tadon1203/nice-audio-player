@@ -1,6 +1,6 @@
 <script lang="ts">
   import { LibraryCatalog } from "#lib/library/library-catalog.svelte";
-  import { AppServices } from "#lib/shell/app-services.svelte";
+  import { AppServices } from "#lib/app/app-services.svelte";
   import VirtualMediaGrid from "#lib/ui/media-grid/virtual-media-grid.svelte";
   import ArtistTile from "../artist-tile.svelte";
   import LibraryWorkspace from "../library-workspace.svelte";

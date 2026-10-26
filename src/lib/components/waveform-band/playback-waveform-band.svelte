@@ -5,7 +5,7 @@
 
 <script lang="ts">
   import { Button } from "#lib/ui/shadcn/button";
-  import { AppServices } from "#lib/shell/app-services.svelte";
+  import { AppServices } from "#lib/app/app-services.svelte";
   import RollingNumber from "#lib/ui/rolling-number/rolling-number.svelte";
   import WaveformSeek from "#lib/ui/waveform/waveform-seek.svelte";
   import { cn } from "#lib/utils/cn.js";
@@ -33,7 +33,7 @@
     timeClass?: string;
   } = $props();
 
-  const { playback, motion: budget, actions, lyricsWaveformLink } = AppServices.current();
+  const { player: playback, motion: budget, actions, lyricsWaveformLink } = AppServices.current();
   const trackKey = $derived(playback.item?.id ?? "none");
   const canSeek = $derived(playback.isActive && playback.durationMs !== null);
   const waveform = $derived(showWaveform ? playback.waveform : null);

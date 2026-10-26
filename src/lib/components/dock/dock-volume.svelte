@@ -3,8 +3,8 @@
   import Music2 from "@lucide/svelte/icons/music-2";
   import Volume2 from "@lucide/svelte/icons/volume-2";
   import VolumeX from "@lucide/svelte/icons/volume-x";
-  import { AppServices } from "#lib/shell/app-services.svelte";
-  import { VolumeStep } from "#lib/playback/volume-step";
+  import { AppServices } from "#lib/app/app-services.svelte";
+  import { VolumeStep } from "#lib/player/volume-step";
   import { SpringCurve } from "#lib/ui/motion/spring-curve";
   import { SvelteMotion } from "#lib/ui/motion/svelte-motion";
   import RollingNumber from "#lib/ui/rolling-number/rolling-number.svelte";
@@ -19,7 +19,7 @@
    * transport's centre line.
    */
   const {
-    playback,
+    player: playback,
     session,
     motion: budget,
     actions,

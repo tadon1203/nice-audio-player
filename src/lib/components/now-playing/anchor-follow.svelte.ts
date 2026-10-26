@@ -1,5 +1,5 @@
 import type { Attachment } from "svelte/attachments";
-import { AppServices } from "#lib/shell/app-services.svelte";
+import { AppServices } from "#lib/app/app-services.svelte";
 import { RetargetableSpring } from "#lib/ui/motion/retargetable-spring.svelte";
 import { SpringCurve } from "#lib/ui/motion/spring-curve";
 import { crossfade, motionTokens } from "#lib/ui/motion/tokens";

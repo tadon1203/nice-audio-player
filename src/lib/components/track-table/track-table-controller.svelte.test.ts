@@ -1,5 +1,5 @@
 import { type TrackId } from "#lib/native/bindings";
-import type { AppServices } from "#lib/shell/app-services.svelte";
+import type { AppServices } from "#lib/app/app-services.svelte";
 import { describe, expect, it, vi, type Mock } from "vitest";
 import { TrackTableController } from "./track-table-controller.svelte";
 import type { TrackTableRow } from "./track-columns";
@@ -30,7 +30,7 @@ function fakeServices(
   };
   const services = {
     actions: { run: (action: () => Promise<unknown>): void => void action() },
-    playback: {
+    player: {
       activeTrackId,
       status,
       playerEnqueueTrack: calls.playerEnqueueTrack,

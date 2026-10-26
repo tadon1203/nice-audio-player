@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
   import { type ArtworkRef } from "#lib/native/bindings";
-  import { AppServices } from "#lib/shell/app-services.svelte";
+  import { AppServices } from "#lib/app/app-services.svelte";
   import Artwork from "#lib/ui/artwork.svelte";
   import { SharedElement } from "#lib/ui/motion/shared-element";
   import ArtworkGlow from "#lib/ui/artwork-glow/artwork-glow.svelte";

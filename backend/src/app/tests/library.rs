@@ -1,8 +1,8 @@
 use super::{Fixture, fixture};
 use crate::app::{BackendApp, PlaybackContext};
-use crate::audio::fake_output::FakeOutput;
 use crate::errors::CommandError;
 use crate::ids::{AlbumId, ArtistId, TrackId};
+use crate::player::fake_output::FakeOutput;
 
 use crate::library::LibraryStatus;
 use crate::library::models::{ListRequest, SortDirection, TrackSortKey};

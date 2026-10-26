@@ -2,7 +2,7 @@
   import { type TrackId } from "#lib/native/bindings";
   import { errorMessage } from "#lib/native/messages";
   import { QueryResult } from "#lib/library/query-result.svelte";
-  import { AppServices } from "#lib/shell/app-services.svelte";
+  import { AppServices } from "#lib/app/app-services.svelte";
   import { Button } from "#lib/ui/shadcn/button/index.js";
   import {
     Sheet,
