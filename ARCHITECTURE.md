@@ -54,7 +54,7 @@ Communication has two directions. A request gets an answer. The Backend pushes i
 
 - **Renderer → Backend:** a command or a query. The Renderer calls a Host command through the area objects in `src/lib/native/commands.ts` (`player`, `library`, `lyrics`, `meter`, `appearance`, `app`). The Host calls the Backend. A command answers only whether the Backend accepted it. A query answers with data, such as a window of the queue.
 - **Backend → Renderer:** one channel. It sends `BackendMessage` on the `app_connect` channel. The channel carries four kinds of message:
-  1. **State:** the whole value of each state. The states are the transport (`player`), the queue (`queue`, with its version), the Library (its availability, its version, its directories, and its scan), the waveform, and the appearance. The owner of a state sends it when the state changes. `BackendApp` sends the Unavailable Library state when the Library did not open. No worker runs in that case.
+  1. **State:** the whole value of each state. The states are the transport (`player`), the queue (`queue`, with its version), the Library (its availability, its version, its directories, and its scan), the waveform, and the appearance. The owner of a state sends it when the state changes. The Library sends the Unavailable state itself when its database did not open. It then runs no worker and answers each command with `LibraryUnavailable`.
   2. **Position:** the playing position. The Backend sends it once a second while a track plays. It also sends it after a seek or a start.
   3. **Backend event:** a fact that happened once, such as a skipped track.
   4. **Measurement:** meter frames, as JSON. They travel on the channel that `meter_start` takes. The Meter measures only while the Player runs.

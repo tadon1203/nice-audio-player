@@ -71,10 +71,14 @@ pub(crate) enum SyncInput {
     ScanEnded(ScanOutcome),
 }
 
-/// The handle `Library` holds. Dropping the last one stops the worker.
-pub(crate) struct LibrarySync {
-    messages: Sender<SyncInput>,
-    thread: WorkerThread,
+/// The handle `Library` holds. Dropping the last one stops the worker. The handle of a Library
+/// that did not open has no worker: its commands fail with `LibraryUnavailable`.
+pub(crate) enum LibrarySync {
+    Running {
+        messages: Sender<SyncInput>,
+        thread: WorkerThread,
+    },
+    Unavailable,
 }
 
 impl LibrarySync {
@@ -98,12 +102,17 @@ impl LibrarySync {
             watchers: HashMap::new(),
         };
         let thread = WorkerThread::spawn("library-sync", move || worker.run(&receiver));
-        Self { messages, thread }
+        Self::Running { messages, thread }
     }
 
     /// Sends a command and waits for its answer. A worker that has stopped is `WorkerStopped`.
     fn call(&self, command: impl FnOnce(Reply<()>) -> SyncCommand) -> Result<()> {
-        request(&self.messages, |reply| SyncInput::Command(command(reply)))
+        match self {
+            Self::Running { messages, .. } => {
+                request(messages, |reply| SyncInput::Command(command(reply)))
+            }
+            Self::Unavailable => Err(Error::LibraryUnavailable),
+        }
     }
 
     pub(crate) fn add_directory(&self, path: String) -> Result<()> {
@@ -133,10 +142,13 @@ impl LibrarySync {
     /// Stops the worker, its watchers and the scan in progress, and waits for them. A worker that
     /// has already stopped has nothing left to stop.
     pub(crate) fn shutdown(&self) {
+        let Self::Running { thread, .. } = self else {
+            return;
+        };
         if self.call(SyncCommand::Shutdown).is_err() {
             debug!("library.sync.already_stopped");
         }
-        self.thread.join();
+        thread.join();
     }
 }
 

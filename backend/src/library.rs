@@ -1,7 +1,7 @@
 //! The Library: the indexed set of tracks from the registered music directories.
 //!
-//! `Library::open` yields a working Library or the reason it is unavailable, and the app holds
-//! that result. A working Library has two sides that meet only in the database: the read side
+//! `Library::start` always yields a Library. One that could not open its database is unavailable:
+//! it answers every command with `LibraryUnavailable`. A working Library has two sides that meet only in the database: the read side
 //! (`lists` and `tracks`: the lists, playback selections, track lookups) and the write side
 //! (`sync`: directories, watchers, and the scan), reached through the methods below.
 
@@ -25,10 +25,12 @@ pub(crate) mod version;
 use crate::Result;
 use crate::errors::Error;
 use crate::ids::DirectoryId;
-use crate::messages::BackendMessage;
+use crate::messages::{self, BackendMessage};
 use database::{Database, ReadConnection};
+use log::error;
 #[cfg(test)]
 use models::LibraryDirectory;
+use models::LibraryState;
 use serde::Serialize;
 use std::{
     path::{Component, Path, PathBuf},
@@ -202,6 +204,25 @@ pub(crate) struct Library {
 }
 
 impl Library {
+    /// The Library of the data directory `directory`, always: when its database cannot be opened,
+    /// the cause is logged, the Unavailable state is sent, and the Library that returns fails
+    /// every command with `LibraryUnavailable`. No worker runs in that case, so the state is sent
+    /// here.
+    pub(crate) fn start(directory: &Path, host: &Sender<BackendMessage>) -> Self {
+        Self::open(directory, host.clone()).unwrap_or_else(|cause| {
+            error!("library.open_failed cause={cause}");
+            messages::send(
+                host,
+                BackendMessage::Library(LibraryState::empty(LibraryStatus::Unavailable)),
+            );
+            Self {
+                database: Database::unavailable(),
+                sync: Arc::new(LibrarySync::Unavailable),
+                version: Arc::new(LibraryVersion::default()),
+            }
+        })
+    }
+
     /// Opens the Library in `directory`: opens its database (see `Database::initialize`), then
     /// starts watching and scanning the registered directories.
     pub(crate) fn open(directory: &Path, host: Sender<BackendMessage>) -> Result<Self> {

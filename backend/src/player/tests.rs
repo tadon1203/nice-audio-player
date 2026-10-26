@@ -111,7 +111,7 @@ impl Fixture {
         ));
         let waveforms = Arc::new(Waveforms::start(files.file("waveforms"), sender.clone()));
         let player = Player::start(
-            Some(Arc::new(library.clone())),
+            Arc::new(library.clone()),
             sender,
             Meter::new(),
             waveforms,

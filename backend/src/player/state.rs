@@ -203,14 +203,12 @@ pub const UPCOMING_WINDOW: u32 = 100;
 pub(super) const HISTORY_IN_STATE: usize = 50;
 
 /// The rows for `entries`, read from the library in one query: `None` where the library no longer
-/// has the track, or where there is no library or it cannot be read (the rows are left out of the
-/// state only).
-fn rows(entries: &[QueueEntry], library: Option<&Library>) -> Vec<Option<QueueItem>> {
+/// has the track, or where the library cannot be read (the rows are left out of the state only).
+fn rows(entries: &[QueueEntry], library: &Library) -> Vec<Option<QueueItem>> {
     let ids: Vec<TrackId> = entries.iter().map(|entry| entry.track_id).collect();
     let resolved = library
-        .map(|library| library.playable_tracks(&ids))
-        .and_then(Result::ok)
-        .unwrap_or_else(|| vec![None; ids.len()]);
+        .playable_tracks(&ids)
+        .unwrap_or_else(|_| vec![None; ids.len()]);
     entries
         .iter()
         .zip(resolved)
@@ -265,7 +263,7 @@ impl QueueState {
 
     /// Reads the rows of the current item, the last few played and the first upcoming ones. The
     /// version is left at 0 for the worker to set.
-    pub(super) fn of(queue: &Queue, library: Option<&Library>) -> Self {
+    pub(super) fn of(queue: &Queue, library: &Library) -> Self {
         let history = queue.history();
         let shown_history = &history[history.len().saturating_sub(HISTORY_IN_STATE)..];
         let upcoming = queue.upcoming();
@@ -297,7 +295,7 @@ impl QueueWindow {
         version: u64,
         offset: usize,
         limit: usize,
-        library: Option<&Library>,
+        library: &Library,
     ) -> Self {
         let upcoming = queue.upcoming();
         let start = offset.min(upcoming.len());

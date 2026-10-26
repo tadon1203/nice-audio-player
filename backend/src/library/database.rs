@@ -3,6 +3,7 @@
 //! through `configure_common`, so the SQL functions are registered on each.
 
 use crate::Result;
+use crate::errors::Error;
 use crate::ids::register_sql_functions;
 use parking_lot::Mutex;
 use rusqlite::{Connection, OpenFlags};
@@ -37,6 +38,8 @@ type ReaderPool = Arc<Mutex<Vec<Connection>>>;
 pub(crate) struct Database {
     path: PathBuf,
     readers: ReaderPool,
+    /// `false` for the database of a Library that did not open: it opens no connection.
+    usable: bool,
 }
 
 /// A read-only connection on loan from the pool; it goes back when dropped.
@@ -86,7 +89,18 @@ impl Database {
         Ok(Self {
             path,
             readers: ReaderPool::default(),
+            usable: true,
         })
+    }
+
+    /// The database of a Library that did not open. Every connection request fails with
+    /// `LibraryUnavailable`.
+    pub(crate) fn unavailable() -> Self {
+        Self {
+            path: PathBuf::new(),
+            readers: ReaderPool::default(),
+            usable: false,
+        }
     }
 
     pub(crate) fn data_dir(&self) -> &Path {
@@ -115,6 +129,9 @@ impl Database {
     }
 
     fn open(&self, flags: OpenFlags) -> Result<Connection> {
+        if !self.usable {
+            return Err(Error::LibraryUnavailable);
+        }
         let connection = Connection::open_with_flags(&self.path, flags)?;
         configure_common(&connection)?;
         Ok(connection)

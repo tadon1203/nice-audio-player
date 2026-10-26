@@ -279,7 +279,7 @@ pub(super) struct PlayerWorker {
     output_selection: AudioOutputSelection,
     messages: Sender<BackendMessage>,
     sent: Sent,
-    library: Option<Arc<Library>>,
+    library: Arc<Library>,
     waveforms: Arc<Waveforms>,
     settings: Arc<SettingsStore>,
     output_stream_factory: Box<dyn OutputStreamFactory>,
@@ -297,7 +297,7 @@ impl PlayerWorker {
     pub(super) fn new(
         inbox: Sender<WorkerInput>,
         messages: Sender<BackendMessage>,
-        library: Option<Arc<Library>>,
+        library: Arc<Library>,
         waveforms: Arc<Waveforms>,
         meter: Meter,
         settings: Arc<SettingsStore>,
@@ -838,7 +838,7 @@ impl PlayerWorker {
             self.queue_version,
             offset as usize,
             limit as usize,
-            self.library.as_deref(),
+            &self.library,
         )
     }
 
@@ -1618,8 +1618,7 @@ impl PlayerWorker {
 
     /// The track of `track_id`, read from the library now. `None` when the library no longer has it.
     fn library_track(&self, track_id: TrackId) -> Result<Option<PlayableTrack>> {
-        let library = self.library.as_ref().ok_or(Error::LibraryUnavailable)?;
-        Ok(library.playable_tracks(&[track_id])?.pop().flatten())
+        Ok(self.library.playable_tracks(&[track_id])?.pop().flatten())
     }
 
     /// The queue entry as a row for the transport, read from the library now.
@@ -1635,7 +1634,7 @@ impl PlayerWorker {
     /// Sends the queue when it differs from the one last sent. Each change moves the queue version on
     /// by one, and the version is part of the state.
     fn send_queue(&mut self) {
-        let mut value = QueueState::of(&self.queue, self.library.as_deref());
+        let mut value = QueueState::of(&self.queue, &self.library);
         value.version = self.queue_version;
         if self.sent.queue.as_ref() == Some(&value) {
             return;

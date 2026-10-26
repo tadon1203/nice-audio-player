@@ -84,12 +84,12 @@ impl Drop for Player {
 impl Player {
     /// Starts the worker, on the audio output `output_stream_factory` opens streams on. The worker
     /// begins with the preferences `settings` saved, and records each change in `settings`. Tracks
-    /// are read from `library`; without one, playing fails with `LibraryUnavailable`. The worker
+    /// are read from `library`; an unavailable one makes playing fail with `LibraryUnavailable`. The worker
     /// sends its state to `messages`, starting with the first values. `meter` takes the taps of this
     /// player's output streams, and `waveforms` hears about each track as it is loaded or is about to
     /// play.
     pub(crate) fn start(
-        library: Option<Arc<Library>>,
+        library: Arc<Library>,
         messages: Sender<BackendMessage>,
         meter: Meter,
         waveforms: Arc<Waveforms>,
