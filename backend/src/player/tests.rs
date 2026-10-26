@@ -7,7 +7,6 @@
 //! log by then. A start is answered before its track loads: a test that needs the track to play
 //! waits for it.
 
-use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -19,7 +18,6 @@ use crate::library::models::{ListRequest, SortDirection, TrackSortKey};
 use crate::messages::BackendMessage;
 use crate::meter::Meter;
 use crate::player::Player;
-use crate::player::PlayerPreferences;
 use crate::player::RepeatMode;
 use crate::player::fake_output::FakeOutput;
 use crate::player::output::{AudioOutputSelection, OutputError, StreamFailureKind};
@@ -28,6 +26,7 @@ use crate::player::state::{
     QueueState, StartedBy,
 };
 use crate::player::waveform::Waveforms;
+use crate::settings::{self, SettingsStore};
 use crate::test_support::{MessageLog, TestDirectory, wait_until, write_pcm_i16_wav};
 
 const SAMPLE_RATE: u32 = 44_100;
@@ -68,7 +67,7 @@ struct Fixture {
     output: FakeOutput,
     /// What the Backend sent, in order.
     messages: Arc<MessageLog>,
-    preferences: Arc<Mutex<Vec<PlayerPreferences>>>,
+    settings: Arc<SettingsStore>,
     /// The track of each clip, by name.
     ids: HashMap<&'static str, TrackId>,
     /// The music directory and the data directory; kept alive for the test.
@@ -104,19 +103,21 @@ impl Fixture {
             .collect();
 
         let output = FakeOutput::new();
-        let preferences = Arc::new(Mutex::new(Vec::new()));
-        let observed = Arc::clone(&preferences);
+        let settings_path = settings::file_path(&data);
+        let settings = Arc::new(SettingsStore::open(
+            settings_path.clone(),
+            settings::read(&settings_path),
+            sender.clone(),
+        ));
         let waveforms = Arc::new(Waveforms::start(files.file("waveforms"), sender.clone()));
         let player = Player::start(
             Some(Arc::new(library.clone())),
             sender,
             Meter::new(),
             waveforms,
-            PlayerPreferences::default(),
-            move |preferences| observed.lock().push(preferences.clone()),
+            Arc::clone(&settings),
             Box::new(output.clone()),
-        )
-        .expect("the player starts");
+        );
 
         let started = wait_until(
             || messages.player().is_some() && messages.queue().is_some(),
@@ -129,7 +130,7 @@ impl Fixture {
             library,
             output,
             messages,
-            preferences,
+            settings,
             ids,
             _files: files,
         }

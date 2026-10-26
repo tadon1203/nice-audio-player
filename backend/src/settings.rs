@@ -14,7 +14,6 @@ use std::{
     fs,
     path::{Path, PathBuf},
     sync::mpsc::{self, RecvTimeoutError, Sender},
-    thread::{self, JoinHandle},
     time::Duration,
 };
 
@@ -23,6 +22,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::messages::{self, BackendMessage};
 use crate::player::PlayerPreferences;
+use crate::threads::WorkerThread;
 
 const FILE_NAME: &str = "settings.json";
 const WRITE_DEBOUNCE: Duration = Duration::from_millis(400);
@@ -98,7 +98,7 @@ struct State {
 
 struct Writer {
     sender: Sender<SettingsFile>,
-    thread: JoinHandle<()>,
+    thread: WorkerThread,
 }
 
 impl SettingsStore {
@@ -110,10 +110,7 @@ impl SettingsStore {
         messages: Sender<BackendMessage>,
     ) -> Self {
         let (sender, receiver) = mpsc::channel();
-        let thread = thread::Builder::new()
-            .name("settings-writer".into())
-            .spawn(move || write_loop(&receiver, &path))
-            .expect("the settings writer thread must start");
+        let thread = WorkerThread::spawn("settings-writer", move || write_loop(&receiver, &path));
         messages::send(
             &messages,
             BackendMessage::Appearance(file.appearance.clone()),
@@ -146,8 +143,8 @@ impl SettingsStore {
 
     /// Remembers the player preferences. They are persisted but not published: the playback
     /// state already tells the renderer.
-    pub(crate) fn record_player(&self, preferences: PlayerPreferences) {
-        self.modify(|file| file.player = preferences);
+    pub(crate) fn record_player(&self, preferences: &PlayerPreferences) {
+        self.modify(|file| file.player = preferences.clone());
     }
 
     /// Applies `change` under the lock, sends the appearance when it changed, and queues the file
@@ -176,9 +173,7 @@ impl SettingsStore {
         let writer = self.state.lock().writer.take();
         if let Some(Writer { sender, thread }) = writer {
             drop(sender);
-            if thread.join().is_err() {
-                error!("settings.writer_panicked");
-            }
+            thread.join();
         }
     }
 }
@@ -272,7 +267,7 @@ mod tests {
             artwork_backdrop: Some(false),
             calm_motion: Some(true),
         });
-        store.record_player(PlayerPreferences {
+        store.record_player(&PlayerPreferences {
             volume: 0.4,
             muted: true,
             output_selection: AudioOutputSelection::Device {
@@ -359,7 +354,7 @@ mod tests {
             "the appearance is sent when the store opens"
         );
 
-        store.record_player(PlayerPreferences {
+        store.record_player(&PlayerPreferences {
             volume: 0.5,
             ..PlayerPreferences::default()
         });

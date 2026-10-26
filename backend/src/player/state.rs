@@ -4,7 +4,7 @@
 use super::queue::{Queue, QueueEntry, RepeatMode};
 use crate::ids::{PlaybackId, QueueItemId, TrackId};
 use crate::library::Library;
-use crate::library::models::NowPlayingTrack;
+use crate::library::models::TrackSummary;
 use crate::player::output::AudioOutputSelection;
 use crate::player::processing::{ChannelConversion, OutputProcessingPlan};
 use crate::player::volume::VolumeState;
@@ -52,7 +52,7 @@ pub enum StartedBy {
 pub struct QueueItem {
     pub queue_item_id: QueueItemId,
     #[serde(flatten)]
-    pub track: NowPlayingTrack,
+    pub track: TrackSummary,
 }
 
 /// A loaded track: identity plus how it reaches the output device.

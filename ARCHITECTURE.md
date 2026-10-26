@@ -90,7 +90,7 @@ On connect the Backend first sends the latest value of each state, so the Render
 
 - The IPC contract is defined once, in the Backend. The Renderer's bindings are generated from it. Nobody edits them by hand.
 - A Host command that blocks does not run on the main thread.
-- Backend services know nothing about the Host or each other. Each state value has one owner thread, which holds it and sends it whole when it changes; a position or a backend event is sent the same way, on the same channel.
+- A Backend service knows nothing about the Host. The Player reads tracks from the Library and writes its preferences to the settings store. Each state value has one owner thread, which holds it and sends it whole when it changes; a position or a backend event is sent the same way, on the same channel.
 - A command never answers with Backend state. The state a command causes arrives as a push.
 - The Host reaches the Backend only through `BackendApp` and its public modules.
 - Settings are read and written through the IPC of the area that owns them. Appearance is read from `app_connect` and written with `appearanceUpdate`; player preferences are read and written through the player commands.

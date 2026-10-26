@@ -6,7 +6,7 @@ use std::sync::mpsc::Sender;
 use std::thread;
 
 use super::state::PlaybackFailureCode;
-use super::worker::{Input, WorkerEvent, send};
+use super::worker::{WorkerInput, send};
 use crate::errors::contain;
 use crate::library::media::ValidatedAudioFile;
 use crate::player::decode::{CompressedAudioSource, DecodeError, DecodeStep, StreamingDecoder};
@@ -80,8 +80,8 @@ pub(super) struct PreparedSource {
     pub start_output_frame: u64,
 }
 
-/// A load running on its own thread. The result arrives as `WorkerEvent::SourceReady` with its id. A
-/// load that is cancelled, or replaced, still reports; the worker ignores the result by id.
+/// Dropping a load cancels it. A load that is cancelled, or replaced, still reports; the worker
+/// ignores the result by id.
 pub(super) struct SourceLoad {
     pub id: SourceLoadId,
     cancellation: Cancellation,
@@ -93,7 +93,7 @@ impl SourceLoad {
         file: ValidatedAudioFile,
         id: SourceLoadId,
         position: LoadPosition,
-        inbox: Sender<Input>,
+        inbox: Sender<WorkerInput>,
     ) -> Result<Self, ()> {
         // A stalled network read must not block the worker, so the thread is never joined.
         // Cancellation is the only way to stop it early, and a stopped load reports nothing.
@@ -106,16 +106,37 @@ impl SourceLoad {
                     prepare(&file, position, &worker_cancellation)
                 })
                 .unwrap_or(Err(PipelineError::SourceOpen));
-                send(&inbox, WorkerEvent::SourceReady { id, result });
+                send(
+                    &inbox,
+                    WorkerInput::Load(LoadEvent::SourceReady { id, result }),
+                );
             })
             .inspect_err(|cause| log::warn!("playback.source_load.thread_failed cause={cause}"))
             .map_err(|_| ())?;
         Ok(Self { id, cancellation })
     }
+}
 
-    pub(super) fn cancel(self) {
+impl Drop for SourceLoad {
+    fn drop(&mut self) {
         self.cancellation.cancel();
     }
+}
+
+/// What the threads that read and decode a file report to the worker.
+pub(super) enum LoadEvent {
+    /// A file's load is done, or failed.
+    SourceReady {
+        id: SourceLoadId,
+        result: Result<PreparedSource, PipelineError>,
+    },
+    /// A decode has enough samples queued to start playing.
+    PrebufferReady { pipeline: PipelineId },
+    /// A decode thread failed; its pipeline is dead.
+    DecodeFailed {
+        pipeline: PipelineId,
+        error: PipelineError,
+    },
 }
 
 /// Opens `file` and does the work of `position` on it.
@@ -194,21 +215,16 @@ fn from_the_beginning(mut decoder: StreamingDecoder) -> Result<PreparedSource, P
     })
 }
 
-/// A decode thread and how to stop it.
+/// A decode thread and how to stop it. Dropping it stops the thread: see `DecodeHandle`.
 pub(super) struct Pipeline {
     pub id: PipelineId,
-    decode: DecodeWorker,
-}
-
-impl Pipeline {
-    pub(super) fn cancel(self) {
-        self.decode.cancel();
-    }
+    /// Dropped with the pipeline, which stops the decode thread.
+    _decode: DecodeHandle,
 }
 
 /// Starts the decode thread that fills `producer` from `prepared`, through `converter`.
 pub(super) fn start_decoding(
-    inbox: &Sender<Input>,
+    inbox: &Sender<WorkerInput>,
     id: PipelineId,
     prepared: PreparedSource,
     producer: PcmProducer,
@@ -232,7 +248,10 @@ pub(super) fn start_decoding(
         prebuffer_sent: false,
     }
     .spawn()?;
-    Ok(Pipeline { id, decode })
+    Ok(Pipeline {
+        id,
+        _decode: decode,
+    })
 }
 
 /// Why a decode task ended without reaching the end of the stream.
@@ -264,32 +283,32 @@ struct DecodeTask {
     converted: Vec<f32>,
     discard_output_samples: usize,
     cancellation: Cancellation,
-    inbox: Sender<Input>,
+    inbox: Sender<WorkerInput>,
     pipeline: PipelineId,
     prebuffer_frames: usize,
     prebuffer_sent: bool,
 }
 
-/// The worker's handle on a decode thread: how to stop it, and how to wake it.
-struct DecodeWorker {
+/// The worker's handle on a decode thread. Dropping it stops the thread without waiting for it: a
+/// read stalled on a network path must not block the playback worker. Whatever the thread still
+/// reports is ignored by pipeline id.
+struct DecodeHandle {
     cancellation: Cancellation,
     waker: PcmWaker,
 }
 
-impl DecodeWorker {
-    /// Stops the decode thread without waiting for it: a read stalled on a network path must
-    /// not block the playback worker. Whatever the thread still reports is ignored by pipeline
-    /// id.
-    fn cancel(self) {
+impl Drop for DecodeHandle {
+    fn drop(&mut self) {
         self.cancellation.cancel();
         self.waker.wake();
     }
 }
 
 impl DecodeTask {
-    /// Starts the thread. The thread is detached: nothing waits for it, and `cancel` stops it.
-    fn spawn(self) -> Result<DecodeWorker, PipelineError> {
-        let worker = DecodeWorker {
+    /// Starts the thread. The thread is detached: nothing waits for it, and dropping the handle
+    /// stops it.
+    fn spawn(self) -> Result<DecodeHandle, PipelineError> {
+        let worker = DecodeHandle {
             cancellation: self.cancellation.clone(),
             waker: self.producer.waker(),
         };
@@ -307,10 +326,10 @@ impl DecodeTask {
         if contain("decode", AssertUnwindSafe(move || self.run())).is_err() {
             send(
                 &inbox,
-                WorkerEvent::DecodeFailed {
+                WorkerInput::Load(LoadEvent::DecodeFailed {
                     pipeline,
                     error: PipelineError::Decode,
-                },
+                }),
             );
         }
     }
@@ -327,10 +346,10 @@ impl DecodeTask {
     fn fail(&self, error: PipelineError) {
         send(
             &self.inbox,
-            WorkerEvent::DecodeFailed {
+            WorkerInput::Load(LoadEvent::DecodeFailed {
                 pipeline: self.pipeline,
                 error,
-            },
+            }),
         );
     }
 
@@ -388,10 +407,18 @@ pub(super) fn prebuffer_frames(sample_rate: u32) -> usize {
         .max(1)
 }
 
-fn notify_prebuffer(inbox: &Sender<Input>, pipeline: PipelineId, sent: &mut bool, ready: bool) {
+fn notify_prebuffer(
+    inbox: &Sender<WorkerInput>,
+    pipeline: PipelineId,
+    sent: &mut bool,
+    ready: bool,
+) {
     if ready && !*sent {
         *sent = true;
-        send(inbox, WorkerEvent::PrebufferReady { pipeline });
+        send(
+            inbox,
+            WorkerInput::Load(LoadEvent::PrebufferReady { pipeline }),
+        );
     }
 }
 
@@ -429,12 +456,16 @@ pub(super) mod gate {
 
 #[cfg(test)]
 mod tests {
-    use super::{DecodeTask, DecodeWorker, Input, Stop, WorkerEvent, prebuffer_frames};
+    use super::{
+        DecodeHandle, DecodeTask, LoadEvent, LoadPosition, SourceLoad, SourceLoadId, Stop,
+        prebuffer_frames,
+    };
     use crate::library::media::ValidatedAudioFile;
     use crate::player::decode::{CompressedAudioSource, DecodeStep};
     use crate::player::output::PipelineId;
     use crate::player::output::{PcmConsumer, bounded_pcm_queue};
     use crate::player::processing::{OutputProcessingError, OutputProcessingPlan, PcmConverter};
+    use crate::player::worker::WorkerInput;
     use crate::test_support::{TestDirectory, write_pcm_i16_wav};
     use crate::threads::Cancellation;
     use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
@@ -453,7 +484,7 @@ mod tests {
     fn start_pipeline(
         file: &ValidatedAudioFile,
         capacity_frames: usize,
-    ) -> (DecodeWorker, PcmConsumer, Receiver<Input>) {
+    ) -> (DecodeHandle, PcmConsumer, Receiver<WorkerInput>) {
         let mut decoder = CompressedAudioSource::open(file, &Cancellation::default())
             .unwrap()
             .decoder()
@@ -486,9 +517,9 @@ mod tests {
         (worker, consumer, events)
     }
 
-    fn next_event(events: &Receiver<Input>) -> WorkerEvent {
+    fn next_event(events: &Receiver<WorkerInput>) -> LoadEvent {
         match events.recv_timeout(Duration::from_secs(2)) {
-            Ok(Input::WorkerEvent(event)) => event,
+            Ok(WorkerInput::Load(event)) => event,
             _ => panic!("the decode worker sent no event"),
         }
     }
@@ -506,12 +537,12 @@ mod tests {
 
         assert!(matches!(
             next_event(&events),
-            WorkerEvent::PrebufferReady {
+            LoadEvent::PrebufferReady {
                 pipeline: PipelineId(7)
             }
         ));
         assert!(consumer.available_frames(1) >= prebuffer_frames(44_100));
-        worker.cancel();
+        drop(worker);
     }
 
     #[test]
@@ -522,7 +553,7 @@ mod tests {
 
         assert!(matches!(
             next_event(&events),
-            WorkerEvent::PrebufferReady { .. }
+            LoadEvent::PrebufferReady { .. }
         ));
         let deadline = Instant::now() + Duration::from_secs(2);
         while consumer.available_frames(1) < 1_000 && Instant::now() < deadline {
@@ -536,7 +567,7 @@ mod tests {
             std::thread::yield_now();
         }
         assert!(consumer.is_finished());
-        worker.cancel();
+        drop(worker);
     }
 
     #[test]
@@ -551,7 +582,7 @@ mod tests {
             std::thread::yield_now();
         }
         assert_eq!(consumer.available_frames(1), 8);
-        worker.cancel();
+        drop(worker);
 
         // The thread ends by itself and drops its inbox: a cancelled worker reports nothing.
         assert!(
@@ -573,6 +604,19 @@ mod tests {
             Stop::from(OutputProcessingError::ResamplerProcessingFailed),
             Stop::Conversion
         );
+    }
+
+    #[test]
+    fn dropping_a_source_load_cancels_it() {
+        let directory = TestDirectory::new();
+        let file = wav_file(&directory, 1_000);
+        let (inbox, _events) = mpsc::channel();
+        let load = SourceLoad::spawn(file, SourceLoadId(1), LoadPosition::Start, inbox).unwrap();
+        let cancellation = load.cancellation.clone();
+
+        drop(load);
+
+        assert!(cancellation.is_cancelled());
     }
 
     #[test]

@@ -8,13 +8,15 @@ use cpal::StreamInstant;
 
 use super::output::{
     AudioOutputDeviceIdentity, AudioOutputSelection, DeviceResolutionError, OutputError,
-    OutputEvent, OutputEvents, OutputLinks, OutputStream, OutputStreamFactory, PcmConsumer,
-    PipelineId, PreparedOutput, PreparedOutputConfig, StreamFailureKind, make_queue,
+    OutputEvent, OutputEvents, OutputStream, OutputStreamFactory, OutputStreamId, PcmConsumer,
+    PipelineId, PreparedOutput, PreparedOutputConfig, StreamCallbacks, StreamFailureKind,
+    make_queue,
 };
 use super::pcm::PcmSpec;
 use super::processing::OutputProcessingPlan;
 
 struct StreamState {
+    stream: OutputStreamId,
     running: bool,
     played_frames: u64,
     now: StreamInstant,
@@ -136,8 +138,12 @@ impl FakeOutput {
     }
 
     pub(crate) fn fail_stream(&self, kind: StreamFailureKind) {
-        let events = Arc::clone(&self.latest().lock().events);
-        events(OutputEvent::Failed(kind));
+        let (events, stream) = {
+            let state = self.latest();
+            let state = state.lock();
+            (Arc::clone(&state.events), state.stream)
+        };
+        events(OutputEvent::Failed { stream, kind });
     }
 }
 
@@ -170,7 +176,7 @@ impl OutputStreamFactory for FakeOutput {
         selection: &AudioOutputSelection,
         spec: PcmSpec,
         first: PipelineId,
-        links: OutputLinks,
+        links: StreamCallbacks,
     ) -> Result<PreparedOutput, OutputError> {
         if let Some(error) = self.shared().fail_open.take() {
             return Err(error);
@@ -188,6 +194,7 @@ impl OutputStreamFactory for FakeOutput {
         let (producer, consumer) = make_queue(spec)?;
         let start_error = self.shared().fail_next_start.take();
         let state = Arc::new(Mutex::new(StreamState {
+            stream: links.stream,
             running: false,
             played_frames: 0,
             now: StreamInstant::new(1, 0),

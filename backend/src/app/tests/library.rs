@@ -19,8 +19,7 @@ fn fixture_without_library() -> Fixture {
     std::fs::write(&data_dir, "a file, so the data directory cannot be created")
         .expect("a blocker");
     let (recorded, sink) = MessageLog::shared();
-    let backend = BackendApp::initialize(data_dir, sink, Box::new(FakeOutput::new()))
-        .expect("the test backend starts");
+    let backend = BackendApp::initialize(data_dir, sink, Box::new(FakeOutput::new()));
     Fixture {
         backend,
         recorded,

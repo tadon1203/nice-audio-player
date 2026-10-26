@@ -316,17 +316,6 @@ export type NowPlayingAlbum = {
 } & TrackAlbum;
 
 /**
- *  The loaded track as the Renderer sees it. No file path: the playback worker holds the file. It
- *  has no state: only a playable track is ever loaded.
- */
-export type NowPlayingTrack = {
-	album: NowPlayingAlbum | null,
-	trackNumber: number | null,
-	discNumber: number | null,
-	year: number | null,
-} & TrackCore;
-
-/**
  *  One page of a list: which rows, how many the whole list has, and the Library version it was
  *  read at. A page whose version differs from the first one's means the list changed under it.
  */
@@ -398,7 +387,7 @@ skipping: boolean };
  */
 export type QueueItem = {
 	queueItemId: QueueItemId,
-} & NowPlayingTrack;
+} & TrackSummary;
 
 /**  One entry of the playback queue: the queue's counter. On the IPC a number. */
 export type QueueItemId = number;
@@ -521,4 +510,15 @@ export type TrackSortKey = "title" | "artist" | "album" | "duration";
  *  decoded. Missing wins over unsupported.
  */
 export type TrackState = "playable" | "missing" | "unsupported";
+
+/**
+ *  A track as the Renderer sees it: the loaded track, and each queue row. No file path: the playback
+ *  worker holds the file. It has no state: only a playable track is ever loaded or queued.
+ */
+export type TrackSummary = {
+	album: NowPlayingAlbum | null,
+	trackNumber: number | null,
+	discNumber: number | null,
+	year: number | null,
+} & TrackCore;
 

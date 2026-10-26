@@ -18,16 +18,15 @@ use super::{
 use crate::errors::CommandError;
 use crate::ids::DirectoryId;
 use crate::messages::{self, BackendMessage};
-use crate::threads::{Cancellation, request, run_in_background};
+use crate::threads::{Cancellation, Reply, WorkerThread, answer, request, run_in_background};
 use log::{debug, error, info, warn};
 use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
-use parking_lot::Mutex;
 use std::{
     collections::{HashMap, HashSet},
     path::{Path, PathBuf},
     sync::{
         Arc,
-        mpsc::{self, Receiver, RecvTimeoutError, Sender, SyncSender},
+        mpsc::{self, Receiver, RecvTimeoutError, Sender},
     },
     thread::{self, JoinHandle},
     time::{Duration, Instant},
@@ -39,8 +38,6 @@ use std::{
 const DEBOUNCE: Duration = Duration::from_millis(500);
 #[cfg(test)]
 const DEBOUNCE: Duration = Duration::from_millis(50);
-
-type Reply<T> = SyncSender<Result<T, CommandError>>;
 
 /// What a caller asks the worker to do. Each command answers on its own reply channel.
 pub(crate) enum SyncCommand {
@@ -73,14 +70,6 @@ pub(crate) enum SyncInput {
     ScanEnded(ScanOutcome),
 }
 
-/// Answers a command, if its caller is still waiting. A caller that has gone away is logged, not
-/// an error.
-fn respond<T>(reply: &Reply<T>, result: Result<T, CommandError>) {
-    if reply.send(result).is_err() {
-        debug!("library.reply_closed");
-    }
-}
-
 /// Sends an input to the worker. The worker may already be gone, which is logged.
 fn send(messages: &Sender<SyncInput>, input: SyncInput) {
     if let Err(cause) = messages.send(input) {
@@ -91,7 +80,7 @@ fn send(messages: &Sender<SyncInput>, input: SyncInput) {
 /// The handle `Library` holds. Dropping the last one stops the worker.
 pub(crate) struct LibrarySync {
     messages: Sender<SyncInput>,
-    thread: Mutex<Option<JoinHandle<()>>>,
+    thread: WorkerThread,
 }
 
 impl LibrarySync {
@@ -114,19 +103,13 @@ impl LibrarySync {
             collector: None,
             watchers: HashMap::new(),
         };
-        let thread = thread::Builder::new()
-            .name("library-sync".into())
-            .spawn(move || worker.run(&receiver))
-            .expect("the OS starts a thread unless it is out of resources");
-        Self {
-            messages,
-            thread: Mutex::new(Some(thread)),
-        }
+        let thread = WorkerThread::spawn("library-sync", move || worker.run(&receiver));
+        Self { messages, thread }
     }
 
     /// Sends a command and waits for its answer. A worker that has stopped is `TaskFailed`.
     fn call<T>(&self, command: impl FnOnce(Reply<T>) -> SyncCommand) -> Result<T, CommandError> {
-        request(&self.messages, |reply| SyncInput::Command(command(reply)))?
+        request(&self.messages, |reply| SyncInput::Command(command(reply)))
     }
 
     pub(crate) fn add_directory(&self, path: String) -> Result<(), CommandError> {
@@ -162,12 +145,7 @@ impl LibrarySync {
         if let Err(cause) = self.call(SyncCommand::Shutdown) {
             debug!("library.sync.shutdown_failed cause={cause}");
         }
-        let thread = self.thread.lock().take();
-        if let Some(thread) = thread
-            && thread.join().is_err()
-        {
-            error!("library.sync.worker_panicked");
-        }
+        self.thread.join();
     }
 }
 
@@ -254,7 +232,7 @@ impl LibraryWorker {
                     self.watch_and_scan(directory, Duration::ZERO);
                     self.changed_directories();
                 }
-                respond(&reply, result.map(|_| ()));
+                answer(&reply, result.map(|_| ()));
             }
             SyncCommand::SetDirectoryEnabled(id, enabled, reply) => {
                 let result =
@@ -263,7 +241,7 @@ impl LibraryWorker {
                     self.set_enabled(id, enabled);
                     self.changed_directories();
                 }
-                respond(&reply, result);
+                answer(&reply, result);
             }
             SyncCommand::RemoveDirectory(id, reply) => {
                 let result = self.while_idle(|database| directories::remove(database, id));
@@ -273,7 +251,7 @@ impl LibraryWorker {
                     self.collect_artwork_in_background();
                     self.changed_directories();
                 }
-                respond(&reply, result);
+                answer(&reply, result);
             }
             SyncCommand::DeleteMissingTracks(reply) => {
                 let result = self.while_idle(directories::delete_missing);
@@ -281,7 +259,7 @@ impl LibraryWorker {
                     self.collect_artwork_in_background();
                     self.changed_directories();
                 }
-                respond(&reply, result);
+                answer(&reply, result);
             }
             SyncCommand::StartScan(reply) => {
                 let result = if self.scan.is_some() {
@@ -301,7 +279,7 @@ impl LibraryWorker {
                         )
                     })
                 };
-                respond(&reply, result);
+                answer(&reply, result);
             }
             SyncCommand::CancelScan(reply) => {
                 let result = match &self.scan {
@@ -311,11 +289,11 @@ impl LibraryWorker {
                     }
                     None => Err(CommandError::ScanNotRunning),
                 };
-                respond(&reply, result);
+                answer(&reply, result);
             }
             SyncCommand::Shutdown(reply) => {
                 self.stop();
-                respond(&reply, Ok(()));
+                answer(&reply, Ok(()));
                 return false;
             }
         }

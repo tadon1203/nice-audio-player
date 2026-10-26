@@ -204,11 +204,11 @@ pub struct NowPlayingAlbum {
     pub album: TrackAlbum,
     pub track_count: u32,
 }
-/// The loaded track as the Renderer sees it. No file path: the playback worker holds the file. It
-/// has no state: only a playable track is ever loaded.
+/// A track as the Renderer sees it: the loaded track, and each queue row. No file path: the playback
+/// worker holds the file. It has no state: only a playable track is ever loaded or queued.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
-pub struct NowPlayingTrack {
+pub struct TrackSummary {
     #[serde(flatten)]
     pub core: TrackCore,
     pub album: Option<NowPlayingAlbum>,

@@ -40,12 +40,7 @@ fn volume_changes_are_saved_as_preferences() {
     fixture.player.set_volume(0.5).unwrap();
     fixture.player.set_muted(true).unwrap();
 
-    let last = fixture
-        .preferences
-        .lock()
-        .last()
-        .cloned()
-        .expect("a preference was saved");
-    assert_eq!(last.volume, 0.5);
-    assert!(last.muted);
+    let saved = fixture.settings.player_preferences();
+    assert_eq!(saved.volume, 0.5);
+    assert!(saved.muted);
 }

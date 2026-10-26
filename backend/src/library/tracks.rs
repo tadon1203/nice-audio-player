@@ -8,8 +8,8 @@ use super::{
     database::Database,
     lists::{ALBUM_ORDER, track_listing},
     models::{
-        ArtistRef, NowPlayingAlbum, NowPlayingTrack, SortDirection, TrackAlbum, TrackCore,
-        TrackProperties, TrackSortKey, TrackState,
+        ArtistRef, NowPlayingAlbum, SortDirection, TrackAlbum, TrackCore, TrackProperties,
+        TrackSortKey, TrackState, TrackSummary,
     },
 };
 use crate::errors::CommandError;
@@ -24,7 +24,7 @@ use std::collections::HashMap;
 /// The file facts (`file`, `file_format`, `bit_depth`, `bitrate_kbps`) feed the signal path.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PlayableTrack {
-    pub track: NowPlayingTrack,
+    pub track: TrackSummary,
     pub file: ValidatedAudioFile,
     pub file_format: Option<String>,
     pub bit_depth: Option<u32>,
@@ -229,7 +229,7 @@ fn playable_track(
         track_count: album_track_count,
     });
     Ok(Some(PlayableTrack {
-        track: NowPlayingTrack {
+        track: TrackSummary {
             core: TrackCore {
                 id: row.track_id,
                 title: row.title,

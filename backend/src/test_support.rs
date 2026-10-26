@@ -12,7 +12,7 @@ use parking_lot::Mutex;
 
 use crate::ids::TrackId;
 use crate::library::media::ValidatedAudioFile;
-use crate::library::models::{LibraryState, NowPlayingTrack, TrackCore};
+use crate::library::models::{LibraryState, TrackCore, TrackSummary};
 use crate::library::tracks::PlayableTrack;
 use crate::messages::BackendMessage;
 use crate::player::{PlayerState, QueueState};
@@ -20,7 +20,7 @@ use crate::player::{PlayerState, QueueState};
 /// A track that is only an id, the file's name as its title, and the file.
 pub(crate) fn bare_track(id: TrackId, file: ValidatedAudioFile) -> PlayableTrack {
     PlayableTrack {
-        track: NowPlayingTrack {
+        track: TrackSummary {
             core: TrackCore {
                 id,
                 title: file.file_name.clone(),

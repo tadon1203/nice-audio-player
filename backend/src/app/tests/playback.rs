@@ -109,8 +109,7 @@ fn previous_back_to_a_track_that_played_before_shows_its_waveform() {
     let data_dir = directory.file("data");
     std::fs::create_dir_all(&data_dir).expect("data directory");
     let (recorded, sink) = MessageLog::shared();
-    let backend = BackendApp::initialize(data_dir, sink, Box::new(FakeOutput::new()))
-        .expect("the test backend starts");
+    let backend = BackendApp::initialize(data_dir, sink, Box::new(FakeOutput::new()));
     backend
         .add_directory(music)
         .expect("register the music directory");

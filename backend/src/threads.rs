@@ -1,10 +1,14 @@
-//! The thread helpers: the flag that stops background work, the request that waits for a
-//! worker's answer, and the priority that keeps analysis out of playback's way.
+//! The thread helpers: the flag that stops background work, the reply a worker answers on, the
+//! request that waits for that answer, the handle that joins a worker thread, and the priority
+//! that keeps analysis out of playback's way.
 
 use crate::errors::CommandError;
+use log::{debug, error};
+use parking_lot::Mutex;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Sender, SyncSender, sync_channel};
+use std::thread::{self, JoinHandle};
 
 /// A shared flag that tells background work (source loading, decoding) to stop.
 #[derive(Clone, Default)]
@@ -20,17 +24,64 @@ impl Cancellation {
     }
 }
 
-/// Sends a command with a reply channel and waits for the answer.
-/// A closed channel is `CommandError::TaskFailed`.
+/// Where a worker answers one command. The answer is sent once, by the worker.
+pub type Reply<T> = SyncSender<Result<T, CommandError>>;
+
+/// Answers a command, if its caller is still waiting. A caller that has gone away is logged, not
+/// an error.
+pub fn answer<T>(reply: &Reply<T>, result: Result<T, CommandError>) {
+    if reply.send(result).is_err() {
+        debug!("thread.reply_closed");
+    }
+}
+
+/// Sends a command with its reply and waits for the answer. A worker that has stopped, before or
+/// while it answers, is `CommandError::TaskFailed`.
 pub fn request<C, T>(
     sender: &Sender<C>,
-    command: impl FnOnce(SyncSender<T>) -> C,
+    command: impl FnOnce(Reply<T>) -> C,
 ) -> Result<T, CommandError> {
     let (reply, answer) = sync_channel(1);
     sender
         .send(command(reply))
         .map_err(|_| CommandError::TaskFailed)?;
-    answer.recv().map_err(|_| CommandError::TaskFailed)
+    answer.recv().map_err(|_| CommandError::TaskFailed)?
+}
+
+/// A named thread that its owner joins: once in `join`, and again when the handle is dropped.
+/// Calling `join` again does nothing. The owner must stop the thread's loop first.
+pub struct WorkerThread {
+    name: String,
+    handle: Mutex<Option<JoinHandle<()>>>,
+}
+
+impl WorkerThread {
+    /// Starts `run` on a thread called `name`. Panics if the OS cannot start it.
+    pub fn spawn(name: &str, run: impl FnOnce() + Send + 'static) -> Self {
+        let handle = thread::Builder::new()
+            .name(name.into())
+            .spawn(run)
+            .expect("the OS starts a thread unless it is out of resources");
+        Self {
+            name: name.into(),
+            handle: Mutex::new(Some(handle)),
+        }
+    }
+
+    /// Waits for the thread to finish. A thread that panicked is logged.
+    pub fn join(&self) {
+        if let Some(handle) = self.handle.lock().take()
+            && handle.join().is_err()
+        {
+            error!("thread.panicked name={}", self.name);
+        }
+    }
+}
+
+impl Drop for WorkerThread {
+    fn drop(&mut self) {
+        self.join();
+    }
 }
 
 /// Lowers the calling thread to Windows background mode (low CPU, I/O and memory priority), so
@@ -52,27 +103,71 @@ pub fn run_in_background() {}
 
 #[cfg(test)]
 mod tests {
-    use super::request;
+    use super::{Reply, WorkerThread, request};
     use crate::errors::CommandError;
-    use std::sync::mpsc::{SyncSender, channel};
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::mpsc::channel;
     use std::thread;
 
     #[test]
     fn request_returns_the_answer_the_worker_sends() {
-        let (sender, receiver) = channel::<SyncSender<u8>>();
-        thread::spawn(move || receiver.recv().unwrap().send(7).unwrap());
+        let (sender, receiver) = channel::<Reply<u8>>();
+        thread::spawn(move || receiver.recv().unwrap().send(Ok(7)).unwrap());
 
         assert_eq!(request(&sender, |reply| reply), Ok(7));
     }
 
     #[test]
+    fn request_passes_on_the_error_the_worker_answers_with() {
+        let (sender, receiver) = channel::<Reply<u8>>();
+        thread::spawn(move || {
+            receiver
+                .recv()
+                .unwrap()
+                .send(Err(CommandError::QueueBusy))
+                .unwrap();
+        });
+
+        assert_eq!(
+            request(&sender, |reply| reply),
+            Err(CommandError::QueueBusy)
+        );
+    }
+
+    #[test]
     fn request_is_task_failed_when_the_receiver_is_dropped() {
-        let (sender, receiver) = channel::<SyncSender<u8>>();
+        let (sender, receiver) = channel::<Reply<u8>>();
         drop(receiver);
 
         assert_eq!(
             request(&sender, |reply| reply),
             Err(CommandError::TaskFailed)
         );
+    }
+
+    #[test]
+    fn request_is_task_failed_when_the_worker_drops_the_reply() {
+        let (sender, receiver) = channel::<Reply<u8>>();
+        thread::spawn(move || drop(receiver.recv().unwrap()));
+
+        assert_eq!(
+            request(&sender, |reply| reply),
+            Err(CommandError::TaskFailed)
+        );
+    }
+
+    #[test]
+    fn a_worker_thread_is_joined_once() {
+        let runs = Arc::new(AtomicUsize::new(0));
+        let counted = Arc::clone(&runs);
+        let worker = WorkerThread::spawn("test-worker", move || {
+            counted.fetch_add(1, Ordering::SeqCst);
+        });
+
+        worker.join();
+        worker.join();
+        drop(worker);
+        assert_eq!(runs.load(Ordering::SeqCst), 1);
     }
 }

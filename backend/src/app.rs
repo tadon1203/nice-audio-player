@@ -39,12 +39,6 @@ use std::{
     sync::{Arc, mpsc::Sender},
 };
 
-#[derive(Debug, thiserror::Error)]
-pub enum BackendError {
-    #[error("the playback service could not start")]
-    PlaybackStartFailed,
-}
-
 pub struct BackendApp {
     player: Player,
     meter: Meter,
@@ -61,7 +55,7 @@ impl BackendApp {
         data_dir: PathBuf,
         messages: Sender<BackendMessage>,
         output: Box<dyn OutputStreamFactory>,
-    ) -> Result<Self, BackendError> {
+    ) -> Self {
         let saved = settings::read(&settings::file_path(&data_dir));
         let settings = Arc::new(SettingsStore::open(
             settings::file_path(&data_dir),
@@ -82,26 +76,22 @@ impl BackendApp {
                 })),
             );
         }
-        let remember = Arc::clone(&settings);
         let meter = Meter::new();
         let player = Player::start(
             library.clone().ok().map(Arc::new),
             messages,
             meter.clone(),
             Arc::clone(&waveforms),
-            settings.player_preferences(),
-            move |preferences| remember.record_player(preferences.clone()),
+            Arc::clone(&settings),
             output,
-        )
-        .inspect_err(|cause| log::warn!("app.playback.start_failed cause={cause}"))
-        .map_err(|_| BackendError::PlaybackStartFailed)?;
-        Ok(Self {
+        );
+        Self {
             player,
             meter,
             library,
             settings,
             data_dir,
-        })
+        }
     }
 
     pub fn shutdown(&self) {

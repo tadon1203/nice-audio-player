@@ -74,9 +74,7 @@ pub fn run() {
             };
             app.manage(artwork::ArtworkDir(data_dir.clone()));
             let (sender, messages) = mpsc::channel();
-            let backend = BackendApp::initialize(data_dir, sender, Box::new(CpalOutput))
-                .inspect_err(|cause| log::warn!("host.backend.startup_failed cause={cause}"))
-                .map_err(|_| std::io::Error::other("backend startup failed"))?;
+            let backend = BackendApp::initialize(data_dir, sender, Box::new(CpalOutput));
             let backend = Arc::new(backend);
             let delivery = Arc::new(Delivery::default());
             app.manage(AppState {
