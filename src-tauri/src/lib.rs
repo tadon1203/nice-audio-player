@@ -2,13 +2,12 @@ use std::sync::{Arc, mpsc};
 
 use backend::app::{BackendApp, CpalOutput};
 use delivery::Delivery;
-use tauri::Manager;
+use tauri::{Manager, Runtime};
 
 mod artwork;
 mod bindings;
 mod commands;
 mod delivery;
-// `tauri_plugin_wdio` installs its own logger in the E2E build.
 #[cfg(not(feature = "wdio"))]
 mod logging;
 mod os;
@@ -27,33 +26,39 @@ impl std::fmt::Debug for AppState {
     }
 }
 
-pub fn run() {
-    let builder = tauri::Builder::default();
-    // First, so a second launch exits before it opens anything. Not in the E2E build, which must
-    // not collide with a running app.
-    #[cfg(not(feature = "wdio"))]
-    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-        if let Some(window) = app.get_webview_window("main") {
-            if let Err(cause) = window.unminimize() {
-                log::debug!("host.window.unminimize_failed cause={cause}");
+/// Adds the plugins that differ between the app build and the E2E build.
+///
+/// The app build installs a single-instance check first, so a second launch exits before it opens
+/// anything. The E2E build must not collide with a running app.
+/// `tauri_plugin_wdio` installs its own logger, and a second one fails the build of the app.
+#[cfg(not(feature = "wdio"))]
+fn configure_plugins<R: Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
+    builder
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                if let Err(cause) = window.unminimize() {
+                    log::debug!("host.window.unminimize_failed cause={cause}");
+                }
+                if let Err(cause) = window.show() {
+                    log::debug!("host.window.show_failed cause={cause}");
+                }
+                if let Err(cause) = window.set_focus() {
+                    log::debug!("host.window.focus_failed cause={cause}");
+                }
             }
-            if let Err(cause) = window.show() {
-                log::debug!("host.window.show_failed cause={cause}");
-            }
-            if let Err(cause) = window.set_focus() {
-                log::debug!("host.window.focus_failed cause={cause}");
-            }
-        }
-    }));
-    #[cfg(feature = "wdio")]
-    let builder = builder
-        .plugin(tauri_plugin_wdio::init())
-        .plugin(tauri_plugin_wdio_webdriver::init());
-    // `tauri_plugin_wdio` installs its own logger, and a second one fails the build of the app.
-    #[cfg(not(feature = "wdio"))]
-    let builder = builder.plugin(logging::plugin());
+        }))
+        .plugin(logging::plugin())
+}
 
-    let app = builder
+#[cfg(feature = "wdio")]
+fn configure_plugins<R: Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
+    builder
+        .plugin(tauri_plugin_wdio::init())
+        .plugin(tauri_plugin_wdio_webdriver::init())
+}
+
+pub fn run() {
+    let app = configure_plugins(tauri::Builder::default())
         .register_asynchronous_uri_scheme_protocol("nice-artwork", |context, request, responder| {
             artwork::serve_artwork(context.app_handle(), &request, responder);
         })
